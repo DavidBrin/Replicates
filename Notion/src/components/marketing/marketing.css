@@ -1,0 +1,764 @@
+/* ============================================================================
+   Marketing design tokens + primitives
+   ----------------------------------------------------------------------------
+   Notion runs two distinct design systems: the *product* tokens (cool/warm
+   grays, dark-theme aware) which live in `src/app/globals.css`, and the
+   *marketing* tokens used on notion.com. They are NOT the same palette — the
+   marketing grays are warmer (#F6F5F4, not #F5F5F5) and marketing text is
+   alpha-black rather than a gray hex, so it composites correctly over the
+   tinted section backgrounds.
+
+   Everything here is therefore scoped to `.marketing`, so the landing page can
+   carry the real marketing palette without leaking a light-only, warm-gray
+   theme into the app shell.
+   ========================================================================== */
+
+.marketing {
+  /* -- blues ------------------------------------------------------------- */
+  --mkt-blue-100: #f2f9ff;
+  --mkt-blue-200: #e6f3fe;
+  --mkt-blue-300: #93cdfe;
+  --mkt-blue-400: #62aef0;
+  --mkt-blue-500: #097fe8;
+  --mkt-blue-600: #0075de;
+  --mkt-blue-700: #005bab;
+
+  /* -- warm grays -------------------------------------------------------- */
+  --mkt-gray-100: #f9f9f8;
+  --mkt-gray-200: #f6f5f4;
+  --mkt-gray-300: #dfdcd9;
+  --mkt-gray-400: #a39e98;
+  --mkt-gray-500: #78736f;
+  --mkt-gray-600: #615d59;
+  --mkt-gray-700: #494744;
+  --mkt-gray-800: #31302e;
+  --mkt-gray-900: #191918;
+
+  /* -- alpha-black ink --------------------------------------------------- */
+  --mkt-text-strong: rgb(0 0 0 / 0.95);
+  --mkt-text-normal: rgb(0 0 0 / 0.9);
+  --mkt-text-muted: rgb(0 0 0 / 0.54);
+  --mkt-bg-hover: rgb(0 0 0 / 0.05);
+  --mkt-border-base: rgb(0 0 0 / 0.1);
+
+  /* -- elevation --------------------------------------------------------- */
+  /* Notion's shadows top out at 4% opacity across six stacked layers; the
+     Tailwind defaults are 3-4x heavier and read as a different brand. */
+  --shadow-200: 0 0.175px 1.041px rgb(0 0 0 / 0.013),
+    0 0.8px 2.925px rgb(0 0 0 / 0.02), 0 2.025px 7.847px rgb(0 0 0 / 0.027),
+    0 4px 18px rgb(0 0 0 / 0.04);
+  --shadow-300: 0 0.667px 3.502px rgb(0 0 0 / 0.0096),
+    0 2.933px 7.252px rgb(0 0 0 / 0.0157), 0 7.2px 14.462px rgb(0 0 0 / 0.02),
+    0 13.867px 28.348px rgb(0 0 0 / 0.0243),
+    0 23.333px 52.123px rgb(0 0 0 / 0.0304), 0 36px 89px rgb(0 0 0 / 0.04);
+
+  /* Geometry is injected from `layout.marketing` by <Marketing>. */
+  --mkt-max-width: 1252px;
+  --mkt-gutter: 24px;
+
+  /* Fills the flex-column body so the app's own (possibly dark) page
+     background never shows through beneath a short marketing page. */
+  flex: 1 0 auto;
+  background: #fff;
+  color: var(--mkt-text-normal);
+  font-family: var(--font-sans);
+  /* The page must never scroll sideways — marquees and stickers clip here.
+     `clip` rather than `hidden` on purpose: `hidden` would make this a scroll
+     container and the sticky nav would stop sticking. */
+  overflow-x: clip;
+}
+
+/* ------------------------------------------------------------- container -- */
+
+.mkt-container {
+  width: 100%;
+  max-width: var(--mkt-max-width);
+  margin-inline: auto;
+  padding-inline: var(--mkt-gutter);
+}
+
+/* A narrower measure for the hero copy.
+   Sized so the headline breaks into Notion's two lines rather than three:
+   line two carries "agents" (309px) + the pill + " together." (399px), and
+   the widest rotating word needs ~1048px of it at the full 96px size. A
+   960px column forces an ugly third line, so the measure is set just above
+   that worst case. The deck and CTAs re-narrow themselves below. */
+.mkt-container--hero {
+  max-width: calc(1060px + var(--mkt-gutter) * 2);
+}
+
+.mkt-container--hero .mkt-deck {
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+/* ------------------------------------------------------------ typography -- */
+
+.mkt-h1 {
+  /* 96 / 100 / 600 / -4.6px at full size. The tracking is expressed in `em`
+     (-4.6 / 96) so it scales in lockstep with the clamped font size. */
+  font-size: clamp(44px, 7vw, 96px);
+  line-height: 1.0417;
+  font-weight: 600;
+  letter-spacing: -0.0479em;
+  color: var(--mkt-text-strong);
+  text-wrap: balance;
+}
+
+.mkt-h2 {
+  /* 54 / 56 / 700 / -1.875px */
+  font-size: clamp(32px, 5vw, 54px);
+  line-height: 1.037;
+  font-weight: 700;
+  letter-spacing: -0.0347em;
+  color: var(--mkt-text-strong);
+  text-wrap: balance;
+}
+
+.mkt-h2--display {
+  /* 64 / 64 / 700 / -2.125px */
+  font-size: clamp(34px, 6vw, 64px);
+  line-height: 1;
+  letter-spacing: -0.0332em;
+}
+
+.mkt-h3 {
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--mkt-text-strong);
+  text-wrap: balance;
+}
+
+.mkt-deck {
+  font-size: clamp(17px, 2.1vw, 20px);
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--mkt-text-muted);
+  text-wrap: pretty;
+}
+
+.mkt-body {
+  font-size: 16px;
+  line-height: 24px;
+  text-wrap: pretty;
+}
+
+.mkt-small {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.mkt-eyebrow {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--mkt-text-muted);
+}
+
+/* --------------------------------------------------------------- buttons -- */
+
+.mkt-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 156px;
+  height: 38px;
+  padding: 6px 15px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, filter 0.15s ease;
+}
+
+.mkt-cta--primary {
+  background: var(--mkt-blue-600);
+  color: #fff;
+}
+.mkt-cta--primary:hover {
+  background: var(--mkt-blue-700);
+}
+
+.mkt-cta--soft {
+  background: var(--mkt-blue-200);
+  color: var(--mkt-blue-700);
+}
+.mkt-cta--soft:hover {
+  background: var(--mkt-blue-300);
+}
+
+/* The nav CTA is deliberately *black*, not blue — the blue pill is reserved
+   for the hero so the two never compete in the same viewport. */
+.mkt-cta--dark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 4px 14px;
+  border-radius: 8px;
+  background: var(--mkt-gray-900);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+.mkt-cta--dark:hover {
+  background: var(--mkt-gray-700);
+}
+
+:where(.marketing) :focus-visible {
+  outline: 2px solid var(--mkt-blue-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------- nav -- */
+
+.mkt-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 64px;
+  background: #fff;
+  /* No border at rest; a hairline fades in once the page has scrolled. */
+  box-shadow: 0 0 var(--mkt-border-base);
+  transition: box-shadow 0.2s ease;
+}
+.mkt-nav[data-scrolled="true"] {
+  box-shadow: 0 1px var(--mkt-border-base);
+}
+
+.mkt-nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 64px;
+  /* Full-bleed bar, 24px page inset. */
+  padding-inline: var(--mkt-gutter);
+}
+
+.mkt-nav__links {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.mkt-nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  color: var(--mkt-text-normal);
+  white-space: nowrap;
+  /* Hover is a background wash only — no colour shift, no underline. */
+  transition: background-color 0.15s ease;
+}
+.mkt-nav__link:hover,
+.mkt-nav__link[data-open="true"] {
+  background: var(--mkt-bg-hover);
+}
+
+.mkt-nav__caret {
+  transition: transform 0.15s ease;
+}
+.mkt-nav__link[data-open="true"] .mkt-nav__caret {
+  transform: rotate(180deg);
+}
+
+.mkt-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mkt-nav__login {
+  display: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--mkt-text-normal);
+  transition: background-color 0.15s ease;
+}
+.mkt-nav__login:hover {
+  background: var(--mkt-bg-hover);
+}
+
+/* Two-class selector so it beats Tailwind's own `.inline-flex` regardless of
+   which stylesheet the bundler emits first. */
+.mkt-nav .mkt-nav__burger {
+  display: inline-flex;
+}
+
+/* Stacked variant used inside the mobile disclosure. */
+.mkt-nav__link--block {
+  display: flex;
+}
+
+/* -- mega menu ---------------------------------------------------------- */
+
+.mkt-mega {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  padding: 24px 95px 32px 87px;
+  box-shadow: 0 4px 4px -2px rgb(0 0 0 / 8%);
+  opacity: 0;
+  transform: translateY(-16px);
+  visibility: hidden;
+  pointer-events: none;
+  /* Closing is faster than opening and waits 50ms, so a slightly wobbly
+     mouse path between trigger and panel never flickers it shut. */
+  transition: opacity 0.15s ease-in 50ms, transform 0.15s ease-in 50ms,
+    visibility 0s linear 0.2s;
+}
+
+.mkt-mega[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out, visibility 0s;
+}
+
+/* Invisible bridge across the gap between the trigger and the panel. */
+.mkt-mega::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: transparent;
+}
+
+.mkt-mega__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 32px;
+}
+@media (min-width: 1100px) {
+  .mkt-mega__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.mkt-mega__row {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+.mkt-mega__row:hover {
+  background: var(--mkt-bg-hover);
+}
+.mkt-mega__row-label {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--mkt-text-normal);
+}
+.mkt-mega__row-desc {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--mkt-text-muted);
+}
+
+/* -- mobile disclosure --------------------------------------------------- */
+
+.mkt-nav__mobile {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid var(--mkt-border-base);
+  box-shadow: var(--shadow-200);
+  padding: 8px var(--mkt-gutter) 20px;
+  max-height: calc(100dvh - 64px);
+  overflow-y: auto;
+}
+
+/* Primary desktop breakpoint, taken from the live site. */
+@media (min-width: 840px) {
+  .mkt-nav__links,
+  .mkt-nav__login {
+    display: inline-flex;
+  }
+  .mkt-nav .mkt-nav__burger,
+  .mkt-nav__mobile {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ hero -- */
+
+.mkt-hero {
+  position: relative;
+  padding-top: clamp(32px, 6vw, 72px);
+  padding-bottom: clamp(24px, 4vw, 48px);
+  text-align: center;
+}
+
+/* -- animated word pill -------------------------------------------------- */
+
+.mkt-pill {
+  display: inline-flex;
+  align-items: center;
+  /* Notion's pill hugs its word — the whole dot-plus-padding chrome is about
+     0.6em, not the 1.0em a comfortable-looking guess produces. At 96px that
+     difference is ~40px, which is the margin between a two-line headline and
+     an awkward three-line one. */
+  gap: 0.1em;
+  height: 1.06em;
+  line-height: 1;
+  /* `overflow: hidden` (needed to clip the width morph) moves an inline-level
+     box's baseline to its bottom margin edge, so the pill has to be re-seated
+     by hand. Measured against the neighbouring glyphs: this puts the pill's
+     top just above cap height and its bottom just below the baseline, which
+     is how Notion's sits. Expressed in `em` so it holds at every clamp step. */
+  vertical-align: 0.22em;
+  background: var(--mkt-blue-200);
+  color: var(--mkt-blue-700);
+  border-radius: 999px;
+  padding: 0 0.16em 0 0.14em;
+  /* Width is driven from JS (measured against a hidden mirror) so the pill
+     morphs between words instead of snapping. */
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mkt-pill__dot {
+  flex: none;
+  width: 0.2em;
+  height: 0.2em;
+  border-radius: 999px;
+  background: var(--mkt-blue-500);
+}
+
+.mkt-pill__word {
+  display: inline-block;
+}
+
+.mkt-pill__mirror {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  left: -9999px;
+  top: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mkt-pill__word {
+    animation: mkt-word-in 0.35s ease-out;
+  }
+}
+
+@keyframes mkt-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.24em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* -- avatar pile --------------------------------------------------------- */
+
+.mkt-avatars {
+  display: flex;
+  justify-content: center;
+  margin-bottom: clamp(20px, 3vw, 32px);
+}
+.mkt-avatars > * + * {
+  margin-left: -14px;
+}
+
+/* -- hero visual --------------------------------------------------------- */
+
+.mkt-heroshot {
+  position: relative;
+  border: 1px solid var(--mkt-border-base);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow-300);
+  background: #fff;
+}
+
+/* The screenshot dissolves into the page instead of ending on a hard edge —
+   this is the single detail that most makes the section read as Notion's. */
+.mkt-heroshot__fade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 200px;
+  background: linear-gradient(180deg, transparent, #fff);
+  pointer-events: none;
+}
+
+/* -- sticker rail -------------------------------------------------------- */
+
+/* The rail is clipped to the copy band at the top of the hero: below that the
+   1252px product panel takes the full width and there is no margin to sit in.
+   It only appears once the viewport is wide enough to leave a clear gutter
+   outside the 960px hero column. */
+.mkt-stickers {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 640px;
+  pointer-events: none;
+  z-index: 1;
+}
+@media (min-width: 1280px) {
+  .mkt-stickers {
+    display: block;
+  }
+}
+
+.mkt-sticker {
+  position: absolute;
+  color: var(--mkt-gray-400);
+  will-change: transform;
+}
+
+.mkt-sticker__badge {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: var(--shadow-200);
+  display: grid;
+  place-items: center;
+}
+
+.mkt-sticker__app {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: var(--shadow-200);
+  display: grid;
+  place-items: center;
+}
+
+.mkt-sticker__count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+.mkt-sticker__squiggle {
+  position: absolute;
+  color: var(--mkt-gray-300);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mkt-sticker {
+    animation: mkt-sticker-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+}
+
+@keyframes mkt-sticker-in {
+  from {
+    opacity: 0;
+    transform: translate(0, 24px) scale(0.9);
+  }
+}
+
+/* --------------------------------------------------------------- marquee -- */
+
+.mkt-marquee {
+  overflow: hidden;
+  /* Feather the ends so wordmarks don't get guillotined at the viewport edge */
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 6%,
+    #000 94%,
+    transparent
+  );
+}
+
+.mkt-marquee__track {
+  display: flex;
+  width: max-content;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mkt-marquee__track {
+    animation: mkt-marquee var(--mkt-marquee-duration, 46s) linear infinite;
+  }
+  .mkt-marquee:hover .mkt-marquee__track {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes mkt-marquee {
+  /* The list is rendered twice; -50% lands exactly on the seam. */
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.mkt-wordmark {
+  padding-inline: clamp(20px, 3vw, 40px);
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--mkt-gray-500);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* -------------------------------------------------------------- sections -- */
+
+.mkt-section {
+  padding-block: clamp(56px, 9vw, 96px);
+}
+
+.mkt-card {
+  border-radius: 12px;
+  border: 1px solid var(--mkt-border-base);
+  background: #fff;
+}
+
+.mkt-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mkt-tab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--mkt-text-muted);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.mkt-tab:hover {
+  background: var(--mkt-bg-hover);
+}
+.mkt-tab[aria-selected="true"] {
+  background: var(--mkt-blue-200);
+  color: var(--mkt-blue-700);
+  font-weight: 500;
+}
+
+/* Fade the swapped panel in so tab changes don't jump. */
+@media (prefers-reduced-motion: no-preference) {
+  .mkt-tabpanel {
+    animation: mkt-fade-up 0.28s ease-out;
+  }
+}
+
+@keyframes mkt-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* --------------------------------------------------------------- mockups -- */
+
+.mkt-mock {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--mkt-gray-700);
+  user-select: none;
+}
+
+.mkt-mock__sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--mkt-gray-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mkt-mock__section-label {
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mkt-gray-400);
+}
+
+.mkt-mock__card {
+  border: 1px solid var(--mkt-border-base);
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.03);
+}
+
+.mkt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- footer -- */
+
+.mkt-footer-link {
+  display: inline-block;
+  padding-block: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--mkt-text-muted);
+  transition: color 0.15s ease;
+}
+.mkt-footer-link:hover {
+  color: var(--mkt-text-normal);
+}
+
+.mkt-footer-heading {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--mkt-text-strong);
+  margin-bottom: 8px;
+}

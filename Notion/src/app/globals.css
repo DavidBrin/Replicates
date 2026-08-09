@@ -1,0 +1,359 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Design tokens
+   ----------------------------------------------------------------------------
+   Values below were captured directly from Notion's own shipped stylesheets
+   (notion.com marketing tokens + the `.notion-light-theme` custom-property
+   block served on published notion.site pages) so the clone renders with the
+   real palette rather than an approximation. Dark-theme values follow Notion's
+   long-documented dark palette.
+
+   Naming mirrors Notion's own token grammar so the mapping stays auditable:
+     bac = background   tex = text   bor = border   ico = icon
+     pri = primary      sec = secondary            ter = tertiary
+     int = interactive (hover)       ele = elevated (popovers/cards)
+   ========================================================================== */
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif;
+  --font-serif: Lyon-Text, Georgia, ui-serif, serif;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono",
+    Courier, monospace;
+
+  /* Notion's type ramp (marketing token set: --font-size-*) */
+  --text-2xs: 0.6875rem; /* 11px - property labels */
+  --text-xs: 0.75rem; /* 12px - meta, counts */
+  --text-sm: 0.8125rem; /* 13px - sidebar, table cells */
+  --text-base: 0.875rem; /* 14px - board cards, menus */
+  --text-md: 1rem; /* 16px - body copy */
+  --text-lg: 1.125rem; /* 18px - heading 3 */
+  --text-xl: 1.5rem; /* 24px - heading 2 */
+  --text-2xl: 1.875rem; /* 30px - heading 1 */
+  --text-3xl: 2.5rem; /* 40px - page title */
+
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+
+  --ease-notion: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+/* ---------------------------------------------------------------- light --- */
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bac-pri: #ffffff;
+  --bac-sec: #f9f8f7;
+  --bac-ter: #f0efed;
+  --bac-int: #f4f3f3;
+  --bac-int-strong: #eceae8;
+  --bac-ele: #ffffff;
+  --bac-acc-pri: #2c2c2b;
+  --bac-overlay: rgba(15, 15, 15, 0.06);
+
+  /* Text */
+  --tex-pri: #2c2c2b;
+  --tex-sec: #7d7a75;
+  --tex-ter: #a19e99;
+  --tex-acc: #5f5e59;
+  --tex-inv: #ffffff;
+
+  /* Icons */
+  --ico-pri: #383836;
+  --ico-sec: #8e8b86;
+  --ico-ter: #ada9a3;
+
+  /* Borders */
+  --bor-pri: #e6e5e3;
+  --bor-sec: #f0efed;
+  --bor-str: #d4d3cf;
+
+  /* Brand / accent */
+  --accent: #0075de;
+  --accent-hover: #005bab;
+  --accent-soft: #e6f3fe;
+  --accent-text: #005bab;
+  --accent-ring: rgba(35, 131, 226, 0.35);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(15, 15, 15, 0.06);
+  --shadow-card: rgba(15, 15, 15, 0.1) 0 0 0 1px, rgba(15, 15, 15, 0.1) 0 2px 4px;
+  --shadow-menu: rgba(15, 15, 15, 0.05) 0 0 0 1px,
+    rgba(15, 15, 15, 0.1) 0 3px 6px, rgba(15, 15, 15, 0.2) 0 9px 24px;
+  --shadow-hero: 0px 13.867px 28.348px rgba(0, 0, 0, 0.024),
+    0px 23.333px 52.123px rgba(0, 0, 0, 0.03),
+    0px 36px 89px rgba(0, 0, 0, 0.04);
+
+  /* Tag palette — background */
+  --tag-default-bg: #f0efed;
+  --tag-gray-bg: #f0efed;
+  --tag-brown-bg: #f5ede9;
+  --tag-orange-bg: #fbebde;
+  --tag-yellow-bg: #f9f3dc;
+  --tag-green-bg: #e8f1ec;
+  --tag-blue-bg: #e5f2fc;
+  --tag-purple-bg: #f3ebf9;
+  --tag-pink-bg: #fae9f1;
+  --tag-red-bg: #fce9e7;
+
+  /* Tag palette — text */
+  --tag-default-fg: #494846;
+  --tag-gray-fg: #494846;
+  --tag-brown-fg: #584437;
+  --tag-orange-fg: #6a4222;
+  --tag-yellow-fg: #655121;
+  --tag-green-fg: #2a533c;
+  --tag-blue-fg: #264a72;
+  --tag-purple-fg: #553b69;
+  --tag-pink-fg: #68354e;
+  --tag-red-fg: #6d3531;
+
+  /* Tag palette — solid dot / board column tint source */
+  --tag-default-dot: #91918e;
+  --tag-gray-dot: #787774;
+  --tag-brown-dot: #9f6b53;
+  --tag-orange-dot: #d9730d;
+  --tag-yellow-dot: #cb912f;
+  --tag-green-dot: #448361;
+  --tag-blue-dot: #337ea9;
+  --tag-purple-dot: #9065b0;
+  --tag-pink-dot: #c14c8a;
+  --tag-red-dot: #cd3c3a;
+
+  /* Board column tint (very light wash behind a group) */
+  --tag-default-wash: #f9f8f7;
+  --tag-gray-wash: #f9f8f7;
+  --tag-brown-wash: #faf8f6;
+  --tag-orange-wash: #fcf7f4;
+  --tag-yellow-wash: #fcfaef;
+  --tag-green-wash: #f6f9f7;
+  --tag-blue-wash: #f3f9fd;
+  --tag-purple-wash: #faf7fc;
+  --tag-pink-wash: #fcf7f9;
+  --tag-red-wash: #fdf6f6;
+}
+
+/* ----------------------------------------------------------------- dark --- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bac-pri: #191919;
+  --bac-sec: #202020;
+  --bac-ter: #252525;
+  --bac-int: rgba(255, 255, 255, 0.055);
+  --bac-int-strong: rgba(255, 255, 255, 0.09);
+  --bac-ele: #252525;
+  --bac-acc-pri: #ffffff;
+  --bac-overlay: rgba(255, 255, 255, 0.055);
+
+  --tex-pri: rgba(255, 255, 255, 0.81);
+  --tex-sec: rgba(255, 255, 255, 0.46);
+  --tex-ter: rgba(255, 255, 255, 0.282);
+  --tex-acc: rgba(255, 255, 255, 0.6);
+  --tex-inv: #191919;
+
+  --ico-pri: rgba(255, 255, 255, 0.81);
+  --ico-sec: rgba(255, 255, 255, 0.443);
+  --ico-ter: rgba(255, 255, 255, 0.282);
+
+  --bor-pri: rgba(255, 255, 255, 0.094);
+  --bor-sec: rgba(255, 255, 255, 0.055);
+  --bor-str: rgba(255, 255, 255, 0.16);
+
+  --accent: #2383e2;
+  --accent-hover: #0077d4;
+  --accent-soft: rgba(35, 131, 226, 0.18);
+  --accent-text: #529cca;
+  --accent-ring: rgba(35, 131, 226, 0.5);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: rgba(255, 255, 255, 0.094) 0 0 0 1px,
+    rgba(0, 0, 0, 0.2) 0 2px 4px;
+  --shadow-menu: rgba(0, 0, 0, 0.2) 0 0 0 1px, rgba(0, 0, 0, 0.4) 0 3px 6px,
+    rgba(0, 0, 0, 0.5) 0 9px 24px;
+  --shadow-hero: 0 24px 68px rgba(0, 0, 0, 0.55);
+
+  --tag-default-bg: rgba(255, 255, 255, 0.055);
+  --tag-gray-bg: rgba(255, 255, 255, 0.055);
+  --tag-brown-bg: #4a3228;
+  --tag-orange-bg: #5c3b23;
+  --tag-yellow-bg: #56452f;
+  --tag-green-bg: #243d30;
+  --tag-blue-bg: #143a4e;
+  --tag-purple-bg: #3c2d49;
+  --tag-pink-bg: #4e2c3c;
+  --tag-red-bg: #522e2a;
+
+  --tag-default-fg: rgba(255, 255, 255, 0.81);
+  --tag-gray-fg: rgba(255, 255, 255, 0.81);
+  --tag-brown-fg: #ba856f;
+  --tag-orange-fg: #c77d48;
+  --tag-yellow-fg: #ca9849;
+  --tag-green-fg: #529e72;
+  --tag-blue-fg: #5e87c9;
+  --tag-purple-fg: #9a6dd7;
+  --tag-pink-fg: #e255a1;
+  --tag-red-fg: #ff7369;
+
+  --tag-default-dot: #979a9b;
+  --tag-gray-dot: #979a9b;
+  --tag-brown-dot: #937264;
+  --tag-orange-dot: #ffa344;
+  --tag-yellow-dot: #ffdc49;
+  --tag-green-dot: #4dab9a;
+  --tag-blue-dot: #529cca;
+  --tag-purple-dot: #9a6dd7;
+  --tag-pink-dot: #e255a1;
+  --tag-red-dot: #ff7369;
+
+  --tag-default-wash: rgba(255, 255, 255, 0.03);
+  --tag-gray-wash: rgba(255, 255, 255, 0.03);
+  --tag-brown-wash: rgba(186, 133, 111, 0.08);
+  --tag-orange-wash: rgba(255, 163, 68, 0.07);
+  --tag-yellow-wash: rgba(255, 220, 73, 0.06);
+  --tag-green-wash: rgba(77, 171, 154, 0.07);
+  --tag-blue-wash: rgba(82, 156, 202, 0.08);
+  --tag-purple-wash: rgba(154, 109, 215, 0.08);
+  --tag-pink-wash: rgba(226, 85, 161, 0.07);
+  --tag-red-wash: rgba(255, 115, 105, 0.07);
+}
+
+/* Expose the runtime tokens to Tailwind utilities (bg-surface, text-secondary…) */
+@theme inline {
+  --color-surface: var(--bac-pri);
+  --color-surface-sec: var(--bac-sec);
+  --color-surface-ter: var(--bac-ter);
+  --color-surface-hover: var(--bac-int);
+  --color-surface-active: var(--bac-int-strong);
+  --color-surface-elevated: var(--bac-ele);
+
+  --color-primary: var(--tex-pri);
+  --color-secondary: var(--tex-sec);
+  --color-tertiary: var(--tex-ter);
+  --color-inverted: var(--tex-inv);
+
+  --color-icon: var(--ico-pri);
+  --color-icon-sec: var(--ico-sec);
+  --color-icon-ter: var(--ico-ter);
+
+  --color-line: var(--bor-pri);
+  --color-line-soft: var(--bor-sec);
+  --color-line-strong: var(--bor-str);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+}
+
+/* ------------------------------------------------------------- base css --- */
+* {
+  border-color: var(--bor-pri);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bac-pri);
+  color: var(--tex-pri);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "lnum" 1, "locl" 0;
+}
+
+/* Notion's scrollbars: thin, only visible on hover of the scroll container. */
+.notion-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.notion-scroller:hover {
+  scrollbar-color: var(--bor-str) transparent;
+}
+.notion-scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.notion-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+.notion-scroller::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.notion-scroller:hover::-webkit-scrollbar-thumb {
+  background: var(--bor-str);
+  background-clip: content-box;
+}
+
+/* contentEditable placeholder, matching Notion's ghost text */
+[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--tex-ter);
+  pointer-events: none;
+  position: absolute;
+  white-space: pre;
+}
+
+[contenteditable] {
+  outline: none;
+  word-break: break-word;
+}
+
+/* Selection matches Notion's blue wash */
+::selection {
+  background: var(--accent-ring);
+}
+
+/* Popovers and menus enter with a short rise; Notion's is barely perceptible
+   and that restraint is the point — a longer animation reads as sluggish. */
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
