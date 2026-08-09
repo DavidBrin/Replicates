@@ -13,7 +13,10 @@ import type { BlockComponentProps } from "./shared";
 export function ChildDatabase({ block }: BlockComponentProps) {
   if (!block.targetId) return null;
   return (
-    <div contentEditable={false} className="my-2">
+    // `notion-breakout` (globals.css) widens the block past the page's text
+    // measure — a board with five columns should not be squeezed into the
+    // 708px column the prose uses.
+    <div contentEditable={false} className="notion-breakout my-2">
       <DatabaseView databaseId={block.targetId} />
     </div>
   );

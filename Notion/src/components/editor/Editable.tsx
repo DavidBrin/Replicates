@@ -297,9 +297,15 @@ export function Editable({ blockId, className, style, placeholder }: EditablePro
       element.textContent = stripped;
       commit(stripped);
       closeSlash();
-      setCaret(element, start);
 
       applyBlockType(blockId, nextType);
+
+      // Converting swaps in a different block component, so the element this
+      // handler is holding is about to be discarded. Setting the caret on it
+      // now would be undone by the remount — the caret has to be restored
+      // after React commits, against whatever element replaces it.
+      // A divider is not editable, so there is nothing to focus.
+      if (nextType !== "divider") focusAfterCommit(blockId, start);
     },
     [blockId, closeSlash, commit],
   );

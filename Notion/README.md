@@ -60,9 +60,27 @@ The work was split across a team of agents rather than done linearly, borrowing 
 
 **3. Implementation (parallel, 4 agents).** With the contracts fixed, four agents built disjoint surfaces simultaneously — block editor, database views, marketing site, app chrome — each confined to its own directory and each handed the exact signatures of the components it did not own.
 
-**4. Review.** Type-checking, linting, the unit suite, an independent code review, and a browser pass over the running app.
+**4. Review.** Type-checking, linting, the unit suite, and a browser pass driving the real app.
 
 The two things that made the parallel phase work were **directory ownership** (no two agents could touch the same file) and **contracts written down before the fan-out** (an agent importing `DatabaseView` was told its exact signature rather than guessing).
+
+### What the browser pass caught
+
+Static checks passed while the app was still visibly broken, which is the argument for driving it rather than trusting a green build. Six defects, in rough order of severity:
+
+**The app never rendered at all.** `/workspace` sat on the loading skeleton forever. The load effect had a "has already run" ref guard *and* a cancel-on-cleanup flag; under Strict Mode's mount → unmount → remount, the first pass started and was cancelled, and the second returned early at the guard. `hydrated` never flipped. Loading is an idempotent read, so the fix was to delete the guard and let it run twice in development.
+
+**The page cover was invisible** despite occupying the right space. The style object set the `background` shorthand for gradients and `backgroundImage` for URLs; React applies both, so assigning the second as `undefined` cleared the image the first had just set, leaving only the shorthand's other resets behind. Both kinds now go through `backgroundImage`.
+
+**The hero headline broke into three lines** instead of Notion's two, with the pill stranded on its own. Measuring showed line two needs ~1048px at 96px and the column was 960px — and that our pill carried 1.0em of dot-and-padding chrome where Notion's carries about 0.6em. The pill was also seated ~30px too low, because `overflow: hidden` (needed to clip the width morph) moves an inline box's baseline to its bottom margin edge.
+
+**The board was squeezed into the 708px text column.** Notion lets an inline database break out to the page width. Fixed by making the editor root a size container and re-centring the block on it with symmetric negative margins — no viewport or sidebar arithmetic.
+
+**Choosing a slash-menu item lost the caret.** The caret was restored before the conversion, and converting swaps in a different component, so the element being focused was already on its way out. It now restores after React commits.
+
+**The calendar opened on an empty month,** because the demo data was pinned to a fixed date in the past. The seed is now anchored to today. That is safe here for a specific reason: nothing date-derived is server-rendered — `/workspace` emits the skeleton on the server and paints only after client hydration — so a server/client timezone difference cannot produce a mismatch.
+
+Two more were caught by the linter and fixed rather than suppressed: a `setState`-in-effect in the theme provider (now an external store read through `useSyncExternalStore`, which is the right shape for a value that differs between server and client anyway), and a `useCallback` the React Compiler could not preserve in `Popover` (the callback moved inside the effect that used it, which also stopped the scroll and resize listeners re-arming every render).
 
 ---
 
@@ -82,7 +100,9 @@ Research changed the build in ways worth recording, because several assumptions 
 
 The tag palette came from the same source — the familiar `#337ea9` blue, `#448361` green, `#d9730d` orange, `#cd3c3a` red — along with each colour's pill background and the faint wash used behind a board column.
 
-**Three findings contradicted the brief.** The reference screenshots suggested the hero screenshot sat inside a browser-chrome mockup with traffic lights. It does not — grepping Notion's CSS and HTML for `trafficLight|browserChrome|tabStrip` returns nothing. The hero is a bordered rounded panel that **dissolves into the page** behind a 200px white gradient, and that gradient is doing more work than the border radius. Similarly, the nav CTA is black (`#191918`) while the *hero* CTA is blue (`#0075de`) — two different buttons. And the hero headline is **weight 600, not 700**, at 96px with −4.6px tracking.
+**Three findings contradicted the starting assumptions.** The reference screenshots suggested the hero screenshot sat inside a browser-chrome mockup with traffic lights. It does not — grepping Notion's CSS and HTML for `trafficLight|browserChrome|tabStrip` returns nothing. The hero is a bordered rounded panel that **dissolves into the page** behind a 200px white gradient, and that gradient is doing more work than the border radius. Similarly, the nav CTA is black (`#191918`) while the *hero* CTA is blue (`#0075de`) — two different buttons. And the hero headline is **weight 600, not 700**, at 96px with −4.6px tracking.
+
+Research also killed a spec item that turned out not to exist: Notion has no Short/Medium/Tall table row height (that is Airtable). Row height is content-driven off a `min-height: 36px`; what Notion actually has is per-property **Wrap text**, and Small/Medium/Large sizing on **board and gallery cards**, not table rows.
 
 **Notion's data model is public, so the types mirror it.** Notion's own engineering writing describes the model: everything is a block; a block has an id, a type, properties, an ordered `content[]` of child ids, and a parent. Database rows *are* pages — which is why, in this codebase, opening a board card opens a page you can write in. The `Page` type carries an optional `databaseId` and `properties` rather than there being a separate `Row` entity, and that one decision removes a whole category of syncing bugs.
 
@@ -240,8 +260,13 @@ The suite concentrates on the pure layer, where the bug surface actually is: the
 Storage adapters share one `describe.each` suite, since all four must satisfy the same contract.
 
 ```bash
-npm test
+npm test         # 90 tests, ~0.5s
+npm run lint
+npm run typecheck
+npm run build
 ```
+
+All four are clean. The UI itself was verified by driving the running app in a browser rather than by asserting on rendered markup — including a keyboard drag of a board card from **Not started** to **Blocked**, confirmed by reading `status-blocked` back out of IndexedDB afterwards. The section above lists what that pass found.
 
 ---
 
@@ -308,4 +333,7 @@ Scoped out deliberately, and worth being explicit about:
 - **Rich text is plain text plus browser-native marks.** Bold/italic/code apply through `execCommand`; there is no `RichText[]` annotation model persisted per span.
 - **Undo is per-block and browser-native.** There is no application-level undo stack across blocks.
 - **No relations, rollups or formulas.** The property registry is built to accept them — each is one class — but they are not implemented.
-- **Timeline and gallery views** are not implemented; board, table, list and calendar are.
+- **Timeline and gallery views** are not implemented; board, table, list and calendar are. A gallery tab falls back to the board so it is never a dead end.
+- **A multi-day event repeats per day in the calendar** rather than drawing one continuous bar across the row. The dates are right; the rendering is naive.
+- **Block drag reorders within one parent only.** Moving a block to a different nesting level is done with Tab and Shift-Tab.
+- **The demo workspace is anchored to today**, so screenshots taken on different days show different dates. That is deliberate — see the note above.

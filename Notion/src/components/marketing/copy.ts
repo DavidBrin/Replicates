@@ -243,7 +243,8 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
 export interface PricingPlan {
   name: string;
   price: string;
-  cadence?: string;
+  /** Shown under the price. Required so no plan falls back to wrong copy. */
+  cadence: string;
   blurb: string;
   cta: { label: string; href: string };
   emphasis?: boolean;
@@ -254,6 +255,7 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     name: "Free",
     price: "$0",
+    cadence: "free forever",
     blurb: "For individuals organising every corner of their life.",
     cta: { label: "Get started", href: routes.workspace },
     features: [
@@ -296,6 +298,7 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     name: "Enterprise",
     price: "Custom",
+    cadence: "annual billing",
     blurb: "For organisations with advanced security and control needs.",
     cta: { label: "Request a demo", href: "#request-demo" },
     features: [

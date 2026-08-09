@@ -23,11 +23,35 @@ import type {
 } from "../model/types";
 import { storage as storageConfig } from "@/config/app.config";
 
-/** Fixed clock so the seed is deterministic and snapshot-testable. */
-const SEED_EPOCH = new Date("2026-02-19T16:20:00.000Z").toISOString();
+/**
+ * The demo is anchored to *today* rather than to a fixed date, so the calendar
+ * view opens on a month that has work in it and "Edited 2 hours ago" reads as
+ * live. Without this the seeded tasks would drift further into the past with
+ * every month that passes and the calendar would look broken.
+ *
+ * Anchoring to the current day is safe here specifically because nothing
+ * date-derived is ever server-rendered: `/workspace` emits the hydration
+ * skeleton on the server and on the first client pass, and the workspace only
+ * paints once hydration has completed on the client. A server/client timezone
+ * difference therefore cannot produce a hydration mismatch.
+ */
+const SEED_EPOCH = startOfToday();
+
+function startOfToday(): number {
+  const now = new Date();
+  now.setHours(9, 0, 0, 0);
+  return now.getTime();
+}
+
+const DAY_MS = 86_400_000;
 
 function ts(offsetMinutes = 0): string {
-  return new Date(Date.parse(SEED_EPOCH) + offsetMinutes * 60_000).toISOString();
+  return new Date(SEED_EPOCH + offsetMinutes * 60_000).toISOString();
+}
+
+/** A calendar date `days` from today, as `YYYY-MM-DD`. */
+function day(days: number): string {
+  return new Date(SEED_EPOCH + days * DAY_MS).toISOString().slice(0, 10);
 }
 
 /* ------------------------------------------------------------------ users -- */
@@ -145,7 +169,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-not-started",
     assignees: ["user-rafi"],
     priority: "priority-high",
-    due: { start: "2026-03-02" },
+    due: { start: day(9) },
     tags: ["tag-research", "tag-eng"],
     effort: 5,
     body: [
@@ -162,7 +186,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-not-started",
     assignees: ["user-rafi"],
     priority: "priority-medium",
-    due: { start: "2026-03-06" },
+    due: { start: day(13) },
     tags: ["tag-ops"],
     effort: 3,
   },
@@ -173,7 +197,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-not-started",
     assignees: ["user-david"],
     priority: "priority-medium",
-    due: { start: "2026-03-11" },
+    due: { start: day(18) },
     tags: ["tag-research", "tag-ops"],
     effort: 8,
   },
@@ -214,7 +238,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-in-progress",
     assignees: ["user-rafi", "user-david"],
     priority: "priority-urgent",
-    due: { start: "2026-02-24", end: "2026-03-13" },
+    due: { start: day(3), end: day(20) },
     tags: ["tag-research"],
     effort: 13,
     body: [
@@ -232,7 +256,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-in-progress",
     assignees: ["user-david"],
     priority: "priority-high",
-    due: { start: "2026-03-04" },
+    due: { start: day(11) },
     tags: ["tag-research", "tag-ops"],
     effort: 8,
   },
@@ -243,7 +267,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-in-review",
     assignees: ["user-theo"],
     priority: "priority-high",
-    due: { start: "2026-02-27" },
+    due: { start: day(6) },
     tags: ["tag-eng"],
     effort: 5,
   },
@@ -264,7 +288,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-blocked",
     assignees: ["user-mara"],
     priority: "priority-urgent",
-    due: { start: "2026-02-20" },
+    due: { start: day(-1) },
     tags: ["tag-ops"],
     effort: 5,
   },
@@ -275,7 +299,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-done",
     assignees: ["user-david", "user-rafi", "user-mara"],
     priority: "priority-high",
-    due: { start: "2026-02-14" },
+    due: { start: day(-7) },
     tags: ["tag-research"],
     effort: 8,
     verified: true,
@@ -287,7 +311,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-done",
     assignees: ["user-david"],
     priority: "priority-medium",
-    due: { start: "2026-02-10" },
+    due: { start: day(-11) },
     tags: ["tag-eng", "tag-ops"],
     effort: 2,
     verified: true,
@@ -299,7 +323,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-done",
     assignees: ["user-david", "user-rafi", "user-theo"],
     priority: "priority-high",
-    due: { start: "2026-02-12" },
+    due: { start: day(-9) },
     tags: ["tag-research"],
     effort: 5,
     verified: true,
@@ -311,7 +335,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-done",
     assignees: ["user-theo", "user-rafi"],
     priority: "priority-high",
-    due: { start: "2026-02-13" },
+    due: { start: day(-8) },
     tags: ["tag-eng"],
     effort: 8,
     verified: true,
@@ -323,7 +347,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-done",
     assignees: ["user-rin"],
     priority: "priority-low",
-    due: { start: "2026-02-06" },
+    due: { start: day(-15) },
     tags: ["tag-design"],
     effort: 2,
     verified: true,
@@ -335,7 +359,7 @@ const TASK_ROWS: SeedRow[] = [
     status: "status-done",
     assignees: ["user-mara", "user-rin"],
     priority: "priority-medium",
-    due: { start: "2026-02-17" },
+    due: { start: day(-4) },
     tags: ["tag-gtm", "tag-design"],
     effort: 5,
     verified: false,

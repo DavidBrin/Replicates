@@ -299,6 +299,22 @@ body {
   background-clip: content-box;
 }
 
+/* An inline database is wider than the prose it sits in — Notion lets a board
+   or table use the whole page while the text stays on its 708px measure.
+   The editor root is a size container, so the block can be sized against the
+   page width and re-centred on it with symmetric negative margins, without
+   knowing anything about the sidebar or the viewport. */
+[data-editor-root] {
+  container-type: inline-size;
+  container-name: page;
+}
+
+.notion-breakout {
+  --breakout-width: min(100cqw - 48px, 1600px);
+  width: max(100%, var(--breakout-width));
+  margin-inline: min(0px, calc(50% - var(--breakout-width) / 2));
+}
+
 /* contentEditable placeholder, matching Notion's ghost text */
 [data-placeholder]:empty::before {
   content: attr(data-placeholder);

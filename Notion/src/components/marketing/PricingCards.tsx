@@ -58,7 +58,7 @@ export function PricingCards() {
               className="mkt-small mt-1"
               style={{ color: "var(--mkt-text-muted)" }}
             >
-              {plan.cadence ?? "free forever"}
+              {plan.cadence}
             </p>
 
             <p

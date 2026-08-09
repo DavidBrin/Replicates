@@ -173,7 +173,9 @@ export function PageEditor({ pageId }: PageEditorProps) {
 
   if (!page) return null;
 
-  const hasCover = page.cover.type !== "none";
+  // Narrowed to the variants that actually paint, so the JSX below can read
+  // `.gradient` / `.url` without re-checking the discriminant.
+  const cover = page.cover.type === "none" ? null : page.cover;
   const hasIcon = page.icon.type !== "none";
   const horizontalPadding = page.fullWidth
     ? layout.page.fullWidthPadding
@@ -195,7 +197,7 @@ export function PageEditor({ pageId }: PageEditorProps) {
       // shrinks the whole body without each block knowing about the setting.
       style={{ "--editor-text": page.smallText ? "14px" : "16px" } as CSSProperties}
     >
-      {hasCover ? (
+      {cover ? (
         <div
           className="group/cover relative w-full"
           style={{
@@ -206,9 +208,7 @@ export function PageEditor({ pageId }: PageEditorProps) {
             // shorthand first, then assigning the longhand `undefined` clears
             // it again while leaving the shorthand's other resets in place.
             backgroundImage:
-              page.cover.type === "gradient"
-                ? page.cover.gradient
-                : `url(${page.cover.url})`,
+              cover.type === "gradient" ? cover.gradient : `url(${cover.url})`,
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
@@ -231,7 +231,7 @@ export function PageEditor({ pageId }: PageEditorProps) {
         {hasIcon ? (
           <div
             style={{
-              marginTop: hasCover ? -layout.page.iconCoverOverlap : 24,
+              marginTop: cover ? -layout.page.iconCoverOverlap : 24,
               marginBottom: 4,
             }}
           >
@@ -267,9 +267,9 @@ export function PageEditor({ pageId }: PageEditorProps) {
           className={cn(
             "flex h-7 items-center gap-1 opacity-0 transition-opacity duration-100",
             "group-hover/page:opacity-100 focus-within:opacity-100",
-            hasIcon && hasCover && "hidden",
+            hasIcon && cover && "hidden",
           )}
-          style={{ marginTop: hasIcon ? 0 : hasCover ? 24 : 40 }}
+          style={{ marginTop: hasIcon ? 0 : cover ? 24 : 40 }}
         >
           {!hasIcon ? (
             <HeaderButton
@@ -280,7 +280,7 @@ export function PageEditor({ pageId }: PageEditorProps) {
               Add icon
             </HeaderButton>
           ) : null}
-          {!hasCover ? (
+          {!cover ? (
             <HeaderButton icon={<ImagePlus size={14} />} onClick={cycleCover}>
               Add cover
             </HeaderButton>
