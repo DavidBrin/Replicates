@@ -253,20 +253,50 @@ The marketing site carries a **second, scoped palette** — Notion runs differen
 
 ## Testing
 
-Vitest + React Testing Library + jsdom.
-
-The suite concentrates on the pure layer, where the bug surface actually is: the view engine (filter, sort, group), the property-type registry, the storage adapters, and the store's tree operations. These run in milliseconds and catch the things that are genuinely hard to get right — that blanks sink in *both* sort directions, that a block cannot be moved inside its own subtree, that trashing a page trashes its whole subtree, that removing a property clears any view grouping that pointed at it, that a permanent delete leaves no dangling references.
-
-Storage adapters share one `describe.each` suite, since all four must satisfy the same contract.
+Vitest + React Testing Library + jsdom. **147 tests, about two seconds.**
 
 ```bash
-npm test         # 90 tests, ~0.5s
+npm test
 npm run lint
 npm run typecheck
 npm run build
 ```
 
-All four are clean. The UI itself was verified by driving the running app in a browser rather than by asserting on rendered markup — including a keyboard drag of a board card from **Not started** to **Blocked**, confirmed by reading `status-blocked` back out of IndexedDB afterwards. The section above lists what that pass found.
+The suite is in two halves, because the first half alone was green while the app rendered nothing.
+
+**Pure logic** — the view engine (filter, sort, group), the property-type registry, the storage adapters, the store's tree operations, and the seed's referential integrity. Fast, and where most of the genuinely tricky invariants live: that blanks sink in *both* sort directions, that a block cannot be moved inside its own subtree, that trashing a page trashes its whole subtree, that removing a property clears any view grouping pointing at it, that a permanent delete leaves no dangling references. Storage adapters share one `describe.each` suite, since all four must satisfy the same contract.
+
+**Mounted components** — added specifically to close the gap the browser pass exposed. Anything whose failure mode is *"renders, but wrong"* is unreachable from a logic test:
+
+| Suite | Guards |
+|---|---|
+| `providers.test.tsx` | The workspace reaches a hydrated state **under `<StrictMode>`**. This is the one that would have caught the blank app. |
+| `PageEditor.test.tsx` | The cover actually paints; every block type survives the renderer registry; the inline database keeps its break-out class. |
+| `Editable.test.tsx` | Typing reaches the store; markdown shortcuts convert; the slash menu opens, filters and **leaves the caret in the converted block**; Enter splits at the caret; Tab and Shift-Tab re-nest. |
+| `DatabaseView.test.tsx` | All four views render their rows — including the calendar placing tasks on the grid rather than showing an empty month. |
+| `SharePopover.test.tsx` | Invites land as pending members with the right role; role changes and removals write through. |
+| `demo-workspace.test.ts` | No dangling ids anywhere in the seed, and the demo data stays *fresh* — enough tasks in the current month, every board column non-empty. |
+
+### The regression tests were verified against their own bugs
+
+A regression test that passes both before and after a fix proves nothing. Each of the three most important ones was checked by reintroducing the original defect and confirming it fails:
+
+- restoring the ref guard in the load effect → **all 5** provider tests fail;
+- restoring the `background` shorthand on the cover → the gradient test fails;
+- restoring the caret-before-conversion ordering → the caret test fails with *"no editable is focused after converting"*.
+
+### Two jsdom shims, and why they are legitimate
+
+jsdom has no layout engine and no `contenteditable`, which silently breaks editor tests in ways that look like product bugs:
+
+- **`Range.getBoundingClientRect` does not exist** — calling it *throws*. The editor measures the caret to anchor the slash menu, so that exception aborted the state update that opens it. The visible symptom was a menu that never appeared; the real cause surfaced only as an unhandled error. The shim returns a zero rect, which production code already treats as "fall back to the element's own box".
+- **`isContentEditable` is hard-wired to `false`** — user-event reads it to decide whether an element is typable, so without the shim every editor test types into the void.
+
+Both live in `vitest.setup.ts` with the reasoning written down. Where jsdom genuinely cannot model something — restoring a caret across a remount, so that typing *after* an Enter-split lands in the new block — the test asserts the structural outcome and places the caret explicitly rather than pretending. That behaviour is covered by the browser pass instead.
+
+### Beyond the suite
+
+The UI was also verified by driving the running app — including a keyboard drag of a board card from **Not started** to **Blocked**, confirmed by reading `status-blocked` back out of IndexedDB afterwards.
 
 ---
 
