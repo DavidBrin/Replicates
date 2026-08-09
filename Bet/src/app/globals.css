@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — SPEC.md §7.1 (Bet's own identity, dark-first).
+ * Every color, radius and spacing value used by components must come from
+ * here (G7). No hex literals in components.
+ */
+@theme {
+  --color-surface-0: #0a0b10; /* page      */
+  --color-surface-1: #101218; /* card      */
+  --color-surface-2: #17181c; /* raised    */
+  --color-surface-3: #202227; /* hover     */
+  --color-border: #ffffff17; /* hairline  */
+  --color-border-2: #ffffff24;
+  --color-text-1: #ecedee; /* primary   */
+  --color-text-2: #9b9da7; /* secondary */
+  --color-text-3: #6b6e78; /* muted     */
+  --color-accent: #7c6cff; /* Bet indigo */
+  --color-accent-2: #a394ff;
+  --color-yes: #2bae4c;
+  --color-yes-bg: #2bae4c1f;
+  --color-yes-br: #2bae4c52;
+  --color-no: #f43437;
+  --color-no-bg: #f434371f;
+  --color-no-br: #f4343752;
+  --color-warn: #efc500;
+
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-pill: 999px;
+
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  --surface-0: #0a0b10;
+  --surface-1: #101218;
+  --surface-2: #17181c;
+  --surface-3: #202227;
+  --border: #ffffff17;
+  --border-2: #ffffff24;
+  --text-1: #ecedee;
+  --text-2: #9b9da7;
+  --text-3: #6b6e78;
+  --accent: #7c6cff;
+  --accent-2: #a394ff;
+  --yes: #2bae4c;
+  --yes-bg: #2bae4c1f;
+  --yes-br: #2bae4c52;
+  --no: #f43437;
+  --no-bg: #f434371f;
+  --no-br: #f4343752;
+  --warn: #efc500;
+
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-pill: 999px;
+}
+
+/*
+ * Explore's borrowed identity — SPEC §7.3. Kalshi's surfaces + mint accent.
+ * Scoped so the aesthetics never leak into the private Bet surface.
+ */
+[data-surface="explore"] {
+  --surface-0: #0a0c0f;
+  --surface-1: #13161a;
+  --surface-2: #1b2029;
+  --accent: #28cc95;
+  --no: #ff409f;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--surface-0);
+  color: var(--text-1);
+  font-family:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-feature-settings:
+    "cv01",
+    "cv02",
+    "cv03",
+    "cv04",
+    "cv11";
+}
+
+/* Numeric discipline — SPEC §7.2: every probability, price, multiplier,
+   credit amount and countdown renders with tabular numerals. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}

@@ -77,9 +77,10 @@ alone. Buttons are `<button>`, links are `<a>`. Modals trap focus and close on E
 No payment code, no deposit/withdraw UI, no wording implying real currency. Balances are
 "credits". See DECISIONS D1.
 
-### G11 — Commits
-One commit per task minimum, message in imperative mood describing the change. Do not
-amend or rebase previous tasks' commits.
+### G11 — Do not run git
+Implementers **do not** run `git add`, `git commit`, or any other git command. Tasks run
+in overlapping waves against one working tree, and concurrent git invocations corrupt the
+index. Write your files, run the tests, report. The controller commits.
 
 ---
 
@@ -222,8 +223,8 @@ reference test genuinely fails if you return stored objects directly.
 ## Task 4 — Authz policy + auth adapter + composition root
 
 **Files:** `src/domain/authz.ts`, `src/ports/auth.ts`, `src/adapters/auth/demo-session.ts`,
-`src/lib/container.ts`, `src/app/api/session/route.ts`, `src/app/api/me/route.ts`,
-`src/app/signin/page.tsx`, `proxy.ts`, tests.
+`src/lib/container.ts`, `src/lib/http.ts`, `src/app/api/session/route.ts`,
+`src/app/api/me/route.ts`, `src/app/signin/page.tsx`, `proxy.ts`, tests.
 
 1. **`authz.ts`** — `can(actor: Actor, action: Action, resource: Resource, ctx): boolean`
    implementing the matrix in `research/social-and-invites.md` §7.2 exactly. Resource
@@ -237,6 +238,13 @@ reference test genuinely fails if you return stored objects directly.
    `httpOnly`, `sameSite: "lax"`, `secure` in production, `path: "/"`. Secret from
    `AUTH_SECRET` env with a documented development fallback constant (and a loud
    `console.warn` when the fallback is used).
+4b. **`lib/http.ts`** — `jsonOk(data, init?)`, `jsonErr(error, status?)`,
+   `parseBody(req, schema)`, and a `handler()` wrapper that catches thrown `AppError`s
+   and unexpected errors (logging the latter, returning `internal` without leaking the
+   message). Status mapping: `validation→400, forbidden→403, not_found→404,
+   conflict→409, rate_limited→429, insufficient_balance→422, market_closed→409,
+   internal→500`. Every later task's routes use this module.
+
 4. **`container.ts`** — the composition root. Builds the singleton `DataStore` (seeded,
    Task 5), `Clock`, `IdGen`, `AuthProvider`, and exposes `getContainer()`. This is the
    **only** module that constructs adapters. Also exports
@@ -294,11 +302,8 @@ bounded-loss invariant.
 **Files:** `src/app/api/users/search/route.ts`, `src/app/api/friends/**`,
 `src/app/api/groups/**`, `src/app/api/invites/**`, `src/lib/http.ts`, tests.
 
-1. **`lib/http.ts`** — `jsonOk(data, init?)`, `jsonErr(error, status?)`, `parseBody(req, schema)`,
-   and a `handler()` wrapper that catches thrown `AppError`s and unexpected errors
-   (logging the latter, returning `internal` without leaking the message). Status mapping:
-   `validation→400, forbidden→403, not_found→404, conflict→409, rate_limited→429,
-   insufficient_balance→422, market_closed→409, internal→500`.
+1. `lib/http.ts` already exists from Task 4 — use `jsonOk` / `jsonErr` / `parseBody` /
+   `handler()` from it. Do not create a second HTTP helper module.
 2. **`GET /api/users/search?q=`** — min 2 chars, case-insensitive prefix on handle and
    display name, capped at 10 results, excludes self. Returns only
    `{id, handle, displayName, avatarColor, isFriend, hasPendingRequest}` — never emails,
