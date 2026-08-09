@@ -32,6 +32,13 @@ describe("formatCredits()", () => {
     expect(formatCredits(credits(124_050))).toBe("1,241"); // 1240.5 -> 1241
     expect(formatCredits(credits(124_049))).toBe("1,240");
   });
+
+  it("rounds a negative halfway remainder half away from zero, not half-up", () => {
+    // Math.round(-1240.5) is -1240 (half-up); the house style is half away
+    // from zero, matching money.ts's mul()/fromDecimal() rounding, so this
+    // must be -1241.
+    expect(formatCredits(credits(-124_050))).toBe("-1,241"); // -1240.5 -> -1241
+  });
 });
 
 describe("formatCreditsPrecise()", () => {

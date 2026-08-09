@@ -28,8 +28,11 @@ export function credits(n: number): Credits {
 }
 
 /** Rounds to the nearest integer, ties breaking away from zero (so -0.5
- * rounds to -1, not 0, unlike `Math.round`). */
-function roundHalfAwayFromZero(n: number): number {
+ * rounds to -1, not 0, unlike `Math.round`, which is half-up and would round
+ * -0.5 to -0). Exported so other domain modules (e.g. `formatters.ts`) that
+ * need to round a decimal credit amount for display share this house style
+ * instead of reimplementing it with plain `Math.round`. */
+export function roundHalfAwayFromZero(n: number): number {
   return n >= 0 ? Math.round(n) : -Math.round(-n);
 }
 

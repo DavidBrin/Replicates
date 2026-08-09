@@ -7,13 +7,16 @@
  */
 
 import type { Credits } from "./money";
-import { toDecimal } from "./money";
+import { roundHalfAwayFromZero, toDecimal } from "./money";
 
 /** Renders whole credits with thousands separators, e.g. `124000` cents
- * (1,240 credits) → `"1,240"`. Rounds to the nearest whole credit — use
- * `formatCreditsPrecise` where cent-level display is needed. */
+ * (1,240 credits) → `"1,240"`. Rounds to the nearest whole credit, half away
+ * from zero (money.ts's house rounding style — plain `Math.round` is
+ * half-up and would round a negative halfway value, e.g. -1240.50, toward
+ * -1240 instead of -1241). Use `formatCreditsPrecise` where cent-level
+ * display is needed. */
 export function formatCredits(c: Credits): string {
-  const whole = Math.round(toDecimal(c));
+  const whole = roundHalfAwayFromZero(toDecimal(c));
   return new Intl.NumberFormat("en-US").format(whole);
 }
 
