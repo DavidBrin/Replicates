@@ -186,6 +186,16 @@ export type Market = {
   outcomes: Outcome[];
   createdAt: Date;
   resolution?: Resolution;
+  /**
+   * Explore's topical grouping (SPEC §3.6: Politics/Sports/Crypto/Culture/
+   * Economics/Climate/Tech) — only meaningful for `visibility: "public"`
+   * markets; `undefined` for every private/group market. Added by Task 7
+   * (see seed-data/explore-markets.ts's module doc comment for the id-prefix
+   * workaround this field replaces as the source of truth for
+   * `GET /api/explore`'s category grouping) rather than a fixed enum here,
+   * so this file doesn't have to depend on Task 5's `ExploreCategory` union.
+   */
+  category?: string;
 };
 
 // ---------------------------------------------------------------------------

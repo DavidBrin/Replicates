@@ -498,6 +498,11 @@ async function seedExploreMarket(
     stakesVisible: true,
     outcomes,
     createdAt,
+    // Task 7: the real `category` field (entities.ts) replaces the id-prefix
+    // workaround as the source of truth `GET /api/explore` groups by. The id
+    // still carries the `mkt-${category}_` prefix (harmless, kept for
+    // debuggability) but nothing reads it back anymore.
+    category: def.category,
   };
   await tx.markets.insert(market);
 
