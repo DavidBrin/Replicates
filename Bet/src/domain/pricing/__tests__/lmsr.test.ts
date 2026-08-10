@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { add, toDecimal, zero, type Credits } from "@/domain/money";
+import { add, credits, toDecimal, zero, type Credits } from "@/domain/money";
 import {
   defaultB,
   lmsrCost,
@@ -142,6 +142,102 @@ describe("lmsrSharesForBudget — inverts lmsrTradeCost", () => {
         const proceeds = -lmsrTradeCost(q, 0, -shares, b);
         expect(proceeds).toBeLessThanOrEqual(budget + 1e-6);
       }),
+    );
+  });
+});
+
+describe("budget-based orders never overspend at the money boundary (through engine.quote/execute)", () => {
+  // Unlike the raw-decimal checks above, these go through the ENGINE and
+  // compare against `order.budget` as integer `Credits` — the value the
+  // caller is actually charged after the ceil-rounding money boundary
+  // (`toCreditsAtBoundary`). The 2-outcome path is an independent
+  // algebraic closed-form solve (lmsr.ts's `lmsrDeltaForTargetCost`), not
+  // covered by the n-outcome bisection's `f(lo) <= budget` loop invariant,
+  // so it needs its own direct check — a float mismatch inside the EPS
+  // guard could in principle round a cent over budget.
+
+  function assertNeverOverspends(state: MarketState, budgetCents: number) {
+    const outcomeId = Object.keys((state as Extract<MarketState, { kind: "lmsr" }>).q)[0];
+    const budget = credits(budgetCents);
+    const quote = lmsrEngine.quote(state, { outcomeId, side: "buy", budget });
+    expect(quote.cost).toBeLessThanOrEqual(budget);
+
+    // execute() must agree with quote() (invariant 7) and also never overspend.
+    const { quote: executed } = lmsrEngine.execute(state, { outcomeId, side: "buy", budget });
+    expect(executed.cost).toBeLessThanOrEqual(budget);
+  }
+
+  it("2-outcome closed form: quote.cost never exceeds order.budget as integer Credits", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 20, max: 500 }),
+        fc.integer({ min: 0, max: 500 }),
+        fc.integer({ min: 0, max: 500 }),
+        fc.integer({ min: 1, max: 100_000 }),
+        (b, q0, q1, budgetCents) => {
+          const state: MarketState = { kind: "lmsr", status: "open", b, q: { Yes: q0, No: q1 } };
+          assertNeverOverspends(state, budgetCents);
+        },
+      ),
+      { numRuns: 5000 },
+    );
+  });
+
+  it("2-outcome closed form: tiny budgets (1-5 cents) never overspend — proportionally the riskiest case", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 20, max: 500 }),
+        fc.integer({ min: 0, max: 500 }),
+        fc.integer({ min: 0, max: 500 }),
+        fc.integer({ min: 1, max: 5 }),
+        (b, q0, q1, budgetCents) => {
+          const state: MarketState = { kind: "lmsr", status: "open", b, q: { Yes: q0, No: q1 } };
+          assertNeverOverspends(state, budgetCents);
+        },
+      ),
+      { numRuns: 5000 },
+    );
+  });
+
+  it("n-outcome bisection: quote.cost never exceeds order.budget as integer Credits", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 20, max: 500 }),
+        fc.array(fc.integer({ min: 0, max: 300 }), { minLength: 3, maxLength: 5 }),
+        fc.integer({ min: 1, max: 100_000 }),
+        (b, qValues, budgetCents) => {
+          const outcomes = qValues.map((_, i) => `O${i}`);
+          const state: MarketState = {
+            kind: "lmsr",
+            status: "open",
+            b,
+            q: Object.fromEntries(outcomes.map((o, i) => [o, qValues[i]])),
+          };
+          assertNeverOverspends(state, budgetCents);
+        },
+      ),
+      { numRuns: 5000 },
+    );
+  });
+
+  it("n-outcome bisection: tiny budgets (1-5 cents) never overspend — proportionally the riskiest case", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 20, max: 500 }),
+        fc.array(fc.integer({ min: 0, max: 300 }), { minLength: 3, maxLength: 5 }),
+        fc.integer({ min: 1, max: 5 }),
+        (b, qValues, budgetCents) => {
+          const outcomes = qValues.map((_, i) => `O${i}`);
+          const state: MarketState = {
+            kind: "lmsr",
+            status: "open",
+            b,
+            q: Object.fromEntries(outcomes.map((o, i) => [o, qValues[i]])),
+          };
+          assertNeverOverspends(state, budgetCents);
+        },
+      ),
+      { numRuns: 5000 },
     );
   });
 });

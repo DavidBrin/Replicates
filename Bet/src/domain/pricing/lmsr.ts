@@ -232,9 +232,23 @@ export class LmsrEngine extends BasePricingEngine {
   }
 
   /** Each share of the winning outcome pays 1 credit (par value); every
-   * other share pays 0. Payouts are aggregated per user and rounded DOWN
-   * at the money boundary (never favors the trader — G2); losing/zero
-   * entries are omitted. */
+   * other share pays 0. Payouts are aggregated per user (by `userId`) and
+   * rounded DOWN at the money boundary (never favors the trader — G2);
+   * losing/zero entries are omitted.
+   *
+   * CONTRACT: `positions` must contain at most one row per (userId,
+   * outcomeId) pair — i.e. each user's holding in a given outcome already
+   * summed into a single `Position.shares` figure, the way `DataStore`'s
+   * `PositionRepo` is expected to store it (one upserted row per
+   * user+market+outcome, per Task 7's `executeTrade`, not one row per
+   * trade). This method rounds DOWN per row *before* aggregating by user,
+   * which is the safe direction (never overpays) but is lossy if the same
+   * (user, outcome) pair arrives as several un-merged rows — each one
+   * loses its own fraction-of-a-cent to the floor independently, instead
+   * of the sum being floored once. E.g. two 0.5-share rows for the same
+   * user/outcome pay `floor(0.5)+floor(0.5) = 0` here, vs. `floor(0.5+0.5)
+   * = 1` if pre-merged — never a house loss, but needlessly ungenerous.
+   * Callers must pre-aggregate. */
   settle(state: MarketState, winningOutcomeId: OutcomeId, positions: Position[]): Payout[] {
     if (state.kind !== "lmsr") throw new PricingError("internal", "LmsrEngine given non-lmsr state");
     const byUser = new Map<string, Credits>();
