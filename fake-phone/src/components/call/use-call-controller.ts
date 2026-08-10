@@ -187,6 +187,10 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
     const provider = container.voiceFor(settings.voiceTier);
 
     let connected = false;
+    // Tracked separately from `connected`, because they answer different
+    // questions: `connected` is "did the call start", `spoke` is "did this
+    // provider actually deliver a voice".
+    let spoke = false;
 
     /**
      * Runs one provider to completion. Resolves when its event stream ends,
@@ -215,6 +219,7 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
               dispatch({ type: "CONNECTED", at: clock.now() });
               break;
             case "line":
+              spoke = true;
               setSubtitle(event.text);
               break;
             case "listening":
@@ -244,11 +249,18 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
       // hand back the AI provider on a deployment whose server has no key, an
       // invalid key, or `VOICE_PROVIDER=scripted`. The registry cannot know
       // that — only the first request finds out. So the *runtime* fallback the
-      // registry promises at construction time has to happen here: if AI never
-      // got as far as connecting, run the call on the scripted provider
-      // instead. The user hears a real call rather than silence, which is the
-      // whole point of the degradation chain.
-      if (!cancelled && !connected && provider.id === "ai") {
+      // registry promises at construction time has to happen here.
+      //
+      // The trigger is "AI never spoke a line", not "AI never connected". A key
+      // that is present but rejected or expired fails *later* than that: the
+      // session route mints happily, the adapter emits `connected`, and only
+      // the first turn discovers the upstream rejection. Gating on `connected`
+      // would treat that as a working call and leave the user with a live timer
+      // and total silence — the exact failure this fallback exists to prevent.
+      // Re-connecting is harmless: the reducer ignores `CONNECTED` once the
+      // call is active, so the timer keeps running while the scripted voice
+      // takes over.
+      if (!cancelled && !spoke && provider.id === "ai") {
         const fallback = container.voiceFor("scripted");
         if (fallback.id !== "ai") await run(fallback);
       }

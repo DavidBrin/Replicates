@@ -104,6 +104,50 @@ describe("useCallController — connecting is never a dead end", () => {
     expect(voiceFor).toHaveBeenCalledWith("scripted");
   });
 
+  it("falls back when AI connects but a rejected key stops it ever speaking", async () => {
+    // A key that is present but invalid fails later than a missing one: the
+    // session route mints happily, the adapter reports `connected`, and only
+    // the first turn discovers the upstream rejection. Gating the fallback on
+    // the handshake would call that a working call and leave the user with a
+    // running timer and total silence.
+    const ai = providerEmitting("ai", [
+      { type: "connecting" },
+      { type: "connected" },
+      { type: "error", message: "401 from the provider" },
+      { type: "ended" },
+    ]);
+    const scripted = providerEmitting("scripted", [
+      { type: "connected" },
+      { type: "line", text: "I'm outside now" },
+    ]);
+    const voiceFor = vi.fn((tier: VoiceTier) => (tier === "ai" ? ai : scripted));
+
+    const { result } = renderController(fakeContainer(voiceFor), AI_SETTINGS);
+
+    result.current.answer();
+
+    await waitFor(() => expect(result.current.subtitle).toBe("I'm outside now"));
+    expect(result.current.state.phase).toBe("active");
+    expect(voiceFor).toHaveBeenCalledWith("scripted");
+  });
+
+  it("does not fall back when AI actually spoke", async () => {
+    const ai = providerEmitting("ai", [
+      { type: "connected" },
+      { type: "line", text: "hey, where are you?" },
+      { type: "ended" },
+    ]);
+    const voiceFor = vi.fn(() => ai);
+
+    const { result } = renderController(fakeContainer(voiceFor), AI_SETTINGS);
+
+    result.current.answer();
+
+    await waitFor(() => expect(result.current.state.phase).toBe("active"));
+    expect(voiceFor).toHaveBeenCalledTimes(1);
+    expect(voiceFor).not.toHaveBeenCalledWith("scripted");
+  });
+
   it("connects anyway when every provider fails", async () => {
     // Silent but live beats a timer that never starts.
     const dead = providerEmitting("ai", [{ type: "error", message: "nope" }, { type: "ended" }]);
