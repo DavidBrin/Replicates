@@ -9,13 +9,14 @@ import type { AvatarStackItem } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CalendarClock } from "lucide-react";
 import type { ComponentProps } from "react";
-import type { Market, MarketStatus, OutcomeId, Trade, User, UserId } from "@/domain/entities";
+import type { Market, MarketStatus, OutcomeId, Position, Trade, User, UserId } from "@/domain/entities";
 import { nextStatusForClock } from "@/domain/market-state";
-import { add, compare, sub, zero, type Credits } from "@/domain/money";
+import { add, compare, sub, zero } from "@/domain/money";
 import { toMarketState } from "@/domain/pricing-config";
 import { getEngine } from "@/domain/pricing/registry";
 import type { Payout } from "@/domain/pricing/types";
 import type { DataStore } from "@/ports/data-store";
+import { computeGroupNetCredits } from "./net-credits";
 
 const CLOSING_SOON_MS = 48 * 60 * 60 * 1000;
 const ACTIVE_INVITE_STATUSES = new Set(["created", "sent", "viewed"]);
@@ -43,8 +44,10 @@ function toAvatarItem(user: User): AvatarStackItem {
  * Builds everything one `MarketCard` needs: current prices, participant
  * avatars, volume/trader/message counts, a leading-outcome sparkline, and
  * (for resolved markets) the viewer's realized P/L. Also returns the raw
- * `trades`/`payouts` it computed along the way so the caller can fold them
- * into the group-wide leaderboard without re-deriving them.
+ * `trades`/`payouts`/`positions`/`prices` it computed along the way so the
+ * caller can fold them into the group-wide (mark-to-market) leaderboard
+ * without re-deriving them or re-consulting the pricing engine a second
+ * time.
  */
 async function buildMarketCardData(
   store: DataStore,
@@ -53,7 +56,13 @@ async function buildMarketCardData(
   now: Date,
   viewerId: UserId,
   userCache: UserCache,
-): Promise<{ data: MarketCardData; trades: Trade[]; payouts: Payout[] }> {
+): Promise<{
+  data: MarketCardData;
+  trades: Trade[];
+  payouts: Payout[];
+  positions: Position[];
+  prices: Record<OutcomeId, number>;
+}> {
   const effectiveStatus = nextStatusForClock(market, now);
   const engine = getEngine(market.pricing.kind);
   // `currentPrices` never consults status (only `quote`/`execute` do, via
@@ -134,6 +143,8 @@ async function buildMarketCardData(
     },
     trades,
     payouts,
+    positions,
+    prices,
   };
 }
 
@@ -215,26 +226,25 @@ export default async function GroupDashboardPage({
     markets.map((market) => buildMarketCardData(store, slug, market, now, user.id, userCache)),
   );
 
-  // Group-scoped net credits: every group member's cash flow from THIS
-  // group's markets — trade costs (buy: spend, sell: recover) plus any
-  // settlement payout. Reuses the trades/payouts already computed per card
-  // rather than re-deriving them.
-  const netByMember = new Map<UserId, Credits>(group.memberIds.map((id) => [id, zero()]));
-  for (const { trades, payouts } of built) {
-    for (const trade of trades) {
-      if (!netByMember.has(trade.userId)) continue;
-      const current = netByMember.get(trade.userId)!;
-      netByMember.set(
-        trade.userId,
-        trade.side === "buy" ? sub(current, trade.cost) : add(current, trade.cost),
-      );
-    }
-    for (const payout of payouts) {
-      const userId = payout.userId as UserId;
-      if (!netByMember.has(userId)) continue;
-      netByMember.set(userId, add(netByMember.get(userId)!, payout.amount));
-    }
-  }
+  // Group-scoped, mark-to-market net credits (fix round 1 — see
+  // `net-credits.ts`'s doc comment for the full derivation): every group
+  // member's cash flow from THIS group's markets (buy: spend, sell:
+  // recover), plus either a resolved market's settlement payout or, for
+  // every market still short of `"resolved"`, that member's open
+  // positions marked at the market's *current* price (reusing the exact
+  // `prices` each `MarketCard` already displays — no second price
+  // mapping). Without the mark, every open position reads as a pure loss
+  // of its full stake even when it's actually up.
+  const netByMember = computeGroupNetCredits(
+    group.memberIds,
+    built.map(({ data, trades, payouts, positions, prices }) => ({
+      status: data.market.status,
+      trades,
+      payouts,
+      positions,
+      prices,
+    })),
+  );
 
   const leaderboard: LeaderboardEntry[] = memberUsers
     .map((u) => ({
