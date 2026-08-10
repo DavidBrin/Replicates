@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   agentRules: false,
 
+  // The dev-tools badge floats over the bottom-left of every screen. On a
+  // full-screen call replica it is both a visible tell and a tap target sitting
+  // on top of the end-call button, so it is off even in development.
+  devIndicators: false,
+
   turbopack: {
     root: fileURLToPath(new URL(".", import.meta.url)),
   },

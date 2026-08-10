@@ -49,8 +49,12 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
   const abortRef = useRef<AbortController | null>(null);
   // `onEnded` is called from timers and event handlers; holding it in a ref
   // keeps those effects from re-subscribing every time the parent re-renders.
+  // Written in an effect rather than during render — a render may be discarded,
+  // and a ref written by a discarded render outlives it.
   const onEndedRef = useRef(onEnded);
-  onEndedRef.current = onEnded;
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+  }, [onEnded]);
 
   const phase = state.phase;
 
@@ -62,8 +66,12 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
       dispatch({ type: "RING" });
       return;
     }
+    // No synchronous `setCountdownRemaining` here: the initial value already
+    // came from this hook's `useState` initializer, and setting it again on
+    // mount would just be a second render for the same number. The parent only
+    // mounts this hook once settings have hydrated, so that initializer is
+    // never working from stale defaults.
     let remaining = settings.ringDelaySeconds;
-    setCountdownRemaining(remaining);
     const id = setInterval(() => {
       remaining -= 1;
       setCountdownRemaining(remaining);
@@ -139,9 +147,9 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
     const provider = container.voiceFor(settings.voiceTier);
 
     void (async () => {
-      // Warming the synthesizer here rather than at first `speak()` matters on
-      // iOS, where the voice list is empty until the engine has been touched
-      // once — a cold `speak()` silently says nothing.
+      // A second, belt-and-braces warm-up for the paths that reach `connecting`
+      // without a tap — auto-answer, and the e2e suite. The real one runs in
+      // the answer handler, inside the gesture, where iOS actually grants it.
       await speech.warmUp().catch(() => {});
 
       let session: VoiceSession | null = null;
@@ -226,7 +234,13 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
   }, [phase, container]);
 
   const answer = useCallback(() => {
+    // Both of these MUST happen synchronously inside the tap, not in the
+    // effect that follows. iOS grants audio playback and speech rights per
+    // user activation, and that grant does not survive the trip through a
+    // state update into an effect — warming the synthesizer there instead
+    // means the first spoken line silently says nothing.
     void container.ringtone.unlock();
+    void container.speech.warmUp().catch(() => {});
     dispatch({ type: "ANSWER" });
   }, [container]);
 

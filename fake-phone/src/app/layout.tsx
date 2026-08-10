@@ -31,7 +31,12 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
   },
   other: {
-    "mobile-web-app-capable": "yes",
+    // Next 16 renders `appleWebApp.capable` as the *unprefixed*
+    // `mobile-web-app-capable`, which only Safari 17+ honours. iOS versions
+    // before that read the Apple-prefixed name and nothing else, and without it
+    // a home-screen launch opens in a Safari tab with browser chrome — which
+    // destroys the illusion completely. Both names are emitted deliberately.
+    "apple-mobile-web-app-capable": "yes",
   },
 };
 

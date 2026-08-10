@@ -80,48 +80,63 @@
  * visible "this is a web page" tell.
  * ------------------------------------------------------------------------- */
 
-html,
-body {
-  height: 100%;
-  background: var(--color-ground);
-  color: var(--color-text-primary);
-  font-family: var(--font-ios);
-  /* Rubber-banding at the top of a "call screen" is the single most obvious
-   * tell that this is a browser and not the Phone app. */
-  overscroll-behavior: none;
-  /* iOS shows a magnifier/callout on long-press, and a text cursor on drag.
-   * Neither exists in a native call UI. Inputs opt back in below. */
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  text-size-adjust: 100%;
-  -webkit-text-size-adjust: 100%;
-}
+/* These element resets MUST stay inside `@layer base`.
+ *
+ * Tailwind 4 emits its utilities into `@layer utilities`, and in the CSS
+ * cascade *unlayered* rules beat layered ones outright — specificity is only
+ * consulted within a layer. An unlayered `button { background: none }` therefore
+ * silently defeats `bg-ios-green` on every button in the app: the class is in
+ * the markup, the utility is in the stylesheet, the custom property resolves,
+ * and the answer button still renders transparent. That is exactly the bug this
+ * layer prevents, and it cost the green Accept button once already.
+ *
+ * The custom classes further down (`.app-frame`, `.pad-safe-*`, `.tabular`) are
+ * deliberately left unlayered, because the skins rely on them winning against
+ * Tailwind's padding utilities. */
+@layer base {
+  html,
+  body {
+    height: 100%;
+    background: var(--color-ground);
+    color: var(--color-text-primary);
+    font-family: var(--font-ios);
+    /* Rubber-banding at the top of a "call screen" is the single most obvious
+     * tell that this is a browser and not the Phone app. */
+    overscroll-behavior: none;
+    /* iOS shows a magnifier/callout on long-press, and a text cursor on drag.
+     * Neither exists in a native call UI. Inputs opt back in below. */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
 
-body {
-  margin: 0;
-  overflow: hidden;
-}
+  body {
+    margin: 0;
+    overflow: hidden;
+  }
 
-input,
-textarea {
-  -webkit-user-select: auto;
-  user-select: auto;
-  -webkit-touch-callout: default;
-  font: inherit;
-}
+  input,
+  textarea {
+    -webkit-user-select: auto;
+    user-select: auto;
+    -webkit-touch-callout: default;
+    font: inherit;
+  }
 
-button {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  /* Stops iOS double-tap-to-zoom from eating the second tap on the answer
-   * button — the most costly possible place to lose a tap. */
-  touch-action: manipulation;
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    /* Stops iOS double-tap-to-zoom from eating the second tap on the answer
+     * button — the most costly possible place to lose a tap. */
+    touch-action: manipulation;
+  }
 }
 
 /* The app frame. `100dvh` rather than `100vh`: on mobile Safari `100vh` is the
@@ -148,6 +163,79 @@ button {
 .tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+
+/* The ringing-handset wiggle on the Android swipe-to-answer pill. Keyframes
+ * cannot be expressed as Tailwind utilities, so they live here rather than in
+ * an inline <style> element inside the component. */
+@keyframes fp-android-ring {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0);
+  }
+  65% {
+    transform: rotate(-13deg);
+  }
+  75% {
+    transform: rotate(13deg);
+  }
+  85% {
+    transform: rotate(-7deg);
+  }
+}
+
+/* Live-mode animations: a comment rising into the stream, and a heart drifting
+ * up the right edge. The wobble is an alternating ease-in-out, which is a sine
+ * wave in everything but name and animates on the compositor for free.
+ *
+ * Neither needs its own reduced-motion branch — the block below collapses every
+ * duration, and the hearts layer stops spawning entirely rather than flashing
+ * (see `floating-hearts.tsx`). */
+@keyframes fp-live-enter {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fp-live-enter {
+  animation: fp-live-enter 260ms var(--ease-ios, ease-out) both;
+}
+
+@keyframes fp-live-heart-rise {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(calc(var(--fp-rise) * -1));
+    opacity: 0;
+  }
+}
+
+.fp-live-heart-rise {
+  animation: fp-live-heart-rise linear both;
+}
+
+@keyframes fp-live-heart-wobble {
+  from {
+    transform: translateX(calc(var(--fp-drift) * -0.5));
+  }
+  to {
+    transform: translateX(calc(var(--fp-drift) * 0.5));
+  }
+}
+
+.fp-live-heart-wobble {
+  animation: fp-live-heart-wobble ease-in-out infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {

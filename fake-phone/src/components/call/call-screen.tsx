@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 
 import { useSettings } from "@/components/app-shell/settings-provider";
+import type { Settings } from "@/domain/settings";
 
 import { AndroidCallSkin } from "./android/android-call-skin";
 import { IosCallSkin } from "./ios/ios-call-skin";
@@ -19,8 +20,21 @@ import { CALL_TEST_IDS, type CallSkinProps } from "./types";
 import { useCallController } from "./use-call-controller";
 
 export function CallScreen() {
+  const { settings, hydrated } = useSettings();
+
+  // The controller reads its ring delay, persona and voice tier once, when it
+  // mounts. Mounting it before stored settings have hydrated would arm a call
+  // with the defaults and then have to correct itself mid-ring, so the ringing
+  // background renders alone for that one frame instead.
+  if (!hydrated) {
+    return <div data-testid="call-screen" className="h-full w-full bg-black" />;
+  }
+
+  return <ActiveCall settings={settings} />;
+}
+
+function ActiveCall({ settings }: { settings: Settings }) {
   const router = useRouter();
-  const { settings } = useSettings();
 
   const goHome = useCallback(() => router.push("/home"), [router]);
   const call = useCallController(settings, goHome);

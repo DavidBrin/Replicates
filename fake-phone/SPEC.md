@@ -165,12 +165,15 @@ Two Route Handlers, both no-ops without a key:
 Env contract (all optional; absence is a supported, tested state):
 
 ```
-VOICE_PROVIDER=scripted|ai
-AI_PROVIDER=anthropic|openai
-ANTHROPIC_API_KEY=
-OPENAI_API_KEY=
+VOICE_PROVIDER=scripted|ai          # override only; inferred from key presence
+AI_PROVIDER=anthropic|openai        # default anthropic
+ANTHROPIC_API_KEY=                  # the only variable actually required
+OPENAI_API_KEY=                     # declared seam, no client in this build
 VOICE_CALL_MAX_DURATION_SECONDS=240
 VOICE_CALL_MAX_TOKENS=2000
+NEXT_PUBLIC_VOICE_AI_ENABLED=true   # build-time client gate; the server route
+                                    # stays the authority and still 503s
+                                    # without a key
 ```
 
 ---
