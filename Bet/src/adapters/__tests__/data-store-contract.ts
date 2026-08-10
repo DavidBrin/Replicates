@@ -557,6 +557,50 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
       expect(secondPage).toHaveLength(3);
     });
 
+    it("keyset pagination tie-breaks messages sharing an identical `at` by id, correctly across a page boundary", async () => {
+      const store = makeStore();
+      const roomId = brand<"GroupId">(uid("room"));
+      const sameInstant = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
+      const total = 6;
+      for (let i = 0; i < total; i++) {
+        await store.messages.insert(makeMessage({ roomId, id: brand(`tie_${i}`), at: sameInstant }));
+      }
+
+      // Ground truth: one unpaginated fetch of everything. Also confirms
+      // this test is actually exercising the tie-break (all rows share one
+      // timestamp), not accidentally falling back to time-ordering.
+      const fullPage = await store.messages.listMessages(roomId, { limit: total });
+      expect(fullPage).toHaveLength(total);
+      expect(new Set(fullPage.map((m) => m.at.getTime())).size).toBe(1);
+      const fullOrderIds = fullPage.map((m) => m.id);
+
+      // Paginate in chunks smaller than the tied group, so at least one page
+      // boundary falls strictly between two rows with the exact same `at`.
+      const pageSize = 2;
+      const pages: Message[][] = [];
+      let cursor: { at: Date; id: string } | undefined;
+      for (let guard = 0; guard < 10; guard++) {
+        const page = await store.messages.listMessages(roomId, { before: cursor, limit: pageSize });
+        if (page.length === 0) break;
+        pages.push(page);
+        const last = page[page.length - 1];
+        cursor = { at: last.at, id: last.id };
+      }
+
+      const flattened = pages.flat();
+      // No overlap, no skip.
+      expect(new Set(flattened.map((m) => m.id)).size).toBe(total);
+      expect(flattened).toHaveLength(total);
+      // Paginating in chunks must reproduce EXACTLY the same order as one
+      // unpaginated fetch. This is what actually pins the tie-break: if the
+      // sort comparator and the cursor filter disagree on tie order (e.g.
+      // one is ascending-by-id and the other descending), a tied row gets
+      // either skipped or repeated and this equality fails even though the
+      // "no overlap" / "no skip" checks above could still pass in some
+      // inversions.
+      expect(flattened.map((m) => m.id)).toEqual(fullOrderIds);
+    });
+
     it("message insert is idempotent on (roomId, authorId, clientId)", async () => {
       const store = makeStore();
       const roomId = brand<"GroupId">(uid("room"));
@@ -618,6 +662,55 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
       expect(fetchedUser?.balance).toBe(100);
       const fetchedGroup = await store.groups.findById(groupBefore.id);
       expect(fetchedGroup?.name).toBe(groupBefore.name);
+    });
+
+    it("a bare write to an UNTOUCHED table survives a concurrent transact's commit (per-key diff, not whole-map replace)", async () => {
+      const store = makeStore();
+      // Table A: users — this is what the in-flight transact reads and
+      // writes. Table B: groups — the transact never touches this at all.
+      const userA = await store.users.insert(makeUser({ balance: credits(100) }));
+      const groupBefore = await store.groups.insert(makeGroup({ name: "original" }));
+
+      // A gate the transact's callback parks on, and a signal it fires once
+      // it has already read table A — i.e. once `transact` has definitely
+      // already taken its internal snapshot (that happens before the
+      // callback is even invoked), so anything the test does after
+      // `await ready` is guaranteed to land strictly *inside* the window
+      // between snapshot and commit, not before or after it.
+      let releaseGate!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+      let notifyReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        notifyReady = resolve;
+      });
+
+      const txPromise = store.transact(async (tx) => {
+        const current = await tx.users.findById(userA.id); // read table A
+        notifyReady();
+        await gate; // pause here — the transact is now "in flight"
+        const next = (current?.balance ?? 0) + 50;
+        await tx.users.update(userA.id, { balance: credits(next) }); // write table A
+      });
+
+      await ready; // the transact's snapshot has definitely already been taken
+
+      // A bare, non-transact write to a table the transact above never
+      // touches, made while that transact is still in flight.
+      await store.groups.update(groupBefore.id, { name: "bare write during transact" });
+
+      releaseGate();
+      await txPromise;
+
+      const finalUser = await store.users.findById(userA.id);
+      expect(finalUser?.balance).toBe(150);
+      // This is the assertion that fails under a whole-map `Object.assign`
+      // commit: the transact's own (stale) snapshot of `groups` clobbers
+      // the bare write made while it was in flight, even though the
+      // transact never touched `groups` at all.
+      const finalGroup = await store.groups.findById(groupBefore.id);
+      expect(finalGroup?.name).toBe("bare write during transact");
     });
 
     it("nested transact reuses the outer transaction rather than double-staging", async () => {

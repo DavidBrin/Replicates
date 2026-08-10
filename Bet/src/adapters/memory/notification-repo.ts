@@ -46,7 +46,7 @@ export class MemoryNotificationRepo implements NotificationRepo {
     const now = new Date();
     for (const [id, notification] of this.tables.notifications) {
       if (notification.userId === userId && notification.readAt === undefined) {
-        this.tables.notifications.set(id, { ...notification, readAt: now });
+        this.tables.notifications.set(id, cloneEntity({ ...notification, readAt: now }));
       }
     }
   }
