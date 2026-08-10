@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, Info, X, XCircle } from "lucide-react";
@@ -41,6 +49,26 @@ const variantClasses: Record<ToastVariant, string> = {
 
 let nextId = 0;
 
+// `useSyncExternalStore` with differing client/server snapshots is React's
+// own documented pattern for "render differently on the client, without a
+// hydration mismatch" (see its docs' "how to fix hydration mismatch
+// errors" section) — it never subscribes to anything real (there is
+// nothing to change to), it exists purely so `getServerSnapshot` can return
+// `false` for SSR/the client's hydration-matching first pass, and
+// `getSnapshot` can return `true` for every client render after that. This
+// is the mechanism, not a `useState`+`useEffect` "isMounted" flag, because
+// this repo's lint config (`react-hooks/set-state-in-effect`) forbids
+// calling `setState` synchronously inside an effect body.
+function subscribeNever(): () => void {
+  return () => {};
+}
+function getClientSnapshot(): boolean {
+  return true;
+}
+function getServerSnapshot(): boolean {
+  return false;
+}
+
 /**
  * App-wide toast host (SPEC: trade confirmations, friend-request results,
  * etc.). Wrap the app once in `<ToastProvider>`; call `useToast().show(...)`
@@ -48,6 +76,15 @@ let nextId = 0;
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
+  // `document` exists on every client render (including the very first one
+  // hydration runs) but never on the server, so branching render output on
+  // `typeof document !== "undefined"` directly guarantees a hydration
+  // mismatch the instant this provider is actually mounted in a page tree
+  // (nothing did until Task 9's `(app)/layout.tsx`, which is how this was
+  // found — see that task's report). `mounted` instead reflects "is this
+  // render running as the client's first, hydration-matching pass or
+  // later" via `useSyncExternalStore` (see its helpers' doc comment above).
+  const mounted = useSyncExternalStore(subscribeNever, getClientSnapshot, getServerSnapshot);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -72,7 +109,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {typeof document !== "undefined"
+      {mounted
         ? createPortal(
             <div
               role="status"
