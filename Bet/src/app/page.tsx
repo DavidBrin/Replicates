@@ -45,7 +45,7 @@ interface FeaturedMarketData {
  * (`null`) if the seed ever ships with zero open markets, so the page still
  * renders a coherent hero rather than throwing.
  */
-async function loadFeaturedMarket(store: DataStore, now: Date): Promise<FeaturedMarketData | null> {
+async function loadFeaturedMarket(store: DataStore): Promise<FeaturedMarketData | null> {
   const groups = (
     await Promise.all(SEEDED_GROUP_SLUGS.map((slug) => store.groups.findBySlug(slug)))
   ).filter((g): g is Group => g !== undefined);
@@ -122,7 +122,7 @@ async function loadFeaturedMarket(store: DataStore, now: Date): Promise<Featured
 export default async function MarketingHome() {
   const { store, clock } = await getContainer();
   const now = clock.now();
-  const featured = await loadFeaturedMarket(store, now);
+  const featured = await loadFeaturedMarket(store);
 
   return (
     <div className="flex min-h-dvh flex-col">

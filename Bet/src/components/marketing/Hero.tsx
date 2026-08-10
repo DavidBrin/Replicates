@@ -27,7 +27,7 @@ export function Hero({ demo }: HeroProps) {
             A private prediction market for your people
           </span>
 
-          <h1 className="text-[15vw] leading-[0.92] font-semibold tracking-[-0.04em] text-(--text-1) sm:text-[96px] xl:text-[104px]">
+          <h1 className="text-[17vw] leading-[0.9] font-bold tracking-[-0.045em] text-(--text-1) sm:text-[104px] xl:text-[124px]">
             wanna
             <br />
             bet?

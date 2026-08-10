@@ -1,5 +1,5 @@
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatCreditsPrecise } from "@/domain/formatters";
+import { formatCreditsPrecise, formatPriceCents } from "@/domain/formatters";
 import { credits, sub } from "@/domain/money";
 import { cn } from "@/lib/cn";
 
@@ -38,6 +38,10 @@ export function PositionSummary({ positions, className }: PositionSummaryProps) 
       {held.map((p) => {
         const avgCostPerShare = p.shares > 0 ? p.costBasis / p.shares / 100 : 0;
         const currentValue = credits(Math.round(p.shares * p.currentPrice * 100));
+        // `avgCostPerShare` is a 0–1 fraction of a credit (cents/share ÷
+        // 100) — `formatPriceCents` is what turns that back into the "76¢"
+        // display, matching how the rest of the app renders per-share
+        // prices (G6: no hand-rolled `toFixed` + `¢` in the component).
         const unrealizedPnl = sub(currentValue, credits(p.costBasis));
         return (
           <div
@@ -46,7 +50,7 @@ export function PositionSummary({ positions, className }: PositionSummaryProps) 
           >
             <Field label="Outcome" value={p.outcomeLabel} />
             <Field label="Shares" value={p.shares.toFixed(2)} tnum />
-            <Field label="Avg cost" value={`${avgCostPerShare.toFixed(2)}¢`} tnum />
+            <Field label="Avg cost" value={formatPriceCents(avgCostPerShare)} tnum />
             <Field
               label="Unrealized P/L"
               value={`${unrealizedPnl > 0 ? "+" : ""}${formatCreditsPrecise(unrealizedPnl)}`}
