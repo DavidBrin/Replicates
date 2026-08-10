@@ -116,7 +116,7 @@ afford.
 |---|---|
 | `npm run dev` | Dev server |
 | `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Unit tests (361) |
+| `npm test` | Unit tests (363) |
 | `npm run test:e2e` | Playwright, three projects (mobile Safari, mobile Chrome, desktop) |
 | `npm run typecheck` · `npm run lint` | TypeScript · ESLint |
 | `npm run generate:assets` | Regenerate the ringtone WAVs and the PWA icons |

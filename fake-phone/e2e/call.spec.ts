@@ -99,4 +99,23 @@ test.describe("scripted voice", () => {
     await expect(page.getByTestId(CALL.subtitle)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId(CALL.subtitle)).not.toBeEmpty();
   });
+
+  test("the caller keeps talking after the call connects", async ({ page }) => {
+    // Regression test, and the reason it asserts a *second* line rather than a
+    // first: the voice effect used to be keyed on the connecting phase, so the
+    // session was torn down the moment the call went active. The caller
+    // delivered one line and then fell silent for the rest of the call — and
+    // the old single-subtitle assertion passed the whole time.
+    await seedSilentRing(page, { voiceTier: "scripted", showSubtitles: true });
+    await page.goto("/");
+    await page.getByTestId(CALL.answer).click();
+
+    const subtitle = page.getByTestId(CALL.subtitle);
+    await expect(subtitle).toBeVisible({ timeout: 15_000 });
+    const first = await subtitle.textContent();
+
+    await expect
+      .poll(async () => (await subtitle.textContent()) !== first, { timeout: 25_000 })
+      .toBe(true);
+  });
 });

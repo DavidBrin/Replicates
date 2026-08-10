@@ -15,6 +15,7 @@ import {
   callReducer,
   elapsedSeconds as computeElapsed,
   initialCallState,
+  isOnCall,
 } from "@/domain/call-session";
 import { getPersona } from "@/domain/persona-catalog";
 import type { Settings } from "@/domain/settings";
@@ -57,6 +58,12 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
   }, [onEnded]);
 
   const phase = state.phase;
+  /**
+   * True for `connecting` *and* `active` — one boolean covering the whole
+   * lifetime of a call, so the voice effect below is not re-run (and its session
+   * not destroyed) merely because the call finished connecting.
+   */
+  const onCall = isOnCall(state);
 
   /* --------------------------------------------------------- ring delay -- */
 
@@ -172,7 +179,19 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
   /* ------------------------------------------------------------- voice --- */
 
   useEffect(() => {
-    if (phase !== "connecting") return;
+    // Keyed on `onCall`, NOT on `phase === "connecting"`.
+    //
+    // This effect owns the voice session for the whole call. Keyed on the phase,
+    // it was torn down the instant the call connected: the provider emits
+    // `connected`, the reducer moves to `active`, the dependency changes, React
+    // runs the cleanup — which aborts the very session that was about to speak.
+    // Every real provider pauses between lines, so the caller delivered its
+    // first line and then went silent for the rest of the call, on the *default*
+    // tier. It survived every test because a fake provider that yields
+    // synchronously is fully consumed before React ever commits that first
+    // state update, and because the e2e only asserted that a subtitle appeared
+    // at all.
+    if (!onCall) return;
     const { clock, ringtone, speech, wakeLock } = container;
 
     ringtone.stopRinging();
@@ -277,7 +296,7 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
       voiceRef.current?.stop();
       voiceRef.current = null;
     };
-  }, [phase, container, settings.personaId, settings.voiceTier]);
+  }, [onCall, container, settings.personaId, settings.voiceTier]);
 
   /* ------------------------------------------------------------- timer --- */
 

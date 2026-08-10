@@ -19,6 +19,31 @@ import { useCallController } from "./use-call-controller";
  * on "connecting" is a phone that is visibly not on a call.
  */
 
+/**
+ * Emits its events with a real gap between each one.
+ *
+ * This matters more than it looks. A generator that yields everything
+ * synchronously is consumed entirely before React ever commits the state update
+ * from the first event — which hides any bug where connecting the call tears
+ * down the very session that is still speaking. Real providers await speech and
+ * listening pauses between lines, so they always have gaps.
+ */
+function providerEmittingSlowly(id: VoiceTier, events: readonly CallEvent[]): VoiceProvider {
+  return {
+    id,
+    isAvailable: () => true,
+    start: async () => ({
+      events: async function* () {
+        for (const event of events) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          yield event;
+        }
+      },
+      stop: () => {},
+    }),
+  };
+}
+
 function providerEmitting(id: VoiceTier, events: readonly CallEvent[]): VoiceProvider {
   return {
     id,
@@ -146,6 +171,52 @@ describe("useCallController — connecting is never a dead end", () => {
     await waitFor(() => expect(result.current.state.phase).toBe("active"));
     expect(voiceFor).toHaveBeenCalledTimes(1);
     expect(voiceFor).not.toHaveBeenCalledWith("scripted");
+  });
+
+  it("keeps the voice session alive across the connecting → active transition", async () => {
+    // The session must survive the call connecting. Every real provider speaks
+    // its lines *after* the connect, with pauses in between — so if connecting
+    // tears the session down, the caller says its first word and then goes
+    // silent for the rest of the call.
+    const scripted = providerEmittingSlowly("scripted", [
+      { type: "connected" },
+      { type: "line", text: "first line" },
+      { type: "listening" },
+      { type: "line", text: "second line" },
+    ]);
+
+    const { result } = renderController(fakeContainer(() => scripted), {
+      ...defaultSettings,
+      ringtoneEnabled: false,
+    });
+
+    result.current.answer();
+
+    await waitFor(() => expect(result.current.state.phase).toBe("active"));
+    await waitFor(() => expect(result.current.subtitle).toBe("second line"), { timeout: 2000 });
+  });
+
+  it("falls back when AI fails asynchronously after connecting", async () => {
+    // The rejected-key case as it actually happens: the handshake succeeds, the
+    // call goes active, and only the first turn — one network round trip later —
+    // discovers the upstream rejection.
+    const ai = providerEmittingSlowly("ai", [
+      { type: "connected" },
+      { type: "error", message: "401 from the provider" },
+      { type: "ended" },
+    ]);
+    const scripted = providerEmittingSlowly("scripted", [
+      { type: "connected" },
+      { type: "line", text: "I'm outside now" },
+    ]);
+    const voiceFor = vi.fn((tier: VoiceTier) => (tier === "ai" ? ai : scripted));
+
+    const { result } = renderController(fakeContainer(voiceFor), AI_SETTINGS);
+
+    result.current.answer();
+
+    await waitFor(() => expect(result.current.subtitle).toBe("I'm outside now"), { timeout: 3000 });
+    expect(voiceFor).toHaveBeenCalledWith("scripted");
   });
 
   it("connects anyway when every provider fails", async () => {

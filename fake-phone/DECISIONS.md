@@ -403,7 +403,32 @@ record the facing it never got — an un-mirrored selfie and a desynced next fli
 
 ---
 
-## D24 — Development ran as parallel slices against a frozen contract
+## D24 — The voice effect is keyed on the whole call, not on "connecting"
+
+**Decision.** The effect that owns the voice session depends on `isOnCall(state)`
+— one boolean true for both `connecting` and `active` — rather than on
+`phase === "connecting"`.
+
+**Why — this was the worst bug in the project, and it shipped green.** Keyed on
+the phase, the effect was torn down *the instant the call connected*: the
+provider emits `connected`, the reducer moves to `active`, the dependency
+changes, and React runs the cleanup that aborts the very session about to speak.
+Every real provider pauses between lines, so the caller delivered its first line
+and then went silent for the rest of the call — on the **default** tier.
+
+It survived everything. Unit tests used fake providers that yield synchronously,
+so the whole event stream was consumed before React committed the first state
+update. The e2e asserted only that *a* subtitle appeared, which the first line
+satisfied. It took an independent reviewer reading the dependency array to see
+it, and a test with a deliberate `await` between events to prove it.
+
+**The lesson, kept:** a fake that is faster than reality is not a fake, it is a
+different system. `providerEmittingSlowly` exists in the controller's tests for
+exactly that reason, and the e2e now asserts a *second* line rather than a first.
+
+---
+
+## D25 — Development ran as parallel slices against a frozen contract
 
 **Decision.** The foundation (domain, ports, container, tokens, app shell) was
 built and committed first; six slices then ran concurrently against it on
