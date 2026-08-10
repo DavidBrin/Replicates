@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { brand } from "@/domain/entities";
 import { executeTrade, priceOrder } from "@/domain/services/trading";
 import { compare, fromDecimal, sub, credits } from "@/domain/money";
+import { feeAtRate, takerFee } from "@/domain/pricing/fees";
 import { buildFixture } from "@/test-support/trading-fixtures";
 
 describe("domain/services/trading.ts — executeTrade", () => {
@@ -232,5 +233,148 @@ describe("domain/services/trading.ts — executeTrade", () => {
         order: { outcomeId: f.yes.id, side: "sell", shares: 1 },
       }),
     ).rejects.toMatchObject({ code: "validation" });
+  });
+});
+
+/**
+ * G6 at the error-message boundary. `Credits` is integer CENTS, so
+ * interpolating one raw into a sentence overstates it 100x — and these
+ * strings are not internal: they travel through the `{ error }` envelope
+ * into a toast in `OrderTicket.tsx` verbatim. `minStake = credits(500)`
+ * (5.00 credits) used to read "Minimum stake is 500 credits."
+ */
+describe("user-facing money in error messages is formatted, never raw cents", () => {
+  it("renders minStake as credits, not as its cent count", async () => {
+    const f = await buildFixture({ minStake: 500 }); // 5.00 credits
+    await expect(
+      executeTrade(
+        { store: f.store, clock: f.clock, idGen: f.idGen },
+        {
+          actor: { userId: f.alice.id },
+          marketId: f.market.id,
+          order: { outcomeId: f.yes.id, side: "buy", budget: fromDecimal(1) },
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: "Minimum stake is 5.00 credits.",
+    });
+  });
+
+  it("renders maxStake as credits, not as its cent count", async () => {
+    const f = await buildFixture({ maxStake: 1000 }); // 10.00 credits
+    await expect(
+      executeTrade(
+        { store: f.store, clock: f.clock, idGen: f.idGen },
+        {
+          actor: { userId: f.alice.id },
+          marketId: f.market.id,
+          order: { outcomeId: f.yes.id, side: "buy", budget: fromDecimal(50) },
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: "Maximum stake is 10.00 credits.",
+    });
+  });
+
+  it("renders a slippage rejection's cost and limit as credits", async () => {
+    const f = await buildFixture();
+    let message = "";
+    try {
+      await executeTrade(
+        { store: f.store, clock: f.clock, idGen: f.idGen },
+        {
+          actor: { userId: f.alice.id },
+          marketId: f.market.id,
+          order: {
+            outcomeId: f.yes.id,
+            side: "buy",
+            budget: fromDecimal(20),
+            maxCost: credits(1000), // 10.00 credits — deliberately too low
+          },
+        },
+      );
+    } catch (err) {
+      message = (err as { message: string }).message;
+    }
+    expect(message).toContain("10.00");
+    // The realized cost is ~20.xx credits; the raw cent figure (2xxx) must
+    // not appear anywhere in the sentence.
+    expect(message).not.toMatch(/\b\d{4,}\b/);
+  });
+
+  it("renders an oversell rejection's share counts readably", async () => {
+    const f = await buildFixture();
+    const deps = { store: f.store, clock: f.clock, idGen: f.idGen };
+    const buy = await executeTrade(deps, {
+      actor: { userId: f.alice.id },
+      marketId: f.market.id,
+      order: { outcomeId: f.yes.id, side: "buy", budget: fromDecimal(10) },
+    });
+
+    await expect(
+      executeTrade(deps, {
+        actor: { userId: f.alice.id },
+        marketId: f.market.id,
+        order: { outcomeId: f.yes.id, side: "sell", shares: buy.quote.shares * 10 },
+      }),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringMatching(/^Cannot sell [\d,]+\.\d{2} shares — you hold [\d,]+\.\d{2}\.$/),
+    });
+  });
+});
+
+/**
+ * The market's `feeBps` is a RATE, and is now charged as one. It used to be
+ * read as a bare on/off toggle, with `takerFee`'s hard-coded 700bps charged
+ * whenever it was non-zero — so the seeded `feeBps: 200` market billed at 7%
+ * while the rules panel displayed the entity's honest "2.00%".
+ */
+describe("the market's own feeBps is the rate actually charged", () => {
+  it("charges 200bps on a 200bps market, not the hard-coded 700bps taker rate", async () => {
+    const f = await buildFixture({ feeBps: 200 });
+    const quote = priceOrder(f.market, { outcomeId: f.yes.id, side: "buy", shares: 40 });
+
+    expect(quote.fee).toBe(feeAtRate(40, quote.avgPrice, 200));
+    expect(quote.fee).not.toBe(takerFee(40, quote.avgPrice));
+    // 0.02 x 40 x P x (1-P) with P ~ 0.5497 is ~20c; the old 7% charge was
+    // ~70c, about 3.5x what the displayed rate implies.
+    expect(quote.fee).toBeLessThan(30);
+  });
+
+  it("still charges nothing when feeBps is 0", async () => {
+    const f = await buildFixture({ feeBps: 0 });
+    const quote = priceOrder(f.market, { outcomeId: f.yes.id, side: "buy", shares: 40 });
+    expect(quote.fee).toBe(0);
+  });
+});
+
+/**
+ * The critical bug's surface as `POST /api/markets/[id]/quote` sees it: a
+ * budget sell above the extractable cap used to answer HTTP 200 with
+ * `{ shares: null, cost: 0, avgPrice: null }`.
+ */
+describe("priceOrder — an over-cap budget sell is a validation error, not a 0-cost quote", () => {
+  it("rejects rather than quoting free money", async () => {
+    // b = 100, q = 0 => p = 0.5, so at most -100*ln(0.5) = 69.31 credits
+    // can ever be extracted by selling Yes.
+    const f = await buildFixture();
+    let thrown: { code?: string; message?: string } | undefined;
+    try {
+      priceOrder(f.market, { outcomeId: f.yes.id, side: "sell", budget: fromDecimal(100) });
+    } catch (err) {
+      thrown = err as { code?: string; message?: string };
+    }
+    expect(thrown?.code).toBe("validation");
+    expect(thrown?.message).toContain("69.3");
+  });
+
+  it("still quotes a sell under the cap", async () => {
+    const f = await buildFixture();
+    const quote = priceOrder(f.market, { outcomeId: f.yes.id, side: "sell", budget: fromDecimal(20) });
+    expect(Number.isFinite(quote.shares)).toBe(true);
+    expect(quote.cost).toBeGreaterThan(0);
   });
 });

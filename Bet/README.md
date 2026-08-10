@@ -96,7 +96,10 @@ Hexagonal, with dependency inversion enforced by a test ([D7](DECISIONS.md)):
 ```
 src/domain/      Pure TypeScript. Zero framework imports — enforced by
                  src/domain/__tests__/layering.test.ts, which resolves relative
-                 imports so `../../adapters/x` can't sneak past it.
+                 imports so `../../adapters/x` can't sneak past it. The same test
+                 enforces the other half of the rule: no file under src/components
+                 may import src/adapters (UI talks to ports, never to an
+                 implementation).
   money.ts             Credits as branded integer cents; all money arithmetic
   formatters.ts        Every number the UI displays goes through here
   pricing/             The three market engines behind one interface
@@ -134,16 +137,21 @@ conserves money, and quotes are deterministic.
 ### API
 
 ```
-POST/DELETE /api/session          GET /api/me           GET /api/users/search
-GET  /api/friends                 POST /api/friends/requests[/[id]]
-GET/POST /api/groups              GET /api/groups/[slug][/members]
+POST/DELETE /api/session          GET  /api/me            GET /api/users/search
+GET  /api/friends                 POST /api/friends/requests      POST /api/friends/requests/[id]
+GET/POST /api/groups              GET  /api/groups/[slug]         POST /api/groups/[slug]/members
 POST /api/invites                 GET/POST /api/invites/[id]
-GET/POST /api/markets             GET /api/markets/[id]
+POST /api/markets                 GET  /api/markets/[id]
 POST /api/markets/[id]/quote      POST /api/markets/[id]/trades
 POST /api/markets/[id]/resolve    GET  /api/markets/[id]/history
 GET/POST /api/markets/[id]/messages
 GET  /api/explore                 GET/POST /api/notifications
 ```
+
+That is the complete surface — every `route.ts` under `src/app/api`, with exactly the
+methods each one exports. Notably there is **no** `GET /api/markets`: every screen that
+lists markets is a Server Component reading through the container directly, so no
+list-markets endpoint was ever needed.
 
 Every response is `{ data }` or `{ error: { code, message, fields? } }`. Every input is
 Zod-parsed. Every handler calls `can()` before touching data. Unauthorized reads of private
@@ -154,7 +162,7 @@ resources return **404, not 403** — a 403 confirms the resource exists ([D6](D
 ## Testing
 
 ```bash
-npm test          # ~613 unit, property and route-handler tests
+npm test          # ~664 unit, property and route-handler tests
 npm run test:e2e  # Playwright end-to-end
 ```
 
@@ -211,9 +219,14 @@ Honest list. Nothing here is hidden behind a happy path.
 **Not built**
 - Market editing after creation; leaving a group; deleting an account; image uploads;
   push notifications; mobile apps; i18n; a public market-creation flow.
-- `niceTicks()` in `src/domain/chart.ts` is tested but has no consumer — the charts use a
-  fixed 0–100% axis.
 - `Tabs` uses native tab order rather than the full ARIA roving-tabindex pattern.
+- **The parimutuel rake is burned, not collected.** `ParimutuelEngine.settle` pays out
+  `totalPool × (1 − rakeBps/10000)` and credits the difference to *nobody* — no house
+  account, no `Payout` row — so those credits leave the economy. This is inert today:
+  every seeded and wizard-created parimutuel market has `rakeBps = 0`, and nothing in the
+  UI or API can set it otherwise, so `Σ payouts === totalPool` in practice. Introducing a
+  non-zero rake without first deciding who receives it would be a real money leak. Written
+  up in full at the top of `ParimutuelEngine.settle`.
 
 ---
 
@@ -240,3 +253,23 @@ The reviews earned their keep. A sample of what they caught that tests alone did
 
 The last three were found by *looking at the rendered page*, not by running tests — which
 is the argument for driving the real thing rather than trusting a green suite.
+
+A final review before merge found three more, all of which had survived every green run:
+
+- **A pending invitee could read a private market's holders and their exact stakes.**
+  `authz.ts` had the right policy for reading a position — and no route called it, because
+  `GET /api/markets/[id]` hand-rolled the check instead. The policy branch was dead code
+  while the hole was live.
+- **The `RealtimeChannel` port didn't exist where this README said it did.** The interface
+  lived *inside* the polling adapter and the Room imported the adapter directly, so the
+  architecture the docs described was true on paper and false in the import graph. The
+  layering test only scanned `src/domain`, so nothing caught it. It now scans
+  `src/components` too — and that extension was verified by adding a violating import and
+  watching the test go red before reverting it.
+- **Average cost could display an impossible price** (over 100¢ for a contract that settles
+  at 100¢), because it divided the running `costBasis` residual — re-rounded on every
+  partial sell — by an ever-smaller share count. It is now derived from the trade ledger.
+
+The same pass deleted a batch of exports that had no consumers at all (`ProgressBar`,
+`Sheet`, `isOk`/`unwrapOr`, `getMarket`/`getHistory`, the id-prefix category helpers,
+`niceTicks`), each verified unused before removal.

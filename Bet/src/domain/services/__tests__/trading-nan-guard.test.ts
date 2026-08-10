@@ -17,7 +17,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { brand } from "@/domain/entities";
 import { credits, zero } from "@/domain/money";
-import type { MarketState, Order, Payout, Quote } from "@/domain/pricing/types";
+import type { MarketState, Payout, Quote } from "@/domain/pricing/types";
 import { buildFixture } from "@/test-support/trading-fixtures";
 
 /** The quote the stub engine hands back — a NaN share count with an
@@ -34,8 +34,8 @@ const NAN_SHARE_QUOTE: Quote = {
 const stubEngine = {
   currentPrices: (state: MarketState) =>
     state.kind === "lmsr" ? Object.fromEntries(Object.keys(state.q).map((o) => [o, 0.5])) : {},
-  quote: (_state: MarketState, _order: Order): Quote => NAN_SHARE_QUOTE,
-  execute: (state: MarketState, _order: Order) => ({ newState: state, quote: NAN_SHARE_QUOTE }),
+  quote: (): Quote => NAN_SHARE_QUOTE,
+  execute: (state: MarketState) => ({ newState: state, quote: NAN_SHARE_QUOTE }),
   settle: (): Payout[] => [],
 };
 

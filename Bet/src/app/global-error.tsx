@@ -55,16 +55,21 @@ export default function GlobalError({
                   <Button variant="secondary" onClick={reset}>
                     Try again
                   </Button>
-                  {/* A plain anchor, not `useRouter()`: this boundary stands
-                      in for the root layout, so the client router it would
-                      push through is exactly the thing that may have just
-                      failed. A full document load is the reliable escape. */}
-                  <a
-                    href="/"
-                    className="inline-flex h-10 items-center justify-center rounded-(--radius-input) px-4 text-sm font-medium text-(--text-1) transition-colors hover:bg-(--surface-3) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-(--surface-0)"
+                  {/* A hard document load, not `next/link` or
+                      `useRouter()`: this boundary stands in for the root
+                      layout, so the client router it would navigate
+                      through is part of the tree that just failed to
+                      render. Reloading from the server is the escape that
+                      cannot itself be broken by the same fault. */}
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- see comment above: a client-router navigation is exactly what must not be relied on here.
+                      window.location.href = "/";
+                    }}
                   >
                     Go home
-                  </a>
+                  </Button>
                 </div>
               }
             />

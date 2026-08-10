@@ -11,7 +11,7 @@ import { CalendarClock } from "lucide-react";
 import type { ComponentProps } from "react";
 import type { Market, MarketStatus, OutcomeId, Position, Trade, User, UserId } from "@/domain/entities";
 import { nextStatusForClock } from "@/domain/market-state";
-import { add, compare, sub, zero } from "@/domain/money";
+import { add, compare, zero } from "@/domain/money";
 import { toMarketState } from "@/domain/pricing-config";
 import { getEngine } from "@/domain/pricing/registry";
 import type { Payout } from "@/domain/pricing/types";
