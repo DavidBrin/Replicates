@@ -9,6 +9,12 @@
  *
  * ### The ephemeral-token seam
  *
+ * `ephemeralToken` below means a *provider* credential, and is a different thing
+ * from the session token this route signs: the session token carries no secret
+ * and is only meaningful to us, while an ephemeral token is a real, spendable
+ * credential minted by the vendor. Nothing in this file ever returns the second
+ * kind today.
+ *
  * `research/ai-voice-architecture.md` §2.1 describes two wire patterns. The one
  * this build uses is the server-proxied stream (Claude has no browser-safe
  * direct path), so `ephemeralToken` is always `null` and the browser talks only
@@ -37,9 +43,9 @@ import {
   voiceUnconfigured,
 } from "@/lib/voice/http";
 import { clientKeyFor, sessionRateLimiter } from "@/lib/voice/rate-limit";
-import { isConfigured, readVoiceConfig } from "@/lib/voice/config";
+import { API_KEY_ENV_VARS, isConfigured, readVoiceConfig } from "@/lib/voice/config";
 import { sessionRequestSchema } from "@/lib/voice/requests";
-import { voiceSessions } from "@/lib/voice/session-store";
+import { mintVoiceSessionToken, voiceSessionSigningKey } from "@/lib/voice/session-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +54,11 @@ export const dynamic = "force-dynamic";
 const SESSION_TTL_SECONDS = 600;
 
 export interface VoiceSessionResponse {
+  /**
+   * The session *is* a signed token — see `lib/voice/session-token.ts`. It is
+   * still called `sessionId` because that is what it is to the client: an opaque
+   * string it quotes back on every turn and never reads. It carries no secret.
+   */
   readonly sessionId: string;
   /** Epoch milliseconds. The client stops the call at or before this. */
   readonly expiresAt: number;
@@ -73,19 +84,32 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   /**
-   * The mint is a *record*, not just a string. `/api/voice/turn` will look this
-   * up and enforce the caps against it, so the id it hands back means "the
-   * server has agreed to run this call, and is counting" rather than "here is
-   * an opaque token nobody checks" (which is what it used to mean).
+   * `null` is unreachable: `isConfigured` above has already proved the selected
+   * provider's key is present, and the key is what the signature is derived
+   * from. The branch exists so that there is no path through this handler that
+   * mints an *unsigned* session — not even if that check ever moves.
    */
-  const session = voiceSessions.open({
-    personaId: parsed.data.personaId,
-    ttlMs: SESSION_TTL_SECONDS * 1000,
-  });
+  const signingKey = await voiceSessionSigningKey(API_KEY_ENV_VARS[config.aiProvider]);
+  if (!signingKey) return voiceUnconfigured();
+
+  /**
+   * The mint is a *signed claim*, not just a string. `/api/voice/turn` verifies
+   * it and enforces the duration cap against the issued-at inside it, so the
+   * string handed back means "the server agreed to run this call, at this
+   * moment" — and it means that on every instance, not only on this one.
+   */
+  const { token, claims } = await mintVoiceSessionToken(
+    {
+      personaId: parsed.data.personaId,
+      issuedAt: Date.now(),
+      ttlMs: SESSION_TTL_SECONDS * 1000,
+    },
+    signingKey,
+  );
 
   const body: VoiceSessionResponse = {
-    sessionId: session.id,
-    expiresAt: session.expiresAt,
+    sessionId: token,
+    expiresAt: claims.expiresAt,
     aiProvider: config.aiProvider,
     ephemeralToken: null,
     maxDurationSeconds: config.maxDurationSeconds,

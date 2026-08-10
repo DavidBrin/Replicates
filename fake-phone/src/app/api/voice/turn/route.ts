@@ -17,15 +17,21 @@
  *
  * ### The client is not the accountant
  *
- * Every number the caps are enforced against — how long the call has run, how
- * many tokens it has spent — is read from the server's own record of the session
- * (`lib/voice/session-store.ts`), never from the request body. A body-supplied
- * `elapsedSeconds: 0` on every turn was, until this was fixed, an unbounded
- * billable loop; the session id it quoted was not checked against anything the
- * server had ever minted, so it did not even need to be a real one.
+ * Neither number the caps are enforced against comes off the wire. How long the
+ * call has run is read from the issued-at inside the **signed** session token
+ * (`lib/voice/session-token.ts`), so it is exact on any instance and a client
+ * cannot move it. How much the call has spent is read from this instance's
+ * ledger (`lib/voice/token-budget.ts`), which is best-effort and says so. A
+ * body-supplied `elapsedSeconds: 0` on every turn was, until this was fixed, an
+ * unbounded billable loop; the session id it quoted was not checked against
+ * anything at all, so it did not even need to be a real one.
+ *
+ * The turn's allowance is *reserved before the model is called* and reconciled
+ * afterwards. Reading the total, awaiting the model and only then recording the
+ * cost let three overlapping turns each spend the whole remaining budget.
  */
 
-import { isConfigured, readVoiceConfig } from "@/lib/voice/config";
+import { API_KEY_ENV_VARS, isConfigured, readVoiceConfig } from "@/lib/voice/config";
 import {
   invalidVoiceRequest,
   readJsonBody,
@@ -42,7 +48,12 @@ import {
   turnRequestSchema,
   type TurnRequest,
 } from "@/lib/voice/requests";
-import { elapsedSecondsFor, voiceSessions } from "@/lib/voice/session-store";
+import {
+  elapsedSecondsSince,
+  verifyVoiceSessionToken,
+  voiceSessionSigningKey,
+} from "@/lib/voice/session-token";
+import { voiceTokenBudget } from "@/lib/voice/token-budget";
 import { createVoiceSseResponse, type VoiceEndReason } from "@/lib/voice/sse";
 import { buildSystemPrompt } from "@/lib/voice/system-prompt";
 import { resolveTextModelClient } from "@/lib/voice/text-model-registry";
@@ -76,27 +87,43 @@ export async function POST(request: Request): Promise<Response> {
   }
   const turn: TurnRequest = parsed.data;
 
-  // An id the server never minted — or one whose call has long since expired —
-  // buys nothing. This is the check whose absence made every cap below optional.
-  const session = voiceSessions.find(turn.sessionId);
+  // Unreachable: `isConfigured` has already proved the provider key the
+  // signature derives from is present. Kept so no token is ever taken on trust.
+  const signingKey = await voiceSessionSigningKey(API_KEY_ENV_VARS[config.aiProvider]);
+  if (!signingKey) return voiceUnconfigured();
+
+  // A token this deployment never signed — or one whose call has long since
+  // expired — buys nothing. This is the check whose absence made every cap below
+  // optional, and it needs no shared state to make it.
+  const session = await verifyVoiceSessionToken(turn.sessionId, signingKey, Date.now());
   if (!session) return voiceSessionNotFound();
 
-  const elapsedSeconds = elapsedSecondsFor(session, Date.now());
+  const elapsedSeconds = elapsedSecondsSince(session, Date.now());
+
+  /**
+   * From here to the reservation below there is deliberately no `await`. That
+   * gap is the whole of the concurrency bug: an `await` between reading the
+   * ledger and taking from it lets every overlapping turn resume holding the
+   * same figure, and each one then claims a full allowance against a budget the
+   * others have already spent.
+   */
   const capped = capReached(
     elapsedSeconds,
-    session.tokensUsed,
+    voiceTokenBudget.spent(session.sessionId),
     config.maxDurationSeconds,
     config.maxTokens,
   );
-  if (capped) {
-    // Still a well-formed SSE stream, so the client has exactly one code path
-    // for "the call ended" whether it ended naturally or on a budget.
-    return createVoiceSseResponse(async (emit) => {
-      emit.send("connected", { sessionId: session.id });
-      emit.send("line", { text: WRAP_UP_LINE });
-      emit.send("ended", { reason: capped satisfies VoiceEndReason });
-    });
-  }
+  if (capped) return endedCall(session.sessionId, capped);
+
+  const reservation = voiceTokenBudget.reserve({
+    sessionId: session.sessionId,
+    expiresAt: session.expiresAt,
+    tokens: MAX_TOKENS_PER_TURN,
+    budget: config.maxTokens,
+  });
+  // Turns already in flight have claimed what is left. Ending the call is the
+  // only honest answer: the budget that would pay for this turn is spoken for.
+  if (!reservation) return endedCall(session.sessionId, "token_cap");
 
   const systemPrompt = buildSystemPrompt({
     persona: turn.persona,
@@ -105,11 +132,8 @@ export async function POST(request: Request): Promise<Response> {
     targetSeconds: config.maxDurationSeconds,
   });
 
-  const remainingTokens = Math.max(0, config.maxTokens - session.tokensUsed);
-  const maxTokens = Math.min(MAX_TOKENS_PER_TURN, remainingTokens);
-
   return createVoiceSseResponse(async (emit) => {
-    emit.send("connected", { sessionId: session.id });
+    emit.send("connected", { sessionId: session.sessionId });
 
     let result;
     try {
@@ -122,10 +146,15 @@ export async function POST(request: Request): Promise<Response> {
       result = await client.complete({
         systemPrompt,
         transcript: turn.transcript,
-        maxTokens,
+        // The reservation *is* the ceiling: the budget has already been made to
+        // fit it, so there is no second calculation here to disagree with it.
+        maxTokens: reservation.tokens,
         signal: request.signal,
       });
     } catch (cause) {
+      // Nothing was spoken, so nothing is charged — but the allowance must go
+      // back, or a call that hits one flaky turn quietly loses that much budget.
+      voiceTokenBudget.release(reservation);
       if (cause instanceof VoiceModelError) {
         // A safety decline is not a crash — end the call the way a person would.
         if (cause.code === "refused") {
@@ -140,13 +169,15 @@ export async function POST(request: Request): Promise<Response> {
       throw cause;
     }
 
-    // Charged to the server's record before the line is sent, so a client that
-    // hangs up mid-stream has still paid for what it spent.
-    voiceSessions.recordUsage(session.id, result.outputTokens);
+    // The reservation becomes a charge, at the real figure, before the line is
+    // sent — so a client that hangs up mid-stream has still paid for what it
+    // spent. Until this line the turn was costed at its worst case, which is the
+    // direction a spend guard should be wrong in.
+    voiceTokenBudget.settle(reservation, result.outputTokens);
 
     emit.send("line", { text: result.text });
     // Informational only now — the client renders nothing from it and the caps
-    // are enforced against the record above. Kept because it is the one place a
+    // are enforced against the ledger above. Kept because it is the one place a
     // developer can watch a call's spend without server logs.
     emit.send("usage", { outputTokens: result.outputTokens });
     // The gap where the other side "replies". The client fills it with silence;
@@ -157,12 +188,27 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 /**
+ * A call that ends without calling the model.
+ *
+ * Still a well-formed SSE stream, so the client has exactly one code path for
+ * "the call ended" whether it ended naturally or on a budget.
+ */
+function endedCall(sessionId: string, reason: VoiceEndReason): Response {
+  return createVoiceSseResponse(async (emit) => {
+    emit.send("connected", { sessionId });
+    emit.send("line", { text: WRAP_UP_LINE });
+    emit.send("ended", { reason });
+  });
+}
+
+/**
  * Which cap, if any, this turn has run into.
  *
  * Checked *before* spending anything: a turn that would start within a wrap-up
- * margin of either ceiling never reaches the model at all. Both figures come
- * from the server's session record — `config.ts` keeps the accepted budgets
- * above these margins so that "capped from the first turn" is unreachable.
+ * margin of either ceiling never reaches the model at all. Neither figure comes
+ * off the wire — the elapsed one from the signed token, the spend from this
+ * instance's ledger — and `config.ts` keeps the accepted budgets above these
+ * margins so that "capped from the first turn" is unreachable.
  */
 function capReached(
   elapsedSeconds: number,

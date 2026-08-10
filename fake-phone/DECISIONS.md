@@ -350,22 +350,37 @@ hits and a fast user occasionally would too.
 
 ---
 
-## D22 — The server is the authority on what a call costs
+## D22 — A voice session is a signed token, not a server-side record
 
-**Decision.** `/api/voice/session` records every session it mints; `/api/voice/turn`
-looks the id up, derives elapsed time from the server-recorded issue time, and
-accumulates token usage server-side. `elapsedSeconds` and `tokensUsed` were
-removed from the request schema entirely.
+**Decision.** `/api/voice/session` mints an HMAC-signed token carrying the session
+id, persona, issue time and expiry. `/api/voice/turn` verifies the signature and
+derives elapsed time from the *signed* issue time. `elapsedSeconds` and
+`tokensUsed` were removed from the request schema entirely. Token spend is
+reserved before the model call, not recorded after it.
 
-**Why.** They were client-supplied. A caller could post any `sessionId` with both
-counters reset to zero on every request and drive unbounded billable model calls
-straight past the per-call caps. A budget enforced by the party being budgeted is
-not a budget.
+**Why.** Two failures, one after the other.
 
-**Consequence, accepted.** The store is in-memory, so on a multi-instance deploy a
-session minted on instance A is unknown to B and that call ends cleanly instead of
-continuing uncapped. It fails *closed*, which is the correct direction for a spend
-guard — and it is why production wants shared storage.
+The first was trusting the client: those counters came from the browser, so a
+caller could post any session id with both reset to zero on every request and
+drive unbounded billable model calls past the caps. A budget enforced by the
+party being budgeted is not a budget.
+
+The obvious fix — a server-side session store — was a module-level `Map`, and the
+two routes are *separate serverless functions* on the documented deploy target.
+A session minted by one would be unknown to the other, so the AI tier would not
+have worked on Vercel at all. Signing the session makes the server the authority
+with no shared state to lose: the duration cap is exact on every instance, and
+the client still cannot forge or extend a session.
+
+Reserving before spending closes the second half. Reading usage, awaiting the
+model, then recording usage lets three overlapping turns each see the same
+figure and each take a full allowance — 1,200 tokens against an 800 cap, which is
+what the test now proves against the old ordering.
+
+**Consequence, stated plainly.** Token accounting is still per-instance and
+best-effort: a call whose turns land on N instances can spend up to N times its
+token budget. The *duration* cap is exact everywhere. Only shared storage
+(Vercel KV, Redis) makes the token side exact, and the ledger module says so.
 
 ---
 

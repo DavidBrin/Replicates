@@ -12,10 +12,11 @@
  * What is deliberately *absent* is as load-bearing as what is here. A turn does
  * not carry `elapsedSeconds` or `tokensUsed`: those are the two numbers the cost
  * caps are enforced against, and a schema that accepts them from the client is a
- * schema that lets a caller reset its own spend to zero on every request. They
- * are read from the server's own session record instead (`session-store.ts`).
- * Zod strips unknown keys, so an older client that still sends them is not
- * rejected — its figures are simply not consulted.
+ * schema that lets a caller reset its own spend to zero on every request. The
+ * elapsed figure is read from the signed session token (`session-token.ts`) and
+ * the spend from the server's own ledger (`token-budget.ts`). Zod strips unknown
+ * keys, so an older client that still sends them is not rejected — its figures
+ * are simply not consulted.
  */
 
 import { z } from "zod";
@@ -35,7 +36,12 @@ export const transcriptTurnSchema = z.object({
 });
 
 export const turnRequestSchema = z.object({
-  sessionId: z.string().trim().min(1).max(128),
+  /**
+   * The signed session token, opaque to the client. The bound is a sanity
+   * limit rather than a format check — a real one is ~200 characters and the
+   * signature, not the length, is what decides whether it is worth anything.
+   */
+  sessionId: z.string().trim().min(1).max(1024),
   persona: z.object({
     id: z.string().trim().min(1).max(64),
     title: z.string().trim().max(120).optional(),

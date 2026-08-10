@@ -18,7 +18,7 @@ import {
 } from "@/domain/call-session";
 import { getPersona } from "@/domain/persona-catalog";
 import type { Settings } from "@/domain/settings";
-import type { VoiceSession } from "@/ports";
+import type { VoiceProvider, VoiceSession } from "@/ports";
 
 import { useContainer } from "../app-shell/container-provider";
 
@@ -186,19 +186,18 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
     const persona = getPersona(settings.personaId);
     const provider = container.voiceFor(settings.voiceTier);
 
-    void (async () => {
-      // A second, belt-and-braces warm-up for the paths that reach `connecting`
-      // without a tap — auto-answer, and the e2e suite. The real one runs in
-      // the answer handler, inside the gesture, where iOS actually grants it.
-      await speech.warmUp().catch(() => {});
+    let connected = false;
 
+    /**
+     * Runs one provider to completion. Resolves when its event stream ends,
+     * whether that was a clean finish or a failure — the caller decides what to
+     * do about it. Never throws.
+     */
+    const run = async (candidate: VoiceProvider): Promise<void> => {
       let session: VoiceSession | null = null;
       try {
-        session = await provider.start(persona, abort.signal);
+        session = await candidate.start(persona, abort.signal);
       } catch {
-        // A provider that cannot start must not strand the user on a
-        // "connecting" screen: connect anyway and run the call silently.
-        if (!cancelled) dispatch({ type: "CONNECTED", at: clock.now() });
         return;
       }
       if (cancelled) {
@@ -207,28 +206,57 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
       }
       voiceRef.current = session;
 
-      for await (const event of session.events()) {
-        if (cancelled) break;
-        switch (event.type) {
-          case "connected":
-            dispatch({ type: "CONNECTED", at: clock.now() });
-            break;
-          case "line":
-            setSubtitle(event.text);
-            break;
-          case "listening":
-            setSubtitle(null);
-            break;
-          case "error":
-            setSubtitle(null);
-            break;
-          case "ended":
-            setSubtitle(null);
-            break;
-          default:
-            break;
+      try {
+        for await (const event of session.events()) {
+          if (cancelled) break;
+          switch (event.type) {
+            case "connected":
+              connected = true;
+              dispatch({ type: "CONNECTED", at: clock.now() });
+              break;
+            case "line":
+              setSubtitle(event.text);
+              break;
+            case "listening":
+            case "error":
+            case "ended":
+              setSubtitle(null);
+              break;
+            default:
+              break;
+          }
         }
+      } catch {
+        // A provider whose iterator throws is a failed provider, not a crashed
+        // call. Fall through to the recovery below.
       }
+    };
+
+    void (async () => {
+      // A second, belt-and-braces warm-up for the paths that reach `connecting`
+      // without a tap — auto-answer, and the e2e suite. The real one runs in
+      // the answer handler, inside the gesture, where iOS actually grants it.
+      await speech.warmUp().catch(() => {});
+
+      await run(provider);
+
+      // The AI tier's availability is a build-time flag, so the registry can
+      // hand back the AI provider on a deployment whose server has no key, an
+      // invalid key, or `VOICE_PROVIDER=scripted`. The registry cannot know
+      // that — only the first request finds out. So the *runtime* fallback the
+      // registry promises at construction time has to happen here: if AI never
+      // got as far as connecting, run the call on the scripted provider
+      // instead. The user hears a real call rather than silence, which is the
+      // whole point of the degradation chain.
+      if (!cancelled && !connected && provider.id === "ai") {
+        const fallback = container.voiceFor("scripted");
+        if (fallback.id !== "ai") await run(fallback);
+      }
+
+      // Last resort. A provider that never connected must not leave the user
+      // stranded on a "connecting" screen with a timer that never starts:
+      // connect anyway and run the call silently.
+      if (!cancelled && !connected) dispatch({ type: "CONNECTED", at: clock.now() });
     })();
 
     return () => {

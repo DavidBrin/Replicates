@@ -2,10 +2,15 @@
 
 vi.mock("server-only", () => ({}));
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { turnRateLimiter } from "@/lib/voice/rate-limit";
-import { voiceSessions } from "@/lib/voice/session-store";
+import {
+  mintVoiceSessionToken,
+  voiceSessionSigningKey,
+  type MintedVoiceSession,
+} from "@/lib/voice/session-token";
+import { voiceTokenBudget } from "@/lib/voice/token-budget";
 
 import { POST } from "./route";
 
@@ -14,11 +19,42 @@ const SECRET = "sk-ant-turn-route-secret-key-0123456789";
 const SESSION_TTL_MS = 600_000;
 
 /**
- * A session the *server* minted, which is now the only kind `/turn` will serve.
- * Tests that want a forged one pass a plausible id of their own instead.
+ * The key the route will derive for itself, derived here the same way. Nothing
+ * is shared between the mint and the turn except this — which is the point: on
+ * Vercel they are two functions that share nothing else.
  */
-function mintSession(personaId = "friend-nearby"): string {
-  return voiceSessions.open({ personaId, ttlMs: SESSION_TTL_MS }).id;
+let signingKey: CryptoKey;
+
+/** The default session for tests that do not care which one they are on. */
+let session: MintedVoiceSession;
+
+beforeAll(async () => {
+  const key = await voiceSessionSigningKey("ANTHROPIC_API_KEY", { ANTHROPIC_API_KEY: SECRET });
+  if (!key) throw new Error("expected a signing key");
+  signingKey = key;
+});
+
+/**
+ * A session this deployment signed, which is now the only kind `/turn` will
+ * serve. Tests that want a forged one pass a plausible string of their own.
+ */
+async function mintSession(personaId = "friend-nearby"): Promise<MintedVoiceSession> {
+  return mintVoiceSessionToken(
+    { personaId, issuedAt: Date.now(), ttlMs: SESSION_TTL_MS },
+    signingKey,
+  );
+}
+
+/** Puts spend on a session's ledger the way a completed turn would. */
+function spend(sessionId: string, tokens: number): void {
+  const reservation = voiceTokenBudget.reserve({
+    sessionId,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+    tokens,
+    budget: Number.MAX_SAFE_INTEGER,
+  });
+  if (!reservation) throw new Error("expected the ledger to accept the spend");
+  voiceTokenBudget.settle(reservation, tokens);
 }
 
 function useEnv(overrides: Record<string, string> = {}): void {
@@ -38,7 +74,7 @@ interface TurnBodyOverrides {
 
 function turnBody(overrides: TurnBodyOverrides = {}) {
   return {
-    sessionId: overrides.sessionId ?? mintSession(),
+    sessionId: overrides.sessionId ?? session.token,
     persona: {
       id: "friend-nearby",
       title: "A friend nearby",
@@ -90,9 +126,10 @@ function parseSse(raw: string): { event: string; data: Record<string, unknown> }
     });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   turnRateLimiter.reset();
-  voiceSessions.reset();
+  voiceTokenBudget.reset();
+  session = await mintSession();
 });
 
 afterEach(() => {
@@ -265,7 +302,7 @@ describe("POST /api/voice/turn — the happy path", () => {
 describe("POST /api/voice/turn — the server is the accountant", () => {
   beforeEach(() => useEnv({ ANTHROPIC_API_KEY: SECRET }));
 
-  it("refuses a session id it never minted, spending nothing", async () => {
+  it("refuses a session id it never signed, spending nothing", async () => {
     // The whole attack in one test: a well-formed body quoting an invented id.
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
@@ -279,15 +316,69 @@ describe("POST /api/voice/turn — the server is the accountant", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("refuses a token whose claims have been edited, spending nothing", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const [body, signature] = session.token.split(".");
+    const claims = JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      iat: number;
+      exp: number;
+    };
+    // Rewind the clock and extend the call: the two things a caller would most
+    // like to change, and the two the signature is there to nail down.
+    claims.iat -= 3_600_000;
+    claims.exp += 3_600_000;
+    const forged = btoa(JSON.stringify(claims))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    const response = await POST(request(turnBody({ sessionId: `${forged}.${signature}` })));
+
+    expect(response.status).toBe(404);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("refuses a session signed by another deployment's key", async () => {
+    const elsewhere = await voiceSessionSigningKey("ANTHROPIC_API_KEY", {
+      ANTHROPIC_API_KEY: "sk-ant-some-other-deployment",
+    });
+    if (!elsewhere) throw new Error("expected a signing key");
+    const foreign = await mintVoiceSessionToken(
+      { personaId: "friend-nearby", issuedAt: Date.now(), ttlMs: SESSION_TTL_MS },
+      elsewhere,
+    );
+    vi.stubGlobal("fetch", vi.fn());
+
+    const response = await POST(request(turnBody({ sessionId: foreign.token })));
+
+    expect(response.status).toBe(404);
+  });
+
   it("refuses a session that has expired rather than serving it forever", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    const sessionId = mintSession();
+    const expiring = await mintSession();
     vi.setSystemTime(Date.now() + SESSION_TTL_MS + 1000);
     vi.stubGlobal("fetch", vi.fn());
 
-    const response = await POST(request(turnBody({ sessionId })));
+    const response = await POST(request(turnBody({ sessionId: expiring.token })));
 
     expect(response.status).toBe(404);
+  });
+
+  it("serves a session minted by an instance that shares nothing but the key", async () => {
+    // The F1 regression. Nothing in this test hands the turn route any state:
+    // the token is the whole of what crosses between the two functions, exactly
+    // as it is between two serverless instances that never share a heap.
+    const detached = await mintVoiceSessionToken(
+      { personaId: "friend-nearby", issuedAt: Date.now(), ttlMs: SESSION_TTL_MS },
+      signingKey,
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(anthropicOk("Hey, I'm outside.")));
+
+    const frames = parseSse(await (await POST(request(turnBody({ sessionId: detached.token })))).text());
+
+    expect(frames.at(-1)?.data.reason).toBe("completed");
   });
 
   it("ignores client-supplied usage figures entirely", async () => {
@@ -297,10 +388,10 @@ describe("POST /api/voice/turn — the server is the accountant", () => {
     // A fresh `Response` per call: a body can only be read once.
     const fetchSpy = vi.fn().mockImplementation(async () => anthropicOk("Hey.", 300));
     vi.stubGlobal("fetch", fetchSpy);
-    const sessionId = mintSession();
+    const { token } = await mintSession();
 
     // The identical body, replayed, insisting it has spent nothing each time.
-    const replayed = { ...turnBody({ sessionId }), elapsedSeconds: 0, tokensUsed: 0 };
+    const replayed = { ...turnBody({ sessionId: token }), elapsedSeconds: 0, tokensUsed: 0 };
     await (await POST(request(replayed))).text();
     await (await POST(request(replayed))).text();
     const third = parseSse(await (await POST(request(replayed))).text());
@@ -315,11 +406,11 @@ describe("POST /api/voice/turn — the server is the accountant", () => {
     useEnv({ ANTHROPIC_API_KEY: SECRET, VOICE_CALL_MAX_TOKENS: "2000" });
     const fetchSpy = vi.fn().mockImplementation(async () => anthropicOk("Nearly there.", 200));
     vi.stubGlobal("fetch", fetchSpy);
-    const sessionId = mintSession();
+    const { token } = await mintSession();
 
-    await (await POST(request(turnBody({ sessionId })))).text();
-    await (await POST(request(turnBody({ sessionId })))).text();
-    await (await POST(request(turnBody({ sessionId })))).text();
+    await (await POST(request(turnBody({ sessionId: token })))).text();
+    await (await POST(request(turnBody({ sessionId: token })))).text();
+    await (await POST(request(turnBody({ sessionId: token })))).text();
 
     // Each turn's ceiling is the call budget minus what the server has watched
     // this session spend — 2000, 1800, 1600 — clamped to the per-turn maximum.
@@ -329,10 +420,10 @@ describe("POST /api/voice/turn — the server is the accountant", () => {
     expect(ceilings).toEqual([400, 400, 400]);
 
     // And the fourth turn on a nearly-spent budget stops before spending.
-    const spent = vi.fn().mockImplementation(async () => anthropicOk("x", 1000));
-    vi.stubGlobal("fetch", spent);
-    await (await POST(request(turnBody({ sessionId })))).text();
-    const capped = parseSse(await (await POST(request(turnBody({ sessionId })))).text());
+    const overspent = vi.fn().mockImplementation(async () => anthropicOk("x", 1000));
+    vi.stubGlobal("fetch", overspent);
+    await (await POST(request(turnBody({ sessionId: token })))).text();
+    const capped = parseSse(await (await POST(request(turnBody({ sessionId: token })))).text());
 
     expect(capped.at(-1)?.data.reason).toBe("token_cap");
   });
@@ -340,11 +431,83 @@ describe("POST /api/voice/turn — the server is the accountant", () => {
   it("charges a turn even if the client never reads the stream", async () => {
     useEnv({ ANTHROPIC_API_KEY: SECRET });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(anthropicOk("Hey.", 77)));
-    const sessionId = mintSession();
+    const { token, claims } = await mintSession();
 
-    await (await POST(request(turnBody({ sessionId })))).text();
+    await (await POST(request(turnBody({ sessionId: token })))).text();
 
-    expect(voiceSessions.find(sessionId)?.tokensUsed).toBe(77);
+    expect(voiceTokenBudget.spent(claims.sessionId)).toBe(77);
+  });
+
+  it("holds the whole allowance while a turn is in flight, not after it", async () => {
+    // A turn that is still running is money already committed. Costing it at
+    // zero until it finishes is exactly what let three turns spend one budget.
+    useEnv({ ANTHROPIC_API_KEY: SECRET });
+    const { token, claims } = await mintSession();
+    let observedMidTurn = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => {
+        observedMidTurn = voiceTokenBudget.spent(claims.sessionId);
+        return anthropicOk("Hey.", 12);
+      }),
+    );
+
+    await (await POST(request(turnBody({ sessionId: token })))).text();
+
+    expect(observedMidTurn).toBe(400);
+    expect(voiceTokenBudget.spent(claims.sessionId)).toBe(12);
+  });
+
+  it("gives the allowance back when the turn fails", async () => {
+    useEnv({ ANTHROPIC_API_KEY: SECRET });
+    const { token, claims } = await mintSession();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    await (await POST(request(turnBody({ sessionId: token })))).text();
+
+    // A call that hits one flaky turn must not quietly lose 400 tokens of budget.
+    expect(voiceTokenBudget.spent(claims.sessionId)).toBe(0);
+  });
+
+  it("cannot be made to spend more than the budget by overlapping turns", async () => {
+    // The F2 regression. Three turns start together, each on the same nearly
+    // full budget; with the allowance recorded only *after* the model returns,
+    // all three saw zero spent, all three were granted 400, and an 800-token
+    // call spent 1,200.
+    useEnv({ ANTHROPIC_API_KEY: SECRET, VOICE_CALL_MAX_TOKENS: "800" });
+    const { token, claims } = await mintSession();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchSpy = vi.fn().mockImplementation(async () => {
+      // Every turn is inside the model call at the same time — the `await` that
+      // used to sit between reading the budget and writing to it.
+      await held;
+      return anthropicOk("Hey.", 400);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const inFlight = [
+      POST(request(turnBody({ sessionId: token }))),
+      POST(request(turnBody({ sessionId: token }))),
+      POST(request(turnBody({ sessionId: token }))),
+    ];
+    const bodies = await Promise.all(inFlight);
+    release();
+    const streams = await Promise.all(bodies.map((response) => response.text()));
+
+    const granted = fetchSpy.mock.calls.map(
+      (call) =>
+        (JSON.parse(String((call[1] as RequestInit).body)) as { max_tokens: number }).max_tokens,
+    );
+    const total = granted.reduce((sum, tokens) => sum + tokens, 0);
+
+    expect(total).toBeLessThanOrEqual(800);
+    expect(voiceTokenBudget.spent(claims.sessionId)).toBeLessThanOrEqual(800);
+    // The turn that could not be covered ends the call in persona rather than
+    // running on credit.
+    expect(streams.map((raw) => parseSse(raw).at(-1)?.data.reason)).toContain("token_cap");
   });
 });
 
@@ -355,11 +518,14 @@ describe("POST /api/voice/turn — cost guardrails", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 
-    const sessionId = mintSession();
-    // Elapsed is measured from the mint, not from anything the caller claims.
+    const { token } = await mintSession();
+    // Elapsed is measured from the signed mint time, not from anything the
+    // caller claims — and the caller here claims it has been going no time at all.
     vi.setSystemTime(Date.now() + 45_000);
 
-    const response = await POST(request(turnBody({ sessionId })));
+    const response = await POST(
+      request({ ...turnBody({ sessionId: token }), elapsedSeconds: 0 }),
+    );
     const frames = parseSse(await response.text());
 
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -375,10 +541,10 @@ describe("POST /api/voice/turn — cost guardrails", () => {
     const fetchSpy = vi.fn().mockResolvedValue(anthropicOk("Still walking."));
     vi.stubGlobal("fetch", fetchSpy);
 
-    const sessionId = mintSession();
+    const { token } = await mintSession();
     vi.setSystemTime(Date.now() + 10_000);
 
-    const frames = parseSse(await (await POST(request(turnBody({ sessionId })))).text());
+    const frames = parseSse(await (await POST(request(turnBody({ sessionId: token })))).text());
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(frames.at(-1)?.data.reason).toBe("completed");
@@ -386,13 +552,13 @@ describe("POST /api/voice/turn — cost guardrails", () => {
 
   it("ends the call once the token budget is spent, spending nothing", async () => {
     useEnv({ ANTHROPIC_API_KEY: SECRET, VOICE_CALL_MAX_TOKENS: "900" });
-    const sessionId = mintSession();
-    voiceSessions.recordUsage(sessionId, 520);
+    const { token, claims } = await mintSession();
+    spend(claims.sessionId, 520);
 
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 
-    const frames = parseSse(await (await POST(request(turnBody({ sessionId })))).text());
+    const frames = parseSse(await (await POST(request(turnBody({ sessionId: token })))).text());
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(frames.at(-1)?.data.reason).toBe("token_cap");
@@ -403,13 +569,13 @@ describe("POST /api/voice/turn — cost guardrails", () => {
     // wrap-up margin, on the smallest accepted budget — the request still fits
     // inside what remains.
     useEnv({ ANTHROPIC_API_KEY: SECRET, VOICE_CALL_MAX_TOKENS: "800" });
-    const sessionId = mintSession();
-    voiceSessions.recordUsage(sessionId, 399);
+    const { token, claims } = await mintSession();
+    spend(claims.sessionId, 399);
 
     const fetchSpy = vi.fn().mockResolvedValue(anthropicOk("Almost there."));
     vi.stubGlobal("fetch", fetchSpy);
 
-    await (await POST(request(turnBody({ sessionId })))).text();
+    await (await POST(request(turnBody({ sessionId: token })))).text();
 
     const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body)) as {
       max_tokens: number;

@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sessionRateLimiter } from "@/lib/voice/rate-limit";
+import { verifyVoiceSessionToken, voiceSessionSigningKey } from "@/lib/voice/session-token";
 
 import { POST } from "./route";
 
@@ -67,6 +68,19 @@ describe("POST /api/voice/session — unconfigured", () => {
     expect(response.status).toBe(503);
   });
 
+  it("mints nothing at all, so there is no unsigned session anywhere", async () => {
+    // With no key there is no signing key either, which is why the 503 has to
+    // come first: the alternative would be a session nobody can verify.
+    expect(await voiceSessionSigningKey("ANTHROPIC_API_KEY", {})).toBeNull();
+
+    const body = (await (await POST(request({ personaId: "friend-nearby" }))).json()) as Record<
+      string,
+      unknown
+    >;
+
+    expect(body.sessionId).toBeUndefined();
+  });
+
   it("consumes no rate-limit budget while inert", async () => {
     for (let i = 0; i < 10; i += 1) {
       const response = await POST(request({ personaId: "friend-nearby" }));
@@ -87,6 +101,45 @@ describe("POST /api/voice/session — configured", () => {
     expect(String(body.sessionId).length).toBeGreaterThan(0);
     expect(typeof body.expiresAt).toBe("number");
     expect(Number(body.expiresAt)).toBeGreaterThan(Date.now());
+  });
+
+  it("mints a session any other instance can verify with nothing but the key", async () => {
+    // This is what makes the AI tier work on the deploy target at all: `/session`
+    // and `/turn` are separate functions with separate memory, so the session has
+    // to be verifiable from the token alone. Nothing is shared here either — the
+    // key below is derived from the env the same way the turn route derives it.
+    const before = Date.now();
+    const body = (await (await POST(request({ personaId: "friend-nearby" }))).json()) as {
+      sessionId: string;
+      expiresAt: number;
+    };
+
+    const key = await voiceSessionSigningKey("ANTHROPIC_API_KEY", {
+      ANTHROPIC_API_KEY: SECRET,
+    });
+    if (!key) throw new Error("expected a signing key");
+    const claims = await verifyVoiceSessionToken(body.sessionId, key, Date.now());
+
+    expect(claims).not.toBeNull();
+    expect(claims?.personaId).toBe("friend-nearby");
+    expect(claims?.expiresAt).toBe(body.expiresAt);
+    // The issued-at is the server's clock, and it is the only one the duration
+    // cap will ever consult.
+    expect(claims?.issuedAt).toBeGreaterThanOrEqual(before);
+    expect(claims?.issuedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("mints a session no other key can verify", async () => {
+    const body = (await (await POST(request({ personaId: "friend-nearby" }))).json()) as {
+      sessionId: string;
+    };
+
+    const foreign = await voiceSessionSigningKey("ANTHROPIC_API_KEY", {
+      ANTHROPIC_API_KEY: "sk-ant-some-other-deployment",
+    });
+    if (!foreign) throw new Error("expected a signing key");
+
+    expect(await verifyVoiceSessionToken(body.sessionId, foreign, Date.now())).toBeNull();
   });
 
   it("exposes the seam for a browser-direct provider as an explicit null", async () => {

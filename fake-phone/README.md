@@ -95,7 +95,18 @@ To light it up:
 5. Choose the **AI** voice tier in settings
 
 No code change and no new dependency. The key is read server-side only and never
-reaches the browser.
+reaches the browser. `VOICE_SESSION_SECRET` is optional: session tokens are signed
+with a key derived from the provider's API key unless you set it, so setting it
+is only worth doing if you rotate that key and would rather not cut live calls a
+few minutes short.
+
+If the AI tier is selectable but the server cannot actually serve it — no key,
+a rejected key, `VOICE_PROVIDER=scripted` — the call does not fail. The client
+flag is build-time, so only the first request finds out; when AI fails to
+connect, the call runs on the **scripted** provider instead, and if that fails
+too it still connects and runs silently. A phone stuck on "connecting" is a
+phone that is visibly not on a call, which is the one outcome this app cannot
+afford.
 
 ---
 
@@ -105,7 +116,7 @@ reaches the browser.
 |---|---|
 | `npm run dev` | Dev server |
 | `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Unit tests (327) |
+| `npm test` | Unit tests (359) |
 | `npm run test:e2e` | Playwright, three projects (mobile Safari, mobile Chrome, desktop) |
 | `npm run typecheck` · `npm run lint` | TypeScript · ESLint |
 | `npm run generate:assets` | Regenerate the ringtone WAVs and the PWA icons |
@@ -209,11 +220,11 @@ Honest list. Some are platform limits, some are scope.
    `ephemeralToken: null` with the exact three steps documented in place. A true
    speech-to-speech provider is a branch in that handler plus a transport in the
    adapter — not a contract change.
-9. **The rate limiter and the voice-session store are in-memory**, so both are
-   per serverless instance. The session store fails *closed* — a session minted
-   on one instance is unknown to another, so that call ends cleanly rather than
-   continuing uncapped — which is the right direction for a spend guard, but
-   production wants shared storage.
+9. **Token accounting is per-instance and best-effort.** The session itself is a
+   signed token, so the *duration* cap is exact on every serverless instance with
+   no shared state. The token ledger and the rate limiter are in-memory, so a
+   call whose turns land on N instances can spend up to N times its token budget.
+   Shared storage (Vercel KV, Redis) is what makes the token side exact.
 10. **Offline is verified manually, not in CI.** The service worker only
     registers in production builds and Playwright runs against `npm run dev`, so
     the offline path was proved by hand against `next start` (13 `/_next/` assets
