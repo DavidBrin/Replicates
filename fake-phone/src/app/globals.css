@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Design tokens
+ *
+ * Three palettes live here, and they are deliberately kept apart:
+ *
+ *   1. `ios-*`    — Apple's documented system colors, used by the iOS call skin.
+ *   2. `md-*`     — Material 3 dark-theme roles, used by the Android call skin.
+ *   3. everything else — fake-phone's OWN brand, used only by surfaces we
+ *                        invented (home, settings, live chrome).
+ *
+ * A skin must never reach into another skin's tokens, and our brand accent must
+ * never appear inside a replica surface — that mixing is exactly what makes a
+ * replica read as "an app pretending", which is the one thing this product
+ * cannot afford.
+ *
+ * Sources: research/ios-call-ui.md §3, research/android-call-ui.md §3.
+ * ------------------------------------------------------------------------- */
+
+@theme {
+  /* -- iOS system colors (dark chrome, which is what call UI always runs in) */
+  --color-ios-green: #30d158;
+  --color-ios-red: #ff453a;
+  --color-ios-gray: #8e8e93;
+  --color-ios-gray2: #636366;
+  --color-ios-gray5: #2c2c2e;
+  --color-ios-gray6: #1c1c1e;
+  --color-ios-fallback-top: #3a3a3c;
+  --color-ios-fallback-bottom: #1c1c1e;
+
+  /* -- Material 3 dark roles */
+  --color-md-surface: #1c1b1f;
+  --color-md-surface-container: #211f26;
+  --color-md-surface-container-high: #2b2930;
+  --color-md-on-surface: #e6e1e5;
+  --color-md-on-surface-variant: #cac4d0;
+  --color-md-primary: #d0bcff;
+  --color-md-error: #f2b8b5;
+  --color-md-error-container: #8c1d18;
+  --color-md-answer: #34a853;
+  --color-md-decline: #ea4335;
+
+  /* -- fake-phone brand: a calm, night-time safety tool.
+   * Amber rather than red or blue: red reads as alarm (this app must not look
+   * like it is contacting emergency services — see SPEC §1), blue reads as
+   * corporate. Amber reads as a beacon, and it sits far enough from the
+   * call-green that the two never compete on the same screen. */
+  --color-ground: #0b0b0f;
+  --color-surface-1: #17171c;
+  --color-surface-2: #1f1f26;
+  --color-hairline: #2a2a33;
+  --color-accent: #ffb340;
+  --color-accent-dim: #6b4a17;
+  --color-text-primary: #f5f5f7;
+  --color-text-secondary: #a1a1aa;
+
+  /* -- Type. We never ship SF Pro font files: Apple licenses them for software
+   * running on Apple platforms, not for web embedding. `-apple-system` pulls
+   * the real, locally-installed San Francisco on Apple devices for free, which
+   * is pixel-identical to native and carries no licensing exposure.
+   * (research/ios-call-ui.md §5) */
+  --font-ios:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", system-ui, sans-serif;
+  /* Google Sans went SIL OFL in Dec 2025, so it is safe to name; Roboto is
+   * Apache 2.0. (research/android-call-ui.md §5) */
+  --font-android: "Google Sans", "Google Sans Text", Roboto, system-ui, sans-serif;
+
+  /* -- Motion. iOS press feedback and Material's emphasized-decelerate. */
+  --ease-ios: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-md-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+}
+
+/* ---------------------------------------------------------------------------
+ * Phone-app resets
+ *
+ * Each rule below exists because of a specific mobile-Safari behaviour that
+ * would otherwise break the illusion. Removing any of them re-introduces a
+ * visible "this is a web page" tell.
+ * ------------------------------------------------------------------------- */
+
+html,
+body {
+  height: 100%;
+  background: var(--color-ground);
+  color: var(--color-text-primary);
+  font-family: var(--font-ios);
+  /* Rubber-banding at the top of a "call screen" is the single most obvious
+   * tell that this is a browser and not the Phone app. */
+  overscroll-behavior: none;
+  /* iOS shows a magnifier/callout on long-press, and a text cursor on drag.
+   * Neither exists in a native call UI. Inputs opt back in below. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+input,
+textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+  -webkit-touch-callout: default;
+  font: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  /* Stops iOS double-tap-to-zoom from eating the second tap on the answer
+   * button — the most costly possible place to lose a tap. */
+  touch-action: manipulation;
+}
+
+/* The app frame. `100dvh` rather than `100vh`: on mobile Safari `100vh` is the
+ * *largest* viewport height, so a `100vh` call screen is taller than the visible
+ * area and the end-call button sits below the fold behind the URL bar. */
+.app-frame {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Safe-area helpers. Paired with `viewport-fit=cover` in the layout's viewport
+ * meta — without that meta these insets all resolve to 0. */
+.pad-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pad-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Call timers and viewer counts must not jitter as digits change width. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
