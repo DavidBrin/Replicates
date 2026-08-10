@@ -41,8 +41,11 @@ vi.mock("next/navigation", () => ({
 /* ----------------------------------------------------------- dom shims --- */
 
 // jsdom implements neither of these, and later tasks' layout/theme code
-// subscribes to them on mount.
-if (!window.matchMedia) {
+// subscribes to them on mount. Guarded on `typeof window` because some test
+// files opt into the plain Node environment via a `// @vitest-environment
+// node` pragma (Task 4: jose's webapi build misbehaves under jsdom), where
+// `window` doesn't exist at all — this setup file still runs for them.
+if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = ((query: string) => ({
     matches: false,
     media: query,
@@ -78,4 +81,8 @@ if (!globalThis.IntersectionObserver) {
 }
 
 // jsdom has no layout engine, so this is a no-op rather than throwing.
-Element.prototype.scrollIntoView ??= vi.fn();
+// (Guarded for the same reason as the block above — absent under the plain
+// Node environment.)
+if (typeof Element !== "undefined") {
+  Element.prototype.scrollIntoView ??= vi.fn();
+}
