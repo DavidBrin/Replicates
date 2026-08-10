@@ -26,7 +26,7 @@ export function CardFooter({ question, volume, closesAt, now, className }: CardF
 
   return (
     <div className={className}>
-      <div className="mt-3 flex items-center justify-between border-t border-(--border) pt-3">
+      <div className="mt-2 flex items-center justify-between border-t border-(--border) pt-2">
         <div className="flex items-center gap-2">
           <span className="tabular-nums text-xs text-(--text-3)">${formatVolume(volume)} Vol.</span>
           {closingSoon ? (

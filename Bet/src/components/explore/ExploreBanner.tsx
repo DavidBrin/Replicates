@@ -23,7 +23,7 @@ export function ExploreBanner() {
 
   return (
     <div className="border-b border-(--border) bg-(--surface-2)">
-      <div className="mx-auto flex max-w-[1320px] items-start gap-3 px-4 py-2.5 sm:px-6">
+      <div className="mx-auto flex max-w-[1440px] items-start gap-3 px-4 py-2.5 sm:px-6">
         <Info className="mt-0.5 size-4 shrink-0 text-(--accent)" aria-hidden="true" />
         <p className="flex-1 text-xs text-(--text-2) sm:text-sm">
           Explore is a simulated public-markets showcase — nothing here trades for real.

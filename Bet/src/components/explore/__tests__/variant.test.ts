@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { brand } from "@/domain/entities";
 import type { Outcome } from "@/domain/entities";
-import { deriveCardVariant } from "../variant";
+import { deriveCardVariant, isCompactBinary } from "../variant";
 
 function outcome(label: string): Outcome {
   return {
@@ -31,5 +31,29 @@ describe("deriveCardVariant", () => {
 
   it("treats a single outcome as head-to-head (degenerate, never seeded)", () => {
     expect(deriveCardVariant([outcome("Only")])).toBe("headToHead");
+  });
+});
+
+describe("isCompactBinary", () => {
+  it("is deterministic — same id, same result, every call", () => {
+    const id = "market-42";
+    const first = isCompactBinary(id);
+    for (let i = 0; i < 10; i++) {
+      expect(isCompactBinary(id)).toBe(first);
+    }
+  });
+
+  it("splits a batch of ids roughly evenly, not all-true or all-false", () => {
+    const ids = Array.from({ length: 40 }, (_, i) => `seeded-market-${i}`);
+    const compactCount = ids.filter((id) => isCompactBinary(id)).length;
+    expect(compactCount).toBeGreaterThan(10);
+    expect(compactCount).toBeLessThan(30);
+  });
+
+  it("gives different ids independent results (not a constant function)", () => {
+    const results = new Set(
+      Array.from({ length: 20 }, (_, i) => isCompactBinary(`market-${i}`)),
+    );
+    expect(results.size).toBe(2);
   });
 });

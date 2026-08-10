@@ -79,7 +79,7 @@ export default async function ExploreDetailPage({ params }: ExploreDetailPagePro
     variant === "binary" && yesOutcome ? (prices[yesOutcome.id] ?? 0) : Math.max(0, ...Object.values(prices));
 
   return (
-    <div className="mx-auto flex max-w-[1320px] flex-col gap-6 px-4 py-6 sm:px-6 xl:flex-row">
+    <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-6 xl:flex-row">
       <div className="min-w-0 flex-1">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {categoryLabel ? (

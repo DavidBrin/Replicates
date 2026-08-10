@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
  * `not-found` and its unrelated (Bet-indigo) styling. */
 export default function ExploreMarketNotFound() {
   return (
-    <div className="mx-auto max-w-[1320px] px-4 py-16 sm:px-6">
+    <div className="mx-auto max-w-[1440px] px-4 py-16 sm:px-6">
       <EmptyState
         title="Market not found"
         description="This market doesn't exist, or isn't part of the public Explore showcase."

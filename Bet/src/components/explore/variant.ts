@@ -28,3 +28,35 @@ export function deriveCardVariant(outcomes: readonly Outcome[]): ExploreCardVari
   }
   return "multi";
 }
+
+/**
+ * Fixed-point FNV-1a-style string hash (same shape as `orderbook-synth.ts`'s
+ * `hashSeed`, reimplemented locally rather than imported — this module has
+ * no other dependency on that file and duplicating six lines keeps the two
+ * pure-derivation modules independent). Deterministic and total: same
+ * input, same output, every time, in every environment.
+ */
+function stableHash(key: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Task 13 fix round 1: most seeded markets are binary, so rendering every
+ * one of them as `BinaryGaugeCard` made ~3/4 of the grid the same circular-
+ * gauge shape — visually monotonous in a way the real references aren't
+ * (Polymarket genuinely renders binary markets both as a gauge card *and*
+ * as a compact list row, e.g. inside multi-outcome event groups). This adds
+ * variety in the derivation, not the outcome count: roughly half of binary
+ * markets render as the compact `label — % — [Yes][No]` row instead of the
+ * gauge, chosen by a stable hash of the market id — never `Math.random()`,
+ * which would churn between server/client renders and break hydration, or
+ * reshuffle the grid on every request. Pure and total.
+ */
+export function isCompactBinary(marketId: string): boolean {
+  return stableHash(marketId) % 2 === 0;
+}

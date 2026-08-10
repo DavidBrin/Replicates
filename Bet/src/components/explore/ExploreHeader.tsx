@@ -40,7 +40,7 @@ export function ExploreHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-(--border) bg-(--surface-1)/95 backdrop-blur">
       {/* Row 1 — ~64px */}
-      <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-4 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
         <Link href="/explore" className="flex shrink-0 items-center gap-1.5">
           <span className="text-lg font-bold tracking-tight text-(--accent)">Bet</span>
           <span className="hidden text-xs text-(--text-3) sm:inline">Explore</span>
@@ -117,7 +117,7 @@ export function ExploreHeader() {
 
       {/* Row 2 — ~43px category strip */}
       <nav aria-label="Categories" className="scrollbar-none overflow-x-auto border-t border-(--border)">
-        <ul className="mx-auto flex h-[43px] max-w-[1320px] min-w-max items-center gap-5 px-4 sm:px-6">
+        <ul className="mx-auto flex h-[43px] max-w-[1440px] min-w-max items-center gap-5 px-4 sm:px-6">
           {CATEGORY_TABS.map((tab) => {
             const isActive = activeCategory === tab.id;
             return (
