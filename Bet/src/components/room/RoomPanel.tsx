@@ -154,6 +154,7 @@ export function RoomPanel({
 
   return (
     <div
+      data-testid="room-panel"
       className={cn(
         "flex h-full min-h-0 flex-col rounded-(--radius-card) border border-(--border) bg-(--surface-2)",
         className,

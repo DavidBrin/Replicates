@@ -92,7 +92,7 @@ export function UserMenu({
           </div>
           <div className="flex items-center justify-between rounded-(--radius-input) bg-(--surface-3) px-3 py-2">
             <span className="text-xs text-(--text-2)">Balance</span>
-            <span className="tnum text-sm font-semibold text-(--text-1)">
+            <span data-testid="topbar-balance" className="tnum text-sm font-semibold text-(--text-1)">
               {formatCredits(balance)}
             </span>
           </div>

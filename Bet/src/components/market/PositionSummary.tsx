@@ -34,7 +34,7 @@ export function PositionSummary({ positions, className }: PositionSummaryProps) 
   }
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    <div data-testid="position-summary" className={cn("flex flex-col gap-3", className)}>
       {held.map((p) => {
         const avgCostPerShare = p.shares > 0 ? p.costBasis / p.shares / 100 : 0;
         const currentValue = credits(Math.round(p.shares * p.currentPrice * 100));
@@ -46,6 +46,9 @@ export function PositionSummary({ positions, className }: PositionSummaryProps) 
         return (
           <div
             key={p.outcomeId}
+            data-testid="position-row"
+            data-outcome-label={p.outcomeLabel}
+            data-shares={p.shares}
             className="grid grid-cols-2 gap-2 rounded-(--radius-input) bg-(--surface-3) px-3 py-2.5 text-sm sm:grid-cols-4"
           >
             <Field label="Outcome" value={p.outcomeLabel} />

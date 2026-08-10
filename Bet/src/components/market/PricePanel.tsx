@@ -38,7 +38,7 @@ export function PricePanel({ outcomes, series, delta, className }: PricePanelPro
       )}
     >
       {leading ? (
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-baseline gap-3" data-testid="market-leading-probability">
           <span className="tnum text-4xl font-semibold text-(--text-1)">{formatProbability(leading.price)}</span>
           <span className="text-sm text-(--text-2)">{leading.label}</span>
           {delta !== null ? <DeltaChip delta={delta} /> : null}

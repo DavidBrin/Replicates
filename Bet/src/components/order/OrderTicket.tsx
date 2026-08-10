@@ -285,6 +285,7 @@ export function OrderTicket({
 
       <Button
         type="button"
+        data-testid="order-submit"
         variant={side === "buy" ? "yes" : "no"}
         disabled={!!disabledReason || submitting}
         loading={submitting}

@@ -69,7 +69,10 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
               description="Try a different category, filter, or search term."
             />
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] items-start gap-4">
+            <div
+              data-testid="explore-grid"
+              className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] items-start gap-4"
+            >
               {filtered.map((view) => (
                 <ExploreMarketCard key={view.market.id} view={view} now={now} />
               ))}
