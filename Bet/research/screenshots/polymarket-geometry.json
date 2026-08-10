@@ -1,0 +1,87 @@
+{
+  "cardCount": 40,
+  "sample": [
+    {
+      "style": {
+        "w": 346,
+        "h": 184,
+        "bg": "rgba(0, 0, 0, 0)",
+        "border": "0px solid rgb(230, 232, 234)",
+        "radius": "11.2px",
+        "pad": "0px",
+        "gap": "8px",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "font": "inter",
+        "color": "rgb(14, 15, 17)"
+      },
+      "text": ""
+    },
+    {
+      "style": {
+        "w": 346,
+        "h": 184,
+        "bg": "rgba(0, 0, 0, 0)",
+        "border": "0px solid rgb(230, 232, 234)",
+        "radius": "11.2px",
+        "pad": "0px",
+        "gap": "8px",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "font": "inter",
+        "color": "rgb(14, 15, 17)"
+      },
+      "text": ""
+    },
+    {
+      "style": {
+        "w": 346,
+        "h": 136,
+        "bg": "rgba(0, 0, 0, 0)",
+        "border": "0px solid rgb(230, 232, 234)",
+        "radius": "11.2px",
+        "pad": "0px",
+        "gap": "8px",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "font": "inter",
+        "color": "rgb(14, 15, 17)"
+      },
+      "text": ""
+    },
+    {
+      "style": {
+        "w": 363,
+        "h": 219,
+        "bg": "rgba(0, 0, 0, 0)",
+        "border": "0px solid rgb(230, 232, 234)",
+        "radius": "11.2px",
+        "pad": "0px",
+        "gap": "12px",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "font": "inter",
+        "color": "rgb(14, 15, 17)"
+      },
+      "text": "Hot topics | 1 | Yabloko | $808K today | 2 | Arsenal | $1M today | 3 | Benfica | $852K today | 4 | Porto | $2M today | 5 | Ajax | $8.8K today"
+    }
+  ],
+  "grid": {
+    "w": 346,
+    "h": 328,
+    "bg": "rgba(0, 0, 0, 0)",
+    "border": "0px solid rgb(230, 232, 234)",
+    "radius": "0px",
+    "pad": "0px",
+    "gap": "16px",
+    "fontSize": "16px",
+    "fontWeight": "400",
+    "font": "inter",
+    "color": "rgb(14, 15, 17)"
+  },
+  "yesNoButtons": [],
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  }
+}
