@@ -112,7 +112,13 @@ export const POST = handler<{ id: string }>(async (req, { params }) => {
     if (invite.inviterId !== me.id) {
       return throwApp({ code: "forbidden", message: "Only the inviter can revoke this." });
     }
-    const updated = await store.invites.update(invite.id, { status: "revoked" });
+    // Single write, but still through `transact`: the store's mutex only
+    // serializes transact-vs-transact, so a BARE write here could land
+    // mid-flight of a concurrent `accept` transact on this same invite row
+    // and be silently clobbered when that transact's diff commits (Fix
+    // round 1, Important 1) — every write to this row now goes through the
+    // same staging/diff path as `accept`.
+    const updated = await store.transact((tx) => tx.invites.update(invite.id, { status: "revoked" }));
     return jsonOk({ invite: updated });
   }
 
@@ -124,7 +130,9 @@ export const POST = handler<{ id: string }>(async (req, { params }) => {
   }
 
   if (action === "decline") {
-    const updated = await store.invites.update(invite.id, { status: "declined" });
+    const updated = await store.transact((tx) =>
+      tx.invites.update(invite.id, { status: "declined" }),
+    );
     return jsonOk({ invite: updated });
   }
 

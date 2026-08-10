@@ -1,11 +1,30 @@
 import { z } from "zod";
-import { brand } from "@/domain/entities";
+import { brand, type UserId } from "@/domain/entities";
+import { can } from "@/domain/authz";
 import { getContainer, requireUser } from "@/lib/container";
 import { handler, jsonOk, parseBody, throwApp } from "@/lib/http";
 
 const actionSchema = z.object({
   action: z.enum(["accept", "decline", "cancel"]),
 });
+
+/**
+ * Routes every "is this caller allowed to act as X here" check for a
+ * friend request through `domain/authz.ts`'s `friendGraph` resource (G5)
+ * rather than comparing ids by hand. Per `FriendGraphAuthzFacts`'s own doc
+ * comment: "the route handler ... builds `ownerId` to mean 'the user-id
+ * whose authority this specific action requires'" — this route supplies
+ * `request.fromId` when checking sender-authority (existence/cancel) and
+ * `request.toId` when checking recipient-authority (accept/decline).
+ */
+function ownsFriendGraph(actorId: UserId, ownerId: UserId): boolean {
+  return can(
+    { userId: actorId },
+    "read",
+    { type: "friendGraph", ownerId },
+    { friendGraph: { ownerId } },
+  );
+}
 
 /**
  * `POST /api/friends/requests/[id] { action }` (SPEC §8). Only the
@@ -23,7 +42,9 @@ export const POST = handler<{ id: string }>(async (req, { params }) => {
   const { store, clock, idGen } = await getContainer();
 
   const request = await store.friends.findRequestById(brand(id));
-  if (!request || (request.fromId !== me.id && request.toId !== me.id)) {
+  const isParty =
+    !!request && (ownsFriendGraph(me.id, request.fromId) || ownsFriendGraph(me.id, request.toId));
+  if (!request || !isParty) {
     return throwApp({ code: "not_found", message: "Friend request not found." });
   }
 
@@ -35,18 +56,26 @@ export const POST = handler<{ id: string }>(async (req, { params }) => {
   }
 
   if (action === "cancel") {
-    if (request.fromId !== me.id) {
+    if (!ownsFriendGraph(me.id, request.fromId)) {
       return throwApp({
         code: "forbidden",
         message: "Only the sender can cancel a friend request.",
       });
     }
-    const updated = await store.friends.updateRequestStatus(request.id, "cancelled");
+    // Single write, but still through `transact`: the store's mutex only
+    // serializes transact-vs-transact, so a BARE write here could land
+    // mid-flight of a concurrent `accept` transact and be silently
+    // clobbered when that transact's diff commits (Fix round 1, Important
+    // 1) — every write to this row now goes through the same
+    // staging/diff path as `accept`.
+    const updated = await store.transact((tx) =>
+      tx.friends.updateRequestStatus(request.id, "cancelled"),
+    );
     return jsonOk({ request: updated });
   }
 
   // accept / decline: recipient only.
-  if (request.toId !== me.id) {
+  if (!ownsFriendGraph(me.id, request.toId)) {
     return throwApp({
       code: "forbidden",
       message: "Only the recipient can respond to a friend request.",
@@ -54,7 +83,9 @@ export const POST = handler<{ id: string }>(async (req, { params }) => {
   }
 
   if (action === "decline") {
-    const updated = await store.friends.updateRequestStatus(request.id, "declined");
+    const updated = await store.transact((tx) =>
+      tx.friends.updateRequestStatus(request.id, "declined"),
+    );
     return jsonOk({ request: updated });
   }
 
