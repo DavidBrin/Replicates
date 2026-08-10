@@ -108,7 +108,12 @@ export class DemoSessionAuthProvider implements AuthProvider {
     if (!token) return null;
     try {
       const key = getSecretKey();
-      const { payload } = await jwtVerify(token, key);
+      // Pin the algorithm explicitly rather than relying on jose's internal
+      // key-type check (it currently rejects asymmetric algs against a raw
+      // Uint8Array secret, but that's an implementation detail of the
+      // library, not a contract this code should lean on — a future key
+      // type or jose version could silently widen what's accepted).
+      const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] });
       if (typeof payload.sub !== "string" || payload.sub.length === 0) {
         return null;
       }

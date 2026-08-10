@@ -41,7 +41,9 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
 
   if (token) {
     try {
-      await jwtVerify(token, getSecretKey());
+      // Pinned to HS256 — see the matching comment in demo-session.ts's
+      // verify(); don't rely on jose's internal key-type check alone.
+      await jwtVerify(token, getSecretKey(), { algorithms: ["HS256"] });
       return NextResponse.next();
     } catch {
       // Expired/tampered — fall through to the redirect below, same as no

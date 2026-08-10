@@ -7,10 +7,12 @@
 // Task 4 report). Session signing/verification has no DOM dependency, so
 // this file runs under the real Node environment instead.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SignJWT } from "jose";
 import { brand } from "@/domain/entities";
 import {
   DemoSessionAuthProvider,
   DEV_FALLBACK_SECRET,
+  getSecretKey,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
   sessionCookieOptions,
@@ -49,6 +51,21 @@ describe("adapters/auth/demo-session.ts", () => {
       vi.stubEnv("AUTH_SECRET", "a-completely-different-secret");
       const verifier = new DemoSessionAuthProvider();
       expect(await verifier.verify(token)).toBeNull();
+    });
+
+    it("rejects a token signed with a different HMAC algorithm (HS512) against the SAME secret", async () => {
+      // Same key bytes as the provider would use — this isn't a wrong-secret
+      // case, it's an algorithm-confusion case: verify() must pin `alg` to
+      // HS256, not just check the signature against a compatible key.
+      const key = getSecretKey();
+      const foreignAlgToken = await new SignJWT({ sub: "usr_alg_confusion" })
+        .setProtectedHeader({ alg: "HS512" })
+        .setIssuedAt()
+        .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+        .sign(key);
+
+      const provider = new DemoSessionAuthProvider();
+      expect(await provider.verify(foreignAlgToken)).toBeNull();
     });
   });
 
