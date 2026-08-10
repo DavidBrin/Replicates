@@ -15,7 +15,6 @@ import {
 import { deriveResolutionView } from "@/components/market/resolution-view";
 import { TradeRefreshProvider } from "@/components/market/TradeRefreshProvider";
 import { OrderTicket } from "@/components/order/OrderTicket";
-import { RoomPanel } from "@/components/room/RoomPanel";
 import type { RoomAuthorInfo, RoomEntry } from "@/components/room/group-messages";
 import type { AvatarStackItem } from "@/components/ui/Avatar";
 import type { Actor } from "@/domain/authz";
@@ -29,6 +28,7 @@ import { computeMarketFacts, computeRoomFacts } from "@/domain/services/market-a
 import { encodeMessageCursor } from "@/lib/api-client";
 import { getContainer } from "@/lib/container";
 import { requireCurrentUser } from "@/lib/server-actor";
+import { RoomPanelHost } from "./RoomPanelHost";
 
 const INITIAL_MESSAGE_LIMIT = 30;
 
@@ -271,7 +271,7 @@ export default async function MarketPage({
             />
           </div>
 
-          <RoomPanel
+          <RoomPanelHost
             className="h-[640px] xl:w-[360px] xl:shrink-0"
             marketId={market.id}
             currentUserId={user.id}

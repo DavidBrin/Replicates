@@ -29,7 +29,17 @@ test("a friend request sent by one user can be accepted by the recipient, and sh
   // check below instead of failing on a missing "Add" button.
   const stillStrangers = await addButton.isVisible().catch(() => false);
   if (stillStrangers) {
+    // `FriendsBoard`'s Add/Accept actions update the UI optimistically
+    // BEFORE their `POST` resolves — the next step signs in as a
+    // different user, which is a full page navigation that would abort
+    // an in-flight fetch. Wait for the real response first, or the
+    // mutation can be silently dropped server-side (observed: an aborted
+    // `POST /api/friends/requests/[id]` never lands the friendship).
+    const sendResponse = page.waitForResponse(
+      (r) => r.url().includes("/api/friends/requests") && r.request().method() === "POST",
+    );
     await addButton.click();
+    await sendResponse;
     await expect(page.getByRole("tab", { name: /^Sent \(\d+\)/ })).toBeVisible();
 
     // --- birdie accepts it ---------------------------------------------------------
@@ -38,7 +48,12 @@ test("a friend request sent by one user can be accepted by the recipient, and sh
     await page.getByRole("tab", { name: /^Requests \(\d+\)/ }).click();
     const requestRow = page.getByText("Liv Torres").locator("..").locator("..");
     await expect(requestRow.getByRole("button", { name: "Accept" })).toBeVisible();
+
+    const acceptResponse = page.waitForResponse(
+      (r) => r.url().includes("/api/friends/requests/") && r.request().method() === "POST",
+    );
     await requestRow.getByRole("button", { name: "Accept" }).click();
+    await acceptResponse;
   } else {
     await signIn(page, "birdie");
     await page.goto("/app/friends");

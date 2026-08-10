@@ -35,9 +35,15 @@ test.describe("explore", () => {
 
     // Every card in the filtered grid carries the "Sports" category badge —
     // proves the tab actually filtered the underlying data, not just
-    // relabeled the same set.
-    const cardCount = await filteredCards.count();
-    const sportsBadges = filteredGrid.locator('a[href^="/explore/"]').filter({ hasText: "Sports" });
+    // relabeled the same set. Each card's `<a>` is a "stretched link"
+    // (`ExploreMarketCard.tsx`'s doc comment) that sits as an empty
+    // SIBLING of the card's content, not a wrapper around it — so the
+    // badge text lives on the card's root `<div>`, one level up, not on
+    // the anchor itself.
+    const cardContainers = filteredGrid.locator("> div");
+    const cardCount = await cardContainers.count();
+    expect(cardCount).toBe(await filteredCards.count());
+    const sportsBadges = cardContainers.filter({ hasText: "Sports" });
     expect(await sportsBadges.count()).toBe(cardCount);
   });
 

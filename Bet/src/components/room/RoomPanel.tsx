@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useTradeRefresh } from "@/components/market/TradeRefreshProvider";
 import { ApiError, getMessages, postMessage, type ApiMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { PollingRealtimeChannel } from "@/adapters/realtime/polling";
+import type { RealtimeChannel, RealtimeChannelFactory } from "@/ports/realtime";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { mergeRoomEntries, type RoomAuthorInfo, type RoomEntry } from "./group-messages";
@@ -29,6 +29,13 @@ export interface RoomPanelProps {
    * current/former position holder. A bare pending invite can see the
    * market but isn't "in the room" yet. */
   canPost: boolean;
+  /** How to build the live-tail transport (`src/ports/realtime.ts`). The
+   * component owns the channel's *lifetime* (one per `marketId`, closed on
+   * unmount) and its `fetchLatest`/`sendMessage` closures; the choice of
+   * transport is injected, because a component may not import an adapter
+   * (G1). The market page binds `createPollingRealtimeChannel` via
+   * `RoomPanelHost`; a test binds a fake. */
+  createChannel: RealtimeChannelFactory<RoomEntry>;
   className?: string;
 }
 
@@ -41,9 +48,10 @@ function toRoomEntry(m: ApiMessage): RoomEntry {
 /**
  * The Room (SPEC §5.4): a keyset-paginated, author-grouped message list with
  * inline system-event chips, an optimistic composer, and a live tail
- * powered by `PollingRealtimeChannel` (`src/adapters/realtime/polling.ts`)
- * — every `setInterval`/`document.visibilityState` concern lives there,
- * this component only calls `subscribe`/`send`/`close`.
+ * powered by whichever `RealtimeChannel` (`src/ports/realtime.ts`) the
+ * `createChannel` prop supplies — every `setInterval`/
+ * `document.visibilityState` concern lives in that adapter, this component
+ * only calls `subscribe`/`send`/`close` against the port.
  */
 export function RoomPanel({
   marketId,
@@ -53,6 +61,7 @@ export function RoomPanel({
   initialNextCursor,
   now,
   canPost,
+  createChannel,
   className,
 }: RoomPanelProps) {
   const toast = useToast();
@@ -60,7 +69,7 @@ export function RoomPanel({
   const [messages, setMessages] = useState<RoomEntry[]>(initialMessages);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [loadingMore, setLoadingMore] = useState(false);
-  const channelRef = useRef<PollingRealtimeChannel<RoomEntry> | null>(null);
+  const channelRef = useRef<RealtimeChannel<RoomEntry> | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const nowDate = useMemo(() => new Date(now), [now]);
 
@@ -70,7 +79,7 @@ export function RoomPanel({
   }, [marketId]);
 
   useEffect(() => {
-    const channel = new PollingRealtimeChannel<RoomEntry>({
+    const channel = createChannel({
       fetchLatest,
       sendMessage: async (clientId, body) => {
         const res = await postMessage(marketId, { clientId, body });
@@ -85,7 +94,7 @@ export function RoomPanel({
       channel.close();
       channelRef.current = null;
     };
-  }, [marketId, fetchLatest]);
+  }, [marketId, fetchLatest, createChannel]);
 
   // A trade (OrderTicket) or resolution action (ResolutionPanel) elsewhere
   // on the page bumps this — re-poll immediately rather than waiting for

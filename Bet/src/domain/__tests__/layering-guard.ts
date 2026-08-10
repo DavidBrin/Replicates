@@ -80,3 +80,29 @@ export function isForbiddenImport(
     isInside(resolved, resolve(srcRoot, "app"))
   );
 }
+
+/**
+ * True if `specifier`, written inside a `src/components/**` file, is
+ * forbidden under G1's component rule: "src/components/ UI. MUST NOT import
+ * `src/adapters/**` directly; data arrives via props or via `src/app` server
+ * components."
+ *
+ * Narrower than `isForbiddenImport` on purpose. Components legitimately
+ * import react and next, and they legitimately import `src/app` types and
+ * `src/lib` helpers — the single forbidden direction is components reaching
+ * into an adapter, which is how a UI file ends up welded to one
+ * implementation of a port (the `RealtimeChannel` case: the Room used to
+ * `new PollingRealtimeChannel(...)` directly, so "there is a port" was true
+ * on paper and false in the import graph). Resolution is shared with the
+ * domain rule, so the relative-path bypass (`../../adapters/x`) is caught
+ * here too.
+ */
+export function isForbiddenComponentImport(
+  file: string,
+  specifier: string,
+  srcRoot: string,
+): boolean {
+  const resolved = resolveSpecifier(file, specifier, srcRoot);
+  if (resolved === null) return false;
+  return isInside(resolved, resolve(srcRoot, "adapters"));
+}

@@ -114,6 +114,19 @@ async function loadFeaturedMarket(store: DataStore): Promise<FeaturedMarketData 
 }
 
 /**
+ * Forces per-request rendering rather than a `next build`-time static
+ * snapshot. This page reads live seed data (`getContainer()`) for its
+ * "live demo card" — without this, `next build`'s own short-lived process
+ * would seed its own store and freeze that snapshot into the static
+ * output forever (stale numbers, and IDs from a container the running
+ * server never shares — see `signin/page.tsx`'s identical, more severe
+ * case, where the same gap breaks sign-in outright). Found by diffing
+ * `next build`'s route table (this page listed `○ Static`) against a
+ * live production smoke check.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * The marketing home (SPEC §3.1). Server Component — reads straight through
  * `getContainer()`, same pattern as the group dashboard (Task 9). No auth
  * required; this is the one page every visitor, signed in or not, lands on

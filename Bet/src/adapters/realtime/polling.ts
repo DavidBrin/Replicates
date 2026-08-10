@@ -1,10 +1,13 @@
 /**
- * `RealtimeChannel` port + a polling implementation (Task 10's brief: "Put
- * the polling behind a `RealtimeChannel` port ... so SSE or a hosted
- * provider could replace it without touching the component"). The Room
- * (`src/components/room/RoomPanel.tsx`) talks only to the `RealtimeChannel`
- * interface below — it never calls `setInterval` or touches
- * `document.visibilityState` itself.
+ * Polling implementation of the `RealtimeChannel` port (Task 10's brief:
+ * "Put the polling behind a `RealtimeChannel` port ... so SSE or a hosted
+ * provider could replace it without touching the component"). The interface
+ * itself lives in `src/ports/realtime.ts`, not here — the Room
+ * (`src/components/room/RoomPanel.tsx`) programs against that port and is
+ * handed a `RealtimeChannelFactory` as a prop, so it never imports this
+ * module (G1: `src/components/**` must not import `src/adapters/**`, which
+ * `src/domain/__tests__/layering.test.ts` now enforces). It never calls
+ * `setInterval` or touches `document.visibilityState` itself either.
  *
  * This is an adapter (G1: "src/adapters/ implements ports. May import
  * domain + ports."), not a React hook, so it's plain, framework-free TS —
@@ -12,30 +15,14 @@
  * swap for an SSE-backed implementation later without any component change.
  */
 
-export interface RealtimeChannel<TMessage> {
-  /** Registers the (single) listener for newly-fetched message batches.
-   * Starts polling immediately if the document is currently visible. */
-  subscribe(onMessages: (messages: TMessage[]) => void): void;
-  /** Sends one message, then immediately re-polls (rather than waiting for
-   * the next scheduled tick) so the sender sees their own message land
-   * without a visible delay. */
-  send(msg: { clientId: string; body: string }): Promise<TMessage>;
-  /** Stops polling and detaches every listener — call on unmount. */
-  close(): void;
-}
+import type { RealtimeChannel, RealtimeChannelOptions } from "@/ports/realtime";
 
 /** The subset of `Document` this adapter needs, so tests can inject a fake
  * one instead of depending on jsdom's real `document`. */
 export type VisibilityHost = Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
 
-export interface PollingRealtimeChannelOptions<TMessage> {
-  /** Fetches the current "latest messages" batch — the Room passes a
-   * closure over `getMessages(marketId, { limit })` (no `before`: this
-   * channel is for the live tail, not historical/keyset pagination, which
-   * the Room's "load earlier" affordance handles directly via
-   * `@/lib/api-client`). */
-  fetchLatest: () => Promise<TMessage[]>;
-  sendMessage: (clientId: string, body: string) => Promise<TMessage>;
+export interface PollingRealtimeChannelOptions<TMessage>
+  extends RealtimeChannelOptions<TMessage> {
   /** Poll interval while visible. Default 4000ms (SPEC §5.4). */
   intervalMs?: number;
   /** Defaults to the real `document` when available (browser), `undefined`
@@ -121,4 +108,17 @@ export class PollingRealtimeChannel<TMessage> implements RealtimeChannel<TMessag
     this.doc?.removeEventListener("visibilitychange", this.onVisibilityChange);
     this.listener = null;
   }
+}
+
+/**
+ * The `RealtimeChannelFactory` a UI host binds into a component — this is
+ * the single line that says "the transport is polling." Swapping in an SSE
+ * adapter is a one-import change at the injection site
+ * (`src/app/(app)/app/g/[slug]/m/[id]/RoomPanelHost.tsx`), with no edit to
+ * `RoomPanel` at all.
+ */
+export function createPollingRealtimeChannel<TMessage>(
+  options: RealtimeChannelOptions<TMessage>,
+): RealtimeChannel<TMessage> {
+  return new PollingRealtimeChannel<TMessage>(options);
 }

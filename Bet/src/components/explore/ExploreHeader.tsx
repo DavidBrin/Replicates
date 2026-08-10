@@ -130,9 +130,13 @@ export function ExploreHeader() {
                   )}
                 >
                   {tab.label}
-                  {isActive ? (
-                    <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-(--accent)" />
-                  ) : null}
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-(--accent)",
+                      isActive ? "opacity-100" : "opacity-0",
+                    )}
+                  />
                 </Link>
               </li>
             );

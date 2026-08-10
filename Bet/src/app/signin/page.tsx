@@ -10,6 +10,23 @@ export const metadata: Metadata = {
 };
 
 /**
+ * Forces this route to render per-request rather than being statically
+ * prerendered at `next build` time. Without this, `next build` calls
+ * `getContainer()` from its own short-lived build process, seeding a store
+ * with its own random-nanoid user ids, and bakes THAT snapshot into static
+ * HTML/RSC output; the deployed server then boots a completely different
+ * process with its own freshly (and differently) seeded store. The two
+ * never share a `globalThis` (`container.ts`'s memoization is only a
+ * same-process guarantee), so every id on the statically-rendered
+ * `/signin` page is guaranteed to 404 as `not_found` the moment
+ * `POST /api/session` looks it up against the live runtime store —
+ * sign-in is completely broken in production. Caught by hand-driving the
+ * production build (`npm run build && npm start`), not by dev-mode E2E
+ * (`next dev` never statically prerenders, so this never surfaces there).
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * `/signin` (SPEC §2/§3): a plain server-rendered grid of seeded demo users
  * as cards. Server Component — it reads straight from the container's
  * `DataStore` (research/stack.md: "fetch data for the initial render in the

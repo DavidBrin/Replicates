@@ -22,18 +22,18 @@ test.describe("create-bet wizard", () => {
 
     // Step 1
     await fillStep1(page, question, criteria);
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 2 — binary Yes/No is valid by default, no input needed.
     await expect(page.getByRole("switch", { name: /isn't yes\/no/ })).toBeVisible();
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 3 — pricing defaults (Market-priced) are valid, skippable.
     await expect(page.getByRole("radiogroup", { name: "Pricing" })).toBeVisible();
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 4 — zero invitees is valid.
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 5 — review, then create.
     await expect(page.getByText(question, { exact: true })).toBeVisible();
@@ -62,14 +62,14 @@ test.describe("create-bet wizard", () => {
     const criteria = "Resolves Yes if the draft survives a hard reload, No otherwise, obviously.";
     await fillStep1(page, question, criteria);
     const closesAtValue = await page.getByLabel("Closes").inputValue();
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
 
     // Step 2 — actually change something so persistence is meaningfully
     // exercised, not just "the default survived."
     await page.getByRole("switch", { name: /isn't yes\/no/ }).click();
     const outcomeLabel = "Definitely maybe";
-    await page.getByLabel("Outcome 1").fill(outcomeLabel);
-    await page.getByLabel("Outcome 2").fill("The other one");
+    await page.getByLabel("Outcome 1", { exact: true }).fill(outcomeLabel);
+    await page.getByLabel("Outcome 2", { exact: true }).fill("The other one");
 
     await page.reload();
 
@@ -82,11 +82,11 @@ test.describe("create-bet wizard", () => {
     await expect(page.getByLabel("Closes")).toHaveValue(closesAtValue);
 
     // Step 2's custom-outcomes toggle and labels also survived.
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByRole("switch", { name: /isn't yes\/no/ })).toHaveAttribute(
       "aria-checked",
       "true",
     );
-    await expect(page.getByLabel("Outcome 1")).toHaveValue(outcomeLabel);
+    await expect(page.getByLabel("Outcome 1", { exact: true })).toHaveValue(outcomeLabel);
   });
 });

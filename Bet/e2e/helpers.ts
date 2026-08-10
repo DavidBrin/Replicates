@@ -21,9 +21,11 @@ export async function signIn(page: Page, handle: string): Promise<void> {
 /**
  * Opens the top-bar avatar dropdown (`UserMenu`) — where the current
  * balance and "Sign out" live — and returns once the menu panel is
- * visible.
+ * visible. Scoped to `<header>`: Next's dev-mode overlay ("Open Next.js
+ * Dev Tools") also renders a `button[aria-haspopup="menu"]` outside it,
+ * which would otherwise make the plain attribute selector ambiguous.
  */
 export async function openUserMenu(page: Page): Promise<void> {
-  await page.locator('button[aria-haspopup="menu"]').click();
+  await page.locator('header button[aria-haspopup="menu"]').click();
   await page.getByRole("menu").waitFor({ state: "visible" });
 }
