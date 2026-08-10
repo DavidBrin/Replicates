@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
   // Pin Turbopack's inferred workspace root to this package. Without this,
   // Turbopack walks up from cwd looking for the "highest" lockfile and can
   // land on an unrelated one elsewhere under the developer's home directory
-  // (this repo isn't its own git root — `Bet/` is a subdirectory of a
+  // (this repo isn't its own git root — `bet/` is a subdirectory of a
   // larger repo), which desyncs the root used for root-level file
   // conventions (notably `proxy.ts`, Task 4) from this package's actual
   // directory. Symptom without this: `proxy.ts` silently never runs (empty
