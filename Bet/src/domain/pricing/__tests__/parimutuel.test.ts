@@ -148,3 +148,60 @@ describe("parimutuel settlement — largest-remainder exactness", () => {
     );
   });
 });
+
+/**
+ * A winning outcome with ZERO stakers used to destroy the entire pool: the
+ * winners list was empty, so `distributeLargestRemainder` split the net pool
+ * among nobody and `settle` returned `[]`. Alice's 50.00 on Yes simply
+ * evaporated when the market resolved No with no No stakers — a silent
+ * total loss of real, already-debited credits, and a direct violation of
+ * the `Σ escrow` conservation invariant (SPEC §6.5 #5).
+ */
+describe("parimutuel settlement — an unbacked winning outcome refunds instead of burning the pool", () => {
+  const state: MarketState = {
+    kind: "parimutuel",
+    status: "resolved",
+    rakeBps: 0,
+    pools: { Yes: credits(5_000), No: zero() },
+  };
+
+  it("refunds the sole staker in full when the winning side had no backers", () => {
+    const positions: Position[] = [
+      { userId: "alice", outcomeId: "Yes", shares: 50, costBasis: credits(5_000) },
+    ];
+
+    const payouts = parimutuelEngine.settle(state, "No", positions);
+    expect(payouts).toEqual([{ userId: "alice", amount: credits(5_000) }]);
+  });
+
+  it("refunds several stakers pro-rata, to the cent, and never burns the rake", () => {
+    const raked: MarketState = {
+      kind: "parimutuel",
+      status: "resolved",
+      rakeBps: 500,
+      pools: { Yes: credits(3_333), No: credits(6_667) },
+    };
+    const positions: Position[] = [
+      { userId: "alice", outcomeId: "Yes", shares: 33, costBasis: credits(3_333) },
+      { userId: "bob", outcomeId: "No", shares: 66, costBasis: credits(6_667) },
+    ];
+
+    // "Maybe" won and nobody staked it — there is no winning side for the
+    // rake to be taken from, so every cent of the pool goes back.
+    const payouts = parimutuelEngine.settle(raked, "Maybe", positions);
+    const total = payouts.reduce((sum, p) => sum + p.amount, 0);
+    expect(total).toBe(10_000);
+    const byUser = Object.fromEntries(payouts.map((p) => [p.userId, p.amount]));
+    expect(byUser.alice).toBe(credits(3_333));
+    expect(byUser.bob).toBe(credits(6_667));
+  });
+
+  it("still pays only the winners when the winning outcome DOES have backers", () => {
+    const positions: Position[] = [
+      { userId: "alice", outcomeId: "Yes", shares: 30, costBasis: credits(3_000) },
+      { userId: "bob", outcomeId: "No", shares: 20, costBasis: credits(2_000) },
+    ];
+    const payouts = parimutuelEngine.settle(state, "Yes", positions);
+    expect(payouts).toEqual([{ userId: "alice", amount: credits(5_000) }]);
+  });
+});

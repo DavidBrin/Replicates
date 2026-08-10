@@ -1,7 +1,7 @@
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatCreditsPrecise } from "@/domain/formatters";
-import { credits } from "@/domain/money";
+import { formatCreditsPrecise, formatShares } from "@/domain/formatters";
+import type { Credits } from "@/domain/money";
 import { cn } from "@/lib/cn";
 
 export interface HolderRow {
@@ -14,7 +14,7 @@ export interface HolderRow {
   /** Present only when `market.stakesVisible` is true, or this row is the
    * viewer's own — mirrors `GET /api/markets/[id]`'s `HolderView.stake`
    * exactly (never invented client-side). */
-  stake?: number;
+  stake?: Credits;
 }
 
 export interface HoldersListProps {
@@ -44,9 +44,9 @@ export function HoldersList({ holders, className }: HoldersListProps) {
           </div>
           <div className="tnum flex shrink-0 items-center gap-3 text-(--text-2)">
             <span>{h.outcomeLabel}</span>
-            <span>{h.shares.toFixed(2)} sh</span>
+            <span>{formatShares(h.shares)} sh</span>
             {h.stake !== undefined ? (
-              <span className="text-(--text-1)">{formatCreditsPrecise(credits(h.stake))}</span>
+              <span className="text-(--text-1)">{formatCreditsPrecise(h.stake)}</span>
             ) : null}
           </div>
         </div>

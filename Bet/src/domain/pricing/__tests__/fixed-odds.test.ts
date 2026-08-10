@@ -179,4 +179,86 @@ describe("fixed-odds settlement — peer-to-peer matching rule", () => {
       ),
     );
   });
+
+  /**
+   * Final-review minor #7, targeted where the generic fuzz above is
+   * weakest.
+   *
+   * That property draws each order's outcome uniformly, so it almost never
+   * produces a genuinely **one-sided** book — and one-sidedness is exactly
+   * where a peer-funded engine can plausibly promise more than it holds.
+   * The escrow only ever receives `shares × openingPrice`, but each winning
+   * share is owed a full credit at par, so a book where everyone piled onto
+   * the same outcome collects strictly less than it owes. `settle()` must
+   * take the haircut branch there and hand out at most the pot; if it ever
+   * paid par regardless, it would be minting credits that nobody staked.
+   *
+   * Both directions of one-sidedness are generated:
+   *  - every stake on the outcome that WINS (the pot is short of par), and
+   *  - every stake on outcomes that LOSE (no winning claimant at all — the
+   *    whole pot is "unmatched remainder" and must return to the stakers,
+   *    without any of it being conjured or dropped).
+   */
+  it("never pays out more than was escrowed on a deliberately ONE-SIDED book", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...CONFIGS),
+        // Stake sizes for 1..6 backers, all piling onto a single outcome.
+        fc.array(fc.integer({ min: 1, max: 400 }), { minLength: 1, maxLength: 6 }),
+        // Which outcome the whole book backs.
+        fc.integer({ min: 0, max: 3 }),
+        // Whether that backed outcome is the one that wins.
+        fc.boolean(),
+        (config, stakes, backedIdx, backedWins) => {
+          const backed = config.outcomes[backedIdx % config.outcomes.length]!;
+          const winningOutcomeId = backedWins
+            ? backed
+            : config.outcomes[(backedIdx + 1) % config.outcomes.length]!;
+
+          let state = freshState(config);
+          const positions: Position[] = [];
+          stakes.forEach((shares, i) => {
+            const { newState, quote } = fixedOddsEngine.execute(state, {
+              outcomeId: backed,
+              side: "buy",
+              shares,
+            });
+            state = newState;
+            positions.push({
+              userId: `user-${i}`,
+              outcomeId: backed,
+              shares: quote.shares,
+              costBasis: quote.cost,
+            });
+          });
+
+          const escrow = (state as Extract<MarketState, { kind: "fixedOdds" }>).escrow;
+          const totalCollected = Object.values(escrow).reduce((sum, e) => sum + e, 0);
+          expect(totalCollected).toBeGreaterThan(0);
+
+          const payouts = fixedOddsEngine.settle(state, winningOutcomeId, positions);
+          const totalPaid = payouts.reduce((sum, p) => sum + p.amount, 0);
+
+          // The invariant under test: the engine is peer-funded, so it can
+          // never distribute a cent that was not staked.
+          expect(totalPaid).toBeLessThanOrEqual(totalCollected);
+
+          if (backedWins) {
+            // Every share is owed 1 credit but was bought for less than
+            // one (opening prices are strictly in (0,1)), so this book is
+            // necessarily short of par — the haircut branch. Winners still
+            // receive the whole pot, just not par.
+            const totalOwed = Math.floor(positions.reduce((s, p) => s + p.shares, 0) * 100);
+            expect(totalCollected).toBeLessThan(totalOwed);
+            expect(totalPaid).toBe(totalCollected);
+          } else {
+            // Nobody backed the winner: the entire pot is unmatched money
+            // that was never at risk, and must go back to the stakers —
+            // not vanish, and not multiply.
+            expect(totalPaid).toBe(totalCollected);
+          }
+        },
+      ),
+    );
+  });
 });

@@ -10,8 +10,9 @@ import {
   formatCreditsPrecise,
   formatPriceCents,
   formatProbability,
+  formatShares,
 } from "@/domain/formatters";
-import { credits, mul, toDecimal } from "@/domain/money";
+import { credits, mul, toDecimal, type Credits } from "@/domain/money";
 import { ApiError, postTrade, type OrderInput } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { useTradeRefresh } from "@/components/market/TradeRefreshProvider";
@@ -36,10 +37,12 @@ export interface OrderTicketProps {
    * `nextStatusForClock` by the caller). */
   status: MarketStatus;
   outcomes: OrderTicketOutcome[];
-  /** Credits (integer cents). */
-  balance: number;
-  minStake: number;
-  maxStake: number;
+  /** Integer-cent `Credits`, branded — a bare `number` here was the one
+   * remaining money seam where a decimal-credits value could be passed by
+   * mistake and only show up as a 100x display error (G2). */
+  balance: Credits;
+  minStake: Credits;
+  maxStake: Credits;
   myPositions: OrderTicketPosition[];
   className?: string;
 }
@@ -134,7 +137,7 @@ export function OrderTicket({
     setAmount(String(value));
   }
 
-  const minStakeDecimal = toDecimal(credits(minStake));
+  const minStakeDecimal = toDecimal(minStake);
 
   let disabledReason: string | null = null;
   if (status !== "open") {
@@ -235,7 +238,7 @@ export function OrderTicket({
         </label>
         {side === "sell" && sellAllShares ? (
           <div className="tnum rounded-(--radius-input) border border-(--border) bg-(--surface-3) px-3 py-2 text-sm text-(--text-1)">
-            {heldShares.toFixed(2)} shares
+            {formatShares(heldShares)} shares
           </div>
         ) : (
           <Input
@@ -273,8 +276,17 @@ export function OrderTicket({
       </div>
 
       <div className="tnum flex flex-col gap-1.5 rounded-(--radius-input) bg-(--surface-3) px-3 py-2.5 text-sm">
-        <QuoteRow label="Shares" value={quote ? quote.shares.toFixed(2) : "—"} />
+        <QuoteRow label="Shares" value={quote ? formatShares(quote.shares) : "—"} />
         <QuoteRow label="Avg price" value={quote ? formatPriceCents(quote.avgPrice) : "—"} />
+        {/* The realized cost/proceeds line. A SELL had no row showing what
+            the trader would actually receive — the amount field is a
+            *budget*, and in "sell entire position" mode there is no amount
+            at all, so the proceeds were invisible right up to the toast.
+            `quote.cost` is the fee-inclusive realized figure either way. */}
+        <QuoteRow
+          label={side === "buy" ? "Cost" : "You receive"}
+          value={quote ? formatCreditsPrecise(credits(Math.round(quote.cost))) : "—"}
+        />
         <QuoteRow
           label="To win"
           value={quote ? formatCreditsPrecise(credits(Math.round(quote.shares * 100))) : "—"}
@@ -294,7 +306,7 @@ export function OrderTicket({
         {disabledReason ?? `${side === "buy" ? "Buy" : "Sell"} ${selectedOutcome?.label ?? ""}`}
       </Button>
 
-      <p className="tnum text-xs text-(--text-3)">Balance: {formatCredits(credits(balance))}</p>
+      <p className="tnum text-xs text-(--text-3)">Balance: {formatCredits(balance)}</p>
     </div>
   );
 }
