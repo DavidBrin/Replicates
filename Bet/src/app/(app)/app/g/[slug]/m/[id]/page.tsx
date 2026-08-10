@@ -4,7 +4,11 @@ import { ActivityFeed, type ActivityEntry } from "@/components/market/ActivityFe
 import { HoldersList, type HolderRow } from "@/components/market/HoldersList";
 import { MarketDetailTabs } from "@/components/market/MarketDetailTabs";
 import { MarketHeader } from "@/components/market/MarketHeader";
-import { PositionSummary, type PositionSummaryItem } from "@/components/market/PositionSummary";
+import {
+  PositionSummary,
+  type PositionSummaryItem,
+  type PositionSummarySettlement,
+} from "@/components/market/PositionSummary";
 import { PricePanel } from "@/components/market/PricePanel";
 import { delta24h } from "@/components/market/price-delta";
 import { RulesPanel } from "@/components/market/RulesPanel";
@@ -26,6 +30,7 @@ import { averageBuyPrice } from "@/domain/position-ledger";
 import { toMarketState } from "@/domain/pricing-config";
 import { getEngine } from "@/domain/pricing/registry";
 import { computeMarketFacts, computeRoomFacts } from "@/domain/services/market-access";
+import { realizedPnlFor } from "@/domain/services/realized-pnl";
 import { encodeMessageCursor } from "@/lib/api-client";
 import { getContainer } from "@/lib/container";
 import { requireCurrentUser } from "@/lib/server-actor";
@@ -193,6 +198,30 @@ export default async function MarketPage({
       currentPrice: prices[p.outcomeId] ?? 0,
     }));
 
+  // A RESOLVED market has no live mark. Without this gate the tab kept
+  // marking settled positions against `p(winner)` (0.54983 in the worked
+  // case), showing a red "Unrealized P/L −0.61" to a holder who had in fact
+  // been paid 50.00 and was up 21.90. `engine.settle` + `realizedPnlFor` is
+  // exactly what `MarketCard`'s settled face uses on the group dashboard —
+  // one derivation, two surfaces.
+  let settlement: PositionSummarySettlement | undefined;
+  if (market.status === "resolved" && market.resolution) {
+    const winningOutcomeId = market.resolution.winningOutcomeId;
+    const payouts = engine.settle(
+      toMarketState(market.pricing, "resolved"),
+      winningOutcomeId,
+      positions,
+    );
+    const { payout, pnl, hasPosition } = realizedPnlFor(user.id, marketTrades, payouts);
+    settlement = {
+      winningOutcomeId,
+      winningLabel: market.outcomes.find((o) => o.id === winningOutcomeId)?.label ?? "—",
+      payout,
+      realizedPnl: pnl,
+      hasPosition,
+    };
+  }
+
   const resolutionForView = market.resolution
     ? {
         winningOutcomeId: market.resolution.winningOutcomeId,
@@ -274,7 +303,9 @@ export default async function MarketPage({
             />
 
             <MarketDetailTabs
-              position={<PositionSummary positions={positionSummaryItems} />}
+              position={
+                <PositionSummary positions={positionSummaryItems} settlement={settlement} />
+              }
               holders={<HoldersList holders={holders} />}
               rules={
                 <RulesPanel

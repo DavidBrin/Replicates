@@ -32,13 +32,3 @@ export function ok<T, E = AppError>(value: T): Result<T, E> {
 export function err<T = never, E = AppError>(error: E): Result<T, E> {
   return { ok: false, error };
 }
-
-export function isOk<T, E>(
-  result: Result<T, E>,
-): result is { ok: true; value: T } {
-  return result.ok === true;
-}
-
-export function unwrapOr<T, E>(result: Result<T, E>, fallback: T): T {
-  return result.ok ? result.value : fallback;
-}

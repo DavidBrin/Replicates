@@ -23,8 +23,10 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Shared behavior for `Modal` and `Sheet` (both dismissible overlay
- * dialogs): traps focus inside `containerRef` while `open`, closes on
+ * Dismissible-overlay-dialog behavior, used by `Modal` (and by any future
+ * sibling, e.g. a slide-over — the unconsumed `Sheet` that used to share it
+ * was deleted in the final review rather than left as dead weight):
+ * traps focus inside `containerRef` while `open`, closes on
  * Escape, locks body scroll, and restores focus to whatever triggered the
  * dialog once it closes. Returns nothing — callers read/write DOM directly
  * through `containerRef`, this hook only wires up the side effects.

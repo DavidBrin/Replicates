@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAreaPath, buildLinePath, niceTicks, scale } from "./chart";
+import { buildAreaPath, buildLinePath, scale } from "./chart";
 
 describe("scale", () => {
   it("linearly interpolates a value between domain and range", () => {
@@ -82,24 +82,5 @@ describe("buildAreaPath", () => {
     const d = buildAreaPath([{ x: 5, y: 0.8 }], { width: 60, height: 20, yMin: 0, yMax: 1 });
     expect(d).toBe("M30,4 L30,20 L30,20 Z");
     expect(d.endsWith("Z")).toBe(true);
-  });
-});
-
-describe("niceTicks", () => {
-  it("collapses to a single tick when min === max", () => {
-    expect(niceTicks(5, 5, 4)).toEqual([5]);
-  });
-
-  it("returns [] for a non-positive tick count", () => {
-    expect(niceTicks(0, 10, 0)).toEqual([]);
-  });
-
-  it("produces round, evenly spaced ticks spanning the domain", () => {
-    expect(niceTicks(0, 100, 5)).toEqual([0, 20, 40, 60, 80, 100]);
-    expect(niceTicks(0, 1, 5)).toEqual([0, 0.2, 0.4, 0.6, 0.8, 1]);
-  });
-
-  it("expands past a non-round domain to nice round bounds", () => {
-    expect(niceTicks(3, 27, 4)).toEqual([0, 10, 20, 30]);
   });
 });

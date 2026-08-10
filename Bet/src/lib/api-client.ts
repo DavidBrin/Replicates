@@ -82,16 +82,6 @@ export interface ApiPosition {
   costBasis: number;
 }
 
-export interface ApiHolder {
-  userId: string;
-  handle: string | null;
-  displayName: string;
-  avatarColor: string | null;
-  outcomeId: string;
-  shares: number;
-  stake?: number;
-}
-
 export interface ApiMessage {
   id: string;
   roomId: string;
@@ -100,12 +90,6 @@ export interface ApiMessage {
   body: string;
   clientId?: string;
   at: string;
-}
-
-export interface ApiPricePoint {
-  marketId: string;
-  at: string;
-  prices: Record<string, number>;
 }
 
 export interface ApiQuote {
@@ -120,13 +104,6 @@ export interface ApiQuote {
 // Request / response shapes
 // ---------------------------------------------------------------------------
 
-export interface GetMarketResponse {
-  market: ApiMarket;
-  prices: Record<string, number>;
-  myPositions: ApiPosition[];
-  holders: ApiHolder[];
-}
-
 export interface QuoteResponse {
   quote: ApiQuote;
   prices: Record<string, number>;
@@ -136,10 +113,6 @@ export interface TradeResponse {
   quote: ApiQuote;
   market: ApiMarket;
   position: ApiPosition;
-}
-
-export interface HistoryResponse {
-  points: ApiPricePoint[];
 }
 
 export interface MessagesResponse {
@@ -230,10 +203,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // `/api/markets/[id]` family
 // ---------------------------------------------------------------------------
 
-export function getMarket(marketId: string): Promise<GetMarketResponse> {
-  return request<GetMarketResponse>(`/api/markets/${marketId}`);
-}
-
 export function getQuote(marketId: string, order: OrderInput): Promise<QuoteResponse> {
   return request<QuoteResponse>(`/api/markets/${marketId}/quote`, {
     method: "POST",
@@ -246,11 +215,6 @@ export function postTrade(marketId: string, order: OrderInput): Promise<TradeRes
     method: "POST",
     body: JSON.stringify(order),
   });
-}
-
-export function getHistory(marketId: string, since?: string): Promise<HistoryResponse> {
-  const qs = since ? `?since=${encodeURIComponent(since)}` : "";
-  return request<HistoryResponse>(`/api/markets/${marketId}/history${qs}`);
 }
 
 export function getMessages(

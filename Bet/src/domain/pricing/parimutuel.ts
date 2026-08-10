@@ -80,11 +80,33 @@ export class ParimutuelEngine extends BasePricingEngine {
     return { newState: { ...state, pools: newPools }, quote };
   }
 
-  /** `payout = stake / winningPool × (totalPool × (1 − rake))`, distributed
-   * with the largest-remainder method so no cent is lost or invented (the
-   * `Σ escrow` conservation invariant, SPEC §6.5 #5). The rake itself
-   * (and any residual rounding from it) simply stays uncollected — it was
-   * never owed to anyone. */
+  /**
+   * `payout = stake / winningPool × (totalPool × (1 − rake))`, distributed
+   * with the largest-remainder method so no cent is lost or invented among
+   * the winners (the `Σ escrow` conservation invariant, SPEC §6.5 #5).
+   *
+   * ## The rake is BURNED, not collected (final-review minor #6)
+   *
+   * `Σ payouts = netPool = floor(totalPool × (1 − rakeBps/10000))`. The
+   * difference `totalPool − netPool` — the rake, plus the residual cent
+   * that `floor` shaves — is credited to **nobody**. There is no house
+   * account, no group treasury and no `Payout` row for it: those credits
+   * are simply destroyed, and the app's total credit supply shrinks by that
+   * amount every time a raked parimutuel market resolves.
+   *
+   * This is inert today and deliberately left that way. Every seeded and
+   * wizard-created parimutuel market has `rakeBps = 0`, so `netPool ===
+   * totalPool` and nothing is burned; there is no UI, API field or seed
+   * value that sets a non-zero rake. Bet is play-money (D1/G10) with no
+   * revenue model, so inventing a house account to receive a fee nobody
+   * charges would be building a feature on speculation.
+   *
+   * **If a non-zero `rakeBps` is ever introduced, this is a bug, not a
+   * design.** The fix is to decide who receives the rake (a house user, a
+   * group balance, or a redistribution to all stakers) and emit a `Payout`
+   * for it here, so `Σ payouts === totalPool` holds unconditionally. Noted
+   * in the README's "Known gaps" as well, so it can't be lost.
+   */
   settle(state: MarketState, winningOutcomeId: OutcomeId, positions: Position[]): Payout[] {
     assertParimutuel(state);
 
@@ -93,13 +115,26 @@ export class ParimutuelEngine extends BasePricingEngine {
     const netPoolCents = Math.floor(totalPoolCents * (1 - rake));
 
     const winners = positions.filter((p) => p.outcomeId === winningOutcomeId && p.costBasis > 0);
+
+    // NOBODY BACKED THE WINNER. Splitting the pool "among the winners"
+    // then distributes it among nobody, and the entire escrow — every
+    // loser's stake, real credits that were really debited — simply
+    // vanishes, breaking the `Σ escrow` conservation invariant (SPEC §6.5
+    // #5) in the one direction that costs players money. A pool with no
+    // claimant was never won; it is refunded pro-rata to whoever paid in,
+    // rake included (there is no winning side to take a cut from), still
+    // via largest-remainder so not a cent is lost or invented.
+    const claimants =
+      winners.length > 0 ? winners : positions.filter((p) => p.costBasis > 0);
+    const distributable = winners.length > 0 ? netPoolCents : totalPoolCents;
+
     const winnerCents = distributeLargestRemainder(
-      netPoolCents,
-      winners.map((p) => p.costBasis),
+      distributable,
+      claimants.map((p) => p.costBasis),
     );
 
     const byUser = new Map<string, Credits>();
-    winners.forEach((p, i) => {
+    claimants.forEach((p, i) => {
       if (winnerCents[i] <= 0) return;
       const prior = byUser.get(p.userId) ?? zero();
       byUser.set(p.userId, add(prior, credits(winnerCents[i])));

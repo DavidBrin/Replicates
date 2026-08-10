@@ -15,6 +15,7 @@ import { add, compare, sub, zero } from "@/domain/money";
 import { toMarketState } from "@/domain/pricing-config";
 import { getEngine } from "@/domain/pricing/registry";
 import type { Payout } from "@/domain/pricing/types";
+import { realizedPnlFor } from "@/domain/services/realized-pnl";
 import type { DataStore } from "@/ports/data-store";
 import { computeGroupNetCredits } from "./net-credits";
 
@@ -108,17 +109,11 @@ async function buildMarketCardData(
     const winningLabel =
       market.outcomes.find((o) => o.id === market.resolution!.winningOutcomeId)?.label ?? "—";
 
-    const viewerTrades = trades.filter((t) => t.userId === viewerId);
-    if (viewerTrades.length > 0) {
-      const netSpent = viewerTrades.reduce(
-        (sum, t) => (t.side === "buy" ? add(sum, t.cost) : sub(sum, t.cost)),
-        zero(),
-      );
-      const payoutAmount = payouts.find((p) => p.userId === viewerId)?.amount ?? zero();
-      settled = { winningLabel, pnl: sub(payoutAmount, netSpent), hasPosition: true };
-    } else {
-      settled = { winningLabel, pnl: zero(), hasPosition: false };
-    }
+    // Shared with the market detail page's settled position tab — see
+    // `domain/services/realized-pnl.ts` for why this is one derivation
+    // rather than a per-surface reimplementation.
+    const { pnl, hasPosition } = realizedPnlFor(viewerId, trades, payouts);
+    settled = { winningLabel, pnl: hasPosition ? pnl : zero(), hasPosition };
   }
 
   return {

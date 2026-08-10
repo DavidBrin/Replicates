@@ -55,15 +55,36 @@ function ceilCents(amountInCredits: number): Credits {
   return credits(Object.is(rounded, -0) ? 0 : rounded);
 }
 
+/**
+ * The Kalshi fee SHAPE charged at a caller-supplied rate:
+ * `ceilCents(rateBps/10000 × C × P × (1 − P))`.
+ *
+ * This exists because a `Market`'s `feeBps` is a genuine rate, not a
+ * boolean. `trading.ts` used to read it as an on/off toggle and then charge
+ * the hard-coded 700bps taker rate regardless, so a market seeded
+ * `feeBps: 200` displayed "Fee 2.00%" in the rules panel while actually
+ * being charged at 7% — 3.5x what the number on screen implied. Threading
+ * the market's own rate through here makes the displayed number the number
+ * that is charged.
+ *
+ * `rateBps` must be finite and non-negative; a rate of 0 yields a zero fee.
+ */
+export function feeAtRate(contracts: number, price: number, rateBps: number): Credits {
+  if (!Number.isFinite(rateBps) || rateBps < 0) {
+    throw new RangeError(`feeAtRate: expected a finite, non-negative rateBps, got ${rateBps}`);
+  }
+  return ceilCents(rawFee(contracts, price, rateBps));
+}
+
 /** Kalshi's taker fee: `ceilCents(0.07 × C × P × (1 − P))`. `contracts` is
  * the number of contracts/shares traded (`C`); `price` is the probability
  * the contract traded at, in `[0, 1]` (`P`). */
 export function takerFee(contracts: number, price: number): Credits {
-  return ceilCents(rawFee(contracts, price, TAKER_RATE_BPS));
+  return feeAtRate(contracts, price, TAKER_RATE_BPS);
 }
 
 /** Kalshi's maker fee — exactly 1/4 the taker rate, rewarding resting
  * liquidity. Same rounding rule as `takerFee`. */
 export function makerFee(contracts: number, price: number): Credits {
-  return ceilCents(rawFee(contracts, price, MAKER_RATE_BPS));
+  return feeAtRate(contracts, price, MAKER_RATE_BPS);
 }

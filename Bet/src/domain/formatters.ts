@@ -41,6 +41,15 @@ export function formatShares(shares: number): string {
   }).format(shares);
 }
 
+/** Renders a basis-point rate as a percentage with 2 decimals, e.g. `200`
+ * → `"2.00%"`, `0` → `"None"`. Used for a market's `feeBps`/`rakeBps` —
+ * finer-grained than `formatProbability`'s whole percent, and here rather
+ * than as a `toFixed(2)` in a component (G6). */
+export function formatRateBps(bps: number): string {
+  if (!Number.isFinite(bps) || bps <= 0) return "None";
+  return `${(bps / 100).toFixed(2)}%`;
+}
+
 /** Renders a probability (0–1) as a whole percent, e.g. `0.7239` → `"72%"`. */
 export function formatProbability(p: number): string {
   return `${Math.round(p * 100)}%`;

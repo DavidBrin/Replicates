@@ -1,4 +1,4 @@
-import { formatCreditsPrecise } from "@/domain/formatters";
+import { formatCreditsPrecise, formatRateBps } from "@/domain/formatters";
 import { credits } from "@/domain/money";
 import { cn } from "@/lib/cn";
 import {
@@ -68,8 +68,19 @@ export function RulesPanel({
         <Stat label="Min stake" value={formatCreditsPrecise(credits(Math.round(minStake * 100)))} />
         <Stat label="Max stake" value={formatCreditsPrecise(credits(Math.round(maxStake * 100)))} />
         <Stat label="Stakes visible" value={stakesVisible ? "Yes" : "No"} />
-        <Stat label="Fee" value={feeBps > 0 ? `${(feeBps / 100).toFixed(2)}%` : "None"} />
+        <Stat label="Fee" value={formatRateBps(feeBps)} />
       </section>
+
+      {/* The fee is charged at THIS market's own rate (it used to display
+          the market's `feeBps` while `trading.ts` billed a hard-coded 7%),
+          on a Kalshi-shaped base that shrinks as the market approaches a
+          lock — so the headline rate is the ceiling, never a surprise. */}
+      {feeBps > 0 ? (
+        <p className="-mt-2 text-xs text-(--text-3)">
+          Charged per trade on {formatRateBps(feeBps)} of shares × price × (1 − price), so it costs
+          most when the market is a coin flip and fades to nothing near a lock.
+        </p>
+      ) : null}
 
       <section className="flex flex-col gap-1.5">
         <h3 className="text-xs font-semibold tracking-wide text-(--text-2) uppercase">Pricing</h3>

@@ -10,22 +10,18 @@
  * rather than real ones, so nothing here reads as a claim about a real
  * person or makes up a real organization's action.
  *
- * ## The missing `category` field
+ * ## The id-prefix category convention, and why it's gone
  *
- * `Market` (src/domain/entities.ts, Task 3, already built) has no
- * `category` column — SPEC §4's domain model never defines one, even
- * though §3.6 requires Explore's category tabs. Task 5's file scope is
- * `seed.ts` / `seed-data/**` / tests only; adding a field to `entities.ts`
- * is out of scope and would touch a file two other already-complete tasks
- * depend on. The workaround, adopted here and needing to be honored by
- * whichever task builds `GET /api/explore` (Task 7) and the Explore UI
- * (Task 13): **the market id's prefix encodes its category** —
- * `seed.ts` calls `idGen.next(\`mkt-${category}\`)` for every Explore
- * market, so `market.id` always starts with `mkt-politics_`,
- * `mkt-sports_`, `mkt-crypto_`, `mkt-culture_`, `mkt-economics_`,
- * `mkt-climate_`, or `mkt-tech_`. `CATEGORY_ID_PREFIXES` below is the
- * single source of truth for that convention — read it back out with
- * `categoryFromMarketId`.
+ * `Market` originally had no `category` column, so this file encoded a
+ * market's category in its **id prefix** (`mkt-sports_…`) and exposed
+ * `categoryFromMarketId` to read it back out. `Market.category` was added
+ * later and `GET /api/explore` groups on that real field, which left the
+ * id-prefix machinery (`EXPLORE_CATEGORIES`, `categoryFromMarketId`) with
+ * zero consumers — two ways to answer the same question, one of them
+ * unenforced and free to drift. The final review deleted them.
+ *
+ * `categoryIdPrefix` survives only because `seed.ts` still uses it to mint
+ * readable ids; nothing parses those ids back.
  */
 
 import { TOKEN_BLUE, TOKEN_NO, TOKEN_ORANGE, TOKEN_YES, OUTCOME_COLOR_CYCLE } from "./palette";
@@ -39,27 +35,11 @@ export type ExploreCategory =
   | "climate"
   | "tech";
 
-export const EXPLORE_CATEGORIES: readonly ExploreCategory[] = [
-  "politics",
-  "sports",
-  "crypto",
-  "culture",
-  "economics",
-  "climate",
-  "tech",
-];
-
-/** See this module's doc comment — the id-prefix convention standing in
- * for a `category` field `entities.ts` doesn't have. */
+/** Prefixes each seeded Explore market's id with its category, purely so
+ * ids read legibly in logs and test failures (`mkt-sports_…`). It is no
+ * longer load-bearing: see this module's doc comment. */
 export function categoryIdPrefix(category: ExploreCategory): string {
   return `mkt-${category}`;
-}
-
-/** Inverse of `categoryIdPrefix`: recovers the category from a seeded
- * Explore market's id, or `undefined` if `id` doesn't match the
- * convention (e.g. a private market's id). */
-export function categoryFromMarketId(id: string): ExploreCategory | undefined {
-  return EXPLORE_CATEGORIES.find((c) => id.startsWith(`${categoryIdPrefix(c)}_`));
 }
 
 export interface ExploreOutcomeSeed {

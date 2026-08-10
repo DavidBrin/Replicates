@@ -35,11 +35,11 @@ import {
   type Position,
   type UserId,
 } from "@/domain/entities";
-import { formatPriceCents } from "@/domain/formatters";
+import { formatCreditsPrecise, formatPriceCents, formatShares } from "@/domain/formatters";
 import { add, clamp, compare, mul, sub, zero, type Credits } from "@/domain/money";
 import { assertTradable, MarketNotTradableError } from "@/domain/market-state";
 import { fromMarketState, toMarketState } from "@/domain/pricing-config";
-import { takerFee } from "@/domain/pricing/fees";
+import { feeAtRate } from "@/domain/pricing/fees";
 import { getEngine } from "@/domain/pricing/registry";
 import type { Order as EngineOrder, Quote } from "@/domain/pricing/types";
 import type { Clock } from "@/ports/clock";
@@ -72,6 +72,44 @@ export interface TradeDeps {
   idGen: IdGen;
 }
 
+/** Float slack on a share-count comparison: a position's `shares` is a
+ * float, so an exact-position sell can miss equality by an ulp. */
+const SHARE_EPSILON = 1e-9;
+
+/**
+ * The oversell predicate, phrased as a NEGATED "is provably within" rather
+ * than the direct `shares > held + eps` it replaced.
+ *
+ * The difference is the whole point: `NaN > anything` is `false`, so the
+ * direct form let a non-finite share count sail straight THROUGH the guard
+ * — it failed **open** on exactly the input it exists to stop. `!(shares <=
+ * held + eps)` is `true` for `NaN`, so an unknown quantity fails **closed**
+ * and the trade is refused. Exported so the fail-closed behaviour can be
+ * asserted directly (`__tests__/trading-nan-guard.test.ts`) instead of only
+ * inferred from an end-to-end path.
+ */
+export function exceedsHeld(shares: number, held: number): boolean {
+  return !(shares <= held + SHARE_EPSILON);
+}
+
+/**
+ * Refuses any quote carrying a non-finite money or share value. Every
+ * comparison below (`compare`, `>`, `<`) silently reports "no problem" for
+ * a `NaN`, so the only safe policy is to reject the whole quote up front.
+ * A non-finite quote is an engine bug, not bad user input, hence
+ * `internal`.
+ */
+function assertFiniteQuote(quote: Quote): void {
+  if (
+    !Number.isFinite(quote.shares) ||
+    !Number.isFinite(quote.cost) ||
+    !Number.isFinite(quote.avgPrice) ||
+    !Number.isFinite(quote.fee)
+  ) {
+    fail("internal", "The pricing engine returned an unusable quote — no trade was placed.");
+  }
+}
+
 function toEngineOrder(order: TradeOrderInput): EngineOrder {
   return {
     outcomeId: order.outcomeId,
@@ -84,11 +122,21 @@ function toEngineOrder(order: TradeOrderInput): EngineOrder {
   };
 }
 
-/** Folds the market's per-trade fee (SPEC §6.3: `feeBps` of 0 disables it)
+/**
+ * Folds the market's per-trade fee (SPEC §6.3: `feeBps` of 0 disables it)
  * on top of the engine's raw quote — added to `cost` for a buy, deducted
- * from proceeds (clamped at 0) for a sell. */
+ * from proceeds (clamped at 0) for a sell.
+ *
+ * `feeBps` is the market's own RATE, and is charged as such. It used to be
+ * read as a mere on/off toggle, with `takerFee`'s hard-coded 700bps
+ * (Kalshi's published taker rate) charged whenever it was non-zero — so the
+ * seeded `feeBps: 200` market billed at 7% while the rules panel truthfully
+ * reported the entity's "2.00%". The fee SHAPE stays Kalshi's
+ * (`rate × C × P × (1 − P)`, heaviest where the market is most uncertain);
+ * only the rate now comes from the market.
+ */
 function applyFee(feeBps: number, side: TradeSide, raw: Quote): Quote {
-  const fee = feeBps > 0 ? takerFee(raw.shares, raw.avgPrice) : zero();
+  const fee = feeBps > 0 ? feeAtRate(raw.shares, raw.avgPrice, feeBps) : zero();
   const cost = side === "buy" ? add(raw.cost, fee) : clamp(sub(raw.cost, fee), zero(), raw.cost);
   return { ...raw, cost, fee };
 }
@@ -105,7 +153,12 @@ export function priceOrder(market: Market, order: TradeOrderInput): Quote {
   const engine = getEngine(market.pricing.kind);
   const state = toMarketState(market.pricing, market.status);
   const raw = runEngine(() => engine.quote(state, toEngineOrder(order)));
-  return applyFee(market.pricing.feeBps, order.side, raw);
+  const quote = applyFee(market.pricing.feeBps, order.side, raw);
+  // `POST /quote` renders this straight into the order ticket — a
+  // non-finite value must never reach the client as `{ shares: null,
+  // cost: 0 }`, which reads as a free trade.
+  assertFiniteQuote(quote);
+  return quote;
 }
 
 function assertTradableOrFail(market: Market, now: Date): void {
@@ -158,11 +211,16 @@ export async function executeTrade(
 
     if (order.side === "sell") {
       const held = existingPosition?.shares ?? 0;
-      if (held <= 0) {
+      // `!(held > 0)` rather than `held <= 0`: a non-finite holding is not
+      // a holding, and must not be treated as one.
+      if (!(held > 0)) {
         fail("validation", "You do not hold a position in this outcome to sell.");
       }
-      if (order.shares !== undefined && order.shares > held + 1e-9) {
-        fail("validation", `Cannot sell ${order.shares} shares — you hold ${held}.`);
+      if (order.shares !== undefined && exceedsHeld(order.shares, held)) {
+        fail(
+          "validation",
+          `Cannot sell ${formatShares(order.shares)} shares — you hold ${formatShares(held)}.`,
+        );
       }
     }
 
@@ -178,34 +236,47 @@ export async function executeTrade(
     // actually priced the order (G3).
     if (order.side === "sell") {
       const held = existingPosition?.shares ?? 0;
-      if (quote.shares > held + 1e-9) {
-        fail("validation", `Cannot sell ${quote.shares} shares — you hold ${held}.`);
+      if (exceedsHeld(quote.shares, held)) {
+        fail(
+          "validation",
+          `Cannot sell ${formatShares(quote.shares)} shares — you hold ${formatShares(held)}.`,
+        );
       }
     }
 
+    // Every check below compares money with `compare`, which reports 0
+    // (i.e. "equal, carry on") for a `NaN` — so all of them would fail open
+    // on a non-finite quote. Reject the quote outright first.
+    assertFiniteQuote(quote);
+
+    // Every money value interpolated into a message below goes through
+    // `formatCreditsPrecise`: `Credits` is integer CENTS, so a raw
+    // `${credits(500)}` reads "500 credits" for what is actually 5.00 —
+    // 100x overstated, and these strings reach the user verbatim in a
+    // toast (G6).
     if (order.maxCost !== undefined) {
       if (order.side === "buy" && compare(quote.cost, order.maxCost) > 0) {
         fail(
           "conflict",
-          `Slippage exceeded: realized cost ${quote.cost} exceeds your maxCost ${order.maxCost}.`,
+          `Slippage exceeded: the realized cost ${formatCreditsPrecise(quote.cost)} is above your limit of ${formatCreditsPrecise(order.maxCost)} credits.`,
         );
       }
       if (order.side === "sell" && compare(quote.cost, order.maxCost) < 0) {
         fail(
           "conflict",
-          `Slippage exceeded: realized proceeds ${quote.cost} fell short of your minimum ${order.maxCost}.`,
+          `Slippage exceeded: the realized proceeds ${formatCreditsPrecise(quote.cost)} fell short of your minimum of ${formatCreditsPrecise(order.maxCost)} credits.`,
         );
       }
     }
 
     if (order.side === "buy") {
       if (compare(quote.cost, market.minStake) < 0) {
-        fail("validation", `Minimum stake is ${market.minStake} credits.`, {
+        fail("validation", `Minimum stake is ${formatCreditsPrecise(market.minStake)} credits.`, {
           amount: "below minStake",
         });
       }
       if (compare(quote.cost, market.maxStake) > 0) {
-        fail("validation", `Maximum stake is ${market.maxStake} credits.`, {
+        fail("validation", `Maximum stake is ${formatCreditsPrecise(market.maxStake)} credits.`, {
           amount: "above maxStake",
         });
       }

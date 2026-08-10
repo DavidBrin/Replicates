@@ -138,11 +138,20 @@ describe("lmsrSharesForBudget — inverts lmsrTradeCost", () => {
 
   it("sells: proceeds bisection also never exceeds the requested budget", () => {
     fc.assert(
-      fc.property(fc.integer({ min: 20, max: 300 }), fc.double({ min: 1, max: 50, noNaN: true }), (b, budget) => {
+      fc.property(fc.integer({ min: 20, max: 300 }), fc.double({ min: 1, max: 50, noNaN: true }), (b, requested) => {
         const q = [40, 10, 5]; // some pre-existing shares to sell against
+        // Sells are capped at `lmsrMaxProceeds` — beyond it there is no
+        // share count that raises the money, and asking is now a
+        // `validation` error rather than a `NaN`. The "never overspends"
+        // property is only defined below the cap; the over-cap half is
+        // asserted directly underneath.
+        const cap = lmsrMaxProceeds(q, 0, b);
+        const budget = Math.min(requested, cap * 0.999);
         const shares = lmsrSharesForBudget(q, 0, budget, b, "sell");
         const proceeds = -lmsrTradeCost(q, 0, -shares, b);
         expect(proceeds).toBeLessThanOrEqual(budget + 1e-6);
+
+        expect(() => lmsrSharesForBudget(q, 0, cap * 1.001, b, "sell")).toThrow(PricingError);
       }),
     );
   });
