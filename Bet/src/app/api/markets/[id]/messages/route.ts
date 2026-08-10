@@ -36,6 +36,43 @@ function decodeCursor(raw: string): { at: Date; id: string } | undefined {
   return { at, id };
 }
 
+/** Mirrors `lib/http.ts`'s private `fieldsFromZodError` (dotted path ->
+ * first message per field) for query-string validation — see
+ * `history/route.ts`'s identical copy for why this isn't shared out of a
+ * module this task doesn't own. */
+function fieldsFromZodError(error: z.ZodError): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.length > 0 ? issue.path.map(String).join(".") : "_";
+    if (!(key in fields)) fields[key] = issue.message;
+  }
+  return fields;
+}
+
+/**
+ * `?limit=` — accepted as any finite positive number (floored, then capped
+ * at `MAX_LIMIT`) to preserve the exact prior hand-rolled behavior; `.int()`
+ * is deliberately NOT enforced here so `limit=3.7` still floors to 3
+ * instead of being rejected. `?before=` — an empty string is treated as
+ * "absent" (matching the prior `if (beforeRaw)` truthy check); a non-empty
+ * value must decode via `decodeCursor` or the whole query is `validation`.
+ */
+const listQuerySchema = z.object({
+  limit: z.coerce.number().finite().positive().optional(),
+  before: z
+    .string()
+    .optional()
+    .transform((raw, ctx) => {
+      if (!raw) return undefined;
+      const decoded = decodeCursor(raw);
+      if (!decoded) {
+        ctx.addIssue({ code: "custom", message: "Invalid before cursor." });
+        return z.NEVER;
+      }
+      return decoded;
+    }),
+});
+
 async function loadRoom(req: Request, id: string) {
   const marketId = brand<"MarketId">(id);
   const actor = await getActor(req);
@@ -53,25 +90,20 @@ export const GET = handler<{ id: string }>(async (req, ctx) => {
   authorizeOr404(can(actor, "read", { type: "room", id: marketId }, { room: roomFacts }));
 
   const url = new URL(req.url);
-  const beforeRaw = url.searchParams.get("before");
-  const limitRaw = url.searchParams.get("limit");
-
-  let limit = DEFAULT_LIMIT;
-  if (limitRaw !== null) {
-    const parsed = Number(limitRaw);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      throwApp({ code: "validation", message: "limit must be a positive number.", fields: { limit: "invalid" } });
-    }
-    limit = Math.min(MAX_LIMIT, Math.floor(parsed));
+  const parsedQuery = listQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+  if (!parsedQuery.success) {
+    throwApp({
+      code: "validation",
+      message: "Invalid query parameters.",
+      fields: fieldsFromZodError(parsedQuery.error),
+    });
   }
 
-  let before: { at: Date; id: string } | undefined;
-  if (beforeRaw) {
-    before = decodeCursor(beforeRaw);
-    if (!before) {
-      throwApp({ code: "validation", message: "Invalid before cursor.", fields: { before: "invalid" } });
-    }
-  }
+  const limit =
+    parsedQuery.data.limit !== undefined
+      ? Math.min(MAX_LIMIT, Math.floor(parsedQuery.data.limit))
+      : DEFAULT_LIMIT;
+  const before = parsedQuery.data.before;
 
   const messages = await store.messages.listMessages(marketId, { before, limit });
   const last = messages[messages.length - 1];

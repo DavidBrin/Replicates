@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from "vitest";
+import { brand } from "@/domain/entities";
 import { getContainer, resetContainerForTests } from "@/lib/container";
 import { GET, POST } from "@/app/api/markets/[id]/messages/route";
 
@@ -67,6 +68,91 @@ describe("GET /api/markets/[id]/messages", () => {
     const cookie = await sessionCookieFor("noodle");
     const res = await GET(getReq(market.id, "", cookie) as never, ctxFor(market.id));
     expect(res.status).toBe(404);
+  });
+
+  /** Walks a seeded busy market's full message list page by page via
+   * `?before=`, concatenating pages, and asserts the result is EXACTLY
+   * equal (same order, no duplicates, no gaps) to a single unpaginated
+   * fetch — Task 10's Room paginates on exactly this contract. */
+  it("keyset pagination concatenates to exactly the same list as a single unpaginated fetch", async () => {
+    const market = await sl10k(); // sl-10k: 10 seeded trades + 14 seeded chat lines = 24 messages
+    const cookie = await sessionCookieFor("dev");
+
+    const fullRes = await GET(getReq(market.id, "?limit=50", cookie) as never, ctxFor(market.id));
+    expect(fullRes.status).toBe(200);
+    const fullBody = await fullRes.json();
+    const fullIds: string[] = fullBody.data.messages.map((m: { id: string }) => m.id);
+    expect(fullIds.length).toBeGreaterThanOrEqual(20);
+    expect(fullBody.data.nextCursor).toBeNull(); // fewer than the 50 requested — no further page
+
+    const paginatedIds: string[] = [];
+    let cursor: string | null = null;
+    let pageCount = 0;
+    do {
+      const qs = cursor ? `?limit=5&before=${encodeURIComponent(cursor)}` : "?limit=5";
+      const res = await GET(getReq(market.id, qs, cookie) as never, ctxFor(market.id));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.data.messages.length).toBeLessThanOrEqual(5);
+      paginatedIds.push(...body.data.messages.map((m: { id: string }) => m.id));
+      cursor = body.data.nextCursor;
+      pageCount += 1;
+      expect(pageCount).toBeLessThan(20); // guards against an infinite loop on a regression
+    } while (cursor);
+
+    expect(pageCount).toBeGreaterThan(1); // actually exercised multiple pages
+    expect(paginatedIds).toEqual(fullIds); // same order, no duplicates, no gaps
+    expect(new Set(paginatedIds).size).toBe(paginatedIds.length);
+  });
+
+  /** The same continuity guarantee across a page boundary that lands
+   * squarely inside a group of messages sharing an IDENTICAL timestamp —
+   * the seed's hand-authored data never produces one (see task-7-report.md
+   * "Fix round 1"), so this constructs one directly via the store to
+   * exercise `MemoryMessageRepo`'s id-descending tie-break at a boundary. */
+  it("keyset pagination has no gaps or duplicates across a same-timestamp boundary", async () => {
+    const market = await sl10k();
+    const cookie = await sessionCookieFor("dev");
+    const { store, clock } = await getContainer();
+    const dev = await store.users.findByHandle("dev");
+    // Newer than every seeded message (all are hours-to-days old), so these
+    // four land at the very front of the newest-first list, guaranteeing a
+    // `limit=3` page boundary falls inside the tied group.
+    const tiedAt = new Date(clock.now().getTime() - 1_000);
+    const tiedIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const message = await store.messages.insert({
+        id: brand(`msg_tiedtest_${i}`),
+        roomId: market.id,
+        authorId: dev!.id,
+        kind: "text",
+        body: `tied message ${i}`,
+        at: tiedAt,
+      });
+      tiedIds.push(message.id);
+    }
+
+    const fullRes = await GET(getReq(market.id, "?limit=50", cookie) as never, ctxFor(market.id));
+    const fullBody = await fullRes.json();
+    const fullIds: string[] = fullBody.data.messages.map((m: { id: string }) => m.id);
+    // All four tied messages are the newest and thus the first four entries.
+    expect(fullIds.slice(0, 4).sort()).toEqual([...tiedIds].sort());
+
+    const paginatedIds: string[] = [];
+    let cursor: string | null = null;
+    let pageCount = 0;
+    do {
+      const qs = cursor ? `?limit=3&before=${encodeURIComponent(cursor)}` : "?limit=3";
+      const res = await GET(getReq(market.id, qs, cookie) as never, ctxFor(market.id));
+      const body = await res.json();
+      paginatedIds.push(...body.data.messages.map((m: { id: string }) => m.id));
+      cursor = body.data.nextCursor;
+      pageCount += 1;
+      expect(pageCount).toBeLessThan(20);
+    } while (cursor);
+
+    expect(paginatedIds).toEqual(fullIds);
+    expect(new Set(paginatedIds).size).toBe(paginatedIds.length);
   });
 });
 
