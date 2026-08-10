@@ -39,18 +39,51 @@ function encode(secret: string): Uint8Array {
 }
 
 /**
- * Resolves the HS256 signing key from `AUTH_SECRET`. In production with no
- * secret configured, throws at first use (effectively at startup, since
- * `container.ts` constructs the `AuthProvider` eagerly) rather than quietly
- * signing tokens with a key that's committed to this repo — see
- * `DEV_FALLBACK_SECRET`'s doc comment.
+ * Minimum `AUTH_SECRET` length accepted in production, in characters.
+ *
+ * HS256's security rests entirely on the secret's entropy: the signature is
+ * a keyed hash of attacker-visible data, so anyone holding a single issued
+ * token can brute-force short keys **offline**, at whatever rate their
+ * hardware allows, with no request to this app and nothing to rate-limit.
+ * A 1-character secret falls in microseconds, and forging a session then
+ * means forging any user. RFC 8725 §3.5 / RFC 7518 §3.2 put the floor at
+ * "at least as many bits as the hash output" — 256 bits for HS256 — which
+ * 32 ASCII characters meet. Anything shorter is rejected outright rather
+ * than accepted with a warning, because a warning in a production log is
+ * not a control.
+ */
+export const MIN_PRODUCTION_SECRET_LENGTH = 32;
+
+/**
+ * Resolves the HS256 signing key from `AUTH_SECRET`. In production, throws
+ * at first use (effectively at startup, since `container.ts` constructs the
+ * `AuthProvider` eagerly) if the secret is missing *or* too short, rather
+ * than quietly signing tokens with a key that's committed to this repo, or
+ * with one that can be recovered offline — see `DEV_FALLBACK_SECRET` and
+ * `MIN_PRODUCTION_SECRET_LENGTH`.
+ *
+ * Outside production nothing changes: any non-empty `AUTH_SECRET` is used
+ * as-is, and an absent one falls back to the well-known dev secret with a
+ * one-time warning, so `npm run dev` and the test suite still need zero
+ * setup.
  */
 export function getSecretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+
   if (secret && secret.length > 0) {
+    if (isProduction && secret.length < MIN_PRODUCTION_SECRET_LENGTH) {
+      throw new Error(
+        `AUTH_SECRET is too short (${secret.length} characters). Refusing to ` +
+          `start in production with a session-signing secret under ` +
+          `${MIN_PRODUCTION_SECRET_LENGTH} characters — HS256 signatures are ` +
+          "brute-forceable offline from a single issued token. Generate one " +
+          "with `openssl rand -base64 32`; see .env.example.",
+      );
+    }
     return encode(secret);
   }
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     throw new Error(
       "AUTH_SECRET is not set. Refusing to start in production without a " +
         "session-signing secret — see .env.example.",

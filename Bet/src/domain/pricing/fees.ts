@@ -44,10 +44,15 @@ export function rawFee(contracts: number, price: number, rateBps: number): numbe
  * rule (research §7.1, §2.10). A small epsilon absorbs float noise that
  * would otherwise nudge an exact cent value up to the next one. */
 function ceilCents(amountInCredits: number): Credits {
+  // Same trap `engine.ts`'s `toCreditsAtBoundary` carried: a bare `|| 0`
+  // normalizes `-0` but ALSO swallows `NaN` into a silent zero fee. Reject
+  // non-finite input outright and normalize `-0` with `Object.is`.
+  if (!Number.isFinite(amountInCredits)) {
+    throw new RangeError(`ceilCents: expected a finite amount of credits, got ${amountInCredits}`);
+  }
   const EPS = 1e-7;
-  // `|| 0` normalizes a `-0` result (e.g. `Math.ceil(-0.0000001)`) to `+0` —
-  // a fee of exactly zero should never print or compare as negative zero.
-  return credits(Math.ceil(amountInCredits * 100 - EPS) || 0);
+  const rounded = Math.ceil(amountInCredits * 100 - EPS);
+  return credits(Object.is(rounded, -0) ? 0 : rounded);
 }
 
 /** Kalshi's taker fee: `ceilCents(0.07 × C × P × (1 − P))`. `contracts` is

@@ -13,6 +13,7 @@ import {
   DemoSessionAuthProvider,
   DEV_FALLBACK_SECRET,
   getSecretKey,
+  MIN_PRODUCTION_SECRET_LENGTH,
   SESSION_COOKIE_NAME,
   SESSION_TTL_SECONDS,
   sessionCookieOptions,
@@ -117,13 +118,48 @@ describe("adapters/auth/demo-session.ts", () => {
       expect(() => mod.getSecretKey()).toThrow(/AUTH_SECRET/);
     });
 
-    it("never throws in production when AUTH_SECRET is set", async () => {
+    it("never throws in production when AUTH_SECRET is set and long enough", async () => {
       vi.resetModules();
-      vi.stubEnv("AUTH_SECRET", "a-real-production-secret");
+      vi.stubEnv("AUTH_SECRET", "x".repeat(MIN_PRODUCTION_SECRET_LENGTH));
       vi.stubEnv("NODE_ENV", "production");
 
       const mod = await import("@/adapters/auth/demo-session");
       expect(() => mod.getSecretKey()).not.toThrow();
+    });
+
+    /**
+     * Final-review minor #2. HS256 signatures are brute-forceable offline
+     * from any single issued token, so a short secret is a full session-
+     * forgery vector, not a hygiene nit — it must fail closed at startup.
+     */
+    it("throws in production when AUTH_SECRET is shorter than the minimum", async () => {
+      vi.resetModules();
+      vi.stubEnv("AUTH_SECRET", "x");
+      vi.stubEnv("NODE_ENV", "production");
+
+      const mod = await import("@/adapters/auth/demo-session");
+      expect(() => mod.getSecretKey()).toThrow(/too short/i);
+    });
+
+    it("throws in production one character below the minimum, but not at it", async () => {
+      vi.resetModules();
+      vi.stubEnv("AUTH_SECRET", "x".repeat(MIN_PRODUCTION_SECRET_LENGTH - 1));
+      vi.stubEnv("NODE_ENV", "production");
+      const mod = await import("@/adapters/auth/demo-session");
+      expect(() => mod.getSecretKey()).toThrow(/too short/i);
+
+      vi.stubEnv("AUTH_SECRET", "x".repeat(MIN_PRODUCTION_SECRET_LENGTH));
+      expect(() => mod.getSecretKey()).not.toThrow();
+    });
+
+    it("still accepts a short AUTH_SECRET outside production (dev ergonomics unchanged)", async () => {
+      vi.resetModules();
+      vi.stubEnv("AUTH_SECRET", "s");
+      vi.stubEnv("NODE_ENV", "development");
+
+      const mod = await import("@/adapters/auth/demo-session");
+      expect(() => mod.getSecretKey()).not.toThrow();
+      expect(mod.getSecretKey()).toEqual(new TextEncoder().encode("s"));
     });
   });
 });

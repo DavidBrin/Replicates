@@ -10,6 +10,7 @@
  * `toCreditsAtBoundary` (rounding in the house's/pot's favor).
  */
 
+import { formatCreditsPrecise } from "@/domain/formatters";
 import { add, toDecimal, zero, type Credits } from "@/domain/money";
 import { BasePricingEngine, PricingError, ZERO, toCreditsAtBoundary } from "./engine";
 import type { MarketState, Order, OutcomeId, Payout, Position, Quote } from "./types";
@@ -84,7 +85,51 @@ function lmsrDeltaForTargetCost(q: number[], idx: number, targetCost: number, b:
   const p = prices[idx];
   const x = targetCost / b;
   const arg = (Math.exp(x) - (1 - p)) / p;
-  return b * Math.log(arg);
+  // DOMAIN CHECK. `arg <= 0` means the requested `targetCost` is outside
+  // what the cost function can ever reach — always a SELL asking for more
+  // proceeds than the outcome can pay (see `lmsrMaxProceeds`). Without this
+  // `Math.log` returns `NaN`, which used to propagate all the way to a
+  // silent 0-cost quote. Never return `NaN`: reject with a message that
+  // tells the trader the maximum actually available.
+  if (!(arg > 0)) throw sellCapError(q, idx, b);
+  const delta = b * Math.log(arg);
+  if (!Number.isFinite(delta)) throw sellCapError(q, idx, b);
+  return delta;
+}
+
+/**
+ * The most that can EVER be extracted (decimal credits) by selling
+ * outcome `idx` down, however many shares are sold: `−b · ln(1 − p)`, the
+ * limit of `C(q) − C(q with q[idx] → −∞)`. Because `p` is the softmax of
+ * `q/b`, this holds for any number of outcomes, so the 2-outcome
+ * closed-form path and the n-outcome bisection path share one cap.
+ *
+ * Ask for a penny more and the closed form's `Math.log` goes out of domain
+ * (`NaN`) while the bisection's bracket doubles to `Infinity` — the two
+ * halves of the same defect, and why the guard lives here rather than in
+ * either branch.
+ */
+export function lmsrMaxProceeds(q: number[], idx: number, b: number): number {
+  const p = lmsrPrices(q, b)[idx];
+  if (!(p > 0)) return 0;
+  if (p >= 1) return Number.POSITIVE_INFINITY;
+  return -b * Math.log(1 - p);
+}
+
+/** The `validation` error a too-large sell earns, carrying the maximum
+ * proceeds actually available at the current price — rounded DOWN (never
+ * advertise more than the market can pay) and rendered through
+ * `formatCreditsPrecise` (G6: a raw `Credits` is integer cents and would
+ * read 100x too large). */
+function sellCapError(q: number[], idx: number, b: number): PricingError {
+  const max = lmsrMaxProceeds(q, idx, b);
+  const shown = Number.isFinite(max) ? formatCreditsPrecise(toCreditsAtBoundary(max, "down")) : null;
+  return new PricingError(
+    "validation",
+    shown === null
+      ? "That sell is larger than this outcome can pay out at the current price."
+      : `That sell is larger than this outcome can pay out — at the current price you can take out at most ${shown} credits.`,
+  );
 }
 
 /**
@@ -135,16 +180,29 @@ export function lmsrSharesForBudget(
   side: "buy" | "sell",
 ): number {
   if (budget <= 0) return 0;
+  // A SELL is capped: no quantity of shares can extract more than
+  // `lmsrMaxProceeds`. Checked here, once, so BOTH the closed-form and the
+  // bisection path are covered — the closed form would otherwise return
+  // `NaN` (out-of-domain `Math.log`) and the bisection `Infinity` (its
+  // bracket doubles forever because `f` never reaches the budget).
+  // Equality is rejected too: the cap is only approached as shares -> ∞.
+  if (side === "sell" && !(budget < lmsrMaxProceeds(q, idx, b))) {
+    throw sellCapError(q, idx, b);
+  }
   if (q.length === 2) {
     const target = side === "sell" ? -budget : budget;
     const delta = lmsrDeltaForTargetCost(q, idx, target, b);
     return Math.abs(delta);
   }
-  return bisectForBudget((magnitude) => {
-    const delta = side === "sell" ? -magnitude : magnitude;
+  const magnitude = bisectForBudget((m) => {
+    const delta = side === "sell" ? -m : m;
     const cost = lmsrTradeCost(q, idx, delta, b);
     return side === "sell" ? -cost : cost;
   }, budget);
+  if (!Number.isFinite(magnitude)) {
+    throw new PricingError("internal", "LMSR bisection failed to bracket the requested budget");
+  }
+  return magnitude;
 }
 
 function toArrays(state: Extract<MarketState, { kind: "lmsr" }>): { outcomes: OutcomeId[]; q: number[] } {
@@ -169,8 +227,19 @@ function priceOrder(
       ? order.shares
       : lmsrSharesForBudget(q, idx, toDecimal(order.budget!), state.b, order.side);
 
+  // Belt and braces: whatever route produced `magnitude` (a caller-supplied
+  // `shares`, the closed form, or the bisection), a non-finite quantity must
+  // never reach the money boundary, where it would be rounded into a
+  // plausible-looking `Credits` amount.
+  if (!Number.isFinite(magnitude)) {
+    throw new PricingError("internal", "LMSR produced a non-finite share quantity");
+  }
+
   const deltaShares = order.side === "sell" ? -magnitude : magnitude;
   const costDecimal = lmsrTradeCost(q, idx, deltaShares, state.b);
+  if (!Number.isFinite(costDecimal)) {
+    throw new PricingError("internal", "LMSR produced a non-finite trade cost");
+  }
 
   const qAfter = q.slice();
   qAfter[idx] += deltaShares;

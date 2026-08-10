@@ -184,7 +184,7 @@ export default async function InviteLandingPage({
             <div className="flex flex-col items-center gap-3 text-center">
               <Avatar
                 initials={state.inviterDisplayName.slice(0, 2).toUpperCase()}
-                color="#7c6cff"
+                color="var(--accent)"
                 size="lg"
               />
               <div>

@@ -11,24 +11,8 @@ import { authorizeOr404, handler, jsonOk, parseBody, throwApp } from "@/lib/http
 import { can } from "@/domain/authz";
 import { brand, type Market, type Outcome, type OutcomeId, type PricingConfig } from "@/domain/entities";
 import { fromDecimal, zero, type Credits } from "@/domain/money";
+import { OUTCOME_COLOR_CYCLE } from "@/domain/palette";
 import { defaultB } from "@/domain/pricing/lmsr";
-
-/** A small, fixed default palette for outcomes the wizard doesn't assign a
- * color to — the same documented accent ramp SPEC §7.1/§7.3 draws from
- * (Bet indigo, Polymarket blue/purple/teal/magenta, Kalshi orange/gold),
- * kept local rather than importing `adapters/memory/seed-data/palette.ts`
- * so market creation doesn't depend on seed-only data (G1 doesn't forbid
- * it — routes may import adapters — but the coupling has no upside here). */
-const DEFAULT_OUTCOME_COLORS: readonly string[] = [
-  "#7c6cff",
-  "#4877ff",
-  "#a261e1",
-  "#0595b3",
-  "#ff9500",
-  "#ee2ba6",
-  "#e5bd45",
-  "#a394ff",
-];
 
 const outcomeInputSchema = z.object({
   label: z.string().trim().min(1).max(60),
@@ -136,7 +120,10 @@ export const POST = handler(async (req) => {
       id: brand<"OutcomeId">(idGen.next("out")),
       marketId,
       label: o.label,
-      color: o.color ?? DEFAULT_OUTCOME_COLORS[i % DEFAULT_OUTCOME_COLORS.length]!,
+      // The shared ramp (`domain/palette.ts`) the seed also cycles through,
+      // so a market created here is colored exactly like a seeded one. This
+      // route used to keep a value-for-value copy of it.
+      color: o.color ?? OUTCOME_COLOR_CYCLE[i % OUTCOME_COLOR_CYCLE.length]!,
     }));
 
     let pricing: PricingConfig;

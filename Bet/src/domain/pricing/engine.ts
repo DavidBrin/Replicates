@@ -12,6 +12,7 @@
  * only implement the math.
  */
 
+import { formatCreditsPrecise } from "@/domain/formatters";
 import { compare, credits, isNegative, zero, type Credits } from "@/domain/money";
 import type { ErrorCode } from "@/domain/result";
 import type { MarketState, Order, OutcomeId, Payout, Position, Quote } from "./types";
@@ -121,16 +122,20 @@ export abstract class BasePricingEngine implements PricingEngine {
 
   private guardMaxCost(order: Order, quote: Quote): void {
     if (order.maxCost === undefined) return;
+    // Both messages reach a user verbatim (via `runEngine` -> the error
+    // envelope -> a toast), so every money value goes through
+    // `formatCreditsPrecise` — a raw `Credits` is integer CENTS and would
+    // read 100x too large (G6).
     if (order.side === "buy" && compare(quote.cost, order.maxCost) > 0) {
       throw new PricingError(
         "validation",
-        `Slippage exceeded: cost ${quote.cost} would exceed maxCost ${order.maxCost}`,
+        `Slippage exceeded: cost ${formatCreditsPrecise(quote.cost)} would exceed your maximum of ${formatCreditsPrecise(order.maxCost)} credits`,
       );
     }
     if (order.side === "sell" && compare(quote.cost, order.maxCost) < 0) {
       throw new PricingError(
         "validation",
-        `Slippage exceeded: proceeds ${quote.cost} would fall short of the minimum ${order.maxCost}`,
+        `Slippage exceeded: proceeds ${formatCreditsPrecise(quote.cost)} would fall short of your minimum of ${formatCreditsPrecise(order.maxCost)} credits`,
       );
     }
   }
@@ -146,12 +151,24 @@ export abstract class BasePricingEngine implements PricingEngine {
  * so float noise never manufactures an extra cent of rounding.
  */
 export function toCreditsAtBoundary(amountInCredits: number, direction: "up" | "down"): Credits {
+  // A non-finite amount is ALWAYS an upstream bug (an out-of-domain
+  // `Math.log`, a divide by zero, a `NaN` propagated through a cost
+  // function) and must surface as an error. This used to end in
+  // `credits(rounded || 0)`: the `|| 0` was written to normalize `-0`, but
+  // `NaN || 0` is `0` too, so a `NaN` cost was silently laundered into a
+  // perfectly valid-looking ZERO-COST quote. Money is never conjured from a
+  // `NaN` — check first, and normalize `-0` with `Object.is`, which cannot
+  // swallow anything else.
+  if (!Number.isFinite(amountInCredits)) {
+    throw new PricingError(
+      "internal",
+      `toCreditsAtBoundary: expected a finite amount of credits, got ${amountInCredits}`,
+    );
+  }
   const cents = amountInCredits * 100;
   const EPS = 1e-7;
-  // `|| 0` normalizes a `-0` result to `+0` — a zero amount should never
-  // print or compare as negative zero.
   const rounded = direction === "up" ? Math.ceil(cents - EPS) : Math.floor(cents + EPS);
-  return credits(rounded || 0);
+  return credits(Object.is(rounded, -0) ? 0 : rounded);
 }
 
 /**

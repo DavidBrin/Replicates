@@ -45,9 +45,20 @@ Open <http://localhost:3000>, hit **Start betting**, and pick **@dev** on the si
 npx vercel        # or push to GitHub and import the repo
 ```
 
-Nothing else to configure — no env vars are required. Set `AUTH_SECRET` to any random
-string in production if you want sessions to survive redeploys. **Read the persistence
-caveat in [Known gaps](#known-gaps) before treating a deployment as durable.**
+**Set one environment variable: `AUTH_SECRET`** — any random string of **32 characters or
+more**.
+
+```bash
+openssl rand -base64 32
+```
+
+This is *required* in production. Sessions are signed with it, and the app deliberately
+**throws rather than falling back to the development key** when `NODE_ENV=production` —
+shipping with a known signing key would let anyone forge a session. Without it, sign-in
+returns a 500. Locally you need nothing: the dev fallback applies and warns once.
+
+No database, no other services. **Read the persistence caveat in
+[Known gaps](#known-gaps) before treating a deployment as durable.**
 
 ---
 
@@ -177,6 +188,9 @@ Honest list. Nothing here is hidden behind a happy path.
   anyone. Sessions themselves are real — HS256-signed, HttpOnly, SameSite=Lax, algorithm
   pinned — but the identity check is deliberately absent for demo ergonomics
   ([D9](DECISIONS.md)). An `AuthProvider` port is where a real provider drops in.
+- **`AUTH_SECRET` (32+ chars) is required in production** — see
+  [Deploying to Vercel](#deploying-to-vercel). The app throws rather than signing with the
+  known development key. Sessions also do not survive a redeploy if the secret changes.
 
 **Product**
 - **Explore is simulated and read-only.** Those are generated markets, not real ones, and

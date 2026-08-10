@@ -28,6 +28,19 @@ export function formatCreditsPrecise(c: Credits): string {
   }).format(toDecimal(c));
 }
 
+/** Renders a share/contract count, e.g. `12.3456` → `"12.35"`, `1234` →
+ * `"1,234.00"`. Shares are not money (never a `Credits`), but they are a
+ * displayed number and so belong here rather than as an ad-hoc `toFixed()`
+ * at a call site (G6). A non-finite count renders `"—"` — it is never
+ * silently shown as `0`. */
+export function formatShares(shares: number): string {
+  if (!Number.isFinite(shares)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(shares);
+}
+
 /** Renders a probability (0–1) as a whole percent, e.g. `0.7239` → `"72%"`. */
 export function formatProbability(p: number): string {
   return `${Math.round(p * 100)}%`;

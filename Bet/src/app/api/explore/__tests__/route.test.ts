@@ -69,4 +69,24 @@ describe("GET /api/explore", () => {
       expect(entry.market.category).toBe("sports");
     }
   });
+
+  // G4: `?category=` used to be read straight off `searchParams` — the last
+  // unparsed input in src/app/api/**.
+  it("rejects an over-long ?category= with a 400 validation envelope", async () => {
+    const tooLong = "x".repeat(41);
+    const res = await GET(
+      new Request(`http://localhost/api/explore?category=${tooLong}`) as never,
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("validation");
+    expect(body.error.fields.category).toBeTruthy();
+  });
+
+  it("treats an empty ?category= as no filter rather than an error", async () => {
+    const res = await GET(new Request("http://localhost/api/explore?category=") as never);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.categories.length).toBeGreaterThan(1);
+  });
 });

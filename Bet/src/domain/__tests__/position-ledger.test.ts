@@ -56,10 +56,13 @@ describe("averageBuyPrice", () => {
     const trades: LedgerTrade[] = [buy(YES, 3, 199)];
 
     // --- replay trading.ts's costBasis arithmetic, sell by sell ---
+    // Unwinding most of the position in two goes, the second leaving a
+    // dust-sized remainder — which is exactly where an uncorrected ±0.5¢
+    // gets divided by a very small number.
     let shares = 3;
     let costBasis: Credits = credits(199);
 
-    for (const sold of [2, 0.9]) {
+    for (const sold of [2, 0.992]) {
       const soldFraction = Math.min(1, sold / shares);
       const removed = mul(costBasis, soldFraction, "nearest");
       shares = Math.max(0, shares - sold);
@@ -68,8 +71,10 @@ describe("averageBuyPrice", () => {
       trades.push(sell(YES, sold, removed));
     }
 
-    // 0.1 shares left, and a residual that no longer means "0.1 × 66.3¢".
-    expect(shares).toBeCloseTo(0.1, 10);
+    // 0.008 shares left, holding a 1¢ residual that no longer means
+    // "0.008 × 66.3¢" (which would be well under a cent).
+    expect(shares).toBeCloseTo(0.008, 10);
+    expect(costBasis).toBe(1);
 
     const residualAverageCents = (costBasis / shares / 100) * 100;
     const ledgerAverageCents = averageBuyPrice(trades, YES) * 100;

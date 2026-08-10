@@ -1,16 +1,18 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { add, credits, toDecimal, zero, type Credits } from "@/domain/money";
+import { PricingError } from "../engine";
 import {
   defaultB,
   lmsrCost,
   lmsrEngine,
   lmsrMaxLoss,
+  lmsrMaxProceeds,
   lmsrPrices,
   lmsrSharesForBudget,
   lmsrTradeCost,
 } from "../lmsr";
-import type { MarketState, Position } from "../types";
+import type { MarketState, Position, Quote } from "../types";
 import { runPricingInvariants } from "./invariants";
 
 const OUTCOME_SETS: string[][] = [
@@ -361,3 +363,89 @@ describe("guards (BasePricingEngine, exercised through LmsrEngine)", () => {
   });
 });
 
+
+/**
+ * Regression coverage for the critical money bug: a budget-denominated SELL
+ * asking for more than the outcome can possibly pay out drove
+ * `Math.log()` out of its domain and produced `NaN` — which
+ * `toCreditsAtBoundary`'s old `|| 0` then laundered into a silent 0-cost
+ * quote (`{ shares: null, cost: 0, avgPrice: null }` over the wire).
+ *
+ * The worked case is the shipped seed's Roommates market ("Does anyone do
+ * the dishes before Thursday?"): `b = 60`, `p(Yes) = 0.29015`, so the most
+ * that can ever be extracted by selling Yes is `−60·ln(1 − 0.29015) =
+ * 20.56` credits — and 25 is the OrderTicket's DEFAULT amount.
+ */
+describe("budget sells are capped by extractable proceeds (critical money bug)", () => {
+  const B = 60;
+  const P = 0.29015;
+  // The q vector whose Yes price is exactly P: p = e^(q/b) / (e^(q/b) + 1).
+  const Q_YES = B * Math.log(P / (1 - P));
+  const state: MarketState = { kind: "lmsr", status: "open", b: B, q: { Yes: Q_YES, No: 0 } };
+
+  it("reproduces the seeded market's price and its 20.56-credit proceeds cap", () => {
+    expect(lmsrPrices([Q_YES, 0], B)[0]).toBeCloseTo(P, 6);
+    expect(lmsrMaxProceeds([Q_YES, 0], 0, B)).toBeCloseTo(20.56, 2);
+  });
+
+  it("rejects an over-cap budget sell as `validation`, never a 0-cost quote", () => {
+    let thrown: unknown;
+    try {
+      lmsrEngine.quote(state, { outcomeId: "Yes", side: "sell", budget: credits(2500) });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(PricingError);
+    expect((thrown as PricingError).code).toBe("validation");
+    // The message must tell the trader the maximum actually available.
+    expect((thrown as PricingError).message).toContain("20.5");
+  });
+
+  it("never returns a non-finite share count or a zero-cost sell quote", () => {
+    let quote: Quote | undefined;
+    try {
+      quote = lmsrEngine.quote(state, { outcomeId: "Yes", side: "sell", budget: credits(2500) });
+    } catch {
+      quote = undefined;
+    }
+    if (quote) {
+      expect(Number.isFinite(quote.shares)).toBe(true);
+      expect(Number.isFinite(quote.avgPrice)).toBe(true);
+      expect(quote.cost).toBeGreaterThan(0);
+    }
+  });
+
+  it("the 50-credit quick chip is rejected too", () => {
+    expect(() =>
+      lmsrEngine.quote(state, { outcomeId: "Yes", side: "sell", budget: credits(5000) }),
+    ).toThrow(PricingError);
+  });
+
+  it("still prices a sell comfortably under the cap", () => {
+    const quote = lmsrEngine.quote(state, { outcomeId: "Yes", side: "sell", budget: credits(1000) });
+    expect(Number.isFinite(quote.shares)).toBe(true);
+    expect(quote.shares).toBeGreaterThan(0);
+    expect(quote.cost).toBeGreaterThan(0);
+  });
+
+  it("rejects an over-cap sell on the n-outcome bisection path too", () => {
+    const threeWay: MarketState = {
+      kind: "lmsr",
+      status: "open",
+      b: B,
+      q: { A: 0, B: 0, C: 0 },
+    };
+    // cap = -60 * ln(1 - 1/3) = 24.33
+    expect(lmsrMaxProceeds([0, 0, 0], 0, B)).toBeCloseTo(24.33, 2);
+    expect(() =>
+      lmsrEngine.quote(threeWay, { outcomeId: "A", side: "sell", budget: credits(3000) }),
+    ).toThrow(PricingError);
+  });
+
+  it("lmsrSharesForBudget itself throws rather than returning NaN/Infinity", () => {
+    expect(() => lmsrSharesForBudget([Q_YES, 0], 0, 25, B, "sell")).toThrow(PricingError);
+    expect(() => lmsrSharesForBudget([0, 0, 0], 0, 30, B, "sell")).toThrow(PricingError);
+    // A buy has no such cap — arbitrarily large budgets stay finite.
+    expect(Number.isFinite(lmsrSharesForBudget([Q_YES, 0], 0, 10_000, B, "buy"))).toBe(true);
+  });
+});
