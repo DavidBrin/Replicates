@@ -7,8 +7,23 @@ export interface PositionSummaryItem {
   outcomeId: string;
   outcomeLabel: string;
   shares: number;
-  /** Credits (integer cents). */
+  /**
+   * Credits (integer cents) still tied up in this position — a **running
+   * residual**, reduced on every partial sell, NOT a historical total and
+   * NOT something to divide by `shares` for an average (finding C; see
+   * `src/domain/position-ledger.ts` for why that drifts). It is exactly the
+   * right basis for unrealized P/L against the current mark, which is the
+   * only thing it's used for here.
+   */
   costBasis: number;
+  /**
+   * Average acquisition price per share as a 0..1 fraction of a credit,
+   * derived by the caller from the trade ledger
+   * (`domain/position-ledger.ts`'s `averageBuyPrice`: Σ buy cost ÷ Σ buy
+   * shares). Required, not optional, so no caller can quietly fall back to
+   * the residual-derived average this replaced.
+   */
+  avgCostPerShare: number;
   /** Current probability, 0..1 — used to mark the position to market. */
   currentPrice: number;
 }
@@ -36,12 +51,14 @@ export function PositionSummary({ positions, className }: PositionSummaryProps) 
   return (
     <div data-testid="position-summary" className={cn("flex flex-col gap-3", className)}>
       {held.map((p) => {
-        const avgCostPerShare = p.shares > 0 ? p.costBasis / p.shares / 100 : 0;
         const currentValue = credits(Math.round(p.shares * p.currentPrice * 100));
-        // `avgCostPerShare` is a 0–1 fraction of a credit (cents/share ÷
-        // 100) — `formatPriceCents` is what turns that back into the "76¢"
-        // display, matching how the rest of the app renders per-share
-        // prices (G6: no hand-rolled `toFixed` + `¢` in the component).
+        // `avgCostPerShare` arrives as a 0–1 fraction of a credit, already
+        // derived from the trade ledger by the caller — `formatPriceCents`
+        // turns that into the "76¢" display, matching how the rest of the
+        // app renders per-share prices (G6: no hand-rolled `toFixed` + `¢`
+        // in the component). Unrealized P/L, by contrast, is correctly
+        // measured against the *residual* `costBasis`: it asks what the
+        // shares still held are worth versus what is still sunk in them.
         const unrealizedPnl = sub(currentValue, credits(p.costBasis));
         return (
           <div
@@ -53,7 +70,7 @@ export function PositionSummary({ positions, className }: PositionSummaryProps) 
           >
             <Field label="Outcome" value={p.outcomeLabel} />
             <Field label="Shares" value={p.shares.toFixed(2)} tnum />
-            <Field label="Avg cost" value={formatPriceCents(avgCostPerShare)} tnum />
+            <Field label="Avg cost" value={formatPriceCents(p.avgCostPerShare)} tnum />
             <Field
               label="Unrealized P/L"
               value={`${unrealizedPnl > 0 ? "+" : ""}${formatCreditsPrecise(unrealizedPnl)}`}

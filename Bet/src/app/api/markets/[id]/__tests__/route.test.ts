@@ -125,4 +125,66 @@ describe("GET /api/markets/[id]", () => {
     const body = await res.json();
     expect(body.data.market.id).toBe(marketId);
   });
+
+  /**
+   * Final-review finding A. `can(…,"read",{type:"market"},…)` admits a
+   * *pending* invitee on purpose — you have to see a bet to decide whether
+   * to join it. The route used to treat that as licence to hand back the
+   * whole holders list, including every member's exact stake, because it
+   * gated stakes on `market.stakesVisible || own row` instead of on
+   * `authz.ts`'s position policy (which requires `isFellowParticipant`).
+   * sl-10k has `stakesVisible: true`, so the old code revealed everything.
+   */
+  async function inviteBirdieToSl10k(status: "sent" | "accepted"): Promise<string> {
+    const marketId = await sl10kId();
+    const { store, clock, idGen } = await getContainer();
+    const birdie = await store.users.findByHandle("birdie");
+    const maya = await store.users.findByHandle("maya");
+    await store.invites.insert({
+      id: brand(idGen.next("inv")),
+      kind: "direct",
+      targetType: "market",
+      targetId: brand(marketId),
+      inviterId: maya!.id,
+      inviteeId: birdie!.id,
+      status,
+      expiresAt: new Date(clock.now().getTime() + 7 * 86_400_000),
+      createdAt: clock.now(),
+    });
+    return marketId;
+  }
+
+  it("gives a pending invitee the market but no holders and no stakes, even when stakesVisible is on", async () => {
+    const marketId = await inviteBirdieToSl10k("sent");
+    const { store } = await getContainer();
+    const market = await store.markets.findById(brand(marketId));
+    expect(market!.stakesVisible).toBe(true);
+
+    const cookie = await sessionCookieFor("birdie");
+    const res = await GET(getReq(marketId, cookie) as never, ctxFor(marketId));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    // They can see the bet itself — that's the point of the invite.
+    expect(body.data.market.id).toBe(marketId);
+    expect(typeof body.data.prices).toBe("object");
+    // …but not the private group's roster, nor anybody's stake.
+    expect(body.data.holders).toEqual([]);
+    expect(body.data.myPositions).toEqual([]);
+  });
+
+  it("gives a genuine participant the holders list with exact stakes on the same market", async () => {
+    // Same user, same market, one field different: the invite is accepted,
+    // which is what makes them a participant.
+    const marketId = await inviteBirdieToSl10k("accepted");
+    const cookie = await sessionCookieFor("birdie");
+    const res = await GET(getReq(marketId, cookie) as never, ctxFor(marketId));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.data.holders.length).toBeGreaterThan(0);
+    for (const holder of body.data.holders) {
+      expect(typeof holder.stake).toBe("number");
+    }
+  });
 });

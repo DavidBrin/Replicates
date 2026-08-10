@@ -22,6 +22,7 @@ import { can } from "@/domain/authz";
 import { brand, type User, type UserId } from "@/domain/entities";
 import { nextStatusForClock } from "@/domain/market-state";
 import { toDecimal } from "@/domain/money";
+import { averageBuyPrice } from "@/domain/position-ledger";
 import { toMarketState } from "@/domain/pricing-config";
 import { getEngine } from "@/domain/pricing/registry";
 import { computeMarketFacts, computeRoomFacts } from "@/domain/services/market-access";
@@ -76,10 +77,14 @@ export default async function MarketPage({
   const prices = engine.currentPrices(toMarketState(market.pricing, market.status));
   const roomFacts = await computeRoomFacts(store, market, actor);
 
-  const [positions, history, messagesPageDesc] = await Promise.all([
+  const [positions, history, messagesPageDesc, marketTrades] = await Promise.all([
     store.positions.listByMarket(marketId),
     store.priceHistory.listByMarket(marketId),
     store.messages.listMessages(marketId, { limit: INITIAL_MESSAGE_LIMIT }),
+    // The trade ledger — the only trustworthy source for "what did I pay
+    // per share" (finding C; `Position.costBasis` is a running residual
+    // that drifts under repeated partial sells).
+    store.trades.listByMarket(marketId),
   ]);
 
   const holderPositions = positions.filter((p) => p.shares > 0);
@@ -117,16 +122,36 @@ export default async function MarketPage({
     });
   }
 
+  // Same two-gate rule as `GET /api/markets/[id]` (see that route's doc
+  // comment): the roster is for fellow participants, and each row's exact
+  // stake goes through the position policy rather than a hand-rolled `if`
+  // (G5). This page already requires group membership above, so
+  // `isFellowParticipant` is always true here — routing it through `can()`
+  // anyway keeps the two surfaces from drifting apart again.
+  const isFellowParticipant = facts.creatorId === user.id || facts.isParticipant;
+
   const holders: HolderRow[] = [];
   for (const p of holderPositions) {
     const u = await resolveUser(p.userId);
     const outcomeLabel = market.outcomes.find((o) => o.id === p.outcomeId)?.label ?? "—";
-    const revealStake = market.stakesVisible || p.userId === user.id;
+    const revealStake = can(
+      actor,
+      "read",
+      { type: "position", id: p.id },
+      {
+        position: {
+          holderId: p.userId,
+          isFellowParticipant,
+          stakesVisible: market.stakesVisible,
+          marketStatus: market.status,
+        },
+      },
+    );
     holders.push({
       userId: p.userId,
       displayName: u?.displayName ?? "Unknown trader",
       avatarInitials: u?.avatarInitials ?? "?",
-      avatarColor: u?.avatarColor ?? "#6b6e78",
+      avatarColor: u?.avatarColor ?? "var(--text-3)",
       outcomeLabel,
       shares: p.shares,
       stake: revealStake ? p.costBasis : undefined,
@@ -156,6 +181,7 @@ export default async function MarketPage({
   }));
 
   const myPositions = positions.filter((p) => p.userId === user.id);
+  const myTrades = marketTrades.filter((t) => t.userId === user.id);
   const positionSummaryItems: PositionSummaryItem[] = myPositions
     .filter((p) => p.shares > 0)
     .map((p) => ({
@@ -163,6 +189,7 @@ export default async function MarketPage({
       outcomeLabel: market.outcomes.find((o) => o.id === p.outcomeId)?.label ?? "—",
       shares: p.shares,
       costBasis: p.costBasis,
+      avgCostPerShare: averageBuyPrice(myTrades, p.outcomeId),
       currentPrice: prices[p.outcomeId] ?? 0,
     }));
 
