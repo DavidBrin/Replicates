@@ -17,12 +17,32 @@ import "server-only";
 
 import { z } from "zod";
 
+import { MAX_TOKENS_PER_TURN, WRAP_UP_SECONDS, WRAP_UP_TOKENS } from "./requests";
+
 /** Server-side kill switch / override. Absent, it is inferred from key presence. */
 export const VOICE_PROVIDERS = ["scripted", "ai"] as const;
 export type VoiceProviderSetting = (typeof VOICE_PROVIDERS)[number];
 
 export const AI_PROVIDERS = ["anthropic", "openai"] as const;
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
+
+/**
+ * The providers that actually have a client in this build.
+ *
+ * `openai` is a declared seam in the env contract (SPEC §3.4) with no
+ * implementation — see `text-model-registry.ts`. Naming that here, rather than
+ * only inside the resolver, is what lets the routes refuse a `AI_PROVIDER=openai`
+ * deployment at the door with the documented `503 voice_unconfigured` instead of
+ * minting a session that every turn then fails to serve.
+ *
+ * A future `openai-client.ts` adds `"openai"` to this list and one line to the
+ * resolver. Nothing else moves.
+ */
+export const IMPLEMENTED_AI_PROVIDERS: readonly AiProviderId[] = ["anthropic"] as const;
+
+export function hasModelClient(provider: AiProviderId): boolean {
+  return IMPLEMENTED_AI_PROVIDERS.includes(provider);
+}
 
 /**
  * The env var each provider's key lives in. Exported as *names*, never values —
@@ -41,10 +61,18 @@ export const DEFAULT_MAX_TOKENS = 2000;
  * Cost guardrails from `research/ai-voice-architecture.md` §6. The ceilings are
  * deliberately well under Vercel's 300s Hobby function cap (§2.4) so behaviour
  * is identical on every plan and a runaway call cannot outlive its function.
+ *
+ * The *floors* are derived from the wrap-up margins rather than picked, because
+ * a budget smaller than its own margin is a budget that is spent before the call
+ * starts: `/api/voice/turn` wraps up at `maxDuration - WRAP_UP_SECONDS` and at
+ * `maxTokens - WRAP_UP_TOKENS`, so at 15s or 64 tokens the very first turn hit a
+ * cap, the caller spoke the wrap-up line, and the model was never called at all.
+ * Every accepted configuration must be able to place at least one real call —
+ * hence "one full turn's worth *on top of* the margin" for both.
  */
-const MIN_DURATION_SECONDS = 15;
+const MIN_DURATION_SECONDS = WRAP_UP_SECONDS * 2;
 const MAX_DURATION_SECONDS = 600;
-const MIN_TOKENS = 64;
+const MIN_TOKENS = WRAP_UP_TOKENS + MAX_TOKENS_PER_TURN;
 const MAX_TOKENS = 8000;
 
 export type VoiceEnv = Readonly<Record<string, string | undefined>>;
@@ -109,9 +137,17 @@ export function readVoiceConfig(env: VoiceEnv = process.env): VoiceConfig {
   };
 }
 
-/** False whenever the routes must answer `503 voice_unconfigured`. */
+/**
+ * False whenever the routes must answer `503 voice_unconfigured`.
+ *
+ * A key for a provider this build cannot call is not a configured deployment.
+ * Saying so *here* is what makes `AI_PROVIDER=openai` fail fast and typed: the
+ * session mint refuses instead of succeeding and leaving `/turn` to throw out of
+ * the resolver before any SSE framing exists, which reached the browser as an
+ * untyped framework 500.
+ */
 export function isConfigured(config: VoiceConfig): boolean {
-  return config.voiceProvider === "ai" && config.hasApiKey;
+  return config.voiceProvider === "ai" && config.hasApiKey && hasModelClient(config.aiProvider);
 }
 
 /**

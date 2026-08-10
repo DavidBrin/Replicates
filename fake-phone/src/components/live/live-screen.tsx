@@ -121,7 +121,12 @@ export function LiveScreen(): React.ReactElement {
 
       {isLive ? (
         <>
-          <LiveTopBar viewers={session.viewers} onClose={leave} />
+          <LiveTopBar
+            username={settings.live.username}
+            avatar={settings.live.avatar}
+            viewers={session.viewers}
+            onClose={leave}
+          />
           <CommentStream comments={comments} elapsedMs={session.elapsedMs} />
           <FloatingHearts />
           <LiveBottomBar onFlip={camera.flip} />

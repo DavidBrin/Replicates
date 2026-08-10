@@ -14,6 +14,15 @@
  *
  * Unconfigured, this route emits nothing and streams nothing: it returns the
  * same typed `503 { code: "voice_unconfigured" }` as `/api/voice/session`.
+ *
+ * ### The client is not the accountant
+ *
+ * Every number the caps are enforced against — how long the call has run, how
+ * many tokens it has spent — is read from the server's own record of the session
+ * (`lib/voice/session-store.ts`), never from the request body. A body-supplied
+ * `elapsedSeconds: 0` on every turn was, until this was fixed, an unbounded
+ * billable loop; the session id it quoted was not checked against anything the
+ * server had ever minted, so it did not even need to be a real one.
  */
 
 import { isConfigured, readVoiceConfig } from "@/lib/voice/config";
@@ -21,6 +30,7 @@ import {
   invalidVoiceRequest,
   readJsonBody,
   voiceRateLimited,
+  voiceSessionNotFound,
   voiceUnconfigured,
 } from "@/lib/voice/http";
 import { VoiceModelError } from "@/lib/voice/model-client";
@@ -32,6 +42,7 @@ import {
   turnRequestSchema,
   type TurnRequest,
 } from "@/lib/voice/requests";
+import { elapsedSecondsFor, voiceSessions } from "@/lib/voice/session-store";
 import { createVoiceSseResponse, type VoiceEndReason } from "@/lib/voice/sse";
 import { buildSystemPrompt } from "@/lib/voice/system-prompt";
 import { resolveTextModelClient } from "@/lib/voice/text-model-registry";
@@ -65,18 +76,28 @@ export async function POST(request: Request): Promise<Response> {
   }
   const turn: TurnRequest = parsed.data;
 
-  const capped = capReached(turn, config.maxDurationSeconds, config.maxTokens);
+  // An id the server never minted — or one whose call has long since expired —
+  // buys nothing. This is the check whose absence made every cap below optional.
+  const session = voiceSessions.find(turn.sessionId);
+  if (!session) return voiceSessionNotFound();
+
+  const elapsedSeconds = elapsedSecondsFor(session, Date.now());
+  const capped = capReached(
+    elapsedSeconds,
+    session.tokensUsed,
+    config.maxDurationSeconds,
+    config.maxTokens,
+  );
   if (capped) {
     // Still a well-formed SSE stream, so the client has exactly one code path
     // for "the call ended" whether it ended naturally or on a budget.
     return createVoiceSseResponse(async (emit) => {
-      emit.send("connected", { sessionId: turn.sessionId });
+      emit.send("connected", { sessionId: session.id });
       emit.send("line", { text: WRAP_UP_LINE });
       emit.send("ended", { reason: capped satisfies VoiceEndReason });
     });
   }
 
-  const client = resolveTextModelClient(config.aiProvider);
   const systemPrompt = buildSystemPrompt({
     persona: turn.persona,
     callerName: turn.callerName,
@@ -84,14 +105,20 @@ export async function POST(request: Request): Promise<Response> {
     targetSeconds: config.maxDurationSeconds,
   });
 
-  const remainingTokens = Math.max(0, config.maxTokens - turn.tokensUsed);
+  const remainingTokens = Math.max(0, config.maxTokens - session.tokensUsed);
   const maxTokens = Math.min(MAX_TOKENS_PER_TURN, remainingTokens);
 
   return createVoiceSseResponse(async (emit) => {
-    emit.send("connected", { sessionId: turn.sessionId });
+    emit.send("connected", { sessionId: session.id });
 
     let result;
     try {
+      // Resolved inside the guarded producer, not above it. A provider with no
+      // client in this build throws from here, and every throw in this block
+      // leaves as a typed `error` + `ended` frame — never as a framework 500 the
+      // client has no branch for. (`isConfigured` already refuses such a
+      // deployment at the door; this is the second lock on the same door.)
+      const client = resolveTextModelClient(config.aiProvider);
       result = await client.complete({
         systemPrompt,
         transcript: turn.transcript,
@@ -113,7 +140,14 @@ export async function POST(request: Request): Promise<Response> {
       throw cause;
     }
 
+    // Charged to the server's record before the line is sent, so a client that
+    // hangs up mid-stream has still paid for what it spent.
+    voiceSessions.recordUsage(session.id, result.outputTokens);
+
     emit.send("line", { text: result.text });
+    // Informational only now — the client renders nothing from it and the caps
+    // are enforced against the record above. Kept because it is the one place a
+    // developer can watch a call's spend without server logs.
     emit.send("usage", { outputTokens: result.outputTokens });
     // The gap where the other side "replies". The client fills it with silence;
     // §4.2 calls this the single most important cue that a call is real.
@@ -126,15 +160,18 @@ export async function POST(request: Request): Promise<Response> {
  * Which cap, if any, this turn has run into.
  *
  * Checked *before* spending anything: a turn that would start within a wrap-up
- * margin of either ceiling never reaches the model at all.
+ * margin of either ceiling never reaches the model at all. Both figures come
+ * from the server's session record — `config.ts` keeps the accepted budgets
+ * above these margins so that "capped from the first turn" is unreachable.
  */
 function capReached(
-  turn: TurnRequest,
+  elapsedSeconds: number,
+  tokensUsed: number,
   maxDurationSeconds: number,
   maxTokens: number,
 ): VoiceEndReason | null {
-  if (turn.elapsedSeconds >= maxDurationSeconds - WRAP_UP_SECONDS) return "duration_cap";
-  if (turn.tokensUsed >= maxTokens - WRAP_UP_TOKENS) return "token_cap";
+  if (elapsedSeconds >= maxDurationSeconds - WRAP_UP_SECONDS) return "duration_cap";
+  if (tokensUsed >= maxTokens - WRAP_UP_TOKENS) return "token_cap";
   return null;
 }
 

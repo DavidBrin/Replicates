@@ -29,11 +29,37 @@
 
 import { useRouter } from "next/navigation";
 
+import { useContainer } from "@/components/app-shell/container-provider";
 import { SettingsPanel } from "@/components/settings/settings-panel";
 import { PrimaryButton } from "@/components/ui";
 
 export function HomeScreen(): React.ReactElement {
   const router = useRouter();
+  const { ringtone } = useContainer();
+
+  /**
+   * This tap is the *scheduling* gesture, and it is the only reliable moment of
+   * transient activation the platform gives us before the call arrives
+   * (SPEC §4 constraint 2). iOS grants playback rights per user activation and
+   * they do not survive the trip through a route change and a `setTimeout`, so
+   * a delayed ring that never ran `unlock()` inside a real tap calls `play()`
+   * outside activation and is refused — the call arrives silently, which is the
+   * whole product failing quietly.
+   *
+   * Called synchronously, before routing: the promise may be awaited later, but
+   * the permission decision is made at the call site. `unlock()` never throws
+   * and is idempotent, and the container is a module-level singleton, so the
+   * unlocked element survives the navigation to `/`.
+   *
+   * "Go live" deliberately does not do this. The live surface plays no audio at
+   * all — it is a camera, a badge and a comment stream — so there is nothing
+   * there for an unlock to buy, and taking playback rights a screen does not
+   * use is a side effect without a reason.
+   */
+  const startCall = () => {
+    void ringtone.unlock();
+    router.push("/");
+  };
 
   return (
     <div
@@ -80,7 +106,7 @@ export function HomeScreen(): React.ReactElement {
         hunting for the trigger under stress, never a missing setting.
       */}
       <div className="pad-safe-bottom shrink-0 border-t border-hairline bg-ground px-5 pt-3 pb-3">
-        <PrimaryButton onClick={() => router.push("/")} testId="start-call">
+        <PrimaryButton onClick={startCall} testId="start-call">
           Start a call
         </PrimaryButton>
 

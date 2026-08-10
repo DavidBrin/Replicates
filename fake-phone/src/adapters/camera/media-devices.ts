@@ -172,21 +172,21 @@ export function createCameraSource(): CameraSource {
         throw new CameraError("single_camera", "This device only has one camera.");
       }
 
-      const previous = facing;
-      try {
-        return await acquire(target);
-      } catch (error) {
-        // The flip failed after we released the old stream (iOS will not let us
-        // hold both, so this window is unavoidable). Best-effort restore, and
-        // rethrow the original failure either way so the UI reports what
-        // actually went wrong rather than the recovery attempt.
-        try {
-          await acquire(previous);
-        } catch {
-          /* nothing further to try */
-        }
-        throw error;
-      }
+      // A rejection from here means exactly one thing: no camera is running.
+      //
+      // `acquire` releases the old stream before asking for the new one (iOS
+      // will not hand out both), and on failure it either never opened a device
+      // or stopped what it opened — so there is nothing left to clean up, and
+      // nothing left running. This used to re-acquire `facing` on the way out
+      // and then rethrow, which was the worst of both worlds: the caller was
+      // told the flip had failed while a live track kept the phone's camera
+      // indicator lit behind an error screen. It could not have done better
+      // with what it was given, either — `flip()` resolves with a `MediaStream`
+      // and nothing else, so a caller cannot tell a real switch from a silent
+      // restore and would go on believing it was showing the other camera.
+      // Recovery therefore belongs to the caller, which knows which way the
+      // camera was facing; see `useLiveCamera.flip`.
+      return acquire(target);
     },
   };
 }

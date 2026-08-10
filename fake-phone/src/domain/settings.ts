@@ -78,25 +78,77 @@ export type LiveSettings = z.infer<typeof liveSettingsSchema>;
 export const defaultSettings: Settings = settingsSchema.parse({});
 
 /**
+ * Looks through `.default()` / `.optional()` wrappers for an object schema.
+ *
+ * `caller` and `live` are declared as `callerSettingsSchema.default(...)`, so
+ * the value sitting in `settingsSchema.shape` is a `ZodDefault`, not the object
+ * schema itself. Unwrapping structurally rather than special-casing those two
+ * keys means a third nested group added later gets field-level repair for free
+ * instead of silently losing it.
+ */
+function asObjectSchema(schema: z.ZodType): z.ZodObject | null {
+  let current: z.ZodType = schema;
+  // Bounded rather than `while (true)`: this is the one code path that has to
+  // work when everything else about the stored data is broken, so it must not
+  // be able to hang on a wrapper chain that loops back on itself.
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (current instanceof z.ZodObject) return current;
+    const inner = (current as { unwrap?: () => z.ZodType }).unwrap?.();
+    if (!inner) return null;
+    current = inner;
+  }
+  return null;
+}
+
+/**
+ * Repairs one object against its schema, field by field, recursively.
+ *
+ * The recursion is the point. Validating `caller` as a whole means a single
+ * oversized photo — the field most likely to go bad, since it is the only one
+ * that can blow the storage quota — also discards the carefully-configured
+ * caller name and label beside it. That is exactly the all-or-nothing failure
+ * D16 exists to forbid, and a promise of field-level repair that stops at the
+ * top level is not one.
+ *
+ * A field that cannot be repaired is left out entirely, which lets the schema's
+ * own default fill it in on the final parse.
+ */
+function repairObject<Shape extends Record<string, z.ZodType>>(
+  schema: z.ZodObject<Shape>,
+  raw: unknown,
+): z.infer<z.ZodObject<Shape>> {
+  const whole = schema.safeParse(raw);
+  if (whole.success) return whole.data;
+
+  // Not an object at all — a string, a number, a `null` from a truncated write.
+  // There are no individual fields left to salvage, so take the defaults.
+  if (typeof raw !== "object" || raw === null) return schema.parse({});
+
+  const record = raw as Record<string, unknown>;
+  const repaired: Record<string, unknown> = {};
+
+  for (const [key, fieldSchema] of Object.entries(schema.shape)) {
+    const field = fieldSchema.safeParse(record[key]);
+    if (field.success) {
+      repaired[key] = field.data;
+      continue;
+    }
+
+    const nested = asObjectSchema(fieldSchema);
+    if (nested) repaired[key] = repairObject(nested, record[key]);
+  }
+
+  return schema.parse(repaired);
+}
+
+/**
  * Parses stored settings, repairing anything invalid.
  *
  * Field-level repair rather than all-or-nothing: a single bad field (a photo
  * that exceeded quota and got truncated, say) must not discard the user's
- * carefully-configured caller name. Unknown top-level keys from a future
+ * carefully-configured caller name — at any depth. Unknown keys from a future
  * version are dropped silently by the schema.
  */
 export function parseSettings(raw: unknown): Settings {
-  const whole = settingsSchema.safeParse(raw);
-  if (whole.success) return whole.data;
-
-  if (typeof raw !== "object" || raw === null) return defaultSettings;
-
-  const record = raw as Record<string, unknown>;
-  const repaired: Record<string, unknown> = {};
-  for (const key of Object.keys(settingsSchema.shape) as (keyof Settings)[]) {
-    const fieldSchema = settingsSchema.shape[key];
-    const result = fieldSchema.safeParse(record[key]);
-    if (result.success) repaired[key] = result.data;
-  }
-  return settingsSchema.parse(repaired);
+  return repairObject(settingsSchema, raw);
 }

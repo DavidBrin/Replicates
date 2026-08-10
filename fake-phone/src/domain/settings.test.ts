@@ -42,6 +42,53 @@ describe("parseSettings", () => {
     expect(parsed.voiceTier).toBe(defaultSettings.voiceTier);
   });
 
+  it("repairs a nested group field by field, not as a whole", () => {
+    // D16 promises field-level repair, and a promise that stops at the top
+    // level is not one. The photo is the field most likely to go bad — it is
+    // the only one large enough to blow the storage quota — and losing it must
+    // not also cost the caller name and label sitting beside it, which are what
+    // make the call screen convincing.
+    const parsed = parseSettings({
+      ...defaultSettings,
+      caller: { name: "Dad", label: "iPhone", photo: "x".repeat(4_000_001) },
+    });
+
+    expect(parsed.caller.name).toBe("Dad");
+    expect(parsed.caller.label).toBe("iPhone");
+    expect(parsed.caller.photo).toBe(defaultSettings.caller.photo);
+  });
+
+  it("repairs the live group the same way", () => {
+    const parsed = parseSettings({
+      ...defaultSettings,
+      live: { username: "nightwalk", avatar: "", viewers: -12, commentsPerMinute: 60 },
+    });
+
+    expect(parsed.live.username).toBe("nightwalk");
+    expect(parsed.live.commentsPerMinute).toBe(60);
+    expect(parsed.live.viewers).toBe(defaultSettings.live.viewers);
+  });
+
+  it("repairs a bad nested field and a bad top-level field in the same object", () => {
+    const parsed = parseSettings({
+      ...defaultSettings,
+      skin: "hologram",
+      caller: { name: "Dad", label: "iPhone", photo: 42 },
+    });
+
+    expect(parsed.skin).toBe(defaultSettings.skin);
+    expect(parsed.caller.name).toBe("Dad");
+    expect(parsed.caller.label).toBe("iPhone");
+  });
+
+  it("takes the group defaults when the group is not an object at all", () => {
+    // Nothing to salvage field by field, but the rest of the object survives.
+    const parsed = parseSettings({ ...defaultSettings, skin: "android", caller: "Mum" });
+
+    expect(parsed.caller).toEqual(defaultSettings.caller);
+    expect(parsed.skin).toBe("android");
+  });
+
   it("drops unknown keys from a future version", () => {
     const parsed = parseSettings({ ...defaultSettings, somethingNew: true });
     expect(parsed).not.toHaveProperty("somethingNew");

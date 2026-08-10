@@ -10,6 +10,7 @@
 export const VOICE_ERROR_CODES = [
   "voice_unconfigured",
   "invalid_request",
+  "session_not_found",
   "rate_limited",
   "voice_upstream_failed",
 ] as const;
@@ -52,6 +53,21 @@ export function voiceUnconfigured(): Response {
 
 export function invalidVoiceRequest(message = "The request body was not valid."): Response {
   return voiceError("invalid_request", message, 400);
+}
+
+/**
+ * The session id in this request was never minted here, or has expired.
+ *
+ * Distinct from `invalid_request` because the body was perfectly well formed —
+ * what failed is the *claim* it made. It is also the answer a forged id gets, so
+ * the message says nothing about which of the two it was.
+ */
+export function voiceSessionNotFound(): Response {
+  return voiceError(
+    "session_not_found",
+    "That voice session is not available. Start the call again.",
+    404,
+  );
 }
 
 export function voiceRateLimited(retryAfterSeconds: number): Response {

@@ -40,7 +40,13 @@ function ActiveCall({ settings }: { settings: Settings }) {
   const call = useCallController(settings, goHome);
 
   if (call.countdownRemaining !== null) {
-    return <RingCountdown seconds={call.countdownRemaining} onSkip={() => router.refresh()} />;
+    // Cancel leaves this route rather than refreshing it. `router.refresh()`
+    // re-renders the server component and deliberately *preserves* client
+    // state — so the countdown kept running behind the refresh and the call
+    // rang anyway, which is the one thing a button labelled Cancel must not
+    // do. Navigating to /home unmounts this tree, and the controller's effect
+    // cleanup clears the interval and hands back the wake lock with it.
+    return <RingCountdown seconds={call.countdownRemaining} onCancel={goHome} />;
   }
 
   const skinProps: CallSkinProps = {
@@ -78,7 +84,7 @@ function ActiveCall({ settings }: { settings: Settings }) {
  * of apps in this category, always from apps that promised background ringing
  * they could not deliver.
  */
-function RingCountdown({ seconds, onSkip }: { seconds: number; onSkip: () => void }) {
+function RingCountdown({ seconds, onCancel }: { seconds: number; onCancel: () => void }) {
   return (
     <div
       data-testid="ring-countdown"
@@ -91,7 +97,8 @@ function RingCountdown({ seconds, onSkip }: { seconds: number; onSkip: () => voi
         can only arrive while fake-phone is in front of you.
       </p>
       <button
-        onClick={onSkip}
+        onClick={onCancel}
+        data-testid="ring-countdown-cancel"
         className="mt-2 rounded-full border border-hairline px-6 py-3 text-sm text-text-primary"
       >
         Cancel

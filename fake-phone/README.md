@@ -105,7 +105,7 @@ reaches the browser.
 |---|---|
 | `npm run dev` | Dev server |
 | `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Unit tests (281) |
+| `npm test` | Unit tests (327) |
 | `npm run test:e2e` | Playwright, three projects (mobile Safari, mobile Chrome, desktop) |
 | `npm run typecheck` · `npm run lint` | TypeScript · ESLint |
 | `npm run generate:assets` | Regenerate the ringtone WAVs and the PWA icons |
@@ -195,26 +195,43 @@ Honest list. Some are platform limits, some are scope.
 
 5. **The AI tier needs a key** (see above). Only the Anthropic path has a client;
    the OpenAI seam is declared but empty.
-6. **No ephemeral-token/WebRTC path.** `/api/voice/session` returns
+6. **The AI tier speaks; it does not listen.** There is no speech-to-text in this
+   build, so the caller talks and reacts to the script rather than to you. That
+   matches what a one-sided fake call actually is, and it is why the scripted
+   tier is nearly as convincing as the AI one — but "a live conversation" means
+   the *model* is generating the caller's side live, not that it hears you. The
+   seam where STT would attach is marked in the voice adapter.
+7. **A finished script does not hang up.** When the caller's lines run out the
+   call stays connected and the timer keeps running, because that is what a real
+   call does — the person who wanted out is the one who ends it. It is a
+   deliberate choice, not a missing transition.
+8. **No ephemeral-token/WebRTC path.** `/api/voice/session` returns
    `ephemeralToken: null` with the exact three steps documented in place. A true
    speech-to-speech provider is a branch in that handler plus a transport in the
    adapter — not a contract change.
-7. **The rate limiter is in-memory**, so it resets per serverless instance. Fine
-   for a demo, not a production control.
+9. **The rate limiter and the voice-session store are in-memory**, so both are
+   per serverless instance. The session store fails *closed* — a session minted
+   on one instance is unknown to another, so that call ends cleanly rather than
+   continuing uncapped — which is the right direction for a spend guard, but
+   production wants shared storage.
+10. **Offline is verified manually, not in CI.** The service worker only
+    registers in production builds and Playwright runs against `npm run dev`, so
+    the offline path was proved by hand against `next start` (13 `/_next/` assets
+    cached; an offline reopen hydrates and navigates) rather than by a test.
 
 **Scope**
 
-8. **No App Store build yet.** The path is Capacitor around this same codebase —
+11. **No App Store build yet.** The path is Capacitor around this same codebase —
    see below. Nothing here is architected in a way that blocks it.
-9. **Contact photos only, no contact import.** Deliberate: reading the address
+12. **Contact photos only, no contact import.** Deliberate: reading the address
    book is a permission this app does not need.
-10. **One-sided audio only.** The AI tier speaks and listens through the browser;
+13. **One-sided audio only.** The AI tier speaks and listens through the browser;
     there is no telephony anywhere, by design.
-11. **The M3 colour tokens are MED-confidence.** `m3.material.io` is a JS-rendered
+14. **The M3 colour tokens are MED-confidence.** `m3.material.io` is a JS-rendered
     SPA that could not be scraped, so the Android palette comes from
     well-published AndroidX values rather than a live source. Spot-check before
     treating them as final.
-12. **Screenshots are captured on Chromium** with a synthetic camera, so live
+15. **Screenshots are captured on Chromium** with a synthetic camera, so live
     mode shows a test pattern rather than a face.
 
 ---

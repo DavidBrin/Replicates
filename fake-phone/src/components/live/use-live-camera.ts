@@ -84,6 +84,7 @@ export function useLiveCamera(): LiveCameraController {
   }, [applyStream, camera, fail]);
 
   const flip = useCallback(() => {
+    const previous = facing;
     const target: CameraFacing = facing === "user" ? "environment" : "user";
     camera
       .flip()
@@ -91,13 +92,35 @@ export function useLiveCamera(): LiveCameraController {
       .catch((error: unknown) => {
         const code = readCameraFailure(error);
         if (code === "single_camera") {
-          // The port contract says the current stream survives a rejected
-          // flip, so this is a note, not a failure state — the picture the
-          // user is looking at is still live.
+          // Refused before the running stream was touched, so this is a note,
+          // not a failure state — the picture the user is looking at is still
+          // live.
           setNotice("This device only has one camera.");
           return;
         }
-        fail(error);
+        if (code === "aborted") {
+          // Superseded by something we did on purpose (a second tap, or a
+          // teardown). Whatever superseded it owns the camera now; re-opening
+          // one here would fight it — and could resurrect a camera the user has
+          // just left the screen to switch off.
+          return;
+        }
+        // Any other rejection means the adapter is holding nothing: it has to
+        // release the running camera before it can ask for the other one, so
+        // by the time we get here the picture is already gone. Re-open the one
+        // we had rather than dropping the user onto the error primer — on this
+        // screen the picture is the deterrent, and losing it because a *second*
+        // camera would not open is a much worse outcome than a failed flip.
+        // This is the layer that can do it: it is the only one that knows which
+        // way the surviving camera was facing.
+        camera
+          .start(previous)
+          .then((restored) => {
+            applyStream(restored, previous);
+            setNotice("Could not switch cameras.");
+          })
+          // Report what actually went wrong, not the recovery's own failure.
+          .catch(() => fail(error));
       });
   }, [applyStream, camera, facing, fail]);
 

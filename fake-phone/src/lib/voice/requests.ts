@@ -8,6 +8,14 @@
  * not a hole: `system-prompt.ts` wraps the brief as untrusted data and appends
  * the guardrails after it, and the length caps here stop the brief being used
  * as a way to spend someone else's token budget.
+ *
+ * What is deliberately *absent* is as load-bearing as what is here. A turn does
+ * not carry `elapsedSeconds` or `tokensUsed`: those are the two numbers the cost
+ * caps are enforced against, and a schema that accepts them from the client is a
+ * schema that lets a caller reset its own spend to zero on every request. They
+ * are read from the server's own session record instead (`session-store.ts`).
+ * Zod strips unknown keys, so an older client that still sends them is not
+ * rejected — its figures are simply not consulted.
  */
 
 import { z } from "zod";
@@ -37,10 +45,6 @@ export const turnRequestSchema = z.object({
   callerLabel: z.string().trim().max(40).default(""),
   /** Oldest first. Capped so a long call cannot grow the prompt without bound. */
   transcript: z.array(transcriptTurnSchema).max(60).default([]),
-  /** Wall-clock seconds since the call connected, per the client's `Clock`. */
-  elapsedSeconds: z.number().int().min(0).max(86_400).default(0),
-  /** Output tokens spent so far this call, accumulated from `usage` frames. */
-  tokensUsed: z.number().int().min(0).max(1_000_000).default(0),
 });
 
 export type TurnRequest = z.infer<typeof turnRequestSchema>;

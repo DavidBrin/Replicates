@@ -23,13 +23,23 @@
 import type { VoiceTier } from "@/domain/settings";
 import type { CallEvent, Clock, SpeechSynthesizer, VoiceProvider, VoiceSession } from "@/ports";
 
-import { createAiVoiceProvider } from "./ai";
+import { createAiVoiceProvider, type CallerIdentity } from "./ai";
 import { createScriptedVoiceProvider } from "./scripted";
 import { createSilentVoiceProvider } from "./silent";
 
 export interface VoiceDeps {
   speech: SpeechSynthesizer;
   clock: Clock;
+  /**
+   * The caller identity currently on screen, read fresh when a call starts.
+   *
+   * Optional, and only the AI tier consumes it: the persona merely *suggests* a
+   * caller name, and the user can override it in settings — so without this the
+   * screen could read "Mum" while the model introduced itself as "Sam". A getter
+   * rather than a value because the container is built once and settings change
+   * afterwards.
+   */
+  callerIdentity?: () => CallerIdentity | null;
 }
 
 /**
@@ -42,7 +52,8 @@ const TIER_ORDER: readonly VoiceTier[] = ["ai", "scripted", "silent"] as const;
 type ProviderFactory = (deps: VoiceDeps) => VoiceProvider;
 
 const FACTORIES: Readonly<Record<VoiceTier, ProviderFactory>> = {
-  ai: (deps) => createAiVoiceProvider({ speech: deps.speech }),
+  ai: (deps) =>
+    createAiVoiceProvider({ speech: deps.speech, callerIdentity: deps.callerIdentity }),
   scripted: (deps) => createScriptedVoiceProvider(deps),
   silent: () => createSilentVoiceProvider(),
 };

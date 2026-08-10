@@ -57,16 +57,27 @@ export interface Container {
 export function createBrowserContainer(): Container {
   const clock = new SystemClock();
   const speech = createSpeechSynthesizer();
+  const settings = new LocalSettingsStore();
 
   return {
     clock,
-    settings: new LocalSettingsStore(),
+    settings,
     ringtone: createRingtonePlayer(),
     speech,
     camera: createCameraSource(),
     haptics: new NavigatorHaptics(),
     wakeLock: new ScreenWakeLock(),
-    voiceFor: (tier) => createVoiceProvider(tier, { speech, clock }),
+    voiceFor: (tier) =>
+      createVoiceProvider(tier, {
+        speech,
+        clock,
+        // Read at call time, not at container-construction time: the container
+        // is a process-lifetime singleton and the user can rename the caller
+        // between calls. Without this the AI tier briefs the model from the
+        // persona's *suggested* name, so the screen could read "Mum" while the
+        // caller introduced itself as "Sam".
+        callerIdentity: () => settings.load().caller,
+      }),
   };
 }
 

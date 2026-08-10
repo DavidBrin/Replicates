@@ -34,11 +34,16 @@
 
 import type { Persona } from "@/domain/persona";
 import type { CallEvent, SpeechSynthesizer, VoiceProvider, VoiceSession } from "@/ports";
+import { isAiTierEnabledInBuild } from "@/lib/voice/ai-tier-flag";
 import { parseSseStream } from "@/lib/voice/sse-parse";
 import type { TranscriptTurn } from "@/lib/voice/model-client";
 
-/** Build-time public flag. See the `isAvailable()` note above. */
-export const AI_ENABLED_FLAG = "NEXT_PUBLIC_VOICE_AI_ENABLED";
+/**
+ * Build-time public flag. See the `isAvailable()` note above. Re-exported from
+ * `lib/voice/ai-tier-flag` so the settings screen and this adapter cannot drift
+ * apart about what "the AI tier is enabled" means.
+ */
+export { AI_ENABLED_FLAG } from "@/lib/voice/ai-tier-flag";
 
 const SESSION_URL = "/api/voice/session";
 const TURN_URL = "/api/voice/turn";
@@ -54,8 +59,27 @@ interface MintedSession {
   readonly maxDurationSeconds: number;
 }
 
+/** Who the *screen* says is calling. Not necessarily who the persona suggested. */
+export interface CallerIdentity {
+  readonly name: string;
+  readonly label?: string;
+}
+
 export interface AiVoiceDeps {
   readonly speech: SpeechSynthesizer;
+  /**
+   * The caller identity currently on screen, read fresh at `start()`.
+   *
+   * The persona only ever *suggests* a name (`suggestedCallerName`), and the
+   * user is free to override it in settings — so briefing the model from the
+   * suggestion meant the screen could read "Mum" while the model introduced
+   * itself as "Sam". A getter rather than a value because the container is built
+   * once and the setting changes underneath it.
+   *
+   * Optional so that a caller which has no settings to offer — the server-render
+   * container, a test — gets the persona's suggestion and nothing breaks.
+   */
+  readonly callerIdentity?: () => CallerIdentity | null;
 }
 
 export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
@@ -65,8 +89,7 @@ export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
     id: "ai",
 
     isAvailable(): boolean {
-      // Read as a literal so Next inlines it into the client bundle.
-      return process.env.NEXT_PUBLIC_VOICE_AI_ENABLED === "true";
+      return isAiTierEnabledInBuild();
     },
 
     async start(persona: Persona, signal: AbortSignal): Promise<VoiceSession> {
@@ -78,6 +101,7 @@ export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
 
       const transcript: TranscriptTurn[] = [];
       const pendingUserSpeech: string[] = [];
+      const caller = resolveCallerIdentity(deps.callerIdentity, persona);
 
       async function* run(): AsyncGenerator<CallEvent> {
         yield { type: "connecting" };
@@ -94,17 +118,20 @@ export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
         yield { type: "connected" };
 
         const startedAt = Date.now();
-        let tokensUsed = 0;
 
         for (let turn = 0; turn < MAX_TURNS; turn += 1) {
           if (controller.signal.aborted) break;
 
           // Anything the user said since the last turn joins the transcript.
+          // Nothing fills this queue in this build — see `sendUserSpeech`.
           while (pendingUserSpeech.length > 0) {
             const text = pendingUserSpeech.shift();
             if (text) transcript.push({ role: "user", text });
           }
 
+          // A client-side stop, not a cap: the server enforces the real ceiling
+          // against its own record of when it minted the session, and this only
+          // saves a round trip that would be answered with the wrap-up line.
           const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
           if (elapsedSeconds >= session.maxDurationSeconds) break;
 
@@ -113,13 +140,7 @@ export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
 
           try {
             const body = await postTurn(
-              {
-                sessionId: session.sessionId,
-                persona,
-                transcript,
-                elapsedSeconds,
-                tokensUsed,
-              },
+              { sessionId: session.sessionId, persona, caller, transcript },
               controller.signal,
             );
 
@@ -131,7 +152,10 @@ export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
                 yield { type: "line", text };
                 await speakSafely(speech, text, controller.signal);
               } else if (frame.event === "usage") {
-                tokensUsed += readTokens(frame.data);
+                // Server-side bookkeeping, deliberately not mirrored here. The
+                // budget is spent against the server's session record; a copy
+                // kept on the client would only be a number an attacker could
+                // choose, which is exactly what this stopped being.
               } else if (frame.event === "listening") {
                 yield { type: "listening" };
                 await sleep(readPauseMs(frame.data), controller.signal);
@@ -162,7 +186,24 @@ export function createAiVoiceProvider(deps: AiVoiceDeps): VoiceProvider {
       return {
         events: (): AsyncIterable<CallEvent> => run(),
 
-        /** Only the AI tier uses this; the other tiers ignore it (ports). */
+        /**
+         * The speech-to-text seam — and, in this build, an unused one.
+         *
+         * Nothing calls it. That is the product, not an oversight: a fake call
+         * is deliberately one-sided (SPEC §2.2 — the tiers speak *at* the user,
+         * and the scripted tier's whole trick is the silence where a reply would
+         * go), and there is no microphone capture anywhere in the app, so there
+         * is nothing to feed it. The transcript the model sees is therefore
+         * caller-only, and the prompt is written for exactly that.
+         *
+         * If STT is ever added, this is the single place it attaches: a
+         * recogniser behind a port, calling this on each final result. Everything
+         * downstream — the queue drain at the top of the turn loop, the `user`
+         * role in `TranscriptTurn`, the server's transcript schema — already
+         * handles a two-sided conversation, and `ai.test.ts` exercises that path.
+         * The transport would want revisiting at that point too (`lib/voice/sse.ts`
+         * notes that barge-in is the moment SSE stops being the right choice).
+         */
         sendUserSpeech(text: string): void {
           const trimmed = text.trim();
           if (trimmed) pendingUserSpeech.push(trimmed.slice(0, 2000));
@@ -210,9 +251,9 @@ async function mintSession(persona: Persona, signal: AbortSignal): Promise<Minte
 interface TurnPayload {
   readonly sessionId: string;
   readonly persona: Persona;
+  /** Who the screen says is calling — the name the model must answer to. */
+  readonly caller: CallerIdentity;
   readonly transcript: readonly TranscriptTurn[];
-  readonly elapsedSeconds: number;
-  readonly tokensUsed: number;
 }
 
 async function postTurn(
@@ -223,6 +264,8 @@ async function postTurn(
     method: "POST",
     signal,
     headers: { "content-type": "application/json" },
+    // No `elapsedSeconds`, no `tokensUsed`. The server counts both against the
+    // session it minted; a client-supplied figure would be a client-chosen cap.
     body: JSON.stringify({
       sessionId: payload.sessionId,
       persona: {
@@ -230,11 +273,9 @@ async function postTurn(
         title: payload.persona.title,
         characterBrief: payload.persona.characterBrief,
       },
-      callerName: payload.persona.suggestedCallerName,
-      callerLabel: payload.persona.suggestedCallerLabel,
+      callerName: payload.caller.name,
+      callerLabel: payload.caller.label ?? "",
       transcript: payload.transcript,
-      elapsedSeconds: payload.elapsedSeconds,
-      tokensUsed: payload.tokensUsed,
     }),
   });
 
@@ -257,6 +298,9 @@ async function failureMessage(response: Response): Promise<string> {
     if (body.code === "rate_limited") {
       return "Too many voice requests just now.";
     }
+    if (body.code === "session_not_found") {
+      return "This call's session has expired.";
+    }
     if (typeof body.message === "string" && body.message.length <= 200) return body.message;
   } catch {
     // fall through to the generic message
@@ -265,6 +309,33 @@ async function failureMessage(response: Response): Promise<string> {
 }
 
 /* ------------------------------------------------------------- utilities -- */
+
+/**
+ * The identity the model is briefed with.
+ *
+ * The user's configured caller wins whenever there is one; the persona's
+ * suggestion is the fallback, which is all it ever was meant to be. Getting this
+ * wrong is not cosmetic — the screen says "Mum" and the voice says "it's Sam",
+ * which is precisely the moment the illusion the whole product rests on breaks.
+ */
+function resolveCallerIdentity(
+  read: (() => CallerIdentity | null) | undefined,
+  persona: Persona,
+): CallerIdentity {
+  // A settings read is third-party code from here; a throw must not stop a call.
+  let configured: CallerIdentity | null = null;
+  try {
+    configured = read?.() ?? null;
+  } catch {
+    configured = null;
+  }
+
+  const name = configured?.name.trim();
+  if (!name) {
+    return { name: persona.suggestedCallerName, label: persona.suggestedCallerLabel };
+  }
+  return { name, label: configured?.label?.trim() || persona.suggestedCallerLabel };
+}
 
 /**
  * Speech must never take the call down. `SpeechSynthesizer.speak` already
@@ -323,16 +394,6 @@ function readReason(data: unknown): string {
     if (typeof reason === "string") return reason;
   }
   return "completed";
-}
-
-function readTokens(data: unknown): number {
-  if (typeof data === "object" && data !== null && "outputTokens" in data) {
-    const tokens = (data as { outputTokens: unknown }).outputTokens;
-    if (typeof tokens === "number" && Number.isFinite(tokens) && tokens > 0) {
-      return Math.round(tokens);
-    }
-  }
-  return 0;
 }
 
 function readPauseMs(data: unknown): number {

@@ -14,11 +14,14 @@ import {
   API_KEY_ENV_VARS,
   DEFAULT_MAX_DURATION_SECONDS,
   DEFAULT_MAX_TOKENS,
+  IMPLEMENTED_AI_PROVIDERS,
   describeVoiceConfig,
+  hasModelClient,
   isConfigured,
   readVoiceConfig,
   type VoiceEnv,
 } from "./config";
+import { MAX_TOKENS_PER_TURN, WRAP_UP_SECONDS, WRAP_UP_TOKENS } from "./requests";
 
 const SECRET = "sk-ant-do-not-leak-me-0123456789";
 
@@ -73,6 +76,26 @@ describe("readVoiceConfig", () => {
     expect(isConfigured(config)).toBe(false);
   });
 
+  it("is unconfigured for a provider this build has no client for, key or not", () => {
+    // `openai` is a declared seam (SPEC §3.4) with no implementation. Saying so
+    // here is what makes `/turn` fail fast and typed rather than throwing out of
+    // the model resolver as an untyped 500 halfway through a call.
+    const config = readVoiceConfig({
+      AI_PROVIDER: "openai",
+      OPENAI_API_KEY: "sk-openai-configured-but-unbuilt",
+    });
+
+    expect(config.aiProvider).toBe("openai");
+    expect(config.hasApiKey).toBe(true);
+    expect(hasModelClient("openai")).toBe(false);
+    expect(isConfigured(config)).toBe(false);
+  });
+
+  it("names the providers it can actually call", () => {
+    expect(IMPLEMENTED_AI_PROVIDERS).toEqual(["anthropic"]);
+    expect(hasModelClient("anthropic")).toBe(true);
+  });
+
   it("names the env var per provider without ever exposing a value", () => {
     expect(API_KEY_ENV_VARS.anthropic).toBe("ANTHROPIC_API_KEY");
     expect(API_KEY_ENV_VARS.openai).toBe("OPENAI_API_KEY");
@@ -105,11 +128,41 @@ describe("readVoiceConfig", () => {
   it("accepts in-range overrides", () => {
     const config = readVoiceConfig({
       VOICE_CALL_MAX_DURATION_SECONDS: "90",
-      VOICE_CALL_MAX_TOKENS: "500",
+      VOICE_CALL_MAX_TOKENS: "1200",
     });
 
     expect(config.maxDurationSeconds).toBe(90);
-    expect(config.maxTokens).toBe(500);
+    expect(config.maxTokens).toBe(1200);
+  });
+
+  it("refuses a budget that would be spent before the first line", () => {
+    // The old floors (15s, 64 tokens) sat *below* the wrap-up margins, so those
+    // configurations were capped from turn one: the caller spoke the wrap-up
+    // line and the model was never called at all. A budget that cannot buy a
+    // call is not a smaller budget, it is a broken one — so it falls back to the
+    // documented default rather than being honoured.
+    const config = readVoiceConfig({
+      VOICE_CALL_MAX_DURATION_SECONDS: String(WRAP_UP_SECONDS),
+      VOICE_CALL_MAX_TOKENS: String(WRAP_UP_TOKENS),
+    });
+
+    expect(config.maxDurationSeconds).toBe(DEFAULT_MAX_DURATION_SECONDS);
+    expect(config.maxTokens).toBe(DEFAULT_MAX_TOKENS);
+  });
+
+  it("keeps every accepted budget clear of the wrap-up margins", () => {
+    // The smallest thing the schema will accept must still leave room for one
+    // real turn on top of the margin that ends the call in persona.
+    const smallest = readVoiceConfig({
+      VOICE_CALL_MAX_DURATION_SECONDS: String(WRAP_UP_SECONDS * 2),
+      VOICE_CALL_MAX_TOKENS: String(WRAP_UP_TOKENS + MAX_TOKENS_PER_TURN),
+    });
+
+    expect(smallest.maxDurationSeconds).toBeGreaterThan(WRAP_UP_SECONDS);
+    expect(smallest.maxTokens).toBeGreaterThan(WRAP_UP_TOKENS);
+    // i.e. a turn starting at zero elapsed and zero spent is not already capped.
+    expect(0 >= smallest.maxDurationSeconds - WRAP_UP_SECONDS).toBe(false);
+    expect(0 >= smallest.maxTokens - WRAP_UP_TOKENS).toBe(false);
   });
 
   it("never puts the key on the config object", () => {

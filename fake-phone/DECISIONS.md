@@ -350,7 +350,45 @@ hits and a fast user occasionally would too.
 
 ---
 
-## D22 — Development ran as parallel slices against a frozen contract
+## D22 — The server is the authority on what a call costs
+
+**Decision.** `/api/voice/session` records every session it mints; `/api/voice/turn`
+looks the id up, derives elapsed time from the server-recorded issue time, and
+accumulates token usage server-side. `elapsedSeconds` and `tokensUsed` were
+removed from the request schema entirely.
+
+**Why.** They were client-supplied. A caller could post any `sessionId` with both
+counters reset to zero on every request and drive unbounded billable model calls
+straight past the per-call caps. A budget enforced by the party being budgeted is
+not a budget.
+
+**Consequence, accepted.** The store is in-memory, so on a multi-instance deploy a
+session minted on instance A is unknown to B and that call ends cleanly instead of
+continuing uncapped. It fails *closed*, which is the correct direction for a spend
+guard — and it is why production wants shared storage.
+
+---
+
+## D23 — A rejected camera `flip()` guarantees no camera is running
+
+**Decision.** When switching cameras fails, the adapter does not restore the
+previous stream and rethrow. A rejection means nothing is live. Recovery — where
+the previous facing is known — happens one layer up, in the hook.
+
+**Why.** The original code re-acquired the previous camera, kept it, and then
+threw. The UI treats a rejection as "the camera is off", drops its preview, and
+shows the error state — while the hardware indicator stays lit with nothing on
+screen. In a safety app, a camera the user believes is off but which is actually
+running is the worst bug available. The port's doc comment now states the
+guarantee, because it is a contract, not an implementation detail.
+
+**Rejected.** Resolving with the restored stream. `flip()` returns a bare
+`MediaStream` with no way to say *which* camera came back, so the caller would
+record the facing it never got — an un-mirrored selfie and a desynced next flip.
+
+---
+
+## D24 — Development ran as parallel slices against a frozen contract
 
 **Decision.** The foundation (domain, ports, container, tokens, app shell) was
 built and committed first; six slices then ran concurrently against it on

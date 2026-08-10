@@ -63,6 +63,28 @@ test.describe("the call is the entry surface", () => {
   });
 });
 
+test.describe("delayed calls", () => {
+  test("cancelling the countdown really cancels it", async ({ page }) => {
+    // Regression test. Cancel used to call `router.refresh()`, which re-renders
+    // the server component but deliberately preserves client state — so the
+    // countdown kept running behind the refresh and the call rang anyway, which
+    // is the one thing a button labelled Cancel must not do.
+    await seedSilentRing(page, { ringDelaySeconds: 5 });
+    await page.goto("/");
+
+    await expect(page.getByTestId("ring-countdown")).toBeVisible();
+    await page.getByTestId("ring-countdown-cancel").click();
+
+    await expect(page.getByTestId("home-screen")).toBeVisible();
+    await expect(page).toHaveURL(/\/home$/);
+
+    // Well past the 5s delay: nothing may ring.
+    await page.waitForTimeout(7000);
+    await expect(page.getByTestId("home-screen")).toBeVisible();
+    await expect(page.getByTestId(CALL.answer)).toHaveCount(0);
+  });
+});
+
 test.describe("scripted voice", () => {
   test("the caller's lines appear as subtitles so the call reads as real without sound", async ({
     page,

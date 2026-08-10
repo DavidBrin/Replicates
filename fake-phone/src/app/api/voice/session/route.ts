@@ -39,6 +39,7 @@ import {
 import { clientKeyFor, sessionRateLimiter } from "@/lib/voice/rate-limit";
 import { isConfigured, readVoiceConfig } from "@/lib/voice/config";
 import { sessionRequestSchema } from "@/lib/voice/requests";
+import { voiceSessions } from "@/lib/voice/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,9 +72,20 @@ export async function POST(request: Request): Promise<Response> {
     return invalidVoiceRequest("A voice session needs a personaId.");
   }
 
+  /**
+   * The mint is a *record*, not just a string. `/api/voice/turn` will look this
+   * up and enforce the caps against it, so the id it hands back means "the
+   * server has agreed to run this call, and is counting" rather than "here is
+   * an opaque token nobody checks" (which is what it used to mean).
+   */
+  const session = voiceSessions.open({
+    personaId: parsed.data.personaId,
+    ttlMs: SESSION_TTL_SECONDS * 1000,
+  });
+
   const body: VoiceSessionResponse = {
-    sessionId: crypto.randomUUID(),
-    expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
+    sessionId: session.id,
+    expiresAt: session.expiresAt,
     aiProvider: config.aiProvider,
     ephemeralToken: null,
     maxDurationSeconds: config.maxDurationSeconds,

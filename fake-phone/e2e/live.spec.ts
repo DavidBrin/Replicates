@@ -28,6 +28,9 @@ test.describe("live stream mode", () => {
     await expect(page.getByTestId("live-badge")).toBeVisible();
     // 1240 must render abbreviated, per the platform convention.
     await expect(page.getByTestId("viewer-count")).toHaveText(/1\.2K/);
+    // The configured broadcaster identity has to actually appear — a settings
+    // field that changes nothing on screen reads as a broken app.
+    await expect(page.getByTestId("live-username")).toHaveText(/rowan/);
 
     // The video element must be inline and muted, or iOS takes it fullscreen
     // and the illusion dies.

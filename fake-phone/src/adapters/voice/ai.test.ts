@@ -219,7 +219,10 @@ describe("createAiVoiceProvider — a working call", () => {
     ]);
   });
 
-  it("accumulates the token budget from usage frames", async () => {
+  it("never sends its own accounting, so it cannot choose its own budget", async () => {
+    // The caps are enforced against the server's record of the session. A turn
+    // carrying `elapsedSeconds`/`tokensUsed` is a turn that can reset them to
+    // zero forever, which is exactly what this stopped doing.
     const fetchSpy = vi
       .fn()
       .mockResolvedValueOnce(sessionResponse())
@@ -242,11 +245,100 @@ describe("createAiVoiceProvider — a working call", () => {
       ).events(),
     );
 
-    const secondTurn = JSON.parse(String((fetchSpy.mock.calls[2][1] as RequestInit).body)) as {
-      tokensUsed: number;
-    };
+    for (const call of [fetchSpy.mock.calls[1], fetchSpy.mock.calls[2]]) {
+      const body = JSON.parse(String((call[1] as RequestInit).body)) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("tokensUsed");
+      expect(body).not.toHaveProperty("elapsedSeconds");
+      // The minted session id is the only thing tying a turn to its budget.
+      expect(body.sessionId).toBe("session-1");
+    }
+  });
 
-    expect(secondTurn.tokensUsed).toBe(31);
+  it("ends the call cleanly when the server no longer knows the session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(sessionResponse())
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ code: "session_not_found", message: "gone" }), {
+            status: 404,
+          }),
+        ),
+    );
+
+    const events = await collect(
+      (
+        await createAiVoiceProvider({ speech: makeSpeech() }).start(
+          PERSONA,
+          new AbortController().signal,
+        )
+      ).events(),
+    );
+
+    expect(events.map((event) => event.type)).toEqual([
+      "connecting",
+      "connected",
+      "error",
+      "ended",
+    ]);
+    expect(events[2]).toMatchObject({ message: expect.stringMatching(/expired/i) });
+  });
+
+  describe("the caller identity the model is briefed with", () => {
+    async function turnBodyFor(deps: Parameters<typeof createAiVoiceProvider>[0]) {
+      const fetchSpy = vi
+        .fn()
+        .mockResolvedValueOnce(sessionResponse())
+        .mockResolvedValueOnce(sseResponse([{ event: "ended", data: { reason: "token_cap" } }]));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      await collect((await createAiVoiceProvider(deps).start(PERSONA, new AbortController().signal)).events());
+
+      return JSON.parse(String((fetchSpy.mock.calls[1][1] as RequestInit).body)) as {
+        callerName: string;
+        callerLabel: string;
+      };
+    }
+
+    it("is the one the user configured, not the persona's suggestion", async () => {
+      // The screen says "Mum". A model briefed as "Sam" introduces itself as Sam
+      // and the illusion the whole product rests on is gone.
+      const body = await turnBodyFor({
+        speech: makeSpeech(),
+        callerIdentity: () => ({ name: "Mum", label: "mobile" }),
+      });
+
+      expect(body.callerName).toBe("Mum");
+      expect(body.callerLabel).toBe("mobile");
+    });
+
+    it("falls back to the persona's suggestion when nothing is configured", async () => {
+      const body = await turnBodyFor({ speech: makeSpeech() });
+
+      expect(body.callerName).toBe(PERSONA.suggestedCallerName);
+      expect(body.callerLabel).toBe(PERSONA.suggestedCallerLabel);
+    });
+
+    it("ignores a blank configured name rather than briefing an unnamed caller", async () => {
+      const body = await turnBodyFor({
+        speech: makeSpeech(),
+        callerIdentity: () => ({ name: "   ", label: "" }),
+      });
+
+      expect(body.callerName).toBe(PERSONA.suggestedCallerName);
+    });
+
+    it("survives a settings read that throws", async () => {
+      const body = await turnBodyFor({
+        speech: makeSpeech(),
+        callerIdentity: () => {
+          throw new Error("localStorage is unavailable");
+        },
+      });
+
+      expect(body.callerName).toBe(PERSONA.suggestedCallerName);
+    });
   });
 
   it("posts only the persona fields the server needs", async () => {

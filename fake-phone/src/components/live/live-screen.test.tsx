@@ -187,6 +187,56 @@ describe("LiveScreen", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows the configured broadcaster identity over the stream", async () => {
+    const camera = stubCamera();
+    const settings: Settings = {
+      ...defaultSettings,
+      live: { ...defaultSettings.live, username: "rowan", avatar: "" },
+    };
+    renderLive(camera, settings);
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+
+    await waitFor(() => expect(screen.getByTestId("live-username")).toBeInTheDocument());
+    // A setting that changes nothing on screen reads as a broken setting.
+    expect(screen.getByTestId("live-username")).toHaveTextContent("rowan");
+    // No avatar configured: the monogram, through the same shared helper the
+    // call screen uses.
+    expect(screen.getByTestId("live-avatar")).toHaveTextContent("R");
+  });
+
+  it("uses the configured avatar image when there is one", async () => {
+    const camera = stubCamera();
+    const avatar = "data:image/png;base64,iVBORw0KGgo=";
+    const settings: Settings = {
+      ...defaultSettings,
+      live: { ...defaultSettings.live, username: "rowan", avatar },
+    };
+    renderLive(camera, settings);
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+
+    await waitFor(() => expect(screen.getByTestId("live-avatar")).toBeInTheDocument());
+    expect(screen.getByTestId("live-avatar")).toHaveStyle({
+      backgroundImage: `url("${avatar}")`,
+    });
+    // The image replaces the monogram rather than sitting behind it.
+    expect(screen.getByTestId("live-avatar")).toHaveTextContent("");
+  });
+
+  it("carries no platform branding in the live chrome", async () => {
+    // research/instagram-live-ui.md §9: the category pattern is fine, the brand
+    // assets are not — and the broadcaster identity is the newest place a
+    // wordmark could creep in.
+    const camera = stubCamera();
+    renderLive(camera);
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+    await waitFor(() => expect(screen.getByTestId("live-badge")).toBeInTheDocument());
+
+    expect(screen.getByTestId("live-screen").textContent).not.toMatch(/instagram|tiktok/i);
+  });
+
   it("keeps the current stream when a flip finds only one camera", async () => {
     const single = Object.assign(new Error("one camera"), {
       code: "single_camera",
@@ -205,5 +255,52 @@ describe("LiveScreen", () => {
     // Still live: a refused flip must never take the picture away.
     expect(screen.getByTestId("live-badge")).toBeInTheDocument();
     expect(screen.queryByTestId("camera-primer")).not.toBeInTheDocument();
+  });
+
+  it("re-opens the camera it had when a flip fails outright", async () => {
+    // The adapter has to release the running camera before it can ask for the
+    // other one, so a failed flip arrives here with the picture already gone
+    // and nothing running. Dropping the user onto the error primer would end
+    // the broadcast because a *second* camera would not open.
+    const busy = Object.assign(new Error("busy"), { name: "NotReadableError" });
+    const camera = stubCamera({ flip: () => Promise.reject(busy) });
+    renderLive(camera);
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+    await waitFor(() => expect(screen.getByTestId("live-badge")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText("Flip camera"));
+
+    await waitFor(() =>
+      expect(screen.getByText("Could not switch cameras.")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("camera-primer")).not.toBeInTheDocument();
+    // Re-opened the camera it was already on, not the one that just refused.
+    expect(camera.calls).toEqual(["user", "user"]);
+  });
+
+  it("explains the failure when the camera cannot be re-opened either", async () => {
+    const busy = Object.assign(new Error("busy"), { name: "NotReadableError" });
+    let started = 0;
+    const camera = stubCamera({
+      flip: () => Promise.reject(busy),
+      start: () => {
+        started += 1;
+        // The first start succeeds; the recovery start finds the camera gone.
+        return started === 1
+          ? Promise.resolve(fakeStream())
+          : Promise.reject(Object.assign(new Error("gone"), { name: "NotFoundError" }));
+      },
+    });
+    renderLive(camera);
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+    await waitFor(() => expect(screen.getByTestId("live-badge")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText("Flip camera"));
+
+    // The original failure is what gets reported, not the recovery's.
+    await waitFor(() => expect(screen.getByText("The camera is busy")).toBeInTheDocument());
+    expect(screen.getByTestId("camera-primer")).toBeInTheDocument();
   });
 });

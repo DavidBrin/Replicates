@@ -66,6 +66,26 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
       dispatch({ type: "RING" });
       return;
     }
+    const { wakeLock } = container;
+
+    // The wake lock is held for the *countdown*, not only for the call.
+    //
+    // A phone with a 30s display timeout locks itself halfway through a 60s
+    // delay, and a locked screen suspends both this interval and the audio —
+    // so the call simply never arrives. That is the "it never rang" one-star
+    // review the competitive research found under every app in this category,
+    // and D12 says we state the constraint and mitigate it rather than ship it
+    // silently. `request()` never throws; a denied lock just means the screen
+    // may still dim, which is the status quo, not a regression.
+    const acquired = wakeLock.request();
+    // Release is chained onto the request rather than called outright: the
+    // adapter holds a single sentinel it assigns *after* its await, so a
+    // countdown cancelled in its first frames would otherwise release nothing
+    // and strand a lock that keeps the screen on for the rest of the session.
+    const releaseWakeLock = () => {
+      void acquired.then(() => wakeLock.release());
+    };
+
     // No synchronous `setCountdownRemaining` here: the initial value already
     // came from this hook's `useState` initializer, and setting it again on
     // mount would just be a second render for the same number. The parent only
@@ -78,14 +98,25 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
       if (remaining <= 0) {
         clearInterval(id);
         setCountdownRemaining(null);
+        // Handed back on the ring: the connecting effect takes its own lock
+        // when the call is answered, and the adapter keeps one sentinel, so a
+        // second request over a live one would orphan the first.
+        releaseWakeLock();
         dispatch({ type: "RING" });
       }
     }, 1000);
-    return () => clearInterval(id);
+
+    // Covers both cancellation (the countdown screen's Cancel unmounts this)
+    // and unmount. Releasing twice is harmless; the adapter has already
+    // dropped its sentinel.
+    return () => {
+      clearInterval(id);
+      releaseWakeLock();
+    };
     // Intentionally keyed on the delay only: re-running this when `phase`
     // changes would restart the countdown after the call is answered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.ringDelaySeconds]);
+  }, [settings.ringDelaySeconds, container]);
 
   /* ----------------------------------------------------------- ringtone -- */
 
@@ -106,7 +137,16 @@ export function useCallController(settings: Settings, onEnded: () => void): Call
     // happened and this never fires.
     const unlockOnGesture = () => {
       if (cancelled) return;
-      void ringtone.unlock().then(() => ringtone.startRinging().catch(() => {}));
+      void ringtone.unlock().then(() => {
+        // Re-checked after the await, not only before it. The tap that unlocks
+        // audio is very often the same tap that answers or declines: this
+        // listener runs on `pointerdown`, the button's `click` tears the effect
+        // down, and the unlock promise then resolves into a torn-down world. A
+        // `startRinging()` from here would loop the ringtone over a live call
+        // or over the home screen, with nothing left mounted to stop it.
+        if (cancelled) return;
+        return ringtone.startRinging().catch(() => {});
+      });
     };
     document.addEventListener("pointerdown", unlockOnGesture, { once: true });
 

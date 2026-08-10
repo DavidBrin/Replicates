@@ -111,7 +111,16 @@ export interface CameraSource {
   isSupported(): boolean;
   start(facing: CameraFacing): Promise<MediaStream>;
   stop(): void;
-  /** Resolves to the new stream, or rejects if only one camera exists. */
+  /**
+   * Resolves to the new stream, or rejects if only one camera exists.
+   *
+   * A rejection also guarantees that **no camera is running** — an implementation
+   * must never leave a stream live behind a thrown error. The UI treats a
+   * rejection as "the camera is off" and stops showing a preview, so a stream
+   * that survived it would keep the hardware indicator lit with nothing on
+   * screen. In a safety app, a camera the user believes is off but which is
+   * actually recording is the worst bug available.
+   */
   flip(): Promise<MediaStream>;
 }
 
