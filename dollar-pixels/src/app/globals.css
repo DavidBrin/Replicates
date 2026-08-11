@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — SPEC §11.
+ *
+ * Every value is ours. `research/original-site.md` §3 records what the 2005
+ * stylesheet and its GIFs actually measured, so the lineage is traceable
+ * without a byte of it being copied (DECISIONS D20).
+ */
+@theme {
+  --color-ground: #8f8f8f;
+  --color-chrome: #5a5a5a;
+  --color-panel: #e4e4e4;
+  --color-panel-2: #f4f4f4;
+  --color-rule: #3d3d3d;
+  --color-gold: #d9ab22;
+  --color-gold-dim: #b8901a;
+  --color-ink: #1b1b1b;
+  --color-ink-2: #4d4d4d;
+  --color-ink-3: #7a7a7a;
+  --color-link: #000099;
+  --color-sold: #1f9d2f;
+  --color-open: #c0182b;
+  --color-empty-a: #e1e1e1;
+  --color-empty-b: #d6d6d6;
+  --color-select: #0a7cff;
+
+  --font-sans: var(--font-stack);
+}
+
+/*
+ * The same palette as plain custom properties, mirroring the sibling project
+ * `bet`.
+ *
+ * Both spellings resolve at runtime — `@theme` emits its variables onto
+ * `:root` — so a consumer may read either. The mirror exists for the code that
+ * is not Tailwind's: the hand-written helper classes below, and the canvas
+ * renderer, which reads its checker and selection colours off
+ * `getComputedStyle` at paint time rather than carrying hex it would then have
+ * to keep in step with this file. Those have no reason to depend on the theme
+ * layer's naming. Keep the two blocks aligned.
+ */
+:root {
+  --ground: #8f8f8f;
+  --chrome: #5a5a5a;
+  --panel: #e4e4e4;
+  --panel-2: #f4f4f4;
+  --rule: #3d3d3d;
+  --gold: #d9ab22;
+  --gold-dim: #b8901a;
+  --ink: #1b1b1b;
+  --ink-2: #4d4d4d;
+  --ink-3: #7a7a7a;
+  --link: #000099;
+  --sold: #1f9d2f;
+  --open: #c0182b;
+  --empty-a: #e1e1e1;
+  --empty-b: #d6d6d6;
+  --select: #0a7cff;
+
+  /*
+   * Trebuchet MS is the original's face and ships on both macOS and Windows,
+   * so the period feel costs no web font, no download and no licence question
+   * (DECISIONS D20). Nothing here is fetched.
+   */
+  --font-stack: "Trebuchet MS", "Lucida Grande", Helvetica, Verdana, system-ui,
+    sans-serif;
+
+  /*
+   * The hardest layout constraint in the project (DECISIONS D1): the grid is
+   * 1200px wide and must render at 1:1, because at any scale below 1.0 a
+   * 3-pixel block stops landing on device-pixel boundaries and the block grid
+   * smears. 1240 = 1200 grid + 2px frame + the column's 2 x 16px gutters,
+   * with 6px spare, and still leaves 20px of margin either side at 1280.
+   */
+  --layout-max: 1240px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-stack);
+  }
+
+  a {
+    color: var(--link);
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  /*
+   * One global ring rather than a focus class per component: an interactive
+   * element added by a later slice cannot quietly ship without one.
+   */
+  :focus-visible {
+    outline: 2px solid var(--select);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Helper classes live outside `@layer` on purpose. Unlayered CSS beats every
+ * Tailwind utility regardless of source order, so `.tnum` wins over a stray
+ * `font-variant-numeric` utility instead of losing to whichever was emitted
+ * last.
+ */
+
+/* Every count, price and coordinate in the product renders with tabular
+   figures, so a live sold/available counter does not jitter as it ticks. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Off-screen until focused, then pinned over the chrome. */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  z-index: 100;
+  border: 1px solid var(--rule);
+  background: var(--panel-2);
+  padding: 0.5rem 0.75rem;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+  left: 0.5rem;
+}
+
+/*
+ * Honoured globally rather than per-animation: the only motion in the app is
+ * the spinner and a few colour transitions, none of which carry meaning.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
