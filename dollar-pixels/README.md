@@ -25,7 +25,7 @@ real path settle through the same code, so the switch is not a leap of faith.
 | [`src/domain`](src/domain) | Pure logic: geometry, money, pricing, the order state machine, tile validation |
 | [`src/domain/services`](src/domain/services) | Checkout, settlement, pages, seeding — everything that changes state |
 | [`src/ports`](src/ports) | The five interfaces: `Store`, `PaymentProvider`, `Clock`, `IdGen`, `AuthProvider` |
-| [`src/adapters`](src/adapters) | Their implementations: memory + Postgres, mock + Stripe, demo sessions |
+| [`src/adapters`](src/adapters) | Their implementations: SQLite + Postgres + memory, mock + Stripe, demo sessions |
 | [`src/components/grid`](src/components/grid) | The canvas renderer and its hit-testing |
 | [`src/components/buy`](src/components/buy) | Selection panel, tile uploader, the accessible claims list |
 | [`src/app`](src/app) | Routes — thin handlers and the screens |
@@ -39,8 +39,12 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. Nothing to configure — no keys, no database, no account.
+Open <http://localhost:3000>. Nothing to configure — no keys, no database server, no account.
 You sign in by typing a name, and you buy blocks with money that does not exist.
+
+**What you buy stays bought.** The demo writes to a SQLite file at `.data/dollar-pixels.db`
+through Node's built-in `node:sqlite`, so there is nothing to install and nothing to migrate —
+the schema is applied when the file is opened. Delete the file to reset the wall.
 
 | Command | What it does |
 |---|---|
@@ -112,8 +116,8 @@ Ports and adapters, with a pure core and one composition root.
         │                            ▲
         └── src/components           │
             (canvas, panels)    src/adapters
-                                 memory │ postgres
-                                 mock   │ stripe
+                            sqlite │ postgres │ memory
+                            mock   │ stripe
 ```
 
 Two rules, enforced by a test rather than by convention
@@ -124,8 +128,8 @@ import React, Next, an adapter or a route; `src/components` may not import an ad
 
 - **`Store`** — because Vercel's filesystem is read-only and `/tmp` is not shared between
   invocations, so the obvious JSON-file store works locally and then loses purchases in
-  production with no error at all. In-memory for development, Postgres for deployment, one
-  shared contract test suite for both. [D13](DECISIONS.md#d13--the-store-is-a-port-because-the-obvious-simple-choice-fails-silently-on-vercel)
+  production with no error at all. SQLite for the local demo, Postgres for deployment,
+  in-memory for tests — one shared contract suite held against all three. [D13](DECISIONS.md#d13--the-store-is-a-port-because-the-obvious-simple-choice-fails-silently-on-vercel)
 - **`PaymentProvider`** — because the mock has to be a *rehearsal* for Stripe, not a shortcut
   around it. Both providers converge on one `settle(orderId, ref)`; the only difference is who
   says "paid". Every fake-money test is therefore also a test of the code Stripe will drive.
@@ -157,24 +161,69 @@ The play-money banner is driven by the same variable, and defaults to *showing*.
 variable warns you about fake money on a real deployment, which is a confusing mistake — the
 other way round is the one that makes someone think they spent something.
 
-## Deploying
+## Storage: three drivers, and why the demo one cannot be the deployed one
 
-Vercel detects this with no configuration. Point the project root at `dollar-pixels/` and
-deploy.
+| `STORE_DRIVER` | Where it puts things | Use it for |
+|---|---|---|
+| `sqlite` *(default)* | a file at `SQLITE_PATH`, default `.data/dollar-pixels.db` | **local demo** — survives restarts, no install, no migration |
+| `postgres` | `DATABASE_URL` | **deployment** — the only one that works on Vercel |
+| `memory` | the process | the test suite |
 
-It will run with an entirely empty environment, and **it will forget everything**. The default
-store is in-memory, which on Vercel means per-function-instance and gone on the next cold
-start. That is a legitimate way to show the thing off; it is not a way to sell anything.
+**SQLite is not a deployment option, and the reason is specific.** Vercel Functions run on a
+read-only filesystem with a writable `/tmp` that is *not shared between invocations*. A SQLite
+file there fails in two ways: writing into the project directory throws `EROFS` outright, and
+writing to `/tmp` appears to work and then loses data intermittently with no error at all,
+because the next request can land on a different instance. A marketplace that sometimes forgets
+a purchase is worse than one that refuses to start.
 
-For a deployment that remembers:
+An unrecognised `STORE_DRIVER` now throws rather than quietly falling back — a misspelt
+`Postgres` used to boot on the in-memory adapter and forget every sale on each cold start.
 
+## Deploying to Vercel
+
+Vercel detects this with no configuration. Point the project root at `dollar-pixels/`.
+
+**1. Create the database.** In your Vercel project, *Storage → Create → Neon* (any Postgres
+works; Neon is the first-party integration and has a free tier). Attaching it injects
+`DATABASE_URL` into the project automatically — you do not have to copy it by hand.
+
+**2. Apply the schema, once.** There is no migration runner; the DDL is idempotent and
+committed:
+
+```bash
+psql "$DATABASE_URL" -f src/adapters/store/schema.sql
 ```
-STORE_DRIVER=postgres
-DATABASE_URL=postgres://…      # Vercel's Neon integration injects this
-AUTH_SECRET=…                  # openssl rand -base64 32
-```
 
-Then apply the schema once: `psql "$DATABASE_URL" -f src/adapters/store/schema.sql`.
+Pull the URL locally with `vercel env pull .env.local` if you need it in a shell.
+
+**3. Set the environment variables** (*Settings → Environment Variables*):
+
+| Variable | Value | Why |
+|---|---|---|
+| `STORE_DRIVER` | `postgres` | **Required.** Without it the deployment runs on the in-memory store and forgets everything on each cold start. |
+| `DATABASE_URL` | injected by the integration | Required by `STORE_DRIVER=postgres`; the app refuses to start without it. |
+| `AUTH_SECRET` | `openssl rand -base64 32` | **Set this.** Unset, a random secret is generated per process, so sessions break across instances and on every cold start. |
+| `PAYMENT_PROVIDER` | `mock`, or `stripe` for real money | Defaults to `mock`. |
+| `PLATFORM_FEE_BPS` | `0` | Optional. Basis points of block sales the platform keeps on premium pages. |
+
+**4. Only if you want real money** — see *Turning on real money* above:
+
+| Variable | Value |
+|---|---|
+| `STRIPE_SECRET_KEY` | `sk_live_…` / `sk_test_…` |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` from the webhook endpoint you create |
+
+Then add a Stripe webhook pointing at `https://<your-domain>/api/stripe/webhook` for
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed` and `checkout.session.expired`.
+
+`PAYMENT_PROVIDER=stripe` without both secrets is a fatal startup error, by design.
+
+**A caveat worth reading before you take money.** The Postgres adapter now has a regression
+suite run against SQLite for the constraint behaviour it shares, but it has still never been
+executed against a real Postgres server. The contract suite is written to run against it
+unchanged — add a `postgres.test.ts` gated on `DATABASE_URL` and point it at a scratch database
+before trusting it with anything.
 
 ## Known gaps
 
@@ -194,10 +243,11 @@ Then apply the schema once: `psql "$DATABASE_URL" -f src/adapters/store/schema.s
 
 **Storage**
 
-4. **`PostgresStore` has never been executed against a real database.** It is correct by
-   inspection and by a contract suite written to run against it unchanged, but there was no
-   Postgres in the build environment. The contract test is deliberately adapter-agnostic so a
-   `postgres.test.ts` gated on `DATABASE_URL` can be dropped in. Do that before deploying it.
+4. **`PostgresStore` has never been executed against a real database.** SQLite now covers the
+   constraint behaviour the two share — and immediately found a bug that would have taken the
+   Postgres deployment down at boot (D32) — but the adapter's own SQL has still never run. The
+   contract test is adapter-agnostic so a `postgres.test.ts` gated on `DATABASE_URL` drops in
+   unchanged. Do that before deploying it.
 5. **Transactional serializability is not part of the `Store` contract.** The memory adapter
    serialises transactions through a mutex; Postgres at READ COMMITTED would need explicit row
    locks to match. No current service depends on the difference, but the port does not say so.
@@ -213,7 +263,7 @@ Then apply the schema once: `psql "$DATABASE_URL" -f src/adapters/store/schema.s
 
 ## Development notes
 
-365 unit and property tests, 30 e2e across desktop and mobile. All green, and that is
+414 unit and property tests, 30 e2e across desktop and mobile. All green, and that is
 precisely the point of this section: **the most important bugs in the project were invisible
 to every one of them.**
 

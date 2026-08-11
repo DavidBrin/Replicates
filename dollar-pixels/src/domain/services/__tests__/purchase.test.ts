@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createMemoryStore } from "@/adapters/store";
 import { MockPaymentProvider } from "@/adapters/payment/mock";
 import { FixedClock, SeqIdGen } from "@/adapters/system";
@@ -518,6 +521,88 @@ describe("unpaid holds are capped per buyer", () => {
       ...claimBody({ bx: 100, by: 100, bw: 2, bh: 2 }),
     });
     expect(seventh.order.status).toBe("pending");
+  });
+});
+
+describe("against a store that enforces foreign keys", () => {
+  /**
+   * The whole buy path, run against SQLite rather than the memory store.
+   *
+   * This exists because of a bug the rest of this file could not see. Both real
+   * schemas declare `holds.order_id` as a foreign key onto `orders(id)`, and
+   * the service reserved blocks *before* inserting the order row — so every
+   * purchase raised a constraint violation on any real database, while 400-odd
+   * tests stayed green against an in-memory store that enforces no constraints
+   * at all. It would have taken the Postgres deployment down at seeding, on
+   * first boot, before a single request.
+   *
+   * The shared contract suite cannot catch it either: it seeds an order and
+   * then reserves, which is the opposite order from every production caller.
+   * Only exercising the *service* against a constraint-enforcing store does.
+   */
+  let dir: string;
+  let sqlite: Store;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "dp-fk-"));
+    const { SqliteStore } = await import("@/adapters/store/sqlite");
+    sqlite = new SqliteStore(join(dir, "test.db"));
+    h = { ...h, store: sqlite };
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("buys and settles blocks without violating a constraint", async () => {
+    await makeUser(h.store, "usr_a", "Ana");
+    const page = await makePage(h.store);
+
+    const { order } = await buyBlocks(h, {
+      slug: page.slug,
+      buyerId: "usr_a",
+      ...claimBody(),
+    });
+    expect(order.amountCents).toBe(400);
+
+    const result = await settle(h, order.id, "evt_fk");
+    expect(result.claim).not.toBeNull();
+    expect((await gridSnapshot(h, page.slug)).soldBlocks).toBe(4);
+  });
+
+  it("spends a free allowance without violating a constraint", async () => {
+    await makeUser(h.store, "usr_creator", "Creator");
+    const page = await makePage(h.store, {
+      kind: "private",
+      ownerId: "usr_creator",
+      allowanceTotal: PRIVATE_PAGE_ALLOWANCE,
+    });
+
+    const order = await claimFree(h, {
+      slug: page.slug,
+      buyerId: "usr_creator",
+      ...claimBody({ bx: 0, by: 0, bw: 3, bh: 3 }),
+    });
+    const result = await settle(h, order.id, `allowance_${order.id}`);
+
+    expect(result.claim).not.toBeNull();
+    expect((await h.store.getPage(page.id))?.allowanceUsed).toBe(9);
+  });
+
+  it("leaves no order behind when the blocks are already taken", async () => {
+    // The reservation now happens after the insert, so a refused reservation
+    // has to take the order row down with it rather than leaving an orphan.
+    await makeUser(h.store, "usr_a", "Ana");
+    await makeUser(h.store, "usr_b", "Ben");
+    const page = await makePage(h.store);
+
+    await buyBlocks(h, { slug: page.slug, buyerId: "usr_a", ...claimBody() });
+
+    await expect(
+      buyBlocks(h, { slug: page.slug, buyerId: "usr_b", ...claimBody() }),
+    ).rejects.toMatchObject({ code: "unavailable" });
+
+    expect(await h.store.listOrdersByBuyer("usr_b")).toHaveLength(0);
   });
 });
 

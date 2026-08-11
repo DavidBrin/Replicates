@@ -588,3 +588,66 @@ simply evaporate from a creator's 69.
 **Consequence.** Nested `transact` joins the outer transaction rather than opening a new one —
 a property the store contract already guaranteed and tested — so this needed no new store
 method, only the two halves put inside the same boundary.
+
+---
+
+## D31 — SQLite is the local store; Postgres is for deployment only
+
+**Decision.** Three drivers. `sqlite` (the default) writes a file under `.data/` via Node's
+built-in `node:sqlite`. `postgres` is for Vercel. `memory` is what the test suite runs against.
+
+**Why.** The in-memory default made the local demo forget every purchase on restart, which is
+a poor way to show someone a marketplace. SQLite fixes that with **no dependency at all** —
+`node:sqlite` ships with Node 26, so there is no package to install, no native build to fail,
+and no migration step: the schema is applied when the file is opened.
+
+It is deliberately not the deployment answer. On Vercel the filesystem is read-only and `/tmp`
+is not shared between invocations, so a SQLite file there works in testing and then loses data
+silently (`research/persistence-and-vercel.md` §1). That is the exact failure D13 exists to
+avoid, and adding a third driver does not change it.
+
+**Consequence.** The unit suite pins `STORE_DRIVER=memory` in `vitest.config.mts`, because a
+suite that opened the demo database would carry rows between runs and fail differently on a
+second `npm test`. SQLite is exercised on purpose against a temp file, by its own contract run.
+
+---
+
+## D32 — The order row is written before the hold that points at it
+
+**Decision.** `buyBlocks` and `claimFree` insert the order first, then reserve the blocks,
+inside one transaction.
+
+**Why.** They did it the other way round, and it was broken everywhere it mattered.
+`holds.order_id` is a foreign key onto `orders(id)` in both real schemas and neither declares
+it deferrable, so reserving before the order exists raises a constraint violation at statement
+time. **Every block purchase would have failed on Postgres**, and `seedFlagship` was worse — it
+reserved against order ids it never inserted at all, so the container build would have rejected
+at boot, before serving one request, and `getContainer` memoises the *rejected promise*, so
+that instance would have returned 500 forever.
+
+None of it was visible. The in-memory store enforces no foreign keys, so 400-odd tests passed.
+The shared contract suite could not catch it either: it seeds an order and *then* reserves,
+which is the opposite order from every production caller. Adding SQLite is what surfaced it —
+it failed on the first request.
+
+**Consequence.** There is now a regression suite that runs the buy path, the free-claim path
+and the refused-reservation rollback against SQLite specifically, because exercising the
+*service* against a constraint-enforcing store is the only thing that would have caught this.
+The README's claim that the Postgres adapter was "correct by inspection" was wrong, and this is
+what wrong looks like.
+
+---
+
+## D33 — Checkout Sessions accept cards only
+
+**Decision.** `payment_method_types: ["card"]`.
+
+**Why.** D28 stopped settling an unpaid `completed` session — correct, and on its own it turned
+a rare over-delivery into a guaranteed non-delivery. Delayed methods resolve hours or days
+later, and our hold lasts 35 minutes, so by the time `async_payment_succeeded` arrived the
+blocks would be long released and settlement would fail permanently: money taken, nothing
+delivered, and Stripe retrying for three days against a hold that cannot come back.
+
+Refusing those methods up front is the honest fix. Supporting them properly needs a hold that
+outlives the payment, which is a different product than a live grid where blocks must not sit
+frozen for days.

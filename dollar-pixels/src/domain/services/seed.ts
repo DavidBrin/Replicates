@@ -172,6 +172,36 @@ export async function seedFlagship(deps: SeedDeps): Promise<Page> {
   for (const { rect, tenant } of planned) {
     n++;
     const orderId = `ord_seed_${n}`;
+
+    // A real order row, not just an id.
+    //
+    // `holds.order_id` is a foreign key onto `orders(id)` in both real schemas,
+    // so reserving against an id that was never inserted fails outright with a
+    // constraint violation. The in-memory store enforces no foreign keys, so
+    // this passed everywhere until SQLite ran it — and it would have taken the
+    // Postgres deployment down on its first boot, at seeding, before serving a
+    // single request.
+    await deps.store.createOrder({
+      id: orderId,
+      kind: "blocks",
+      pageId: created.id,
+      buyerId: SEED_USER_ID,
+      amountCents: blocksIn(rect) * 100,
+      status: "pending",
+      provider: "seed",
+      providerRef: null,
+      payload: {
+        kind: "blocks",
+        pageId: created.id,
+        rect,
+        caption: tenant.caption,
+        colour: tenant.colour,
+        tile: null,
+      },
+      createdAt: SEED_EPOCH,
+      settledAt: null,
+    });
+
     // Seeded claims still go through reserve-then-claim rather than being
     // written straight in, so the seed exercises the same invariants a real
     // purchase does. A seed that bypassed them could hide a broken store.
@@ -195,7 +225,15 @@ export async function seedFlagship(deps: SeedDeps): Promise<Page> {
       orderId,
       createdAt: SEED_EPOCH,
     };
-    await deps.store.claimBlocks(claim, asOf);
+    const claimed = await deps.store.claimBlocks(claim, asOf);
+    // Leave the order in the state a real settled purchase would be in, so the
+    // seeded rows are not a shape the rest of the system never otherwise sees.
+    if (claimed) {
+      await deps.store.updateOrderStatus(orderId, "paid", {
+        providerRef: `seed_${n}`,
+        settledAt: SEED_EPOCH,
+      });
+    }
   }
 
   return created;

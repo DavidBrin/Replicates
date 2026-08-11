@@ -1,3 +1,4 @@
+import { HOLD_MINUTES } from "@/domain/order";
 import { buyBlocks } from "@/domain/services/checkout";
 import { AppError } from "@/domain/services/errors";
 import { getContainer, requireUser } from "@/lib/container";
@@ -36,7 +37,7 @@ export const POST = handler(
       orderId: order.id,
       amountCents: order.amountCents,
       redirectUrl: checkout.redirectUrl,
-      holdMinutes: 30,
+      holdMinutes: HOLD_MINUTES,
     });
   },
 );

@@ -61,8 +61,11 @@ function ReturnView() {
         if (found.status !== "pending") return;
       } catch (cause) {
         if (!live) return;
+        // Show the error but keep polling. A transient blip is the exact thing
+        // this page exists to ride out; giving up on the first one strands the
+        // buyer on an error screen for an order that settles a second later.
+        // Only the deadline below stops the loop.
         setError(cause instanceof Error ? cause.message : "Could not read that order.");
-        return;
       }
       if (Date.now() - startedAt >= GIVE_UP_MS) {
         setGaveUp(true);

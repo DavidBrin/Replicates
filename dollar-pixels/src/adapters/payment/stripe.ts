@@ -40,6 +40,21 @@ export interface StripeSessionCreateParams {
   mode: "payment";
   line_items: StripeLineItemParams[];
   expires_at: number;
+  /**
+   * Cards only, and deliberately.
+   *
+   * Delayed methods — bank debits, transfers — complete a session while
+   * `payment_status` is still "unpaid" and settle hours or days later. Our hold
+   * lasts 35 minutes, so by the time `async_payment_succeeded` arrived the
+   * blocks would be long released and settlement would fail permanently: money
+   * taken, nothing delivered, and the webhook retrying for three days against a
+   * hold that cannot come back.
+   *
+   * Refusing those methods up front is the honest fix. Supporting them properly
+   * means a hold that outlives the payment, which is a different product
+   * decision than the one this grid makes.
+   */
+  payment_method_types: ["card"];
   metadata: { orderId: string };
   success_url: string;
   cancel_url: string;
@@ -207,6 +222,7 @@ export class StripePaymentProvider implements PaymentProvider {
         mode: "payment",
         line_items: input.lines.map(toLineItem),
         expires_at: sessionExpiresAt(input.expiresAt, this.clock.now()),
+        payment_method_types: ["card"],
         // Carried so the webhook settles from the event alone, with no lookup
         // by session id first (research §5).
         metadata: { orderId: input.orderId },

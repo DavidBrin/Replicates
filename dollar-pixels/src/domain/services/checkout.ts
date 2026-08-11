@@ -69,8 +69,6 @@ export async function buyBlocks(
   const page = await requirePage(deps.store, input.slug);
   const { rect, caption, colour, tile } = validateClaimInput(page, input);
 
-  await assertHoldsAvailable(deps, input.buyerId, now);
-
   const amountCents = rectPrice(rect);
   const orderId = deps.idGen.next("ord");
   const expiresAt = holdExpiryFrom(now);
@@ -85,14 +83,24 @@ export async function buyBlocks(
   };
 
   const order = await deps.store.transact(async (tx) => {
-    const reserved = await tx.reserveBlocks(page.id, rect, orderId, expiresAt, now);
-    if (!reserved) {
-      fail(
-        "unavailable",
-        "Some of those blocks have just been taken. Refresh and pick again.",
-      );
-    }
-    return tx.createOrder({
+    // Counted inside the reserving transaction, not before it.
+    //
+    // Read outside, this was a check-then-act across two transactions: forty
+    // concurrent checkouts all observed "fewer than six open" and all forty
+    // succeeded, which is exactly the attacker the cap exists to stop.
+    await assertHoldsAvailable(tx, input.buyerId, now);
+
+    // The order row FIRST, then the hold that points at it.
+    //
+    // `holds.order_id` is a foreign key onto `orders(id)` in both real schemas
+    // and neither declares it deferrable, so reserving before the order exists
+    // raises a constraint violation at statement time and every purchase 500s.
+    // The in-memory store enforces no foreign keys, which is why this survived
+    // a full test suite; SQLite reproduced it on the first request.
+    //
+    // A failed reservation still throws, and the throw still rolls the whole
+    // transaction back, so the order never outlives the blocks it wanted.
+    const created = await tx.createOrder({
       id: orderId,
       kind: "blocks",
       pageId: page.id,
@@ -105,6 +113,15 @@ export async function buyBlocks(
       createdAt: now.toISOString(),
       settledAt: null,
     });
+
+    const reserved = await tx.reserveBlocks(page.id, rect, orderId, expiresAt, now);
+    if (!reserved) {
+      fail(
+        "unavailable",
+        "Some of those blocks have just been taken. Refresh and pick again.",
+      );
+    }
+    return created;
   });
 
   const blocks = blocksIn(rect);
@@ -177,18 +194,8 @@ export async function claimFree(
     const consumed = await tx.consumeAllowance(page.id, wanted);
     if (!consumed) fail("invalid", "You have used all of your free blocks.");
 
-    const reserved = await tx.reserveBlocks(
-      page.id,
-      rect,
-      orderId,
-      holdExpiryFrom(now),
-      now,
-    );
-    if (!reserved) {
-      fail("unavailable", "Some of those blocks have just been taken.");
-    }
-
-    return tx.createOrder({
+    // Order before hold, for the foreign key — see `buyBlocks`.
+    const created = await tx.createOrder({
       id: orderId,
       kind: "blocks",
       pageId: page.id,
@@ -201,6 +208,19 @@ export async function claimFree(
       createdAt: now.toISOString(),
       settledAt: null,
     });
+
+    const reserved = await tx.reserveBlocks(
+      page.id,
+      rect,
+      orderId,
+      holdExpiryFrom(now),
+      now,
+    );
+    if (!reserved) {
+      fail("unavailable", "Some of those blocks have just been taken.");
+    }
+
+    return created;
   });
 }
 
@@ -222,16 +242,16 @@ export async function claimFree(
 export const MAX_OPEN_HOLDS_PER_BUYER = 6;
 
 async function assertHoldsAvailable(
-  deps: CheckoutDeps,
+  store: Store,
   buyerId: string,
   now: Date,
 ): Promise<void> {
-  const orders = await deps.store.listOrdersByBuyer(buyerId);
+  const orders = await store.listOrdersByBuyer(buyerId);
 
   let open = 0;
   for (const order of orders) {
     if (order.status !== "pending") continue;
-    const hold = await deps.store.getHold(order.id);
+    const hold = await store.getHold(order.id);
     // An expired hold is not holding anything, so it does not count against
     // the buyer — the same read-time rule the store uses (DECISIONS D9).
     if (hold && !isExpiredAt(hold.expiresAt, now)) open++;

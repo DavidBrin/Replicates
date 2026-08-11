@@ -182,7 +182,20 @@ export function PageClient({ initial }: { initial: InitialPage }) {
         </div>
 
         <div className="flex w-full flex-col gap-3 2xl:w-96 2xl:shrink-0">
-          <SignInBar user={user} onChange={setUser} />
+          {/*
+            Signing in changes what the page knows about you — `isOwner` and
+            the free-block allowance both come from `/api/pages/[slug]`, which
+            is fetched by the `reloadKey` effect. Without the bump, a private
+            page's creator signs in on their own page and never sees the free
+            blocks until they reload by hand.
+          */}
+          <SignInBar
+            user={user}
+            onChange={(next) => {
+              setUser(next);
+              reload();
+            }}
+          />
           <BuyPanel
             slug={slug}
             dims={dims}

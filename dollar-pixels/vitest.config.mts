@@ -23,6 +23,12 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // `getStore()` defaults to the SQLite driver so the demo persists. Pinned
+    // back to memory here: a unit suite that opened `.data/dollar-pixels.db`
+    // would carry rows between runs and fail differently on a second `npm
+    // test`. The SQLite adapter is exercised on purpose, against a temp file,
+    // by `src/adapters/store/__tests__/sqlite.test.ts`.
+    env: { STORE_DRIVER: "memory" },
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,

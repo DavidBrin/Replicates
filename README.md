@@ -67,7 +67,7 @@ $10 and come with 69 free blocks; premium pages cost half the grid's face value
 and pay their creator for every block anyone buys on them.
 
 Next.js · canvas renderer with O(1) hit-testing · ports for storage and payment ·
-365 unit and property tests · 30 e2e across desktop and mobile.
+414 unit and property tests · 30 e2e across desktop and mobile.
 Built from five parallel research lanes, then five parallel build slices.
 
 **[Read the README →](dollar-pixels/README.md)** ·

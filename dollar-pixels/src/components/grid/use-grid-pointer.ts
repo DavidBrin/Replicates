@@ -173,6 +173,13 @@ export function useGridPointer(options: GridPointerOptions): GridPointer {
     draftRef.current = null;
     setDragging(false);
     setDraft(null);
+    // `blocked` and `clamped` describe the gesture that just ended, so they
+    // have to end with it. Left set, a drag that finished over taken blocks
+    // made the *next* selection — including one typed into the coordinate
+    // form — render with the unavailable tint and announce that its blocks
+    // were already taken, when nothing was wrong with it.
+    setBlocked(false);
+    setClamped(false);
   }, []);
 
   /** Turn a finished gesture into either a selection or an activation. */
