@@ -435,3 +435,156 @@ breaks on an install flag nobody remembers setting is the worst kind of failure 
 
 **Consequence.** The lazy `import()` still earns its keep: it keeps the packages out of the
 serverless bundle's execution path, so the mock configuration never pays their startup cost.
+
+---
+
+## D23 — The buy panel goes below the grid, not beside it
+
+**Decision.** The grid gets the full content column, with the buy panel stacked underneath.
+Side by side returns only at the `2xl` breakpoint.
+
+**Why.** This one shipped wrong and was caught by driving the app rather than by any test.
+The panel was a 384px sidebar, which left the grid about 808px of a 1240px column — so the
+1200px canvas was permanently scaled to 0.67 and a block occupied two device pixels instead
+of three. Every unit test still passed, because the maths was right; the arrangement was
+wrong. The headline claim of D1 — that this grid is the biggest one that still renders 1:1 —
+was quietly false on the only screen size it was chosen for.
+
+**Consequence.** There is now an e2e assertion that the canvas measures exactly 1200 CSS
+pixels on a desktop viewport. A number that load-bearing should not be re-derivable only by
+reading the CSS.
+
+---
+
+## D24 — Zoom multiplies the rendered size; the fit-scale is measured at 1×
+
+**Decision.** The responsive fit-scale is `containerWidth / gridWidthAt1x`, not
+`containerWidth / gridWidthAtCurrentZoom`.
+
+**Why.** The second form was what shipped, and it made the zoom control do **nothing at all**.
+Every zoom level immediately re-fitted to the same container, so the canvas backing store grew
+while the element on screen stayed exactly the same size. Clicking `+` produced a marginally
+crisper image and no zoom. Measuring the fit against the 1× width instead means zoom
+multiplies what you see, which is the only thing a zoom control is for.
+
+**Consequence.** A zoomed grid is deliberately wider than its container and the frame scrolls,
+rather than shrinking back to fit — otherwise the fix would just re-introduce the bug with
+extra steps. The e2e now asserts that zooming in exactly doubles the rendered width, which is
+also a check that the factor stayed an integer (D7).
+
+---
+
+## D25 — The e2e suite runs on one worker
+
+**Decision.** `fullyParallel: false`, `workers: 1`, and the Playwright port is configurable.
+
+**Why.** Both halves were found the hard way. Every test drives one dev server backed by one
+in-memory store, so the suite shares a single mutable world — the wall, the slug namespace,
+the seeded claims. Run in parallel, tests reserve each other's blocks and race each other's
+sign-ins, and a *different* test fails on each run. That is the worst failure mode available:
+it reads as a flaky product rather than a flaky harness, and it invites someone to add a retry
+instead of finding out why.
+
+The port matters for the same reason. This package is one of several sibling Next apps in the
+repository, and a stray `next dev` from one of the others holding :3000 is not hypothetical —
+it happened during this build. With a fixed port and `reuseExistingServer`, Playwright attaches
+to *that* server and runs the suite against a different application entirely, which produces a
+result that is meaningless whichever colour it comes out.
+
+**Consequence.** The whole suite still runs in well under a minute, so nothing was traded away.
+
+---
+
+## D26 — `PAYMENT_PROVIDER` is read through one function
+
+**Decision.** `domain/payment-config.ts` owns the normalisation. The provider factory and the
+root layout both call it.
+
+**Why.** They used to read the same variable two different ways. The factory normalised —
+`.trim().toLowerCase()`, with its own test asserting that `"STRIPE"` selects Stripe. The
+layout compared the raw string to `"stripe"` to decide whether to show the play-money banner.
+
+So `PAYMENT_PROVIDER=STRIPE` with real keys produced a deployment that **charged real cards
+while displaying "no card is charged, every purchase here is fake"**. That is the most
+misleading state this application can occupy, and it was reachable by a plausible typo rather
+than by anything exotic. Found in security review, not by any test — both halves were
+individually correct and tested.
+
+**Consequence.** An unrecognised value answers "not live", so the warning shows. That is the
+safe direction: the factory refuses to boot on it anyway, and of the two possible mistakes,
+staying silent about fake money is the one that costs someone something.
+
+---
+
+## D27 — A webhook event is marked processed *after* the work, not before
+
+**Decision.** `markEventProcessed` runs once settlement has succeeded. Duplicate protection
+rests on `settle` being idempotent (D17), not on the dedupe record.
+
+**Why.** Marking first is the obvious shape and it is a trap. If settlement then failed for
+any transient reason — a database blip, a function timeout — the route asked Stripe to retry,
+Stripe redelivered the *same event id*, the dedupe swallowed it, and `settle` was never called
+again. An order the buyer had already paid for would sit `pending` forever, its blocks
+eventually released to someone else, with nothing in the system left to notice.
+
+The guard was protecting against acting twice so eagerly that it could prevent ever acting
+once.
+
+**Consequence.** Two deliveries can now race past the check, which is fine and was always the
+real design: `settle` on an order already paid by the same reference is a no-op. The record is
+an audit trail and a cheap short-circuit, not the thing correctness rests on.
+
+---
+
+## D28 — A completed Checkout Session is not necessarily a paid one
+
+**Decision.** `checkout.session.completed` only settles when `payment_status` is not
+`"unpaid"`.
+
+**Why.** Delayed payment methods — bank debits, transfers — fire `checkout.session.completed`
+immediately with `payment_status: "unpaid"`, and resolve later as `async_payment_succeeded` or
+`async_payment_failed`. Settling on the first event hands over the blocks before the money
+exists, and the failure path cannot undo it: releasing a `paid` order is refused by design
+(D17), so the eventual `async_payment_failed` is acknowledged and does nothing. The buyer
+keeps the pixels for free.
+
+Nothing restricts `payment_method_types`, so this depends only on what the operator has
+enabled in their Stripe dashboard — not on anything visible in this repository.
+
+**Consequence.** A missing or unreadable `payment_status` is treated as paid. A shape change
+in the event should not silently stop every settlement; that failure would be total and
+invisible, where the case being guarded against is rare and self-corrects on the async event.
+
+---
+
+## D29 — One buyer may hold six unpaid reservations, not unlimited
+
+**Decision.** `MAX_OPEN_HOLDS_PER_BUYER = 6`, counting only holds that have not expired.
+
+**Why.** Each checkout takes a fresh 35-minute hold over up to 4,000 blocks, and nothing
+obliges anyone to pay. With no cap, one signed-in user can cover a 400 × 400 page in about
+forty requests and keep re-issuing before the old holds lapse — the entire grid, permanently
+unbuyable by anyone else, at no cost whatsoever under the mock provider. A denial of
+availability on the only thing the product does.
+
+**Consequence.** The count uses the same read-time expiry rule as everything else (D9), so the
+cap frees itself as holds lapse and a settled order stops counting immediately. Six is
+generous for a person buying a few patches at once and useless as an attack.
+
+---
+
+## D30 — A free claim is created and settled in one transaction
+
+**Decision.** The `claim-free` route wraps `claimFree` and `settle` in a single
+`store.transact`.
+
+**Why.** They were two sequential calls, and the gap between them leaked. `claimFree`
+increments `allowanceUsed` and takes a hold; settlement writes the claim. An interruption in
+between — a timeout, a deploy — left the allowance spent with no claim to show for it, and
+nothing could give it back: the hold expires on its own, but no code path decrements
+`allowanceUsed`, and nothing ever calls `release` on an allowance order. Free blocks would
+simply evaporate from a creator's 69.
+
+**Consequence.** Nested `transact` joins the outer transaction rather than opening a new one —
+a property the store contract already guaranteed and tested — so this needed no new store
+method, only the two halves put inside the same boundary.

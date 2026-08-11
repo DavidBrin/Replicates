@@ -76,18 +76,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true, data: { ignored: true } });
   }
 
-  // First-seen wins. A repeat is acknowledged and dropped before it can write
-  // anything — the second half of idempotency, the first half being `settle`
-  // itself refusing to act twice.
-  const fresh = await c.store.markEventProcessed({
-    id,
-    provider: "stripe",
-    receivedAt: c.clock.now().toISOString(),
-  });
-  if (!fresh) {
-    return NextResponse.json({ ok: true, data: { duplicate: true } });
-  }
-
   const intent = settlementIntentFor(type);
   if (intent === "ignore") {
     return NextResponse.json({ ok: true, data: { ignored: true } });
@@ -100,12 +88,40 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true, data: { ignored: true } });
   }
 
+  // A `completed` session is not necessarily a *paid* one. Delayed payment
+  // methods — bank debits, transfers — fire `checkout.session.completed` while
+  // `payment_status` is still "unpaid", and resolve later as
+  // `async_payment_succeeded` or `async_payment_failed`. Settling on the first
+  // event would hand over the blocks and then be unable to take them back,
+  // because releasing a paid order is refused by design (DECISIONS D17).
+  if (intent === "settle" && !isPaidSession(event)) {
+    return NextResponse.json({ ok: true, data: { awaitingPayment: true } });
+  }
+
   try {
     if (intent === "settle") {
       await settle(c, orderId, id);
     } else {
       await release(c, orderId, "expired");
     }
+
+    // Recorded only after the work succeeded, and deliberately not before.
+    //
+    // Marking first reads as the obvious idempotency guard and is a trap: if
+    // settlement then fails for any transient reason — a database blip, a
+    // function timeout — Stripe's retry redelivers the same event id, the
+    // dedupe swallows it, and an order the buyer has already paid for stays
+    // `pending` forever with nothing left to notice it.
+    //
+    // Nothing is lost by moving it: `settle` is idempotent on its own
+    // (DECISIONS D17), so a duplicate that races past this line is a no-op
+    // rather than a second claim. The record is an audit trail and a cheap
+    // short-circuit, not the thing correctness rests on.
+    await c.store.markEventProcessed({
+      id,
+      provider: "stripe",
+      receivedAt: c.clock.now().toISOString(),
+    });
   } catch (error) {
     if (isAppError(error) && error.code === "conflict") {
       // An out-of-order delivery — an `expired` arriving after a `completed`
@@ -122,6 +138,26 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   return NextResponse.json({ ok: true, data: { handled: type } });
+}
+
+/**
+ * Has this session's money actually arrived?
+ *
+ * `payment_status` is `"paid"`, `"unpaid"` or `"no_payment_required"`. Only an
+ * unpaid one is refused: a zero-amount session legitimately requires no
+ * payment, and a missing field is treated as paid so that a shape change in the
+ * event does not quietly stop every settlement — that failure would be silent
+ * and total, whereas the delayed-payment case this guards against is rare and
+ * self-corrects when `async_payment_succeeded` arrives.
+ */
+function isPaidSession(event: unknown): boolean {
+  if (typeof event !== "object" || event === null) return false;
+  const data = (event as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null) return true;
+  const object = (data as { object?: unknown }).object;
+  if (typeof object !== "object" || object === null) return true;
+  const status = (object as { payment_status?: unknown }).payment_status;
+  return status !== "unpaid";
 }
 
 function readEventEnvelope(event: unknown): { id: string | null; type: string | null } {

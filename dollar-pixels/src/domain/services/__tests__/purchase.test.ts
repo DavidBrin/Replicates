@@ -5,7 +5,11 @@ import { FixedClock, SeqIdGen } from "@/adapters/system";
 import type { Page, User } from "@/domain/entities";
 import { HOLD_MINUTES } from "@/domain/order";
 import { PRIVATE_PAGE_ALLOWANCE } from "@/domain/pricing";
-import { buyBlocks, claimFree } from "@/domain/services/checkout";
+import {
+  MAX_OPEN_HOLDS_PER_BUYER,
+  buyBlocks,
+  claimFree,
+} from "@/domain/services/checkout";
 import { release, settle } from "@/domain/services/fulfilment";
 import { gridSnapshot } from "@/domain/services/pages";
 import { AppError } from "@/domain/services/errors";
@@ -423,6 +427,97 @@ describe("the free allowance", () => {
     await expect(
       claimFree(h, { slug: page.slug, buyerId: "usr_other", ...claimBody() }),
     ).rejects.toMatchObject({ code: "forbidden" });
+  });
+});
+
+describe("unpaid holds are capped per buyer", () => {
+  it("refuses a seventh open reservation", async () => {
+    // Without a cap one signed-in user can hold an entire grid for free and
+    // keep it unbuyable indefinitely: each checkout takes a fresh 35-minute
+    // hold over up to 4,000 blocks and nothing obliges anyone to pay.
+    await makeUser(h.store, "usr_a", "Ana");
+    const page = await makePage(h.store, { size: "medium" });
+
+    for (let i = 0; i < MAX_OPEN_HOLDS_PER_BUYER; i++) {
+      await buyBlocks(h, {
+        slug: page.slug,
+        buyerId: "usr_a",
+        ...claimBody({ bx: i * 5, by: 0, bw: 4, bh: 4 }),
+      });
+    }
+
+    await expect(
+      buyBlocks(h, {
+        slug: page.slug,
+        buyerId: "usr_a",
+        ...claimBody({ bx: 100, by: 100, bw: 2, bh: 2 }),
+      }),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("counts only live holds, so the cap frees itself as they lapse", async () => {
+    await makeUser(h.store, "usr_a", "Ana");
+    const page = await makePage(h.store, { size: "medium" });
+
+    for (let i = 0; i < MAX_OPEN_HOLDS_PER_BUYER; i++) {
+      await buyBlocks(h, {
+        slug: page.slug,
+        buyerId: "usr_a",
+        ...claimBody({ bx: i * 5, by: 0, bw: 4, bh: 4 }),
+      });
+    }
+
+    h.clock.advance((HOLD_MINUTES + 1) * MINUTE);
+
+    const after = await buyBlocks(h, {
+      slug: page.slug,
+      buyerId: "usr_a",
+      ...claimBody({ bx: 100, by: 100, bw: 2, bh: 2 }),
+    });
+    expect(after.order.status).toBe("pending");
+  });
+
+  it("does not count one buyer's holds against another", async () => {
+    await makeUser(h.store, "usr_a", "Ana");
+    await makeUser(h.store, "usr_b", "Ben");
+    const page = await makePage(h.store, { size: "medium" });
+
+    for (let i = 0; i < MAX_OPEN_HOLDS_PER_BUYER; i++) {
+      await buyBlocks(h, {
+        slug: page.slug,
+        buyerId: "usr_a",
+        ...claimBody({ bx: i * 5, by: 0, bw: 4, bh: 4 }),
+      });
+    }
+
+    const ben = await buyBlocks(h, {
+      slug: page.slug,
+      buyerId: "usr_b",
+      ...claimBody({ bx: 100, by: 100, bw: 2, bh: 2 }),
+    });
+    expect(ben.order.buyerId).toBe("usr_b");
+  });
+
+  it("stops counting a hold once its order settles", async () => {
+    await makeUser(h.store, "usr_a", "Ana");
+    const page = await makePage(h.store, { size: "medium" });
+
+    for (let i = 0; i < MAX_OPEN_HOLDS_PER_BUYER; i++) {
+      const { order } = await buyBlocks(h, {
+        slug: page.slug,
+        buyerId: "usr_a",
+        ...claimBody({ bx: i * 5, by: 0, bw: 4, bh: 4 }),
+      });
+      await settle(h, order.id, `evt_${i}`);
+    }
+
+    // Six completed purchases must not lock someone out of a seventh.
+    const seventh = await buyBlocks(h, {
+      slug: page.slug,
+      buyerId: "usr_a",
+      ...claimBody({ bx: 100, by: 100, bw: 2, bh: 2 }),
+    });
+    expect(seventh.order.status).toBe("pending");
   });
 });
 

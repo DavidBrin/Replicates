@@ -40,3 +40,35 @@ an empty book.
 
 **[Read the README →](bet/README.md)** ·
 [Spec](bet/SPEC.md) · [Decisions](bet/DECISIONS.md) · [Research](bet/research)
+
+---
+
+## [dollar-pixels](dollar-pixels) — the Million Dollar Homepage, at $1 for nine pixels
+
+> **$1 buys nine pixels**
+
+A rebuild of the 2005 page that sold a million pixels at a dollar each. This one
+sells them in blocks of nine — a 3 × 3 square for a dollar — on a 400 × 400 block
+grid, and adds the thing the original could not: you can buy a page of your own.
+
+| The wall | Selecting blocks | Making a page |
+|---|---|---|
+| <img src="dollar-pixels/docs/screenshots/the-wall.png" width="240" alt="The wall: a 400 by 400 block grid, a quarter sold"> | <img src="dollar-pixels/docs/screenshots/selecting.png" width="240" alt="Dragging a rectangle of blocks with the price shown live"> | <img src="dollar-pixels/docs/screenshots/new-page.png" width="240" alt="Creating an unlisted or premium page"> |
+
+The grid is 1200 × 1200 rather than the original's 1000 × 1000 because 1000 is not
+divisible by three — a nine-pixel block cannot sit on that canvas without being
+split. Blocks carry a caption and artwork but no link, which is the one part of
+the original deliberately not rebuilt: a 2017 study found 547 of its links dead,
+and the surviving mirror has quietly rewritten 1,164 more to archive snapshots.
+
+Play money by default, with Stripe one environment variable away — both settle
+through the same code, so the switch is not a leap of faith. Unlisted pages cost
+$10 and come with 69 free blocks; premium pages cost half the grid's face value
+and pay their creator for every block anyone buys on them.
+
+Next.js · canvas renderer with O(1) hit-testing · ports for storage and payment ·
+365 unit and property tests · 30 e2e across desktop and mobile.
+Built from five parallel research lanes, then five parallel build slices.
+
+**[Read the README →](dollar-pixels/README.md)** ·
+[Spec](dollar-pixels/SPEC.md) · [Decisions](dollar-pixels/DECISIONS.md) · [Research](dollar-pixels/research)

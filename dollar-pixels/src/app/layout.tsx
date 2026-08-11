@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { paymentIsLive } from "@/domain/payment-config";
 import { PlayMoneyBanner, SiteFooter, SiteHeader, SiteNav } from "@/components/app-shell";
 import "./globals.css";
 
@@ -32,17 +33,19 @@ export const metadata: Metadata = {
  * Whether the active payment provider actually charges cards.
  *
  * Read from the environment rather than from the container, because the root
- * layout must not reach into `src/adapters/**` and must not fetch. It is the
- * same variable the composition root selects on, and selecting `stripe`
- * without keys is fatal at startup (DECISIONS D11), so `stripe` here can be
- * trusted to mean real money.
+ * layout must not reach into `src/adapters/**` and must not fetch. It goes
+ * through the SAME normaliser the composition root uses (DECISIONS D26) — two
+ * independent readings of one variable is how `PAYMENT_PROVIDER=STRIPE` once
+ * produced a deployment that charged real cards while announcing itself as
+ * play money. Selecting `stripe` without keys is fatal at startup
+ * (DECISIONS D11), so `stripe` here can be trusted to mean real money.
  *
  * Default false: with an unset or misspelt variable the banner shows. Warning
  * about play money on a live deployment is a confusing mistake; staying silent
  * on a play-money one is the mistake that makes someone think they have spent
  * something.
  */
-const PAYMENT_IS_LIVE = process.env.PAYMENT_PROVIDER === "stripe";
+const PAYMENT_IS_LIVE = paymentIsLive(process.env.PAYMENT_PROVIDER);
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (

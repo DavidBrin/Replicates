@@ -8,6 +8,7 @@
  * the first minute.
  */
 
+import { normalisePaymentProvider } from "@/domain/payment-config";
 import type { PaymentProvider } from "@/ports";
 
 import { MockPaymentProvider } from "./mock";
@@ -18,7 +19,6 @@ export { StripePaymentProvider } from "./stripe";
 
 export type PaymentEnv = Record<string, string | undefined>;
 
-const DEFAULT_PROVIDER = "mock";
 
 /**
  * Both are required, though only the secret key is used to build the provider.
@@ -33,10 +33,11 @@ const STRIPE_REQUIRED_VARS = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as c
  * and the composition root can pass a validated object.
  */
 export function createPaymentProvider(env: PaymentEnv = process.env): PaymentProvider {
-  // Case and whitespace are normalised because neither can lead anywhere
-  // dangerous: an unrecognised value throws, so tidying the input can only
-  // turn a refusal to boot into the provider the operator plainly meant.
-  const requested = (env.PAYMENT_PROVIDER ?? "").trim().toLowerCase() || DEFAULT_PROVIDER;
+  // Normalisation lives in `domain/payment-config.ts` so that the root layout,
+  // which decides whether to show the play-money banner, reads the variable
+  // through the exact same function. Two independent readings of one variable
+  // is how a live deployment ended up able to advertise itself as fake.
+  const requested = normalisePaymentProvider(env.PAYMENT_PROVIDER) ?? env.PAYMENT_PROVIDER;
 
   switch (requested) {
     case "mock":

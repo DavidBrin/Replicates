@@ -16,7 +16,7 @@ import {
   type BlockRect,
 } from "@/domain/geometry";
 import { rectPrice } from "@/domain/pricing";
-import { holdExpiryFrom } from "@/domain/order";
+import { holdExpiryFrom, isExpiredAt } from "@/domain/order";
 import {
   artErrorMessage,
   normaliseCaption,
@@ -68,6 +68,8 @@ export async function buyBlocks(
   const now = deps.clock.now();
   const page = await requirePage(deps.store, input.slug);
   const { rect, caption, colour, tile } = validateClaimInput(page, input);
+
+  await assertHoldsAvailable(deps, input.buyerId, now);
 
   const amountCents = rectPrice(rect);
   const orderId = deps.idGen.next("ord");
@@ -203,6 +205,45 @@ export async function claimFree(
 }
 
 /* ------------------------------------------------------------- internals -- */
+
+/**
+ * How many rectangles one buyer may have reserved but unpaid at once.
+ *
+ * Without a cap, a signed-in user can hold the entire grid indefinitely for
+ * free. Each checkout takes a fresh 35-minute hold over up to
+ * `MAX_SELECTION_BLOCKS` blocks and nothing obliges anyone to pay: roughly
+ * forty requests cover a 400x400 page, and re-issuing before the old holds
+ * lapse keeps it unbuyable by anyone else forever. Under the mock provider
+ * that costs an attacker nothing at all.
+ *
+ * Six is generous for a person buying a few patches at once and useless as a
+ * denial-of-service tool.
+ */
+export const MAX_OPEN_HOLDS_PER_BUYER = 6;
+
+async function assertHoldsAvailable(
+  deps: CheckoutDeps,
+  buyerId: string,
+  now: Date,
+): Promise<void> {
+  const orders = await deps.store.listOrdersByBuyer(buyerId);
+
+  let open = 0;
+  for (const order of orders) {
+    if (order.status !== "pending") continue;
+    const hold = await deps.store.getHold(order.id);
+    // An expired hold is not holding anything, so it does not count against
+    // the buyer — the same read-time rule the store uses (DECISIONS D9).
+    if (hold && !isExpiredAt(hold.expiresAt, now)) open++;
+  }
+
+  if (open >= MAX_OPEN_HOLDS_PER_BUYER) {
+    fail(
+      "conflict",
+      `You already have ${open} unpaid reservations. Finish or cancel one before starting another.`,
+    );
+  }
+}
 
 async function requirePage(store: Store, slug: string): Promise<Page> {
   const page = await store.getPageBySlug(slug);

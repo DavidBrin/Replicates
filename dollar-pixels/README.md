@@ -211,12 +211,70 @@ Then apply the schema once: `psql "$DATABASE_URL" -f src/adapters/store/schema.s
 8. **Sign-in is a name.** Anyone can be anyone by typing their name, and the interface says so.
    Nothing valuable is behind it — every page is public by design.
 
+## Development notes
+
+365 unit and property tests, 30 e2e across desktop and mobile. All green, and that is
+precisely the point of this section: **the most important bugs in the project were invisible
+to every one of them.**
+
+Two were found by driving the app in a browser and measuring it:
+
+1. **The grid was never actually 1:1.** The buy panel was a 384px sidebar, leaving the
+   1200px canvas about 808px of column — so it rendered at 0.67 scale and a block occupied
+   two device pixels instead of three. Every unit test passed, because the arithmetic was
+   right; the *arrangement* was wrong, and the arrangement is the entire justification for
+   the grid being 1200 wide. Found by measuring the rendered canvas in a real browser.
+   [D23](DECISIONS.md#d23--the-buy-panel-goes-below-the-grid-not-beside-it)
+2. **The zoom control did nothing.** The responsive fit-scale was measured against the
+   *zoomed* width, so every zoom level was immediately re-fitted to the same container: the
+   backing store grew, the thing on screen did not move. Clicking `+` produced a slightly
+   crisper image and no zoom.
+   [D24](DECISIONS.md#d24--zoom-multiplies-the-rendered-size-the-fit-scale-is-measured-at-1)
+
+Both are now pinned by e2e assertions on the measured canvas width, because a number that
+load-bearing should not be verifiable only by reading the CSS.
+
+A third was a harness bug wearing a product bug's clothes: the e2e suite ran in parallel
+against one dev server holding one in-memory store, so tests reserved each other's blocks and
+a different one failed on every run.
+[D25](DECISIONS.md#d25--the-e2e-suite-runs-on-one-worker)
+
+Independent review found five more, all of them in the money path and none of them visible to
+a passing suite, because in each case both halves were individually correct:
+
+3. **A live deployment could advertise itself as play money.** The provider factory normalised
+   `PAYMENT_PROVIDER` and the layout compared the raw string, so `PAYMENT_PROVIDER=STRIPE`
+   charged real cards while displaying "no card is charged". Both readings were tested; only
+   the disagreement between them was the bug.
+   [D26](DECISIONS.md#d26--payment_provider-is-read-through-one-function)
+4. **A transient failure stranded a paid order forever.** The webhook recorded an event as
+   processed *before* settling it, so if settlement failed, Stripe's retry was swallowed by
+   the dedupe and the order stayed `pending` with the buyer already charged.
+   [D27](DECISIONS.md#d27--a-webhook-event-is-marked-processed-after-the-work-not-before)
+5. **A completed session was assumed to be a paid one.** Delayed payment methods complete
+   while still unpaid; the eventual failure could not take the blocks back, because releasing
+   a paid order is refused by design.
+   [D28](DECISIONS.md#d28--a-completed-checkout-session-is-not-necessarily-a-paid-one)
+6. **One user could hold the whole grid, free, forever.** No cap on concurrent unpaid
+   reservations.
+   [D29](DECISIONS.md#d29--one-buyer-may-hold-six-unpaid-reservations-not-unlimited)
+7. **Free blocks could evaporate.** The allowance was spent in one transaction and the claim
+   written in another, and nothing anywhere decrements `allowanceUsed`.
+   [D30](DECISIONS.md#d30--a-free-claim-is-created-and-settled-in-one-transaction)
+
+**The independent codex review did not run.** It fails before reaching the diff — the CLI
+sends a tool with an empty description and its Linear integration's OAuth grant has expired.
+Five invocations failed identically, so this is an environment fault rather than anything
+about the code, but it means the outside opinion on this diff came from Claude reviewers on
+separate correctness and security lenses, not from a second model. Worth re-running once the
+CLI is working.
+
 ## What this is
 
 A study, not a product, and not affiliated with the original in any way. Everything here —
-the code, the copy, the palette, the seeded tenants on the wall — is written from scratch; the
-research file records what the 2005 page measured so the lineage is traceable, and that is
-where the relationship ends.
+the code, the copy, the palette, the invented tenants seeded onto the wall — is written from
+scratch; the research file records what the 2005 page measured so the lineage is traceable,
+and that is where the relationship ends.
 
 Built the way its siblings in this repository were: five parallel research lanes, then a spec
 derived from them, then five parallel build slices against a frozen contract, then review.
