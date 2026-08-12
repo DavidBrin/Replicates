@@ -1,5 +1,5 @@
-import { test } from "@playwright/test";
-import { ROUTES, startFromTitle, waitForMatch } from "./helpers";
+import { test, type Page } from "@playwright/test";
+import { ROUTES, readFighters, startFromTitle, waitForMatch } from "./helpers";
 
 /**
  * The README images, captured from the running game.
@@ -21,6 +21,27 @@ test.describe.configure({ mode: "serial" });
 test.skip(!CAPTURE, "Screenshot capture only runs with CAPTURE=1");
 
 const shot = (name: string) => `docs/screenshots/${name}.png`;
+
+/**
+ * Wait for a frame worth photographing.
+ *
+ * "Six seconds in" is a coin flip: one fighter is often mid-launch and out of
+ * frame, which makes the README's hero image a picture of an empty stage. So
+ * the shot waits for a moment when both are alive and close enough to be in
+ * shot together, and gives up rather than hanging if the match never obliges.
+ */
+async function waitForBothOnStage(page: Page, timeoutMs = 8000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const fighters = await readFighters(page);
+    const framed =
+      fighters.length > 1 &&
+      fighters.every((f) => f.action !== "dead" && Math.abs(f.y) < 45) &&
+      Math.abs(fighters[0].x - fighters[1].x) < 34;
+    if (framed) return;
+    await page.waitForTimeout(120);
+  }
+}
 
 test("title", async ({ page }) => {
   await page.goto(ROUTES.title);
@@ -89,9 +110,11 @@ test("the match, and the HUD", async ({ page }) => {
   // Let two CPUs fight for a few seconds so the shot has damage on the meters
   // and fighters mid-action, rather than four idle poses on the spawn points.
   await page.waitForTimeout(6000);
+  await waitForBothOnStage(page);
   await page.screenshot({ path: shot("match") });
 
   await page.waitForTimeout(6000);
+  await waitForBothOnStage(page);
   await page.screenshot({ path: shot("match-2") });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
-import { fx } from "@/engine/fixed";
+import { fx, toFloat } from "@/engine/fixed";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
 import {
   BEHAVIOURS,
@@ -10,6 +10,7 @@ import {
   GRAB_RANGE,
   MELEE_RANGE,
   ROLL_RECOVER,
+  approach,
   attack,
   blastMargin,
   canAct,
@@ -19,6 +20,7 @@ import {
   fullHopPulse,
   isOffstage,
   isStunned,
+  meleeReachFromDef,
   observe,
   platformMove,
   pulse,
@@ -112,6 +114,7 @@ function context(
     stage: DEFAULT_STAGE_VIEW,
     tuning,
     jumps: 1,
+    meleeReach: MELEE_RANGE,
     rolls,
   };
 }
@@ -566,5 +569,54 @@ describe("the behaviour set", () => {
     const state = gameState([fighter(0), fighter(1, { x: fx(60) })]);
     const ctx = context(state, L9);
     expect(BEHAVIOURS.some((b) => b.run(ctx).score > 0)).toBe(true);
+  });
+});
+
+describe("the approach/attack threshold", () => {
+  /**
+   * The dead band, stated as a property.
+   *
+   * `approach` stops closing at `meleeReach` and `attack` starts swinging at
+   * `meleeReach`, so the two must read the *same* number. When they did not —
+   * `attack` used a roster-wide constant of 20 units while Donkey Kong's jab
+   * covers 11.5 — every distance in between was one where neither behaviour
+   * would act on the gap: the CPU stood still and threw jabs at air. Against an
+   * opponent who also stood still the state was identical on the next frame, so
+   * the same decision returned forever and the match stopped progressing at
+   * 58%–0%.
+   *
+   * Swept rather than spot-checked, because the bug lived in a *band* of
+   * distances: any single sample outside 11.5…20 would have passed.
+   */
+  for (const reach of [fx(4), fx(8), fx(11.5), fx(16), fx(20), fx(30)]) {
+    it(`covers every distance for a fighter reaching ${toFloat(reach)}`, () => {
+      for (let d = 1; d <= 40; d++) {
+        const state = gameState([fighter(0), fighter(1, { x: fx(d) })]);
+        const ctx = { ...context(state, L9), meleeReach: reach };
+
+        const acted = attack(ctx).score > 0 || approach(ctx).score > 0;
+        expect(acted, `nothing to do at distance ${d} with reach ${toFloat(reach)}`).toBe(true);
+      }
+    });
+  }
+
+  it("reads a fighter's reach off its own move data", () => {
+    // A stand-in rather than the real roster, so this stays a test of the
+    // function and not of Donkey Kong's frame data: jab reaching 11.5 and ftilt
+    // reaching 13.5 must yield 11.5, because the default swing does not choose
+    // which of the two comes out.
+    const def = {
+      moves: {
+        jab1: { hitboxes: [{ x: fx(7.5), radius: fx(4) }] },
+        ftilt: { hitboxes: [{ x: fx(9), radius: fx(4.5) }] },
+      },
+    } as unknown as Parameters<typeof meleeReachFromDef>[0];
+
+    expect(toFloat(meleeReachFromDef(def))).toBeCloseTo(11.5, 1);
+  });
+
+  it("falls back to the constant for a fighter with no pokes at all", () => {
+    const def = { moves: {} } as unknown as Parameters<typeof meleeReachFromDef>[0];
+    expect(meleeReachFromDef(def)).toBe(MELEE_RANGE);
   });
 });

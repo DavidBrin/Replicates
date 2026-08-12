@@ -52,6 +52,62 @@ export async function holdFor(page: Page, code: string, frames: number): Promise
   await page.keyboard.up(code);
 }
 
+/**
+ * One fighter as the simulation holds it, in floats.
+ *
+ * Read through `window.__smashDebug` rather than off the canvas: pixels can
+ * only tell you something was painted, and the question these tests ask is
+ * whether the *simulation* moved.
+ */
+export interface DebugFighter {
+  port: number;
+  x: number;
+  y: number;
+  action: string;
+  actionFrame: number;
+  damage: number;
+  stocks: number;
+  facing: number;
+}
+
+interface DebugHandle {
+  frame: number;
+  fighters(): DebugFighter[];
+}
+
+export async function readFighters(page: Page): Promise<DebugFighter[]> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __smashDebug?: DebugHandle };
+    return w.__smashDebug?.fighters() ?? [];
+  });
+}
+
+/**
+ * Walk the real menu path into a running match: one human on port 0 and a CPU
+ * on port 1, which is the default configuration and the one a player meets
+ * first. Deliberately not a deep link — the match configuration lives in a
+ * client-side store, so `/play` loaded cold has nothing to run.
+ */
+export async function startMatch(page: Page): Promise<void> {
+  await startFromTitle(page);
+  await page.getByRole("button", { name: /smash/i }).first().click();
+  await page.waitForURL(`**${ROUTES.rules}`);
+  await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
+
+  await page.waitForURL(`**${ROUTES.stage}`);
+  await page.getByLabel("Stages").getByRole("button").first().click();
+  await page.getByRole("button", { name: /next|fighters|continue/i }).first().click();
+
+  await page.waitForURL(`**${ROUTES.fighters}`);
+  const roster = page.getByLabel("Fighters").getByRole("button");
+  await roster.nth(0).click();
+  await roster.nth(1).click();
+
+  await page.getByRole("button", { name: /ready|fight/i }).first().click();
+  await page.waitForURL(`**${ROUTES.play}`);
+  await waitForMatch(page);
+}
+
 /** Wait until the match canvas has actually started painting. */
 export async function waitForMatch(page: Page): Promise<void> {
   await page.getByLabel("Match").waitFor();

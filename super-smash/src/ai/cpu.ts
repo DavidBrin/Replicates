@@ -32,6 +32,7 @@ import {
   BEHAVIOURS,
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
+  MELEE_RANGE,
   ROLL_FUMBLE,
   type BehaviourContext,
   type BehaviourName,
@@ -52,6 +53,11 @@ export interface CpuWorld {
   readonly stage?: StageView;
   /** Air jumps this fighter actually has. Kirby has five. */
   readonly jumps?: number;
+  /**
+   * How far this fighter's pokes reach, from `meleeReachFromDef`. Defaults to
+   * `MELEE_RANGE`, which is right for nobody in particular — supply it.
+   */
+  readonly meleeReach?: number;
 }
 
 /**
@@ -144,6 +150,7 @@ export function decideCpu(
     stage: world.stage ?? DEFAULT_STAGE_VIEW,
     tuning,
     jumps: world.jumps ?? DEFAULT_AIR_JUMPS,
+    meleeReach: world.meleeReach ?? MELEE_RANGE,
     rolls,
   };
 

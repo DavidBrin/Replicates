@@ -25,6 +25,7 @@
 
 import type {
   FighterDef,
+  FighterState,
   GameState,
   InputFrame,
   MatchOutcome,
@@ -35,11 +36,11 @@ import type {
 import { createInitialState, cloneState, step, DEFAULT_SEED } from "@/engine/simulate";
 import type { FighterSelection } from "@/engine/simulate";
 import { createCamera, updateCamera } from "@/render/camera";
-import { createVfx, ingestEvents, type VfxState } from "@/render/vfx";
+import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
 import { render } from "@/render/renderer";
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { stageViewFromDef } from "@/ai/behaviours";
+import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
 
 /** 60Hz, expressed once. */
@@ -63,6 +64,33 @@ export interface PlayerSlot {
   readonly label?: string;
 }
 
+/**
+ * As much of the audio engine as the loop needs.
+ *
+ * Structural rather than the concrete `AudioEngine`, for the same reason
+ * `getFighter` is injected: this module is the seam, and a seam that imports
+ * Web Audio drags a browser API into every test that wants to run a match.
+ * `AudioEngine` satisfies this without being told about it.
+ */
+export interface MatchAudio {
+  handleEvents(events: StepEvents): void;
+  setShieldHeld(port: number, held: boolean): void;
+}
+
+/**
+ * The shield is up — including `shieldRelease`, whose bubble is still shrinking
+ * on screen. Kept identical to `drawShield`'s predicate on purpose: a hum that
+ * stops while a bubble is still visible is a bug you hear before you see.
+ */
+function isShielding(f: FighterState): boolean {
+  return (
+    f.action === "shieldStart" ||
+    f.action === "shield" ||
+    f.action === "shieldStun" ||
+    f.action === "shieldRelease"
+  );
+}
+
 export interface MatchRunnerOptions {
   readonly stage: StageDef;
   readonly players: readonly PlayerSlot[];
@@ -72,6 +100,8 @@ export interface MatchRunnerOptions {
   readonly getFighter: (id: string) => FighterDef;
   /** Absent in a CPU-only demo match. */
   readonly keyboard?: KeyboardInput | null;
+  /** Absent under test, and until the player's first gesture unlocks the context. */
+  readonly audio?: MatchAudio | null;
   readonly onEnd?: (outcome: MatchOutcome) => void;
   readonly onFrame?: (state: GameState, events: StepEvents) => void;
   readonly debugSilhouette?: boolean;
@@ -85,6 +115,14 @@ export interface MatchRunner {
   advance(n: number): void;
   readonly state: GameState;
   readonly frame: number;
+  /**
+   * The cosmetic state, exposed so a test can assert it is being *aged*.
+   *
+   * Not decoration: the one bug this seam has shipped twice is forgetting to
+   * drive a collaborator every frame, and a collaborator you cannot observe is
+   * one you cannot hold to that.
+   */
+  readonly vfx: VfxState;
   /** Repaint without stepping — used when the match has ended but stays on screen. */
   redraw(): void;
 }
@@ -97,6 +135,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     seed = DEFAULT_SEED,
     getFighter,
     keyboard = null,
+    audio = null,
     onEnd,
     onFrame,
     debugSilhouette = false,
@@ -126,6 +165,9 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   const cpuWorlds: CpuWorld[] = players.map((p, i) => ({
     stage: stageViewFromDef(stage),
     jumps: defs[i]?.attributes.jumps ?? 2,
+    // Per fighter, from its own move data. A shared constant here is what let a
+    // CPU decide it was close enough to punch from further than its arm goes.
+    meleeReach: defs[i] ? meleeReachFromDef(defs[i]) : undefined,
   }));
 
   const camera = createCamera(stage);
@@ -157,9 +199,27 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     events = result.events;
     prevInputs = inputs;
 
-    ingestEvents(vfx, events, state);
+    // `stepVfx`, not `ingestEvents`. Ingestion only *creates* — the sparks, the
+    // KO flash, the white tint on a fighter who was just hit. Ageing them is a
+    // separate call, and driving the first without the second means nothing on
+    // screen ever expires: sparks pile up to the particle cap and stay, a hit
+    // fighter stays white, and the full-screen flash a lost stock puts up never
+    // lifts. `stepVfx` is the composite that runs both in the right order, plus
+    // the three trackers that read cosmetic state off the fighters directly
+    // (dodge afterimages, charge motes, damage smoke) and which nothing else
+    // calls at all.
+    stepVfx(vfx, events, state);
     updateHud(hud, state);
     updateCamera(camera, state, stage, events);
+
+    // Sound is driven from the same events the particles are, on the same
+    // frame, so a hit spark and its impact never drift apart. `setShieldHeld`
+    // is level-triggered and idempotent by design, so calling it every frame
+    // for every fighter is the intended usage rather than a waste.
+    if (audio) {
+      audio.handleEvents(events);
+      for (const f of state.fighters) audio.setShieldHeld(f.port, isShielding(f));
+    }
 
     onFrame?.(state, events);
 
@@ -237,6 +297,9 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     },
     get frame() {
       return state.frame;
+    },
+    get vfx() {
+      return vfx;
     },
   };
 }

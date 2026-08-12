@@ -14,10 +14,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { MatchOutcome } from "@/engine/types";
+import { toFloat } from "@/engine/fixed";
 import { createMatchRunner, type MatchRunner, type PlayerSlot as RunnerSlot } from "@/game/matchRunner";
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow, schemeForMenuId } from "@/game/bootstrap";
 import { FIGHTERS } from "@/fighters";
 import { createKeyboardInput, type KeyboardInput } from "@/input/keyboard";
+import { AudioEngine } from "@/audio";
 import { conflictFreeSelection } from "@/input/schemes";
 import {
   RANDOM_FIGHTER,
@@ -114,6 +116,8 @@ export default function PlayPage() {
 
     let runner: MatchRunner | null = null;
     let keyboard: KeyboardInput | null = null;
+    let audio: AudioEngine | null = null;
+    let releaseAudioGesture: (() => void) | null = null;
 
     try {
       bootstrapEngine();
@@ -133,11 +137,41 @@ export default function PlayPage() {
         // `conflictFreeSelection` is what stops two people picking mirror-image
         // presets that share six physical keys (DECISIONS D8). It hands back a
         // set that provably cannot collide, earlier entries winning.
-        const chosen = conflictFreeSelection(humans.map((p) => schemeForMenuId(p.scheme)));
-        keyboard = createKeyboardInput(
-          chosen.active.map((scheme, i) => ({ port: humans[i].port, scheme })),
-        );
+        const requested = humans.map((p) => ({ port: p.port, scheme: schemeForMenuId(p.scheme) }));
+        const chosen = conflictFreeSelection(requested.map((r) => r.scheme));
+        // Paired back to their owners by membership, not by index.
+        // `conflictFreeSelection` *drops* rejected entries, so from the first
+        // rejection onwards `active[i]` and `humans[i]` are different people:
+        // with three humans whose second preset collides, the third player's
+        // keys would have driven the second player's fighter.
+        const kept = new Set(chosen.active);
+        keyboard = createKeyboardInput(requested.filter((r) => kept.has(r.scheme)));
+        // Constructing the reader only computes the code→button table; it binds
+        // no listeners. Without this call `drain()` answers "nothing is held"
+        // truthfully and forever, and every human port plays a match it cannot
+        // touch. The cleanup below and `quit()` both already `detach()`, so this
+        // is the missing half of a lifecycle the rest of the file assumed.
+        keyboard.attach();
         keyboardRef.current = keyboard;
+      }
+
+      // Every sound in the game is synthesised on demand, so there is nothing
+      // to preload and no reason to build the context before it can be heard.
+      // Autoplay policy suspends an AudioContext created outside a gesture, and
+      // arriving here from the character-select screen means the player has
+      // already clicked — but a deep link or a reload has not, so the unlock
+      // stays armed until the first key or click either way.
+      //
+      // Wrapped separately from the match: a browser with no Web Audio, or one
+      // that refuses to build a context, should cost the player their sound and
+      // nothing else. Sharing the outer `catch` would turn that into "THE MATCH
+      // COULD NOT START", which is a strictly worse trade.
+      try {
+        audio = new AudioEngine();
+        releaseAudioGesture = audio.unlockOnGesture();
+        void audio.resume().catch(() => {});
+      } catch {
+        audio = null;
       }
 
       const tracker = createTracker(players.length);
@@ -149,6 +183,7 @@ export default function PlayPage() {
         seed,
         getFighter: getFighterOrThrow,
         keyboard,
+        audio,
         onFrame: (state, events) => {
           // The canvas is opaque to an end-to-end test, so the frame counter is
           // published deliberately: it is the one honest signal that the
@@ -191,6 +226,33 @@ export default function PlayPage() {
         },
       });
       runnerRef.current = runner;
+
+      // How an end-to-end test sees the simulation. The canvas is opaque, so
+      // without this the only assertable signal is "frames are advancing" —
+      // which is true of a match nobody can control, and is exactly why a dead
+      // keyboard shipped green. Accessors rather than a per-frame snapshot:
+      // publishing a fresh object 60 times a second would put real garbage on
+      // the hot loop to serve a test that reads it twice.
+      const live = runner;
+      (window as unknown as { __smashDebug?: unknown }).__smashDebug = {
+        get frame() {
+          return live.frame;
+        },
+        fighters: () =>
+          live.state.fighters.map((f) => ({
+            port: f.port,
+            x: toFloat(f.x),
+            y: toFloat(f.y),
+            action: f.action,
+            actionFrame: f.actionFrame,
+            damage: toFloat(f.damage),
+            stocks: f.stocks,
+            facing: f.facing,
+            intangible: f.intangible,
+            hitstun: f.hitstun,
+          })),
+      };
+
       runner.start(canvas);
     } catch (e) {
       // Deferred out of the effect body on purpose. Setting state synchronously
@@ -204,8 +266,15 @@ export default function PlayPage() {
     return () => {
       runner?.stop();
       keyboard?.detach();
+      releaseAudioGesture?.();
+      // Disposed, not just silenced: an AudioContext is a real OS audio device
+      // handle, and browsers cap how many a page may hold. Leaking one per
+      // match means a player who quits and restarts enough times gets a game
+      // that can no longer make any sound at all.
+      audio?.dispose();
       runnerRef.current = null;
       keyboardRef.current = null;
+      delete (window as unknown as { __smashDebug?: unknown }).__smashDebug;
     };
   }, [players, stageId, stageForm, rules, router, setResult]);
 

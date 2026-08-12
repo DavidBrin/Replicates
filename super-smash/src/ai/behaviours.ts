@@ -28,9 +28,11 @@
 import {
   Btn,
   type ActionState,
+  type FighterDef,
   type FighterState,
   type GameState,
   type InputFrame,
+  type MoveSlot,
   type StageDef,
 } from "@/engine/types";
 import { SDI_INPUT_INTERVAL, SMASH_INPUT_WINDOW } from "@/engine/constants";
@@ -268,6 +270,8 @@ export interface BehaviourContext {
   readonly tuning: LevelTuning;
   /** Air jumps the CPU believes it has. Kirby has five; most have one. */
   readonly jumps: number;
+  /** How far this fighter's pokes actually reach. See `meleeReachFromDef`. */
+  readonly meleeReach: number;
   /** Pre-drawn randoms in [0,1), one per `ROLL_*` slot. */
   readonly rolls: readonly number[];
 }
@@ -296,8 +300,61 @@ const NOTHING: BehaviourResult = { score: 0, input: 0 };
 
 /** Ranges, in fixed units. A fighter is roughly 12 units tall. */
 export const GRAB_RANGE = fx(11);
+/**
+ * The fallback swing range, for a CPU whose fighter's reach was not supplied.
+ *
+ * Kept only as a default. Using it for a real fighter is what produced the
+ * whiff deadlock described on `meleeReachFromDef`.
+ */
 export const MELEE_RANGE = fx(20);
 export const THREAT_RANGE = fx(30);
+
+/** The pokes the default swing in `attack` can actually come out as. */
+const POKE_SLOTS: readonly MoveSlot[] = ["jab1", "ftilt"];
+
+/**
+ * How far this fighter can actually hit from, in world units.
+ *
+ * `attack` and `approach` are two halves of one threshold: `approach` stops
+ * closing at it and `attack` starts swinging at it, so the number has to be a
+ * distance the fighter's arm genuinely covers. A single constant for the whole
+ * roster is not — Donkey Kong's jab reaches 11.5 units (offset 7.5, radius
+ * 4.0), so a CPU using `MELEE_RANGE` parked at 14 units away, decided that was
+ * close enough to punch, and threw jabs at empty air. Nothing recovered: with
+ * both fighters stationary the state was identical on the next frame, so the
+ * same decision came back forever and the match sat at 58%–0% until the timer
+ * would have run out.
+ *
+ * Taken as the *minimum* across the pokes rather than the maximum, because the
+ * default swing does not get to choose which one comes out — a tilt when the
+ * direction has gone stale, a jab when it has not. Closing to the shorter of
+ * the two means whichever the engine reads, it connects. Every heavier option
+ * reaches further than either, so nothing else needs a threshold of its own.
+ *
+ * Conservative on purpose in one more way: it ignores the victim's hurtbox
+ * radius, which only ever adds reach. Standing a little too close costs the CPU
+ * nothing; standing a little too far costs it the entire match.
+ */
+export function meleeReachFromDef(def: FighterDef): number {
+  let reach = 0;
+  let found = false;
+
+  for (const slot of POKE_SLOTS) {
+    const move = def.moves[slot];
+    if (!move) continue;
+
+    let furthest = 0;
+    for (const hitbox of move.hitboxes) {
+      furthest = Math.max(furthest, hitbox.x + hitbox.radius);
+    }
+    if (furthest <= 0) continue;
+
+    reach = found ? Math.min(reach, furthest) : furthest;
+    found = true;
+  }
+
+  return found ? reach : MELEE_RANGE;
+}
 export const VERTICAL_REACH = fx(13);
 
 export function isStunned(f: FighterState): boolean {
@@ -581,7 +638,7 @@ export const attack: Behaviour = (ctx) => {
   const { self, target, targetAction, dx, dy, distance, facingTarget } = ctx.view;
   const { tuning } = ctx;
   if (!canAct(self) || !target) return NOTHING;
-  if (distance > MELEE_RANGE) return NOTHING;
+  if (distance > ctx.meleeReach) return NOTHING;
 
   const toward = towardX(0, dx);
   if (!facingTarget && self.grounded && toward !== 0) {
@@ -674,7 +731,10 @@ export const platformMove: Behaviour = (ctx) => {
 export const approach: Behaviour = (ctx) => {
   const { self, target, dx, dy, distance } = ctx.view;
   if (!canAct(self) || !target) return NOTHING;
-  if (distance <= MELEE_RANGE) return NOTHING;
+  // The same threshold `attack` swings at, so there is no band of distances
+  // where neither behaviour will act — that gap is what let a CPU stand still
+  // and punch nothing for the rest of the match.
+  if (distance <= ctx.meleeReach) return NOTHING;
 
   let input = towardX(0, dx);
   // Jumping toward a target well above is the same decision as platformMove,

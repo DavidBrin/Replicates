@@ -596,3 +596,81 @@ run. It passed with the bug reintroduced. The fixture now uses four frames, whic
 covers the hitbox's first active frame and not its last — and fails when the fix is reverted.
 
 ---
+
+## D29 — Four bugs in one place, because the seam was the only module with no tests
+
+`src/game/matchRunner.ts` is the whole of the join between a pure simulation and a browser.
+It shipped with no test file, and every module it drives shipped with a thorough one — which
+is exactly backwards, and produced four separate defects that a player meets in the first
+thirty seconds and that not one of 1,289 passing tests could see:
+
+| Symptom | Cause |
+|---|---|
+| No key did anything, all match | `play/page.tsx` built the keyboard reader and never called `attach()`, so it bound no listeners and `drain()` truthfully reported "nothing held" forever |
+| A white wash over the screen from the first KO onward | The runner called `ingestEvents` instead of `stepVfx`, so `updateVfx` never ran and `koFlash` never decayed from 12 |
+| Hit sparks that stayed on screen for the rest of the match | The same line: particles were created every frame and aged on none |
+| No sound at all, anywhere | Nothing outside `src/audio/` imported `src/audio/` |
+
+The common shape is not carelessness about any one of them. It is that **a collaborator with
+a per-frame contract has no way to complain about not being called.** `updateVfx` is correct.
+`AudioEngine.handleEvents` is correct, and its doc comment even says "call it every rendered
+frame" — written for a caller that did not exist. Each was unit-tested in isolation and each
+passed, because a module that is never invoked is indistinguishable from one that works.
+
+Nothing above the seam caught it either. `flow.spec.ts` asserted the frame counter was
+advancing, which is true of a match nobody can control. `controls.spec.ts` was green because
+it tests the screen that *documents* the controls. The one assertion that would have caught
+the dead keyboard — press a key, check the fighter moved — was the assertion nobody had
+written.
+
+**So the tests added here assert the drive, not the arithmetic.** `matchRunner.test.ts` counts
+the calls the loop is contractually required to make (vfx aged exactly once per simulation
+frame; audio driven every frame; the KO flash actually reaching zero), and `e2e/gameplay.spec.ts`
+presses real keys at a real match and asserts the *fighter* changed. Both were confirmed by
+reverting each fix and watching them go red.
+
+One of those e2e assertions was vacuous on the first attempt, in the same way D28's was: it
+checked `fighters.some(f => f.damage > 0)`, which a player who cannot move satisfies within
+seconds by being beaten up. It now asserts the *opponent's* percent rose, which is only
+possible if the player's inputs arrive.
+
+---
+
+## D30 — A CPU's swing range has to come from its own arms
+
+`attack` swung whenever the opponent was within `MELEE_RANGE`, a single constant of 20 units
+shared by the whole roster, and `approach` stopped closing at the same constant. Donkey
+Kong's jab reaches 11.5 units — offset 7.5 plus radius 4.0. So a CPU could stand 14 units
+away, be inside its own attack threshold and outside its own reach, and punch air.
+
+What made that fatal rather than merely bad is that **nothing perturbs it**. `approach`
+declines because the target is close enough; `attack` accepts and whiffs; neither fighter
+moves; the next frame's state is identical, so the same decision returns. A real match
+observed live sat at 58%–0% for thirty seconds with the CPU jabbing at nothing, and would
+have sat there until the timer ran out.
+
+The fix is to stop guessing. `meleeReachFromDef` reads the reach out of the fighter's own
+move data, and the runner hands it to each CPU alongside the stage geometry and air-jump
+count it already supplies. Two details are deliberate:
+
+- It takes the **minimum** across jab and forward tilt, not the maximum. The default swing
+  does not choose which one comes out — the engine reads a tilt when the direction has gone
+  stale and a jab when it has not (SPEC §6) — so closing to the shorter of the two is the
+  only distance at which *whichever* the engine picks connects. Every heavier option reaches
+  further than either.
+- It **ignores the victim's hurtbox radius**, which only ever adds reach. Standing slightly
+  too close costs the CPU nothing; standing slightly too far cost it the entire match.
+
+The regression test sweeps every distance from 1 to 40 units against six different reaches
+and asserts that at least one of `attack`/`approach` acts at each. Swept rather than
+spot-checked because the bug lived in a *band*: any single sample outside 11.5–20 passed.
+
+An earlier attempt tested this by running a CPU against a motionless opponent for twenty
+simulated seconds and asserting it dealt damage. That test was thrown away — it failed for
+three fighters for reasons that had nothing to do with the bug. A fighter with no input never
+leaves the respawn platform, so the "statue" was standing 24 units in the air and the CPU was
+correctly jumping at it; and one failure was simply the assertion reading the victim's
+percent on the frame *after* a KO reset it to zero. A test whose failures need that much
+explaining is measuring the wrong thing.
+
+---
