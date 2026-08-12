@@ -674,3 +674,205 @@ percent on the frame *after* a KO reset it to zero. A test whose failures need t
 explaining is measuring the wrong thing.
 
 ---
+
+## D31 — Up jumps, and still aims, and the arbitration is five frames long
+
+On a Switch the left stick does both jobs: push it up and you jump, tilt it up and press A
+and you get an up-smash. One control, two meanings, told apart by *magnitude*.
+
+A key has no magnitude. So the only signal left is **time**: an up press that is followed by
+attack, special or grab was an aimed attack, and one that stands alone was a jump. Which
+means the jump has to wait long enough to find out.
+
+`TAP_JUMP_FRAMES` is deliberately equal to `SMASH_INPUT_WINDOW`, and not chosen for feel.
+Five frames is exactly how long an up press stays eligible to become an up-smash, so a
+shorter wait would fire the jump first and make up-smash unreachable from the arrow cluster,
+while a longer one would delay every jump for nothing further in return.
+
+Five frames is 83ms and it is felt. That is what the dedicated jump key is for: it has no
+ambiguity to resolve, so it fires on the frame it is pressed, and a player who wants the
+snappier jump has one. This is the same trade the real game offers as the "tap jump" setting,
+arrived at from the other direction.
+
+The implementation needs no new state, which is worth stating because the obvious version
+does. Tap jump fires when `lastDirPressed` is up and `framesSinceDirPress` equals the window
+— both fields the smash/tilt rule already maintains — and it is expressed as an ordinary
+`jumpPressed`, so the buffer, jumpsquat, short hop, air jumps and ledge jumps all treat it
+identically without knowing it exists. Two properties fall out for free:
+
+- **An attack inside the window suppresses it automatically.** Pressing attack takes the
+  fighter out of an actionable state, so by the frame the jump would fire it is never asked
+  for. There is no "was it claimed?" flag to keep.
+- **Holding up cannot pogo.** `framesSinceDirPress` is reset by *any* fresh direction, so it
+  can only equal the window once per press.
+
+---
+
+## D32 — Two engine features the roster used and nothing read
+
+`MoveDef.momentum` and `MoveDef.superArmourFrames` were both in the type from the first
+commit, both referenced by fighter data, and both read by no code at all.
+
+The armour one was cosmetic: Donkey Kong's Giant Punch declared `superArmourFrames: [9, 20]`
+and flinched like anybody else's jab. The momentum one was not. **No fighter could recover.**
+Up-special played its animation and left the fighter exactly where it was, so every hit that
+sent a player off the stage was a stock, for all eight fighters, from the first match.
+
+This is the third bug of this exact shape in the project (see D29) and the pattern is now
+unmistakable: *data that describes behaviour, and no test that the behaviour happens*. Every
+adjacent test passed. The frame data was well-formed and `schema.test.ts` proved it.
+`specialSlot` returned `"upB"` for an up input and `states.test.ts` proved it. The state
+machine entered `special` and played the clip. What nobody had written down is the property a
+player notices in ten seconds — that pressing up-special off the side of the stage gets you
+back.
+
+So `fighters/specials.test.ts` drives the real `step()` loop with the real roster and asserts
+on **where the fighter ends up**, for every fighter, with the bar set at a fighter's own
+height. Nothing in it inspects `momentum`: a test that read the same table the code reads
+would pass just as happily against an engine that ignored it, which is exactly what shipped.
+
+Two design notes on `momentum` itself:
+
+- It **sets** velocity rather than adding it. These are scripted movements with a definite
+  speed; adding would make a Fox Illusion out of a run travel further than one from a
+  standstill.
+- It needs `hold`, or a downward impulse is clawed back to the fighter's ordinary fall speed
+  on the very next frame by gravity — which is the difference between a stone and a puffball.
+  While a hold is live, gravity does not apply.
+
+Writing it turned up an immediate consequence: returning early to skip gravity also skips the
+clamp that stops a grounded fighter driving into the floor, and a grounded Stone fell out of
+the world. A grounded Stone now sits there, which is also what it does in the real game.
+
+---
+
+## D33 — A rebinding UI the match never read
+
+`/controls` shipped with per-player scheme assignment, per-action rebinding, a live keyboard
+diagram and conflict refusal. All of it worked. None of it reached the game: `schemeForMenuId`
+returned the hard-coded preset and never saw the store, so a player could rebind every key,
+watch the diagram redraw, start a match, and find the original keys driving their fighter.
+
+The same shape as D29's dead keyboard and D32's dead frame data, and caught the same way —
+by a test that presses the *new* key and looks at the fighter. `e2e/rebinding.spec.ts` does
+the whole thing in one page session, because the match configuration is a client-side store
+and a `page.goto` between the rebinding and the match would reset it and pass against a game
+that had silently reverted to the defaults.
+
+Its first draft asserted the old key no longer moved the fighter by measuring displacement,
+and failed against a correct build: a fighter still decelerating out of the previous hold, or
+shoved by the CPU, drifts several units with no input at all. It now samples *action states*
+— did a walk ever start — which has one cause.
+
+---
+
+## D34 — An attack's animation is timed against its own hitbox, not its own length
+
+Play testing said the attacks "don't look like anything", and they didn't. The cause was one
+line: an attack clip ran at `actionFrame / totalFrames`, which puts the strike key at a fixed
+*fraction* of the move. No hitbox is live at a fixed fraction of its own move. Mario's forward
+smash connects at 32% of its 47 frames; his jab connects at 10% of its 20. So the jab reached
+full extension eight frames after its hitbox had already gone, and the forward smash arrived
+at its extension a frame late and then held one pose, motionless, for thirty frames.
+
+A clip now declares which of its keys is the moment of contact, and `poseTimeFor` stretches
+the wind-up and the recovery independently so that key lands on the frame the move actually
+hits. One shared clip therefore serves a 20-frame jab and a 47-frame smash and reads correctly
+in both — which is the whole premise of the shared pose library (D2), finally holding.
+
+Three smaller things followed from looking closely:
+
+- **Wind-ups accelerate into contact; recoveries decelerate out of it.** A smoothstepped
+  wind-up decelerates *into* the hit, so a forward smash arrived at full extension at walking
+  pace, and the whole game read as being made of putty.
+- **Every attack gained a follow-through key.** A single ease from the extension to the rest
+  pose across thirty recovery frames is well under a degree a frame, and reads as a freeze.
+- **Frame numbers are quoted from one and `actionFrame` counts from zero.** That was known in
+  the collision loop and rediscovered by hand in two more places, so it is now `moveFrameOf`
+  and `actionFrameOf` in `hitbox.ts` with the reasoning attached.
+
+---
+
+## D35 — The swing is drawn from the move's hitboxes, never authored
+
+A fighter's limbs are a few pixels thick and a swing lasts three frames. Every fighting game
+since the arcade era solves this the same way: the *weapon trail* does the reading, not the
+limb. `render/swing.ts` is that trail, and it says three things a pose cannot — which
+direction the attack points, how far it reaches, and on exactly which frames it can hurt you.
+
+**Nothing about it is authored.** The pivot is the fighter's shoulder, the radius is the
+distance to the furthest live hitbox and the sweep is centred on that hitbox's direction, so
+the graphic is derived from the same numbers the simulation hits with. An authored arc would
+be a second source of truth about where a move reaches, and the two would disagree within a
+week. `swing.test.ts` walks every attack of every fighter on every frame and asserts the arc
+never reaches past the hitbox it came from, because a swing drawn longer than its own hitbox
+teaches a distance that will whiff and the player will blame the hit detection.
+
+It is drawn per *hitbox window* rather than per move, so a multi-hit is several swings — one
+arc spanning Link's whole spin attack would claim the blade was out for most of a second.
+
+---
+
+## D36 — A hit spark is punctuation, not the sentence
+
+The burst star reached nine simulation units and swelled to 2.8× before dying: a star four
+times the height of the fighter who threw it, on screen for nearly half a second. On the one
+frame a player most needs to read — who was hit, and which way they are going — the screen
+was a solid orange shape.
+
+It is now about a third of a fighter and gone in a tenth of a second, and both halves are
+bounded by a test, because either one alone brings it back. Its sparks also fan along the
+launch angle rather than in a symmetric puff, which meant carrying that angle on the hit
+event: the direction is resolved from the hitbox and the attacker's facing inside the engine,
+where `knockbackToVelocity` already owns that mirroring rule, rather than being re-derived in
+the renderer where the two would be free to disagree.
+
+Knockback itself was invisible — a fighter flew off in silence at the same apparent speed
+whether the hit was a jab or a kill move — so a launched fighter now drags a port-coloured
+streak emitted from their own velocity. It reuses the existing spark particle, which already
+draws itself stretched backwards along its motion; nothing new to draw.
+
+---
+
+## D37 — Whoever is doing something is drawn on top
+
+Port order is the obvious draw order and it is the wrong one. It means the player on port 1
+spends every exchange hidden behind whoever is on port 2, and against a body as wide as
+Donkey Kong's, "hidden" is literal: a forward smash landing squarely was invisible, because
+the fighter throwing it was entirely behind the fighter taking it.
+
+`drawDepth` sorts by what each fighter is *doing* — attacking in front, being hit behind,
+everything else between — and the sort is stable, so two idle fighters do not swap depth
+every time one of them twitches.
+
+The camera had the same class of problem from the other direction. It was told to keep 72% of
+the main platform in frame, which is wider than two fighters ever get, so the platform and not
+the fighters set the zoom for the entire match and the camera never pushed in on anything. A
+fighter was an eighth of the screen height and a whole arm swing was a dozen pixels. It now
+keeps a third of the platform in shot and pushes to 15 px/unit, which puts a fighter at about
+a fifth of the screen — roughly where Ultimate sits in a close 1v1. The stage edges are
+allowed to leave the frame during close combat, exactly as they do in the real game.
+
+---
+
+## D38 — A special needs a prop, not a better pose
+
+There are four special clips — `neutralB`, `sideB`, `upB`, `downB` — and thirty-two specials.
+So Kirby's Stone and Samus's Charge Shot were the *same animation*: a fighter crouching
+slightly. The move list was right, the frame data was right, the mechanics were right, and
+every special in the game looked like every other one.
+
+The shared pose library is the correct decision for ordinary attacks, because a rig's
+proportions carry the identity (D2) — Donkey Kong's forward smash is Mario's on much longer
+arms and reads as his. It does not work for specials, and the fix is not more clips. What the
+eye reads in a special is the **prop**: the stone, the plasma, the hexagon. `render/specialFx.ts`
+is one entry per fighter per slot, and an entry may replace the fighter outright. Exactly one
+does — Kirby, who *is* the stone.
+
+Anything with no entry draws nothing, which is correct rather than incomplete: a special whose
+whole graphic is its projectile, like Link's arrow or Mario's fireball, is already drawn by
+`drawProjectiles`, and a glow on top would only muddy it.
+
+The failure mode here is silent — a typo in a table key, or a move renamed in `fighters/`, and
+the effect simply stops being drawn with nothing to indicate it — so `specialFx.test.ts`
+asserts every key names a move that actually exists.

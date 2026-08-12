@@ -99,6 +99,7 @@ export default function PlayPage() {
   const stageId = useMatchConfig((s) => s.stageId);
   const stageForm = useMatchConfig((s) => s.stageForm);
   const rules = useMatchConfig((s) => s.rules);
+  const bindings = useMatchConfig((s) => s.bindings);
   const setResult = useMatchConfig((s) => s.setResult);
 
   const [paused, setPaused] = useState(false);
@@ -137,7 +138,13 @@ export default function PlayPage() {
         // `conflictFreeSelection` is what stops two people picking mirror-image
         // presets that share six physical keys (DECISIONS D8). It hands back a
         // set that provably cannot collide, earlier entries winning.
-        const requested = humans.map((p) => ({ port: p.port, scheme: schemeForMenuId(p.scheme) }));
+        // With `bindings`, so a player who rebound their keys plays on the keys
+        // they chose. Without it this reads the factory preset and the whole
+        // controls screen is decorative.
+        const requested = humans.map((p) => ({
+          port: p.port,
+          scheme: schemeForMenuId(p.scheme, bindings[p.scheme]),
+        }));
         const chosen = conflictFreeSelection(requested.map((r) => r.scheme));
         // Paired back to their owners by membership, not by index.
         // `conflictFreeSelection` *drops* rejected entries, so from the first
@@ -292,7 +299,7 @@ export default function PlayPage() {
       keyboardRef.current = null;
       delete (window as unknown as { __smashDebug?: unknown }).__smashDebug;
     };
-  }, [players, stageId, stageForm, rules, router, setResult]);
+  }, [players, stageId, stageForm, rules, bindings, router, setResult]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

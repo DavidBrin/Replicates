@@ -110,11 +110,22 @@ presets a player chooses, and a **third preset on a disjoint cluster** exists fo
 on one laptop. The binding UI refuses a key another active player already holds
 ([D8](DECISIONS.md#d8--the-two-control-schemes-are-alternatives-not-two-players)).
 
-**A keyboard has no stick magnitude**, so the distinctions Smash draws from *how far* and
-*how fast* the stick moved are recovered from timing instead: an attack within 5 frames of a
+**Up jumps, exactly as pushing the stick up does**, and the same key still aims your attacks
+— `↑`+`D` is an up-smash, `↑`+`A` is your recovery. A stick tells those apart by magnitude
+and a key has none, so an up press waits 5 frames to see whether an attack follows before it
+becomes a jump. That is precisely as long as it stays eligible to *be* an up-smash. The
+dedicated jump key has no such ambiguity and fires on the frame it is pressed, which is what
+it is for ([D31](DECISIONS.md#d31--up-jumps-and-still-aims-and-the-arbitration-is-five-frames-long)).
+
+**A keyboard has no stick magnitude**, so the other distinctions Smash draws from *how far*
+and *how fast* the stick moved are recovered from timing too: an attack within 5 frames of a
 fresh direction press is a smash, otherwise a tilt; a jump released inside the 3-frame
 jumpsquat is a short hop; each fresh direction press during hitlag is one SDI pulse, so
 mashing works exactly as it does in the real game.
+
+**Every key is rebindable, per player.** `/controls` assigns a preset to each port and
+rebinds any action in it; the match reads the bindings the player actually chose
+([D33](DECISIONS.md#d33--a-rebinding-ui-the-match-never-read)).
 
 Walking is not reachable, and that is correct rather than missing — a key is always a *full*
 deflection, and a fully-deflected stick dashes. Micro-spacing comes from tapping.

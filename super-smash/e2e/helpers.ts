@@ -91,6 +91,17 @@ export async function readFighters(page: Page): Promise<DebugFighter[]> {
  */
 export async function startMatch(page: Page): Promise<void> {
   await startFromTitle(page);
+  await startMatchFromMenu(page);
+}
+
+/**
+ * The menu-to-match half on its own.
+ *
+ * Split out for the tests that have to *do* something on the way — change a
+ * binding, say — and cannot afford a fresh `page.goto`, since the match
+ * configuration lives in a client-side store that a reload would wipe.
+ */
+export async function startMatchFromMenu(page: Page): Promise<void> {
   await page.getByRole("button", { name: /smash/i }).first().click();
   await page.waitForURL(`**${ROUTES.rules}`);
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();

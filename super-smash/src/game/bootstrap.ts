@@ -20,7 +20,7 @@ import { registerFighters, registerStages } from "@/engine/simulate";
 import { allStageForms } from "@/stages";
 import type { FighterDef, StageDef } from "@/engine/types";
 import { CONFIG_ARROWS, CONFIG_WASD, CONFIG_LOCAL_P2, type Scheme } from "@/input/schemes";
-import type { SchemeId } from "@/lib/matchConfig";
+import type { Bindings, SchemeId } from "@/lib/matchConfig";
 
 let registered = false;
 
@@ -58,8 +58,23 @@ const SCHEME_BY_MENU_ID: Record<SchemeId, Scheme> = {
   rightCluster: CONFIG_LOCAL_P2,
 };
 
-export function schemeForMenuId(id: SchemeId): Scheme {
-  return SCHEME_BY_MENU_ID[id] ?? CONFIG_ARROWS;
+/**
+ * The scheme a menu id names, with the player's own rebinding applied.
+ *
+ * `bindings` is not optional decoration — without it this returns the factory
+ * preset, which is what it used to do, and the consequence was that the
+ * controls screen was a lie: a player could rebind every key, watch the
+ * diagram update, start a match and find the original keys still driving their
+ * fighter. The store recorded the change and nothing downstream read it.
+ *
+ * The two vocabularies use the same nine action names (`CONTROL_ACTIONS` and
+ * `GAME_ACTIONS`), which is why this is a spread rather than a translation —
+ * and why `bootstrap.test.ts` asserts the two lists have not drifted apart.
+ */
+export function schemeForMenuId(id: SchemeId, bindings?: Bindings): Scheme {
+  const preset = SCHEME_BY_MENU_ID[id] ?? CONFIG_ARROWS;
+  if (!bindings) return preset;
+  return { ...preset, bindings: { ...bindings } };
 }
 
 export { FIGHTERS, STAGES };

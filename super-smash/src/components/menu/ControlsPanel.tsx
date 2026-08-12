@@ -206,6 +206,26 @@ export function ControlsPanel() {
           </p>
         </SkewPanel>
 
+        {/* The one thing about the direction keys a player cannot deduce from
+            the diagram, because it is a rule rather than a binding. */}
+        <SkewPanel
+          className="mt-4 border-[3px] border-panel-ink bg-[#181b20]"
+          innerClassName="px-6 py-4"
+        >
+          <h2 className="font-display text-xl tracking-[0.1em] text-smash-yellow uppercase">
+            Up jumps, like the stick
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">
+            Pressing <strong className="text-white">Up</strong> on its own jumps, exactly as pushing the stick
+            up does on a Switch — and the same key still aims your attacks, so{" "}
+            <strong className="text-white">Up + Attack</strong> is an up-smash and{" "}
+            <strong className="text-white">Up + Special</strong> is your recovery. To tell the two apart, an Up
+            press waits five frames to see whether an attack follows it. The{" "}
+            <strong className="text-white">Jump</strong> key has nothing to work out, so it fires the instant
+            you press it — that is what it is there for.
+          </p>
+        </SkewPanel>
+
         {/* Who is playing on what */}
         <section aria-label="Player control schemes" className="mt-5">
           <h2 className="mb-2 font-display text-lg tracking-[0.14em] text-white/70 uppercase">Ports</h2>
