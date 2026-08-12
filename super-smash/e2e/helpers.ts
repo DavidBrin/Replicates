@@ -65,6 +65,7 @@ export interface DebugFighter {
   y: number;
   action: string;
   actionFrame: number;
+  move: string | null;
   damage: number;
   stocks: number;
   facing: number;

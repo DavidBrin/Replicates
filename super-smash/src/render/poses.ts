@@ -16,15 +16,23 @@
  * swings it forward, 210° swings it back; for an arm, 90° points straight
  * forward and 0° straight up.
  *
- * Clips interpolate with **shortest-path angle lerp under a smoothstep ease**.
+ * Clips interpolate with **shortest-path angle lerp under a per-span ease**.
  * Linear lerp between 350° and 10° walks the long way round the circle and
- * spins a limb through a full turn on a two-frame transition; smoothstep
- * removes the velocity discontinuity at each keyframe, which is what makes
- * three keys per attack look like anticipation rather than like three
- * photographs.
+ * spins a limb through a full turn on a two-frame transition; easing removes
+ * the velocity discontinuity at each keyframe, which is what makes four keys
+ * per attack look like anticipation rather than like four photographs.
+ *
+ * An attack is not eased like anything else, and is not *timed* like anything
+ * else either. Its wind-up accelerates into contact and its recovery
+ * decelerates out of it (`Ease`), and its strike key is pinned to the frame the
+ * move's hitbox actually goes live rather than to a fixed fraction of the clip
+ * (`MoveTiming`). Both exist for the same reason: an attack whose extension
+ * arrives a few frames off its hitbox does not read as an attack at all — it
+ * reads as a fighter standing still while damage happens.
  */
 
-import type { ActionState, FighterState, MoveSlot } from "@/engine/types";
+import { actionFrameOf } from "@/engine/hitbox";
+import type { ActionState, FighterDef, FighterState, MoveSlot } from "@/engine/types";
 import { deg, type BoneName, type PoseAngles } from "./skeleton";
 
 /* ----------------------------------------------------------- interpolation -- */
@@ -53,6 +61,35 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/**
+ * How a span between two keys is traversed.
+ *
+ * `smooth` eases both ends and is right for anything that is not a hit. It is
+ * wrong for a hit, and wrong in a way that reads as the whole game being made
+ * of putty: a smoothstepped wind-up decelerates *into* the contact frame, so a
+ * forward smash arrives at full extension at walking pace. Real attacks
+ * accelerate into contact and decelerate out of it, which is `in` on the
+ * wind-up span and `out` on the strike span.
+ */
+export type Ease = "smooth" | "in" | "out" | "linear";
+
+export function applyEase(kind: Ease | undefined, t: number): number {
+  const c = t < 0 ? 0 : t > 1 ? 1 : t;
+  switch (kind) {
+    // Cubic rather than quadratic: the extra order is what makes the limb sit
+    // still through the anticipation and then cover the distance in three or
+    // four frames, which is the shape of a real swing.
+    case "in":
+      return c * c * c;
+    case "out":
+      return 1 - (1 - c) ** 3;
+    case "linear":
+      return c;
+    default:
+      return smoothstep(c);
+  }
+}
+
 /* ------------------------------------------------------------------ clips -- */
 
 export interface Keyframe {
@@ -67,11 +104,23 @@ export interface Keyframe {
   /** Squash and stretch for this key. Default 1. */
   readonly scaleX?: number;
   readonly scaleY?: number;
+  /** How the span *leaving* this key is traversed. Default `smooth`. */
+  readonly ease?: Ease;
 }
 
 export interface PoseClip {
   readonly keys: readonly Keyframe[];
   readonly loop: boolean;
+  /**
+   * The `t` of the key that is the moment of contact, for clips that have one.
+   *
+   * Attacks are the only clips whose timing has an external truth to be right
+   * or wrong about: the move's hitbox is live on particular frames, and the
+   * fighter had better be at full extension on those exact frames. Naming the
+   * strike key here is what lets `poseTimeFor` stretch the wind-up and the
+   * recovery independently so that it is — see `MoveTiming`.
+   */
+  readonly strike?: number;
 }
 
 export interface PoseSample {
@@ -122,7 +171,7 @@ export function samplePose(clip: PoseClip, t: number): PoseSample {
   const b = clip.loop && i === keys.length - 1 ? keys[0] : keys[Math.min(i + 1, keys.length - 1)];
   const spanEnd = clip.loop && i === keys.length - 1 ? 1 : b.t;
   const span = spanEnd - a.t;
-  const local = span <= 0 ? 0 : smoothstep((u - a.t) / span);
+  const local = span <= 0 ? 0 : applyEase(a.ease, (u - a.t) / span);
 
   return blendKeys(a, b, local);
 }
@@ -598,8 +647,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   grab: {
     loop: false,
+    strike: 0.3,
     keys: [
-      { t: 0, pose: P({ torso: -6, upperArmR: 140, forearmR: -50, upperArmL: 152, forearmL: -46 }) },
+      {
+        t: 0,
+        pose: P({ torso: -6, upperArmR: 140, forearmR: -50, upperArmL: 152, forearmL: -46 }),
+        ease: "in",
+      },
       {
         t: 0.3,
         pose: P({
@@ -610,6 +664,16 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 88, forearmL: 2,
         }),
         offsetX: 0.4,
+        ease: "out",
+      },
+      {
+        t: 0.5,
+        pose: P({
+          torso: 8, head: -4,
+          upperArmR: 92, forearmR: -2,
+          upperArmL: 96, forearmL: -2,
+        }),
+        offsetX: 0.2,
       },
       { t: 1, pose: P({ torso: 6, upperArmR: 100, forearmR: -12, upperArmL: 104, forearmL: -10 }) },
     ],
@@ -617,8 +681,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   jab: {
     loop: false,
+    strike: 0.3,
     keys: [
-      { t: 0, pose: P({ torso: -8, head: 6, upperArmR: 196, forearmR: 60, upperArmL: 150, forearmL: -30 }) },
+      {
+        t: 0,
+        pose: P({ torso: -8, head: 6, upperArmR: 196, forearmR: 60, upperArmL: 150, forearmL: -30 }),
+        ease: "in",
+      },
       {
         t: 0.3,
         pose: P({
@@ -629,6 +698,23 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 200, forearmL: -70,
         }),
         offsetX: 0.35,
+        scaleX: 1.06,
+        ease: "out",
+      },
+      // The follow-through. Without it the recovery is one long ease from the
+      // extension to the rest pose, which over a smash's thirty recovery frames
+      // is under a degree a frame and reads as a freeze. The fist stays out
+      // while the body unwinds first — which is both what a punch does and what
+      // tells the opponent the move is over.
+      {
+        t: 0.44,
+        pose: P({
+          torso: 4, head: -2,
+          thighR: 152, shinR: 22, footR: -86,
+          upperArmR: 98, forearmR: 6,
+          upperArmL: 186, forearmL: -56,
+        }),
+        offsetX: 0.2,
       },
       { t: 1, pose: P({ torso: 2, upperArmR: 150, forearmR: -30, upperArmL: 190, forearmL: -40 }) },
     ],
@@ -636,8 +722,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   ftilt: {
     loop: false,
+    strike: 0.32,
     keys: [
-      { t: 0, pose: P({ torso: -12, head: 8, upperArmR: 206, forearmR: 54, upperArmL: 158, forearmL: -20 }) },
+      {
+        t: 0,
+        pose: P({ torso: -12, head: 8, upperArmR: 206, forearmR: 54, upperArmL: 158, forearmL: -20 }),
+        ease: "in",
+      },
       {
         t: 0.32,
         pose: P({
@@ -648,6 +739,18 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 212, forearmL: -50,
         }),
         offsetX: 0.5,
+        scaleX: 1.08,
+        ease: "out",
+      },
+      {
+        t: 0.46,
+        pose: P({
+          torso: 2, head: 0,
+          thighR: 150, shinR: 24, footR: -86,
+          upperArmR: 100, forearmR: 4,
+          upperArmL: 200, forearmL: -42,
+        }),
+        offsetX: 0.28,
       },
       { t: 1, pose: P({ torso: 4, upperArmR: 132, forearmR: -24, upperArmL: 196, forearmL: -34 }) },
     ],
@@ -655,8 +758,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   utilt: {
     loop: false,
+    strike: 0.32,
     keys: [
-      { t: 0, pose: P({ torso: 12, head: -10, upperArmR: 190, forearmR: 50, upperArmL: 176, forearmL: -40 }) },
+      {
+        t: 0,
+        pose: P({ torso: 12, head: -10, upperArmR: 190, forearmR: 50, upperArmL: 176, forearmL: -40 }),
+        ease: "in",
+      },
       {
         t: 0.32,
         pose: P({
@@ -667,6 +775,17 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 344, forearmL: 10,
         }),
         offsetY: 0.35,
+        scaleY: 1.08,
+        ease: "out",
+      },
+      {
+        t: 0.46,
+        pose: P({
+          torso: -2, head: 6,
+          upperArmR: 42, forearmR: -4,
+          upperArmL: 328, forearmL: 6,
+        }),
+        offsetY: 0.14,
       },
       { t: 1, pose: P({ torso: 4, upperArmR: 120, forearmR: -30, upperArmL: 236, forearmL: 30 }) },
     ],
@@ -674,11 +793,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   dtilt: {
     loop: false,
+    strike: 0.3,
     keys: [
       {
         t: 0,
         pose: P({ torso: 18, head: -14, thighR: 138, shinR: 90, thighL: 146, shinL: 86 }),
         offsetY: -1.5,
+        ease: "in",
       },
       {
         t: 0.3,
@@ -691,6 +812,18 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetY: -1.9,
         offsetX: 0.3,
+        scaleX: 1.1,
+        ease: "out",
+      },
+      {
+        t: 0.46,
+        pose: P({
+          torso: 22, head: -16,
+          thighR: 126, shinR: 22, footR: -84,
+          thighL: 148, shinL: 92, footL: -72,
+        }),
+        offsetY: -1.8,
+        offsetX: 0.16,
       },
       { t: 1, pose: P({ torso: 18, thighR: 136, shinR: 92, thighL: 146, shinL: 86 }), offsetY: -1.5 },
     ],
@@ -698,8 +831,14 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   dashAttack: {
     loop: false,
+    strike: 0.28,
     keys: [
-      { t: 0, pose: P({ torso: 24, head: -16, upperArmR: 214, forearmR: 46, upperArmL: 150, forearmL: -40 }), offsetX: 0.2 },
+      {
+        t: 0,
+        pose: P({ torso: 24, head: -16, upperArmR: 214, forearmR: 46, upperArmL: 150, forearmL: -40 }),
+        offsetX: 0.2,
+        ease: "in",
+      },
       {
         t: 0.28,
         pose: P({
@@ -711,7 +850,20 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetX: 1.1,
         offsetY: -0.6,
-        scaleX: 1.1,
+        scaleX: 1.14,
+        ease: "out",
+      },
+      {
+        t: 0.44,
+        pose: P({
+          torso: 30, head: -20,
+          thighR: 136, shinR: 46, footR: -74,
+          thighL: 210, shinL: 34, footL: -70,
+          upperArmR: 96, forearmR: -6,
+          upperArmL: 100, forearmL: -8,
+        }),
+        offsetX: 0.7,
+        offsetY: -0.6,
       },
       { t: 1, pose: P({ torso: 16, upperArmR: 140, forearmR: -28, upperArmL: 200, forearmL: -34 }), offsetY: -0.6 },
     ],
@@ -721,6 +873,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   // charge glow has a pose to sit behind.
   fsmash: {
     loop: false,
+    strike: 0.3,
     keys: [
       {
         t: 0,
@@ -733,6 +886,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetX: -0.5,
         offsetY: -0.4,
+        ease: "in",
       },
       {
         t: 0.3,
@@ -745,7 +899,20 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetX: 1.0,
         offsetY: -0.5,
-        scaleX: 1.08,
+        scaleX: 1.14,
+        ease: "out",
+      },
+      {
+        t: 0.44,
+        pose: P({
+          torso: 12, head: -6, hip: -2,
+          thighR: 142, shinR: 26, footR: -88,
+          thighL: 214, shinL: 28, footL: -74,
+          upperArmR: 98, forearmR: 6,
+          upperArmL: 210, forearmL: -46,
+        }),
+        offsetX: 0.62,
+        offsetY: -0.4,
       },
       { t: 1, pose: P({ torso: 8, upperArmR: 126, forearmR: -30, upperArmL: 200, forearmL: -40 }), offsetY: -0.3 },
     ],
@@ -753,6 +920,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   usmash: {
     loop: false,
+    strike: 0.3,
     keys: [
       {
         t: 0,
@@ -764,6 +932,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 220, forearmL: -60,
         }),
         offsetY: -1.4,
+        ease: "in",
       },
       {
         t: 0.3,
@@ -775,7 +944,20 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: -8, forearmL: 6,
         }),
         offsetY: 0.5,
-        scaleY: 1.1,
+        scaleY: 1.16,
+        scaleX: 0.92,
+        ease: "out",
+      },
+      {
+        t: 0.44,
+        pose: P({
+          torso: 0, head: 4,
+          thighR: 164, shinR: 16, footR: -86,
+          upperArmR: 30, forearmR: -10,
+          upperArmL: 330, forearmL: 10,
+        }),
+        offsetY: 0.16,
+        scaleY: 1.04,
       },
       { t: 1, pose: P({ torso: 6, upperArmR: 110, forearmR: -40, upperArmL: 244, forearmL: 40 }) },
     ],
@@ -783,6 +965,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   dsmash: {
     loop: false,
+    strike: 0.3,
     keys: [
       {
         t: 0,
@@ -794,6 +977,7 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 334, forearmL: -20,
         }),
         offsetY: -1.2,
+        ease: "in",
       },
       {
         t: 0.3,
@@ -805,8 +989,21 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 264, forearmL: -62,
         }),
         offsetY: -2.0,
-        scaleX: 1.16,
-        scaleY: 0.9,
+        scaleX: 1.22,
+        scaleY: 0.86,
+        ease: "out",
+      },
+      {
+        t: 0.46,
+        pose: P({
+          torso: 10, head: -8,
+          thighR: 130, shinR: 88, footR: -80,
+          thighL: 224, shinL: -70, footL: 76,
+          upperArmR: 80, forearmR: 44,
+          upperArmL: 280, forearmL: -44,
+        }),
+        offsetY: -1.7,
+        scaleX: 1.08,
       },
       { t: 1, pose: P({ torso: 12, thighR: 140, shinR: 72, thighL: 150, shinL: 68 }), offsetY: -1.3 },
     ],
@@ -816,8 +1013,9 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   nair: {
     loop: false,
+    strike: 0.22,
     keys: [
-      { t: 0, pose: P({ torso: 8, thighR: 150, shinR: 50, thighL: 206, shinL: 40 }) },
+      { t: 0, pose: P({ torso: 8, thighR: 150, shinR: 50, thighL: 206, shinL: 40 }), ease: "in" },
       {
         t: 0.22,
         pose: P({
@@ -827,7 +1025,20 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmR: 62, forearmR: 10,
           upperArmL: 288, forearmL: -10,
         }),
-        scaleX: 1.12,
+        scaleX: 1.18,
+        scaleY: 0.94,
+        ease: "out",
+      },
+      {
+        t: 0.4,
+        pose: P({
+          torso: 2,
+          thighR: 126, shinR: 18, footR: -78,
+          thighL: 224, shinL: 22, footL: -72,
+          upperArmR: 84, forearmR: 4,
+          upperArmL: 268, forearmL: -4,
+        }),
+        scaleX: 1.06,
       },
       { t: 1, pose: P({ torso: 2, thighR: 146, shinR: 34, thighL: 210, shinL: 28, upperArmR: 118, upperArmL: 242 }) },
     ],
@@ -835,10 +1046,12 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   fair: {
     loop: false,
+    strike: 0.3,
     keys: [
       {
         t: 0,
         pose: P({ torso: -14, head: 10, upperArmR: 330, forearmR: 30, upperArmL: 160, forearmL: -30 }),
+        ease: "in",
       },
       {
         t: 0.3,
@@ -850,6 +1063,18 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 200, forearmL: -46,
         }),
         offsetX: 0.4,
+        scaleX: 1.1,
+        ease: "out",
+      },
+      {
+        t: 0.46,
+        pose: P({
+          torso: 10, head: -6,
+          thighR: 150, shinR: 38, footR: -72,
+          upperArmR: 148, forearmR: -14,
+          upperArmL: 206, forearmL: -38,
+        }),
+        offsetX: 0.22,
       },
       { t: 1, pose: P({ torso: 6, upperArmR: 146, forearmR: -26, upperArmL: 210, forearmL: -30 }) },
     ],
@@ -857,8 +1082,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   bair: {
     loop: false,
+    strike: 0.26,
     keys: [
-      { t: 0, pose: P({ torso: 14, head: -12, thighR: 150, shinR: 60, thighL: 158, shinL: 56 }) },
+      {
+        t: 0,
+        pose: P({ torso: 14, head: -12, thighR: 150, shinR: 60, thighL: 158, shinL: 56 }),
+        ease: "in",
+      },
       {
         t: 0.26,
         pose: P({
@@ -869,7 +1099,18 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 146, forearmL: -34,
         }),
         offsetX: -0.5,
-        scaleX: 1.1,
+        scaleX: 1.16,
+        ease: "out",
+      },
+      {
+        t: 0.44,
+        pose: P({
+          torso: 20, head: -16,
+          thighR: 226, shinR: 8, footR: 70,
+          thighL: 232, shinL: 6, footL: 72,
+        }),
+        offsetX: -0.24,
+        scaleX: 1.05,
       },
       { t: 1, pose: P({ torso: 10, thighR: 196, shinR: 30, thighL: 202, shinL: 26 }) },
     ],
@@ -877,8 +1118,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   uair: {
     loop: false,
+    strike: 0.26,
     keys: [
-      { t: 0, pose: P({ torso: 12, head: -10, thighR: 154, shinR: 54, thighL: 202, shinL: 50 }) },
+      {
+        t: 0,
+        pose: P({ torso: 12, head: -10, thighR: 154, shinR: 54, thighL: 202, shinL: 50 }),
+        ease: "in",
+      },
       {
         t: 0.26,
         pose: P({
@@ -889,7 +1135,19 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 340, forearmL: 12,
         }),
         offsetY: 0.4,
-        scaleY: 1.12,
+        scaleY: 1.18,
+        scaleX: 0.92,
+        ease: "out",
+      },
+      {
+        t: 0.44,
+        pose: P({
+          torso: -2, head: 6,
+          thighR: 140, shinR: 6, footR: -66,
+          thighL: 156, shinL: 4, footL: -64,
+        }),
+        offsetY: 0.16,
+        scaleY: 1.06,
       },
       { t: 1, pose: P({ torso: 0, thighR: 152, shinR: 30, thighL: 200, shinL: 26 }) },
     ],
@@ -897,8 +1155,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   dair: {
     loop: false,
+    strike: 0.26,
     keys: [
-      { t: 0, pose: P({ torso: -8, head: 8, thighR: 146, shinR: 70, thighL: 200, shinL: 66 }) },
+      {
+        t: 0,
+        pose: P({ torso: -8, head: 8, thighR: 146, shinR: 70, thighL: 200, shinL: 66 }),
+        ease: "in",
+      },
       {
         t: 0.26,
         pose: P({
@@ -909,8 +1172,19 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 210, forearmL: 40,
         }),
         offsetY: -0.5,
-        scaleX: 0.9,
-        scaleY: 1.14,
+        scaleX: 0.86,
+        scaleY: 1.2,
+        ease: "out",
+      },
+      {
+        t: 0.44,
+        pose: P({
+          torso: 2,
+          thighR: 174, shinR: 8, footR: -96,
+          thighL: 186, shinL: 8, footL: -94,
+        }),
+        offsetY: -0.22,
+        scaleY: 1.08,
       },
       { t: 1, pose: P({ torso: 0, thighR: 168, shinR: 20, thighL: 192, shinL: 18 }) },
     ],
@@ -920,8 +1194,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   neutralB: {
     loop: false,
+    strike: 0.34,
     keys: [
-      { t: 0, pose: P({ torso: -14, head: 10, upperArmR: 200, forearmR: 60, upperArmL: 168, forearmL: -30 }) },
+      {
+        t: 0,
+        pose: P({ torso: -14, head: 10, upperArmR: 200, forearmR: 60, upperArmL: 168, forearmL: -30 }),
+        ease: "in",
+      },
       {
         t: 0.34,
         pose: P({
@@ -932,6 +1211,17 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 104, forearmL: -6,
         }),
         offsetX: 0.3,
+        scaleX: 1.06,
+        ease: "out",
+      },
+      {
+        t: 0.5,
+        pose: P({
+          torso: 2, head: 0,
+          upperArmR: 104, forearmR: 4,
+          upperArmL: 118, forearmL: 2,
+        }),
+        offsetX: 0.14,
       },
       { t: 1, pose: P({ torso: 4, upperArmR: 126, forearmR: -26, upperArmL: 200, forearmL: -30 }) },
     ],
@@ -939,8 +1229,14 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   sideB: {
     loop: false,
+    strike: 0.3,
     keys: [
-      { t: 0, pose: P({ torso: -18, head: 12, upperArmR: 222, forearmR: 60, upperArmL: 150, forearmL: -36 }), offsetX: -0.3 },
+      {
+        t: 0,
+        pose: P({ torso: -18, head: 12, upperArmR: 222, forearmR: 60, upperArmL: 150, forearmL: -36 }),
+        offsetX: -0.3,
+        ease: "in",
+      },
       {
         t: 0.3,
         pose: P({
@@ -951,7 +1247,18 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 226, forearmL: -60,
         }),
         offsetX: 0.9,
-        scaleX: 1.08,
+        scaleX: 1.14,
+        ease: "out",
+      },
+      {
+        t: 0.46,
+        pose: P({
+          torso: 16, head: -10,
+          thighR: 140, shinR: 30, footR: -82,
+          upperArmR: 96, forearmR: 2,
+          upperArmL: 212, forearmL: -48,
+        }),
+        offsetX: 0.58,
       },
       { t: 1, pose: P({ torso: 10, upperArmR: 132, forearmR: -28, upperArmL: 202, forearmL: -34 }), offsetX: 0.3 },
     ],
@@ -959,11 +1266,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   upB: {
     loop: false,
+    strike: 0.28,
     keys: [
       {
         t: 0,
         pose: P({ torso: 16, head: -14, thighR: 140, shinR: 76, thighL: 148, shinL: 72, upperArmR: 210, upperArmL: 224 }),
         offsetY: -1.2,
+        ease: "in",
       },
       {
         t: 0.28,
@@ -975,8 +1284,21 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: -12, forearmL: 4,
         }),
         offsetY: 0.9,
-        scaleX: 0.9,
-        scaleY: 1.16,
+        scaleX: 0.86,
+        scaleY: 1.22,
+        ease: "out",
+      },
+      {
+        t: 0.5,
+        pose: P({
+          torso: 0, head: 4,
+          thighR: 160, shinR: 22, footR: -80,
+          thighL: 200, shinL: 20, footL: -80,
+          upperArmR: 26, forearmR: 4,
+          upperArmL: 334, forearmL: -4,
+        }),
+        offsetY: 0.5,
+        scaleY: 1.08,
       },
       { t: 1, pose: P({ torso: 2, upperArmR: 46, forearmR: 20, upperArmL: 314, forearmL: -20 }), offsetY: 0.3 },
     ],
@@ -984,8 +1306,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   downB: {
     loop: false,
+    strike: 0.3,
     keys: [
-      { t: 0, pose: P({ torso: 6, head: -6, upperArmR: 40, forearmR: 30, upperArmL: 320, forearmL: -30 }) },
+      {
+        t: 0,
+        pose: P({ torso: 6, head: -6, upperArmR: 40, forearmR: 30, upperArmL: 320, forearmL: -30 }),
+        ease: "in",
+      },
       {
         t: 0.3,
         pose: P({
@@ -996,7 +1323,20 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
           upperArmL: 128, forearmL: -70,
         }),
         offsetY: -1.4,
-        scaleX: 1.06,
+        scaleX: 1.12,
+        scaleY: 0.92,
+        ease: "out",
+      },
+      {
+        t: 0.48,
+        pose: P({
+          torso: 14, head: -10,
+          thighR: 142, shinR: 74, footR: -82,
+          thighL: 150, shinL: 70, footL: -80,
+          upperArmR: 140, forearmR: -40,
+          upperArmL: 218, forearmL: -44,
+        }),
+        offsetY: -1.2,
       },
       { t: 1, pose: P({ torso: 10, thighR: 148, shinR: 60, thighL: 154, shinL: 56 }), offsetY: -0.9 },
     ],
@@ -1006,9 +1346,11 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
 
   fthrow: {
     loop: false,
+    strike: 0.35,
     keys: [
-      { t: 0, pose: P({ torso: -16, upperArmR: 130, forearmR: -50, upperArmL: 138, forearmL: -46 }) },
+      { ease: "in", t: 0, pose: P({ torso: -16, upperArmR: 130, forearmR: -50, upperArmL: 138, forearmL: -46 }) },
       {
+        ease: "out",
         t: 0.35,
         pose: P({
           torso: 24, head: -16,
@@ -1019,15 +1361,27 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetX: 0.6,
       },
+      {
+        t: 0.52,
+        pose: P({
+          torso: 14, head: -8,
+          thighR: 146, shinR: 24, footR: -86,
+          upperArmR: 96, forearmR: 2,
+          upperArmL: 100, forearmL: 2,
+        }),
+        offsetX: 0.34,
+      },
       { t: 1, pose: P({ torso: 8, upperArmR: 118, forearmR: -30, upperArmL: 124, forearmL: -28 }) },
     ],
   },
 
   bthrow: {
     loop: false,
+    strike: 0.4,
     keys: [
-      { t: 0, pose: P({ torso: 14, upperArmR: 108, forearmR: -40, upperArmL: 114, forearmL: -38 }) },
+      { ease: "in", t: 0, pose: P({ torso: 14, upperArmR: 108, forearmR: -40, upperArmL: 114, forearmL: -38 }) },
       {
+        ease: "out",
         t: 0.4,
         pose: P({
           torso: -30, head: 22, hip: 10,
@@ -1038,15 +1392,27 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetX: -0.7,
       },
+      {
+        t: 0.58,
+        pose: P({
+          torso: -18, head: 14,
+          thighR: 168, shinR: 18, footR: -84,
+          upperArmR: 238, forearmR: 30,
+          upperArmL: 244, forearmL: 28,
+        }),
+        offsetX: -0.4,
+      },
       { t: 1, pose: P({ torso: -6, upperArmR: 214, forearmR: 20, upperArmL: 220, forearmL: 18 }) },
     ],
   },
 
   uthrow: {
     loop: false,
+    strike: 0.35,
     keys: [
-      { t: 0, pose: P({ torso: 12, head: -10, upperArmR: 116, forearmR: -50, upperArmL: 122, forearmL: -48 }), offsetY: -0.6 },
+      { ease: "in", t: 0, pose: P({ torso: 12, head: -10, upperArmR: 116, forearmR: -50, upperArmL: 122, forearmL: -48 }), offsetY: -0.6 },
       {
+        ease: "out",
         t: 0.35,
         pose: P({
           torso: -8, head: 10,
@@ -1058,15 +1424,27 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         offsetY: 0.6,
         scaleY: 1.1,
       },
+      {
+        t: 0.52,
+        pose: P({
+          torso: -2, head: 6,
+          upperArmR: 26, forearmR: -4,
+          upperArmL: 334, forearmL: 4,
+        }),
+        offsetY: 0.3,
+        scaleY: 1.04,
+      },
       { t: 1, pose: P({ torso: 2, upperArmR: 60, forearmR: 20, upperArmL: 300, forearmL: -20 }) },
     ],
   },
 
   dthrow: {
     loop: false,
+    strike: 0.35,
     keys: [
-      { t: 0, pose: P({ torso: -10, upperArmR: 122, forearmR: -46, upperArmL: 128, forearmL: -44 }) },
+      { ease: "in", t: 0, pose: P({ torso: -10, upperArmR: 122, forearmR: -46, upperArmL: 128, forearmL: -44 }) },
       {
+        ease: "out",
         t: 0.35,
         pose: P({
           torso: 30, head: -24, hip: -8,
@@ -1077,6 +1455,17 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
         }),
         offsetY: -1.7,
         scaleX: 1.08,
+      },
+      {
+        t: 0.52,
+        pose: P({
+          torso: 22, head: -16,
+          thighR: 138, shinR: 80, footR: -80,
+          thighL: 146, shinL: 76, footL: -78,
+          upperArmR: 170, forearmR: -10,
+          upperArmL: 176, forearmL: -8,
+        }),
+        offsetY: -1.4,
       },
       { t: 1, pose: P({ torso: 14, thighR: 146, shinR: 62, thighL: 152, shinL: 58 }), offsetY: -1.0 },
     ],
@@ -1199,21 +1588,68 @@ export function poseNameFor(action: ActionState, move: MoveSlot | null): PoseNam
 }
 
 /**
+ * What the renderer knows about the move being animated.
+ *
+ * `firstActive` is the whole reason this exists. Driving an attack clip by
+ * `actionFrame / totalFrames` puts the strike key at a fixed *fraction* of the
+ * move, and no move's hitbox is live at a fixed fraction of itself: Mario's
+ * forward smash is 47 frames and connects on frame 15 (32%), his jab is 20 and
+ * connects on frame 2 (10%). Under the old scheme the jab reached full
+ * extension eight frames after the hitbox had already gone, and the smash
+ * arrived at its extension a frame late and then held it, motionless, for
+ * thirty frames — which is exactly what "the attacks don't look like anything"
+ * turned out to mean.
+ */
+export interface MoveTiming {
+  readonly total: number;
+  /** First frame any hitbox is live, or -1 for a move with none. */
+  readonly firstActive: number;
+  readonly lastActive: number;
+}
+
+/** Read the timing of the move a fighter is currently performing. */
+export function moveTimingFor(
+  def: Pick<FighterDef, "moves"> | null | undefined,
+  move: MoveSlot | null,
+): MoveTiming | undefined {
+  const def_ = def?.moves;
+  const m = move && def_ ? def_[move] : undefined;
+  if (!m) return undefined;
+  let first = -1;
+  let last = -1;
+  for (const hb of m.hitboxes) {
+    if (first < 0 || hb.startFrame < first) first = hb.startFrame;
+    if (hb.endFrame > last) last = hb.endFrame;
+  }
+  // Converted out of the frame-data convention and into `actionFrame`, which is
+  // what every caller here counts in. See `moveFrameOf`.
+  return {
+    total: m.totalFrames,
+    firstActive: first < 0 ? -1 : actionFrameOf(first),
+    lastActive: last < 0 ? -1 : actionFrameOf(last),
+  };
+}
+
+/**
  * Normalised clip time for a fighter.
  *
  * Looping clips are driven by the *global* frame for idle (so four fighters do
  * not breathe in lockstep once their `actionFrame`s coincide) and by
- * `actionFrame` for locomotion (so a walk starts on its contact key). Attacks
- * are driven by `actionFrame / totalFrames`, which means the pose is
- * automatically in time with the move's real frame data rather than with a
- * guess — a 60-frame forward smash and a 12-frame jab both hit their strike key
- * at 30% of their own duration.
+ * `actionFrame` for locomotion (so a walk starts on its contact key).
+ *
+ * An attack is driven by a **two-piece map anchored on its own contact frame**:
+ * the wind-up is stretched to fill the startup and the recovery is stretched to
+ * fill the rest, so the clip's strike key lands on `firstActive` whatever the
+ * move's frame data says. That is what makes one shared clip serve a 20-frame
+ * jab and a 47-frame smash and read correctly in both — the alternative is a
+ * hand-tuned clip per move per fighter, which is the three hundred and twenty
+ * animations this whole approach exists to avoid.
  */
 export function poseTimeFor(
   name: PoseName,
   fighter: Pick<FighterState, "actionFrame" | "port" | "charge">,
   frame: number,
-  moveTotalFrames?: number,
+  timing?: MoveTiming,
 ): number {
   switch (name) {
     case "idle":
@@ -1225,12 +1661,24 @@ export function poseTimeFor(
     case "tumble":
       return (fighter.actionFrame % TUMBLE_PERIOD) / TUMBLE_PERIOD;
     default: {
-      const total = moveTotalFrames && moveTotalFrames > 0 ? moveTotalFrames : 30;
-      // A charging smash parks on its wind-up key instead of running the clip.
+      const total = timing && timing.total > 0 ? timing.total : 30;
+      const strike = POSE_LIBRARY[name]?.strike;
+      // A charging smash parks partway up its wind-up, so the charge glow has a
+      // coiled pose to sit behind rather than a finished one.
       if (fighter.charge > 0 && (name === "fsmash" || name === "usmash" || name === "dsmash")) {
-        return 0.16;
+        return (strike ?? 0.3) * 0.55;
       }
-      return Math.min(1, fighter.actionFrame / total);
+      const f = fighter.actionFrame;
+      const first = timing?.firstActive ?? -1;
+      // Only remap when there is a contact frame with room on both sides of it.
+      // A move whose hitbox is live on frame 0, or on its last frame, has no
+      // wind-up or no recovery to stretch, and the plain ratio is right.
+      if (strike !== undefined && first > 0 && first < total) {
+        return f <= first
+          ? (strike * f) / first
+          : Math.min(1, strike + ((1 - strike) * (f - first)) / (total - first));
+      }
+      return Math.min(1, f / total);
     }
   }
 }
@@ -1239,9 +1687,9 @@ export function poseTimeFor(
 export function samplePoseForFighter(
   fighter: Pick<FighterState, "action" | "actionFrame" | "move" | "port" | "charge">,
   frame: number,
-  moveTotalFrames?: number,
+  timing?: MoveTiming,
 ): PoseSample {
   const name = poseNameFor(fighter.action, fighter.move);
   const clip = POSE_LIBRARY[name];
-  return samplePose(clip, poseTimeFor(name, fighter, frame, moveTotalFrames));
+  return samplePose(clip, poseTimeFor(name, fighter, frame, timing));
 }

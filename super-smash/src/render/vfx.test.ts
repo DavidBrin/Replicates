@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import { fx } from "@/engine/fixed";
 import { SHIELD_MAX_HEALTH } from "@/engine/constants";
 import { MAX_ZOOM, createCamera } from "./camera";
-import { hexToRgb } from "./characterArt";
+import { PORT_COLOURS, hexToRgb } from "./characterArt";
 import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
 import {
+  BURST_MAX_GROWTH,
+  FIGHTER_UNITS,
   HIT_FLASH_FRAMES,
   createVfx,
   drawKoFlash,
@@ -19,6 +21,7 @@ import {
   spawnHitSpark,
   stepVfx,
   trackAfterimages,
+  trackLaunchTrails,
   updateVfx,
 } from "./vfx";
 import { makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
@@ -26,7 +29,7 @@ import { makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
 const stage = makeStage();
 const cam = createCamera(stage);
 
-function hit(over: Partial<{ damage: number; knockback: number; victim: number }> = {}) {
+function hit(over: Partial<{ damage: number; knockback: number; victim: number; angle: number }> = {}) {
   return makeEvents({
     hits: [
       {
@@ -36,6 +39,7 @@ function hit(over: Partial<{ damage: number; knockback: number; victim: number }
         x: 0,
         y: fx(6),
         knockback: over.knockback ?? fx(60),
+        angle: over.angle ?? fx(45),
       },
     ],
   });
@@ -108,6 +112,111 @@ describe("hit sparks", () => {
     ingestEvents(v, hit(), makeState());
     for (let i = 0; i < HIT_FLASH_FRAMES + 1; i++) updateVfx(v);
     expect(hitFlashAmount(v, 1)).toBe(0);
+  });
+
+  /**
+   * The spark is punctuation, not the sentence.
+   *
+   * At its worst the burst star reached nine units and swelled to 2.8×, which
+   * is a star four times the height of the fighter who threw it: on the one
+   * frame a player most needs to read — who was hit, and which way they are
+   * going — the screen was a solid orange shape. Both halves are bounded here
+   * because either one alone can bring it back.
+   */
+  it("keeps even the hardest hit's spark smaller than the fighter throwing it", () => {
+    const v = createVfx();
+    // Harder than any single hitbox in the roster, so this is the worst case.
+    spawnHitSpark(v, 0, 0, 40, 320);
+
+    const burst = v.particles.find((p) => p.kind === "burst");
+    expect(burst).toBeDefined();
+    expect((burst as { size: number }).size * BURST_MAX_GROWTH).toBeLessThan(FIGHTER_UNITS * 0.5);
+
+    for (const p of v.particles) {
+      expect(p.size).toBeLessThan(FIGHTER_UNITS * 0.5);
+    }
+  });
+
+  it("throws its sparks the way the victim is going", () => {
+    // The frame of contact is the frame a player most needs to read a launch
+    // off, and a symmetric puff tells them nothing. Both directions are
+    // checked, because a spark cone that ignored the angle entirely would pass
+    // a one-sided assertion by luck about half the time.
+    const mean = (angle: number) => {
+      const v = createVfx();
+      spawnHitSpark(v, 0, 0, 14, 120, angle);
+      const sparks = v.particles.filter((p) => p.kind === "spark");
+      expect(sparks.length).toBeGreaterThan(4);
+      return {
+        vx: sparks.reduce((a, p) => a + p.vx, 0) / sparks.length,
+        vy: sparks.reduce((a, p) => a + p.vy, 0) / sparks.length,
+      };
+    };
+
+    expect(mean(0).vx).toBeGreaterThan(0);
+    expect(mean(Math.PI).vx).toBeLessThan(0);
+    expect(mean(Math.PI / 2).vy).toBeGreaterThan(0);
+    expect(mean(-Math.PI / 2).vy).toBeLessThan(0);
+  });
+
+  it("is gone within a fifth of a second", () => {
+    // "Practically instantaneous" was the note. Twelve frames is 200ms; the
+    // sparks used to live for 26, which is closer to half a second of debris
+    // sitting on top of the launch.
+    const v = createVfx();
+    spawnHitSpark(v, 0, 0, 40, 320);
+    for (let i = 0; i < 12; i++) updateVfx(v);
+    expect(v.particles.length).toBe(0);
+  });
+});
+
+/**
+ * Knockback is the game's whole scoring system, and until this it was
+ * invisible: a fighter flew off in silence, at the same apparent speed whether
+ * the hit was a jab or a kill move.
+ */
+describe("launch trails", () => {
+  function launched(over: Partial<Parameters<typeof makeFighter>[0]> = {}) {
+    return makeState({
+      fighters: [makeFighter({ port: 0, action: "tumble", vx: fx(4), vy: fx(3), ...over })],
+    });
+  }
+
+  it("streaks behind a fighter who was hit hard", () => {
+    const v = createVfx();
+    trackLaunchTrails(v, launched());
+    expect(v.particles.length).toBeGreaterThan(0);
+  });
+
+  it("stays quiet during hitlag, when the launch has not started yet", () => {
+    // The freeze comes *before* the launch. A streak here would be coming off a
+    // fighter who has not moved.
+    const v = createVfx();
+    trackLaunchTrails(v, launched({ hitlag: 6 }));
+    expect(v.particles).toHaveLength(0);
+  });
+
+  it("stays quiet for a fighter who is barely moving, and for one not in hitstun", () => {
+    const slow = createVfx();
+    trackLaunchTrails(slow, launched({ vx: fx(0.3), vy: 0 }));
+    expect(slow.particles).toHaveLength(0);
+
+    const running = createVfx();
+    trackLaunchTrails(running, launched({ action: "run" }));
+    expect(running.particles).toHaveLength(0);
+  });
+
+  it("is port-coloured, so who is flying is readable from the streak alone", () => {
+    const v = createVfx();
+    trackLaunchTrails(v, launched({ port: 1 }));
+    expect(v.particles[0].colour).toBe(PORT_COLOURS[1]);
+  });
+
+  it("travels the way the fighter is travelling", () => {
+    const v = createVfx();
+    trackLaunchTrails(v, launched({ vx: fx(-5), vy: fx(2) }));
+    expect(v.particles[0].vx).toBeLessThan(0);
+    expect(v.particles[0].vy).toBeGreaterThan(0);
   });
 });
 

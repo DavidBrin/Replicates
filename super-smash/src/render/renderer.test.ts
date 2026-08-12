@@ -301,7 +301,7 @@ describe("the whole frame", () => {
       ],
     });
     const events = makeEvents({
-      hits: [{ attacker: 0, victim: 1, damage: fx(16), x: fx(-40), y: fx(10), knockback: fx(180) }],
+      hits: [{ attacker: 0, victim: 1, damage: fx(16), x: fx(-40), y: fx(10), knockback: fx(180), angle: fx(45) }],
       kos: [{ port: 3, x: fx(-240), y: fx(-140), kind: "blast" }],
       lands: [{ port: 2, x: fx(90), y: 0 }],
       clanks: [{ x: 0, y: fx(8) }],

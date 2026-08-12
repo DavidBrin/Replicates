@@ -46,9 +46,11 @@ import {
   type CharacterRig,
 } from "./characterArt";
 import { drawHud, updateHud, type HudFighterInfo, type HudState } from "./hud";
-import { samplePoseForFighter, type PoseSample } from "./poses";
+import { moveTimingFor, samplePoseForFighter, type PoseSample } from "./poses";
 import { rigHeight, type RigTransform } from "./skeleton";
 import { drawBackground, drawBlastZone, drawPlatforms } from "./stageArt";
+import { drawSpecialFx } from "./specialFx";
+import { drawSwingArc, swingArcFor } from "./swing";
 import {
   drawFinalSmashAura,
   drawKoFlash,
@@ -218,7 +220,24 @@ export function drawScene(
   // behind their own ghosts.
   drawAfterimages(ctx, state, camera, drawn);
 
+  // Swings go under the fighters, so the blade passes behind the arm that
+  // swung it rather than washing the fighter out.
   for (const d of drawn) {
+    if (d.fighter.action === "dead") continue;
+    const arc = swingArcFor(d.def, d.fighter, visualHeight(d.rig));
+    if (arc) drawSwingArc(ctx, arc, camera);
+  }
+
+  // Whoever is doing something goes on top.
+  //
+  // Port order is the obvious draw order and it is the wrong one: it means the
+  // player on port 1 spends every exchange hidden behind whoever is on port 2,
+  // and against a body as wide as Donkey Kong's, "hidden" is literal — a
+  // forward smash landing squarely was invisible because the fighter throwing
+  // it was entirely behind the fighter taking it. Sorting by what each fighter
+  // is doing keeps the attacker and the launch both readable, and it is stable,
+  // so two idle fighters do not swap depth every time one of them twitches.
+  for (const d of [...drawn].sort((a, b) => drawDepth(a.fighter) - drawDepth(b.fighter))) {
     if (d.fighter.action === "dead") continue;
     drawOneFighter(ctx, state, camera, d, mode);
   }
@@ -295,7 +314,8 @@ function drawOneFighter(
   const f = d.fighter;
   const rig = d.rig;
   const palette = resolvePalette(d.def, f.costume);
-  const pose = samplePoseForFighter(f, state.current.frame, moveTotalFrames(d.def, f));
+  const timing = moveTimingFor(d.def, f.move);
+  const pose = samplePoseForFighter(f, state.current.frame, timing);
   const squash = squashFor(f);
   const height = visualHeight(rig);
 
@@ -328,14 +348,49 @@ function drawOneFighter(
     tint: { colour: "#FFFFFF", amount: hitFlashAmount(state.vfx, f.port) },
   } as const;
 
-  if (mode !== "silhouette") drawFigure(ctx, { ...params, mode: "rim", rimWidth });
-  drawFigure(ctx, { ...params, mode });
+  // A special's own graphic goes under the fighter, and may replace them —
+  // Kirby's Stone is the fighter, not a prop held by one.
+  const fx = drawSpecialFx(ctx, d.def, f, cam, height, screen.x, screen.y);
+
+  if (!fx.hideFigure) {
+    if (mode !== "silhouette") drawFigure(ctx, { ...params, mode: "rim", rimWidth });
+    drawFigure(ctx, { ...params, mode });
+  }
 
   drawFinalSmashAura(ctx, f, cam, height, state.current.frame);
   drawShield(ctx, state.vfx, f, cam, height);
 
   const label = state.cpu?.[f.port] ? "CPU" : `P${f.port + 1}`;
   drawPortTag(ctx, screen.x, screen.y - height * cam.zoom - 14, f.port, label, Math.max(0.6, cam.zoom / 7));
+}
+
+/**
+ * Painter's-algorithm depth: lower is drawn first, so higher ends up in front.
+ *
+ * Exported so the ordering is a stated rule with a test rather than a sort
+ * comparator nobody can see the intent of.
+ */
+export function drawDepth(f: FighterState): number {
+  switch (f.action) {
+    // Being hit, held or floored: you are the thing being done to.
+    case "hitstun":
+    case "tumble":
+    case "grabbed":
+    case "thrown":
+    case "downed":
+    case "shieldBroken":
+      return 0;
+    // Doing something to somebody.
+    case "attack":
+    case "special":
+    case "grab":
+    case "grabHold":
+    case "pummel":
+    case "throw":
+      return 2;
+    default:
+      return 1;
+  }
 }
 
 /**
@@ -362,10 +417,6 @@ function intangibleAlpha(f: FighterState): number {
   return 1;
 }
 
-function moveTotalFrames(def: FighterDef | null, f: FighterState): number | undefined {
-  if (!def || !f.move) return undefined;
-  return def.moves[f.move]?.totalFrames;
-}
 
 function drawAfterimages(
   ctx: CanvasRenderingContext2D,

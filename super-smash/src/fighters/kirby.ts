@@ -692,6 +692,10 @@ export const kirby: FighterDef = {
       slot: "upB",
       name: "Final Cutter",
       totalFrames: 60,
+      momentum: [
+        { frame: 3, x: fx(0.2), y: fx(3.2), hold: 12 },
+        { frame: 24, x: fx(0.2), y: fx(-3.4), hold: 14 },
+      ],
       landingLag: 30,
       hitboxes: [
         {
@@ -745,6 +749,8 @@ export const kirby: FighterDef = {
       slot: "downB",
       name: "Stone",
       totalFrames: 60,
+      superArmourFrames: [10, 48],
+      momentum: [{ frame: 12, x: fx(0), y: fx(-5.4), hold: 34 }],
       // He turns into a rock and drops. The armour is the point: he is
       // invulnerable for the whole transformation, which is why it works as a
       // recovery mixup and a get-off-me button rather than as an attack.

@@ -674,6 +674,7 @@ export const fox: FighterDef = {
       slot: "sideB",
       name: "Fox Illusion",
       totalFrames: 55,
+      momentum: [{ frame: 18, x: fx(6.2), y: fx(0), hold: 8 }],
       landingLag: 16,
       hitboxes: [
         {
@@ -697,6 +698,10 @@ export const fox: FighterDef = {
       slot: "upB",
       name: "Fire Fox",
       totalFrames: 91,
+      // Frame 20, not 42: the wind-up has to be shorter than the fall it is
+      // supposed to save you from, and at 42 Fox reached the ground before the
+      // burst ever fired.
+      momentum: [{ frame: 20, x: fx(1.3), y: fx(4.3), hold: 16 }],
       landingLag: 20,
       hitboxes: [
         {

@@ -130,13 +130,40 @@ describe("the library", () => {
     }
   });
 
-  it("gives the walk cycle four keys and the attacks their anticipation key", () => {
+  it("gives the walk cycle four keys", () => {
     expect(POSE_LIBRARY.walk.keys).toHaveLength(4);
     expect(POSE_LIBRARY.walk.loop).toBe(true);
-    for (const attack of ["jab", "ftilt", "fsmash", "fair", "dsmash", "upB"] as PoseName[]) {
-      expect(POSE_LIBRARY[attack].keys.length).toBe(3);
+  });
+
+  /**
+   * Every clip that declares a strike is an attack, and every attack has the
+   * same four-beat shape: anticipate, hit, follow through, settle. The
+   * follow-through key is the one that is easy to leave out and impossible to
+   * miss once it is gone — without it the recovery is a single ease from the
+   * extension to the rest pose, which across a forward smash's thirty recovery
+   * frames is well under a degree a frame and reads as a frozen fighter.
+   */
+  it("gives every attack a strike key on the beat it claims, and a follow-through after it", () => {
+    const attacks = names.filter((n) => POSE_LIBRARY[n].strike !== undefined);
+    expect(attacks.length).toBeGreaterThan(15);
+
+    for (const name of attacks) {
+      const clip = POSE_LIBRARY[name];
+      const strike = clip.strike as number;
       // The strike lands in the first half — the rest is recovery.
-      expect(POSE_LIBRARY[attack].keys[1].t).toBeLessThan(0.5);
+      expect(strike, name).toBeLessThan(0.5);
+
+      const keys = clip.keys;
+      const strikeIndex = keys.findIndex((k) => Math.abs(k.t - strike) < 1e-9);
+      expect(strikeIndex, `${name} declares strike ${strike} but has no key there`).toBeGreaterThan(0);
+
+      // Accelerate into the hit, decelerate out of it.
+      expect(keys[strikeIndex - 1].ease, name).toBe("in");
+      expect(keys[strikeIndex].ease, name).toBe("out");
+
+      // At least one key between the strike and the end, and the end itself.
+      expect(keys.length - strikeIndex, `${name} has no follow-through`).toBeGreaterThanOrEqual(3);
+      expect(keys[keys.length - 1].t, name).toBe(1);
     }
   });
 
@@ -247,13 +274,74 @@ describe("state to pose", () => {
 
   it("times an attack against its own frame data, not a fixed duration", () => {
     const f = makeFighter({ action: "attack", move: "fsmash", actionFrame: 22 });
-    expect(poseTimeFor("fsmash", f, 0, 44)).toBeCloseTo(0.5, 9);
-    expect(poseTimeFor("jab", { ...f, actionFrame: 9 }, 0, 18)).toBeCloseTo(0.5, 9);
+    const noHitboxes = { total: 44, firstActive: -1, lastActive: -1 };
+    expect(poseTimeFor("fsmash", f, 0, noHitboxes)).toBeCloseTo(0.5, 9);
+    expect(
+      poseTimeFor("jab", { ...f, actionFrame: 9 }, 0, { total: 18, firstActive: -1, lastActive: -1 }),
+    ).toBeCloseTo(0.5, 9);
   });
 
   it("parks a charging smash on its wind-up", () => {
     const f = makeFighter({ action: "attack", move: "fsmash", actionFrame: 40, charge: 25 });
-    expect(poseTimeFor("fsmash", f, 0, 44)).toBeLessThan(0.2);
+    expect(poseTimeFor("fsmash", f, 0, { total: 44, firstActive: 15, lastActive: 17 })).toBeLessThan(
+      POSE_LIBRARY.fsmash.strike as number,
+    );
+  });
+
+  /**
+   * The one that matters. A shared clip can only serve every move in the game
+   * if its extension lands on the frame the hitbox goes live — and the failure
+   * when it does not is silent, because the fighter is still animating and
+   * damage is still being dealt, just not at the same time.
+   */
+  it("puts full extension on the frame the hitbox goes live, whatever the frame data", () => {
+    const shapes = [
+      { total: 47, firstActive: 15 }, // Mario's forward smash
+      { total: 20, firstActive: 2 }, // a jab
+      { total: 60, firstActive: 44 }, // a slow, late-hitting swing
+      { total: 9, firstActive: 3 }, // about as short as a move gets
+    ];
+    for (const shape of shapes) {
+      const timing = { ...shape, lastActive: shape.firstActive + 2 };
+      const f = makeFighter({ action: "attack", move: "fsmash", actionFrame: shape.firstActive });
+      expect(poseTimeFor("fsmash", f, 0, timing)).toBeCloseTo(
+        POSE_LIBRARY.fsmash.strike as number,
+        9,
+      );
+    }
+  });
+
+  it("holds the clip monotonic across the join, so nothing snaps backwards", () => {
+    const timing = { total: 47, firstActive: 15, lastActive: 17 };
+    let previous = -1;
+    for (let frame = 0; frame <= timing.total; frame++) {
+      const t = poseTimeFor("fsmash", makeFighter({ action: "attack", move: "fsmash", actionFrame: frame }), 0, timing);
+      expect(t).toBeGreaterThanOrEqual(previous);
+      previous = t;
+    }
+    expect(previous).toBeCloseTo(1, 9);
+  });
+
+  it("falls back to the plain ratio for a move that is live on its first frame", () => {
+    // Nothing to stretch: there is no wind-up, so anchoring would divide by zero
+    // and — worse — would put the extension on frame 0 of every such move.
+    const timing = { total: 30, firstActive: 0, lastActive: 4 };
+    const f = makeFighter({ action: "attack", move: "fsmash", actionFrame: 15 });
+    expect(poseTimeFor("fsmash", f, 0, timing)).toBeCloseTo(0.5, 9);
+  });
+
+  it("accelerates into the strike rather than easing into it", () => {
+    // Halfway through the wind-up in *time*, an attack should be well short of
+    // halfway there in *space*. A smoothstepped wind-up is at exactly half, and
+    // that is what made every attack read as a fighter drifting into position.
+    const clip = POSE_LIBRARY.fsmash;
+    const strike = clip.strike as number;
+    const start = samplePose(clip, 0);
+    const mid = samplePose(clip, strike / 2);
+    const end = samplePose(clip, strike);
+    const travelled = Math.abs(angleDelta(start.angles.upperArmR as number, mid.angles.upperArmR as number));
+    const total = Math.abs(angleDelta(start.angles.upperArmR as number, end.angles.upperArmR as number));
+    expect(travelled / total).toBeLessThan(0.25);
   });
 
   it("desynchronises idle breathing between ports", () => {

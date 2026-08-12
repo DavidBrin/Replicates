@@ -234,10 +234,25 @@ export default function PlayPage() {
       // publishing a fresh object 60 times a second would put real garbage on
       // the hot loop to serve a test that reads it twice.
       const live = runner;
+      const liveCanvas = canvas;
       (window as unknown as { __smashDebug?: unknown }).__smashDebug = {
         get frame() {
           return live.frame;
         },
+        // Hand-cranking the loop, for looking at a single frame.
+        //
+        // A screenshot costs about a quarter of a second, which is fifteen
+        // simulation frames — so a running match cannot be photographed
+        // mid-attack at all, and every animation in the game was being judged
+        // from whatever frame the shutter happened to land on. Stopping the
+        // clock and stepping by hand is the difference between "the forward
+        // smash looks wrong" and knowing which frame of it is wrong.
+        //
+        // `advance` gathers input the ordinary way, so keys held by the
+        // driver are read exactly as a player's would be.
+        pause: () => live.stop(),
+        resume: () => live.start(liveCanvas),
+        step: (n = 1) => live.advance(n),
         fighters: () =>
           live.state.fighters.map((f) => ({
             port: f.port,
@@ -245,6 +260,7 @@ export default function PlayPage() {
             y: toFloat(f.y),
             action: f.action,
             actionFrame: f.actionFrame,
+            move: f.move,
             damage: toFloat(f.damage),
             stocks: f.stocks,
             facing: f.facing,

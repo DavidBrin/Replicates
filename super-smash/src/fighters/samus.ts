@@ -698,6 +698,7 @@ export const samus: FighterDef = {
       slot: "upB",
       name: "Screw Attack",
       totalFrames: 56,
+      momentum: [{ frame: 4, x: fx(0.45), y: fx(2.9), hold: 16 }],
       landingLag: 24,
       hitboxes: [
         {

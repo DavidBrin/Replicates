@@ -47,6 +47,7 @@ import {
   SMASH_CHARGE_DAMAGE,
   SMASH_CHARGE_MAX,
   SMASH_INPUT_WINDOW,
+  TAP_JUMP_FRAMES,
   SPOT_DODGE_FRAMES,
   SPOT_DODGE_INTANGIBLE,
   TUMBLE_HITSTUN,
@@ -64,7 +65,7 @@ import {
   runVelocity,
   walkVelocity,
 } from "./physics";
-import { clearHitRecord } from "./hitbox";
+import { clearHitRecord, moveFrameOf } from "./hitbox";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type {
   ActionState,
@@ -208,11 +209,32 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
   const freshDir = f.framesSinceDirPress === 0;
   const canPulse = f.hitlag > 0 && freshDir && f.hitlag % SDI_INPUT_INTERVAL === 0;
 
+  // Tap jump: an up press that nobody claimed.
+  //
+  // It fires on the frame the arbitration window closes, and it is expressed as
+  // an ordinary jump press so that everything downstream — the buffer,
+  // jumpsquat, short hop, air jumps, ledge jumps — treats it exactly like the
+  // jump key without knowing it exists.
+  //
+  // The "nobody claimed it" test needs no bookkeeping, which is the nice part.
+  // An attack, special or grab pressed inside the window has already taken the
+  // fighter out of an actionable state by the time this fires, so the jump
+  // simply never gets asked for; and `framesSinceDirPress` is reset by *any*
+  // fresh direction, so it can only equal the window on the press that started
+  // it. Both facts mean one press can produce at most one jump, and holding up
+  // does not pogo.
+  const tapJump =
+    f.lastDirPressed === Btn.Up &&
+    f.framesSinceDirPress === TAP_JUMP_FRAMES &&
+    held(input, Btn.Up);
+
   return {
     x,
     y,
-    jumpPressed: pressed(input, prev, Btn.Jump),
-    jumpHeld: held(input, Btn.Jump),
+    jumpPressed: pressed(input, prev, Btn.Jump) || tapJump,
+    // Holding up holds the jump, so up gives a full hop and a flick gives a
+    // short one — the same distinction the stick makes.
+    jumpHeld: held(input, Btn.Jump) || held(input, Btn.Up),
     attackPressed: pressed(input, prev, Btn.Attack),
     attackHeld: held(input, Btn.Attack),
     specialPressed: pressed(input, prev, Btn.Special),
@@ -1137,6 +1159,74 @@ export function respawnInvincibilityFrames(framesWaited: number): number {
  * a state that has just been entered should move on the frame it is entered,
  * which a single combined pass gets wrong half the time depending on branch order.
  */
+/**
+ * Is this fighter inside a move's super-armour window?
+ *
+ * Derived from `move` and `actionFrame`, both of which are already simulation
+ * state, so armour rolls back with everything else and needs no field of its
+ * own. `superArmourFrames` has been in the type — and on Donkey Kong's Giant
+ * Punch — since the roster was written, and until this was read it did nothing
+ * at all: the one move in the game that is *defined* by walking through a jab
+ * flinched like everybody else.
+ */
+export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
+  if (f.move === null) return false;
+  if (f.action !== "attack" && f.action !== "special") return false;
+  // Not named `window`: `layering.test.ts` forbids that identifier anywhere in
+  // the engine, and it is right to — the check is a plain grep, because the
+  // rule it enforces is "no browser globals reachable from a simulation that
+  // has to run identically on both peers", and a grep cannot be fooled by a
+  // clever alias the way a type checker can.
+  const armour = def.moves[f.move]?.superArmourFrames;
+  if (!armour) return false;
+  const frame = moveFrameOf(f.actionFrame);
+  return frame >= armour[0] && frame <= armour[1];
+}
+
+/**
+ * A move's own scripted movement, if it has one on this frame.
+ *
+ * This is what makes a Fox Illusion cross the stage, a Dolphin Slash rise, and
+ * a Stone drop like a stone. `MoveDef.momentum` has been in the type since the
+ * roster was written and nothing read it, so every special that is *supposed*
+ * to move the fighter simply played its animation on the spot.
+ *
+ * The velocity is **set**, not added: these are scripted movements with a
+ * definite speed, and adding would make a Fox Illusion out of a run faster than
+ * one from a standstill. `x` is facing-relative and `y` absolute, matching the
+ * projectile convention.
+ *
+ * `hold` is what makes it a drop rather than a hop. Without it, gravity claws
+ * the velocity back to the fighter's ordinary fall speed on the very next
+ * frame, and a stone falls at exactly the speed a puffball does.
+ *
+ * Returns true while a hold is live, so the caller knows to leave gravity and
+ * air drift alone.
+ */
+function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
+  if (f.move === null) return false;
+  if (f.action !== "attack" && f.action !== "special" && f.action !== "throw") return false;
+  const impulses = ctx.def.moves[f.move]?.momentum;
+  if (!impulses) return false;
+
+  const frame = moveFrameOf(f.actionFrame);
+  for (const m of impulses) {
+    const until = m.frame + (m.hold ?? 0);
+    if (frame < m.frame || frame > until) continue;
+    f.vx = m.x * (f.facing >= 0 ? 1 : -1);
+    f.vy = m.y;
+    // The floor still wins. A downward impulse on a grounded fighter drove
+    // them straight through the stage — a grounded Stone fell out of the world
+    // — because this branch returns before the clamp at the bottom of
+    // `applyMovement` that ordinarily stops that. A Stone used on the ground
+    // simply sits there, which is also what it does in the real game.
+    if (f.grounded && f.vy < 0) f.vy = 0;
+    f.launchSpeed = 0;
+    return frame < until;
+  }
+  return false;
+}
+
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
   const a = ctx.def.attributes;
 
@@ -1145,6 +1235,10 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     f.vy = 0;
     return;
   }
+
+  // Scripted movement outranks everything below it — that is the point of a
+  // move that carries its own — but only for as long as it is held.
+  if (f.hitstun <= 0 && applyMoveMomentum(f, ctx)) return;
 
   if (f.hitstun > 0) {
     decayLaunch(f, LAUNCH_SPEED_DECAY);

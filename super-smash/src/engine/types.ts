@@ -263,8 +263,21 @@ export interface MoveDef {
   readonly rapid?: boolean;
   /** Which move follows this one if the button is pressed again in time. */
   readonly followUp?: MoveSlot;
-  /** Horizontal impulse applied on the given frame — dash attacks, side-Bs. */
-  readonly momentum?: readonly { frame: number; x: number; y: number }[];
+  /**
+   * Scripted movement the move carries — a Fox Illusion's dash, a Dolphin
+   * Slash's rise, a Stone's drop.
+   *
+   * `frame` is quoted like every other frame number here, from one. `x` is
+   * facing-relative and `y` absolute, matching `ProjectileDef`. The velocity is
+   * set rather than added, so the movement is the same from a standstill as out
+   * of a run.
+   *
+   * `hold` extends the impulse over that many further frames, during which the
+   * velocity is re-asserted and gravity does not apply. Without it a downward
+   * impulse is clawed back to the fighter's ordinary fall speed on the next
+   * frame — which is the difference between a stone and a puffball.
+   */
+  readonly momentum?: readonly { frame: number; x: number; y: number; hold?: number }[];
   /** What this move launches, if anything. See `ProjectileDef`. */
   readonly projectiles?: readonly ProjectileDef[];
 }
@@ -584,7 +597,20 @@ export interface MatchOutcome {
  * presentation. Never fed back into the simulation.
  */
 export interface StepEvents {
-  hits: { attacker: number; victim: number; damage: number; x: number; y: number; knockback: number }[];
+  hits: {
+    attacker: number;
+    victim: number;
+    damage: number;
+    x: number;
+    y: number;
+    knockback: number;
+    /**
+     * The world direction the victim is about to travel, in fixed degrees from
+     * +x. Presentation only — it is what lets a hit throw its sparks the way
+     * the victim is going instead of in a symmetric puff that says nothing.
+     */
+    angle: number;
+  }[];
   shieldHits: { victim: number; x: number; y: number }[];
   clanks: { x: number; y: number }[];
   kos: { port: number; x: number; y: number; kind: "blast" | "star" | "screen" }[];

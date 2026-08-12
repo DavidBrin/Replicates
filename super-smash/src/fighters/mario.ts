@@ -652,6 +652,7 @@ export const mario: FighterDef = {
       slot: "upB",
       name: "Super Jump Punch",
       totalFrames: 55,
+      momentum: [{ frame: 4, x: fx(0.5), y: fx(2.9), hold: 12 }],
       landingLag: 30,
       hitboxes: [
         {

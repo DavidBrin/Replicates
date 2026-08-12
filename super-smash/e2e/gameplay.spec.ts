@@ -55,6 +55,45 @@ test("the jump key leaves the ground", async ({ page }) => {
   expect(airborne.y).toBeGreaterThan(groundY);
 });
 
+/**
+ * Up is the stick, not a spare key.
+ *
+ * On a Switch you jump by pushing the stick up, and the same stick aims every
+ * up-attack. Both halves are checked here rather than only the jump, because
+ * the naive way to make up jump — fire on the press — silently costs you
+ * up-tilt, up-smash and up-special from the arrow cluster, and each of those
+ * failures looks like "the jump works" from a test that only presses up.
+ */
+test("the up arrow jumps, like the stick", async ({ page }) => {
+  await startMatch(page);
+
+  const groundY = (await readFighters(page))[0].y;
+
+  await page.keyboard.down(P1.up);
+  // Longer than for the jump key: up spends five frames finding out whether it
+  // was a jump or an aimed attack before it commits.
+  await page.waitForTimeout(250);
+  const airborne = (await readFighters(page))[0];
+  await page.keyboard.up(P1.up);
+
+  expect(airborne.y).toBeGreaterThan(groundY);
+});
+
+test("up plus attack is still an up-attack, not a jump", async ({ page }) => {
+  await startMatch(page);
+
+  await page.keyboard.down(P1.up);
+  await page.waitForTimeout(30);
+  await page.keyboard.down(P1.attack);
+  await page.waitForTimeout(60);
+  const acting = (await readFighters(page))[0];
+  await page.keyboard.up(P1.attack);
+  await page.keyboard.up(P1.up);
+
+  expect(acting.action).toBe("attack");
+  expect(acting.move).toMatch(/^u(smash|tilt)$/);
+});
+
 test("the attack key puts the fighter into an attacking state", async ({ page }) => {
   await startMatch(page);
 

@@ -139,6 +139,26 @@ export const BUFFER_FRAMES = 9;
  */
 export const SMASH_INPUT_WINDOW = 5;
 
+/**
+ * How long an "up" press waits before it becomes a jump.
+ *
+ * On the Switch the stick jumps when you flick it up, and the same stick aims
+ * every up-attack. A stick resolves that by *magnitude* — a gentle tilt is an
+ * up-tilt, a flick is a jump — and a key has no magnitude, so a keyboard has to
+ * resolve it by *time* instead: an up press that is followed by attack, special
+ * or grab was an aimed attack, and one that stands alone was a jump.
+ *
+ * Which means the jump has to wait long enough to find out. Deliberately equal
+ * to `SMASH_INPUT_WINDOW`, because that is exactly how long an up press stays
+ * eligible to become an up-smash: a shorter wait would fire the jump first and
+ * make up-smash unreachable from the arrow keys, and a longer one would delay
+ * every jump for no further gain.
+ *
+ * Five frames is 83ms, which is felt. That is what the dedicated jump key is
+ * for — it has no ambiguity to resolve, so it fires on the frame it is pressed.
+ */
+export const TAP_JUMP_FRAMES = SMASH_INPUT_WINDOW;
+
 /** Frames a smash attack may be charged before it fires on its own. */
 export const SMASH_CHARGE_MAX = 60;
 /** Full charge multiplies damage by this much. */

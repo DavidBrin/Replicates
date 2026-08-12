@@ -43,6 +43,7 @@ import {
   applyLSI,
   lsiApplies,
   knockbackToVelocity,
+  launchWorldAngle,
   resolveAngle,
 } from "./knockback";
 import {
@@ -55,6 +56,7 @@ import {
   hitboxWorldPos,
   hurtboxCapsule,
   markHit,
+  moveFrameOf,
   resolveClank,
   sweptHitboxOverlaps,
 } from "./hitbox";
@@ -82,6 +84,7 @@ import {
   applyMovement,
   chargeMultiplier,
   grabLedge,
+  hasSuperArmour,
   interpretInput,
   isParrying,
   onLanded,
@@ -663,9 +666,7 @@ function gatherHitboxes(
     if (!hasLiveMove(f.action)) continue;
     const move = defs[i].moves[f.move];
     if (move === undefined) continue;
-    // `actionFrame` counts from zero on the frame the move starts, so the move's
-    // own frame 1 — the number the frame data is quoted in — is one higher.
-    for (const hb of activeHitboxes(move, f.actionFrame + 1)) {
+    for (const hb of activeHitboxes(move, moveFrameOf(f.actionFrame))) {
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
       const was = hitboxWorldPos(prevPos[i].x, prevPos[i].y, f.facing, hb);
       out.push({
@@ -988,6 +989,9 @@ function applyInvincibleHit(
     x: c.x,
     y: c.y,
     knockback: 0,
+    // An invincible defender is not launched, so there is no direction to
+    // report and the spark stays symmetric.
+    angle: 0,
   });
 }
 
@@ -1148,6 +1152,34 @@ function applyHit(
   /* ---- the damage path ---- */
   victim.damage += damage;
 
+  /* ---- the super-armour path ---- */
+  //
+  // Armour is not invincibility and not a shield: the damage lands in full and
+  // the fighter simply refuses to be moved by it. That is the whole identity of
+  // a move like Giant Punch — you walk through the jab and land the punch — and
+  // it is why armour has to sit here, after damage and before knockback, rather
+  // than at the top with the intangibility checks.
+  if (hasSuperArmour(victim, victimDef)) {
+    victim.damage += damage;
+    // The attacker still freezes. Hitting armour should feel like hitting
+    // something solid, and a hit that reports nothing back reads as a whiff.
+    const lag = computeHitlag(damage, {
+      electric: hb.effect === "electric",
+      moveMultiplier: hb.hitlagMultiplier,
+    });
+    if (!fromProjectile) attacker.hitlag = lag;
+    events.hits.push({
+      attacker: attacker.port,
+      victim: victim.port,
+      damage,
+      x: c.x,
+      y: c.y,
+      knockback: 0,
+      angle: 0,
+    });
+    return;
+  }
+
   const crouchCancel = isCrouching(victim);
 
   const kb = computeKnockback({
@@ -1218,6 +1250,10 @@ function applyHit(
     x: c.x,
     y: c.y,
     knockback: kb,
+    // The un-DI'd direction. DI has not been chosen yet — it is sampled on the
+    // last frame of hitlag — so this is the launch as the *hit* set it, which
+    // is the right thing for a graphic that fires on the contact frame.
+    angle: launchWorldAngle(victim.pendingAngle, victim.pendingFacing),
   });
 }
 

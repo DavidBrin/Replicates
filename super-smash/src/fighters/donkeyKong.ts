@@ -492,6 +492,7 @@ export const donkeyKong: FighterDef = {
       slot: "sideB",
       name: "Headbutt",
       totalFrames: 62,
+      momentum: [{ frame: 14, x: fx(1.1), y: fx(0), hold: 6 }],
       hitboxes: [
         {
           // Angle 270 does two different things depending on where the victim
@@ -515,6 +516,7 @@ export const donkeyKong: FighterDef = {
       slot: "upB",
       name: "Spinning Kong",
       totalFrames: 104,
+      momentum: [{ frame: 6, x: fx(0.85), y: fx(1.9), hold: 18 }],
       landingLag: 38,
       hitboxes: [
         {

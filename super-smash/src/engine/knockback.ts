@@ -461,6 +461,22 @@ export interface LaunchVector {
  * trajectory into the cone halfway through the flight and flip it to balloon fall
  * mid-hitstun, which is not a thing the real game does. See `FighterState.balloon`.
  */
+/**
+ * The direction a launch actually travels, in fixed degrees measured from
+ * world +x.
+ *
+ * `Hitbox.angle` is stated relative to "directly in front of the attacker", so
+ * on its own it does not say which way anything goes — the same 45° is up-right
+ * from a fighter facing right and up-*left* from one facing left. The renderer
+ * needs the resolved direction to aim a hit's sparks along the launch, and
+ * deriving it there would mean a second copy of this mirroring rule living in
+ * the presentation layer, free to disagree with `knockbackToVelocity` below.
+ */
+export function launchWorldAngle(angleFx: number, facing: number): number {
+  const a = normalizeAngle(angleFx);
+  return facing >= 0 ? a : normalizeAngle(fx(180) - a);
+}
+
 export function knockbackToVelocity(kb: number, angleFx: number, facing: number): LaunchVector {
   const speed = mul(kb, LAUNCH_SPEED_RATIO);
   const a = normalizeAngle(angleFx);

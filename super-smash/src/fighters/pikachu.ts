@@ -623,6 +623,7 @@ export const pikachu: FighterDef = {
       slot: "sideB",
       name: "Skull Bash",
       totalFrames: 96,
+      momentum: [{ frame: 22, x: fx(4.0), y: fx(0.5), hold: 10 }],
       chargeable: true,
       hitboxes: [
         {
@@ -661,6 +662,10 @@ export const pikachu: FighterDef = {
       slot: "upB",
       name: "Quick Attack",
       totalFrames: 52,
+      momentum: [
+        { frame: 8, x: fx(0.9), y: fx(4.6), hold: 6 },
+        { frame: 20, x: fx(4.4), y: fx(1.4), hold: 6 },
+      ],
       landingLag: 24,
       // **Two segments.** He zips once in the direction held, then immediately
       // zips again in a second, independently aimed direction. The second dash

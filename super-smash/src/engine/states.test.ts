@@ -11,6 +11,8 @@ import {
   SDI_DISTANCE,
   SHIELD_MIN_HOLD,
   SPOT_DODGE_INTANGIBLE,
+  SMASH_INPUT_WINDOW,
+  TAP_JUMP_FRAMES,
 } from "./constants";
 import {
   advanceFighter,
@@ -281,6 +283,92 @@ describe("walk versus dash", () => {
   });
 });
 
+/**
+ * Up is both "jump" and "aim upward", exactly as the stick is on a Switch.
+ *
+ * A stick tells the two apart by how hard it is pushed. A key cannot, so the
+ * only signal left is time: an up press that is followed by an attack was an
+ * aimed attack, and one that stands alone was a jump. Everything below is that
+ * one sentence, checked from both sides — because a rule that only ever jumps
+ * and a rule that only ever attacks each satisfy half of it.
+ */
+describe("the up key jumps, like the stick", () => {
+  it("jumps from a bare up press, once the window has closed", () => {
+    const f = fighter();
+    hold(f, Btn.Up, TAP_JUMP_FRAMES);
+    // Nothing yet: still deciding what the press meant.
+    expect(f.action).toBe("stand");
+
+    tick(f, Btn.Up, Btn.Up);
+    expect(f.action).toBe("jumpSquat");
+  });
+
+  it("leaves the ground, and not only in name", () => {
+    const f = fighter();
+    hold(f, Btn.Up, TAP_JUMP_FRAMES + 1 + JUMP_SQUAT_FRAMES + 1);
+    expect(f.grounded).toBe(false);
+    expect(f.vy).toBeGreaterThan(0);
+  });
+
+  it("still lets the arrows aim an attack: up plus attack is an up-smash", () => {
+    const f = fighter();
+    tick(f, Btn.Up, 0);
+    tick(f, Btn.Up | Btn.Attack, Btn.Up);
+    expect(f.move).toBe("usmash");
+    expect(f.action).toBe("attack");
+  });
+
+  it("gives up-special to up plus special rather than a jump", () => {
+    const f = fighter();
+    tick(f, Btn.Up, 0);
+    tick(f, Btn.Up | Btn.Special, Btn.Up);
+    expect(f.move).toBe("upB");
+  });
+
+  it("jumps only once however long up is held", () => {
+    // The failure this rules out is a pogo: a condition that stays true while
+    // the key is down would re-fire on every actionable frame.
+    const f = fighter();
+    let jumpSquats = 0;
+    let prev: InputFrame = 0;
+    for (let i = 0; i < 90; i++) {
+      const before = f.action;
+      tick(f, Btn.Up, prev);
+      prev = Btn.Up;
+      if (before !== "jumpSquat" && f.action === "jumpSquat") jumpSquats++;
+    }
+    expect(jumpSquats).toBe(1);
+  });
+
+  it("air-jumps from up too", () => {
+    const f = fighter({ grounded: false, action: "fall", platform: -1 });
+    hold(f, Btn.Up, TAP_JUMP_FRAMES + 1);
+    expect(f.action).toBe("jump");
+    expect(f.jumpsUsed).toBe(1);
+  });
+
+  it("keeps the dedicated jump key instant, which is the point of having one", () => {
+    // Up has an ambiguity to resolve and pays five frames for it. Jump has
+    // none, so it must not.
+    const f = fighter();
+    tick(f, Btn.Jump, 0);
+    expect(f.action).toBe("jumpSquat");
+  });
+
+  it("treats held up as a held jump, so up is a full hop and a flick is a short one", () => {
+    const full = fighter();
+    hold(full, Btn.Up, TAP_JUMP_FRAMES + 1 + JUMP_SQUAT_FRAMES + 1);
+
+    const short = fighter();
+    hold(short, Btn.Up, TAP_JUMP_FRAMES + 1);
+    expect(short.action).toBe("jumpSquat");
+    // Released inside jumpsquat: the short hop.
+    for (let i = 0; i < JUMP_SQUAT_FRAMES + 1; i++) tick(short, 0, i === 0 ? Btn.Up : 0);
+
+    expect(full.vy).toBeGreaterThan(short.vy);
+  });
+});
+
 describe("tilt versus smash", () => {
   it("reads an attack within five frames of a fresh direction as a smash", () => {
     const f = fighter();
@@ -290,16 +378,15 @@ describe("tilt versus smash", () => {
   });
 
   it("reads an attack after the window as a tilt", () => {
+    // Held directions all leave the tilt window in some other state — right
+    // becomes a dash, up becomes a tap jump — so this is checked on the
+    // *interpretation* rather than by holding a key and looking at the move.
     const f = fighter();
-    tick(f, Btn.Right, 0);
-    // Six frames of holding puts the fighter into a dash, so hold up instead:
-    // the direction is stale but still held.
-    const g = fighter();
-    tick(g, Btn.Up, 0);
-    for (let i = 0; i < 6; i++) tick(g, Btn.Up, Btn.Up);
-    tick(g, Btn.Up | Btn.Attack, Btn.Up);
-    expect(g.move).toBe("utilt");
-    expect(f.action).toBe("walk");
+    f.lastDirPressed = Btn.Up;
+    f.framesSinceDirPress = SMASH_INPUT_WINDOW + 1;
+    const intent = interpretInput(f, Btn.Up | Btn.Attack, Btn.Up);
+    expect(intent.smash).toBe(false);
+    expect(groundAttackSlot(f, intent)).toBe("utilt");
   });
 
   it("reads a bare attack as a jab", () => {

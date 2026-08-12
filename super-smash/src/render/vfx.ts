@@ -99,6 +99,18 @@ export interface VfxState {
 
 /** A hit victim flashes white for two to four frames, scaled by damage. */
 export const HIT_FLASH_FRAMES = 4;
+
+/**
+ * A fighter, in simulation units, for sizing effects against.
+ *
+ * Not read from a rig: every fighter has a different one, and an effect that
+ * looked right on Donkey Kong and swallowed Pikachu would be the same bug in a
+ * new place. Effects are sized against "a fighter" as a unit, and this is it.
+ */
+export const FIGHTER_UNITS = 13;
+
+/** How far a burst star swells before it dies. */
+export const BURST_MAX_GROWTH = 1.7;
 const MAX_PARTICLES = 640;
 
 export function createVfx(): VfxState {
@@ -152,7 +164,7 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
     const y = toFloat(hit.y);
     const damage = toFloat(hit.damage);
     const kb = toFloat(hit.knockback);
-    spawnHitSpark(v, x, y, damage, kb);
+    spawnHitSpark(v, x, y, damage, kb, (toFloat(hit.angle) * Math.PI) / 180);
     v.hitFlash[hit.victim] = Math.min(HIT_FLASH_FRAMES, 2 + Math.floor(damage / 8));
   }
 
@@ -204,6 +216,21 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
  * The colour ramp is Ultimate's read at a glance: small hits throw white and
  * pale-yellow sparks, big ones throw orange and red. A player who has not
  * looked at the percent still knows roughly what just landed.
+ *
+ * ## On the sizes below
+ *
+ * A fighter is about thirteen simulation units tall, and everything here is in
+ * the same units — so the numbers are readable as fractions of a fighter, which
+ * is the only scale that matters. The burst tops out at a little under four
+ * units, so the biggest hit in the game throws a star about a third of a
+ * fighter high.
+ *
+ * That is deliberate and it was not always so: the burst used to reach nine
+ * units and grow to 2.8×, which is a star four times the height of the fighter
+ * who threw it. On a big hit the spark covered both fighters, the platform and
+ * most of the screen, so the one frame a player most needs to read — who got
+ * hit, and which way they are going — was the one frame they could see least.
+ * A hit spark is punctuation. It is not the sentence.
  */
 export function spawnHitSpark(
   v: VfxState,
@@ -211,11 +238,22 @@ export function spawnHitSpark(
   y: number,
   damage: number,
   knockback: number,
+  /**
+   * The world direction the victim is being launched, in radians. Sparks fan
+   * out around it rather than in a circle, so the frame of contact already says
+   * which way the fighter is about to go — which is the single most useful
+   * thing a player can learn from a hit, and a symmetric puff says none of it.
+   */
+  launchAngle = 0,
 ): void {
   const heat = Math.min(1, damage / 22);
-  const count = Math.round(6 + heat * 18);
+  const count = Math.round(5 + heat * 11);
   const colour = heat < 0.4 ? mixHex("#FFFFFF", "#FFE873", heat / 0.4) : mixHex("#FFE873", "#FF5A21", (heat - 0.4) / 0.6);
   const speed = 0.7 + heat * 1.9 + Math.min(1.6, knockback / 140);
+  // Six frames is a tenth of a second, which is where a hit spark should be:
+  // long enough to register, short enough that the very next frame of the
+  // fighter being launched is unobstructed.
+  const life = 5 + Math.round(heat * 4);
 
   push(v, {
     kind: "burst",
@@ -223,9 +261,9 @@ export function spawnHitSpark(
     y,
     vx: 0,
     vy: 0,
-    life: 8 + Math.round(heat * 6),
-    maxLife: 8 + Math.round(heat * 6),
-    size: 3.4 + heat * 6.5,
+    life,
+    maxLife: life,
+    size: 1.2 + heat * 2.4,
     colour,
     rotation: rand(v) * Math.PI,
     spin: 0,
@@ -233,8 +271,12 @@ export function spawnHitSpark(
     drag: 1,
   });
 
+  // A wide fan rather than a beam: a hit is messy, and sparks that all point
+  // one way read as a laser. Two thirds of a right angle either side keeps the
+  // launch legible while still looking like an impact.
+  const fan = Math.PI * 0.36;
   for (let i = 0; i < count; i++) {
-    const a = rand(v) * Math.PI * 2;
+    const a = launchAngle + (rand(v) * 2 - 1) * fan;
     const s = speed * (0.35 + rand(v) * 0.9);
     push(v, {
       kind: "spark",
@@ -242,15 +284,67 @@ export function spawnHitSpark(
       y,
       vx: Math.cos(a) * s,
       vy: Math.sin(a) * s,
-      life: 10 + Math.round(rand(v) * 16),
-      maxLife: 26,
-      size: 0.5 + heat * 1.5 + rand(v) * 0.6,
+      life: 5 + Math.round(rand(v) * 6),
+      maxLife: 11,
+      size: 0.35 + heat * 0.75 + rand(v) * 0.35,
       colour,
       rotation: a,
       spin: 0,
       gravity: -0.035,
       drag: 0.9,
     });
+  }
+}
+
+/**
+ * The streak a launched fighter drags behind them.
+ *
+ * Knockback is the game's whole scoring system and it was invisible: a fighter
+ * flew off in silence, at the same apparent speed whether the hit was a jab or
+ * a kill move. The trail is what makes a launch *feel* like force — it is
+ * emitted per frame from the fighter's own velocity, so it is longer and denser
+ * the harder they were hit, without anything having to be told how hard that
+ * was.
+ *
+ * Reuses the `spark` particle, which already draws itself stretched backwards
+ * along its own velocity. Nothing new to draw; it is the same streak the impact
+ * throws, laid down continuously by a body instead of once by a fist.
+ */
+export const LAUNCH_TRAIL_SPEED = 1.6;
+
+export function trackLaunchTrails(v: VfxState, state: GameState): void {
+  for (const f of state.fighters) {
+    if (f.action !== "hitstun" && f.action !== "tumble" && f.action !== "thrown") continue;
+    // Hitlag is the freeze *before* the launch. A trail during it would be a
+    // streak coming off a fighter who has not moved yet.
+    if (f.hitlag > 0) continue;
+
+    const vx = toFloat(f.vx);
+    const vy = toFloat(f.vy);
+    const speed = Math.hypot(vx, vy);
+    if (speed < LAUNCH_TRAIL_SPEED) continue;
+
+    const colour = PORT_COLOURS[f.port % PORT_COLOURS.length];
+    const heat = Math.min(1, (speed - LAUNCH_TRAIL_SPEED) / 5);
+    // Two per frame, offset across the body, so the trail has width. One
+    // reads as a thread; the fighter is a solid object.
+    for (let i = 0; i < 2; i++) {
+      push(v, {
+        kind: "spark",
+        x: toFloat(f.x) + spread(v, 1.6),
+        y: toFloat(f.y) + 6 + spread(v, 3),
+        vx: vx * 0.4,
+        vy: vy * 0.4,
+        life: 6,
+        maxLife: 6,
+        size: 0.6 + heat * 1.3,
+        colour,
+        rotation: 0,
+        spin: 0,
+        gravity: 0,
+        drag: 1,
+      });
+    }
   }
 }
 
@@ -540,6 +634,7 @@ export function updateVfx(v: VfxState): void {
 export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState): void {
   if (events) ingestEvents(v, events, state);
   trackAfterimages(v, state);
+  trackLaunchTrails(v, state);
   trackChargeGlow(v, state);
   trackDamageSmoke(v, state);
   updateVfx(v);
@@ -571,7 +666,10 @@ export function drawParticles(ctx: CanvasRenderingContext2D, v: VfxState, cam: C
         break;
       }
       case "burst": {
-        const grow = 1 + (1 - t) * 1.8;
+        // A short pop rather than a bloom. The star was expanding to nearly
+        // three times its spawn size, which on top of a size that was already
+        // too large is what turned a hit into a screen wipe.
+        const grow = 1 + (1 - t) * (BURST_MAX_GROWTH - 1);
         ctx.fillStyle = withAlpha(p.colour, Math.min(1, t * 1.9));
         star(ctx, s.x, s.y, r * grow, r * grow * 0.34, 4, p.rotation);
         ctx.fill();

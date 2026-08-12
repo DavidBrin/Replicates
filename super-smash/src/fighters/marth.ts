@@ -811,6 +811,7 @@ export const marth: FighterDef = {
       slot: "upB",
       name: "Dolphin Slash",
       totalFrames: 55,
+      momentum: [{ frame: 5, x: fx(0.6), y: fx(3.5), hold: 11 }],
       landingLag: 24,
       // Frame 5, and intangible on frames 4-5 grounded, 1-5 airborne — one of
       // the best out-of-shield options in the game. No tipper on this one.

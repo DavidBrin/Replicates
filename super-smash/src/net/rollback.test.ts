@@ -77,7 +77,7 @@ function makeDeps(overrides: Partial<RollbackDeps<FakeState>> = {}): RollbackDep
       // An "event" that a naive implementation would replay on every rollback.
       for (let port = 0; port < inputs.length; port++) {
         if (pressed(inputs[port] ?? 0, prevInputs[port] ?? 0, Btn.Attack)) {
-          events.hits.push({ attacker: port, victim: 1 - port, damage: 1, x: 0, y: 0, knockback: 1 });
+          events.hits.push({ attacker: port, victim: 1 - port, damage: 1, x: 0, y: 0, knockback: 1, angle: 0 });
         }
       }
       return { state: { frame: state.frame + 1, acc }, events };

@@ -211,6 +211,29 @@ export function hitboxWorldPos(
   return { x: x + (facing >= 0 ? hb.x : -hb.x), y: y + hb.y };
 }
 
+/**
+ * The move frame a fighter's `actionFrame` is on.
+ *
+ * `actionFrame` counts from zero on the frame a move starts; frame data — every
+ * `startFrame` and `endFrame` in `fighters/` — is quoted the way the community
+ * quotes it, from one. So a hitbox marked `startFrame: 15` is live when
+ * `actionFrame` is 14, and every consumer of both numbers has to agree about
+ * that or it is off by a frame.
+ *
+ * It lives here, named, because there are now three such consumers — the
+ * collision loop, the animation timing and the swing graphic — and two of them
+ * are in the renderer, far enough from this file that the convention would
+ * otherwise be rediscovered by hand each time.
+ */
+export function moveFrameOf(actionFrame: number): number {
+  return actionFrame + 1;
+}
+
+/** The inverse: which `actionFrame` a quoted move frame lands on. */
+export function actionFrameOf(moveFrame: number): number {
+  return moveFrame - 1;
+}
+
 /** The hitboxes of `move` that are live on `frame` (0-based within the move). */
 export function activeHitboxes(move: MoveDef, frame: number): Hitbox[] {
   const out: Hitbox[] = [];

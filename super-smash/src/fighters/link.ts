@@ -623,6 +623,7 @@ export const link: FighterDef = {
       slot: "upB",
       name: "Spin Attack",
       totalFrames: 76,
+      momentum: [{ frame: 6, x: fx(0.35), y: fx(2.5), hold: 13 }],
       landingLag: 30,
       hitboxes: [
         {

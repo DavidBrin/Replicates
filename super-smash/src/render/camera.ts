@@ -26,12 +26,16 @@ export const VIEW_HEIGHT = 1080;
  *
  * The lower bound is set by the blast zone: Battlefield's is 480 units wide, and
  * 1920/480 = 4, so a camera that could pull back further than 4 would show
- * nothing but empty space beyond the KO line. The upper bound is a taste
- * decision — 11 px/unit puts a 13-unit fighter at 143px, about an eighth of the
- * screen height, which is where Ultimate sits in a close 1v1.
+ * nothing but empty space beyond the KO line.
+ *
+ * The upper bound is readability. 15 px/unit puts a 13-unit fighter at 195px,
+ * about a fifth of the screen height, which is roughly where Ultimate sits in a
+ * close 1v1. It was 11, and at 11 a fighter is an eighth of the screen — small
+ * enough that a forward smash's whole arm travel is a dozen pixels and every
+ * attack in the game reads as "nothing happened".
  */
 export const MIN_ZOOM = 3.6;
-export const MAX_ZOOM = 11;
+export const MAX_ZOOM = 15;
 
 /** Empty space kept around the fighters, in simulation units. */
 export const FRAME_MARGIN_X = 38;
@@ -134,12 +138,19 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
   const centre = stageCentre(stage);
   if (count === 0) return { x: centre.x, y: centre.y, zoom: MIN_ZOOM, framed: false };
 
-  // Always keep the main platform in shot even when both fighters are stood on
-  // top of each other, or the camera zooms into a featureless close-up.
+  // Keep the *middle* of the main platform in shot, so a close-up still has
+  // ground and edges in it rather than being two fighters against the sky.
+  //
+  // A third of the half-width, not most of it: at 0.72 this floor was wider
+  // than any two fighters ever get, so it — and not the fighters — set the zoom
+  // for the whole match, and the camera never pushed in on anything. The stage
+  // edges are allowed to leave the frame during close combat, exactly as they
+  // do in the real game; `MIN_ZOOM` and the blast-zone clamp below are what
+  // stop the view running off the stage entirely.
   const main = stage.platforms.find((p) => p.ledges) ?? stage.platforms[0];
   if (main) {
-    minX = Math.min(minX, toFloat(main.x) - toFloat(main.halfWidth) * 0.72);
-    maxX = Math.max(maxX, toFloat(main.x) + toFloat(main.halfWidth) * 0.72);
+    minX = Math.min(minX, toFloat(main.x) - toFloat(main.halfWidth) * 0.32);
+    maxX = Math.max(maxX, toFloat(main.x) + toFloat(main.halfWidth) * 0.32);
     minY = Math.min(minY, toFloat(main.y) - 6);
   }
 
