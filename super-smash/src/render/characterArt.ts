@@ -1422,6 +1422,27 @@ export function squashFor(fighter: Pick<FighterState, "action" | "actionFrame" |
   return { scaleX: 1, scaleY: 1 };
 }
 
+/**
+ * The shudder both fighters do during hitlag, in world units.
+ *
+ * Hitlag on a strong hit is nineteen frames — a third of a second — and it is
+ * correct that it is: the crunch is Ultimate's, and the formula here matches
+ * the published one. But a third of a second in which nothing at all moves does
+ * not read as impact, it reads as the game hanging. The vibration is what turns
+ * the freeze into a *held* moment, and it is the piece that was missing: the
+ * spark is gone after nine frames and the squash is static, so the back half of
+ * every heavy hit was a still image.
+ *
+ * Alternates every frame off the hitlag counter, so it is derived from
+ * simulation state and identical on both peers of a rollback, and decays with
+ * the counter so the shudder settles rather than stopping dead.
+ */
+export function hitlagShake(fighter: Pick<FighterState, "hitlag">): number {
+  if (fighter.hitlag <= 0) return 0;
+  const k = Math.min(1, fighter.hitlag / 10);
+  return (fighter.hitlag % 2 === 0 ? 1 : -1) * k * 0.55;
+}
+
 /* ----------------------------------------------------- port ring & tag ---- */
 
 /** The soft port-coloured disc under a grounded fighter. */

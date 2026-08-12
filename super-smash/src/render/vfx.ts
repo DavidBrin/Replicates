@@ -100,15 +100,6 @@ export interface VfxState {
 /** A hit victim flashes white for two to four frames, scaled by damage. */
 export const HIT_FLASH_FRAMES = 4;
 
-/**
- * A fighter, in simulation units, for sizing effects against.
- *
- * Not read from a rig: every fighter has a different one, and an effect that
- * looked right on Donkey Kong and swallowed Pikachu would be the same bug in a
- * new place. Effects are sized against "a fighter" as a unit, and this is it.
- */
-export const FIGHTER_UNITS = 13;
-
 /** How far a burst star swells before it dies. */
 export const BURST_MAX_GROWTH = 1.7;
 const MAX_PARTICLES = 640;
@@ -219,8 +210,7 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
  *
  * ## On the sizes below
  *
- * A fighter is about thirteen simulation units tall, and everything here is in
- * the same units — so the numbers are readable as fractions of a fighter, which
+ * Everything here is in simulation units, the same ones  counts — so the numbers are readable as fractions of a fighter, which
  * is the only scale that matters. The burst tops out at a little under four
  * units, so the biggest hit in the game throws a star about a third of a
  * fighter high.

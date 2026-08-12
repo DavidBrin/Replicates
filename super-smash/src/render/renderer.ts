@@ -40,6 +40,7 @@ import {
   drawPortTag,
   drawStockIcon,
   getCharacterRig,
+  hitlagShake,
   resolvePalette,
   squashFor,
   withAlpha,
@@ -319,7 +320,11 @@ function drawOneFighter(
   const squash = squashFor(f);
   const height = visualHeight(rig);
 
-  const screen = worldToScreen(cam, d.x + pose.offsetX * f.facing * rig.scale, d.y + pose.offsetY * rig.scale);
+  const screen = worldToScreen(
+    cam,
+    d.x + pose.offsetX * f.facing * rig.scale + hitlagShake(f),
+    d.y + pose.offsetY * rig.scale,
+  );
   const transform: RigTransform = {
     x: screen.x,
     y: screen.y,

@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { fx } from "@/engine/fixed";
 import { SHIELD_MAX_HEALTH } from "@/engine/constants";
-import { MAX_ZOOM, createCamera } from "./camera";
+import { FIGHTER_UNITS, MAX_ZOOM, createCamera } from "./camera";
 import { PORT_COLOURS, hexToRgb } from "./characterArt";
 import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
 import {
   BURST_MAX_GROWTH,
-  FIGHTER_UNITS,
   HIT_FLASH_FRAMES,
   createVfx,
   drawKoFlash,

@@ -37,6 +37,17 @@ export const VIEW_HEIGHT = 1080;
 export const MIN_ZOOM = 3.6;
 export const MAX_ZOOM = 15;
 
+/**
+ * How tall a fighter is, in simulation units.
+ *
+ * Not read from a rig: every fighter has a different one, and a graphic that
+ * looked right on Donkey Kong and swallowed Pikachu would be the same bug in a
+ * new place. The renderer sizes and frames against "a fighter" as a unit, and
+ * this is it — one constant, here rather than in `vfx.ts`, because `vfx`
+ * already imports from this module and the reverse would be a cycle.
+ */
+export const FIGHTER_UNITS = 13;
+
 /** Empty space kept around the fighters, in simulation units. */
 export const FRAME_MARGIN_X = 38;
 export const FRAME_MARGIN_Y = 30;
@@ -130,7 +141,12 @@ export function cameraTarget(state: GameState, stage: StageDef): CameraTarget {
     minX = Math.min(minX, x);
     maxX = Math.max(maxX, x);
     minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
+    // A fighter's origin is at their feet, and a fighter is not a point — so a
+    // box drawn round the origins alone sits entirely below the fighters in it.
+    // Combined with the ground kept in shot below, that put the platform across
+    // the middle of the screen and gave the lower half of every frame to the
+    // stage's underside, while the fighters crowded the top.
+    maxY = Math.max(maxY, y + FIGHTER_UNITS);
     count++;
   }
 

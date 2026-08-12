@@ -832,6 +832,13 @@ whether the hit was a jab or a kill move — so a launched fighter now drags a p
 streak emitted from their own velocity. It reuses the existing spark particle, which already
 draws itself stretched backwards along its motion; nothing new to draw.
 
+The freeze needed the same treatment from the other side. Hitlag on a strong hit is nineteen
+frames, and it is correct that it is — the formula matches the published one — but the spark
+is gone after nine of them and the squash is static, so the back half of every heavy hit was
+a still image. `hitlagShake` alternates both fighters a fraction of a unit either way off the
+hitlag counter, decaying as it runs out. It is what turns a third of a second of nothing into
+a *held* moment rather than the game appearing to hang.
+
 ---
 
 ## D37 — Whoever is doing something is drawn on top
@@ -852,6 +859,14 @@ fighter was an eighth of the screen height and a whole arm swing was a dozen pix
 keeps a third of the platform in shot and pushes to 15 px/unit, which puts a fighter at about
 a fifth of the screen — roughly where Ultimate sits in a close 1v1. The stage edges are
 allowed to leave the frame during close combat, exactly as they do in the real game.
+
+The vertical framing was wrong for a smaller reason with the same flavour: the bounding box
+was drawn round fighters' *origins*, which are at their feet, so the box the camera framed
+sat entirely below the fighters in it. Together with the ground kept in shot underneath, that
+put the platform across the middle of the screen and gave the whole lower half of every frame
+to the stage's underside while the fighters crowded the top. The box now includes a fighter's
+height, which is one constant — `FIGHTER_UNITS`, shared with the effect sizing, so "a
+fighter" means one thing in the renderer rather than two.
 
 ---
 

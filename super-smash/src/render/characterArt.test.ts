@@ -12,6 +12,7 @@ import {
   drawStockIcon,
   getCharacterRig,
   hexToRgb,
+  hitlagShake,
   mixHex,
   resolvePalette,
   shade,
@@ -430,5 +431,37 @@ describe("port furniture", () => {
     // A stock icon is flat: one colour, no palette.
     const fills = new Set(assignmentsTo(stock, "fillStyle").map(String));
     expect(fills.size).toBe(1);
+  });
+});
+
+/**
+ * A strong hit freezes both fighters for nineteen frames — a third of a second
+ * — and that is correct: it is Ultimate's own formula. But a third of a second
+ * in which nothing at all moves reads as the game hanging rather than as
+ * impact, and the spark is gone after nine of those frames.
+ */
+describe("the hitlag shudder", () => {
+  it("is nothing at all when nobody is frozen", () => {
+    expect(hitlagShake({ hitlag: 0 })).toBe(0);
+  });
+
+  it("alternates side to side every frame", () => {
+    const a = hitlagShake({ hitlag: 8 });
+    const b = hitlagShake({ hitlag: 7 });
+    expect(Math.sign(a)).not.toBe(Math.sign(b));
+    expect(Math.abs(a)).toBeGreaterThan(0);
+  });
+
+  it("settles as the freeze runs out rather than stopping dead", () => {
+    const early = Math.abs(hitlagShake({ hitlag: 12 }));
+    const late = Math.abs(hitlagShake({ hitlag: 2 }));
+    expect(late).toBeLessThan(early);
+  });
+
+  it("stays a shudder — never enough to look like movement", () => {
+    // A fighter is thirteen units; anything approaching that is a teleport.
+    for (const hitlag of [1, 4, 9, 19, 30]) {
+      expect(Math.abs(hitlagShake({ hitlag }))).toBeLessThan(1);
+    }
   });
 });
