@@ -1,0 +1,379 @@
+import { describe, expect, it } from "vitest";
+
+import { fx } from "@/engine/fixed";
+import { SHIELD_MAX_HEALTH } from "@/engine/constants";
+import { MAX_ZOOM, createCamera } from "./camera";
+import { hexToRgb } from "./characterArt";
+import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
+import {
+  HIT_FLASH_FRAMES,
+  createVfx,
+  drawKoFlash,
+  drawParticles,
+  drawShield,
+  drawSmashBall,
+  drawStarKos,
+  hitFlashAmount,
+  ingestEvents,
+  spawnDust,
+  spawnHitSpark,
+  stepVfx,
+  trackAfterimages,
+  updateVfx,
+} from "./vfx";
+import { makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
+
+const stage = makeStage();
+const cam = createCamera(stage);
+
+function hit(over: Partial<{ damage: number; knockback: number; victim: number }> = {}) {
+  return makeEvents({
+    hits: [
+      {
+        attacker: 0,
+        victim: over.victim ?? 1,
+        damage: over.damage ?? fx(10),
+        x: 0,
+        y: fx(6),
+        knockback: over.knockback ?? fx(60),
+      },
+    ],
+  });
+}
+
+describe("events, not state", () => {
+  it("spawns nothing at all when a frame reports no events", () => {
+    const v = createVfx();
+    const state = makeState({ fighters: [makeFighter({ port: 0, damage: fx(90) })] });
+    stepVfx(v, makeEvents(), state);
+    expect(v.particles).toHaveLength(0);
+    expect(v.koFlash).toBe(0);
+  });
+
+  it("spawns once per event, however many times the frame is re-simulated", () => {
+    // The rollback case: the same frame's *state* is seen repeatedly, but the
+    // authoritative step reports its events exactly once.
+    const v = createVfx();
+    const state = makeState();
+    ingestEvents(v, hit(), state);
+    const afterOne = v.particles.length;
+    for (let i = 0; i < 8; i++) {
+      trackAfterimages(v, state);
+      updateVfx(v);
+    }
+    expect(afterOne).toBeGreaterThan(0);
+    expect(v.particles.length).toBeLessThanOrEqual(afterOne);
+  });
+});
+
+describe("hit sparks", () => {
+  it("throws more and larger sparks for a bigger hit", () => {
+    const small = createVfx();
+    const big = createVfx();
+    spawnHitSpark(small, 0, 0, 3, 20);
+    spawnHitSpark(big, 0, 0, 24, 200);
+    expect(big.particles.length).toBeGreaterThan(small.particles.length);
+    const size = (v: typeof small) => Math.max(...v.particles.map((p) => p.size));
+    expect(size(big)).toBeGreaterThan(size(small));
+  });
+
+  it("ramps colour from white through yellow to orange as damage climbs", () => {
+    // Blue drains first (white to yellow), then green (yellow to orange), while
+    // red stays pinned — which is the ramp, stated as three channels.
+    const blues: number[] = [];
+    const greens: number[] = [];
+    for (const damage of [0.5, 6, 12, 18, 25]) {
+      const v = createVfx();
+      spawnHitSpark(v, 0, 0, damage, 40);
+      const [r, g, b] = hexToRgb(v.particles[0].colour);
+      expect(r).toBe(255);
+      blues.push(b);
+      greens.push(g);
+    }
+    for (let i = 1; i < blues.length; i++) expect(blues[i]).toBeLessThan(blues[i - 1]);
+    expect(greens[greens.length - 1]).toBeLessThan(greens[0]);
+  });
+
+  it("flashes the victim white for two to four frames", () => {
+    const v = createVfx();
+    ingestEvents(v, hit({ damage: fx(4) }), makeState());
+    expect(v.hitFlash[1]).toBeGreaterThanOrEqual(2);
+    expect(v.hitFlash[1]).toBeLessThanOrEqual(HIT_FLASH_FRAMES);
+    expect(hitFlashAmount(v, 1)).toBeGreaterThan(0);
+    expect(hitFlashAmount(v, 0)).toBe(0);
+  });
+
+  it("lets the flash expire", () => {
+    const v = createVfx();
+    ingestEvents(v, hit(), makeState());
+    for (let i = 0; i < HIT_FLASH_FRAMES + 1; i++) updateVfx(v);
+    expect(hitFlashAmount(v, 1)).toBe(0);
+  });
+});
+
+describe("expiry", () => {
+  it("drops particle counts monotonically once nothing new spawns", () => {
+    const v = createVfx();
+    spawnHitSpark(v, 0, 0, 20, 150);
+    const counts: number[] = [];
+    for (let i = 0; i < 60; i++) {
+      updateVfx(v);
+      counts.push(v.particles.length);
+    }
+    for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]);
+    expect(counts[counts.length - 1]).toBe(0);
+  });
+
+  it("caps the particle budget rather than growing without bound", () => {
+    const v = createVfx();
+    for (let i = 0; i < 200; i++) spawnHitSpark(v, 0, 0, 25, 200);
+    expect(v.particles.length).toBeLessThanOrEqual(640);
+  });
+
+  it("clears afterimages, star KOs and screen KOs too", () => {
+    const v = createVfx();
+    ingestEvents(
+      v,
+      makeEvents({
+        kos: [
+          { port: 0, x: 0, y: fx(190), kind: "star" },
+          { port: 1, x: 0, y: fx(190), kind: "screen" },
+        ],
+      }),
+      makeState(),
+    );
+    expect(v.starKos).toHaveLength(1);
+    expect(v.screenKos).toHaveLength(1);
+    for (let i = 0; i < 120; i++) updateVfx(v);
+    expect(v.starKos).toHaveLength(0);
+    expect(v.screenKos).toHaveLength(0);
+    expect(v.koFlash).toBe(0);
+  });
+});
+
+describe("shields", () => {
+  it("is drawn only while shielding", () => {
+    const idle = createMockContext();
+    const held = createMockContext();
+    const v = createVfx();
+    drawShield(idle, v, makeFighter({ action: "stand" }), cam, 13);
+    drawShield(held, v, makeFighter({ action: "shield" }), cam, 13);
+    expect(countOf(idle, "arc")).toBe(0);
+    expect(countOf(held, "arc")).toBeGreaterThan(0);
+  });
+
+  it("shrinks as shield HP drops", () => {
+    const radii: number[] = [];
+    for (const hp of [1, 0.6, 0.2, 0]) {
+      const ctx = createMockContext();
+      drawShield(
+        ctx,
+        createVfx(),
+        makeFighter({ action: "shield", shieldHealth: Math.round(SHIELD_MAX_HEALTH * hp) }),
+        cam,
+        13,
+      );
+      radii.push(callsOf(ctx, "arc")[0].args[2] as number);
+    }
+    for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
+  });
+
+  it("is port-coloured", () => {
+    const ctx = createMockContext();
+    drawShield(ctx, createVfx(), makeFighter({ port: 1, action: "shield" }), cam, 13);
+    expect(assignmentsTo(ctx, "fillStyle").some((s) => String(s).includes("59, 123, 254"))).toBe(true);
+  });
+
+  it("flashes white on a perfect shield — which Ultimate scores on release", () => {
+    const v = createVfx();
+    const state = makeState({
+      fighters: [
+        makeFighter({ port: 0 }),
+        makeFighter({ port: 1, action: "shieldRelease", actionFrame: 2 }),
+      ],
+    });
+    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
+    expect(v.parryFlash[1]).toBeGreaterThan(0);
+
+    const ctx = createMockContext();
+    drawShield(ctx, v, state.fighters[1], cam, 13);
+    expect(assignmentsTo(ctx, "fillStyle").some((s) => String(s).includes("255, 255, 255"))).toBe(true);
+  });
+
+  it("does not flash for a shield hit outside the release window", () => {
+    const v = createVfx();
+    const state = makeState({
+      fighters: [makeFighter({ port: 0 }), makeFighter({ port: 1, action: "shield", actionFrame: 2 })],
+    });
+    ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
+    expect(v.parryFlash[1]).toBe(0);
+  });
+
+  it("fades out over the drop animation", () => {
+    const early = createMockContext();
+    const late = createMockContext();
+    const v = createVfx();
+    drawShield(early, v, makeFighter({ action: "shieldRelease", actionFrame: 1 }), cam, 13);
+    drawShield(late, v, makeFighter({ action: "shieldRelease", actionFrame: 10 }), cam, 13);
+    const alpha = (c: typeof early) =>
+      Number(String(assignmentsTo(c, "fillStyle")[0]).match(/([\d.]+)\)$/)?.[1] ?? 0);
+    expect(alpha(late)).toBeLessThan(alpha(early));
+  });
+});
+
+describe("KOs", () => {
+  it("flashes the screen and fades", () => {
+    const v = createVfx();
+    ingestEvents(v, makeEvents({ kos: [{ port: 1, x: 0, y: fx(190), kind: "blast" }] }), makeState());
+    const bright = createMockContext();
+    drawKoFlash(bright, v);
+    const first = Number(String(assignmentsTo(bright, "fillStyle")[0]).match(/([\d.]+)\)$/)?.[1] ?? 0);
+
+    for (let i = 0; i < 6; i++) updateVfx(v);
+    const dim = createMockContext();
+    drawKoFlash(dim, v);
+    const later = Number(String(assignmentsTo(dim, "fillStyle")[0]).match(/([\d.]+)\)$/)?.[1] ?? 0);
+
+    expect(first).toBeGreaterThan(later);
+    expect(countOf(bright, "fillRect")).toBe(1);
+  });
+
+  it("shrinks the star KO into the distance", () => {
+    const v = createVfx();
+    ingestEvents(v, makeEvents({ kos: [{ port: 0, x: 0, y: fx(150), kind: "star" }] }), makeState());
+    const sizes: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const ctx = createMockContext();
+      drawStarKos(ctx, v, cam);
+      const pts = callsOf(ctx, "moveTo");
+      sizes.push(pts.length > 0 ? (pts[0].args[1] as number) : 0);
+      for (let f = 0; f < 20; f++) updateVfx(v);
+    }
+    expect(v.starKos.length + sizes.length).toBeGreaterThan(0);
+  });
+
+  it("draws nothing when there is no flash to draw", () => {
+    const ctx = createMockContext();
+    drawKoFlash(ctx, createVfx());
+    expect(ctx.calls).toHaveLength(0);
+  });
+});
+
+describe("continuous effects", () => {
+  it("trails afterimages only while a dodge is actually intangible", () => {
+    const v = createVfx();
+    trackAfterimages(v, makeState({ fighters: [makeFighter({ action: "roll", intangible: 0 })] }));
+    expect(v.afterimages).toHaveLength(0);
+    trackAfterimages(
+      v,
+      makeState({ fighters: [makeFighter({ action: "roll", intangible: 8, actionFrame: 4 })] }),
+    );
+    expect(v.afterimages).toHaveLength(1);
+  });
+
+  it("emits charge motes only while a smash is held", () => {
+    const idle = createVfx();
+    stepVfx(idle, null, makeState({ fighters: [makeFighter({ charge: 0 })] }));
+    expect(idle.particles.filter((p) => p.kind === "chargeMote")).toHaveLength(0);
+
+    const charging = createVfx();
+    for (let i = 0; i < 4; i++) {
+      stepVfx(charging, null, makeState({ fighters: [makeFighter({ charge: 30 })] }));
+    }
+    expect(charging.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
+  });
+
+  it("smokes above 120% and not below", () => {
+    const cool = createVfx();
+    const hot = createVfx();
+    for (let i = 0; i < 30; i++) {
+      stepVfx(cool, null, makeState({ fighters: [makeFighter({ damage: fx(119) })] }));
+      stepVfx(hot, null, makeState({ fighters: [makeFighter({ damage: fx(150) })] }));
+    }
+    expect(cool.particles.filter((p) => p.kind === "smoke")).toHaveLength(0);
+    expect(hot.particles.filter((p) => p.kind === "smoke").length).toBeGreaterThan(0);
+  });
+
+  it("gives a live Smash Ball a rainbow aura and nothing when it is gone", () => {
+    const off = createMockContext();
+    drawSmashBall(off, makeState(), cam);
+    expect(off.calls).toHaveLength(0);
+
+    const on = createMockContext();
+    drawSmashBall(on, makeState({ smashBall: { active: true, x: 0, y: fx(50), vx: 0, vy: 0, health: fx(40), driftTimer: 0 } }), cam);
+    const hues = assignmentsTo(on, "strokeStyle").filter((s) => String(s).startsWith("hsla"));
+    expect(new Set(hues.map(String)).size).toBeGreaterThan(3);
+  });
+});
+
+describe("drawing particles", () => {
+  it("streaks a spark backwards along its own velocity", () => {
+    const v = createVfx();
+    spawnHitSpark(v, 0, 0, 12, 80);
+    const ctx = createMockContext();
+    drawParticles(ctx, v, cam);
+    expect(countOf(ctx, "stroke")).toBeGreaterThan(0);
+    for (const call of ctx.calls) {
+      for (const arg of call.args) {
+        if (typeof arg === "number") expect(Number.isFinite(arg)).toBe(true);
+      }
+    }
+  });
+
+  it("draws nothing for an empty system", () => {
+    const ctx = createMockContext();
+    drawParticles(ctx, createVfx(), cam);
+    expect(countOf(ctx, "stroke")).toBe(0);
+    expect(countOf(ctx, "fill")).toBe(0);
+  });
+
+  /*
+   * Landing dust shipped at a world radius of up to 2.7 — a disc five units
+   * across next to a thirteen-unit fighter — held at full opacity for most of
+   * twenty-four frames. Nine of them at once read as a bank of cloud sitting
+   * on the platform rather than as a puff at the feet.
+   */
+  describe("landing dust", () => {
+    /** Feet to crown, in the same world units `size` is measured in. */
+    const FIGHTER_HEIGHT = 13;
+
+    it("is a puff at the feet, not scenery on the stage", () => {
+      const v = createVfx();
+      spawnDust(v, 0, 0, 9, 0.9);
+      const widest = Math.max(...v.particles.map((p) => p.size * 2));
+      expect(widest).toBeLessThan(FIGHTER_HEIGHT * 0.12);
+      // And a puff, not a fixture: gone within a third of a second.
+      expect(Math.max(...v.particles.map((p) => p.life))).toBeLessThanOrEqual(20);
+    });
+
+    it("is translucent on every frame it is alive", () => {
+      const v = createVfx();
+      spawnDust(v, 0, 0, 9, 0.9);
+      const alphas: number[] = [];
+      for (let frame = 0; frame < 24 && v.particles.length > 0; frame++) {
+        const ctx = createMockContext();
+        drawParticles(ctx, v, cam);
+        for (const style of assignmentsTo(ctx, "fillStyle")) {
+          const m = /rgba\([^)]*,\s*([\d.]+)\)/.exec(String(style));
+          if (m) alphas.push(Number(m[1]));
+        }
+        updateVfx(v);
+      }
+      expect(alphas.length).toBeGreaterThan(0);
+      // Never solid — a hard-edged opaque disc is what made it read as a shape.
+      expect(Math.max(...alphas)).toBeLessThanOrEqual(0.6);
+    });
+
+    it("stays a puff on screen even when the camera is punched all the way in", () => {
+      const v = createVfx();
+      spawnDust(v, 0, 0, 9, 0.9);
+      const ctx = createMockContext();
+      drawParticles(ctx, { ...v }, { ...cam, zoom: MAX_ZOOM * 1.6 });
+      const radii = callsOf(ctx, "arc").map((c) => c.args[2] as number);
+      // The fighter is 13 units tall at the same zoom; the dust must stay a
+      // small fraction of him, not a third of the screen.
+      const fighterOnScreen = FIGHTER_HEIGHT * MAX_ZOOM * 1.6;
+      expect(Math.max(...radii) * 2).toBeLessThan(fighterOnScreen * 0.2);
+    });
+  });
+});

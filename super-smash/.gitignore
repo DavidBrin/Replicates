@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+
+# The local SQLite demo database. Its whole point is to survive a restart
+# on one machine; it is not something to share between them.
+.data/
+*.db
+*.db-wal
+*.db-shm
+
+test-results/
+playwright-report/
+blob-report/
+.playwright-mcp/
+*.tsbuildinfo
+.env
+.env.local
+.env*.local
+.DS_Store
+.vercel

@@ -7,6 +7,38 @@ and research notes.
 
 ---
 
+## [super-smash](super-smash) — Super Smash Bros. Ultimate, on a laptop keyboard
+
+> **eight fighters, one keyboard, sixty frames a second**
+
+A rebuild of [Super Smash Bros. Ultimate](https://www.smashbros.com)'s versus mode — the
+brawl, which is the mode that has carried across every game in the series since 1999 and is
+the one nearly everybody actually plays. The knockback equation is Ultimate's, the stage
+geometry is Kurogane Hammer's, and the frame data comes out of the game's own decompiled
+scripts.
+
+| Character select | The match | Stage select |
+|---|---|---|
+| <img src="super-smash/docs/screenshots/character-select.png" width="240" alt="Character select: a portrait grid ordered by fighter number, with sheared player panels below"> | <img src="super-smash/docs/screenshots/match.png" width="240" alt="Two fighters on Battlefield with the damage HUD below"> | <img src="super-smash/docs/screenshots/stage-select.png" width="240" alt="Stage select with the Normal / Battlefield / Omega toggle"> |
+
+Every fighter is **drawn from code** — a bone hierarchy of capsules and circles — because
+there is no legitimate way to obtain Nintendo's art, and because every open-source Smash
+clone that tried to ship real sprites stalled on making them. Every sound is synthesised
+from oscillators. Nothing in the repository is an asset.
+
+It also does one thing the original does not: **rollback netcode**. Ultimate is delay-based.
+And the shared-WiFi case needed no code at all — ICE gathers host candidates and prefers the
+LAN route on its own, so two laptops in one room get a direct sub-10ms path for free.
+
+Next.js · a pure fixed-point simulation with a test that fails the build on `Math.random` ·
+1,285 unit and property tests · 7 e2e · rollback verified against a ground-truth run at six
+link conditions. Built from eight parallel research lanes, then six parallel build slices.
+
+**[Read the README →](super-smash/README.md)** ·
+[Spec](super-smash/SPEC.md) · [Decisions](super-smash/DECISIONS.md) · [Research](super-smash/research)
+
+---
+
 ## [fake-phone](fake-phone) — a staged incoming call, for when you feel unsafe
 
 > **never feel alone**

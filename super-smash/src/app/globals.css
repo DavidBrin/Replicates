@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Design tokens
+   ==========================================================================
+
+   Two copies of the same palette, deliberately.
+
+   `@theme` is what Tailwind compiles utilities from: declaring
+   `--color-smash-red` here is what makes `bg-smash-red` and `text-smash-red`
+   exist at all. The `:root` block below repeats the values under their bare
+   names because the canvas renderer does not go through Tailwind — it reads
+   colours out of `getComputedStyle(document.documentElement)` so the HUD and
+   the menus cannot drift apart. Change a colour and you change it twice; the
+   alternative is a canvas that quietly disagrees with the UI around it.
+
+   Values sampled from Ultimate screenshots, per SPEC §10.
+   ========================================================================== */
+
+@theme {
+  --color-smash-red: #ad0000;
+  --color-smash-red-lit: #c10500;
+  --color-smash-red-deep: #6d0000;
+  --color-smash-yellow: #ffd500;
+  --color-smash-yellow-lit: #ffe873;
+  --color-panel-ink: #090b0c;
+  --color-panel-bone: #f2f0eb;
+
+  --color-cpu-grey: #dbdbdb;
+  --color-cpu-grey-dim: #a0a0a0;
+  --color-cpu-grey-lit: #f5f5f5;
+
+  --color-p1: #fe3636;
+  --color-p2: #3b7bfe;
+  --color-p3: #ffc61e;
+  --color-p4: #35c759;
+
+  /* The four modes Ultimate shows beside Smash. Dimmed on this build — see
+     SPEC §12 — but present, because their absence would be the bigger lie. */
+  --color-mode-smash: #ad0000;
+  --color-mode-spirits: #2c9c4d;
+  --color-mode-games: #1f6ecd;
+  --color-mode-vault: #cf3f92;
+  --color-mode-online: #ef7c1a;
+
+  --font-display: var(--font-anton), "Arial Black", "Helvetica Neue", sans-serif;
+  --font-menu: var(--font-rounded), ui-rounded, "Hiragino Maru Gothic ProN", "Segoe UI", sans-serif;
+}
+
+:root {
+  --smash-red: #ad0000;
+  --smash-red-lit: #c10500;
+  --smash-red-deep: #6d0000;
+  --smash-yellow: #ffd500;
+  --panel-ink: #090b0c;
+  --panel-bone: #f2f0eb;
+
+  --cpu-grey: #dbdbdb;
+  --cpu-grey-dim: #a0a0a0;
+  --cpu-grey-lit: #f5f5f5;
+
+  --p1: #fe3636;
+  --p2: #3b7bfe;
+  --p3: #ffc61e;
+  --p4: #35c759;
+
+  /* The shear that makes the whole interface read as Smash. Every panel, tab,
+     banner and button leans by this much; see SPEC §10. */
+  --smash-shear: -12deg;
+}
+
+/* ==========================================================================
+   Base
+   ==========================================================================
+
+   Everything here is inside `@layer base` and that is load-bearing, not
+   tidiness. Tailwind v4 emits its utilities into `@layer utilities`, and CSS
+   cascade layers beat specificity: an *unlayered* rule wins over any layered
+   one no matter how specific. An unlayered `button { background: none }` reset
+   therefore silently defeats every `bg-*` class in the app, and the symptom —
+   invisible buttons that look correct in devtools — costs a day to find. A
+   sibling project paid that day. Keep resets layered.
+   ========================================================================== */
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: #101215;
+    color: #f5f5f5;
+    font-family: var(--font-menu);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior: none;
+  }
+
+  /* The menus are keyboard-driven by design (SPEC §6), so the focus ring is a
+     first-class part of the visual language rather than something to suppress.
+     It is Ultimate's yellow selection outline. */
+  :focus-visible {
+    outline: 3px solid var(--smash-yellow);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--smash-yellow);
+    color: var(--panel-ink);
+  }
+}
+
+/* ==========================================================================
+   Shared shapes
+   ==========================================================================
+
+   Two utilities that would otherwise be repeated in every component: the
+   shear, and the counter-shear that puts the *contents* of a sheared panel
+   back upright. Text inside a parallelogram must not itself be slanted —
+   Ultimate slants the panel, not the type.
+   ========================================================================== */
+
+@layer components {
+  .shear {
+    transform: skewX(var(--smash-shear));
+  }
+
+  .unshear {
+    transform: skewX(calc(var(--smash-shear) * -1));
+  }
+
+  /* The fine diagonal hatch under the title screen wordmark and behind the
+     character grid. Two gradients rather than an image so it scales with the
+     viewport and costs no request. */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      -78deg,
+      rgb(0 0 0 / 0.05) 0px,
+      rgb(0 0 0 / 0.05) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  }
+
+  /* The lighter band that runs diagonally across Ultimate's red ground. */
+  .red-ground {
+    background-color: var(--smash-red);
+    background-image: linear-gradient(
+      100deg,
+      var(--smash-red-deep) 0%,
+      var(--smash-red) 34%,
+      var(--smash-red-lit) 40%,
+      var(--smash-red) 47%,
+      var(--smash-red-deep) 100%
+    );
+  }
+}
+
+/* ==========================================================================
+   Motion
+   ========================================================================== */
+
+@keyframes press-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes cursor-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6%);
+  }
+}
+
+@keyframes tile-sheen {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(2.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@layer components {
+  .anim-press-pulse {
+    animation: press-pulse 1.4s ease-in-out infinite;
+  }
+
+  .anim-cursor-bob {
+    animation: cursor-bob 2.2s ease-in-out infinite;
+  }
+
+  .anim-slide-in-right {
+    animation: slide-in-right 180ms ease-out both;
+  }
+}
+
+/* A player who cannot see the animation is not thereby stopped from playing,
+   so honour the preference rather than treating it as decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
