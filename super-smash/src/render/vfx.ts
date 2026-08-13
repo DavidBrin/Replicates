@@ -663,6 +663,52 @@ function ring(x: number, y: number, colour: string, size: number, life: number):
   };
 }
 
+/** Stars per orbit round a broken-shielded fighter's head, and how fast. */
+export const DIZZY_STARS = 3;
+const DIZZY_PERIOD = 44;
+
+/**
+ * The stars that say *stunned* rather than *tired*.
+ *
+ * A shield break is four seconds of total helplessness and the body sway that
+ * animates it is legible at close range and almost invisible with four fighters
+ * on screen — which is exactly when a broken shield is most worth noticing. In
+ * Ultimate the read is carried by an orange halo with stars circling the head,
+ * and it survives the fighter being a few pixels tall because it is a bright
+ * shape *above* the silhouette rather than a change *within* it.
+ *
+ * Drawn from state rather than spawned as particles because it is a continuous
+ * property of being stunned and not a reaction to a moment, and because the
+ * orbit has to stay attached to a head that is lolling around underneath it.
+ */
+export function drawDizzyStars(
+  ctx: CanvasRenderingContext2D,
+  fighter: Pick<FighterState, "action" | "actionFrame" | "x" | "y">,
+  cam: Camera,
+  fighterHeight: number,
+): void {
+  if (fighter.action !== "shieldBroken") return;
+
+  const s = worldToScreen(cam, toFloat(fighter.x), toFloat(fighter.y) + fighterHeight * 1.02);
+  const phase = (fighter.actionFrame % DIZZY_PERIOD) / DIZZY_PERIOD;
+  const rx = fighterHeight * 0.42 * cam.zoom;
+  const ry = rx * 0.34;
+
+  ctx.save();
+  for (let i = 0; i < DIZZY_STARS; i++) {
+    const a = (phase + i / DIZZY_STARS) * Math.PI * 2;
+    const x = s.x + Math.cos(a) * rx;
+    const y = s.y - Math.sin(a) * ry;
+    // Behind the head for half the orbit, so it reads as going *round*.
+    const depth = 0.55 + 0.45 * Math.sin(a);
+    const r = fighterHeight * cam.zoom * (0.055 + 0.03 * depth);
+    ctx.fillStyle = withAlpha("#FFD500", 0.45 + 0.55 * depth);
+    star(ctx, x, y, r, r * 0.42, 5, a * 0.6);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 /** Smash-charge motes, spiralling into the charging fighter. */
 export function trackChargeGlow(v: VfxState, state: GameState): void {
   for (const f of state.fighters) {

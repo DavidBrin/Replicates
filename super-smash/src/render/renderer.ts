@@ -41,6 +41,7 @@ import {
   getCharacterRig,
   hitlagShake,
   resolvePalette,
+  rotationPivot,
   squashFor,
   withAlpha,
   type CharacterRig,
@@ -352,7 +353,7 @@ function drawOneFighter(
     // right — backwards relative to travel. `skeleton.test.ts` pins the
     // property this relies on.
     rotation: pose.rotation + poseSpinFor(posed, frame, timing, attrs),
-    pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
+    pivot: rotationPivot(rig),
   };
 
   // The port ring goes under the feet, before the rim, so the rim overlaps it.

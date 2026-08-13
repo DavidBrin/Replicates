@@ -817,6 +817,15 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
                 : null;
       if (throwSlot !== null && hasMove(ctx, throwSlot)) {
         startMove(f, "throw", throwSlot);
+        // The victim is being carried now, not held. `thrown` and `grabbed`
+        // are different animations for a reason — one is a fighter struggling
+        // against a grip, the other is a fighter already committed to a
+        // trajectory — and until now nothing ever entered `thrown`, so the
+        // second of them could not happen.
+        const carried = f.grabbing >= 0 ? ctx.fighters[f.grabbing] : undefined;
+        if (carried !== undefined && carried.grabbedBy === f.port) {
+          startAction(carried, "thrown");
+        }
         return;
       }
       return;
@@ -847,6 +856,10 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
     }
 
     case "thrown": {
+      // Still in the thrower's hands: the release is the throw's hitbox
+      // connecting, which `applyHit` turns into hitstun or tumble. Leaving on
+      // `hitstun <= 0` alone would end the carry on its first frame.
+      if (f.grabbedBy >= 0) return;
       if (f.hitstun <= 0) startAction(f, f.grounded ? "stand" : "fall");
       return;
     }

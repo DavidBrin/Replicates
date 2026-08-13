@@ -45,6 +45,7 @@ import {
   NEAR_BONES,
   drawCapsule,
   resolve,
+  rigHeight,
   type Bone,
   type BoneName,
   type Rig,
@@ -1403,6 +1404,17 @@ function drawProp(
  * Volume is roughly preserved — squashing x by k stretches y by about 1/k — so
  * the fighter does not appear to gain or lose mass.
  */
+/**
+ * Height about which a whole-body rotation turns, in rig units.
+ *
+ * Exported because tests that measure what the game draws have to use the same
+ * pivot, and the alternative is each of them re-deriving the expression and
+ * silently drifting the day it changes.
+ */
+export function rotationPivot(rig: CharacterRig): number {
+  return rigHeight(rig.bones, rig.headRadius) * 0.45;
+}
+
 export function squashFor(fighter: Pick<FighterState, "action" | "actionFrame" | "hitlag">): {
   scaleX: number;
   scaleY: number;

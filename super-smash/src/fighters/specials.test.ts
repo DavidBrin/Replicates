@@ -217,3 +217,77 @@ describe("Fox Illusion actually crosses ground", () => {
     expect(travelled).toBeGreaterThan(walkedTo);
   });
 });
+
+/**
+ * The same class of bug as the two above, found the same way and one layer up.
+ *
+ * `thrown` is an action state with its own handler in `states.ts`, its own
+ * entry in `poseNameFor`, its own place in the draw order, and its own
+ * animation. Nothing ever put a fighter into it: a throw's victim went from
+ * `grabbed` straight to `hitstun`, so the carry — the part of a throw where the
+ * victim has stopped struggling and is already committed to a trajectory — was
+ * drawn as a fighter still fighting the grip.
+ */
+describe("a thrown fighter is thrown", () => {
+  /** Two fighters, side by side on the ground, one already holding the other. */
+  function held(): GameState {
+    const state = createInitialState(
+      "finalDestination",
+      [{ defId: "mario" }, { defId: "kirby" }],
+      RULES,
+      0x9a12,
+    );
+    const [a, v] = state.fighters;
+    for (const f of state.fighters) {
+      f.action = "stand";
+      f.actionFrame = 0;
+      f.grounded = true;
+      f.platform = 0;
+      f.y = fx(0);
+      f.intangible = 0;
+      f.invincible = 0;
+    }
+    a.x = fx(0);
+    a.facing = 1;
+    a.action = "grabHold";
+    a.grabbing = v.port;
+    a.grabTimer = 60;
+    v.x = fx(4);
+    v.facing = -1;
+    v.action = "grabbed";
+    v.grabbedBy = a.port;
+    return state;
+  }
+
+  function play(inputs: [number, number], frames: number): FighterState[][] {
+    let s = held();
+    let prev: [number, number] = [0, 0];
+    const seen: FighterState[][] = [];
+    for (let i = 0; i < frames; i++) {
+      const result = step(s, inputs, { prevInputs: prev });
+      s = result.state;
+      prev = inputs;
+      seen.push(s.fighters.map((f) => ({ ...f })));
+    }
+    return seen;
+  }
+
+  // A direction alone throws; the attack button pummels. Getting this the
+  // wrong way round is how the first draft of this test passed nothing.
+  it("carries the victim in `thrown` rather than in `grabbed`", () => {
+    const frames = play([Btn.Right, 0], 40);
+    const victim = frames.map((f) => f[1]);
+    expect(frames.some((f) => f[0].action === "throw")).toBe(true);
+    expect(victim.some((v) => v.action === "thrown")).toBe(true);
+  });
+
+  it("lets go of them again", () => {
+    // The carry holds while the thrower still has them, so the guard that
+    // keeps it from ending on its first frame must not keep it for ever.
+    const victim = play([Btn.Right, 0], 200).map((f) => f[1]);
+    const last = victim[victim.length - 1];
+    expect(last.grabbedBy).toBe(-1);
+    expect(last.action).not.toBe("thrown");
+    expect(last.action).not.toBe("grabbed");
+  });
+});
