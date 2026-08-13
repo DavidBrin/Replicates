@@ -1,2 +1,10 @@
 .playwright-mcp/
 .superpowers/
+
+# A sibling project that lives in this directory but is not part of it.
+# `git add -A` from inside super-smash stages the whole repo, and swept it
+# into a commit once.
+Linear/
+
+# Stray capture artefacts from the animation tooling.
+super-smash/anim-*.png
