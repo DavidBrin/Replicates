@@ -572,3 +572,78 @@ describe("ground effects", () => {
     expect(dustFrom({ action: "fall", actionFrame: 9, fastFalling: true })).toHaveLength(0);
   });
 });
+
+/**
+ * Which box won a swing, when the swing hit more than one fighter.
+ *
+ * A move is several hitboxes at once and an overlap resolves to the lowest id,
+ * which is the sweetspot mechanic. Recording only the last event made the
+ * answer depend on victim port order: a Marth tipper on one opponent followed
+ * by a sourspot on another recorded the sourspot and suppressed the bloom.
+ */
+describe("the hitbox a swing landed with", () => {
+  const swinger = () =>
+    makeState({
+      fighters: [
+        makeFighter({ port: 0, action: "attack", move: "fsmash", actionFrame: 4 }),
+        makeFighter({ port: 1 }),
+        makeFighter({ port: 2 }),
+      ],
+    });
+
+  /** One frame in which the same swing connects with two fighters. */
+  function bothVictims(first: number, second: number) {
+    const v = createVfx();
+    const state = swinger();
+    const events = makeEvents({
+      hits: [
+        { attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: first },
+        { attacker: 0, victim: 2, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: second },
+      ],
+    });
+    ingestEvents(v, events, state);
+    return v.lastHit[0]?.hitboxId;
+  }
+
+  it("keeps the sweetspot whichever order the victims arrive in", () => {
+    // The property: the answer must not depend on port order.
+    expect(bothVictims(0, 1)).toBe(0);
+    expect(bothVictims(1, 0)).toBe(0);
+  });
+
+  it("still reports a sourspot when that is all that connected", () => {
+    // Otherwise "keep the lowest" would be indistinguishable from "always 0".
+    expect(bothVictims(1, 1)).toBe(1);
+    expect(bothVictims(2, 3)).toBe(2);
+  });
+
+  it("does not carry a sweetspot over into the next swing", () => {
+    // Aggregation is scoped to the action; a new swing starts from nothing, or
+    // one tipper would bloom every attack that followed it.
+    const v = createVfx();
+    const tip = makeState({
+      fighters: [makeFighter({ port: 0, action: "attack", move: "fsmash", actionFrame: 4 })],
+    });
+    tip.frame = 100;
+    ingestEvents(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 0 }],
+      }),
+      tip,
+    );
+    // A later swing: the action began after the tipper was recorded.
+    const later = makeState({
+      fighters: [makeFighter({ port: 0, action: "attack", move: "fsmash", actionFrame: 2 })],
+    });
+    later.frame = 140;
+    ingestEvents(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 1 }],
+      }),
+      later,
+    );
+    expect(v.lastHit[0]?.hitboxId).toBe(1);
+  });
+});

@@ -417,8 +417,14 @@ describe("the tipper flash knows what actually connected", () => {
   const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
   const cam = createCamera(makeStage());
 
-  /** Paint the forward smash on an active frame, told which box won. */
-  function paint(struckWith: number | null, hitlag = 0) {
+  /**
+   * Paint the forward smash on an active frame.
+   *
+   * `struckWith` of `undefined` omits the cosmetic state entirely, which is
+   * what the animation lab does; `null` supplies it and says nothing has
+   * connected, which is what a shielded swing looks like.
+   */
+  function paint(struckWith: number | null | undefined, hitlag = 0) {
     const ctx = createMockContext();
     const move = marth.moves.fsmash as MoveDef;
     const live = Math.min(...move.hitboxes.map((h) => h.startFrame));
@@ -429,10 +435,26 @@ describe("the tipper flash knows what actually connected", () => {
       actionFrame: live - 1,
       hitlag,
     });
-    drawMoveFx(ctx, marth, f, cam, 14, 960, 700, {
-      lastHit: [struckWith === null ? null : { hitboxId: struckWith, frame: 0 }, null, null, null],
-      frame: f.actionFrame,
-    });
+    drawMoveFx(
+      ctx,
+      marth,
+      f,
+      cam,
+      14,
+      960,
+      700,
+      struckWith === undefined
+        ? undefined
+        : {
+            lastHit: [
+              struckWith === null ? null : { hitboxId: struckWith, frame: 0 },
+              null,
+              null,
+              null,
+            ],
+            frame: f.actionFrame,
+          },
+    );
     return ctx;
   }
 
@@ -461,6 +483,14 @@ describe("the tipper flash knows what actually connected", () => {
   it("falls back to hitlag when nobody supplied the cosmetic state", () => {
     // The animation lab draws effects without a VfxState. A dimmer bloom on
     // every hit is better than a flash that can never bloom at all.
-    expect(biggest(paint(null, 8))).toBeGreaterThan(biggest(paint(null, 0)));
+    expect(biggest(paint(undefined, 8))).toBeGreaterThan(biggest(paint(undefined, 0)));
+  });
+
+  it("does not bloom on a swing the simulation says connected with nothing", () => {
+    // A shield hit freezes the attacker without producing a hit event, so
+    // `hitlag` is set and `struckWith` is null. Treating that null like the
+    // lab's missing context bloomed a sourspot that had been shielded.
+    expect(biggest(paint(null, 8))).toBe(biggest(paint(null, 0)));
+    expect(biggest(paint(null, 8))).toBeLessThan(biggest(paint(0, 8)));
   });
 });

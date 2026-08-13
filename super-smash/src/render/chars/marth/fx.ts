@@ -138,8 +138,12 @@ function paintTip(c: FxContext, hb: Hitbox, k: number): void {
   // draw. `hitlag` is kept as the fallback for a caller that did not supply the
   // cosmetic state (the animation lab does not), where a dimmer bloom on every
   // hit is better than none.
-  const connected = c.struckWith ?? null;
-  const tipped = connected !== null ? connected === hb.id : c.f.hitlag > 0;
+  // `undefined` means no cosmetic state was supplied — the animation lab — and
+  // only then is `hitlag` worth falling back to. `null` is the simulation
+  // saying this swing has connected with nothing, which a shield hit produces:
+  // it freezes the attacker without a hit event, so falling back there bloomed
+  // a sourspot that had been shielded.
+  const tipped = c.struckWith === undefined ? c.f.hitlag > 0 : c.struckWith === hb.id;
   const bloom = tipped ? 1.45 : 1;
   const s = k * bloom;
 

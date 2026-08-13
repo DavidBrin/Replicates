@@ -185,7 +185,22 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
     v.hitFlash[hit.victim] = Math.min(HIT_FLASH_FRAMES, 2 + Math.floor(damage / 8));
     // Recorded against the *attacker*: this is "what did my swing land with",
     // which is the attacker's question, not the victim's.
-    v.lastHit[hit.attacker] = { hitboxId: hit.hitboxId, frame: state.frame };
+    //
+    // Aggregated across the swing rather than overwritten, by keeping the
+    // lowest id — the same rule `bestHitbox` settles an overlap by, and for the
+    // same reason. One swing can hit two fighters with different boxes, and
+    // taking the last event would make the sweetspot depend on victim port
+    // order: a Marth tipper on one opponent followed by a sourspot on another
+    // would record only the sourspot and suppress the bloom. If the tip
+    // connected with anyone, the tip connected.
+    const who = state.fighters.find((f) => f.port === hit.attacker);
+    const swingStarted = who ? state.frame - who.actionFrame : state.frame;
+    const already = v.lastHit[hit.attacker];
+    const sameSwing = already !== null && already !== undefined && already.frame >= swingStarted;
+    v.lastHit[hit.attacker] = {
+      hitboxId: sameSwing ? Math.min(already.hitboxId, hit.hitboxId) : hit.hitboxId,
+      frame: state.frame,
+    };
   }
 
   for (const s of events.shieldHits) {

@@ -54,7 +54,16 @@ export interface FxContext {
    */
   readonly dir: number;
   /**
-   * Which of this move's hitboxes has connected so far this swing, or `null`.
+   * Which of this move's hitboxes has connected so far this swing.
+   *
+   * Three states, and the difference between the last two matters:
+   * a **number** is the box that won; **null** is "the simulation is watching
+   * and nothing has connected"; **undefined** is "nobody supplied the cosmetic
+   * state at all" — which is the animation lab, drawing a pose with no match
+   * behind it. Collapsing null into undefined made a sourspot that hit a shield
+   * bloom as a tipper, because a shield hit freezes the attacker without
+   * producing a hit event, so the `hitlag` fallback fired on a swing the
+   * simulation had already reported as not connecting.
    *
    * The id of the box that won, resolved by the simulation (`bestHitbox`
    * settles an overlap by lowest id, which is the sweetspot mechanic itself).
@@ -169,7 +178,7 @@ export function fxContextFor(
   screenX: number,
   screenY: number,
   totalFrames: number,
-  struckWith: number | null = null,
+  struckWith: number | null | undefined = undefined,
 ): FxContext {
   const frame = moveFrameOf(f.actionFrame);
   return {
