@@ -1,6 +1,31 @@
 // The tallest and by some distance the thinnest, with the smallest head — the
 // elongated build that lets the cape and Falchion read as elegant rather than
 // as clutter.
+//
+// ## The cape was upside down
+//
+// The shared `cape` painter is authored with its bulk at **positive local y**,
+// and a prop's local `+y` runs along its bone *toward the tip*. Hung on the
+// `torso`, whose tip is the shoulders, that put six rig units of navy cloth
+// **above** the shoulder line — a hood standing two units clear of the crown.
+// On a fighter whose whole read is a narrow silhouette it was the widest,
+// darkest shape on screen and it sat where his head is. Link gets away with the
+// same painter because his is a third of the size.
+//
+// So the cape is a `custom` prop here: the same idea, drawn downward from the
+// shoulders to the knee and flared back, which is what a cape is and what makes
+// the space between it and the legs read as *thin*.
+//
+// ## Falchion's length is not a taste decision
+//
+// Every tipper hitbox in `fighters/marth.ts` is at `TIP_REACH = 11.0` **world**
+// units, and `rig.scale` is the rig-unit-to-world multiplier, so the blade has
+// to be sized in rig units and then checked in world ones — a step easy to skip
+// and worth 16% of his reach. The arm is 4.73 rig units, so an extended arm plus
+// a blade of `s` reaches `(4.73 + s) * 1.16` world. The forward-smash tip sits
+// 11.6 world from the shoulder, which puts `s` at 5.3: the drawn point lands on
+// the tipper hitbox rather than a unit short of it or, worse, well past it,
+// promising reach the move does not have.
 
 import {
   ARMS,
@@ -9,45 +34,199 @@ import {
   LEGS,
   eyes,
   group,
+  poly,
   tweakRig,
+  type Brush,
   type CharacterRig,
+  type PropDef,
 } from "../../rigKit";
+
+/**
+ * The shoulder cape, hanging.
+ *
+ * Local frame: `+y` runs up the torso toward the shoulders, `+x` is forward, one
+ * unit is `size`. Everything here is therefore negative-y — down the back — and
+ * mostly negative-x, which is behind him.
+ */
+function drawCape(b: Brush, p: PropDef): void {
+  const ctx = b.ctx;
+  ctx.beginPath();
+  ctx.moveTo(0.34, 0.1);
+  ctx.lineTo(-0.44, 0.14);
+  // The outer edge falls from the shoulder and flares back as it goes.
+  ctx.quadraticCurveTo(-0.92, -0.95, -0.8, -2.26);
+  // The hem, cut on a slant so it reads as cloth rather than as a plank.
+  ctx.quadraticCurveTo(-0.5, -2.52, -0.12, -2.28);
+  // Back up the inside edge, close to the body.
+  ctx.quadraticCurveTo(0.14, -1.15, 0.3, -0.12);
+  ctx.closePath();
+  b.fill(p.colour);
+
+  // The lining, on the body pass only: a narrow band inside the hem is the
+  // whole reason a cape reads as having a front and a back.
+  if (b.mode === "body" && p.detail) {
+    ctx.beginPath();
+    ctx.moveTo(-0.12, -2.28);
+    ctx.quadraticCurveTo(-0.5, -2.52, -0.8, -2.26);
+    ctx.quadraticCurveTo(-0.72, -1.98, -0.64, -1.86);
+    ctx.quadraticCurveTo(-0.42, -2.06, -0.1, -1.9);
+    ctx.closePath();
+    b.fill(p.detail);
+  }
+}
+
+/** The gold collar the cape hangs from — the one bright note at shoulder height. */
+function drawCollar(b: Brush, p: PropDef): void {
+  poly(b.ctx, [
+    [0.44, 0.3],
+    [-0.5, 0.34],
+    [-0.44, -0.12],
+    [0.4, -0.16],
+  ]);
+  b.fill(p.colour);
+}
+
+/**
+ * Falchion.
+ *
+ * The shared `swordLong` painter is the right silhouette, but its crossguard is
+ * 0.48 of a unit across and the blade has to be `size: 5.3` to land its point on
+ * the tipper hitbox — which scaled that guard to 2.5 rig units, wider than
+ * Marth's whole torso. Blade length and guard width are one number in that
+ * painter and two here, which is the only reason this is custom.
+ *
+ * Local frame: `+y` runs out along the hand, `+x` is forward, one unit is `size`.
+ */
+function drawFalchion(b: Brush, p: PropDef): void {
+  const ctx = b.ctx;
+  // The grip, back down the hand, and the pommel behind it.
+  poly(ctx, [
+    [-0.032, -0.3],
+    [0.032, -0.3],
+    [0.032, 0.02],
+    [-0.032, 0.02],
+  ]);
+  b.fill("#2B3348");
+  ctx.beginPath();
+  ctx.arc(0, -0.33, 0.055, 0, Math.PI * 2);
+  ctx.closePath();
+  b.fill(p.detail ?? "accent");
+
+  // The winged guard: swept forward toward the point, which is what makes
+  // Falchion's hilt read as Falchion's and not as a cross.
+  ctx.beginPath();
+  ctx.moveTo(-0.15, 0.0);
+  ctx.quadraticCurveTo(-0.11, 0.12, -0.045, 0.1);
+  ctx.lineTo(0.045, 0.1);
+  ctx.quadraticCurveTo(0.11, 0.12, 0.15, 0.0);
+  ctx.quadraticCurveTo(0.07, -0.05, 0, -0.05);
+  ctx.quadraticCurveTo(-0.07, -0.05, -0.15, 0.0);
+  ctx.closePath();
+  b.fill(p.detail ?? "accent");
+
+  // The blade: near-parallel for most of its length, then a long leaf taper.
+  ctx.beginPath();
+  ctx.moveTo(-0.036, 0.08);
+  ctx.lineTo(0.036, 0.08);
+  ctx.quadraticCurveTo(0.05, 0.66, 0.01, 1.0);
+  ctx.quadraticCurveTo(-0.028, 0.68, -0.036, 0.08);
+  ctx.closePath();
+  b.fill(p.colour);
+
+  // The fuller, body pass only — one darker line is the difference between a
+  // blade and a white stick.
+  if (b.mode === "body") {
+    poly(ctx, [
+      [-0.011, 0.14],
+      [0.011, 0.14],
+      [0.008, 0.78],
+      [-0.008, 0.78],
+    ]);
+    b.fill("#A9BCD2");
+  }
+}
+
+/**
+ * The blue hair.
+ *
+ * The head circle takes exactly one colour — `boneColour.head`, defaulting to
+ * skin — so hair has to be a prop over the top of it. It is worth the prop:
+ * blue hair under a gold circlet is the single fastest read on this character,
+ * and without it the crown is a bare skin disc that could be anybody.
+ *
+ * Local frame: `+y` up the head bone, `+x` forward, one unit is `size`. The head
+ * circle's radius is about 0.92 of a unit at the size used below.
+ */
+function drawHair(b: Brush, p: PropDef): void {
+  const ctx = b.ctx;
+  // The crown, a shade proud of the skull so it reads as hair and not as a hat
+  // band.
+  ctx.beginPath();
+  ctx.arc(0, 0.1, 0.95, 0.12, Math.PI - 0.02);
+  ctx.closePath();
+  b.fill(p.colour);
+  // The fringe: one short point over the brow, not a curtain. It has to stop
+  // well above the eyes — the face is nine pixels tall at match scale and hair
+  // over it turns him into a hood.
+  poly(ctx, [
+    [0.34, 0.72],
+    [1.02, 0.44],
+    [0.88, 0.06],
+    [0.5, 0.36],
+  ]);
+  b.fill(p.colour);
+  // The longer sweep at the back, which is what gives the head a direction.
+  poly(ctx, [
+    [-0.36, 0.7],
+    [-1.04, 0.36],
+    [-1.28, -0.3],
+    [-0.66, 0.1],
+  ]);
+  b.fill(p.colour);
+}
 
 export const rig: CharacterRig = {
   id: "marth",
-  scale: 1.14,
+  scale: 1.16,
   bones: tweakRig({
-    root: { len: 1.16 },
-    torso: { thick: 0.8, len: 1.06 },
-    hip: { thick: 0.84 },
-    ...group(LEGS, { len: 1.16, thick: 0.8 }),
-    ...group(ARMS, { len: 1.08, thick: 0.8 }),
-    ...group(FEET, { len: 1.2, thick: 1.0 }),
-    ...group(HANDS, { thick: 0.88 }),
+    // `root` is the strut from the feet to the pelvis and has to move with the
+    // legs or the feet leave the stage. Both go up together.
+    root: { len: 1.2 },
+    torso: { thick: 0.74, len: 1.08 },
+    hip: { thick: 0.78 },
+    ...group(LEGS, { len: 1.2, thick: 0.76 }),
+    ...group(ARMS, { len: 1.1, thick: 0.76 }),
+    ...group(FEET, { len: 1.2, thick: 0.96 }),
+    ...group(HANDS, { thick: 0.7 }),
   }),
-  headRadius: 1.9,
+  headRadius: 1.84,
   boneColour: {
     torso: "primary",
     hip: "secondary",
-    thighL: "#22262E",
-    thighR: "#22262E",
+    // Not near-black. The outline is #0E1430, and legs and forearms painted at
+    // #22262E vanished into their own rim — the lower half of him was one dark
+    // mass and the limbs had no shape in it. These read as *dark blue* against
+    // the outline, which is the point.
+    thighL: "#2C3660",
+    thighR: "#2C3660",
     shinL: "secondary",
     shinR: "secondary",
     upperArmL: "primary",
     upperArmR: "primary",
-    forearmL: "#22262E",
-    forearmR: "#22262E",
+    forearmL: "#2C3660",
+    forearmR: "#2C3660",
     handL: "#E6E2D8",
     handR: "#E6E2D8",
     footL: "secondary",
     footR: "secondary",
   },
   props: [
-    { kind: "cape", bone: "torso", at: 0.95, size: 3.2, colour: "secondary", detail: "accent", layer: "behind" },
+    { kind: "custom", bone: "torso", at: 1, size: 3.0, colour: "secondary", detail: "#3E5BB8", layer: "behind", draw: drawCape },
+    { kind: "custom", bone: "torso", at: 1, size: 0.9, along: -0.3, across: 0.35, colour: "accent", draw: drawCollar },
     { kind: "belt", bone: "hip", at: 0.85, size: 1.5, colour: "accent" },
-    { kind: "swordLong", bone: "handR", at: 1, size: 5.4, colour: "#E6EEF6", detail: "accent" },
-    { kind: "hairSwoop", bone: "head", at: 1, size: 1.8, across: 0.55, along: 0.55, colour: "secondary" },
-    { kind: "tiara", bone: "head", at: 1, size: 1.5, along: 0.72, colour: "accent", detail: "#5FC8E8" },
-    eyes(0.62, "#2E4C8F"),
+    { kind: "custom", bone: "handR", at: 1, size: 5.3, colour: "#E6EEF6", detail: "accent", draw: drawFalchion },
+    { kind: "custom", bone: "head", at: 1, size: 2.0, colour: "#3C63C8", draw: drawHair },
+    { kind: "tiara", bone: "head", at: 1, size: 1.25, along: 0.86, colour: "accent", detail: "#5FC8E8" },
+    eyes(0.6, "#2E4C8F"),
   ],
 };

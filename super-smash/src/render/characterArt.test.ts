@@ -89,10 +89,26 @@ describe("the roster's rigs", () => {
     expect(h("donkeykong")).toBeGreaterThan(h("mario"));
     expect(h("marth")).toBeGreaterThan(h("mario"));
 
-    // Head-to-height ratio: the two little ones are mostly head.
+    // Head-to-height ratio: the two round ones are mostly head, and every
+    // humanoid is not.
+    //
+    // Asserted against the roster's own humanoids rather than a fixed multiple
+    // of Mario, because the fixed multiple encoded a bug. It was 1.5×, which
+    // Pikachu cleared only because his head radius was 72% of his height — a
+    // skull that swallowed his torso and both arms, so no limb of his could
+    // ever be seen. Fixing that dropped him to 1.38× and the test called the
+    // fix a regression.
+    //
+    // The real property survives the fix with room to spare: Kirby is 2.34×
+    // Mario and Pikachu 1.38×, while the headiest humanoid is Samus at 0.95×.
     const headiness = (id: string) => proportions(rigOf(id))[1];
-    expect(headiness("kirby")).toBeGreaterThan(headiness("mario") * 1.5);
-    expect(headiness("pikachu")).toBeGreaterThan(headiness("mario") * 1.5);
+    const humanoids = ROSTER.filter((id) => id !== "kirby" && id !== "pikachu");
+    const tallestHead = Math.max(...humanoids.map(headiness));
+    for (const round of ["kirby", "pikachu"] as const) {
+      expect(headiness(round), `${round} is no headier than a humanoid`).toBeGreaterThan(
+        tallestHead * 1.25,
+      );
+    }
   });
 
   it("gives Donkey Kong arms longer than his legs, and nobody else", () => {
