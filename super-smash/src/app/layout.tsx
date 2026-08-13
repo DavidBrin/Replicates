@@ -48,9 +48,25 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+/**
+ * `suppressHydrationWarning` is on `<html>` because extensions edit `<html>`.
+ *
+ * Dark-mode extensions add `style="filter: invert(0)"` to the document element
+ * before React hydrates, so React compares the tree it expected against a DOM
+ * a third party has already changed and reports a mismatch the page did not
+ * cause. It is the case the error message itself lists last, and it is the only
+ * one that can fire here: everything this component renders is static.
+ *
+ * It suppresses one level only — this element's own attributes and text. Any
+ * genuine mismatch inside the app still warns, which is the part worth keeping.
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${anton.variable} ${rounded.variable}`}>
+    <html
+      lang="en"
+      className={`${anton.variable} ${rounded.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-full bg-[#101215] antialiased">{children}</body>
     </html>
   );
