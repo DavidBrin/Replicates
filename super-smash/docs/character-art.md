@@ -82,7 +82,17 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    separate people have shipped it.
 
 5. **Rotation interpolates the short way round.** A key at 0 and a key at 360°
-   are the same key. For whole turns use the clip's `spin` field, not `rotation`.
+   are the same key.
+
+6. **`spin` cartwheels the whole body, and that is almost never what you want.**
+   It rotates the fighter in the screen plane, so a fighter who is supposed to
+   pirouette instead tips onto their side. Two characters reached for it
+   independently on multi-hit spinning moves and both had to back it out. A
+   rotation the body cannot show is expressed as **successive keys stepping the
+   limb chain round**, 90° at a time — that is how a chain of keys expresses a
+   turn a single pair cannot. Link's Spin Attack gets 940° of blade path this
+   way with no `spin` at all. Reserve `spin` for a body that genuinely tumbles:
+   a tumble, a roll, a launched fighter.
 
 ### Body-level fields
 
@@ -105,6 +115,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 
 Effects are painted **under** the fighter and may return `{ hideFigure: true }`
 to replace them entirely (Kirby's Stone is the only one that does).
+
+Under the fighter is a real constraint, not a detail: anything you wind up
+*behind* the body is invisible for as long as it is behind the body. Link's
+boomerang spent two-thirds of its wind-up hidden behind his shoulder across two
+rounds of iteration before it was moved above his head.
 
 Available in `fxKit`: `circle`, `glow`, `polygon`, `crescent`, `armourWindow`,
 `withAlpha`. `crescent` is the tapered blade sweep the real game puts on nearly
@@ -141,6 +156,18 @@ Paint with `b.fill(...)` / `b.line(...)`, **never** `ctx.fillStyle` directly:
 the figure is drawn twice — once inflated in the outline colour for the rim, once
 in body colours — and a painter that sets its own fill paints that colour into
 the rim pass and punches a hole in the silhouette.
+
+**The shared weapon props are too thin to see.** `sword` and `swordLong` are
+about a 0.46-unit strip beside a 1.25-unit forearm — a scratch on the glass at
+match scale. Link's agent found that fixing the *poses* alone shipped a swing
+nobody could see, and reported replacing Falchion with a broad `custom` blade as
+the single biggest silhouette change of the whole pass. Check any weapon at
+match scale before concluding its animation is fine.
+
+**A shape painted in the outline colour disappears.** It is drawn into the rim
+pass and vanishes into the fighter's own edge. Kirby's Inhale mouth was
+invisible for exactly this reason. If an effect paints dark-on-dark, it is
+invisible, not subtle.
 
 ## Looking at your work
 
