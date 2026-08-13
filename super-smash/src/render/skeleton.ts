@@ -133,7 +133,17 @@ export const BASE_RIG: Rig = {
   footL: { parent: "shinL", attach: 1, angle: deg(-88), length: 1.0, thickness: 1.35 },
   thighR: { parent: "hip", attach: 0, angle: deg(176), length: 2.1, thickness: 1.85 },
   shinR: { parent: "thighR", attach: 1, angle: deg(4), length: 2.0, thickness: 1.5 },
-  footR: { parent: "shinR", attach: 1, angle: deg(88), length: 1.0, thickness: 1.35 },
+  /*
+   * Negative, matching `footL`, so that both feet rest pointing *forward*.
+   *
+   * Angles accumulate down the chain, and the two legs are not mirrored — the
+   * whole rig is, once, at draw time. So `deg(88)` here accumulated to 268° and
+   * rested the right foot pointing backwards. Nearly every clip names the feet
+   * and overrode it, which is why it survived; `idle` names no leg at all, so a
+   * standing fighter had one foot on backwards, and any clip that did name the
+   * feet swivelled that foot 170° on the way back to standing.
+   */
+  footR: { parent: "shinR", attach: 1, angle: deg(-88), length: 1.0, thickness: 1.35 },
 
   upperArmL: { parent: "torso", attach: 1, angle: deg(191), length: 1.95, thickness: 1.5 },
   forearmL: { parent: "upperArmL", attach: 1, angle: deg(-13), length: 1.8, thickness: 1.3 },

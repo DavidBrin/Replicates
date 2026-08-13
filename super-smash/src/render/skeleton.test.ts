@@ -171,3 +171,58 @@ describe("drawing", () => {
     expect(lineTo?.args[0]).not.toBe(5);
   });
 });
+
+describe("facing and rotation", () => {
+  /**
+   * Mirroring x reverses a rotation's visual sense, and callers must not
+   * reverse it a second time.
+   *
+   * This is the property the renderer relies on to draw a spin. It was
+   * reversed twice — once here and once by a facing multiplier at the call
+   * site — which cancelled out, so a fighter rolling left turned the same way
+   * on screen as one rolling right.
+   */
+  it("reverses a rotation when the rig is mirrored", () => {
+    const pose = {};
+    const at = (facing: number, rotation: number) =>
+      resolve(BASE_RIG, pose, {
+        x: 0, y: 0, scale: 1, facing, rotation, pivot: 4.2,
+      }).head;
+
+    const turn = 0.4;
+    const right = at(1, turn);
+    const left = at(-1, turn);
+
+    // Same drawing, mirrored: the head is the same height and the opposite side.
+    expect(left.y1).toBeCloseTo(right.y1, 9);
+    expect(left.x1).toBeCloseTo(-right.x1, 9);
+
+    // And it got there by turning the other way — the head sweeps toward the
+    // fighter's own front in both cases, which is what makes a roll roll.
+    const swept = (facing: number) => at(facing, turn).x1 - at(facing, 0).x1;
+    expect(Math.sign(swept(1))).toBe(-Math.sign(swept(-1)));
+  });
+});
+
+describe("the rest pose", () => {
+  /**
+   * Both legs rest in the same shape, because the rig is mirrored once at draw
+   * time rather than per limb.
+   *
+   * Angles accumulate down the chain, so a sign that looks symmetric written
+   * down is not: the right foot's `deg(88)` accumulated to 268° and pointed
+   * backwards. Almost every clip names the feet and overrode it, so it survived
+   * — except in `idle`, which names no leg, and which is the pose a fighter
+   * holds whenever nobody is pressing anything.
+   */
+  it("stands on two feet pointing the same way", () => {
+    const sk = resolve(BASE_RIG, {}, { x: 0, y: 0, scale: 1, facing: 1 });
+    const toeL = sk.footL.x1 - sk.footL.x0;
+    const toeR = sk.footR.x1 - sk.footR.x0;
+    expect(Math.sign(toeL)).toBe(Math.sign(toeR));
+    expect(toeR).toBeCloseTo(toeL, 6);
+    // And on the floor rather than through it: both soles level, within a
+    // tenth of a unit of each other.
+    expect(Math.abs(sk.footR.y1 - sk.footL.y1)).toBeLessThan(0.1);
+  });
+});

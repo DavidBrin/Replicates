@@ -346,7 +346,12 @@ function drawOneFighter(
     scaleX: squash.scaleX * pose.scaleX,
     scaleY: squash.scaleY * pose.scaleY,
     facing: f.facing >= 0 ? 1 : -1,
-    rotation: pose.rotation + poseSpinFor(posed, frame, timing, attrs) * (f.facing >= 0 ? 1 : -1),
+    // No facing multiplier: `resolve` mirrors x, which already reverses the
+    // visual sense of a rotation. Signing the spin here as well cancelled that
+    // out, so a fighter rolling left spun the same way on screen as one rolling
+    // right — backwards relative to travel. `skeleton.test.ts` pins the
+    // property this relies on.
+    rotation: pose.rotation + poseSpinFor(posed, frame, timing, attrs),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
 
