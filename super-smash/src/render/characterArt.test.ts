@@ -14,6 +14,7 @@ import {
   hexToRgb,
   hitlagShake,
   mixHex,
+  PROP_PAINTERS,
   resolvePalette,
   shade,
   squashFor,
@@ -547,4 +548,54 @@ describe("a colour that has already been through withAlpha", () => {
     expect(mixHex(withAlpha("#FFFFFF", 0.5), "#000000", 0)).toBe("#ffffff");
     expect(shade(withAlpha("#808080", 0.5), 0)).toBe("#808080");
   });
+});
+
+describe("props point away from the bone they hang on", () => {
+  /**
+   * A prop's local `+y` runs along its bone toward the tip, so a shape meant to
+   * stand off the head must have its extremity at *positive* y.
+   *
+   * Both ear painters had every y negated, which grew them down into the skull;
+   * what showed was a dark nub on the jaw. Three character agents found it
+   * independently and two routed around it with a `custom` prop before the
+   * painter itself was fixed — so this is a property worth holding rather than
+   * a one-off correction.
+   *
+   * Measured by painting into a mock context and reading back the path, which
+   * is the only way to see a shape the painter draws rather than one a rig
+   * declares.
+   */
+  function extremes(kind: "earsPointed" | "earsBolt"): { min: number; max: number } {
+    const ctx = createMockContext();
+    const brush = {
+      ctx: ctx as unknown as CanvasRenderingContext2D,
+      mode: "body" as const,
+      palette: resolvePalette(null, 0),
+      rimLocal: 0,
+      outline: "#000",
+      fill() {},
+      line() {},
+    };
+    PROP_PAINTERS[kind](brush, {
+      kind,
+      bone: "head",
+      at: 1,
+      size: 1,
+      colour: "primary",
+      detail: "#000",
+    });
+    const ys = ctx.calls
+      .filter((c) => c.method === "moveTo" || c.method === "lineTo")
+      .map((c) => c.args[1] as number);
+    return { min: Math.min(...ys), max: Math.max(...ys) };
+  }
+
+  for (const kind of ["earsPointed", "earsBolt"] as const) {
+    it(`grows ${kind} up off the head rather than into it`, () => {
+      const { min, max } = extremes(kind);
+      // The tip must reach further from the base than the base dips behind it.
+      expect(max, `${kind} has no upward extent`).toBeGreaterThan(0.5);
+      expect(max).toBeGreaterThan(Math.abs(min));
+    });
+  }
 });

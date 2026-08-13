@@ -169,7 +169,7 @@ function makeBrush(
  * fighter's own file. Everything below is shared, and a shared table is a file
  * eight people cannot add to at once.
  */
-const PROP_PAINTERS: Record<PropKind, PropPainter> = {
+export const PROP_PAINTERS: Record<PropKind, PropPainter> = {
   custom(b, p) {
     p.draw?.(b, p);
   },
@@ -260,31 +260,41 @@ const PROP_PAINTERS: Record<PropKind, PropPainter> = {
   },
 
   // Fox and Link: tall triangles rising clear of the skull.
+  /**
+   * A pair of tapered ears standing up off the head.
+   *
+   * Both ear painters had every `y` negated, which put their tips *below* the
+   * base — and a prop's local `+y` runs along its bone toward the tip, so on
+   * `head` that meant both ears grew down into the skull and what showed was a
+   * dark nub on the jaw. Three character agents hit it independently and two
+   * routed around it with a `custom` prop before anyone fixed the painter.
+   */
   earsPointed(b, p) {
     const ctx = b.ctx;
     poly(ctx, [
-      [-0.75, 0.1],
-      [-1.35, -1.55],
-      [-0.05, -0.3],
+      [-0.75, -0.1],
+      [-1.35, 1.55],
+      [-0.05, 0.3],
     ]);
     b.fill(p.colour);
     if (p.detail) {
       poly(ctx, [
-        [-0.78, -0.14],
-        [-1.18, -1.15],
-        [-0.42, -0.42],
+        [-0.78, 0.14],
+        [-1.18, 1.15],
+        [-0.42, 0.42],
       ]);
       b.fill(p.detail);
     }
     poly(ctx, [
-      [0.5, 0.05],
-      [1.1, -1.6],
-      [0.0, -0.35],
+      [0.5, -0.05],
+      [1.1, 1.6],
+      [0.0, 0.35],
     ]);
     b.fill(p.colour);
   },
 
   // Pikachu: long, tapered, black-tipped. Half his silhouette.
+  /** Pikachu's lightning-bolt ears. Same sign fix as `earsPointed`. */
   earsBolt(b, p) {
     const ctx = b.ctx;
     for (const [dx, lean, len] of [
@@ -292,17 +302,17 @@ const PROP_PAINTERS: Record<PropKind, PropPainter> = {
       [0.34, 0.3, 0.94],
     ] as const) {
       poly(ctx, [
-        [dx - 0.24, 0.15],
-        [dx + lean * 1.15 - 0.16, -1.75 * len],
-        [dx + lean * 1.15 + 0.16, -1.72 * len],
-        [dx + 0.26, 0.1],
+        [dx - 0.24, -0.15],
+        [dx + lean * 1.15 - 0.16, 1.75 * len],
+        [dx + lean * 1.15 + 0.16, 1.72 * len],
+        [dx + 0.26, -0.1],
       ]);
       b.fill(p.colour);
       poly(ctx, [
-        [dx + lean * 0.92 - 0.2, -1.35 * len],
-        [dx + lean * 1.15 - 0.16, -1.75 * len],
-        [dx + lean * 1.15 + 0.16, -1.72 * len],
-        [dx + lean * 0.92 + 0.22, -1.32 * len],
+        [dx + lean * 0.92 - 0.2, 1.35 * len],
+        [dx + lean * 1.15 - 0.16, 1.75 * len],
+        [dx + lean * 1.15 + 0.16, 1.72 * len],
+        [dx + lean * 0.92 + 0.22, 1.32 * len],
       ]);
       b.fill(p.detail ?? "#20202C");
     }
