@@ -1287,3 +1287,53 @@ of `lighter` rather than a choice anyone made.
 
 **Idle is still the shared clip for everyone.** It is the pose a player sees most, and on Samus
 it hangs the arm cannon at her side where it reads as a dark slab rather than as a weapon.
+
+---
+
+## D51 — Seven rounds of codex review, and what it kept finding
+
+Seventeen findings across seven rounds, converging on the eighth with none. No P1s at any point,
+and after the first round nothing in the game's own logic — which is the useful signal, because
+the game code had already been through eight agents and a full test suite, and the *tooling* had
+been through neither.
+
+Almost everything it found was in the two capture scripts and the animation lab. That is worth
+recording rather than shrugging at, because those are the instruments the whole pass was judged
+with, and **an instrument that lies is worse than no instrument**: it does not produce doubt, it
+produces confident wrong conclusions. The session had already been bitten by exactly that twice —
+a fighter dropdown that resolved a rig and no fighter, so Donkey Kong's locomotion was "verified"
+against a motionless drawing; and a capture that photographed a forward air and labelled it a
+forward smash.
+
+The findings that mattered most were the ones where the tool was silently substituting something
+plausible:
+
+- **The capture accepted any offensive action as the move it was asked for.** A smash input read
+  one frame too slow is a tilt, and both are `action: "attack"`. I had fixed this once for
+  *footing* — the aerial-instead-of-grounded case — and fixed the symptom rather than the class.
+- **The contact sheet capped itself at 48 cells**, so uncapping a move's *length* only meant a
+  91-frame Fire Fox got 48 samples spread across it. A sheet that skips frames is worse than a
+  short one, because nothing on it says which frames are missing.
+- **`--hold` was documented, with a worked example, and never parsed**, so every charge sheet was
+  silently the uncharged move.
+- **The lab kept the last-picked move when an action had no dropdown**, so a grab drew whatever
+  attack had been selected before it.
+
+Three findings were in game code, and all three were the same shape as bugs the agents had already
+reported: something scoped one level too narrowly. The effect lookup matched a move slot exactly,
+so a grab out of a run — `dashGrab`, which is most grabs — lost its tether. Hitlag freezes
+`actionFrame` while the global clock runs on, so deriving an action's start from
+`frame − actionFrame` drifted forward and dropped the tipper bloom partway through the crunch,
+which is the moment it exists for. And `glow`'s mid stop was a flat 0.35 however faint its centre
+had faded to, because `withAlpha` replaces an alpha rather than scaling it — a ring seven times
+brighter than the glow it belonged to, outliving it.
+
+One finding was **wrong**: that Link and Samus both declare a projectile called `bomb`. They do
+not — Samus has `bomb`, Link has `remoteBomb`, and all nine ids across the roster are distinct.
+The fragility underneath it was real, though: `ProjectileState` carries only `defId`, so an id is
+the only thing that survives from a definition to the thing in flight, and a collision would be
+ambiguous to the engine rather than merely to the renderer. Asserted with a test rather than
+restructured, because the assumption belongs to the engine.
+
+Every finding was checked against the code before being acted on, and every fix was
+mutation-verified — which is how the wrong one was caught.
