@@ -89,7 +89,7 @@ function lengthOf(f: FighterState, attrs?: JumpAttributes, moveFrames?: number):
   return clip.period ?? 30;
 }
 
-interface Options {
+export interface Options {
   readonly fighterId: string;
   readonly action: ActionState;
   readonly move: MoveSlot;
@@ -97,12 +97,30 @@ interface Options {
   readonly fastFalling: boolean;
 }
 
+/**
+ * The move an action actually performs.
+ *
+ * The move dropdown is hidden for an action that does not take one, but the
+ * *value* stays at whatever was last picked — so selecting `grab` left `move`
+ * on `fsmash`, and once `drawMoveFx` learned to draw during a grab the lab
+ * painted Mario's fire palm over his grab. A grab performs the grab; nothing
+ * else here performs a move it did not choose.
+ */
+export function moveFor(o: Options): MoveSlot {
+  return o.action === "grab" ? "grab" : o.move;
+}
+
+/** Whether this action performs a move, and so has frame data of its own. */
+export function usesMoveFor(action: ActionState): boolean {
+  return action === "attack" || action === "special" || action === "throw" || action === "grab";
+}
+
 function fighterAt(o: Options, frame: number): FighterState {
   return makeFighter({
     defId: o.fighterId,
     action: o.action,
     actionFrame: frame,
-    move: o.move,
+    move: moveFor(o),
     jumpsUsed: o.jumpsUsed,
     fastFalling: o.fastFalling,
     // A reel is as long as the hit that caused it; 24 is an average one.
@@ -139,7 +157,7 @@ function drawCell(
   const def = getFighter(o.fighterId) ?? null;
   const rig = getCharacterRig(o.fighterId);
   const palette = resolvePalette(def, 0);
-  const move = def?.moves?.[o.move];
+  const move = def?.moves?.[moveFor(o)];
   const timing = move
     ? {
         total: move.totalFrames,
@@ -147,7 +165,7 @@ function drawCell(
         lastActive: move.hitboxes.length ? Math.max(...move.hitboxes.map((h) => h.endFrame)) - 1 : -1,
       }
     : undefined;
-  const usesMove = o.action === "attack" || o.action === "special" || o.action === "throw";
+  const usesMove = usesMoveFor(o.action);
   const attrs = def?.attributes;
   const pose = samplePoseForFighter(f, frame, usesMove ? timing : undefined, attrs);
   const squash = squashFor(f);
@@ -170,7 +188,13 @@ function drawCell(
   // would say Kirby's Stone and Samus's Charge Shot still look identical.
   const height = rigHeight(rig.bones, rig.headRadius) * rig.scale;
   const cam = { ...createCamera(makeStage()), zoom };
+  // Under the same alpha as the figure. `drawMoveFx` paints straight to the
+  // context and takes no opacity of its own, so an onion skin would otherwise
+  // stack four full-strength plasma balls over the frame being reviewed.
+  ctx.save();
+  ctx.globalAlpha = alpha;
   const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : { hideFigure: false };
+  ctx.restore();
   if (fx.hideFigure) return;
 
   drawFigure(ctx, { ...params, mode: "rim", rimWidth: Math.max(2, zoom * 0.5) });
@@ -195,11 +219,10 @@ export default function AnimLab() {
   );
   const total = useMemo(() => {
     const def = getFighter(o.fighterId);
-    const usesMove = o.action === "attack" || o.action === "special" || o.action === "throw";
     return lengthOf(
       fighterAt(o, 0),
       def?.attributes,
-      usesMove ? def?.moves?.[o.move]?.totalFrames : undefined,
+      usesMoveFor(o.action) ? def?.moves?.[moveFor(o)]?.totalFrames : undefined,
     );
   }, [o]);
   const poseName = useMemo(() => poseNameFor(fighterAt(o, 0)), [o]);
@@ -274,6 +297,7 @@ export default function AnimLab() {
     return () => cancelAnimationFrame(raf);
   }, [o, total, playing, onion, frame]);
 
+  // The grab has frame data but no choice of slot, so it gets no dropdown.
   const usesMove = action === "attack" || action === "special" || action === "throw";
 
   return (

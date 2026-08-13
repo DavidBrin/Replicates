@@ -27,8 +27,8 @@
  *               downB, grab. Default fsmash.
  *   --frames    which frames of the move to capture, comma separated.
  *               Default is nine spread across the move.
- *   --hold      simulation frames to run before starting to capture, so the
- *               move has room to develop. Default is chosen per move.
+ *   --hold      simulation frames to hold the button before releasing, for a
+ *               move that charges. Default 0, i.e. tapped.
  *   --full      capture the whole 1920×1080 frame per cell rather than a crop
  *               around the fighter.
  *   --out       where to write. Default fight-<fighter>-<move>.png
@@ -50,6 +50,10 @@ const against = flag("against", "donkeyKong");
 const move = flag("move", "fsmash");
 const base = flag("base", "http://localhost:3000");
 const full = has("full");
+// Simulation frames to hold the attack button before releasing, for the moves
+// that charge. Documented since the first version and never parsed until a
+// review pointed out that `--hold 90` produced an identical uncharged sheet.
+const hold = Math.max(0, Number(flag("hold", "0")) || 0);
 const out = resolve(flag("out", `fight-${fighter}-${move}.png`));
 
 /**
@@ -205,18 +209,47 @@ for (let i = 0; i < 90; i++) {
 // describes and the one worth photographing.
 for (const k of plan.keys) await page.keyboard.down(KEY[k]);
 await debug.step(1);
-for (const k of plan.keys) await page.keyboard.up(KEY[k]);
-if (plan.smash) await debug.step(1);
 
-// Find the frame the move actually starts on. The input is buffered and a
-// grounded attack waits out whatever the fighter was already doing, so counting
-// from the keypress would put every cell one or two frames early.
+// A dash attack is a *second* input thrown out of an existing run, so it needs
+// the run to exist first: hold the direction for `run` frames, then add attack
+// without letting go. Declared in the table from the start and never read —
+// the script pressed right, never pressed attack, and exited saying the move
+// was never entered.
+if (plan.then) {
+  await debug.step(plan.run ?? 12);
+  for (const k of plan.then) {
+    if (!plan.keys.includes(k)) await page.keyboard.down(KEY[k]);
+  }
+  await debug.step(1);
+  for (const k of plan.then) await page.keyboard.up(KEY[k]).catch(() => {});
+}
+
+// Find the frame the move actually starts on, *before* releasing anything. The
+// input is buffered and a grounded attack waits out whatever the fighter was
+// already doing, so counting from the keypress would put every cell one or two
+// frames early — and stepping a charge's worth of frames first would step
+// clean past the move and report it as never entered.
 let started = false;
 for (let i = 0; i < 30 && !started; i++) {
   const [me] = await debug.fighters();
   if (me.action === "attack" || me.action === "special" || me.action === "grab") started = true;
   else await debug.step(1);
 }
+
+// A charge is held, not tapped. `states.ts` charges on `attackHeld` — the
+// attack button, even for a special like the Charge Shot — and pins
+// `actionFrame` one frame short of the first hitbox while it does, so the
+// clock can run without the move going anywhere. That is why this holds
+// `attack` rather than the move's own keys, and why it happens after the move
+// has started rather than before.
+if (started && hold > 0) {
+  await page.keyboard.down(KEY.attack);
+  await debug.step(hold);
+  await page.keyboard.up(KEY.attack);
+}
+
+for (const k of plan.keys) await page.keyboard.up(KEY[k]);
+if (plan.smash) await debug.step(1);
 if (!started) {
   console.error(`${fighter} never entered ${move} — the input did not take`);
   await browser.close();
