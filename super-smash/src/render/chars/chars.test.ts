@@ -14,10 +14,10 @@ import { describe, expect, it } from "vitest";
 import { FIGHTERS, FIGHTER_IDS } from "@/fighters";
 import type { MoveSlot } from "@/engine/types";
 import { CHARACTER_POSES, CHARACTER_RIGS, MOVE_FX_KEYS, PROJECTILE_PAINTER_KEYS } from ".";
-import { charKey, clipFor, overrides } from "./poses";
+import { charKey, clipFor, overrides, type PoseOverrides } from "./poses";
 import { getCharacterRig } from ".";
 import { POSE_LIBRARY, type PoseName } from "../poses/library";
-import { samplePoseForFighter } from "../poses";
+import { poseNameFor, samplePoseForFighter } from "../poses";
 import { makeFighter } from "../testFixtures";
 
 const byKey = new Map(FIGHTERS.map((f) => [charKey(f.id), f]));
@@ -129,6 +129,9 @@ describe("a fighter's own clip wins", () => {
 const SLOT_FOR: Partial<Record<PoseName, MoveSlot>> = {
   grab: "grab",
   jab: "jab1",
+  jab2: "jab2",
+  jab3: "jab3",
+  rapidJab: "rapidJab",
   ftilt: "ftilt",
   utilt: "utilt",
   dtilt: "dtilt",
@@ -182,5 +185,41 @@ describe("the effect tables name real moves", () => {
   it("covers at least half the roster, so specials are not all one look", () => {
     const covered = new Set(MOVE_FX_KEYS.map((k) => k.split(".")[0]));
     expect(covered.size).toBeGreaterThanOrEqual(FIGHTERS.length / 2);
+  });
+});
+
+
+/**
+ * Each hit of a jab string is its own animation.
+ *
+ * `SLOT_POSE` used to collapse `jab1`/`jab2`/`jab3`/`rapidJab` onto one name,
+ * so Mario's third-hit roundhouse and Fox's rapid flurry could not exist
+ * without putting a kick in the tail of every jab. Two character agents
+ * reported it independently as the thing they could not express.
+ */
+describe("the jab string", () => {
+  const HITS: MoveSlot[] = ["jab1", "jab2", "jab3", "rapidJab"];
+
+  it("gives every hit its own name", () => {
+    const names = HITS.map((slot) => poseNameFor({ action: "attack", move: slot, jumpsUsed: 0, fastFalling: false }));
+    expect(new Set(names).size, `two hits share a clip name: ${names}`).toBe(HITS.length);
+  });
+
+  it("still plays one punch for a fighter who says nothing", () => {
+    // The default must not change: a fighter who authors no jab throws the
+    // same punch three times, exactly as before.
+    for (const name of ["jab2", "jab3", "rapidJab"] as PoseName[]) {
+      expect(POSE_LIBRARY[name]).toBe(POSE_LIBRARY.jab);
+    }
+  });
+
+  it("lets a fighter change one hit without changing the others", () => {
+    // The property that was missing. Proven against the shared library rather
+    // than against a character's file, so it holds whether or not anyone has
+    // taken the opportunity yet.
+    const mine: PoseOverrides = { jab3: { loop: false, keys: [{ t: 0, pose: {} }] } };
+    expect(mine.jab3).not.toBe(POSE_LIBRARY.jab3);
+    expect(mine.jab).toBeUndefined();
+    expect(mine.rapidJab).toBeUndefined();
   });
 });

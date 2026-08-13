@@ -84,9 +84,11 @@ export type JumpAttributes = Pick<
 
 const SLOT_POSE: Record<MoveSlot, PoseName> = {
   jab1: "jab",
-  jab2: "jab",
-  jab3: "jab",
-  rapidJab: "jab",
+  // Each hit of the string gets its own name. They alias the first hit's clip
+  // in the shared library, so nothing changes until a fighter overrides one.
+  jab2: "jab2",
+  jab3: "jab3",
+  rapidJab: "rapidJab",
   ftilt: "ftilt",
   utilt: "utilt",
   dtilt: "dtilt",

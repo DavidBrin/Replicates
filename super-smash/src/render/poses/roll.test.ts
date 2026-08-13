@@ -173,7 +173,7 @@ describe("the tuck is a ball", () => {
         const { width, height } = silhouette(id, f);
         // Donkey Kong is the loose end of this: his arms are long enough that
         // even wrapped round his shins they stretch the ball sideways.
-        expect(Math.max(width, height) / Math.min(width, height)).toBeLessThan(1.5);
+        expect(Math.max(width, height) / Math.min(width, height), `${id} f${f}`).toBeLessThan(1.5);
       }
     }
   });

@@ -78,6 +78,9 @@ export type PoseName =
   // offence
   | "grab"
   | "jab"
+  | "jab2"
+  | "jab3"
+  | "rapidJab"
   | "ftilt"
   | "utilt"
   | "dtilt"
@@ -134,4 +137,24 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   ledgeGetUp,
 
   ...attacks,
+
+  /**
+   * The rest of the jab string, defaulting to the same clip as the first hit.
+   *
+   * A jab is not one animation. Mario's third hit is a roundhouse kick, Fox's
+   * and Kirby's end in a rapid flurry, Marth's and Samus's are two-hit strings
+   * — and every one of those was playing the punch authored for hit one,
+   * because `SLOT_POSE` collapsed all four slots onto a single name. Two
+   * character agents reported it independently as the thing they could not
+   * express.
+   *
+   * Aliased rather than duplicated so the default is unchanged: a fighter who
+   * says nothing still throws the same punch three times, which is what they
+   * did before. A fighter who wants a kick on the third hit now has somewhere
+   * to put it, and putting it there does not put a kick in the tail of every
+   * jab.
+   */
+  jab2: attacks.jab,
+  jab3: attacks.jab,
+  rapidJab: attacks.jab,
 };
