@@ -29,6 +29,7 @@ import {
   type PlayerSlot,
 } from "@/lib/matchConfig";
 import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from "@/render/renderer";
+import { worldToScreen } from "@/render/camera";
 
 /**
  * Who gets credit for a kill.
@@ -260,6 +261,16 @@ export default function PlayPage() {
         pause: () => live.stop(),
         resume: () => live.start(liveCanvas),
         step: (n = 1) => live.advance(n),
+        // Where each fighter is *on screen*, 0..1 across the match canvas, so a
+        // capture can crop around the fighter it is photographing rather than
+        // around the middle of the stage. A fighter who spawns near an edge
+        // otherwise lands on the crop boundary and is reviewed sixty pixels
+        // tall.
+        screenPositions: () =>
+          live.state.fighters.map((f) => {
+            const p = worldToScreen(live.camera, toFloat(f.x), toFloat(f.y));
+            return { port: f.port, x: p.x / INTERNAL_WIDTH, y: p.y / INTERNAL_HEIGHT };
+          }),
         fighters: () =>
           live.state.fighters.map((f) => ({
             port: f.port,

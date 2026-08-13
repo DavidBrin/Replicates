@@ -35,7 +35,7 @@ import type {
 } from "@/engine/types";
 import { createInitialState, cloneState, step, DEFAULT_SEED } from "@/engine/simulate";
 import type { FighterSelection } from "@/engine/simulate";
-import { createCamera, updateCamera } from "@/render/camera";
+import { createCamera, updateCamera, type Camera } from "@/render/camera";
 import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
 import { render } from "@/render/renderer";
@@ -123,6 +123,15 @@ export interface MatchRunner {
    * one you cannot hold to that.
    */
   readonly vfx: VfxState;
+  /**
+   * Where the view currently is, so a capture can frame what it photographed.
+   *
+   * A contact sheet that crops the middle of the screen crops the middle of the
+   * *stage*, and a fighter who spawns near an edge lands on the crop boundary
+   * sixty pixels tall — which is how a whole character's moveset came to be
+   * reviewed from thumbnails. Mutated in place every tick, so read it live.
+   */
+  readonly camera: Camera;
   /** Repaint without stepping — used when the match has ended but stays on screen. */
   redraw(): void;
 }
@@ -300,6 +309,17 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     },
     get vfx() {
       return vfx;
+    },
+    /**
+     * Where the view currently is, so a capture can frame what it photographed.
+     *
+     * A contact sheet that crops the middle of the screen crops the middle of
+     * the *stage*, and a fighter who spawns near an edge lands on the crop
+     * boundary sixty pixels tall. Read live rather than snapshotted: the camera
+     * is mutated in place every tick.
+     */
+    get camera() {
+      return camera;
     },
   };
 }

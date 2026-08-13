@@ -171,6 +171,7 @@ const debug = {
   pause: () => page.evaluate(() => window.__smashDebug.pause()),
   step: (n) => page.evaluate((k) => window.__smashDebug.step(k), n),
   fighters: () => page.evaluate(() => window.__smashDebug.fighters()),
+  where: () => page.evaluate(() => window.__smashDebug.screenPositions()),
 };
 
 // Face the opponent and close the gap, so a hitbox has something to hit — an
@@ -235,8 +236,14 @@ for (const target of wanted) {
   if (forward > 0) await debug.step(forward);
   at += Math.max(0, forward);
   const [self] = await debug.fighters();
+  // Where the driven fighter actually is on screen, so the crop can follow
+  // them. Cropping the middle of the frame crops the middle of the *stage*,
+  // and a fighter who spawns near an edge lands on the crop boundary sixty
+  // pixels tall — which is how a whole moveset came to be reviewed from
+  // thumbnails.
+  const [spot] = await debug.where();
   const png = await page.getByLabel("Match").screenshot();
-  shots.push({ frame: target, action: self.action, actionFrame: self.actionFrame, png });
+  shots.push({ frame: target, action: self.action, actionFrame: self.actionFrame, png, spot });
 }
 
 function DEFAULT_FRAMES(slot) {
@@ -262,9 +269,9 @@ const composed = await page.evaluate(
           }),
       ),
     );
-    const w = crop ? Math.round(images[0].width * 0.6) : images[0].width;
-    const h = crop ? Math.round(images[0].height * 0.55) : images[0].height;
-    const scale = 420 / w;
+    const w = crop ? Math.round(images[0].width * 0.34) : images[0].width;
+    const h = crop ? Math.round(images[0].height * 0.46) : images[0].height;
+    const scale = 470 / w;
     const cw = Math.round(w * scale);
     const ch = Math.round(h * scale);
     const label = 26;
@@ -280,8 +287,12 @@ const composed = await page.evaluate(
     images.forEach((img, i) => {
       const x = (i % cols) * cw;
       const y = Math.floor(i / cols) * (ch + label);
-      const sx = crop ? (img.width - w) / 2 : 0;
-      const sy = crop ? (img.height - h) * 0.5 : 0;
+      // Centre on the fighter, then clamp so the window stays on the image —
+      // a fighter at the very edge gets an off-centre crop rather than a band
+      // of nothing.
+      const spot = cells[i].at ?? { x: 0.5, y: 0.5 };
+      const sx = crop ? Math.max(0, Math.min(img.width - w, img.width * spot.x - w / 2)) : 0;
+      const sy = crop ? Math.max(0, Math.min(img.height - h, img.height * spot.y - h * 0.78)) : 0;
       ctx.drawImage(img, sx, sy, w, h, x, y + label, cw, ch);
       ctx.fillStyle = "#8FA3B8";
       ctx.font = "13px monospace";
@@ -297,6 +308,7 @@ const composed = await page.evaluate(
     cells: shots.map((s) => ({
       data: s.png.toString("base64"),
       label: `f${s.frame}  ${s.action}:${s.actionFrame}`,
+      at: s.spot ? { x: s.spot.x, y: s.spot.y } : null,
     })),
   },
 );
