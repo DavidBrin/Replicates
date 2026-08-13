@@ -286,7 +286,12 @@ const startFrame = me.actionFrame;
 // The move's real length, read off the running match rather than guessed.
 const lengths = await debug.moveFrames();
 const total = lengths.find((m) => m.port === 0)?.total ?? 0;
-const wanted = frames.length ? frames : DEFAULT_FRAMES(total > 0 ? total : 34);
+// From wherever the capture starts to the end of the move. With `--hold` the
+// charge pins `actionFrame` partway in, so the baseline is not frame 0 — and
+// spreading samples across the *whole* move from there ran the last few of them
+// off the end, past the move's own last frame.
+const remaining = total > 0 ? Math.max(1, total - startFrame) : 34;
+const wanted = frames.length ? frames : DEFAULT_FRAMES(remaining);
 const shots = [];
 let at = startFrame;
 for (const target of wanted) {

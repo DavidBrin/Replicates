@@ -80,9 +80,29 @@ const FX_MODULES: Readonly<Record<string, FxModule>> = {
   marth: marthFx,
 };
 
+/**
+ * Slots that fall back to another fighter's entry for a different slot.
+ *
+ * A dash grab *is* the grab, thrown out of a run — the engine gives it its own
+ * slot for frame data, and `SLOT_POSE` already collapses it onto the same clip.
+ * Without the same fallback here, Samus's Grapple Beam and Link's hookshot
+ * simply vanish when the grab happens to come out of a dash, which is most of
+ * the times a player actually grabs. A fighter who wants a different graphic
+ * for it can still declare `dashGrab` explicitly and win.
+ *
+ * `pummel` is deliberately absent: it is a hit landed on someone already held,
+ * not the reach that caught them.
+ */
+const FX_FALLBACK: Partial<Record<MoveSlot, MoveSlot>> = {
+  dashGrab: "grab",
+};
+
 /** What this fighter paints for this move, if anything. */
 export function fxFor(id: string | null | undefined, slot: MoveSlot): FxFn | undefined {
-  return FX_MODULES[charKey(id)]?.fx[slot];
+  const mine = FX_MODULES[charKey(id)]?.fx;
+  if (!mine) return undefined;
+  const fallback = FX_FALLBACK[slot];
+  return mine[slot] ?? (fallback ? mine[fallback] : undefined);
 }
 
 /**

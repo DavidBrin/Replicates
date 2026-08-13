@@ -13,7 +13,7 @@
 import { describe, expect, it } from "vitest";
 import { FIGHTERS, FIGHTER_IDS } from "@/fighters";
 import type { MoveSlot } from "@/engine/types";
-import { CHARACTER_POSES, CHARACTER_RIGS, MOVE_FX_KEYS, PROJECTILE_PAINTER_KEYS } from ".";
+import { CHARACTER_POSES, CHARACTER_RIGS, MOVE_FX_KEYS, PROJECTILE_PAINTER_KEYS, fxFor } from ".";
 import { charKey, clipFor, overrides, type PoseOverrides } from "./poses";
 import { getCharacterRig } from ".";
 import { POSE_LIBRARY, type PoseName } from "../poses/library";
@@ -256,5 +256,45 @@ describe("projectile ids", () => {
       .filter(([, who]) => who.size > 1)
       .map(([id, who]) => `${id} is declared by ${[...who].join(" and ")}`);
     expect(shared).toEqual([]);
+  });
+});
+
+/**
+ * A dash grab is the grab, thrown out of a run.
+ *
+ * The engine gives it its own slot so it can carry its own frame data, and
+ * `SLOT_POSE` already collapses it onto the same clip. The effect lookup did
+ * not, so Samus's Grapple Beam and Link's hookshot vanished whenever the grab
+ * came out of a dash — which is most of the times a player actually grabs, and
+ * these are the two moves whose entire graphic *is* the effect.
+ */
+describe("a dash grab paints what a grab paints", () => {
+  const grabbers = FIGHTERS.filter((f) => fxFor(f.id, "grab") !== undefined);
+
+  it("has somebody who paints a grab, or this proves nothing", () => {
+    expect(grabbers.length, "no fighter declares a grab effect").toBeGreaterThan(0);
+  });
+
+  it("falls back to the grab's own painter", () => {
+    for (const def of grabbers) {
+      expect(fxFor(def.id, "dashGrab"), `${def.id} loses its tether on a dash grab`).toBe(
+        fxFor(def.id, "grab"),
+      );
+    }
+  });
+
+  it("does not invent one for a fighter who paints no grab", () => {
+    for (const def of FIGHTERS) {
+      if (fxFor(def.id, "grab") !== undefined) continue;
+      expect(fxFor(def.id, "dashGrab"), `${def.id}`).toBeUndefined();
+    }
+  });
+
+  it("leaves the pummel alone — it is a hit, not the reach that caught them", () => {
+    for (const def of FIGHTERS) {
+      const pummel = fxFor(def.id, "pummel");
+      if (pummel === undefined) continue;
+      expect(pummel).not.toBe(fxFor(def.id, "grab"));
+    }
   });
 });
