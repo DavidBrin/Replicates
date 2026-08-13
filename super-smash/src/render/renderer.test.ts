@@ -260,12 +260,12 @@ describe("projectiles", () => {
       },
     });
     const lookup = projectileVisual(renderState({ fighters: [def] }));
-    expect(lookup("linkArrow")).toBe("arrow");
+    expect(lookup("linkArrow").visual).toBe("arrow");
   });
 
   it("falls back to a visible shape for an unknown id — an invisible projectile cannot be dodged", () => {
     const lookup = projectileVisual(renderState({ fighters: [makeDef()] }));
-    expect(lookup("nothing-like-this")).toBe("energy");
+    expect(lookup("nothing-like-this").visual).toBe("energy");
   });
 
   it("draws one per projectile in flight", () => {

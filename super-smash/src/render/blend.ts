@@ -36,7 +36,7 @@
 import type { FighterState } from "@/engine/types";
 import { blendSamples, type PoseSample } from "./poses/clip";
 import type { PoseName } from "./poses/library";
-import { POSE_LIBRARY } from "./poses/library";
+import { clipFor } from "./chars/poses";
 
 /**
  * Frames a transition takes to fade.
@@ -118,7 +118,7 @@ function isImposed(action: FighterState["action"]): boolean {
  */
 export function clipFrameFor(
   blends: PoseBlend[],
-  fighter: Pick<FighterState, "port" | "action" | "actionFrame">,
+  fighter: Pick<FighterState, "port" | "action" | "actionFrame" | "defId">,
   name: PoseName,
   frame: number,
 ): number {
@@ -130,12 +130,12 @@ export function clipFrameFor(
 
 function noticeChange(
   b: PoseBlend,
-  fighter: Pick<FighterState, "action">,
+  fighter: Pick<FighterState, "action" | "defId">,
   name: PoseName,
   frame: number,
 ): void {
   if (b.name === name) return;
-  const snap = POSE_LIBRARY[name]?.strike !== undefined || isImposed(fighter.action);
+  const snap = clipFor(fighter.defId, name)?.strike !== undefined || isImposed(fighter.action);
   b.from = snap ? null : b.last;
   b.name = name;
   b.since = frame;
@@ -143,7 +143,7 @@ function noticeChange(
 
 export function blendedPose(
   blends: PoseBlend[],
-  fighter: Pick<FighterState, "port" | "action">,
+  fighter: Pick<FighterState, "port" | "action" | "defId">,
   name: PoseName,
   sample: PoseSample,
   frame: number,

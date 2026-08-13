@@ -37,21 +37,34 @@
  * leaves seams wherever two capsules meet.
  */
 
-import type { FighterDef, FighterPalette, FighterState } from "@/engine/types";
+import type { FighterPalette, FighterState } from "@/engine/types";
 import type { PoseSample } from "./poses";
 import {
-  BASE_RIG,
   FAR_BONES,
   NEAR_BONES,
   drawCapsule,
   resolve,
   rigHeight,
-  type Bone,
   type BoneName,
-  type Rig,
   type RigTransform,
   type Skeleton,
 } from "./skeleton";
+
+import {
+  PANEL_INK,
+  PORT_COLOURS,
+  ellipse,
+  poly,
+  roleColour,
+  shade,
+  withAlpha,
+  type Brush,
+  type CharacterRig,
+  type DrawMode,
+  type PropDef,
+  type PropKind,
+  type PropPainter,
+} from "./rigKit";
 
 /* ------------------------------------------------------------------ type -- */
 
@@ -59,604 +72,47 @@ import {
 export const FONT_DISPLAY = "'Anton', 'Arial Narrow', Haettenschweiler, Impact, sans-serif";
 export const FONT_UI = "'M PLUS Rounded 1c', 'Trebuchet MS', system-ui, sans-serif";
 
-/* --------------------------------------------------------------- colours -- */
-
-/** Sampled from Ultimate's HUD (SPEC §10). Port order is P1..P4. */
-export const PORT_COLOURS: readonly string[] = ["#FE3636", "#3B7BFE", "#FFC61E", "#35C759"];
-
-export const SMASH_RED = "#AD0000";
-export const SMASH_RED_LIT = "#C10500";
-export const SMASH_YELLOW = "#FFD500";
-export const PANEL_INK = "#090B0C";
-
-export function hexToRgb(hex: string): [number, number, number] {
-  let h = hex.trim();
-  if (h.startsWith("#")) h = h.slice(1);
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  const n = Number.parseInt(h.slice(0, 6), 16);
-  if (Number.isNaN(n)) return [0, 0, 0];
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function rgbToHex(r: number, g: number, b: number): string {
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
-  return `#${c(r)}${c(g)}${c(b)}`;
-}
-
-/** Lighten (`amount > 0`) or darken (`amount < 0`) toward white/black. */
-export function shade(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  const t = amount < 0 ? 0 : 255;
-  const k = Math.abs(amount);
-  return rgbToHex(r + (t - r) * k, g + (t - g) * k, b + (t - b) * k);
-}
-
-export function mixHex(a: string, b: string, t: number): string {
-  const [r1, g1, b1] = hexToRgb(a);
-  const [r2, g2, b2] = hexToRgb(b);
-  return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
-}
-
-export function withAlpha(hex: string, alpha: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
-}
-
-const FALLBACK_PALETTE: FighterPalette = {
-  primary: "#C64B3A",
-  secondary: "#2E4C8F",
-  accent: "#E0C060",
-  skin: "#F2C89A",
-  outline: "#160D12",
-  alts: [],
-};
-
-/** Apply a costume's remap. Costume 0 is always the default colours. */
-export function resolvePalette(def: FighterDef | null, costume: number): FighterPalette {
-  const base = def?.palette ?? FALLBACK_PALETTE;
-  if (costume <= 0 || !base.alts || costume > base.alts.length) return base;
-  const alt = base.alts[costume - 1];
-  return { ...base, primary: alt.primary, secondary: alt.secondary, accent: alt.accent };
-}
-
-function roleColour(role: string, palette: FighterPalette): string {
-  if (role.startsWith("#")) return role;
-  switch (role) {
-    case "primary":
-      return palette.primary;
-    case "secondary":
-      return palette.secondary;
-    case "accent":
-      return palette.accent;
-    case "skin":
-      return palette.skin;
-    case "outline":
-      return palette.outline;
-    default:
-      return role;
-  }
-}
-
-/* ----------------------------------------------------------------- props -- */
-
-export type PropKind =
-  | "cap"
-  | "capPointed"
-  | "helmet"
-  | "tiara"
-  | "hairSwoop"
-  | "earsRound"
-  | "earsPointed"
-  | "earsBolt"
-  | "snout"
-  | "muzzle"
-  | "nose"
-  | "moustache"
-  | "brow"
-  | "face"
-  | "cheeks"
-  | "visor"
-  | "tie"
-  | "bib"
-  | "vest"
-  | "belt"
-  | "cape"
-  | "tunic"
-  | "patch"
-  | "shoulderPad"
-  | "cannon"
-  | "sword"
-  | "swordLong"
-  | "shield"
-  | "tailBushy"
-  | "tailBolt";
-
-export interface PropDef {
-  readonly kind: PropKind;
-  readonly bone: BoneName;
-  /** Position along the bone: 0 = base, 1 = tip. */
-  readonly at: number;
-  /** Half-extent in rig units. Shapes are authored in a [-1, 1] box. */
-  readonly size: number;
-  /** Extra offset along the bone, rig units. */
-  readonly along?: number;
-  /** Extra offset toward the fighter's front, rig units. */
-  readonly across?: number;
-  /** Extra rotation in the prop's own frame, radians. */
-  readonly angle?: number;
-  /** Palette role name or literal hex. */
-  readonly colour: string;
-  /** Second colour, for props that need one. */
-  readonly detail?: string;
-  /** "behind" draws before the far-side limbs — capes, tails, back-slung shields. */
-  readonly layer?: "behind" | "front";
-  /** Mirror the shape's forward axis, for the far-side member of a pair. */
-  readonly flip?: boolean;
-}
-
-/* -------------------------------------------------------------- the rigs -- */
-
-export interface CharacterRig {
-  readonly id: string;
-  /** Multiplier on the shared world-to-screen scale. */
-  readonly scale: number;
-  readonly bones: Rig;
-  /** Head circle radius, rig units, centred on the head bone's tip. */
-  readonly headRadius: number;
-  readonly boneColour: Readonly<Partial<Record<BoneName, string>>>;
-  readonly props: readonly PropDef[];
-}
-
-type BoneTweak = {
-  len?: number;
-  thick?: number;
-  lenAbs?: number;
-  thickAbs?: number;
-  angle?: number;
-};
-
-/** Build a rig by scaling the reference humanoid. */
-function tweakRig(over: Partial<Record<BoneName, BoneTweak>>): Rig {
-  const out: Record<string, Bone> = {};
-  for (const name of Object.keys(BASE_RIG) as BoneName[]) {
-    const base = BASE_RIG[name];
-    const t = over[name];
-    out[name] = {
-      parent: base.parent,
-      attach: base.attach,
-      angle: t?.angle ?? base.angle,
-      length: t?.lenAbs ?? base.length * (t?.len ?? 1),
-      thickness: t?.thickAbs ?? base.thickness * (t?.thick ?? 1),
-    };
-  }
-  return out as Rig;
-}
-
-/** Apply one tweak to every bone in a group. */
-function group(names: readonly BoneName[], t: BoneTweak): Partial<Record<BoneName, BoneTweak>> {
-  const out: Partial<Record<BoneName, BoneTweak>> = {};
-  for (const n of names) out[n] = t;
-  return out;
-}
-
-const ARMS: readonly BoneName[] = ["upperArmL", "forearmL", "upperArmR", "forearmR"];
-const LEGS: readonly BoneName[] = ["thighL", "shinL", "thighR", "shinR"];
-const HANDS: readonly BoneName[] = ["handL", "handR"];
-const FEET: readonly BoneName[] = ["footL", "footR"];
-
-/** Two eyes and a pair of pupils, forward of the head's centre. */
-function eyes(size: number, iris = "#1B1B22", across = 0.42): PropDef {
-  return { kind: "face", bone: "head", at: 1, size, across, colour: "#FFFFFF", detail: iris };
-}
-
-// Short, round and big-headed. Mario is the roster's baseline and the shape
-// everyone else is read against, so he is drawn as squarely "average person,
-// slightly cartooned" — which in a cast containing DK and Kirby is itself
-// distinct.
-const MARIO: CharacterRig = {
-  id: "mario",
-  scale: 0.96,
-  bones: tweakRig({
-    // The root strut is the leg's length: scale one without the other and the
-    // feet float above the stage or sink through it.
-    root: { len: 0.86 },
-    ...group(LEGS, { len: 0.86, thick: 1.14 }),
-    ...group(HANDS, { thick: 1.26 }),
-    ...group(FEET, { thick: 1.24, len: 1.2 }),
-    hip: { thick: 1.1 },
-    torso: { thick: 1.14, len: 0.96 },
-  }),
-  headRadius: 2.5,
-  boneColour: {
-    torso: "primary",
-    hip: "secondary",
-    thighL: "secondary",
-    thighR: "secondary",
-    shinL: "secondary",
-    shinR: "secondary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "skin",
-    forearmR: "skin",
-    handL: "#FFFFFF",
-    handR: "#FFFFFF",
-    footL: "#5A2E12",
-    footR: "#5A2E12",
-  },
-  props: [
-    { kind: "bib", bone: "torso", at: 0.55, size: 1.9, colour: "secondary", detail: SMASH_YELLOW },
-    { kind: "cap", bone: "head", at: 1, size: 2.6, along: 0.95, colour: "primary", detail: "#FFFFFF" },
-    { kind: "nose", bone: "head", at: 1, size: 0.78, across: 1.05, along: -0.1, colour: "skin" },
-    { kind: "moustache", bone: "head", at: 1, size: 1.1, across: 0.62, along: -0.62, colour: "#3A1F10" },
-    eyes(0.72),
-  ],
-};
-
-// Barrel torso, tiny legs, arms past the knees. Blacked out this is already DK
-// and nobody else in the roster.
-const DONKEY_KONG: CharacterRig = {
-  id: "donkeyKong",
-  scale: 1.34,
-  bones: tweakRig({
-    root: { len: 0.69 },
-    hip: { thick: 1.42, len: 0.9 },
-    torso: { thick: 1.62, len: 1.12 },
-    head: { len: 0.62 },
-    ...group(LEGS, { len: 0.68, thick: 1.3 }),
-    ...group(FEET, { len: 1.35, thick: 1.35 }),
-    ...group(ARMS, { len: 1.44, thick: 1.42 }),
-    ...group(HANDS, { thick: 1.7, len: 1.3 }),
-  }),
-  headRadius: 2.35,
-  boneColour: {
-    torso: "primary",
-    hip: "primary",
-    head: "primary",
-    thighL: "primary",
-    thighR: "primary",
-    shinL: "primary",
-    shinR: "primary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "primary",
-    forearmR: "primary",
-    handL: "skin",
-    handR: "skin",
-    footL: "skin",
-    footR: "skin",
-  },
-  props: [
-    { kind: "patch", bone: "torso", at: 0.55, size: 2.0, across: 0.5, colour: "skin" },
-    { kind: "tie", bone: "torso", at: 0.95, size: 1.5, across: 1.35, colour: "accent", detail: "#FFF2B0" },
-    { kind: "muzzle", bone: "head", at: 1, size: 1.5, across: 0.95, along: -0.5, colour: "skin" },
-    { kind: "brow", bone: "head", at: 1, size: 1.5, across: 0.5, along: 0.55, colour: "#3A2412" },
-    { kind: "earsRound", bone: "head", at: 1, size: 0.72, along: 0.2, colour: "skin" },
-    eyes(0.66),
-  ],
-};
-
-// Taller and leaner than Mario, but stockier than Marth: the athletic middle of
-// the three humanoids, which is the gap the cap and the shield then widen.
-const LINK: CharacterRig = {
-  id: "link",
-  scale: 1.06,
-  bones: tweakRig({
-    root: { len: 1.02 },
-    ...group(LEGS, { len: 1.02 }),
-    ...group(ARMS, { len: 1.04, thick: 0.96 }),
-    ...group(FEET, { len: 1.15, thick: 1.15 }),
-  }),
-  headRadius: 2.3,
-  boneColour: {
-    torso: "primary",
-    hip: "primary",
-    thighL: "#E9DCC0",
-    thighR: "#E9DCC0",
-    shinL: "#E9DCC0",
-    shinR: "#E9DCC0",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "skin",
-    forearmR: "skin",
-    handL: "#D8CBA8",
-    handR: "#D8CBA8",
-    footL: "#6B4A24",
-    footR: "#6B4A24",
-  },
-  props: [
-    { kind: "cape", bone: "torso", at: 0.9, size: 2.4, colour: "#4E3A1E", layer: "behind", angle: 0.1 },
-    { kind: "shield", bone: "forearmL", at: 0.55, size: 1.9, colour: "secondary", detail: "accent", layer: "behind" },
-    { kind: "tunic", bone: "hip", at: 0.5, size: 2.1, colour: "primary" },
-    { kind: "belt", bone: "hip", at: 0.9, size: 1.7, colour: "#5A3A18", detail: "accent" },
-    { kind: "sword", bone: "handR", at: 1, size: 4.2, colour: "#DCE4EC", detail: "accent" },
-    { kind: "capPointed", bone: "head", at: 1, size: 2.5, along: 0.75, colour: "primary" },
-    { kind: "hairSwoop", bone: "head", at: 1, size: 1.5, across: 0.75, along: 0.5, colour: "#E8C86A" },
-    { kind: "earsPointed", bone: "head", at: 1, size: 1.0, along: -0.15, angle: 0.5, colour: "skin" },
-    eyes(0.66, "#2E6BB0"),
-  ],
-};
-
-// Round shoulders and a forearm twice the thickness of the other one. The
-// asymmetry is the whole read: no other fighter has one fat arm.
-const SAMUS: CharacterRig = {
-  id: "samus",
-  scale: 1.1,
-  bones: tweakRig({
-    torso: { thick: 1.2 },
-    hip: { thick: 1.15 },
-    ...group(LEGS, { thick: 1.3 }),
-    ...group(FEET, { thick: 1.4, len: 1.2 }),
-    ...group(ARMS, { thick: 1.12 }),
-    forearmR: { thick: 1.55, len: 1.05 },
-    handR: { thickAbs: 0, lenAbs: 0.2 },
-    head: { len: 0.92 },
-  }),
-  headRadius: 2.45,
-  boneColour: {
-    torso: "primary",
-    hip: "secondary",
-    head: "primary",
-    thighL: "secondary",
-    thighR: "secondary",
-    shinL: "primary",
-    shinR: "primary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "secondary",
-    forearmR: "accent",
-    handL: "secondary",
-    footL: "accent",
-    footR: "accent",
-  },
-  props: [
-    { kind: "helmet", bone: "head", at: 1, size: 2.6, colour: "primary", detail: "accent" },
-    { kind: "visor", bone: "head", at: 1, size: 1.25, across: 0.85, along: 0.05, colour: "#38E08A" },
-    { kind: "shoulderPad", bone: "upperArmL", at: 0.05, size: 1.9, colour: "primary", detail: "secondary", flip: true },
-    { kind: "shoulderPad", bone: "upperArmR", at: 0.05, size: 2.05, colour: "primary", detail: "secondary" },
-    { kind: "cannon", bone: "forearmR", at: 0.75, size: 1.6, colour: "accent", detail: "#2B3138" },
-    { kind: "belt", bone: "hip", at: 0.8, size: 1.6, colour: "accent", detail: "#2B3138" },
-  ],
-};
-
-// The sphere.
-//
-// The torso is vestigial and the head circle *is* the body, so almost the whole
-// figure is one shape. The legs are full length but spend most of themselves
-// inside that shape; only the oversized feet emerge at the bottom, which is
-// exactly the read — a ball balanced on two red boots. Kirby is the one fighter
-// with no prop that leaves his outline, because his outline is the prop.
-const KIRBY: CharacterRig = {
-  id: "kirby",
-  scale: 0.78,
-  bones: tweakRig({
-    root: { lenAbs: 4.2 },
-    hip: { lenAbs: 0.18, thickAbs: 1.2 },
-    torso: { lenAbs: 0.35, thickAbs: 2.4 },
-    head: { lenAbs: 0.55, thickAbs: 1.0 },
-    ...group(LEGS, { lenAbs: 2.0, thickAbs: 1.75 }),
-    ...group(FEET, { lenAbs: 1.6, thickAbs: 2.0 }),
-    ...group(ARMS, { lenAbs: 0.9, thickAbs: 1.5 }),
-    ...group(HANDS, { lenAbs: 0.35, thickAbs: 1.95 }),
-  }),
-  headRadius: 4.45,
-  boneColour: {
-    torso: "primary",
-    hip: "primary",
-    head: "primary",
-    thighL: "primary",
-    thighR: "primary",
-    shinL: "primary",
-    shinR: "primary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "primary",
-    forearmR: "primary",
-    handL: "primary",
-    handR: "primary",
-    footL: "secondary",
-    footR: "secondary",
-  },
-  props: [
-    { kind: "cheeks", bone: "head", at: 1, size: 0.95, across: 1.9, along: -0.9, colour: "accent" },
-    { kind: "face", bone: "head", at: 1, size: 1.25, across: 0.95, along: 0.35, colour: "#FFFFFF", detail: "#20202C" },
-  ],
-};
-
-// Short body, long legs, small head — the digitigrade build, which is what makes
-// the ears and the tail read as animal rather than as decoration.
-const FOX: CharacterRig = {
-  id: "fox",
-  scale: 0.88,
-  bones: tweakRig({
-    root: { len: 1.14 },
-    torso: { thick: 0.88, len: 0.86 },
-    ...group(LEGS, { len: 1.14, thick: 0.94 }),
-    ...group(ARMS, { thick: 0.92 }),
-    ...group(FEET, { len: 1.4, thick: 1.35 }),
-    head: { len: 0.9 },
-  }),
-  headRadius: 2.15,
-  boneColour: {
-    torso: "primary",
-    hip: "secondary",
-    head: "skin",
-    thighL: "secondary",
-    thighR: "secondary",
-    shinL: "secondary",
-    shinR: "secondary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "skin",
-    forearmR: "skin",
-    handL: "#FFFFFF",
-    handR: "#FFFFFF",
-    footL: "#B9C2CC",
-    footR: "#B9C2CC",
-  },
-  props: [
-    { kind: "tailBushy", bone: "hip", at: 0, size: 3.4, colour: "skin", detail: "#FFFFFF", layer: "behind", angle: 2.5 },
-    { kind: "vest", bone: "torso", at: 0.55, size: 2.0, colour: "primary", detail: "accent" },
-    { kind: "earsPointed", bone: "head", at: 1, size: 1.6, along: 0.55, angle: 0.34, colour: "skin", detail: "#3A2A1C" },
-    { kind: "snout", bone: "head", at: 1, size: 1.4, across: 1.1, along: -0.35, colour: "#FFFFFF", detail: "#2B2118" },
-    eyes(0.7, "#3FA1D8"),
-  ],
-};
-
-// Head nearly as wide as the body, limbs almost too short to see, and the two
-// shapes that leave the outline — the ears and the bolt tail — carry the read.
-const PIKACHU: CharacterRig = {
-  id: "pikachu",
-  scale: 0.72,
-  bones: tweakRig({
-    root: { lenAbs: 2.5 },
-    hip: { lenAbs: 0.6, thickAbs: 3.6 },
-    torso: { lenAbs: 1.5, thickAbs: 4.2 },
-    head: { lenAbs: 1.6, thickAbs: 1.9 },
-    ...group(LEGS, { lenAbs: 1.15, thickAbs: 1.7 }),
-    ...group(FEET, { lenAbs: 1.25, thickAbs: 1.6 }),
-    ...group(ARMS, { lenAbs: 1.0, thickAbs: 1.45 }),
-    ...group(HANDS, { lenAbs: 0.35, thickAbs: 1.7 }),
-  }),
-  headRadius: 3.5,
-  boneColour: {
-    torso: "primary",
-    hip: "primary",
-    head: "primary",
-    thighL: "primary",
-    thighR: "primary",
-    shinL: "primary",
-    shinR: "primary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "primary",
-    forearmR: "primary",
-    handL: "primary",
-    handR: "primary",
-    footL: "#6B4A18",
-    footR: "#6B4A18",
-  },
-  props: [
-    { kind: "tailBolt", bone: "hip", at: 0, size: 3.6, colour: "primary", detail: "#6B4A18", layer: "behind", angle: 2.2 },
-    { kind: "earsBolt", bone: "head", at: 1, size: 2.9, along: 0.5, angle: 0.42, colour: "primary", detail: "#20202C" },
-    { kind: "cheeks", bone: "head", at: 1, size: 0.85, across: 1.85, along: -0.8, colour: "accent" },
-    { kind: "snout", bone: "head", at: 1, size: 0.7, across: 1.25, along: -0.55, colour: "primary", detail: "#20202C" },
-    eyes(0.68),
-  ],
-};
-
-// The tallest and by some distance the thinnest, with the smallest head — the
-// elongated build that lets the cape and Falchion read as elegant rather than
-// as clutter.
-const MARTH: CharacterRig = {
-  id: "marth",
-  scale: 1.14,
-  bones: tweakRig({
-    root: { len: 1.16 },
-    torso: { thick: 0.8, len: 1.06 },
-    hip: { thick: 0.84 },
-    ...group(LEGS, { len: 1.16, thick: 0.8 }),
-    ...group(ARMS, { len: 1.08, thick: 0.8 }),
-    ...group(FEET, { len: 1.2, thick: 1.0 }),
-    ...group(HANDS, { thick: 0.88 }),
-  }),
-  headRadius: 1.9,
-  boneColour: {
-    torso: "primary",
-    hip: "secondary",
-    thighL: "#22262E",
-    thighR: "#22262E",
-    shinL: "secondary",
-    shinR: "secondary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "#22262E",
-    forearmR: "#22262E",
-    handL: "#E6E2D8",
-    handR: "#E6E2D8",
-    footL: "secondary",
-    footR: "secondary",
-  },
-  props: [
-    { kind: "cape", bone: "torso", at: 0.95, size: 3.2, colour: "secondary", detail: "accent", layer: "behind" },
-    { kind: "belt", bone: "hip", at: 0.85, size: 1.5, colour: "accent" },
-    { kind: "swordLong", bone: "handR", at: 1, size: 5.4, colour: "#E6EEF6", detail: "accent" },
-    { kind: "hairSwoop", bone: "head", at: 1, size: 1.8, across: 0.55, along: 0.55, colour: "secondary" },
-    { kind: "tiara", bone: "head", at: 1, size: 1.5, along: 0.72, colour: "accent", detail: "#5FC8E8" },
-    eyes(0.62, "#2E4C8F"),
-  ],
-};
-
-const DEFAULT_RIG: CharacterRig = {
-  id: "default",
-  scale: 1,
-  bones: BASE_RIG,
-  headRadius: 2.3,
-  boneColour: {
-    torso: "primary",
-    hip: "secondary",
-    thighL: "secondary",
-    thighR: "secondary",
-    shinL: "secondary",
-    shinR: "secondary",
-    upperArmL: "primary",
-    upperArmR: "primary",
-    forearmL: "skin",
-    forearmR: "skin",
-    handL: "skin",
-    handR: "skin",
-    footL: "accent",
-    footR: "accent",
-  },
-  props: [eyes(0.7)],
-};
-
-export const CHARACTER_RIGS: Readonly<Record<string, CharacterRig>> = {
-  mario: MARIO,
-  donkeykong: DONKEY_KONG,
-  dk: DONKEY_KONG,
-  link: LINK,
-  samus: SAMUS,
-  kirby: KIRBY,
-  fox: FOX,
-  pikachu: PIKACHU,
-  marth: MARTH,
-};
-
 /**
- * Look a rig up by fighter id.
+ * Re-exported so the rest of the renderer keeps one import for "character art".
  *
- * Normalised rather than exact because `fighters/` is authored independently
- * and could plausibly spell Donkey Kong `donkey-kong`, `donkeyKong` or `dk`.
- * An unknown id falls back to the reference humanoid, which is ugly but never
- * throws — a renderer that crashes on an unrecognised fighter takes the whole
- * match with it.
+ * The definitions themselves moved to `rigKit.ts` and `chars/`, which is what
+ * lets a fighter's own file import the vocabulary without importing the
+ * renderer that consumes it.
  */
-export function getCharacterRig(id: string | null | undefined): CharacterRig {
-  if (!id) return DEFAULT_RIG;
-  const key = id.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return CHARACTER_RIGS[key] ?? DEFAULT_RIG;
-}
+export {
+  PORT_COLOURS,
+  SMASH_RED,
+  SMASH_RED_LIT,
+  SMASH_YELLOW,
+  PANEL_INK,
+  hexToRgb,
+  rgbToHex,
+  shade,
+  mixHex,
+  withAlpha,
+  resolvePalette,
+  roleColour,
+  ellipse,
+  poly,
+  tweakRig,
+  group,
+  eyes,
+  ARMS,
+  LEGS,
+  HANDS,
+  FEET,
+  DEFAULT_RIG,
+  type Brush,
+  type DrawMode,
+  type PropDef,
+  type PropKind,
+  type PropPainter,
+  type CharacterRig,
+  type BoneTweak,
+} from "./rigKit";
+export { CHARACTER_RIGS, getCharacterRig } from "./chars";
 
 /* --------------------------------------------------------------- painting -- */
-
-export type DrawMode = "rim" | "body" | "silhouette";
-
-interface Brush {
-  readonly ctx: CanvasRenderingContext2D;
-  readonly mode: DrawMode;
-  readonly palette: FighterPalette;
-  /** Rim inflation expressed in the current local unit. */
-  readonly rimLocal: number;
-  readonly outline: string;
-  /**
-   * Paint every shape in this one colour instead of the mode's default flat
-   * colour. Only meaningful for `silhouette`, and only the hit flash sets it;
-   * props re-derive their own brush, so it has to travel on the brush.
-   */
-  readonly flat?: string;
-  fill(colour: string): void;
-  line(colour: string, width: number): void;
-}
 
 function makeBrush(
   ctx: CanvasRenderingContext2D,
@@ -708,23 +164,16 @@ function makeBrush(
  * tip, `+x` points at the fighter's front, and one unit is the prop's `size`.
  * The frame is mirrored for a left-facing fighter, so "forward" is forward in
  * both directions without a single sign in the shape code.
+ *
+ * `custom` is the escape hatch: it paints `prop.draw`, which lives in the
+ * fighter's own file. Everything below is shared, and a shared table is a file
+ * eight people cannot add to at once.
  */
-type PropPainter = (brush: Brush, prop: PropDef) => void;
-
-function ellipse(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rot = 0): void {
-  ctx.beginPath();
-  ctx.ellipse(x, y, Math.abs(rx), Math.abs(ry), rot, 0, Math.PI * 2);
-  ctx.closePath();
-}
-
-function poly(ctx: CanvasRenderingContext2D, pts: readonly (readonly [number, number])[]): void {
-  ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-  ctx.closePath();
-}
-
 const PROP_PAINTERS: Record<PropKind, PropPainter> = {
+  custom(b, p) {
+    p.draw?.(b, p);
+  },
+
   // Mario's cap: a dome plus the brim that breaks the head's outline forward.
   cap(b, p) {
     const ctx = b.ctx;

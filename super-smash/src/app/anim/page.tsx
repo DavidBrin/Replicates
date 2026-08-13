@@ -32,10 +32,12 @@ import {
   poseSpinFor,
   poseTimeFor,
   samplePoseForFighter,
-  POSE_LIBRARY,
   type JumpAttributes,
 } from "@/render/poses";
-import { makeFighter } from "@/render/testFixtures";
+import { makeFighter, makeStage } from "@/render/testFixtures";
+import { clipFor } from "@/render/chars";
+import { drawMoveFx } from "@/render/specialFx";
+import { createCamera } from "@/render/camera";
 import { FIGHTER_IDS, getFighter } from "@/fighters";
 import type { ActionState, FighterState, MoveSlot } from "@/engine/types";
 
@@ -61,7 +63,7 @@ const OPEN_ENDED = 40;
 
 function lengthOf(f: FighterState, attrs?: JumpAttributes): number {
   const name = poseNameFor(f);
-  const clip = POSE_LIBRARY[name];
+  const clip = clipFor(f.defId, name);
   if (!clip.loop) return actionDurationFor(f, attrs) ?? OPEN_ENDED;
   // A speed-paced cycle has no fixed frame count — find the frame the clip
   // comes back round to its start, so the sheet shows exactly one cycle.
@@ -148,6 +150,16 @@ function drawCell(
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
   const params = { rig, palette, pose, transform, alpha } as const;
+
+  // The move's own effect — the plasma, the rock, the electricity. Drawn here
+  // and not only in a match because half of what makes a special look like
+  // itself is painted rather than posed, and a lab that showed only the pose
+  // would say Kirby's Stone and Samus's Charge Shot still look identical.
+  const height = rigHeight(rig.bones, rig.headRadius) * rig.scale;
+  const cam = { ...createCamera(makeStage()), zoom };
+  const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : { hideFigure: false };
+  if (fx.hideFigure) return;
+
   drawFigure(ctx, { ...params, mode: "rim", rimWidth: Math.max(2, zoom * 0.5) });
   drawFigure(ctx, { ...params, mode: "body" });
 }

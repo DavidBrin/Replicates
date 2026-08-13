@@ -22,7 +22,8 @@ import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES, PERFECT_SHIELD_WINDOW } from 
 import type { FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
 import { poseTimeFor, type PosedFighter } from "./poses";
-import { PORT_COLOURS, mixHex, withAlpha } from "./characterArt";
+import { PORT_COLOURS, mixHex, withAlpha } from "./rigKit";
+import type { ProjectilePainter } from "./fxKit";
 import { worldToScreen, type Camera } from "./camera";
 
 export type ParticleKind =
@@ -1004,11 +1005,17 @@ export function drawShield(
  * it falls and a bomb tumbles, without either needing a per-frame angle in the
  * simulation state.
  */
+export interface ProjectileLook {
+  readonly visual: ProjectileVisual;
+  /** The owning fighter's own painter, if they wrote one. */
+  readonly paint?: ProjectilePainter;
+}
+
 export function drawProjectiles(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   cam: Camera,
-  visualFor: (defId: string) => ProjectileVisual,
+  lookFor: (defId: string) => ProjectileLook,
 ): void {
   if (!state.projectiles || state.projectiles.length === 0) return;
   ctx.save();
@@ -1023,7 +1030,24 @@ export function drawProjectiles(
 
     ctx.save();
     ctx.translate(s.x, s.y);
-    switch (visualFor(p.defId)) {
+    const look = lookFor(p.defId);
+    // A fighter who paints their own does the rotating too: a fireball tumbles,
+    // an arrow noses over as it falls and a bomb does neither.
+    if (look.paint) {
+      look.paint({
+        ctx,
+        u: scale,
+        age: p.age,
+        dir: p.facing >= 0 ? 1 : -1,
+        heading,
+        charge,
+        returning: Boolean(p.returning),
+        frame: state.frame + p.instanceId * 7,
+      });
+      ctx.restore();
+      continue;
+    }
+    switch (look.visual) {
       case "arrow":
         ctx.rotate(heading);
         paintArrow(ctx, scale, p.facing);

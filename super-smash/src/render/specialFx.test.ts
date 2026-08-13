@@ -13,7 +13,7 @@ import { FIGHTERS } from "@/fighters";
 import type { MoveSlot } from "@/engine/types";
 import { createCamera } from "./camera";
 import { createMockContext, countOf } from "./mockContext";
-import { SPECIAL_FX_KEYS, drawSpecialFx } from "./specialFx";
+import { MOVE_FX_KEYS, drawMoveFx } from "./specialFx";
 import { makeFighter, makeStage } from "./testFixtures";
 
 const cam = createCamera(makeStage());
@@ -23,7 +23,7 @@ function draw(id: string, slot: MoveSlot, frame: number, over: Record<string, un
   const ctx = createMockContext();
   const def = byId.get(id);
   expect(def, `no fighter ${id}`).toBeDefined();
-  const result = drawSpecialFx(
+  const result = drawMoveFx(
     ctx,
     def,
     makeFighter({ action: "special", move: slot, actionFrame: frame, ...over }),
@@ -37,24 +37,25 @@ function draw(id: string, slot: MoveSlot, frame: number, over: Record<string, un
 
 describe("the effect table", () => {
   it("names only moves that exist", () => {
-    expect(SPECIAL_FX_KEYS.length).toBeGreaterThan(5);
-    for (const key of SPECIAL_FX_KEYS) {
+    expect(MOVE_FX_KEYS.length).toBeGreaterThan(5);
+    for (const key of MOVE_FX_KEYS) {
       const [id, slot] = key.split(".");
-      const def = byId.get(id);
+      // Keys are normalised char keys — `donkeykong`, not `donkeyKong`.
+      const def = FIGHTERS.find((f) => f.id.toLowerCase() === id);
       expect(def, `${key}: no such fighter`).toBeDefined();
       expect(def?.moves[slot as MoveSlot], `${key}: no such move`).toBeDefined();
     }
   });
 
   it("covers at least half the roster, so specials are not all one look", () => {
-    const covered = new Set(SPECIAL_FX_KEYS.map((k) => k.split(".")[0]));
+    const covered = new Set(MOVE_FX_KEYS.map((k: string) => k.split(".")[0]));
     expect(covered.size).toBeGreaterThanOrEqual(FIGHTERS.length / 2);
   });
 
   it("draws nothing for a fighter who is not doing a special", () => {
     const ctx = createMockContext();
     const before = ctx.calls.length;
-    drawSpecialFx(ctx, byId.get("kirby"), makeFighter({ action: "stand", move: null }), cam, 13, 0, 0);
+    drawMoveFx(ctx, byId.get("kirby"), makeFighter({ action: "stand", move: null }), cam, 13, 0, 0);
     expect(ctx.calls.length).toBe(before);
   });
 });

@@ -6,9 +6,12 @@ import type { PoseName } from "./poses";
 import type { FighterState } from "@/engine/types";
 import type { BoneName } from "./skeleton";
 
-const who = (over: Partial<Pick<FighterState, "port" | "action">> = {}) => ({
+const who = (over: Partial<Pick<FighterState, "port" | "action" | "defId">> = {}) => ({
   port: over.port ?? 0,
   action: over.action ?? ("stand" as FighterState["action"]),
+  // A real id, so the lookup goes down the same path a match does. Mario
+  // authors no override for any clip used here, so the shared library answers.
+  defId: over.defId ?? "mario",
 });
 
 const at = (name: PoseName, t = 0) => samplePose(POSE_LIBRARY[name], t);
@@ -104,7 +107,7 @@ describe("cross-fading between clips", () => {
 });
 
 describe("a clip's own clock", () => {
-  const falling = (actionFrame: number) => ({ port: 0, action: "fall" as const, actionFrame });
+  const falling = (actionFrame: number) => ({ port: 0, action: "fall" as const, actionFrame, defId: "mario" });
 
   it("counts from the action while the clip and the action agree", () => {
     const b = createPoseBlends();

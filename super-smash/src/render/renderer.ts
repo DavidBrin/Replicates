@@ -51,20 +51,21 @@ import { moveTimingFor, poseNameFor, poseSpinFor, samplePoseForFighter, type Pos
 import { blendedPose, clipFrameFor } from "./blend";
 import { rigHeight, type RigTransform } from "./skeleton";
 import { drawBackground, drawBlastZone, drawPlatforms } from "./stageArt";
-import { drawSpecialFx } from "./specialFx";
+import { drawMoveFx } from "./specialFx";
+import { projectilePainterFor } from "./chars";
 import { drawSwingArc, swingArcFor } from "./swing";
 import {
   drawFinalSmashAura,
   drawKoFlash,
   drawParticles,
   drawProjectiles,
+  type ProjectileLook,
   drawScreenKos,
   drawDizzyStars,
   drawShield,
   drawSmashBall,
   drawStarKos,
   hitFlashAmount,
-  type ProjectileVisual,
   type VfxState,
 } from "./vfx";
 
@@ -259,35 +260,46 @@ export function drawScene(
 }
 
 /**
- * Look a projectile's drawing hint up by its definition id.
+ * Look up how a projectile should be drawn, from its definition id.
  *
- * `ProjectileState` carries only `defId`; the `visual` lives on the
- * `ProjectileDef` inside whichever move launches it. Rather than have
- * `fighters/` publish a second index for the renderer's benefit, this walks the
- * loaded fighter definitions once and memoises the result on the roster array —
- * the roster does not change during a match, so the walk happens once per match
- * rather than once per frame.
+ * `ProjectileState` carries only `defId`; both the shared `visual` hint and the
+ * fighter who owns it live on the `ProjectileDef` inside whichever move
+ * launches it. Rather than have `fighters/` publish a second index for the
+ * renderer's benefit, this walks the loaded fighter definitions once and
+ * memoises the result on the roster array — the roster does not change during a
+ * match, so the walk happens once per match rather than once per frame.
+ *
+ * The owner is what lets a fighter paint their own: Mario's fireball and Fox's
+ * blaster bolt are both `"energy"` to the engine, and a shared seven-shape
+ * vocabulary is exactly as far as that gets you.
  */
-const VISUAL_CACHE = new WeakMap<object, Map<string, ProjectileVisual>>();
+const VISUAL_CACHE = new WeakMap<object, Map<string, ProjectileLook>>();
 
-export function projectileVisual(state: RenderState): (defId: string) => ProjectileVisual {
+export function projectileVisual(state: RenderState): (defId: string) => ProjectileLook {
   const key = state.fighters as unknown as object;
   let index = VISUAL_CACHE.get(key);
   if (!index) {
-    index = new Map<string, ProjectileVisual>();
+    index = new Map<string, ProjectileLook>();
     for (const def of state.fighters) {
       if (!def) continue;
       for (const move of Object.values(def.moves)) {
         for (const projectile of move?.projectiles ?? []) {
-          index.set(projectile.id, projectile.visual);
+          index.set(projectile.id, {
+            visual: projectile.visual,
+            paint: projectilePainterFor(def.id, projectile.id),
+          });
         }
       }
     }
     VISUAL_CACHE.set(key, index);
   }
   const resolved = index;
-  return (defId: string) => resolved.get(defId) ?? "energy";
+  // An unknown id falls back to "energy" rather than drawing nothing — a
+  // projectile you cannot see is a projectile you cannot dodge.
+  return (defId: string) => resolved.get(defId) ?? FALLBACK_LOOK;
 }
+
+const FALLBACK_LOOK: ProjectileLook = { visual: "energy" };
 
 function hudInfo(state: RenderState): HudFighterInfo[] {
   return state.current.fighters.map((f) => {
@@ -387,7 +399,7 @@ function drawOneFighter(
 
   // A special's own graphic goes under the fighter, and may replace them —
   // Kirby's Stone is the fighter, not a prop held by one.
-  const fx = drawSpecialFx(ctx, d.def, f, cam, height, screen.x, screen.y);
+  const fx = drawMoveFx(ctx, d.def, f, cam, height, screen.x, screen.y);
 
   if (!fx.hideFigure) {
     if (mode !== "silhouette") drawFigure(ctx, { ...params, mode: "rim", rimWidth });
