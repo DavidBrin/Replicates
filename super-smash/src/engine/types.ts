@@ -610,6 +610,22 @@ export interface StepEvents {
      * the victim is going instead of in a symmetric puff that says nothing.
      */
     angle: number;
+    /**
+     * Which of the move's hitboxes actually won the exchange.
+     *
+     * A move is several hitboxes at once and `bestHitbox` resolves an overlap
+     * by lowest id — which *is* the sweetspot mechanic, not an implementation
+     * detail of it. Marth's tipper, Bowser's fist, a sourspotted aerial: in
+     * every case the same swing does one of two very different things, and
+     * which one is the single most important fact about the exchange for the
+     * two players watching it.
+     *
+     * Without this the renderer could tell that something connected but not
+     * *what*, so a tipper flash could only ever be painted from geometry —
+     * where the blade is, not whether the blade is what landed. Presentation
+     * only, like everything else here, and never fed back into the simulation.
+     */
+    hitboxId: number;
   }[];
   shieldHits: { victim: number; x: number; y: number }[];
   clanks: { x: number; y: number }[];

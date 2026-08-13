@@ -30,7 +30,7 @@ import { makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
 const stage = makeStage();
 const cam = createCamera(stage);
 
-function hit(over: Partial<{ damage: number; knockback: number; victim: number; angle: number }> = {}) {
+function hit(over: Partial<{ damage: number; knockback: number; victim: number; angle: number, hitboxId: 0 }> = {}) {
   return makeEvents({
     hits: [
       {
@@ -40,7 +40,7 @@ function hit(over: Partial<{ damage: number; knockback: number; victim: number; 
         x: 0,
         y: fx(6),
         knockback: over.knockback ?? fx(60),
-        angle: over.angle ?? fx(45),
+        angle: over.angle ?? fx(45), hitboxId: 0,
       },
     ],
   });

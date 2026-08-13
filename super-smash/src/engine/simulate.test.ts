@@ -807,3 +807,94 @@ describe("an attacker's freeze does not depend on the victim's invincibility", (
     );
   });
 });
+
+/**
+ * Which hitbox won is a fact only the simulation knows.
+ *
+ * A move is several hitboxes at once and an overlap resolves to the lowest id
+ * — that *is* the sweetspot mechanic, not an implementation detail of it.
+ * Marth's tipper, a sourspotted aerial, Bowser's fist: the same swing does one
+ * of two very different things, and which one is the most important fact about
+ * the exchange for the two players watching.
+ *
+ * The renderer could previously tell that something connected but not what, so
+ * a tipper flash could only be painted from geometry — where the blade is,
+ * rather than whether the blade is what landed.
+ */
+describe("a hit reports which hitbox won it", () => {
+  /** A move whose sweetspot (id 0) sits out at the tip, sourspot (id 1) near. */
+  const TIPPED: SimContext = {
+    stage: () => STAGE,
+    fighter: () => ({
+      ...DEF,
+      moves: {
+        ...DEF.moves,
+        fsmash: move("fsmash", {
+          totalFrames: 40,
+          hitboxes: [
+            hitbox({ id: 0, x: fx(13), radius: fx(3), damage: fx(18) }),
+            hitbox({ id: 1, x: fx(5), radius: fx(4), damage: fx(9) }),
+          ],
+        }),
+      },
+    }),
+  };
+
+  /** Throw a forward smash with the victim `gap` units away, and report the hit. */
+  function smashFrom(gap: number, ctx: SimContext): { damage: number; hitboxId: number } {
+    const s = standing();
+    s.fighters[1].x = fx(gap);
+    let state = s;
+    let prev: readonly InputFrame[] = [0, 0];
+    for (let i = 0; i < 20; i++) {
+      const inputs = [i === 0 ? Btn.Attack | Btn.Right : 0, 0];
+      const out = step(state, inputs, { prevInputs: prev, ctx });
+      prev = inputs;
+      state = out.state;
+      if (out.events.hits.length > 0) return out.events.hits[0];
+    }
+    throw new Error(`the smash never connected at ${gap}`);
+  }
+
+  it("names the sweetspot when the tip is what reached", () => {
+    // Far enough out that only the id-0 box at x 13 covers the victim.
+    const tip = smashFrom(15, TIPPED);
+    expect(tip.hitboxId).toBe(0);
+    expect(toFloat(tip.damage)).toBeGreaterThan(15);
+  });
+
+  it("names the sourspot when the victim is inside the tip", () => {
+    // Close in, where only the id-1 box at x 5 covers them. If this reported 0
+    // the field would be a constant wearing a meaningful name — which is worse
+    // than not having it, because a tipper flash would fire on every hit.
+    const body = smashFrom(4, TIPPED);
+    expect(body.hitboxId).toBe(1);
+    expect(toFloat(body.damage)).toBeLessThan(12);
+  });
+
+  it("agrees with the damage on every hit of a real exchange", () => {
+    // The pairing is the property: whatever id is reported, it must be the box
+    // whose damage actually landed. A field populated from the wrong box would
+    // pass both tests above and fail here.
+    //
+    // Compared relatively rather than against the authored 18 and 9, because a
+    // fresh move carries a staleness bonus — the reported damage is what the
+    // victim took, not what the table says, and asserting the table here would
+    // be testing the multiplier instead of the pairing.
+    const seen = new Map<number, number[]>();
+    for (const gap of [15, 14, 4, 3]) {
+      const h = smashFrom(gap, TIPPED);
+      const at = seen.get(h.hitboxId) ?? [];
+      at.push(toFloat(h.damage));
+      seen.set(h.hitboxId, at);
+    }
+    expect([...seen.keys()].sort(), "both hitboxes should have won at least once").toEqual([0, 1]);
+    const sweet = seen.get(0) as number[];
+    const sour = seen.get(1) as number[];
+    // Every sweetspot hit harder than every sourspot hit, and each id reported
+    // one consistent damage rather than a mixture.
+    expect(Math.min(...sweet)).toBeGreaterThan(Math.max(...sour));
+    expect(Math.max(...sweet) - Math.min(...sweet)).toBeLessThan(0.01);
+    expect(Math.max(...sour) - Math.min(...sour)).toBeLessThan(0.01);
+  });
+});

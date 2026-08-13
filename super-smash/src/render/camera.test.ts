@@ -216,10 +216,10 @@ describe("trauma", () => {
     const kill = createCamera(stage);
     const state = makeState();
     updateCamera(jab, state, stage, makeEvents({
-      hits: [{ attacker: 0, victim: 1, damage: fx(2), x: 0, y: 0, knockback: fx(20), angle: fx(45) }],
+      hits: [{ attacker: 0, victim: 1, damage: fx(2), x: 0, y: 0, knockback: fx(20), angle: fx(45), hitboxId: 0 }],
     }));
     updateCamera(kill, state, stage, makeEvents({
-      hits: [{ attacker: 0, victim: 1, damage: fx(18), x: 0, y: 0, knockback: fx(180), angle: fx(45) }],
+      hits: [{ attacker: 0, victim: 1, damage: fx(18), x: 0, y: 0, knockback: fx(180), angle: fx(45), hitboxId: 0 }],
     }));
     expect(kill.trauma).toBeGreaterThan(jab.trauma);
   });

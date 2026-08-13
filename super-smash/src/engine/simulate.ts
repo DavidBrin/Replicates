@@ -992,6 +992,7 @@ function applyInvincibleHit(
     // An invincible defender is not launched, so there is no direction to
     // report and the spark stays symmetric.
     angle: 0,
+    hitboxId: c.hitbox.id,
   });
 }
 
@@ -1176,6 +1177,7 @@ function applyHit(
       y: c.y,
       knockback: 0,
       angle: 0,
+      hitboxId: hb.id,
     });
     return;
   }
@@ -1254,6 +1256,7 @@ function applyHit(
     // last frame of hitlag — so this is the launch as the *hit* set it, which
     // is the right thing for a graphic that fires on the contact frame.
     angle: launchWorldAngle(victim.pendingAngle, victim.pendingFacing),
+    hitboxId: hb.id,
   });
 }
 

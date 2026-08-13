@@ -54,7 +54,7 @@ function hit(overrides: Partial<StepEvents["hits"][number]> = {}): StepEvents {
     x: 0,
     y: 0,
     knockback: fx(20),
-    angle: 0,
+    angle: 0, hitboxId: 0,
     ...overrides,
   });
   return events;
@@ -166,7 +166,7 @@ describe("driven by events, never by state", () => {
     const many = await running();
     const events = emptyEvents();
     for (let i = 0; i < 4; i++) {
-      events.hits.push({ attacker: i, victim: 3 - i, damage: fx(3), x: 0, y: 0, knockback: fx(20), angle: 0 });
+      events.hits.push({ attacker: i, victim: 3 - i, damage: fx(3), x: 0, y: 0, knockback: fx(20), angle: 0, hitboxId: 0 });
     }
     many.engine.handleEvents(events);
 
@@ -180,7 +180,7 @@ describe("driven by events, never by state", () => {
 
     const heavy = await running();
     const events = hit({ knockback: fx(10), damage: fx(2) });
-    events.hits.push({ attacker: 1, victim: 0, damage: fx(18), x: 0, y: 0, knockback: fx(140), angle: 0 });
+    events.hits.push({ attacker: 1, victim: 0, damage: fx(18), x: 0, y: 0, knockback: fx(140), angle: 0, hitboxId: 0 });
     heavy.engine.handleEvents(events);
 
     // The heavy recipe has a noise layer with two filters that the light one
