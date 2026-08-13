@@ -253,7 +253,7 @@ describe("state to pose", () => {
 
   it("maps every action state onto a clip that exists", () => {
     for (const action of ACTIONS) {
-      const name = poseNameFor(action, "jab1");
+      const name = poseNameFor({ action, move: "jab1", jumpsUsed: 1, fastFalling: false });
       expect(POSE_LIBRARY[name], `no clip for ${action}`).toBeDefined();
     }
   });
@@ -267,7 +267,7 @@ describe("state to pose", () => {
 
   it("maps every move slot onto a clip that exists", () => {
     for (const slot of SLOTS) {
-      const name = poseNameFor("attack", slot);
+      const name = poseNameFor({ action: "attack", move: slot, jumpsUsed: 1, fastFalling: false });
       expect(POSE_LIBRARY[name], `no clip for ${slot}`).toBeDefined();
     }
   });

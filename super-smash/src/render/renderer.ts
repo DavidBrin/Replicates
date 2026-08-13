@@ -23,7 +23,6 @@
  */
 
 import { toFloat } from "@/engine/fixed";
-import { ROLL_FRAMES } from "@/engine/constants";
 import type { FighterDef, FighterState, GameState, StageDef, StepEvents } from "@/engine/types";
 import {
   INDICATOR_INSET,
@@ -47,7 +46,7 @@ import {
   type CharacterRig,
 } from "./characterArt";
 import { drawHud, updateHud, type HudFighterInfo, type HudState } from "./hud";
-import { moveTimingFor, samplePoseForFighter, type PoseSample } from "./poses";
+import { moveTimingFor, poseSpinFor, samplePoseForFighter, type PoseSample } from "./poses";
 import { rigHeight, type RigTransform } from "./skeleton";
 import { drawBackground, drawBlastZone, drawPlatforms } from "./stageArt";
 import { drawSpecialFx } from "./specialFx";
@@ -332,7 +331,7 @@ function drawOneFighter(
     scaleX: squash.scaleX * pose.scaleX,
     scaleY: squash.scaleY * pose.scaleY,
     facing: f.facing >= 0 ? 1 : -1,
-    rotation: pose.rotation + spinFor(f),
+    rotation: pose.rotation + poseSpinFor(f, state.current.frame, timing) * (f.facing >= 0 ? 1 : -1),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
 
@@ -396,22 +395,6 @@ export function drawDepth(f: FighterState): number {
     default:
       return 1;
   }
-}
-
-/**
- * Whole-body spin for the states that have one.
- *
- * Tumble and roll are the two actions where a fighter is not upright, and both
- * are far more legible spinning than they are as a static tucked pose — a
- * rolling fighter that does not rotate reads as sliding, which is a different
- * move with different frame data.
- */
-function spinFor(f: FighterState): number {
-  if (f.action === "tumble") return f.actionFrame * 0.22 * -f.facing;
-  if (f.action === "roll" || f.action === "ledgeRoll") {
-    return (f.actionFrame / ROLL_FRAMES) * Math.PI * 2 * f.facing;
-  }
-  return 0;
 }
 
 /** Intangible frames blink; invincible ones do not (SPEC's distinction). */
