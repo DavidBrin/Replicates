@@ -17,7 +17,7 @@ import {
   type RenderState,
 } from "./renderer";
 import { getCharacterRig } from "./characterArt";
-import { HIT_FLASH_FRAMES, createVfx, stepVfx } from "./vfx";
+import { DIZZY_STARS, HIT_FLASH_FRAMES, createVfx, stepVfx } from "./vfx";
 import {
   makeDef,
   makeEvents,
@@ -386,5 +386,29 @@ describe("visual height", () => {
     // Roughly Ultimate's scale against a 160-unit Battlefield platform.
     expect(visualHeight(getCharacterRig("mario"))).toBeGreaterThan(8);
     expect(visualHeight(getCharacterRig("mario"))).toBeLessThan(20);
+  });
+});
+
+describe("effects reach the screen", () => {
+  /**
+   * Written at the call site rather than against the effect function, because
+   * the whole point is that the renderer calls it.
+   *
+   * Every dead feature this codebase has turned up — pose blending, move
+   * momentum, super armour, the rebinding store, the thrown state — was
+   * correct, exported and tested in isolation. What none of them had was
+   * anything asserting that the thing which is supposed to use them does.
+   */
+  function fillsDrawn(fighter: Parameters<typeof makeFighter>[0]): number {
+    const state = renderState({ current: makeState({ fighters: [makeFighter(fighter)] }) });
+    const ctx = createMockContext(1600, 900);
+    render(ctx, state, makeEvents(), createCamera(stage), 0);
+    return countOf(ctx, "fill");
+  }
+
+  it("circles a broken shield with stars, and nothing else with them", () => {
+    const dizzy = fillsDrawn({ action: "shieldBroken", actionFrame: 30 });
+    const standing = fillsDrawn({ action: "stand", actionFrame: 30 });
+    expect(dizzy).toBeGreaterThan(standing + DIZZY_STARS - 1);
   });
 });

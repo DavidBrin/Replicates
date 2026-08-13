@@ -59,6 +59,7 @@ import {
   drawParticles,
   drawProjectiles,
   drawScreenKos,
+  drawDizzyStars,
   drawShield,
   drawSmashBall,
   drawStarKos,
@@ -325,11 +326,17 @@ function drawOneFighter(
   const attrs = d.def?.attributes;
   const clipFrame = clipFrameFor(state.vfx.poseBlend, f, name, frame);
   const posed = { ...f, actionFrame: clipFrame };
+  // The spin is folded into the sample *before* the fade, not added after it.
+  // A tumbling fighter has accumulated up to a full revolution, and the spin is
+  // read from the clip they are in — so acting out of tumble used to drop the
+  // whole turn in one frame. Inside the fade it unwinds over four, taking the
+  // short way round, which reads as completing the turn rather than snapping.
+  const sample = samplePoseForFighter(posed, frame, timing, attrs);
   const pose = blendedPose(
     state.vfx.poseBlend,
     f,
     name,
-    samplePoseForFighter(posed, frame, timing, attrs),
+    { ...sample, rotation: sample.rotation + poseSpinFor(posed, frame, timing, attrs) },
     frame,
   );
   const squash = squashFor(f);
@@ -352,13 +359,18 @@ function drawOneFighter(
     // out, so a fighter rolling left spun the same way on screen as one rolling
     // right — backwards relative to travel. `skeleton.test.ts` pins the
     // property this relies on.
-    rotation: pose.rotation + poseSpinFor(posed, frame, timing, attrs),
+    rotation: pose.rotation,
     pivot: rotationPivot(rig),
   };
 
-  // The port ring goes under the feet, before the rim, so the rim overlaps it.
+  // The port ring goes under the feet, before the rim, so the rim overlaps it —
+  // and at the fighter's *position*, not at their drawing's. A clip that
+  // translates the body downward is saying where the shape goes, not where the
+  // fighter is standing; following it dragged the marker under the stage on
+  // every crouch, spot dodge and roll.
   if (f.grounded && f.action !== "downed") {
-    drawPortRing(ctx, screen.x, screen.y, height * cam.zoom * 0.36, f.port, 0.55);
+    const feet = worldToScreen(cam, d.x + hitlagShake(f), d.y);
+    drawPortRing(ctx, feet.x, feet.y, height * cam.zoom * 0.36, f.port, 0.55);
   }
 
   const alpha = intangibleAlpha(f);
@@ -384,6 +396,9 @@ function drawOneFighter(
 
   drawFinalSmashAura(ctx, f, cam, height, state.current.frame);
   drawShield(ctx, state.vfx, f, cam, height);
+  // Above the fighter, and after them, because a broken shield is drawn at the
+  // back of the pile and the stars are the part that has to survive that.
+  drawDizzyStars(ctx, f, cam, height);
 
   const label = state.cpu?.[f.port] ? "CPU" : `P${f.port + 1}`;
   drawPortTag(ctx, screen.x, screen.y - height * cam.zoom - 14, f.port, label, Math.max(0.6, cam.zoom / 7));

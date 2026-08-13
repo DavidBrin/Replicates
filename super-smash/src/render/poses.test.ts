@@ -16,6 +16,8 @@ import {
   type PoseName,
 } from "./poses";
 import { makeFighter } from "./testFixtures";
+import { getCharacterRig, rotationPivot } from "./characterArt";
+import { resolve } from "./skeleton";
 import type { BoneName } from "./skeleton";
 
 const TAU = Math.PI * 2;
@@ -390,5 +392,88 @@ describe("angle range", () => {
         }
       }
     }
+  });
+});
+
+describe("every grounded clip keeps its feet on the floor", () => {
+  /**
+   * The trap this exists for, in one sentence: **depth bought with `offsetY`
+   * has to be repaid by folding the legs, and the fold repays in proportion to
+   * leg length.**
+   *
+   * `offsetY` is absolute and legs run from 2.3 units (Pikachu) to 4.76
+   * (Marth), so every unit of translation spreads the roster's soles about a
+   * third of a unit apart — a crouch planted on Mario buries Kirby. `scaleY`
+   * squashes about the feet and costs nothing in ground contact, which is why
+   * it is the right way to get low. Three separate clips shipped a frozen pose
+   * roughly nine tenths of a unit into the stage before anyone measured it.
+   */
+  const GROUNDED: PoseName[] = [
+    "idle", "walk", "dash", "run", "brake", "turn",
+    "crouchStart", "crouch", "crouchEnd",
+    "jumpSquat", "land", "landingLag",
+    "shield", "shieldRelease", "shieldBroken", "spotDodge",
+  ];
+
+  /** Lowest painted point of a pose, in rig units, positive downwards. */
+  function sole(name: PoseName, t: number, rigId: string): number {
+    const rig = getCharacterRig(rigId);
+    const s = samplePose(POSE_LIBRARY[name], t);
+    const sk = resolve(rig.bones, s.angles, {
+      x: 0, y: 0, scale: 1, scaleX: s.scaleX, scaleY: s.scaleY,
+      facing: 1, rotation: s.rotation, pivot: rotationPivot(rig),
+    });
+    // The feet, not the whole drawing: a deep hunch puts a thick torso capsule
+    // near the ground without anything being wrong, and it is the soles that
+    // "planted" is a claim about.
+    let low = -Infinity;
+    for (const b of [sk.footL, sk.footR]) {
+      low = Math.max(low, b.y0 + b.thickness / 2, b.y1 + b.thickness / 2);
+    }
+    return low - s.offsetY;
+  }
+
+  /** How far below the standing plant a clip's worst frame gets. */
+  function worstSink(name: PoseName, rigId: string): number {
+    const planted = sole("idle", 0, rigId);
+    let worst = 0;
+    for (let i = 0; i <= 24; i++) worst = Math.max(worst, sole(name, i / 24, rigId) - planted);
+    return worst;
+  }
+
+  const RIGS = ["mario", "donkeykong", "kirby", "marth", "pikachu"];
+
+  /**
+   * Only sinking is asserted. A foot leaving the ground is what a run's flight
+   * phase, a dash's toe-off and a pivot up on the toe are *made of*; a foot
+   * inside the stage is never anything but a mistake.
+   */
+  it("never puts a fighter's soles through the stage", () => {
+    const offenders: string[] = [];
+    for (const rigId of RIGS) {
+      for (const name of GROUNDED) {
+        const d = worstSink(name, rigId);
+        if (d > 0.8) offenders.push(`${rigId}/${name} sinks ${d.toFixed(2)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * The sharper half of the same check, and the one that names the cause.
+   *
+   * A clip that sits a little low on everybody is an authoring choice. A clip
+   * that plants on Mario and buries Kirby is `offsetY` doing work that the leg
+   * fold should be doing, and the spread across rigs is what makes that
+   * visible: it is exactly the leg-length difference, in units.
+   */
+  it("plants every rig at the same depth, whatever its legs are like", () => {
+    const offenders: string[] = [];
+    for (const name of GROUNDED) {
+      const sinks = RIGS.map((r) => worstSink(name, r));
+      const spread = Math.max(...sinks) - Math.min(...sinks);
+      if (spread > 0.6) offenders.push(`${name} spreads ${spread.toFixed(2)}`);
+    }
+    expect(offenders).toEqual([]);
   });
 });
