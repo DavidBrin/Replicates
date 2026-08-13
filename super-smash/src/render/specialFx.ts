@@ -108,7 +108,7 @@ export function drawMoveFx(
       screenX,
       screenY,
       move.totalFrames,
-      struck ? struckWithFor(struck.lastHit, f, struck.frame) : undefined,
+      struck ? struckWithFor(struck.lastHit, f) : undefined,
     ),
   );
   return result ?? NOTHING;

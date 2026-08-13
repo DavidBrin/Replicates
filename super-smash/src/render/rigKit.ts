@@ -78,6 +78,22 @@ export function mixHex(a: string, b: string, t: number): string {
   return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
 }
 
+/**
+ * A colour's own opacity: 1 for anything that does not carry one.
+ *
+ * Needed because `withAlpha` *replaces* an alpha rather than scaling it, so
+ * anything deriving a fainter version of a colour that is already fading has to
+ * ask what it is fading from first.
+ */
+export function alphaOf(colour: string): number {
+  const m = /^rgba\(([^)]+)\)$/i.exec(colour.trim());
+  if (!m) return 1;
+  const parts = m[1].split(/[,/\s]+/).filter((p) => p !== "");
+  if (parts.length < 4) return 1;
+  const a = Number.parseFloat(parts[3]);
+  return Number.isFinite(a) ? Math.max(0, Math.min(1, a)) : 1;
+}
+
 export function withAlpha(hex: string, alpha: number): string {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;

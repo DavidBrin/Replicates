@@ -677,3 +677,76 @@ describe("the hitbox a swing landed with", () => {
     expect(v.lastHit[0]?.hitboxId).toBe(1);
   });
 });
+
+/**
+ * A swing's record has to survive its own hitlag.
+ *
+ * Hitlag freezes `actionFrame` while the global frame runs on, so anything that
+ * derives an action's start from `frame - actionFrame` drifts forward by one
+ * every frozen frame. The tipper bloom it gates then disappeared partway
+ * through the crunch — precisely the frames it exists for.
+ */
+describe("a hit survives the freeze it caused", () => {
+  const swinging = (actionFrame: number, hitlag = 0) =>
+    makeState({
+      fighters: [makeFighter({ port: 0, action: "attack", move: "fsmash", actionFrame, hitlag })],
+    });
+
+  it("keeps the recorded hitbox for every frame of hitlag", () => {
+    const v = createVfx();
+    const contact = swinging(5);
+    contact.frame = 300;
+    stepVfx(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
+      }),
+      contact,
+    );
+    expect(v.lastHit[0]?.hitboxId).toBe(0);
+
+    // Nine frames of freeze: the global clock advances, `actionFrame` does not.
+    for (let i = 1; i <= 9; i++) {
+      const frozen = swinging(5, 9 - i);
+      frozen.frame = 300 + i;
+      stepVfx(v, makeEvents(), frozen);
+      expect(v.lastHit[0]?.hitboxId, `lost the hit ${i} frames into hitlag`).toBe(0);
+    }
+  });
+
+  it("forgets it once the fighter stops swinging", () => {
+    const v = createVfx();
+    const contact = swinging(5);
+    contact.frame = 300;
+    stepVfx(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
+      }),
+      contact,
+    );
+    const done = makeState({ fighters: [makeFighter({ port: 0, action: "stand", move: null })] });
+    done.frame = 320;
+    stepVfx(v, makeEvents(), done);
+    expect(v.lastHit[0]).toBeNull();
+  });
+
+  it("forgets it when the same move is thrown again", () => {
+    // `actionFrame` going backwards is what a second identical smash looks
+    // like; action and move are unchanged, so nothing else would notice.
+    const v = createVfx();
+    const first = swinging(9);
+    first.frame = 400;
+    stepVfx(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
+      }),
+      first,
+    );
+    const again = swinging(0);
+    again.frame = 440;
+    stepVfx(v, makeEvents(), again);
+    expect(v.lastHit[0]).toBeNull();
+  });
+});

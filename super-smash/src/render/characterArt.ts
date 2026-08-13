@@ -85,6 +85,7 @@ export {
   SMASH_RED_LIT,
   SMASH_YELLOW,
   PANEL_INK,
+  alphaOf,
   hexToRgb,
   rgbToHex,
   shade,

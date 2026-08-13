@@ -15,12 +15,14 @@ import {
   hitlagShake,
   mixHex,
   PROP_PAINTERS,
+  alphaOf,
   resolvePalette,
   shade,
   squashFor,
   withAlpha,
   type CharacterRig,
 } from "./characterArt";
+import { glow } from "./fxKit";
 import { POSE_LIBRARY, samplePose } from "./poses";
 import { BONE_NAMES, rigHeight } from "./skeleton";
 import { makeDef, makeFighter } from "./testFixtures";
@@ -614,4 +616,47 @@ describe("props point away from the bone they hang on", () => {
       expect(max).toBeGreaterThan(Math.abs(min));
     });
   }
+});
+
+describe("a glow fading out", () => {
+  /** The colour stops a glow lays down, in order. */
+  function stops(inner: string): { offset: number; colour: string }[] {
+    const ctx = createMockContext();
+    glow(ctx as unknown as CanvasRenderingContext2D, 100, 100, 40, inner);
+    return ctx.calls
+      .filter((c) => c.method === "addColorStop")
+      .map((c) => ({ offset: c.args[0] as number, colour: c.args[1] as string }));
+  }
+
+  it("reads an alpha off a colour that has one, and 1 off one that does not", () => {
+    expect(alphaOf("rgba(1, 2, 3, 0.25)")).toBeCloseTo(0.25, 6);
+    expect(alphaOf("rgba(1,2,3,0)")).toBe(0);
+    expect(alphaOf("#FFD9A0")).toBe(1);
+    expect(alphaOf("rgb(1, 2, 3)")).toBe(1);
+  });
+
+  /**
+   * The mid stop is a third of the centre, not a flat 0.35.
+   *
+   * `withAlpha` replaces an alpha rather than scaling it, so an effect fading
+   * out to rgba(..., 0.05) was getting a mid stop seven times brighter than its
+   * own centre — a hard ring that outlived the glow it belonged to.
+   */
+  it("never puts a brighter ring around a fainter centre", () => {
+    for (const fade of [1, 0.5, 0.2, 0.05, 0.01]) {
+      const inner = withAlpha("#FFD9A0", 0.9 * fade);
+      const mid = stops(inner).find((s) => s.offset > 0 && s.offset < 1);
+      expect(mid, "no mid stop").toBeDefined();
+      expect(
+        alphaOf(mid?.colour ?? "#000"),
+        `at fade ${fade} the ring is brighter than the centre`,
+      ).toBeLessThan(alphaOf(inner));
+    }
+  });
+
+  it("still fades the mid stop in proportion rather than to nothing", () => {
+    const bright = alphaOf(stops(withAlpha("#FFD9A0", 0.9))[1].colour);
+    const faint = alphaOf(stops(withAlpha("#FFD9A0", 0.09))[1].colour);
+    expect(bright / faint).toBeCloseTo(10, 1);
+  });
 });

@@ -117,6 +117,16 @@ export interface VfxState {
    * to the swing currently on screen rather than to the one before it.
    */
   lastHit: ({ hitboxId: number; frame: number } | null)[];
+  /**
+   * The swing each fighter was in last frame, to notice when a new one starts.
+   *
+   * `actionFrame` alone cannot say: hitlag *freezes* it while the global frame
+   * runs on, so anything that derives an action's start from
+   * `frame - actionFrame` drifts forward by one every frozen frame — and the
+   * bloom it gates would vanish partway through the crunch, which is exactly
+   * when it should be brightest.
+   */
+  swing: ({ action: string; move: string | null; actionFrame: number } | null)[];
   seed: number;
   frame: number;
 }
@@ -140,6 +150,7 @@ export function createVfx(): VfxState {
     koFlashMax: 1,
     poseBlend: createPoseBlends(),
     lastHit: [null, null, null, null],
+    swing: [null, null, null, null],
     seed: 0x9e3779b9,
     frame: 0,
   };
@@ -860,7 +871,31 @@ export function updateVfx(v: VfxState): void {
 }
 
 /** One call the renderer makes each frame, in the right order. */
+/**
+ * Forget which box a fighter last landed with, once they stop swinging it.
+ *
+ * Runs before `ingestEvents` so a hit recorded *this* frame survives, and
+ * compares against the previous frame rather than deriving anything from
+ * `actionFrame`, which hitlag freezes. A new swing is a changed action, a
+ * changed move, or `actionFrame` going backwards — which is what a second
+ * identical forward smash looks like.
+ */
+export function trackSwings(v: VfxState, state: GameState): void {
+  for (const f of state.fighters) {
+    const prev = v.swing[f.port];
+    const fresh =
+      prev === null ||
+      prev === undefined ||
+      prev.action !== f.action ||
+      prev.move !== f.move ||
+      f.actionFrame < prev.actionFrame;
+    if (fresh) v.lastHit[f.port] = null;
+    v.swing[f.port] = { action: f.action, move: f.move, actionFrame: f.actionFrame };
+  }
+}
+
 export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState): void {
+  trackSwings(v, state);
   if (events) ingestEvents(v, events, state);
   trackAfterimages(v, state);
   trackGroundFx(v, state);

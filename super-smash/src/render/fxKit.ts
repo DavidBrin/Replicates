@@ -18,7 +18,7 @@
 import { moveFrameOf } from "@/engine/hitbox";
 import type { FighterDef, FighterState, MoveSlot } from "@/engine/types";
 import type { Camera } from "./camera";
-import { withAlpha } from "./rigKit";
+import { alphaOf, withAlpha } from "./rigKit";
 
 export interface SpecialFxResult {
   /** Draw no fighter this frame — the effect has replaced them. */
@@ -111,7 +111,11 @@ export function glow(
 ): void {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0, inner);
-  g.addColorStop(0.6, outer ?? withAlpha(inner, 0.35));
+  // A third as opaque as `inner` actually is, not a flat 0.35. `withAlpha`
+  // replaces an alpha rather than scaling it, so an effect fading out to
+  // rgba(..., 0.05) was getting a mid stop seven times brighter than its own
+  // centre — a hard ring that outlived the glow it was supposed to be part of.
+  g.addColorStop(0.6, outer ?? withAlpha(inner, alphaOf(inner) * 0.35));
   g.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = g;
   circle(ctx, x, y, r);
@@ -201,17 +205,18 @@ export function fxContextFor(
 /**
  * The box this fighter's current swing has landed with, if it has landed.
  *
- * Scoped by comparing against the frame the action started — `frame` less
- * `actionFrame` — so a hit from the previous swing cannot bloom this one.
+ * Scoping is `trackSwings`'s job, not this function's: it clears the record
+ * when a fighter starts a new swing, so whatever is here belongs to the swing
+ * on screen. This used to compare against an action start derived as `frame`
+ * less `actionFrame`, which hitlag breaks — the freeze holds `actionFrame`
+ * still while the global frame advances, so the derived start crept forward
+ * and the bloom disappeared partway through the crunch.
  */
 export function struckWithFor(
   lastHit: ({ hitboxId: number; frame: number } | null)[],
-  f: Pick<FighterState, "port" | "actionFrame">,
-  frame: number,
+  f: Pick<FighterState, "port">,
 ): number | null {
-  const hit = lastHit[f.port];
-  if (!hit) return null;
-  return hit.frame >= frame - f.actionFrame ? hit.hitboxId : null;
+  return lastHit[f.port]?.hitboxId ?? null;
 }
 
 /* ---------------------------------------------------------- projectiles -- */

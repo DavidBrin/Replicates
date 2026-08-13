@@ -49,8 +49,19 @@ const DEFAULT_PROPS: Record<string, unknown> = {
   lineDashOffset: 0,
 };
 
-function stubGradient(): CanvasGradient {
-  return { addColorStop: () => {} } as unknown as CanvasGradient;
+/**
+ * A gradient that remembers its stops.
+ *
+ * They used to be dropped, which made a glow's colours untestable — and the
+ * one bug that hid there was a mid stop seven times brighter than the centre it
+ * was supposed to be a third of.
+ */
+function stubGradient(calls: RecordedCall[]): CanvasGradient {
+  return {
+    addColorStop: (offset: number, colour: string) => {
+      calls.push({ method: "addColorStop", args: [offset, colour] });
+    },
+  } as unknown as CanvasGradient;
 }
 
 export function createMockContext(width = 1920, height = 1080): MockContext {
@@ -84,7 +95,7 @@ export function createMockContext(width = 1920, height = 1080): MockContext {
             case "createLinearGradient":
             case "createRadialGradient":
             case "createConicGradient":
-              return stubGradient();
+              return stubGradient(calls);
             case "createPattern":
               return null;
             case "getLineDash":
