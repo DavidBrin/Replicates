@@ -107,14 +107,21 @@ const ARMS_REST = { upperArmR: 116, forearmR: 10, upperArmL: 244, forearmL: -10 
  * — tips its toe 28° into the air. Two boots splayed opposite ways then plant
  * at two different depths, one of them through the floor.
  *
- * So the shins take the splay back out (`152 + 26 = 178`, near enough vertical)
+ * So the shins take the splay back out (`144 + 34 = 178`, near enough vertical)
  * and the feet are set from the accumulated total rather than from the rig's
  * −88: `footR = 92 − 178`, `footL = 92 − 182`. The knees end up splayed, the
  * shins hang plumb, both soles land within a hundredth of each other, and the
- * ankles are 1.9 apart — which is what stops the near boot eclipsing the far
+ * ankles are 2.35 apart — which is what stops the near boot eclipsing the far
  * one. Rule 4 in `docs/character-art.md` still holds: both feet are negative.
+ *
+ * **Round one splayed 28° and it was not enough.** Each boot is 1.5 long with
+ * 2.3 of thickness, so it covers about 3.3 units of ground; at ankles 1.9 apart
+ * the two overlapped along nearly half their length and a critic given a
+ * capture of the idle described "one peanut lump" rather than two feet. 36°
+ * puts them 2.35 apart, which is the first spacing that leaves daylight between
+ * the toe of the far boot and the heel of the near one.
  */
-const STANCE = { thighR: 152, shinR: 26, footR: -86, thighL: 208, shinL: -26, footL: -90 };
+const STANCE = { thighR: 144, shinR: 34, footR: -86, thighL: 216, shinL: -34, footL: -90 };
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
   /**
@@ -129,22 +136,38 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    */
   idle: {
     loop: true,
-    period: 108,
+    period: 96,
     keys: [
       { t: 0, pose: P({ ...STANCE, ...ARMS_REST }), scaleX: 1.0, scaleY: 1.0 },
       {
-        t: 0.25,
-        pose: P({ ...STANCE, ...ARMS_REST, upperArmR: 112, upperArmL: 248 }),
-        scaleX: 1.02,
-        scaleY: 1.03,
+        // The breath in. `scaleX` is the only channel that changes the size of
+        // the circle — `drawFigure` takes the head radius from `scale * scaleX`
+        // — so on this rig it *is* the breath, and `scaleY` only lifts where
+        // the ball sits on the legs. Round one moved it 2%, which is a fifth of
+        // a rig unit on a 4.45 radius and about one pixel at match scale: the
+        // contact sheet showed a hundred and eight identical drawings. 4% is
+        // still small for a cartoon breath and it is the first amount that can
+        // actually be seen.
+        t: 0.28,
+        pose: P({ ...STANCE, ...ARMS_REST, upperArmR: 104, forearmR: 16, upperArmL: 256, forearmL: -16 }),
+        scaleX: 1.04,
+        scaleY: 1.05,
         offsetY: 0.1,
       },
-      { t: 0.5, pose: P({ ...STANCE, ...ARMS_REST }), scaleX: 1.0, scaleY: 1.0 },
       {
-        t: 0.75,
-        pose: P({ ...STANCE, ...ARMS_REST, upperArmR: 120, upperArmL: 240 }),
-        scaleX: 0.985,
-        scaleY: 0.975,
+        t: 0.52,
+        pose: P({ ...STANCE, ...ARMS_REST }),
+        scaleX: 1.0,
+        scaleY: 1.0,
+      },
+      {
+        // The breath out, and the arms drop past their rest angle before they
+        // settle — a nub that returns straight to where it started has no
+        // weight, and the arms are two of the four bumps on his outline.
+        t: 0.78,
+        pose: P({ ...STANCE, ...ARMS_REST, upperArmR: 128, forearmR: 4, upperArmL: 232, forearmL: -4 }),
+        scaleX: 0.975,
+        scaleY: 0.955,
       },
     ],
   },
@@ -475,8 +498,26 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   },
 
   /**
-   * Up smash — a bicycle kick that hits behind and above. He tips back and the
-   * near leg scythes from behind him up over the crown. total 45, first 11.
+   * Up smash — the Somersault Kick, and **round one had it running backwards**.
+   *
+   * SmashWiki calls it "a bicycle kick that hits all around" him, and the
+   * hitbox visualisation settles the direction: frames 12–13 are up *and
+   * forward*, frame 14 is directly overhead, and 15–17 are up *and behind*. So
+   * the boot starts in front, goes over the crown and finishes behind him —
+   * which is the opposite of the round-one clip, where it scythed up from
+   * behind and carried over to the front. The body tips back as the leg passes
+   * over, which is what sells the somersault rather than a high kick.
+   *
+   * total 45, firstActive 11, strike 0.3: t(af) = 0.3 + 0.7·(af − 11)/34.
+   *   overhead, frame 14 → actionFrame 13 → t = 0.341
+   *   behind,   frame 17 → actionFrame 16 → t = 0.403
+   *
+   * The boot only ever clears the crown by about a quarter of a radius: the leg
+   * is 2.0 + 2.0 + 1.5 off a hip 1.08 below the ball's middle, so straight up it
+   * reaches 5.57 from the centre against a 4.45 radius. Pointing the toe *along*
+   * the leg rather than across it is what buys even that, and a leg posed
+   * forward of vertical buys less, because the ball's surface is lower out
+   * there. There is no pose that makes this a big read on this rig.
    */
   usmash: {
     loop: false,
@@ -486,38 +527,87 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         t: 0,
         pose: P({ ...STANCE, thighR: 176, shinR: 26, thighL: 214, shinL: 12 }),
         scaleY: 0.82,
-        rotation: 0.1,
+        rotation: 0.12,
         ease: "in",
       },
-      // hitboxes 12–17 → firstActive 11, lastActive 16, total 45:
-      //   0.3 + 0.7·(16−11)/(45−11) = 0.403
-      ...holdThrough(0.403, {
-        // Leg vertical through the crown, body leaning back under it.
+      {
+        // Up and in front, which is where the first two active frames hit.
         t: 0.3,
+        pose: P({
+          thighR: 42,
+          shinR: 10,
+          footR: -30,
+          thighL: 210,
+          shinL: -10,
+          footL: -82,
+          upperArmR: 60,
+          forearmR: -12,
+          upperArmL: 300,
+          forearmL: 12,
+        }),
+        rotation: 0.14,
+        offsetY: 0.2,
+        scaleY: 1.06,
+        ease: "out",
+      },
+      {
+        // Straight through the crown. Toe pointed along the leg — across it,
+        // the boot lies flat over the head and clears nothing.
+        t: 0.341,
         pose: P({
           thighR: 358,
           shinR: 6,
           footR: -14,
-          thighL: 214,
-          shinL: -14,
+          thighL: 216,
+          shinL: -12,
           footL: -80,
           upperArmR: 24,
           forearmR: -10,
           upperArmL: 330,
           forearmL: 10,
         }),
-        rotation: -0.24,
+        rotation: -0.1,
         offsetY: 0.35,
         scaleY: 1.12,
-        ease: "out",
-      }),
+      },
       {
-        // Carrying over to the front — the kick finishes forward of vertical.
-        t: 0.46,
-        pose: P({ thighR: 46, shinR: 12, footR: -40, thighL: 208, shinL: -8, footL: -84 }),
-        rotation: -0.1,
-        offsetY: 0.12,
-        scaleY: 1.04,
+        // And out behind him, with the body tipped back under it.
+        t: 0.403,
+        pose: P({
+          thighR: 318,
+          shinR: 4,
+          footR: -6,
+          thighL: 220,
+          shinL: -14,
+          footL: -78,
+          upperArmR: 10,
+          forearmR: -8,
+          upperArmL: 344,
+          forearmL: 8,
+        }),
+        rotation: -0.34,
+        offsetY: 0.3,
+        scaleY: 1.1,
+        ease: "out",
+      },
+      {
+        // Down out of the somersault with the **knee folded**. Interpolating a
+        // straight leg from behind-and-above back to `STANCE` swings it through
+        // the floor on the way — the sole went nine tenths of a unit into the
+        // stage around t = 0.67, which the shared grounded-clip check catches
+        // and a player would see as his boot inside the platform. Folding the
+        // knee (thigh 268 against a shin of +52) keeps the ankle high while the
+        // thigh comes round, which is also what a leg actually does.
+        t: 0.52,
+        pose: P({ ...STANCE, thighR: 268, shinR: 52, footR: -60 }),
+        rotation: -0.16,
+        offsetY: 0.1,
+        scaleY: 0.98,
+      },
+      {
+        t: 0.62,
+        pose: P({ ...STANCE }),
+        scaleY: 0.92,
       },
       { t: 1, pose: P({ ...STANCE, ...ARMS_REST }) },
     ],
@@ -1525,7 +1615,15 @@ function drill(from: number, to: number, n: number): Keyframe[] {
     keys.push({
       t: from + i * step,
       pose: P(swapSides(front, back, near)),
-      rotation: near ? 0.14 : -0.14,
+      // **Diagonal**, which is in the move's own name — SmashWiki calls it "a
+      // diagonal corkscrew dropkick", and the hitbox visualisation has the body
+      // and the drilling capsule leaning 20–30° off vertical the whole way
+      // down. Round one alternated ±8° about plumb, which is a drill standing
+      // straight up. The lean is a constant forward bias with the alternation
+      // riding on top of it, so the axis stays put while the body turns about
+      // it — a drill that changed its own angle every four frames would read as
+      // wobbling rather than boring.
+      rotation: 0.34 + (near ? 0.1 : -0.1),
       offsetY: -0.4 - i * 0.06,
       scaleX: 0.9,
       scaleY: 1.05,

@@ -79,31 +79,54 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     ctx.scale(dir, 1);
     ctx.rotate(tilt);
 
-    // Barrel, receiver and grip — three boxes, which at this size is a pistol
-    // and anything more detailed is noise.
-    ctx.fillStyle = "#9AA6B2";
+    // Barrel, receiver, under-barrel and grip — four boxes, which at this size
+    // is a pistol and anything more detailed is noise. Dark charcoal rather
+    // than the steel grey it was: the real weapon is near-black with an orange
+    // accent stripe along the upper housing and a lit amber muzzle bezel, and
+    // the light bits are the *markings*, not the body.
+    ctx.fillStyle = "#31363E";
     ctx.fillRect(0, -u * 0.34, u * 2.45, u * 0.5);
-    ctx.fillStyle = "#5C6874";
+    ctx.fillStyle = "#22262D";
     ctx.fillRect(-u * 0.5, -u * 0.62, u * 1.5, u * 0.95);
-    ctx.fillRect(u * 1.9, -u * 0.42, u * 0.6, u * 0.66);
-    ctx.fillStyle = "#38414B";
+    ctx.fillRect(u * 1.9, -u * 0.44, u * 0.62, u * 0.7);
+    ctx.fillStyle = "#1A1D23";
     ctx.fillRect(-u * 0.36, u * 0.2, u * 0.72, u * 1.15);
-    // The sight rail, in his own accent blue — the one part that says this is
-    // a Star Fox sidearm and not a revolver.
-    ctx.fillStyle = "#2B7FD4";
+    // The under-barrel with its indicator lamp, and the orange stripe. Between
+    // them they are the whole reason this reads as a Star Fox sidearm at eight
+    // pixels rather than as a revolver.
+    ctx.fillRect(u * 0.3, u * 0.08, u * 1.5, u * 0.32);
+    ctx.fillStyle = "#3FD8FF";
+    ctx.fillRect(u * 1.35, u * 0.14, u * 0.34, u * 0.2);
+    ctx.fillStyle = "#FF8A2A";
     ctx.fillRect(u * 0.2, -u * 0.56, u * 1.5, u * 0.2);
+    ctx.fillRect(u * 2.36, -u * 0.4, u * 0.18, u * 0.62);
 
     // The muzzle flash, on the frame the bolt leaves and the two after it.
+    //
+    // Violet, and not the warm amber it was. The real flash is a pair of
+    // indigo crescents opening forward around the muzzle with magenta shards
+    // through them — a *different* hue from the bolt, which is what stops the
+    // flash and the first frames of the shot merging into one orange smear.
     if (kick > 0) {
       ctx.globalCompositeOperation = "lighter";
-      glow(ctx, u * 2.7, -u * 0.08, u * 2.6 * kick, withAlpha("#FFD9A0", kick));
-      ctx.fillStyle = withAlpha("#FFF4D8", kick);
-      ctx.beginPath();
-      ctx.moveTo(u * 2.5, -u * 0.5 * kick);
-      ctx.lineTo(u * (2.5 + 2.2 * kick), 0);
-      ctx.lineTo(u * 2.5, u * 0.5 * kick);
-      ctx.closePath();
-      ctx.fill();
+      glow(ctx, u * 2.7, -u * 0.08, u * 2.8 * kick, withAlpha("#7961FF", kick));
+      ctx.strokeStyle = withAlpha("#9E8CFF", kick);
+      ctx.lineWidth = Math.max(1.5, u * 0.34 * kick);
+      for (const rad of [1.05, 1.65]) {
+        ctx.beginPath();
+        ctx.arc(u * 2.3, 0, u * rad * (0.6 + 0.5 * kick), -1.15, 1.15);
+        ctx.stroke();
+      }
+      ctx.fillStyle = withAlpha("#FF6ED2", kick);
+      for (const a of [-0.62, -0.2, 0.2, 0.62]) {
+        ctx.beginPath();
+        ctx.moveTo(u * 2.4, -u * 0.16);
+        ctx.lineTo(u * (2.4 + 2.6 * kick * Math.cos(a)), u * 2.6 * kick * Math.sin(a));
+        ctx.lineTo(u * 2.4, u * 0.16);
+        ctx.closePath();
+        ctx.fill();
+      }
+      glow(ctx, u * 2.5, 0, u * 1.1 * kick, withAlpha("#FFFFFF", kick));
     }
     ctx.restore();
     return NOTHING;
@@ -132,8 +155,27 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * It pops in oversize on frame 3 (the hitbox frame), settles over two
    * frames, holds, and snaps out on 23 rather than fading — the shine ends
    * abruptly and the graphic should too.
+   *
+   * ## Three things reference corrected on the second pass
+   *
+   * **It does not spin.** The first drawing rotated the hexagon at 0.18 rad a
+   * frame and counter-rotated an inner one, plus three scan lines crawling up
+   * it. The real field snaps into place and *holds* — which is not a detail,
+   * because the whole job of the graphic is to say "this is up, for exactly
+   * these frames", and a field that visibly churns is telling the eye it is
+   * doing something continuous. All of that is gone.
+   *
+   * **It is pointy-top.** Vertices at top and bottom, flat vertical edges left
+   * and right; `polygon` puts its first vertex at angle 0, so the orientation
+   * is a fixed `-PI/2` and never a function of the frame. A flat-top hexagon is
+   * a different shape at a glance and this one is his logo.
+   *
+   * **There is a device, and it flares.** The Reflector is a hexagonal puck
+   * that hovers at his chest, and in every capture of the move the brightest
+   * thing inside the field is a white four-point star on it. It is the detail
+   * that stops the field reading as a bubble that happened to appear.
    */
-  downB: ({ ctx, x, y, u, frame }) => {
+  downB: ({ ctx, x, y, u, frame, over }) => {
     // Frame 3 is the hitbox; 4 to 23 is the reflect window; the two frames
     // after are the dispel.
     if (frame < 3 || frame > 25) return NOTHING;
@@ -141,44 +183,81 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     const out = frame > 23 ? (frame - 23) / 3 : 0;
     const cx = x;
     const cy = y - u * 5.5;
-    const r = u * 6.0 * (1 + pop * 0.35 - out * 0.55);
+    // Half again his standing height, which is what "surrounding himself" means
+    // and what the real field measures. At the 6.0 it was, the hexagon was only
+    // a fifth taller than he is and his boots stuck out of the bottom of it.
+    const r = u * 7.2 * (1 + pop * 0.35 - out * 0.55);
     const alpha = 1 - out;
-    const spin = frame * 0.18;
+    // A vertex at the top and the bottom, so the left and right edges are
+    // vertical. Constant: the field holds still.
+    const UP = -Math.PI / 2;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
-    glow(ctx, cx, cy, r * 1.25, withAlpha("#2E7ED8", 0.32 * alpha));
-    ctx.fillStyle = withAlpha("#4FA8FF", 0.26 * alpha);
-    polygon(ctx, cx, cy, r, 6, spin);
+    glow(ctx, cx, cy, r * 1.25, withAlpha("#1B2FA8", 0.34 * alpha));
+    // Saturated blue rather than the pale one it was: under `lighter` a pale
+    // blue over a blue sky is nearly invisible, and the field's own band is the
+    // most saturated thing in the real move.
+    ctx.fillStyle = withAlpha("#1B39D8", 0.30 * alpha);
+    polygon(ctx, cx, cy, r, 6, UP);
     ctx.fill();
 
-    // A rim bright enough to be the shape's edge, plus a counter-rotating
-    // inner hex so the field has a surface rather than being a flat wash.
-    ctx.strokeStyle = withAlpha("#DCF0FF", alpha);
+    // Two rims: a bright edge and a second one just inside it, which is how the
+    // real field reads — a band with a lit boundary rather than a flat wash.
+    ctx.strokeStyle = withAlpha("#E4F6FF", alpha);
     ctx.lineWidth = Math.max(1.5, u * 0.34);
-    polygon(ctx, cx, cy, r, 6, spin);
+    polygon(ctx, cx, cy, r, 6, UP);
     ctx.stroke();
-    ctx.strokeStyle = withAlpha("#7FD0FF", 0.6 * alpha);
-    ctx.lineWidth = Math.max(1, u * 0.18);
-    polygon(ctx, cx, cy, r * 0.66, 6, -spin);
+    ctx.strokeStyle = withAlpha("#7FD8FF", 0.7 * alpha);
+    ctx.lineWidth = Math.max(1, u * 0.16);
+    polygon(ctx, cx, cy, r * 0.88, 6, UP);
     ctx.stroke();
 
-    // Three scan lines crawling up the field, off the frame counter so two
-    // machines watching the same replay draw the same thing.
-    ctx.strokeStyle = withAlpha("#BFE4FF", 0.4 * alpha);
-    ctx.lineWidth = Math.max(1, u * 0.12);
-    for (let i = 0; i < 3; i++) {
-      const p = ((frame * 0.06 + i / 3) % 1) * 2 - 1;
-      const w = r * Math.sqrt(Math.max(0, 1 - p * p)) * 0.86;
-      ctx.beginPath();
-      ctx.moveTo(cx - w, cy + p * r);
-      ctx.lineTo(cx + w, cy + p * r);
-      ctx.stroke();
-    }
-
-    if (pop > 0) glow(ctx, cx, cy, r * 0.8, withAlpha("#FFFFFF", 0.5 * pop));
+    if (pop > 0) glow(ctx, cx, cy, r * 0.8, withAlpha("#FFFFFF", 0.55 * pop));
     ctx.restore();
+
+    // The device at his chest, in front of him — it is a puck he holds out, and
+    // behind the body it is nothing at all.
+    over(() => {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      // The field's front face, over the body. Without it the hexagon is a
+      // decal on the background: a fighter *inside* an energy field is tinted
+      // by it, and nothing about the body changed when the shine came up. Low
+      // enough to keep his own colours legible, which is the same trade the
+      // flame envelope makes on Fire Fox.
+      ctx.fillStyle = withAlpha("#2A5CFF", 0.16 * alpha);
+      polygon(ctx, cx, cy, r, 6, UP);
+      ctx.fill();
+      const dx = cx;
+      const dy = cy + u * 0.4;
+      const s = u * 1.15;
+      ctx.fillStyle = withAlpha("#9FE6FF", 0.85 * alpha);
+      polygon(ctx, dx, dy, s, 6, UP);
+      ctx.fill();
+      glow(ctx, dx, dy, s * 2.4, withAlpha("#FFFFFF", (0.5 + 0.4 * pop) * alpha));
+      // The four-point star: two crossed spikes, the brightest thing inside the
+      // field and the reason the eye lands on his chest rather than on the rim.
+      ctx.fillStyle = withAlpha("#FFFFFF", alpha);
+      const long = s * (3.0 + 1.4 * pop);
+      const thin = s * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(dx - long, dy);
+      ctx.lineTo(dx, dy - thin);
+      ctx.lineTo(dx + long, dy);
+      ctx.lineTo(dx, dy + thin);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(dx, dy - long);
+      ctx.lineTo(dx + thin, dy);
+      ctx.lineTo(dx, dy + long);
+      ctx.lineTo(dx - thin, dy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    });
     return NOTHING;
   },
 
@@ -198,37 +277,108 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * numbers: the charging hitbox is frames 20-32 and the momentum entry fires
    * on frame 20, which is why the ignition is there and not anywhere else.
    */
-  upB: ({ ctx, x, y, u, frame, dir }) => {
-    if (frame < 4 || frame > 80) return NOTHING;
+  upB: ({ ctx, x, y, u, frame, dir, over }) => {
+    if (frame < 3 || frame > 82) return NOTHING;
     const core = { x, y: y - u * 5.6 };
+
+    /**
+     * The half of the flame he is *inside*.
+     *
+     * The move is "engulfs himself in an aura of flame", and an effect painted
+     * under the fighter cannot show that: everything below was drawn behind
+     * him, so the aura was a rim of orange around his outline and the comet was
+     * a thin plume leaking out from under his boots. The first full capture of
+     * it was a fox standing to attention on a small campfire — which is the
+     * exact failure `over` exists for, and the reason it now paints twice.
+     *
+     * The split is: anything *outside* his silhouette stays behind, where it
+     * can be as bright as it likes without hiding him; anything that has to lie
+     * across the body goes over at an alpha that leaves him legible inside it.
+     * Fire Fox has to read as a fighter *in* a flame, not as a fighter next to
+     * one, and a silhouette that vanished into the fire would be the opposite
+     * mistake.
+     *
+     * The callback runs with the canvas state the renderer left rather than the
+     * state here, so it saves and restores its own.
+     */
+    const inFront = (paint: () => void) =>
+      over(() => {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        paint();
+        ctx.restore();
+      });
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
-    // ---- frames 4-19: the gather.
+    // ---- frames 3-19: the gather.
     //
-    // Sixteen motes on two counter-rotating rings, each spiralling *inward* on
-    // its own phase. Inward is the whole point: fire converging on him is a
-    // charge, fire leaving him is an explosion, and the same particles read as
-    // either depending only on which way the radius goes.
+    // **It climbs him from the floor.** Round one drew twenty motes spiralling
+    // *inward* on two counter-rotating rings, with the reasoning that "fire
+    // converging on him is a charge, fire leaving him is an explosion". It is a
+    // good argument and it is not what the move does: in the game a white smoke
+    // burst erupts at ground level, flame rises around his legs, and by frame
+    // ten he is inside a column standing about twice his own height, licking
+    // *upward and outward* the whole way. Nothing about it converges.
+    //
+    // Which matters beyond accuracy, because a ring of small motes is the one
+    // thing that will not read at match scale — the first capture of it was a
+    // fox standing in a light drizzle of sparks. A column is one big shape.
+    //
+    // Nine tongues across his width, each a tapered wedge on its own flicker
+    // phase, drawn as three colour bands from the outside in: red at the edges,
+    // orange inside that, gold at the heart, which is the ramp the real fire
+    // has and the reason it reads as flame rather than as a glow.
     if (frame < 20) {
-      const k = (frame - 4) / 16;
-      for (let i = 0; i < 16; i++) {
-        const ring = i % 2 === 0 ? 1 : -1;
-        // Each mote starts its fall at a different moment, so they arrive in a
-        // stream rather than as one collapsing hoop.
-        const lead = ((i * 7) % 16) / 16;
-        const p = Math.min(1, Math.max(0, (k - lead * 0.45) / 0.55));
-        if (p <= 0) continue;
-        const a = ring * (i * 1.31 + frame * 0.22);
-        const rad = u * (9.5 * (1 - p) + 1.2);
-        const mx = core.x + Math.cos(a) * rad * 0.85;
-        const my = core.y + Math.sin(a) * rad;
-        glow(ctx, mx, my, u * (0.5 + 1.5 * p), withAlpha("#FFC864", 0.28 + 0.5 * p));
-      }
-      // The aura tightening around him.
-      glow(ctx, core.x, core.y, u * (7 - 2.4 * k), withAlpha("#FF7A1E", 0.1 + 0.34 * k));
+      const k = (frame - 3) / 17;
+      const grow = Math.min(1, k * 1.25);
+
+      /** One flame tongue, rooted on the floor and leaning as it rises. */
+      const tongue = (bx: number, w: number, h: number, lean: number, colour: string) => {
+        ctx.fillStyle = colour;
+        ctx.beginPath();
+        ctx.moveTo(bx - w, y);
+        ctx.quadraticCurveTo(bx - w * 0.9, y - h * 0.5, bx + lean, y - h);
+        ctx.quadraticCurveTo(bx + w * 0.9, y - h * 0.5, bx + w, y);
+        ctx.closePath();
+        ctx.fill();
+      };
+
+      /**
+       * The column, painted once behind him and once — narrower and dimmer —
+       * in front. Fire he is standing behind is a backdrop; fire that also
+       * passes across his boots and his chest is fire he is *in*, and that is
+       * the whole difference between this and a bonfire.
+       */
+      const column = (scale: number, alpha: number) => {
+        for (let i = 0; i < 9; i++) {
+          const off = (i - 4) / 4;
+          // Tongues near the middle are the tallest, so the column has a shape
+          // rather than being a hedge.
+          const shoulder = 1 - 0.30 * off * off;
+          const flick = 0.80 + 0.34 * Math.sin(frame * 0.55 + i * 2.1);
+          const h = u * (3 + 17 * grow) * shoulder * flick * scale;
+          // Wide and overlapping. At a third of this width the nine tongues
+          // never touched and the column drew a single spire with a picket
+          // fence round it — a flame is one mass with a serrated top, so
+          // neighbours have to overlap before they read as fire at all.
+          const w = u * (2.5 - 0.7 * Math.abs(off)) * scale;
+          const band = Math.abs(off) > 0.6 ? "#FF2A24" : Math.abs(off) > 0.25 ? "#FF6531" : "#FFD25A";
+          tongue(core.x + off * u * 4.0 * scale, w, h, -off * u * 1.4, withAlpha(band, alpha));
+        }
+      };
+
+      // The smoke and the root of the fire, at his feet where it starts.
+      glow(ctx, core.x, y, u * (3 + 5 * grow), withAlpha("#FFD9A8", 0.30 + 0.34 * grow));
+      column(1, 0.50 + 0.26 * grow);
+      glow(ctx, core.x, y - u * 4 * grow, u * (2 + 6 * grow), withAlpha("#FF6531", 0.16 + 0.34 * k));
       ctx.restore();
+
+      inFront(() => {
+        column(0.62, 0.20 + 0.16 * grow);
+        glow(ctx, core.x, core.y, u * (2.0 + 2.2 * k), withAlpha("#FFD25A", 0.12 + 0.26 * k));
+      });
       return NOTHING;
     }
 
@@ -264,14 +414,19 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       const d = i * u * 1.3;
       const taper = 1 - i / 22;
       const w = u * 3.9 * taper * (0.88 + 0.22 * Math.sin(frame * 0.7 + i * 0.9));
-      const a = fade * 0.4 * taper;
+      // Two thirds rather than a half, and the far end stays orange rather
+      // than sliding toward brown. Under `lighter` a low-alpha warm colour over
+      // a dark blue sky sums to a muddy `#93655` grey — the plume was read as
+      // dirty smoke on a review, which for the one graphic that has to say
+      // "on fire" is the whole failure.
+      const a = fade * 0.66 * taper;
       if (a <= 0) continue;
       glow(
         ctx,
         core.x + tx * d,
         core.y + ty * d,
         Math.max(1, w),
-        withAlpha(i < 7 ? "#FFD98A" : "#FF6A1A", a),
+        withAlpha(i < 7 ? "#FFF0B4" : i < 13 ? "#FF9A2E" : "#FF4A16", a),
       );
     }
 
@@ -280,11 +435,38 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     ctx.translate(core.x, core.y);
     ctx.rotate(-dir * 0.28);
     ctx.scale(0.72, 1.5);
-    glow(ctx, 0, 0, u * 5.4, withAlpha("#FFE9B0", fade * 0.85));
+    glow(ctx, 0, 0, u * 6.0, withAlpha("#FFE9B0", fade * 0.85));
     ctx.restore();
-    glow(ctx, core.x, core.y, u * 3.0, withAlpha("#FFFFFF", fade * (0.5 + 0.3 * (1 - life))));
+    ctx.restore();
 
-    ctx.restore();
+    // The envelope. Six tongues stacked head-to-boot, each licking back toward
+    // the launch and each on its own beat off the frame counter, plus a white
+    // core at the chest — which is what turns the silhouette from a fox with a
+    // bonfire under him into a fox inside a flame.
+    //
+    // The stack spans `core.y ± 4.4` units rather than starting at the chest
+    // and going down: `core` is his middle, so a stack that only descends
+    // leaves his head and ears outside the fire, and the head is the part a
+    // player is actually looking at.
+    inFront(() => {
+      ctx.save();
+      ctx.translate(core.x, core.y);
+      ctx.rotate(-dir * 0.28);
+      for (let i = 0; i < 6; i++) {
+        const up = u * (4.4 - i * 1.6);
+        const flick = 0.84 + 0.28 * Math.sin(frame * 0.62 + i * 1.7);
+        glow(
+          ctx,
+          -dir * u * 0.22 * i,
+          -up,
+          u * (3.4 - i * 0.18) * flick,
+          withAlpha(i < 2 ? "#FFC468" : i < 4 ? "#FFF0C4" : "#FFA23A", fade * (0.50 - i * 0.04)),
+        );
+      }
+      ctx.restore();
+      glow(ctx, core.x, core.y, u * 2.6, withAlpha("#FFFFFF", fade * (0.40 + 0.24 * (1 - life))));
+    });
+
     return NOTHING;
   },
 
@@ -318,8 +500,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     // brightest where he is and gone twenty-six units back.
     const tail = x + back * u * 26;
     const wash = ctx.createLinearGradient(x, mid, tail, mid);
-    wash.addColorStop(0, withAlpha("#BFE4FF", fade * 0.5));
-    wash.addColorStop(0.45, withAlpha("#5FB4FF", fade * 0.2));
+    wash.addColorStop(0, withAlpha("#F4FEFF", fade * 0.5));
+    wash.addColorStop(0.45, withAlpha("#31E8FF", fade * 0.22));
     wash.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = wash;
     ctx.beginPath();
@@ -336,7 +518,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       const far = near + u * (5.0 - i * 0.8);
       const hn = u * (2.9 - i * 0.55);
       const hf = hn * 0.45;
-      ctx.fillStyle = withAlpha(i === 0 ? "#F2FAFF" : "#9FDCFF", fade * (0.5 - i * 0.15));
+      // Blown out to white rather than tinted blue: the afterimages are copies
+      // of the model washed to near-white, and the *cyan* in the move is the
+      // speed lines, not the bodies. Tinting the ghosts as well turned the
+      // whole move one flat colour and lost the two layers against each other.
+      ctx.fillStyle = withAlpha(i === 0 ? "#FFFFFF" : "#E8FBFF", fade * (0.52 - i * 0.15));
       ctx.beginPath();
       ctx.moveTo(x + back * near, mid - hn);
       ctx.lineTo(x + back * far, mid - hf);
@@ -355,7 +541,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       const wob = (((frame * 7 + i * 13) % 5) - 2) * u * 0.12;
       const from = u * (1.5 + ((i * 5) % 7));
       const to = from + u * (10 + ((i * 3 + frame) % 6) * 2.4);
-      ctx.strokeStyle = withAlpha("#EAF6FF", fade * (0.62 - i * 0.06));
+      ctx.strokeStyle = withAlpha("#7BF2FF", fade * (0.66 - i * 0.06));
       ctx.beginPath();
       ctx.moveTo(x + back * from, y - u * h + wob);
       ctx.lineTo(x + back * to, y - u * h + wob);
@@ -393,8 +579,14 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
   blaster: ({ ctx, u, age, heading }) => {
     // A single frame of extra heat as it leaves the muzzle.
     const born = age <= 1 ? 1 : 0;
-    const len = u * (4.2 + born * 0.9);
-    const r = u * 0.34;
+    // **It grows.** The bolt's own parameters are an initial length of 3 that
+    // reaches 11.25 over its travel — it leaves the muzzle as a spark and is a
+    // needle by the time it is across the stage, which is most of why the real
+    // one reads as travelling rather than as sliding. Held at a constant
+    // length it looked like a decal being dragged.
+    const grow = Math.min(1, age / 7);
+    const len = u * (1.9 + 3.4 * grow + born * 0.8);
+    const r = u * (0.40 - 0.08 * grow);
 
     ctx.save();
     ctx.rotate(heading);
@@ -403,7 +595,7 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
     // The tail: a long, low-alpha taper behind the head, which is what makes a
     // 5.5-units-a-frame projectile look like it is moving in a still frame.
     const tail = ctx.createLinearGradient(0, 0, -len * 2.4, 0);
-    tail.addColorStop(0, withAlpha("#FF6A2A", 0.55));
+    tail.addColorStop(0, withAlpha("#F12D93", 0.55));
     tail.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = tail;
     ctx.beginPath();
@@ -415,16 +607,22 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
 
     // Small and tight. A glow as wide as the bolt is long turns it into a lens
     // flare — which is what the first live capture showed against Battlefield's
-    // blue: under `lighter`, a broad orange falloff over a blue sky washes to
-    // pink and swallows the core. The bolt has to be longer than its own halo.
-    glow(ctx, 0, 0, len * 0.42, withAlpha("#FF8A3C", 0.5 + born * 0.2));
+    // blue. The bolt has to be longer than its own halo.
+    glow(ctx, 0, 0, len * 0.42, withAlpha("#FF5CC0", 0.5 + born * 0.2));
 
     // The jacket, then the core. Both ellipses stretched along the heading.
-    ctx.fillStyle = "#FF4A18";
+    //
+    // **Magenta, not orange.** This was a red-orange bolt for a round, which is
+    // the colour a laser is assumed to be rather than the colour this one is:
+    // sampled off the game's own art it runs white core → pale pink → hot
+    // magenta → deep crimson, hue 315-348 with nothing warm in it. Orange also
+    // put it in the same family as Mario's fireball and Samus's shot, which is
+    // the exact collision this layer exists to prevent.
+    ctx.fillStyle = "#FF2BC9";
     ctx.beginPath();
     ctx.ellipse(0, 0, len, r, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#FFD08A";
+    ctx.fillStyle = "#F99CCC";
     ctx.beginPath();
     ctx.ellipse(0, 0, len * 0.74, r * 0.62, 0, 0, Math.PI * 2);
     ctx.fill();

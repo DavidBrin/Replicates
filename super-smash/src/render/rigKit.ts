@@ -11,7 +11,8 @@
  * of the graph.
  */
 
-import type { FighterDef, FighterPalette } from "@/engine/types";
+import { toFloat } from "@/engine/fixed";
+import type { FighterDef, FighterPalette, FighterState } from "@/engine/types";
 import { BASE_RIG, type Bone, type BoneName, type Rig } from "./skeleton";
 
 /* --------------------------------------------------------------- colours -- */
@@ -257,7 +258,18 @@ export interface PropAnim {
   readonly frame: number;
   /** 0..1 through the current action, or 0 when the fighter is not in one. */
   readonly t: number;
-  /** Velocity in rig units per frame: `+x` the way the fighter faces, `+y` up. */
+  /**
+   * Velocity in **world units per frame**, decoded: `+x` the way the fighter
+   * faces, `+y` up. A walk is on the order of 1, a full run 2–3.
+   *
+   * Decoded matters. The simulation is Q12 fixed point and this shipped passing
+   * `f.vx` through raw, so a full run arrived as 9839 instead of 2.402 — three
+   * orders of magnitude, in a field whose documented example multiplied it by
+   * 0.35 to get radians. The author who found it compensated in their own
+   * painter with `toFloat`, which is what a wrong unit always produces: every author
+   * inventing a different correction, and the ones who don't notice shipping
+   * something wild. The renderer converts now, so a painter must not.
+   */
   readonly vx: number;
   readonly vy: number;
   /** Off the ground — a tail hangs differently in the air than in a run. */
@@ -272,6 +284,35 @@ export interface PropAnim {
  * two portraits of the same fighter differ for no reason a reader could see.
  */
 export const PROP_STILL: PropAnim = { frame: 0, t: 0, vx: 0, vy: 0, airborne: false };
+
+/**
+ * Build a `PropAnim` from a fighter. The one definition, on purpose.
+ *
+ * The renderer and the animation lab both draw fighters, and the lab is only
+ * worth looking at while it agrees with the match — an author who tunes a tail
+ * against a lab that computes its inputs differently is tuning against a
+ * fiction. The lab shipped not passing `anim` at all, so the tool built for
+ * reviewing motion was the one place prop motion could not be seen; had it
+ * instead grown its own copy of this arithmetic, the disagreement would have
+ * been quieter and worse.
+ *
+ * `toFloat` is the whole reason this is a function rather than an object
+ * literal at each call site. See `PropAnim.vx`.
+ */
+export function propAnimFor(
+  f: Pick<FighterState, "vx" | "vy" | "facing" | "grounded" | "actionFrame">,
+  frame: number,
+  /** The current move's length, or 0 when the fighter is not performing one. */
+  totalFrames: number,
+): PropAnim {
+  return {
+    frame,
+    t: totalFrames > 0 ? Math.min(1, f.actionFrame / totalFrames) : 0,
+    vx: toFloat(f.vx) * (f.facing >= 0 ? 1 : -1),
+    vy: toFloat(f.vy),
+    airborne: !f.grounded,
+  };
+}
 
 /** What a prop painter paints with. See `PropDef.draw`. */
 export interface Brush {

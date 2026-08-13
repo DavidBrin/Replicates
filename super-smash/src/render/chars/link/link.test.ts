@@ -23,8 +23,8 @@ import { toFloat } from "@/engine/fixed";
 import { link } from "@/fighters/link";
 import type { MoveSlot } from "@/engine/types";
 import { angleDelta, samplePose, type PoseClip } from "../../poses/clip";
-import type { PoseName } from "../../poses/library";
-import { BASE_RIG, type BoneName } from "../../skeleton";
+import { POSE_LIBRARY, type PoseName } from "../../poses/library";
+import { BASE_RIG, resolve, type BoneName } from "../../skeleton";
 import { assignmentsTo, createMockContext, type MockContext } from "../../mockContext";
 import type { Brush } from "../../rigKit";
 import { PROP_STILL } from "../../rigKit";
@@ -43,7 +43,7 @@ import { rig } from "./rig";
  * That accumulation is the only number in this file that corresponds to what a
  * player actually sees.
  */
-const BLADE_CHAIN: readonly BoneName[] = ["torso", "upperArmR", "forearmR", "handR"];
+const BLADE_CHAIN: readonly BoneName[] = ["hip", "torso", "upperArmR", "forearmR", "handR"];
 
 function bladeAngle(clip: PoseClip, t: number): number {
   const sample = samplePose(clip, t);
@@ -54,20 +54,28 @@ function bladeAngle(clip: PoseClip, t: number): number {
 
 const DEG = 180 / Math.PI;
 
-/** Total distance the blade travels across one play, in degrees. */
-function bladePath(clip: PoseClip, steps = 240): number {
+/**
+ * How far the blade **travels** between two clip times, in degrees — the length
+ * of the path, not the distance between its ends.
+ *
+ * The distinction is not academic and it is what this file got wrong. A
+ * straight `angleDelta` between the first key and the contact key measures
+ * where the blade *ended up*, and Link's forward smash is an overhead chop that
+ * starts pointing forward-down and lands pointing forward: ten degrees apart,
+ * two hundred and ninety degrees of blade path in between, over the top and
+ * back down. The endpoint metric calls that swing motionless. It would also
+ * pass a clip that swung out to the target and came straight back, which is the
+ * exact failure — "the sword does not swing" — this whole file exists to catch.
+ */
+function bladePath(clip: PoseClip, from = 0, to = 1, steps = 240): number {
   let total = 0;
-  let prev = bladeAngle(clip, 0);
+  let prev = bladeAngle(clip, from);
   for (let i = 1; i <= steps; i++) {
-    const cur = bladeAngle(clip, i / steps);
+    const cur = bladeAngle(clip, from + ((to - from) * i) / steps);
     total += Math.abs(angleDelta(prev, cur));
     prev = cur;
   }
   return total * DEG;
-}
-
-function travel(clip: PoseClip, from: number, to: number): number {
-  return Math.abs(angleDelta(bladeAngle(clip, from), bladeAngle(clip, to))) * DEG;
 }
 
 function clipOf(name: PoseName): PoseClip {
@@ -95,7 +103,9 @@ describe("the sword swings", () => {
       const clip = clipOf(name);
       const strike = clip.strike;
       expect(strike, `${name} has no strike`).toBeDefined();
-      expect(travel(clip, 0, strike as number), `${name}: wind-up to contact`).toBeGreaterThan(80);
+      expect(bladePath(clip, 0, strike as number), `${name}: wind-up to contact`).toBeGreaterThan(
+        80,
+      );
     }
   });
 
@@ -106,7 +116,10 @@ describe("the sword swings", () => {
     for (const name of SWORD_MOVES) {
       const clip = clipOf(name);
       const strike = clip.strike as number;
-      expect(travel(clip, Math.max(0, strike - 0.12), strike), `${name}: approach`).toBeGreaterThan(30);
+      expect(
+        bladePath(clip, Math.max(0, strike - 0.12), strike),
+        `${name}: approach`,
+      ).toBeGreaterThan(30);
     }
   });
 
@@ -123,9 +136,28 @@ describe("the sword swings", () => {
   });
 });
 
+/**
+ * The one-shot clips — everything except the standing loop.
+ *
+ * `idle` is the one clip in this file that is *supposed* to be a two-degree
+ * breath with no terminator, so the three assertions below — travel, a shape
+ * after the contact, a key at `t = 1` — are all false of it and true of
+ * everything else. Filtering rather than special-casing keeps them honest: a
+ * second looping clip added later drops out of these and has to earn its own
+ * test rather than quietly weakening one of these.
+ */
+const ACTION_CLIPS = Object.entries(poses).filter(([, c]) => !(c as PoseClip).loop) as [
+  PoseName,
+  PoseClip,
+][];
+
 describe("no clip is a photograph", () => {
+  it("has one-shot clips to check", () => {
+    expect(ACTION_CLIPS.length).toBeGreaterThan(20);
+  });
+
   it("moves some bone a long way in every clip", () => {
-    for (const [name, clip] of Object.entries(poses) as [PoseName, PoseClip][]) {
+    for (const [name, clip] of ACTION_CLIPS) {
       const seen = new Map<BoneName, { min: number; max: number }>();
       for (let i = 0; i <= 20; i++) {
         const sample = samplePose(clip, i / 21);
@@ -143,7 +175,7 @@ describe("no clip is a photograph", () => {
     // `t = 1` is never sampled. A clip whose only key after the strike is the
     // terminator holds the contact pose for the whole recovery — thirty frames
     // of a smash, which is what a freeze looks like.
-    for (const [name, clip] of Object.entries(poses) as [PoseName, PoseClip][]) {
+    for (const [name, clip] of ACTION_CLIPS) {
       const after = clip.keys.filter((k) => k.t > (clip.strike ?? 0) && k.t < 1);
       expect(after.length, `${name} has nothing drawn after its contact`).toBeGreaterThan(0);
       expect(clip.keys[clip.keys.length - 1].t, `${name} has no terminator`).toBe(1);
@@ -151,12 +183,187 @@ describe("no clip is a photograph", () => {
   });
 
   it("names the contact key at exactly the t it declares", () => {
-    for (const [name, clip] of Object.entries(poses) as [PoseName, PoseClip][]) {
+    for (const [name, clip] of ACTION_CLIPS) {
       if (clip.strike === undefined) continue;
       expect(
         clip.keys.some((k) => k.t === clip.strike),
         `${name} declares strike ${clip.strike} and has no key there`,
       ).toBe(true);
+    }
+  });
+});
+
+/* ------------------------------------------------------------ the stance -- */
+
+/**
+ * Where things are, in rig units, y-up, feet at the origin, with the key's own
+ * `offsetX`/`offsetY`/`scaleX`/`scaleY` folded in.
+ *
+ * The pose layer's angles are not the thing anyone looks at; positions are.
+ * Every assertion about the standing pose below is about a *place* — is the
+ * blade above the stage, are the feet on it, are the ankles apart — and none of
+ * them can be written against joint angles without re-deriving the skeleton by
+ * hand, which is how the previous version of this file ended up measuring only
+ * accumulated angles and missing that the sword was inside his own shins.
+ */
+function placesAt(clip: PoseClip, t: number) {
+  const s = samplePose(clip, t);
+  const sk = resolve(rig.bones, s.angles, {
+    x: 0,
+    y: 0,
+    scale: 1,
+    scaleX: s.scaleX,
+    scaleY: s.scaleY,
+    facing: 1,
+  });
+  const at = (bone: BoneName, tip: boolean) => ({
+    x: (tip ? sk[bone].x1 : sk[bone].x0) + s.offsetX,
+    y: -(tip ? sk[bone].y1 : sk[bone].y0) + s.offsetY,
+  });
+  const hand = at("handR", true);
+  const wrist = at("handR", false);
+  // The Master Sword hangs off `handR` at its tip and is drawn along the bone,
+  // so the blade runs `SWORD.size` units on from the fist in the hand's own
+  // direction. Read from the rig rather than restated, so lengthening the
+  // sword moves the test with it.
+  const len = rig.props.find((p) => p.bone === "handR")?.size ?? 0;
+  const d = Math.hypot(hand.x - wrist.x, hand.y - wrist.y) || 1;
+  return {
+    hand,
+    tip: { x: hand.x + ((hand.x - wrist.x) / d) * len, y: hand.y + ((hand.y - wrist.y) / d) * len },
+    ankleR: at("footR", false),
+    ankleL: at("footL", false),
+    crown: -sk.head.y1 + s.offsetY + rig.headRadius,
+    hip: -sk.hip.y1 + s.offsetY,
+  };
+}
+
+/** Eight phases of the standing loop, which is a loop and has no first frame. */
+const IDLE_PHASES = [0, 0.13, 0.26, 0.39, 0.52, 0.65, 0.78, 0.91];
+
+describe("standing still", () => {
+  // Resolved per test rather than once in the describe body. A `clipOf` up here
+  // throws at *collection* time when the override is missing, which takes the
+  // whole file out — so the mutation "delete Link's idle" produced a suite that
+  // did not run rather than a suite that failed, and a run that does not happen
+  // is not a test that caught anything.
+  const idle = () => clipOf("idle");
+
+  it("is Link's own clip, and it loops", () => {
+    // The guard on everything below: `poses.idle` falling back to the shared
+    // library would make every assertion here a test of somebody else's clip.
+    expect(poses.idle, "Link does not override idle").toBeDefined();
+    expect(poses.idle).not.toBe(POSE_LIBRARY.idle);
+    expect(idle().loop).toBe(true);
+    expect(idle().period ?? 0).toBeGreaterThan(30);
+    // A looping clip is sampled with `t` wrapped, so a key at `t = 1` would be
+    // a duplicate of key 0 that the last span crossfades into — a stall.
+    expect(idle().keys[idle().keys.length - 1].t).toBeLessThan(1);
+  });
+
+  it("braces in a wide stance rather than standing to attention", () => {
+    // The shared clip stacks his ankles within a tenth of a unit. Ultimate's
+    // Link is measured at 0.52 of his own height apart; this rig tops out
+    // around 0.4 before the legs are doing the splits, and 3.5 units — a
+    // quarter of his height — is the floor below which it stops reading as a
+    // fighting stance at all.
+    for (const t of IDLE_PHASES) {
+      const p = placesAt(idle(), t);
+      expect(Math.abs(p.ankleR.x - p.ankleL.x), `stance width at t=${t}`).toBeGreaterThan(3.5);
+    }
+  });
+
+  it("keeps both feet on the stage while it does", () => {
+    // Folding the legs raises the ankles, because the pelvis is pinned a fixed
+    // height above the fighter's own position — so a wide stance has to be paid
+    // for in `offsetY`, and forgetting that leaves him hovering. The shared
+    // clip's ankles sit about 0.1 above the origin; anything inside a third of
+    // a unit of that is on the floor.
+    for (const t of IDLE_PHASES) {
+      const p = placesAt(idle(), t);
+      for (const [name, ankle] of [["right", p.ankleR], ["left", p.ankleL]] as const) {
+        expect(ankle.y, `${name} ankle at t=${t}`).toBeGreaterThan(-0.25);
+        expect(ankle.y, `${name} ankle at t=${t}`).toBeLessThan(0.45);
+      }
+    }
+  });
+
+  it("carries the sword up and behind him, not down through his own legs", () => {
+    // The whole reason this clip exists. On the shared idle the blade hung
+    // point-down from a hand at hip height, which on a fighter holding four and
+    // a half units of Master Sword means the sword is inside his shins and
+    // under the stage. Ultimate's is raked *up and back*, tip near the crown.
+    for (const t of IDLE_PHASES) {
+      const p = placesAt(idle(), t);
+      expect(p.tip.y, `blade tip height at t=${t}`).toBeGreaterThan(p.hip + 4);
+      expect(p.tip.x, `blade tip is behind him at t=${t}`).toBeLessThan(p.hand.x - 1);
+      expect(p.tip.y, `blade tip is near the crown at t=${t}`).toBeGreaterThan(p.crown - 2.5);
+    }
+  });
+
+  it("does not bounce", () => {
+    // SmashWiki, of this exact animation: "he does not bounce in place." The
+    // reference's own capture moves his crown one pixel in two hundred and
+    // sixty — under half a percent of his height — and that stillness is the
+    // read. It is the opposite of what the shared clip does, so it is the thing
+    // most likely to be undone by someone adding "life" back.
+    const crowns = IDLE_PHASES.map((t) => placesAt(idle(), t).crown);
+    const travel = Math.max(...crowns) - Math.min(...crowns);
+    expect(travel / placesAt(idle(), 0).crown).toBeLessThan(0.012);
+  });
+
+  it("is still not a photograph", () => {
+    // The other side of the same coin: stillness is not stopping. What moves is
+    // the sword hand — two to four degrees at the shoulder, which at the end of
+    // a four-and-a-half-unit blade is a quarter of a unit of tip travel, and
+    // the only motion on this rig where an angle that small is visible.
+    const tips = IDLE_PHASES.map((t) => placesAt(idle(), t).tip);
+    const spread = Math.max(...tips.map((p) => Math.hypot(p.x - tips[0].x, p.y - tips[0].y)));
+    expect(spread).toBeGreaterThan(0.2);
+  });
+
+  it("closes the loop without a jump", () => {
+    // A loop is sampled with `t` wrapped, so the span from the last key runs
+    // back to key 0 and any mismatch is a snap every cycle at the same phase.
+    const end = placesAt(idle(), 0.999);
+    const start = placesAt(idle(), 0);
+    expect(Math.hypot(end.tip.x - start.tip.x, end.tip.y - start.tip.y)).toBeLessThan(0.15);
+  });
+});
+
+describe("every grounded clip lands back in that stance", () => {
+  /**
+   * The clips that end standing — everything except the three that recover on
+   * a kneel and the five aerials, which are followed by a fall.
+   */
+  const KNEELING = new Set<PoseName>(["dtilt", "dsmash", "dthrow"]);
+  const AERIAL = new Set<PoseName>(["nair", "fair", "bair", "uair", "dair"]);
+  const GROUNDED = ACTION_CLIPS.filter(
+    ([name]) => !KNEELING.has(name) && !AERIAL.has(name) && name !== "grab",
+  );
+
+  it("has clips to check", () => {
+    expect(GROUNDED.length).toBeGreaterThan(10);
+  });
+
+  it("brings the feet down to where standing puts them", () => {
+    // The bug this exists for is silent and I nearly shipped it: the stance
+    // folds its legs, which raises the ankles, and it pays for that with
+    // `offsetY`. A terminator that copied the *angles* and left the offset at
+    // zero ends every attack with Link floating two thirds of a unit above the
+    // stage for the last few frames, then snapping down as the cross-fade into
+    // idle finishes. `t = 1` is never drawn — but the frames before it travel
+    // towards it, so the height it names is the height they head for.
+    const stand = placesAt(clipOf("idle"), 0);
+    for (const [name, clip] of GROUNDED) {
+      const last = clip.keys[clip.keys.length - 1];
+      const end = placesAt(clip, 0.999);
+      expect(last.t, `${name} has no terminator`).toBe(1);
+      for (const [side, ankle] of [["right", end.ankleR], ["left", end.ankleL]] as const) {
+        expect(ankle.y, `${name}: ${side} foot ends ${ankle.y.toFixed(2)} up`).toBeLessThan(
+          stand.ankleR.y + 0.4,
+        );
+      }
     }
   });
 });
@@ -268,7 +475,7 @@ describe("the rig", () => {
     // silhouette — which is invisible until someone stands in front of a light
     // background.
     const custom = rig.props.filter((p) => p.draw);
-    expect(custom.length, "the sword, shield and quiver are all custom").toBe(3);
+    expect(custom.length, "the sword, shield, bow and quiver are all custom").toBe(4);
 
     for (const prop of custom) {
       for (const mode of ["rim", "body"] as const) {
@@ -309,9 +516,22 @@ function brushFor(ctx: MockContext, mode: "rim" | "body", filled: string[]): Bru
 
 /* ------------------------------------------------------------------ fx --- */
 
-function fxAt(slot: MoveSlot, frame: number): MockContext {
+/**
+ * Play one frame of an effect and hand back everything it painted.
+ *
+ * `over` is a real queue rather than a no-op, and it is drained here, because
+ * an effect that defers all its drawing would otherwise come back having drawn
+ * nothing — which is precisely the shape of a bug this file exists to catch.
+ * `deferred` is kept separate so a test can ask *where* a graphic was painted,
+ * not merely whether it was: the bow and the boomerang in hand are only
+ * visible at all because they are in front of the figure.
+ */
+function fxAt(slot: MoveSlot, frame: number): { ctx: MockContext; under: number; over: number } {
+  // The mock context records every property *assignment* as a call, so the
+  // counts have to be read out of it rather than stashed back onto it.
   const ctx = createMockContext();
   const total = link.moves[slot]?.totalFrames ?? 1;
+  const queue: (() => void)[] = [];
   fx[slot]?.({
     ctx,
     u: 12,
@@ -321,38 +541,188 @@ function fxAt(slot: MoveSlot, frame: number): MockContext {
     frame,
     total,
     t: frame / total,
+    over: (paint: () => void) => queue.push(paint),
   } as unknown as FxContext);
-  return ctx;
+  const under = ctx.calls.length;
+  for (const paint of queue) paint();
+  return { ctx, under, over: ctx.calls.length - under };
+}
+
+/** Everything an effect painted this frame, wherever it painted it. */
+function fxCalls(slot: MoveSlot, frame: number): number {
+  return fxAt(slot, frame).ctx.calls.length;
 }
 
 describe("the specials paint what the rig cannot", () => {
   it("puts a bow in his hands until the arrow is away, and nothing after", () => {
     const spawn = link.moves.neutralB?.projectiles?.[0]?.spawnFrame ?? 0;
-    expect(fxAt("neutralB", spawn - 4).calls.length, "no bow while drawing").toBeGreaterThan(4);
-    expect(fxAt("neutralB", spawn + 12).calls.length, "bow still drawn after the shot").toBe(0);
+    expect(fxCalls("neutralB", spawn - 4), "no bow while drawing").toBeGreaterThan(4);
+    expect(fxCalls("neutralB", spawn + 12), "bow still drawn after the shot").toBe(0);
   });
 
   it("holds the boomerang until the frame it is thrown", () => {
     const spawn = link.moves.sideB?.projectiles?.[0]?.spawnFrame ?? 0;
-    expect(fxAt("sideB", spawn - 6).calls.length).toBeGreaterThan(4);
-    expect(fxAt("sideB", spawn + 2).calls.length, "two boomerangs at once").toBe(0);
+    expect(fxCalls("sideB", spawn - 6)).toBeGreaterThan(4);
+    expect(fxCalls("sideB", spawn + 2), "two boomerangs at once").toBe(0);
   });
 
   it("runs the Spin Attack ring for exactly the frames the hitbox is live", () => {
     const boxes = link.moves.upB?.hitboxes ?? [];
     const first = Math.min(...boxes.map((h) => h.startFrame));
     const last = Math.max(...boxes.map((h) => h.endFrame));
-    expect(fxAt("upB", first - 2).calls.length, "ring before the hitbox").toBe(0);
-    expect(fxAt("upB", first + 1).calls.length).toBeGreaterThan(4);
-    expect(fxAt("upB", last).calls.length).toBeGreaterThan(4);
-    expect(fxAt("upB", last + 20).calls.length, "ring outliving the hitbox").toBe(0);
+    expect(fxCalls("upB", first - 2), "ring before the hitbox").toBe(0);
+    expect(fxCalls("upB", first + 1)).toBeGreaterThan(4);
+    expect(fxCalls("upB", last)).toBeGreaterThan(4);
+    expect(fxCalls("upB", last + 20), "ring outliving the hitbox").toBe(0);
   });
 
   it("fires the Sheikah rune as the bomb appears", () => {
     const spawn = link.moves.downB?.projectiles?.[0]?.spawnFrame ?? 0;
-    expect(fxAt("downB", spawn - 3).calls.length).toBeGreaterThan(2);
-    expect(fxAt("downB", spawn).calls.length).toBeGreaterThan(4);
-    expect(fxAt("downB", spawn + 20).calls.length).toBe(0);
+    expect(fxCalls("downB", spawn - 3)).toBeGreaterThan(2);
+    expect(fxCalls("downB", spawn)).toBeGreaterThan(4);
+    expect(fxCalls("downB", spawn + 20)).toBe(0);
+  });
+});
+
+/**
+ * The vertical extent of everything an effect drew, in pixels.
+ *
+ * Every path command that carries a `y` — `moveTo`, `lineTo`, `arc`, `rect` —
+ * contributes, and `arc` contributes its centre plus and minus its radius.
+ * Crude, and enough for the only question being asked: is the graphic big
+ * enough that a player can see it.
+ */
+function paintedHeight(ctx: MockContext): number {
+  const ys: number[] = [];
+  for (const c of ctx.calls) {
+    const a = c.args.map(Number);
+    if (c.method === "moveTo" || c.method === "lineTo") ys.push(a[1]);
+    else if (c.method === "quadraticCurveTo") ys.push(a[1], a[3]);
+    else if (c.method === "arc") ys.push(a[1] - a[2], a[1] + a[2]);
+    else if (c.method === "rect" || c.method === "fillRect") ys.push(a[1], a[1] + a[3]);
+  }
+  return ys.length === 0 ? 0 : Math.max(...ys) - Math.min(...ys);
+}
+
+describe("the props a player has to see", () => {
+  // `u` in `fxAt` is 12 pixels to the world unit, and Link is a shade over 14
+  // world units tall — so his whole body is about 170 pixels there.
+  const BODY = 14.2 * 12;
+
+  it("draws the bow at the size a bow is", () => {
+    // The failure this catches is the one the Master Sword had before it was
+    // widened, in a different place: a graphic that is *correct* and too small
+    // to see. Ultimate's Traveler's Bow is 0.83 of Link's height tip to tip.
+    // The first version of this effect drew a 6.2-unit arc — 0.44 — and at
+    // match scale it read as a gold hair beside his fist.
+    const spawn = link.moves.neutralB?.projectiles?.[0]?.spawnFrame ?? 0;
+    expect(paintedHeight(fxAt("neutralB", spawn - 6).ctx)).toBeGreaterThan(BODY * 0.6);
+  });
+
+  it("draws the boomerang at the size a boomerang is", () => {
+    // Measured off the exported model: 0.59 of his height tip to tip, which is
+    // most of the reason it is a threat you can see coming.
+    const spawn = link.moves.sideB?.projectiles?.[0]?.spawnFrame ?? 0;
+    expect(paintedHeight(fxAt("sideB", spawn - 8).ctx)).toBeGreaterThan(BODY * 0.45);
+  });
+
+  it("paints the parts a body would swallow in front of the fighter", () => {
+    // A held graphic drawn under the figure is a graphic inside his outline —
+    // which is not drawn at all. The bow's string and the back half of its
+    // arrow live between his fist and his cheek; the boomerang's whole wind-up
+    // is behind his shoulder. Two rounds of captures had one of each missing
+    // before `over` existed, and this is the assertion that says it is still
+    // being used.
+    for (const [slot, frame] of [
+      ["neutralB", 8],
+      ["sideB", 12],
+    ] as const) {
+      expect(
+        fxAt(slot, frame).over,
+        `${slot} defers nothing to the over layer`,
+      ).toBeGreaterThan(4);
+    }
+  });
+
+  it("still leaves the bow itself under his fist", () => {
+    // The other half of the same decision, and the one a wholesale move to
+    // `over` breaks: the limbs and the grip are at arm's length in front of him
+    // where nothing occludes them, and his hand should close *over* the grip.
+    // Deferring all of it paints the bow on top of the hand holding it — and
+    // makes `specialFx.test.ts`, which asks every effect to paint something
+    // under the figure, go red for reasons nobody would connect to this.
+    expect(fxAt("neutralB", 8).under).toBeGreaterThan(4);
+  });
+
+  it("draws the Master Sword after the cap", () => {
+    // Props in one layer paint in array order, and the cap is a five-unit green
+    // wedge hung off the head covering most of the space above and behind the
+    // shoulder — which is exactly where the blade goes in the standing pose, in
+    // the whole of the forward smash's wind-up, and in the up smash. With the
+    // sword first, all of those drew the blade and then painted the cap over
+    // it. Nothing throws; the wind-up simply has no sword in it.
+    const order = rig.props.map((p) => (p.bone === "handR" ? "sword" : p.kind));
+    expect(order.indexOf("sword")).toBeGreaterThan(order.indexOf("capPointed"));
+  });
+});
+
+describe("the second slash is available and the animation says so", () => {
+  // Ultimate's forward smash is two inputs: hit one on frames 17-18, and if
+  // attack is pressed again on frames 22-36 a one-handed outward slash follows.
+  // The engine simulates only the first, so the animation must not invent a
+  // hitbox — what it can do is hold the shape the second one fires from, which
+  // in the real move is the blade dragged back and low behind him, in a lunge
+  // he does not come out of until frame 37. That retraction *is* hit two's
+  // wind-up, and a recovery that instead lowers the sword to the carry says the
+  // move is over when it is not.
+  const WINDOW = [22, 25, 29, 33, 36];
+  const clip = clipOf("fsmash");
+  const strike = clip.strike as number;
+  const at = (frame: number) => bladeAngle(clip, clipTimeOf("fsmash", actionFrameOf(frame), strike));
+
+  it("has no second hitbox to be wrong about", () => {
+    const starts = new Set((link.moves.fsmash?.hitboxes ?? []).map((h) => h.startFrame));
+    expect([...starts]).toEqual([17]);
+  });
+
+  it("holds the blade back and low for every frame of the input window", () => {
+    for (const frame of WINDOW) {
+      const a = at(frame);
+      // Direction is `(sin, cos)` with +x forward and +y up.
+      expect(Math.sin(a), `frame ${frame}: blade is not behind him`).toBeLessThan(0);
+      expect(Math.cos(a), `frame ${frame}: blade is not low`).toBeLessThan(0);
+    }
+  });
+
+  it("keeps it alive across the window without swinging it", () => {
+    const from = clipTimeOf("fsmash", actionFrameOf(22), strike);
+    const to = clipTimeOf("fsmash", actionFrameOf(36), strike);
+    const travelled = bladePath(clip, from, to);
+    // 13.6 degrees as authored, against about 5 for three identical keys — a
+    // degree a frame, which at the end of a four-and-a-half-unit blade is a
+    // unit and a half of tip travel across the window. Held, not stopped.
+    expect(travelled, "the window is a frozen frame").toBeGreaterThan(8);
+    expect(travelled, "the window swings the sword the engine has no hitbox for").toBeLessThan(70);
+  });
+
+  it("lowers it again once the window has closed", () => {
+    // Nobody pressed: the blade comes back up to where standing carries it,
+    // which is the tell that the follow-up is gone. Read at 44 rather than at
+    // the last frame — by 49 the clip is almost entirely the terminator, so a
+    // recovery that stayed loaded all the way through would still test clean
+    // purely because `STAND` is where it converges.
+    expect(Math.cos(at(36)), "still loaded at the end of the window").toBeLessThan(0);
+    expect(Math.cos(at(44)), "never comes out of the hold").toBeGreaterThan(0.15);
+  });
+
+  it("parks a charging smash on a key that was authored for it", () => {
+    // `poseTimeFor` freezes a held smash at `strike × 0.55` for as long as the
+    // button is down, which makes that one frame the most-looked-at frame of
+    // the move. Landing it *between* keys means the charge pose is whatever two
+    // shapes happen to average out to.
+    const parked = strike * 0.55;
+    const nearest = Math.min(...clip.keys.map((k) => Math.abs(k.t - parked)));
+    expect(nearest, `no key at t=${parked}`).toBeLessThan(0.005);
   });
 });
 

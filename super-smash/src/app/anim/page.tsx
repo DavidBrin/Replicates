@@ -24,7 +24,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { drawFigure, getCharacterRig, resolvePalette, squashFor } from "@/render/characterArt";
+import { drawFigure, getCharacterRig, propAnimFor, resolvePalette, squashFor } from "@/render/characterArt";
 import { rigHeight } from "@/render/skeleton";
 import {
   actionDurationFor,
@@ -181,7 +181,19 @@ function drawCell(
     rotation: pose.rotation + poseSpinFor(f, frame, usesMove ? timing : undefined, attrs),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
-  const params = { rig, palette, pose, transform, alpha } as const;
+  // The same `anim` a match would give, from the same function, because the lab
+  // is only worth looking at while it agrees with the renderer. It shipped
+  // without this at all — so the one tool built for reviewing motion was the one
+  // place a prop's own motion could not be seen, and an author checking a tail
+  // there would have concluded it was dead.
+  const params = {
+    rig,
+    palette,
+    pose,
+    transform,
+    alpha,
+    anim: propAnimFor(f, frame, usesMove ? (timing?.total ?? 0) : 0),
+  } as const;
 
   // The move's own effect — the plasma, the rock, the electricity. Drawn here
   // and not only in a match because half of what makes a special look like

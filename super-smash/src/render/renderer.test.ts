@@ -473,6 +473,27 @@ describe("the motion a prop is told about", () => {
     expect(left.vx).toBeCloseTo(right.vx, 6);
   });
 
+  /**
+   * The half of this that shipped broken.
+   *
+   * The test above asserts the *sign* and passes just as happily against a
+   * value 4096 times too large — which is exactly what was handed to painters
+   * for a day, because the simulation is Q12 fixed point and the renderer
+   * passed `f.vx` through raw. `PropAnim` documents world units per frame, a
+   * full run is 2.4 of them, and painters were receiving 9839. The author who
+   * found it corrected for it inside their own painter, which is what everyone
+   * would have done differently.
+   *
+   * So: assert the number, not its sign. A units bug has no other symptom — the
+   * fighter still animates, the prop still moves, and it moves by three
+   * thousand radians.
+   */
+  it("hands over world units per frame, decoded, not the simulation's fixed point", () => {
+    const anim = animFor({ defId: "mario", vx: fx(2.4), vy: fx(-1.5), facing: 1, action: "run" });
+    expect(anim.vx, `a 2.4-unit run arrived as ${anim.vx}`).toBeCloseTo(2.4, 3);
+    expect(anim.vy).toBeCloseTo(-1.5, 3);
+  });
+
   it("keeps vertical velocity in world terms — up is up in both directions", () => {
     const rising = animFor({ defId: "mario", vy: fx(3), facing: -1, grounded: false });
     expect(rising.vy).toBeGreaterThan(0);

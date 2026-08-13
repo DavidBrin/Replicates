@@ -15,10 +15,34 @@
  * of the work here is a small vocabulary of electric primitives, and each move
  * is a few lines that arrange them.
  *
- * Everything is stroked three times — a wide dim halo, a saturated middle, a
- * thin white centre — which is the difference between a line that reads as
- * lightning and one that reads as a scribble, and everything composites
- * additively so overlapping arcs blow out to white the way they do on screen.
+ * Everything is stroked four times — a dark contrast edge, a wide dim halo, a
+ * saturated middle, a thin white centre — which is the difference between a line
+ * that reads as lightning and one that reads as a scribble.
+ *
+ * ## Why they are not all additive
+ *
+ * They were, and the result was that **none of Pikachu's electricity was
+ * yellow**. `lighter` adds source to destination and clamps, so a saturated
+ * yellow (255, 226, 74) at 0.9 alpha over anything brighter than about (25, 55,
+ * 180) is already at 255 in two channels; the forward smash's orb stacks a glow
+ * and three filled discs on top of each other and reached 255 in all three over
+ * a *dark* sky, never mind a bright one. What shipped was a white smear that
+ * happened to have a yellow rim — captured on Town & City it read as a puff of
+ * steam. The character's whole signature is that his attacks are yellow.
+ *
+ * So the compositing is now chosen rather than inherited, per pass:
+ *
+ * | Pass | Blend | Why |
+ * |---|---|---|
+ * | edge | source-over | A dark contour. Invisible over a night sky, and the only thing keeping a bolt off a pale one |
+ * | halo | `lighter` | It is light spilling. Low alpha, so it brightens without clamping |
+ * | body | source-over | **The colour of the character.** Painted, not summed, so it is the same yellow at any background brightness |
+ * | core | `lighter` | The filament. Thin, and the one pass that is *supposed* to blow out where arcs cross |
+ *
+ * Keeping the core additive is what preserves the property the old code was
+ * reaching for: a dense burst still has a white heart, because forty thin white
+ * lines crossing still sum to white. What it no longer does is turn the whole
+ * graphic into that heart.
  */
 
 import {
@@ -35,16 +59,37 @@ import type { MoveSlot } from "@/engine/types";
 
 /* ==================================================== the electric kit === */
 
-/** The four colours every electric shape here is built out of. */
+/** The five colours every electric shape here is built out of. */
 export const ELECTRIC = {
-  /** The wide, dim outer halo. */
+  /** The wide, dim outer halo. Additive. */
   halo: "#FFB020",
   /** The saturated middle — the colour a player would actually name. */
   body: "#FFE24A",
-  /** The white-hot centre line. */
+  /** The white-hot centre line. Additive, and thin. */
   core: "#FFFFFF",
   /** A soft fill, for glows and the inside of an orb. */
   hot: "#FFF6B0",
+  /**
+   * The body of a *ball* of electricity, as distinct from a bolt of it.
+   *
+   * Deliberately paler than `body`, because `body` is within seven percent of
+   * the fighter's own `primary` (`#F5D547`) at the same hue — so the forward
+   * smash's orb, the move the character is most respected for, was drawn in
+   * Pikachu's exact colour and vanished into Pikachu. A bolt can afford to match
+   * him because it is a thin shape with a dark edge; a disc two thirds his
+   * height cannot.
+   */
+  ball: "#FFF08A",
+  /**
+   * The contrast edge, painted *under* everything in normal blending.
+   *
+   * Against a night sky it is dark on dark and does nothing. Against Smashville
+   * at midday — a sky that runs to `#D9EEC4` exactly where the fighters stand —
+   * it is the only reason a yellow bolt has an outline at all. Yellow on pale
+   * yellow-green is a luminance difference of about a tenth; the same yellow
+   * with a dark contour around it is a fighting-game effect.
+   */
+  edge: "#4A2600",
 } as const;
 
 export interface ArcOpts {
@@ -105,37 +150,61 @@ function jaggedPath(
 }
 
 /**
- * Stroke the current path as lightning: halo, body, white core.
+ * Paint this pass additively, whatever the caller's blend mode is.
  *
- * The three widths are deliberately far apart and the white one is thin. Under
- * `lighter` every overlap sums, so a white core at full alpha and half the body
- * width turns a dense burst into a white blob — which is what the first pass of
- * the forward smash looked like: bright, unmistakably *something*, and not
- * yellow. Pikachu's electricity is yellow with a white filament in it, so the
- * saturated middle carries the weight and the white is a highlight.
+ * Used for the two passes that genuinely *are* light — the spilled halo and the
+ * thin core filament — and for glows. Everything else paints normally, so its
+ * colour survives the background. See the note at the top of the file.
+ */
+export function additive(ctx: CanvasRenderingContext2D, paint: () => void): void {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  paint();
+  ctx.restore();
+}
+
+/**
+ * Stroke the current path as lightning: dark edge, halo, yellow body, white core.
+ *
+ * The four widths are deliberately far apart and the white one is thin, because
+ * the core is the only additive pass and a wide one turns a dense burst into a
+ * white blob — which is what every one of his moves looked like when all four
+ * passes were additive. Pikachu's electricity is yellow with a white filament in
+ * it, so the saturated middle carries the weight and the white is a highlight.
  */
 function strokeGlow(ctx: CanvasRenderingContext2D, width: number, alpha: number): void {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = withAlpha(ELECTRIC.halo, 0.26 * alpha);
-  ctx.lineWidth = width * 3.4;
+  ctx.strokeStyle = withAlpha(ELECTRIC.edge, 0.30 * alpha);
+  ctx.lineWidth = width * 3.0;
   ctx.stroke();
-  ctx.strokeStyle = withAlpha(ELECTRIC.body, 0.9 * alpha);
+  additive(ctx, () => {
+    ctx.strokeStyle = withAlpha(ELECTRIC.halo, 0.30 * alpha);
+    ctx.lineWidth = width * 2.6;
+    ctx.stroke();
+  });
+  ctx.strokeStyle = withAlpha(ELECTRIC.body, 0.95 * alpha);
   ctx.lineWidth = width * 1.9;
   ctx.stroke();
-  ctx.strokeStyle = withAlpha(ELECTRIC.core, 0.7 * alpha);
-  ctx.lineWidth = Math.max(0.8, width * 0.4);
-  ctx.stroke();
+  additive(ctx, () => {
+    ctx.strokeStyle = withAlpha(ELECTRIC.core, 0.72 * alpha);
+    ctx.lineWidth = Math.max(1.2, width * 0.5);
+    ctx.stroke();
+  });
 }
 
 /**
- * Wrap electric painting: saves the context, switches to additive blending,
- * restores. Everything in the kit assumes it is being called inside one of
- * these, and calling them outside is not wrong — only flatter.
+ * Wrap electric painting: saves the context, pins the blend mode, restores.
+ *
+ * It used to switch the whole graphic to `lighter`, which is the bug the file
+ * header is about. It now pins **normal** blending, so a primitive that wants to
+ * add light asks for it by name (`additive`) and a primitive that wants to be a
+ * colour simply is one. Pinning rather than leaving it alone matters because the
+ * renderer hands an effect whatever state the last painter left.
  */
 export function electric(ctx: CanvasRenderingContext2D, paint: () => void): void {
   ctx.save();
-  ctx.globalCompositeOperation = "lighter";
+  ctx.globalCompositeOperation = "source-over";
   paint();
   ctx.restore();
 }
@@ -189,7 +258,12 @@ export function ring(
   seed: number,
   o: ArcOpts & { readonly jagK?: number } = {},
 ): void {
-  const segs = o.segs ?? 16;
+  // Twenty-six, not sixteen. The down smash's pinwheel and the Skull Bash charge
+  // ring are drawn at five or six units of radius, and at sixteen segments a
+  // "jagged ring" is a bent wire hexagon — a UI widget rather than a band of
+  // current. The jag has to be smaller than the segment spacing to read as
+  // crackle rather than as corners.
+  const segs = o.segs ?? 26;
   ctx.beginPath();
   for (let i = 0; i <= segs; i++) {
     const a = (i / segs) * Math.PI * 2;
@@ -221,13 +295,25 @@ export function orb(
   o: { readonly arcs?: number; readonly alpha?: number } = {},
 ): void {
   const a = o.alpha ?? 1;
-  glow(ctx, x, y, r * 2.1, withAlpha(ELECTRIC.body, 0.42 * a));
-  ctx.fillStyle = withAlpha(ELECTRIC.body, 0.95 * a);
+  // Spilled light, and the only part of the ball that is additive. Four
+  // concentric additive discs was how a "large orb of electricity" became a
+  // white hole: each one alone was under 255, and stacked they were not.
+  additive(ctx, () => glow(ctx, x, y, r * 2.1, withAlpha(ELECTRIC.body, 0.38 * a)));
+  // A ring of the dark edge colour just outside the ball, so it has a contour
+  // against a bright sky in the same way a bolt does.
+  ctx.fillStyle = withAlpha(ELECTRIC.edge, 0.56 * a);
+  circle(ctx, x, y, r * 1.02);
+  ctx.fillStyle = withAlpha(ELECTRIC.ball, 0.97 * a);
   circle(ctx, x, y, r * 0.86);
-  ctx.fillStyle = withAlpha(ELECTRIC.hot, 0.9 * a);
-  circle(ctx, x, y, r * 0.58);
-  ctx.fillStyle = withAlpha(ELECTRIC.core, 0.85 * a);
-  circle(ctx, x, y, r * 0.3);
+  // Wide, because the ball has to separate from the fighter throwing it and he
+  // is the same yellow it is. A white-hot core two thirds of the way out is the
+  // difference between "an orb in front of Pikachu" and "Pikachu, glowing".
+  ctx.fillStyle = withAlpha(ELECTRIC.hot, 0.96 * a);
+  circle(ctx, x, y, r * 0.62);
+  additive(ctx, () => {
+    ctx.fillStyle = withAlpha(ELECTRIC.core, 0.8 * a);
+    circle(ctx, x, y, r * 0.36);
+  });
   arcBurst(ctx, x, y, r * 1.22, o.arcs ?? 5, seed, {
     width: Math.max(1, r * 0.13),
     jag: r * 0.3,
@@ -248,31 +334,32 @@ export function spark(
   r: number,
   turn = 0,
 ): void {
-  glow(ctx, x, y, r * 1.6, withAlpha(ELECTRIC.hot, 0.55));
-  ctx.beginPath();
-  for (let i = 0; i < 12; i++) {
-    const a = turn + (i / 12) * Math.PI * 2;
-    const rr = i % 2 === 0 ? r : r * 0.28;
-    const px = x + Math.cos(a) * rr;
-    const py = y + Math.sin(a) * rr;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fillStyle = withAlpha(ELECTRIC.body, 0.95);
+  const star = (k: number) => {
+    ctx.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const a = turn + (i / 12) * Math.PI * 2;
+      const rr = (i % 2 === 0 ? r : r * 0.28) * k;
+      const px = x + Math.cos(a) * rr;
+      const py = y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  };
+  additive(ctx, () => glow(ctx, x, y, r * 1.6, withAlpha(ELECTRIC.hot, 0.5)));
+  star(1.14);
+  ctx.fillStyle = withAlpha(ELECTRIC.edge, 0.32);
   ctx.fill();
-  ctx.beginPath();
-  for (let i = 0; i < 12; i++) {
-    const a = turn + (i / 12) * Math.PI * 2;
-    const rr = (i % 2 === 0 ? r : r * 0.28) * 0.5;
-    const px = x + Math.cos(a) * rr;
-    const py = y + Math.sin(a) * rr;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fillStyle = ELECTRIC.core;
+  star(1);
+  ctx.fillStyle = withAlpha(ELECTRIC.body, 0.97);
   ctx.fill();
+  // The one white thing in a hit spark, and small. Additive, so two sparks that
+  // land on top of each other genuinely do flash brighter.
+  additive(ctx, () => {
+    star(0.44);
+    ctx.fillStyle = withAlpha(ELECTRIC.core, 0.85);
+    ctx.fill();
+  });
 }
 
 /** A lightning bolt between two points, with `o.forks` branches off it. */
@@ -329,13 +416,17 @@ export function streak(
   ctx.quadraticCurveTo(x0 + dx * 0.4 + nx, y0 + dy * 0.4 + ny, x1, y1);
   ctx.quadraticCurveTo(x0 + dx * 0.4 - nx, y0 + dy * 0.4 - ny, x0, y0);
   ctx.closePath();
-  // `hot` is so close to white that under `lighter` a trail painted in it reads
-  // as a grey smear rather than as Pikachu's electricity. The saturated middle
-  // is the colour of the character.
+  // `hot` is so close to white that a trail painted in it reads as a grey smear
+  // rather than as Pikachu's electricity. The saturated middle is the colour of
+  // the character — and it is painted, not added, because a streak is the
+  // largest area any of these effects covers and so the one that clamped
+  // hardest: the Quick Attack trail was a white teardrop under his feet.
   ctx.fillStyle = withAlpha(ELECTRIC.body, alpha);
   ctx.fill();
-  ctx.fillStyle = withAlpha(ELECTRIC.core, alpha * 0.45);
-  ctx.fill();
+  additive(ctx, () => {
+    ctx.fillStyle = withAlpha(ELECTRIC.core, alpha * 0.22);
+    ctx.fill();
+  });
 }
 
 /**
@@ -388,12 +479,14 @@ export function cheekSparks(c: FxContext, seed: number, k: number): void {
 /** A soft charge glow behind the whole body. `k` is 0..1. */
 export function bodyGlow(c: FxContext, k: number): void {
   if (k <= 0) return;
-  glow(
-    c.ctx,
-    c.x,
-    up(c, 0.5),
-    c.height * c.u * (0.75 + 0.35 * k),
-    withAlpha(ELECTRIC.hot, 0.42 * k),
+  additive(c.ctx, () =>
+    glow(
+      c.ctx,
+      c.x,
+      up(c, 0.5),
+      c.height * c.u * (0.75 + 0.35 * k),
+      withAlpha(ELECTRIC.hot, 0.36 * k),
+    ),
   );
 }
 
@@ -421,11 +514,18 @@ export function tailArc(
   const t = c.dir >= 0 ? to : Math.PI - to;
   const a = o.alpha ?? 1;
   const w = o.width ?? r * 0.4;
+  // Painted rather than added: the sweep is a wide band and two additive fills
+  // over each other put the middle of every tail swipe at 255 in all three
+  // channels, which is why the up tilt's arc came out as a white wing.
   crescent(ctx, cx, cy, r, w, Math.min(f, t), Math.max(f, t));
-  ctx.fillStyle = withAlpha(ELECTRIC.body, 0.5 * a);
+  ctx.fillStyle = withAlpha(ELECTRIC.body, 0.68 * a);
   ctx.fill();
+  // The pale inner band stays *under* half opacity. Painted rather than added it
+  // is a colour rather than light, so at the tail of a fade it is a dark olive
+  // smear on a night stage instead of nothing at all — the sweep has to go out
+  // through yellow, not through grey.
   crescent(ctx, cx, cy, r, w * 0.42, Math.min(f, t), Math.max(f, t));
-  ctx.fillStyle = withAlpha(ELECTRIC.hot, 0.5 * a);
+  ctx.fillStyle = withAlpha(ELECTRIC.hot, 0.48 * a);
   ctx.fill();
   const n = 6;
   for (let i = 0; i < n; i++) {
@@ -441,6 +541,65 @@ export function tailArc(
       { width: Math.max(1.6, r * 0.1), jag: r * 0.16, alpha: a, taper: 0.5 },
     );
   }
+}
+
+/**
+ * One Quick Attack zip, drawn from where he left to where he is.
+ *
+ * SmashWiki's account of the move is that Pikachu "briefly holds still" at the
+ * beginning, middle and end and is otherwise too fast to see — which means the
+ * thing a player actually tracks is not the fighter and not a smooth trail
+ * either, but the **row of copies he leaves down the path**. The wiki calls the
+ * graphic "a unique trail of electrical bubbles"; the previous version drew only
+ * a streak and a bolt, and read as a rocket flame under his feet rather than as
+ * a teleport.
+ *
+ * So: the streak for the direction, the bolt for the electricity, and four
+ * fading afterimages spaced back along the line, largest nearest where he
+ * arrived. They are drawn as balls rather than as little Pikachus on purpose —
+ * an effect file has no access to the figure, and a hand-drawn approximation of
+ * the fighter that did not track his pose would be worse than an honest one.
+ */
+function zip(
+  c: FxContext,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  k: number,
+  seed: number,
+): void {
+  const ctx = c.ctx;
+  // Narrow and faint. A wide opaque teardrop is a rocket flame — that is exactly
+  // what the first pass of this looked like, a candle under his feet — and the
+  // thing that says *electric* is the jag, not the mass. So the smooth part is
+  // half the width it was at two thirds the opacity, and the zigzag on top of it
+  // is wider and rougher than the trail it sits in.
+  streak(ctx, x0, y0, x1, y1, c.u * 1.5, 0.44 * k);
+  arc(ctx, x0, y0, x1, y1, seed, {
+    width: Math.max(1.8, c.u * 0.46),
+    jag: c.u * 1.7,
+    segs: 9,
+    alpha: k,
+    taper: 0.3,
+  });
+  // Spaced unevenly and shrinking down the path, so they read as four separate
+  // places he has been rather than as a dotted line.
+  const AT = [0.2, 0.42, 0.66, 0.9];
+  AT.forEach((p, i) => {
+    orb(
+      ctx,
+      x1 + (x0 - x1) * p,
+      y1 + (y0 - y1) * p,
+      c.u * (1.9 - i * 0.34),
+      seed + i * 13.7,
+      { arcs: 3, alpha: k * (1 - p * 0.75) * 0.85 },
+    );
+  });
+  arcBurst(ctx, x1, y1, c.u * 6.0 * k, 6, seed * 1.3, {
+    width: Math.max(1.2, c.u * 0.3),
+    alpha: k * 0.95,
+  });
 }
 
 /** Ramp to 1 across `rise` frames from `at`, then decay to 0 by `end`. */
@@ -485,10 +644,10 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     const k = pulse(c.frame, 5, 2, 13);
     if (k <= 0) return NOTHING;
     const fx0 = c.x + c.dir * 4.4 * c.u;
-    const fy = c.y - 2.6 * c.u;
+    const fy = c.y - 2.8 * c.u;
     electric(c.ctx, () => {
-      arcBurst(c.ctx, fx0, fy, c.u * 3.6 * k, 6, c.frame * 1.7, {
-        width: Math.max(1.2, c.u * 0.24),
+      arcBurst(c.ctx, fx0, fy, c.u * 4.2 * k, 6, c.frame * 1.7, {
+        width: Math.max(1.2, c.u * 0.26),
         alpha: k,
       });
       arc(c.ctx, c.x, c.y - 3.2 * c.u, fx0, fy, c.frame * 2.3, {
@@ -605,29 +764,49 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       return NOTHING;
     }
     if (frame < 9) return NOTHING;
-    // Gathering at the cheeks, then thrown.
+    // Gathering at the cheeks, then thrown. In front of him: it is a ball
+    // forming at his face, and painted underneath it was a rim of light around
+    // a head that was hiding all of it.
     if (frame < 15) {
       const k = (frame - 8) / 7;
-      electric(ctx, () => {
-        cheekSparks(c, frame * 2.1, k);
-        orb(ctx, x + dir * 1.6 * u, y - 3.4 * u, u * 2.2 * k, frame * 1.7, { arcs: 4, alpha: k });
-      });
+      c.over(() =>
+        electric(ctx, () => {
+          cheekSparks(c, frame * 2.1, k);
+          orb(ctx, x + dir * 2.4 * u, y - 3.4 * u, u * 2.0 * k, frame * 1.7, { arcs: 4, alpha: k });
+        }),
+      );
       return NOTHING;
     }
     if (frame > 31) return NOTHING;
     // Live: the ball sits where its hitbox is and the trail runs back to him.
+    //
+    // **In front of the fighter.** The orb's own hitbox is radius 3.4 centred
+    // 5.4 out and 3.4 up — a ball two thirds his height, and its near half lands
+    // exactly on his head. Painted under the figure, which is the default, the
+    // move's entire graphic was occluded by the fighter throwing it: on Town &
+    // City it read as a small white puff at his shoulder. This is the case the
+    // `over` note is about and this move is the clearest instance of it on the
+    // roster.
+    //
+    // Drawn a little further out than the hitbox's own centre — 6.0 rather than
+    // 5.4 — because Pikachu is the same yellow the orb is and the two merge into
+    // one shape when they overlap by more than about a head. Nothing is promised
+    // that the move does not have: the box reaches 8.8 and the ball is drawn to
+    // about 9.3 at its widest, which is inside the fuzz of a 3.4-unit hurtbox.
     const life = (frame - 15) / 16;
     const fade = frame <= 19 ? 1 : Math.max(0, 1 - (frame - 19) / 12);
-    const cx = x + dir * (4.2 + 1.6 * life) * u;
+    const cx = x + dir * (6.0 + 1.0 * life) * u;
     const cy = y - 3.4 * u;
-    electric(ctx, () => {
-      streak(ctx, x + dir * 0.8 * u, y - 3.3 * u, cx, cy, u * 1.8 * fade, 0.5 * fade);
-      orb(ctx, cx, cy, u * 3.4 * (0.82 + 0.18 * life), frame * 1.9, { arcs: 6, alpha: fade });
-      arcBurst(ctx, cx, cy, u * 4.6 * fade, 4, frame * 2.7, {
-        width: Math.max(1, u * 0.2),
-        alpha: fade * 0.55,
-      });
-    });
+    c.over(() =>
+      electric(ctx, () => {
+        streak(ctx, x + dir * 0.8 * u, y - 3.3 * u, cx, cy, u * 1.8 * fade, 0.5 * fade);
+        orb(ctx, cx, cy, u * 3.4 * (0.86 + 0.14 * life), frame * 1.9, { arcs: 6, alpha: fade });
+        arcBurst(ctx, cx, cy, u * 4.6 * fade, 4, frame * 2.7, {
+          width: Math.max(1, u * 0.2),
+          alpha: fade * 0.55,
+        });
+      }),
+    );
     return NOTHING;
   },
 
@@ -874,31 +1053,39 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    */
   neutralB: (c) => {
     if (c.frame > 26) return NOTHING;
-    electric(c.ctx, () => {
-      if (c.frame < 19) {
-        const k = Math.min(1, c.frame / 12);
-        cheekSparks(c, c.frame * 2.3, k);
-        if (c.frame > 9) {
-          const g = (c.frame - 9) / 10;
-          orb(
-            c.ctx,
-            c.x + c.dir * 2.0 * c.u,
-            c.y - 3.0 * c.u,
-            c.u * 2.6 * g,
-            c.frame * 1.7,
-            { arcs: 5, alpha: g },
-          );
+    // Over the figure, all of it. Nineteen frames of startup is a long time to
+    // show nothing, and everything this paints — the cheeks, the ball gathering
+    // at his mouth, the flash as it leaves — happens on the front of his own
+    // head. Painted underneath, the whole wind-up was a rim of light behind the
+    // one object hiding it, and the capture showed a Pikachu standing still for
+    // a third of a second before a ball appeared out of nowhere.
+    c.over(() =>
+      electric(c.ctx, () => {
+        if (c.frame < 19) {
+          const k = Math.min(1, c.frame / 12);
+          cheekSparks(c, c.frame * 2.3, k);
+          if (c.frame > 7) {
+            const g = (c.frame - 7) / 12;
+            orb(
+              c.ctx,
+              c.x + c.dir * 2.6 * c.u,
+              c.y - 3.0 * c.u,
+              c.u * 2.6 * g,
+              c.frame * 1.7,
+              { arcs: 5, alpha: g },
+            );
+          }
+          return;
         }
-        return;
-      }
-      const k = Math.max(0, 1 - (c.frame - 19) / 8);
-      spark(c.ctx, c.x + c.dir * 3.8 * c.u, c.y - 2.8 * c.u, c.u * 4.0 * k, c.frame);
-      arcBurst(c.ctx, c.x + c.dir * 3.0 * c.u, c.y - 2.8 * c.u, c.u * 5.0 * k, 5, c.frame * 2.2, {
-        width: Math.max(1.2, c.u * 0.26),
-        alpha: k,
-      });
-      cheekSparks(c, c.frame * 2.3, k * 0.7);
-    });
+        const k = Math.max(0, 1 - (c.frame - 19) / 8);
+        spark(c.ctx, c.x + c.dir * 3.8 * c.u, c.y - 2.8 * c.u, c.u * 4.0 * k, c.frame);
+        arcBurst(c.ctx, c.x + c.dir * 3.0 * c.u, c.y - 2.8 * c.u, c.u * 5.0 * k, 5, c.frame * 2.2, {
+          width: Math.max(1.2, c.u * 0.26),
+          alpha: k,
+        });
+        cheekSparks(c, c.frame * 2.3, k * 0.7);
+      }),
+    );
     return NOTHING;
   },
 
@@ -932,12 +1119,14 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
           0.14 * (5 - i) * live,
         );
       }
-      glow(
-        c.ctx,
-        c.x + c.dir * 2.6 * c.u,
-        c.y - 3.2 * c.u,
-        c.u * 4.6 * live,
-        withAlpha(ELECTRIC.hot, 0.5 * live),
+      additive(c.ctx, () =>
+        glow(
+          c.ctx,
+          c.x + c.dir * 2.6 * c.u,
+          c.y - 3.2 * c.u,
+          c.u * 4.6 * live,
+          withAlpha(ELECTRIC.hot, 0.45 * live),
+        ),
       );
       arcBurst(c.ctx, c.x + c.dir * 2.6 * c.u, c.y - 3.2 * c.u, c.u * 3.6, 4, c.frame * 2.9, {
         width: Math.max(1, c.u * 0.22),
@@ -954,42 +1143,30 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    */
   upB: (c) => {
     if (c.frame > 40) return NOTHING;
-    electric(c.ctx, () => {
-      // Zip one, upward.
-      const a = pulse(c.frame, 8, 1, 20);
-      if (a > 0) {
-        const tail = c.y + c.u * 11 * (1 - a * 0.35);
-        streak(c.ctx, c.x, tail, c.x, up(c, 0.6), c.u * 2.6, 0.75 * a);
-        arc(c.ctx, c.x, tail, c.x, up(c, 0.6), c.frame * 3.9, {
-          width: Math.max(1.4, c.u * 0.34),
-          jag: c.u * 1.1,
-          alpha: a,
-          taper: 0.4,
-        });
-        arcBurst(c.ctx, c.x, up(c, 0.5), c.u * 6.0 * a, 6, c.frame * 2.2, {
-          width: Math.max(1.2, c.u * 0.3),
-          alpha: a * 0.95,
-        });
-      }
-      // Zip two, forward and away.
-      const b = pulse(c.frame, 20, 1, 36);
-      if (b > 0) {
-        const bx = c.x - c.dir * c.u * 13 * (1 - b * 0.3);
-        const by = up(c, 0.5) + c.u * 4.4 * (1 - b * 0.3);
-        streak(c.ctx, bx, by, c.x + c.dir * c.u * 0.4, up(c, 0.5), c.u * 2.8, 0.75 * b);
-        arc(c.ctx, bx, by, c.x + c.dir * c.u * 0.4, up(c, 0.5), c.frame * 4.3, {
-          width: Math.max(1.4, c.u * 0.34),
-          jag: c.u * 1.2,
-          alpha: b,
-          taper: 0.4,
-        });
-        arcBurst(c.ctx, c.x, up(c, 0.5), c.u * 6.4 * b, 7, c.frame * 2.6, {
-          width: Math.max(1.2, c.u * 0.32),
-          alpha: b * 0.95,
-        });
-      }
-      if (c.frame < 8) cheekSparks(c, c.frame * 3.1, c.frame / 8);
-    });
+    // Over the figure. He is *inside* his own trail for the whole of a zip —
+    // that is what a zip is — and painting it underneath put the brightest thing
+    // in the move behind the one object it is supposed to be replacing.
+    c.over(() =>
+      electric(c.ctx, () => {
+        // Zip one, upward.
+        const a = pulse(c.frame, 8, 1, 20);
+        if (a > 0) zip(c, c.x, c.y + c.u * 11 * (1 - a * 0.35), c.x, up(c, 0.6), a, c.frame * 3.9);
+        // Zip two, forward and away.
+        const b = pulse(c.frame, 20, 1, 36);
+        if (b > 0) {
+          zip(
+            c,
+            c.x - c.dir * c.u * 13 * (1 - b * 0.3),
+            up(c, 0.5) + c.u * 4.4 * (1 - b * 0.3),
+            c.x + c.dir * c.u * 0.4,
+            up(c, 0.5),
+            b,
+            c.frame * 4.3,
+          );
+        }
+        if (c.frame < 8) cheekSparks(c, c.frame * 3.1, c.frame / 8);
+      }),
+    );
     return NOTHING;
   },
 
@@ -1014,18 +1191,24 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       // from frame 2 and crackling inside until the bolt drops out of it.
       if (frame >= 2) {
         const g = Math.min(1, (frame - 1) / 8) * (frame > 40 ? Math.max(0, 1 - (frame - 40) / 16) : 1);
-        const cy = y - 13 * u;
-        ctx.fillStyle = withAlpha("#3A3550", 0.85 * g);
+        // Twenty units up, not thirteen. The bolt's own leading-edge hitbox is
+        // at y = 16 and the cloud has to be *above* what falls out of it; at 13
+        // it sat a head's width over him and the move read as a rain cloud
+        // following him about rather than as lightning called from the sky.
+        // Wider to match, because a cloud three times further away that is the
+        // same number of pixels across has not moved.
+        const cy = y - 20 * u;
+        ctx.fillStyle = withAlpha("#3A3550", 0.88 * g);
         for (const [ox, oy, r] of [
-          [-3.4, 0.4, 2.5],
-          [-1.0, -0.9, 3.1],
-          [1.8, -0.2, 2.7],
-          [3.6, 0.7, 2.0],
+          [-4.8, 0.5, 3.4],
+          [-1.4, -1.3, 4.3],
+          [2.5, -0.3, 3.8],
+          [5.0, 1.0, 2.8],
         ] as const) {
           circle(ctx, x + ox * u, cy + oy * u, r * u * g);
         }
-        arcBurst(ctx, x, cy, u * 4 * g, 4, frame * 1.7, {
-          width: Math.max(1, u * 0.2),
+        arcBurst(ctx, x, cy, u * 5.4 * g, 4, frame * 1.7, {
+          width: Math.max(1, u * 0.24),
           alpha: 0.55 * g,
         });
       }
@@ -1047,7 +1230,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
           taper: 0.12,
           alpha: fade,
         });
-        glow(ctx, x, bottom, u * 6, withAlpha(ELECTRIC.core, 0.8 * fade));
+        additive(ctx, () => glow(ctx, x, bottom, u * 6, withAlpha(ELECTRIC.core, 0.7 * fade)));
       }
 
       // The discharge, on 16-17: a white flash, a shockwave ring at the hitbox's
@@ -1055,10 +1238,19 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       const blast = pulse(frame, 16, 1, 26);
       if (blast > 0) {
         const cy = y - 3 * u;
-        glow(ctx, x, cy, u * 5.5 * (1 + 1.6 * (1 - blast)), withAlpha(ELECTRIC.core, 0.9 * blast));
+        // The hitbox is radius 5.5 centred on him, which is a ball a third
+        // wider than he is tall — so the blast is drawn at that size and the
+        // ring expands *through* it rather than starting there. The white flash
+        // is the one part of this move that should genuinely clip: a bolt
+        // landing on you is the brightest thing on the screen for two frames.
+        additive(ctx, () =>
+          glow(ctx, x, cy, u * 5.5 * (1 + 1.6 * (1 - blast)), withAlpha(ELECTRIC.core, 0.85 * blast)),
+        );
         ring(ctx, x, cy, u * 5.5 * (0.5 + 1.5 * (1 - blast)), frame, {
           width: Math.max(2, u * 0.5 * blast),
           alpha: blast,
+          jagK: 0.1,
+          segs: 22,
         });
         arcBurst(ctx, x, cy, u * 9 * (0.6 + 0.5 * (1 - blast)), 9, frame * 2.3, {
           width: Math.max(1.4, u * 0.34),
@@ -1070,7 +1262,7 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       // The column lingers: hitbox 1 is live to the end of the move, and a bolt
       // that vanishes the frame it lands does not explain why.
       if (frame >= 18 && frame <= 60) {
-        const fade = Math.max(0, 1 - (frame - 18) / 42);
+        const fade = Math.max(0, 1 - (frame - 18) / 24);
         boltTo(ctx, x, y - u * 20, x, y - u * 3, frame * 4.7, {
           width: Math.max(1.2, u * 0.34 * fade),
           jag: u * 1.6,
@@ -1185,7 +1377,13 @@ export const projectiles: Readonly<Record<string, ProjectilePainter>> = {
     const wear = age < 60 ? 1 : Math.max(0.45, 1 - (age - 60) / 70);
     const r = u * 2.1 * born * (0.9 + 0.1 * Math.sin(age * 0.8)) * wear;
     ctx.save();
-    ctx.globalCompositeOperation = "lighter";
+    // **Not `lighter`.** This painter set additive blending for its whole body
+    // and the primitives inside it save and restore to *whatever is current*,
+    // so an orb drawn here would have gone straight back to summing itself to
+    // white while the same orb drawn by the forward smash did not. The blend is
+    // chosen per pass inside the kit; the projectile's job is only to leave it
+    // alone.
+    ctx.globalCompositeOperation = "source-over";
     // The wake, opposite the heading.
     const bx = -Math.cos(heading) * r * 2.4;
     const by = -Math.sin(heading) * r * 2.4;

@@ -43,6 +43,24 @@ const AIRBORNE: ReadonlySet<PoseName> = new Set<PoseName>([
   "upB",
 ]);
 
+/**
+ * Clips whose body turns over in the picture plane, derived rather than listed.
+ *
+ * A tumbling clip breaks two assumptions the rest of this file is built on, and
+ * both breakages are correct. Its feet point every direction in turn, so "the
+ * near toe is forward of the ankle" is meaningless. And its limbs are not
+ * *reaching* anywhere — the Roll Attack's hitbox is a single sphere on the root
+ * bone flagged `attack_region_body`, with no limb hitbox in the move at all —
+ * so "the striking limb stays on its hitbox" is measuring the rotation of a
+ * ball and calling it a withdrawal.
+ *
+ * Read off the keys rather than named, so a clip that stops tumbling stops
+ * being excused automatically.
+ */
+const TUMBLES: ReadonlySet<PoseName> = new Set<PoseName>(
+  (Object.keys(poses) as PoseName[]).filter((n) => poses[n]!.keys.some((k) => k.rotation)),
+);
+
 /** Resolve one sample of a clip on DK's own rig, feet at the origin. */
 function skeletonAt(clip: PoseClip, t: number) {
   const s = samplePose(clip, t);
@@ -193,7 +211,7 @@ describe("Donkey Kong overrides the moves whose shape is the character", () => {
 describe("every clip is an animation rather than a photograph", () => {
   it("travels a long way from its opening pose at some point", () => {
     const still: string[] = [];
-    for (const name of NAMES) {
+    for (const name of NAMES.filter((n) => !poses[n]!.loop)) {
       // The *furthest* the clip ever gets from where it started, not the
       // distance between its first and last frames. An attack ends roughly
       // where it began — that is what a recovery is — so comparing the two
@@ -216,12 +234,44 @@ describe("every clip is an animation rather than a photograph", () => {
     }
   });
 
+  /**
+   * A looping stance is held to a different standard, and needs one.
+   *
+   * The 90° threshold above is an attack's: it exists because seventeen of the
+   * shared movement clips were one frozen pose. An idle that travelled 90° of
+   * summed bone rotation would be a fighter fidgeting violently. What is true
+   * of a *loop* instead is that it moves at all, and that it does not cut —
+   * the span from its last key back to its first is a real span that gets
+   * drawn, and a loop authored as if it ended at the last key jumps once every
+   * cycle, forever, on the pose a player looks at more than any other.
+   */
+  it("loops without a cut in them, and without standing perfectly still", () => {
+    for (const name of NAMES.filter((n) => poses[n]!.loop)) {
+      let furthest = 0;
+      for (let i = 1; i <= 24; i++) furthest = Math.max(furthest, apart(name, 0, i / 24));
+      expect(furthest, `${name} is a photograph`).toBeGreaterThan(12);
+      expect(furthest, `${name} is a fighter with the shakes`).toBeLessThan(90);
+
+      // Sampled at the clip's own frame rate, so a step is a frame. The wrap
+      // step is the one being checked and it is included by construction:
+      // `i / n` for `i = n - 1` and `t = 1` is `t = 0`.
+      const n = poses[name]!.period ?? 30;
+      const steps: number[] = [];
+      for (let i = 0; i < n; i++) steps.push(apart(name, i / n, ((i + 1) % n) / n));
+      const biggest = Math.max(...steps);
+      const typical = [...steps].sort((a, b) => a - b)[Math.floor(n / 2)];
+      expect(biggest, `${name} jumps at one key — a loop that cuts`).toBeLessThan(typical * 4 + 0.5);
+    }
+  });
+
   it("has essentially arrived by its last drawn frame", () => {
     // `t = 1` is never sampled — `poseTimeFor` divides `actionFrame` by the
     // state's length and `actionFrame` runs 0..n-1. A clip still a long way
     // from its terminator on the last drawn frame stops visibly short and cuts.
+    // A loop has no terminator: it converges back onto its own first key, which
+    // is what the test above checks instead.
     const short: string[] = [];
-    for (const name of NAMES) {
+    for (const name of NAMES.filter((n) => !poses[n]!.loop)) {
       const total = donkeyKong.moves[SLOT_FOR[name] ?? "jab1"]?.totalFrames ?? 40;
       const gap = apart(name, (total - 1) / total, 1);
       if (gap > 90) short.push(`${name} stops ${gap.toFixed(0)}° short`);
@@ -337,6 +387,7 @@ describe("the strike key is the moment of contact, and is shaped like one", () =
   it("stays on its hitbox for as long as its contact hitbox is live", () => {
     const withdrawn: string[] = [];
     for (const name of withStrike()) {
+      if (TUMBLES.has(name)) continue;
       const slot = SLOT_FOR[name];
       const move = slot ? donkeyKong.moves[slot] : undefined;
       if (!move || move.hitboxes.length === 0) continue;
@@ -398,6 +449,184 @@ describe("the strike key is the moment of contact, and is shaped like one", () =
   });
 });
 
+describe("a tumble is drawn as a tumble", () => {
+  /**
+   * The one place in this fighter where clip-level `rotation` is the right
+   * tool, and the two ways it silently is not one.
+   *
+   * Rotation interpolates the **short way round**, so a clip that names 0 on
+   * one key and 4π on the next has named the same angle twice and does not turn
+   * at all — it is a ball sitting still while the engine slides it forward.
+   * Every step therefore has to be under half a turn, and the total has to be a
+   * whole number of turns or the fighter is handed back to `idle` lying on his
+   * side.
+   */
+  it("steps the roll round rather than naming one angle twice", () => {
+    expect([...TUMBLES], "no clip tumbles at all").toEqual(["dashAttack"]);
+    for (const name of TUMBLES) {
+      const keys = poses[name]!.keys;
+      const turns = keys.map((k) => k.rotation ?? 0);
+      for (let i = 1; i < turns.length; i++) {
+        expect(
+          Math.abs(turns[i] - turns[i - 1]),
+          `${name} steps ${(turns[i] - turns[i - 1]).toFixed(2)} rad between keys ` +
+            `${i - 1} and ${i} — over half a turn, so it interpolates backwards`,
+        ).toBeLessThan(Math.PI);
+      }
+      const total = turns[turns.length - 1] - turns[0];
+      expect(Math.abs(total), `${name} barely turns`).toBeGreaterThan(Math.PI * 2);
+      expect(
+        Math.abs(turns[turns.length - 1] % (Math.PI * 2)),
+        `${name} finishes part-way round — it hands over a fighter on his side`,
+      ).toBeLessThan(0.05);
+    }
+  });
+});
+
+/**
+ * Where the parts that carry a shape end up, in **feet-up** coordinates.
+ *
+ * The rest of this file works in the skeleton's own frame, where y runs down
+ * and the origin is the pelvis strut's base rather than the floor. Every claim
+ * below is about height above the stage and reach in front of the toes, and
+ * stating those against a downward y is how a reader ends up checking the
+ * opposite of what was meant.
+ */
+function partsAt(name: PoseName, t: number) {
+  const { sk, sample } = skeletonAt(poses[name]!, t);
+  const sole = Math.max(
+    sk.footL.y0 + sk.footL.thickness / 2,
+    sk.footL.y1 + sk.footL.thickness / 2,
+    sk.footR.y0 + sk.footR.thickness / 2,
+    sk.footR.y1 + sk.footR.thickness / 2,
+  );
+  // `skeletonAt` already hands the sample's `scaleX`/`scaleY` to `resolve`, so
+  // the coordinates arrive scaled; only the translation is still to apply.
+  const p = (n: keyof typeof sk) => ({
+    x: sk[n].x1 + sample.offsetX,
+    y: sole - sk[n].y1,
+    // The bottom of the capsule's end cap: what actually touches the floor.
+    low: sole - sk[n].y1 - sk[n].thickness / 2,
+  });
+  return {
+    handR: p("handR"), handL: p("handL"),
+    footR: p("footR"), footL: p("footL"),
+    head: p("head"), shoulder: p("torso"), hip: p("hip"),
+    kneeR: p("thighR"), kneeL: p("thighL"),
+  };
+}
+
+/** Crown to sole on this rig, for stating heights as fractions of him. */
+const STANDING = rig.bones.root.length + rig.bones.hip.length + rig.bones.torso.length +
+  rig.bones.head.length + rig.headRadius;
+
+describe("the shapes round two is actually claiming", () => {
+  /**
+   * The idle is a knuckle stance, and these are the three numbers that make it
+   * one rather than a hunch.
+   *
+   * All three are from the reference measurements, not taste: the arms hang
+   * plumb (so the *spine's* lean is what carries the hands forward, and the
+   * arms themselves never reach), the fists rest on the floor, and they rest
+   * there in front of his own toes. Miss any one and it is a fighter bending
+   * over.
+   */
+  it("stands on its knuckles, all the way round the loop", () => {
+    for (let i = 0; i < 8; i++) {
+      const t = i / 8;
+      const p = partsAt("idle", t);
+      expect(p.handR.low, `near knuckle floats at t=${t.toFixed(2)}`).toBeLessThan(0.35);
+      expect(p.handL.low, `far knuckle floats at t=${t.toFixed(2)}`).toBeLessThan(0.5);
+      expect(p.handR.x, `near knuckle is behind his toes at t=${t.toFixed(2)}`)
+        .toBeGreaterThan(p.footR.x + 1.5);
+      // The lean, stated as what it buys: the shoulder has to be carried a long
+      // way forward of the ankles, because that is the only thing putting the
+      // hands where they are.
+      expect(p.shoulder.x, `spine is not leaning at t=${t.toFixed(2)}`).toBeGreaterThan(3.0);
+    }
+  });
+
+  /** And the knuckles stay put while the chest breathes over them. */
+  it("keeps the planted parts planted while the body moves", () => {
+    let handSwing = 0;
+    let chestSwing = 0;
+    for (let i = 0; i < 8; i++) {
+      const a = partsAt("idle", i / 8);
+      const b = partsAt("idle", ((i + 1) % 8) / 8);
+      handSwing = Math.max(handSwing, Math.hypot(a.handR.x - b.handR.x, a.handR.y - b.handR.y));
+      chestSwing = Math.max(chestSwing, Math.hypot(a.head.x - b.head.x, a.head.y - b.head.y));
+    }
+    expect(handSwing, "the knuckles slide about").toBeLessThan(0.3);
+    expect(chestSwing, "nothing above the shoulders moves").toBeGreaterThan(handSwing * 1.5);
+  });
+
+  /** The up smash is a clap: the palms meet, above his crown, on his centreline. */
+  it("meets the palms above the crown on the up smash", () => {
+    const p = partsAt("usmash", poses.usmash!.strike as number);
+    expect(Math.hypot(p.handR.x - p.handL.x, p.handR.y - p.handL.y),
+      "the hands do not meet — this is a starfish, not a clap").toBeLessThan(1.2);
+    expect(p.handR.y, "the clap is not above his head").toBeGreaterThan(p.head.y + 2.5);
+    expect(Math.abs(p.handR.x), "the clap is off his centreline").toBeLessThan(2.5);
+    // Feet flat, stated as `offsetY` rather than as a sole position — the sole
+    // *is* the origin these are measured from, so asking where it is is
+    // vacuous, and the thing that lifts a fighter off the stage is the whole-
+    // body translation. The reference measures the silhouette's bottom edge not
+    // moving one pixel between neutral and the two contact frames, so there is
+    // no toe rise and no hop buying this reach: it is bought with `scaleY`,
+    // which stretches about the feet and leaves them where they are.
+    expect(samplePose(poses.usmash!, poses.usmash!.strike as number).offsetY, "he hops into it")
+      .toBeLessThan(0.25);
+  });
+
+  /** The down smash is two fists, both sides, at once, on the deck. */
+  it("brings both fists down together on the down smash", () => {
+    const p = partsAt("dsmash", poses.dsmash!.strike as number);
+    expect(p.handR.x, "the front fist is not in front").toBeGreaterThan(3);
+    expect(p.handL.x, "the back fist is not behind").toBeLessThan(-2);
+    expect(Math.abs(p.handR.y - p.handL.y),
+      "one arm is still up over his shoulder — this is a stagger, not a pound",
+    ).toBeLessThan(1.5);
+    // …and they keep going into the floor rather than stopping at his hips.
+    const late = partsAt("dsmash", 0.328);
+    expect(Math.max(late.handR.y, late.handL.y) / STANDING,
+      "the fists stop above knee height").toBeLessThan(0.32);
+  });
+
+  /** The forward smash finishes low. It is a slam, not a jab. */
+  it("lands the forward smash's hands near the floor", () => {
+    const p = partsAt("fsmash", poses.fsmash!.strike as number);
+    expect(p.handR.y / STANDING, "the hands finish at chest height").toBeLessThan(0.4);
+    expect(p.head.y, "the head is not thrust down and forward").toBeLessThan(p.shoulder.y + 1.5);
+    expect(p.head.x, "the head is not thrust forward").toBeGreaterThan(p.shoulder.x + 2);
+  });
+
+  /** The neutral air is prone. That is the whole move. */
+  it("lays the neutral air's body over and folds the legs under it", () => {
+    const p = partsAt("nair", poses.nair!.strike as number);
+    // The spine, measured as the shoulder's lead over the pelvis against its
+    // rise above it: upright is a big ratio, prone is a small one.
+    const lean = (p.shoulder.x - p.hip.x) / Math.max(0.1, p.shoulder.y - p.hip.y);
+    expect(lean, "the neutral air is drawn standing up").toBeGreaterThan(1.4);
+    // Knees to the chest. Stated at the *knee* and not the ankle, because the
+    // shin folds back down under him — an ankle above the pelvis would be a
+    // fighter sitting cross-legged, not one tucked into a spin.
+    expect(p.kneeR.y, "the legs hang instead of tucking").toBeGreaterThan(p.hip.y);
+    expect(p.kneeL.y, "the far leg hangs instead of tucking").toBeGreaterThan(p.hip.y);
+    // …and both arms are still out at the ends of a bar.
+    expect(p.handR.x - p.handL.x, "the arms are not thrown out level").toBeGreaterThan(9);
+  });
+
+  /** The down air is an exclamation mark: arms up, legs down, feet together. */
+  it("throws the down air's arms up and drives its legs straight down", () => {
+    const p = partsAt("dair", poses.dair!.strike as number);
+    expect(p.handR.y, "the near arm is not above his head").toBeGreaterThan(p.head.y + 1);
+    expect(p.handL.y, "the far arm is not above his head").toBeGreaterThan(p.head.y + 1);
+    expect(p.handR.x - p.handL.x, "the arms are not spread into a V").toBeGreaterThan(2);
+    expect(Math.abs(p.footR.x - p.footL.x), "the feet are staggered, not stacked")
+      .toBeLessThan(0.8);
+  });
+});
+
 describe("the drawing stays Donkey Kong's", () => {
   it("never puts a foot on backwards", () => {
     // `footL` and `footR` both rest at -88 because the legs are not
@@ -408,6 +637,7 @@ describe("the drawing stays Donkey Kong's", () => {
     const offenders: string[] = [];
     for (const name of NAMES) {
       if (AIRBORNE.has(name)) continue; // a stomp and a back kick point the feet anywhere
+      if (TUMBLES.has(name)) continue; // and a roll points them at everything in turn
       for (let i = 0; i <= 10; i++) {
         const t = (i / 10) * 0.95;
         const { sk } = skeletonAt(poses[name]!, t);

@@ -56,6 +56,113 @@
 import { P, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
+/* ----------------------------------------------------------------- idle -- */
+
+/**
+ * The stand — the pose he is in for most of a match, and the one clip here that
+ * is not an attack.
+ *
+ * The shared `idle` is a person standing: legs all but straight, arms hanging,
+ * chest up. Fox is not standing, he is *waiting* — a low, forward-leaning ready
+ * stance with both knees loaded, the near hand carried up in front of the
+ * chest, the far one back at the hip, and the tail out behind as the
+ * counterweight. It is the same stance his idle poses depart from (SmashWiki
+ * describes the first as "a taekwondo-type fighting stance"), and it is what
+ * makes the fastest fighter in the game look like he is about to leave rather
+ * than like he is queueing.
+ *
+ * Three things are borrowed wholesale from the shared clip's reasoning, because
+ * they are right and were expensive to learn:
+ *
+ * 1. **Four keys, and nothing turns round at the same moment as anything
+ *    else.** The chest is highest at key 1, the head is still rising at key 2,
+ *    the near arm is furthest back at key 3. Two keys give a metronome at any
+ *    amplitude.
+ * 2. **Only the inhale is cushioned.** Smoothstep is zero-velocity at both
+ *    ends, so easing every span stops the whole body dead at every key. The
+ *    three spans of the exhale are linear.
+ * 3. **A bent knee repays itself out of the thigh.** `shin += d` with
+ *    `thigh -= d/2` moves the ankle by hundredths of a unit, and both thighs
+ *    carry the pelvis's own tilt subtracted out, or a degree of rock at the
+ *    hip skates both boots across the floor.
+ *
+ * What is Fox's rather than shared: he sits 0.42 units lower with real bend in
+ * both knees, the torso is pitched 14° forward with the head counter-rotated so
+ * the muzzle stays level rather than pointing at his boots, the near arm is
+ * carried forward and bent instead of hanging, and the cycle is 84 frames
+ * instead of 108 — a breath a third faster, which is as much of "he is quick"
+ * as a still pose can carry.
+ *
+ * The period is deliberately *not* a multiple of the tail's own 114-frame sway
+ * in `rig.ts`, so the two never lock into a beat.
+ */
+const idle: PoseClip = {
+  loop: true,
+  period: 84,
+  keys: [
+    {
+      // The settle at the end of the exhale. Chest at its lowest, weight over
+      // the back leg, far arm at the back of its swing.
+      t: 0,
+      pose: P({
+        hip: 1.0, torso: 15.0, head: -10.0,
+        thighR: 160.0, shinR: 32.0, footR: -104.0,
+        thighL: 197.6, shinL: -12.0, footL: -95.0,
+        upperArmR: 156.0, forearmR: -48.0,
+        upperArmL: 187.0, forearmL: -38.0,
+      }),
+      offsetY: -0.44,
+      scaleY: 0.998,
+    },
+    {
+      // Top of the inhale. Most of the rise is `scaleY`, which stretches about
+      // the feet and leaves the soles on the floor; `offsetY` would lift them
+      // off it.
+      t: 0.33,
+      pose: P({
+        hip: 0.2, torso: 12.4, head: -5.6,
+        thighR: 162.3, shinR: 29.0, footR: -103.0,
+        thighL: 199.4, shinL: -15.0, footL: -95.0,
+        upperArmR: 155.2, forearmR: -50.5,
+        upperArmL: 186.6, forearmL: -35.0,
+      }),
+      offsetY: -0.36,
+      scaleY: 1.016,
+      ease: "linear",
+    },
+    {
+      // The head is still coming up as the chest starts down. Weight now over
+      // the near leg and that knee at its softest.
+      t: 0.57,
+      pose: P({
+        hip: -0.8, torso: 13.8, head: -14.2,
+        thighR: 164.8, shinR: 26.0, footR: -102.0,
+        thighL: 200.9, shinL: -18.0, footL: -95.0,
+        upperArmR: 152.0, forearmR: -46.0,
+        upperArmL: 190.2, forearmL: -39.5,
+      }),
+      offsetY: -0.40,
+      scaleY: 1.007,
+      ease: "linear",
+    },
+    {
+      // A hair under key 0, so the last span is a recovery into the settle
+      // rather than a fourth extreme.
+      t: 0.80,
+      pose: P({
+        hip: 0.4, torso: 15.6, head: -10.8,
+        thighR: 161.1, shinR: 31.0, footR: -104.0,
+        thighL: 198.3, shinL: -13.0, footL: -95.0,
+        upperArmR: 151.4, forearmR: -47.0,
+        upperArmL: 190.6, forearmL: -36.0,
+      }),
+      offsetY: -0.46,
+      scaleY: 0.996,
+      ease: "linear",
+    },
+  ],
+};
+
 /* ------------------------------------------------------------------ jab -- */
 
 /**
@@ -228,75 +335,107 @@ const ftilt: PoseClip = {
  * Up tilt: the scorpion kick.
  *
  * "Fox plants his hands on the ground and does a scorpion kick with his right
- * leg." He cannot literally plant them — the arm chain reaches 4.4 units from
- * a shoulder that sits at 8.5, so the hands bottom out at hip height — but the
- * shape that reads is the *pitch*: nose down and forward, both arms driven
- * down, and the near leg whipped up behind him. Contact at (-2.5, 11.4)
- * against a hitbox at (0.5, 11.5) radius 3.8.
+ * leg." Round one read that as impossible — "the arm chain reaches 4.4 units
+ * from a shoulder that sits at 8.5, so the hands bottom out at hip height" —
+ * and settled for a lean. That was measuring the wrong thing. **The arm does
+ * not have to be longer; the shoulder has to come down.** Watch the move
+ * (SmashWiki's own hitbox capture, frames 2-7) and he is not leaning: he is
+ * *doubled over*, chest almost horizontal, muzzle down by his own wrists, hips
+ * the highest part of him, with the near leg whipped up and back over his
+ * spine. Pitch the torso to 96° and the shoulder is at y 5.2 rather than 9.1,
+ * and a 4.35-unit arm hanging off it puts the hand on the floor with room to
+ * spare.
  *
- * The leg goes up and *back*, which is both what a scorpion kick is and the
- * only version of it that can be seen. Straight up put the boot at (0.5, 12.3)
- * and the head at (1.3, 11.3) — a 1.7-unit boot inside a 2.05-radius skull —
- * and the contact frame read as a fighter standing still. Up and back puts
- * five units between them and turns the pose into a silhouette: nose down and
- * forward, boot up and behind, which nobody else on the roster does.
+ * That is the whole fix, and it is worth stating plainly because it is the same
+ * mistake in miniature that made round one lengthen nothing: a limb that will
+ * not reach is usually a *body* that is not committed, and reach bought by
+ * scaling a bone is paid for in every one of the fifty clips that bone is also
+ * in.
  *
- * Frame 3, which is why the wind-up is a single key and the leg is already
- * moving at t=0. This is the move that starts every combo he has.
+ * The shape it buys is a genuine silhouette — a fighter bent double with both
+ * hands on the stage and one boot in the air over his own back — and nobody
+ * else on this roster makes it.
+ *
+ * Contact puts the boot at (-3.7, 9.4) against a hitbox at (0.5, 11.5)
+ * radius 3.8. Frame 3, which is why the wind-up is a single key and he is
+ * already diving at t=0: there are two samples before contact and neither of
+ * them can afford to be a fighter standing up straight.
  */
 const utilt: PoseClip = {
   loop: false,
   strike: 0.26,
   keys: [
     {
+      // Already going over. The hands are past the knees and the near foot has
+      // left the floor on the first frame drawn.
       t: 0,
       pose: P({
-        torso: 14, head: -10,
-        thighR: 158, shinR: 40, footR: -86,
-        thighL: 198, shinL: -16, footL: -86,
-        upperArmR: 168, forearmR: -20, upperArmL: 176, forearmL: -18,
+        torso: 46, head: 6, hip: -4,
+        thighR: 126, shinR: 58, footR: -96,
+        thighL: 200, shinL: -30, footL: -80,
+        upperArmR: 116, forearmR: -6, upperArmL: 120, forearmL: -10,
       }),
+      offsetY: -0.2,
       ease: "in",
     },
     {
+      // Planted. Chest horizontal, both hands on the stage, hips at the apex,
+      // the near leg thrown up and back over his own spine.
       t: 0.26,
       pose: P({
-        torso: 44, head: -4, hip: -8,
-        thighR: -14, shinR: -24, footR: 34,
-        thighL: 204, shinL: -20, footL: -84,
-        upperArmR: 120, forearmR: 44, upperArmL: 126, forearmL: 40,
+        torso: 96, head: 42, hip: -2,
+        thighR: -32, shinR: 8, footR: -30,
+        thighL: 202, shinL: -46, footL: -74,
+        upperArmR: 78, forearmR: 6, handR: 0,
+        upperArmL: 86, forearmL: 0, handL: 0,
       }),
-      offsetX: 0.3,
-      scaleX: 0.96,
-      scaleY: 1.1,
+      offsetX: 0.2,
+      offsetY: -0.5,
+      scaleX: 1.04,
       ease: "hold",
     },
     {
-      t: 0.39,
+      // The late hitbox runs to frame 7 and sits slightly forward and down of
+      // the clean one, so the leg drifts a few degrees over rather than holding
+      // a photograph — the shape is the same and the boot is on its way round.
+      t: 0.40,
       pose: P({
-        torso: 44, head: -4, hip: -8,
-        thighR: -14, shinR: -24, footR: 34,
-        thighL: 204, shinL: -20, footL: -84,
-        upperArmR: 120, forearmR: 44, upperArmL: 126, forearmL: 40,
+        torso: 96, head: 42, hip: -2,
+        thighR: -26, shinR: 6, footR: -28,
+        thighL: 202, shinL: -46, footL: -74,
+        upperArmR: 78, forearmR: 6, handR: 0,
+        upperArmL: 86, forearmL: 0, handL: 0,
       }),
-      offsetX: 0.3,
-      scaleX: 0.96,
-      scaleY: 1.1,
+      offsetX: 0.2,
+      offsetY: -0.5,
+      scaleX: 1.04,
       ease: "out",
     },
     {
+      // Out of it the way he went in: the leg swings down and *forward* past
+      // the vertical while the chest comes up, which is what the capture shows
+      // on frames 8 through 16 and is the opposite of rewinding the kick.
       t: 0.58,
       pose: P({
-        torso: 24, head: -6, hip: -6,
-        thighR: 66, shinR: 42, footR: -56,
-        thighL: 202, shinL: -18, footL: -84,
-        upperArmR: 148, forearmR: 16, upperArmL: 156, forearmL: 14,
+        torso: 52, head: 18, hip: -6,
+        thighR: 96, shinR: 26, footR: -70,
+        thighL: 204, shinL: -34, footL: -78,
+        upperArmR: 106, forearmR: -14, upperArmL: 112, forearmL: -18,
       }),
       offsetX: 0.16,
-      scaleY: 1.04,
+      offsetY: -0.3,
     },
-    { t: 0.90, pose: P({ torso: 8, head: -4, thighR: 164, shinR: 22, footR: -96, thighL: 200, shinL: -18, footL: -84 }) },
-    { t: 1, pose: P({ torso: 4, upperArmR: 166, forearmR: -30, upperArmL: 190, forearmL: -28 }) },
+    {
+      t: 0.90,
+      pose: P({
+        torso: 16, head: -8,
+        thighR: 160, shinR: 30, footR: -100,
+        thighL: 200, shinL: -16, footL: -88,
+        upperArmR: 150, forearmR: -34, upperArmL: 184, forearmL: -30,
+      }),
+      offsetY: -0.1,
+    },
+    { t: 1, pose: P({ torso: 10, head: -6, thighR: 164, shinR: 26, footR: -100, thighL: 200, shinL: -14, footL: -90, upperArmR: 160, forearmR: -36, upperArmL: 188, forearmL: -32 }) },
   ],
 };
 
@@ -589,22 +728,45 @@ const fsmash: PoseClip = {
 };
 
 /**
- * Up smash: the bicycle kick.
+ * Up smash: the bicycle kick, and it is a real somersault.
  *
  * Frame 8 — not frame 2, which belongs to the charge hold and is the most
  * repeated wrong number about this character; see the header of
  * `fighters/fox.ts`. The hitbox is a 5.7-radius sphere at (1.0, 12.0), above
- * his own head, and both legs go through it: the near boot arrives at (3.3,
- * 11.6) and the far one follows it over the top to (2.1, 12.6) three frames
- * later, so the two keys are the two halves of the pedal.
+ * his own head.
  *
- * The kicking leg goes up *and forward* rather than straight up, which took a
- * second pass to find. Straight up put the boot at (1.8, 13.1) and the head at
- * (-0.7, 13.1) — the same height, two units apart, with a 2.05 head circle and
- * a 1.7 boot between them — and the strike frame read as a fighter standing
- * still with something odd behind his ears. The hitbox's radius is 5.7, so
- * there is room to move the boot clear of the skull and still be well inside
- * it, and being legible matters more than being centred.
+ * ## The thing round one could not do, and why it can now
+ *
+ * The boot has to get above his own head, and it cannot: the leg chain is 6.37
+ * units from a pelvis at 4.87, which tops out at 11.25, and the crown of his
+ * head is at 13.10. Round one worked round it by pitching the torso back and
+ * calling it done, and the capture shows exactly what that buys — a fighter
+ * sitting down in mid-air with a boot out at ear height, carried entirely by
+ * the swing arc the renderer paints over him. Lengthening the leg is not the
+ * answer either: it would need +1.9 units, which is a stork, and every unit of
+ * it has to be repaid in `root` or he stands through the floor in all fifty
+ * shared clips.
+ *
+ * The answer is the one the real move uses. SmashWiki's own hitbox capture:
+ * frames 0-4 he crouches, frame 5 he rises with one arm thrown overhead, and by
+ * frame 7 he is **horizontal**, going over backwards — through the whole active
+ * window his head is below his hips and both legs are above him, and the
+ * hitboxes sit on the knee and over the top of his body. It is a somersault,
+ * so it is authored as one: the body turns 135° backwards about the pelvis, the
+ * legs stay pointed down the body's own axis, and after the turn "down the
+ * body" *is* up and forward. A boot that could not pass 11.25 standing arrives
+ * at 14.7, with his own crown three units under it at 6.6.
+ *
+ * `rotation` and not `spin`: `spin` integrates whole turns across the clip and
+ * cannot be keyed, and this turn has to arrive on frame 8, hold through the
+ * second half of the pedal and then come back — he lands on his feet. Each
+ * span is under half a revolution, which is the constraint `lerpAngle` puts on
+ * a keyed rotation, and the unwind is the recovery: 44 frames of it, which is
+ * why this is the slowest thing he owns.
+ *
+ * The two contact keys are the two halves of the pedal — near leg first, far
+ * leg following it over the top — so a still frame of the move is a scissor in
+ * the air and not one leg raised.
  */
 const usmash: PoseClip = {
   loop: false,
@@ -621,8 +783,10 @@ const usmash: PoseClip = {
       ease: "in",
     },
     {
-      // The charge pose, at `strike * 0.55` = 0.143. Dropped into a crouch with
-      // both knees loaded and the arms swung down and back — a coil that is
+      // The charge pose, at `strike * 0.55` = 0.143 — a tenth of the way into
+      // the span below, which under a cubic `in` is a thousandth of the way to
+      // it, so this drawing is what a held button shows. Dropped into a crouch
+      // with both knees loaded and the arms swung down and back: a coil that is
       // obviously about to go upward.
       t: 0.13,
       pose: P({
@@ -637,51 +801,84 @@ const usmash: PoseClip = {
       ease: "in",
     },
     {
+      // Frames 8-9, the clean hit. Over backwards, near leg driving through the
+      // top of the arc, the far one still trailing. The arms are thrown wide
+      // rather than tucked — a somersault is thrown *by* the arms, and tucked
+      // ones would leave the body a featureless bar at this angle.
       t: 0.26,
       pose: P({
-        torso: -46, head: 34, hip: 16,
-        thighR: 10, shinR: 8, footR: -14,
-        thighL: 52, shinL: 26, footL: -26,
-        upperArmR: 132, forearmR: -46, upperArmL: 220, forearmL: 40,
+        torso: -18, head: 22, hip: 6,
+        // A scissor, not a pair. The two legs were 26 degrees apart and read as
+        // one fat limb at match scale — the reference has the kicking leg
+        // ramrod straight down the body's axis with the other folded hard into
+        // the chest, and that split *is* the move's read. Sixty degrees at the
+        // knee is what makes two legs legible as two.
+        thighR: 186, shinR: -6, footR: -76,
+        thighL: 126, shinL: 68, footL: -104,
+        upperArmR: 116, forearmR: -44, upperArmL: 232, forearmL: 36,
       }),
-      offsetX: -0.6,
-      offsetY: 0.9,
-      rotation: -0.244,
-      scaleX: 0.88,
-      scaleY: 1.18,
+      offsetX: -0.5,
+      offsetY: 2.0,
+      rotation: -2.36,
+      scaleX: 0.92,
+      scaleY: 1.12,
       ease: "hold",
     },
     {
+      // Frames 10-11, the late hit and the second half of the pedal. Further
+      // over, and the far leg has crossed the near one through the top.
       t: 0.35,
       pose: P({
-        torso: -44, head: 32, hip: 14,
-        // The far leg follows the near one through the top of the arc, which is
-        // the second half of the pedal — and is why a still frame of this move
-        // shows a scissor rather than one leg raised.
-        thighR: 44, shinR: 18, footR: -28,
-        thighL: 16, shinL: 10, footL: -16,
-        upperArmR: 132, forearmR: -46, upperArmL: 220, forearmL: 40,
+        torso: -16, head: 20, hip: 4,
+        thighR: 130, shinR: 64, footR: -100,
+        thighL: 184, shinL: -6, footL: -78,
+        upperArmR: 112, forearmR: -40, upperArmL: 236, forearmL: 32,
       }),
-      offsetX: -0.6,
-      offsetY: 0.95,
-      rotation: -0.244,
-      scaleX: 0.88,
-      scaleY: 1.18,
+      offsetX: -0.4,
+      offsetY: 2.25,
+      rotation: -2.58,
+      scaleX: 0.92,
+      scaleY: 1.12,
       ease: "out",
     },
     {
-      t: 0.56,
+      // Coming down out of it. The turn unwinds and the legs fold under him at
+      // the same time, so what the eye tracks is the knees arriving rather than
+      // the body rewinding.
+      t: 0.50,
       pose: P({
-        torso: -12, head: 8, hip: 2,
-        thighR: 108, shinR: 26, footR: -76,
-        thighL: 66, shinL: 36, footL: -52,
-        upperArmR: 158, forearmR: -22, upperArmL: 200, forearmL: 20,
+        torso: 4, head: 4, hip: 0,
+        thighR: 128, shinR: 54, footR: -104,
+        thighL: 146, shinL: 44, footL: -96,
+        upperArmR: 148, forearmR: -30, upperArmL: 210, forearmL: 26,
       }),
-      offsetY: 0.16,
-      scaleY: 1.05,
+      offsetY: 1.35,
+      rotation: -1.28,
+      scaleY: 1.04,
     },
-    { t: 0.88, pose: P({ torso: 6, thighR: 162, shinR: 26, footR: -98, thighL: 200, shinL: -18, footL: -84 }) },
-    { t: 1, pose: P({ torso: 6, upperArmR: 178, forearmR: -24, upperArmL: 198, forearmL: -20 }) },
+    {
+      t: 0.62,
+      pose: P({
+        torso: 16, head: -10, hip: -2,
+        thighR: 132, shinR: 76, footR: -122,
+        thighL: 142, shinL: 78, footL: -126,
+        upperArmR: 176, forearmR: -6, upperArmL: 194, forearmL: 4,
+      }),
+      offsetY: -1.1,
+      rotation: -0.30,
+      scaleY: 0.90,
+    },
+    {
+      t: 0.88,
+      pose: P({
+        torso: 8, head: -6,
+        thighR: 158, shinR: 36, footR: -102,
+        thighL: 198, shinL: -10, footL: -88,
+        upperArmR: 172, forearmR: -20, upperArmL: 194, forearmL: -16,
+      }),
+      offsetY: -0.3,
+    },
+    { t: 1, pose: P({ torso: 6, thighR: 162, shinR: 30, footR: -100, thighL: 200, shinL: -14, footL: -88, upperArmR: 178, forearmR: -24, upperArmL: 198, forearmL: -20 }) },
   ],
 };
 
@@ -1656,9 +1853,9 @@ const sideB: PoseClip = {
     {
       t: 0.21,
       pose: P({
-        hip: 42, torso: 26, head: -60,
-        thighR: 212, shinR: 20, footR: -8,
-        thighL: 230, shinL: 8, footL: -12,
+        hip: 26, torso: 22, head: -46,
+        thighR: 228, shinR: 20, footR: -8,
+        thighL: 246, shinL: 8, footL: -12,
         upperArmR: 198, forearmR: 20,
         upperArmL: 206, forearmL: 16,
       }),
@@ -1672,9 +1869,9 @@ const sideB: PoseClip = {
     {
       t: 0.3,
       pose: P({
-        hip: 46, torso: 26, head: -62,
-        thighR: 216, shinR: 22, footR: -10,
-        thighL: 234, shinL: 8, footL: -14,
+        hip: 28, torso: 22, head: -48,
+        thighR: 234, shinR: 22, footR: -10,
+        thighL: 252, shinL: 8, footL: -14,
         upperArmR: 200, forearmR: 22,
         upperArmL: 208, forearmL: 18,
       }),
@@ -1906,6 +2103,7 @@ const upB: PoseClip = {
 };
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
+  idle,
   jab,
   ftilt,
   utilt,

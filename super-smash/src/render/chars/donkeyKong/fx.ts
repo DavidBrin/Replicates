@@ -31,12 +31,19 @@ import type { ProjectilePainter } from "../../fxKit";
  * the ring drifts off the fists silently. `SWEEP_HALF_TURN` is the pose's
  * cadence rather than the frame data's — the near fist is forward on the strike
  * key and traded round by move frame 21.
+ *
+ * Round two laid the body over into the prone attitude the frames actually
+ * show, which drops the shoulder line: `SWEEP_Y` comes down with it. And the
+ * pose now holds the clean window flat and spends the turn across the weak
+ * tail, so `SWEEP_HALF_TURN` follows the keys it is drawn against — bar at
+ * action frame 12, edge at 16, bar traded at 20, which is a half turn every
+ * eight frames.
  */
-const SWEEP_Y = 9.6;
+const SWEEP_Y = 7.4;
 const SWEEP_R = 10.4;
 /** How open the ellipse is. 0 would be exactly edge-on, and invisible. */
 const SWEEP_FLAT = 0.3;
-const SWEEP_HALF_TURN = 11;
+const SWEEP_HALF_TURN = 8;
 const SWEEP_HOT = "#FFF4DC";
 const SWEEP_COOL = "#E39A3A";
 
@@ -75,15 +82,64 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * glows, and it grows with the charge. The white ring on the armour frames is
    * the tell for "hitting him now will not stop this".
    */
-  neutralB: ({ ctx, f, def, x, y, u, frame }) => {
-    const side = f.facing >= 0 ? 1 : -1;
-    const fistX = x + u * 5.4 * side;
-    const fistY = y - u * 8.2;
+  neutralB: ({ ctx, f, def, x, y, u, dir, frame, height, over }) => {
     const charge = Math.min(1, f.charge / SMASH_CHARGE_MAX);
+    const full = charge > 0.985;
+    // The wind-up is a circle centred on the shoulder — measured at 0.6 of his
+    // height in radius, which is the arm — and the fist runs round it up the
+    // *front*, over the crown and away behind him. One revolution every eleven
+    // frames, which is the 110-frame charge divided by its ten wind-ups.
+    const sx = x + u * 0.6 * dir;
+    const sy = y - u * height * 0.58;
+    const r = u * height * 0.6;
+    const spin = (frame / 11) * Math.PI * 2;
+    // `-dir` on the x term is what makes it go up the front rather than up the
+    // back, and it keeps doing so when he turns round.
+    const at = (a: number) => [sx - Math.sin(a) * r * dir, sy - Math.cos(a) * r] as const;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    glow(ctx, fistX, fistY, u * (2.6 + charge * 4), withAlpha("#FFD37A", 0.5 + charge * 0.5));
+
+    // The swipe ribbons: two or three concentric arcs at once, because the
+    // trail outlives one revolution.
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * (1 - i * 0.09), 0, Math.PI * 2);
+      ctx.strokeStyle = withAlpha("#FFFFFF", (0.1 - i * 0.028) * (0.35 + charge * 0.65));
+      ctx.lineWidth = Math.max(1, u * (0.5 - i * 0.13));
+      ctx.stroke();
+    }
+
+    const [fistX, fistY] = at(spin);
+    glow(
+      ctx,
+      fistX,
+      fistY,
+      u * (1.8 + charge * 3.4),
+      withAlpha("#FFD37A", 0.45 + charge * 0.55),
+      withAlpha("#B06A10", 0.12),
+    );
+    // Electricity, not fire: "trails of electricity appear on his arm and fist
+    // during the charge up and the punch". Zig-zags rather than a halo, and
+    // spawned every fifth frame rather than every frame, which is the cadence
+    // they actually flicker at.
+    if (charge > 0.05 && frame % 5 < 2) {
+      ctx.strokeStyle = withAlpha("#FFFFFF", 0.5 + charge * 0.4);
+      ctx.lineWidth = Math.max(1, u * 0.22);
+      for (let k = 0; k < 3; k++) {
+        const a = spin + 2.1 + k * 2.1;
+        ctx.beginPath();
+        ctx.moveTo(fistX, fistY);
+        for (let j = 1; j <= 3; j++) {
+          const d = u * (0.9 + charge * 1.5) * j;
+          ctx.lineTo(
+            fistX + Math.cos(a + j * 0.9) * d,
+            fistY + Math.sin(a + j * 0.9) * d * 0.9,
+          );
+        }
+        ctx.stroke();
+      }
+    }
 
     const armour = armourWindow(def, "neutralB");
     if (armour && frame >= armour[0] && frame <= armour[1]) {
@@ -94,6 +150,29 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
       ctx.stroke();
     }
     ctx.restore();
+
+    // **The full-charge tell is smoke off the top of his head**, and it has
+    // been the tell since Melee — not a glow, not a flashing fist. Painted
+    // `over` because it rises out of the crown and anything drawn under the
+    // figure is hidden by the skull it is supposed to be coming out of.
+    if (full) {
+      over(() => {
+        ctx.save();
+        for (let k = 0; k < 3; k++) {
+          const age = ((frame + k * 9) % 27) / 27;
+          const puff = u * (0.9 + age * 2.1);
+          glow(
+            ctx,
+            x + u * (0.4 + age * 1.1) * dir,
+            y - u * height * (0.98 + age * 0.34),
+            puff,
+            withAlpha("#FFFFFF", 0.5 * (1 - age)),
+            withAlpha("#C8CEDA", 0.08 * (1 - age)),
+          );
+        }
+        ctx.restore();
+      });
+    }
     return NOTHING;
   },
 
@@ -203,6 +282,253 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
         withAlpha("#8A6B45", 0.1 * fade),
       );
     }
+    ctx.restore();
+    return NOTHING;
+  },
+
+  /**
+   * Forward smash — the dive, and what it lands on.
+   *
+   * Two graphics, and the second is the one that matters. The **arc** is the
+   * pair of arms coming over the top: a tapered crescent about the shoulder,
+   * swept from up-and-behind round to down-and-in-front, which is 150° of hand
+   * travel in the two frames either side of contact and reads as a teleport
+   * without a smear.
+   *
+   * The **landing** is on the floor and not in the air, because the pose now
+   * finishes with both fists 4.4 rig units up — 30% of his height — a body's
+   * length out in front of him. A spark hung at the hitbox centre (world y 8)
+   * would sit a metre above the hands that made it. Earth-toned, like Hand Slap
+   * and Headbutt, because all three are DK hitting the ground.
+   */
+  fsmash: ({ ctx, x, y, u, dir, frame, over }) => {
+    const FIRST = 22;
+    const LIFE = 13;
+    const age = frame - FIRST;
+    if (age < -3 || age > LIFE) return NOTHING;
+    const gx = x + u * 10 * dir;
+
+    if (age <= 2) {
+      const swing = Math.min(1, (age + 4) / 6);
+      const fade = age <= 0 ? swing : Math.max(0, 1 - age / 3);
+      // In front of the figure: this is the arms' own path and they are the
+      // frontmost thing on him. Under the body it was eclipsed by the barrel
+      // for the whole of the useful part of the sweep.
+      over(() => {
+        ctx.save();
+        ctx.translate(x + u * 0.6 * dir, y - u * 9.2);
+        ctx.scale(dir, 1);
+        ctx.globalCompositeOperation = "lighter";
+        const lead = -1.3 + swing * 2.5; // up and behind, round to below and in front
+        for (let i = 0; i < 3; i++) {
+          crescent(ctx, 0, 0, u * (9.6 - i * 0.6), u * (1.9 - i * 0.45), lead - 1.15 + i * 0.3, lead);
+          ctx.fillStyle = withAlpha(i === 2 ? "#FFF6E2" : "#E7B778", (0.12 + i * 0.14) * fade);
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+    }
+
+    if (age >= 0) {
+      ctx.save();
+      const fade = Math.max(0, 1 - age / LIFE);
+      const spread = u * (3.0 + age * 1.15);
+      ctx.strokeStyle = withAlpha("#F0DCB6", 0.9 * fade);
+      ctx.lineWidth = Math.max(2, u * 0.7);
+      ctx.beginPath();
+      ctx.ellipse(gx, y, spread, u * 1.35, 0, Math.PI, Math.PI * 2);
+      ctx.stroke();
+      for (const s of [1, -1] as const) {
+        const lift = Math.max(0, 1 - age / 8);
+        ctx.fillStyle = withAlpha("#C9A97B", 0.85 * fade);
+        polygon(ctx, gx + spread * 0.72 * s * dir, y - u * 4.0 * lift * (1 - lift * 0.4),
+          u * (1.2 - age * 0.04), 3, age * 0.35 * s);
+        ctx.fill();
+      }
+      glow(ctx, gx, y - u * 0.8, u * (3.6 + age * 0.7),
+        withAlpha("#F2DEBB", 0.65 * fade), withAlpha("#8A6B45", 0.12 * fade));
+      ctx.restore();
+    }
+    return NOTHING;
+  },
+
+  /**
+   * Up smash — the clap, which happens above his crown and therefore has to be
+   * painted `over` or his own head eclipses it.
+   *
+   * The hitbox is at `x: 0, y: 16` — dead centre, above the skull — so the
+   * graphic is a pair of arcs closing onto that point before contact and a
+   * flat, wide starburst on it after. Wide rather than round: the thing being
+   * sold is two palms meeting, so the burst spreads sideways along the line the
+   * hands closed on.
+   */
+  usmash: ({ ctx, x, y, u, frame, over }) => {
+    const FIRST = 14;
+    const LIFE = 11;
+    const age = frame - FIRST;
+    if (age < -4 || age > LIFE) return NOTHING;
+    const cy = y - u * 16;
+
+    over(() => {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      if (age < 0) {
+        // Closing. Two arcs sweeping in from either side, brightest just
+        // before they meet.
+        const close = 1 + age / 4; // 0 at four frames out, 1 at contact
+        for (const s of [1, -1] as const) {
+          crescent(ctx, x, cy, u * (7.5 - close * 2.5), u * 1.1,
+            s > 0 ? -0.5 : Math.PI - 0.5, s > 0 ? 0.9 : Math.PI + 0.9);
+          ctx.fillStyle = withAlpha("#FFF2D4", 0.16 + close * 0.3);
+          ctx.fill();
+        }
+      } else {
+        const fade = Math.max(0, 1 - age / LIFE);
+        const grow = Math.min(1, (age + 1) / 4);
+        glow(ctx, x, cy, u * (3.4 + grow * 4.5),
+          withAlpha("#FFFFFF", 0.85 * fade), withAlpha("#FFC85A", 0.2 * fade));
+        // Six spokes, flattened along the horizontal, so the burst reads as
+        // two hands meeting rather than as an explosion.
+        ctx.strokeStyle = withAlpha("#FFF6DE", 0.8 * fade);
+        ctx.lineWidth = Math.max(1, u * 0.5 * fade);
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2 + 0.26;
+          const len = u * (5.5 + grow * 6);
+          ctx.beginPath();
+          ctx.moveTo(x, cy);
+          ctx.lineTo(x + Math.cos(a) * len, cy + Math.sin(a) * len * 0.5);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    });
+    return NOTHING;
+  },
+
+  /**
+   * Down smash — the ground pound, one graphic per fist, both on the same
+   * frames.
+   *
+   * `fighters/donkeyKong.ts` staggers the two hitboxes (front on 11-12, back on
+   * 13-14) because that is the shape our simplified table has, but the move is
+   * symmetric — the game fires four mirrored boxes on 11-12 — and the *pose*
+   * now brings both fists down together. So the effect does too, and the
+   * stagger survives only as the front burst being a couple of frames older
+   * and therefore wider than the back one, which is exactly the asymmetry the
+   * real ground hitboxes have.
+   */
+  dsmash: ({ ctx, x, y, u, dir, frame }) => {
+    const FIRST = 11;
+    const LIFE = 16;
+    const age = frame - FIRST;
+    if (age < 0 || age > LIFE) return NOTHING;
+
+    ctx.save();
+    for (const [s, lead] of [
+      [1, 0],
+      [-1, 2],
+    ] as const) {
+      const a = age - lead;
+      if (a < 0) continue;
+      const fade = Math.max(0, 1 - a / LIFE);
+      const reach = u * (2.2 + a * 0.85);
+      const cx = x + u * (s > 0 ? 6.5 : -5.5) * dir;
+      for (let i = 0; i < 2; i++) {
+        const r = reach * (1 - i * 0.35);
+        if (r <= 0) continue;
+        ctx.beginPath();
+        ctx.ellipse(cx, y, r, u * (0.8 + i * 0.4), 0, Math.PI, Math.PI * 2);
+        ctx.strokeStyle = withAlpha("#E8CFA6", (0.9 - i * 0.32) * fade);
+        ctx.lineWidth = Math.max(2, u * 0.6);
+        ctx.stroke();
+      }
+      glow(ctx, cx, y - u * 0.7, u * (2.4 + a * 0.3),
+        withAlpha("#F2DEBB", 0.6 * fade), withAlpha("#8A6B45", 0.1 * fade));
+    }
+    ctx.restore();
+    return NOTHING;
+  },
+
+  /**
+   * Dash attack — the Roll Attack's dust.
+   *
+   * The pose turns him and the engine carries him; this is the ground saying
+   * something happened to it. A rolling four-hundred-pound ape leaves a trail
+   * behind him and not a puff under him, so the puffs are seeded *back* along
+   * his path by their own age, which is what makes the graphic read as travel
+   * rather than as a fighter standing in a cloud.
+   */
+  dashAttack: ({ ctx, x, y, u, dir, frame }) => {
+    const FIRST = 9;
+    const LAST = 24;
+    if (frame < FIRST || frame > LAST + 6) return NOTHING;
+    const out = Math.max(0, 1 - (frame - LAST) / 6);
+    ctx.save();
+    for (let k = 0; k < 5; k++) {
+      const age = ((frame - FIRST + k * 3) % 15) / 15;
+      const fade = (1 - age) * out;
+      if (fade <= 0.02) continue;
+      glow(
+        ctx,
+        x - u * (1.5 + age * 9) * dir,
+        y - u * (0.5 + age * 2.2),
+        u * (1.1 + age * 2.6),
+        withAlpha("#EEDCBB", 0.5 * fade),
+        withAlpha("#8A6B45", 0.09 * fade),
+      );
+    }
+    ctx.restore();
+    return NOTHING;
+  },
+
+  /**
+   * Down air — the stomp, and the one thing on this rig that cannot draw
+   * itself.
+   *
+   * His legs are 3.19 rig units inside a pelvis capsule 2.0 in radius, so
+   * almost none of the stamp ever leaves the silhouette: what a player sees is
+   * two pale soles moving a few pixels. The move is a **meteor** — angle 270,
+   * sweetspot `(1, -2)`, which is *below his own feet* — and none of that is
+   * legible from the drawing. So the graphic carries it: a hard flat shockwave
+   * under the soles and a short downward spike through it, both painted below
+   * the figure where the feet already are.
+   */
+  dair: ({ ctx, x, y, u, dir, frame }) => {
+    const FIRST = 14;
+    const LIFE = 12;
+    const age = frame - FIRST;
+    if (age < -3 || age > LIFE) return NOTHING;
+    const cy = y - u * 1.0;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    if (age < 0) {
+      // The wind-up: a gathering glow under the soles for the three frames the
+      // legs are still folded, so the stamp arrives on something.
+      glow(ctx, x + u * 0.8 * dir, cy, u * (1.2 - age * 0.6),
+        withAlpha("#DCE8FF", 0.16 * (age + 4) / 3));
+      ctx.restore();
+      return NOTHING;
+    }
+    const fade = Math.max(0, 1 - age / LIFE);
+    const grow = Math.min(1, (age + 1) / 4);
+    for (let i = 0; i < 2; i++) {
+      ctx.beginPath();
+      ctx.ellipse(x + u * 0.8 * dir, cy, u * (2.4 + grow * 6) * (1 - i * 0.3),
+        u * (0.7 + i * 0.5), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = withAlpha(i === 0 ? "#FFFFFF" : "#9FC4FF", (0.8 - i * 0.35) * fade);
+      ctx.lineWidth = Math.max(2, u * (0.6 - i * 0.2));
+      ctx.stroke();
+    }
+    // The spike itself: a wedge driven straight down, because angle 270 is the
+    // whole point of the move and nothing in the pose says it.
+    ctx.beginPath();
+    ctx.moveTo(x + u * (0.8 - 1.6) * dir, cy);
+    ctx.lineTo(x + u * (0.8 + 1.6) * dir, cy);
+    ctx.lineTo(x + u * 0.8 * dir, cy + u * (2.4 + grow * 3.4));
+    ctx.closePath();
+    ctx.fillStyle = withAlpha("#EAF2FF", 0.55 * fade);
+    ctx.fill();
     ctx.restore();
     return NOTHING;
   },

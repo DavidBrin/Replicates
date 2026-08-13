@@ -66,17 +66,171 @@ import type { PoseName } from "../../poses/library";
 const CANNON_LEVEL = { upperArmR: 88, forearmR: -4 } as const;
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
+  /* --------------------------------------------------------------- stand -- */
+
+  /**
+   * The standing loop.
+   *
+   * ## Why she needs her own
+   *
+   * The shared `idle` hangs both arms straight down, and on every other fighter
+   * that is a pair of arms. On Samus the near one carries a prop 4.2 rig units
+   * across — nearly her torso's width — mounted **perpendicular to the bone**,
+   * so an arm pointing at the floor turns the Arm Cannon into a horizontal slab
+   * lying across her hips with its gunmetal muzzle collar as the only part that
+   * has a colour of its own. A contact sheet of it is a dark bar across an
+   * orange lozenge: the most identifying prop on the roster, drawn as a belt.
+   * This is the pose a player looks at more than any other, and it was the
+   * single worst frame she had.
+   *
+   * ## What fixes it
+   *
+   * Bend the elbow and bring the cannon **out in front of her hip**. The barrel
+   * then runs forward and down instead of across, the muzzle and the bore are
+   * clear of her silhouette against the background rather than buried in it, and
+   * the shape says *weapon held at the ready*, which is also what SmashWiki
+   * describes: she stands at an angle with the Arm Cannon carried a little lower
+   * than in the earlier games. The elbow stays low and tucked — a cannon raised
+   * to chest height is `fsmash`'s wind-up, not a stand, and a fighter who idles
+   * in her own aiming pose has nowhere to go when she aims.
+   *
+   * ## The numbers, and where they come from
+   *
+   * A reference pass over the game's own idle GIFs frame by frame gives four
+   * things this clip is built to, and only the first was guessable:
+   *
+   *  - the **elbow is bent to about 110°** and the cannon runs down and forward
+   *    at **25–35° under the horizontal**, with the muzzle ending up over the
+   *    leading thigh at hip height. Not level, not at her side.
+   *  - the **torso is pitched 15–20° forward** of vertical with **both knees
+   *    visibly bent** — a low athletic ready stance, not a parade rest. The
+   *    shared clip's five degrees is a person queueing.
+   *  - the **free hand is in front of the abdomen**, just above and behind the
+   *    barrel, rather than hanging at her side. Two of her three idle flourishes
+   *    are "traces her fingertips over her arm cannon" and "drops her arm cannon
+   *    for a moment", and both start from a hand that is already there.
+   *  - the **head is all but locked**. The whole body's bob measures about 1% of
+   *    her height, and none of it is the helmet.
+   *
+   * The legs are also staggered far wider than the shared clip's two degrees: at
+   * her proportions two legs a degree apart are one leg, and a fighter with one
+   * leg reads as a fighter standing on a pole. The shins straighten back under
+   * her so that both ankles stay within a tenth of a unit of the floor while the
+   * thighs carry the stagger.
+   *
+   * ## The breath
+   *
+   * Four keys and the shared clip's cadence, kept deliberately: a 37-frame
+   * inhale eased `smooth` against a 71-frame exhale drifting `linear` through
+   * three unequal beats, so nothing in the body turns round at the same instant
+   * as anything else and the cycle has no countable beat. What is Samus's is
+   * what the cannon does over it — the arm carries a gun the size of her torso,
+   * so the muzzle **lags the chest and sinks further than it rises**, drifting a
+   * five degrees and arriving late. A weapon that breathes in time with the
+   * ribs is a weapon that weighs nothing.
+   *
+   * The *lift* is deliberately smaller than the shared clip's. Measured off a
+   * match-scale capture, the shared amplitudes moved her whole silhouette by
+   * about seven percent of her height with every part of her arriving together,
+   * which reads as one drawing on a lift rather than as a body breathing. Half
+   * the translation and twice the swing in the arms is the same amount of life
+   * spent where an eye can see it articulate.
+   */
+  idle: {
+    loop: true,
+    period: 108,
+    keys: [
+      {
+        // The settle at the end of the exhale: chest low, cannon at the bottom
+        // of its drift.
+        t: 0,
+        pose: P({
+          hip: 1.0, torso: 13.0, head: -11.0,
+          thighR: 163, shinR: 26, thighL: 195, shinL: -5,
+          // Elbow at ~110°, forearm forward and 30° under the horizontal, so the
+          // barrel clears the torso and the bore sits over the leading thigh.
+          upperArmR: 171, forearmR: -60,
+          // The free hand in front of the abdomen, hovering above the barrel.
+          upperArmL: 168, forearmL: -62,
+        }),
+        offsetY: 0.02,
+        scaleY: 1.0,
+      },
+      {
+        // Top of the inhale. The chest is at its highest here and the cannon is
+        // still on its way up — it arrives at key 2.
+        t: 0.34,
+        pose: P({
+          hip: 0.2, torso: 11.4, head: -10.2,
+          thighR: 162.4, shinR: 27.5, thighL: 195.6, shinL: -6.5,
+          upperArmR: 168.4, forearmR: -63.4,
+          upperArmL: 165.2, forearmL: -66.0,
+        }),
+        offsetY: 0.06,
+        scaleY: 1.012,
+        ease: "linear",
+      },
+      {
+        // The head and the cannon both arrive late, a quarter cycle behind the
+        // chest, which is already on its way back down.
+        t: 0.58,
+        pose: P({
+          hip: -0.6, torso: 12.4, head: -12.4,
+          thighR: 164, shinR: 24.5, thighL: 194.2, shinL: -3.5,
+          upperArmR: 166.6, forearmR: -64.6,
+          upperArmL: 162.4, forearmL: -64.4,
+        }),
+        offsetY: 0.035,
+        scaleY: 1.006,
+        ease: "linear",
+      },
+      {
+        // Lowest point of the cycle, a hair under key 0, and the muzzle at the
+        // bottom of its sink — the recovery into the settle is the last span.
+        t: 0.8,
+        pose: P({
+          hip: 0.4, torso: 13.4, head: -11.4,
+          thighR: 163.3, shinR: 25.4, thighL: 195.2, shinL: -4.4,
+          upperArmR: 173.6, forearmR: -56.4,
+          upperArmL: 170.4, forearmL: -58.4,
+        }),
+        offsetY: 0.0,
+        scaleY: 0.997,
+        ease: "linear",
+      },
+    ],
+  },
+
   /* ------------------------------------------------------------ specials -- */
 
   /**
    * Charge Shot.
    *
    * `t = 0` is the **charge stance** and is held for up to 125 real frames, so
-   * it is authored as a finished pose rather than as anticipation: weight sat
-   * back over the rear leg, cannon levelled and braced, the free arm tucked
-   * across the chest. The span leaving it eases `in`, which means the shot is
-   * still 96% of this shape at the t ≈ 0.023 the charge parks on — the stance
-   * does not creep while it is held.
+   * it is authored as a finished pose rather than as anticipation. The span
+   * leaving it eases `in`, which means the shot is still 96% of this shape at
+   * the t ≈ 0.023 the charge parks on — the stance does not creep while it is
+   * held.
+   *
+   * ## What the stance is, and what it is not
+   *
+   * It was upright, weight sat back over the rear leg, with a note saying a
+   * coiled version would read as flinching. Frame-stepping the game's own
+   * footage says the opposite in every particular: she drops into a **deep,
+   * wide, forward-braced lunge and holds it there**. The hips come down to
+   * roughly knee height, the rear leg is extended a long way back and nearly
+   * straight, the front knee is bent to about 110°, the torso is pitched hard
+   * forward over the front leg, the chin is tucked and the visor is sighting
+   * along the barrel. The cannon is out level with the elbow all but locked,
+   * and the free arm is **not** braced across the chest — it is tucked back and
+   * down against her hip. She does not rock; all the motion is in the ball.
+   *
+   * The lunge is not flinching, it is bracing, and it is the difference between
+   * a fighter charging a gun and a fighter waiting for a bus. It also earns
+   * something the upright version could not: the muzzle ends up at roughly
+   * (7, 6.6) rig units, which is where `fighters/samus.ts` spawns the plasma
+   * from — an upright stance held the barrel a unit and a half above its own
+   * projectile.
    *
    * The shot itself has to land at t ≈ 0.07 because the plasma leaves on move
    * frame 3 of 44 and there is no hitbox for `strike` to anchor to. The whole
@@ -91,34 +245,45 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       {
         t: 0,
         pose: P({
-          // Upright and settled, not crouched. She holds this for two seconds
-          // at a time; a coiled version of it reads as flinching, and a player
-          // who cannot tell "charging" from "scared" cannot play the matchup.
-          torso: -3, head: 1, hip: 2,
-          thighR: 160, shinR: 20, footR: -86,
-          thighL: 206, shinL: 18, footL: -84,
-          ...CANNON_LEVEL,
-          // Free arm down and back as a counterweight — the cannon is heavy and
-          // the pose should say so.
-          upperArmL: 208, forearmL: -34,
+          // Pitched hard forward over the front leg, chin tucked, sighting
+          // along the barrel.
+          torso: 26, head: -22, hip: 4,
+          // Front knee bent to about 110°, hips down to knee height.
+          thighR: 122, shinR: 98, footR: -74,
+          // Rear leg driven a long way back and close to straight, on the toe.
+          // 45° rather than the 64° a human lunge would use: her legs are 4.1
+          // units on a 12.2-unit body, so a leg thrown that far back cannot
+          // also reach the floor, and the toe ends up hanging a unit in the air.
+          thighL: 221, shinL: -12, footL: -96,
+          // The cannon level and the elbow nearly locked. Bone angles
+          // accumulate, so with the torso 30° over these come out at a forearm
+          // pointing along the firing line rather than down it.
+          upperArmR: 68, forearmR: -6,
+          // Tucked back and down against her hip — not across the chest.
+          upperArmL: 186, forearmL: -46,
         }),
-        offsetX: -0.2,
+        offsetX: 0.35,
+        // Repaid against the fold: with the legs bent this far the ankles ride
+        // half a unit clear of the floor, so half a unit is exactly what the
+        // body may sink before her boots leave the stage.
+        offsetY: -0.5,
         ease: "in",
       },
       {
-        // The shot. The cannon kicks *up* (a smaller arm angle is higher), the
-        // torso rotates away from it and the whole body is driven back — recoil
-        // is the only thing on screen that says the projectile had mass.
+        // The shot. The cannon kicks *up* (a smaller arm angle is higher) and
+        // the whole body is shoved backwards along the ground — she stays down
+        // in the lunge through it, which is what the recoil looks like: the
+        // shove is in the feet, not in the spine.
         t: 0.07,
         pose: P({
-          torso: -22, head: 16, hip: 8,
-          thighR: 146, shinR: 40, footR: -78,
-          thighL: 222, shinL: 20, footL: -76,
-          upperArmR: 72, forearmR: 6,
-          upperArmL: 146, forearmL: -58,
+          torso: 20, head: -16, hip: 8,
+          thighR: 128, shinR: 92, footR: -72,
+          thighL: 218, shinL: -10, footL: -94,
+          upperArmR: 50, forearmR: 2,
+          upperArmL: 176, forearmL: -52,
         }),
-        offsetX: -0.95,
-        offsetY: -0.15,
+        offsetX: -0.55,
+        offsetY: -0.56,
         scaleX: 0.94,
         // Crawl, not `out`, because the next key is the same shape: the brace
         // has to still be a brace while the plasma is leaving. See below.
@@ -138,27 +303,31 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
          */
         t: 0.16,
         pose: P({
-          torso: -20, head: 15, hip: 7,
-          thighR: 147, shinR: 38, footR: -78,
-          thighL: 221, shinL: 21, footL: -76,
-          upperArmR: 74, forearmR: 5,
-          upperArmL: 148, forearmL: -58,
+          torso: 19, head: -15, hip: 8,
+          thighR: 129, shinR: 90, footR: -72,
+          thighL: 217, shinL: -9, footL: -94,
+          upperArmR: 48, forearmR: 3,
+          upperArmL: 174, forearmL: -52,
         }),
-        offsetX: -0.9,
-        offsetY: -0.12,
+        offsetX: -0.6,
+        offsetY: -0.55,
         scaleX: 0.95,
         ease: "out",
       },
       {
+        // Coming up out of the lunge with the cannon still riding high — the
+        // barrel keeps climbing to about 50° above the horizontal before it
+        // comes down, which is the follow-through the real recoil has.
         t: 0.28,
         pose: P({
-          torso: -10, head: 6,
-          thighR: 150, shinR: 32, footR: -82,
-          thighL: 212, shinL: 24, footL: -80,
-          upperArmR: 82, forearmR: 0,
-          upperArmL: 138, forearmL: -60,
+          torso: 10, head: -8, hip: 4,
+          thighR: 138, shinR: 62, footR: -78,
+          thighL: 212, shinL: 6, footL: -88,
+          upperArmR: 38, forearmR: 4,
+          upperArmL: 160, forearmL: -56,
         }),
         offsetX: -0.4,
+        offsetY: -0.3,
       },
       {
         t: 0.55,
@@ -1265,15 +1434,29 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           // also what stops this reading as a stomp.
           thighR: 208, shinR: 34, footR: -74,
           thighL: 216, shinL: 30, footL: -74,
-          // Cannon straight down, past the feet. Bone angles accumulate down
-          // the chain, so this is 150 *plus the torso's 30* — writing 180 here
-          // points it backwards, which is what the first pass did.
-          upperArmR: 150, forearmR: -4,
+          // Cannon down and forward, aimed along the line from her shoulder to
+          // the meteor hitbox at (1, −2) — a unit in front of her and two below
+          // her feet. Bone angles accumulate down the chain, so 118 here is
+          // 118 *plus the torso's 30*; writing 180 points it backwards, which
+          // is what the first pass did.
+          //
+          // The 35° off vertical is not a stylistic choice, it is the whole
+          // legibility of the move. The cannon prop is 4.2 rig units across the
+          // bone and 3.9 along it, so an arm pointing *straight* down renders it
+          // as a horizontal slab lying over her own thigh, which is exactly what
+          // a zoomed capture of the meteor frame showed: a dark bar at her waist
+          // and no weapon anywhere. Tilted forward it clears the legs — which
+          // this key has already swept back — and the barrel, the muzzle collar
+          // and the bore are all against the background.
+          upperArmR: 118, forearmR: 0,
           upperArmL: 244, forearmL: 34,
         }),
         offsetY: -0.4,
-        scaleX: 0.9,
-        scaleY: 1.14,
+        // Not squashed. `scaleX: 0.9` shrank the cannon's projection by a tenth
+        // on the exact frames it has to be legible against the background, and
+        // there is nothing about a downward swing that narrows a fighter.
+        scaleX: 1.02,
+        scaleY: 1.12,
         ease: "linear",
       },
       {
@@ -1286,12 +1469,12 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           torso: 28, head: -22, hip: -6,
           thighR: 206, shinR: 34, footR: -74,
           thighL: 214, shinL: 30, footL: -74,
-          upperArmR: 154, forearmR: -6,
+          upperArmR: 122, forearmR: -2,
           upperArmL: 242, forearmL: 32,
         }),
         offsetY: -0.36,
-        scaleX: 0.91,
-        scaleY: 1.13,
+        scaleX: 1.01,
+        scaleY: 1.11,
         ease: "out",
       },
       {
@@ -1300,7 +1483,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           torso: 20, head: -16,
           thighR: 194, shinR: 40, footR: -76,
           thighL: 206, shinL: 36, footL: -76,
-          upperArmR: 186, forearmR: -18,
+          upperArmR: 152, forearmR: -14,
           upperArmL: 232, forearmL: 22,
         }),
         offsetY: -0.18,

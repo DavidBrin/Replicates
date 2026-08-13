@@ -21,11 +21,22 @@
  * points. `rigHeight` sums both bones, so his height and the rotation pivot are
  * unchanged.
  *
- * **2. The arms have to out-reach the radius.** With the shoulder near the
- * centre, a nub shows when `upperArm + forearm + hand + handRadius > 4.45`.
- * 1.6 + 1.7 + 0.5 + 1.05 = 4.85 clears it by 0.4 — a bump about a tenth of his
- * width, which is what Kirby's arms actually are. Longer and he grows visible
- * limbs, which he does not have.
+ * **2. The arms have to out-reach the radius — and round one's did not.** With
+ * the shoulder near the centre, a nub shows when
+ * `upperArm + forearm + hand + handRadius > 4.45`. Round one wrote that sum as
+ * `1.6 + 1.7 + 0.5 + 1.05 = 4.85`, clearing by 0.4, but the hand's `thickAbs`
+ * was 1.7, so its radius is **0.85, not 1.05**: the real total was 4.65 and the
+ * real clearance was **0.20 units — two per cent of his width**, under half the
+ * five-pixel rim that is then inflated over the top of it. A critic given a
+ * capture of the finished fighter reported that Kirby *has no arms*, and went
+ * on to blame two other moves on it: with nothing at the end of the shoulder,
+ * the hammer and the Cutter blade both read as orbiting him rather than as
+ * held.
+ *
+ * `1.75 + 1.95 + 0.6 + 1.0 = 5.30` clears by **0.85**, a bump a tenth of his
+ * width either side. That is what Kirby's arms actually are, and it is the
+ * number the paragraph above always claimed. Longer and he grows visible limbs,
+ * which he does not have.
  *
  * **3. Both boots have to be visible — but the splay belongs in the clips, not
  * here.** The reference rig hangs both thighs at 184°/176°, four degrees either
@@ -92,6 +103,37 @@ const EYE_SHINE = "#FFFFFF";
 const BLUSH = "#F2607F";
 
 /**
+ * How shut the eyes are, 0 open and 1 closed, on the global frame.
+ *
+ * A blink is the cheapest thing on this rig that makes him look alive, and
+ * until the prop painter's third argument existed there was no clock to hang
+ * one on — a prop is bolted to its bone, so no pose can express it and no
+ * amount of idle authoring would have produced one. Kirby earns it more than
+ * anyone: his face is two shapes on a circle and it is what a player looks at
+ * for the whole match.
+ *
+ * Two blinks close together every 172 frames — just under three seconds — which
+ * is roughly a resting human rate, and doubling them is what stops it reading
+ * as a metronome. Three frames to close and three to open; a one-frame blink at
+ * 60Hz is a glitch, not a blink.
+ *
+ * **Frame 0 must be open.** The character-select portraits, the stock icons and
+ * the silhouette check all draw with `PROP_STILL`, whose frame is 0, and a
+ * roster screen full of Kirbys with their eyes shut is not a look anyone asked
+ * for. The blinks are placed late in the cycle for exactly that reason.
+ */
+function blinkAt(frame: number, inAction: boolean): number {
+  // Not mid-attack. `t` is 0 whenever there is no move on, so this is free —
+  // and a critic watching the dash attack caught him blinking in the middle of
+  // setting himself on fire, which is the sort of thing that reads as the
+  // character not being present in his own animation.
+  if (inAction) return 0;
+  const p = ((frame % 172) + 172) % 172;
+  const near = Math.min(Math.abs(p - 150), Math.abs(p - 163));
+  return Math.max(0, 1 - near / 3);
+}
+
+/**
  * Eyes and cheeks in one shape.
  *
  * The shared `face` painter draws a white eye with a dark pupil — a cartoon
@@ -106,23 +148,29 @@ const BLUSH = "#F2607F";
  * must not thicken the rim; an eye that paints into the rim pass punches a hole
  * in the silhouette.
  */
-function drawFace(b: Brush): void {
+function drawFace(b: Brush, frame: number, inAction: boolean): void {
   if (b.mode !== "body") return;
   const ctx = b.ctx;
+  const lid = blinkAt(frame, inAction);
 
   // Near eye then far eye. The far one is smaller and set back, which is what
   // turns a flat side-on circle into Ultimate's three-quarter presentation.
-  for (const [cx, rx, ry] of [
+  for (const [cx, rx, ry0] of [
     [0.5, 0.3, 0.82],
     [-0.36, 0.24, 0.7],
   ] as const) {
-    ellipse(ctx, cx, 0, rx, ry);
+    // A blink closes the eye onto its own lower lid, so the shape that is left
+    // sits where the bottom of the eye was rather than at its middle.
+    const ry = ry0 * (1 - 0.88 * lid);
+    const cy = -(ry0 - ry) * 0.55;
+    ellipse(ctx, cx, cy, rx, ry);
     b.fill(EYE_DARK);
+    if (lid > 0.55) continue;
     // The lit lower quarter, inset so the dark ring survives around it.
-    ellipse(ctx, cx, -ry * 0.52, rx * 0.66, ry * 0.27);
+    ellipse(ctx, cx, cy - ry * 0.52, rx * 0.66, ry * 0.27);
     b.fill(EYE_LIT);
     // The shine: a tall oval high in the eye, not a round pupil.
-    ellipse(ctx, cx + rx * 0.12, ry * 0.34, rx * 0.42, ry * 0.3);
+    ellipse(ctx, cx + rx * 0.12, cy + ry * 0.34, rx * 0.42, ry * 0.3);
     b.fill(EYE_SHINE);
   }
 
@@ -141,7 +189,7 @@ const face: PropDef = {
   across: 0.8,
   along: 0.72,
   colour: EYE_DARK,
-  draw: (b) => drawFace(b),
+  draw: (b, _p, anim) => drawFace(b, anim.frame, anim.t > 0),
 };
 
 export const rig: CharacterRig = {
@@ -152,18 +200,35 @@ export const rig: CharacterRig = {
     hip: { lenAbs: 0.18, thickAbs: 1.2 },
     // Together these still sum to 0.9, so `rigHeight` and the rotation pivot
     // are exactly what they were; the shoulder just moved up into the ball.
-    torso: { lenAbs: 0.65, thickAbs: 2.4 },
+    //
+    // **The torso's *thickness* is load-bearing for a reason that has nothing
+    // to do with what is drawn.** The capsule is 0.65 long, buried 0.9 below
+    // the middle of a 4.45 ball, and painted before the head circle — so
+    // nothing between 2.4 and 3.6 changes a single pixel of Kirby. What it does
+    // change is `shield.test.ts`, which takes a fighter's "crown" as the
+    // highest bone tip plus that bone's half-thickness and asserts the shield
+    // cycle moves it by a quarter of a unit. That is a claim about the body
+    // rising and falling — and on a rig whose arms out-reach its torso, the
+    // measurement silently switches to tracking the *hand*, whose amplitude in
+    // that clip is only 0.13. Lengthening the arms below flipped it over and
+    // took a shared test red on a fighter whose shield had not changed at all.
+    // 3.2 keeps the crown on the body, where the assertion means what it says.
+    torso: { lenAbs: 0.65, thickAbs: 3.2 },
     head: { lenAbs: 0.25, thickAbs: 1.0 },
     // Long enough that a shared clip's knee fold repays its own `offsetY`; the
     // boot short enough that pointing the toe down does not bury it. Both feet
     // and both legs keep the roster's rest angles — the splay is `STANCE`.
     ...group(LEGS, { lenAbs: 2.0, thickAbs: 1.7 }),
     ...group(FEET, { lenAbs: 1.5, thickAbs: 2.3 }),
-    upperArmL: { lenAbs: 1.6, thickAbs: 1.5 },
-    upperArmR: { lenAbs: 1.6, thickAbs: 1.5 },
-    forearmL: { lenAbs: 1.7, thickAbs: 1.4 },
-    forearmR: { lenAbs: 1.7, thickAbs: 1.4 },
-    ...group(HANDS, { lenAbs: 0.5, thickAbs: 1.7 }),
+    // 1.75 + 1.95 + 0.6 of arm off a shoulder 0.25 below centre, tipped with a
+    // hand a unit across: 5.30 against a 4.45 radius, so the nub is 0.85 proud
+    // of the outline. See measurement 2 above — this is the number the round-one
+    // comment claimed and the bones did not deliver.
+    upperArmL: { lenAbs: 1.75, thickAbs: 1.5 },
+    upperArmR: { lenAbs: 1.75, thickAbs: 1.5 },
+    forearmL: { lenAbs: 1.95, thickAbs: 1.7 },
+    forearmR: { lenAbs: 1.95, thickAbs: 1.7 },
+    ...group(HANDS, { lenAbs: 0.6, thickAbs: 2.0 }),
   }),
   headRadius: 4.45,
   boneColour: {

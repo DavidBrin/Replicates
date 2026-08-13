@@ -40,6 +40,7 @@ import {
   drawStockIcon,
   getCharacterRig,
   hitlagShake,
+  propAnimFor,
   resolvePalette,
   rotationPivot,
   squashFor,
@@ -395,17 +396,11 @@ function drawOneFighter(
     transform,
     alpha,
     tint: { colour: "#FFFFFF", amount: hitFlashAmount(state.vfx, f.port) },
-    // `vx` is signed by facing so a painter never sees a direction: a tail
-    // trails on `-vx` whichever way its owner is running. `t` is 0 outside an
-    // action rather than undefined, so a prop that idles on it does not have to
-    // ask whether there is a move on.
-    anim: {
-      frame: state.current.frame,
-      t: timing && timing.total > 0 ? Math.min(1, f.actionFrame / timing.total) : 0,
-      vx: f.vx * (f.facing >= 0 ? 1 : -1),
-      vy: f.vy,
-      airborne: !f.grounded,
-    },
+    // Through `propAnimFor` rather than built here, so the animation lab and a
+    // real match compute a prop's motion from the same arithmetic. An author
+    // tuning a tail against a lab that derived it differently would be tuning
+    // against a fiction.
+    anim: propAnimFor(f, state.current.frame, timing?.total ?? 0),
   } as const;
 
   // A special's own graphic goes under the fighter, and may replace them —

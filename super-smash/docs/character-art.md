@@ -185,7 +185,7 @@ The third argument is what makes it possible:
 |---|---|
 | `frame` | The global frame. A clock of your own, for idle sway and flicker. |
 | `t` | 0..1 through the current action, `0` when there is no move on. |
-| `vx` `vy` | Velocity, rig units per frame. **`+x` is the way the fighter faces.** |
+| `vx` `vy` | Velocity, **world units per frame, already decoded**. `+x` is the way the fighter faces. A walk is around 1, a full run 2–3. |
 | `airborne` | Off the ground — a tail hangs differently in a run than in a jump. |
 
 `vx` is signed by facing, so a tail trails on `-vx` in both directions with one

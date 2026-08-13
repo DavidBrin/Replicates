@@ -16,19 +16,24 @@
  * ## Why nearly every clip here is whole-body
  *
  * Pikachu's arms are the reason. His head circle has a radius of 2.6 rig units
- * centred 7.05 up; his shoulders are at 5.25 and his whole arm — upper, fore and
- * hand — is 2.25 units long. **An arm swung sideways cannot reach the edge of
- * his own head**, so an elbow angle changes nothing about his outline; the only
- * place an arm shows at all is hanging below the head circle's underside at
- * 4.45, and even there it is the same palette role as the body with no edge
- * between them. A limb that does not break the silhouette is not on screen.
+ * centred 7.05 up, his shoulders are at 5.25, and his whole arm — upper, fore
+ * and hand — is 2.68 units. **An arm swung sideways still cannot reach the edge
+ * of his own head**, so an elbow angle changes almost nothing about his outline;
+ * a limb that does not break the silhouette is not on screen.
  *
- * So the elbow angles that carry Mario's forward smash carry nothing at all
- * here. What is actually visible on Pikachu is the head circle, the two ears,
- * the bolt tail and the feet — and the ears turn with `head`, the tail turns
- * with the body, and the feet with the legs. Every clip below is therefore
- * written in `rotation`, `scaleX`/`scaleY`, `offsetX`/`offsetY` and the legs,
- * and names an arm only where the arm happens to be free.
+ * The one place it now does is *forward and down*, in front of the chest, which
+ * is where Pikachu carries his forepaws and is the whole reason the arms were
+ * lengthened from 2.25 in round two: at 2.25 a paw brought forward finished up
+ * inside the torso capsule, whose radius is 2.0. It clears by a third of a unit
+ * now, and the hands are a different value from the body, so a standing Pikachu
+ * has hands. That is the only clip that spends them.
+ *
+ * Everywhere else, the elbow angles that carry Mario's forward smash carry
+ * nothing at all here. What is visible on Pikachu is the head circle, the two
+ * ears, the bolt tail and the paws — and the ears turn with `head`, the tail
+ * turns with the body, and the paws with the legs. Every attack below is
+ * therefore written in `rotation`, `scaleX`/`scaleY`, `offsetX`/`offsetY` and
+ * the legs, and names an arm only where the arm happens to be free.
  *
  * ## The tail is not a bone
  *
@@ -89,6 +94,121 @@ const BRACED = {
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
   /**
+   * The standing loop, and the one clip here that is not an attack.
+   *
+   * The shared `idle` is a **person**: knees straight, spine vertical, both arms
+   * hanging at the sides, weight trading between two feet a body's width apart.
+   * That is the right default for six of the eight fighters and it costs Pikachu
+   * more than anyone — he and Kirby are the two who are mostly head, so a
+   * humanoid stand puts a sphere on top of a column and the character underneath
+   * it disappears. Standing still is also the pose he is in for most of a match.
+   *
+   * What the real one is: he is up on his hind legs but **hunched**, knees
+   * folded so the belly sits low, the spine pitched well forward so the head
+   * leads the hips, the forepaws carried up in front of the chest rather than
+   * hanging, and the tail out behind. The silhouette is a rounded animal with a
+   * bolt behind it, not a figure — and that shape, seen for two seconds between
+   * every exchange, is most of what a player looks at.
+   *
+   * ## What it borrows from the shared clip and what it does not
+   *
+   * Borrowed, because they are the reason `idle.ts` is four keys rather than
+   * two: **no two parts of the body turn round at the same moment** — the chest
+   * is highest at key 1, the head arrives late at key 2, the paws are furthest
+   * forward at key 3 — and the key times are uneven, so the cycle has no
+   * countable beat. Only the inhale is cushioned; smoothstep on every span would
+   * bring every bone to a halt at every key, which is a worse metronome than two
+   * keys.
+   *
+   * Not borrowed: the *height* of the breath. A fighter 6.9 units tall breathing
+   * the shared clip's 2% of `scaleY` moves about a pixel, so his rise is carried
+   * by the knees and the pitch of the spine instead, which are angles rather
+   * than scale and read at any size.
+   *
+   * `period` is 96 rather than 108 for a reason that has nothing to do with
+   * Pikachu being quick: `poseTimeFor` offsets each port by `port * 27` in the
+   * *shared* clip, so four fighters idling on the same period drift in lockstep
+   * with a fixed phase between them. A different period is what stops him
+   * breathing in time with the Mario next to him.
+   */
+  idle: {
+    loop: true,
+    period: 96,
+    keys: [
+      {
+        // The settle at the bottom of the breath: knees at their deepest, chest
+        // low, paws drawn back toward the chest. The body leaves this slowly —
+        // the span out of here is the one the ease is spent on.
+        t: 0,
+        pose: P({
+          hip: -5.5,
+          torso: 25,
+          head: -19,
+          thighR: 141, shinR: 78, footR: -124,
+          thighL: 199, shinL: 33, footL: -137,
+          upperArmR: 120, forearmR: -22, handR: -12,
+          upperArmL: 127, forearmL: -26, handL: -10,
+        }),
+        offsetY: -0.35,
+        offsetX: 0.1,
+      },
+      {
+        // Top of the inhale. The rise is knee angle, not `offsetY`: straightening
+        // eight degrees of knee lifts the belly a fifth of a unit and leaves both
+        // paws on the floor, where translating the body lifts them off it.
+        t: 0.34,
+        pose: P({
+          hip: -4.0,
+          torso: 21.5,
+          head: -16,
+          thighR: 145, shinR: 70, footR: -120,
+          thighL: 201, shinL: 29, footL: -135,
+          upperArmR: 116, forearmR: -18, handR: -14,
+          upperArmL: 124, forearmL: -23, handL: -12,
+        }),
+        offsetY: -0.35,
+        offsetX: 0.1,
+        ease: "linear",
+      },
+      {
+        // The head arrives late — it is still coming up as the chest starts back
+        // down, which is the whole of what "the head has its own rhythm" amounts
+        // to on a fighter whose head is half of him.
+        t: 0.58,
+        pose: P({
+          hip: -5.0,
+          torso: 23,
+          head: -21,
+          thighR: 143, shinR: 74, footR: -122,
+          thighL: 200, shinL: 31, footL: -136,
+          upperArmR: 112, forearmR: -15, handR: -16,
+          upperArmL: 121, forearmL: -20, handL: -14,
+        }),
+        offsetY: -0.28,
+        offsetX: 0.12,
+        ease: "linear",
+      },
+      {
+        // Lowest point, a hair under key 0, so the last span is a small recovery
+        // into the settle rather than a fourth extreme.
+        t: 0.8,
+        pose: P({
+          hip: -5.8,
+          torso: 26,
+          head: -18,
+          thighR: 140, shinR: 80, footR: -125,
+          thighL: 199, shinL: 34, footL: -138,
+          upperArmR: 118, forearmR: -21, handR: -11,
+          upperArmL: 125, forearmL: -25, handL: -9,
+        }),
+        offsetY: -0.4,
+        offsetX: 0.09,
+        ease: "linear",
+      },
+    ],
+  },
+
+  /**
    * Headbutt. Not a punch — SmashWiki's name for the move is literally
    * `Headbutt`, and on a fighter who is four fifths head that is the entire
    * animation: rear the skull back, then drive it forward. Frame 2, so the
@@ -148,8 +268,8 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       ...held(0.28, 0.34, {
         pose: P({
           torso: -6, head: 14, hip: 4,
-          thighR: 96, shinR: 10, footR: -16,
-          thighL: 104, shinL: 6, footL: -12,
+          thighR: 94, shinR: 8, footR: -14,
+          thighL: 114, shinL: 14, footL: -26,
           upperArmR: 226, forearmR: -30,
           upperArmL: 232, forearmL: -26,
         }),
@@ -348,11 +468,11 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           upperArmR: 84, forearmR: -6,
           upperArmL: 92, forearmL: -4,
         }),
-        offsetX: 1.1,
+        offsetX: 1.2,
         offsetY: -0.4,
-        rotation: deg(26),
-        scaleX: 1.16,
-        scaleY: 0.93,
+        rotation: deg(17),
+        scaleX: 1.12,
+        scaleY: 0.95,
       }),
       {
         t: 0.68,
@@ -796,32 +916,43 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         scaleY: 0.88,
         ease: "in",
       },
+      // **Horizontal, nose first.** At 56° of rotation with the legs kicked out
+      // at 232 he came out of the crouch tumbling: the capture showed a Pikachu
+      // face-planting at forty-five degrees with his ears trailing up behind
+      // him, which is what being launched *by* a Skull Bash looks like rather
+      // than what throwing one does. SmashWiki has three words for the move —
+      // "launches itself headfirst" — and the shape that says it is the spine
+      // laid flat along the direction of travel with the skull at the front and
+      // everything else streaming behind. So: 82° puts the body axis on the
+      // horizontal, the legs sit near-straight *along* that axis so they trail
+      // rather than kick, and `scaleX` stretches the whole thing lengthwise
+      // because after the rotation his length is the screen's x.
       ...held(0.3, 0.6, {
         pose: P({
-          torso: 6, head: 16, hip: -4,
-          thighR: 232, shinR: -22, footR: -56,
-          thighL: 242, shinL: -18, footL: -54,
-          upperArmR: 140, forearmR: -40,
-          upperArmL: 148, forearmL: -36,
+          torso: 8, head: 14, hip: -2,
+          thighR: 176, shinR: -4, footR: -74,
+          thighL: 186, shinL: -6, footL: -70,
+          upperArmR: 172, forearmR: -10,
+          upperArmL: 188, forearmL: 10,
         }),
-        offsetX: 1.2,
-        offsetY: 0.35,
-        rotation: deg(56),
-        scaleX: 1.24,
-        scaleY: 0.86,
+        offsetX: 1.0,
+        offsetY: 0.15,
+        rotation: deg(58),
+        scaleX: 1.3,
+        scaleY: 0.84,
       }),
       {
         t: 0.7,
         pose: P({
-          torso: 6, head: 14,
-          thighR: 228, shinR: -18, footR: -58,
-          thighL: 238, shinL: -14, footL: -56,
+          torso: 3, head: 6,
+          thighR: 180, shinR: 0, footR: -76,
+          thighL: 190, shinL: -2, footL: -72,
         }),
-        offsetX: 1.0,
-        offsetY: 0.3,
+        offsetX: 0.85,
+        offsetY: 0.12,
         rotation: deg(52),
-        scaleX: 1.2,
-        scaleY: 0.88,
+        scaleX: 1.24,
+        scaleY: 0.86,
       },
       {
         t: 0.82,

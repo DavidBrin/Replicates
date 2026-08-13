@@ -38,27 +38,73 @@ import {
   tweakRig,
   type Brush,
   type CharacterRig,
+  type PropAnim,
   type PropDef,
 } from "../../rigKit";
 
 /**
- * The shoulder cape, hanging.
+ * The shoulder cape, hanging — and, since the prop clock arrived, moving.
  *
  * Local frame: `+y` runs up the torso toward the shoulders, `+x` is forward, one
  * unit is `size`. Everything here is therefore negative-y — down the back — and
  * mostly negative-x, which is behind him.
+ *
+ * ## Why it cannot be a pose
+ *
+ * The cape hangs off `torso`, so bolted rigidly it can only ever do what the
+ * chest does, and a cape that is welded to the chest is a painted-on shape: it
+ * arrived at every key exactly when the shoulders did and nothing about it read
+ * as cloth. There is no bone for it and no pose can name one, which is the exact
+ * case `PropAnim` exists for.
+ *
+ * Two inputs, and both act on the **hem** rather than on the whole shape — cloth
+ * is pinned at the collar and free at the bottom, so every displacement is
+ * weighted by `k`, how far down the panel a point is, squared so the top third
+ * barely moves and the hem carries almost all of it:
+ *
+ * - `frame` gives a slow drift, a twelfth of a unit at the hem over a
+ *   115-frame cycle. It is deliberately slower and smaller than the idle breath
+ *   (108 frames, and the whole body) so the two never lock into one beat.
+ * - `vx` streams it. `vx` is signed by *facing*, so `-vx` trails the cape behind
+ *   him in both directions with no conditional — and a sign added here would be
+ *   a sign applied twice, since the frame is already mirrored.
+ *
+ * The hem rises as it goes back because it is swinging on the shoulder rather
+ * than sliding: a panel thrown 0.6 of a unit behind has to come up about half
+ * that, or the cloth reads as having stretched. Falling adds to it directly —
+ * `vy` is negative going down, so `-vy` billows the cape up around him, which is
+ * the one bit of air resistance the eye actually looks for.
  */
-function drawCape(b: Brush, p: PropDef): void {
+function drawCape(b: Brush, p: PropDef, anim: PropAnim): void {
   const ctx = b.ctx;
+  const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+
+  // Where the hem wants to be, relative to where it is drawn.
+  const drift = Math.sin(anim.frame * 0.0546) * 0.085;
+  const stream = clamp(-anim.vx * 0.3, -0.85, 0.85);
+  const sway = drift + stream;
+  // Swinging, not sliding: back is also up. Plus the billow of a fall.
+  const lift = Math.abs(sway) * 0.5 + (anim.airborne ? clamp(-anim.vy * 0.12, -0.25, 0.55) : 0);
+
+  /** A point on the panel, displaced by how far down the panel it is. */
+  const px = (x: number, y: number) => x + sway * weight(y);
+  const py = (y: number) => y + lift * weight(y);
+  // The shoulder line sits at y ≈ 0.14 and the hem at y ≈ −2.5; `k²` is what
+  // keeps the collar pinned while the hem does the moving.
+  function weight(y: number): number {
+    const k = clamp(-y / 2.4, 0, 1);
+    return k * k;
+  }
+
   ctx.beginPath();
   ctx.moveTo(0.34, 0.1);
   ctx.lineTo(-0.44, 0.14);
   // The outer edge falls from the shoulder and flares back as it goes.
-  ctx.quadraticCurveTo(-0.92, -0.95, -0.8, -2.26);
+  ctx.quadraticCurveTo(px(-0.92, -0.95), py(-0.95), px(-0.8, -2.26), py(-2.26));
   // The hem, cut on a slant so it reads as cloth rather than as a plank.
-  ctx.quadraticCurveTo(-0.5, -2.52, -0.12, -2.28);
+  ctx.quadraticCurveTo(px(-0.5, -2.52), py(-2.52), px(-0.12, -2.28), py(-2.28));
   // Back up the inside edge, close to the body.
-  ctx.quadraticCurveTo(0.14, -1.15, 0.3, -0.12);
+  ctx.quadraticCurveTo(px(0.14, -1.15), py(-1.15), 0.3, -0.12);
   ctx.closePath();
   b.fill(p.colour);
 
@@ -66,10 +112,10 @@ function drawCape(b: Brush, p: PropDef): void {
   // whole reason a cape reads as having a front and a back.
   if (b.mode === "body" && p.detail) {
     ctx.beginPath();
-    ctx.moveTo(-0.12, -2.28);
-    ctx.quadraticCurveTo(-0.5, -2.52, -0.8, -2.26);
-    ctx.quadraticCurveTo(-0.72, -1.98, -0.64, -1.86);
-    ctx.quadraticCurveTo(-0.42, -2.06, -0.1, -1.9);
+    ctx.moveTo(px(-0.12, -2.28), py(-2.28));
+    ctx.quadraticCurveTo(px(-0.5, -2.52), py(-2.52), px(-0.8, -2.26), py(-2.26));
+    ctx.quadraticCurveTo(px(-0.72, -1.98), py(-1.98), px(-0.64, -1.86), py(-1.86));
+    ctx.quadraticCurveTo(px(-0.42, -2.06), py(-2.06), px(-0.1, -1.9), py(-1.9));
     ctx.closePath();
     b.fill(p.detail);
   }
@@ -95,41 +141,62 @@ function drawCollar(b: Brush, p: PropDef): void {
  * Marth's whole torso. Blade length and guard width are one number in that
  * painter and two here, which is the only reason this is custom.
  *
+ * ## The blade was still a black stick
+ *
+ * Going custom fixed the guard and did nothing for the width, which round one
+ * did not re-check at match scale. The figure is drawn twice — once inflated by
+ * `rimWidth` in the outline colour, once in body colours — and the rim is a
+ * **pixel** measurement while the blade is a fraction of the prop's own unit. At
+ * match scale one rig unit is about ten pixels, so `size: 5.3` makes the local
+ * unit ~56px: a half-width of 0.036 drew 4px of white inside 5px of navy rim on
+ * each side. A black bar with a white pinstripe down it, on every frame of every
+ * move, and worst of all on Dolphin Slash, where a vertical blade against the
+ * night sky read as an aerial rather than as a sword.
+ *
+ * So the half-width is 0.082 — about 0.9 rig units across, which is his
+ * forearm's own thickness. That is wide for a rapier and it is what it takes:
+ * the doc's rule is that a weapon has to be checked at match scale, and at match
+ * scale the visible white is what the rim leaves behind, not what was drawn.
+ * The guard went out to 0.2 with it, because a guard the blade's own width is
+ * not a guard.
+ *
  * Local frame: `+y` runs out along the hand, `+x` is forward, one unit is `size`.
  */
 function drawFalchion(b: Brush, p: PropDef): void {
   const ctx = b.ctx;
   // The grip, back down the hand, and the pommel behind it.
   poly(ctx, [
-    [-0.032, -0.3],
-    [0.032, -0.3],
-    [0.032, 0.02],
-    [-0.032, 0.02],
+    [-0.055, -0.3],
+    [0.055, -0.3],
+    [0.055, 0.02],
+    [-0.055, 0.02],
   ]);
   b.fill("#2B3348");
   ctx.beginPath();
-  ctx.arc(0, -0.33, 0.055, 0, Math.PI * 2);
+  ctx.arc(0, -0.33, 0.078, 0, Math.PI * 2);
   ctx.closePath();
   b.fill(p.detail ?? "accent");
 
   // The winged guard: swept forward toward the point, which is what makes
-  // Falchion's hilt read as Falchion's and not as a cross.
+  // Falchion's hilt read as Falchion's and not as a cross. It has to stay
+  // visibly wider than the blade now that the blade is a blade — the guard is
+  // the one shape that says which end of this thing is the hilt.
   ctx.beginPath();
-  ctx.moveTo(-0.15, 0.0);
-  ctx.quadraticCurveTo(-0.11, 0.12, -0.045, 0.1);
-  ctx.lineTo(0.045, 0.1);
-  ctx.quadraticCurveTo(0.11, 0.12, 0.15, 0.0);
-  ctx.quadraticCurveTo(0.07, -0.05, 0, -0.05);
-  ctx.quadraticCurveTo(-0.07, -0.05, -0.15, 0.0);
+  ctx.moveTo(-0.2, 0.0);
+  ctx.quadraticCurveTo(-0.15, 0.15, -0.06, 0.12);
+  ctx.lineTo(0.06, 0.12);
+  ctx.quadraticCurveTo(0.15, 0.15, 0.2, 0.0);
+  ctx.quadraticCurveTo(0.09, -0.06, 0, -0.06);
+  ctx.quadraticCurveTo(-0.09, -0.06, -0.2, 0.0);
   ctx.closePath();
   b.fill(p.detail ?? "accent");
 
   // The blade: near-parallel for most of its length, then a long leaf taper.
   ctx.beginPath();
-  ctx.moveTo(-0.036, 0.08);
-  ctx.lineTo(0.036, 0.08);
-  ctx.quadraticCurveTo(0.05, 0.66, 0.01, 1.0);
-  ctx.quadraticCurveTo(-0.028, 0.68, -0.036, 0.08);
+  ctx.moveTo(-0.082, 0.07);
+  ctx.lineTo(0.082, 0.07);
+  ctx.quadraticCurveTo(0.106, 0.66, 0.012, 1.0);
+  ctx.quadraticCurveTo(-0.07, 0.68, -0.082, 0.07);
   ctx.closePath();
   b.fill(p.colour);
 
@@ -137,10 +204,10 @@ function drawFalchion(b: Brush, p: PropDef): void {
   // blade and a white stick.
   if (b.mode === "body") {
     poly(ctx, [
-      [-0.011, 0.14],
-      [0.011, 0.14],
-      [0.008, 0.78],
-      [-0.008, 0.78],
+      [-0.026, 0.13],
+      [0.026, 0.13],
+      [0.019, 0.79],
+      [-0.019, 0.79],
     ]);
     b.fill("#A9BCD2");
   }

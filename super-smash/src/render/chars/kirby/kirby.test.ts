@@ -321,6 +321,35 @@ describe("the sphere is doing the work, not the elbows", () => {
     }
   });
 
+  /**
+   * The arms have to be *arms*.
+   *
+   * Kirby's whole silhouette is a ball, two boots and two nubs, and the nubs
+   * are the pair that round one lost: the bones summed to 4.65 against a 4.45
+   * radius, so a fully extended arm cleared the outline by two hundredths of
+   * his width — under half the rim that is then inflated over the top of it. A
+   * critic handed a capture of the finished fighter reported, in as many words,
+   * that Kirby *has no arms*, and blamed the hammer and the Cutter blade on it:
+   * a prop held by nothing reads as orbiting him.
+   *
+   * Measured where a player sees it — in the **idle**, the pose he is in more
+   * than any other — and against the drawn radius rather than a constant,
+   * because `scaleX` inflates the circle too.
+   */
+  it("shows an arm nub outside the outline while he is just standing there", () => {
+    const s = samplePose(poses.idle!, 0);
+    const ball = ballOf(s);
+    for (const hand of ["handR", "handL"] as const) {
+      const p = tipOf(s, hand);
+      const proud = Math.hypot(p.x - ball.x, p.y - ball.y) + rig.bones[hand].thickness / 2 - ball.r;
+      expect(
+        proud / (2 * ball.r),
+        `${hand} clears the outline by ${proud.toFixed(2)} units — ` +
+          `${((proud / (2 * ball.r)) * 100).toFixed(1)}% of his width, which is nothing`,
+      ).toBeGreaterThan(0.06);
+    }
+  });
+
   it("does not fall back to a shared clip for any attack, special or throw", () => {
     for (const [name] of ATTACKS) {
       expect(poses[name], `${name} fell back to the shared clip`).toBeDefined();
@@ -423,6 +452,35 @@ describe("both boots reach the floor, and stay on it", () => {
    * actually stands in plants *both* of them, at the same depth, far enough
    * apart to be two feet rather than one.
    */
+  /**
+   * The idle is the pose a player looks at for longer than any other, and on
+   * this rig it has exactly one channel: **size**. `drawFigure` takes the head
+   * circle's radius from `scale * scaleX`, so `scaleX` inflates the whole of
+   * him and nothing else in the clip can — `scaleY` only moves the ball up and
+   * down the legs, and there is no way to squash a circle into an ellipse here.
+   *
+   * Round one breathed 2%, which on a 4.45-unit radius is nine hundredths of a
+   * unit and about a pixel at match scale: the contact sheet was a hundred and
+   * eight identical drawings. The generic "not a photograph" check above passes
+   * on that, because the arms are still swinging four degrees inside the ball —
+   * which is the whole failure mode this file exists to catch, so the breath
+   * gets its own bar, stated in the units a player sees it in.
+   */
+  it("breathes wide enough to see, because a ball can only breathe by changing size", () => {
+    const clip = poses.idle!;
+    let big = -Infinity;
+    let small = Infinity;
+    for (let i = 0; i < 48; i++) {
+      const r = ballOf(samplePose(clip, i / 48)).r;
+      big = Math.max(big, r);
+      small = Math.min(small, r);
+    }
+    expect(
+      (big - small) / small,
+      `the idle changes his width by ${(((big - small) / small) * 100).toFixed(1)}% — at match scale that is one pixel`,
+    ).toBeGreaterThan(0.05);
+  });
+
   it("plants both boots level in the idle, with daylight between them", () => {
     const s = samplePose(poses.idle!, 0);
     const sk = skeletonOf(s);
@@ -455,30 +513,109 @@ describe("both boots reach the floor, and stay on it", () => {
 
 /* ------------------------------------------------------------- the effects -- */
 
-function paint(slot: MoveSlot, frame: number, charge = 0): MockContext {
+/** The screen geometry every effect in `fx.ts` derives from, at `u = 12`. */
+const U = 12;
+const FEET_Y = 600;
+const BALL_SCREEN_R = BALL_R * 0.78 * U;
+
+/**
+ * One effect, painted, with the over-layer marked out.
+ *
+ * `over` runs its callback immediately — which is what the renderer's own
+ * fallback does — but records the span of calls it produced, so a test can ask
+ * not just *what* was painted but **which side of the fighter it was painted
+ * on**. That distinction is the whole of three of Kirby's moves: the Inhale
+ * mouth, the hammer through its swing and the Cutter blade are all wrong under
+ * the figure and right over it, and nothing about the call list alone can tell
+ * the two apart.
+ */
+interface Painted {
+  readonly ctx: MockContext;
+  /** `[from, to)` index ranges of calls made from inside an `over` callback. */
+  readonly overSpans: readonly (readonly [number, number])[];
+}
+
+function painted(slot: MoveSlot, frame: number, charge = 0, costume = 0): Painted {
   const ctx = createMockContext();
   const fn = fx[slot];
   if (!fn) throw new Error(`no effect for ${slot}`);
   const total = def.moves[slot]?.totalFrames ?? 40;
+  const overSpans: [number, number][] = [];
   fn({
     ctx: ctx as unknown as CanvasRenderingContext2D,
-    f: { facing: 1, charge } as never,
+    f: { facing: 1, charge, costume } as never,
     def: def as never,
     cam: { zoom: 12 } as never,
     height: 7.6,
     x: 800,
-    y: 600,
-    u: 12,
+    y: FEET_Y,
+    u: U,
     frame,
     total,
     t: frame / total,
     dir: 1,
-    over: (paint: () => void) => paint(),
+    over: (run: () => void) => {
+      const from = ctx.calls.length;
+      run();
+      overSpans.push([from, ctx.calls.length]);
+    },
   });
-  return ctx;
+  return { ctx, overSpans };
+}
+
+function paint(slot: MoveSlot, frame: number, charge = 0): MockContext {
+  return painted(slot, frame, charge).ctx;
 }
 
 const drew = (slot: MoveSlot, frame: number): number => paint(slot, frame).calls.length;
+
+/** How many calls a move made in front of the fighter rather than behind them. */
+function overCalls(p: Painted): number {
+  return p.overSpans.reduce((n, [from, to]) => n + (to - from), 0);
+}
+
+/**
+ * Every shape of one kind, paired with the fill colour in force when it was
+ * drawn and with whether it was painted over the fighter.
+ *
+ * The colour is what makes the shapes identifiable: `fx.ts` paints the Inhale
+ * throat, its lip, its tongue and its two eyes as five ellipses in one span,
+ * and the only thing separating them in a call list is the `fillStyle`
+ * assignment immediately before each.
+ */
+function shapes(p: Painted, method: string): { args: readonly unknown[]; fill: string; over: boolean }[] {
+  const out: { args: readonly unknown[]; fill: string; over: boolean }[] = [];
+  let fill = "";
+  p.ctx.calls.forEach((c, i) => {
+    if (c.method === "set:fillStyle") fill = String(c.args[0]);
+    if (c.method !== method) return;
+    out.push({ args: c.args, fill, over: p.overSpans.some(([a, b]) => i >= a && i < b) });
+  });
+  return out;
+}
+
+/**
+ * Every closed path the effect built, as its own list of points.
+ *
+ * Used by the Stone assertions, which are claims about a *silhouette* — that it
+ * is irregular and that it stands on the floor — and a silhouette is the point
+ * list, not the call count.
+ */
+function paths(p: Painted): { x: number; y: number }[][] {
+  const out: { x: number; y: number }[][] = [];
+  let current: { x: number; y: number }[] | null = null;
+  for (const c of p.ctx.calls) {
+    if (c.method === "moveTo") {
+      current = [{ x: Number(c.args[0]), y: Number(c.args[1]) }];
+      out.push(current);
+    } else if (c.method === "lineTo" && current) {
+      current.push({ x: Number(c.args[0]), y: Number(c.args[1]) });
+    } else if (c.method === "beginPath") {
+      current = null;
+    }
+  }
+  return out;
+}
 
 describe("the effects paint on the frames they claim and not otherwise", () => {
   /**
@@ -546,7 +683,7 @@ describe("the effects paint on the frames they claim and not otherwise", () => {
     for (const f of [from, Math.round((from + to) / 2), to]) {
       const out = fx.downB!({
         ctx: paint("downB", f) as unknown as CanvasRenderingContext2D,
-        f: { facing: 1, charge: 0 } as never,
+        f: { facing: 1, charge: 0, costume: 0 } as never,
         def: def as never,
         cam: { zoom: 12 } as never,
         height: 7.6,
@@ -592,6 +729,331 @@ describe("the effects paint on the frames they claim and not otherwise", () => {
   });
 });
 
+describe("what is painted in front of Kirby rather than behind him", () => {
+  /**
+   * The Inhale mouth.
+   *
+   * Round one drew it under the figure and pushed it a whole radius forward so
+   * that its leading half cleared the ball. That is not a mouth: the capture
+   * shows a black disc peeping out from behind his shoulder, and he reads as
+   * standing in front of a hole rather than as having opened one. A mouth is a
+   * hole *in* a face and has to be painted on the face.
+   */
+  it("opens the Inhale mouth on his face and not behind his shoulder", () => {
+    const p = painted("neutralB", 30);
+    const throat = shapes(p, "ellipse").filter((s) => s.fill === "#1E0714");
+    expect(throat.length, "no throat painted mid-suction").toBeGreaterThan(0);
+    for (const t of throat) {
+      expect(t.over, "the Inhale mouth is painted behind Kirby, where a mouth cannot be").toBe(true);
+    }
+    // And it is bigger than his face: the maw's own half-width against the
+    // ball's radius. Under a radius across and it is a mouth, not *the* mouth.
+    const widest = Math.max(...throat.map((t) => Number(t.args[2])));
+    expect(widest / BALL_SCREEN_R, "the maw is smaller than his own head").toBeGreaterThan(1.0);
+  });
+
+  /**
+   * The eyes ride up out of the way of it.
+   *
+   * The maw covers the rig's own eyes — it has to, they are a prop on the head
+   * bone and nothing in `fx.ts` can move them — so the face would be blank
+   * without this. It is also what the real animation does. The claim is that
+   * they *travel*: at the start of the move they are where the rig draws them
+   * and by full suction they are against the crown.
+   */
+  it("pushes his eyes up to the crown as the mouth opens", () => {
+    const eyeY = (frame: number): number => {
+      const p = painted("neutralB", frame);
+      const eyes = shapes(p, "ellipse").filter((s) => s.fill === "#241C46");
+      expect(eyes.length, `no eyes painted over the maw on frame ${frame}`).toBe(2);
+      // Drawn after `translate(cx, cy)`, so the recorded `y` is measured from
+      // the middle of the ball, downwards.
+      return Math.max(...eyes.map((e) => Number(e.args[1])));
+    };
+    const opening = eyeY(6);
+    const open = eyeY(30);
+    expect(open, "the eyes are not above the middle of the ball at full suction").toBeLessThan(
+      -0.4 * BALL_SCREEN_R,
+    );
+    expect(
+      opening - open,
+      "the eyes are already at the crown before the mouth opens — they do not ride up, they teleport",
+    ).toBeGreaterThan(0.25 * BALL_SCREEN_R);
+  });
+
+  /**
+   * The hammer swaps sides at the top of the swing.
+   *
+   * Under the figure the shaft disappears into the ball and only the head
+   * clears it, so the mallet reads as floating beside him rather than gripped.
+   * Over the figure through the wind-up would be worse: the hammer is genuinely
+   * behind his shoulder there. The crossover is the frame it is directly
+   * overhead, where there is nothing to occlude either way.
+   */
+  it("holds the hammer behind him on the wind-up and in front of him through the swing", () => {
+    expect(overCalls(painted("sideB", 16)), "the cocked hammer is drawn in front of his face").toBe(0);
+    for (const f of [22, 26, 27, 32]) {
+      expect(
+        overCalls(painted("sideB", f)),
+        `the hammer is behind Kirby on frame ${f} — the shaft vanishes into the ball`,
+      ).toBeGreaterThan(5);
+    }
+  });
+
+  /**
+   * Final Cutter's blade, and the port tag.
+   *
+   * Round one drew it under the figure with its base half a radius above his
+   * middle: two thirds of it inside the ball, and the third that cleared went
+   * straight behind the port tag, which hangs over every fighter's crown. `over`
+   * fixes the first half of that and cannot fix the second — `over` still lands
+   * under the tag — so the swing is biased forward instead, which is the same
+   * fix Link's boomerang needed.
+   */
+  it("puts the Cutter blade in front of Kirby and forward of the port tag", () => {
+    for (const f of [17, 23, 26]) {
+      const p = painted("upB", f);
+      expect(overCalls(p), `the rising Cutter is painted behind Kirby on frame ${f}`).toBeGreaterThan(5);
+      const placements = p.ctx.calls
+        .map((c, i) => ({ c, i }))
+        .filter(({ c, i }) => c.method === "translate" && p.overSpans.some(([a, b]) => i >= a && i < b))
+        .map(({ c }) => Number(c.args[0]));
+      expect(
+        Math.max(...placements) - 800,
+        `the blade is over the crown on frame ${f}, where the port tag is`,
+      ).toBeGreaterThan(0.5 * BALL_SCREEN_R);
+    }
+    // The descent holds the blade under him, where the meteor hitbox is, and
+    // that half is drawn in front of him too — it crosses his own boots.
+    expect(overCalls(painted("upB", 42)), "the falling blade is hidden behind his feet").toBeGreaterThan(5);
+  });
+
+  /**
+   * The two things he holds are held.
+   *
+   * The rig grew real arms this round and it bought nothing on the hammer or
+   * the Cutter, because a move effect is painted after the whole figure: the
+   * shaft and the grip drew straight over the hand that was supposed to be
+   * holding them, and a critic reported both props as "attached to nothing" and
+   * the hammer specifically as "skewering him". `over` cannot help — it is what
+   * put them in front in the first place — so the nubs are painted again, last,
+   * on top of the handle.
+   *
+   * The claim is that they are painted in the **fighter's own colours**, which
+   * is the part a literal would get wrong: Yellow Kirby's hands are yellow, and
+   * a pink nub on a yellow fighter is worse than no nub at all.
+   */
+  it("closes both nubs over the handle, in whatever colour this Kirby is", () => {
+    for (const [slot, frame] of [
+      ["sideB", 26],
+      ["upB", 24],
+      ["upB", 42],
+    ] as const) {
+      for (const costume of [0, 1]) {
+        const expected = costume === 0 ? def.palette.primary : def.palette.alts![0].primary;
+        const p = painted(slot, frame, 0, costume);
+        const hands = shapes(p, "arc").filter((h) => h.fill === expected);
+        expect(
+          hands.length,
+          `${slot} frame ${frame} costume ${costume}: no hand painted in ${expected} — ` +
+            `the handle is drawn over the arm and the prop reads as skewering him`,
+        ).toBe(2);
+        for (const h of hands) {
+          expect(h.over, `${slot}: the gripping hand is painted behind the fighter`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("sweeps the neutral air's spin across the whole of its active window, and moves it", () => {
+    expect(drew("nair", 3), "spinning before the move starts").toBe(0);
+    expect(drew("nair", 45), "still spinning long after the hitbox ended").toBe(0);
+    const angleAt = (frame: number): number => {
+      const p = painted("nair", frame);
+      const arcs = p.ctx.calls.filter((c) => c.method === "arc");
+      expect(arcs.length, `no spin sweep on frame ${frame}`).toBeGreaterThan(2);
+      expect(overCalls(p), "the spin sweep is painted behind the fighter it belongs to").toBeGreaterThan(4);
+      return Number(arcs[0].args[3]);
+    };
+    for (const f of [10, 16, 24, 30]) angleAt(f);
+    expect(
+      Math.abs(angleAt(18) - angleAt(16)),
+      "the spin sweep does not travel — it is a decal, not a rotation",
+    ).toBeGreaterThan(0.5);
+  });
+});
+
+describe("the Stone is a rock", () => {
+  /**
+   * The silhouette Stone paints, in **screen** space.
+   *
+   * The mock records the arguments a call was made with and not the transform
+   * in force, so a path's own numbers say nothing about where on the stage it
+   * ended up — the first version of this measured the point list raw and passed
+   * happily with the whole rock translated four tenths of its height into the
+   * air. The rock body is drawn inside the effect's only `translate`, so
+   * folding that in is what turns a shape into a position.
+   */
+  function profile(frame = 20): { x: number; y: number }[] {
+    const p = painted("downB", frame);
+    const move = p.ctx.calls.find((c) => c.method === "translate");
+    expect(move, "Stone never placed itself on the stage").toBeDefined();
+    const [tx, ty] = [Number(move!.args[0]), Number(move!.args[1])];
+    const all = paths(p);
+    expect(all.length, "Stone painted no outline at all").toBeGreaterThan(0);
+    const longest = all.reduce((best, q) => (q.length > best.length ? q : best), all[0]);
+    return longest.map((v) => ({ x: v.x + tx, y: v.y + ty }));
+  }
+
+  /**
+   * Round one drew `polygon(…, 6, 0.42)` — a **regular hexagon** — twice, with a
+   * pentagon on top. Three concentric regular polygons about one centre is a
+   * nut, and the capture reads as a grey UI badge. Rock has no repeated angle
+   * and no axis of symmetry, and that is measurable: the distances from the
+   * centroid to the vertices of a regular polygon are all identical.
+   *
+   * Measured in the shape's **own** normalised box rather than in pixels. A
+   * regular hexagon drawn 9.8 wide and 7.7 tall is an irregular hexagon in
+   * pixels purely because of the aspect ratio, and that is exactly how the
+   * first version of this test passed against a hexagon put back on purpose.
+   */
+  it("has an irregular outline, not a polygon", () => {
+    const pts = profile();
+    expect(pts.length, "the rock is fewer than eight points — that is a gem, not a boulder").toBeGreaterThanOrEqual(8);
+    const w = Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x));
+    const h = Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y));
+    const unit = pts.map((p) => ({ x: p.x / w, y: p.y / h }));
+    const cx = unit.reduce((s, p) => s + p.x, 0) / unit.length;
+    const cy = unit.reduce((s, p) => s + p.y, 0) / unit.length;
+    const radii = unit.map((p) => Math.hypot(p.x - cx, p.y - cy));
+    const mean = radii.reduce((s, v) => s + v, 0) / radii.length;
+    const spread = (Math.max(...radii) - Math.min(...radii)) / mean;
+    expect(
+      spread,
+      `every vertex is the same distance from the middle (${spread.toFixed(3)}) — it is a polygon`,
+    ).toBeGreaterThan(0.15);
+  });
+
+  /**
+   * And it stands on the floor. The hexagon balanced on a *vertex* half a
+   * radius clear of the stage, which is most of why it read as floating: a
+   * boulder is heavy, and heavy things sit down.
+   */
+  it("rests its base on the stage rather than hovering over it", () => {
+    const pts = profile();
+    const lowest = Math.max(...pts.map((p) => p.y));
+    const height = lowest - Math.min(...pts.map((p) => p.y));
+    // `FEET_Y` is the stage under him — the same line his boots stand on.
+    expect((lowest - FEET_Y) / height, "the rock hovers above the stage").toBeGreaterThan(-0.05);
+    expect((lowest - FEET_Y) / height, "the rock is sunk into the stage").toBeLessThan(0.05);
+  });
+
+  it("is bigger than the Kirby it replaced, and by enough to notice", () => {
+    const pts = profile();
+    const width = Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x));
+    expect(width / (2 * BALL_SCREEN_R), "the rock is no wider than his own head").toBeGreaterThan(1.15);
+  });
+
+  /**
+   * The change, and the landing. With the figure hidden there is nothing for
+   * the dust to be occluded *by*, but dust behind a boulder is a cloud in the
+   * distance and dust in front of one is an impact — and the impact is an
+   * eighteen-percent hitbox that otherwise arrives in silence.
+   */
+  it("puffs in front of the rock on the change and on the landing", () => {
+    const armour = def.moves.downB!.superArmourFrames!;
+    expect(overCalls(painted("downB", armour[0] + 1)), "the transformation happens silently").toBeGreaterThan(4);
+    expect(overCalls(painted("downB", armour[0] + 22)), "the landing happens silently").toBeGreaterThan(4);
+  });
+});
+
+describe("the drill is a cone and the blink is a blink", () => {
+  /**
+   * Six rings of near-equal width one under the other is a spring, which is
+   * what the round-one capture showed — a white slinky hanging off his boots. A
+   * drill tapers, and it ends in the point the meteor hitbox is measured on.
+   */
+  it("narrows the corkscrew all the way down to a point", () => {
+    for (const frame of [20, 25, 30]) {
+      const p = painted("dair", frame);
+      const rings = shapes(p, "ellipse").map((s) => ({
+        cy: Number(s.args[1]),
+        rx: Number(s.args[2]),
+      }));
+      expect(rings.length, `no corkscrew on frame ${frame}`).toBeGreaterThan(4);
+      const sorted = [...rings].sort((a, b) => a.cy - b.cy);
+      const top = sorted[0];
+      const bottom = sorted[sorted.length - 1];
+      expect(
+        bottom.rx,
+        `the corkscrew is a cylinder on frame ${frame}: ${bottom.rx.toFixed(1)} wide at the bottom ` +
+          `against ${top.rx.toFixed(1)} at the top`,
+      ).toBeLessThan(top.rx * 0.5);
+      // And the bit at the end of it, below the last ring.
+      const tip = paths(p).filter((path) => path.length === 3);
+      expect(tip.length, `the drill has no point on frame ${frame}`).toBeGreaterThan(0);
+      expect(
+        Math.max(...tip[0].map((v) => v.y)),
+        "the drill's point is above its own last ring",
+      ).toBeGreaterThan(bottom.cy);
+    }
+  });
+
+  /**
+   * The blink.
+   *
+   * A prop is bolted to its bone, so no pose can express one — the painter's
+   * frame clock is the only thing that can, and Kirby's face is two shapes on a
+   * circle that a player looks at for the whole match. The eyes must be **open
+   * at frame 0**: the character-select portraits, the stock icons and the
+   * silhouette check all draw with `PROP_STILL`, whose frame is zero.
+   */
+  it("blinks, and is never caught blinking on the roster screen", () => {
+    const face = rig.props.find((p) => p.kind === "custom" && p.draw);
+    expect(face, "Kirby has no custom face prop").toBeDefined();
+
+    const eyeHeightAt = (frame: number): number => {
+      const ctx = createMockContext();
+      const brush = {
+        ctx: ctx as unknown as CanvasRenderingContext2D,
+        mode: "body" as const,
+        palette: def.palette,
+        rimLocal: 0,
+        outline: def.palette.outline,
+        // The same two calls the real brush makes, in the same order, so the
+        // colour that follows a shape is recorded alongside it.
+        fill: (colour: string) => {
+          ctx.fillStyle = colour;
+          ctx.fill();
+        },
+        line: () => {},
+      };
+      face!.draw!(brush, face!, { frame, t: 0, vx: 0, vy: 0, airborne: false });
+      // The eye whites are the tall dark ovals; everything else the painter
+      // draws is a blush or an inset. Keyed off the fill that follows each.
+      const heights: number[] = [];
+      ctx.calls.forEach((c, i) => {
+        if (c.method !== "ellipse") return;
+        const next = ctx.calls.slice(i + 1).find((n) => n.method === "set:fillStyle");
+        if (String(next?.args[0]) === "#241C46") heights.push(Number(c.args[3]));
+      });
+      expect(heights.length, `no eyes drawn on frame ${frame}`).toBe(2);
+      return Math.max(...heights);
+    };
+
+    const open = eyeHeightAt(0);
+    let shut = open;
+    for (let f = 0; f < 172; f++) shut = Math.min(shut, eyeHeightAt(f));
+    expect(shut, "Kirby never blinks").toBeLessThan(open * 0.4);
+    expect(eyeHeightAt(0), "frame 0 is a blink — every portrait of him has his eyes shut").toBe(open);
+    // And it is a blink rather than a stutter: at least three frames of it.
+    let closed = 0;
+    for (let f = 0; f < 172; f++) if (eyeHeightAt(f) < open * 0.7) closed++;
+    expect(closed, "the blink is a single frame — at 60Hz that is a dropped frame, not a blink").toBeGreaterThan(4);
+    expect(closed, "he spends most of the match with his eyes shut").toBeLessThan(30);
+  });
+});
+
 describe("nothing an effect paints disappears into the rim", () => {
   /**
    * The trap this guards, in one sentence: **the figure is drawn twice, once
@@ -629,6 +1091,15 @@ describe("nothing an effect paints disappears into the rim", () => {
         const ctx = paint(slot, frame, 40);
         for (const prop of ["fillStyle", "strokeStyle"]) {
           for (const colour of assignmentsTo(ctx, prop)) {
+            // An **exact** match is a deliberate quotation of the rim, not an
+            // accident near it: the two arm nubs painted over the hammer's
+            // handle and the Cutter's grip draw their own rim in the fighter's
+            // outline colour, because they are meant to look like part of the
+            // figure rather than like a graphic laid on it. The bug this test
+            // exists to catch was `#5A1030` against an outline of `#5A2038` —
+            // eighteen units apart, close enough to disappear and far enough
+            // that nobody noticed writing it.
+            if (colour === def.palette.outline) continue;
             const d = distanceFromRim(colour);
             if (d !== null && d < 45) {
               offenders.push(`${slot} paints ${String(colour)} — ${d.toFixed(0)} from the rim`);

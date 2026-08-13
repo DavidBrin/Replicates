@@ -135,6 +135,50 @@ function hylianShield(b: Brush): void {
   }
 }
 
+/**
+ * The Traveler's Bow, stowed across his back.
+ *
+ * Ultimate's Link physically carries it — the skeleton in the exported model
+ * has a dedicated `BowB` bone mid-back, behind the spine and under the Master
+ * Sword's sheath, and a reference pass ranked "the bow limb arcing up behind
+ * the trailing shoulder" fifth of nine silhouette cues and noted that it is the
+ * one only *this* Link has. Nothing else on the rig draws a curve: the shield
+ * is a slab, the quiver a box, the cap and the blade straight wedges, so a
+ * single arc reads immediately even though it is thin.
+ *
+ * Drawn as the stave alone with a string across the chord — three strokes, an
+ * outline under a wood colour under the teal cord wrap the real bow has at each
+ * tip. The teal is the one colour on Link that is neither tunic green, steel
+ * nor leather, and it is what stops the bow reading as another strap.
+ */
+function travellersBow(b: Brush): void {
+  const ctx = b.ctx;
+
+  // The stave. A shallow arc, belly toward the spine.
+  const arc = (width: number, colour: string) => {
+    ctx.beginPath();
+    ctx.moveTo(-0.34, -1.0);
+    ctx.quadraticCurveTo(0.5, 0, -0.34, 1.0);
+    b.line(colour, width);
+  };
+  arc(0.3, "outline");
+  arc(0.19, "#A0763E");
+
+  if (b.mode === "body") {
+    // The string, and the cord wrap at each tip.
+    ctx.beginPath();
+    ctx.moveTo(-0.34, -1.0);
+    ctx.lineTo(-0.34, 1.0);
+    b.line("#E8DCC0", 0.07);
+    for (const y of [-0.78, 0.78]) {
+      ctx.beginPath();
+      ctx.moveTo(-0.28, y);
+      ctx.lineTo(-0.02, y * 0.82);
+      b.line("#40746C", 0.2);
+    }
+  }
+}
+
 /** The quiver, and the arrow fletchings that clear his shoulder. */
 function quiver(b: Brush): void {
   const ctx = b.ctx;
@@ -166,19 +210,59 @@ const SWORD: PropDef = {
   draw: (b) => masterSword(b),
 };
 
-// Wider than the torso capsule on purpose. Props layered "behind" are drawn
-// before the body, so a shield the same width as the chest is a shield nobody
-// ever sees — only what overhangs it reads.
+/**
+ * The Hylian Shield, slung across his back.
+ *
+ * Only the **overhang** is ever seen. Props layered "behind" are drawn before
+ * the body, and the torso capsule is 3.7 rig units through, so everything
+ * inside ±1.85 of the torso axis is painted and then covered. Round one hung it
+ * at `across: -0.85` with `size: 3.1`, which left 1.7 units of shield sticking
+ * out past his back — a blue stripe at match scale, and a reference pass ranked
+ * the shield the *second* strongest cue in Link's whole silhouette. Pushed back
+ * to -1.45 and grown to 3.4, the visible slab is 2.5 units: half again as much
+ * shield, and enough of the curved lower edge and the gold crest to be a shield
+ * rather than a stripe.
+ *
+ * It is on his back and not on his arm, and that is wrong for the pose it is
+ * most looked at in. Ultimate's Link holds it up on the left forearm through
+ * every frame of his idle, his walk and his crouch — that is what his passive
+ * projectile block is — and stows it on his back for exactly three animations,
+ * the bow, the boomerang and the bomb, because those need the hand. A prop here
+ * is welded to one bone for every clip the fighter has, so one of those two
+ * truths has to be given up; giving up the idle is the cheaper of the two only
+ * because the alternative puts a dinner plate through three specials. The
+ * report for this round asks for the shared change that would end the choice.
+ */
 const SHIELD: PropDef = {
   kind: "custom",
   bone: "torso",
-  at: 0.58,
-  size: 3.1,
-  across: -0.85,
+  at: 0.42,
+  size: 3.3,
+  across: -1.5,
   colour: "#C3CBD8",
   detail: "accent",
   layer: "behind",
   draw: (b) => hylianShield(b),
+};
+
+/**
+ * The bow on his back, canted so it crosses behind the trailing shoulder.
+ *
+ * Behind the shield and slightly higher, so what clears both the torso and the
+ * shield is the upper limb — one thin arc above the shoulder line, which is
+ * exactly the part the reference describes.
+ */
+const BOW: PropDef = {
+  kind: "custom",
+  bone: "torso",
+  at: 0.62,
+  size: 3.0,
+  across: -1.1,
+  angle: -0.34,
+  colour: "#A0763E",
+  detail: "#40746C",
+  layer: "behind",
+  draw: (b) => travellersBow(b),
 };
 
 const QUIVER: PropDef = {
@@ -200,6 +284,13 @@ export const rig: CharacterRig = {
   scale: 1.06,
   bones: tweakRig({
     root: { len: 1.02 },
+    // A longer neck than the shared humanoid, for one reason: the torso capsule
+    // is 3.7 units through, so its top cap reaches within a whisker of the head
+    // circle's centre and swallows everything below the eye. A critic reading a
+    // match-scale capture called it "a green bandana over his face" — no cheek,
+    // no jaw, no chin. Two fifths of a unit of extra neck is what puts a chin
+    // above the collar.
+    head: { len: 1.18 },
     ...group(LEGS, { len: 1.02 }),
     ...group(ARMS, { len: 1.04, thick: 0.96 }),
     ...group(FEET, { len: 1.15, thick: 1.15 }),
@@ -223,13 +314,49 @@ export const rig: CharacterRig = {
   },
   props: [
     QUIVER,
+    BOW,
     SHIELD,
-    { kind: "tunic", bone: "hip", at: 0.5, size: 2.1, colour: "primary" },
+    // Shorter than it was. The shared skeleton already gives every fighter only a
+    // third of their height in leg, and a tunic hanging to mid-shin took another
+    // slice off the one part of Link that is supposed to read as a wide brace.
+    { kind: "tunic", bone: "hip", at: 0.5, size: 1.75, colour: "primary" },
     { kind: "belt", bone: "hip", at: 0.9, size: 1.7, colour: "#5A3A18", detail: "accent" },
-    SWORD,
-    { kind: "capPointed", bone: "head", at: 1, size: 2.5, along: 0.75, colour: "primary" },
+    /*
+     * Shorter, and laid further back.
+     *
+     * The cap's tail is the longest straight line on the fighter and it runs up
+     * and back at about fifty degrees — which is within twenty degrees of where
+     * the Master Sword now rakes, on the same side of the body, and thicker. A
+     * critic measuring a match-scale capture found the two merging into a single
+     * green wedge three screen pixels apart, and concluded that the long
+     * up-and-back diagonal in Link's silhouette was *the hat*: it had taken the
+     * sword's job and the sword was contributing nothing.
+     *
+     * Two changes, both about separation rather than about the cap: it is a
+     * fifth shorter so it stops out-topping the blade, and rotated to lie back
+     * along the shoulder blades: the tail runs at seventy degrees off vertical
+     * rather than fifty, against a blade at thirty-two, so the two are forty
+     * degrees apart instead of twenty.
+     */
+    { kind: "capPointed", bone: "head", at: 1, size: 2.05, along: 0.7, angle: 0.35, colour: "primary" },
     { kind: "hairSwoop", bone: "head", at: 1, size: 1.5, across: 0.75, along: 0.5, colour: "#E8C86A" },
     { kind: "earsPointed", bone: "head", at: 1, size: 1.0, along: -0.15, angle: 0.5, colour: "skin" },
+    /*
+     * After the cap, and that is the whole reason it moved.
+     *
+     * Props in one layer are drawn in array order, and the cap is a five-unit
+     * green wedge hung off the head that covers most of the space above and
+     * behind the shoulder. Every pose that carries the blade through that space
+     * — the whole of the forward smash's wind-up, the up smash, the charge
+     * hold, and the standing pose itself, where the sword rakes up past his ear
+     * — was drawing the sword *and then painting the cap over it*. Two rounds of
+     * captures had a wind-up with no visible sword in it, and it read as the
+     * pose being wrong rather than as the draw order being wrong.
+     *
+     * In front is also simply where it belongs: the sword is in the near hand
+     * and the cap is on the far side of it.
+     */
+    SWORD,
     eyes(0.66, "#2E6BB0"),
   ],
 };

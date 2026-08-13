@@ -41,6 +41,7 @@ import {
   tweakRig,
   type Brush,
   type CharacterRig,
+  type PropAnim,
   type PropDef,
 } from "../../rigKit";
 
@@ -57,54 +58,141 @@ const CREAM = "#FFF6E8";
 const HOLSTER = "#3A3E45";
 
 /**
+ * Full run, in rig units per frame: `runSpeed` from `fighters/fox.ts`.
+ *
+ * The saturation point for everything the tail does with velocity, so that the
+ * interesting range is walk-to-run rather than "launched across the stage".
+ */
+const RUN_SPEED = 2.402;
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+/**
  * The tail.
  *
- * A chain of overlapping fur masses down a spine that sweeps back and a little
- * down, tapering to a white tip, with four tufts along the top edge. Circles
- * rather than one path because the rim pass inflates whatever it is given and
- * the union of inflated discs is still a clean silhouette, where an inflated
- * concave path pinches; and because the lumps *are* the bushiness.
+ * A chain of overlapping fur masses along a spine that is *built* rather than
+ * listed, so the whole thing can bend: nine joints, each one a fixed step whose
+ * heading turns by a per-segment angle. One number opens the arc out and one
+ * lifts the root, and the tufts and the white tip come along with them because
+ * they are placed off the spine rather than beside it.
  *
- * Hung off `hip` at its base, so it pivots about the pelvis: any clip that
- * names `hip` swings the tail, which is how `dtilt` sweeps with it and how the
- * whole tail follows a body rotation for free.
+ * Circles rather than one path because the rim pass inflates whatever it is
+ * given and the union of inflated discs is still a clean silhouette, where an
+ * inflated concave path pinches; and because the lumps *are* the bushiness.
+ *
+ * Hung off `hip` at its base, so it pivots about the pelvis: any clip that names
+ * `hip` swings the tail, which is how `dtilt` sweeps with it and how the whole
+ * tail follows a body rotation for free.
+ *
+ * ## What the third argument buys
+ *
+ * A tail reads as a tail because it does *not* track the body, and none of that
+ * is expressible in a pose. Three things are taken from `anim`:
+ *
+ * 1. **Streaming.** `vx` is signed by facing, so `+` is always the way he is
+ *    going and there is no conditional anywhere below. At rest the tail leaves
+ *    the rump barely above level and hangs to about knee height; at a full run
+ *    the root lifts and the arc opens out, and it streams straight out behind
+ *    him. That contrast is the whole reason he is the fastest thing in the game
+ *    and the animation used to be silent about it.
+ * 2. **Drag in the air.** Falling pushes the tail up, rising pulls it down —
+ *    `-vy`, for the same reason and with the same absence of a branch.
+ * 3. **Sway, as a travelling wave.** The idle drift is not one rotation of a
+ *    rigid tail: the phase runs *down* the chain, so the base leads and the tip
+ *    arrives late. That lag is the difference between a tail and a rudder. The
+ *    tip covers about twelve degrees over a 114-frame cycle — visible at match
+ *    scale, and nowhere near a wag; `fox.test.ts` bounds it at both ends.
+ *
+ * The sway is damped by speed and by being mid-move, both because a streaming
+ * tail does not wander and because a drifting sine on top of a pose that is
+ * already swinging the hip reads as noise rather than as life.
  */
-function drawTail(b: Brush, p: PropDef): void {
+function drawTail(b: Brush, p: PropDef, anim: PropAnim): void {
   const ctx = b.ctx;
-  const spine: readonly (readonly [number, number, number])[] = [
-    [0.12, 0.18, 0.44],
-    [-0.28, 0.18, 0.50],
-    [-0.68, 0.12, 0.53],
-    [-1.06, 0.00, 0.50],
-    [-1.40, -0.18, 0.44],
-    [-1.68, -0.40, 0.35],
-    [-1.88, -0.62, 0.24],
-  ];
 
-  // Tufts first, so the round masses cover their roots and only the points show.
-  for (const [x, y, r, lean] of [
-    [-0.42, 0.20, 0.34, 0.30],
-    [-0.86, 0.14, 0.36, 0.22],
-    [-1.24, -0.02, 0.32, 0.10],
-    [-1.56, -0.26, 0.26, -0.02],
-  ] as const) {
+  // Saturating, because the interesting range is walk-to-run and a fighter
+  // launched at fifteen units a frame should not have a tail pointing at the
+  // ceiling.
+  //
+  // These arrive already converted. `renderer.ts` used to pass `f.vx` straight
+  // through, which is Q12 — a full run reached here as 9839 rather than 2.402,
+  // and the `- vx * 0.35` the doc offers as an example would have swung a tail
+  // by three thousand radians. This file compensated locally with `toFloat`;
+  // the renderer now honours the units the type promises, so the compensation
+  // came out. Two divisions by 4096 leave a tail that does not move at all.
+  const drive = clamp(anim.vx / RUN_SPEED, -1, 1);
+  const drop = clamp(-anim.vy / RUN_SPEED, -1, 1);
+  // Still while a move is on and while he is at speed: see above.
+  const calm = (anim.t > 0 ? 0.35 : 1) * (1 - 0.6 * Math.abs(drive));
+  const phase = anim.frame * 0.055;
+
+  // Where the tail leaves the rump, and how hard it arcs over per joint. The
+  // two together are the whole shape: at rest a long gentle sweep from just
+  // above level down to about knee height, and at a run a straight bar angled
+  // a little above horizontal. Straightening is most of what says "fast" —
+  // more than the root angle does, and it survives a still frame, which is the
+  // test.
+  //
+  // Both terms take `drive` **signed**, not its magnitude. Straightening on
+  // `Math.abs` was the first version and it is wrong in a way that only a
+  // measurement finds: backing away lifted the tip *above* where it rests,
+  // because the straightening won against the root dropping. Signed, a fighter
+  // walking backwards gets a tail that hangs and curls under him, which is what
+  // being dragged the other way does to one.
+  const root = 0.22 + drive * 0.26 + drop * 0.24 + Math.sin(phase) * 0.13 * calm;
+  const arc = -0.075 + drive * 0.065 + (anim.airborne ? -0.02 : 0);
+
+  const N = 9;
+  const SEG = 0.31;
+  // Fattest two thirds of the way along and only then tapering, which is a fox
+  // rather than a carrot: an even taper from the base reads as a cone, and a
+  // cone at match scale is the fat sausage this drawing exists to stop being.
+  const RADII = [0.36, 0.46, 0.54, 0.58, 0.58, 0.53, 0.45, 0.33, 0.21];
+
+  const spine: { x: number; y: number; r: number; a: number }[] = [];
+  let x = -0.04;
+  let y = 0.18;
+  let a = root;
+  for (let i = 0; i < N; i++) {
+    if (i > 0) {
+      // The wave, one segment behind the last: `- i * 0.62` is the lag.
+      a += arc + Math.sin(phase - i * 0.62) * 0.034 * calm;
+      x -= Math.cos(a) * SEG;
+      y += Math.sin(a) * SEG;
+    }
+    spine.push({ x, y, r: RADII[i], a });
+  }
+
+  // Tufts first, so the round masses cover their roots and only the points
+  // show. Each one stands off the *local* normal, so they lie along the top
+  // edge whatever the tail is doing — and each is a broad, shallow wedge
+  // rather than a spike. At 1.9 times the local radius they read as thorns;
+  // this is fur, and fur is a serrated edge, not a row of quills.
+  for (const i of [1, 3, 5, 7]) {
+    const s = spine[i];
+    const nx = Math.sin(s.a);
+    const ny = Math.cos(s.a);
+    const dx = -Math.cos(s.a);
+    const dy = Math.sin(s.a);
     ctx.beginPath();
-    ctx.moveTo(x - r * 0.6, y + r * 0.5);
-    ctx.lineTo(x + lean * 0.9 - 0.1, y + r * 1.85);
-    ctx.lineTo(x + r * 0.7, y + r * 0.4);
+    ctx.moveTo(s.x + dx * s.r * 0.95 + nx * s.r * 0.30, s.y + dy * s.r * 0.95 + ny * s.r * 0.30);
+    ctx.lineTo(s.x + dx * s.r * 0.30 + nx * s.r * 1.38, s.y + dy * s.r * 0.30 + ny * s.r * 1.38);
+    ctx.lineTo(s.x - dx * s.r * 0.85 + nx * s.r * 0.25, s.y - dy * s.r * 0.85 + ny * s.r * 0.25);
     ctx.closePath();
     b.fill(p.colour);
   }
 
-  for (let i = 0; i < spine.length; i++) {
-    const [x, y, r] = spine[i];
+  for (let i = 0; i < N; i++) {
+    const s = spine[i];
     ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 0.94, 0, 0, Math.PI * 2);
+    ctx.ellipse(s.x, s.y, s.r, s.r * 0.94, 0, 0, Math.PI * 2);
     ctx.closePath();
     // The last two masses are the white tip. In the rim and silhouette passes
     // `fill` ignores the colour and paints the outline, so the tip costs
     // nothing there.
-    b.fill(i >= spine.length - 2 ? (p.detail ?? CREAM) : p.colour);
+    b.fill(i >= N - 2 ? (p.detail ?? CREAM) : p.colour);
   }
 }
 

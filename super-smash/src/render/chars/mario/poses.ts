@@ -41,14 +41,181 @@ import { P, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
 /**
+ * The stand.
+ *
+ * The pose a player looks at more than any other, and until now Mario borrowed
+ * the roster's shared one. The shared clip is a good breath cycle and a bad
+ * Mario, and the reference says why: **Mario does not stand, he guards.**
+ *
+ * Measured off SmashWiki's own in-game idle capture (600×338, standing height
+ * 260 px, so everything below is quoted as a fraction of his height and then
+ * multiplied by the 11 units he is here):
+ *
+ * | What | Reference | Here |
+ * |---|---|---|
+ * | Hands | closed fists **in front of the chest**, 0.54 H | wrist 0.8 below the shoulder, 1.9 forward → 6.7 units |
+ * | Elbows | flexed 80–100°, held close in | `forearm ≈ −124` off an upper arm hanging 5° back |
+ * | Feet | staggered, outer edges 0.43 H apart | thighs ±26°, ankles ≈ 3.1 units apart |
+ * | Knees | flexed even at his tallest | never straighter than 14° |
+ * | Bob | whole upper body, ~0.11 H, feet planted | ≈ 0.085 H — see below |
+ * | Head | tilts down at the bottom of the bob, level at the top | −4° to −8° |
+ *
+ * The elbow angle is chosen so the *forearm* is the readable part. The near
+ * upper arm is `primary` red over a `primary` red torso and the rim pass only
+ * outlines the figure's outside edge, so an upper arm lying against the chest
+ * is not drawn at all — the first version of this guard was measured by a
+ * critic as "arms hanging straight down, no elbow flex, no forearm", because
+ * everything above the wrist was invisible. Hanging the upper arm nearly
+ * vertical and taking the whole 124° of bend at the elbow puts the bare
+ * skin-coloured forearm diagonally across the blue bib, where it is the one
+ * limb segment on this fighter that always has contrast behind it.
+ *
+ * The fists are the whole point. Mario's three colours are red, blue and
+ * white, and with the arms hanging the white is two gloves buried against the
+ * dungarees — the silhouette is a red-and-blue column with a face on top.
+ * Brought up into the guard they are two round white blobs at chest height
+ * clear of the body, which is both what the reference shows and the single
+ * biggest thing this clip does. The reference is emphatic that this is *not*
+ * Link's or Falcon's wide braced stance: Mario is compact and upright with his
+ * hands in close, bouncing on his toes rather than crouching to lunge.
+ *
+ * **The bob is `scaleY`, not `offsetY`, and that is forced.** The reference
+ * measures cap and chest moving the same 28 px — a translation of the whole
+ * upper body driven by knee flexion with the feet planted. Here the pelvis
+ * sits at a fixed 3.6 units up the `root` strut whatever the legs do, so
+ * folding them lowers nothing; only `offsetY` does, and `offsetY` takes the
+ * feet with it. Buying 1.2 units of drop back by folding needs the thigh 50°
+ * forward and the shin 30° back, which drags the ankle two thirds of a unit
+ * across the stage every cycle. A skating foot is far more visible than a
+ * shallow bounce, so `offsetY` is held all but constant (the four keys vary by
+ * two hundredths of a unit, and the leg angles are chosen so that all four put
+ * both ankles at the same height) and the cycle is carried by `scaleY`
+ * 0.958 → 1.036, which stretches about the *feet* and so cannot lift them.
+ *
+ * That buys 1.07 units at the head — about 8.5% of his drawn height against
+ * the reference's 11% — and costs a 5.6% squash on the head at the bottom of
+ * the bounce, which reads as ordinary squash-and-stretch rather than as
+ * deformation. The four `offsetY` values differ by two hundredths of a unit and
+ * exist only to make the leg angles' own arithmetic come out level. What it does not
+ * reproduce is the reference's *equal* cap and chest travel: under `scaleY` the
+ * chest moves about half as far as the cap. That is the honest limit of a rig
+ * whose pelvis height is a constant.
+ *
+ * `period` is 26. The reference derives ~24 frames from a 2-second capture
+ * holding five cycles, and flags it as reasoned rather than measured; 26 keeps
+ * the pace and stays off a round number so his cycle and everybody else's
+ * drift apart on screen.
+ *
+ * The *rhythm* is inherited from the shared clip and deliberately not
+ * reinvented, because its reasoning is right and dearly bought: nothing turns
+ * round at the same instant as anything else, the key times are uneven so
+ * there is no countable beat, and only one span is eased — smoothstep
+ * everywhere brings the whole body to a halt four times a cycle, which is a
+ * worse metronome than two keys.
+ */
+const idle: PoseClip = {
+  loop: true,
+  period: 26,
+  keys: [
+    {
+      // Bottom of the bounce: knees at their deepest, chest hunched forward,
+      // head tipped down, fists at their lowest. The body leaves here slowly —
+      // this is the span the one ease is spent on.
+      t: 0,
+      pose: P({
+        hip: 1.0, torso: 8.5, head: -8.0,
+        thighL: 211.0, shinL: -12.0, footL: -78,
+        thighR: 147.0, shinR: 12.0, footR: -98,
+        upperArmL: 166.5, forearmL: -122.0,
+        upperArmR: 175.5, forearmR: -126.0,
+      }),
+      offsetY: -0.464,
+      scaleY: 0.944,
+    },
+    {
+      // Top of the bounce at 38%. Legs at their straightest — still 26° of
+      // splay and a few of knee, because the reference has him flexed even at
+      // his tallest.
+      t: 0.38,
+      pose: P({
+        hip: 0.0, torso: 4.0, head: -4.0,
+        thighL: 206.0, shinL: 0.0, footL: -82,
+        thighR: 154.0, shinR: 0.0, footR: -94,
+        upperArmL: 172.0, forearmL: -124.0,
+        upperArmR: 181.0, forearmR: -122.0,
+      }),
+      offsetY: -0.443,
+      scaleY: 1.048,
+      ease: "linear",
+    },
+    {
+      // The head arrives late — still coming up as the body starts down, which
+      // is the whole of what "the head has its own rhythm" amounts to. The near
+      // fist is at the back of its own small drift here and the far one is not,
+      // because nothing synchronises a standing person's arms.
+      t: 0.62,
+      pose: P({
+        hip: -0.7, torso: 5.2, head: -6.6,
+        thighL: 209.7, shinL: -6.0, footL: -80,
+        thighR: 151.7, shinR: 6.0, footR: -96,
+        upperArmL: 175.5, forearmL: -127.0,
+        upperArmR: 177.5, forearmR: -119.0,
+      }),
+      offsetY: -0.449,
+      scaleY: 1.016,
+      ease: "linear",
+    },
+    {
+      // A hair above the bottom, so the last span is a small recovery into the
+      // settle rather than a fourth extreme.
+      t: 0.82,
+      pose: P({
+        hip: 0.4, torso: 7.6, head: -7.0,
+        thighL: 210.1, shinL: -9.0, footL: -79,
+        thighR: 149.1, shinR: 9.0, footR: -97,
+        upperArmL: 169.0, forearmL: -120.0,
+        upperArmR: 179.0, forearmR: -128.0,
+      }),
+      offsetY: -0.456,
+      scaleY: 0.958,
+      ease: "linear",
+    },
+  ],
+};
+
+/**
  * Forward smash: the fire palm.
  *
  * The shared clip is a straight punch, and a punch is the one thing this is
- * not — the damage comes off an *open palm* thrust from the hip with a blast
- * of fire on it, which is why the far hitbox is a radius-5 sphere centred 8.6
- * units in front of him and the near one, the forearm, is the weaker half. So
- * the hand opens, the arm extends level at chest height, and the body drives
- * through behind it.
+ * not — the damage comes off an *open palm* thrust with a blast of fire on it,
+ * which is why the far hitbox is a radius-5 sphere centred 8.6 units in front
+ * of him and the near one, the forearm, is the weaker half.
+ *
+ * Frame-stepping the real animation changed three things round one had by
+ * guesswork:
+ *
+ * **The wind-up leans away.** From about frame 7 he pitches his upper body
+ * *backwards* and picks the front foot off the floor — this is the "deceptively
+ * far" hurtbox retreat, and it is why the charge is safe to hold. Round one
+ * coiled him over the rear foot without lifting anything, which reads as
+ * crouching rather than as withdrawing.
+ *
+ * **The lunge is deep and it is low.** On frame 15 the front leg shoots out and
+ * plants, the rear leg goes dead straight with the heel up, and his head ends
+ * up *below* where it was at frame 13. Round one's contact key was 0.7 units
+ * down; it is 1.6 now, with the legs 70° apart, and the difference is the
+ * whole difference between a shove and a lunge.
+ *
+ * **The off hand stays home.** It is a closed fist tucked at the chest through
+ * the entire thrust, not flung back as a counterweight. Round one had it at
+ * 262° accumulated — straight out behind him — which is a boxer's cross, a
+ * different move.
+ *
+ * The reference does the thrust on his far arm and this does it on the near
+ * one, deliberately: far-side limbs are drawn behind the torso and shaded, so
+ * the one shape the whole move is about would be the dimmest thing on screen
+ * and half-buried. The near arm is the same gesture where a side-on camera can
+ * see it.
  *
  * The key at t = 0.165 is not decoration. `poseTimeFor` parks a charging smash
  * at `strike * 0.55`, and without a key there the charge holds a blend of the
@@ -60,47 +227,57 @@ const fsmash: PoseClip = {
   strike: 0.3,
   keys: [
     {
+      // Already a wound guard rather than a standing pose. `ease` here is
+      // `linear`, not `in`: a cubic on this span holds him at the first key for
+      // most of it, and with the first key sitting a couple of degrees off the
+      // idle a critic timed the first *nine* of fifteen startup frames as
+      // visually identical to standing still. A smash with no telegraph is not
+      // just ugly, it is unreactable.
       t: 0,
       pose: P({
-        torso: -20, head: 14, hip: 6,
-        thighR: 158, shinR: 34, footR: -86,
-        thighL: 206, shinL: 28, footL: -78,
-        upperArmR: 226, forearmR: 58,
-        upperArmL: 130, forearmL: -50,
+        torso: -18, head: 14, hip: 8,
+        thighR: 150, shinR: 46, footR: -84,
+        thighL: 208, shinL: 26, footL: -76,
+        upperArmR: 190, forearmR: -122,
+        upperArmL: 198, forearmL: -118,
       }),
-      offsetX: -0.4,
-      offsetY: -0.55,
-      ease: "in",
+      offsetX: -0.55,
+      offsetY: -0.45,
+      ease: "linear",
     },
-    // The charge, at strike × 0.55. Coiled over the rear foot, palm cocked
-    // behind the hip, shoulders turned away, off hand up in guard.
+    // The charge, at strike × 0.55: leaning away with the front foot off the
+    // floor, both fists up in the guard, weight entirely on the back leg. The
+    // hurtbox goes with him, which is the point of the pose.
     {
       t: 0.165,
       pose: P({
-        torso: -32, head: 22, hip: 10,
-        thighR: 146, shinR: 62, footR: -84,
-        thighL: 212, shinL: 40, footL: -72,
-        upperArmR: 246, forearmR: 72, handR: -18,
-        upperArmL: 116, forearmL: -66,
+        torso: -30, head: 22, hip: 12,
+        thighR: 122, shinR: 76, footR: -60,
+        thighL: 214, shinL: 22, footL: -74,
+        upperArmR: 214, forearmR: -96, handR: -14,
+        upperArmL: 220, forearmL: -92,
       }),
-      offsetX: -0.75,
-      offsetY: -1.05,
+      offsetX: -0.85,
+      offsetY: -0.55,
       ease: "in",
     },
-    // Contact, frame 15. Arm accumulated 24 + 66 = 90: dead level, straight
-    // out from the shoulder at chest height, which is where the fire is.
+    // Contact, frame 15. The palm accumulated −8 + 26 + 78 = 96: just under
+    // level, out from the shoulder at chest height, which is where the fire is
+    // and which keeps the glove clear of his own nose. Front leg
+    // planted 60° forward, rear leg straight back with the heel up, head lower
+    // than it was two frames ago. Off fist closed at the chest.
     {
       t: 0.3,
       pose: P({
-        torso: 24, head: -16, hip: -6,
-        thighR: 128, shinR: 26, footR: -92,
-        thighL: 228, shinL: 34, footL: -70,
-        upperArmR: 66, forearmR: 0, handR: 0,
-        upperArmL: 238, forearmL: -54,
+        torso: 26, head: -18, hip: -8,
+        thighR: 118, shinR: 22, footR: -96,
+        thighL: 240, shinL: 8, footL: -44,
+        upperArmR: 78, forearmR: 4, handR: 0,
+        upperArmL: 178, forearmL: -104,
       }),
-      offsetX: 1.15,
-      offsetY: -0.7,
-      scaleX: 1.16,
+      offsetX: 1.35,
+      offsetY: -1.6,
+      scaleX: 1.2,
       ease: "hold",
     },
     // Frame 17, the last live frame. Held: the palm has not moved, the weight
@@ -108,60 +285,87 @@ const fsmash: PoseClip = {
     {
       t: 0.342,
       pose: P({
-        torso: 22, head: -14, hip: -6,
-        thighR: 128, shinR: 26, footR: -92,
-        thighL: 228, shinL: 34, footL: -70,
-        upperArmR: 68, forearmR: 2, handR: 0,
-        upperArmL: 236, forearmL: -52,
+        torso: 24, head: -16, hip: -8,
+        thighR: 118, shinR: 22, footR: -96,
+        thighL: 240, shinL: 8, footL: -44,
+        upperArmR: 80, forearmR: 4, handR: 0,
+        upperArmL: 176, forearmL: -102,
       }),
-      offsetX: 1.2,
-      offsetY: -0.7,
-      scaleX: 1.14,
+      offsetX: 1.4,
+      offsetY: -1.62,
+      scaleX: 1.19,
       ease: "out",
     },
-    // The palm stays out while the body unwinds first, which is both what a
-    // shove does and what tells the opponent it is over.
+    // He sits in the lunge for another four frames — the reference has him
+    // still down there at 21 and only rising from about 28 — so the palm and
+    // the legs barely move and it is the shoulders that start to come back.
     {
-      t: 0.48,
+      t: 0.44,
       pose: P({
-        torso: 12, head: -6, hip: -2,
-        thighR: 140, shinR: 28, footR: -90,
-        thighL: 214, shinL: 30, footL: -74,
-        upperArmR: 84, forearmR: 10,
-        upperArmL: 216, forearmL: -44,
+        torso: 18, head: -12, hip: -6,
+        thighR: 122, shinR: 26, footR: -94,
+        thighL: 234, shinL: 12, footL: -50,
+        upperArmR: 76, forearmR: 6,
+        upperArmL: 176, forearmL: -98,
       }),
-      offsetX: 0.72,
-      offsetY: -0.5,
+      offsetX: 1.25,
+      offsetY: -1.5,
+      scaleX: 1.16,
     },
     {
       t: 0.68,
       pose: P({
         torso: 8, head: -2,
-        thighR: 146, shinR: 26, footR: -88,
-        thighL: 208, shinL: 26, footL: -78,
-        upperArmR: 106, forearmR: -8,
-        upperArmL: 206, forearmL: -40,
+        thighR: 138, shinR: 34, footR: -90,
+        thighL: 216, shinL: 22, footL: -68,
+        upperArmR: 120, forearmR: -40,
+        upperArmL: 190, forearmL: -96,
       }),
-      offsetX: 0.4,
-      offsetY: -0.35,
+      offsetX: 0.6,
+      offsetY: -0.8,
     },
     {
       t: 0.88,
-      pose: P({ torso: 6, upperArmR: 124, forearmR: -24, upperArmL: 200, forearmL: -36 }),
-      offsetX: 0.16,
-      offsetY: -0.2,
+      pose: P({
+        torso: 6,
+        thighR: 150, shinR: 30, footR: -88,
+        thighL: 206, shinL: 24, footL: -78,
+        upperArmR: 178, forearmR: -86,
+        upperArmL: 198, forearmL: -94,
+      }),
+      offsetX: 0.2,
+      offsetY: -0.4,
     },
-    { t: 1, pose: P({ torso: 4, upperArmR: 132, forearmR: -30, upperArmL: 198, forearmL: -34 }) },
+    { t: 1, pose: P({ torso: 5, upperArmR: 196, forearmR: -100, upperArmL: 202, forearmL: -98 }) },
   ],
 };
 
 /**
  * Up smash: the headbutt.
  *
- * Not a two-handed lift, which is what the shared clip is. Mario ducks and
- * then whips the crown of his head up through an arc, arms thrown down and
- * back as the counterweight — hence a hitbox at y 10.3, just above the head,
- * and only 2.5 units in front of him.
+ * Not a two-handed lift, which is what the shared clip is — and not the small
+ * backward lean round one settled for either. Frame-stepping the real
+ * animation shows how far the head actually travels, and it is the whole move:
+ *
+ * - **frames 5–8** he is folded almost double, backside up, with his head
+ *   dropped *down and behind him* to about knee height — the cap is nearly on
+ *   the floor at his heels — legs straddled wide and planted, one fist cocked
+ *   high and forward, the other hand low near the head.
+ * - **frames 9–12** the crown whips up and over in one arc, back to front, and
+ *   the body extends onto the toes underneath it. The hitbox rides the `head`
+ *   bone offset 2.5 units *forward* of its centre, so what makes contact is the
+ *   forehead at the top of that arc.
+ * - **frames 13–17** he has *overswung*: pitched forward with his head down in
+ *   front and the arms counter-swung, one fist behind the shoulder.
+ *
+ * So the accumulated head angle runs −130° → +20° → +55° → +105°: a 235° sweep
+ * where round one moved it 32° and read, correctly, as a man leaning back.
+ * `head` carries the cap, the nose and the face, so all of that goes round with
+ * it, which is what the original does too.
+ *
+ * The fold is expressed at the neck and the waist rather than with `rotation`,
+ * because the feet stay planted and straddled the whole time and rotating the
+ * body about the pelvis would take the legs with it.
  */
 const usmash: PoseClip = {
   loop: false,
@@ -170,71 +374,94 @@ const usmash: PoseClip = {
     {
       t: 0,
       pose: P({
-        torso: 32, head: 12, hip: -8,
-        thighR: 128, shinR: 106, footR: -78,
-        thighL: 134, shinL: 104, footL: -76,
-        upperArmR: 232, forearmR: 52,
-        upperArmL: 240, forearmL: -48,
+        torso: 16, head: -10, hip: -6,
+        thighR: 138, shinR: 74, footR: -86,
+        thighL: 218, shinL: 62, footL: -80,
+        upperArmR: 176, forearmR: -70,
+        upperArmL: 190, forearmL: -66,
       }),
-      offsetY: -1.55,
+      offsetY: -1.1,
       ease: "in",
     },
-    // Contact, frame 9. Torso arched back 18° with the head 22° forward of
-    // it, so the crown leads, pointing up and a little in front — the hitbox.
-    // On the toes, arms flung back and down.
+    // Folded over, frames 5–8 — the shape `poseTimeFor` holds the charge on.
+    // Chest accumulated −105 and the head another 25 past it, so the crown is
+    // behind his heels at about knee height. Legs straddled 30° either way and
+    // flat on the floor. Near fist cocked high and forward; far hand low.
+    {
+      t: 0.165,
+      pose: P({
+        torso: -96, head: -22, hip: 0,
+        thighR: 150, shinR: 4, footR: -100,
+        thighL: 210, shinL: -4, footL: -76,
+        upperArmR: 132, forearmR: -15,
+        upperArmL: 292, forearmL: 4,
+      }),
+      offsetY: 0.55,
+      offsetX: 0.2,
+      ease: "in",
+    },
+    // Contact, frame 9. Head accumulated 4 − 18 + 34 = 20: up and just forward
+    // of vertical, which with the hitbox's own 2.5-unit forward offset puts the
+    // forehead exactly where the sphere is. On the toes, arms counter-swung
+    // down and back clear of the body.
     {
       t: 0.3,
       pose: P({
-        torso: -18, head: 22, hip: 6,
-        thighR: 174, shinR: 6, footR: -66,
-        thighL: 188, shinL: 6, footL: -68,
-        upperArmR: 218, forearmR: 30,
-        upperArmL: 226, forearmL: -28,
+        torso: -18, head: 34, hip: 4,
+        thighR: 172, shinR: 6, footR: -60,
+        thighL: 190, shinL: 6, footL: -64,
+        upperArmR: 254, forearmR: 16,
+        upperArmL: 260, forearmL: -12,
       }),
-      offsetY: 0.85,
+      offsetY: 0.75,
       scaleY: 1.2,
       scaleX: 0.88,
       ease: "hold",
     },
-    // Frame 12, the last live frame — still fully extended.
+    // Frame 12, the last live frame. The head has carried another 35° over the
+    // top rather than stopping dead at the contact — the arc keeps going, which
+    // is what makes it a swing and not a pose.
     {
       t: 0.368,
       pose: P({
-        torso: -16, head: 20, hip: 6,
-        thighR: 172, shinR: 8, footR: -68,
-        thighL: 190, shinL: 8, footL: -70,
-        upperArmR: 214, forearmR: 28,
-        upperArmL: 222, forearmL: -26,
+        torso: 0, head: 55, hip: 0,
+        thighR: 168, shinR: 10, footR: -66,
+        thighL: 194, shinL: 10, footL: -70,
+        upperArmR: 246, forearmR: 14,
+        upperArmL: 254, forearmL: -10,
       }),
-      offsetY: 0.8,
-      scaleY: 1.18,
-      scaleX: 0.89,
+      offsetY: 0.55,
+      scaleY: 1.16,
+      scaleX: 0.9,
       ease: "out",
     },
+    // Frames 13–17: overswung. Pitched forward, head down in front, near fist
+    // thrown back behind the shoulder.
     {
       t: 0.5,
       pose: P({
-        torso: -2, head: 8,
-        thighR: 162, shinR: 20, footR: -80,
-        thighL: 198, shinL: 18, footL: -80,
-        upperArmR: 192, forearmR: 8,
-        upperArmL: 202, forearmL: -6,
+        torso: 42, head: 63, hip: -8,
+        thighR: 146, shinR: 40, footR: -84,
+        thighL: 208, shinL: 34, footL: -78,
+        upperArmR: 268, forearmR: 20,
+        upperArmL: 116, forearmL: -30,
       }),
-      offsetY: 0.16,
-      scaleY: 1.05,
+      offsetY: -0.9,
+      scaleX: 1.06,
     },
     {
       t: 0.72,
       pose: P({
-        torso: 8, head: -4,
-        thighR: 152, shinR: 30, footR: -84,
-        upperArmR: 156, forearmR: -14,
-        upperArmL: 206, forearmL: -12,
+        torso: 34, head: 20,
+        thighR: 144, shinR: 56, footR: -84,
+        thighL: 210, shinL: 48, footL: -80,
+        upperArmR: 214, forearmR: -20,
+        upperArmL: 168, forearmL: -50,
       }),
-      offsetY: -0.25,
+      offsetY: -1.05,
     },
-    { t: 0.9, pose: P({ torso: 5, upperArmR: 136, forearmR: -28, upperArmL: 210, forearmL: -26 }) },
-    { t: 1, pose: P({ torso: 4, upperArmR: 132, forearmR: -32, upperArmL: 212, forearmL: -28 }) },
+    { t: 0.9, pose: P({ torso: 14, head: -4, upperArmR: 200, forearmR: -70, upperArmL: 196, forearmL: -78 }), offsetY: -0.6 },
+    { t: 1, pose: P({ torso: 8, head: -6, upperArmR: 200, forearmR: -100, upperArmL: 202, forearmL: -98 }) },
   ],
 };
 
@@ -242,17 +469,43 @@ const usmash: PoseClip = {
  * Down smash: the breakdance sweep.
  *
  * Two contacts, nine frames apart, on opposite sides — front on frame 5, back
- * on frame 14, and the back one hits harder. That timing *is* the animation:
- * he drops onto his hands, scythes the near leg out in front, then pivots over
- * the planted hands and brings it round behind. Frame 14 lands at
- * t = 0.18 + 0.82 × (13 − 4) / (43 − 4) ≈ 0.37, so the back sweep gets a key
- * of its own there and a held one just after it.
+ * on frame 14, and the back one hits harder. Round one read that as two
+ * separate kicks from a crouch. Frame-stepping the original shows it is one
+ * continuous rotation with his body **flat along the floor the whole time**:
  *
- * `offsetY: −2.6` is what puts the hands on the floor rather than in the air.
- * The pelvis sits at a fixed 3.6 units up the `root` strut whatever the legs
- * do, so folding them does not lower him an inch; only `offsetY` does, and the
- * arms are 4.35 units long against a 7.7-unit shoulder height. Under −2.4 he
- * is a man crouching and gesturing at the ground.
+ * - **frame 5**: down on *one* planted hand, palm flat, torso horizontal a
+ *   hand's width off the ground, head low and *behind* him next to that hand,
+ *   both legs shot straight out **in front** along the floor.
+ * - **frames 7–13**: he rolls over the planted hand, legs lifting and coming
+ *   round.
+ * - **frame 14**: the exact mirror — head low and in *front*, legs swept low
+ *   **behind**, the supporting hand now under his chest.
+ *
+ * So the two hits are the two ends of one turn, not two swings, and the shape
+ * is horizontal rather than crouched. `rotation` does that: laying the body
+ * −77° at the first contact and +89° at the second puts the head at floor
+ * height at either end with the legs out along the ground, and posing an
+ * ordinary straight body inside that frame is far easier to get right than
+ * fighting sixteen bone angles into a horizontal line.
+ *
+ * The half-turn between them goes through upright rather than through
+ * inverted, which is the compromise this rig forces: laid out, his head is 5.5
+ * units from the pelvis and his arms are 4.35, so a genuine handstand puts his
+ * cap through the stage. Passing through upright would read as standing up,
+ * which is the one thing it must not do — so the midpoint carries
+ * `scaleY: 0.62`, squashing him into a ball rolling across his own hands
+ * instead of a man standing between two kicks.
+ *
+ * `offsetY: −1.5` is what puts him on the floor rather than in the air: the
+ * pelvis sits at a fixed 3.6 units up the `root` strut whatever the legs do, so
+ * folding them lowers nothing. That drops the pelvis to 2.1 units, which lays
+ * the legs along the ground where the hitboxes are (y 3.6 in the original's
+ * units, a shade under two here) and still leaves the head and the supporting
+ * glove above the stage. It was 0.5 lower for a round, and a critic measured
+ * the glove seventeen percent of his own height underground: the arm reaches
+ * 4.35 units and, laid out, the shoulder is barely two above the floor, so the
+ * supporting elbow has to be *bent* rather than hanging straight down. That is
+ * what the 300/16 is.
  */
 const dsmash: PoseClip = {
   loop: false,
@@ -264,107 +517,123 @@ const dsmash: PoseClip = {
         torso: 26, head: -18,
         thighR: 132, shinR: 96, footR: -78,
         thighL: 138, shinL: 92, footL: -76,
-        upperArmR: 146, forearmR: -18,
-        upperArmL: 152, forearmL: -16,
+        upperArmR: 168, forearmR: -60,
+        upperArmL: 174, forearmL: -56,
       }),
-      offsetY: -1.25,
+      offsetY: -1.3,
       ease: "in",
     },
-    // Front sweep, frame 5. Torso back 26° so the planted hands end up behind
-    // him; right leg accumulated 100 at the hip and 92 at the knee — straight
-    // out in front, skimming the floor.
+    // Front sweep, frame 5. Body laid back 86° so the head is at floor height
+    // behind him; legs at 176/180 in the body frame, which after the rotation
+    // is dead level along the ground in front — where the two spheres at
+    // (12.5, 3.6) and (7.0, 3.6) are. Near arm at 266 accumulated, i.e.
+    // straight down in world space: the planted hand.
     {
       t: 0.18,
       pose: P({
-        torso: -26, head: 22,
-        thighR: 100, shinR: -8, footR: -22,
-        thighL: 150, shinL: -80, footL: 40,
-        upperArmR: 206, forearmR: -6,
-        upperArmL: 210, forearmL: -8,
+        torso: 0, head: 8,
+        thighR: 176, shinR: 4, footR: -96,
+        thighL: 182, shinL: -2, footL: -84,
+        upperArmR: 300, forearmR: 16,
+        upperArmL: 326, forearmL: -20,
       }),
-      offsetY: -2.6,
-      offsetX: -0.3,
+      rotation: -1.35,
+      offsetY: -1.5,
+      offsetX: -0.4,
       ease: "hold",
     },
     {
       t: 0.201,
       pose: P({
-        torso: -26, head: 22,
-        thighR: 100, shinR: -8, footR: -22,
-        thighL: 150, shinL: -80, footL: 40,
-        upperArmR: 206, forearmR: -6,
-        upperArmL: 210, forearmL: -8,
+        torso: 0, head: 8,
+        thighR: 176, shinR: 4, footR: -96,
+        thighL: 182, shinL: -2, footL: -84,
+        upperArmR: 300, forearmR: 16,
+        upperArmL: 326, forearmL: -20,
       }),
-      offsetY: -2.6,
-      offsetX: -0.3,
+      rotation: -1.35,
+      offsetY: -1.5,
+      offsetX: -0.4,
       ease: "in",
     },
-    // Over the top of the pivot: knees in, weight passing across the hands.
+    // Over the top of the roll, frame 9. Knees tucked to the chest, both hands
+    // down, and squashed to 62% so he passes across his own hands as a ball
+    // rather than briefly standing up between the two hits.
     {
-      t: 0.29,
+      t: 0.285,
       pose: P({
-        torso: 4, head: -2,
-        thighR: 140, shinR: -46, footR: 10,
-        thighL: 176, shinL: -60, footL: 4,
-        upperArmR: 178, forearmR: -10,
-        upperArmL: 182, forearmL: -12,
+        torso: 10, head: -8,
+        thighR: 118, shinR: 128, footR: -70,
+        thighL: 126, shinL: 124, footL: -68,
+        upperArmR: 214, forearmR: -30,
+        upperArmL: 220, forearmL: -26,
       }),
-      offsetY: -2.75,
+      rotation: 0.1,
+      offsetY: -2.0,
+      scaleY: 0.62,
+      scaleX: 1.14,
       ease: "in",
     },
-    // Back sweep, frame 14, the harder half. Torso forward 30° so the hands
-    // are now in front; right leg accumulated 258 / 266 — straight out behind.
+    // Back sweep, frame 14, the harder half. The mirror of frame 5: laid the
+    // other way at +96°, head low and in front, legs level along the ground
+    // behind, supporting hand under the chest.
     {
-      t: 0.37,
+      t: 0.369,
       pose: P({
-        torso: 30, head: -24,
-        thighR: 258, shinR: 8, footR: 24,
-        thighL: 200, shinL: -145, footL: 35,
-        upperArmR: 150, forearmR: -6,
-        upperArmL: 154, forearmL: -8,
+        torso: 0, head: -8,
+        thighR: 180, shinR: 0, footR: -84,
+        thighL: 186, shinL: -4, footL: -96,
+        upperArmR: 60, forearmR: -16,
+        upperArmL: 34, forearmL: 20,
       }),
-      offsetY: -2.6,
-      offsetX: 0.3,
+      rotation: 1.55,
+      offsetY: -1.5,
+      offsetX: 0.4,
       ease: "hold",
     },
     {
       t: 0.392,
       pose: P({
-        torso: 30, head: -24,
-        thighR: 258, shinR: 8, footR: 24,
-        thighL: 200, shinL: -145, footL: 35,
-        upperArmR: 150, forearmR: -6,
-        upperArmL: 154, forearmL: -8,
+        torso: 0, head: -8,
+        thighR: 180, shinR: 0, footR: -84,
+        thighL: 186, shinL: -4, footL: -96,
+        upperArmR: 60, forearmR: -16,
+        upperArmL: 34, forearmL: 20,
       }),
-      offsetY: -2.6,
-      offsetX: 0.3,
+      rotation: 1.55,
+      offsetY: -1.5,
+      offsetX: 0.4,
       ease: "out",
     },
-    // Back onto the feet.
+    // He does not stand up on the frame the hitbox ends — the original is still
+    // down on all fours at 42, one frame before it is actionable — so the tail
+    // comes up through a low four-point crouch rather than snapping to idle.
     {
-      t: 0.55,
+      t: 0.6,
       pose: P({
-        torso: 24, head: -18,
-        thighR: 134, shinR: 96, footR: -78,
-        thighL: 142, shinL: 90, footL: -76,
-        upperArmR: 158, forearmR: -20,
-        upperArmL: 164, forearmL: -18,
+        torso: 34, head: -26,
+        thighR: 124, shinR: 116, footR: -74,
+        thighL: 132, shinL: 112, footL: -72,
+        upperArmR: 148, forearmR: -22,
+        upperArmL: 156, forearmL: -18,
       }),
-      offsetY: -1.5,
+      rotation: 0.5,
+      offsetY: -2.1,
     },
     {
-      t: 0.76,
+      t: 0.8,
       pose: P({
-        torso: 16, head: -12,
-        thighR: 142, shinR: 68, footR: -82,
-        thighL: 150, shinL: 64, footL: -80,
-        upperArmR: 148, forearmR: -26,
-        upperArmL: 200, forearmL: -24,
+        torso: 30, head: -22,
+        thighR: 130, shinR: 104, footR: -76,
+        thighL: 138, shinL: 100, footL: -74,
+        upperArmR: 160, forearmR: -46,
+        upperArmL: 168, forearmL: -42,
       }),
-      offsetY: -1.0,
+      rotation: 0.24,
+      offsetY: -1.8,
     },
-    { t: 0.92, pose: P({ torso: 8, thighR: 150, shinR: 42, thighL: 200, shinL: 38 }), offsetY: -0.5 },
-    { t: 1, pose: P({ torso: 5, thighR: 154, shinR: 34, thighL: 202, shinL: 30 }), offsetY: -0.3 },
+    { t: 0.93, pose: P({ torso: 18, thighR: 142, shinR: 72, thighL: 198, shinL: 60 }), offsetY: -1.0 },
+    { t: 1, pose: P({ torso: 10, thighR: 150, shinR: 46, thighL: 202, shinL: 38 }), offsetY: -0.5 },
   ],
 };
 
@@ -937,24 +1206,37 @@ const ftilt: PoseClip = {
  * has a consequence for the timing that catches everyone: `moveTimingFor`
  * derives `firstActive` from hitboxes, finds none, and `poseTimeFor` falls
  * back to `actionFrame / total`. So `strike` does nothing here and every `t`
- * below is literally the fraction of 49 frames it happens at. The fireball
- * spawns on frame 17, which is t = 17/49 ≈ 0.347, and that is where the hand
- * has to be open and forward — a key one frame either side of it is a fireball
- * that appears out of a fist.
+ * below is literally the fraction of 49 frames it happens at. `spawnFrame` is
+ * compared against `moveFrameOf(actionFrame)`, so the ball appears on
+ * actionFrame 16, i.e. t = 16/49 = 0.327 — not 17/49 — and that is where the
+ * hand has to be open and forward.
  *
- * It goes out underarm. That is the character of the move and the reason it
- * bounces along the ground instead of flying flat: the release is low, the arm
- * comes up through it, and the ball leaves at chest height on a rising arc.
+ * **It is not an underarm toss.** Round one authored it as one, reasoning back
+ * from the fact that the fireball bounces along the ground. That reasoning is
+ * wrong twice over: the ball leaves at *chest-to-shoulder height* — measured
+ * at about 65% of his standing height off the official screenshot, and the
+ * projectile's own spawn offset here is (5.2, 6.4) — and it bounces because it
+ * launches 10° *downward* under gravity, not because it was rolled.
  *
- * Two details are from reference rather than from guessing, and both change
- * the shape. The **wind-up** is the underarm part and the follow-through is
- * not — the arm draws back and down past the hip, scoops forward, and *stops*
- * at chest height with the palm open; there is no bowler's finish above the
- * head. And the **elbow stays bent** at the release, with the off arm flung up
- * and back beside the head absorbing the momentum, which is what makes the
- * silhouette asymmetric enough to read at a glance. `spawnFrame` is compared
- * against `moveFrameOf(actionFrame)`, so the ball appears on actionFrame 16,
- * i.e. t = 16/49 = 0.327 — not 17/49.
+ * What the animation actually is, from the official 1080p screenshot, Ultimate
+ * Frame Data's pose render and the in-game capture stepped frame by frame:
+ *
+ * - **wind-up**: both fists come up near the chest and chin, elbows tucked —
+ *   the same boxing guard he idles in, wound harder: higher fists, shoulders
+ *   turned further away and the weight further back, because the idle *is*
+ *   that guard and a wind-up that only differs from standing still by a couple
+ *   of degrees is a move with no telegraph.
+ * - **release**: he sinks into a **deep forward lunge**, front foot planted
+ *   well forward with the knee bent, rear leg straight back with the heel
+ *   lifted, torso pitched 20–30° over it.
+ * - the throwing arm comes forward and slightly **up**, ending **open-palmed
+ *   beside his own face** at chin-to-eye height. The elbow stays bent; it is a
+ *   short compact shove, not a full extension.
+ * - the **off hand is flung back and up behind him**, open, as the
+ *   counterweight to the lunge.
+ *
+ * That last pair is what makes the silhouette read at a glance: one hand
+ * forward high, one hand back high, and the body driving through underneath.
  */
 const neutralB: PoseClip = {
   loop: false,
@@ -963,75 +1245,75 @@ const neutralB: PoseClip = {
     {
       t: 0,
       pose: P({
-        torso: -6, head: 4,
-        thighR: 152, shinR: 30, footR: -86,
-        thighL: 204, shinL: 26, footL: -80,
-        upperArmR: 176, forearmR: 10,
-        upperArmL: 186, forearmL: -22,
+        torso: 4, head: -4,
+        thighR: 158, shinR: 4, footR: -92,
+        thighL: 202, shinL: -2, footL: -84,
+        upperArmR: 200, forearmR: -108,
+        upperArmL: 204, forearmL: -104,
       }),
       ease: "in",
     },
-    // Cocked. Arm accumulated 210 + 44 = 254: drawn back and *below* the hip,
-    // which is what makes the throw underarm rather than a shove.
+    // Guard. Both fists up at the chin, elbows in, weight settling onto the
+    // back foot — wound, but not yet committed to anything.
     {
       t: 0.2,
       pose: P({
-        torso: -16, head: 12, hip: 6,
-        thighR: 162, shinR: 36, footR: -84,
-        thighL: 208, shinL: 30, footL: -76,
-        upperArmR: 226, forearmR: 44, handR: -20,
-        upperArmL: 158, forearmL: -40,
+        torso: -20, head: 18, hip: 8,
+        thighR: 172, shinR: 26, footR: -84,
+        thighL: 212, shinL: 16, footL: -74,
+        upperArmR: 224, forearmR: -128, handR: -16,
+        upperArmL: 228, forearmL: -122,
       }),
-      offsetX: -0.4,
-      offsetY: -0.35,
+      offsetX: -0.75,
+      offsetY: -0.55,
       ease: "hold",
     },
     {
       t: 0.26,
       pose: P({
-        torso: -16, head: 12, hip: 6,
-        thighR: 162, shinR: 36, footR: -84,
-        thighL: 208, shinL: 30, footL: -76,
-        upperArmR: 226, forearmR: 44, handR: -20,
-        upperArmL: 158, forearmL: -40,
+        torso: -20, head: 18, hip: 8,
+        thighR: 172, shinR: 26, footR: -84,
+        thighL: 212, shinL: 16, footL: -74,
+        upperArmR: 224, forearmR: -128, handR: -16,
+        upperArmL: 228, forearmL: -122,
       }),
-      offsetX: -0.4,
-      offsetY: -0.35,
+      offsetX: -0.75,
+      offsetY: -0.55,
       ease: "in",
     },
-    // Release, actionFrame 16. Arm accumulated 28 + 108 − 60 = 76 at the wrist
-    // with the elbow still bent: an open palm out in front at chest height,
-    // where the projectile's spawn offset (5.2, 6.4) actually is. Off arm up
-    // and back beside the head.
+    // Release, actionFrame 16. Palm accumulated 22 + 18 + 55 = 95 at the wrist
+    // with the elbow still bent: an open hand out beside his face, 3.6 units
+    // forward of the shoulder and a shade above it, which is where the
+    // projectile's (5.2, 6.4) spawn is. Off hand flung back and up. Deep lunge
+    // under both, rear heel lifted.
     {
       t: 0.327,
       pose: P({
-        torso: 28, head: -14, hip: -6,
-        thighR: 146, shinR: 26, footR: -78,
-        thighL: 220, shinL: 24, footL: -110,
-        upperArmR: 108, forearmR: -60, handR: 16,
-        upperArmL: 252, forearmL: 70,
+        torso: 22, head: -12, hip: -6,
+        thighR: 124, shinR: 22, footR: -94,
+        thighL: 236, shinL: 8, footL: -46,
+        upperArmR: 64, forearmR: 38, handR: 14,
+        upperArmL: 268, forearmL: 30,
       }),
-      offsetX: 0.45,
-      offsetY: -0.45,
-      scaleX: 1.05,
+      offsetX: 0.9,
+      offsetY: -1.15,
+      scaleX: 1.1,
       ease: "hold",
     },
-    // Frames 17–21. One degree of settle and nothing else: the `out` ease has
-    // nowhere to go, so the release reads as *held* for its five frames, which
-    // is what the original does.
+    // Frames 17–21. A degree of settle and nothing else: the release reads as
+    // *held* for its five frames, which is what the original does.
     {
       t: 0.42,
       pose: P({
-        torso: 26, head: -12, hip: -5,
-        thighR: 148, shinR: 25, footR: -78,
-        thighL: 218, shinL: 23, footL: -110,
-        upperArmR: 111, forearmR: -57, handR: 12,
-        upperArmL: 249, forearmL: 66,
+        torso: 20, head: -10, hip: -5,
+        thighR: 126, shinR: 22, footR: -94,
+        thighL: 234, shinL: 9, footL: -48,
+        upperArmR: 66, forearmR: 36, handR: 11,
+        upperArmL: 264, forearmL: 28,
       }),
-      offsetX: 0.42,
-      offsetY: -0.42,
-      scaleX: 1.03,
+      offsetX: 0.88,
+      offsetY: -1.12,
+      scaleX: 1.09,
       ease: "out",
     },
     // The unwind starts from the middle out — hips first, then the shoulders.
@@ -1039,27 +1321,29 @@ const neutralB: PoseClip = {
     {
       t: 0.58,
       pose: P({
-        torso: 16, head: -6, hip: -2,
-        thighR: 154, shinR: 22, footR: -84,
-        thighL: 208, shinL: 18, footL: -104,
-        upperArmR: 126, forearmR: -40, handR: 4,
-        upperArmL: 226, forearmL: 26,
+        torso: 14, head: -6, hip: -2,
+        thighR: 138, shinR: 26, footR: -90,
+        thighL: 220, shinL: 14, footL: -62,
+        upperArmR: 58, forearmR: 20,
+        upperArmL: 232, forearmL: -20,
       }),
-      offsetX: 0.26,
-      offsetY: -0.24,
+      offsetX: 0.5,
+      offsetY: -0.7,
     },
     {
       t: 0.74,
       pose: P({
-        torso: 4,
-        thighR: 150, shinR: 26, footR: -86,
-        upperArmR: 96, forearmR: -18,
-        upperArmL: 196, forearmL: -34,
+        torso: 6,
+        thighR: 150, shinR: 22, footR: -88,
+        thighL: 208, shinL: 12, footL: -76,
+        upperArmR: 140, forearmR: -60,
+        upperArmL: 214, forearmL: -80,
       }),
-      offsetX: 0.14,
+      offsetX: 0.2,
+      offsetY: -0.3,
     },
-    { t: 0.92, pose: P({ torso: 3, upperArmR: 126, forearmR: -26, upperArmL: 198, forearmL: -32 }) },
-    { t: 1, pose: P({ torso: 2, upperArmR: 134, forearmR: -28, upperArmL: 198, forearmL: -30 }) },
+    { t: 0.92, pose: P({ torso: 4, upperArmR: 188, forearmR: -96, upperArmL: 206, forearmL: -98 }) },
+    { t: 1, pose: P({ torso: 4, upperArmR: 200, forearmR: -106, upperArmL: 204, forearmL: -102 }) },
   ],
 };
 
@@ -1068,10 +1352,26 @@ const neutralB: PoseClip = {
  *
  * A matador's flourish. The 7% is beside the point — the move reverses the
  * victim's facing and reflects projectiles — so what it has to read as is a
- * *sweep across the body*, not a strike at something. The near arm starts
- * folded across the chest with the cape gathered behind, and the whole torso
- * turns through the swing: shoulders from 30° closed to 26° open, which is
- * what carries the cape rather than the arm alone.
+ * *sweep across the body*, not a strike at something.
+ *
+ * The reference corrects one assumption that shaped the whole of round one:
+ * **the cape is not in his hand.** It is generated on frame 1, fastened at his
+ * throat with a small red clasp, hangs down his back and whips round on its
+ * own. So the arm is not carrying anything and does not have to pretend to —
+ * it is the *shoulder rotation* that drags the cloth, and the hand is free.
+ *
+ * What the body does: he sinks into a deep forward lunge — front foot planted,
+ * rear leg extended with the heel up, the same lunge as the fireball — and
+ * turns his torso from side-on toward the camera as the arm sweeps across the
+ * front and up, finishing forward at chest-to-head height. The other hand stays
+ * a closed fist at the chest. The sweep is **across the chest and never over
+ * the head**: both damage hitboxes and the reflector sit at y ≈ 6.5–6.7, a
+ * shade under half his height.
+ *
+ * The turn toward the camera is the one thing a side-on rig cannot say, so it
+ * is carried by `scaleX` rather than faked with bones: 0.94 while he is closed
+ * off and 1.16 as the shoulders come round, which is the same device the down
+ * air uses for a rotation out of the screen plane.
  */
 const sideB: PoseClip = {
   loop: false,
@@ -1080,79 +1380,88 @@ const sideB: PoseClip = {
     {
       t: 0,
       pose: P({
-        torso: -8, head: 6,
-        thighR: 154, shinR: 28, footR: -86,
-        thighL: 204, shinL: 26, footL: -80,
-        upperArmR: 148, forearmR: -60,
-        upperArmL: 190, forearmL: -20,
+        torso: 2, head: -2,
+        thighR: 158, shinR: 4, footR: -92,
+        thighL: 202, shinL: -2, footL: -84,
+        upperArmR: 200, forearmR: -106,
+        upperArmL: 204, forearmL: -102,
       }),
       ease: "in",
     },
-    // Gathered. Arm folded across the chest, shoulders turned away, weight on
-    // the back foot — everything wound one way so the sweep can go the other.
+    // Gathered. Near arm folded across the chest, shoulders closed off and
+    // narrowed, weight on the back foot — everything wound one way so the
+    // sweep can go the other, and the cape is still hanging down his back.
     {
       t: 0.2,
       pose: P({
-        torso: -20, head: 16, hip: 8,
-        thighR: 164, shinR: 32, footR: -84,
-        thighL: 208, shinL: 28, footL: -76,
-        upperArmR: 172, forearmR: -84, handR: -20,
-        upperArmL: 176, forearmL: -30,
+        torso: -18, head: 14, hip: 8,
+        thighR: 168, shinR: 20, footR: -88,
+        thighL: 206, shinL: 14, footL: -78,
+        upperArmR: 186, forearmR: -128, handR: -18,
+        upperArmL: 212, forearmL: -96,
       }),
-      offsetX: -0.45,
+      offsetX: -0.5,
+      offsetY: -0.25,
+      scaleX: 0.94,
       ease: "in",
     },
-    // Contact, frame 12. Arm accumulated 26 + 58 = 84 and swung wide out
-    // front, torso driven through it — the cape is at the far end of that arc.
+    // Contact, frame 12. Arm accumulated 24 + 46 = 70 and swung wide out front
+    // at chest height, torso driven through it and opened out to the camera.
+    // Off fist closed at the chest.
     {
       t: 0.34,
       pose: P({
-        torso: 26, head: -18, hip: -6,
-        thighR: 132, shinR: 30, footR: -88,
-        thighL: 222, shinL: 30, footL: -72,
-        upperArmR: 58, forearmR: 22, handR: 0,
-        upperArmL: 226, forearmL: -56,
+        torso: 24, head: -16, hip: -6,
+        thighR: 126, shinR: 22, footR: -94,
+        thighL: 234, shinL: 8, footL: -48,
+        upperArmR: 46, forearmR: 24, handR: 0,
+        upperArmL: 172, forearmL: -110,
       }),
-      offsetX: 0.85,
-      scaleX: 1.14,
+      offsetX: 1.0,
+      offsetY: -1.05,
+      scaleX: 1.16,
       ease: "hold",
     },
     // Frame 14, the last live frame.
     {
       t: 0.395,
       pose: P({
-        torso: 24, head: -16, hip: -6,
-        thighR: 134, shinR: 30, footR: -88,
-        thighL: 220, shinL: 30, footL: -72,
-        upperArmR: 66, forearmR: 26, handR: 0,
-        upperArmL: 222, forearmL: -54,
+        torso: 22, head: -14, hip: -6,
+        thighR: 128, shinR: 22, footR: -94,
+        thighL: 232, shinL: 8, footL: -50,
+        upperArmR: 54, forearmR: 28, handR: 0,
+        upperArmL: 170, forearmL: -108,
       }),
-      offsetX: 0.9,
-      scaleX: 1.13,
+      offsetX: 1.05,
+      offsetY: -1.05,
+      scaleX: 1.15,
       ease: "out",
     },
     {
       t: 0.56,
       pose: P({
-        torso: 14, head: -8,
-        thighR: 142, shinR: 28, footR: -86,
-        thighL: 212, shinL: 28, footL: -76,
-        upperArmR: 96, forearmR: 14,
-        upperArmL: 208, forearmL: -44,
+        torso: 12, head: -6,
+        thighR: 140, shinR: 26, footR: -90,
+        thighL: 218, shinL: 14, footL: -66,
+        upperArmR: 96, forearmR: 4,
+        upperArmL: 182, forearmL: -104,
       }),
-      offsetX: 0.5,
+      offsetX: 0.55,
+      offsetY: -0.6,
+      scaleX: 1.06,
     },
     {
       t: 0.78,
       pose: P({
-        torso: 8, head: -2,
-        upperArmR: 122, forearmR: -8,
-        upperArmL: 202, forearmL: -36,
+        torso: 6, head: -2,
+        upperArmR: 156, forearmR: -60,
+        upperArmL: 196, forearmL: -100,
       }),
       offsetX: 0.24,
+      offsetY: -0.25,
     },
-    { t: 0.94, pose: P({ torso: 5, upperArmR: 134, forearmR: -22, upperArmL: 200, forearmL: -32 }), offsetX: 0.1 },
-    { t: 1, pose: P({ torso: 4, upperArmR: 138, forearmR: -26, upperArmL: 200, forearmL: -30 }) },
+    { t: 0.94, pose: P({ torso: 4, upperArmR: 190, forearmR: -96, upperArmL: 202, forearmL: -100 }), offsetX: 0.1 },
+    { t: 1, pose: P({ torso: 3, upperArmR: 198, forearmR: -104, upperArmL: 203, forearmL: -102 }) },
   ],
 };
 
@@ -1161,8 +1470,28 @@ const sideB: PoseClip = {
  *
  * The hitbox is live on **frame 3** of 55, so `poseTimeFor` compresses the
  * wind-up into two frames and gives the other fifty-two to the rise and the
- * fall. That is the right shape for the move and the wrong shape to author
- * carelessly: the crouch is a flicker, the punch is everything.
+ * fall. That is the right shape for the move — the reference is explicit that
+ * there is no crouch worth speaking of, because three frames of startup leaves
+ * no room for one — and the wrong shape to author carelessly: the crouch is a
+ * flicker, the punch is everything.
+ *
+ * **The fist punches diagonally, not straight up.** Round one had the arm at
+ * 12° *behind* vertical, which put the glove directly beside the cap: at match
+ * scale the whole move read as Mario growing a second white bobble on his hat.
+ * The reference settles it twice over — SmashWiki has him jumping "diagonally
+ * upwards with a more vertical range than horizontal", and the engine's own
+ * boxes reach four units in front of him at both the chest and the head tier.
+ * At 32° forward of vertical the fist clears both the front and the top of
+ * the cap — which is the tightest this rig allows, because the head is 5.0
+ * units from the shoulder to its crown against an arm that reaches 5.45 with
+ * the glove. The head is laid 28° back under it, which buys the horizontal
+ * clearance and is also what a person looking up at their own fist does.
+ *
+ * Straight up is *not* available and it is worth writing down why: the port
+ * tag sits directly over the head, and the figure is drawn under it like
+ * everything else, so a fist on the vertical spends the whole rise behind the
+ * tag. Punching up-and-forward is both what the reference describes and the
+ * only place the glove is visible.
  *
  * The engine supplies the actual travel (`momentum` at frame 4, held twelve
  * frames), so `offsetY` here is only the body's own extension out of the
@@ -1176,57 +1505,67 @@ const upB: PoseClip = {
     {
       t: 0,
       pose: P({
-        torso: 22, head: -18, hip: -8,
-        thighR: 126, shinR: 108, footR: -76,
-        thighL: 132, shinL: 104, footL: -74,
-        upperArmR: 208, forearmR: 40,
-        upperArmL: 216, forearmL: -38,
+        torso: 20, head: -16, hip: -8,
+        thighR: 128, shinR: 104, footR: -76,
+        thighL: 134, shinL: 100, footL: -74,
+        upperArmR: 196, forearmR: 46,
+        upperArmL: 214, forearmL: -38,
       }),
-      offsetY: -1.5,
+      offsetY: -1.35,
       ease: "in",
     },
-    // Contact, frame 3. Fist accumulated −12 + 6 = −6: straight up past the
-    // ear, body stretched out under it, legs trailing and toes pointed. The
-    // shape of hitting a block from below.
+    // Contact, frame 3. Fist accumulated −6 + 40 = 34: up and well forward of
+    // the cap, elbow locked out, head laid back under it. Body stretched, legs
+    // trailing, toes pointed — the shape of hitting a block from below and a
+    // little ahead.
     {
       t: 0.14,
       pose: P({
-        torso: -12, head: 10,
+        torso: -8, head: -20,
         thighR: 186, shinR: 4, footR: -118,
         thighL: 192, shinL: 4, footL: -116,
-        upperArmR: 6, forearmR: -6, handR: 0,
-        upperArmL: 202, forearmL: -34,
+        upperArmR: 44, forearmR: -4, handR: 0,
+        upperArmL: 208, forearmL: -84,
       }),
       offsetY: 0.9,
       scaleY: 1.2,
       scaleX: 0.86,
-      ease: "hold",
+      ease: "linear",
     },
-    // Frames 4–16, the rising column of coin hits. The fist stays up: he is
-    // travelling, not swinging.
+    // Frames 4–16, the rising column of coin hits. The fist stays out in front
+    // and above — he is travelling, not swinging — but the span into here is
+    // `linear`, not `hold`. Held, this key and the contact key are the same
+    // drawing for thirteen consecutive frames, and a critic looking at the
+    // capture said flatly that the move had no animation in it: same bounding
+    // box, same glove, frame after frame. The legs trail further, the body
+    // stretches another two percent and the fist creeps toward vertical, which
+    // is little enough to still read as one held shape and enough to stop it
+    // being a photograph.
     {
       t: 0.383,
       pose: P({
-        torso: -8, head: 8,
-        thighR: 190, shinR: 6, footR: -116,
-        thighL: 194, shinL: 6, footL: -114,
-        upperArmR: 2, forearmR: -4, handR: 0,
-        upperArmL: 206, forearmL: -30,
+        torso: -6, head: -19,
+        thighR: 198, shinR: 10, footR: -122,
+        thighL: 202, shinL: 10, footL: -120,
+        upperArmR: 38, forearmR: -8, handR: 0,
+        upperArmL: 214, forearmL: -76,
       }),
-      offsetY: 1.0,
-      scaleY: 1.22,
-      scaleX: 0.85,
+      offsetY: 1.05,
+      scaleY: 1.24,
+      scaleX: 0.84,
       ease: "hold",
     },
-    // Frames 17–18, the launcher at the top of the column.
+    // Frames 17–18, the launcher at the top of the column. The arm reaches its
+    // furthest — 3° from vertical and still ahead of him — which is where the
+    // 9-unit finishing sphere is.
     {
       t: 0.416,
       pose: P({
-        torso: -4, head: 6,
+        torso: -4, head: -18,
         thighR: 186, shinR: 10, footR: -112,
         thighL: 196, shinL: 8, footL: -110,
-        upperArmR: 352, forearmR: 4, handR: 0,
-        upperArmL: 214, forearmL: -26,
+        upperArmR: 30, forearmR: -6, handR: 0,
+        upperArmL: 214, forearmL: -74,
       }),
       offsetY: 1.05,
       scaleY: 1.22,
@@ -1265,86 +1604,99 @@ const upB: PoseClip = {
 /**
  * Down special: F.L.U.D.D.
  *
- * The other move with **no hitboxes at all**, and deliberately so — it deals
- * no damage, it charges and then pushes. Same consequence as Fireball: no
+ * The other move with **no hitboxes at all**, and deliberately so — it deals no
+ * damage, it charges and then pushes. Same consequence as Fireball: no
  * `firstActive`, so the clip runs linearly across 48 frames and every `t` is
  * the fraction it happens at.
  *
- * Three beats. He turns away and hunches over the pump to charge it (frames
- * 0–14), holds there (14–21, `hold` so the charge is a drawing rather than a
- * drift), then plants both feet, braces, and takes the recoil (22 on).
+ * Three beats. He hunches over the pack to charge it, holds there (`hold`, so
+ * the charge is a drawing rather than a drift), then **brings the nozzle up
+ * beside his head in both hands** and takes the recoil.
+ *
+ * That last pose is the correction round one needed. The reference is explicit
+ * that *Smash*'s F.L.U.D.D. is used differently from *Sunshine*'s: rather than
+ * firing from over and behind his head, Mario **grabs the nozzle and holds it
+ * next to his head**, one hand on the nozzle and one on a handle. Round one
+ * had both hands out at hip height in front of a nozzle drawn over his
+ * shoulder, so the two never met and the water appeared to come out of his
+ * face. Here both hands accumulate to about 75° at the wrist — 2.7 units
+ * forward of the shoulder and 2.5 above it — which is exactly beside the head
+ * and exactly where `fx.ts` draws the grip.
+ *
+ * `strike` is 21/48. For a move with no hitbox that is a literal fraction and
+ * it has to be the same frame `fx.ts` opens the water on; the reference puts
+ * the first pump on frame 21, and round one had the brace at 0.52 — four
+ * frames early, which read as a flinch before anything happened.
  */
 const downB: PoseClip = {
   loop: false,
-  // The frame the water starts, which for a move with no hitbox is a literal
-  // fraction of the 48 and has to be the same number `fx.ts` opens the stream
-  // on. They were 0.46 and 0.52 for a while: the brace arrived six frames
-  // before the water and read as a flinch.
-  strike: 0.52,
+  strike: 0.4375,
   keys: [
     {
       t: 0,
       pose: P({
         torso: 6, head: -6,
-        thighR: 152, shinR: 30, footR: -86,
-        thighL: 204, shinL: 26, footL: -80,
-        upperArmR: 160, forearmR: -30,
-        upperArmL: 200, forearmL: -26,
+        thighR: 158, shinR: 4, footR: -92,
+        thighL: 202, shinL: -2, footL: -84,
+        upperArmR: 200, forearmR: -106,
+        upperArmL: 204, forearmL: -102,
       }),
       ease: "in",
     },
-    // Charging. Hunched over the pump, both hands down on it, knees soft.
+    // Charging. Hunched over the pack, both hands low on it, knees soft.
     {
-      t: 0.29,
+      t: 0.26,
       pose: P({
         torso: 30, head: -24, hip: -6,
         thighR: 140, shinR: 72, footR: -82,
         thighL: 148, shinL: 68, footL: -80,
-        upperArmR: 128, forearmR: -46,
-        upperArmL: 134, forearmL: -44,
+        upperArmR: 148, forearmR: -70,
+        upperArmL: 154, forearmL: -66,
       }),
       offsetY: -1.25,
       ease: "hold",
     },
     {
-      t: 0.44,
+      t: 0.38,
       pose: P({
         torso: 30, head: -24, hip: -6,
         thighR: 140, shinR: 72, footR: -82,
         thighL: 148, shinL: 68, footL: -80,
-        upperArmR: 128, forearmR: -46,
-        upperArmL: 134, forearmL: -44,
+        upperArmR: 148, forearmR: -70,
+        upperArmL: 154, forearmL: -66,
       }),
       offsetY: -1.25,
       ease: "in",
     },
-    // Firing. Braced wide, weight on the back foot, both hands out on the
-    // nozzle, leaning *away* from the stream — this is recoil, not a lunge.
+    // Firing, frame 21. Both hands up on the nozzle beside his head — wrists
+    // accumulated −12 + 22 + 65 = 75 — braced wide with the weight on the back
+    // foot and leaning *away* from the muzzle. This is recoil, not a lunge:
+    // a full-charge shot shoves him backwards faster than he can fly forwards.
     {
-      t: 0.52,
+      t: 0.4375,
       pose: P({
-        torso: -14, head: 12, hip: 8,
-        thighR: 124, shinR: 44, footR: -80,
-        thighL: 226, shinL: 40, footL: -70,
-        upperArmR: 100, forearmR: -18,
-        upperArmL: 106, forearmL: -20,
+        torso: -12, head: 12, hip: 8,
+        thighR: 126, shinR: 44, footR: -80,
+        thighL: 228, shinL: 34, footL: -66,
+        upperArmR: 22, forearmR: 65,
+        upperArmL: 28, forearmL: 62,
       }),
-      offsetX: -0.4,
-      offsetY: -1.05,
+      offsetX: -0.5,
+      offsetY: -1.0,
       scaleX: 1.12,
       ease: "hold",
     },
     {
       t: 0.78,
       pose: P({
-        torso: -12, head: 10, hip: 8,
-        thighR: 126, shinR: 44, footR: -80,
-        thighL: 224, shinL: 40, footL: -70,
-        upperArmR: 104, forearmR: -16,
-        upperArmL: 110, forearmL: -18,
+        torso: -10, head: 10, hip: 8,
+        thighR: 128, shinR: 44, footR: -80,
+        thighL: 226, shinL: 34, footL: -66,
+        upperArmR: 26, forearmR: 62,
+        upperArmL: 32, forearmL: 59,
       }),
-      offsetX: -0.5,
-      offsetY: -1.05,
+      offsetX: -0.6,
+      offsetY: -1.0,
       scaleX: 1.11,
       ease: "out",
     },
@@ -1352,14 +1704,14 @@ const downB: PoseClip = {
       t: 0.94,
       pose: P({
         torso: 4, head: -2,
-        thighR: 146, shinR: 40, footR: -84,
-        thighL: 208, shinL: 34, footL: -78,
-        upperArmR: 134, forearmR: -28,
-        upperArmL: 198, forearmL: -26,
+        thighR: 146, shinR: 20, footR: -88,
+        thighL: 208, shinL: 12, footL: -78,
+        upperArmR: 160, forearmR: -80,
+        upperArmL: 196, forearmL: -92,
       }),
       offsetY: -0.5,
     },
-    { t: 1, pose: P({ torso: 4, thighR: 150, shinR: 32, thighL: 204, shinL: 28 }), offsetY: -0.3 },
+    { t: 1, pose: P({ torso: 4, thighR: 156, shinR: 6, thighL: 202, shinL: -2 }), offsetY: -0.3 },
   ],
 };
 
@@ -1597,6 +1949,7 @@ const dashAttack: PoseClip = {
 };
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
+  idle,
   fsmash,
   usmash,
   dsmash,
