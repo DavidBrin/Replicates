@@ -175,6 +175,7 @@ const debug = {
   pause: () => page.evaluate(() => window.__smashDebug.pause()),
   step: (n) => page.evaluate((k) => window.__smashDebug.step(k), n),
   fighters: () => page.evaluate(() => window.__smashDebug.fighters()),
+  moveFrames: () => page.evaluate(() => window.__smashDebug.moveFrames()),
   where: () => page.evaluate(() => window.__smashDebug.screenPositions()),
 };
 
@@ -229,11 +230,24 @@ if (plan.then) {
 // already doing, so counting from the keypress would put every cell one or two
 // frames early — and stepping a charge's worth of frames first would step
 // clean past the move and report it as never entered.
+// `grab` from a run is `dashGrab`; both are the grab that was asked for.
+const isRequested = (slot) =>
+  slot === move || (move === "grab" && slot === "dashGrab") || (move === "jab" && slot === "jab1");
+
 let started = false;
+let wrongMove = null;
 for (let i = 0; i < 30 && !started; i++) {
   const [me] = await debug.fighters();
-  if (me.action === "attack" || me.action === "special" || me.action === "grab") started = true;
-  else await debug.step(1);
+  const offensive = me.action === "attack" || me.action === "special" || me.action === "grab";
+  // Accepting *any* offensive action is how a sheet comes back labelled
+  // `fsmash` showing an ftilt: a smash input read one frame too slow is a
+  // tilt, and both are `action: "attack"`. A capture that quietly photographs
+  // a different move is worse than one that fails.
+  if (offensive && isRequested(me.move)) started = true;
+  else {
+    if (offensive) wrongMove = me.move;
+    await debug.step(1);
+  }
 }
 
 // A charge is held, not tapped. `states.ts` charges on `attackHeld` — the
@@ -251,7 +265,11 @@ if (started && hold > 0) {
 for (const k of plan.keys) await page.keyboard.up(KEY[k]);
 if (plan.smash) await debug.step(1);
 if (!started) {
-  console.error(`${fighter} never entered ${move} — the input did not take`);
+  console.error(
+    wrongMove
+      ? `${fighter} performed ${wrongMove}, not ${move} — the input was read as a different move`
+      : `${fighter} never entered ${move} — the input did not take`,
+  );
   await browser.close();
   process.exit(1);
 }
@@ -261,7 +279,10 @@ const startFrame = me.actionFrame;
 
 /* ------------------------------------------------------------- the sheet -- */
 
-const wanted = frames.length ? frames : DEFAULT_FRAMES(move);
+// The move's real length, read off the running match rather than guessed.
+const lengths = await debug.moveFrames();
+const total = lengths.find((m) => m.port === 0)?.total ?? 0;
+const wanted = frames.length ? frames : DEFAULT_FRAMES(total > 0 ? total : 34);
 const shots = [];
 let at = startFrame;
 for (const target of wanted) {
@@ -279,11 +300,22 @@ for (const target of wanted) {
   shots.push({ frame: target, action: self.action, actionFrame: self.actionFrame, png, spot });
 }
 
-function DEFAULT_FRAMES(slot) {
-  // Nine cells: dense through the startup where the read happens, sparser
-  // through the recovery where nothing changes fast.
-  const dense = [0, 2, 4, 6, 8, 11, 15, 22, 30];
-  return slot.endsWith("smash") ? dense.map((n) => n + 2) : dense;
+/**
+ * Nine cells spread across the move's own length.
+ *
+ * Weighted toward the front, because the startup and the contact frame are
+ * where the read is and the recovery is where nothing changes fast — but scaled
+ * to the move, so a 19-frame jab does not spend four cells photographing the
+ * fighter standing still afterwards, and a 91-frame Fire Fox does not stop a
+ * third of the way in.
+ */
+function DEFAULT_FRAMES(total) {
+  const last = Math.max(1, total - 1);
+  // Fractions of the move, front-loaded. 0 is the first frame of the move.
+  const at = [0, 0.06, 0.12, 0.2, 0.28, 0.4, 0.55, 0.75, 1];
+  const cells = at.map((f) => Math.round(f * last));
+  // Round-tripping can collide on a very short move; keep them distinct.
+  return [...new Set(cells)];
 }
 
 /* --------------------------------------------------------------- compose -- */

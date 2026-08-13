@@ -271,6 +271,14 @@ export default function PlayPage() {
             const p = worldToScreen(live.camera, toFloat(f.x), toFloat(f.y));
             return { port: f.port, x: p.x / INTERNAL_WIDTH, y: p.y / INTERNAL_HEIGHT };
           }),
+        // The length of the move each fighter is performing, so a capture can
+        // spread its samples across the move instead of across a guess. A
+        // 19-frame jab and a 91-frame Fire Fox need very different cells.
+        moveFrames: () =>
+          live.state.fighters.map((f) => {
+            const def = f.move ? getFighterOrThrow(f.defId) : null;
+            return { port: f.port, move: f.move, total: (f.move && def?.moves[f.move]?.totalFrames) ?? 0 };
+          }),
         fighters: () =>
           live.state.fighters.map((f) => ({
             port: f.port,
