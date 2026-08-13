@@ -21,6 +21,7 @@ import { toFloat } from "@/engine/fixed";
 import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES, PERFECT_SHIELD_WINDOW } from "@/engine/constants";
 import type { FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
+import { poseTimeFor, type PosedFighter } from "./poses";
 import { PORT_COLOURS, mixHex, withAlpha } from "./characterArt";
 import { worldToScreen, type Camera } from "./camera";
 
@@ -533,8 +534,24 @@ export function trackAfterimages(v: VfxState, state: GameState): void {
   }
 }
 
-/** Frames between footfall puffs while running — half of the run cycle. */
-export const RUN_STEP_INTERVAL = 10;
+/**
+ * Whether a fighter's foot planted between the last frame and this one.
+ *
+ * A run cycle is symmetric — two contacts, at the start and at the halfway
+ * point — so a footfall is the clip crossing a multiple of half a cycle. It has
+ * to be asked this way rather than every N frames, because the cycle is paced
+ * by ground covered rather than by frames (`STRIDE`), so its length differs per
+ * fighter and changes with speed. A fixed interval would drift off the foot for
+ * everyone except whichever fighter the interval happened to suit, which is the
+ * same bug the pacing change existed to fix.
+ */
+export function footPlanted(f: PosedFighter): boolean {
+  if (Math.abs(toFloat(f.vx)) <= 0) return false;
+  if (f.actionFrame <= 0) return true;
+  const now = poseTimeFor("run", f, 0);
+  const before = poseTimeFor("run", { ...f, actionFrame: f.actionFrame - 1 }, 0);
+  return Math.floor(now * 2) !== Math.floor(before * 2) || now < before;
+}
 
 /**
  * What a fighter does to the floor.
@@ -579,7 +596,7 @@ export function trackGroundFx(v: VfxState, state: GameState): void {
         break;
 
       case "run":
-        if (f.actionFrame % RUN_STEP_INTERVAL === 0) spawnDust(v, x, y, 2, 0.4, back * 0.35);
+        if (footPlanted(f)) spawnDust(v, x, y, 2, 0.4, back * 0.35);
         break;
 
       // A roll scuffs at both ends and is silent in the middle, where the

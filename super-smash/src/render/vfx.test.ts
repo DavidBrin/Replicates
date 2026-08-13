@@ -19,7 +19,7 @@ import {
   spawnDust,
   spawnHitSpark,
   stepVfx,
-  RUN_STEP_INTERVAL,
+  footPlanted,
   trackAfterimages,
   trackGroundFx,
   trackLaunchTrails,
@@ -526,12 +526,25 @@ describe("ground effects", () => {
     expect(Math.sign(skid)).toBe(-Math.sign(dash));
   });
 
-  it("steps twice per run cycle rather than every frame", () => {
-    const steps = [];
-    for (let frame = 0; frame < RUN_STEP_INTERVAL * 2; frame++) {
-      if (dustFrom({ action: "run", actionFrame: frame }).length > 0) steps.push(frame);
+  it("puts a footfall under the foot, whatever the fighter's speed", () => {
+    // Twice the speed, twice the steps over the same stretch of time — because
+    // the run cycle is paced by ground covered, and a fixed frame interval
+    // would drift off the foot for everyone but one fighter.
+    const steps = (vx: number) => {
+      let n = 0;
+      for (let actionFrame = 1; actionFrame < 60; actionFrame++) {
+        if (footPlanted({ ...makeFighter({ action: "run", actionFrame }), vx })) n++;
+      }
+      return n;
+    };
+    expect(steps(fx(2))).toBeGreaterThan(steps(fx(1)));
+    expect(steps(fx(2))).toBeCloseTo(steps(fx(1)) * 2, 0);
+  });
+
+  it("does not step at all when the fighter is not moving", () => {
+    for (let actionFrame = 1; actionFrame < 40; actionFrame++) {
+      expect(footPlanted({ ...makeFighter({ action: "run", actionFrame }), vx: 0 })).toBe(false);
     }
-    expect(steps).toEqual([0, RUN_STEP_INTERVAL]);
   });
 
   it("makes a landing out of an aerial heavier than a light one", () => {
