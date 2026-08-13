@@ -24,11 +24,37 @@ export const SMASH_RED_LIT = "#C10500";
 export const SMASH_YELLOW = "#FFD500";
 export const PANEL_INK = "#090B0C";
 
+/**
+ * A colour's channels, from `#rgb`, `#rrggbb`, `rgb(...)` or `rgba(...)`.
+ *
+ * The `rgb()` forms are here because leaving them out was a silent wrong
+ * answer, not a missing feature. Every helper below routes through this
+ * function, and an unparseable colour used to come back as **black** — so
+ * `withAlpha(withAlpha(c, 0.4), 0.2)` was black, and so was any colour that had
+ * been through `withAlpha` once before being handed to `glow`, `mixHex` or
+ * `shade`. That is not a rare shape: `glow` takes an `inner` colour that
+ * naturally arrives carrying its own alpha, and re-alphas it for the mid stop.
+ * Two characters' effects hit it independently, and the symptom is a black ring
+ * where a glow should be, or — under `lighter` compositing, where black is the
+ * identity — nothing at all, which reads as the effect simply not working.
+ */
 export function hexToRgb(hex: string): [number, number, number] {
-  let h = hex.trim();
-  if (h.startsWith("#")) h = h.slice(1);
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  const n = Number.parseInt(h.slice(0, 6), 16);
+  const h = hex.trim();
+
+  const fn = /^rgba?\(([^)]+)\)$/i.exec(h);
+  if (fn) {
+    const parts = fn[1].split(/[,/\s]+/).filter((p) => p !== "");
+    const channel = (raw: string | undefined): number => {
+      if (raw === undefined) return 0;
+      const v = raw.endsWith("%") ? (Number.parseFloat(raw) / 100) * 255 : Number.parseFloat(raw);
+      return Number.isFinite(v) ? Math.max(0, Math.min(255, Math.round(v))) : 0;
+    };
+    return [channel(parts[0]), channel(parts[1]), channel(parts[2])];
+  }
+
+  let body = h.startsWith("#") ? h.slice(1) : h;
+  if (body.length === 3) body = body[0] + body[0] + body[1] + body[1] + body[2] + body[2];
+  const n = Number.parseInt(body.slice(0, 6), 16);
   if (Number.isNaN(n)) return [0, 0, 0];
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }

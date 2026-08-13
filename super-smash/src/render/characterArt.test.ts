@@ -131,7 +131,12 @@ describe("the roster's rigs", () => {
         spherical.push(id);
       }
     }
-    expect(spherical).toEqual(["kirby"]);
+    // At most one fighter may lean on the sphere exemption. Not a named one:
+    // a character who moves their outline-breaking shape into a `custom`
+    // painter still breaks their outline, and pinning the exemption to an id
+    // would fail the moment the sphere grew a prop — which is a change for the
+    // better being reported as a regression.
+    expect(spherical.length, `more than one fighter has no outline prop: ${spherical}`).toBeLessThanOrEqual(1);
   });
 
   it("attaches every prop to a bone that exists", () => {
@@ -143,17 +148,52 @@ describe("the roster's rigs", () => {
     }
   });
 
-  it("keeps the signature props unique to their owners", () => {
-    const owner = (kind: string) =>
-      ROSTER.filter((id) => rigOf(id).props.some((p) => p.kind === kind));
-    expect(owner("cannon")).toEqual(["samus"]);
-    expect(owner("tie")).toEqual(["donkeykong"]);
-    expect(owner("tailBolt")).toEqual(["pikachu"]);
-    expect(owner("tailBushy")).toEqual(["fox"]);
-    expect(owner("capPointed")).toEqual(["link"]);
-    expect(owner("shield")).toEqual(["link"]);
-    expect(owner("swordLong")).toEqual(["marth"]);
-    expect(owner("tiara")).toEqual(["marth"]);
+  /**
+   * A signature shape belongs to one fighter.
+   *
+   * Asserted as "nobody shares it" rather than "this exact fighter has it",
+   * because a fighter is free to move their signature into a `custom` painter
+   * in their own file — Samus's cannon and Link's sword both did, and a test
+   * that named the shared `PropKind` reported the improvement as a regression.
+   * A `custom` prop is unique by construction: the painter lives in exactly one
+   * character's directory and no other rig can reference it.
+   *
+   * What must not happen is two fighters wearing the same distinctive shape,
+   * which is the thing that actually costs a silhouette its read.
+   */
+  it("never lets two fighters share a signature prop", () => {
+    const SIGNATURE = [
+      "cannon", "tie", "tailBolt", "tailBushy",
+      "capPointed", "shield", "swordLong", "sword", "tiara", "helmet",
+    ];
+    for (const kind of SIGNATURE) {
+      const owners = ROSTER.filter((id) => rigOf(id).props.some((p) => p.kind === kind));
+      expect(owners.length, `${kind} is worn by ${owners.join(" and ")}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  /**
+   * Every fighter carries at least one shape nobody else does.
+   *
+   * The property the previous test was really after, stated so that a custom
+   * painter counts. Without it a roster could drift into eight fighters
+   * wearing only shared kinds and the suite would have nothing to say.
+   */
+  it("gives every fighter a shape that is theirs alone", () => {
+    const FLAT = new Set(["face", "cheeks", "visor", "patch", "brow", "moustache", "eyes"]);
+    const bare: string[] = [];
+    for (const id of ROSTER) {
+      const mine = rigOf(id).props.filter((p) => !FLAT.has(p.kind));
+      // A custom painter is unique by construction; a shared kind counts only
+      // if this fighter is the only one wearing it.
+      const unique = mine.some(
+        (p) =>
+          p.kind === "custom" ||
+          ROSTER.filter((other) => rigOf(other).props.some((q) => q.kind === p.kind)).length === 1,
+      );
+      if (!unique) bare.push(id);
+    }
+    expect(bare, `these fighters wear nothing nobody else wears: ${bare}`).toEqual([]);
   });
 });
 
@@ -463,5 +503,48 @@ describe("the hitlag shudder", () => {
     for (const hitlag of [1, 4, 9, 19, 30]) {
       expect(Math.abs(hitlagShake({ hitlag }))).toBeLessThan(1);
     }
+  });
+});
+
+describe("a colour that has already been through withAlpha", () => {
+  // `withAlpha` returns `rgba(...)`, and `glow` re-alphas its `inner` argument
+  // to derive the mid stop — so a colour fading over an effect's lifetime goes
+  // through twice as a matter of course. `hexToRgb` used to return black for
+  // anything that was not hex, which made the second pass silently black: a
+  // dark ring where a glow should be, or under `lighter` compositing, where
+  // black is the identity, nothing at all. Two characters' effects hit it
+  // independently and both worked around it locally.
+  it("survives a second pass rather than turning black", () => {
+    const once = withAlpha("#FFD9A0", 0.45);
+    expect(hexToRgb(once)).toEqual([255, 217, 160]);
+    expect(withAlpha(once, 0.2)).toBe("rgba(255, 217, 160, 0.2)");
+  });
+
+  it("reads the rgb forms as well as the rgba ones", () => {
+    expect(hexToRgb("rgb(12, 34, 56)")).toEqual([12, 34, 56]);
+    expect(hexToRgb("rgba(12,34,56,0.5)")).toEqual([12, 34, 56]);
+  });
+
+  it("still returns black for something genuinely unreadable", () => {
+    // The fallback is load-bearing: a renderer that throws on a bad colour
+    // takes the whole match with it.
+    expect(hexToRgb("not a colour")).toEqual([0, 0, 0]);
+    expect(hexToRgb("")).toEqual([0, 0, 0]);
+  });
+
+  it("reads a named colour as black, and that is the whole story", () => {
+    // `parseInt` stops at the first character it cannot read rather than
+    // rejecting the string, so a CSS name that happens to start with hex
+    // digits parses as its own prefix — "chartreuse" is `0x0c`, a very dark
+    // blue. Asserted rather than fixed because nothing in the renderer passes
+    // a named colour and a stricter parser would be a behaviour change with no
+    // caller to benefit from it. Worth knowing before anyone adds one.
+    expect(hexToRgb("chartreuse")).toEqual([0, 0, 12]);
+  });
+
+  it("keeps mixing and shading honest for an alpha colour", () => {
+    // Both route through hexToRgb, so both were black for the same reason.
+    expect(mixHex(withAlpha("#FFFFFF", 0.5), "#000000", 0)).toBe("#ffffff");
+    expect(shade(withAlpha("#808080", 0.5), 0)).toBe("#808080");
   });
 });

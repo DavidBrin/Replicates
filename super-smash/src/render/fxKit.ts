@@ -65,17 +65,31 @@ export function circle(ctx: CanvasRenderingContext2D, x: number, y: number, r: n
   ctx.fill();
 }
 
+/**
+ * A radial falloff from `inner` at the centre to nothing at `r`.
+ *
+ * The mid stop defaults to `inner` at a third of its opacity, which needs
+ * `withAlpha` to handle a colour that already carries an alpha — `inner` very
+ * often does, because an effect fading over its own lifetime writes
+ * `glow(..., withAlpha("#FFD9A0", 0.45 * fade))`. It used to come back black;
+ * see `hexToRgb`.
+ *
+ * `undefined` rather than a sentinel string for `outer`, so that "the caller
+ * did not choose" is a distinct thing from "the caller chose transparent
+ * black" — a caller who deliberately wanted a hard falloff was getting the
+ * derived mid stop instead.
+ */
 export function glow(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   r: number,
   inner: string,
-  outer = "rgba(0,0,0,0)",
+  outer?: string,
 ): void {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0, inner);
-  g.addColorStop(0.6, outer === "rgba(0,0,0,0)" ? withAlpha(inner, 0.35) : outer);
+  g.addColorStop(0.6, outer ?? withAlpha(inner, 0.35));
   g.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = g;
   circle(ctx, x, y, r);

@@ -61,10 +61,23 @@ const MOVES: readonly MoveSlot[] = [
 /** How long the lab should show an action that has no natural end. */
 const OPEN_ENDED = 40;
 
-function lengthOf(f: FighterState, attrs?: JumpAttributes): number {
+/**
+ * How many frames of this action the sheet should draw.
+ *
+ * `moveFrames` is separate from `attrs` because an attack's length is not a
+ * property of the *state* — `actionDurationFor` reads the state machine's own
+ * constants and an attack has none, since it lasts exactly as long as the move
+ * being thrown. Without it the lab quietly fell back to forty cells for every
+ * attack, so a 79-frame down air was reviewed at just over half its length and
+ * whatever happened after frame 40 was authored blind. The recovery of a slow
+ * move is not a detail: it is most of what a stuffed attack looks like.
+ */
+function lengthOf(f: FighterState, attrs?: JumpAttributes, moveFrames?: number): number {
   const name = poseNameFor(f);
   const clip = clipFor(f.defId, name);
-  if (!clip.loop) return actionDurationFor(f, attrs) ?? OPEN_ENDED;
+  if (!clip.loop) {
+    return actionDurationFor(f, attrs) ?? (moveFrames && moveFrames > 0 ? moveFrames : OPEN_ENDED);
+  }
   // A speed-paced cycle has no fixed frame count — find the frame the clip
   // comes back round to its start, so the sheet shows exactly one cycle.
   if (poseTimeFor(name, { ...f, actionFrame: 1 }, 0) === 0) return clip.period ?? 30;
@@ -180,7 +193,15 @@ export default function AnimLab() {
     () => ({ fighterId, action, move, jumpsUsed, fastFalling }),
     [fighterId, action, move, jumpsUsed, fastFalling],
   );
-  const total = useMemo(() => lengthOf(fighterAt(o, 0), getFighter(o.fighterId)?.attributes), [o]);
+  const total = useMemo(() => {
+    const def = getFighter(o.fighterId);
+    const usesMove = o.action === "attack" || o.action === "special" || o.action === "throw";
+    return lengthOf(
+      fighterAt(o, 0),
+      def?.attributes,
+      usesMove ? def?.moves?.[o.move]?.totalFrames : undefined,
+    );
+  }, [o]);
   const poseName = useMemo(() => poseNameFor(fighterAt(o, 0)), [o]);
 
   // The contact sheet: one cell per simulation frame, at the action's real length.

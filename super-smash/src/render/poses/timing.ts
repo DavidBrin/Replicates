@@ -48,12 +48,14 @@ import {
   TURNAROUND_FRAMES,
 } from "@/engine/states";
 import type { FighterDef, FighterState, MoveSlot } from "@/engine/types";
+import { clipFor } from "../chars/poses";
 import { samplePose, type PoseSample } from "./clip";
-import { POSE_LIBRARY, type PoseName } from "./library";
+import { type PoseName } from "./library";
 
 /** Everything the pose layer needs to know about a fighter. */
 export type PosedFighter = Pick<
   FighterState,
+  | "defId"
   | "action"
   | "actionFrame"
   | "move"
@@ -376,7 +378,7 @@ export function poseTimeFor(
   timing?: MoveTiming,
   attrs?: JumpAttributes,
 ): number {
-  const clip = POSE_LIBRARY[name];
+  const clip = clipFor(fighter.defId, name);
   if (clip?.loop) {
     if (PACED_BY_SPEED[name]) {
       return wrap((fighter.actionFrame * Math.abs(toFloat(fighter.vx))) / STRIDE);
@@ -424,7 +426,7 @@ export function poseSpinFor(
   attrs?: JumpAttributes,
 ): number {
   const name = poseNameFor(fighter);
-  const spin = POSE_LIBRARY[name]?.spin;
+  const spin = clipFor(fighter.defId, name)?.spin;
   if (!spin) return 0;
   return poseTimeFor(name, fighter, frame, timing, attrs) * spin * Math.PI * 2;
 }
@@ -437,5 +439,5 @@ export function samplePoseForFighter(
   attrs?: JumpAttributes,
 ): PoseSample {
   const name = poseNameFor(fighter);
-  return samplePose(POSE_LIBRARY[name], poseTimeFor(name, fighter, frame, timing, attrs));
+  return samplePose(clipFor(fighter.defId, name), poseTimeFor(name, fighter, frame, timing, attrs));
 }

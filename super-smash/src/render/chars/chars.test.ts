@@ -52,6 +52,27 @@ describe("every fighter is reachable by their own id", () => {
 describe("a fighter's own clip wins", () => {
   const NAMES = Object.keys(POSE_LIBRARY) as PoseName[];
 
+  /**
+   * The guard on the guard.
+   *
+   * Every test below that proves the override mechanism works is a loop over
+   * the declared overrides, and a loop over nothing passes. That is not a
+   * hypothetical: the wiring in `timing.ts` was reverted by an errant
+   * `git checkout` and committed, and this file stayed green through it,
+   * because at that moment all eight override tables were empty and every
+   * assertion below ran zero times. The bug was found by a character agent
+   * adding a single clip and watching the suite go red — which is exactly the
+   * signal this test existed to give and did not.
+   *
+   * So: assert the fixture is non-empty before trusting anything it proves.
+   */
+  it("has overrides to test at all", () => {
+    const declared = FIGHTER_IDS.flatMap((id) =>
+      Object.keys(CHARACTER_POSES[charKey(id)] ?? {}).map((name) => `${id}.${name}`),
+    );
+    expect(declared.length, "no fighter overrides any clip — every test below is vacuous").toBeGreaterThan(0);
+  });
+
   it("falls through to the shared library where nothing is declared", () => {
     for (const id of FIGHTER_IDS) {
       for (const name of NAMES) {
