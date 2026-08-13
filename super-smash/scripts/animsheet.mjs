@@ -39,7 +39,14 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 await page.goto(`${base}/anim`, { waitUntil: "networkidle" });
 
-await page.getByLabel("Fighter").selectOption(fighter);
+const ids = await page.getByLabel("Fighter").locator("option").allTextContents();
+const picked = ids.find((id) => id.toLowerCase() === fighter.toLowerCase());
+if (!picked) {
+  console.error(`unknown fighter "${fighter}". Try one of: ${ids.join(", ")}`);
+  await browser.close();
+  process.exit(1);
+}
+await page.getByLabel("Fighter").selectOption(picked);
 await page.getByLabel("Action").selectOption(action);
 if (await page.getByLabel("Move").count()) await page.getByLabel("Move").selectOption(move);
 // Freeze playback so the strip is reproducible run to run.

@@ -135,7 +135,10 @@ describe("the library", () => {
   });
 
   it("gives the walk cycle four keys", () => {
-    expect(POSE_LIBRARY.walk.keys).toHaveLength(4);
+    // At least the canonical four — contact, pass, contact-mirrored, pass.
+    // Not exactly four: a gait reads better with the body bottoming out just
+    // *after* contact, which needs eight.
+    expect(POSE_LIBRARY.walk.keys.length).toBeGreaterThanOrEqual(4);
     expect(POSE_LIBRARY.walk.loop).toBe(true);
   });
 

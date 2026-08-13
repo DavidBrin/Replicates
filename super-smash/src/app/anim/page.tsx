@@ -24,7 +24,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CHARACTER_RIGS, drawFigure, getCharacterRig, resolvePalette, squashFor } from "@/render/characterArt";
+import { drawFigure, getCharacterRig, resolvePalette, squashFor } from "@/render/characterArt";
 import { rigHeight } from "@/render/skeleton";
 import {
   actionDurationFor,
@@ -36,7 +36,7 @@ import {
   type JumpAttributes,
 } from "@/render/poses";
 import { makeFighter } from "@/render/testFixtures";
-import { FIGHTERS, getFighter } from "@/fighters";
+import { FIGHTER_IDS, getFighter } from "@/fighters";
 import type { ActionState, FighterState, MoveSlot } from "@/engine/types";
 
 /** Every action worth looking at, grouped the way an animator would think of them. */
@@ -252,7 +252,7 @@ export default function AnimLab() {
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
         <select aria-label="Fighter" value={fighterId} onChange={(e) => setFighterId(e.target.value)}>
-          {Object.keys(CHARACTER_RIGS).map((id) => (
+          {FIGHTER_IDS.map((id) => (
             <option key={id} value={id}>{id}</option>
           ))}
         </select>
@@ -299,7 +299,7 @@ export default function AnimLab() {
         <canvas ref={sheet} aria-label="Contact sheet" style={{ borderRadius: 6, maxWidth: "100%" }} />
       </div>
       <p style={{ color: "#4E5866", fontSize: 12, marginTop: 18 }}>
-        {FIGHTERS.length} fighters share every clip. See src/render/poses/.
+        {FIGHTER_IDS.length} fighters share every clip. See src/render/poses/.
       </p>
     </main>
   );
