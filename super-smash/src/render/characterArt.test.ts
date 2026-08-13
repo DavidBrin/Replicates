@@ -15,6 +15,7 @@ import {
   hitlagShake,
   mixHex,
   PROP_PAINTERS,
+  PROP_STILL,
   alphaOf,
   resolvePalette,
   shade,
@@ -601,7 +602,7 @@ describe("props point away from the bone they hang on", () => {
       size: 1,
       colour: "primary",
       detail: "#000",
-    });
+    }, PROP_STILL);
     const ys = ctx.calls
       .filter((c) => c.method === "moveTo" || c.method === "lineTo")
       .map((c) => c.args[1] as number);
@@ -658,5 +659,60 @@ describe("a glow fading out", () => {
     const bright = alphaOf(stops(withAlpha("#FFD9A0", 0.9))[1].colour);
     const faint = alphaOf(stops(withAlpha("#FFD9A0", 0.09))[1].colour);
     expect(bright / faint).toBeCloseTo(10, 1);
+  });
+});
+
+/**
+ * A prop with a clock of its own.
+ *
+ * A prop is a shape bolted rigidly to a bone, so it can only move when the pose
+ * moves the bone — which is right for a shoulder pad and wrong for everything
+ * soft. A tail reads as a tail precisely because it *doesn't* track the body:
+ * it lags, overshoots and settles late, and none of that is a property of the
+ * skeleton, so no pose can express it.
+ *
+ * `PropAnim` is the two inputs that get most of the way there: a clock, and the
+ * fighter's velocity in the prop's own frame. Both have to survive the trip
+ * from `drawFigure` down through `paintFigure` and `drawProp`, and a break
+ * anywhere along it is silent — the prop simply stops moving, which is
+ * indistinguishable from an author not having animated it yet.
+ */
+describe("props are given the fighter's motion", () => {
+  function animSeenBy(params: Partial<Parameters<typeof drawFigure>[1]> = {}) {
+    const seen: unknown[] = [];
+    const rig: CharacterRig = {
+      ...getCharacterRig("mario"),
+      props: [
+        {
+          kind: "custom",
+          bone: "head",
+          at: 1,
+          size: 1,
+          colour: "primary",
+          draw: (_b, _p, anim) => seen.push(anim),
+        },
+      ],
+    };
+    drawFigure(createMockContext() as unknown as CanvasRenderingContext2D, {
+      rig,
+      palette: resolvePalette(null, 0),
+      pose: REST_SAMPLE,
+      transform: { x: 0, y: 0, scale: 10, facing: 1 },
+      mode: "body",
+      ...params,
+    });
+    return seen[0] as { frame: number; t: number; vx: number; vy: number; airborne: boolean };
+  }
+
+  it("hands the painter what the caller supplied", () => {
+    const anim = { frame: 41, t: 0.5, vx: 1.5, vy: -0.25, airborne: true };
+    expect(animSeenBy({ anim })).toEqual(anim);
+  });
+
+  it("hands it a still frame when the caller supplied nothing", () => {
+    // Stock icons, the select portraits and the silhouette check all draw a
+    // figure with no match behind them. A prop that swayed there would make two
+    // portraits of the same fighter differ for no reason a reader could see.
+    expect(animSeenBy()).toEqual(PROP_STILL);
   });
 });

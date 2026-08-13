@@ -369,6 +369,7 @@ function paint(slot: MoveSlot, frame: number, total = 40) {
     total,
     t: frame / total,
     dir: 1,
+    over: (paint: () => void) => paint(),
   });
   return ctx.calls.length;
 }

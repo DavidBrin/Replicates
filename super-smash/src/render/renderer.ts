@@ -395,6 +395,17 @@ function drawOneFighter(
     transform,
     alpha,
     tint: { colour: "#FFFFFF", amount: hitFlashAmount(state.vfx, f.port) },
+    // `vx` is signed by facing so a painter never sees a direction: a tail
+    // trails on `-vx` whichever way its owner is running. `t` is 0 outside an
+    // action rather than undefined, so a prop that idles on it does not have to
+    // ask whether there is a move on.
+    anim: {
+      frame: state.current.frame,
+      t: timing && timing.total > 0 ? Math.min(1, f.actionFrame / timing.total) : 0,
+      vx: f.vx * (f.facing >= 0 ? 1 : -1),
+      vy: f.vy,
+      airborne: !f.grounded,
+    },
   } as const;
 
   // A special's own graphic goes under the fighter, and may replace them —
@@ -408,6 +419,12 @@ function drawOneFighter(
     if (mode !== "silhouette") drawFigure(ctx, { ...params, mode: "rim", rimWidth });
     drawFigure(ctx, { ...params, mode });
   }
+
+  // Whatever the effect asked to be painted after the body: the near half of a
+  // drill, the tip of a swing that passes in front of the shoulder, a spark on
+  // the fist rather than behind it. Before the shield and the port tag, both of
+  // which are readability the player needs and a move graphic should not bury.
+  for (const paint of fx.over) paint();
 
   drawFinalSmashAura(ctx, f, cam, height, state.current.frame);
   drawShield(ctx, state.vfx, f, cam, height);

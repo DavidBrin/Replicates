@@ -23,6 +23,7 @@ import { samplePose, type Keyframe } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 import { resolve, rigHeight } from "../../skeleton";
 import type { Brush, PropDef } from "../../rigKit";
+import { PROP_STILL } from "../../rigKit";
 import { createCamera } from "../../camera";
 import { createMockContext, type RecordedCall } from "../../mockContext";
 import { makeFighter, makeStage } from "../../testFixtures";
@@ -93,7 +94,7 @@ function propBox(prop: PropDef): Box {
     fill: () => ctx.fill(),
     line: () => ctx.stroke(),
   };
-  prop.draw!(brush, prop);
+  prop.draw!(brush, prop, PROP_STILL);
   return boundsOf(ctx.calls);
 }
 
@@ -408,6 +409,7 @@ function paint(slot: MoveSlot, frame: number) {
     total: move.totalFrames,
     t: frame / move.totalFrames,
     dir: 1,
+    over: (paint: () => void) => paint(),
   });
   return ctx;
 }

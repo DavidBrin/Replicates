@@ -230,7 +230,48 @@ export interface PropDef {
 }
 
 /** How a prop's shape is painted, in the prop's own normalised frame. */
-export type PropPainter = (brush: Brush, prop: PropDef) => void;
+export type PropPainter = (brush: Brush, prop: PropDef, anim: PropAnim) => void;
+
+/**
+ * The motion a prop is allowed to have of its own.
+ *
+ * A prop is a shape bolted rigidly to a bone, so it can only move when the pose
+ * moves the bone it hangs from. That is right for a shoulder pad and wrong for
+ * everything soft: a tail, a cape, a scarf, hair. What makes those read is
+ * precisely that they *don't* move with the body — they lag it, overshoot it,
+ * and settle late, and none of that is expressible in a pose because it is not
+ * a property of the skeleton.
+ *
+ * The honest fix is a second simulation, and this is not that. It is the two
+ * inputs that get most of the way there for free: a clock, so a prop can idle
+ * on its own cycle, and the fighter's velocity, so it can stream behind them.
+ * A tail that sways on `frame` and trails on `-vx` reads as a tail, which was
+ * the thing that could not be done at all.
+ *
+ * Every field is in the **prop's** frame, so `vx` is positive when the fighter
+ * is moving the way they are facing whichever way that is. Painters never see a
+ * facing and must not branch on one.
+ */
+export interface PropAnim {
+  /** The global frame. A prop's own clock, for idle sway and flicker. */
+  readonly frame: number;
+  /** 0..1 through the current action, or 0 when the fighter is not in one. */
+  readonly t: number;
+  /** Velocity in rig units per frame: `+x` the way the fighter faces, `+y` up. */
+  readonly vx: number;
+  readonly vy: number;
+  /** Off the ground — a tail hangs differently in the air than in a run. */
+  readonly airborne: boolean;
+}
+
+/**
+ * What a prop with no animation behind it gets.
+ *
+ * Stock icons, the character-select portraits and the silhouette check all draw
+ * a figure with no match and no clock, and a prop that swayed there would make
+ * two portraits of the same fighter differ for no reason a reader could see.
+ */
+export const PROP_STILL: PropAnim = { frame: 0, t: 0, vx: 0, vy: 0, airborne: false };
 
 /** What a prop painter paints with. See `PropDef.draw`. */
 export interface Brush {

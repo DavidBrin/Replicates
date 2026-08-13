@@ -42,10 +42,10 @@
 
 import type { FighterDef, FighterState } from "@/engine/types";
 import type { Camera } from "./camera";
-import { fxContextFor, struckWithFor, NOTHING, type SpecialFxResult } from "./fxKit";
+import { fxContextFor, struckWithFor, DREW_NOTHING, type MoveFxResult } from "./fxKit";
 import { fxFor } from "./chars";
 
-export type { SpecialFxResult, FxContext, FxFn } from "./fxKit";
+export type { SpecialFxResult, MoveFxResult, FxContext, FxFn } from "./fxKit";
 export { MOVE_FX_KEYS } from "./chars";
 
 /**
@@ -74,10 +74,12 @@ const DRAWS_ITS_MOVE: Partial<Record<FighterState["action"], true>> = {
 };
 
 /**
- * Paint whatever the fighter's current move paints, over the figure.
+ * Paint whatever the fighter's current move paints.
  *
- * Called for every fighter every frame; the lookup is a miss for almost all of
- * them, which is the cheap path.
+ * Under the figure by default; anything the effect handed to `over` comes back
+ * in the result for the caller to run once the figure is down. Called for every
+ * fighter every frame, and the lookup is a miss for almost all of them, which
+ * is the cheap path.
  */
 export function drawMoveFx(
   ctx: CanvasRenderingContext2D,
@@ -89,15 +91,16 @@ export function drawMoveFx(
   screenY: number,
   /** Cosmetic state, for the effects that need to know a swing connected. */
   struck?: { lastHit: ({ hitboxId: number; frame: number } | null)[]; frame: number },
-): SpecialFxResult {
-  if (f.move === null || !def) return NOTHING;
-  if (!DRAWS_ITS_MOVE[f.action]) return NOTHING;
+): MoveFxResult {
+  if (f.move === null || !def) return DREW_NOTHING;
+  if (!DRAWS_ITS_MOVE[f.action]) return DREW_NOTHING;
   const move = def.moves[f.move];
-  if (!move) return NOTHING;
+  if (!move) return DREW_NOTHING;
 
   const fn = fxFor(def.id, f.move);
-  if (!fn) return NOTHING;
+  if (!fn) return DREW_NOTHING;
 
+  const over: (() => void)[] = [];
   const result = fn(
     fxContextFor(
       ctx,
@@ -109,7 +112,14 @@ export function drawMoveFx(
       screenY,
       move.totalFrames,
       struck ? struckWithFor(struck.lastHit, f) : undefined,
+      (paint) => over.push(paint),
     ),
   );
-  return result ?? NOTHING;
+  // Not `result ?? DREW_NOTHING`: an effect that returns `{ hideFigure: true }`
+  // returns a `SpecialFxResult`, which carries no queue, and taking it whole
+  // would throw away every paint it had just deferred. Kirby's Stone is exactly
+  // that shape, and it is the one effect that replaces the fighter — so the
+  // case where the queue is the *only* thing on screen is the case that would
+  // have lost it.
+  return { hideFigure: result?.hideFigure ?? false, over };
 }

@@ -53,6 +53,7 @@ import {
 import {
   PANEL_INK,
   PORT_COLOURS,
+  PROP_STILL,
   ellipse,
   poly,
   roleColour,
@@ -61,6 +62,7 @@ import {
   type Brush,
   type CharacterRig,
   type DrawMode,
+  type PropAnim,
   type PropDef,
   type PropKind,
   type PropPainter,
@@ -103,8 +105,10 @@ export {
   HANDS,
   FEET,
   DEFAULT_RIG,
+  PROP_STILL,
   type Brush,
   type DrawMode,
+  type PropAnim,
   type PropDef,
   type PropKind,
   type PropPainter,
@@ -171,8 +175,8 @@ function makeBrush(
  * eight people cannot add to at once.
  */
 export const PROP_PAINTERS: Record<PropKind, PropPainter> = {
-  custom(b, p) {
-    p.draw?.(b, p);
+  custom(b, p, anim) {
+    p.draw?.(b, p, anim);
   },
 
   // Mario's cap: a dome plus the brim that breaks the head's outline forward.
@@ -692,6 +696,11 @@ export interface FigureParams {
    * so explicitly rather than hope silhouette mode reads its palette.
    */
   readonly flat?: string;
+  /**
+   * The clock and velocity a soft prop moves on. Omitted means still — see
+   * `PROP_STILL`, which is what a stock icon or a portrait gets.
+   */
+  readonly anim?: PropAnim;
 }
 
 function boneColourFor(rig: CharacterRig, name: BoneName): string {
@@ -706,9 +715,11 @@ export function drawFigure(ctx: CanvasRenderingContext2D, params: FigureParams):
   const rim = mode === "rim" ? (params.rimWidth ?? 5) : 0;
   const scale = Math.abs(transform.scale * (transform.scaleX ?? 1));
 
+  const anim = params.anim ?? PROP_STILL;
+
   ctx.save();
   if (params.alpha !== undefined && params.alpha < 1) ctx.globalAlpha = params.alpha;
-  paintFigure(ctx, makeBrush(ctx, mode, palette, rim, params.flat), rig, skeleton, transform, scale);
+  paintFigure(ctx, makeBrush(ctx, mode, palette, rim, params.flat), rig, skeleton, transform, scale, anim);
   ctx.restore();
 
   /*
@@ -732,7 +743,7 @@ export function drawFigure(ctx: CanvasRenderingContext2D, params: FigureParams):
   if (tint && tint.amount > 0 && mode === "body") {
     ctx.save();
     ctx.globalAlpha = (params.alpha ?? 1) * Math.min(1, tint.amount);
-    paintFigure(ctx, makeBrush(ctx, "silhouette", palette, 0, tint.colour), rig, skeleton, transform, scale);
+    paintFigure(ctx, makeBrush(ctx, "silhouette", palette, 0, tint.colour), rig, skeleton, transform, scale, anim);
     ctx.restore();
   }
 
@@ -752,12 +763,13 @@ function paintFigure(
   skeleton: Skeleton,
   transform: RigTransform,
   scale: number,
+  anim: PropAnim,
 ): void {
   const { mode, palette, rimLocal: rim } = brush;
   const propsBehind = rig.props.filter((p) => p.layer === "behind");
   const propsFront = rig.props.filter((p) => p.layer !== "behind");
 
-  for (const prop of propsBehind) drawProp(ctx, brush, skeleton, prop, transform, scale);
+  for (const prop of propsBehind) drawProp(ctx, brush, skeleton, prop, transform, scale, anim);
 
   // Far-side limbs, shaded down so the near side separates from them without a
   // second outline pass.
@@ -785,7 +797,7 @@ function paintFigure(
 
   drawLimbs(ctx, brush, rig, skeleton, NEAR_BONES, mode, palette, rim, 0);
 
-  for (const prop of propsFront) drawProp(ctx, brush, skeleton, prop, transform, scale);
+  for (const prop of propsFront) drawProp(ctx, brush, skeleton, prop, transform, scale, anim);
 }
 
 function drawLimbs(
@@ -818,6 +830,7 @@ function drawProp(
   prop: PropDef,
   transform: RigTransform,
   scale: number,
+  anim: PropAnim,
 ): void {
   const bone = skeleton[prop.bone];
   let dx = bone.x1 - bone.x0;
@@ -849,7 +862,7 @@ function drawProp(
   if (prop.angle) ctx.rotate(prop.angle);
   // The brush's rim is expressed in the local unit, which the scale just changed.
   const local = makeBrush(ctx, brush.mode, brush.palette, size === 0 ? 0 : brush.rimLocal / size, brush.flat);
-  PROP_PAINTERS[prop.kind](local, prop);
+  PROP_PAINTERS[prop.kind](local, prop, anim);
   ctx.restore();
 }
 

@@ -312,6 +312,7 @@ function fxAt(slot: MoveSlot, frame: number, charge = 0) {
     total: samus.moves[slot]?.totalFrames ?? 40,
     t: 0,
     dir: 1,
+    over: (paint: () => void) => paint(),
   });
   return drawn();
 }
@@ -355,6 +356,7 @@ describe("the effects paint on the frames they claim to", () => {
       total: 44,
       t: 0,
       dir: 1,
+      over: (paint: () => void) => paint(),
     });
     return biggest;
   }
@@ -378,6 +380,7 @@ describe("the effects paint on the frames they claim to", () => {
       fx.downB?.({
         ctx, f: { facing: 1, charge: 0 } as never, def: samus, cam: { zoom: 10 } as never,
         height: 12.2, x: 400, y: 400, u: 10, frame, total: 47, t: 0, dir: 1,
+        over: (paint: () => void) => paint(),
       });
     expect(call(2)?.hideFigure ?? false).toBe(false);
     expect(call(11)?.hideFigure).toBe(true);

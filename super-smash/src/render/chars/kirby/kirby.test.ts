@@ -473,6 +473,7 @@ function paint(slot: MoveSlot, frame: number, charge = 0): MockContext {
     total,
     t: frame / total,
     dir: 1,
+    over: (paint: () => void) => paint(),
   });
   return ctx;
 }
@@ -556,6 +557,7 @@ describe("the effects paint on the frames they claim and not otherwise", () => {
         total: 60,
         t: 0,
         dir: 1,
+        over: (paint: () => void) => paint(),
       });
       expect(out && "hideFigure" in out ? out.hideFigure : false, `Kirby is drawn as well as the rock on frame ${f}`).toBe(true);
     }

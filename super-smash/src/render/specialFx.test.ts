@@ -14,6 +14,7 @@ import type { FighterState, MoveSlot } from "@/engine/types";
 import { createCamera } from "./camera";
 import { createMockContext, countOf } from "./mockContext";
 import { MOVE_FX_KEYS, drawMoveFx } from "./specialFx";
+import { fxContextFor } from "./fxKit";
 import { fxFor } from "./chars";
 import { makeFighter, makeStage } from "./testFixtures";
 
@@ -160,5 +161,114 @@ describe("a grab draws its own effect", () => {
     for (const id of grabbers) {
       expect(drawn(id, "stand", "grab"), `${id} drew a grab while standing`).toBe(0);
     }
+  });
+});
+
+/**
+ * The layer an effect paints on.
+ *
+ * Everything used to go under the fighter, which is right for a charge glow and
+ * wrong for anything the body is inside of — the near half of a drill, the tip
+ * of a swing that passes in front of the shoulder. `over` defers a paint to
+ * after the figure, and the whole mechanism rests on two things being true:
+ * `drawMoveFx` must not run the deferred paint itself, and it must hand it back
+ * to a caller who will. Either one failing is silent — the effect looks exactly
+ * as it did before.
+ */
+describe("painting over the figure", () => {
+  /**
+   * Built through `fxContextFor` rather than as an object literal, because a
+   * literal would be testing the literal. `fxContextFor` is the one function
+   * that assembles what an effect is called with, in the lab and in a match
+   * alike, so it is the only place the wiring can actually be wrong.
+   */
+  const contextWith = (sink?: (paint: () => void) => void) => {
+    const ctx = createMockContext();
+    return {
+      ctx,
+      c: fxContextFor(
+        ctx as unknown as CanvasRenderingContext2D,
+        byId.get("mario")!,
+        makeFighter({ action: "special", move: "neutralB" as MoveSlot }),
+        cam,
+        13,
+        0,
+        0,
+        30,
+        undefined,
+        sink,
+      ),
+    };
+  };
+
+  it("does not run a deferred paint at the time it is queued", () => {
+    const queue: (() => void)[] = [];
+    const { ctx, c } = contextWith((p) => queue.push(p));
+    c.over(() => c.ctx.fillRect(0, 0, 1, 1));
+    expect(countOf(ctx, "fillRect"), "the paint ran under the figure after all").toBe(0);
+    expect(queue.length).toBe(1);
+  });
+
+  it("runs it when the queue is drained, and in the order it was queued", () => {
+    const queue: (() => void)[] = [];
+    const order: string[] = [];
+    const { c } = contextWith((p) => queue.push(p));
+    c.over(() => order.push("first"));
+    c.over(() => order.push("second"));
+    for (const paint of queue) paint();
+    expect(order).toEqual(["first", "second"]);
+  });
+
+  /**
+   * The documented fallback. A caller who builds a context and never drains a
+   * queue gets the old behaviour — painted, under the figure — rather than an
+   * effect that quietly loses half of itself.
+   */
+  it("paints immediately when nobody supplied a sink", () => {
+    const { ctx, c } = contextWith();
+    c.over(() => c.ctx.fillRect(0, 0, 1, 1));
+    expect(countOf(ctx, "fillRect"), "the paint was dropped on the floor").toBe(1);
+  });
+
+  /**
+   * The case that would have been lost. `drawMoveFx` used to return the
+   * effect's own result whole, and an effect that says `{ hideFigure: true }`
+   * returns a `SpecialFxResult`, which carries no queue — so taking it whole
+   * would have dropped every deferred paint. That is Kirby's Stone: the one
+   * effect where nothing else is on screen, so the queue is the entire picture.
+   */
+  it("keeps the queue even when the effect replaces the fighter", () => {
+    const ctx = createMockContext();
+    const kirby = byId.get("kirby");
+    const result = drawMoveFx(
+      ctx,
+      kirby,
+      makeFighter({ defId: "kirby", action: "special", move: "downB", actionFrame: 20 }),
+      cam,
+      13,
+      960,
+      540,
+    );
+    expect(result.hideFigure, "this frame is supposed to be the rock").toBe(true);
+    expect(Array.isArray(result.over), "the queue did not survive hideFigure").toBe(true);
+  });
+
+  it("hands back a drainable queue on every path, including the misses", () => {
+    // A caller writes `for (const p of fx.over) paint()` unconditionally, so a
+    // path that returns no array at all is a crash rather than a missing effect.
+    const paths = [
+      drawMoveFx(createMockContext(), undefined, makeFighter(), cam, 13, 0, 0),
+      drawMoveFx(createMockContext(), byId.get("mario"), makeFighter({ move: null }), cam, 13, 0, 0),
+      drawMoveFx(
+        createMockContext(),
+        byId.get("mario"),
+        makeFighter({ action: "stand", move: "neutralB" }),
+        cam,
+        13,
+        0,
+        0,
+      ),
+    ];
+    for (const p of paths) expect(Array.isArray(p.over)).toBe(true);
   });
 });

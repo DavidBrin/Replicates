@@ -113,13 +113,32 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 };
 ```
 
-Effects are painted **under** the fighter and may return `{ hideFigure: true }`
-to replace them entirely (Kirby's Stone is the only one that does).
+Effects are painted **under** the fighter by default, and may return
+`{ hideFigure: true }` to replace them entirely (Kirby's Stone is the only one
+that does).
 
-Under the fighter is a real constraint, not a detail: anything you wind up
-*behind* the body is invisible for as long as it is behind the body. Link's
+Under the fighter is the right default — a charge glow behind the body, a
+shockwave at the feet — and the wrong one for anything the body is *inside* of.
+Call `over` for those:
+
+```ts
+uair: ({ ctx, x, y, u, over }) => {
+  glow(ctx, x, y - 3 * u, 2 * u, "rgba(255,240,180,0.5)");        // behind
+  over(() => crescent(ctx, x, y - 3 * u, 2.4 * u, 0.5 * u, -2.6, -0.5));  // in front
+},
+```
+
+Queue order is paint order, and the callback runs with the canvas state the
+renderer left rather than the state at the point you called `over` — save and
+restore inside it if it needs one. Samus's drill had its centre occluded by
+Samus for a whole round of iteration, and every fighter's up air puts its
+graphic exactly where the body already is.
+
+`over` still lands *under* the port tag and the shield, both of which are
+readability a move graphic should not bury. If your effect has to be legible
+above the head, that is a reason to move it, not to fight the tag: Link's
 boomerang spent two-thirds of its wind-up hidden behind his shoulder across two
-rounds of iteration before it was moved above his head.
+rounds before it was solved authorially, by winding up above the head instead.
 
 Available in `fxKit`: `circle`, `glow`, `polygon`, `crescent`, `armourWindow`,
 `withAlpha`. `crescent` is the tapered blade sweep the real game puts on nearly
@@ -149,8 +168,41 @@ file everyone lives in. For a shape only you will ever need, use:
 
 ```ts
 { kind: "custom", bone: "handR", at: 1, size: 3, colour: "accent",
-  draw: (b, p) => { /* normalised frame: +y along the bone, +x forward */ } }
+  draw: (b, p, anim) => { /* normalised frame: +y along the bone, +x forward */ } }
 ```
+
+### A prop that moves on its own
+
+A prop is bolted rigidly to its bone, so by default it can only move when a pose
+moves that bone. That is right for a shoulder pad and wrong for everything soft.
+A tail reads as a tail precisely because it *doesn't* track the body — it lags,
+overshoots and settles late — and none of that is a property of the skeleton, so
+no pose can express it.
+
+The third argument is what makes it possible:
+
+| Field | What it is |
+|---|---|
+| `frame` | The global frame. A clock of your own, for idle sway and flicker. |
+| `t` | 0..1 through the current action, `0` when there is no move on. |
+| `vx` `vy` | Velocity, rig units per frame. **`+x` is the way the fighter faces.** |
+| `airborne` | Off the ground — a tail hangs differently in a run than in a jump. |
+
+`vx` is signed by facing, so a tail trails on `-vx` in both directions with one
+line and no conditional. **Never branch on a direction in a prop painter**: the
+frame is already mirrored for you, and a sign added here is a sign applied
+twice.
+
+```ts
+draw: (b, p, { frame, vx }) => {
+  const sway = Math.sin(frame * 0.11) * 0.13 - vx * 0.35;  // idle drift, plus stream
+  ...
+}
+```
+
+This is two inputs, not a simulation. It buys sway and streaming; it does not
+buy real follow-through, and a prop that needs to overshoot a fast pose still
+has to be authored to.
 
 Paint with `b.fill(...)` / `b.line(...)`, **never** `ctx.fillStyle` directly:
 the figure is drawn twice — once inflated in the outline colour for the rim, once

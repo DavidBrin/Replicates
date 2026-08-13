@@ -16,7 +16,7 @@ import {
   visualHeight,
   type RenderState,
 } from "./renderer";
-import { getCharacterRig } from "./characterArt";
+import { CHARACTER_RIGS, getCharacterRig } from "./characterArt";
 import { DIZZY_STARS, HIT_FLASH_FRAMES, createVfx, stepVfx } from "./vfx";
 import {
   makeDef,
@@ -410,5 +410,80 @@ describe("effects reach the screen", () => {
     const dizzy = fillsDrawn({ action: "shieldBroken", actionFrame: 30 });
     const standing = fillsDrawn({ action: "stand", actionFrame: 30 });
     expect(dizzy).toBeGreaterThan(standing + DIZZY_STARS - 1);
+  });
+});
+
+/**
+ * What the renderer tells a prop about the fighter's motion.
+ *
+ * Every field of `PropAnim` is in the prop's own frame, which is mirrored with
+ * the fighter — so a painter never sees a direction and must never branch on
+ * one. That makes `vx` the field with a real decision behind it: it is signed
+ * by facing, so "moving the way I am pointing" is positive whichever way that
+ * is, and a tail trails on `-vx` in both directions with one line of code.
+ *
+ * Get it wrong and a tail streams backwards when its owner runs left, which is
+ * the same bug the `flip` sign on props already produced once.
+ */
+describe("the motion a prop is told about", () => {
+  function animFor(over: Parameters<typeof makeFighter>[0]) {
+    const seen: { vx: number; vy: number; frame: number; airborne: boolean }[] = [];
+    const base = getCharacterRig("mario");
+    const fighter = makeFighter(over);
+    const state = renderState({
+      current: makeState({ fighters: [fighter], frame: 77 }),
+      fighters: [
+        makeDef({
+          id: fighter.defId,
+          // The rig the renderer resolves comes from the fighter's id, so the
+          // spy has to be installed on that rig rather than passed in.
+        }),
+      ],
+    });
+    const rig = CHARACTER_RIGS[fighter.defId];
+    const original = rig.props;
+    Object.defineProperty(rig, "props", {
+      value: [
+        {
+          kind: "custom",
+          bone: "head",
+          at: 1,
+          size: 1,
+          colour: "primary",
+          draw: (_b: unknown, _p: unknown, anim: (typeof seen)[number]) => seen.push(anim),
+        },
+      ],
+      configurable: true,
+      writable: true,
+    });
+    try {
+      render(createMockContext(1600, 900), state, makeEvents(), createCamera(stage), 0);
+    } finally {
+      Object.defineProperty(rig, "props", { value: original, configurable: true, writable: true });
+    }
+    expect(base).toBeDefined();
+    return seen[0];
+  }
+
+  it("calls forward positive whichever way the fighter faces", () => {
+    const right = animFor({ defId: "mario", vx: fx(2), facing: 1, action: "run" });
+    const left = animFor({ defId: "mario", vx: fx(-2), facing: -1, action: "run" });
+    expect(right.vx, "running forward read as negative").toBeGreaterThan(0);
+    expect(left.vx, "the same run, mirrored, read the other way").toBeGreaterThan(0);
+    expect(left.vx).toBeCloseTo(right.vx, 6);
+  });
+
+  it("keeps vertical velocity in world terms — up is up in both directions", () => {
+    const rising = animFor({ defId: "mario", vy: fx(3), facing: -1, grounded: false });
+    expect(rising.vy).toBeGreaterThan(0);
+  });
+
+  it("passes the global frame, so a prop can idle on its own clock", () => {
+    expect(animFor({ defId: "mario" }).frame).toBe(77);
+  });
+
+  it("says whether the fighter is off the ground", () => {
+    expect(animFor({ defId: "mario", grounded: false }).airborne).toBe(true);
+    expect(animFor({ defId: "mario", grounded: true }).airborne).toBe(false);
   });
 });

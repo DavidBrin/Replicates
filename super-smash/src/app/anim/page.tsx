@@ -37,6 +37,7 @@ import {
 import { makeFighter, makeStage } from "@/render/testFixtures";
 import { clipFor } from "@/render/chars";
 import { drawMoveFx } from "@/render/specialFx";
+import { DREW_NOTHING } from "@/render/fxKit";
 import { createCamera } from "@/render/camera";
 import { FIGHTER_IDS, getFighter } from "@/fighters";
 import type { ActionState, FighterState, MoveSlot } from "@/engine/types";
@@ -188,11 +189,18 @@ function drawCell(
   // would say Kirby's Stone and Samus's Charge Shot still look identical.
   const height = rigHeight(rig.bones, rig.headRadius) * rig.scale;
   const cam = { ...createCamera(makeStage()), zoom };
-  const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : { hideFigure: false };
-  if (fx.hideFigure) return;
+  const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : DREW_NOTHING;
 
-  drawFigure(ctx, { ...params, mode: "rim", rimWidth: Math.max(2, zoom * 0.5) });
-  drawFigure(ctx, { ...params, mode: "body" });
+  if (!fx.hideFigure) {
+    drawFigure(ctx, { ...params, mode: "rim", rimWidth: Math.max(2, zoom * 0.5) });
+    drawFigure(ctx, { ...params, mode: "body" });
+  }
+
+  // The same order the renderer uses, including when there is no figure to be
+  // after. The lab is only worth looking at while it agrees with the match, and
+  // an early return here would have hidden the over-layer of the one effect
+  // that replaces the fighter — the case where it is the whole picture.
+  for (const paint of fx.over) paint();
 }
 
 /**

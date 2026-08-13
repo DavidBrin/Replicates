@@ -21,6 +21,8 @@ import type {
   StepEvents,
 } from "@/engine/types";
 import { emptyEvents } from "@/engine/types";
+import { createCamera } from "./camera";
+import type { FxContext } from "./fxKit";
 
 export function makeFighter(over: Partial<FighterState> = {}): FighterState {
   return {
@@ -212,4 +214,36 @@ export function makeDef(over: Partial<FighterDef> = {}): FighterDef {
 
 export function makeEvents(over: Partial<StepEvents> = {}): StepEvents {
   return { ...emptyEvents(), ...over };
+}
+
+/**
+ * A context to call one move effect with, without a match behind it.
+ *
+ * Every character's tests used to build this by hand as an object literal,
+ * which meant that adding a field to `FxContext` broke six files that had no
+ * interest in it. `over` is the field that forced the issue and it is also the
+ * one a hand-built literal gets wrong in the worst way: an effect's deferred
+ * paints have to go *somewhere*, and a test that supplied no sink would report
+ * a move as painting nothing when the truth was that the test dropped it.
+ *
+ * The default runs deferred paints immediately, so a test that only counts
+ * draw calls sees the whole effect. A test that cares which layer a paint
+ * landed on passes its own `over` and drains it.
+ */
+export function makeFxContext(over: Partial<FxContext> & { ctx: CanvasRenderingContext2D }): FxContext {
+  return {
+    f: makeFighter(),
+    def: makeDef(),
+    cam: { ...createCamera(makeStage()), zoom: 12 },
+    height: 13,
+    x: 0,
+    y: 0,
+    u: 12,
+    frame: 0,
+    total: 30,
+    t: 0,
+    dir: 1,
+    over: (paint) => paint(),
+    ...over,
+  };
 }

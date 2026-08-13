@@ -27,6 +27,24 @@ export interface SpecialFxResult {
 
 export const NOTHING: SpecialFxResult = { hideFigure: false };
 
+/**
+ * What `drawMoveFx` hands back: whatever the effect said, plus the paints it
+ * deferred to after the figure.
+ *
+ * Separate from `SpecialFxResult` because the two are written by different
+ * people. An effect returns the first — `hideFigure` or nothing at all — and
+ * never assembles a queue; the dispatcher returns the second, and a caller who
+ * draws a fighter has to run it. Folding them into one type made `over`
+ * optional at the point it is consumed, and an optional queue is one a renderer
+ * can forget to drain without the compiler minding.
+ */
+export interface MoveFxResult extends SpecialFxResult {
+  /** Run these after the figure is drawn, in the order they were queued. */
+  readonly over: readonly (() => void)[];
+}
+
+export const DREW_NOTHING: MoveFxResult = { hideFigure: false, over: [] };
+
 export interface FxContext {
   readonly ctx: CanvasRenderingContext2D;
   readonly f: FighterState;
@@ -75,6 +93,27 @@ export interface FxContext {
    * flash on the right hits and one on every hit.
    */
   readonly struckWith?: number | null;
+  /**
+   * Paint this *after* the figure instead of under it.
+   *
+   * An effect is painted under the fighter, which is right for most of them —
+   * a charge glow behind the body, a shockwave at the feet, an aura. It is
+   * wrong for anything the fighter's own body is inside of: Samus's drill had
+   * its centre occluded by Samus, and every fighter's up air puts its graphic
+   * exactly where the body and the port tag already are.
+   *
+   * ```ts
+   * uair: ({ ctx, x, y, u, over }) => {
+   *   glow(ctx, x, y - 3 * u, 2 * u, "rgba(255,240,180,0.5)");  // under
+   *   over(() => crescent(ctx, x, y - 3 * u, 2.4 * u, 0.5 * u, -2.6, -0.5));
+   * },
+   * ```
+   *
+   * The callback runs with the canvas state the renderer left, not the state
+   * at the point `over` was called — save and restore inside it if it needs
+   * one. Queue order is paint order.
+   */
+  readonly over: (paint: () => void) => void;
 }
 
 export type FxFn = (c: FxContext) => SpecialFxResult | void;
@@ -183,6 +222,13 @@ export function fxContextFor(
   screenY: number,
   totalFrames: number,
   struckWith: number | null | undefined = undefined,
+  /**
+   * Where deferred paints go. Defaults to running them immediately — which is
+   * the old behaviour, under the figure — so that a caller who builds a context
+   * by hand and never drains a queue still draws the effect rather than
+   * silently dropping half of it.
+   */
+  over: (paint: () => void) => void = (paint) => paint(),
 ): FxContext {
   const frame = moveFrameOf(f.actionFrame);
   return {
@@ -199,6 +245,7 @@ export function fxContextFor(
     t: Math.min(1, frame / Math.max(1, totalFrames)),
     dir: f.facing >= 0 ? 1 : -1,
     struckWith,
+    over,
   };
 }
 

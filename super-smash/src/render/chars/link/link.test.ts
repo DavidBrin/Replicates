@@ -27,6 +27,7 @@ import type { PoseName } from "../../poses/library";
 import { BASE_RIG, type BoneName } from "../../skeleton";
 import { assignmentsTo, createMockContext, type MockContext } from "../../mockContext";
 import type { Brush } from "../../rigKit";
+import { PROP_STILL } from "../../rigKit";
 import type { FxContext, ProjectileContext } from "../../fxKit";
 import { poses } from "./poses";
 import { fx, projectiles } from "./fx";
@@ -273,7 +274,7 @@ describe("the rig", () => {
       for (const mode of ["rim", "body"] as const) {
         const ctx = createMockContext();
         const filled: string[] = [];
-        prop.draw?.(brushFor(ctx, mode, filled), prop);
+        prop.draw?.(brushFor(ctx, mode, filled), prop, PROP_STILL);
         // The rim pass is one flat silhouette per shape and the body pass adds
         // the detail on top, so only the body pass is expected to be rich.
         expect(filled.length, `${prop.bone} in ${mode} paints nothing`).toBeGreaterThan(
