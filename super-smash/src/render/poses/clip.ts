@@ -99,6 +99,17 @@ export interface Keyframe {
 }
 
 export interface PoseClip {
+  /**
+   * Keys sorted by `t`, 0..1.
+   *
+   * Note that for a **fixed-length** state `t = 1` is never sampled:
+   * `poseTimeFor` divides `actionFrame` by the state's length and `actionFrame`
+   * runs 0..n-1, so the last frame drawn is at `(n-1)/n`. A key at `t = 1` is a
+   * terminator — what the clip converges towards, and what keeps it well-formed
+   * if the state is ever lengthened — not a drawing anyone sees. Author the
+   * last *visible* shape at `(n-1)/n` or earlier, and `poses.test.ts` will tell
+   * you if a clip stops short of where it was heading.
+   */
   readonly keys: readonly Keyframe[];
   readonly loop: boolean;
   /**

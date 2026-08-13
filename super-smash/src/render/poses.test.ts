@@ -5,6 +5,7 @@ import { fx } from "@/engine/fixed";
 import type { ActionState, MoveSlot } from "@/engine/types";
 import {
   POSE_LIBRARY,
+  actionDurationFor,
   angleDelta,
   blendSamples,
   lerpAngle,
@@ -475,5 +476,65 @@ describe("every grounded clip keeps its feet on the floor", () => {
       if (spread > 0.6) offenders.push(`${name} spreads ${spread.toFixed(2)}`);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("every fixed-length clip arrives before its state ends", () => {
+  /**
+   * `poseTimeFor` divides `actionFrame` by the state's length, and `actionFrame`
+   * runs 0..n-1 — so the last frame drawn is at `(n-1)/n` and **`t = 1` is never
+   * sampled**. A key sitting there is a terminator, not a drawing: it is what
+   * the clip converges *towards*, and it is legitimate to have one (it keeps
+   * the clip well-formed if the state is ever lengthened).
+   *
+   * What is not legitimate is a clip that is only half-way to it when the state
+   * ends. Under `smooth` easing a final span is at 50% by its midpoint, so a
+   * clip whose last key is a long way from its second-to-last stops visibly
+   * short and then cuts. Three separate agents hit this convention head-on
+   * while authoring; rather than move it under them, this pins the property
+   * they were each working to satisfy.
+   */
+  const FIXED: [PoseName, Parameters<typeof makeFighter>[0]][] = [
+    ["dash", { action: "dashStart" }],
+    ["brake", { action: "runBrake" }],
+    ["turn", { action: "turnaround" }],
+    ["crouchStart", { action: "crouchStart" }],
+    ["crouchEnd", { action: "crouchEnd" }],
+    ["jumpSquat", { action: "jumpSquat" }],
+    ["land", { action: "land" }],
+    ["landingLag", { action: "landingLag", charge: 16 }],
+    ["shieldRelease", { action: "shieldRelease" }],
+    ["roll", { action: "roll" }],
+    ["spotDodge", { action: "spotDodge" }],
+    ["airDodge", { action: "airDodge" }],
+    ["getUp", { action: "getUp" }],
+    ["downed", { action: "downed" }],
+    ["hitstun", { action: "hitstun", hitstun: 24 }],
+    ["ledgeGetUp", { action: "ledgeGetUp" }],
+  ];
+
+  /** Total angular distance between two samples of a clip, in degrees. */
+  function apart(name: PoseName, a: number, b: number): number {
+    const x = samplePose(POSE_LIBRARY[name], a);
+    const y = samplePose(POSE_LIBRARY[name], b);
+    let sum = 0;
+    for (const bone of Object.keys(x.angles) as BoneName[]) {
+      const p = x.angles[bone];
+      const q = y.angles[bone];
+      if (p !== undefined && q !== undefined) sum += (Math.abs(p - q) * 180) / Math.PI;
+    }
+    return sum;
+  }
+
+  it("is essentially at its final pose on its last drawn frame", () => {
+    const short: string[] = [];
+    for (const [name, over] of FIXED) {
+      const total = actionDurationFor(makeFighter(over)) ?? 30;
+      const gap = apart(name, (total - 1) / total, 1);
+      // Summed over roughly fourteen posed bones, so this is about five
+      // degrees each — a settle, not a jump.
+      if (gap > 70) short.push(`${name} stops ${gap.toFixed(0)}° short`);
+    }
+    expect(short).toEqual([]);
   });
 });
