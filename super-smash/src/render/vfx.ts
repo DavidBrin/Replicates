@@ -417,13 +417,28 @@ export function spawnShieldHit(
  * gone in a quarter of a second, and translucent from the first frame so it
  * never has a hard edge to mistake for a shape.
  */
-export function spawnDust(v: VfxState, x: number, y: number, count: number, power: number): void {
+export function spawnDust(
+  v: VfxState,
+  x: number,
+  y: number,
+  count: number,
+  power: number,
+  /**
+   * Push the puff one way along the ground, in units per frame.
+   *
+   * A landing throws dust outwards evenly, but everything a fighter does to
+   * *start* or *stop* moving throws it the other way from the travel — that
+   * asymmetry is most of what makes a skid read as a skid rather than as a
+   * fighter standing in a cloud.
+   */
+  bias = 0,
+): void {
   for (let i = 0; i < count; i++) {
     push(v, {
       kind: "dust",
       x: x + spread(v, 1.2),
       y,
-      vx: spread(v, 1.1) * power,
+      vx: spread(v, 1.1) * power + bias,
       vy: rand(v) * 0.45 * power,
       life: 11 + Math.round(rand(v) * 5),
       maxLife: 16,
@@ -506,6 +521,92 @@ export function trackAfterimages(v: VfxState, state: GameState): void {
       maxLife: 12,
     });
   }
+}
+
+/** Frames between footfall puffs while running — half of the run cycle. */
+export const RUN_STEP_INTERVAL = 10;
+
+/**
+ * What a fighter does to the floor.
+ *
+ * The simulation emits an event for exactly two of these — a grounded jump and
+ * a landing — because those are the two the *engine* cares about. Every other
+ * moment a fighter shoves against the ground is a span of an action state and
+ * nothing announces it, so it is derived here the same way afterimages are.
+ *
+ * Which mattered more than it sounds. Ultimate's ground effects are how you
+ * read weight and commitment at a glance: the midair jump has a white puff that
+ * is the clearest "that jump is spent" signal in the game, a skid drags a
+ * scrape behind it, and a dash kicks dust the opposite way from the travel.
+ * Without them a fighter moves like a cursor — correct positions, no contact
+ * with the floor they are supposedly pushing off.
+ */
+export function trackGroundFx(v: VfxState, state: GameState): void {
+  for (const f of state.fighters) {
+    const x = toFloat(f.x);
+    const y = toFloat(f.y);
+    const back = -f.facing;
+
+    switch (f.action) {
+      // The midair jump. `events.jumps` fires only for the grounded one,
+      // because that is the only jump that leaves a floor.
+      case "jump":
+        if (f.actionFrame === 0 && f.jumpsUsed >= 2) {
+          push(v, ring(x, y + 3, "#FFFFFF", 2.4, 14));
+          spawnDust(v, x, y + 2, 7, 0.7);
+        }
+        break;
+
+      // Out of a standstill: the dust goes backwards, hard.
+      case "dashStart":
+        if (f.actionFrame === 0) spawnDust(v, x, y, 8, 0.75, back * 0.9);
+        break;
+
+      // Into a standstill: four frames of scrape, thrown ahead of the heels
+      // because the fighter is still sliding the way they were running.
+      case "runBrake":
+        spawnDust(v, x - f.facing * 0.6, y, 3, 0.5, -back * 0.7);
+        break;
+
+      case "run":
+        if (f.actionFrame % RUN_STEP_INTERVAL === 0) spawnDust(v, x, y, 2, 0.4, back * 0.35);
+        break;
+
+      // A roll scuffs at both ends and is silent in the middle, where the
+      // fighter is off their feet.
+      case "roll":
+      case "ledgeRoll":
+        if (f.actionFrame === 0) spawnDust(v, x, y, 5, 0.6, back * 0.5);
+        break;
+
+      // Landing lag is a *heavier* landing than the one `events.lands` already
+      // drew, so this is the difference rather than the whole puff.
+      case "landingLag":
+        if (f.actionFrame === 0) spawnDust(v, x, y, 8, 1.3);
+        break;
+
+      default:
+        break;
+    }
+  }
+}
+
+function ring(x: number, y: number, colour: string, size: number, life: number): Particle {
+  return {
+    kind: "ring",
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    life,
+    maxLife: life,
+    size,
+    colour,
+    rotation: 0,
+    spin: 0,
+    gravity: 0,
+    drag: 1,
+  };
 }
 
 /** Smash-charge motes, spiralling into the charging fighter. */
@@ -624,6 +725,7 @@ export function updateVfx(v: VfxState): void {
 export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState): void {
   if (events) ingestEvents(v, events, state);
   trackAfterimages(v, state);
+  trackGroundFx(v, state);
   trackLaunchTrails(v, state);
   trackChargeGlow(v, state);
   trackDamageSmoke(v, state);

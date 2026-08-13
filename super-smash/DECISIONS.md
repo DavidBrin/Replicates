@@ -891,3 +891,73 @@ whole graphic is its projectile, like Link's arrow or Mario's fireball, is alrea
 The failure mode here is silent — a typo in a table key, or a move renamed in `fighters/`, and
 the effect simply stops being drawn with nothing to indicate it — so `specialFx.test.ts`
 asserts every key names a move that actually exists.
+
+---
+
+## D39 — Seventeen of the twenty-one movements were a single frozen pose
+
+The attacks were fixed first (D34) and the movements were left, on the assumption that they
+were merely rough. They were not rough. Of the twenty-one non-attack clips, **seventeen were
+one keyframe** — `still()` — which means a dash, a skid, a jumpsquat, a landing, a roll, a
+spot dodge, an air dodge, a shield, a reel and a ledge hang were each a photograph held for
+the entire duration of the state. A thirty-one-frame roll was thirty-one identical drawings
+of a crouching fighter, and the only reason it read as a roll at all was a whole-body rotation
+the renderer applied on top.
+
+This was invisible for a specific reason worth recording: **there was nowhere to look at an
+animation.** Checking one meant starting a match, provoking the state and hoping a screenshot
+landed on the right frame — and a screenshot round-trip is about 250ms, which is fifteen
+simulation frames, wider than most of these animations are. So the fix came in three parts and
+only the third is animation.
+
+**A place to look.** `/anim` draws one cell per simulation frame of any action at its true
+length, sampled through `samplePoseForFighter` exactly as the match samples it, plus 60Hz
+playback and an onion skin. `scripts/animsheet.mjs` captures the strip headlessly. The first
+contact sheet it produced — four identical Marios labelled 0, 1, 2, 3 — was the whole
+diagnosis in one image.
+
+**A duration.** A clip that was not an attack ran at `actionFrame / 30`, a number with no
+relationship to anything. Nobody noticed because a photograph cannot be mistimed. The moment a
+landing has a squash key and a recovery key the question is unavoidable: a landing is four
+frames, a landing out of an aerial is however many its landing lag says, and a roll is
+thirty-one. `actionDurationFor` reads the state machine's own constants, imported rather than
+copied, so an animation cannot drift out of step with the state it animates.
+
+**A file per clip.** The library was one 1,700-line object literal, which meant one animation
+at a time and nowhere to put the reasoning for a particular clip's beats. Each now lives in
+`render/poses/<name>.ts` next to its own frame budget and its own reference to the real game.
+
+Two things moved onto the clip as part of this. `spin` — whole turns of the body across one
+play — because keyframe rotation interpolates the short way round, so a key at 0 and a key at
+360° are the same key and the body never turns; that is why roll needed a special case in the
+renderer, and now it does not. And `period`, the length of a looping cycle, which belongs to
+the animation that was drawn at that cadence rather than to a table somewhere else.
+
+The vocabulary grew where one clip was being asked to serve two different motions:
+`crouchStart` and `crouchEnd` are descents and rises rather than the settled crouch,
+`doubleJump` is not the first jump, `fastFall` is not a fall, `landingLag` is not a light
+landing, and `getUp` is not lying on the floor. Each started as an alias of what it used to
+share, so the vocabulary could be wired and tested before any of them were drawn.
+
+---
+
+## D40 — A fighter who leaves no mark on the floor is a cursor
+
+The simulation emits an event for a grounded jump and for a landing, and for nothing else,
+because those are the two moments the *engine* cares about. Every other time a fighter shoves
+against the ground — the burst out of a dash, the four frames of a skid, footfalls in a run,
+the scuff at the start of a roll, the extra weight of a landing out of an aerial — is a span
+of an action state that nothing announces.
+
+So `trackGroundFx` derives them from state, the same way `trackAfterimages` already derived
+dodge trails, and for the same reason: a dodge is a span and not a moment. No engine change,
+no new events, nothing that could desync.
+
+The direction is the part that carries the meaning. Dust thrown evenly is a generic puff and
+reads the same for every action; dust thrown *backwards* is a fighter accelerating away from
+it, and dust thrown *forwards* is a fighter still sliding into it. Dash and skid are the same
+cloud with opposite signs, and that sign is the difference between starting and stopping.
+
+The midair jump gets a white ring, which in Ultimate is the clearest read a player has that
+an opponent's second jump is spent — and it is deliberately not fired for the first jump,
+which already has its own event and would otherwise be drawn twice.

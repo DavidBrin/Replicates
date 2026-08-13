@@ -34,12 +34,14 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/fighters`](src/fighters) | Eight fighters, every attribute and every move |
 | [`src/stages`](src/stages) | Six stages, and the Ω / Battlefield forms as a data transform |
 | [`src/render`](src/render) | The canvas painter — skeletons, poses, camera, VFX, HUD |
+| [`src/render/poses`](src/render/poses) | One file per animation, each with the frame budget it was drawn to |
 | [`src/net`](src/net) | Rollback session, wire format, and three transports |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
 | [`src/input`](src/input) | Three control schemes and the latched keyboard reader |
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
+| [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
 
 ## Quick start
@@ -69,6 +71,19 @@ Screenshots are captured, not taken by hand:
 ```bash
 CAPTURE=1 npx playwright test screenshots --project=desktop-chrome
 ```
+
+Animation has its own workshop at **<http://localhost:3000/anim>** — pick any fighter and any
+action and it draws one cell per simulation frame at the action's true length, with 60Hz
+playback and an onion skin. The same strip can be captured from the command line:
+
+```bash
+node scripts/animsheet.mjs roll --fighter kirby --out roll.png
+```
+
+It exists because animation is the one thing here that cannot be judged from its source, and
+because without it a whole class of bug is invisible: seventeen of the twenty-one movement
+clips turned out to be a single frozen pose held for the length of the state
+([D39](DECISIONS.md#d39--seventeen-of-the-twenty-one-movements-were-a-single-frozen-pose)).
 
 ---
 

@@ -19,7 +19,9 @@ import {
   spawnDust,
   spawnHitSpark,
   stepVfx,
+  RUN_STEP_INTERVAL,
   trackAfterimages,
+  trackGroundFx,
   trackLaunchTrails,
   updateVfx,
 } from "./vfx";
@@ -483,5 +485,66 @@ describe("drawing particles", () => {
       const fighterOnScreen = FIGHTER_HEIGHT * MAX_ZOOM * 1.6;
       expect(Math.max(...radii) * 2).toBeLessThan(fighterOnScreen * 0.2);
     });
+  });
+});
+
+describe("ground effects", () => {
+  const at = (over: Parameters<typeof makeFighter>[0]) => makeState({ fighters: [makeFighter(over)] });
+
+  function dustFrom(over: Parameters<typeof makeFighter>[0]) {
+    const v = createVfx();
+    trackGroundFx(v, at(over));
+    return v.particles;
+  }
+
+  /** Mean horizontal velocity of the puff — the direction it was thrown. */
+  function meanVx(ps: ReturnType<typeof dustFrom>): number {
+    const dust = ps.filter((p) => p.kind === "dust");
+    return dust.reduce((a, p) => a + p.vx, 0) / Math.max(1, dust.length);
+  }
+
+  it("puffs on a midair jump and not on a grounded one", () => {
+    const second = dustFrom({ action: "jump", actionFrame: 0, jumpsUsed: 2 });
+    expect(second.some((p) => p.kind === "ring")).toBe(true);
+    // The first jump already has `events.jumps`; a second puff here would
+    // double it.
+    const first = dustFrom({ action: "jump", actionFrame: 0, jumpsUsed: 1 });
+    expect(first).toHaveLength(0);
+  });
+
+  it("throws a dash's dust backwards, and mirrors with the fighter", () => {
+    expect(meanVx(dustFrom({ action: "dashStart", actionFrame: 0, facing: 1 }))).toBeLessThan(0);
+    expect(meanVx(dustFrom({ action: "dashStart", actionFrame: 0, facing: -1 }))).toBeGreaterThan(0);
+  });
+
+  it("throws a skid's dust the way the fighter is still sliding", () => {
+    // Opposite to the dash: one is leaving a standstill, the other arriving at
+    // one, and the dust going the same way for both is what made every ground
+    // effect read as the same generic puff.
+    const dash = meanVx(dustFrom({ action: "dashStart", actionFrame: 0, facing: 1 }));
+    const skid = meanVx(dustFrom({ action: "runBrake", actionFrame: 1, facing: 1 }));
+    expect(Math.sign(skid)).toBe(-Math.sign(dash));
+  });
+
+  it("steps twice per run cycle rather than every frame", () => {
+    const steps = [];
+    for (let frame = 0; frame < RUN_STEP_INTERVAL * 2; frame++) {
+      if (dustFrom({ action: "run", actionFrame: frame }).length > 0) steps.push(frame);
+    }
+    expect(steps).toEqual([0, RUN_STEP_INTERVAL]);
+  });
+
+  it("makes a landing out of an aerial heavier than a light one", () => {
+    const light = createVfx();
+    ingestEvents(light, makeEvents({ lands: [{ port: 0, x: fx(0), y: fx(0) }] }), at({ action: "land" }));
+    const lag = dustFrom({ action: "landingLag", actionFrame: 0 });
+    const spread = (ps: { vx: number }[]) => Math.max(...ps.map((p) => Math.abs(p.vx)));
+    expect(spread(lag)).toBeGreaterThan(spread(light.particles));
+  });
+
+  it("leaves a fighter who is not touching the floor alone", () => {
+    expect(dustFrom({ action: "stand", actionFrame: 12 })).toHaveLength(0);
+    expect(dustFrom({ action: "fall", actionFrame: 12 })).toHaveLength(0);
+    expect(dustFrom({ action: "shield", actionFrame: 12 })).toHaveLength(0);
   });
 });
