@@ -1163,3 +1163,127 @@ is the correct outcome. And it waits for the footing the move needs before press
 attack pressed while the fighter happens to be airborne silently performs the *aerial* of the
 same direction, and the first sheet it produced came back labelled `fsmash` showing a forward
 air — exactly the kind of quiet wrong answer a review tool must never give.
+
+---
+
+## D47 — What eight parallel characters found in the shared code
+
+One agent per fighter, each owning three files and forbidden from touching anything shared. The
+constraint was there to stop eight people editing one table at once. Its more valuable effect was
+that **every shared-code defect had to be reported rather than worked around**, and a defect
+reported independently by two agents is a defect that is really there.
+
+Five landed, each found by someone who could not fix it:
+
+**Both ear painters had every `y` negated.** A prop's local `+y` runs along its bone toward the
+tip, so on the head they grew *down into the skull* and what showed was a dark nub on the jaw.
+Fox proved it by rendering Pikachu; Pikachu proved it the other way round. Both routed around it
+with a `custom` prop. Link never noticed and had shipped with no visible ears at all.
+
+**`hexToRgb` returned black for anything that was not hex.** So `withAlpha` applied twice was
+black, and `glow`'s derived mid stop was black whenever its `inner` argument already carried an
+alpha — which it does whenever an effect fades over its own lifetime. Under `lighter`
+compositing, where black is the identity, that renders as *nothing at all*. Two characters hit it
+independently and both worked around it locally.
+
+**`ease: "out"` on a strike key abandons the contact pose in one frame.** It is a cubic, so for a
+44-frame smash with its hitbox live 15–19, the fighter is 36% of the way to the recovery pose by
+the last active frame. Every attack in the game was being visibly withdrawn while it was still
+hitting. The fix is a second key held at the end of the active window, at
+`strike + (1 − strike)(last − first)/(total − first)`, and it was applied across the roster.
+
+**`SLOT_POSE` collapsed all four jab slots onto one clip.** Mario's third-hit roundhouse and
+Fox's rapid flurry could not exist without putting a kick in the tail of every jab. Two agents
+reported it. The three new names alias the first hit's clip, so the default is unchanged.
+
+**`drawMoveFx` bailed unless the action was `special`, `attack` or `throw`.** `startMove` gives a
+grab the action `grab`, so a grab's effect was drawn in the animation lab — which drives the pose
+directly — and never once in a match. That excluded exactly the two moves whose entire graphic
+*is* the effect: Samus's Grapple Beam and Link's hookshot, both invisible tethers.
+
+Three tooling defects were found the same way. The lab capped every attack at 40 frames, because
+`actionDurationFor` has no case for `attack` — a move lasts as long as the move — so 51 of Fire
+Fox's 91 frames had never been rendered and nobody knew it had no fire. `fightsheet` cropped the
+middle of the stage rather than the fighter, so a fighter who spawns near an edge was reviewed
+sixty pixels tall. And `chars.test.ts`, which exists to prove the per-character override reaches
+the sampler, was **vacuously green**: every assertion loops over the declared overrides and there
+were none, so it stayed green through an errant `git checkout` that reverted the wiring entirely.
+It now asserts the fixture is non-empty before trusting what it proves.
+
+---
+
+## D48 — `spin` is a screen-plane rotation, and four characters wanted a different one
+
+`poseSpinFor` integrates the clip's `spin` linearly over clip time and seeds it into the root
+bone angle, which cartwheels the rig head over heels. Four agents reached for it independently —
+for a corkscrew down air, a drill, Screw Attack and Spinning Kong — and all four found the
+fighter lying on their side.
+
+It has three defects for anything that is not a genuine somersault. It can only express a
+screen-plane turn, and a roundhouse, a corkscrew and Screw Attack all turn about the fighter's
+*long* axis, which a rig with one plane cannot rotate about at all. It cannot stop, because it
+ramps across the whole clip and carries on through the recovery. And clip time never reaches 1
+(D40), so the fighter ends at an arbitrary angle — `spin: 4` measured 2.9 turns on the last drawn
+frame, which is what "on her side" actually was.
+
+Two replacements came out of the fan-out, and between them they cover the cases:
+
+**A turn about the long axis** is carried in `scaleX`: wide face-on, collapsed to about a third
+edge-on, `linear` throughout, one key per half-turn placed on the multi-hit's own frames, with
+the two arms' angles swapped at each half-turn so a limb crosses the body every time. This is how
+flat animation has always faked a pirouette.
+
+**A limb turning through more than half a revolution** is stepped 90° per key with *cumulative*
+angles — 96, 186, 276, 366, 456 — because `lerpAngle` takes the short way between any pair, so
+96 → 456 written as 96 → 96 is the same key and the limb never moves. Link's Spin Attack gets
+940° of blade path this way.
+
+`spin` is left as it is and is still right for a tumble or a roll, where the body genuinely does
+go over. What it is not is a general rotation.
+
+---
+
+## D49 — Reporting which hitbox won a hit
+
+A move is several hitboxes at once and `bestHitbox` resolves an overlap by lowest id — which *is*
+the sweetspot mechanic, not an implementation detail of it. Marth's tipper, a sourspotted aerial,
+Bowser's fist: the same swing does one of two very different things, and which one is the single
+most important fact about the exchange for the two players watching it.
+
+`StepEvents.hits` carried attacker, victim, damage, position, knockback and angle, but not the id
+of the box that won, so the renderer could tell that something connected and not *what*. A tipper
+flash could only ever be painted from geometry — where the blade is, rather than whether the
+blade is what landed — and the only available signal, `f.hitlag > 0`, is set by any connection, so
+landing the handle bloomed exactly like landing the point.
+
+`hitboxId` is presentation-only like the rest of `StepEvents` and stays outside `hashState`, so
+determinism and desync detection are untouched. `VfxState` latches it per attacker, scoped to the
+current action so a hit from the previous swing cannot bloom this one.
+
+---
+
+## D50 — What this pass did not fix
+
+**Effects paint under the fighter, and some of them want to be above.** An up-air's graphic sits
+where the fighter's own port tag is drawn, and the tag is painted over everything — so the centre
+of Samus's drill is occluded in a real match, and every fighter's up air has the same problem.
+Link's boomerang hit the same wall from the other side and was solved authorially, by winding up
+above the head instead of behind the shoulder. A proper fix lets an effect declare that it paints
+after the figure.
+
+**A prop cannot move on its own.** Painters get no frame input, so Fox's tail can only move when
+a pose moves the hip — it cannot lag, follow through, or settle. That is most of what makes a
+tail read as a tail.
+
+**Several rigs cannot reach their own hitboxes.** Fox's up smash boot cannot clear his head
+because the leg chain is shorter than the head bone plus the head radius; his up tilt cannot
+plant his hands because the arm chain bottoms out at hip height; Pikachu's forward tilt extends a
+foot 3.4 units from the spine against a head radius of 2.6. In each case the effect carries the
+move and the limb does not, which is a compromise rather than a solution.
+
+**Additive electricity saturates to white over a bright sky.** Clearly yellow against the lab's
+dark background and white-hot in a match. Probably correct for the real orb, but it is a property
+of `lighter` rather than a choice anyone made.
+
+**Idle is still the shared clip for everyone.** It is the pose a player sees most, and on Samus
+it hangs the arm cannon at her side where it reads as a dark slab rather than as a weapon.
