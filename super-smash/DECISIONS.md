@@ -1080,3 +1080,86 @@ fighter inside is mute about it, because the pose layer is never told `shieldHea
 is a strain *cycle* — it returns to where it started, which health never does — and that is
 stated in the file rather than faked with `actionFrame`, which resets on shieldstun and on
 re-entering shield while health carries over.
+
+---
+
+## D44 — A fighter may play their own clip
+
+The pose library is shared by design (D33): fifty clips across eight rigs rather than four
+hundred hand-authored ones, with proportion carrying the identity. Donkey Kong's forward smash
+is Mario's played on arms half again as long and it reads as Donkey Kong's.
+
+It stops working at the specials, and it stops working badly. Four special clips serve
+thirty-two specials, so Samus's Charge Shot and Kirby's Stone were the *same animation* — a
+fighter crouching slightly. `specialFx.ts` (D36) patched over that with props: the plasma, the
+rock. A prop cannot fix a pose that is wrong. Marth's Shield Breaker is a two-handed overhead
+thrust and Pikachu's Thunder Jolt is a cheek-sparking hop, and no amount of glow makes one look
+like the other.
+
+It also stops working for the handful of *normals* whose shape is the character rather than the
+archetype. Link's forward smash is a sword coming down; Kirby's is a flying kick; Samus's is a
+cannon blast. Those are different animations, not one animation with different arms.
+
+So `clipFor(fighterId, name)` asks one further question before handing a clip over: does this
+fighter author their own? Name one and they play it; name nothing and nothing changes. The
+default stays the default — the override is for the moves that earn it, and a fighter whose
+`poses.ts` is empty is a fighter for whom the shared library was already right.
+
+The id travels on the fighter as `defId`, which `FighterState` already carried, rather than as
+a fifth optional argument. An argument callers can forget is an argument callers will forget,
+and the symptom would be a fighter silently reverting to the shared animation — indistinguishable
+from the animation simply not being good enough yet, which is the worst thing to be unable to
+tell apart while eight people iterate on exactly that. `chars.test.ts` drives the override
+through `samplePoseForFighter`, the function the renderer actually calls, and was verified by
+breaking the lookup and watching it go red.
+
+---
+
+## D45 — One directory per character, because eight is eight jobs
+
+Making eight characters look like themselves is eight independent jobs that touch almost nothing
+in common. The only thing that made it one job was where the code lived: one rig table, one
+effects table, one pose library, all shared.
+
+Now `src/render/chars/<id>/` holds `rig.ts` (proportion, palette, props), `poses.ts` (the clips
+that are theirs) and `fx.ts` (what their moves paint, and their projectiles). The shared parts
+moved down into kits — `rigKit.ts` and `fxKit.ts` — that a character's file can import without
+importing the renderer that consumes it, which is what keeps the graph acyclic.
+
+Three shared tables were also closed doors, and each is now openable from a character's own file:
+
+**Props were a fixed union of thirty shapes** with a shared painter table, so Link's hookshot or
+Samus's grapple beam meant editing a file every other fighter lives in. `kind: "custom"` carries
+its own painter. The one rule is to paint through the brush rather than setting `ctx.fillStyle`:
+the figure is drawn twice, inflated in the outline colour and then in body colours, and a
+painter that sets its own fill paints that colour into the rim pass and punches a hole in the
+silhouette.
+
+**Projectiles had seven shared shapes** and a `visual` hint chosen by the engine. Mario's
+fireball and Fox's blaster bolt were both `"energy"`. A fighter can now paint their own, keyed
+by the projectile's def id rather than by the move, because one move can spawn several and a
+projectile outlives the move that made it.
+
+**Effects were restricted to `action === "special"`**, which is our distinction and not the
+game's — a tipper flash, a sword arc and a sparking knee are all attacks. The restriction bought
+nothing: a slot with no entry was already the cheap path. Keyed by move slot now, any slot.
+
+---
+
+## D46 — Photographing a move as it is actually played
+
+`animsheet.mjs` (D39) draws a pose in the lab, which is the right tool for the pose and blind to
+everything around it: the swing arc, the projectile, the hit spark, the dust, the opponent
+flinching. Those are drawn by the match and only by the match.
+
+A screenshot costs about a quarter of a second, which is fifteen simulation frames, so a running
+match cannot be photographed mid-attack at all — a two-frame jab is over before the shutter
+opens. `scripts/fightsheet.mjs` drives a real match through the menus, then stops the clock with
+`__smashDebug.pause()` and cranks it by hand a frame at a time.
+
+Two things it learned the hard way. It presses keys rather than poking state, because a move
+that cannot be reached from the controls is a move nobody will ever see and the capture failing
+is the correct outcome. And it waits for the footing the move needs before pressing: a grounded
+attack pressed while the fighter happens to be airborne silently performs the *aerial* of the
+same direction, and the first sheet it produced came back labelled `fsmash` showing a forward
+air — exactly the kind of quiet wrong answer a review tool must never give.

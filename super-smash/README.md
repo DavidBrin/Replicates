@@ -35,6 +35,8 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/stages`](src/stages) | Six stages, and the Ω / Battlefield forms as a data transform |
 | [`src/render`](src/render) | The canvas painter — skeletons, poses, camera, VFX, HUD |
 | [`src/render/poses`](src/render/poses) | One file per animation, each with the frame budget it was drawn to |
+| [`src/render/chars`](src/render/chars) | One directory per fighter: their rig, their own clips, what their moves paint |
+| [`docs/character-art.md`](docs/character-art.md) | How to make a character look like themselves — the four layers and the gotchas |
 | [`src/net`](src/net) | Rollback session, wire format, and three transports |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
 | [`src/input`](src/input) | Three control schemes and the latched keyboard reader |
@@ -42,6 +44,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
 | [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame |
+| [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — swing arc, projectile, hit spark — by cranking a paused match by hand |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
 
 ## Quick start
@@ -84,6 +87,24 @@ It exists because animation is the one thing here that cannot be judged from its
 because without it a whole class of bug is invisible: seventeen of the twenty-one movement
 clips turned out to be a single frozen pose held for the length of the state
 ([D39](DECISIONS.md#d39--seventeen-of-the-twenty-one-movements-were-a-single-frozen-pose)).
+
+The lab draws the pose. Half of what makes an attack read is drawn by the *match* — the blade
+arc, the projectile, the spark, the opponent flinching — so there is a second capture for that,
+which starts a real match, stops the clock and steps it by hand:
+
+```bash
+node scripts/fightsheet.mjs --fighter link --move fsmash --out link-fsmash.png
+node scripts/fightsheet.mjs --fighter samus --move neutralB --frames 0,8,16,24,32
+```
+
+A screenshot costs about fifteen simulation frames, so a *running* match cannot be photographed
+mid-attack at all — which is why every animation in the game was being judged from whatever
+frame the shutter happened to land on
+([D46](DECISIONS.md#d46--photographing-a-move-as-it-is-actually-played)).
+
+Making one character look like themselves has its own guide:
+**[docs/character-art.md](docs/character-art.md)** — the four layers a fighter is made of, which
+files belong to which character, and the conventions that have each cost somebody a day.
 
 ---
 
