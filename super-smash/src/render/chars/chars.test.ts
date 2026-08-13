@@ -223,3 +223,38 @@ describe("the jab string", () => {
     expect(mine.rapidJab).toBeUndefined();
   });
 });
+
+/**
+ * A projectile id names one projectile in the whole game.
+ *
+ * `ProjectileState` carries only `defId`, so the id is the *only* thing that
+ * survives from the definition to the thing flying through the air. Two
+ * fighters declaring the same id would be ambiguous to the engine, not merely
+ * to the renderer: `projectileVisual` builds one index across the whole roster
+ * and the later fighter would silently take the earlier one's shape and
+ * painter, so swapping player order would change how a bomb looks.
+ *
+ * Nothing collides today — Samus has `bomb`, Link has `remoteBomb` — and this
+ * exists so that stays true, because the failure is silent and the fix once two
+ * have shipped is a rename in fighter data.
+ */
+describe("projectile ids", () => {
+  const declared = FIGHTERS.flatMap((def) =>
+    Object.values(def.moves).flatMap((m) => (m?.projectiles ?? []).map((p) => ({ id: p.id, owner: def.id }))),
+  );
+
+  it("has some to check", () => {
+    expect(declared.length, "no fighter launches a projectile").toBeGreaterThan(4);
+  });
+
+  it("belongs to exactly one fighter", () => {
+    const owners = new Map<string, Set<string>>();
+    for (const { id, owner } of declared) {
+      owners.set(id, (owners.get(id) ?? new Set()).add(owner));
+    }
+    const shared = [...owners.entries()]
+      .filter(([, who]) => who.size > 1)
+      .map(([id, who]) => `${id} is declared by ${[...who].join(" and ")}`);
+    expect(shared).toEqual([]);
+  });
+});

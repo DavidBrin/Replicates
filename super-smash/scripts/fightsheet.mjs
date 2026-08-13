@@ -262,8 +262,12 @@ if (started && hold > 0) {
   await page.keyboard.up(KEY.attack);
 }
 
+// Released, but *not* stepped. The move has already started at actionFrame 0
+// and the baseline below is read from it, so an extra step here would make
+// frame 0 of every smash sheet actually be frame 1 and shift the whole strip —
+// startup and contact landing one frame late on the one tool used to check
+// exactly that. The release registers on the capture loop's own first step.
 for (const k of plan.keys) await page.keyboard.up(KEY[k]);
-if (plan.smash) await debug.step(1);
 if (!started) {
   console.error(
     wrongMove

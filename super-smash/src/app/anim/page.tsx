@@ -188,17 +188,47 @@ function drawCell(
   // would say Kirby's Stone and Samus's Charge Shot still look identical.
   const height = rigHeight(rig.bones, rig.headRadius) * rig.scale;
   const cam = { ...createCamera(makeStage()), zoom };
-  // Under the same alpha as the figure. `drawMoveFx` paints straight to the
-  // context and takes no opacity of its own, so an onion skin would otherwise
-  // stack four full-strength plasma balls over the frame being reviewed.
-  ctx.save();
-  ctx.globalAlpha = alpha;
   const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : { hideFigure: false };
-  ctx.restore();
   if (fx.hideFigure) return;
 
   drawFigure(ctx, { ...params, mode: "rim", rimWidth: Math.max(2, zoom * 0.5) });
   drawFigure(ctx, { ...params, mode: "body" });
+}
+
+/**
+ * Draw one past frame faintly, through an offscreen canvas.
+ *
+ * The obvious way — set `globalAlpha` and draw — does not work: an effect
+ * painter is free to assign `globalAlpha` itself, and thirteen of them across
+ * Mario, Link and Kirby do. Those assignments *replace* the value rather than
+ * multiplying it, so the ghost's plasma came out at full strength over a figure
+ * that had faded correctly, which is worse than no onion skin at all.
+ *
+ * Compositing a finished cell is the one approach a painter cannot reach past.
+ */
+let scratch: HTMLCanvasElement | null = null;
+
+function ghost(
+  ctx: CanvasRenderingContext2D,
+  target: HTMLCanvasElement,
+  o: Options,
+  frame: number,
+  groundY: number,
+  alpha: number,
+): void {
+  if (!scratch) scratch = document.createElement("canvas");
+  if (scratch.width !== target.width || scratch.height !== target.height) {
+    scratch.width = target.width;
+    scratch.height = target.height;
+  }
+  const s = scratch.getContext("2d");
+  if (!s) return;
+  s.clearRect(0, 0, scratch.width, scratch.height);
+  drawCell(s, o, frame, scratch.width / 2, groundY, 9);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(scratch, 0, 0);
+  ctx.restore();
 }
 
 export default function AnimLab() {
@@ -294,7 +324,7 @@ export default function AnimLab() {
       if (onion) {
         for (let k = 4; k >= 1; k--) {
           const prev = shown - k;
-          if (prev >= 0) drawCell(ctx, o, prev, c.width / 2, groundY, 9, 0.14 * (5 - k) * 0.5);
+          if (prev >= 0) ghost(ctx, c, o, prev, groundY, 0.14 * (5 - k) * 0.5);
         }
       }
       drawCell(ctx, o, shown, c.width / 2, groundY, 9);
