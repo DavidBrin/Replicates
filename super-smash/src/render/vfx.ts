@@ -20,6 +20,7 @@
 import { toFloat } from "@/engine/fixed";
 import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES, PERFECT_SHIELD_WINDOW } from "@/engine/constants";
 import type { FighterState, GameState, StepEvents } from "@/engine/types";
+import { createPoseBlends, type PoseBlend } from "./blend";
 import { PORT_COLOURS, mixHex, withAlpha } from "./characterArt";
 import { worldToScreen, type Camera } from "./camera";
 
@@ -93,6 +94,14 @@ export interface VfxState {
   /** Full-screen KO flash, frames remaining. */
   koFlash: number;
   koFlashMax: number;
+  /**
+   * Where each fighter is in a cross-fade between two clips, by port.
+   *
+   * Cosmetic state that has to persist across frames, which is what this whole
+   * object is for (D4) — it is not a particle, but it belongs to exactly the
+   * same lifetime and travels to exactly the same places.
+   */
+  poseBlend: PoseBlend[];
   seed: number;
   frame: number;
 }
@@ -114,6 +123,7 @@ export function createVfx(): VfxState {
     parryFlash: [0, 0, 0, 0],
     koFlash: 0,
     koFlashMax: 1,
+    poseBlend: createPoseBlends(),
     seed: 0x9e3779b9,
     frame: 0,
   };
