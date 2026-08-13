@@ -961,3 +961,122 @@ cloud with opposite signs, and that sign is the difference between starting and 
 The midair jump gets a white ring, which in Ultimate is the clearest read a player has that
 an opponent's second jump is spent — and it is deliberately not fired for the first jump,
 which already has its own event and would otherwise be drawn twice.
+
+---
+
+## D41 — One agent per movement, and what twenty-one pairs of eyes found
+
+Every movement clip was rewritten by a separate agent working on that one animation: its own
+file, its own test, its own research against SmashWiki, and its own obligation to *look* at the
+result in `/anim` on three differently-proportioned rigs before reporting. The parallelism was
+the point — twenty-one animations is more than one pass of attention can hold, and an animation
+nobody looks at is exactly how seventeen frozen poses shipped (D39).
+
+What came back was better animation, and something more useful: **the same defect found
+independently by several agents is a defect that is really there.** Three found the right foot
+pointing backwards. Three hit the sampling convention. Two asked for a per-clip rotation pivot.
+That convergence is what a single reviewer cannot produce, and every one of them turned out to
+be a real bug in shared code rather than a misunderstanding of it.
+
+**The right foot rested backwards.** Bone angles accumulate down the chain and the two legs are
+not mirrored — the whole rig is, once, at draw time — so `footR: deg(88)` resolved to 268°.
+Nearly every clip names the feet and overrode it, which is why it survived; `idle` names no leg
+at all, and `idle` is what a fighter does whenever nobody is pressing anything. Fixing the rest
+angle then exposed that four clips had *authored* their feet to match the broken value, so they
+had one foot on backwards too.
+
+**A fighter rolling left spun backwards.** `resolve` mirrors x, which already reverses a
+rotation's visual sense, and the renderer signed the spin by facing on top of that. The two
+cancelled. Verified by measuring where the head actually goes rather than by reasoning about
+signs, and the property the fix rests on is now a test in `skeleton.test.ts`.
+
+**Feet sank into the stage, and the reason is worth keeping.** Depth bought with `offsetY` has
+to be repaid by folding the legs, and the fold repays *in proportion to leg length* — so a
+crouch planted on Mario buries Kirby, whose legs are half as long. `scaleY` squashes about the
+feet and costs nothing in ground contact, which is why it is the right way to get low.
+`poses.test.ts` asserts both the absolute plant and the cross-rig spread; the second is the one
+that names the cause.
+
+**`t = 1` is never sampled.** `poseTimeFor` divides `actionFrame` by the state's length and
+`actionFrame` runs 0..n-1. Three agents hit this while authoring and worked around it
+independently; a fourth put its three keys exactly on the sampled grid on purpose. The first
+instinct was to change the mapping — and that would have broken work that is now correct and
+documented. The convention is written down in `clip.ts` instead, and the property they were
+each satisfying is a test.
+
+**And the tool lied.** The lab's fighter dropdown was built from the rig table's keys while its
+speed lookup wanted a fighter id, which Donkey Kong spells differently. His walk and run — the
+two clips paced by ground covered — got a speed of zero and stood perfectly still, under a
+heading reporting the wrong cycle length. Several agents reviewed his locomotion against a
+motionless drawing and called it verified. A review tool that fails silently is worse than no
+review tool, because it converts "unchecked" into "checked".
+
+---
+
+## D42 — Fade between clips, but not into a hit
+
+Every clip is authored on its own, so nothing joined them up: on the frame a fighter stopped
+running the legs were mid-stride, and on the next they were wherever the skid's first key
+happened to put them. A cut, not a deceleration, at every one of the forty-odd transitions a
+match is made of. `blendSamples` had existed since the pose library did — correct, tested, and
+called by nothing, which is the fourth feature found in that state.
+
+Two kinds of change still arrive on the frame they happen. An **attack** is timed against its
+own hitbox (D34), so fading into a jab that comes out on frame 2 would put the fighter
+three-quarters of the way to a stance the move has already left. And anything **imposed** — a
+hit landing, a shield breaking, a grab connecting — is the moment of impact, and impact that
+eases in is not impact. Those are the transitions the eye is most attuned to, so a fade there
+costs more than it buys everywhere else combined.
+
+Four frames, because the shortest state anything fades into is the four-frame landing and a
+fade longer than the state it enters would never finish.
+
+Two consequences worth recording. The fade is what made the backwards-foot bug *visible* — a
+176° foot flip that a hard cut had hidden became an interpolated spin — which is a fair
+description of how latent bugs surface: something else gets better and they stop being hidden.
+And clip time now counts from the frame the **clip** started rather than the action, because
+fast-falling swaps one clip for another without restarting anything: a player who pressed down
+twenty frames into a descent entered the dive two-thirds of the way through it and never saw
+the snap, which is the whole read the opponent is supposed to get.
+
+---
+
+## D43 — What this pass did not fix
+
+Recorded because each of these was diagnosed properly and then deliberately left, and a reader
+who finds one should know it was seen rather than missed.
+
+**The two forearm conventions.** `forearmR` positive with `forearmL` negative is not a
+geometric mirror — it puts the two elbows on opposite sides of the body, so the right elbow
+folds behind the upper arm while the left folds in front. The run cycle now uses the correct
+rule (both negative for flexion) and the rest of the library still uses the old one. Fixing it
+means changing every clip in one go, because the cross-fade meets the two conventions at every
+seam between them, and doing that safely means re-verifying all twenty-one animations. The dash
+was brought onto the run's convention at the one seam where the elbow gap was largest.
+
+**A lying fighter's height is not proportional to its own.** `downed` rotates a standing body
+about a pivot at 45% of rig height, but the height a flat body rests at is half its *thickness*
+— and those two do not scale together. At the best single `offsetY` the roster spreads 4.6
+units: Marth floats, Kirby sinks. No combination of the existing channels closes it, because
+the required corrections have opposite signs. It wants a per-clip pivot, or a clip that can say
+"plant my lowest point on the floor" and have the renderer solve it.
+
+**The foot slip in the walk and the run is in the constant, not the poses.** `STRIDE` is 36
+world units per cycle against a leg about 4 units long, so a step is four times a leg and no
+arrangement of that leg can cover it. Both agents solved their stance legs from ankle
+*positions* rather than angles and give back what a leg can — around a fifth of the step. The
+rest is the constant, and lowering it would put Fox at four frames per cycle.
+
+**A hanging fighter is drawn where the engine says they are.** `grabLedge` puts the fighter's
+origin *at* the ledge lip and the hurtbox stands on that origin, so the simulation models a
+hanging fighter as occupying the space above the ledge. Drawing them where a hanging fighter
+actually is — a body-length lower, hands at the corner — would put the visible figure outside
+its own hurtbox and make every edgeguard look like a miss. The clip treats the grip as a
+notional hold above the fighter's head instead, which is a compromise with the engine and not
+an animation choice.
+
+**The shield does not know its own health.** The bubble shrinks as the shield decays and the
+fighter inside is mute about it, because the pose layer is never told `shieldHealth`. The clip
+is a strain *cycle* — it returns to where it started, which health never does — and that is
+stated in the file rather than faked with `actionFrame`, which resets on shieldstun and on
+re-entering shield while health carries over.
