@@ -10,10 +10,11 @@
 
 import { describe, expect, it } from "vitest";
 import { FIGHTERS } from "@/fighters";
-import type { MoveSlot } from "@/engine/types";
+import type { FighterState, MoveSlot } from "@/engine/types";
 import { createCamera } from "./camera";
 import { createMockContext, countOf } from "./mockContext";
 import { MOVE_FX_KEYS, drawMoveFx } from "./specialFx";
+import { fxFor } from "./chars";
 import { makeFighter, makeStage } from "./testFixtures";
 
 const cam = createCamera(makeStage());
@@ -113,6 +114,51 @@ describe("the rest", () => {
     for (const [id, slot, frame] of cases) {
       const { ctx } = draw(id, slot, frame);
       expect(ctx.calls.length, `${id}.${slot} drew nothing`).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * A grab is a move, and its effect has to be drawn during it.
+ *
+ * The guard listed `special`, `attack` and `throw`, but `startMove` gives a
+ * grab the *action* `grab`. So a grab's effect was drawn in the animation lab
+ * — which drives the pose directly — and never once in a match. That excluded
+ * exactly the two moves on the roster whose entire graphic is the effect:
+ * Samus's Grapple Beam and Link's hookshot, both of which were invisible
+ * tethers. Two agents reported it independently.
+ */
+describe("a grab draws its own effect", () => {
+  function drawn(id: string, action: FighterState["action"], slot: MoveSlot): number {
+    const ctx = createMockContext();
+    const def = FIGHTERS.find((f) => f.id === id);
+    drawMoveFx(
+      ctx,
+      def,
+      makeFighter({ defId: id, action, move: slot, actionFrame: 6 }),
+      cam,
+      13,
+      960,
+      700,
+    );
+    return ctx.calls.length;
+  }
+
+  const grabbers = FIGHTERS.filter((f) => fxFor(f.id, "grab") !== undefined).map((f) => f.id);
+
+  it("has somebody who paints one, or this test proves nothing", () => {
+    expect(grabbers.length, "no fighter declares a grab effect").toBeGreaterThan(0);
+  });
+
+  it("paints during the grab action, not only during an attack", () => {
+    for (const id of grabbers) {
+      expect(drawn(id, "grab", "grab"), `${id} drew nothing while grabbing`).toBeGreaterThan(0);
+    }
+  });
+
+  it("still paints nothing while merely standing", () => {
+    for (const id of grabbers) {
+      expect(drawn(id, "stand", "grab"), `${id} drew a grab while standing`).toBe(0);
     }
   });
 });

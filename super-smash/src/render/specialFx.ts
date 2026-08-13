@@ -49,6 +49,31 @@ export type { SpecialFxResult, FxContext, FxFn } from "./fxKit";
 export { MOVE_FX_KEYS } from "./chars";
 
 /**
+ * The actions during which a fighter is performing the move in `f.move`.
+ *
+ * Derived from `startMove` in `states.ts`, which is the only thing that sets
+ * `f.move` — and which uses the *action* `grab` for a grab and `pummel` for a
+ * pummel, not `attack`. The guard used to list `special`, `attack` and `throw`
+ * only, so a grab's effect was never drawn in a match at all; it appeared in
+ * the animation lab, which drives the pose directly, and nowhere else.
+ *
+ * That excluded exactly the two moves on the roster whose entire graphic *is*
+ * an effect — Samus's Grapple Beam and Link's hookshot — so both were invisible
+ * tethers. Two agents reported it independently.
+ *
+ * `grabHold` is absent on purpose: `startAction` nulls `f.move` on the way in,
+ * so a fighter holding someone is no longer performing the grab that caught
+ * them.
+ */
+const DRAWS_ITS_MOVE: Partial<Record<FighterState["action"], true>> = {
+  attack: true,
+  special: true,
+  throw: true,
+  grab: true,
+  pummel: true,
+};
+
+/**
  * Paint whatever the fighter's current move paints, over the figure.
  *
  * Called for every fighter every frame; the lookup is a miss for almost all of
@@ -66,7 +91,7 @@ export function drawMoveFx(
   struck?: { lastHit: ({ hitboxId: number; frame: number } | null)[]; frame: number },
 ): SpecialFxResult {
   if (f.move === null || !def) return NOTHING;
-  if (f.action !== "special" && f.action !== "attack" && f.action !== "throw") return NOTHING;
+  if (!DRAWS_ITS_MOVE[f.action]) return NOTHING;
   const move = def.moves[f.move];
   if (!move) return NOTHING;
 
