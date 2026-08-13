@@ -100,6 +100,47 @@ function isImposed(action: FighterState["action"]): boolean {
  * not advance the fade or a fighter's transitions would run at monitor refresh
  * rate instead of at 60Hz.
  */
+/**
+ * How far into its *own* clip the fighter is, rather than into its action.
+ *
+ * Almost always the same number, because a clip normally changes exactly when
+ * the action does. Fast-falling is the exception that makes the distinction
+ * necessary: `fastFalling` is a flag on a fighter who is already falling, so it
+ * swaps `fall` for `fastFall` without restarting anything. A player who presses
+ * down twenty frames into a descent would enter the new clip two-thirds of the
+ * way through it and never see the snap into the dive — which is the whole read
+ * the opponent is supposed to get.
+ *
+ * Taking the smaller of the two is right in both cases: equal when the clip and
+ * the action started together, and the clip's own count when it did not.
+ *
+ * Must be called before `blendedPose`, which is what notices the change.
+ */
+export function clipFrameFor(
+  blends: PoseBlend[],
+  fighter: Pick<FighterState, "port" | "action" | "actionFrame">,
+  name: PoseName,
+  frame: number,
+): number {
+  const b = blends[fighter.port];
+  if (!b) return fighter.actionFrame;
+  noticeChange(b, fighter, name, frame);
+  return Math.min(fighter.actionFrame, frame - b.since);
+}
+
+function noticeChange(
+  b: PoseBlend,
+  fighter: Pick<FighterState, "action">,
+  name: PoseName,
+  frame: number,
+): void {
+  if (b.name === name) return;
+  const snap = POSE_LIBRARY[name]?.strike !== undefined || isImposed(fighter.action);
+  b.from = snap ? null : b.last;
+  b.name = name;
+  b.since = frame;
+}
+
 export function blendedPose(
   blends: PoseBlend[],
   fighter: Pick<FighterState, "port" | "action">,
@@ -110,12 +151,7 @@ export function blendedPose(
   const b = blends[fighter.port];
   if (!b) return sample;
 
-  if (b.name !== name) {
-    const snap = POSE_LIBRARY[name]?.strike !== undefined || isImposed(fighter.action);
-    b.from = snap ? null : b.last;
-    b.name = name;
-    b.since = frame;
-  }
+  noticeChange(b, fighter, name, frame);
 
   const t = b.from ? (frame - b.since) / BLEND_FRAMES : 1;
   if (t >= 1 || t < 0) b.from = null;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BLEND_FRAMES, blendedPose, createPoseBlends } from "./blend";
+import { BLEND_FRAMES, blendedPose, clipFrameFor, createPoseBlends } from "./blend";
 import { POSE_LIBRARY, samplePose, type PoseSample } from "./poses";
 import type { PoseName } from "./poses";
 import type { FighterState } from "@/engine/types";
@@ -100,5 +100,37 @@ describe("cross-fading between clips", () => {
     // Not from the crouch it never reached, and not from the idle it had left.
     expect(distance(next, mid)).toBeLessThan(distance(next, at("crouch")));
     expect(distance(next, mid)).toBeLessThan(distance(next, at("run")));
+  });
+});
+
+describe("a clip's own clock", () => {
+  const falling = (actionFrame: number) => ({ port: 0, action: "fall" as const, actionFrame });
+
+  it("counts from the action while the clip and the action agree", () => {
+    const b = createPoseBlends();
+    for (let n = 0; n < 20; n++) {
+      expect(clipFrameFor(b, falling(n), "fall", n)).toBe(n);
+    }
+  });
+
+  it("restarts when the clip changes without the action restarting", () => {
+    // Fast-falling is a flag on a fighter who is already falling, so a player
+    // who presses down twenty frames in would otherwise enter the dive
+    // two-thirds of the way through it and never see the snap.
+    const b = createPoseBlends();
+    for (let n = 0; n < 20; n++) clipFrameFor(b, falling(n), "fall", n);
+    expect(clipFrameFor(b, falling(20), "fastFall", 20)).toBe(0);
+    expect(clipFrameFor(b, falling(21), "fastFall", 21)).toBe(1);
+    expect(clipFrameFor(b, falling(22), "fastFall", 22)).toBe(2);
+  });
+
+  it("keeps each port on its own clock", () => {
+    const b = createPoseBlends();
+    for (let n = 0; n < 10; n++) {
+      clipFrameFor(b, { ...falling(n), port: 0 }, "fall", n);
+      clipFrameFor(b, { ...falling(n), port: 1 }, "fall", n);
+    }
+    expect(clipFrameFor(b, { ...falling(10), port: 0 }, "fastFall", 10)).toBe(0);
+    expect(clipFrameFor(b, { ...falling(10), port: 1 }, "fall", 10)).toBe(10);
   });
 });

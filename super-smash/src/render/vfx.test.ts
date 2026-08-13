@@ -560,4 +560,15 @@ describe("ground effects", () => {
     expect(dustFrom({ action: "fall", actionFrame: 12 })).toHaveLength(0);
     expect(dustFrom({ action: "shield", actionFrame: 12 })).toHaveLength(0);
   });
+
+  it("sparks while fast-falling and not while merely falling", () => {
+    // Ultimate's actual fast-fall cue is a small flashing star, not a pose
+    // change — so it has to be here rather than in the clip.
+    const falling = dustFrom({ action: "fall", actionFrame: 8, fastFalling: false });
+    const diving = dustFrom({ action: "fall", actionFrame: 8, fastFalling: true });
+    expect(falling).toHaveLength(0);
+    expect(diving.some((p) => p.kind === "spark")).toBe(true);
+    // Intermittent, so it flashes rather than streams.
+    expect(dustFrom({ action: "fall", actionFrame: 9, fastFalling: true })).toHaveLength(0);
+  });
 });

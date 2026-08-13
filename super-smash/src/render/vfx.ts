@@ -599,6 +599,33 @@ export function trackGroundFx(v: VfxState, state: GameState): void {
         if (footPlanted(f)) spawnDust(v, x, y, 2, 0.4, back * 0.35);
         break;
 
+      // The fast-fall star.
+      //
+      // Ultimate signals a fast fall with a small flashing blue-purple star and
+      // *no pose change at all* — the pose read is a pre-Ultimate thing the
+      // star replaced. The dive in `fastFall.ts` carries the silhouette, but the
+      // spark is what the real game gives the opponent, and it is the part that
+      // is legible when the fighter is small on screen.
+      case "fall":
+        if (f.fastFalling && f.actionFrame % 4 === 0) {
+          push(v, {
+            kind: "spark",
+            x: x + spread(v, 1.6),
+            y: y + 5 + rand(v) * 5,
+            vx: spread(v, 0.12),
+            vy: 0.5 + rand(v) * 0.3,
+            life: 7,
+            maxLife: 7,
+            size: 0.5 + rand(v) * 0.3,
+            colour: "#9FA6FF",
+            rotation: 0,
+            spin: 0,
+            gravity: 0,
+            drag: 0.96,
+          });
+        }
+        break;
+
       // A roll scuffs at both ends and is silent in the middle, where the
       // fighter is off their feet.
       case "roll":

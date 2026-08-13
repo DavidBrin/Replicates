@@ -47,7 +47,7 @@ import {
 } from "./characterArt";
 import { drawHud, updateHud, type HudFighterInfo, type HudState } from "./hud";
 import { moveTimingFor, poseNameFor, poseSpinFor, samplePoseForFighter, type PoseSample } from "./poses";
-import { blendedPose } from "./blend";
+import { blendedPose, clipFrameFor } from "./blend";
 import { rigHeight, type RigTransform } from "./skeleton";
 import { drawBackground, drawBlastZone, drawPlatforms } from "./stageArt";
 import { drawSpecialFx } from "./specialFx";
@@ -316,14 +316,19 @@ function drawOneFighter(
   const rig = d.rig;
   const palette = resolvePalette(d.def, f.costume);
   const timing = moveTimingFor(d.def, f.move);
-  // Faded out of whatever was on screen last frame, so that a change of clip is
-  // a transition rather than a cut. See `blend.ts`.
+  const frame = state.current.frame;
+  const name = poseNameFor(f);
+  // Clips are sampled on their own clock and faded out of whatever was on
+  // screen last frame, so that a change of clip is a transition and not a cut.
+  // See `blend.ts` — `clipFrameFor` must run before `blendedPose`.
+  const clipFrame = clipFrameFor(state.vfx.poseBlend, f, name, frame);
+  const posed = { ...f, actionFrame: clipFrame };
   const pose = blendedPose(
     state.vfx.poseBlend,
     f,
-    poseNameFor(f),
-    samplePoseForFighter(f, state.current.frame, timing),
-    state.current.frame,
+    name,
+    samplePoseForFighter(posed, frame, timing),
+    frame,
   );
   const squash = squashFor(f);
   const height = visualHeight(rig);
@@ -340,7 +345,7 @@ function drawOneFighter(
     scaleX: squash.scaleX * pose.scaleX,
     scaleY: squash.scaleY * pose.scaleY,
     facing: f.facing >= 0 ? 1 : -1,
-    rotation: pose.rotation + poseSpinFor(f, state.current.frame, timing) * (f.facing >= 0 ? 1 : -1),
+    rotation: pose.rotation + poseSpinFor(posed, frame, timing) * (f.facing >= 0 ? 1 : -1),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
 
