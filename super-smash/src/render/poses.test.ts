@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
+import { fx } from "@/engine/fixed";
 import type { ActionState, MoveSlot } from "@/engine/types";
 import {
   POSE_LIBRARY,
@@ -352,6 +353,25 @@ describe("state to pose", () => {
 
   it("drives the walk from the action frame so it starts on a contact key", () => {
     expect(poseTimeFor("walk", makeFighter({ actionFrame: 0 }), 500)).toBe(0);
+  });
+
+  it("paces the walk and run cycles by distance, so nobody skates", () => {
+    // Fox walks 56% faster than Kirby. On a fixed frame period they would be at
+    // the same point in the cycle having covered very different ground, which
+    // is what dragging feet looks like.
+    const slow = poseTimeFor("walk", makeFighter({ actionFrame: 8, vx: fx(1) }), 0);
+    const fast = poseTimeFor("walk", makeFighter({ actionFrame: 8, vx: fx(2) }), 0);
+    expect(fast).toBeCloseTo(slow * 2, 3);
+    // And the direction of travel does not reverse the cycle.
+    const back = poseTimeFor("walk", makeFighter({ actionFrame: 8, vx: fx(-2) }), 0);
+    expect(back).toBeCloseTo(fast, 6);
+  });
+
+  it("freezes the step of a fighter who is not going anywhere", () => {
+    const held = [0, 5, 17, 40].map((actionFrame) =>
+      poseTimeFor("run", makeFighter({ actionFrame, vx: 0 }), 0),
+    );
+    expect(new Set(held).size).toBe(1);
   });
 
   it("samples a whole fighter without needing move data", () => {

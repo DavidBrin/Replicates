@@ -26,7 +26,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_RIGS, drawFigure, getCharacterRig, resolvePalette, squashFor } from "@/render/characterArt";
 import { rigHeight } from "@/render/skeleton";
-import { actionDurationFor, poseNameFor, poseSpinFor, samplePoseForFighter, POSE_LIBRARY } from "@/render/poses";
+import {
+  actionDurationFor,
+  poseNameFor,
+  poseSpinFor,
+  poseTimeFor,
+  samplePoseForFighter,
+  POSE_LIBRARY,
+} from "@/render/poses";
 import { makeFighter } from "@/render/testFixtures";
 import { FIGHTERS, getFighter } from "@/fighters";
 import type { ActionState, FighterState, MoveSlot } from "@/engine/types";
@@ -54,8 +61,16 @@ const OPEN_ENDED = 40;
 function lengthOf(f: FighterState): number {
   const name = poseNameFor(f);
   const clip = POSE_LIBRARY[name];
-  if (clip.loop) return clip.period ?? 30;
-  return actionDurationFor(f) ?? OPEN_ENDED;
+  if (!clip.loop) return actionDurationFor(f) ?? OPEN_ENDED;
+  // A speed-paced cycle has no fixed frame count — find the frame the clip
+  // comes back round to its start, so the sheet shows exactly one cycle.
+  if (poseTimeFor(name, { ...f, actionFrame: 1 }, 0) === 0) return clip.period ?? 30;
+  for (let n = 2; n <= 240; n++) {
+    if (poseTimeFor(name, { ...f, actionFrame: n }, 0) < poseTimeFor(name, { ...f, actionFrame: n - 1 }, 0)) {
+      return n;
+    }
+  }
+  return clip.period ?? 30;
 }
 
 interface Options {
@@ -78,7 +93,20 @@ function fighterAt(o: Options, frame: number): FighterState {
     hitstun: o.action === "hitstun" ? Math.max(0, 24 - frame) : 0,
     charge: o.action === "landingLag" ? 16 : 0,
     grounded: o.action !== "jump" && o.action !== "fall" && o.action !== "airDodge",
+    // Walk and run are paced by ground covered rather than by frames elapsed,
+    // so a fighter standing still freezes mid-step. Give them their own speed
+    // or the lab shows one motionless drawing for the cycles that move most.
+    vx: speedFor(o),
   });
+}
+
+/** The fighter's own ground speed, for the clips that are paced by it. */
+function speedFor(o: Options): number {
+  const attrs = getFighter(o.fighterId)?.attributes;
+  if (!attrs) return 0;
+  if (o.action === "walk") return attrs.walkSpeed;
+  if (o.action === "run" || o.action === "dashStart" || o.action === "runBrake") return attrs.runSpeed;
+  return 0;
 }
 
 /** Draw one fighter, centred on its feet, exactly as the renderer would. */

@@ -20,6 +20,7 @@
  * it animates.
  */
 
+import { toFloat } from "@/engine/fixed";
 import { actionFrameOf } from "@/engine/hitbox";
 import {
   AIR_DODGE_FRAMES,
@@ -53,7 +54,15 @@ import { POSE_LIBRARY, type PoseName } from "./library";
 /** Everything the pose layer needs to know about a fighter. */
 export type PosedFighter = Pick<
   FighterState,
-  "action" | "actionFrame" | "move" | "port" | "charge" | "jumpsUsed" | "fastFalling" | "hitstun"
+  | "action"
+  | "actionFrame"
+  | "move"
+  | "port"
+  | "charge"
+  | "jumpsUsed"
+  | "fastFalling"
+  | "hitstun"
+  | "vx"
 >;
 
 const SLOT_POSE: Record<MoveSlot, PoseName> = {
@@ -91,6 +100,36 @@ const SLOT_POSE: Record<MoveSlot, PoseName> = {
 
 /** A looping clip that names no period of its own runs at half a second. */
 const DEFAULT_PERIOD = 30;
+
+/**
+ * World units one walk or run cycle covers, so cadence follows speed.
+ *
+ * A fixed frame period makes the fast half of the roster skate. Fox walks at
+ * 1.523 units a frame and Kirby at 0.977 — a 56% spread — so one 32-frame cycle
+ * for both means Fox's feet plant 56% short of where his body has gone, and
+ * dragging feet is the single most recognisable sign of an animation that is
+ * not attached to its movement.
+ *
+ * Driving the cycle by distance rather than by frames removes the whole class:
+ * a fighter moving twice as fast steps twice as often, every fighter's foot
+ * plants where the ground is, and the clip does not need to know whose legs it
+ * is on. Thirty-six units is Mario's walk speed across the walk clip's own
+ * period, which is also within a whisker of his run speed across the run clip's
+ * — a stride is a stride, and running only does it more often.
+ *
+ * A fighter held at zero speed — walking into a wall — freezes mid-step, which
+ * is correct: feet stop when the fighter stops.
+ */
+const STRIDE = 36;
+
+/** Cycles are paced by distance covered, not by frames elapsed. */
+const PACED_BY_SPEED: Partial<Record<PoseName, true>> = { walk: true, run: true };
+
+/** Normalised position within a cycle, for any real number of cycles. */
+function wrap(cycles: number): number {
+  if (!Number.isFinite(cycles)) return 0;
+  return cycles - Math.floor(cycles);
+}
 
 export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed" | "fastFalling">): PoseName {
   switch (f.action) {
@@ -310,11 +349,14 @@ export function poseTimeFor(
 ): number {
   const clip = POSE_LIBRARY[name];
   if (clip?.loop) {
+    if (PACED_BY_SPEED[name]) {
+      return wrap((fighter.actionFrame * Math.abs(toFloat(fighter.vx))) / STRIDE);
+    }
     const period = clip.period ?? DEFAULT_PERIOD;
     // Idle alone is driven by the global frame and offset per port, so that
     // four fighters standing still do not breathe in lockstep.
     const t = name === "idle" ? frame + fighter.port * 27 : fighter.actionFrame;
-    return (((t % period) + period) % period) / period;
+    return wrap(t / period);
   }
 
   const strike = clip?.strike;
