@@ -233,7 +233,13 @@ export default function AnimLab() {
     if (!c) return;
     const ctx = c.getContext("2d");
     if (!ctx) return;
-    const n = Math.min(total, 48);
+    // One cell per simulation frame, with no cap. There used to be a cap of
+    // 48, which quietly turned the sheet into a *sample* the moment a move ran
+    // longer than that: a 91-frame Fire Fox got 48 cells spread across it and
+    // forty-three frames — including any one-frame key or effect — were never
+    // drawn at all. A sheet that skips frames is worse than a short one,
+    // because nothing on it says which frames are missing.
+    const n = total;
     const cell = 150;
     const rows = Math.ceil(n / 12);
     c.width = cell * Math.min(n, 12);
@@ -251,7 +257,7 @@ export default function AnimLab() {
       ctx.moveTo(col * cell, groundY + 0.5);
       ctx.lineTo(col * cell + cell, groundY + 0.5);
       ctx.stroke();
-      const f = Math.round((i * (total - 1)) / Math.max(1, n - 1));
+      const f = i;
       drawCell(ctx, o, f, x, groundY, 4.0);
       ctx.fillStyle = "#7C8896";
       ctx.font = "11px ui-monospace, monospace";

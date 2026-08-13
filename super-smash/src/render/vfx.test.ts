@@ -617,6 +617,36 @@ describe("the hitbox a swing landed with", () => {
     expect(bothVictims(2, 3)).toBe(2);
   });
 
+  it("does not carry one hit phase's sweetspot into the next", () => {
+    // A multi-hit move is several windows in one action — a down smash that
+    // sweeps front then back, a multi-hit aerial. Aggregating across the whole
+    // action would leave the second window unable to report its own sweetspot,
+    // because the first window's lower id would still be sitting there.
+    const v = createVfx();
+    const state = swinger();
+    state.frame = 200;
+    ingestEvents(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 0 }],
+      }),
+      state,
+    );
+    expect(v.lastHit[0]?.hitboxId).toBe(0);
+
+    // The second window, later in the same action.
+    const later = swinger();
+    later.frame = 208;
+    ingestEvents(
+      v,
+      makeEvents({
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 2 }],
+      }),
+      later,
+    );
+    expect(v.lastHit[0]?.hitboxId, "the first phase's tip is still being reported").toBe(2);
+  });
+
   it("does not carry a sweetspot over into the next swing", () => {
     // Aggregation is scoped to the action; a new swing starts from nothing, or
     // one tipper would bloom every attack that followed it.

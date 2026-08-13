@@ -186,19 +186,24 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
     // Recorded against the *attacker*: this is "what did my swing land with",
     // which is the attacker's question, not the victim's.
     //
-    // Aggregated across the swing rather than overwritten, by keeping the
-    // lowest id — the same rule `bestHitbox` settles an overlap by, and for the
-    // same reason. One swing can hit two fighters with different boxes, and
-    // taking the last event would make the sweetspot depend on victim port
-    // order: a Marth tipper on one opponent followed by a sourspot on another
-    // would record only the sourspot and suppress the bloom. If the tip
-    // connected with anyone, the tip connected.
-    const who = state.fighters.find((f) => f.port === hit.attacker);
-    const swingStarted = who ? state.frame - who.actionFrame : state.frame;
+    // Aggregated within a frame, replaced across frames.
+    //
+    // `resolveHits` settles every candidate for one step at once, so hits on
+    // the *same* frame are one swing meeting several fighters — and taking the
+    // last of them would make the sweetspot depend on victim port order: a
+    // Marth tipper on one opponent followed by a sourspot on another would
+    // record only the sourspot and suppress the bloom. Within a frame, keep the
+    // lowest id, which is the rule `bestHitbox` settles an overlap by: if the
+    // tip connected with anyone, the tip connected.
+    //
+    // Across frames it must *not* aggregate. A multi-hit move — a down smash
+    // that sweeps front then back, a multi-hit aerial — is several windows in
+    // one action, and holding the first window's id would leave the second
+    // unable to report its own sweetspot at all.
     const already = v.lastHit[hit.attacker];
-    const sameSwing = already !== null && already !== undefined && already.frame >= swingStarted;
+    const sameFrame = already !== null && already !== undefined && already.frame === state.frame;
     v.lastHit[hit.attacker] = {
-      hitboxId: sameSwing ? Math.min(already.hitboxId, hit.hitboxId) : hit.hitboxId,
+      hitboxId: sameFrame ? Math.min(already.hitboxId, hit.hitboxId) : hit.hitboxId,
       frame: state.frame,
     };
   }
