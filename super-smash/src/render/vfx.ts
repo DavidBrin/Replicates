@@ -104,6 +104,19 @@ export interface VfxState {
    * same lifetime and travels to exactly the same places.
    */
   poseBlend: PoseBlend[];
+  /**
+   * The last hit each fighter *landed*, and which of the move's boxes won it.
+   *
+   * A move is several hitboxes at once and an overlap resolves to the lowest
+   * id, which is the sweetspot mechanic (`bestHitbox`). An effect can work out
+   * from geometry where a sweetspot *is*; only the simulation knows whether it
+   * is what connected, and that is the difference between a tipper flash that
+   * fires on the right hits and one that fires on all of them.
+   *
+   * `frame` is the global frame, so an effect can ask whether the hit belongs
+   * to the swing currently on screen rather than to the one before it.
+   */
+  lastHit: ({ hitboxId: number; frame: number } | null)[];
   seed: number;
   frame: number;
 }
@@ -126,6 +139,7 @@ export function createVfx(): VfxState {
     koFlash: 0,
     koFlashMax: 1,
     poseBlend: createPoseBlends(),
+    lastHit: [null, null, null, null],
     seed: 0x9e3779b9,
     frame: 0,
   };
@@ -169,6 +183,9 @@ export function ingestEvents(v: VfxState, events: StepEvents, state: GameState):
     const kb = toFloat(hit.knockback);
     spawnHitSpark(v, x, y, damage, kb, (toFloat(hit.angle) * Math.PI) / 180);
     v.hitFlash[hit.victim] = Math.min(HIT_FLASH_FRAMES, 2 + Math.floor(damage / 8));
+    // Recorded against the *attacker*: this is "what did my swing land with",
+    // which is the attacker's question, not the victim's.
+    v.lastHit[hit.attacker] = { hitboxId: hit.hitboxId, frame: state.frame };
   }
 
   for (const s of events.shieldHits) {

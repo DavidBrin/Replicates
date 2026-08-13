@@ -42,7 +42,7 @@
 
 import type { FighterDef, FighterState } from "@/engine/types";
 import type { Camera } from "./camera";
-import { fxContextFor, NOTHING, type SpecialFxResult } from "./fxKit";
+import { fxContextFor, struckWithFor, NOTHING, type SpecialFxResult } from "./fxKit";
 import { fxFor } from "./chars";
 
 export type { SpecialFxResult, FxContext, FxFn } from "./fxKit";
@@ -62,6 +62,8 @@ export function drawMoveFx(
   height: number,
   screenX: number,
   screenY: number,
+  /** Cosmetic state, for the effects that need to know a swing connected. */
+  struck?: { lastHit: ({ hitboxId: number; frame: number } | null)[]; frame: number },
 ): SpecialFxResult {
   if (f.move === null || !def) return NOTHING;
   if (f.action !== "special" && f.action !== "attack" && f.action !== "throw") return NOTHING;
@@ -72,7 +74,17 @@ export function drawMoveFx(
   if (!fn) return NOTHING;
 
   const result = fn(
-    fxContextFor(ctx, def, f, cam, height, screenX, screenY, move.totalFrames),
+    fxContextFor(
+      ctx,
+      def,
+      f,
+      cam,
+      height,
+      screenX,
+      screenY,
+      move.totalFrames,
+      struck ? struckWithFor(struck.lastHit, f, struck.frame) : null,
+    ),
   );
   return result ?? NOTHING;
 }

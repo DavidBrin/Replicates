@@ -399,7 +399,10 @@ function drawOneFighter(
 
   // A special's own graphic goes under the fighter, and may replace them —
   // Kirby's Stone is the fighter, not a prop held by one.
-  const fx = drawMoveFx(ctx, d.def, f, cam, height, screen.x, screen.y);
+  const fx = drawMoveFx(ctx, d.def, f, cam, height, screen.x, screen.y, {
+    lastHit: state.vfx.lastHit,
+    frame: state.current.frame,
+  });
 
   if (!fx.hideFigure) {
     if (mode !== "silhouette") drawFigure(ctx, { ...params, mode: "rim", rimWidth });

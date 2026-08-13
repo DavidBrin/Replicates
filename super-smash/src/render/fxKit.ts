@@ -53,6 +53,19 @@ export interface FxContext {
    * conditional.
    */
   readonly dir: number;
+  /**
+   * Which of this move's hitboxes has connected so far this swing, or `null`.
+   *
+   * The id of the box that won, resolved by the simulation (`bestHitbox`
+   * settles an overlap by lowest id, which is the sweetspot mechanic itself).
+   * Scoped to the *current* action, so a swing that has not connected reads
+   * `null` even if the previous one did.
+   *
+   * Geometry can tell an effect where a sweetspot is. Only this can tell it
+   * whether the sweetspot is what landed — the difference between a tipper
+   * flash on the right hits and one on every hit.
+   */
+  readonly struckWith?: number | null;
 }
 
 export type FxFn = (c: FxContext) => SpecialFxResult | void;
@@ -156,6 +169,7 @@ export function fxContextFor(
   screenX: number,
   screenY: number,
   totalFrames: number,
+  struckWith: number | null = null,
 ): FxContext {
   const frame = moveFrameOf(f.actionFrame);
   return {
@@ -171,7 +185,24 @@ export function fxContextFor(
     total: totalFrames,
     t: Math.min(1, frame / Math.max(1, totalFrames)),
     dir: f.facing >= 0 ? 1 : -1,
+    struckWith,
   };
+}
+
+/**
+ * The box this fighter's current swing has landed with, if it has landed.
+ *
+ * Scoped by comparing against the frame the action started — `frame` less
+ * `actionFrame` — so a hit from the previous swing cannot bloom this one.
+ */
+export function struckWithFor(
+  lastHit: ({ hitboxId: number; frame: number } | null)[],
+  f: Pick<FighterState, "port" | "actionFrame">,
+  frame: number,
+): number | null {
+  const hit = lastHit[f.port];
+  if (!hit) return null;
+  return hit.frame >= frame - f.actionFrame ? hit.hitboxId : null;
 }
 
 /* ---------------------------------------------------------- projectiles -- */
