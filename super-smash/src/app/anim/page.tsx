@@ -33,6 +33,7 @@ import {
   poseTimeFor,
   samplePoseForFighter,
   POSE_LIBRARY,
+  type JumpAttributes,
 } from "@/render/poses";
 import { makeFighter } from "@/render/testFixtures";
 import { FIGHTERS, getFighter } from "@/fighters";
@@ -58,10 +59,10 @@ const MOVES: readonly MoveSlot[] = [
 /** How long the lab should show an action that has no natural end. */
 const OPEN_ENDED = 40;
 
-function lengthOf(f: FighterState): number {
+function lengthOf(f: FighterState, attrs?: JumpAttributes): number {
   const name = poseNameFor(f);
   const clip = POSE_LIBRARY[name];
-  if (!clip.loop) return actionDurationFor(f) ?? OPEN_ENDED;
+  if (!clip.loop) return actionDurationFor(f, attrs) ?? OPEN_ENDED;
   // A speed-paced cycle has no fixed frame count — find the frame the clip
   // comes back round to its start, so the sheet shows exactly one cycle.
   if (poseTimeFor(name, { ...f, actionFrame: 1 }, 0) === 0) return clip.period ?? 30;
@@ -132,7 +133,8 @@ function drawCell(
       }
     : undefined;
   const usesMove = o.action === "attack" || o.action === "special" || o.action === "throw";
-  const pose = samplePoseForFighter(f, frame, usesMove ? timing : undefined);
+  const attrs = def?.attributes;
+  const pose = samplePoseForFighter(f, frame, usesMove ? timing : undefined, attrs);
   const squash = squashFor(f);
 
   const transform = {
@@ -142,7 +144,7 @@ function drawCell(
     scaleX: squash.scaleX * pose.scaleX,
     scaleY: squash.scaleY * pose.scaleY,
     facing: 1 as const,
-    rotation: pose.rotation + poseSpinFor(f, frame, usesMove ? timing : undefined),
+    rotation: pose.rotation + poseSpinFor(f, frame, usesMove ? timing : undefined, attrs),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
   const params = { rig, palette, pose, transform, alpha } as const;
@@ -166,7 +168,7 @@ export default function AnimLab() {
     () => ({ fighterId, action, move, jumpsUsed, fastFalling }),
     [fighterId, action, move, jumpsUsed, fastFalling],
   );
-  const total = useMemo(() => lengthOf(fighterAt(o, 0)), [o]);
+  const total = useMemo(() => lengthOf(fighterAt(o, 0), getFighter(o.fighterId)?.attributes), [o]);
   const poseName = useMemo(() => poseNameFor(fighterAt(o, 0)), [o]);
 
   // The contact sheet: one cell per simulation frame, at the action's real length.

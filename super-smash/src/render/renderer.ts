@@ -321,13 +321,14 @@ function drawOneFighter(
   // Clips are sampled on their own clock and faded out of whatever was on
   // screen last frame, so that a change of clip is a transition and not a cut.
   // See `blend.ts` — `clipFrameFor` must run before `blendedPose`.
+  const attrs = d.def?.attributes;
   const clipFrame = clipFrameFor(state.vfx.poseBlend, f, name, frame);
   const posed = { ...f, actionFrame: clipFrame };
   const pose = blendedPose(
     state.vfx.poseBlend,
     f,
     name,
-    samplePoseForFighter(posed, frame, timing),
+    samplePoseForFighter(posed, frame, timing, attrs),
     frame,
   );
   const squash = squashFor(f);
@@ -345,7 +346,7 @@ function drawOneFighter(
     scaleX: squash.scaleX * pose.scaleX,
     scaleY: squash.scaleY * pose.scaleY,
     facing: f.facing >= 0 ? 1 : -1,
-    rotation: pose.rotation + poseSpinFor(posed, frame, timing) * (f.facing >= 0 ? 1 : -1),
+    rotation: pose.rotation + poseSpinFor(posed, frame, timing, attrs) * (f.facing >= 0 ? 1 : -1),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
 

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { fx } from "./fixed";
 import {
   AIR_DODGE_FRAMES,
+  AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
+  DIRECTIONAL_AIR_DODGE_LANDING_LAG,
   DIRECTIONAL_AIR_DODGE_FRAMES,
   JUMP_SQUAT_FRAMES,
   PERFECT_SHIELD_WINDOW,
@@ -633,6 +635,23 @@ describe("air dodge", () => {
     expect(directional.action).toBe("airDodge");
     expect(directional.charge).toBe(1);
     expect(directional.vx).toBeGreaterThan(0);
+  });
+
+  it("costs nearly double the landing lag when it was directional", () => {
+    // Otherwise a directional air dodge is strictly better than a neutral one —
+    // more distance for the same recovery — and Ultimate's descendant of the
+    // wavedash becomes a free approach.
+    const lagAfter = (buttons: number): number => {
+      const f = fighter({ grounded: false, action: "fall", y: fx(4) });
+      tick(f, buttons, 0);
+      expect(f.action).toBe("airDodge");
+      onLanded(f, ctx());
+      expect(f.action).toBe("landingLag");
+      return f.charge;
+    };
+    expect(lagAfter(Btn.Shield)).toBe(AIR_DODGE_LANDING_LAG);
+    expect(lagAfter(Btn.Shield | Btn.Right)).toBe(DIRECTIONAL_AIR_DODGE_LANDING_LAG);
+    expect(DIRECTIONAL_AIR_DODGE_LANDING_LAG).toBeGreaterThan(AIR_DODGE_LANDING_LAG);
   });
 
   it("lasts 50 frames neutral and 63 directional", () => {

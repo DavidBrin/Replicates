@@ -26,6 +26,7 @@ import {
   AIR_DODGE_FRAMES,
   AIR_DODGE_INTANGIBLE,
   AIR_DODGE_LANDING_LAG,
+  DIRECTIONAL_AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
   DASH_INTERRUPT_FRAME,
   DASH_THRESHOLD_FRAMES,
@@ -1338,8 +1339,11 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
     }
   }
   if (f.action === "airDodge") {
+    // Read before `startAction`, which clears it: `charge` is how an air dodge
+    // remembers it was directional (see `updateDodgeIntangibility`).
+    const directional = f.charge === 1;
     startAction(f, "landingLag");
-    f.charge = AIR_DODGE_LANDING_LAG;
+    f.charge = directional ? DIRECTIONAL_AIR_DODGE_LANDING_LAG : AIR_DODGE_LANDING_LAG;
     return;
   }
   startAction(f, "land");

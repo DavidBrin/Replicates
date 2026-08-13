@@ -173,6 +173,15 @@ export const ROLL_INTANGIBLE = [4, 20] as const;
 export const AIR_DODGE_FRAMES = 50;
 export const AIR_DODGE_INTANGIBLE = [3, 28] as const;
 export const AIR_DODGE_LANDING_LAG = 10;
+/**
+ * A directional air dodge is punished for landing in it, and heavily.
+ *
+ * Nearly double the neutral dodge's lag, which is what stops Ultimate's
+ * directional air dodge from being a free approach: it is the descendant of the
+ * wavedash and it costs. Both were 10 here, which made the directional dodge
+ * strictly better than the neutral one — more distance, same recovery.
+ */
+export const DIRECTIONAL_AIR_DODGE_LANDING_LAG = 19;
 export const DIRECTIONAL_AIR_DODGE_FRAMES = 63;
 export const DIRECTIONAL_AIR_DODGE_INTANGIBLE = [3, 20] as const;
 export const DIRECTIONAL_AIR_DODGE_SPEED = fx(3.2);

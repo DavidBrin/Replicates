@@ -63,6 +63,21 @@ export type PosedFighter = Pick<
   | "fastFalling"
   | "hitstun"
   | "vx"
+  | "shortHop"
+>;
+
+/**
+ * What the pose layer needs from a fighter's attributes.
+ *
+ * Only the jump needs any, and it needs them because a jump's length is not a
+ * constant: it lasts until the rise runs out, which is the launch velocity
+ * divided by the fighter's own gravity. Fox is airborne for 18 frames and Samus
+ * for 31. Played over a fixed thirty, Fox's somersault reached 216 degrees
+ * before the fall cut in and handed the renderer a fighter tucked on his side.
+ */
+export type JumpAttributes = Pick<
+  FighterDef["attributes"],
+  "gravity" | "fullHopVelocity" | "shortHopVelocity" | "airJumpVelocity"
 >;
 
 const SLOT_POSE: Record<MoveSlot, PoseName> = {
@@ -223,9 +238,22 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
  * need one.
  */
 export function actionDurationFor(
-  f: Pick<PosedFighter, "action" | "actionFrame" | "charge" | "hitstun">,
+  f: Pick<PosedFighter, "action" | "actionFrame" | "charge" | "hitstun" | "jumpsUsed" | "shortHop">,
+  attrs?: JumpAttributes,
 ): number | undefined {
   switch (f.action) {
+    // Frames until the rise runs out. The ratio of two Q12 values is a plain
+    // number, so no conversion is needed.
+    case "jump": {
+      if (!attrs || attrs.gravity <= 0) return undefined;
+      const v =
+        f.jumpsUsed >= 2
+          ? attrs.airJumpVelocity
+          : f.shortHop
+            ? attrs.shortHopVelocity
+            : attrs.fullHopVelocity;
+      return Math.max(1, Math.round(v / attrs.gravity));
+    }
     case "entering":
       return ENTRY_FRAMES;
     case "jumpSquat":
@@ -257,10 +285,10 @@ export function actionDurationFor(
       return ROLL_FRAMES;
     case "ledgeRoll":
       return LEDGE_ROLL_FRAMES;
-    // A directional air dodge is the longer of the two, and the only way to
-    // tell them apart from here is that it is the longer of the two.
+    // `charge` is how an air dodge remembers it was directional — the same flag
+    // the engine reads for its intangibility window and its landing lag.
     case "airDodge":
-      return f.actionFrame >= AIR_DODGE_FRAMES ? DIRECTIONAL_AIR_DODGE_FRAMES : AIR_DODGE_FRAMES;
+      return f.charge === 1 ? DIRECTIONAL_AIR_DODGE_FRAMES : AIR_DODGE_FRAMES;
     case "downed":
       return DOWNED_FRAMES;
     case "getUp":
@@ -346,6 +374,7 @@ export function poseTimeFor(
   fighter: PosedFighter,
   frame: number,
   timing?: MoveTiming,
+  attrs?: JumpAttributes,
 ): number {
   const clip = POSE_LIBRARY[name];
   if (clip?.loop) {
@@ -366,7 +395,7 @@ export function poseTimeFor(
     return (strike ?? 0.3) * 0.55;
   }
 
-  const stateFrames = actionDurationFor(fighter);
+  const stateFrames = actionDurationFor(fighter, attrs);
   const total = timing && timing.total > 0 ? timing.total : (stateFrames ?? 30);
   const f = fighter.actionFrame;
   const first = timing?.firstActive ?? -1;
@@ -388,11 +417,16 @@ export function poseTimeFor(
  * round. Kept apart from the pose sample for that reason: the sample is
  * facing-agnostic and gets mirrored, and a spin must not be.
  */
-export function poseSpinFor(fighter: PosedFighter, frame: number, timing?: MoveTiming): number {
+export function poseSpinFor(
+  fighter: PosedFighter,
+  frame: number,
+  timing?: MoveTiming,
+  attrs?: JumpAttributes,
+): number {
   const name = poseNameFor(fighter);
   const spin = POSE_LIBRARY[name]?.spin;
   if (!spin) return 0;
-  return poseTimeFor(name, fighter, frame, timing) * spin * Math.PI * 2;
+  return poseTimeFor(name, fighter, frame, timing, attrs) * spin * Math.PI * 2;
 }
 
 /** The pose a fighter is in this frame, ready to hand to `resolve()`. */
@@ -400,7 +434,8 @@ export function samplePoseForFighter(
   fighter: PosedFighter,
   frame: number,
   timing?: MoveTiming,
+  attrs?: JumpAttributes,
 ): PoseSample {
   const name = poseNameFor(fighter);
-  return samplePose(POSE_LIBRARY[name], poseTimeFor(name, fighter, frame, timing));
+  return samplePose(POSE_LIBRARY[name], poseTimeFor(name, fighter, frame, timing, attrs));
 }
