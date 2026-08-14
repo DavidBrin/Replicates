@@ -67,6 +67,10 @@ import { newId } from "@/lib/ids";
 import {
   ConflictError,
   type CreateIssueInput,
+  type DependencyGraphIssue,
+  type DependencyGraphQuery,
+  type DependencyGraphRows,
+  type DependencyRelation,
   type IssueQuery,
   type IssueRelationWithTarget,
   type IssueRepository,
@@ -169,6 +173,17 @@ const ISSUE_FROM = `
  * for the lifecycle mutations and anything that has to show the trash.
  */
 const LIVE_ISSUE = `i.archived_at is null and i.trashed_at is null`;
+
+/**
+ * The most nodes `dependencyGraph` will return, whatever it is asked for.
+ *
+ * The caller's `maxNodes` is a *view* decision and lives in
+ * `config/dependency-graph.ts`. This is the floor under it: a query parameter
+ * that reached this method unchecked would otherwise be able to ask for the
+ * whole workspace, and the recursive walk that answers it is the one query here
+ * with no natural bound of its own.
+ */
+const HARD_GRAPH_NODE_CEILING = 1_000;
 
 interface TeamJson {
   id: string;
@@ -1151,6 +1166,185 @@ export class SqlIssueRepository extends BaseRepository implements IssueRepositor
         relatedStateType: text(row, "related_state_type") as StateType,
       };
     });
+  }
+
+  /**
+   * The blocking component around a team, bounded by visibility and by size.
+   *
+   * ## One walk, not one query per issue
+   *
+   * A recursive CTE follows `issue_relations` out from the team's issues in
+   * both stored directions — the row for "A blocks B" is the same row as "B is
+   * blocked by A" — until it stops finding anything new. `union` rather than
+   * `union all` is what makes it terminate on a cyclic graph: the duplicate
+   * elimination is the visited set, and `A → B → C → A` would otherwise recurse
+   * until the server gave up.
+   *
+   * ## The visibility predicate is inside the recursion
+   *
+   * `other.team_id in (…)` sits in the recursive term, not in the final select.
+   * Filtering afterwards would leave an invisible issue working as a bridge: a
+   * private issue blocking two visible ones would still tell the viewer those
+   * two are connected, and how many hops apart, while showing nothing in
+   * between. Refusing to step onto it ends the chain there instead, which looks
+   * exactly like a chain that ended.
+   *
+   * ## Direction is not decided here
+   *
+   * The rows come back as stored — `(issue_id, related_issue_id, type)` — and
+   * `domain/services/dependency-graph.ts` turns them into blocker → blocked
+   * edges. A `case` expression in this query could do it in two lines, and then
+   * the knowledge of what the inverse of a relation *is* would live both in
+   * `entities.ts` and in a string in this file.
+   */
+  async dependencyGraph(
+    query: DependencyGraphQuery,
+    tx?: Tx,
+  ): Promise<DependencyGraphRows> {
+    const reader = this.reader(tx);
+    const isolatedCount = await this.#isolatedIssueCount(query.teamId, reader);
+    const empty: DependencyGraphRows = {
+      issues: [],
+      relations: [],
+      isolatedCount,
+      truncated: false,
+    };
+    // `in ()` is a syntax error, and a viewer with no visible team has no
+    // graph to draw in any case.
+    if (query.visibleTeamIds.length === 0) return empty;
+
+    const cap = Math.max(1, Math.min(query.maxNodes, HARD_GRAPH_NODE_CEILING));
+
+    const params = new Params();
+    const team = params.bind(query.teamId);
+    const visible = params.bindAll(query.visibleTeamIds as readonly SqlValue[]);
+    // One more than the cap, so a full page and an overflowing one are
+    // distinguishable without a second counting query.
+    const limit = params.bind(cap + 1);
+
+    const rows = await reader.query(
+      `with recursive seeds as (
+         select i.id
+           from issues i
+          where i.team_id = ${team}
+            and ${LIVE_ISSUE}
+            and exists (
+              select 1
+                from issue_relations r
+               where (r.issue_id = i.id or r.related_issue_id = i.id)
+                 and r.type in ('blocks', 'blocked_by'))
+       ),
+       reachable as (
+         select id from seeds
+          union
+         select other.id
+           from reachable c
+           join issue_relations r
+             on r.issue_id = c.id or r.related_issue_id = c.id
+           join issues other
+             on other.id = case
+                             when r.issue_id = c.id then r.related_issue_id
+                             else r.issue_id
+                           end
+          where r.type in ('blocks', 'blocked_by')
+            and other.archived_at is null
+            and other.trashed_at is null
+            and other.team_id in (${visible})
+       )
+       select i.id, i.title, i.priority, i.number,
+              t.key as team_key, i.team_id,
+              s.name as state_name, s.type as state_type, s.color as state_color,
+              u.name as assignee_name,
+              u.avatar_color as assignee_avatar_color,
+              u.avatar_url as assignee_avatar_url
+         from reachable c
+         join issues i on i.id = c.id
+         join teams t on t.id = i.team_id
+         join workflow_states s on s.id = i.state_id
+         left join users u on u.id = i.assignee_id
+        order by case when i.team_id = ${team} then 0 else 1 end,
+                 t.key asc, i.number asc
+        limit ${limit}`,
+      params.values,
+    );
+
+    // The team's own issues sort first, so a cut component keeps the issues the
+    // page is *about* and loses the far end of somebody else's chain.
+    const truncated = rows.length > cap;
+    const issues = (truncated ? rows.slice(0, cap) : rows).map(
+      (row): DependencyGraphIssue => ({
+        id: text(row, "id"),
+        identifier: formatIdentifier(text(row, "team_key"), num(row, "number")),
+        title: text(row, "title"),
+        teamId: text(row, "team_id"),
+        teamKey: text(row, "team_key"),
+        stateName: text(row, "state_name"),
+        stateType: text(row, "state_type") as StateType,
+        stateColor: text(row, "state_color"),
+        priority: num(row, "priority") as Priority,
+        assigneeName: nullableText(row, "assignee_name"),
+        assigneeAvatarColor: nullableText(row, "assignee_avatar_color"),
+        assigneeAvatarUrl: nullableText(row, "assignee_avatar_url"),
+      }),
+    );
+
+    if (issues.length === 0) return empty;
+
+    const relations = await this.#relationsAmong(
+      issues.map((issue) => issue.id),
+      reader,
+    );
+    return { issues, relations, isolatedCount, truncated };
+  }
+
+  /**
+   * Blocking relations with *both* ends in the given set.
+   *
+   * Both, not either: an edge with one end outside is an edge to a node that
+   * will not be drawn, and the layout would either crash on the dangling id or
+   * silently invent a node for it. Truncation is the ordinary way that happens.
+   */
+  async #relationsAmong(
+    ids: readonly IssueId[],
+    reader: SqlExecutor,
+  ): Promise<DependencyRelation[]> {
+    const params = new Params();
+    const list = params.bindAll(ids as readonly SqlValue[]);
+    const rows = await reader.query(
+      `select r.issue_id, r.related_issue_id, r.type
+         from issue_relations r
+        where r.type in ('blocks', 'blocked_by')
+          and r.issue_id in (${list})
+          and r.related_issue_id in (${list})
+        order by r.created_at asc, r.id asc`,
+      params.values,
+    );
+    return rows.map((row) => ({
+      issueId: text(row, "issue_id"),
+      relatedIssueId: text(row, "related_issue_id"),
+      type: text(row, "type") as IssueRelationType,
+    }));
+  }
+
+  /** Live issues in the team that no blocking relation touches. */
+  async #isolatedIssueCount(
+    teamId: string,
+    reader: SqlExecutor,
+  ): Promise<number> {
+    const rows = await reader.query(
+      `select count(*) as total
+         from issues i
+        where i.team_id = $1
+          and ${LIVE_ISSUE}
+          and not exists (
+            select 1
+              from issue_relations r
+             where (r.issue_id = i.id or r.related_issue_id = i.id)
+               and r.type in ('blocks', 'blocked_by'))`,
+      [teamId],
+    );
+    const row = rows[0];
+    return row === undefined ? 0 : num(row, "total");
   }
 
   /* ------------------------------------------------------ subscriptions -- */

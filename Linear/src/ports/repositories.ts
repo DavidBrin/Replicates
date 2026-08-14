@@ -448,6 +448,73 @@ export interface IssueQuery {
   readonly offset?: number;
 }
 
+/* ==================================================== dependency graph == */
+
+/**
+ * What bounds the walk out from one team's issues.
+ *
+ * ## `visibleTeamIds` stops the traversal, it does not filter the result
+ *
+ * The distinction is the whole security argument for this query. Fetching the
+ * component and hiding the invisible issues afterwards would still let one act
+ * as a bridge: if a private issue blocks two issues the viewer *can* see, the
+ * viewer learns those two are connected — and how far apart — without ever
+ * being shown the thing in between. Refusing to traverse through an issue in a
+ * team the viewer cannot see means the chain simply ends there, which is
+ * indistinguishable from the chain having ended.
+ *
+ * The list is computed from `TeamRepository.listForUser`, so a guest sees only
+ * their own teams and nobody discovers a private team's existence by the shape
+ * of a graph.
+ *
+ * ## `maxNodes` is a cap on a component, not on a page
+ *
+ * A connected component has no natural size. One cross-team dependency can, in
+ * principle, join two hundred issues to a chain of three, and the cost of
+ * finding that out is paid before anything renders. The cap is enforced in SQL
+ * so the pathological case costs one bounded query rather than one unbounded
+ * one, and {@link DependencyGraphRows.truncated} says so out loud rather than
+ * quietly drawing a partial graph that looks complete.
+ */
+export interface DependencyGraphQuery {
+  readonly teamId: TeamId;
+  /** The traversal never leaves these teams. */
+  readonly visibleTeamIds: readonly TeamId[];
+  readonly maxNodes: number;
+}
+
+/** A graph node: what a card renders, and nothing else. */
+export interface DependencyGraphIssue {
+  readonly id: IssueId;
+  readonly identifier: string;
+  readonly title: string;
+  readonly teamId: TeamId;
+  readonly teamKey: string;
+  readonly stateName: string;
+  readonly stateType: StateType;
+  readonly stateColor: string;
+  readonly priority: Priority;
+  readonly assigneeName: string | null;
+  readonly assigneeAvatarColor: string | null;
+  readonly assigneeAvatarUrl: string | null;
+}
+
+/** A relation exactly as stored — normalised in the domain, not in SQL. */
+export interface DependencyRelation {
+  readonly issueId: IssueId;
+  readonly relatedIssueId: IssueId;
+  readonly type: IssueRelationType;
+}
+
+export interface DependencyGraphRows {
+  readonly issues: readonly DependencyGraphIssue[];
+  readonly relations: readonly DependencyRelation[];
+  /** Live issues in the team with no blocking relation at all. Counted only. */
+  readonly isolatedCount: number;
+  /** The component was larger than `maxNodes` and has been cut. */
+  readonly truncated: boolean;
+}
+
 /** A relation joined to the issue on its other end, for rendering the list. */
 export interface IssueRelationWithTarget extends IssueRelation {
   readonly relatedIdentifier: string;
@@ -550,6 +617,21 @@ export interface IssueRepository {
    * apart — `entities.ts`, `INVERSE_RELATION`.
    */
   listRelations(issueId: IssueId, tx?: Tx): Promise<IssueRelationWithTarget[]>;
+
+  /**
+   * Every issue connected to a team's issues by a chain of blocking relations,
+   * and the relations between them — the whole component, in one round trip.
+   *
+   * {@link listRelations} answers for one issue, which is the wrong shape for a
+   * graph: a team of three hundred issues would be three hundred queries before
+   * anything could be drawn.
+   *
+   * @see DependencyGraphQuery for what bounds the traversal, and why.
+   */
+  dependencyGraph(
+    query: DependencyGraphQuery,
+    tx?: Tx,
+  ): Promise<DependencyGraphRows>;
 
   subscribe(issueId: IssueId, userId: UserId, tx?: Tx): Promise<void>;
   unsubscribe(issueId: IssueId, userId: UserId, tx?: Tx): Promise<void>;

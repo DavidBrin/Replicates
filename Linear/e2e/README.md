@@ -43,6 +43,23 @@ renaming one is a breaking change.
 | `status-picker`, `priority-picker`, `assignee-picker`, `label-picker` | the popovers |
 | `picker-option-{value}` | an option inside any picker |
 
+### The dependency graph
+
+| id | on |
+|---|---|
+| `dependency-graph` | the canvas container |
+| `graph-viewport` | the pannable, scrollable region |
+| `graph-node-{IDENTIFIER}` | one issue card, e.g. `graph-node-ENG-12` |
+| `graph-edge` | one drawn dependency; carries `data-reversed` when it closes a cycle |
+| `graph-cycle-warning` | the banner naming a set of issues that block each other |
+| `graph-summary`, `graph-not-drawn`, `graph-truncated` | the counts in the sub-header |
+| `graph-empty` | the empty state, for a team with no blocking relations |
+| `graph-zoom-in`, `graph-zoom-out`, `graph-zoom-reset` | the zoom controls |
+| `view-tab-dag` | the tab that reaches it |
+
+A card also carries `data-issue-id` (the raw id, as `board-card` does) and
+`data-foreign` when the issue belongs to another team.
+
 ### Projects, teams, members
 
 | id | on |

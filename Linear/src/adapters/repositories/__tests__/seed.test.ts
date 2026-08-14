@@ -154,6 +154,61 @@ describe("the workspace", () => {
   });
 });
 
+/**
+ * The seeded dependency web, read back the way the DAG page reads it.
+ *
+ * The seed's own comment claims the relations demonstrate four things; these
+ * are three of them checked against the query that will actually draw them, and
+ * the fourth — the cross-team edge into a private team — checked from both
+ * sides, because "the owner sees it and the member does not" is the only part
+ * of the fixture that is a security claim rather than a layout one.
+ */
+describe("the dependency web", () => {
+  async function graphFor(userId: string) {
+    const eng = await repos.teams.byKey(seed.workspaceId, "ENG");
+    const visible = await repos.teams.listForUser(seed.workspaceId, userId);
+    return repos.issues.dependencyGraph({
+      teamId: eng!.id,
+      visibleTeamIds: visible.map((team) => team.id),
+      maxNodes: 500,
+    });
+  }
+
+  it("draws a connected web rather than a scattering of pairs", async () => {
+    const graph = await graphFor(seed.users.owner);
+    expect(graph.relations.length).toBeGreaterThanOrEqual(7);
+    expect(graph.truncated).toBe(false);
+    // Issues with no dependency at all are the majority, and are counted
+    // rather than drawn.
+    expect(graph.isolatedCount).toBeGreaterThan(0);
+  });
+
+  it("stores every relation once, in the blocks direction", async () => {
+    const graph = await graphFor(seed.users.owner);
+    expect(graph.relations.every((r) => r.type === "blocks")).toBe(true);
+  });
+
+  it("shows the owner the Design issue that blocks an Engineering one", async () => {
+    const graph = await graphFor(seed.users.owner);
+    expect(graph.issues.some((issue) => issue.teamKey === "DES")).toBe(true);
+  });
+
+  /**
+   * The member is not in Design, which is private. The chain has to end at the
+   * boundary — not continue through a hidden node, and not report a placeholder
+   * that would confirm one exists.
+   */
+  it("ends the chain at the private team for a member who is not in it", async () => {
+    const graph = await graphFor(seed.users.member);
+    expect(graph.issues.some((issue) => issue.teamKey === "DES")).toBe(false);
+    for (const relation of graph.relations) {
+      const ends = new Set(graph.issues.map((issue) => issue.id));
+      expect(ends.has(relation.issueId)).toBe(true);
+      expect(ends.has(relation.relatedIssueId)).toBe(true);
+    }
+  });
+});
+
 describe("the issues", () => {
   it("has forty of them, numbered per team from one", async () => {
     const issues = await repos.issues.list({

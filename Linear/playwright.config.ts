@@ -81,8 +81,23 @@ export default defineConfig({
        * Naming the driver makes that impossible.
        */
       DB_DRIVER: "pglite",
-      // A scratch database per run, separate from the dev server's `.data/linear`.
-      DB_DATA_DIR: ".data/e2e",
+      /**
+       * In memory, so the suite really does get a fresh database per run.
+       *
+       * This was `.data/e2e`, described as "a scratch database per run" — and
+       * it was scratch, but it was the *same* scratch directory every time.
+       * `seedDemoWorkspace` writes nothing when the workspace already exists,
+       * so once that directory had been seeded, every later change to the seed
+       * was invisible to this suite: new fixtures simply never appeared, and
+       * the specs that needed them failed as though the feature were broken.
+       * The DAG specs found it, because they were the first to need seed data
+       * that had not existed before.
+       *
+       * A directory that is deleted before each run would work too, and would
+       * be one more thing to remember. The suite is one server process and
+       * every spec seeds what it needs, so there is nothing to persist.
+       */
+      DB_DATA_DIR: ":memory:",
       AUTH_SECRET: "e2e-secret-not-for-production-use-only-0123456789",
       SEED_DEMO_DATA: "true",
       /**

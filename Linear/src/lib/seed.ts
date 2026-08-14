@@ -848,6 +848,50 @@ const ISSUES: readonly SeedIssue[] = [
 
 /* ============================================================== comments = */
 
+/* ============================================================= relations = */
+
+/**
+ * Blocking relations, so the DAG view has something to draw on first run.
+ *
+ * Chosen to exercise every case the drawing has to handle rather than to be
+ * exhaustive:
+ *
+ * - **A merge.** Three issues block `board columns keep their scroll position`,
+ *   so the layout has to pick an order for them that does not tangle.
+ * - **An edge spanning two layers.** `reconcile optimistic creation` blocks both
+ *   the bulk-order fix *and* the board scroll fix, and the second of those has
+ *   to route around a whole layer — which is what dummy nodes are for.
+ * - **A separate component.** The palette pair is not connected to the sync
+ *   work, because a graph with one component would not prove the layout can
+ *   place two.
+ * - **A cross-team edge, into a private team.** `DES-3` blocks `ENG-5`. The
+ *   owner sees a Design card in Engineering's graph; a plain member, who is not
+ *   in Design, sees `ENG-5` drop out of the graph entirely rather than a
+ *   placeholder telling them something is there. That is the visibility rule
+ *   demonstrating itself on real data.
+ *
+ * No cycle is seeded. A deadlock is a defect, and shipping one in the demo
+ * workspace would make every new install look broken; the red warning path is
+ * covered by `domain/services/__tests__/dependency-graph.test.ts` and is one
+ * relation away for anyone who wants to see it.
+ */
+const RELATIONS: readonly {
+  /** Index into {@link ISSUES}. Must finish first. */
+  blocker: number;
+  /** Index into {@link ISSUES}. Waits on the blocker. */
+  blocked: number;
+  daysAgo: number;
+}[] = [
+  { blocker: 10, blocked: 0, daysAgo: 12 },
+  { blocker: 10, blocked: 8, daysAgo: 12 },
+  { blocker: 0, blocked: 8, daysAgo: 9 },
+  { blocker: 1, blocked: 19, daysAgo: 11 },
+  { blocker: 19, blocked: 8, daysAgo: 6 },
+  { blocker: 12, blocked: 18, daysAgo: 5 },
+  { blocker: 21, blocked: 2, daysAgo: 8 },
+  { blocker: 24, blocked: 4, daysAgo: 7 },
+];
+
 const COMMENTS: readonly {
   /** Index into {@link ISSUES}. */
   issue: number;
@@ -1342,6 +1386,31 @@ export async function seedDemoWorkspace(
           createdAt: at(Math.max(0, issue.daysAgo - 1)),
         });
       }
+    }
+
+    /* -- relations -------------------------------------------------------- */
+
+    // Stored once, in the `blocks` direction. The inverse is derived on read
+    // (`entities.ts`, `INVERSE_RELATION`), so writing both halves here would
+    // create two rows that could disagree.
+    for (const [index, relation] of RELATIONS.entries()) {
+      const blockerId = issueIds[relation.blocker];
+      const blockedId = issueIds[relation.blocked];
+      if (blockerId === undefined || blockedId === undefined) {
+        throw new Error(
+          `Seed relation ${index} names an issue that does not exist`,
+        );
+      }
+      await t.execute(
+        `insert into issue_relations (id, issue_id, related_issue_id, type, created_at)
+         values ($1,$2,$3,'blocks',$4)`,
+        [
+          deterministicId("rel", `${urlKey}:${index}`),
+          blockerId,
+          blockedId,
+          at(relation.daysAgo),
+        ],
+      );
     }
 
     /* -- comments --------------------------------------------------------- */

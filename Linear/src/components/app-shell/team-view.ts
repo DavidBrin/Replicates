@@ -16,13 +16,14 @@
  * not a component.
  */
 
-export type TeamView = "active" | "backlog" | "all" | "board";
+export type TeamView = "active" | "backlog" | "all" | "board" | "dag";
 
 export const TEAM_VIEWS: readonly TeamView[] = [
   "active",
   "backlog",
   "all",
   "board",
+  "dag",
 ];
 
 export function isTeamView(value: string): value is TeamView {

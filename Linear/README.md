@@ -10,13 +10,15 @@ model, and a workspace that boots with one command and no database to install.
 |---|---|---|
 | <img src="docs/screenshots/issue-list.png" width="240" alt="Grouped issue list with status glyphs, priority icons, labels and assignees"> | <img src="docs/screenshots/issue-detail.png" width="240" alt="Issue detail with properties rail, activity feed and threaded comments"> | <img src="docs/screenshots/board.png" width="240" alt="Board with columns from the current grouping"> |
 
-| Projects | Members | Marketing |
-|---|---|---|
-| <img src="docs/screenshots/projects.png" width="240" alt="Project list with health, lead and progress"> | <img src="docs/screenshots/members.png" width="240" alt="Workspace members with roles and invitations"> | <img src="docs/screenshots/marketing.png" width="240" alt="Marketing page"> |
+| Projects | Members | Marketing | DAG |
+|---|---|---|---|
+| <img src="docs/screenshots/projects.png" width="240" alt="Project list with health, lead and progress"> | <img src="docs/screenshots/members.png" width="240" alt="Workspace members with roles and invitations"> | <img src="docs/screenshots/marketing.png" width="240" alt="Marketing page"> | <img src="docs/screenshots/dag.png" width="240" alt="Blocking relations drawn as a directed graph, blockers on the left pointing at what they block"> |
 
 Next.js 16 · PostgreSQL everywhere (WASM locally, Neon deployed) ·
-**1,477 unit tests** · 14 e2e permission tests · built from six parallel
-research lanes, then seven parallel build slices.
+**1,559 unit tests** · 23 e2e tests · built from six parallel research lanes,
+then seven parallel build slices — plus one feature Linear does not have: a
+**DAG** tab per team, drawing the blocking relations nobody can currently see
+more than one hop of.
 
 ```bash
 npm install && npm run dev     # http://localhost:3000 — no database to set up
@@ -41,6 +43,16 @@ and updates. **Teams** own their workflow states, labels and membership.
 membership; a guest sees only what they were added to, and a private team is
 invisible even to a full workspace member. `/settings/members` refuses a member
 outright rather than rendering a read-only version of itself.
+
+**One thing Linear does not have.** Every team has a **DAG** tab: its blocking
+relations drawn as a directed graph, blockers on the left pointing at what they
+block. Linear stores `blocks` / `blocked_by` but only ever shows one hop, on the
+issue you happen to be reading — so a four-issue chain is invisible unless you
+already know to walk it, and a dependency *cycle* is invisible from everywhere.
+The graph follows a chain across team boundaries, stops dead at a team you
+cannot see, and draws a loop in red with the issues named. Cards are real links.
+Layout is a pure function on the server (Sugiyama: cycle-break, layer, reduce
+crossings, place, route), so nothing reflows after hydration. See D27.
 
 **Cut deliberately:** cycles, initiatives, SLAs, customer requests,
 integrations, insights, documents, offline sync. The brief allowed dropping the
@@ -151,11 +163,20 @@ Claims here are separated by how they were checked.
 That is the brief's headline requirement and the one-way-door rule (D19),
 working end to end.
 
-**Verified by the suites:** 1,477 unit tests, `tsc --noEmit` clean, `eslint`
-clean, `next build` succeeding, and **14 e2e permission tests, none skipped**,
-covering invitation, the one-way admin promotion, last-owner protection, guest
-team scoping, private-team invisibility, and the whole add-to-project → edit →
-add-an-issue → remove cycle through the UI.
+**Verified by the suites:** 1,559 unit tests, `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeding, and **23 e2e tests, none skipped** — 14
+permission tests covering invitation, the one-way admin promotion, last-owner
+protection, guest team scoping, private-team invisibility and the whole
+add-to-project → edit → add-an-issue → remove cycle through the UI, plus 9 for
+the DAG, including the one that matters: the same URL rendering two different
+graphs for two different people.
+
+**Proved by mutation, not just by passing:** five assertions were confirmed to
+fail when the code they cover is reverted — the rate limiter's eviction policy,
+the `issue.reorder` gate, and three in the graph layout (keeping the best
+ordering, translating the canvas to its origin, and measuring edge bends in the
+bounds). A test that has never been seen to fail is a test that has not been
+seen.
 
 The last of those was skipped until recently (D22): `POST /api/issues`
 pre-gated on `canViewTeam` before consulting `issue.create`, so the gate was
@@ -261,7 +282,7 @@ constraint was still stopping the payload. Of the rest:
 
 ```
 SPEC.md                 the contract every slice built against
-DECISIONS.md            26 numbered decisions, with the rejected alternative
+DECISIONS.md            27 numbered decisions, with the rejected alternative
 research/               9,095 lines from six parallel lanes
   01-visual-design.md     measured tokens, glyph geometry, layout
   02-features.md          product behaviour, 67 features ranked MUST/SHOULD/COULD
@@ -273,22 +294,23 @@ research/               9,095 lines from six parallel lanes
 
 | Path | What lives there |
 |---|---|
-| `src/domain/` | `entities.ts` (the vocabulary), `policy.ts` (authorization), `ordering.ts` (fractional index), `color.ts` (the one definition of a colour), `filters.ts`, `sorting.ts`, `services/membership.ts` |
+| `src/domain/` | `entities.ts` (the vocabulary), `policy.ts` (authorization), `ordering.ts` (fractional index), `color.ts` (the one definition of a colour), `filters.ts`, `sorting.ts`, `services/membership.ts`, `services/graph-layout.ts` (Sugiyama, pure), `services/dependency-graph.ts` (relations → blocking edges, cycles) |
 | `src/ports/` | `repositories.ts`, `ai.ts` — interfaces in domain terms, no SQL |
+| `src/config/` | `env.ts` (validated environment), `dependency-graph.ts` (every DAG tunable, in one place) |
 | `src/adapters/db/` | `driver.ts` (the seam), `pglite.ts`, `neon.ts`, `schema.sql` (25 tables), `schema.ts` (generated, drift-guarded) |
 | `src/adapters/repositories/` | one module per aggregate |
 | `src/adapters/ai/` | `anthropic.ts`, `openai.ts`, `shared.ts` — raw HTTP, symmetric on purpose |
 | `src/lib/` | `auth/` (scrypt, sessions, invites, `rate-limit.ts`), `boot.ts`, `seed.ts`, `keyboard/`, `store/`, `ids.ts`, `markdown.ts` |
 | `src/components/ui/` | 16 primitives — combobox, popover, status/priority glyphs, avatar, toast |
 | `src/components/` | `app-shell` 11 · `issue-detail` 17 · `issues` 13 · `projects` 12 · `members` 8 · `marketing` 6 · `auth` 6 · `command-palette` 5 · `teams` 4 · `inbox` 4 · `search` 3 |
-| `src/app/` | 14 routes + 27 API handlers |
-| `e2e/` | `permissions.spec.ts` — the multi-user journey; `README.md` — the test-id contract |
+| `src/app/` | 15 routes + 27 API handlers |
+| `e2e/` | `permissions.spec.ts` — the multi-user journey; `dependency-graph.spec.ts` — the DAG, including the same URL showing two people two graphs; `README.md` — the test-id contract |
 
 ### Commands
 
 ```bash
 npm run dev            # PGlite, seeded on first boot
-npm run verify         # typecheck + lint + 1,477 unit tests
+npm run verify         # typecheck + lint + 1,559 unit tests
 npm run test:e2e       # Playwright, against a production build
 npm run build:schema   # regenerate schema.ts from schema.sql
 npm run db:push        # apply the schema (Vercel build command)

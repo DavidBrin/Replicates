@@ -423,6 +423,50 @@ admin or owner, and they may add to any team. The call is there so that enabling
 `anyMember` later does not silently reopen the hole. Its test says so rather
 than pretending to prove something it cannot.
 
+### D27 — The DAG is a fifth view, and it is read-only
+
+The one feature here that Linear does not have. `blocks` / `blocked_by` have
+always been first-class relations, and every screen that shows them shows *one
+hop* — so a chain four issues long is only visible to somebody who already knows
+to walk it, and a dependency cycle is not visible from anywhere at all.
+
+Four choices worth recording.
+
+**The whole connected component, not just this team.** A blocking relation
+crosses team boundaries and a graph that silently dropped those edges would
+show an issue as unblocked when it is not. The cost is that the component has no
+natural size, which is why `maxNodes` exists and why `truncated` is reported
+rather than quietly drawn.
+
+**Visibility stops the traversal; it does not filter the result.** This is the
+whole security argument. Fetching the component and hiding the invisible issues
+afterwards leaves them working as bridges: a private issue blocking two visible
+ones would tell the viewer those two are connected and exactly how far apart,
+without ever showing what is in between. The predicate therefore sits inside the
+recursive CTE. A seeded fixture — `DES-3` blocks `ENG-5`, Design private —
+proves both halves, from the owner's side and the member's.
+
+**Layout hand-rolled rather than `dagre`, `d3-dag` or React Flow.** Not because
+those are bad; because the layout is the interesting part and a pure
+`(nodes, edges, options) → positions` function is one the tests can hold
+directly. Crossing counts, layer assignment, cycle reversal and canvas bounds
+are all assertions against a returned object, and three of them are proved by
+mutation. The runner-up was `d3-dag` (TypeScript-first, small); React Flow was
+rejected for shipping no layout at all and rendering nodes as DOM elements.
+
+**Read-only.** Editing from the graph means drag-to-connect, optimistic store
+entries, both-ends permission checks and refusing edges that would close a
+cycle. Relations are already created on the issue detail page; a second write
+path to keep consistent with the first is not worth it for a view whose job is
+to show you what the first one did.
+
+Two bugs from this feature are worth keeping, because both passed every test:
+independent chains laid out together pushed a three-hundred-pixel hole between
+them, and the canvas origin came from the *working* node set, which includes
+the invisible waypoints of a long edge — so a bend above the first card shifted
+the whole drawing down. Neither is expressible as a wrong number. Both were
+found by looking at the page, and both now have fixtures.
+
 ### D15 — Research captures from the authenticated app are not committed
 
 The visual-research lane found the browser already signed in to a real
