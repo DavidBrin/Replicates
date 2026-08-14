@@ -246,6 +246,24 @@ export function resolveCollision(
       f.grounded = false;
       f.platform = -1;
       out.leftGround = true;
+    } else if (f.vy > 0) {
+      // Rising off the surface, so this fighter is no longer standing on it.
+      //
+      // Without this the branch below pinned `y` to the platform and zeroed
+      // `vy` every frame, and the only way out of `grounded` was to walk off
+      // the edge — so a *scripted* upward movement could never lift anybody.
+      // `applyMoveMomentum` set the velocity correctly and this threw it away
+      // on the same frame, which is why Samus's Screw Attack and Marth's
+      // Dolphin Slash both played their rising animation on the spot. Two
+      // character agents found it independently, from opposite ends of the
+      // roster, each having first suspected their own capture tooling.
+      //
+      // A jump does not come through here — `states.ts` clears `grounded`
+      // itself on the jumpSquat transition — so this only reaches the case
+      // that was silently broken: a move whose own data says it goes up.
+      f.grounded = false;
+      f.platform = -1;
+      out.leftGround = true;
     } else {
       // A moving platform carries its passenger; Smashville is unplayable otherwise.
       if (p.motion) f.x += cx - platformCentreX(p, frame - 1);

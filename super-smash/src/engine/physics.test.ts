@@ -251,6 +251,43 @@ describe("platform collision", () => {
     expect(f.platform).toBe(0);
   });
 
+  /**
+   * A scripted rise lifts a grounded fighter off the floor.
+   *
+   * `MoveDef.momentum` is what makes Samus's Screw Attack and Marth's Dolphin
+   * Slash go up. `applyMoveMomentum` set `vy` correctly and this function threw
+   * it away on the same frame: a fighter still inside their platform's bounds
+   * took the "still standing on it" branch, which pins `y` and zeroes `vy`, and
+   * the only escape from `grounded` was walking off the edge. So both moves
+   * played their rising animation on the spot, for the whole roster.
+   *
+   * Two character agents found it independently, each having first suspected
+   * their own capture tooling. It is asserted here rather than in either of
+   * their files because it is nobody's character — it is every up-special.
+   */
+  it("lifts a grounded fighter who has been given upward velocity", () => {
+    const f = fighter({ x: 0, y: 0, vy: fx(2.9) });
+    f.grounded = true;
+    f.platform = 0;
+    const out = resolveCollision(f, 0, 0, STAGE, ATTRS, 0);
+    expect(f.vy, "the rise was cancelled on the frame it was applied").toBe(fx(2.9));
+    expect(f.grounded, "still standing on the floor while rising off it").toBe(false);
+    expect(out.leftGround).toBe(true);
+  });
+
+  it("still pins a grounded fighter who is not going anywhere", () => {
+    // The other half: standing still must stay standing, at the surface, with
+    // no drift — otherwise this fix trades a broken up-special for a roster
+    // that sinks through the stage.
+    const f = fighter({ x: 0, y: fx(0.4), vy: 0 });
+    f.grounded = true;
+    f.platform = 0;
+    resolveCollision(f, 0, 0, STAGE, ATTRS, 0);
+    expect(f.grounded).toBe(true);
+    expect(f.y).toBe(0);
+    expect(f.vy).toBe(0);
+  });
+
   it("does not land a fighter moving upward through a surface", () => {
     const f = fighter({ x: 0, y: fx(29), vy: fx(2) });
     const out = resolveCollision(f, 0, fx(27), STAGE, ATTRS, 0);

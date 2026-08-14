@@ -112,7 +112,9 @@ const HAIR = "#6289E2";
 // more saturated, nearer the in-game daylight reading of `#45719D`, because the
 // rest of this palette is flat and saturated and the studio value read washed
 // out beside a `#2B4FC9` tunic. Hue is held in the reference's 204-213 band.
-const CAPE = "#4E82B4";
+// The cape's outer face now lives on the palette as the `extra` role, so it
+// follows the costume — see `fighters/marth.ts`. The lining stays a literal:
+// it is the same dark red in every costume.
 const CAPE_LINING = "#7A3A33";
 
 /**
@@ -406,7 +408,11 @@ export const rig: CharacterRig = {
     footR: "#6A4732",
   },
   props: [
-    { kind: "custom", bone: "torso", at: 1, size: 3.0, colour: CAPE, detail: CAPE_LINING, layer: "behind", draw: drawCape },
+    // `extra` rather than the `CAPE` literal, so the cape follows the costume.
+    // As a literal it stayed light blue on alt 1 — which is the *red-caped*
+    // Marth, so the one costume defined by its cape colour was the one that
+    // ignored it. The literal is still the default, declared on the palette.
+    { kind: "custom", bone: "torso", at: 1, size: 3.0, colour: "extra", detail: CAPE_LINING, layer: "behind", draw: drawCape },
     { kind: "custom", bone: "torso", at: 1, size: 0.95, along: 0.06, across: 0.22, colour: "accent", draw: drawCollar },
     { kind: "belt", bone: "hip", at: 0.8, size: 1.15, colour: "accent" },
     { kind: "custom", bone: "handR", at: 1, size: 5.3, colour: "#E6EEF6", detail: "accent", draw: drawFalchion },

@@ -333,8 +333,26 @@ export interface FighterPalette {
   readonly accent: string;
   readonly skin: string;
   readonly outline: string;
-  /** Alternate costumes: each remaps primary/secondary/accent. */
-  readonly alts: readonly { primary: string; secondary: string; accent: string }[];
+  /**
+   * A fifth surface, for a fighter who has one the four roles cannot carry.
+   *
+   * Added for Marth's cape, which is a distinct colour from his tunic, his
+   * trim and his boots — and which had to become a hard-coded literal to stay
+   * legible, because every available role merged it with one of them. A
+   * literal does not follow a costume, so the red-caped alt came out blue:
+   * the legibility fix traded a default-costume win for one alt being wrong.
+   *
+   * Optional, because seven fighters do not need it and a role nobody sets is
+   * a role nobody has to think about.
+   */
+  readonly extra?: string;
+  /** Alternate costumes: each remaps primary/secondary/accent, and `extra` if it is set. */
+  readonly alts: readonly {
+    primary: string;
+    secondary: string;
+    accent: string;
+    extra?: string;
+  }[];
 }
 
 /* ----------------------------------------------------------------- stages -- */

@@ -221,6 +221,24 @@ pass and vanishes into the fighter's own edge. Kirby's Inhale mouth was
 invisible for exactly this reason. If an effect paints dark-on-dark, it is
 invisible, not subtle.
 
+## Two things a rig can declare
+
+**`tagClearance`** — how far your silhouette reaches above your *skeleton*, in
+rig units. The port tag is placed from `rigHeight`, which measures bones and the
+head circle and knows nothing about props, so a fighter whose identifying shape
+sits on top of their head wears the tag on it. Four characters hit this
+independently. Declare it and the tag rises; leave it and nothing changes.
+
+**`extra`** — a fifth palette role, for a fighter with a surface the other four
+cannot carry. Marth's cape is the case: it is a distinct colour from his tunic,
+his trim and his boots, so it became a literal to stay legible — and a literal
+does not follow a costume, which left the *red-caped* alt light blue. Set
+`extra` on the palette, and on any alt that needs its own, then use `"extra"` as
+a prop's `colour`. Unset, it falls back to `accent`.
+
+Reach for a literal only when the colour must *not* follow the costume — Mario's
+white gloves, Pikachu's black ear tips. If it should follow, it needs a role.
+
 ## Looking at your work
 
 ```bash

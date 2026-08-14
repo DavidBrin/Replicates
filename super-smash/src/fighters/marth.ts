@@ -1022,8 +1022,25 @@ export const marth: FighterDef = {
     accent: "#E8C34A", // the gold trim and Falchion's hilt
     skin: "#F5D5B0",
     outline: "#0E1430",
+    /**
+     * The cape's outer face — a fifth surface, because the other four are
+     * taken by the tunic, the armour and boots, the gold trim, and skin.
+     *
+     * Light cyan-leaning blue, not the crimson most references appear to show.
+     * In a front-facing pose the cape flares forward and the camera sees the
+     * dark red *lining* at nearly nine pixels to one, so an honest sample of
+     * any front view returns red; straight-on back views settle it. And a
+     * crimson cape on a blue-haired swordsman is Roy at a glance — the mistake
+     * is worth recording because it will catch the next person too.
+     *
+     * It also does the work of separating head from torso: Marth's real hair
+     * and tunic are 7% of the luminance range apart in the same hue family, and
+     * what pulls them apart on the model is the light mantle at his shoulders.
+     */
+    extra: "#4E82B4",
     alts: [
-      { primary: "#C41E3A", secondary: "#5E1020", accent: "#E8C34A" }, // red
+      // The red-caped alt: the one costume whose identity *is* the cape.
+      { primary: "#C41E3A", secondary: "#5E1020", accent: "#E8C34A", extra: "#B3323A" }, // red
       { primary: "#1E7B3C", secondary: "#0E3A1C", accent: "#D8D8B0" }, // green
       { primary: "#E8E8E8", secondary: "#8A8A9A", accent: "#C9A02B" }, // white
       { primary: "#1A1A1A", secondary: "#3A3A4A", accent: "#8A7020" }, // black

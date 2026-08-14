@@ -387,7 +387,19 @@ function drawOneFighter(
   }
 
   const alpha = intangibleAlpha(f);
-  const rimWidth = Math.max(2.5, cam.zoom * 0.55);
+  // The outline is proportional to the fighter, not to the screen.
+  //
+  // It was a flat screen-space width, so a small rig wore a proportionally
+  // enormous one: measured at zoom 12 against head radius, Fox 30% and Pikachu
+  // 29% against Kirby's 16%. On Pikachu that is 34% of his painted pixels and
+  // it welds his head to his body — reported as a "brown hood", and measured
+  // rather than guessed.
+  //
+  // Scaling by `rig.scale` does not equalise it completely, because the ratio
+  // also depends on a rig's head radius, which is its own choice. It does fix
+  // the part that was arbitrary: two fighters drawn at different sizes were
+  // getting the same number of pixels of ink around them.
+  const rimWidth = Math.max(2.5, cam.zoom * 0.55 * rig.scale);
 
   const params = {
     rig,

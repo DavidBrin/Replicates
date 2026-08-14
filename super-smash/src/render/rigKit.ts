@@ -114,7 +114,16 @@ export function resolvePalette(def: FighterDef | null, costume: number): Fighter
   const base = def?.palette ?? FALLBACK_PALETTE;
   if (costume <= 0 || !base.alts || costume > base.alts.length) return base;
   const alt = base.alts[costume - 1];
-  return { ...base, primary: alt.primary, secondary: alt.secondary, accent: alt.accent };
+  return {
+    ...base,
+    primary: alt.primary,
+    secondary: alt.secondary,
+    accent: alt.accent,
+    // An alt that says nothing about `extra` keeps the default's, which is what
+    // every existing costume expects: the five alts on the roster were written
+    // before this role existed.
+    extra: alt.extra ?? base.extra,
+  };
 }
 
 /**
@@ -133,6 +142,12 @@ export function roleColour(role: string, palette: FighterPalette): string {
       return palette.secondary;
     case "accent":
       return palette.accent;
+    case "extra":
+      // Falls back to `accent` rather than to the role name, so a rig that asks
+      // for `extra` on a fighter who does not define one gets a colour from the
+      // palette instead of the literal string "extra", which `fillStyle`
+      // silently ignores — leaving the shape painted in whatever was set last.
+      return palette.extra ?? palette.accent;
     case "skin":
       return palette.skin;
     case "outline":

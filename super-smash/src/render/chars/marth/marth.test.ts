@@ -38,6 +38,7 @@ import { POSE_LIBRARY } from "../../poses/library";
 import { poses } from "./poses";
 import { rig } from "./rig";
 import { fx } from "./fx";
+import { hexToRgb, resolvePalette, roleColour } from "../../rigKit";
 import { drawMoveFx } from "../../specialFx";
 import { createCamera } from "../../camera";
 import { createMockContext } from "../../mockContext";
@@ -806,5 +807,57 @@ describe("the tipper flash knows what actually connected", () => {
     // lab's missing context bloomed a sourspot that had been shielded.
     expect(biggest(paint(null, 8))).toBe(biggest(paint(null, 0)));
     expect(biggest(paint(null, 8))).toBeLessThan(biggest(paint(0, 8)));
+  });
+});
+
+/**
+ * The cape follows the costume.
+ *
+ * It had to stop being a palette role to stay legible — every one of the four
+ * merged it with the tunic or the boots — and became a hard-coded literal,
+ * which does not follow a costume. So alt 1, the *red-caped* Marth, came out
+ * light blue: the one costume defined by its cape colour was the only one that
+ * ignored it. A fifth `extra` role fixes it without giving the legibility back.
+ *
+ * Asserted through `resolvePalette` and `roleColour` together, because the bug
+ * needed both — a role that resolves correctly but is not carried across a
+ * costume swap is the same wrong colour on screen.
+ */
+describe("the cape across costumes", () => {
+  const capes = def.palette;
+
+  it("declares an outer face distinct from every other role", () => {
+    const roles = [capes.primary, capes.secondary, capes.accent, capes.skin, capes.outline];
+    expect(capes.extra, "no cape colour declared").toBeDefined();
+    expect(roles, "the cape reuses a role it was split out of").not.toContain(capes.extra);
+  });
+
+  it("gives the red costume a red cape", () => {
+    const red = resolvePalette(def, 1);
+    expect(roleColour("extra", red)).not.toBe(roleColour("extra", resolvePalette(def, 0)));
+    // Red rather than merely different: the point of the costume.
+    const [r, g, b] = hexToRgb(roleColour("extra", red));
+    expect(r, "the red costume's cape is not red").toBeGreaterThan(Math.max(g, b) + 40);
+  });
+
+  it("keeps the default cape blue", () => {
+    const [r, g, b] = hexToRgb(roleColour("extra", resolvePalette(def, 0)));
+    expect(b, "the default cape is not blue").toBeGreaterThan(r + 30);
+    expect(b).toBeGreaterThan(g);
+  });
+
+  it("leaves a costume that says nothing about it on the default", () => {
+    // Only alt 1 declares a cape. The other four were written before the role
+    // existed and must not silently fall back to gold.
+    for (const costume of [2, 3, 4, 5]) {
+      expect(roleColour("extra", resolvePalette(def, costume)), `costume ${costume}`).toBe(capes.extra);
+    }
+  });
+
+  it("is what the rig actually asks for", () => {
+    // The join. A palette nobody reads is the same bug wearing a fix.
+    const cape = rig.props.find((p) => p.draw && p.layer === "behind");
+    expect(cape, "no cape prop").toBeDefined();
+    expect(cape!.colour, "the cape still carries a literal").toBe("extra");
   });
 });
