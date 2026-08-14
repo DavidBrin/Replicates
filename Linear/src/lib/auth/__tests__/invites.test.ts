@@ -350,6 +350,48 @@ describe("acceptInvite", () => {
     expect(result.ok === false && result.denial.code).toBe("INVITE_INVALID");
   });
 
+  it("refuses an invite from an inviter who has since been deactivated", async () => {
+    // The gap a bare `workspace_members.role` lookup left open. Deactivation
+    // does not delete the role row, so the old check still saw an admin and
+    // the link kept working — a fired administrator's pending invitations
+    // outliving their access is precisely the case that must not happen.
+    const { token } = await inviteFrom(ADMIN, "member");
+    await db.execute("update users set active = false where id = $1", [ADMIN]);
+
+    const result = await acceptInvite({ token, userId: NEWCOMER }, db);
+
+    expect(result.ok === false && result.denial.code).toBe("INVITE_INVALID");
+    const rows = await db.query(
+      "select 1 from workspace_members where workspace_id = $1 and user_id = $2",
+      [WORKSPACE, NEWCOMER],
+    );
+    expect(rows, "the invitee must not have been let in").toHaveLength(0);
+
+    await db.execute("update users set active = true where id = $1", [ADMIN]);
+  });
+
+  it("re-resolves the teams rather than trusting the stored list", async () => {
+    // Today this cannot change the outcome, and the test says so rather than
+    // pretending otherwise: the shipped policy is admins-only invites, and an
+    // admin may add to any team, so anyone still permitted to invite is still
+    // permitted to grant every team they named. The assertion pins the
+    // behaviour that must hold when that stops being true — the granted list
+    // comes from re-resolution against the inviter's *current* authority, not
+    // from `invites.team_ids`.
+    await db.execute(
+      `insert into teams (id, workspace_id, name, key, private)
+       values ('tem_inv_priv2', $1, 'Skunkworks II', 'SK2', true)
+       on conflict do nothing`,
+      [WORKSPACE],
+    );
+    const { token } = await inviteFrom(ADMIN, "member", ["tem_inv_priv2"]);
+
+    const result = await acceptInvite({ token, userId: NEWCOMER }, db);
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.value.teamIds).toEqual(["tem_inv_priv2"]);
+  });
+
   it("§4.4.6 — re-validates the role against the inviter's *current* rank", async () => {
     // An admin mints an admin invite, then loses the rank that allowed it. The
     // link must not still hand out admin.

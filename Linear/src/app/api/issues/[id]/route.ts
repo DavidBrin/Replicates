@@ -153,6 +153,22 @@ export async function PATCH(
   const allowed = authorize(actor, actionsFor(patch), resource, viewer);
   if (!allowed.ok) return allowed.response;
 
+  // `sortOrder` needs its own grant *in addition*, not instead.
+  //
+  // `authorize` is deliberately OR — an edit is `update_own` **or**
+  // `update_any` — and `actionsFor` only asked for `issue.reorder` when
+  // `sortOrder` arrived alone. Together those two facts meant the grant could
+  // be downgraded by bundling: `{ title: <the title it already has>,
+  // sortOrder: <anywhere> }` is authorised as an ordinary edit by the author's
+  // `update_own`, and the issue moves. The position is not a field of this
+  // issue the way its title is — it is this issue's place in a list everyone
+  // in the workspace sees — which is exactly why it has a separate row in the
+  // policy table.
+  if (patch.sortOrder !== undefined) {
+    const reorder = authorize(actor, ["issue.reorder"], resource, viewer);
+    if (!reorder.ok) return reorder.response;
+  }
+
   const invalid = await validateReferences(patch, team, actor);
   if (invalid) return failure(400, invalid, viewer);
 

@@ -51,7 +51,7 @@ import type { UserId, WorkspaceId, WorkspaceRole } from "@/domain/entities";
 import { allowed, explainDenial } from "@/domain/policy";
 import { withWorkspaceLock } from "@/domain/services/membership";
 import { redeemInvite, workspaceForInviteToken } from "@/lib/auth/invites";
-import { hashPassword } from "@/lib/auth/password";
+import { DerivationOverloadedError, hashPassword } from "@/lib/auth/password";
 import { consumeAuthAttempt } from "@/lib/auth/rate-limit";
 import {
   createSession,
@@ -104,6 +104,27 @@ export async function POST(request: Request): Promise<Response> {
     parsed.data.inviteToken ??
     readCookie(request.headers.get("cookie"), PENDING_INVITE_COOKIE);
 
+  const { allowOpenSignup } = config().auth;
+
+  // A closed workspace still has to let invited people in, or the invitation is
+  // not an invitation.
+  //
+  // This runs *before* the throttle, and the order is the fix for a denial of
+  // service against a specific person. The budget is keyed on the email, so
+  // when the refusal came second, five requests naming a victim's address and
+  // no invite token spent that address's entire sign-up budget — for free,
+  // since this path touches neither the database nor scrypt. The invitation
+  // then arrived at a 429 and the invited person could not join at all, for as
+  // long as the attacker cared to repeat it.
+  //
+  // Refusing first costs an attacker a cheap 403 and costs the victim nothing.
+  // What is deliberately *not* protected by moving this is the endpoint's own
+  // flood exposure, and it does not need to be: nothing below this line has
+  // run yet, so a rejected request is a JSON parse and a comparison.
+  if (!allowOpenSignup && !inviteToken) {
+    return Response.json({ error: INVITATION_ONLY }, { status: 403 });
+  }
+
   // Before the hash. Every sign-up spends ~200 ms and 128 MB in scrypt, which
   // is the cost that protects the stored password and, unthrottled, the lever
   // that makes this endpoint worth flooding.
@@ -116,14 +137,6 @@ export async function POST(request: Request): Promise<Response> {
         headers: { "Retry-After": String(throttle.retryAfterSeconds) },
       },
     );
-  }
-
-  const { allowOpenSignup } = config().auth;
-
-  // A closed workspace still has to let invited people in, or the invitation is
-  // not an invitation.
-  if (!allowOpenSignup && !inviteToken) {
-    return Response.json({ error: INVITATION_ONLY }, { status: 403 });
   }
 
   const db = getDb();
@@ -155,7 +168,13 @@ export async function POST(request: Request): Promise<Response> {
 
   // Outside the transaction: 200 ms of scrypt is 200 ms of holding a workspace
   // lock, and nothing in the hash depends on anything the transaction reads.
-  const passwordHash = await hashPassword(password);
+  let passwordHash: string;
+  try {
+    passwordHash = await hashPassword(password);
+  } catch (error) {
+    if (error instanceof DerivationOverloadedError) return overloaded();
+    throw error;
+  }
   const userId = newId("usr") as UserId;
 
   const create = async (tx: SqlExecutor): Promise<Created> => {
@@ -328,5 +347,19 @@ function isUniqueViolation(error: unknown): boolean {
   return (
     error instanceof Error &&
     /duplicate key value violates unique constraint/i.test(error.message)
+  );
+}
+
+/**
+ * A momentary overload of the derivation queue, as a response.
+ *
+ * 503 rather than 429: the caller did nothing wrong and their own budget is
+ * untouched — the process is simply busy — and `Retry-After` says so in the
+ * one place a client will actually read it.
+ */
+function overloaded(): Response {
+  return Response.json(
+    { error: "Busy right now. Try again in a moment." },
+    { status: 503, headers: { "Retry-After": "2" } },
   );
 }

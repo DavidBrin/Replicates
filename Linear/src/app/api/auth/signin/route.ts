@@ -30,7 +30,12 @@
 import { z } from "zod";
 
 import { getDb, type SqlRow } from "@/adapters/db";
-import { hashPassword, needsRehash, verifyPassword } from "@/lib/auth/password";
+import {
+  DerivationOverloadedError,
+  hashPassword,
+  needsRehash,
+  verifyPassword,
+} from "@/lib/auth/password";
 import { consumeAuthAttempt } from "@/lib/auth/rate-limit";
 import { createSession, sessionCookie } from "@/lib/auth/session";
 import type { UserId } from "@/domain/entities";
@@ -85,7 +90,13 @@ export async function POST(request: Request): Promise<Response> {
   );
   const user = rows[0] ?? null;
 
-  const matches = await verifyPassword(password, user?.password_hash ?? null);
+  let matches: boolean;
+  try {
+    matches = await verifyPassword(password, user?.password_hash ?? null);
+  } catch (error) {
+    if (error instanceof DerivationOverloadedError) return overloaded();
+    throw error;
+  }
   // A deactivated account is folded in here rather than checked earlier, so it
   // costs the same as a wrong password and reports the same thing.
   if (!user || !matches || !user.active) {
@@ -114,5 +125,19 @@ export async function POST(request: Request): Promise<Response> {
   return Response.json(
     { user: { id: user.id, email: user.email, name: user.name } },
     { status: 200, headers: { "Set-Cookie": sessionCookie(session.token) } },
+  );
+}
+
+/**
+ * A momentary overload of the derivation queue, as a response.
+ *
+ * 503 rather than 429: the caller did nothing wrong and their own budget is
+ * untouched — the process is simply busy — and `Retry-After` says so in the
+ * one place a client will actually read it.
+ */
+function overloaded(): Response {
+  return Response.json(
+    { error: "Busy right now. Try again in a moment." },
+    { status: 503, headers: { "Retry-After": "2" } },
   );
 }

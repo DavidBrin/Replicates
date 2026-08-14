@@ -434,18 +434,77 @@ export async function redeemInvite(
     return denied({ code: "INVITE_EXPIRED" });
   }
 
-  // §4.4.6 — the role is re-validated against the *inviter's current* rank.
-  // An invite minted by an admin who has since been demoted must not still
-  // hand out admin.
-  const inviter = await tx.query<SqlRow & { role: WorkspaceRole }>(
-    "select role from workspace_members where workspace_id = $1 and user_id = $2",
-    [invite.workspaceId, invite.invitedById],
+  // §4.4.6 — an invite is exercised with the inviter's authority *now*, not
+  // the authority they had when they minted it.
+  //
+  // This used to read one column, `workspace_members.role`, which caught the
+  // headline case — a demoted admin's link must not still hand out admin — and
+  // missed the two next to it. `loadActor` is the same function the mint path
+  // uses, so the same three gates now apply at both ends:
+  //
+  //  - **Deactivated.** The role row survives deactivation, so a bare role
+  //    lookup still saw an admin. A fired administrator's pending invites kept
+  //    working, which is precisely the moment they must not.
+  //  - **No longer permitted to invite at all.** Rank alone does not answer
+  //    that question; `member.invite` does, and it is a policy row rather than
+  //    a comparison written here.
+  //  - **The teams.** `team_ids` was validated against the inviter when the
+  //    row was written and never again, so an admin could name a private team,
+  //    be demoted, and still place someone inside it.
+  //
+  // Every one of these answers `INVITE_INVALID` rather than naming the cause.
+  // The invitee did nothing wrong and is owed an explanation, but not this one:
+  // the reason is a fact about somebody else's standing in a workspace they are
+  // not yet in.
+  const inviter = await loadActor(
+    tx,
+    invite.workspaceId,
+    invite.invitedById,
   );
-  const inviterRole = inviter[0]?.role;
-  if (!inviterRole) return denied({ code: "INVITE_INVALID" });
-  if (WORKSPACE_ROLE_RANK[invite.role] > WORKSPACE_ROLE_RANK[inviterRole]) {
+  if (inviter.workspaceRole === null) return denied({ code: "INVITE_INVALID" });
+
+  // Rank first, and the order is deliberate. Demotion fails both this check and
+  // the `member.invite` one below, and of the two answers this is the better:
+  // it is the specific, documented §4.4.6 refusal, it names the same denial the
+  // mint path uses for the same reason, and it describes the *invite* — this
+  // link would grant more than it may — rather than the inviter's standing.
+  if (WORKSPACE_ROLE_RANK[invite.role] > WORKSPACE_ROLE_RANK[inviter.workspaceRole]) {
     return denied({ code: "CANNOT_GRANT_ABOVE_OWN_RANK", requested: invite.role });
   }
+  // Then the two that rank cannot answer. A deactivated administrator still
+  // holds the role row, and a demotion to a rank that happens to cover the
+  // invited role still removes the right to invite at all.
+  if (inviter.suspended === true) return denied({ code: "INVITE_INVALID" });
+  if (!can(inviter, "member.invite", { kind: "invite" })) {
+    return denied({ code: "INVITE_INVALID" });
+  }
+
+  // The teams are re-resolved rather than trusted. A failure here drops the
+  // team grants and keeps the workspace join: the alternative is refusing the
+  // whole redemption, which punishes the invitee for a change in someone
+  // else's role and leaves them with no way in at all. An admin can add them
+  // afterwards, which is the same remedy as an invite that named no teams.
+  //
+  // Worth being straight about: under the settings this app actually ships
+  // with, this can never change the outcome. `memberInvitePolicy` is
+  // `adminsOnly` and nothing in the codebase overrides it, so anyone who still
+  // passes the `member.invite` gate above is an admin or owner — and they may
+  // add to any team, including a private one. The call is here so that turning
+  // `anyMember` on later does not silently reopen the hole, which is the whole
+  // reason the mint path validates through `can` rather than by hand.
+  //
+  // `loadActor` is deliberately called without settings, matching
+  // `createInvite`, which is also handed `undefined` by every caller. If that
+  // ever changes, both paths have to change together or a member's legitimate
+  // invitation starts failing at redemption for a rule it passed at mint.
+  const revalidated = await resolveInviteTeams(
+    tx,
+    invite.workspaceId,
+    invite.teamIds,
+    inviter,
+    invite.role,
+  );
+  const grantedTeams = revalidated.ok ? revalidated.value : [];
 
   const inserted = await tx.execute(
     `insert into workspace_members (workspace_id, user_id, role)
@@ -454,7 +513,7 @@ export async function redeemInvite(
     [invite.workspaceId, input.userId, invite.role],
   );
 
-  const joinedTeams = await addToTeams(tx, invite, input.userId);
+  const joinedTeams = await addToTeams(tx, invite, grantedTeams, input.userId);
 
   await tx.execute(
     `update invites set status = 'accepted', accepted_at = now(), accepted_by_id = $2
@@ -502,9 +561,13 @@ export async function acceptInvite(
 async function addToTeams(
   tx: SqlExecutor,
   invite: Invite,
+  teamIds: readonly TeamId[],
   userId: UserId,
 ): Promise<TeamId[]> {
-  if (invite.teamIds.length === 0) return [];
+  // `teamIds` rather than `invite.teamIds`: the caller has re-validated the
+  // stored list against the inviter's current authority, and the difference
+  // between the two is exactly the escalation this argument exists to prevent.
+  if (teamIds.length === 0) return [];
   const rows = await tx.query<SqlRow & { team_id: TeamId }>(
     `insert into team_members (team_id, user_id, role)
      select t.id, $2, 'member'
@@ -513,7 +576,7 @@ async function addToTeams(
         and t.id in (select value from json_array_elements_text($1::json))
      on conflict (team_id, user_id) do nothing
      returning team_id`,
-    [JSON.stringify(invite.teamIds), userId, invite.workspaceId],
+    [JSON.stringify(teamIds), userId, invite.workspaceId],
   );
   return rows.map((row) => row.team_id);
 }

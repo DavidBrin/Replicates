@@ -84,6 +84,11 @@ export type AiProviderId = (typeof AI_PROVIDERS)[number];
 export interface ServerConfig {
   readonly isProduction: boolean;
   readonly isTest: boolean;
+  /**
+   * Whether `x-forwarded-for` may be believed. See `trustsProxyHeaders`; the
+   * rate limiter's IP bucket is only a bucket when this is true.
+   */
+  readonly trustProxyHeaders: boolean;
 
   readonly db: {
     readonly driver: DbDriver;
@@ -186,14 +191,76 @@ function authSecret(isProduction: boolean): string {
  *
  *  - The flag must be set explicitly. It is named for the only thing it is
  *    for, so it cannot be mistaken for a performance or compatibility switch.
- *  - `VERCEL` must be absent. This is the belt to the flag's braces: if the
- *    variable is ever pasted into a real deployment's environment — the single
- *    most likely way an escape hatch like this turns into the outage it was
- *    written to prevent — the guard still fires, because the host announces
- *    itself and no amount of local opt-in should outrank that.
+ *  - No serverless host may be announcing itself. This is the belt to the
+ *    flag's braces: if the variable is ever pasted into a real deployment's
+ *    environment — the single most likely way an escape hatch like this turns
+ *    into the outage it was written to prevent — the guard still fires,
+ *    because the platform sets a variable of its own and no amount of local
+ *    opt-in should outrank that. It checks the whole list in
+ *    {@link SERVERLESS_MARKERS}, not just Vercel: the property that makes
+ *    PGlite wrong is an ephemeral filesystem, and Lambda, Cloud Run and
+ *    Netlify have it too.
  */
 function allowsPgliteUnderProduction(): boolean {
-  return raw("E2E_ALLOW_PGLITE_PRODUCTION_BUILD") === "true" && !raw("VERCEL");
+  return raw("E2E_ALLOW_PGLITE_PRODUCTION_BUILD") === "true" && !isServerless();
+}
+
+/**
+ * Variables the major serverless hosts set on their own.
+ *
+ * The escape hatch above originally checked `VERCEL` alone, which protected the
+ * one host this app is documented against and no other. That is the wrong
+ * shape for a safety check: the hatch exists because a *filesystem* is durable
+ * on a laptop and not in a function invocation, and that is true on Lambda,
+ * Cloud Run and Netlify exactly as it is on Vercel. A stray environment
+ * variable copied between projects would have silently permitted an embedded
+ * database that forgets every write between requests.
+ *
+ * None of these are set by a normal `next start`, so the local case — which is
+ * the case the hatch is for — is unaffected. The list cannot be exhaustive, so
+ * it is only ever a second line: the flag itself must still be set explicitly.
+ */
+function isServerless(): boolean {
+  return SERVERLESS_MARKERS.some((name) => Boolean(raw(name)));
+}
+
+const SERVERLESS_MARKERS = [
+  "VERCEL",
+  "AWS_LAMBDA_FUNCTION_NAME",
+  "AWS_EXECUTION_ENV",
+  "NETLIFY",
+  "RENDER",
+  "FLY_APP_NAME",
+  // Cloud Run and Cloud Functions.
+  "K_SERVICE",
+  "FUNCTION_TARGET",
+  // Azure Functions.
+  "FUNCTIONS_WORKER_RUNTIME",
+  "CF_PAGES",
+] as const;
+
+/**
+ * Whether something in front of this process rewrites `x-forwarded-for`.
+ *
+ * The rate limiter keys a bucket on the caller's address, and an address read
+ * from a header the caller controls is not a key — vary it per request and
+ * every request gets a fresh budget. So this cannot be inferred from the
+ * header's presence; it has to be a statement about the deployment.
+ *
+ * Default: true on a host that terminates traffic itself and overwrites the
+ * header (the serverless list above), false anywhere else — including a plain
+ * `next start`, which is reachable directly and where the header is whatever
+ * the client typed. `TRUST_PROXY_HEADERS` overrides it for the real case the
+ * default gets wrong: a self-hosted deployment behind nginx or Caddy.
+ *
+ * Wrong in the permissive direction is a silently disabled limiter. Wrong in
+ * the strict direction is several honest callers sharing one bucket, which is
+ * visible and survivable. The default takes the second.
+ */
+function trustsProxyHeaders(): boolean {
+  const explicit = raw("TRUST_PROXY_HEADERS");
+  if (explicit !== undefined) return explicit === "true";
+  return isServerless();
 }
 
 /* --------------------------------------------------------------- build --- */
@@ -230,6 +297,7 @@ function build(): ServerConfig {
   return {
     isProduction,
     isTest,
+    trustProxyHeaders: trustsProxyHeaders(),
 
     db: {
       driver,

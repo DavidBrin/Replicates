@@ -1,5 +1,7 @@
 import "server-only";
 
+import { config } from "@/config/env";
+
 /**
  * Throttling for the two endpoints that spend real money on a stranger's input.
  *
@@ -73,6 +75,24 @@ interface Budget {
 interface Bucket {
   tokens: number;
   updatedAt: number;
+  /**
+   * The budget this key is charged against, carried on the bucket rather than
+   * looked up from the key. Eviction has to compare buckets from *different*
+   * endpoints against each other, and it cannot do that without knowing what
+   * each one's tokens are worth — sign-in refills five times faster than
+   * sign-up, so a raw token count means different things in different rows.
+   */
+  readonly capacity: number;
+  readonly refillSeconds: number;
+}
+
+/** A bucket's token count brought forward to `now`, without mutating it. */
+function tokensAt(bucket: Bucket, now: number): number {
+  return Math.min(
+    bucket.capacity,
+    bucket.tokens +
+      (now - bucket.updatedAt) / (bucket.refillSeconds * 1000),
+  );
 }
 
 /**
@@ -96,23 +116,80 @@ function buckets(): Map<string, Bucket> {
 }
 
 /**
- * Drop entries that have refilled to full and been idle since.
+ * Keep the map bounded, without handing an attacker their budget back.
  *
- * Without it the map is an unbounded, attacker-controlled allocation: one entry
- * per distinct address plus one per distinct IP, forever. Sweeping on write
- * rather than on a timer keeps it to the request path and needs no scheduler —
- * and a bucket at full capacity carries no information, so discarding it is not
- * forgetting anything.
+ * ## Why idle-eviction alone was not enough
+ *
+ * The first version dropped only entries that had refilled to full *and* been
+ * idle for an hour. Against ordinary traffic that is correct and cheap. Against
+ * the traffic this file exists to survive it was neither, and it failed in two
+ * directions at once:
+ *
+ *  - **Memory.** Fifty thousand distinct addresses in a minute produce fifty
+ *    thousand entries, none of them an hour idle, so nothing was ever evicted.
+ *    The map grew without bound on unauthenticated input.
+ *  - **CPU.** The sweep ran on *every* insert once the map passed its
+ *    threshold and scanned the whole map to delete nothing, so the cost of the
+ *    n-th new key was O(n) — quadratic over a burst. The limiter became the
+ *    amplifier for the exhaustion attack it was written to stop.
+ *
+ * ## Why the fullest buckets go first
+ *
+ * Eviction is a limit *reset*: a key with no entry gets a full budget on its
+ * next request. So the choice of victim is a security decision, not a cache
+ * policy. Evicting the oldest — the obvious LRU answer — is exactly wrong here,
+ * because an attacker who has spent their budget can flood the map with junk
+ * keys until their own throttled entry ages out, and walk away with a fresh
+ * allowance. That turns the bound into the bypass.
+ *
+ * Evicting the *fullest* inverts it. A bucket at capacity carries no
+ * information — it is indistinguishable from having no entry at all — so
+ * dropping it forgets nothing. A bucket at zero is the only thing in the map
+ * that is actually doing work, and it is the last thing discarded. Under
+ * maximum pressure the map degrades to holding precisely the keys being
+ * throttled, which is the correct thing to keep.
+ *
+ * The hysteresis matters too: evicting down to a target below the cap means the
+ * sort runs once per batch of evictions rather than once per insert.
  */
 function prune(now: number): void {
   const map = buckets();
-  if (map.size < 2_048) return;
+  if (map.size < MAX_BUCKETS) return;
+
+  // Cheap pass first: anything idle long enough has refilled to full anyway.
   for (const [key, bucket] of map) {
     if (now - bucket.updatedAt > IDLE_EVICTION_MS) map.delete(key);
+  }
+  if (map.size <= PRUNE_TARGET) return;
+
+  // Still over, so this is a live flood rather than accumulated debris. Rank by
+  // what each key has left and discard from the top.
+  const ranked = Array.from(map, ([key, bucket]) => ({
+    key,
+    tokens: tokensAt(bucket, now),
+  })).sort((a, b) => b.tokens - a.tokens);
+
+  for (let i = 0; i < ranked.length && map.size > PRUNE_TARGET; i += 1) {
+    map.delete(ranked[i]!.key);
   }
 }
 
 const IDLE_EVICTION_MS = 60 * 60 * 1000;
+
+/**
+ * The ceiling, and the level evicted back down to.
+ *
+ * 20,000 buckets is a few megabytes and far more distinct addresses than this
+ * application sees in an hour of honest use. The gap to the target is
+ * deliberate: without it, every insert at the ceiling would trigger a sort.
+ */
+const MAX_BUCKETS = 20_000;
+const PRUNE_TARGET = 16_000;
+
+/** How many keys are being tracked. For tests, which assert the bound holds. */
+export function bucketCountForTests(): number {
+  return buckets().size;
+}
 
 function take(key: string, budget: Budget, now: number): boolean {
   const map = buckets();
@@ -120,14 +197,16 @@ function take(key: string, budget: Budget, now: number): boolean {
 
   if (!bucket) {
     prune(now);
-    map.set(key, { tokens: budget.capacity - 1, updatedAt: now });
+    map.set(key, {
+      tokens: budget.capacity - 1,
+      updatedAt: now,
+      capacity: budget.capacity,
+      refillSeconds: budget.refillSeconds,
+    });
     return true;
   }
 
-  const refilled = Math.min(
-    budget.capacity,
-    bucket.tokens + (now - bucket.updatedAt) / (budget.refillSeconds * 1000),
-  );
+  const refilled = tokensAt(bucket, now);
   bucket.updatedAt = now;
 
   if (refilled < 1) {
@@ -211,14 +290,47 @@ function budgetsFor(endpoint: AuthEndpoint): {
  * attacker would want to be able to forge their way out of.
  */
 export function clientAddress(request: Request): string {
+  // Unless something in front of this process is known to *overwrite* the
+  // header, it is just a string the caller chose — and a bucket key the caller
+  // chooses is not a bucket. Varying it per request gave every request its own
+  // fresh budget, which turned the IP half of the limiter off completely and
+  // left only the email half, itself bypassed by varying the address. Both
+  // together are the whole limiter, so a spoofable key is not a partial
+  // defence; it is none.
+  if (!trustsForwardedFor()) return DIRECT;
+
   const forwarded = request.headers.get("x-forwarded-for");
   const first = forwarded?.split(",")[0]?.trim();
   if (first) return first;
   return (
     request.headers.get("x-real-ip")?.trim() ||
     request.headers.get("cf-connecting-ip")?.trim() ||
-    "unknown"
+    DIRECT
   );
+}
+
+/**
+ * The one bucket every caller shares when the headers cannot be believed.
+ *
+ * Conservative in the safe direction: too *few* buckets throttles honest
+ * callers who share it, which is visible and recoverable. Too many is an
+ * attacker with an unlimited supply of empty ones, which is neither. The email
+ * bucket still separates individual accounts, so a shared address does not
+ * collapse the whole limiter onto one counter.
+ */
+const DIRECT = "direct";
+
+/**
+ * Whether a proxy in front of this process rewrites `x-forwarded-for`.
+ *
+ * `config().trustProxyHeaders` is the answer, defaulted from the host rather
+ * than from a guess — see `src/config/env.ts`. It has to be an explicit
+ * decision because the header is indistinguishable either way: a spoofed value
+ * from a direct client and a real one from a load balancer are the same bytes,
+ * and only the deployment knows which it is.
+ */
+function trustsForwardedFor(): boolean {
+  return config().trustProxyHeaders;
 }
 
 /**

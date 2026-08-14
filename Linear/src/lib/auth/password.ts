@@ -105,6 +105,39 @@ const SALT_BYTES = 16;
  */
 const MAX_CONCURRENT_DERIVATIONS = 4;
 
+/**
+ * How many may be *queued* behind those four.
+ *
+ * The comment above says the rate limiter stops this queue growing without
+ * bound, and that turned out to be true only of callers who keep getting the
+ * password wrong. A correct password refunds its token — deliberately, so an
+ * honest user never meets the limiter — which means one working account can
+ * enqueue derivations indefinitely. Memory stays bounded, because the four
+ * slots above are what allocate; what grows is the line, and everyone else's
+ * sign-in waits behind it.
+ *
+ * Sixty-four is about three seconds of backlog at four-way concurrency and
+ * ~200 ms each. Past that a request is going to time out somewhere anyway, and
+ * a fast 503 with `Retry-After` is a better answer than a socket held open for
+ * a queue slot that will not arrive in time. It is the same reasoning as the
+ * limiter itself: refuse cheaply rather than accept expensively.
+ */
+const MAX_WAITING_DERIVATIONS = 64;
+
+/**
+ * Thrown when the queue is full. The routes turn it into a 503.
+ *
+ * A distinct type rather than `false`: reporting "wrong password" under load
+ * would be a lie that also spends the caller's rate-limit budget, so a
+ * momentary overload would lock out the very accounts trying to sign in.
+ */
+export class DerivationOverloadedError extends Error {
+  constructor() {
+    super("Too many password checks in flight.");
+    this.name = "DerivationOverloadedError";
+  }
+}
+
 let inFlight = 0;
 const waiting: (() => void)[] = [];
 
@@ -112,6 +145,9 @@ async function acquireSlot(): Promise<void> {
   if (inFlight < MAX_CONCURRENT_DERIVATIONS) {
     inFlight += 1;
     return;
+  }
+  if (waiting.length >= MAX_WAITING_DERIVATIONS) {
+    throw new DerivationOverloadedError();
   }
   await new Promise<void>((resolve) => waiting.push(resolve));
   inFlight += 1;

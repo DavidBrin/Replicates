@@ -59,12 +59,28 @@ import {
 } from "@/domain/entities";
 import { canViewTeam, type Action } from "@/domain/policy";
 
+import { HEX_COLOR } from "@/domain/color";
+
+/**
+ * A project colour, which reaches a CSS property when the project renders.
+ *
+ * This schema was applied here once and lost to a concurrent edit, and the
+ * database `check` constraint is what caught it: the payload never stored, but
+ * the route answered 500 instead of 400 and an uppercase `#ABCDEF` — perfectly
+ * valid CSS — was rejected as if it were an attack. Validation belongs at both
+ * layers, and this is the one that gets to explain itself.
+ */
+const HEX_COLOR_SCHEMA = z
+  .string()
+  .regex(HEX_COLOR, "Colour must be a hex value such as #5e6ad2.")
+  .transform((value) => value.toLowerCase());
+
 const Patch = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().max(20_000).optional(),
   summary: z.string().max(500).optional(),
   icon: z.string().max(40).optional(),
-  color: z.string().max(40).optional(),
+  color: HEX_COLOR_SCHEMA.optional(),
   state: z.enum(PROJECT_STATES).optional(),
   startDate: z.string().max(10).nullable().optional(),
   targetDate: z.string().max(10).nullable().optional(),

@@ -15,7 +15,7 @@ model, and a workspace that boots with one command and no database to install.
 | <img src="docs/screenshots/projects.png" width="240" alt="Project list with health, lead and progress"> | <img src="docs/screenshots/members.png" width="240" alt="Workspace members with roles and invitations"> | <img src="docs/screenshots/marketing.png" width="240" alt="Marketing page"> |
 
 Next.js 16 · PostgreSQL everywhere (WASM locally, Neon deployed) ·
-**1,454 unit tests** · 14 e2e permission tests · built from six parallel
+**1,477 unit tests** · 14 e2e permission tests · built from six parallel
 research lanes, then seven parallel build slices.
 
 ```bash
@@ -151,7 +151,7 @@ Claims here are separated by how they were checked.
 That is the brief's headline requirement and the one-way-door rule (D19),
 working end to end.
 
-**Verified by the suites:** 1,454 unit tests, `tsc --noEmit` clean, `eslint`
+**Verified by the suites:** 1,477 unit tests, `tsc --noEmit` clean, `eslint`
 clean, `next build` succeeding, and **14 e2e permission tests, none skipped**,
 covering invitation, the one-way admin promotion, last-owner protection, guest
 team scoping, private-team invisibility, and the whole add-to-project → edit →
@@ -197,6 +197,31 @@ areas; this one was pointed at everything. The ones worth naming:
   trivially walked past — spent before the derivation and refunded on a correct
   password, so an honest user never meets it.
 
+**A third review, of the fixes themselves.** The second round's repairs had not
+been reviewed, and reviewing them found seven more — including one where a
+concurrent agent had silently reverted a fix I had already made and verified:
+the project PATCH schema was back to `z.string().max(40)`, and only the database
+constraint was still stopping the payload. Of the rest:
+
+- **A bounded limiter is a limit reset** (D24). The token-bucket map had no
+  ceiling, so a burst of distinct keys grew it without bound and made every
+  insert scan it. Adding a ceiling then created the subtler bug: eviction hands
+  a key a fresh budget, so dropping the *oldest* lets a throttled attacker
+  flood their own entry out and start again. Victims are chosen fullest-first.
+- **A bucket keyed on a header the caller sends is not a bucket** (D25).
+  `x-forwarded-for` is now believed only where something is known to overwrite
+  it.
+- **An invite outlived its inviter's authority** (D26). Deactivation does not
+  delete a role row, so a fired administrator's pending invitations kept
+  working.
+- **`issue.reorder` could be bypassed by bundling.** The route asked for it only
+  when `sortOrder` arrived alone, and authorization is OR — so
+  `{title, sortOrder}` was authorised by the author's `update_own` and moved the
+  issue in everyone's list.
+- **Sign-up's throttle was charged before its cheapest rejection**, so five
+  invite-less requests naming a victim's address locked that address out of its
+  own invitation.
+
 **Five bugs the running app found that no unit test could:**
 
 - Tailwind v4's content detection scanned `research/screenshots/*.png` and
@@ -236,7 +261,7 @@ areas; this one was pointed at everything. The ones worth naming:
 
 ```
 SPEC.md                 the contract every slice built against
-DECISIONS.md            23 numbered decisions, with the rejected alternative
+DECISIONS.md            26 numbered decisions, with the rejected alternative
 research/               9,095 lines from six parallel lanes
   01-visual-design.md     measured tokens, glyph geometry, layout
   02-features.md          product behaviour, 67 features ranked MUST/SHOULD/COULD
@@ -263,7 +288,7 @@ research/               9,095 lines from six parallel lanes
 
 ```bash
 npm run dev            # PGlite, seeded on first boot
-npm run verify         # typecheck + lint + 1,454 unit tests
+npm run verify         # typecheck + lint + 1,477 unit tests
 npm run test:e2e       # Playwright, against a production build
 npm run build:schema   # regenerate schema.ts from schema.sql
 npm run db:push        # apply the schema (Vercel build command)

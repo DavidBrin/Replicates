@@ -347,6 +347,57 @@ describe("PATCH, DELETE and reorder on an issue the actor cannot view", () => {
   });
 });
 
+/* ================================================== 3b — the reorder gate = */
+
+describe("reordering by bundling it with an ordinary edit", () => {
+  /**
+   * `issue.reorder` has no `ws:member` row; `issue.update_own` grants one via
+   * `authorInPublicTeam`. A workspace member who authored an issue in a public
+   * team therefore sits exactly between the two, which is what makes the gap
+   * testable: the route asked for `issue.reorder` only when `sortOrder` arrived
+   * *alone*, and `authorize` is OR, so adding any second field downgraded the
+   * requirement to the grant this actor happens to have.
+   *
+   * The position is not a field of the issue the way its title is — there is
+   * one global order and moving a row edits everyone's view of the list.
+   */
+  let ownIssueId: string;
+
+  beforeAll(async () => {
+    const created = await post(createIssue, "http://x/api/issues", outsiderId, {
+      teamId: fixture.teamId,
+      title: "Filed by a workspace member",
+    });
+    expect(created.status).toBe(201);
+    ownIssueId = ((await created.json()) as { issue: { id: string } }).issue.id;
+  });
+
+  it("refuses a bare reorder", async () => {
+    const response = await patch(ownIssueId, outsiderId, { sortOrder: "a1" });
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses the same reorder smuggled beside an allowed field", async () => {
+    const response = await patch(ownIssueId, outsiderId, {
+      title: "Filed by a workspace member",
+      sortOrder: "a1",
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("leaves the order untouched when it refuses", async () => {
+    const stored = await fixture.repos.issues.byId(ownIssueId);
+    expect(stored?.sortOrder).not.toBe("a1");
+  });
+
+  it("still allows the edit the actor is entitled to", async () => {
+    const response = await patch(ownIssueId, outsiderId, {
+      title: "Retitled by its author",
+    });
+    expect(response.status).toBe(200);
+  });
+});
+
 /* ================================================ 4 — the create pre-gate = */
 
 describe("POST /api/issues — the team gate", () => {

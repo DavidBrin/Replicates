@@ -358,6 +358,71 @@ is what the API path uses, because Zod's `.regex()` does not trim.
 stored rather than refused. The disagreement is the safe way round — no amount
 of whitespace turns `url(...)` into six hex digits.
 
+### D24 — Eviction from the rate limiter drops the *fullest* buckets
+
+The limiter keys a token bucket on the caller's IP and email, so the map is
+something an unauthenticated caller can grow. The first version evicted only
+entries that had refilled to full *and* been idle an hour, which against a burst
+— where nothing is idle at all — evicted nothing, grew without bound, and made
+every insert past the threshold scan the whole map to delete nothing. The
+limiter became the amplifier for the exhaustion attack it was written to stop.
+
+Adding a ceiling creates a second, less obvious problem: eviction is a limit
+*reset*, because a key with no entry gets a full budget on its next request. The
+obvious LRU answer — drop the oldest — is therefore exactly wrong. An attacker
+who has spent their budget floods the map with junk keys until their own
+throttled entry ages out, and walks away with a fresh allowance. The bound
+becomes the bypass.
+
+So the victim is chosen by how much budget it has left, fullest first. A bucket
+at capacity is indistinguishable from no entry, so discarding it forgets
+nothing; a bucket at zero is the only row doing work, and it is the last to go.
+Under maximum pressure the map degrades to holding exactly the keys being
+throttled. The test that pins this was checked against the LRU policy first and
+fails there, which is the only reason to believe it.
+
+### D25 — `x-forwarded-for` is believed only where something overwrites it
+
+The same limiter read the caller's address from a header the caller sends. That
+is not a key: vary it per request and every request gets its own budget, which
+switches the IP half off entirely — and the email half is bypassed by varying
+the address, so the two together were not a partial defence but none.
+
+The header cannot be validated, because a spoofed value from a direct client and
+a real one from a load balancer are the same bytes. Only the deployment knows
+which it is, so `config().trustProxyHeaders` is now an explicit fact, defaulted
+from the host: true where the platform terminates traffic and rewrites the
+header, false anywhere else — including a plain `next start`, which is reachable
+directly. `TRUST_PROXY_HEADERS` overrides it for the case the default gets
+wrong, a self-hosted deployment behind nginx.
+
+Wrong in the permissive direction is a silently disabled limiter. Wrong in the
+strict direction is several honest callers sharing one bucket, which is visible
+and survivable. The default takes the second, and the email bucket still
+separates individual accounts so a shared address does not collapse everything
+onto one counter.
+
+### D26 — An invite is exercised with the inviter's authority *now*
+
+Redemption re-checked one column, `workspace_members.role`, which caught the
+headline case — a demoted admin's link must not still hand out admin — and
+missed the two beside it. Deactivation does not delete the role row, so a fired
+administrator's pending invitations kept working, which is precisely the moment
+they must not. And `team_ids` was validated against the inviter when the row was
+written and never again.
+
+The fix is to stop hand-rolling the check and call `loadActor`, the same
+function the mint path uses, then re-run the same gates. A failure to re-resolve
+the teams drops the team grants and keeps the workspace join, because refusing
+outright punishes the invitee for a change in someone else's role.
+
+Worth recording honestly: under the settings this app ships with, the team
+re-resolution can never change the outcome. `memberInvitePolicy` is `adminsOnly`
+and nothing overrides it, so anyone still passing the `member.invite` gate is an
+admin or owner, and they may add to any team. The call is there so that enabling
+`anyMember` later does not silently reopen the hole. Its test says so rather
+than pretending to prove something it cannot.
+
 ### D15 — Research captures from the authenticated app are not committed
 
 The visual-research lane found the browser already signed in to a real
