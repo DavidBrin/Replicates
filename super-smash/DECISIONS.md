@@ -1397,3 +1397,50 @@ different application in the same repository, with nothing in its output indicat
 reviewed what was asked. The same class of error as a capture tool that photographs the wrong
 move, and the same lesson: an instrument that lies does not produce doubt, it produces confident
 wrong conclusions.
+
+---
+
+## D53 — The runtime errors, and which of them the app was actually causing
+
+A `chunk.reason.enqueueModel is not a function` crash inside React's flight client prompted a
+sweep for runtime errors. The sweep found three real defects. **None of them was that one**, and
+saying so is the point of this entry.
+
+**The crash is a development artifact and does not reproduce.** Its stack is entirely inside
+Next's vendored RSC deserializer with no application frame in it. `resolveModelChunk` throws that
+exact message when a row arrives for a chunk that is no longer pending — legitimate for a
+streaming chunk, whose `reason` holds a controller, and impossible for an ordinary one, whose
+`reason` is the response object. So it means a row id was resolved twice: a flight payload merged
+with another. The dev server that produced it had been up for **nineteen hours**, held alive by a
+watchdog written for the eight parallel character agents — a script that only restarts a server
+that is *down*, so a healthy but increasingly stale one runs forever. Driving every route and
+every client-side transition against it did not reproduce the crash; a clean restart is the fix,
+and the watchdog is retired. It is recorded here as unreproduced rather than as fixed.
+
+**The reproducible error was a hydration mismatch on every single page load.** `layout.tsx`
+carried `suppressHydrationWarning` on `<html>`, with a comment correctly noting that it suppresses
+one level only. Grammarly — the extension the comment was written for — does not touch `<html>`:
+it stamps `data-new-gr-c-s-check-loaded` and `data-gr-ext-installed` onto `<body>`, one level
+below where the flag reached. The guard was on the one element nothing writes to. Both elements
+need it, because both are what a third party can reach before React does.
+
+**A missing favicon was pulling a second copy of React into the build.** There was no `public/`
+directory and no icon, so `/favicon.ico` 404'd on every load. A 404 in an App Router app with no
+`pages/` directory still falls through to the *Pages Router* error page — which resolves the
+installed React rather than the copy Next vendors for the App Router. The build was therefore
+emitting chunks for React 19.2.8 alongside Next's vendored 19.3 canary; three sibling apps in this
+repository, identical dependencies, emitted one React each. An `icon.svg` and a `not-found.tsx`
+remove both the 404 and the fallback, and the second React with them.
+
+**And there was no error boundary at all.** Any throw under the root layout unmounted the tree and
+left a blank page — in development behind the overlay, in production behind nothing. A
+sixty-frame simulation has a great deal of surface to throw from, and "the screen went white" is
+the one bug report carrying no information. `error.tsx` offers `reset()` first and shows
+`error.digest`, which on a production build is the only thing linking a crash to a server log.
+`global-error.tsx` deliberately duplicates that screen instead of sharing it: it renders *in place
+of* the root layout, so the stylesheet and both typefaces are precisely what is not guaranteed to
+have loaded, and a Tailwind class there would be a name with nothing behind it.
+
+All three ship as the game's own **NO CONTEST** — what Ultimate calls a match that ends without a
+winner. A 404 and a crash are both the game stopping short, and the player already has a word for
+that.

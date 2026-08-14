@@ -59,6 +59,15 @@ export const viewport: Viewport = {
  *
  * It suppresses one level only — this element's own attributes and text. Any
  * genuine mismatch inside the app still warns, which is the part worth keeping.
+ *
+ * Which is why `<body>` needs its own. Grammarly, the most common of these
+ * extensions, does not touch `<html>` at all: it stamps
+ * `data-new-gr-c-s-check-loaded` and `data-gr-ext-installed` onto `<body>`, one
+ * level below where the suppression reached. The flag on `<html>` was therefore
+ * guarding the one element nothing writes to, and every page load logged a
+ * hydration mismatch naming those two attributes. Both flags are needed, and
+ * for the same reason: they are the two elements a third party can reach before
+ * React does.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -67,7 +76,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${anton.variable} ${rounded.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-full bg-[#101215] antialiased">{children}</body>
+      <body className="min-h-full bg-[#101215] antialiased" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

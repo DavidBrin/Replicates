@@ -112,6 +112,12 @@ velocity delivered in the wrong units, an authoring view that disagreed with the
 different ways, and an engine branch that had silently disabled scripted vertical movement for the
 whole roster ([D52](DECISIONS.md#d52--round-two-and-what-a-review-of-it-kept-finding)).
 
+A reported crash inside React's own RSC client turned out not to be the app's, and chasing it
+found the three errors that were: a hydration warning on every page load, a missing favicon that
+was quietly pulling a second copy of React into the build, and no error boundary anywhere — so any
+throw left a blank page
+([D53](DECISIONS.md#d53--the-runtime-errors-and-which-of-them-the-app-was-actually-causing)).
+
 ---
 
 ## The game
