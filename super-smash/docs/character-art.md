@@ -239,6 +239,40 @@ a prop's `colour`. Unset, it falls back to `accent`.
 Reach for a literal only when the colour must *not* follow the costume — Mario's
 white gloves, Pikachu's black ear tips. If it should follow, it needs a role.
 
+## Testing what you add
+
+Break it on purpose, confirm the test goes red, restore it. That much is already
+habit here. **The other half is to break the *caller*.**
+
+A ten-round review of the second art pass found twenty-one defects and fifteen
+were in the tests, not the code — every implementation had been mutation-tested
+and not one test had. They failed the same way each time: **the test named the
+property it was failing to check.**
+
+- `expect(Array.isArray(result.over)).toBe(true)` — for a test whose whole
+  purpose was that the queue *survives*. `[]` is an array, and `[]` is the exact
+  loss it described.
+- Rewritten to count canvas calls, it passed on `save()`/`restore()`, which move
+  a call count without painting a pixel.
+- Every test of a shared helper called the helper directly, so all of them
+  stayed green when a caller reverted to its own copy of the formula — which is
+  the drift that caused the bug in the first place.
+- A shape assertion read `moveTo`/`lineTo` when the helper draws neither, so it
+  took `Math.max()` of an empty list.
+- A loop over a projectile table that was empty ran zero assertions.
+
+Three habits that catch all of those:
+
+1. **Assert the value, not the shape.** `Array.isArray`, `.toBeDefined()` and
+   `.not.toBe(somethingElse)` are the tells.
+2. **Assert the fixture is non-empty** before trusting a loop over it. A loop
+   over nothing is green.
+3. **Delete the consumer, not the function.** If your test still passes, it
+   proves a helper exists that nobody is obliged to call.
+
+The question to ask of a green test: *what would still be broken while this is
+passing?*
+
 ## Looking at your work
 
 ```bash
