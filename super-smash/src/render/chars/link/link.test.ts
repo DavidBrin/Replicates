@@ -322,6 +322,30 @@ describe("standing still", () => {
     expect(spread).toBeGreaterThan(0.2);
   });
 
+  it("keeps the sword up while he moves, too", () => {
+    // Standing still is not where a fighter spends their time. The shared walk,
+    // run and crouch swing the arms like someone with both hands free — the run
+    // drives the sword shoulder through a hundred and sixteen degrees a cycle —
+    // which slings four and a half units of Master Sword forward across his own
+    // shins and back twice a second. The stance the clip above finally gets
+    // right is thrown away the instant a player touches the stick.
+    //
+    // Walk, crouch and stand because SmashWiki's note is that Link's passive
+    // projectile block is live in all three, which is only true because the
+    // sword and shield stay up through them. Dash and run for the plainer
+    // reason that standing, walking, dashing and running are the four things a
+    // player watches all match.
+    for (const name of ["walk", "dash", "run", "crouch"] as PoseName[]) {
+      const clip = clipOf(name);
+      expect(clip, `${name} falls through to the shared clip`).not.toBe(POSE_LIBRARY[name]);
+      for (const t of IDLE_PHASES) {
+        const p = placesAt(clip, t);
+        expect(p.tip.y, `${name}: blade tip at t=${t}`).toBeGreaterThan(p.hip + 3.5);
+        expect(p.tip.x, `${name}: blade is behind him at t=${t}`).toBeLessThan(p.hand.x - 1);
+      }
+    }
+  });
+
   it("closes the loop without a jump", () => {
     // A loop is sampled with `t` wrapped, so the span from the last key runs
     // back to key 0 and any mismatch is a snap every cycle at the same phase.
@@ -338,8 +362,12 @@ describe("every grounded clip lands back in that stance", () => {
    */
   const KNEELING = new Set<PoseName>(["dtilt", "dsmash", "dthrow"]);
   const AERIAL = new Set<PoseName>(["nair", "fair", "bair", "uair", "dair"]);
+  // `dash` is the odd one out: it is a one-shot like an attack, but what it
+  // hands off to is `run`, not standing, so it ends mid-stride with a foot in
+  // the air on purpose.
+  const HANDS_OFF = new Set<PoseName>(["grab", "dash"]);
   const GROUNDED = ACTION_CLIPS.filter(
-    ([name]) => !KNEELING.has(name) && !AERIAL.has(name) && name !== "grab",
+    ([name]) => !KNEELING.has(name) && !AERIAL.has(name) && !HANDS_OFF.has(name),
   );
 
   it("has clips to check", () => {
@@ -598,8 +626,18 @@ function paintedHeight(ctx: MockContext): number {
     const a = c.args.map(Number);
     if (c.method === "moveTo" || c.method === "lineTo") ys.push(a[1]);
     else if (c.method === "quadraticCurveTo") ys.push(a[1], a[3]);
-    else if (c.method === "arc") ys.push(a[1] - a[2], a[1] + a[2]);
     else if (c.method === "rect" || c.method === "fillRect") ys.push(a[1], a[1] + a[3]);
+    else if (c.method === "arc") {
+      // Sampled, not `centre ± radius`. An arc's construction circle is not
+      // what gets drawn, and for the bow the difference is the whole test: its
+      // limbs are a *shallow* 0.6-radian slice of a very large circle, so the
+      // radius is nearly as big as the fighter while the ink on screen is a
+      // fraction of it. Measuring the circle let a bow half the right size
+      // pass, which is exactly the failure this assertion exists to catch.
+      const [x, y, r, from, to] = a;
+      for (let i = 0; i <= 16; i++) ys.push(y + r * Math.sin(from + ((to - from) * i) / 16));
+      void x;
+    }
   }
   return ys.length === 0 ? 0 : Math.max(...ys) - Math.min(...ys);
 }
@@ -666,6 +704,259 @@ describe("the props a player has to see", () => {
   });
 });
 
+/* ------------------------------------------------------------ boomerang -- */
+
+/**
+ * Every point an effect painted, in **canvas** space rather than in the local
+ * frame it was authored in.
+ *
+ * `paintedHeight` above reads the raw path arguments, which is right for the
+ * question it asks — how big is this — and useless for the question below,
+ * which is *where did it end up*. The boomerang is drawn at the origin and then
+ * translated, rotated and mirrored into place, so its authored coordinates say
+ * nothing at all about whether it lands on Link's face or under the port tag.
+ *
+ * The transform stack is replayed here from the recorded `save`/`restore`/
+ * `translate`/`rotate`/`scale` calls. A 2×3 affine is enough; nothing in this
+ * fighter uses `transform` or `setTransform`.
+ */
+type Affine = readonly [number, number, number, number, number, number];
+const IDENTITY: Affine = [1, 0, 0, 1, 0, 0];
+
+function paintedPoints(ctx: MockContext): { x: number; y: number }[] {
+  let m: Affine = IDENTITY;
+  const stack: Affine[] = [];
+  const out: { x: number; y: number }[] = [];
+  const at = (x: number, y: number) => out.push({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
+
+  for (const c of ctx.calls) {
+    const a = c.args.map(Number);
+    switch (c.method) {
+      case "save":
+        stack.push(m);
+        break;
+      case "restore":
+        m = stack.pop() ?? IDENTITY;
+        break;
+      case "translate":
+        m = [m[0], m[1], m[2], m[3], m[0] * a[0] + m[2] * a[1] + m[4], m[1] * a[0] + m[3] * a[1] + m[5]];
+        break;
+      case "rotate": {
+        const [c0, s0] = [Math.cos(a[0]), Math.sin(a[0])];
+        m = [m[0] * c0 + m[2] * s0, m[1] * c0 + m[3] * s0, -m[0] * s0 + m[2] * c0, -m[1] * s0 + m[3] * c0, m[4], m[5]];
+        break;
+      }
+      case "scale":
+        m = [m[0] * a[0], m[1] * a[0], m[2] * a[1], m[3] * a[1], m[4], m[5]];
+        break;
+      case "moveTo":
+      case "lineTo":
+        at(a[0], a[1]);
+        break;
+      case "quadraticCurveTo":
+        at(a[0], a[1]);
+        at(a[2], a[3]);
+        break;
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+/**
+ * The box the port tag covers, in canvas pixels, for a fighter standing at
+ * `(x, y)` with `u` pixels to the world unit.
+ *
+ * `over()` paints *under* the tag by design, so this is the one region on the
+ * screen where a move graphic is simply not shown — and `docs/character-art.md`
+ * is explicit that it is a reason to move a graphic rather than a thing to
+ * fight. Quoted from `renderer.ts` and `drawPortTag`: a 46 × 24 parallelogram
+ * at `scale = zoom / 7`, sheared by `0.22 · h`, centred on the fighter and
+ * hung 14 pixels above his crown. Link stands 14.2 world units tall.
+ *
+ * Taken as its bounding box, which errs on the side of calling something
+ * occluded that is merely near the corner — the right direction to err for an
+ * object that has to be legible.
+ */
+function portTagBox(x: number, y: number, u: number) {
+  const scale = Math.max(0.6, u / 7);
+  const [w, h] = [46 * scale, 24 * scale];
+  const base = y - 14.2 * u - 14;
+  return { left: x - w / 2 - h * 0.22, right: x + w / 2 + h * 0.22, top: base - h, bottom: base };
+}
+
+/** Hue in degrees, and saturation 0..1, of a `#rrggbb`. */
+function hsOf(hex: string): { hue: number; sat: number } {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const [max, min] = [Math.max(r, g, b), Math.min(r, g, b)];
+  const d = max - min;
+  if (d === 0) return { hue: 0, sat: 0 };
+  const hue =
+    max === r ? 60 * (((g - b) / d + 6) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  return { hue, sat: d / max };
+}
+
+/** The shorter way round between two hues, 0..180. */
+function hueGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+describe("the boomerang reads as a boomerang", () => {
+  // Four separate critiques called this object *hair*, across five attempts at
+  // fixing it, and the last round concluded the cause was colour. It was, in
+  // part — but two of the three causes were geometry, and both were invisible
+  // at 1:1 and obvious in a magnified capture. All three are pinned here.
+  const RELEASE = link.moves.sideB?.projectiles?.[0]?.spawnFrame ?? 27;
+  // `fxAt` plants the fighter at (400, 500) with 12 pixels to the world unit.
+  const [FX_X, FX_Y, FX_U] = [400, 500, 12];
+
+  it("holds the wind-up clear of the port tag", () => {
+    // **Cause one.** The tag is opaque, as wide as his shoulders and centred on
+    // him, and the hold used to sit at −5.2 world units laid over 60°, which
+    // put the object's inboard arm at −3.4 — under the tag for the whole coil.
+    // What reached the player was *one arm of a V*, and one arm of a V is a
+    // lock of hair. The symmetry that makes this a boomerang was precisely the
+    // part being clipped, which is why four rounds of moving it and recolouring
+    // it never touched the problem.
+    const tag = portTagBox(FX_X, FX_Y, FX_U);
+    for (let frame = 0; frame <= RELEASE; frame++) {
+      const buried = paintedPoints(fxAt("sideB", frame).ctx).filter(
+        (p) => p.x > tag.left && p.x < tag.right && p.y > tag.top && p.y < tag.bottom,
+      );
+      expect(buried.length, `frame ${frame} puts ${buried.length} points under the port tag`).toBe(0);
+    }
+  });
+
+  it("throws it past his head rather than through it", () => {
+    // **Cause two.** The old path was a straight chord from the hold to the
+    // hand, and at his centre line that chord passed through 11.1 world units —
+    // inside a head that spans 9.4 to 14.2. Frames 18 to 24 laid the whole
+    // object across his skull; a magnified capture of frame 21 is a ponytail
+    // with a hair tie on it. The two frames the previous round verified, 6 and
+    // 12, happen to be the two that were already clear.
+    //
+    // Measured on the **painted points**, not on where the painter translated
+    // to. That distinction is the whole test. A first cut of this asserted the
+    // centre stayed off the head and passed everywhere — and a critic reading a
+    // capture cold called frame 20 "a long pointed beak growing out of his
+    // face". The object is eight units long: its centre was 2.6 units clear
+    // while its elbow, the vertex, was sitting on his cheek at 1.4. An
+    // assertion about the middle of a shape says nothing about the shape.
+    //
+    // Head centre is 11.8 world units up (root 4.28 + hip 1.1 + torso 3.2 +
+    // head 1.18, times the 1.06 rig scale), radius 2.3 × 1.06.
+    //
+    // Only the half of that circle **above its own centre** is asserted, and
+    // that is the rig's own claim rather than a threshold picked to make these
+    // numbers pass: `rig.ts` records that the torso capsule is 3.7 units
+    // through and "its top cap reaches within a whisker of the head circle's
+    // centre", which is why Link was given extra neck. Everything below the
+    // centre line is collar. An object crossing a collar reads as passing in
+    // front of him; an object crossing eyes reads as attached to him, and that
+    // is the whole difference between a throw and a beak.
+    const [headY, headR] = [11.8, 2.3 * 1.06];
+    for (let frame = 0; frame <= RELEASE; frame++) {
+      for (const p of paintedPoints(fxAt("sideB", frame).ctx)) {
+        const dx = (p.x - FX_X) / FX_U;
+        const rise = (FX_Y - p.y) / FX_U;
+        if (rise < headY) continue;
+        const d = Math.hypot(dx, rise - headY);
+        expect(d, `frame ${frame} puts the boomerang on his face`).toBeGreaterThan(headR);
+      }
+    }
+  });
+
+  it("paints it outside Link's own colour family", () => {
+    // **Cause three,** and the one the last round correctly identified. The old
+    // body was `#C9B27A`; the hair swoop on his head is `#E8C86A`. Those are
+    // hue 42.5° and hue 44.8° — *two degrees apart* — at luma 178 against 199,
+    // with his skin a third warm mid-tone at 208. Three shapes in one hue
+    // family at one value, touching. No placement rescues that.
+    const swoop = rig.props.find((p) => p.kind === "hairSwoop")?.colour;
+    expect(swoop, "the hair swoop this has to stay away from has moved").toMatch(/^#[0-9A-Fa-f]{6}$/);
+    const hair = hsOf(swoop as string);
+
+    const fills = assignmentsTo(fxAt("sideB", 13).ctx, "fillStyle")
+      .filter((v): v is string => typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v))
+      .map(hsOf)
+      // Greys and near-whites — the steel — have no hue to be wrong about.
+      .filter((c) => c.sat > 0.15);
+    expect(fills.length, "the wind-up paints nothing with a hue").toBeGreaterThan(0);
+    for (const c of fills) {
+      expect(hueGap(c.hue, hair.hue), `${c.hue.toFixed(0)}° is in Link's own hue family`).toBeGreaterThan(90);
+    }
+  });
+
+  it("outlines it under its own body colour rather than over it", () => {
+    // The silent one, and the reason the first cool version still failed: a
+    // stroke is centred on its path. The arm is 0.16–0.21 of the half-span
+    // across and the rim is 0.14, so stroking *after* filling eats two thirds
+    // of the body colour and the capture comes back as a near-black wire with
+    // two white tips.
+    //
+    // This is the identical failure that made the steel caps invisible for
+    // three rounds — 0.178 wide, stroked with 0.08 from both sides, leaving
+    // about half a pixel of cap at match scale, while the comment above them
+    // claimed they were what stopped the object reading as hair. Fill last and
+    // the rim keeps only its outer half.
+    //
+    // Located by walking to the **body's own** path rather than by taking the
+    // first `stroke` and the first `fill` in the frame, which is what this
+    // asserted first. The spin ghosts fill without stroking, so on any frame
+    // fast enough to have them a correct painter would have read as a broken
+    // one. The body is the first fill made under an opaque, saturated colour:
+    // the ghosts are `rgba()`, the caps are near-white, the wrap is stroked.
+    const calls = fxAt("sideB", 13).ctx.calls;
+    let colour: { sat: number } | null = null;
+    let body = -1;
+    for (let i = 0; i < calls.length && body < 0; i++) {
+      const c = calls[i];
+      if (c.method === "set:fillStyle") {
+        const v = c.args[0];
+        colour = typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v) ? hsOf(v) : null;
+      } else if (c.method === "fill" && colour && colour.sat > 0.15) body = i;
+    }
+    expect(body, "the wind-up never fills the boomerang's body").toBeGreaterThan(-1);
+
+    const opened = calls.slice(0, body).map((c) => c.method).lastIndexOf("beginPath");
+    const strokes = calls
+      .slice(opened, body)
+      .map((c) => c.method)
+      .includes("stroke");
+    expect(strokes, "the rim is painted over the body it is supposed to edge").toBe(true);
+  });
+
+  it("throws the same object it was holding", () => {
+    // The wind-up and the projectile are drawn in different places by different
+    // functions, and a hold that reads as one thing followed by a flight that
+    // reads as another is worse than either alone. They share `paintBoomerang`,
+    // and this is what says so: the same hues, in the same proportions.
+    const held = new Set(
+      assignmentsTo(fxAt("sideB", 13).ctx, "fillStyle").filter(
+        (v): v is string => typeof v === "string" && v.startsWith("#"),
+      ),
+    );
+    const flight = createMockContext();
+    projectiles.boomerang?.({
+      ctx: flight,
+      u: FX_U,
+      age: 6,
+      dir: 1,
+      frame: 6,
+      returning: false,
+    } as unknown as ProjectileContext);
+    const thrown = new Set(
+      assignmentsTo(flight, "fillStyle").filter((v): v is string => typeof v === "string" && v.startsWith("#")),
+    );
+    for (const colour of held) {
+      expect(thrown.has(colour), `${colour} is in his hand but not in the air`).toBe(true);
+    }
+  });
+});
+
 describe("the second slash is available and the animation says so", () => {
   // Ultimate's forward smash is two inputs: hit one on frames 17-18, and if
   // attack is pressed again on frames 22-36 a one-handed outward slash follows.
@@ -713,6 +1004,33 @@ describe("the second slash is available and the animation says so", () => {
     // purely because `STAND` is where it converges.
     expect(Math.cos(at(36)), "still loaded at the end of the window").toBeLessThan(0);
     expect(Math.cos(at(44)), "never comes out of the hold").toBeGreaterThan(0.15);
+  });
+
+  it("lunges wider and lower than he stands, and holds it", () => {
+    // The regression this exists to stop happening twice. The lunge was
+    // authored against the old narrow stance; when the standing pose was
+    // widened to the A-frame the reference describes, the "deep split lunge"
+    // silently became *narrower and no lower than standing still* — so the
+    // contact frame and the whole second-hit window read as a man standing
+    // upright with his arm out. Two critics reading match-scale captures named
+    // it independently, and neither could have known it was a regression rather
+    // than an oversight, because nothing tied the two poses together.
+    //
+    // Now something does. A lunge is not a pose, it is a *relation* to the
+    // stance: further apart and further down. Written that way it cannot drift
+    // again — widening the stance a second time will fail here rather than
+    // quietly undo the smash.
+    const stand = placesAt(clipOf("idle"), 0);
+    const standWide = Math.abs(stand.ankleR.x - stand.ankleL.x);
+    const clip = clipOf("fsmash");
+    for (const frame of [17, 19, 24, 31]) {
+      const p = placesAt(clip, clipTimeOf("fsmash", actionFrameOf(frame), strike));
+      expect(
+        Math.abs(p.ankleR.x - p.ankleL.x),
+        `frame ${frame}: stance ${Math.abs(p.ankleR.x - p.ankleL.x).toFixed(2)} against ${standWide.toFixed(2)} standing`,
+      ).toBeGreaterThan(standWide + 0.3);
+      expect(p.hip, `frame ${frame}: hips no lower than standing`).toBeLessThan(stand.hip - 0.1);
+    }
   });
 
   it("parks a charging smash on a key that was authored for it", () => {

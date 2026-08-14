@@ -10,18 +10,29 @@
 //      partly that the sword cannot be seen swinging. It is drawn here instead,
 //      as a `custom` prop, wide enough to read and with the winged crossguard
 //      that is the one shape nobody else on the roster has.
-//   2. **The shield on his back.** Ultimate's Link is Breath of the Wild's, and
-//      he carries the Hylian Shield slung across his back — he only brings it
-//      round when he actually guards. Hanging it off `forearmL` (which is where
-//      it was) puts a dinner plate in the hand that has to draw a bow, throw a
-//      boomerang and hold a bomb, and every one of those poses read as him
-//      shoving a shield at the opponent.
-//   3. **The cap.** Long, pointed, trailing behind the head. Kept exactly as it
-//      was, because it is already doing its job.
+//   2. **The shield on his back.** Not where Ultimate puts it. His Link holds
+//      the Hylian Shield up on the left forearm through every frame of his
+//      idle, his walk and his crouch — that is what his passive projectile
+//      block is, and a reference pass ranks it the second strongest cue in his
+//      whole silhouette after the leg A-frame. It is on his back here because a
+//      prop is welded to one bone for every clip a fighter has, and that same
+//      hand draws a bow, throws a boomerang and holds a bomb. See `SHIELD`.
+//   3. **The cap.** Long, pointed, trailing behind the head — and the thing that
+//      was quietly eating the Master Sword, twice over. It was drawn *after* the
+//      sword, so any pose that carried the blade up past the shoulder painted a
+//      green wedge over it; and it was anchored 1.8 units too low, so it sat
+//      across his eyes like a mask with the top of his skull bare. Both are
+//      fixed below.
+//
+// The second and third of those had survived a full round of work each. Neither
+// is subtle at the size this file is authored at; both are invisible at the size
+// a fighter is *seen* at, which is about forty screen pixels of head. Nothing
+// here was found by reading it. Everything was found by magnifying a capture.
 
 import {
   ARMS,
   FEET,
+  HANDS,
   LEGS,
   eyes,
   group,
@@ -51,42 +62,43 @@ import {
 function masterSword(b: Brush): void {
   const ctx = b.ctx;
 
-  // Grip, and the pommel below the fist.
+  // Grip, and the pommel below the fist. Short: the whole hilt is under a third
+  // of the blade, which is the proportion the real sword has and not the one
+  // this prop used to have.
   poly(ctx, [
-    [-0.062, -0.3],
-    [0.062, -0.3],
-    [0.062, 0.05],
-    [-0.062, 0.05],
+    [-0.055, -0.18],
+    [0.055, -0.18],
+    [0.055, 0.03],
+    [-0.055, 0.03],
   ]);
   b.fill("#3D56B2");
   poly(ctx, [
-    [-0.13, -0.28],
-    [0.13, -0.28],
-    [0, -0.46],
+    [-0.1, -0.17],
+    [0.1, -0.17],
+    [0, -0.27],
   ]);
   b.fill("accent");
 
   // The crossguard: two swept wings rising toward the blade. This is the read.
   poly(ctx, [
-    [-0.42, 0.2],
-    [-0.3, 0.02],
-    [0.3, 0.02],
-    [0.42, 0.2],
-    [0.26, 0.23],
-    [0.13, 0.12],
-    [-0.13, 0.12],
-    [-0.26, 0.23],
+    [-0.3, 0.14],
+    [-0.22, 0.0],
+    [0.22, 0.0],
+    [0.3, 0.14],
+    [0.19, 0.16],
+    [0.095, 0.085],
+    [-0.095, 0.085],
+    [-0.19, 0.16],
   ]);
   b.fill("accent");
 
-  // The blade: broad at the guard, tapering to a point a little over four rig
-  // units out — about a third of his height, which is what it is in the game.
+  // The blade: broad at the guard, tapering to a point a full `size` out.
   poly(ctx, [
-    [-0.115, 0.1],
-    [0.115, 0.1],
-    [0.092, 0.78],
+    [-0.105, 0.06],
+    [0.105, 0.06],
+    [0.084, 0.8],
     [0, 1.0],
-    [-0.092, 0.78],
+    [-0.084, 0.8],
   ]);
   b.fill("#DCE4EC");
 
@@ -94,10 +106,10 @@ function masterSword(b: Brush): void {
   // painted over the rim's own silhouette.
   if (b.mode === "body") {
     poly(ctx, [
-      [-0.042, 0.16],
-      [0.042, 0.16],
-      [0.034, 0.76],
-      [-0.034, 0.76],
+      [-0.038, 0.12],
+      [0.038, 0.12],
+      [0.031, 0.78],
+      [-0.031, 0.78],
     ]);
     b.fill("#9BB0C4");
   }
@@ -114,7 +126,7 @@ function hylianShield(b: Brush): void {
   ctx.quadraticCurveTo(0.5, -0.78, 0, -1.0);
   ctx.quadraticCurveTo(-0.5, -0.78, -0.8, -0.16);
   ctx.closePath();
-  b.fill("#C3CBD8");
+  b.fill("#9FAABC");
 
   if (b.mode === "body") {
     ctx.beginPath();
@@ -200,11 +212,31 @@ function quiver(b: Brush): void {
   }
 }
 
+/**
+ * Long. The first pass drew grip-to-tip at 4.6 rig units — a third of Link's
+ * height — and three independent reads called it short: the reference measures
+ * the Master Sword at **0.83 of his height overall**, the same length as his
+ * bow, with a blade about three times the hilt; and two critics working from
+ * magnified captures put the drawn blade at 0.23–0.29 H against a wanted 0.55
+ * and called it a gladius.
+ *
+ * It also explained something that looked unrelated. `swing.ts` derives the
+ * swoosh from the move's own hitboxes, so on the forward smash the arc reaches
+ * 13.7 world units from his centre — and the sword tip reached 10. The graphic
+ * that says "this is how far the move goes" and the weapon that is supposed to
+ * be making it were four units apart, which reads as two swings happening at
+ * once. Lengthening the blade closes most of that gap without touching a
+ * hitbox.
+ *
+ * 6.4 rather than the reference's ratio outright: at this length the tip clears
+ * his crown in the standing pose and stays off the stage in the forward smash's
+ * low hold, and a longer one does neither.
+ */
 const SWORD: PropDef = {
   kind: "custom",
   bone: "handR",
   at: 1,
-  size: 4.6,
+  size: 6.4,
   colour: "#DCE4EC",
   detail: "accent",
   draw: (b) => masterSword(b),
@@ -239,7 +271,7 @@ const SHIELD: PropDef = {
   at: 0.42,
   size: 3.3,
   across: -1.5,
-  colour: "#C3CBD8",
+  colour: "#9FAABC",
   detail: "accent",
   layer: "behind",
   draw: (b) => hylianShield(b),
@@ -294,6 +326,12 @@ export const rig: CharacterRig = {
     ...group(LEGS, { len: 1.02 }),
     ...group(ARMS, { len: 1.04, thick: 0.96 }),
     ...group(FEET, { len: 1.15, thick: 1.15 }),
+    // Slimmer fists. The shared hand capsule is 1.75 units through against a
+    // 1.2-unit forearm, so a hand at the end of an arm reads as a ball on a
+    // stick — and Link's off hand, which is the far-side limb and shaded down
+    // a quarter, was coming out as an olive lump at his waist rather than as a
+    // fist. Two critics named it independently.
+    ...group(HANDS, { thick: 0.86 }),
   }),
   headRadius: 2.3,
   boneColour: {
@@ -322,25 +360,36 @@ export const rig: CharacterRig = {
     { kind: "tunic", bone: "hip", at: 0.5, size: 1.75, colour: "primary" },
     { kind: "belt", bone: "hip", at: 0.9, size: 1.7, colour: "#5A3A18", detail: "accent" },
     /*
-     * Shorter, and laid further back.
+     * On his head, which it was not.
      *
-     * The cap's tail is the longest straight line on the fighter and it runs up
-     * and back at about fifty degrees — which is within twenty degrees of where
-     * the Master Sword now rakes, on the same side of the body, and thicker. A
-     * critic measuring a match-scale capture found the two merging into a single
-     * green wedge three screen pixels apart, and concluded that the long
-     * up-and-back diagonal in Link's silhouette was *the hat*: it had taken the
-     * sword's job and the sword was contributing nothing.
+     * `capPointed` draws a half-disc **hanging below its anchor**: the flat
+     * chord is at `−0.1 × size` in the prop's frame and the fill runs down from
+     * there to `−1.1 × size`. So the chord is the *brim* and the anchor has to
+     * sit at the crown for the fill to land on the skull. It was anchored at
+     * `along: 0.7` — seven tenths of a unit above the head's *centre*, which put
+     * the brim half a unit above centre and the fill from there down to nearly
+     * the jaw. The cap was a green band straight across his eyes with a crescent
+     * under them, and the top of his skull was bare skin.
      *
-     * Two changes, both about separation rather than about the cap: it is a
-     * fifth shorter so it stops out-topping the blade, and rotated to lie back
-     * along the shoulder blades: the tail runs at seventy degrees off vertical
-     * rather than fifty, against a blade at thirty-two, so the two are forty
-     * degrees apart instead of twenty.
+     * That has been true since round one, whose note read "kept exactly as it
+     * was, because it is already doing its job." It was invisible at 1:1: the
+     * whole head is about forty screen pixels in a match, and a band across the
+     * middle of it reads as shadow. It took a capture magnified five times to
+     * see that Link was wearing his hat over his face.
+     *
+     * `along: 2.5` puts the brim at the crown (head radius 2.3, plus the
+     * painter's own 0.1 × size chord offset). The `angle` that was here is gone
+     * with it — it was added to lay the tail back away from the blade, and all
+     * it really did was tilt the brim into a diagonal across his face. The
+     * separation problem it was for is solved better by the draw order below:
+     * the blade is silver, on top, and now starts from a hand that is not where
+     * the cap starts.
      */
-    { kind: "capPointed", bone: "head", at: 1, size: 2.05, along: 0.7, angle: 0.35, colour: "primary" },
-    { kind: "hairSwoop", bone: "head", at: 1, size: 1.5, across: 0.75, along: 0.5, colour: "#E8C86A" },
-    { kind: "earsPointed", bone: "head", at: 1, size: 1.0, along: -0.15, angle: 0.5, colour: "skin" },
+    { kind: "capPointed", bone: "head", at: 1, size: 2.05, along: 2.5, colour: "primary" },
+    // Tucked under the brim as a fringe. Pushed forward 0.75 of a unit it
+    // reached past the head's own edge and read, at this size, as a beak.
+    { kind: "hairSwoop", bone: "head", at: 1, size: 1.3, across: 0.5, along: 0.75, colour: "#E8C86A" },
+    { kind: "earsPointed", bone: "head", at: 1, size: 1.5, along: -0.3, angle: 0.5, colour: "skin" },
     /*
      * After the cap, and that is the whole reason it moved.
      *

@@ -22,6 +22,15 @@
  * how long the leg stays out, which for a move whose hitbox is live for
  * twenty-five of its thirty-eight frames is the whole move.
  *
+ * And five are not moves at all. Standing, walking, dashing, running and
+ * crouching are what a player watches for most of a match, and the shared
+ * versions of all five hang or swing the arms the way somebody with both hands
+ * free does — which on this fighter puts four and a half rig units of Master
+ * Sword through his own shins. `idleClip` is authored outright, because
+ * Ultimate’s Link has a stance nobody else has; the other four are the shared
+ * cycles with `carrying` putting his arms back on them, because their legs were
+ * never the problem.
+ *
  * Author against the real move: the frame data (ultimateframedata.com) says
  * when the hitbox is live, and `poseTimeFor` will put the clip’s `strike` key
  * on that frame whatever the numbers are, so the clip only has to be the right
@@ -34,7 +43,7 @@
  */
 
 import { P, type PoseClip } from "../../poses/clip";
-import type { PoseName } from "../../poses/library";
+import { POSE_LIBRARY, type PoseName } from "../../poses/library";
 
 /**
  * Link, standing — "Wait", the pose a player looks at more than any other, and
@@ -55,11 +64,11 @@ import type { PoseName } from "../../poses/library";
  *
  * | | measured | here |
  * |---|---|---|
- * | ankle to ankle | 0.52 H | 0.32 H — see below |
- * | trail leg, off vertical | 33° back, knee flexed ~12° | 26° back, flexed 12° |
- * | lead leg, off vertical | 21° forward, shin vertical | 24° forward, flexed 24° |
- * | stance height vs upright | 6–7% lower | 5% lower |
- * | blade, off vertical | **29° up and BACK**, tip above the crown | 32° up and back, tip a hair over the crown |
+ * | ankle to ankle | 0.52 H | 0.36 H — see below |
+ * | trail leg, off vertical | 33° back, knee flexed ~12° | 34° back, flexed 12° |
+ * | lead leg, off vertical | 21° forward, shin vertical | 27° forward, flexed 28° |
+ * | stance height vs upright | 6–7% lower | 6.7% lower |
+ * | blade, off vertical | **29° up and BACK**, tip above the crown | 32° up and back, tip half a unit over the crown |
  * | head travel over one cycle | **under 1% of H** | 0.4% |
  *
  * Four things follow, and three of them are the opposite of what the shared
@@ -70,8 +79,8 @@ import type { PoseName } from "../../poses/library";
  *      dozen degrees. Seven units of ankle separation — the measured 0.52 H —
  *      is not reachable: the pelvis is pinned four and a quarter units above
  *      the feet and the legs are four and a fifth long, so that much spread
- *      would need the splits. 4.3 units is reachable, and it is fifteen times
- *      the shared clip's tenth of a unit.
+ *      would need the splits. Five units is reachable, and it is seventeen
+ *      times the shared clip's three tenths of a unit.
  *
  *      The **near** leg leads, which is the opposite of what the reference
  *      infers (it reads the shield-side left foot as forward, and flags that as
@@ -175,6 +184,7 @@ const idleClip: PoseClip = {
   ],
 };
 
+
 /**
  * The stance every grounded clip converges towards — `idleClip`'s settle key,
  * written once, with the height its folded legs are owed.
@@ -210,6 +220,102 @@ const STAND_Y = -0.93;
 
 /** The terminator every grounded clip ends on: the stance, at the stance's height. */
 const standKey = { t: 1, pose: P(STAND), offsetY: STAND_Y } as const;
+
+/**
+ * The shared clip, with Link's arms put back on it.
+ *
+ * Four of the ground clips — walk, dash, run and crouch — are good animations
+ * that are wrong on him for one reason: they swing the arms like someone out
+ * for a stroll, and he is carrying four and a half rig units of Master Sword.
+ * The shared run drives the sword arm through a hundred and sixteen degrees a
+ * cycle, which slings the blade forward across his own shins and back again
+ * twice a second. Standing still finally holds the stance the reference
+ * describes; the instant a player touches the stick, it is thrown away.
+ *
+ * SmashWiki's note is that Link's passive projectile block is live *while
+ * standing, walking and crouching* — which is only true because sword and
+ * shield stay up through all three — and that "the majority of Link's
+ * animations have been significantly reworked in order to seamlessly transition
+ * into his new idle stance."
+ *
+ * So: keep the legs, the torso, the bob and the timing, and overwrite the five
+ * arm bones with the standing pose plus a small counter-swing. Derived from the
+ * shared clip rather than copied out of it, so a future improvement to the walk
+ * cycle reaches Link too — copying would have forked it silently.
+ *
+ * `sway` is degrees at the sword shoulder, phased by `cos` so the extremes land
+ * on the keys where a stride is at full extension and the arms are furthest
+ * from neutral. The off arm takes three quarters of it, opposite, because
+ * nothing synchronises two arms.
+ */
+function carrying(clip: PoseClip, sway: number): PoseClip {
+  const n = clip.keys.length;
+  const DEG = 180 / Math.PI;
+  /** The lean the stance's own arm angles were authored against. */
+  const rest = STAND.hip + STAND.torso;
+  return {
+    ...clip,
+    keys: clip.keys.map((key, i) => {
+      const phase = Math.cos((i / n) * Math.PI * 2);
+      // Bone angles are parent-relative and accumulate, so an arm angle copied
+      // onto a clip that leans the body further forward leans the *sword* with
+      // it. The run throws its chest eighteen degrees over the front foot
+      // against the stance's eight, which was enough to swing the blade a
+      // tenth of a turn forward and drop the tip back towards his shins. Taking
+      // the difference out again holds the blade at the same angle to the
+      // *world* through the whole cycle, which is what a man carrying a sword
+      // does with his shoulder.
+      const lean =
+        ((key.pose.root ?? 0) + (key.pose.hip ?? 0) + (key.pose.torso ?? 0)) * DEG - rest;
+      return {
+        ...key,
+        pose: {
+          ...key.pose,
+          ...P({
+            upperArmR: STAND.upperArmR - lean + sway * phase,
+            forearmR: STAND.forearmR + sway * 0.3 * phase,
+            handR: STAND.handR + sway * 0.25 * phase,
+            upperArmL: STAND.upperArmL - lean - sway * 0.75 * phase,
+            forearmL: STAND.forearmL - sway * 0.5 * phase,
+          }),
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * Link, walking. Four degrees of counter-swing at the sword shoulder against
+ * the shared clip's fifty-two — enough that the arms are not welded on, far
+ * less than a stroll.
+ */
+const walkClip = carrying(POSE_LIBRARY.walk, 4);
+
+/**
+ * Link, running. Nine degrees at the sword shoulder rather than the walk's
+ * four — a run has more arm drive in it — against the hundred and sixteen the
+ * shared clip swings, which is what a person with both hands free does and what
+ * put the blade through his own shins twice a second.
+ */
+const runClip = carrying(POSE_LIBRARY.run, 9);
+
+/**
+ * Link, dashing. Seven degrees — between the walk and the run. The passive
+ * shield is *not* live during a dash, so this one is not about the mechanic; it
+ * is that the shared clip spends the first half of the dash with the blade
+ * pointing down and forward across his own shins, and standing, walking,
+ * dashing and running are the four things a player watches all match.
+ */
+const dashClip = carrying(POSE_LIBRARY.dash, 7);
+
+/**
+ * Link, crouching. A single held pose, so the counter-swing is nothing and this
+ * is purely the stance's arms on the shared clip's folded legs. The arm angles
+ * are relative to the torso, so they follow the crouch's forward lean and the
+ * sword keeps the same relation to his chest that it has standing up — which is
+ * the whole of what "the shield stays up while crouching" means here.
+ */
+const crouchClip = carrying(POSE_LIBRARY.crouch, 0);
 
 /** Link, jab: a fast downward slash from over the shoulder. */
 const jabClip: PoseClip = {
@@ -505,7 +611,7 @@ const dashAttackClip: PoseClip = {
  * single-handed outward slash"*. Only the first is simulated here — the engine
  * gives `fsmash` one hitbox window, frames 17–18 of 50 — so the animation's job
  * is to say, without lying about a hitbox, that a second swing is sitting
- * there. It does that with the shape the real move actually holds.
+ * there. It does that by holding the shape the real move holds.
  *
  * The beats, stepped off SmashWiki's own hitbox capture. Their frame numbers
  * are the game's, one ahead of `actionFrame`; the `t` column is where
@@ -514,42 +620,30 @@ const dashAttackClip: PoseClip = {
  *
  * | game f | t | what |
  * |---|---|---|
- * | 5–11 | 0.06–0.19 | the hilt rises up and behind the head while the **blade keeps pointing forward** — it ends lying flat over his own skull with the tip out in front at head height |
+ * | 5–11 | 0.06–0.19 | the hilt rises; the blade comes up over the head and points forward |
  * | **9–10** | **0.165** | **the charge locks here.** `poseTimeFor` parks a charging smash at `strike × 0.55`, which is exactly this key, and the real move charges on exactly these frames |
  * | 12–14 | 0.24 | the left hand joins the hilt; both arms lift and the blade rotates *backwards* over him, tip going forward → up → up-back |
  * | 15 | 0.2625 | apex: arms locked out overhead, blade near horizontal pointing straight back |
  * | 16 | 0.281 | the torso pitches violently forward; the blade starts over |
- * | **17** | **0.30** | **contact.** Deep split lunge, rear leg stretched back, front knee folded, blade horizontal forward at chest height — which is where both this move's hitboxes are (y = 7.5 of a 14-unit fighter) |
+ * | **17** | **0.30** | **contact,** in a split lunge wider and lower than his standing stance |
  * | 18 | 0.32 | the arc carries on down; tip near the ground |
- * | 22–36 | 0.40–0.69 | **the second-hit window.** He *holds the lunge* and retracts the blade to a low trailing position behind him, which is the wind-up hit two fires from |
+ * | 22–36 | 0.40–0.69 | **the second-hit window.** He *holds the lunge* and drags the blade back and low behind him, which is the wind-up hit two fires from |
  * | 37+ | 0.84+ | nobody pressed: he comes up out of the lunge |
  *
- * Two things this gets right that the previous version had backwards.
+ * Three of those keys carry a note of their own, because in each case this rig
+ * cannot do what the reference does and the substitute is a decision rather
+ * than an approximation: the **charge pose** (frame 9) cannot put the hilt
+ * behind a head this size, the **contact** blade is angled to agree with the
+ * swoosh `swing.ts` derives rather than with the reference's flat blade, and
+ * the **hold** had to be re-cut when the standing stance got wider than the
+ * lunge was.
  *
- * **The charge pose.** A charging smash is frozen on one frame for as long as
- * the player holds the button, so it is the single most-looked-at frame of the
- * move, and it was a generic coil with the blade tucked behind the shoulder.
- * The real one is unmistakable and nobody else on the roster has it: hilt above
- * and behind the head, **blade lying flat forward over his own skull**, point
- * out in front at head height. The arm that does it is a closed elbow with the
- * upper arm swept up and back — the wrist is cocked about sixty-five degrees,
- * which is a lot, and is what carrying a sword over your shoulder costs.
- *
- * **The hold during the input window.** It was cocked *up in front*, which is
- * neither what the move does nor a shape that means anything. The real
- * animation drags the sword *back and low behind him* over frames 19–36 and
- * stays down in the lunge until 37 — the retraction is literally hit two's
- * wind-up. So the window now reads as a fighter still loaded, and the frames
- * are not identical: the blade rakes fifteen degrees further back across the
- * window and the front knee eases, so it is held rather than frozen.
- *
- * The lunge is the other thing worth having. Measured off the reference it
- * covers about six tenths of his own height, which is not expressible here —
- * `offsetX` moves the drawing and not the hurtbox, so a large one detaches the
- * fighter from what can hit him. Two rig units of `offsetX` plus a genuinely
- * split stance (front thigh sixty degrees forward, rear leg raked thirty-eight
- * back, ankles five units apart) carries most of the read at a tenth of the
- * cost.
+ * The lunge itself is the one thing that is simply smaller than the real move.
+ * Measured off the reference it covers about six tenths of his own height;
+ * `offsetX` moves the drawing and not the hurtbox, so a translation that large
+ * detaches the fighter from what can hit him. Two rig units of `offsetX`, a
+ * stance five and three-quarter units wide against the five he stands in, and
+ * half a unit of hip drop carry most of the read at a fraction of the cost.
  */
 const fsmashClip: PoseClip = {
   loop: false,
@@ -559,18 +653,7 @@ const fsmashClip: PoseClip = {
     // knees softening. Attacks are not cross-faded into — `blend.ts` cuts to
     // them, because a jab whose hitbox is out on frame 2 cannot afford four
     // frames of arriving — so frame 0 has to already be where standing left off.
-    {
-      t: 0,
-      pose: P({
-        hip: 1, torso: 6, head: -6,
-        thighL: 205, shinL: 12, footL: -112,
-        thighR: 137, shinR: 24, footR: -72,
-        upperArmR: 201, forearmR: 112, handR: 0,
-        upperArmL: 145, forearmL: -100,
-      }),
-      offsetY: -0.65,
-      ease: "in",
-    },
+    { t: 0, pose: P(STAND), offsetY: STAND_Y, ease: "in" },
     // Frame ~3. The hilt lifts and the blade swings up through vertical, tip
     // high. The weight goes back off the front foot.
     //
@@ -585,30 +668,47 @@ const fsmashClip: PoseClip = {
       t: 0.06,
       pose: P({
         hip: 2, torso: 2, head: -2,
-        thighL: 200, shinL: 14, footL: -112,
-        thighR: 138, shinR: 22, footR: -74,
+        thighL: 211, shinL: 11, footL: -115,
+        thighR: 131, shinR: 26, footR: -70,
         upperArmR: 300, forearmR: 50, handR: -14,
         upperArmL: 148, forearmL: -85,
       }),
       offsetX: -0.4,
-      offsetY: -0.7,
+      offsetY: -0.92,
       ease: "in",
     },
-    // Frames 9–10, and the pose a charging smash parks on. Hilt above and
-    // behind the head, blade lying flat forward over the skull with the point
-    // out in front at head height, one hand on the grip, the off arm dropped
-    // forward as a counterweight. Coiled and low.
+    // Frames 9–10, and the pose a charging smash parks on. Sword up over the
+    // head, blade forward, point out well in front at crown height, one hand on
+    // the grip, the off arm dropped forward as a counterweight. Coiled and low.
+    //
+    // The reference puts the hilt *behind* the skull with the blade lying flat
+    // forward over it. This rig cannot do that, and the reason is worth writing
+    // down because it constrains every overhead pose he has: the shared
+    // humanoid's head is deliberately oversized — radius 2.3 against a 13.4-unit
+    // body, about a sixth of his height where a real one is an eighth — and the
+    // whole arm from shoulder to fingertip is 4.5. Straight up, the hand
+    // reaches 13.1 and the crown is at 13.8. **The hand cannot get above his own
+    // head.** A blade held level from anywhere the hand can reach crosses his
+    // face, which is what the first two versions of this key did.
+    //
+    // So the blade is raised twenty degrees instead of flat. The hand sits at
+    // the temple, the blade rises away from the face rather than across it, and
+    // the tip finishes above the crown and well out in front — the whole sword
+    // against the sky. That is the read the real pose has, arrived at the only
+    // way this skeleton allows. A charging smash is frozen on this one frame
+    // for as long as the button is held, so it is the frame that can least
+    // afford to be half-buried in a hat.
     {
       t: 0.165,
       pose: P({
         hip: 6, torso: -4, head: 6,
-        thighL: 202, shinL: 14, footL: -114,
-        thighR: 136, shinR: 26, footR: -78,
-        upperArmR: 299, forearmR: 92, handR: 67,
+        thighL: 209, shinL: 13, footL: -116,
+        thighR: 132, shinR: 30, footR: -74,
+        upperArmR: 1.7, forearmR: 13.8, handR: 52.5,
         upperArmL: 126, forearmL: -40,
       }),
       offsetX: -0.75,
-      offsetY: -0.8,
+      offsetY: -0.95,
       scaleX: 0.96,
       ease: "in",
     },
@@ -618,13 +718,13 @@ const fsmashClip: PoseClip = {
       t: 0.244,
       pose: P({
         hip: 4, torso: -14, head: 12,
-        thighL: 203, shinL: 13, footL: -113,
-        thighR: 137, shinR: 25, footR: -76,
+        thighL: 208, shinL: 13, footL: -115,
+        thighR: 133, shinR: 28, footR: -74,
         upperArmR: -20, forearmR: 10, handR: -30,
         upperArmL: -15, forearmL: 5,
       }),
       offsetX: -0.5,
-      offsetY: -0.6,
+      offsetY: -0.85,
       ease: "in",
     },
     // Frame 15. The apex, and the tallest shape in the move: both arms locked
@@ -633,13 +733,13 @@ const fsmashClip: PoseClip = {
       t: 0.2625,
       pose: P({
         hip: 6, torso: -18, head: 14,
-        thighL: 199, shinL: 14, footL: -112,
-        thighR: 139, shinR: 24, footR: -76,
+        thighL: 206, shinL: 14, footL: -114,
+        thighR: 135, shinR: 27, footR: -74,
         upperArmR: -3, forearmR: -5, handR: -50,
         upperArmL: 2, forearmL: -12,
       }),
       offsetX: -0.6,
-      offsetY: -0.5,
+      offsetY: -0.78,
       scaleX: 0.92,
       scaleY: 1.06,
       ease: "in",
@@ -656,7 +756,7 @@ const fsmashClip: PoseClip = {
         upperArmL: 336, forearmL: -6,
       }),
       offsetX: 0.4,
-      offsetY: -0.7,
+      offsetY: -0.9,
       ease: "in",
     },
     // Frame 17: contact. A deep split lunge — front thigh sixty degrees
@@ -668,19 +768,31 @@ const fsmashClip: PoseClip = {
       t: 0.3,
       pose: P({
         hip: -8, torso: 30, head: -22,
-        thighL: 226, shinL: 2, footL: -120,
-        thighR: 130, shinR: 44, footR: -76,
-        upperArmR: 117, forearmR: -95, handR: 51,
-        upperArmL: 122, forearmL: -84,
+        thighL: 234, shinL: 8, footL: -114,
+        thighR: 122, shinR: 46, footR: -70,
+        upperArmR: 127.2, forearmR: -94, handR: 12.8,
+        upperArmL: 130, forearmL: -78,
       }),
+      // Two corrections live in these numbers.
+      //
       // The hands ride a unit higher than the reference's, which drops them to
       // the front knee. This move's two hitboxes are both at `y = 7.5` of a
       // 14-unit fighter — chest height — and a blade drawn at knee height while
       // the box that hits is at chest height is the graphic lying about where
       // the move reaches. `scaleY` is nearly 1 for the same reason: squashing
       // the contact frame pulled the blade a further half-unit below its box.
+      //
+      // And the blade sits **twenty-two degrees above horizontal** rather than
+      // flat, which is a step away from the reference and towards the thing
+      // drawn next to it. `swing.ts` derives the swoosh from the move's own
+      // hitboxes and sweeps it from about +51° down to −51° across the active
+      // window; on the contact frame its leading edge — the bright hard line a
+      // player reads as *the blade* — is at +26°. A flat blade there left the
+      // sword and its own trail forty degrees apart in the one frame everybody
+      // looks at. The tip at this angle is still inside the far hitbox, so
+      // nothing is being promised that the move does not have.
       offsetX: 2.0,
-      offsetY: -0.95,
+      offsetY: -1.45,
       scaleX: 1.12,
       scaleY: 0.99,
       ease: "out",
@@ -691,13 +803,13 @@ const fsmashClip: PoseClip = {
       t: 0.322,
       pose: P({
         hip: -6, torso: 24, head: -16,
-        thighL: 222, shinL: 4, footL: -119,
-        thighR: 128, shinR: 42, footR: -76,
-        upperArmR: 118, forearmR: -40, handR: 39,
+        thighL: 230, shinL: 8, footL: -114,
+        thighR: 122, shinR: 46, footR: -72,
+        upperArmR: 122, forearmR: -60, handR: 38,
         upperArmL: 124, forearmL: -60,
       }),
       offsetX: 1.5,
-      offsetY: -0.9,
+      offsetY: -1.4,
       scaleX: 1.06,
     },
     // Frame ~19, and a key that exists for one reason: the blade is 4.6 units
@@ -711,30 +823,38 @@ const fsmashClip: PoseClip = {
       t: 0.36,
       pose: P({
         hip: -4, torso: 22, head: -14,
-        thighL: 218, shinL: 4, footL: -119,
-        thighR: 128, shinR: 42, footR: -77,
+        thighL: 228, shinL: 6, footL: -112,
+        thighR: 120, shinR: 44, footR: -72,
         upperArmR: 77, forearmR: 116.35, handR: -36.4,
         upperArmL: 132, forearmL: -56,
       }),
       offsetX: 1.35,
-      offsetY: -0.9,
+      offsetY: -1.35,
       scaleX: 1.03,
     },
-    // Frame ~22. The second-hit window opens. The lunge is *held* and the blade
-    // has been dragged back and down behind him — the position hit two's
-    // one-handed outward slash scoops forward out of. The off hand comes off
-    // the hilt and opens.
+    // Frame ~22. The second-hit window opens. The lunge is *held* — wider than
+    // his standing stance and a third of a unit lower, which is the whole of
+    // what "still loaded" looks like from the side — and the blade has been
+    // dragged back and low behind him, the position hit two's one-handed
+    // outward slash scoops forward out of. The off hand comes off the hilt.
+    //
+    // Two critics reading match-scale captures said this window read as
+    // recovery rather than as a held threat, and both gave the same reason:
+    // the hips never dropped. They were right, and it was a regression rather
+    // than an oversight — the lunge was authored against the old narrow stance
+    // and then the stance got wider than it, so the "deep split lunge" ended up
+    // *narrower* than standing still.
     {
       t: 0.4,
       pose: P({
         hip: 0, torso: 14, head: -10,
-        thighL: 214, shinL: 4, footL: -118,
-        thighR: 128, shinR: 40, footR: -78,
-        upperArmR: 192, forearmR: 23, handR: 3,
+        thighL: 222, shinL: 6, footL: -110,
+        thighR: 118, shinR: 42, footR: -70,
+        upperArmR: 196, forearmR: 32, handR: 4,
         upperArmL: 140, forearmL: -50,
       }),
       offsetX: 1.2,
-      offsetY: -0.9,
+      offsetY: -1.25,
       // Linear, not the default `smooth`. Smoothstep is zero-velocity at both
       // ends, so easing the hold makes the fifteen frames the second input is
       // read in stall at each end — which is exactly what a frozen frame looks
@@ -749,13 +869,13 @@ const fsmashClip: PoseClip = {
       t: 0.55,
       pose: P({
         hip: 0, torso: 12, head: -8,
-        thighL: 211, shinL: 6, footL: -117,
-        thighR: 131, shinR: 38, footR: -78,
-        upperArmR: 196, forearmR: 26, handR: 4,
+        thighL: 220, shinL: 8, footL: -110,
+        thighR: 120, shinR: 42, footR: -70,
+        upperArmR: 200, forearmR: 36, handR: 4,
         upperArmL: 144, forearmL: -54,
       }),
       offsetX: 1.05,
-      offsetY: -0.85,
+      offsetY: -1.18,
       ease: "linear",
     },
     // Frame ~36, the last frame the second input is read on, and the furthest
@@ -764,13 +884,13 @@ const fsmashClip: PoseClip = {
       t: 0.69,
       pose: P({
         hip: 0, torso: 10, head: -6,
-        thighL: 209, shinL: 8, footL: -116,
-        thighR: 134, shinR: 34, footR: -78,
-        upperArmR: 202, forearmR: 29, handR: 4,
+        thighL: 219, shinL: 8, footL: -109,
+        thighR: 121, shinR: 41, footR: -72,
+        upperArmR: 204, forearmR: 40, handR: 4,
         upperArmL: 148, forearmL: -58,
       }),
       offsetX: 0.85,
-      offsetY: -0.82,
+      offsetY: -1.14,
       ease: "out",
     },
     // Frame ~42. Nobody pressed: he comes up out of the lunge and the sword
@@ -779,13 +899,13 @@ const fsmashClip: PoseClip = {
       t: 0.84,
       pose: P({
         hip: 0.4, torso: 8.5, head: -6.5,
-        thighL: 205.6, shinL: 10, footL: -113,
-        thighR: 136.6, shinR: 28, footR: -74,
-        upperArmR: 200, forearmR: 66, handR: 5,
+        thighL: 211, shinL: 10, footL: -114,
+        thighR: 129, shinR: 30, footR: -69,
+        upperArmR: 202, forearmR: 68, handR: 6,
         upperArmL: 146, forearmL: -80,
       }),
       offsetX: 0.35,
-      offsetY: -0.72,
+      offsetY: -0.96,
     },
     // Terminator, never drawn — Link's own stance, so the last frame of the
     // recovery is already standing.
@@ -2027,6 +2147,10 @@ const dthrowClip: PoseClip = {
 
 export const poses: Partial<Record<PoseName, PoseClip>> = {
   idle: idleClip,
+  walk: walkClip,
+  dash: dashClip,
+  run: runClip,
+  crouch: crouchClip,
   jab: jabClip,
   ftilt: ftiltClip,
   utilt: utiltClip,

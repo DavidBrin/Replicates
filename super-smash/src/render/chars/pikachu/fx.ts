@@ -224,7 +224,16 @@ export function arc(
   strokeGlow(ctx, o.width ?? 2, o.alpha ?? 1);
 }
 
-/** `n` arcs radiating out of a point to about radius `r`. */
+/**
+ * `n` arcs radiating out of a point to about radius `r`.
+ *
+ * `from` is where each arc *starts*, as a fraction of `r`. The default 0.14 is a
+ * burst — everything springing out of one point, which is what a discharge is.
+ * Pushing it out near 1 gives the opposite shape: crackle that only exists on
+ * the surface of something. An orb needs that, and did not have it, so its six
+ * surface arcs ran from the middle of the ball out past its edge and the forward
+ * smash read as a plate of yellow noodles rather than as a ball of electricity.
+ */
 export function arcBurst(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -232,15 +241,16 @@ export function arcBurst(
   r: number,
   n: number,
   seed: number,
-  o: ArcOpts & { readonly turn?: number } = {},
+  o: ArcOpts & { readonly turn?: number; readonly from?: number } = {},
 ): void {
+  const from = o.from ?? 0.14;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + (o.turn ?? 0) + noise(seed + i * 2.1) * 0.28;
-    const reach = r * (0.62 + 0.38 * Math.abs(noise(seed + i * 3.7)));
+    const reach = r * (from + (1 - from) * (0.62 + 0.38 * Math.abs(noise(seed + i * 3.7))));
     arc(
       ctx,
-      x + Math.cos(a) * r * 0.14,
-      y + Math.sin(a) * r * 0.14,
+      x + Math.cos(a) * r * from,
+      y + Math.sin(a) * r * from,
       x + Math.cos(a) * reach,
       y + Math.sin(a) * reach,
       seed + i * 11.3,
@@ -314,10 +324,13 @@ export function orb(
     ctx.fillStyle = withAlpha(ELECTRIC.core, 0.8 * a);
     circle(ctx, x, y, r * 0.36);
   });
-  arcBurst(ctx, x, y, r * 1.22, o.arcs ?? 5, seed, {
-    width: Math.max(1, r * 0.13),
-    jag: r * 0.3,
-    alpha: a * 0.9,
+  // On the surface. Thin, short, and starting three quarters of the way out, so
+  // what they do is make the edge of the ball crawl rather than cover the ball.
+  arcBurst(ctx, x, y, r * 1.14, o.arcs ?? 5, seed, {
+    from: 0.76,
+    width: Math.max(1, r * 0.085),
+    jag: r * 0.16,
+    alpha: a * 0.85,
   });
 }
 
@@ -1184,7 +1197,15 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
   downB: (c) => {
     const { ctx, x, y, u, frame } = c;
     if (frame > 64) return NOTHING;
-    const top = y - u * 120;
+    // The bolt starts *inside the cloud*, not off the top of the world.
+    //
+    // It used to start 120 units up and run straight past the cloud to the top
+    // of the screen, which read as a rope hanging through a cloud rather than as
+    // lightning coming out of one. It also made `boltTo`'s forks absurd: a fork
+    // reaches a sixth to a third of the bolt's own length, so on a 120-unit bolt
+    // they were twenty-unit zigzags floating unattached in the corner of the
+    // frame, which is exactly what a capture showed.
+    const top = y - u * 18.5;
 
     electric(ctx, () => {
       // The cloud: a clump of overlapping discs about eleven units up, gathering
@@ -1225,7 +1246,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
         const bottom = y - u * (16 - 13 * drop);
         boltTo(ctx, x, top, x, bottom, frame * 3.1, {
           width: Math.max(2.5, u * 0.62 * (0.4 + 0.6 * fade)),
-          jag: u * 2.2,
+          jag: u * 1.5,
+          segs: 12,
           forks: 2,
           taper: 0.12,
           alpha: fade,
@@ -1246,11 +1268,18 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
         additive(ctx, () =>
           glow(ctx, x, cy, u * 5.5 * (1 + 1.6 * (1 - blast)), withAlpha(ELECTRIC.core, 0.85 * blast)),
         );
-        ring(ctx, x, cy, u * 5.5 * (0.5 + 1.5 * (1 - blast)), frame, {
+        // Starts near the hitbox's own radius rather than at half of it: a
+        // shockwave that begins small and grows reads as a bubble inflating,
+        // and the frame it is *strongest* is the frame it should already be the
+        // size of the thing it hit with.
+        ring(ctx, x, cy, u * 5.5 * (0.8 + 1.1 * (1 - blast)), frame, {
           width: Math.max(2, u * 0.5 * blast),
           alpha: blast,
-          jagK: 0.1,
-          segs: 22,
+          // Barely jagged and finely segmented: this one is a *shockwave*, and
+          // at forty pixels of radius a sixteen-sided jagged ring is a bent wire
+          // hexagon. The crackle belongs on the arcs thrown through it.
+          jagK: 0.05,
+          segs: 40,
         });
         arcBurst(ctx, x, cy, u * 9 * (0.6 + 0.5 * (1 - blast)), 9, frame * 2.3, {
           width: Math.max(1.4, u * 0.34),

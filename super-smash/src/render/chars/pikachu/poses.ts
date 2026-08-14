@@ -166,7 +166,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           upperArmR: 116, forearmR: -18, handR: -14,
           upperArmL: 124, forearmL: -23, handL: -12,
         }),
-        offsetY: -0.35,
+        offsetY: -0.2,
         offsetX: 0.1,
         ease: "linear",
       },
@@ -253,6 +253,21 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * the legs really do carry: fully extended forward they are the only part of
    * him that leaves the head's outline, and tipping the body back is what puts
    * them there.
+   *
+   * ## Three keys before contact, not one
+   *
+   * With a single wind-up key the clip went from standing to horizontal in six
+   * frames with nothing in between, and a critic looking at frames 2 and 5 read
+   * it as **falling over sideways** rather than as a kick — which is fair, since
+   * "fell over" and "dropped into a breaking move" are the same picture unless
+   * something shows the drop being *chosen*. So the wind-up is now the two
+   * shapes the real move has: the crouch, then the **plant** — hips up, both
+   * paws down, weight rolled back onto the shoulder — and only then the legs.
+   *
+   * That middle key is also what makes frame 2 worth drawing. Startup is six
+   * frames and `poseTimeFor` stretches the wind-up across all of them, so a key
+   * at `t = 0.13` is a frame a player actually sees rather than a shape the clip
+   * passes through.
    */
   ftilt: {
     loop: false,
@@ -263,6 +278,25 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         pose: P({ torso: 10, head: -8, thighR: 148, shinR: 62, footR: -118, thighL: 156, shinL: 58, footL: -122 }),
         offsetY: -0.9,
         rotation: deg(-6),
+        ease: "in",
+      },
+      {
+        // The plant. Paws down and behind, hips lifting, knees drawn up into the
+        // chest — the coil the legs come out of, and the frame that says this is
+        // a breaking move rather than a stumble.
+        t: 0.13,
+        pose: P({
+          torso: 4, head: -2, hip: 8,
+          thighR: 122, shinR: 84, footR: -96,
+          thighL: 134, shinL: 80, footL: -100,
+          upperArmR: 214, forearmR: -24,
+          upperArmL: 222, forearmL: -20,
+        }),
+        offsetY: -1.35,
+        offsetX: -0.45,
+        rotation: deg(-19),
+        scaleX: 1.04,
+        scaleY: 0.95,
         ease: "in",
       },
       ...held(0.28, 0.34, {
@@ -929,7 +963,22 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       // because after the rotation his length is the screen's x.
       ...held(0.3, 0.6, {
         pose: P({
-          torso: 8, head: 14, hip: -2,
+          // `head` pitches back against a body that is already 58° over, which
+          // is as close as this rig gets to ears that trail.
+          //
+          // **It does not get all the way there, and the reason is structural.**
+          // The ears are a prop welded to the `head` bone and swept rearward *in
+          // that bone's own frame*, so they lie back along his spine correctly —
+          // but the spine itself is rotated 58° toward the direction of travel,
+          // and rotating the body rotates the ears with it. On screen they still
+          // finish up ahead of the crown. Three shapes were tried against a
+          // capture: 82° (flat, face into the floor, ears leading), 34° (upright,
+          // reads as leaning rather than flying, ears still leading) and this.
+          // Nothing available here fixes it, because nothing here can give a prop
+          // a lag in *screen* space — that is `PropAnim` gaining a rotation, or
+          // props gaining a "trails" flag, and both are shared. Named in the
+          // report; this is the best of the three.
+          torso: 8, head: -12, hip: -2,
           thighR: 176, shinR: -4, footR: -74,
           thighL: 186, shinL: -6, footL: -70,
           upperArmR: 172, forearmR: -10,

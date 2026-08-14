@@ -16,7 +16,7 @@ import {
   visualHeight,
   type RenderState,
 } from "./renderer";
-import { CHARACTER_RIGS, getCharacterRig } from "./characterArt";
+import { CHARACTER_RIGS, PANEL_INK, getCharacterRig, withAlpha } from "./characterArt";
 import { DIZZY_STARS, HIT_FLASH_FRAMES, createVfx, stepVfx } from "./vfx";
 import {
   makeDef,
@@ -506,5 +506,86 @@ describe("the motion a prop is told about", () => {
   it("says whether the fighter is off the ground", () => {
     expect(animFor({ defId: "mario", grounded: false }).airborne).toBe(true);
     expect(animFor({ defId: "mario", grounded: true }).airborne).toBe(false);
+  });
+});
+
+/**
+ * The port tag clears the fighter's silhouette, not their skeleton.
+ *
+ * `visualHeight` measures bones and the head circle and knows nothing about
+ * props, so a fighter whose identifying shape sits on top of their head wore
+ * the tag on it. Four agents reported this independently, on four characters
+ * and for four different reasons — Pikachu's ears, Samus's drill tip, Mario's
+ * Super Jump Punch, and Link's boomerang, where the tag clipped the inboard
+ * arm of the V and left one arm, which reads as a hank of hair.
+ *
+ * Measured off the drawing rather than off the arithmetic: the tag is the
+ * highest ink a fighter has, so the topmost coordinate in the call log is it.
+ */
+describe("where the port tag sits", () => {
+  function tagTop(id: string, clearance?: number): number {
+    const rig = CHARACTER_RIGS[id];
+    const original = rig.tagClearance;
+    Object.defineProperty(rig, "tagClearance", { value: clearance, configurable: true, writable: true });
+    try {
+      const ctx = createMockContext(1600, 900);
+      // The rig is resolved from the *definition's* id (`renderer.ts:221`),
+      // not from `FighterState.defId` — so a fixture that sets only `defId`
+      // renders the default Mario rig and every measurement below comes back
+      // identical no matter what clearance is declared.
+      const state = renderState({
+        current: makeState({ fighters: [makeFighter({ defId: id })] }),
+        fighters: [makeDef({ id })],
+      });
+      render(ctx, state, makeEvents(), createCamera(stage), 0);
+      // The tag has to be isolated by its own fill, not found as "the highest
+      // ink on the canvas". The first version of this took the topmost
+      // `moveTo` in the whole call log and got the stage's mountains, which do
+      // not move when a fighter's clearance changes — so it reported the same
+      // number for every input and would have passed against a fix that did
+      // nothing at all.
+      //
+      // The tag panel is the only shape painted in `PANEL_INK` at 0.82, so
+      // find that fill and take the path op that opened it.
+      const ink = withAlpha(PANEL_INK, 0.82);
+      const at = ctx.calls.findIndex((c) => c.method === "set:fillStyle" && c.args[0] === ink);
+      expect(at, "no port tag was drawn at all").toBeGreaterThan(-1);
+      for (let i = at; i >= 0; i--) {
+        if (ctx.calls[i].method === "moveTo") return ctx.calls[i].args[1] as number;
+      }
+      throw new Error("the tag's fill had no path before it");
+    } finally {
+      Object.defineProperty(rig, "tagClearance", { value: original, configurable: true, writable: true });
+    }
+  }
+
+  it("rises for a fighter who declares headroom", () => {
+    const withNone = tagTop("pikachu", 0);
+    const withEars = tagTop("pikachu", 3.2);
+    expect(withEars, "declaring clearance did not move the tag").toBeLessThan(withNone);
+  });
+
+  it("scales the clearance by the rig, so it means rig units and not pixels", () => {
+    // Compared across two rigs, because comparing a fighter against itself
+    // cannot see this. The first version asserted `lift / rig.scale > lift`,
+    // which is true for any fighter under 1.0 whatever the code does — it
+    // passed against a mutation that dropped the scaling entirely, and a test
+    // that survives its own bug is worse than none.
+    //
+    // The same declared clearance must lift a big rig further than a small
+    // one, in proportion: Marth is 1.16 and Pikachu 0.72.
+    const small = CHARACTER_RIGS["pikachu"];
+    const big = CHARACTER_RIGS["marth"];
+    const smallLift = tagTop("pikachu", 0) - tagTop("pikachu", 4);
+    const bigLift = tagTop("marth", 0) - tagTop("marth", 4);
+    expect(smallLift).toBeGreaterThan(0);
+    expect(bigLift / smallLift, "clearance is in pixels, not rig units").toBeCloseTo(
+      big.scale / small.scale,
+      4,
+    );
+  });
+
+  it("leaves a fighter who declares nothing exactly where they were", () => {
+    expect(tagTop("mario", undefined)).toBe(tagTop("mario", 0));
   });
 });

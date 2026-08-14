@@ -372,6 +372,25 @@ export interface CharacterRig {
   readonly headRadius: number;
   readonly boneColour: Readonly<Partial<Record<BoneName, string>>>;
   readonly props: readonly PropDef[];
+  /**
+   * How far this fighter's silhouette reaches above the top of its skeleton,
+   * in rig units. Ears, a tall cap, a crest.
+   *
+   * The port tag is placed from `rigHeight`, which measures *bones* and the
+   * head circle and knows nothing about props — so a fighter whose identifying
+   * shape is on top of their head wears the tag on it. Pikachu's agent
+   * reported exactly that: the ears are the one shape that names him at 60
+   * pixels, and the tag sits across them in every in-match frame.
+   *
+   * Declared rather than measured because a `custom` prop paints an arbitrary
+   * path in its own frame, and there is no honest way to ask a painter how far
+   * up it goes without running it. A number a rig states about itself is
+   * checkable by looking; a number derived from a bounding box would be a
+   * guess wearing a measurement's clothes.
+   *
+   * Default 0, which is what every fighter had before this existed.
+   */
+  readonly tagClearance?: number;
 }
 
 export type BoneTweak = {

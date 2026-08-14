@@ -20,7 +20,7 @@ import { pikachu as def } from "@/fighters/pikachu";
 import type { MoveSlot } from "@/engine/types";
 import { moveFrameOf } from "@/engine/hitbox";
 import { toFloat } from "@/engine/fixed";
-import { samplePose, type Keyframe } from "../../poses/clip";
+import { samplePose, type Keyframe, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 import { resolve, rigHeight } from "../../skeleton";
 import type { Brush, PropAnim, PropDef } from "../../rigKit";
@@ -307,6 +307,26 @@ describe("the tail moves on its own", () => {
   });
 
   /**
+   * The ears sweep back with speed too, and they are the part that actually
+   * *needs* the clamp: the tail's bend is bounded a second time on its way to
+   * being an angle, but the ear's lean is a straight multiply into a shear. An
+   * unbounded one puts the tips several hundred units off the top of the screen
+   * on the first frame of a launch, and the fighter loses the top of his
+   * silhouette at exactly the moment a player is trying to find him.
+   */
+  it("keeps the ears on his head at any speed", () => {
+    const ears = propNamed("head");
+    const rest = propBox(ears, PROP_STILL);
+    for (const vx of [2.039, 40, 9839, -9839]) {
+      const box = propBox(ears, still({ vx }));
+      expect(Math.abs(box.minX), `ears at vx=${vx}`).toBeLessThan(Math.abs(rest.minX) + 2);
+      expect(box.maxX, `ears at vx=${vx}`).toBeLessThan(rest.maxX + 2);
+    }
+    // But a run still visibly sweeps them: clamped is not frozen.
+    expect(Math.abs(propBox(ears, still({ vx: 2.039 })).minX - rest.minX)).toBeGreaterThan(0.02);
+  });
+
+  /**
    * A portrait, a stock icon and the silhouette check all draw a figure with no
    * match behind them and get `PROP_STILL`. Two portraits of the same fighter
    * that differed would be a bug nobody could explain, so the whole of the
@@ -353,7 +373,12 @@ const NAMES = Object.keys(poses) as PoseName[];
 const PIVOT = rigHeight(rig.bones, rig.headRadius) * 0.45;
 
 function skeletonAt(name: PoseName, t: number) {
-  const s = samplePose(poses[name]!, t);
+  return skeletonOf(poses[name]!, t);
+}
+
+/** The same, for a clip that is not in the table — a rebuilt two-key version. */
+function skeletonOf(clip: PoseClip, t: number) {
+  const s = samplePose(clip, t);
   return resolve(rig.bones, s.angles, {
     x: s.offsetX,
     y: -s.offsetY,
@@ -509,6 +534,67 @@ describe("the contact shape is held for as long as the hitbox is live", () => {
       if (mean < peak * 0.55) limp.push(`${name} sags back toward rest while it is hitting`);
     }
     expect(limp).toEqual([]);
+  });
+
+  /**
+   * The forward tilt's wind-up is a *shape*, not an interpolation.
+   *
+   * Two keys — rest, then contact — blend, so every frame in between is on the
+   * straight line joining them. On a fighter whose attacks are carried by
+   * whole-body rotation that line is the same picture leaning further over each
+   * frame, and a critic reading a capture of this move called it "falling over
+   * sideways" rather than a kick. He was right: nothing between standing and
+   * horizontal said the drop had been *chosen*. The real move drops onto a
+   * shoulder first — paws down, hips up, knees into the chest — and that plant is
+   * the frame that distinguishes a breaking move from a stumble.
+   *
+   * Measured against **the two-key clip it replaced**, rebuilt here from the
+   * move's own first and contact keys. That is the only comparison that isolates
+   * the thing being claimed: bone angles interpolate, so every limb tip swings
+   * through an arc and deviates from a straight line whether or not there is a
+   * key in the middle — a "does the path bow" test passes on a clip with nothing
+   * in it. Easing does not help either; `ease: "in"` changes *when* the body is
+   * on the two-key path, never whether.
+   *
+   * Scoped to this move because it is the one where the wind-up is a distinct
+   * posture rather than a coil. The smashes genuinely do just rear back.
+   */
+  it("drops onto a shoulder before it kicks, rather than toppling", () => {
+    const clip = poses.ftilt!;
+    const contact = clip.keys.find((k) => Math.abs(k.t - clip.strike!) < 1e-9)!;
+    const twoKey: PoseClip = { loop: false, strike: clip.strike, keys: [clip.keys[0], contact] };
+    const LIMB = ["footR", "footL", "handR", "head", "hip"] as const;
+    // Every shape the two-key version ever passes through, sampled finely. The
+    // comparison is against the *set* rather than frame against frame, so that
+    // it measures a shape the flat clip does not have rather than merely a
+    // difference in when it arrives — a key that only re-times the same path
+    // would pass a frame-matched test and is not a plant.
+    const flatPath = Array.from({ length: 60 }, (_, i) =>
+      skeletonOf(twoKey, (clip.strike! * i) / 59),
+    );
+    let novel = 0;
+    for (let i = 1; i < 12; i++) {
+      const real = skeletonOf(clip, (clip.strike! * i) / 12);
+      let nearest = Infinity;
+      for (const flat of flatPath) {
+        let d = 0;
+        for (const bone of LIMB) {
+          d = Math.max(d, Math.hypot(real[bone].x1 - flat[bone].x1, real[bone].y1 - flat[bone].y1));
+        }
+        nearest = Math.min(nearest, d);
+      }
+      novel = Math.max(novel, nearest);
+    }
+    const a = skeletonOf(clip, 0);
+    const b = skeletonOf(clip, clip.strike!);
+    let travelled = 0;
+    for (const bone of LIMB) {
+      travelled = Math.max(travelled, Math.hypot(b[bone].x1 - a[bone].x1, b[bone].y1 - a[bone].y1));
+    }
+    expect(
+      novel / travelled,
+      "the wind-up only visits shapes two keys would have drawn anyway — there is no plant in it",
+    ).toBeGreaterThan(0.1);
   });
 
   it("is at its furthest extension on the strike and not after it", () => {

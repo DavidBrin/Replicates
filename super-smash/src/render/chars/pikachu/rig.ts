@@ -250,7 +250,7 @@ function lerp(a: number, b: number, t: number) {
     // Positive lays the bolt back toward horizontal; negative stands it up.
     // Clamped because a dash reaches the fast end of `speed` and a tail folded
     // through its own root is not a tail.
-    const bend = Math.max(-0.62, Math.min(0.62, Math.sin(anim.frame * 0.055) * 0.10 + Math.sin(anim.frame * 0.019 + 1.7) * 0.055 + speed(anim.vx) * 0.20 + (anim.airborne ? -0.20 : 0)));
+    const bend = Math.max(-0.62, Math.min(0.62, Math.sin(anim.frame * 0.055) * 0.10 + Math.sin(anim.frame * 0.019 + 1.7) * 0.055 + speed(anim.vx) * 0.15 + (anim.airborne ? -0.20 : 0)));
     const bar = (a0: number, a1: number, off: number, w: number) => {
         const pt = (a: number, s: number): [number, number] => turn(a * UX + (off + s * w) * VX, a * UY + (off + s * w) * VY, bend * (a / TIP));
         poly(ctx, [
@@ -434,6 +434,14 @@ export const rig: CharacterRig = {
     // Wider than the 4.0 torso, so the skull actually overhangs the body: on a
     // fighter with no neck that overhang is the only thing separating them.
     headRadius: 2.6,
+    // The ears leave the head by more than the head's own radius, and they are
+    // the shape that names him at sixty pixels. Without this the port tag sits
+    // across them in every in-match frame — reported from a capture, not
+    // derived: the ear bands run to 2.46 of a 2.25-unit prop frame, anchored
+    // 0.7 above a head tip that `rigHeight` already counts 2.6 past, and they
+    // rake back rather than standing straight up, so the vertical reach is less
+    // than that arithmetic suggests. This number was set by looking.
+    tagClearance: 3.2,
     boneColour: {
         torso: "primary",
         hip: "primary",

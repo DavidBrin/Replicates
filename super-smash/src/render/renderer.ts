@@ -427,8 +427,20 @@ function drawOneFighter(
   // back of the pile and the stars are the part that has to survive that.
   drawDizzyStars(ctx, f, cam, height);
 
+  // The tag clears the fighter's *silhouette*, not their skeleton.
+  //
+  // `visualHeight` measures bones and the head circle, so a fighter whose
+  // identifying shape sits on top of their head wore the tag on it. Four agents
+  // reported this independently, on four different characters and for four
+  // different reasons: Pikachu's ears (the one shape that names him at sixty
+  // pixels), Samus's drill tip, Mario's Super Jump Punch — which cannot punch
+  // straight up and be seen — and Link's boomerang, where the tag clipped the
+  // inboard arm of the V and left one arm, which reads as a hank of hair. The
+  // symmetry that made it a boomerang was exactly what was being cut off.
   const label = state.cpu?.[f.port] ? "CPU" : `P${f.port + 1}`;
-  drawPortTag(ctx, screen.x, screen.y - height * cam.zoom - 14, f.port, label, Math.max(0.6, cam.zoom / 7));
+  const clearance = (rig.tagClearance ?? 0) * rig.scale;
+  const tagY = screen.y - (height + clearance) * cam.zoom - 14;
+  drawPortTag(ctx, screen.x, tagY, f.port, label, Math.max(0.6, cam.zoom / 7));
 }
 
 /**

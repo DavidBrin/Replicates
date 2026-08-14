@@ -43,6 +43,79 @@ import {
 } from "../../rigKit";
 
 /**
+ * The hair, and why it is not the tunic's blue.
+ *
+ * It was `#3C63C8` against a `#2B4FC9` tunic: the same hue at 7% more
+ * luminance (98 against 80 on a 255 scale). A critic sampling a match capture
+ * put it plainly — head and torso fuse into one blue mass with a hairline of
+ * outline between them. The reference measures the real model at the same seven
+ * percent and says the same thing: do not rely on a hair/tunic value step at
+ * small scale, it isn't there.
+ *
+ * The real model separates them with the light-blue mantle at the shoulders,
+ * which `CAPE` below now provides. This lightens the hair as well rather than
+ * instead — belt and braces on the one read that has to survive a 160-pixel
+ * figure, and Marth's hair is the brightest blue on him in every official
+ * render, so it costs nothing in accuracy.
+ */
+const HAIR = "#6289E2";
+
+/**
+ * The cape's own colours, and the one place on this fighter where a literal
+ * beats a palette role.
+ *
+ * ## Why not a role
+ *
+ * It was `secondary` — and `secondary` is also his boots, his shins and his
+ * armour, so the cape, both calves and both feet were one flat `#1A2A5E` mass
+ * behind a `#0E1430` outline. At match scale the bottom half of Marth was a
+ * single dark blob with a head on it. `primary` would have merged it with the
+ * tunic instead. There is no role that separates it, so it is a literal, and
+ * the cost is stated plainly: the five alt costumes in `fighters/marth.ts` swap
+ * the roles and will not swap this. Costume 2 is a red-caped Marth and will
+ * come out light blue.
+ *
+ * ## Which way round, and how that was got wrong once
+ *
+ * The cape is **two-tone: light, cyan-leaning blue on the outer face, dark
+ * brick red on the lining.** An earlier pass here had it crimson, on a
+ * reference read that sampled SmashWiki's idle GIFs and reported "dark
+ * crimson". That reading was not invented — it was a sampling artefact, and the
+ * mechanism is worth recording because it will catch the next person too. In
+ * every *front-facing* pose the cape flares forward and outward, so the camera
+ * sees the **lining**; on the official render there are 53,255 lining pixels
+ * against 6,140 of outer face, nearly nine to one. Dark red is genuinely the
+ * largest colour mass on the model from the front, and any naive sample of a
+ * front view returns it.
+ *
+ * Two straight-on **back** views settle it — a frame of the Final Smash
+ * cutscene and one of the on-screen appearance, the latter with a red-caped Roy
+ * standing a few metres away in the same shot, not reading alike. The outer face
+ * is blue at hue 204-213 across every lighting condition, against the tunic's
+ * royal blue at 222.
+ *
+ * That also fixes an identity problem rather than only an accuracy one: a
+ * crimson cape on a blue-haired swordsman is Marth's *second* costume, and at a
+ * glance it is Roy.
+ *
+ * ## What the light blue is doing structurally
+ *
+ * More than covering his back. The same reference measures Marth's hair and
+ * tunic at 78 and 95 luma — seven percent of the range apart, in the same hue
+ * family, with overlapping distributions — and says outright that a viewer
+ * cannot separate head from torso on that step, because in the real model the
+ * separating shapes are the face, the gold circlet and **the light-blue mantle
+ * around the neck and shoulders**. This prop runs to the shoulders, so making it
+ * light blue puts that separator where the reference has it.
+ */
+// `#6B93B8` is the reference's neutral-studio sample; this is a touch deeper and
+// more saturated, nearer the in-game daylight reading of `#45719D`, because the
+// rest of this palette is flat and saturated and the studio value read washed
+// out beside a `#2B4FC9` tunic. Hue is held in the reference's 204-213 band.
+const CAPE = "#4E82B4";
+const CAPE_LINING = "#7A3A33";
+
+/**
  * The shoulder cape, hanging — and, since the prop clock arrived, moving.
  *
  * Local frame: `+y` runs up the torso toward the shoulders, `+x` is forward, one
@@ -121,7 +194,15 @@ function drawCape(b: Brush, p: PropDef, anim: PropAnim): void {
   }
 }
 
-/** The gold collar the cape hangs from — the one bright note at shoulder height. */
+/**
+ * The clasp the cape hangs from, at the throat.
+ *
+ * A gold bar, and it used to be the third of three: circlet, collar and belt
+ * were all `accent`, the same width, stacked down the front, so the one that
+ * identifies him — the circlet — was competing with two that do not. This is
+ * smaller than it was, and it carries the reference costume's **red gem**,
+ * which both breaks the run of gold and is the one warm note at face height.
+ */
 function drawCollar(b: Brush, p: PropDef): void {
   poly(b.ctx, [
     [0.44, 0.3],
@@ -130,6 +211,14 @@ function drawCollar(b: Brush, p: PropDef): void {
     [0.4, -0.16],
   ]);
   b.fill(p.colour);
+  // Body pass only: a gem is a detail, and in the rim pass it would fatten the
+  // clasp's silhouette by its own radius.
+  if (b.mode === "body") {
+    b.ctx.beginPath();
+    b.ctx.arc(-0.02, 0.1, 0.19, 0, Math.PI * 2);
+    b.ctx.closePath();
+    b.fill("#C4384A");
+  }
 }
 
 /**
@@ -153,27 +242,35 @@ function drawCollar(b: Brush, p: PropDef): void {
  * move, and worst of all on Dolphin Slash, where a vertical blade against the
  * night sky read as an aerial rather than as a sword.
  *
- * So the half-width is 0.082 — about 0.9 rig units across, which is his
+ * So the half-width is 0.072 — about 0.8 rig units across, two-thirds of his
  * forearm's own thickness. That is wide for a rapier and it is what it takes:
  * the doc's rule is that a weapon has to be checked at match scale, and at match
  * scale the visible white is what the rim leaves behind, not what was drawn.
- * The guard went out to 0.2 with it, because a guard the blade's own width is
- * not a guard.
+ * The guard went out to 0.175 with it, because a guard the blade's own width is
+ * not a guard — and no further: `swordLong`'s guard scaled to 2.5 rig units
+ * against a 2.74-unit torso, which is the thing round one went custom to fix.
  *
  * Local frame: `+y` runs out along the hand, `+x` is forward, one unit is `size`.
  */
 function drawFalchion(b: Brush, p: PropDef): void {
   const ctx = b.ctx;
   // The grip, back down the hand, and the pommel behind it.
+  //
+  // 0.13 of a unit, not 0.3. The prop's origin is the *tip* of `handR` and the
+  // hand bone is 0.6 rig units long, so a grip reaching to −0.3 — 1.6 rig units
+  // — ran the whole length of the fist and a rig unit up the forearm besides. A
+  // critic reading a match capture called the result "a dark blob above the
+  // guard" and could not find a hand anywhere on the sword; there wasn't one,
+  // the grip was painted over it. This ends about where the fist does.
   poly(ctx, [
-    [-0.055, -0.3],
-    [0.055, -0.3],
-    [0.055, 0.02],
-    [-0.055, 0.02],
+    [-0.05, -0.13],
+    [0.05, -0.13],
+    [0.05, 0.02],
+    [-0.05, 0.02],
   ]);
   b.fill("#2B3348");
   ctx.beginPath();
-  ctx.arc(0, -0.33, 0.078, 0, Math.PI * 2);
+  ctx.arc(0, -0.155, 0.062, 0, Math.PI * 2);
   ctx.closePath();
   b.fill(p.detail ?? "accent");
 
@@ -182,21 +279,28 @@ function drawFalchion(b: Brush, p: PropDef): void {
   // visibly wider than the blade now that the blade is a blade — the guard is
   // the one shape that says which end of this thing is the hilt.
   ctx.beginPath();
-  ctx.moveTo(-0.2, 0.0);
-  ctx.quadraticCurveTo(-0.15, 0.15, -0.06, 0.12);
-  ctx.lineTo(0.06, 0.12);
-  ctx.quadraticCurveTo(0.15, 0.15, 0.2, 0.0);
-  ctx.quadraticCurveTo(0.09, -0.06, 0, -0.06);
-  ctx.quadraticCurveTo(-0.09, -0.06, -0.2, 0.0);
+  ctx.moveTo(-0.16, 0.0);
+  ctx.quadraticCurveTo(-0.12, 0.14, -0.05, 0.115);
+  ctx.lineTo(0.05, 0.115);
+  ctx.quadraticCurveTo(0.12, 0.14, 0.16, 0.0);
+  ctx.quadraticCurveTo(0.075, -0.055, 0, -0.055);
+  ctx.quadraticCurveTo(-0.075, -0.055, -0.16, 0.0);
   ctx.closePath();
   b.fill(p.detail ?? "accent");
 
   // The blade: near-parallel for most of its length, then a long leaf taper.
   ctx.beginPath();
-  ctx.moveTo(-0.082, 0.07);
-  ctx.lineTo(0.082, 0.07);
-  ctx.quadraticCurveTo(0.106, 0.66, 0.012, 1.0);
-  ctx.quadraticCurveTo(-0.07, 0.68, -0.082, 0.07);
+  ctx.moveTo(-0.072, 0.07);
+  ctx.lineTo(0.072, 0.07);
+  // Parallel for the first 55% of its length, then the point. Tapering from the
+  // guard makes a triangle, and a triangle 5.3 units long and 0.8 wide reads as
+  // a gladius: a critic given a match capture called it exactly that. The
+  // *ratio* cannot be fixed by narrowing — the rim eats anything thinner — and
+  // it cannot be fixed by lengthening, because 5.3 is pinned to the tipper
+  // hitbox. A straight shaft is what is left, and it is most of the read.
+  ctx.lineTo(0.076, 0.62);
+  ctx.quadraticCurveTo(0.062, 0.87, 0.01, 1.0);
+  ctx.quadraticCurveTo(-0.048, 0.87, -0.066, 0.62);
   ctx.closePath();
   b.fill(p.colour);
 
@@ -206,8 +310,8 @@ function drawFalchion(b: Brush, p: PropDef): void {
     poly(ctx, [
       [-0.026, 0.13],
       [0.026, 0.13],
-      [0.019, 0.79],
-      [-0.019, 0.79],
+      [0.021, 0.8],
+      [-0.021, 0.8],
     ]);
     b.fill("#A9BCD2");
   }
@@ -274,26 +378,40 @@ export const rig: CharacterRig = {
     // #22262E vanished into their own rim — the lower half of him was one dark
     // mass and the limbs had no shape in it. These read as *dark blue* against
     // the outline, which is the point.
-    thighL: "#2C3660",
-    thighR: "#2C3660",
-    shinL: "secondary",
-    shinR: "secondary",
+    // Leggings, then boots. These were `#2C3660` over `secondary`, and
+    // `secondary` is also the cape, so cape, both calves and both feet were one
+    // flat navy mass with a navy outline round it — the bottom half of Marth was
+    // a blob. The reference costume is grey leggings under knee-high brown
+    // boots, which is a value *and* a temperature break exactly at the knee,
+    // where a leg needs one. Blue and gold still carry him: tunic, hair,
+    // circlet, belt and hilt are untouched, and the boots are the smallest area
+    // on the figure.
+    thighL: "#454E70",
+    thighR: "#454E70",
+    shinL: "#6A4732",
+    shinR: "#6A4732",
     upperArmL: "primary",
     upperArmR: "primary",
     forearmL: "#2C3660",
     forearmR: "#2C3660",
-    handL: "#E6E2D8",
-    handR: "#E6E2D8",
-    footL: "secondary",
-    footR: "secondary",
+    // Gauntlets. These were `#E6E2D8`, near-white, and the *far* one — shaded
+    // 24% to a neutral (175,172,164) — was the brightest thing on the lower half
+    // of him. A critic measuring a match capture logged it as "a 12×23 grey prop
+    // I cannot identify, a rock in a bumbag". It was his left hand. The
+    // reference costume is dark navy fingerless gauntlets, which removes the
+    // block and is what he actually wears.
+    handL: "#242B52",
+    handR: "#242B52",
+    footL: "#6A4732",
+    footR: "#6A4732",
   },
   props: [
-    { kind: "custom", bone: "torso", at: 1, size: 3.0, colour: "secondary", detail: "#3E5BB8", layer: "behind", draw: drawCape },
-    { kind: "custom", bone: "torso", at: 1, size: 0.9, along: -0.3, across: 0.35, colour: "accent", draw: drawCollar },
-    { kind: "belt", bone: "hip", at: 0.85, size: 1.5, colour: "accent" },
+    { kind: "custom", bone: "torso", at: 1, size: 3.0, colour: CAPE, detail: CAPE_LINING, layer: "behind", draw: drawCape },
+    { kind: "custom", bone: "torso", at: 1, size: 0.95, along: 0.06, across: 0.22, colour: "accent", draw: drawCollar },
+    { kind: "belt", bone: "hip", at: 0.8, size: 1.15, colour: "accent" },
     { kind: "custom", bone: "handR", at: 1, size: 5.3, colour: "#E6EEF6", detail: "accent", draw: drawFalchion },
-    { kind: "custom", bone: "head", at: 1, size: 2.0, colour: "#3C63C8", draw: drawHair },
-    { kind: "tiara", bone: "head", at: 1, size: 1.25, along: 0.86, colour: "accent", detail: "#5FC8E8" },
+    { kind: "custom", bone: "head", at: 1, size: 2.0, colour: HAIR, draw: drawHair },
+    { kind: "tiara", bone: "head", at: 1, size: 1.25, along: 0.68, colour: "accent", detail: "#5FC8E8" },
     eyes(0.6, "#2E4C8F"),
   ],
 };

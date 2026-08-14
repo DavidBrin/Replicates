@@ -46,6 +46,16 @@ import { FIGHTERS } from "@/fighters";
 
 const NAMES = Object.keys(poses) as PoseName[];
 const clips = NAMES.map((name) => [name, poses[name] as PoseClip] as const);
+/**
+ * The one-shot clips.
+ *
+ * Everything below about strikes, wind-ups and follow-through is a statement
+ * about an *attack*, and the standing loop is not one: it has no contact frame,
+ * no terminator — a loop wraps rather than converging — and no wind-up to be a
+ * different drawing from. Running those assertions over it asserted three
+ * things that are meaningless rather than three things that are true.
+ */
+const attacks = clips.filter(([, clip]) => !clip.loop);
 
 /** How long the drawn blade is, in rig units. Read from the rig, not retyped. */
 const BLADE = rig.props.find((p) => p.bone === "handR")?.size ?? 0;
@@ -131,9 +141,89 @@ describe("Marth overrides the moves whose shape is the character", () => {
   });
 });
 
+/**
+ * The pose a player looks at more than any other, and the one round one left on
+ * the shared clip.
+ *
+ * The library's `idle` hangs both arms straight down, which accumulates to a
+ * blade direction of 190°. On a fist that is a fist; on a 5.3-unit blade it puts
+ * the drawn point at world (−0.7, −0.3) — behind his heel and **under the
+ * stage**. Every frame Marth was not attacking he was standing on his own sword,
+ * and nothing in the suite could see it, because a clip can satisfy every
+ * structural rule and still bury the weapon in the floor.
+ *
+ * So the assertion is geometric and it is sampled across the whole cycle rather
+ * than at the keys: an interpolated frame can dip below a floor that both of its
+ * neighbours clear.
+ */
+describe("the standing loop is his own", () => {
+  const idle = poses.idle as PoseClip;
+
+  /** Every drawn frame of the loop, the way `poseTimeFor` would sample it. */
+  const cycle = Array.from({ length: idle?.period ?? 1 }, (_, f) =>
+    samplePose(idle, f / (idle.period as number)),
+  );
+
+  /** The point of Falchion for a sampled frame, in the same world units as the hitboxes. */
+  function tipAt(s: ReturnType<typeof samplePose>): { x: number; y: number } {
+    return bladeTip({ t: 0, pose: s.angles, offsetX: s.offsetX, offsetY: s.offsetY, scaleX: s.scaleX, scaleY: s.scaleY });
+  }
+
+  it("exists at all, loops, and does not breathe on everybody else's clock", () => {
+    expect(idle, "no idle override — Marth is still on the shared standing clip").toBeDefined();
+    expect(idle.loop).toBe(true);
+    expect(idle.period).toBeDefined();
+    expect(idle.period).not.toBe(POSE_LIBRARY.idle.period);
+  });
+
+  it("never plants the point of Falchion in the stage or behind his heel", () => {
+    for (let f = 0; f < cycle.length; f++) {
+      const p = tipAt(cycle[f]);
+      expect(
+        p.y,
+        `frame ${f}: the point is at world y=${p.y.toFixed(2)} — the stage is y=0`,
+      ).toBeGreaterThan(0.45);
+      expect(p.x, `frame ${f}: the point is at world x=${p.x.toFixed(2)}, behind him`).toBeGreaterThan(3.0);
+    }
+  });
+
+  /**
+   * …and does not overreach either. `BODY_REACH` is 6.0 and the tipper 11.0, and
+   * the resting point sits at 7.1 — past the body hitbox, well short of the tip.
+   * Straightening the elbow to carry the sword out at arm's length puts it at
+   * 8.3, which is a fighter standing in the middle of his own forward smash:
+   * every attack then has nowhere left to travel to, and the wind-up of each of
+   * them has to start by pulling *back*.
+   */
+  it("keeps the resting point short of attack extension", () => {
+    for (const s of cycle) {
+      const x = tipAt(s).x;
+      expect(x, `the resting point is ${x.toFixed(1)} world units out — that is a lunge, not a stance`).toBeLessThan(8.0);
+    }
+  });
+
+  it("keeps both feet on the stage for the whole breath", () => {
+    for (let f = 0; f < cycle.length; f++) {
+      const s = cycle[f];
+      const sk = resolve(rig.bones, s.angles, {
+        x: 0,
+        y: 0,
+        scale: 1,
+        scaleX: s.scaleX,
+        scaleY: s.scaleY,
+        facing: 1,
+      });
+      // `resolve` is y-down with the origin at the feet, so the sole's height
+      // above the stage is `-y + offsetY`, in rig units.
+      const sole = Math.min(-sk.footL.y1, -sk.footR.y1, -sk.footL.y0, -sk.footR.y0) + s.offsetY;
+      expect(Math.abs(sole), `frame ${f}: a foot is ${sole.toFixed(2)} rig units off the stage`).toBeLessThan(0.35);
+    }
+  });
+});
+
 describe("every clip is well formed", () => {
   it("keeps keys sorted inside [0, 1]", () => {
-    for (const [name, clip] of clips) {
+    for (const [name, clip] of attacks) {
       let last = -1;
       for (const k of clip.keys) {
         expect(k.t, `${name}`).toBeGreaterThanOrEqual(0);
@@ -146,7 +236,7 @@ describe("every clip is well formed", () => {
   });
 
   it("puts the strike in the first half, on a key, with a follow-through after it", () => {
-    for (const [name, clip] of clips) {
+    for (const [name, clip] of attacks) {
       expect(clip.strike, `${name} declares no strike`).toBeDefined();
       const strike = clip.strike as number;
       expect(strike, name).toBeLessThan(0.5);
@@ -316,7 +406,7 @@ describe("the sword actually swings", () => {
    * would and asks that the blade is somewhere different a third of the way in.
    */
   it("is a different drawing at the start of the wind-up than at contact", () => {
-    for (const [name, clip] of clips) {
+    for (const [name, clip] of attacks) {
       const strike = clip.strike as number;
       const early = bladeAngle(samplePose(clip, strike * 0.34).angles);
       const at = bladeAngle(samplePose(clip, strike).angles);
@@ -403,6 +493,198 @@ describe("the effects are wired to moves that exist", () => {
       expect(shared, `${slot} has no overlapping hitbox pair to call a tipper`).toBe(true);
     }
   });
+
+  /**
+   * The failure another two fighters hit independently this round: an effect
+   * that peaks *before* its hitbox is live and fades through the active window,
+   * so the swing looks finished by the time it connects.
+   *
+   * For a tipper that is worse than for a generic slash graphic, because the
+   * flash is the spacing cue: a player who learns "the light means the tip is
+   * out" from a light that appears two frames early learns the wrong distance.
+   *
+   * So: nothing on the frame before the window opens, something on the frame it
+   * opens, and still something on its last live frame. Painted counts are read
+   * off a mock context rather than asserted structurally, so a graphic that
+   * happens to draw with zero alpha still counts as absent.
+   */
+  it("paints nothing before the hitbox is live, and is still painting on its last live frame", () => {
+    const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
+    const cam = createCamera(makeStage());
+    const drawnAt = (slot: MoveSlot, actionFrame: number) => {
+      const ctx = createMockContext();
+      const f = makeFighter({ defId: "marth", action: "attack", move: slot, actionFrame });
+      const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, undefined);
+      for (const paint of r.over) paint();
+      return ctx.calls.length;
+    };
+
+    for (const slot of Object.keys(fx) as MoveSlot[]) {
+      // Shield Breaker's charge glow and the Counter's ward are deliberately
+      // painted outside any hitbox window — they are charge and stance tells,
+      // not swing tells — so only the moves whose whole graphic is the tipper
+      // can be asked this.
+      if (slot === "neutralB" || slot === "downB") continue;
+      const boxes = def.moves[slot]!.hitboxes.filter((h) => !h.grabbing);
+      const first = Math.min(...boxes.map((h) => h.startFrame));
+      const window = boxes.filter((h) => h.startFrame === first);
+      const last = Math.max(...window.map((h) => h.endFrame));
+      // `c.frame` is `actionFrame + 1`, so the frame before the window opens is
+      // `actionFrame = first - 2`.
+      if (first >= 2) {
+        expect(drawnAt(slot, first - 2), `${slot} paints on frame ${first - 1}, before its hitbox exists`).toBe(0);
+      }
+      expect(drawnAt(slot, first - 1), `${slot} paints nothing on frame ${first}, its first live frame`).toBeGreaterThan(0);
+      expect(drawnAt(slot, last - 1), `${slot} has stopped painting by frame ${last}, still a live frame`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * The tip flash goes in front of the figure.
+   *
+   * `over` arrived this round, and it matters here more than for most effects:
+   * Down Air's meteor sweetspot is below and *behind* his own legs, Up Air's and
+   * Up Smash's tips are inside the head-and-shoulders region, and Neutral Air's
+   * second sweetspot is behind his back. Under the figure those are a flash the
+   * fighter is standing on top of.
+   */
+  /**
+   * A charging smash must not flash its tipper.
+   *
+   * `states.ts` pins a chargeable move's `actionFrame` one frame short of its
+   * first hitbox while the button is held, so the effect sees `frame ===
+   * startFrame` for the whole charge — sixty frames of a graphic that means
+   * "the tip is live right now" on frames where the engine has stopped the
+   * clock and nothing can be hit. A capture of a held Shield Breaker is what
+   * found it: a fixed sheen on the point next to a charge glow that was
+   * supposed to be the only thing changing.
+   */
+  it("does not flash the tip through a held charge", () => {
+    const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
+    const cam = createCamera(makeStage());
+    const move = marth.moves.neutralB as MoveDef;
+    const opens = Math.min(...move.hitboxes.map((h) => h.startFrame));
+    // Counting *all* arcs cannot answer this: the charge glow is arcs too, and
+    // it is supposed to be there and to grow. What is being asked is whether
+    // anything is painted **on the tip hitbox**, so the count is scoped to it.
+    const tip = move.hitboxes.reduce((a, b) => (a.id <= b.id ? a : b));
+    const tx = 960 + toFloat(tip.x) * cam.zoom;
+    const ty = 700 - toFloat(tip.y) * cam.zoom;
+    const onTheTip = (charge: number, actionFrame: number) => {
+      const ctx = createMockContext();
+      const f = makeFighter({ defId: "marth", action: "special", move: "neutralB", actionFrame, charge });
+      const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, {
+        lastHit: [null, null, null, null],
+        frame: 0,
+      });
+      for (const paint of r.over) paint();
+      return ctx.calls.filter(
+        (cc) =>
+          cc.method === "arc" &&
+          Math.hypot((cc.args[0] as number) - tx, (cc.args[1] as number) - ty) < cam.zoom * 1.5,
+      ).length;
+    };
+    expect(onTheTip(0, opens - 1), "the tipper does not paint on the first live frame at all").toBeGreaterThan(0);
+    expect(onTheTip(40, opens - 1), "the tipper flashes through a held charge").toBe(0);
+  });
+
+  /**
+   * The edge light, which is the part the real game actually has.
+   *
+   * SmashWiki: Marth's tipper "is indicated by a bright motion trail at the tip
+   * of his sword", where Lucina's trail is even across the whole blade. That
+   * gradient is on every swing, hit or not — it is the standing invitation, and
+   * it is what a player learns spacing from. The landed flash is this rebuild's
+   * substitute for a sound and a doubled hitlag it has no way to reproduce.
+   *
+   * The segment is derived: the sourspot box sits on the body of the blade and
+   * the sweetspot on its outer end, so the light has to be painted *between
+   * them*, not at either. Asserting that some paint lands strictly between the
+   * two hitbox positions is what distinguishes an edge light from one more glow
+   * on the point.
+   */
+  it("lights the outer blade between the sourspot and the tip, not just the point", () => {
+    const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
+    const cam = createCamera(makeStage());
+    const move = marth.moves.fsmash as MoveDef;
+    const live = Math.min(...move.hitboxes.map((h) => h.startFrame));
+    const tip = move.hitboxes.reduce((a, b) => (a.id <= b.id ? a : b));
+    const inner = move.hitboxes.reduce((a, b) => (a.id >= b.id ? a : b));
+
+    const ctx = createMockContext();
+    const f = makeFighter({ defId: "marth", action: "attack", move: "fsmash", actionFrame: live - 1 });
+    const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, {
+      lastHit: [null, null, null, null],
+      frame: f.actionFrame,
+    });
+    for (const paint of r.over) paint();
+
+    // Screen positions of the two boxes, the same arithmetic the effect uses.
+    const u = cam.zoom;
+    const ix = 960 + toFloat(inner.x) * u;
+    const iy = 700 - toFloat(inner.y) * u;
+    const tx = 960 + toFloat(tip.x) * u;
+    const ty = 700 - toFloat(tip.y) * u;
+    const len2 = (tx - ix) ** 2 + (ty - iy) ** 2;
+
+    const between = ctx.calls
+      .filter((c) => c.method === "arc")
+      .map((c) => (((c.args[0] as number) - ix) * (tx - ix) + ((c.args[1] as number) - iy) * (ty - iy)) / len2)
+      .filter((t) => t > 0.15 && t < 0.9);
+    expect(
+      between.length,
+      "nothing is painted along the outer blade — the tipper has no trail, only a point",
+    ).toBeGreaterThan(0);
+  });
+
+  it("queues the tip flash above the body rather than painting it underneath", () => {
+    const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
+    const cam = createCamera(makeStage());
+    const move = marth.moves.dair as MoveDef;
+    const live = Math.min(...move.hitboxes.map((h) => h.startFrame));
+    const ctx = createMockContext();
+    const f = makeFighter({ defId: "marth", action: "attack", move: "dair", actionFrame: live - 1 });
+    const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, undefined);
+    expect(r.over.length, "the tip flash is painted under the fighter").toBeGreaterThan(0);
+    expect(ctx.calls.length, "something was painted under the fighter that should be over it").toBe(0);
+  });
+});
+
+/**
+ * Counter's graphic covers the move's own two halves and the gap between them.
+ *
+ * The engine has no counter mechanic, so the whole of what a player can read
+ * about this move is the graphic: a gleam as the guard forms, a held ward across
+ * the documented window (frames 6-27), a gap, and then the riposte. If the ward
+ * stops early the move looks over while it is still countering, and if it never
+ * stops the move never looks like it resolved.
+ */
+describe("Counter shows its window", () => {
+  const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
+  const cam = createCamera(makeStage());
+  const drawn = (actionFrame: number) => {
+    const ctx = createMockContext();
+    const f = makeFighter({ defId: "marth", action: "special", move: "downB", actionFrame });
+    const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, undefined);
+    for (const paint of r.over) paint();
+    return ctx.calls.length;
+  };
+
+  it("paints across the documented counter window and again on the riposte", () => {
+    // frame = actionFrame + 1, and the window is move frames 6-27.
+    for (const frame of [6, 14, 27]) {
+      expect(drawn(frame - 1), `nothing painted on frame ${frame}, inside the counter window`).toBeGreaterThan(0);
+    }
+    for (const frame of [36, 40]) {
+      expect(drawn(frame - 1), `nothing painted on frame ${frame}, the riposte`).toBeGreaterThan(0);
+    }
+  });
+
+  it("goes dark between the window closing and the riposte", () => {
+    for (const frame of [29, 31]) {
+      expect(drawn(frame - 1), `frame ${frame} is between the window and the cut and should be dark`).toBe(0);
+    }
+  });
 });
 
 /**
@@ -435,7 +717,7 @@ describe("the tipper flash knows what actually connected", () => {
       actionFrame: live - 1,
       hitlag,
     });
-    drawMoveFx(
+    const result = drawMoveFx(
       ctx,
       marth,
       f,
@@ -455,6 +737,12 @@ describe("the tipper flash knows what actually connected", () => {
             frame: f.actionFrame,
           },
     );
+    // The tip flash is queued through `over` so it lands in front of the body
+    // rather than under it, and `drawMoveFx` hands the queue back rather than
+    // running it. Draining it here is what the renderer does; not draining it
+    // would make every assertion below pass against a context nothing painted
+    // into — the exact shape of a vacuous test.
+    for (const paint of result.over) paint();
     return ctx;
   }
 
@@ -470,6 +758,32 @@ describe("the tipper flash knows what actually connected", () => {
     // it would be asserting on nothing.
     expect(sour, "fsmash needs at least two hitboxes to have a tipper").toBeGreaterThan(sweet);
     expect(biggest(paint(sweet))).toBeGreaterThan(biggest(paint(sour)));
+  });
+
+  /**
+   * The state round two added, and the one a fight capture caught.
+   *
+   * Walking into Donkey Kong and swinging deals 16.4 — the 13% body hit — and
+   * the old graphic drew the same hard cyan star on the point that a 22.7 tip
+   * hit drew, only 1.45× smaller. Two stars of different sizes are told apart
+   * by comparison and there is nothing to compare against mid-match, so the
+   * picture said "tipper" on the frame the player was being taught they had
+   * mis-spaced. A sourspot must leave the point *dark*.
+   */
+  it("leaves the point dark when a different box won the swing", () => {
+    const move = marth.moves.fsmash as MoveDef;
+    const sour = Math.max(...move.hitboxes.map((h) => h.id));
+    expect(biggest(paint(sour)), "a sourspot hit still painted something on the tip").toBe(0);
+    // …and the un-connected state is not dark, because marking where the
+    // sweetspot is before contact is the honest half of this graphic.
+    expect(biggest(paint(null))).toBeGreaterThan(0);
+  });
+
+  it("keeps the un-connected gleam far below the landed flash", () => {
+    const move = marth.moves.fsmash as MoveDef;
+    const sweet = Math.min(...move.hitboxes.map((h) => h.id));
+    // Half is not enough of a gap to read in the third of a second a hit lasts.
+    expect(biggest(paint(null))).toBeLessThan(biggest(paint(sweet)) * 0.6);
   });
 
   it("does not bloom on a sourspot that froze him just as hard", () => {
