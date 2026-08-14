@@ -42,7 +42,7 @@ describe("Avatar", () => {
 
   it("takes initials from the first and last words", () => {
     expect(initialsFor("David Del Rio")).toBe("DR");
-    expect(initialsFor("Marco Vidal")).toBe("BL");
+    expect(initialsFor("Marco Vidal")).toBe("MV");
     expect(initialsFor("cher")).toBe("CH");
     expect(initialsFor("   ")).toBe("?");
   });
@@ -61,7 +61,7 @@ describe("Avatar", () => {
     expect(container.querySelector("img")).toBeInTheDocument();
 
     render(<Avatar id="usr_2" name="Rafi Okonjo" />);
-    expect(screen.getByText("DD")).toBeInTheDocument();
+    expect(screen.getByText("RO")).toBeInTheDocument();
   });
 
   it("goes silent when decorative", () => {
