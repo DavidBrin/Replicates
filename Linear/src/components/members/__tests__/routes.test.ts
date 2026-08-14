@@ -65,6 +65,10 @@ const WORKSPACE = "wsp_slice_members";
 const OTHER_WORKSPACE = "wsp_slice_other";
 const TEAM = "tem_slice_eng";
 const PRIVATE_TEAM = "tem_slice_des";
+/** Public, in this workspace, and nobody below is in it. */
+const OPEN_TEAM = "tem_slice_ops";
+/** In the *other* workspace. Nothing here may reach it by naming its id. */
+const FOREIGN_TEAM = "tem_slice_skunk";
 const PROJECT = "prj_slice_site";
 const FOREIGN_PROJECT = "prj_slice_foreign";
 
@@ -155,6 +159,17 @@ beforeEach(async () => {
   await db.execute(
     `insert into teams (id, workspace_id, name, key, private) values ($1, $2, 'Design', 'DES', true)`,
     [PRIVATE_TEAM, WORKSPACE],
+  );
+  // Public, so every workspace member can *see* it — and none of them holds a
+  // role in it, so none of them may create or attach work there. That gap is
+  // what separates "may I see this team" from "may I use it".
+  await db.execute(
+    `insert into teams (id, workspace_id, name, key, private) values ($1, $2, 'Operations', 'OPS', false)`,
+    [OPEN_TEAM, WORKSPACE],
+  );
+  await db.execute(
+    `insert into teams (id, workspace_id, name, key, private) values ($1, $2, 'Skunkworks', 'SKW', false)`,
+    [FOREIGN_TEAM, OTHER_WORKSPACE],
   );
   await db.execute(
     "insert into team_members (team_id, user_id, role) values ($1, $2, 'admin')",
@@ -472,7 +487,10 @@ describe("/api/projects", () => {
         body: { workspaceId: WORKSPACE, name: "Sneaky", teamIds: [TEAM] },
       }),
     );
-    expect(response.status).toBe(403);
+    // 404 rather than 403, and that is the stricter answer, for the same reason
+    // `POST /api/teams/{id}/members` gives it: `team.view` denies `ws:guest`
+    // outright (row 14), so a guest must not learn that this team id resolves.
+    expect(response.status).toBe(404);
     const rows = await db.query("select 1 from projects where name = 'Sneaky'");
     expect(rows).toHaveLength(0);
   });
@@ -485,6 +503,165 @@ describe("/api/projects", () => {
       }),
     );
     expect(response.status).toBe(201);
+  });
+
+  /**
+   * `project.create` is a team-scoped row, so a body naming two teams asks the
+   * matrix twice — and one grant is not an answer to the other.
+   *
+   * The bug this pins was a single character: `teams.some(...)` where the rule
+   * is `every`. A workspace member holding a role in Engineering could list
+   * Operations alongside it and attach both, and an attached team is what
+   * decides who may read the project afterwards.
+   */
+  it("requires the permission for every team named, not just one of them", async () => {
+    const response = await createProjectRoute(
+      request("POST", "/api/projects", {
+        as: MEMBER,
+        body: {
+          workspaceId: WORKSPACE,
+          name: "Piggyback",
+          teamIds: [TEAM, OPEN_TEAM],
+        },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(
+      await db.query("select 1 from projects where name = 'Piggyback'"),
+    ).toHaveLength(0);
+    expect(
+      await db.query("select 1 from project_teams where team_id = $1", [
+        OPEN_TEAM,
+      ]),
+    ).toHaveLength(0);
+  });
+
+  it("hides a team from another workspace rather than refusing it", async () => {
+    const response = await createProjectRoute(
+      request("POST", "/api/projects", {
+        as: OWNER,
+        body: {
+          workspaceId: WORKSPACE,
+          name: "Cross tenancy",
+          teamIds: [FOREIGN_TEAM],
+        },
+      }),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain("Skunkworks");
+    expect(
+      await db.query("select 1 from projects where name = 'Cross tenancy'"),
+    ).toHaveLength(0);
+  });
+
+  /**
+   * R7, at the one moment it used to be skippable.
+   *
+   * `leadId` and `memberIds` went straight into the insert, so creating a
+   * project was a way around every membership rule: naming a workspace guest as
+   * lead minted the container admin R7 exists to forbid, and the members panel
+   * would then show a guest leading work they are not supposed to discover.
+   */
+  it("refuses to make a workspace guest the lead of a new project", async () => {
+    const response = await createProjectRoute(
+      request("POST", "/api/projects", {
+        as: MEMBER,
+        body: {
+          workspaceId: WORKSPACE,
+          name: "Guest led",
+          teamIds: [TEAM],
+          leadId: GUEST,
+        },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "GUEST_CANNOT_HOLD_ROLE",
+    });
+    expect(
+      await db.query("select 1 from projects where name = 'Guest led'"),
+    ).toHaveLength(0);
+    expect(
+      await db.query("select 1 from project_members where user_id = $1", [GUEST]),
+    ).toHaveLength(0);
+  });
+
+  it("refuses to seed a project with somebody who is not in the workspace", async () => {
+    const response = await createProjectRoute(
+      request("POST", "/api/projects", {
+        as: MEMBER,
+        body: {
+          workspaceId: WORKSPACE,
+          name: "Outsider seeded",
+          teamIds: [TEAM],
+          memberIds: [OUTSIDER],
+        },
+      }),
+    );
+    // 404 rather than 403: naming an id from another tenancy must look exactly
+    // like naming one that does not exist.
+    expect(response.status).toBe(404);
+    expect(
+      await db.query("select 1 from projects where name = 'Outsider seeded'"),
+    ).toHaveLength(0);
+    expect(
+      await db.query("select 1 from project_members where user_id = $1", [
+        OUTSIDER,
+      ]),
+    ).toHaveLength(0);
+  });
+
+  /**
+   * Row 28 grants `project.create` to `team:member`, and a guest may hold that.
+   * R7 says a guest is never a container admin. Both are true at once, so the
+   * creation stands and the project simply has no lead — R6 allows exactly that
+   * — rather than the request being refused for a role nobody asked for.
+   */
+  it("lets a guest in a team create a project, without leading it", async () => {
+    await db.execute(
+      "insert into team_members (team_id, user_id, role) values ($1, $2, 'member')",
+      [TEAM, GUEST],
+    );
+    const response = await createProjectRoute(
+      request("POST", "/api/projects", {
+        as: GUEST,
+        body: { workspaceId: WORKSPACE, name: "Guest made", teamIds: [TEAM] },
+      }),
+    );
+    expect(response.status).toBe(201);
+    const { project } = (await response.json()) as {
+      project: { id: string; leadId: string | null };
+    };
+    expect(project.leadId).toBeNull();
+    const rows = await db.query<{ user_id: string; role: string }>(
+      "select user_id, role from project_members where project_id = $1",
+      [project.id],
+    );
+    expect(rows).toStrictEqual([{ user_id: GUEST, role: "member" }]);
+  });
+
+  it("still seeds the legal case: a guest as a plain member, and the creator", async () => {
+    const response = await createProjectRoute(
+      request("POST", "/api/projects", {
+        as: MEMBER,
+        body: {
+          workspaceId: WORKSPACE,
+          name: "Shared",
+          teamIds: [TEAM],
+          memberIds: [GUEST],
+        },
+      }),
+    );
+    expect(response.status).toBe(201);
+    const { project } = (await response.json()) as { project: { id: string } };
+    const rows = await db.query<{ user_id: string; role: string }>(
+      "select user_id, role from project_members where project_id = $1 order by user_id",
+      [project.id],
+    );
+    expect(rows).toStrictEqual([
+      { user_id: GUEST, role: "member" },
+      { user_id: MEMBER, role: "lead" },
+    ]);
   });
 });
 
@@ -595,6 +772,155 @@ describe("PATCH /api/projects/{id}", () => {
     );
     expect(response.status).toBe(403);
     expect(await projectName()).toBe("Website redesign");
+  });
+});
+
+describe("POST /api/projects/{id} — milestones", () => {
+  /**
+   * The permission question was asked about a *project*; the command names a
+   * milestone by a bare id, and the repository looks that id up by primary key.
+   * Nothing joined the two, so a member of any project could rename or delete a
+   * milestone belonging to a project they cannot open — including one in another
+   * workspace entirely.
+   */
+  it("refuses a milestone that belongs to another project", async () => {
+    await db.execute(
+      `insert into project_milestones (id, project_id, name, sort_order)
+       values ('mil_slice_foreign', $1, 'Elsewhere launch', 'a0')`,
+      [FOREIGN_PROJECT],
+    );
+    await db.execute(
+      "insert into project_members (project_id, user_id, role) values ($1, $2, 'member')",
+      [PROJECT, GUEST],
+    );
+
+    const renamed = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: GUEST,
+        body: {
+          action: "updateMilestone",
+          milestoneId: "mil_slice_foreign",
+          name: "Taken over",
+        },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(renamed.status).toBe(404);
+    expect(await renamed.text()).not.toContain("Elsewhere launch");
+
+    const deleted = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: GUEST,
+        body: { action: "deleteMilestone", milestoneId: "mil_slice_foreign" },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(deleted.status).toBe(404);
+
+    const rows = await db.query<{ name: string }>(
+      "select name from project_milestones where id = 'mil_slice_foreign'",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.name).toBe("Elsewhere launch");
+  });
+
+  it("still edits and deletes its own project's milestones", async () => {
+    const created = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: OWNER,
+        body: { action: "createMilestone", name: "Beta" },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(created.status).toBe(201);
+    const { milestone } = (await created.json()) as {
+      milestone: { id: string };
+    };
+
+    const renamed = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: OWNER,
+        body: {
+          action: "updateMilestone",
+          milestoneId: milestone.id,
+          name: "Beta 2",
+        },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(renamed.status).toBe(200);
+
+    const deleted = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: OWNER,
+        body: { action: "deleteMilestone", milestoneId: milestone.id },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(deleted.status).toBe(200);
+    expect(
+      await db.query("select 1 from project_milestones where id = $1", [
+        milestone.id,
+      ]),
+    ).toHaveLength(0);
+  });
+});
+
+describe("POST /api/projects/{id} — attaching a team", () => {
+  async function attachedTeamIds(): Promise<string[]> {
+    const rows = await db.query<{ team_id: string }>(
+      "select team_id from project_teams where project_id = $1 order by team_id",
+      [PROJECT],
+    );
+    return rows.map((row) => row.team_id);
+  }
+
+  /**
+   * `project.add_team` is a grant on the project, never a licence to name any
+   * team in the world — and an attached team decides who may *read* the project
+   * (footnote 11), so a team from another workspace is a tenancy breach rather
+   * than an untidy row.
+   */
+  it("refuses a team from another workspace", async () => {
+    const response = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: OWNER,
+        body: { action: "addTeam", teamId: FOREIGN_TEAM },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain("Skunkworks");
+    expect(await attachedTeamIds()).toStrictEqual([TEAM]);
+  });
+
+  it("refuses a private team the actor cannot see", async () => {
+    await db.execute(
+      "insert into project_members (project_id, user_id, role) values ($1, $2, 'lead')",
+      [PROJECT, MEMBER],
+    );
+    const response = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: MEMBER,
+        body: { action: "addTeam", teamId: PRIVATE_TEAM },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain("Design");
+    expect(await attachedTeamIds()).toStrictEqual([TEAM]);
+  });
+
+  it("attaches a team the actor can see, in the same workspace", async () => {
+    const response = await projectCommandRoute(
+      request("POST", `/api/projects/${PROJECT}`, {
+        as: OWNER,
+        body: { action: "addTeam", teamId: OPEN_TEAM },
+      }),
+      params({ id: PROJECT }),
+    );
+    expect(response.status).toBe(200);
+    expect(await attachedTeamIds()).toContain(OPEN_TEAM);
   });
 });
 
@@ -832,6 +1158,65 @@ describe("workflow states", () => {
       alsoDone,
     ]);
     expect(rows).toHaveLength(0);
+  });
+
+  /**
+   * `state.manage` was answered about Engineering. The command then names a
+   * state id, and the repository updated whichever row carried it — so a team
+   * admin could rename or reorder the workflow of a *private* team they have no
+   * standing in, and read its name back out of the response.
+   *
+   * The actor has to be a team admin and nothing more: a workspace admin
+   * legitimately administers both teams, so the bug is invisible from that seat.
+   */
+  it("refuses to update a workflow state belonging to another team", async () => {
+    await db.execute(
+      "update team_members set role = 'admin' where team_id = $1 and user_id = $2",
+      [TEAM, MEMBER],
+    );
+    await db.execute(
+      `insert into workflow_states (id, team_id, name, type, color, position)
+       values ('sta_slice_secret', $1, 'Design Secret', 'started', '#5e6ad2', 0)`,
+      [PRIVATE_TEAM],
+    );
+
+    const response = await teamCommandRoute(
+      request("POST", `/api/teams/${TEAM}`, {
+        as: MEMBER,
+        body: {
+          action: "updateState",
+          stateId: "sta_slice_secret",
+          name: "Renamed from outside",
+          position: 99,
+        },
+      }),
+      params({ id: TEAM }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain("Design Secret");
+    const rows = await db.query<{ name: string; position: number }>(
+      "select name, position from workflow_states where id = 'sta_slice_secret'",
+    );
+    expect(rows[0]?.name).toBe("Design Secret");
+    expect(Number(rows[0]?.position)).toBe(0);
+  });
+
+  it("still updates a state of its own team", async () => {
+    const { done } = await seedStates();
+    const response = await teamCommandRoute(
+      request("POST", `/api/teams/${TEAM}`, {
+        as: OWNER,
+        body: { action: "updateState", stateId: done, name: "Shipped it" },
+      }),
+      params({ id: TEAM }),
+    );
+    expect(response.status).toBe(200);
+    const rows = await db.query<{ name: string }>(
+      "select name from workflow_states where id = $1",
+      [done],
+    );
+    expect(rows[0]?.name).toBe("Shipped it");
   });
 
   it("refuses a plain team member managing states", async () => {

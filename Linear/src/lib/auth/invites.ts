@@ -49,6 +49,8 @@ import {
   allowed,
   can,
   denied,
+  teamAddAction,
+  type Actor,
   type Authorized,
   type WorkspacePolicySettings,
 } from "@/domain/policy";
@@ -171,6 +173,9 @@ export async function createInvite(
         return denied({ code: "CANNOT_GRANT_ABOVE_OWN_RANK", requested: role });
       }
 
+      const teams = await resolveInviteTeams(tx, workspaceId, teamIds, actor, role);
+      if (!teams.ok) return teams;
+
       const { token, tokenHash } = mintInviteToken();
       const id = newId("inv");
       const expiresAt = new Date(
@@ -190,7 +195,7 @@ export async function createInvite(
           workspaceId,
           email,
           role,
-          JSON.stringify(teamIds),
+          JSON.stringify(teams.value),
           tokenHash,
           actorId,
           expiresAt.toISOString(),
@@ -202,6 +207,63 @@ export async function createInvite(
       return allowed({ invite: toInvite(row), token });
     },
   );
+}
+
+/**
+ * The teams an invitation may name, resolved before any of them is stored.
+ *
+ * `team_ids` is a bare `text[]` with no foreign key — a deliberate choice, so
+ * that a team deleted between minting and acceptance does not strand the
+ * invitation — and the acceptance path filters by `workspace_id` for the same
+ * reason. What neither of those does is stop a *foreign* id being written in
+ * the first place, and the row is not inert: {@link previewInvite} renders the
+ * team names to anybody holding the link, so an unvalidated id turns an invite
+ * into a way to read the name of a team in someone else's workspace.
+ *
+ * Two questions, in order. The team must belong to the invite's workspace —
+ * answered with a single query rather than one per id, so a partially valid
+ * list cannot half-succeed. And the actor must be permitted to put somebody of
+ * this role into it: {@link teamAddAction} picks between rows 20 and 21 because
+ * inviting a guest into a team is a stricter grant than inviting a member, and
+ * choosing between them at the call site is the role comparison `SPEC.md` §4
+ * forbids.
+ *
+ * Both failures answer `NOT_FOUND` / `INSUFFICIENT_ROLE` rather than naming the
+ * team: the caller supplied the id, so there is nothing to confirm.
+ */
+async function resolveInviteTeams(
+  tx: SqlExecutor,
+  workspaceId: WorkspaceId,
+  teamIds: readonly TeamId[],
+  actor: Actor,
+  role: WorkspaceRole,
+): Promise<Authorized<TeamId[]>> {
+  const wanted = [...new Set(teamIds)];
+  if (wanted.length === 0) return allowed([]);
+
+  const rows = await tx.query<SqlRow & { id: TeamId; private: boolean }>(
+    `select id, private from teams
+      where workspace_id = $1
+        and id in (select value from json_array_elements_text($2::json))`,
+    [workspaceId, JSON.stringify(wanted)],
+  );
+  if (rows.length !== wanted.length) {
+    return denied({ code: "NOT_FOUND", what: "team" });
+  }
+
+  const action = teamAddAction(role);
+  for (const row of rows) {
+    if (
+      !can(actor, action, {
+        kind: "team",
+        team: { id: row.id, private: row.private },
+      })
+    ) {
+      return denied({ code: "INSUFFICIENT_ROLE", action });
+    }
+  }
+
+  return allowed(rows.map((row) => row.id));
 }
 
 /* =============================================================== reading = */
@@ -234,6 +296,7 @@ export async function previewInvite(
       role: WorkspaceRole;
       email: string | null;
       team_ids: unknown;
+      workspace_id: WorkspaceId;
       workspace_name: string;
       workspace_url_key: string;
       inviter_name: string;
@@ -241,7 +304,7 @@ export async function previewInvite(
       expires_at: string | Date;
     }
   >(
-    `select i.role, i.email, i.team_ids, i.status, i.expires_at,
+    `select i.role, i.email, i.team_ids, i.status, i.expires_at, i.workspace_id,
             w.name as workspace_name, w.url_key as workspace_url_key,
             u.name as inviter_name
        from invites i
@@ -256,10 +319,18 @@ export async function previewInvite(
   if (new Date(row.expires_at).getTime() <= Date.now()) return null;
 
   const teamIds = readTeamIds(row.team_ids);
+  // Scoped to the invite's own workspace, and not only as a belt to
+  // `resolveInviteTeams`' braces: this is the one query in the file that runs
+  // for an *unauthenticated* caller holding nothing but a token, so a stray id
+  // in `team_ids` — from a row minted before that validation existed, or from a
+  // team that has since moved — would print the name of somebody else's team to
+  // whoever opened the link.
   const teams = teamIds.length
     ? await db.query<SqlRow & { name: string }>(
-        `select name from teams where id in (select value from json_array_elements_text($1::json))`,
-        [JSON.stringify(teamIds)],
+        `select name from teams
+          where workspace_id = $2
+            and id in (select value from json_array_elements_text($1::json))`,
+        [JSON.stringify(teamIds), row.workspace_id],
       )
     : [];
 

@@ -207,6 +207,17 @@ export async function POST(
       return Response.json({ state }, { status: 201, headers: auth.headers });
     }
     case "updateState": {
+      // `state.manage` was answered about *this* team. A state id is a bare
+      // string in the body, so nothing about that answer covers a row belonging
+      // to some other team — an admin of Engineering renaming a state of a
+      // private Design team is the same class of bug as editing its issues.
+      // Resolving the id inside the authorized team's own list is what ties the
+      // two together; anything outside it is 404, because the actor has no way
+      // to know the id resolves at all.
+      const states = await repos.teams.listStates(auth.team.id);
+      if (!states.some((state) => state.id === command.stateId)) {
+        return notFoundResponse("team", auth.headers);
+      }
       const state = await repos.teams.updateState(command.stateId, {
         ...(command.name === undefined ? {} : { name: command.name }),
         ...(command.color === undefined ? {} : { color: command.color }),

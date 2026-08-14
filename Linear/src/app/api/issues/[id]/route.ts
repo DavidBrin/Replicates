@@ -37,7 +37,6 @@ import {
   authenticate,
   authorize,
   failure,
-  issueResource,
   loadIssueContext,
   respond,
   validateReferences,
@@ -104,15 +103,16 @@ export async function PATCH(
     return failure(400, "Nothing to change.", viewer);
   }
 
+  // `null` covers "no such issue" *and* "an issue you may not view", so the two
+  // are one answer — see `../authorize.ts`.
   const loaded = await loadIssueContext(id, viewer.user.id);
   if (!loaded) return failure(404, "No such issue.", viewer);
-  const { issue, team, actor } = loaded;
+  const { issue, team, actor, resource } = loaded;
 
-  const resource = issueResource(team, issue);
   const allowed = authorize(actor, actionsFor(patch), resource, viewer);
   if (!allowed.ok) return allowed.response;
 
-  const invalid = await validateReferences(patch, team);
+  const invalid = await validateReferences(patch, team, actor);
   if (invalid) return failure(400, invalid, viewer);
 
   const repositories = getRepositories();
@@ -152,14 +152,9 @@ export async function DELETE(
   const { id } = await context.params;
   const loaded = await loadIssueContext(id, viewer.user.id);
   if (!loaded) return failure(404, "No such issue.", viewer);
-  const { issue, team, actor } = loaded;
+  const { issue, actor, resource } = loaded;
 
-  const allowed = authorize(
-    actor,
-    ["issue.delete"],
-    issueResource(team, issue),
-    viewer,
-  );
+  const allowed = authorize(actor, ["issue.delete"], resource, viewer);
   if (!allowed.ok) return allowed.response;
 
   await getRepositories().issues.trash(issue.id, viewer.user.id);

@@ -18,9 +18,13 @@
  *    which is the whole reason mutations are Route Handlers rather than Server
  *    Actions (`DECISIONS.md` D6): selecting five issues and pressing `S` fires
  *    five requests that overlap.
- * 3. **Rollback restores only the touched fields.** A whole-object snapshot
- *    would clobber a concurrent edit to a different field — you set the
- *    assignee, a status edit fails, and the assignee silently reverts too.
+ * 3. **Rollback restores only the touched fields, to the newest server truth.**
+ *    A whole-object snapshot would clobber a concurrent edit to a *different*
+ *    field — you set the assignee, a status edit fails, and the assignee
+ *    silently reverts too. Restoring the value the transaction started from
+ *    would clobber a *newer* one: a hydration that landed while the request was
+ *    in flight is server truth, and undoing past it deletes somebody else's
+ *    change from the screen.
  * 4. **Reconcile rebases.** Server truth is written, then every *still-queued*
  *    local patch is re-applied on top. Without it, the response to your first
  *    edit erases your second one for the ~50ms until its own response lands,
@@ -345,6 +349,19 @@ export function createIssueStore(options: IssueStoreOptions): IssueStore {
   const draining = new Set<IssueId>();
   let idleWaiters: (() => void)[] = [];
 
+  /**
+   * The newest server truth seen for each issue — a hydration or a response,
+   * whichever landed last.
+   *
+   * Rollback needs it, and the value captured when a mutation *began* is not
+   * it. Title is A, an edit optimistically sets B, a server render arrives with
+   * C because somebody else renamed the issue, and then the edit is refused:
+   * undoing to A discards C and puts a value on screen that no longer exists
+   * anywhere. Undoing means "the field goes back to what the server says", and
+   * this map is what the server says.
+   */
+  const base = new Map<IssueId, IssueWithRelations>();
+
   const state = createStore<IssueStoreState>(() => ({
     byId: {},
     list: [],
@@ -464,6 +481,7 @@ export function createIssueStore(options: IssueStoreOptions): IssueStore {
    * first one's answer.
    */
   function reconcile(txn: Txn, server: IssueWithRelations): void {
+    base.set(txn.entityId, server);
     const queue = queues.get(txn.entityId) ?? [];
     let next = server;
     for (const other of queue) {
@@ -477,13 +495,25 @@ export function createIssueStore(options: IssueStoreOptions): IssueStore {
     const current = state.getState().byId[txn.entityId];
 
     if (txn.dispatch.kind === "create") {
+      base.delete(txn.entityId);
       dropIssue(txn.entityId);
     } else if (current) {
-      // Only the fields this transaction wrote go back. Later queued patches
-      // are then re-applied, so a failed status change does not also undo the
-      // assignee someone set half a second afterwards.
+      // Only the fields this transaction wrote go back, and they go back to
+      // the *latest* server truth rather than to the value the transaction
+      // started from — a hydration may have landed in between with a newer one,
+      // and reverting past it would erase a change this client never made.
+      // `txn.original` is the fallback for an issue the server has never spoken
+      // about, which is only ever a locally created row.
+      const authoritative = base.get(txn.entityId);
+      const restored =
+        authoritative === undefined
+          ? txn.original
+          : originalOf(authoritative, txn.patch);
+
+      // Later queued patches are then re-applied, so a failed status change
+      // does not also undo the assignee someone set half a second afterwards.
       const queue = queues.get(txn.entityId) ?? [];
-      let next = applyPatch(current, txn.original, catalog);
+      let next = applyPatch(current, restored, catalog);
       for (const other of queue) {
         if (other === txn) continue;
         next = applyPatch(next, other.patch, catalog);
@@ -514,12 +544,25 @@ export function createIssueStore(options: IssueStoreOptions): IssueStore {
 
     hydrate(issues: readonly IssueWithRelations[]): void {
       const byId: Record<IssueId, IssueWithRelations> = {};
-      for (const issue of issues) byId[issue.id] = rebase(issue);
+      for (const issue of issues) {
+        // A server render is authoritative even for a field an in-flight
+        // transaction is about to be refused for.
+        base.set(issue.id, issue);
+        byId[issue.id] = rebase(issue);
+      }
       // Rows created optimistically in this session are kept: a server render
       // that has not caught up yet must not make a just-created issue vanish.
       for (const [id, queue] of queues) {
         const existing = state.getState().byId[id];
         if (existing && !byId[id] && queue.length > 0) byId[id] = existing;
+      }
+      // An issue this render did not mention and nothing is waiting on has left
+      // the view, so its base goes too — otherwise the map is every issue the
+      // tab has ever displayed.
+      for (const id of [...base.keys()]) {
+        if (byId[id] === undefined && (queues.get(id)?.length ?? 0) === 0) {
+          base.delete(id);
+        }
       }
       commit(byId);
     },

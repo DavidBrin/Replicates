@@ -39,7 +39,7 @@ import {
   PROJECT_STATES,
   type ProjectId,
 } from "@/domain/entities";
-import type { Action } from "@/domain/policy";
+import { canViewTeam, type Action } from "@/domain/policy";
 
 const Patch = z.object({
   name: z.string().trim().min(1).max(200).optional(),
@@ -143,6 +143,29 @@ async function authorize(
   return { ok: true, access, projectId: project.id, headers };
 }
 
+/**
+ * Does the authorized project own this milestone?
+ *
+ * The permission question was asked about a project; the command names a
+ * milestone by a bare id. Nothing connects the two unless something does it
+ * here, and without it a member of any project can rename or delete a milestone
+ * of a project they cannot open — the repository looks the row up by primary
+ * key and has no project to compare it against.
+ *
+ * Read from the authorized project's own list rather than by id-then-compare,
+ * so there is no branch in which a foreign row has been loaded and the check
+ * merely forgotten.
+ */
+async function ownsMilestone(
+  auth: Extract<Authorized, { ok: true }>,
+  milestoneId: string,
+): Promise<boolean> {
+  const milestones = await auth.access.repos.projects.listMilestones(
+    auth.projectId,
+  );
+  return milestones.some((milestone) => milestone.id === milestoneId);
+}
+
 export async function PATCH(
   request: Request,
   context: Context,
@@ -205,6 +228,9 @@ export async function POST(
       return Response.json({ milestone }, { status: 201, headers: auth.headers });
     }
     case "updateMilestone": {
+      if (!(await ownsMilestone(auth, command.milestoneId))) {
+        return notFoundResponse("project", auth.headers);
+      }
       const milestone = await repos.projects.updateMilestone(
         command.milestoneId,
         {
@@ -218,10 +244,29 @@ export async function POST(
       return Response.json({ milestone }, { headers: auth.headers });
     }
     case "deleteMilestone": {
+      if (!(await ownsMilestone(auth, command.milestoneId))) {
+        return notFoundResponse("project", auth.headers);
+      }
       await repos.projects.deleteMilestone(command.milestoneId, user.id);
       return Response.json({ deleted: command.milestoneId }, { headers: auth.headers });
     }
     case "addTeam": {
+      const team = await repos.teams.byId(command.teamId);
+      // `project.add_team` was granted on the *project*. It is not a licence to
+      // name any team in the world: attaching one changes who may read the
+      // project (footnote 11's roll-up) and, across a workspace boundary, would
+      // hand a second tenancy a foothold in this one. So the team has to be in
+      // this workspace *and* visible to the actor — `canViewTeam` picks the
+      // public/private row of the matrix so the call site never does.
+      if (
+        !team ||
+        team.workspaceId !== auth.access.workspace.id ||
+        !canViewTeam(auth.access.actor, team)
+      ) {
+        // 404, not 403: a private team the actor cannot see must not be
+        // confirmed to exist by the shape of the refusal.
+        return notFoundResponse("team", auth.headers);
+      }
       await repos.projects.addTeam(auth.projectId, command.teamId, user.id);
       return Response.json({ added: command.teamId }, { headers: auth.headers });
     }

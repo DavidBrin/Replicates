@@ -15,7 +15,7 @@ model, and a workspace that boots with one command and no database to install.
 | <img src="docs/screenshots/projects.png" width="240" alt="Project list with health, lead and progress"> | <img src="docs/screenshots/members.png" width="240" alt="Workspace members with roles and invitations"> | <img src="docs/screenshots/marketing.png" width="240" alt="Marketing page"> |
 
 Next.js 16 · PostgreSQL everywhere (WASM locally, Neon deployed) ·
-**1,325 unit tests** · 13 e2e permission tests · built from six parallel
+**1,383 unit tests** · 14 e2e permission tests · built from six parallel
 research lanes, then seven parallel build slices.
 
 ```bash
@@ -151,18 +151,27 @@ Claims here are separated by how they were checked.
 That is the brief's headline requirement and the one-way-door rule (D19),
 working end to end.
 
-**Verified by the suites:** 1,325 unit tests, `tsc --noEmit` clean, `eslint`
-clean, `next build` succeeding, and **13 e2e permission tests** covering
-invitation, the one-way admin promotion, last-owner protection, guest team
-scoping, private-team invisibility, and the whole add-to-project → edit →
-remove cycle through the UI.
+**Verified by the suites:** 1,383 unit tests, `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeding, and **14 e2e permission tests, none skipped**,
+covering invitation, the one-way admin promotion, last-owner protection, guest
+team scoping, private-team invisibility, and the whole add-to-project → edit →
+add-an-issue → remove cycle through the UI.
 
-**One test remains skipped** (D22), and it is a real gap rather than a flake: a
-project member who is not in the project's team cannot file an issue into it.
-`POST /api/issues` pre-gates on `canViewTeam` before consulting `issue.create`,
-so the gate is broader than the policy row it guards. Closing it changes where
-team scoping is enforced, which deserves its own change rather than a hurried
-one.
+The last of those was skipped until recently (D22): `POST /api/issues`
+pre-gated on `canViewTeam` before consulting `issue.create`, so the gate was
+broader than the policy row it guarded and a project member could not file into
+their own project. It now authorizes `issue.create` against the whole resource
+— team *and* project — and answers `404` rather than `403` when the caller may
+not know the team exists.
+
+**An independent review found eighteen more.** Running `codex` over the
+finished code turned up defects the suites could not: an idempotent-create
+replay that returned *any* issue whose id you supplied, including ones you
+could not see; `updateState` accepting a workflow state belonging to another
+team; project creation using `teams.some(...)` where it needed `every(...)`, so
+one permitted team smuggled a private one in beside it; and several 403-vs-404
+pairs that together formed an existence oracle. All eighteen are fixed, each
+with a regression test that was verified to fail against the code before it.
 
 **Four bugs the running app found that no unit test could:**
 

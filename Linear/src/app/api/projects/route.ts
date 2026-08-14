@@ -16,13 +16,19 @@ import { z } from "zod";
 import {
   accessForWorkspace,
   badRequest,
+  denialResponse,
   forbidden,
   notFoundResponse,
   sessionForRequest,
   unauthorized,
+  type WorkspaceAccess,
 } from "@/components/members/workspace-access";
-import { PROJECT_STATES } from "@/domain/entities";
-import { can } from "@/domain/policy";
+import {
+  PROJECT_STATES,
+  type UserId,
+  type WorkspaceRole,
+} from "@/domain/entities";
+import { can, canViewTeam, checkProjectRoleChange } from "@/domain/policy";
 
 const Body = z.object({
   workspaceId: z.string().min(1).max(64),
@@ -55,24 +61,51 @@ export async function POST(request: Request): Promise<Response> {
   const teams = [];
   for (const teamId of teamIds) {
     const team = await access.repos.teams.byId(teamId);
-    // A team from another workspace is not a 403 — from this actor's point of
-    // view it does not exist, and saying so would confirm that it does.
-    if (!team || team.workspaceId !== access.workspace.id) {
+    // A team from another workspace — or a private one this actor is not in —
+    // is not a 403: from this actor's point of view it does not exist, and
+    // saying so would confirm that it does. `canViewTeam` picks the public or
+    // private row of the matrix so this call site never does.
+    if (
+      !team ||
+      team.workspaceId !== access.workspace.id ||
+      !canViewTeam(access.actor, team)
+    ) {
       return notFoundResponse("team", headers);
     }
     teams.push(team);
   }
 
+  // `every`, emphatically not `some`. `project.create` is team-scoped, so a
+  // body naming two teams is two separate permission questions, and one grant
+  // is not an answer to the other: with `some`, a member of Engineering could
+  // attach the private Design team to a project simply by listing both — and
+  // an attached team is what decides who may read the project afterwards
+  // (footnote 11). The no-teams case is spelled out rather than left to
+  // `every`'s vacuous truth, which would grant it to everybody.
   const permitted =
     teams.length === 0
       ? can(access.actor, "project.create", { kind: "project" })
-      : teams.some((team) =>
+      : teams.every((team) =>
           can(access.actor, "project.create", {
             kind: "project",
             team: { id: team.id, private: team.private },
           }),
         );
   if (!permitted) return forbidden("project.create", headers);
+
+  // The creator is a member of what they created, and leads it unless the body
+  // names somebody else. Membership grants edit here (`DECISIONS.md` D8), so
+  // omitting it would produce a project its author cannot change.
+  const membership = await plannedMembership(
+    access,
+    headers,
+    {
+      userId: input.leadId === undefined ? access.user.id : input.leadId,
+      explicit: input.leadId !== undefined,
+    },
+    input.memberIds,
+  );
+  if (!membership.ok) return membership.response;
 
   const project = await access.repos.projects.create(
     {
@@ -83,17 +116,111 @@ export async function POST(request: Request): Promise<Response> {
       ...(input.icon === undefined ? {} : { icon: input.icon }),
       ...(input.color === undefined ? {} : { color: input.color }),
       ...(input.state === undefined ? {} : { state: input.state }),
-      // The creator is a member of what they created. Membership grants edit
-      // here (`DECISIONS.md` D8), so omitting it would produce a project its
-      // author cannot change.
-      leadId: input.leadId === undefined ? access.user.id : input.leadId,
+      leadId: membership.leadId,
       startDate: input.startDate ?? null,
       targetDate: input.targetDate ?? null,
       teamIds,
-      memberIds: input.memberIds ?? [access.user.id],
+      memberIds: membership.memberIds,
     },
     access.user.id,
   );
 
   return Response.json({ project }, { status: 201, headers });
+}
+
+type PlannedMembership =
+  | {
+      readonly ok: true;
+      readonly leadId: UserId | null;
+      readonly memberIds: UserId[];
+    }
+  | { readonly ok: false; readonly response: Response };
+
+/**
+ * The project's founding membership, checked against the same rules a later
+ * `POST /api/projects/{id}/members` would face.
+ *
+ * `leadId` and `memberIds` used to go straight into the insert, which made
+ * project creation a way around every membership rule there is: a plain team
+ * member could name a workspace **guest** as lead and mint the container admin
+ * R7 exists to forbid, or seed a project with somebody who is not a principal
+ * of the workspace at all.
+ *
+ * The checks live here rather than in `domain/services/membership.ts` for one
+ * reason: that service acts on a project row under a lock, and there is no row
+ * yet. Creating first and repairing afterwards would leave a window — however
+ * short — in which the illegal grant is real and readable. So the transition is
+ * decided before the write, by the same `policy.ts` function the service calls,
+ * and the insert only ever writes principals that have already been cleared.
+ *
+ * `lead.explicit` is the one subtlety. A guest may hold `team:member`, and row
+ * 28 grants `project.create` to `team:member` — so a guest *may* create a
+ * project and may *never* lead one. Refusing the whole request would contradict
+ * the matrix; silently ignoring a lead the caller asked for would be worse. So
+ * the default lead (the creator) steps down to plain membership and the project
+ * is created without one, which R6 explicitly allows, while a lead the body
+ * named is refused out loud.
+ */
+async function plannedMembership(
+  access: WorkspaceAccess,
+  headers: Headers,
+  lead: { readonly userId: string | null; readonly explicit: boolean },
+  requested: readonly string[] | undefined,
+): Promise<PlannedMembership> {
+  const actor = {
+    workspaceRole: access.actor.workspaceRole ?? "guest",
+    projectRole: null,
+  };
+
+  /**
+   * Not "no such user": a project membership for somebody with no
+   * `workspace_members` row is the state `SPEC.md` §4 says cannot exist, and an
+   * id borrowed from another tenancy must be indistinguishable from a typo.
+   */
+  const workspaceRoleOf = async (
+    userId: string,
+  ): Promise<WorkspaceRole | null> =>
+    (await access.repos.workspaces.memberOf(access.workspace.id, userId))
+      ?.role ?? null;
+
+  // The lead is decided first, because failing the check can change who it is.
+  let leadId: UserId | null = null;
+  if (lead.userId !== null) {
+    const targetRole = await workspaceRoleOf(lead.userId);
+    if (targetRole === null) {
+      return { ok: false, response: notFoundResponse("member", headers) };
+    }
+    const decision = checkProjectRoleChange(
+      actor,
+      { workspaceRole: targetRole },
+      "lead",
+    );
+    if (decision.ok) {
+      leadId = lead.userId;
+    } else if (lead.explicit) {
+      return { ok: false, response: denialResponse(decision.denial, headers) };
+    }
+  }
+
+  const memberIds = new Set<UserId>(requested ?? []);
+  memberIds.add(access.user.id);
+  if (leadId !== null) memberIds.add(leadId);
+
+  for (const userId of memberIds) {
+    if (userId === leadId) continue;
+    const targetRole = await workspaceRoleOf(userId);
+    if (targetRole === null) {
+      return { ok: false, response: notFoundResponse("member", headers) };
+    }
+    const decision = checkProjectRoleChange(
+      actor,
+      { workspaceRole: targetRole },
+      "member",
+    );
+    if (!decision.ok) {
+      return { ok: false, response: denialResponse(decision.denial, headers) };
+    }
+  }
+
+  return { ok: true, leadId, memberIds: [...memberIds] };
 }

@@ -24,7 +24,9 @@ import {
  */
 
 const WORKSPACE = "wsp_inv";
+const OTHER_WORKSPACE = "wsp_inv_other";
 const TEAM = "tem_inv";
+const FOREIGN_TEAM = "tem_inv_other";
 const OWNER = "usr_inv_owner";
 const ADMIN = "usr_inv_admin";
 const MEMBER = "usr_inv_member";
@@ -94,6 +96,18 @@ async function inviteFrom(
   );
   if (!result.ok) throw new Error(`createInvite denied: ${result.denial.code}`);
   return result.value;
+}
+
+/** A second tenancy, with a team whose name must never leave it. */
+async function seedOtherWorkspace(): Promise<void> {
+  await db.execute(
+    "insert into workspaces (id, name, url_key) values ($1, 'Other', 'inv-other')",
+    [OTHER_WORKSPACE],
+  );
+  await db.execute(
+    "insert into teams (id, workspace_id, name, key) values ($1, $2, 'Skunkworks', 'SKW')",
+    [FOREIGN_TEAM, OTHER_WORKSPACE],
+  );
 }
 
 async function roleOf(userId: string): Promise<string | null> {
@@ -181,6 +195,71 @@ describe("createInvite", () => {
   it("keeps the team list", async () => {
     const { invite } = await inviteFrom(OWNER, "member", [TEAM]);
     expect(invite.teamIds).toStrictEqual([TEAM]);
+  });
+
+  /**
+   * `team_ids` has no foreign key — deliberately, so a team deleted between
+   * minting and acceptance does not strand the invitation — and the row is not
+   * inert: `previewInvite` renders the names to anybody holding the link. An
+   * unvalidated id therefore turned an invite into a way to read the name of a
+   * team in somebody else's workspace.
+   */
+  it("refuses a team id from another workspace, and stores nothing", async () => {
+    await seedOtherWorkspace();
+
+    const result = await createInvite(
+      {
+        workspaceId: WORKSPACE,
+        actorId: OWNER,
+        role: "member",
+        teamIds: [FOREIGN_TEAM],
+      },
+      db,
+    );
+
+    expect(result.ok === false && result.denial.code).toBe("NOT_FOUND");
+    expect(await db.query("select 1 from invites")).toHaveLength(0);
+  });
+
+  it("refuses one valid team smuggled alongside a foreign one", async () => {
+    await seedOtherWorkspace();
+
+    const result = await createInvite(
+      {
+        workspaceId: WORKSPACE,
+        actorId: OWNER,
+        role: "member",
+        teamIds: [TEAM, FOREIGN_TEAM],
+      },
+      db,
+    );
+
+    expect(result.ok === false && result.denial.code).toBe("NOT_FOUND");
+    expect(await db.query("select 1 from invites")).toHaveLength(0);
+  });
+
+  it("refuses a team the inviter may not add anybody to", async () => {
+    await db.execute(
+      "insert into teams (id, workspace_id, name, key, private) values ('tem_inv_priv', $1, 'Skunkworks', 'SKW', true)",
+      [WORKSPACE],
+    );
+
+    const result = await createInvite(
+      {
+        workspaceId: WORKSPACE,
+        actorId: MEMBER,
+        role: "member",
+        teamIds: ["tem_inv_priv"],
+        settings: {
+          ...DEFAULT_WORKSPACE_POLICY_SETTINGS,
+          memberInvitePolicy: "anyMember",
+        },
+      },
+      db,
+    );
+
+    expect(result.ok === false && result.denial.code).toBe("INSUFFICIENT_ROLE");
+    expect(await db.query("select 1 from invites")).toHaveLength(0);
   });
 });
 
@@ -334,6 +413,33 @@ describe("previewInvite", () => {
       teamNames: ["Design"],
       email: "who@example.com",
     });
+  });
+
+  /**
+   * The preview runs for a caller holding nothing but a token — no session, no
+   * membership, no principal at all. So it is the one query in the file where a
+   * stray id in `team_ids` becomes a disclosure, and validation at mint time
+   * does not cover the rows that were minted before it existed.
+   *
+   * The row here is written straight into the table for exactly that reason:
+   * `createInvite` now refuses to produce it, and the preview still has to be
+   * safe against one that already exists.
+   */
+  it("never names a team from another workspace, whatever the stored row says", async () => {
+    await seedOtherWorkspace();
+    const { token, tokenHash } = mintInviteToken();
+    await db.execute(
+      `insert into invites
+         (id, workspace_id, email, role, team_ids, token_hash, invited_by_id, expires_at)
+       values ('inv_legacy', $1, null, 'member', array[$2, $3], $4, $5,
+               now() + interval '1 day')`,
+      [WORKSPACE, TEAM, FOREIGN_TEAM, tokenHash, OWNER],
+    );
+
+    const preview = await previewInvite(token, db);
+
+    expect(preview?.teamNames).toStrictEqual(["Design"]);
+    expect(JSON.stringify(preview)).not.toContain("Skunkworks");
   });
 
   it("is null for anything unusable, so it cannot be used to probe", async () => {

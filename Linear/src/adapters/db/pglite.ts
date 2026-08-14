@@ -1,5 +1,7 @@
 import "server-only";
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import {
   splitStatements,
   type SqlDatabase,
@@ -66,7 +68,6 @@ export class PgliteDatabase implements SqlDatabase {
 
   #db: PGliteInstance | null = null;
   #opening: Promise<PGliteInstance> | null = null;
-  #depth = 0;
 
   /**
    * @param dataDir A directory to persist into, or `":memory:"` for a database
@@ -150,21 +151,37 @@ export class PgliteDatabase implements SqlDatabase {
    *
    * Nested calls are the exception — they join the transaction already in
    * flight rather than deadlocking behind it, so a repository method that
-   * takes an optional executor works in both positions. The depth counter is
-   * incremented *synchronously* for exactly the reason above.
+   * takes an optional executor works in both positions.
+   *
+   * ## Why nesting is decided by async context and not by a counter
+   *
+   * "Am I already inside a transaction?" is a question about *this* call
+   * stack, and a counter on the instance answers a different question: "is
+   * anybody, anywhere in this process, inside one?". Under concurrent requests
+   * those diverge. Request B arrives while A's transaction is open, sees a
+   * non-zero counter, concludes it is nested, and runs its statements inside
+   * A's transaction — then A rolls back and takes B's committed-looking write
+   * with it, after B has already returned success to its caller. Nothing in the
+   * SQL is wrong and nothing logs an error; a write simply disappears whenever
+   * two requests overlap.
+   *
+   * `AsyncLocalStorage` answers the question that was actually meant. The store
+   * is set for the dynamic extent of the transaction callback, so a call
+   * *inside* it — however many awaits deep — sees it and joins, and a call from
+   * any other async context, which is what a second concurrent request is, sees
+   * nothing and queues. `node:async_hooks` is a server-only dependency in a
+   * file that is already server-only and already dynamically loads a WASM
+   * Postgres.
    */
+  readonly #inTransaction = new AsyncLocalStorage<true>();
+
   #queue: Promise<unknown> = Promise.resolve();
 
   async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
     // A nested call is already inside the outer transaction; joining it must
     // not queue behind the very transaction it is running in.
-    if (this.#depth > 0) {
-      this.#depth += 1;
-      try {
-        return await fn(this);
-      } finally {
-        this.#depth -= 1;
-      }
+    if (this.#inTransaction.getStore() === true) {
+      return fn(this);
     }
 
     const run = this.#queue.then(
@@ -183,9 +200,10 @@ export class PgliteDatabase implements SqlDatabase {
   async #runTransaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
     const db = await this.#open();
     await db.query("begin");
-    this.#depth = 1;
     try {
-      const result = await fn(this);
+      // Only `fn` runs inside the scope: the marker has to be gone by the time
+      // `commit` returns, or work started after it would still look nested.
+      const result = await this.#inTransaction.run(true, () => fn(this));
       await db.query("commit");
       return result;
     } catch (error) {
@@ -196,8 +214,6 @@ export class PgliteDatabase implements SqlDatabase {
         // not mask the error that got us here.
       }
       throw error;
-    } finally {
-      this.#depth = 0;
     }
   }
 

@@ -130,10 +130,12 @@ const ISSUE_SELECT = `
      where il.issue_id = i.id
   ), '[]'::json) as labels,
   (select count(*) from issues si
-    where si.parent_id = i.id and si.trashed_at is null) as sub_issue_count,
+    where si.parent_id = i.id
+      and si.trashed_at is null and si.archived_at is null) as sub_issue_count,
   (select count(*) from issues si
      join workflow_states ss on ss.id = si.state_id
-    where si.parent_id = i.id and si.trashed_at is null
+    where si.parent_id = i.id
+      and si.trashed_at is null and si.archived_at is null
       and ss.type = 'completed') as completed_sub_issue_count,
   (select count(*) from comments cm where cm.issue_id = i.id) as comment_count
 `;
@@ -146,6 +148,27 @@ const ISSUE_FROM = `
   left join users cu on cu.id = i.creator_id
   left join projects p on p.id = i.project_id
 `;
+
+/**
+ * What "the issue" means to everything above this layer.
+ *
+ * A trashed issue is *gone* — it is in a 30-day recovery window, and until
+ * somebody restores it, loading its page or accepting an edit to it are both
+ * wrong. An archived one is out of the working set for the same reason Linear
+ * archives rather than deletes: it should stop appearing, stop counting, and
+ * stop being editable, without losing its history.
+ *
+ * `list` and `count` already enforce this through `domain/filters.ts`, where
+ * `includeArchived` can opt back in and nothing opts back into trashed. The
+ * single-row reads did not, which meant a trashed issue's page still rendered
+ * and every mutation route — each of which loads the issue by id first — still
+ * accepted writes to it. Naming the predicate once is what keeps the reads that
+ * use it from drifting apart.
+ *
+ * {@link SqlIssueRepository.byIdIncludingDeleted} is the deliberate exception,
+ * for the lifecycle mutations and anything that has to show the trash.
+ */
+const LIVE_ISSUE = `i.archived_at is null and i.trashed_at is null`;
 
 interface TeamJson {
   id: string;
@@ -491,7 +514,30 @@ export class SqlIssueRepository extends BaseRepository implements IssueRepositor
 
   /* -------------------------------------------------------------- reads -- */
 
+  /** A live issue — see {@link LIVE_ISSUE} for what that excludes and why. */
   async byId(id: IssueId, tx?: Tx): Promise<IssueWithRelations | null> {
+    const rows = await this.reader(tx).query(
+      `select ${ISSUE_SELECT} ${ISSUE_FROM} where i.id = $1 and ${LIVE_ISSUE}`,
+      [id],
+    );
+    const row = rows[0];
+    return row === undefined ? null : mapIssueRow(row);
+  }
+
+  /**
+   * The row whatever state it is in, archived and trashed included.
+   *
+   * Separate from {@link byId} rather than a flag on it, because the safe
+   * answer has to be the one you get by default: a caller that forgets the flag
+   * should refuse to load a trashed issue, not accept an edit to it. The
+   * callers are the lifecycle mutations — archiving an issue and then reading
+   * it back through a read that hides archived issues would report the write it
+   * just made as a missing row — and anything that has to show the trash.
+   */
+  async byIdIncludingDeleted(
+    id: IssueId,
+    tx?: Tx,
+  ): Promise<IssueWithRelations | null> {
     const rows = await this.reader(tx).query(
       `select ${ISSUE_SELECT} ${ISSUE_FROM} where i.id = $1`,
       [id],
@@ -509,7 +555,8 @@ export class SqlIssueRepository extends BaseRepository implements IssueRepositor
     if (parsed === null) return null;
     const rows = await this.reader(tx).query(
       `select ${ISSUE_SELECT} ${ISSUE_FROM}
-        where t.workspace_id = $1 and lower(t.key) = lower($2) and i.number = $3`,
+        where t.workspace_id = $1 and lower(t.key) = lower($2) and i.number = $3
+          and ${LIVE_ISSUE}`,
       [workspaceId, parsed.teamKey, parsed.number],
     );
     const row = rows[0];
@@ -560,10 +607,18 @@ export class SqlIssueRepository extends BaseRepository implements IssueRepositor
     return row === undefined ? 0 : num(row, "total");
   }
 
+  /**
+   * A parent's children, in their manual order.
+   *
+   * The same predicate as the progress counts in {@link ISSUE_SELECT}, and it
+   * has to be: a list showing four sub-issues under a donut that says "3 of 3"
+   * is a bug report waiting to happen, and the two disagreeing is exactly what
+   * happens when one of them forgets a lifecycle column.
+   */
   async listSubIssues(parentId: IssueId, tx?: Tx): Promise<IssueWithRelations[]> {
     const rows = await this.reader(tx).query(
       `select ${ISSUE_SELECT} ${ISSUE_FROM}
-        where i.parent_id = $1 and i.trashed_at is null
+        where i.parent_id = $1 and ${LIVE_ISSUE}
         order by i.sub_issue_sort_order asc, i.id asc`,
       [parentId],
     );
@@ -1226,8 +1281,16 @@ export class SqlIssueRepository extends BaseRepository implements IssueRepositor
 
   /* ------------------------------------------------------------ helpers -- */
 
+  /**
+   * The row a mutation just wrote, read back.
+   *
+   * Deliberately the lifecycle-blind read: archiving an issue and then loading
+   * it through {@link byId} would report the write that just succeeded as a
+   * missing row. Whether the *caller* was entitled to touch a trashed issue is
+   * a question for the layer that resolved the id, and it asks it with `byId`.
+   */
   async #require(t: SqlExecutor, id: IssueId): Promise<IssueWithRelations> {
-    const issue = await this.byId(id, t);
+    const issue = await this.byIdIncludingDeleted(id, t);
     if (issue === null) throw new NotFoundError("Issue", id);
     return issue;
   }

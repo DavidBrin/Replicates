@@ -36,7 +36,6 @@ import {
   authenticate,
   authorize,
   failure,
-  issueResource,
   loadIssueContext,
   respond,
   validateReferences,
@@ -87,9 +86,11 @@ export async function POST(request: Request): Promise<Response> {
   }
   const { id, beforeKey, afterKey, patch = {} } = parsed.data;
 
+  // `null` covers "no such issue" *and* "an issue you may not view", so a drag
+  // aimed at a stranger's id cannot tell the two apart — see `../authorize.ts`.
   const loaded = await loadIssueContext(id, viewer.user.id);
   if (!loaded) return failure(404, "No such issue.", viewer);
-  const { issue, team, actor } = loaded;
+  const { issue, team, actor, resource } = loaded;
 
   // Listed field by field rather than destructured with a rest, so that
   // dropping the client's `sortOrder` is a visible decision rather than an
@@ -106,15 +107,10 @@ export async function POST(request: Request): Promise<Response> {
     ? ["issue.update_any", "issue.update_own"]
     : ["issue.reorder"];
 
-  const allowed = authorize(
-    actor,
-    actions,
-    issueResource(team, issue),
-    viewer,
-  );
+  const allowed = authorize(actor, actions, resource, viewer);
   if (!allowed.ok) return allowed.response;
 
-  const invalid = await validateReferences(patch, team);
+  const invalid = await validateReferences(patch, team, actor);
   if (invalid) return failure(400, invalid, viewer);
 
   let sortOrder: string;

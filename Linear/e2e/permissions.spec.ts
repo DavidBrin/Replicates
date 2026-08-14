@@ -271,28 +271,21 @@ test.describe("project membership grants edit rights", () => {
   });
 
   /**
-   * `fixme` for a reason that is **not** the one the surrounding tests used to
-   * carry, and not a client-side one at all.
+   * The other half of the deviation, and the harder half.
    *
-   * The add now persists and everything either side of this passes: the guest
-   * opens Website Redesign, renames it, and the rename survives a reload. What
-   * refuses is `POST /api/issues`, with `403 "Your role does not allow this."` —
-   * and it refuses *before* the permission this test is about is ever consulted.
-   *
-   * `app/api/issues/route.ts` gates on `canViewTeam(actor, team)` first, and the
-   * project's only team is the private Design team the guest is deliberately not
-   * in (`e2e/README.md`). The matrix underneath says the opposite: rows 39 and
-   * 41 (`issue.create`, `issue.update_any`) both grant `proj:member`, which is
+   * Website Redesign lives entirely inside the private Design team, which the
+   * guest is deliberately not in (`e2e/README.md`). So filing into it is the one
+   * case where `proj:member` has to carry the request on its own: rows 39 and 41
+   * of the matrix (`issue.create`, `issue.update_any`) grant it, which is
    * `DECISIONS.md` D8 — "project membership additionally grants edit on the
-   * project and its issues". So the pre-gate is broader than the policy it
-   * guards, and a project member cannot file into the project they were added
-   * to whenever that project lives in a team they cannot see.
+   * project and its issues" — and nothing else about this actor does.
    *
-   * Left named rather than deleted: it is a real gap between D8 and the route,
-   * it is server-side, and closing it is a change to the authorization model
-   * (which team a project member may file into) rather than to this slice.
+   * `POST /api/issues` used to refuse with a 403 before ever consulting that
+   * grant, because it pre-gated on `canViewTeam`. It now authorizes
+   * `issue.create` against the whole resource, team *and* project, so the
+   * project role is in scope where the matrix says it should be (D22).
    */
-  test.fixme("and can add an issue to it", async ({ page }) => {
+  test("and can add an issue to it", async ({ page }) => {
     await signIn(page, "guest@demo.test");
     await page.goto("/demo/project/website-redesign");
 

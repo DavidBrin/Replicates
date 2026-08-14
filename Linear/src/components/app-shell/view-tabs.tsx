@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 // The vocabulary lives in a directive-free module so server components can call
 // the guard — see `team-view.ts`. Re-exported here so existing imports of the
 // tab component keep working.
-import { TEAM_VIEWS, type TeamView } from "./team-view";
+import type { TeamView } from "./team-view";
 
 export { TEAM_VIEWS, isTeamView, type TeamView } from "./team-view";
 

@@ -286,13 +286,85 @@ create unique index if not exists projects_slug_key
 create index if not exists projects_workspace_idx
   on projects (workspace_id, sort_order);
 
+-- A project and the teams that own it — and the one join in this schema where
+-- two independent foreign keys are not enough.
+--
+-- \`project_id\` referencing \`projects\` and \`team_id\` referencing \`teams\` are
+-- each satisfied by a row from *any* workspace, so the pair \`(a project in
+-- workspace A, a team in workspace B)\` is a legal row as far as those two
+-- constraints are concerned. It is also a tenancy breach: an attached team is
+-- what decides who may read a project (footnote 11's roll-up), so a
+-- cross-workspace attachment hands a second tenancy a foothold in this one.
+--
+-- The fix is the ordinary one — a **composite foreign key** — which needs the
+-- workspace on the referencing row. \`workspace_id\` is therefore carried here,
+-- denormalised from \`projects\`, and both composite keys are checked against it:
+-- the project half makes the value trustworthy, the team half is the rule.
+--
+-- The column is filled by a trigger rather than by the caller. The insert lives
+-- in \`adapters/repositories/projects.ts\` and names two columns; requiring a
+-- third would put the schema's invariant in the hands of every future call
+-- site, which is the arrangement this constraint exists to replace. A \`before\`
+-- row trigger runs ahead of constraint evaluation, so the derived value is in
+-- place by the time the foreign keys are checked.
+--
+-- Two notes for a reader checking this against Postgres' manual:
+--   * a foreign key may reference a plain \`unique index\`, which is why the two
+--     parent keys below are indexes rather than table constraints — the latter
+--     have no \`if not exists\` form and would not be idempotent;
+--   * the route (\`app/api/projects/[id]/route.ts\`) checks the same rule and
+--     answers 404. This is defence in depth: the constraint is what makes the
+--     rule true of the *data*, the route is what makes the refusal legible.
 create table if not exists project_teams (
-  project_id text not null references projects(id) on delete cascade,
-  team_id    text not null references teams(id) on delete cascade,
+  project_id   text not null references projects(id) on delete cascade,
+  team_id      text not null references teams(id) on delete cascade,
+  workspace_id text not null,
   primary key (project_id, team_id)
 );
 
 create index if not exists project_teams_team_idx on project_teams (team_id);
+
+-- Existing databases: add the column, derive it, then require it. All three are
+-- no-ops on a database created by the statement above.
+alter table project_teams add column if not exists workspace_id text;
+update project_teams pt
+   set workspace_id = p.workspace_id
+  from projects p
+ where p.id = pt.project_id and pt.workspace_id is null;
+alter table project_teams alter column workspace_id set not null;
+
+create unique index if not exists projects_id_workspace_key
+  on projects (id, workspace_id);
+create unique index if not exists teams_id_workspace_key
+  on teams (id, workspace_id);
+
+create or replace function project_teams_derive_workspace() returns trigger
+language plpgsql as $fn$
+begin
+  select p.workspace_id into new.workspace_id
+    from projects p where p.id = new.project_id;
+  return new;
+end;
+$fn$;
+
+drop trigger if exists project_teams_derive_workspace_trg on project_teams;
+create trigger project_teams_derive_workspace_trg
+  before insert or update on project_teams
+  for each row execute function project_teams_derive_workspace();
+
+do $$ begin
+  alter table project_teams
+    add constraint project_teams_project_workspace_fkey
+    foreign key (project_id, workspace_id)
+    references projects (id, workspace_id) on delete cascade;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table project_teams
+    add constraint project_teams_team_workspace_fkey
+    foreign key (team_id, workspace_id)
+    references teams (id, workspace_id) on delete cascade;
+exception when duplicate_object then null; end $$;
 
 create table if not exists project_members (
   project_id text         not null references projects(id) on delete cascade,

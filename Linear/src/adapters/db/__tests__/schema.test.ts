@@ -132,6 +132,47 @@ describe("applying the schema", () => {
     await expect(insert("iss_2", 1)).rejects.toThrow();
   });
 
+  /**
+   * The one join where two independent foreign keys are not enough.
+   *
+   * `project_teams.project_id` and `.team_id` are each satisfied by a row from
+   * any workspace, so the pair is a legal row as far as either constraint can
+   * see — and an attached team decides who may read the project, which makes a
+   * cross-workspace attachment a tenancy breach rather than a stray row. The
+   * route refuses it too; this asserts the *data* cannot hold it even if some
+   * future call site forgets.
+   */
+  it("refuses a project_teams row that crosses a workspace boundary", async () => {
+    await db.query(
+      `insert into workspaces (id, name, url_key)
+       values ('wsp_2','W2','w2') on conflict do nothing`,
+    );
+    await db.query(
+      `insert into teams (id, workspace_id, name, key)
+       values ('tem_2','wsp_2','Other','OTH') on conflict do nothing`,
+    );
+    await db.query(
+      `insert into projects (id, workspace_id, name, slug_id, sort_order)
+       values ('prj_1','wsp_1','P','p','a0') on conflict do nothing`,
+    );
+
+    await expect(
+      db.query(
+        `insert into project_teams (project_id, team_id) values ('prj_1','tem_2')`,
+      ),
+    ).rejects.toThrow();
+
+    // …and the same-workspace row is accepted, with the workspace derived
+    // rather than supplied: the repository's insert names two columns.
+    await db.query(
+      `insert into project_teams (project_id, team_id) values ('prj_1','tem_1')`,
+    );
+    const rows = await db.query<{ workspace_id: string }>(
+      `select workspace_id from project_teams where project_id = 'prj_1'`,
+    );
+    expect(rows).toStrictEqual([{ workspace_id: "wsp_1" }]);
+  });
+
   it("keeps order keys byte-ordered under the declared collation", async () => {
     // The value of this assertion is limited and worth being honest about:
     // PGlite's default collation is already byte-wise, so this passes here

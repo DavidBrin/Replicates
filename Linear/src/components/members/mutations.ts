@@ -99,6 +99,25 @@ export async function callApi<T>(
     };
   }
 
+  // A 2xx whose body will not parse is not a success. Every route in this app
+  // answers a mutation with the thing it wrote, so an empty or truncated body
+  // means the response did not come from a handler that finished — a proxy
+  // timeout page, a connection cut mid-stream, an HTML error document with a
+  // 200 on it. Reporting `{ ok: true, value: null }` for that is the worst of
+  // the three possible answers: the caller keeps the optimistic row, or
+  // refreshes as though the write committed, and nothing on screen says
+  // otherwise. A failure is recoverable — the caller reverts and says so.
+  if (payload === null || payload === undefined) {
+    return {
+      ok: false,
+      failure: {
+        code: "MALFORMED_RESPONSE",
+        message: "The change was not confirmed. Reload to see what was saved.",
+        status: response.status,
+      },
+    };
+  }
+
   return { ok: true, value: payload as T };
 }
 
@@ -108,8 +127,15 @@ export async function callApi<T>(
  * `LAST_OWNER` is the one the permission journey asserts on by name, and the
  * reason it says "last owner" rather than "at least one owner": the sentence
  * has to name the rule that was hit, not restate the invariant it protects.
+ *
+ * `MALFORMED_RESPONSE` is the only code here that does not come from
+ * `domain/policy.ts`: it is the transport's own, for a success nobody could
+ * read, and it says "reload" because that is the only advice that is true —
+ * the write may or may not have landed.
  */
 const MESSAGES: Readonly<Record<string, string>> = {
+  MALFORMED_RESPONSE:
+    "The change was not confirmed. Reload to see what was saved.",
   LAST_OWNER:
     "The last owner cannot be demoted or removed. Promote another owner first.",
   LAST_TEAM_ADMIN:

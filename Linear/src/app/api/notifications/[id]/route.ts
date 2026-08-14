@@ -29,6 +29,8 @@ import {
   loadOneNotification,
 } from "@/components/inbox/data";
 
+import { unreadCountForWorkspace } from "../scope";
+
 const PatchBody = z
   .object({
     workspace: z.string().min(1).max(64),
@@ -91,7 +93,13 @@ export async function PATCH(
     access.workspace.id,
     id,
   );
-  const unread = await notifications.unreadCount(access.user.id);
+  // The same workspace-scoped count the collection returns, so the badge does
+  // not change meaning depending on which request last refreshed it.
+  const unread = await unreadCountForWorkspace(
+    access.db,
+    access.user.id,
+    access.workspace.id,
+  );
   return Response.json({ notification: after, unread }, { headers });
 }
 
@@ -121,8 +129,10 @@ export async function DELETE(
   }
 
   await getRepositories().notifications.delete(id, access.user.id);
-  const unread = await getRepositories().notifications.unreadCount(
+  const unread = await unreadCountForWorkspace(
+    access.db,
     access.user.id,
+    access.workspace.id,
   );
   return Response.json({ deleted: id, unread }, { headers });
 }

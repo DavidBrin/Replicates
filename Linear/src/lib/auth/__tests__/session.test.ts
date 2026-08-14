@@ -168,6 +168,60 @@ describe("sliding expiry", () => {
     const resolved = await resolveSession(session.token, { db, renew: true });
     expect(resolved?.renewedToken).toBeUndefined();
   });
+
+  it("rotates once when two requests race past the half-life", async () => {
+    // A page load is several concurrent route handlers holding one cookie. If
+    // each mints its own token, the row keeps the last write and every other
+    // response hands the browser a cookie that is already dead — a sign-out
+    // that depends on the order the responses happen to arrive in.
+    const session = await createSession(USER, { db });
+    await db.execute(
+      "update sessions set expires_at = now() + interval '1 minute' where id = $1",
+      [session.sessionId],
+    );
+
+    const [first, second] = await Promise.all([
+      resolveSession(session.token, { db, renew: true }),
+      resolveSession(session.token, { db, renew: true }),
+    ]);
+
+    // Both requests answer with the same live session…
+    expect(first?.sessionId).toBe(session.sessionId);
+    expect(second?.sessionId).toBe(session.sessionId);
+    expect(first?.userId).toBe(USER);
+    expect(second?.userId).toBe(USER);
+
+    // …and exactly one of them carries a cookie to set.
+    const issued = [first?.renewedToken, second?.renewedToken].filter(
+      (token): token is string => typeof token === "string",
+    );
+    expect(issued).toHaveLength(1);
+
+    // Whatever was handed to the browser has to be the token the row holds.
+    // Two rotations leave one of them dead on arrival.
+    for (const token of issued) {
+      expect(await resolveSession(token, { db })).not.toBeNull();
+    }
+  });
+
+  it("keeps the loser of that race signed in, on the winner's expiry", async () => {
+    const session = await createSession(USER, { db });
+    await db.execute(
+      "update sessions set expires_at = now() + interval '1 minute' where id = $1",
+      [session.sessionId],
+    );
+
+    const results = await Promise.all([
+      resolveSession(session.token, { db, renew: true }),
+      resolveSession(session.token, { db, renew: true }),
+    ]);
+
+    // The overtaken request returns the winner's row rather than its own idea
+    // of the session: same expiry, no cookie to set.
+    const [winner] = results.filter((r) => r?.renewedToken !== undefined);
+    const [loser] = results.filter((r) => r?.renewedToken === undefined);
+    expect(loser?.expiresAt.toISOString()).toBe(winner?.expiresAt.toISOString());
+  });
 });
 
 describe("bulk revocation", () => {

@@ -27,7 +27,9 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 
+import { getDb } from "@/adapters/db";
 import { getRepositories } from "@/adapters/repositories";
+import { unreadCountForWorkspace } from "@/app/api/notifications/scope";
 import { can } from "@/domain/policy";
 import { actorFor, currentUser } from "@/lib/auth/current-user";
 import { AppShell } from "@/components/app-shell/app-shell";
@@ -55,7 +57,12 @@ export default async function WorkspaceLayout({
     repositories.teams.listForUser(workspace.id, user.id),
     repositories.workspaces.listForUser(user.id),
     repositories.views.listForUser(workspace.id, user.id),
-    repositories.notifications.unreadCount(user.id),
+    // Scoped to this workspace, not to the account. The sidebar badge sits
+    // inside one workspace's chrome, so an account-wide count makes it promise
+    // unread items that this Inbox will never show — and, worse, silently
+    // reports the existence of activity in a workspace the reader may have
+    // been removed from. Same defect the notifications API carried; same fix.
+    unreadCountForWorkspace(getDb(), user.id, workspace.id),
   ]);
 
   const data: ShellData = {

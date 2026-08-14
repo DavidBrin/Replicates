@@ -19,25 +19,36 @@
  * decision, but the id is what actually carries it — a key the client forgot to
  * send cannot produce a second issue.
  *
- * ## A guest asking for a team they are not in gets a 403
+ * **A retry is only a retry of your own request.** The id is client-supplied, so
+ * "return the row that already has this id" is a read of an arbitrary row by
+ * arbitrary id — the whole issue, with its description, labels, assignee and
+ * project, handed to anyone who can create anywhere and guess an identifier.
+ * The replay is therefore scoped to the same creator *and* the team this
+ * request was authorized against; anything else is a 404, because a collision
+ * the caller may not read about is one they should not learn exists.
  *
- * Not an empty list. `GET` with an explicit `teamId` resolves the team, checks
- * `canViewTeam`, and refuses — because an empty list is indistinguishable from
- * "that team has no issues", which is an answer nobody outside the team is
- * entitled to.
+ * ## A team you cannot see answers 404, never 403
+ *
+ * Not an empty list, and not a refusal that confirms the team. `GET` with an
+ * explicit `teamId` resolves the team, checks `canViewTeam`, and 404s — an empty
+ * list is indistinguishable from "that team has no issues", which is an answer
+ * nobody outside the team is entitled to, and a 403 answers "yes, it exists".
+ * The same rule governs the workspace key on `GET` and the create gate on
+ * `POST`.
  */
 
 import { z } from "zod";
 
 import { getRepositories } from "@/adapters/repositories";
 import { isPriority, type Priority, type StateType } from "@/domain/entities";
-import { can, canViewTeam } from "@/domain/policy";
+import { can, canViewTeam, type Resource } from "@/domain/policy";
 import { actorFor } from "@/lib/auth/current-user";
 import {
   authenticate,
-  authorize,
+  authorizeVisible,
   failure,
   issueResource,
+  resolveProject,
   respond,
   validateReferences,
 } from "./authorize";
@@ -86,30 +97,69 @@ export async function POST(request: Request): Promise<Response> {
   if (!team) return failure(404, "No such team.", viewer);
 
   const actor = await actorFor(team.workspaceId, viewer.user.id);
-  if (!canViewTeam(actor, team)) {
-    return failure(403, "Your role does not allow this.", viewer);
+
+  // The project is resolved *before* the decision, because it is part of the
+  // resource being decided on. `issue.create` grants `proj:member` (D8), so a
+  // project member may file into the project they were added to even when its
+  // team is one they cannot otherwise see — which a `canViewTeam` pre-gate here
+  // used to forbid, refusing a permission the matrix grants and confirming a
+  // hidden team's existence with a 403 on the way (D22).
+  let project: Resource["project"];
+  if (body.projectId) {
+    const resolved = await resolveProject(body.projectId, team, actor);
+    if (!resolved) {
+      return failure(400, "That project is not in this workspace.", viewer);
+    }
+    project = resolved;
   }
 
-  const allowed = authorize(
-    actor,
-    ["issue.create"],
-    issueResource(team, {
+  const resource = issueResource(
+    team,
+    {
       creatorId: viewer.user.id,
       assigneeId: body.assigneeId ?? null,
       projectId: body.projectId ?? null,
-    }),
+    },
+    project,
+  );
+
+  const allowed = authorizeVisible(
+    actor,
+    ["issue.create"],
+    resource,
     viewer,
+    "No such team.",
   );
   if (!allowed.ok) return allowed.response;
 
-  const invalid = await validateReferences(body, team);
+  // The rest of the references, only now that the actor is entitled to know
+  // what is in this team: "that status does not belong to this team" is a fact
+  // about the team's contents. `projectId` is already resolved above and is not
+  // re-checked here.
+  const invalid = await validateReferences(
+    {
+      ...(body.stateId !== undefined ? { stateId: body.stateId } : {}),
+      ...(body.assigneeId !== undefined ? { assigneeId: body.assigneeId } : {}),
+      ...(body.labelIds !== undefined ? { labelIds: body.labelIds } : {}),
+    },
+    team,
+    actor,
+  );
   if (invalid) return failure(400, invalid, viewer);
 
   if (body.id) {
     const existing = await repositories.issues.byId(body.id);
     if (existing) {
-      // A retry, an offline replay, or a double-submit. Returning the row makes
-      // the second attempt indistinguishable from the first for the client.
+      // A retry, an offline replay, or a double-submit — *of this request*.
+      // Returning the row makes the second attempt indistinguishable from the
+      // first for the client, and the two conditions are what keep it a replay
+      // rather than a read: the id is client-supplied, so a row created by
+      // somebody else, or living in a team other than the one just authorized,
+      // is not this caller's to be handed back. It answers as missing, which is
+      // also the answer a fabricated id gets.
+      if (existing.creatorId !== viewer.user.id || existing.teamId !== team.id) {
+        return failure(404, "No such issue.", viewer);
+      }
       return respond({ issue: existing }, 200, viewer);
     }
   }
@@ -155,7 +205,11 @@ export async function GET(request: Request): Promise<Response> {
 
   const actor = await actorFor(workspace.id, viewer.user.id);
   if (!can(actor, "workspace.view", { kind: "workspace" })) {
-    return failure(403, "Your role does not allow this.", viewer);
+    // 404, with the same words an unknown key gets. A 403 here would answer
+    // "that workspace is real, you are just not in it" — which, given the key
+    // is guessable and the endpoint is open to any signed-in account, is a
+    // directory of every workspace on the host.
+    return failure(404, "No such workspace.", viewer);
   }
 
   const teamKey = url.searchParams.get("team");

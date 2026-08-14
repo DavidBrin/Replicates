@@ -33,6 +33,24 @@ import "server-only";
  * them out mid-sentence. Renewal mints a new token for the same row once the
  * session is past its half-life, so the write happens roughly once per TTL/2
  * rather than on every request.
+ *
+ * ## Rotation is a compare-and-set, because a page makes many requests at once
+ *
+ * A browser does not make one request at a time. Open a page past the session's
+ * half-life and several route handlers run concurrently, each holding the same
+ * cookie and each deciding to renew. With an unconditional `update … where id`,
+ * every one of them mints a token and the row keeps whichever landed last —
+ * so if the responses arrive in a different order from the writes, the browser
+ * stores a token whose hash is no longer in the table and the next request
+ * signs the user out. It is not a rare interleaving: it is what a page load
+ * looks like.
+ *
+ * So the rotation names the token it is replacing — `where token_hash = $old` —
+ * and is a compare-and-set: exactly one racer can win. A racer that finds no
+ * row has been overtaken, and must *not* issue a token of its own; it re-reads
+ * the row and returns the winner's session with no `renewedToken` at all. The
+ * response that carries the surviving cookie is the winner's, and the loser
+ * leaves the browser's cookie exactly as it found it.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -200,16 +218,53 @@ export async function resolveSession(
 
   const nextExpiry = new Date(Date.now() + ttl * 1000);
   const renewedToken = await signToken(row.id, row.user_id, nextExpiry);
-  await db.execute(
-    "update sessions set token_hash = $2, expires_at = $3 where id = $1",
-    [row.id, hashToken(renewedToken), nextExpiry.toISOString()],
+  // Naming the old hash in the `where` is what makes this a compare-and-set:
+  // two requests holding the same cookie cannot both succeed here.
+  const rotated = await db.execute(
+    `update sessions set token_hash = $3, expires_at = $4
+      where id = $1 and token_hash = $2 and revoked_at is null`,
+    [
+      row.id,
+      hashToken(token),
+      hashToken(renewedToken),
+      nextExpiry.toISOString(),
+    ],
   );
+
+  if (rotated === 0) {
+    // Overtaken. The token just minted was never stored, so returning it would
+    // put a dead cookie in the browser and undo the winner's rotation. The
+    // winner's raw token is unknowable from here — the row holds a digest — so
+    // the only correct answer is the winner's *session*, with no cookie to set.
+    return await currentSession(db, row.id, row.user_id);
+  }
 
   return {
     sessionId: row.id,
     userId: row.user_id,
     expiresAt: nextExpiry,
     renewedToken,
+  };
+}
+
+/** The session row as it stands now, or null if it has since died. */
+async function currentSession(
+  db: SqlDatabase,
+  sessionId: string,
+  userId: UserId,
+): Promise<ResolvedSession | null> {
+  const rows = await db.query<SessionRow>(
+    `select id, user_id, expires_at from sessions
+      where id = $1 and user_id = $2
+        and revoked_at is null and expires_at > now()`,
+    [sessionId, userId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    sessionId: row.id,
+    userId: row.user_id,
+    expiresAt: new Date(row.expires_at),
   };
 }
 

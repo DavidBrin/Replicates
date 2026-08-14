@@ -272,6 +272,42 @@ describe("createIssueStore", () => {
     expect(failures).toEqual([{ identifier: "ENG-1", status: 403 }]);
   });
 
+  it("rolls back onto the newest server truth, not the value it started from", async () => {
+    // Title is A. An edit optimistically sets B. A server render then arrives
+    // with C, because somebody else renamed the issue while the request was in
+    // flight. The edit is refused — and undoing to A would put a title on
+    // screen that exists nowhere, silently discarding the other person's work
+    // until the next reload.
+    expect(current().title).toBe("Issue 1");
+
+    store.mutate([ISSUE_ID], { title: "B" });
+    await settle();
+
+    store.hydrate([makeIssue({ id: ISSUE_ID, state: TODO, title: "C" })]);
+    // The pending patch still wins on screen while it is in flight.
+    expect(current().title).toBe("B");
+
+    calls[0]?.reject(new MutationError(403, "Your role does not allow this."));
+    await settle();
+
+    expect(current().title).toBe("C");
+  });
+
+  it("rebases a still-queued patch over the value a rollback restores", async () => {
+    store.mutate([ISSUE_ID], { title: "B" });
+    store.mutate([ISSUE_ID], { assigneeId: alice.id });
+    await settle();
+
+    store.hydrate([makeIssue({ id: ISSUE_ID, state: TODO, title: "C" })]);
+    calls[0]?.reject(new MutationError(422, "no"));
+    await settle();
+
+    // The refused title goes back to the server's C; the assignee edit that is
+    // still waiting its turn survives the rollback.
+    expect(current().title).toBe("C");
+    expect(current().assigneeId).toBe(alice.id);
+  });
+
   it("keeps the optimistic value and retries a 5xx", async () => {
     store.mutate([ISSUE_ID], { stateId: IN_PROGRESS.id });
     await settle();

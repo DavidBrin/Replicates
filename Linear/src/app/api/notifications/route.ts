@@ -17,12 +17,20 @@
  * because a notification is a pointer to an issue and team membership changes
  * underneath it. See `components/inbox/data.ts` for why such a row is dropped
  * rather than redacted.
+ *
+ * The third is the **workspace**, and it is the one that used to be missing.
+ * Both verbs here are addressed to one workspace and refuse anyone without
+ * standing in it, but the badge count and the mark-all were asked of the whole
+ * account: the count summed every workspace the user belongs to, and "mark all
+ * read" cleared all of them from whichever tab happened to be open. `./scope.ts`
+ * puts the workspace back into both queries.
  */
 
 import { z } from "zod";
 
-import { getRepositories } from "@/adapters/repositories";
 import { authorizeInboxRequest, loadInbox } from "@/components/inbox/data";
+
+import { markAllReadInWorkspace, unreadCountForWorkspace } from "./scope";
 
 const MarkAllBody = z.object({
   workspace: z.string().min(1).max(64),
@@ -50,11 +58,15 @@ export async function GET(request: Request): Promise<Response> {
     },
   );
 
-  // The badge count comes from the repository rather than from
-  // `notifications.length`: the list is filtered by `can()` and capped by a
-  // limit, so deriving the count from it would show "3" beside a list of three
-  // when there are forty.
-  const unread = await getRepositories().notifications.unreadCount(access.user.id);
+  // The badge count is a database count rather than `notifications.length`: the
+  // list is filtered by `can()` and capped by a limit, so deriving the count
+  // from it would show "3" beside a list of three when there are forty. It is
+  // scoped to the same workspace the list is, because it labels that inbox.
+  const unread = await unreadCountForWorkspace(
+    access.db,
+    access.user.id,
+    access.workspace.id,
+  );
 
   return Response.json({ notifications, unread }, { headers });
 }
@@ -69,8 +81,13 @@ export async function POST(request: Request): Promise<Response> {
   if ("response" in resolved) return resolved.response;
   const { access, headers } = resolved;
 
-  const updated = await getRepositories().notifications.markAllRead(
+  // Scoped to the workspace named in the body — the same one standing was just
+  // established in. Without it, clearing this inbox cleared every other
+  // workspace's too, from a request that never mentioned them.
+  const updated = await markAllReadInWorkspace(
+    access.db,
     access.user.id,
+    access.workspace.id,
   );
   return Response.json({ updated }, { headers });
 }

@@ -26,14 +26,36 @@ import "server-only";
  * never checked against. {@link validateReferences} rejects those before any
  * write, and returns 400 rather than 403 because the request is malformed, not
  * refused.
+ *
+ * `projectId` needs more than a workspace-equality test, which is why
+ * {@link resolveProject} exists: attaching an issue to a project puts that
+ * project's name into the response and the issue into that project's board, so
+ * the actor must hold `project.view` on it. "No such project", "another
+ * workspace's project" and "a private project you were never added to" all
+ * answer with the *same* message, so the field cannot be used to enumerate
+ * projects.
+ *
+ * ## 404 versus 403
+ *
+ * Following `research/05-oss-architecture.md` §3.6 and the rest of this
+ * codebase: a 403 is only ever shown to somebody who already knows the resource
+ * exists. {@link loadIssueContext} therefore returns `null` — a 404 — for an
+ * issue the actor may not *view*, and {@link authorizeVisible} downgrades its
+ * own refusal to a 404 for the same reason. A 403 on a real id beside a 404 on
+ * a made-up one is an enumeration oracle, and it is free to hand out.
  */
 
 import { getDb } from "@/adapters/db";
 import { getRepositories } from "@/adapters/repositories";
+import {
+  canOnProject,
+  projectScope,
+} from "@/components/members/workspace-access";
 import type {
   IssueId,
   IssueWithRelations,
   Priority,
+  ProjectId,
   Team,
   UserId,
 } from "@/domain/entities";
@@ -97,23 +119,30 @@ export async function authenticate(request: Request): Promise<Guarded<Viewer>> {
 /**
  * The resource an issue action is checked against.
  *
- * `allTeamsPublic` is derived from the owning team rather than rolled up over
- * the project's teams. It is only read by `projectFullyPublic`, which no issue
- * row in the matrix consults — every issue action grants `proj:lead` and
- * `proj:member` outright — so the approximation cannot widen a grant. Deriving
- * it properly would mean a join on every mutation to answer a question nothing
- * asks.
+ * `project` may be handed in already resolved, which is what a caller that had
+ * to authorize the reference anyway has to spare — {@link resolveProject} rolls
+ * up the privacy of *every* team attached to it, which is what footnote 11
+ * actually means. Without one, `allTeamsPublic` is derived from the owning team.
+ * That approximation cannot widen an issue grant: `projectFullyPublic` is the
+ * only predicate that reads it and no issue row in the matrix consults it —
+ * every issue action grants `proj:lead` and `proj:member` outright — so on the
+ * issue rows the project's job is to *select the actor's project role*, and its
+ * id is what does that.
  */
 export function issueResource(
   team: Pick<Team, "id" | "private">,
   issue?: Pick<IssueWithRelations, "creatorId" | "assigneeId" | "projectId">,
+  project?: Resource["project"],
 ): Resource {
+  const inProject =
+    project ??
+    (issue?.projectId
+      ? { id: issue.projectId, allTeamsPublic: !team.private }
+      : undefined);
   return {
     kind: "issue",
     team: { id: team.id, private: team.private },
-    ...(issue?.projectId
-      ? { project: { id: issue.projectId, allTeamsPublic: !team.private } }
-      : {}),
+    ...(inProject ? { project: inProject } : {}),
     ...(issue ? { authorId: issue.creatorId, assigneeId: issue.assigneeId } : {}),
   };
 }
@@ -122,15 +151,27 @@ export interface IssueContext {
   readonly issue: IssueWithRelations;
   readonly team: Team;
   readonly actor: Actor;
+  /**
+   * The resource `issue.view` was granted on. Handlers reuse it rather than
+   * rebuilding one, so there is a single assembly of the facts the matrix reads.
+   */
+  readonly resource: Resource;
 }
 
 /**
  * Load an issue with everything the policy needs, and the actor for *its*
- * workspace.
+ * workspace — **or nothing, if the actor may not see it.**
  *
  * The team is fetched separately from `issue.team` on purpose:
  * `IssueWithRelations.team` carries the display fields and not `private`, and
  * the private flag is the one the visibility rows turn on.
+ *
+ * The `issue.view` gate is here rather than in each handler because the three
+ * that call this — PATCH, DELETE and reorder — must not be able to distinguish
+ * an issue that does not exist from one they are not entitled to know about.
+ * With the check here both answer `null`, and `null` is the 404 every caller
+ * already writes. This mirrors `api/_lib/issue-access.ts`, which does the same
+ * for the comment, reaction and relation handlers.
  */
 export async function loadIssueContext(
   issueId: string,
@@ -144,7 +185,11 @@ export async function loadIssueContext(
 
   const { loadActor } = await import("@/domain/services/membership");
   const actor = await loadActor(getDb(), team.workspaceId, userId);
-  return { issue, team, actor };
+
+  const resource = issueResource(team, issue);
+  if (!can(actor, "issue.view", resource)) return null;
+
+  return { issue, team, actor, resource };
 }
 
 /** `can`, as a guard that produces the refusal. */
@@ -167,6 +212,66 @@ export function authorize(
   };
 }
 
+/**
+ * {@link authorize}, for a resource the actor may not know exists.
+ *
+ * `authorize` answers 403, which is the honest answer once the actor has been
+ * shown the row — every caller of {@link loadIssueContext} has, because that
+ * function already required `issue.view`. A handler that resolves its container
+ * from the *request* has shown nothing yet, and a 403 there says "this team is
+ * real" to anyone who guesses an id. So the refusal is a 403 only if the actor
+ * could have viewed the resource anyway, and a 404 otherwise.
+ */
+export function authorizeVisible(
+  actor: Actor,
+  actions: readonly Action[],
+  resource: Resource,
+  viewer: Viewer,
+  missing: string,
+): Guarded<true> {
+  if (actions.some((action) => can(actor, action, resource))) {
+    return { ok: true, value: true };
+  }
+  if (can(actor, "issue.view", resource)) {
+    return {
+      ok: false,
+      response: failure(403, "Your role does not allow this.", viewer),
+    };
+  }
+  return { ok: false, response: failure(404, missing, viewer) };
+}
+
+/**
+ * A `projectId` from a client, resolved into the resource fact it stands for —
+ * or `null` if the actor has no business naming it.
+ *
+ * Three refusals collapse into that one `null` deliberately: no such project,
+ * a project in another workspace, and a project this actor may not view. They
+ * are the same answer because distinguishing them turns the field into a
+ * project directory — attaching an issue to a project puts the project's name
+ * in the response, so "you may not view it" would leak the very thing the
+ * refusal is protecting.
+ *
+ * `canOnProject` rather than `can`: a project can be attached to several teams
+ * and a {@link Resource} names one, so the union across attached teams is taken
+ * the same way `components/members/workspace-access.ts` takes it everywhere
+ * else a project is authorized.
+ */
+export async function resolveProject(
+  projectId: ProjectId,
+  team: Team,
+  actor: Actor,
+): Promise<Resource["project"] | null> {
+  const repositories = getRepositories();
+  const project = await repositories.projects.byId(projectId);
+  if (!project || project.workspaceId !== team.workspaceId) return null;
+
+  const scope = await projectScope(repositories, projectId);
+  if (!canOnProject(actor, "project.view", projectId, scope)) return null;
+
+  return { id: projectId, allTeamsPublic: scope.allTeamsPublic };
+}
+
 /** The client-writable fields, already narrowed by the route's schema. */
 export interface IssuePatchInput {
   readonly title?: string;
@@ -186,10 +291,17 @@ export interface IssuePatchInput {
  * point it.
  *
  * Returns an error message, or null when the patch is safe to apply.
+ *
+ * The `actor` is a parameter and not an afterthought: workspace equality is a
+ * *containment* test, and containment is not permission. A guest who may edit
+ * an issue in team A could otherwise file it into a private project P in the
+ * same workspace that they were never added to, and read P's name straight back
+ * out of the response.
  */
 export async function validateReferences(
   patch: IssuePatchInput,
   team: Team,
+  actor: Actor,
 ): Promise<string | null> {
   const repositories = getRepositories();
 
@@ -208,8 +320,8 @@ export async function validateReferences(
   }
 
   if (patch.projectId !== undefined && patch.projectId !== null) {
-    const project = await repositories.projects.byId(patch.projectId);
-    if (!project || project.workspaceId !== team.workspaceId) {
+    // One message for all three refusals — see {@link resolveProject}.
+    if ((await resolveProject(patch.projectId, team, actor)) === null) {
       return "That project is not in this workspace.";
     }
   }

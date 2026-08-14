@@ -95,6 +95,55 @@ describe("callApi", () => {
     expect(refusalMessage(result.failure)).toMatch(/last owner/i);
   });
 
+  it("refuses a 2xx whose body will not parse", async () => {
+    // A proxy timeout page, a connection cut mid-stream, an HTML error document
+    // with a 200 on it. The write may or may not have landed, and the one thing
+    // the caller must not do is keep the optimistic row as though it had.
+    fetchMock.mockResolvedValue(
+      new Response("", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+
+    const result = await callApi("/api/workspaces/wsp_demo/members", {
+      method: "PATCH",
+      body: { userId: "usr_owner", role: "admin" },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.failure.code).toBe("MALFORMED_RESPONSE");
+    expect(result.failure.status).toBe(200);
+    expect(refusalMessage(result.failure)).toMatch(/reload/i);
+  });
+
+  it("refuses a 2xx that is truncated part way through", async () => {
+    fetchMock.mockResolvedValue(
+      new Response('{"role":"adm', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await callApi("/api/workspaces/wsp_demo/members", {
+      method: "PATCH",
+      body: { userId: "usr_owner", role: "admin" },
+    });
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("still refuses a 201 whose body is the JSON literal null", async () => {
+    // `JSON.parse("null")` succeeds, so a parse-only check lets this through as
+    // `{ ok: true, value: null }` — the same lie in a different wrapper.
+    fetchMock.mockResolvedValue(jsonResponse(201, null));
+
+    const result = await callApi("/api/invites", {
+      method: "POST",
+      body: { email: "someone@example.com" },
+    });
+
+    expect(result.ok).toBe(false);
+  });
+
   it("reads a thrown fetch as a failure rather than an unhandled rejection", async () => {
     fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 

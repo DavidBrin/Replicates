@@ -2,7 +2,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { SqlDatabase } from "@/adapters/db/driver";
-import { transitionStamps } from "@/adapters/repositories/issues";
+import {
+  type SqlIssueRepository,
+  transitionStamps,
+} from "@/adapters/repositories/issues";
+import type { IssueWithRelations } from "@/domain/entities";
 import { compareOrderKeys } from "@/domain/ordering";
 import { ConflictError, NotFoundError } from "@/ports/repositories";
 
@@ -44,6 +48,17 @@ function create(overrides: Partial<Parameters<Fixture["repos"]["issues"]["create
     },
     fx.ownerId,
   );
+}
+
+/**
+ * The lifecycle-blind read.
+ *
+ * It is on the adapter rather than the port on purpose — the default read has
+ * to be the safe one — so a test that wants a trashed or archived row has to
+ * say so, which is the same thing the trash UI would have to say.
+ */
+function anyState(id: string): Promise<IssueWithRelations | null> {
+  return (fx.repos.issues as SqlIssueRepository).byIdIncludingDeleted(id);
 }
 
 describe("issue numbering", () => {
@@ -472,9 +487,9 @@ describe("the activity feed", () => {
 
   it("logs archive and unarchive", async () => {
     const issue = await create({ title: "Archivable" });
-    await fx.repos.issues.archive(issue.id, fx.ownerId);
-    const archived = await fx.repos.issues.byId(issue.id);
-    expect(archived?.archivedAt).not.toBeNull();
+    const archived = await fx.repos.issues.archive(issue.id, fx.ownerId);
+    expect(archived.archivedAt).not.toBeNull();
+    expect((await anyState(issue.id))?.archivedAt).not.toBeNull();
 
     await fx.repos.issues.unarchive(issue.id, fx.ownerId);
     const restored = await fx.repos.issues.byId(issue.id);
@@ -703,10 +718,76 @@ describe("lifecycle", () => {
       filter: { teamIds: [fx.teamId], includeArchived: true },
     });
     expect(listed.map((i) => i.id)).not.toContain(issue.id);
-    expect(await fx.repos.issues.byId(issue.id)).not.toBeNull();
+    // The row survives its 30-day window, and only an explicit read sees it.
+    expect(await anyState(issue.id)).not.toBeNull();
 
     const restored = await fx.repos.issues.restore(issue.id, fx.ownerId);
     expect(restored.id).toBe(issue.id);
+    expect(await fx.repos.issues.byId(issue.id)).not.toBeNull();
+  });
+
+  it("refuses to load a trashed issue by id or by identifier", async () => {
+    // Every mutation route resolves the issue with one of these two before it
+    // does anything else. Handing back a trashed row makes its page render and
+    // its edits succeed for the whole 30-day window.
+    const issue = await create({ title: "In the bin" });
+    await fx.repos.issues.trash(issue.id, fx.ownerId);
+
+    expect(await fx.repos.issues.byId(issue.id)).toBeNull();
+    expect(
+      await fx.repos.issues.byIdentifier(fx.workspaceId, issue.identifier),
+    ).toBeNull();
+  });
+
+  it("refuses to load an archived issue, until it is unarchived", async () => {
+    const issue = await create({ title: "Filed away" });
+    await fx.repos.issues.archive(issue.id, fx.ownerId);
+
+    expect(await fx.repos.issues.byId(issue.id)).toBeNull();
+    expect(
+      await fx.repos.issues.byIdentifier(fx.workspaceId, issue.identifier),
+    ).toBeNull();
+
+    await fx.repos.issues.unarchive(issue.id, fx.ownerId);
+    expect(await fx.repos.issues.byId(issue.id)).not.toBeNull();
+    expect(
+      await fx.repos.issues.byIdentifier(fx.workspaceId, issue.identifier),
+    ).not.toBeNull();
+  });
+
+  it("leaves an archived sub-issue out of the progress counts and the list", async () => {
+    // The donut on the parent and the list under it read from two different
+    // statements. An archived child that counts towards "3 of 4" while
+    // appearing nowhere in the four is a progress bar nobody can reconcile.
+    const parent = await create({ title: "Parent of some" });
+    const live = await create({ title: "Live child", parentId: parent.id });
+    const shelved = await create({ title: "Shelved child", parentId: parent.id });
+    await fx.repos.issues.update(
+      shelved.id,
+      { stateId: fx.stateOfType("completed").id },
+      fx.ownerId,
+    );
+    await fx.repos.issues.archive(shelved.id, fx.ownerId);
+
+    const read = await fx.repos.issues.byId(parent.id);
+    expect(read?.subIssueCount).toBe(1);
+    expect(read?.completedSubIssueCount).toBe(0);
+    expect(
+      (await fx.repos.issues.listSubIssues(parent.id)).map((child) => child.id),
+    ).toEqual([live.id]);
+  });
+
+  it("leaves a trashed sub-issue out of the same two places", async () => {
+    const parent = await create({ title: "Parent of one" });
+    const live = await create({ title: "Kept child", parentId: parent.id });
+    const binned = await create({ title: "Binned child", parentId: parent.id });
+    await fx.repos.issues.trash(binned.id, fx.ownerId);
+
+    const read = await fx.repos.issues.byId(parent.id);
+    expect(read?.subIssueCount).toBe(1);
+    expect(
+      (await fx.repos.issues.listSubIssues(parent.id)).map((child) => child.id),
+    ).toEqual([live.id]);
   });
 
   it("orphans a purged issue's children rather than deleting them", async () => {

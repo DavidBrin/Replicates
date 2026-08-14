@@ -299,19 +299,28 @@ because the deeper lesson generalises: an added member and an
 added-member-whose-request-was-cancelled look identical, so any spec downstream
 of a mutation must wait for the acknowledgement rather than for the pixels.
 
-### D22 — Open: `POST /api/issues` pre-gates on team membership
+### D22 — Closed: `POST /api/issues` authorizes the whole resource
 
-One e2e test remains `fixme`, and it is a genuine gap rather than a flake.
-
-A project member who is not in the project's team can open and edit the
-project, but cannot file an issue into it: `POST /api/issues` calls
-`canViewTeam(actor, team)` before consulting `issue.create`, and refuses with
+A project member who is not in the project's team could open and edit the
+project but not file an issue into it: `POST /api/issues` called
+`canViewTeam(actor, team)` *before* consulting `issue.create`, and refused with
 `403`. The policy matrix grants `proj:member` on both rows — that is D8 — so
-the pre-gate is broader than the rule it guards.
+the pre-gate was broader than the rule it guarded, and its refusal confirmed
+the existence of a team the caller was not entitled to know about.
 
-Left open deliberately. Closing it means changing where team scoping is
-enforced for issue creation, which is an authorization change and deserves its
-own change rather than a hurried one at the end of a build.
+Closed by deleting the pre-gate and authorizing `issue.create` against the
+**complete** resource instead: the team *and* the referenced project, resolved
+first because the project role is what the grant turns on. The refusal is now
+`can()`'s, and it answers `404` unless `issue.view` also passes — a 403 on a
+real team id beside a 404 on a fabricated one was the same enumeration oracle
+the rest of the API is careful to avoid.
+
+Team scoping did not move; it stopped being applied twice, once by the matrix
+and once by a coarser check in front of it. The `fixme` on
+`e2e/permissions.spec.ts` → *"and can add an issue to it"* is lifted, and
+`src/app/api/issues/__tests__/authorization.test.ts` pins both directions:
+`proj:member` files into a private team's project, and an actor with no project
+role gets the same `404` a nonexistent team gets.
 
 ### D15 — Research captures from the authenticated app are not committed
 
