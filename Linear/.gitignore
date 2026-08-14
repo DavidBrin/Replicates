@@ -1,0 +1,35 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+
+# The local SQLite database. Its whole point is to survive a restart on one
+# machine; it is not something to share between them.
+.data/
+*.db
+*.db-wal
+*.db-shm
+
+# Research captures taken from the *authenticated* Linear app.
+#
+# The visual-research lane found the browser already signed in to a real
+# workspace, so the highest-fidelity references it collected are screenshots and
+# DOM dumps of live company issues — team names, issue titles, member avatars.
+# They are the best reference material in the project and the one thing that
+# must not be pushed: this repository is public. The design tokens and geometry
+# measured from them live on in `research/01-visual-design.md`, which is the
+# part that was worth keeping anyway.
+research/screenshots/linear-app-*
+research/screenshots/app-*.json
+
+test-results/
+playwright-report/
+blob-report/
+.playwright-mcp/
+*.tsbuildinfo
+.env
+.env.local
+.env*.local
+.DS_Store
+.vercel

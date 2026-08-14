@@ -1,0 +1,194 @@
+{
+  "lch2": {
+    "lch(60% 64.37 141.95)": "#26a644",
+    "lch(9.232% 0.85 272 / 1)": "#1a1a1b",
+    "lch(2.595% 0.4 272)": "#09090a",
+    "lch(4.8% 0.4 272)": "#101011"
+  },
+  "cssFiles": [
+    "https://static.linear.app/client/assets/electronMixins-lo3so6th.css",
+    "https://static.linear.app/client/assets/Button-DO5Nz3Sh.css",
+    "https://static.linear.app/client/assets/Tooltip-TzaSp9uA.css",
+    "https://static.linear.app/client/assets/PointerIcon-BtbjBqCq.css",
+    "https://static.linear.app/client/assets/GridLoaderIcon-CeNB58KF.css",
+    "https://static.linear.app/client/assets/Input-DxSL0lOB.css",
+    "https://static.linear.app/client/assets/Avatar-DFsDiI8f.css",
+    "https://static.linear.app/client/assets/SubscriptionsControl-C93gAOq1.css",
+    "https://static.linear.app/client/assets/SimpleActionMenu-DvTjeNqQ.css",
+    "https://static.linear.app/client/assets/src-BrcRM9he.css",
+    "https://static.linear.app/client/assets/Tabs-CNcBYrgv.css",
+    "https://static.linear.app/client/assets/FuzzyDatePicker-CfAvfrd3.css",
+    "https://static.linear.app/client/assets/pageSizes-q9Kr0LQ3.css",
+    "https://static.linear.app/client/assets/vendor-react-medium-image-zoom-T8makrnF.css",
+    "https://static.linear.app/client/assets/ContextualMenuActions-hmVw3bTo.css",
+    "https://static.linear.app/client/assets/Root-BcJz3RRv.css",
+    "https://static.linear.app/client/assets/LinearLayout-B8BkeGug.css",
+    "https://static.linear.app/client/assets/MainSettingsLayout-nT5gJDH_.css",
+    "https://static.linear.app/client/assets/LogicListItem-S9hjtP-Z.css",
+    "https://static.linear.app/client/assets/CollabEditing-BXZ8NWKe.css",
+    "https://static.linear.app/client/assets/useComment-DS4ItQdQ.css",
+    "https://static.linear.app/client/assets/InlineCommentQuote-BKywz-ps.css",
+    "https://static.linear.app/client/assets/CollaborativeEditor-BH2hIp8h.css",
+    "https://static.linear.app/client/assets/FooterShouldBeLazyLoaded-5gbv3R0r.css",
+    "https://static.linear.app/client/assets/AgentConversationItems-BAFB6QIA.css",
+    "https://static.linear.app/client/assets/AgentPanel-CMzuwRCM.css",
+    "https://static.linear.app/client/assets/SharedEditorComponents-BQMUB25k.css",
+    "https://static.linear.app/client/assets/useAgentSessionRowInfo-CpS2x-va.css",
+    "https://static.linear.app/client/assets/TriageRulePropertiesEdit-B5ti-yvl.css",
+    "https://static.linear.app/client/assets/ConfirmationDialog-DCU_rQ2K.css",
+    "https://static.linear.app/client/assets/NewContentViewHeader-FijDYoq2.css",
+    "https://static.linear.app/client/assets/ViewOptionsMenu-C8ukfWLi.css",
+    "https://static.linear.app/client/assets/useIsKeyPressedRef-B8iXRV9D.css",
+    "https://static.linear.app/client/assets/GroupedList-DabcGmbB.css",
+    "https://static.linear.app/client/assets/ListCell-BzSQl_mH.css",
+    "https://static.linear.app/client/assets/DetailButton-DRi2jLSe.css",
+    "https://static.linear.app/client/assets/EmbeddedGridList-E5HnPKt-.css",
+    "https://static.linear.app/client/assets/ColumnHeaders-DEIYjv8D.css",
+    "https://static.linear.app/client/assets/listCellHoverReveal-Cn2XkSwU.css",
+    "https://static.linear.app/client/assets/OverviewPageComponents-CDwol36J.css",
+    "https://static.linear.app/client/assets/CommentBody-Bqhcxwa2.css",
+    "https://static.linear.app/client/assets/InitiativeUpdateCard-Dzx_z_ug.css",
+    "https://static.linear.app/client/assets/ContentViewHeaderBreadcrumb-Dow7X6Af.css",
+    "https://static.linear.app/client/assets/NewContentViewHeaderTitle-BjUWGkir.css",
+    "https://static.linear.app/client/assets/HistoryEntryComponents-BySoQs1j.css",
+    "https://static.linear.app/client/assets/ViewEmptyState-04qCLFhi.css",
+    "https://static.linear.app/client/assets/UpdatesFloatingPanel-MNjjJI0K.css",
+    "https://static.linear.app/client/assets/InitiativeOverviewPage-BpDOKbWY.css",
+    "https://static.linear.app/client/assets/AdditionalCustomerNeedCreateForm-BPPGtSAl.css",
+    "https://static.linear.app/client/assets/AgentSessionActivities-B_MUs54H.css",
+    "https://static.linear.app/client/assets/EmbeddedVariableList-YnbZDM_p.css",
+    "https://static.linear.app/client/assets/IssueDetailsPaneSidebar-CC8IqqVx.css",
+    "https://static.linear.app/client/assets/SearchPage-BMSA3A7-.css",
+    "https://static.linear.app/client/assets/EditorComponent-ClN_5x3O.css",
+    "https://static.linear.app/client/assets/FilterBlockStyles-djlfqXJy.css",
+    "https://static.linear.app/client/assets/UniversalCustomFilterPanelShouldBeLazyLoaded-x3W-7wBo.css",
+    "https://static.linear.app/client/assets/graphs-CvTQxdl7.css",
+    "https://static.linear.app/client/assets/ReadonlyEditorComponent-CQtklrvE.css",
+    "https://static.linear.app/client/assets/useInsightData-B0GWs-XJ.css",
+    "https://static.linear.app/client/assets/InsightsFullscreen-Bh8evE9G.css",
+    "https://static.linear.app/client/assets/TimelinePage-OJ34pCAD.css",
+    "https://static.linear.app/client/assets/FormDescription-CehBG-WT.css",
+    "https://static.linear.app/client/assets/UpsellBox-CAAT245k.css",
+    "https://static.linear.app/client/assets/HoverActionRow-DIvGEe7M.css",
+    "https://static.linear.app/client/assets/ReleasePipelineComponents-NA4_Drc1.css",
+    "https://static.linear.app/client/assets/CarouselScrollView-BON7oTBW.css",
+    "https://static.linear.app/client/assets/AllIntegrationsSettingsPage-DUgroMun.css",
+    "https://static.linear.app/client/assets/IntegrationSettingsPage-CI3cqm2U.css",
+    "https://static.linear.app/client/assets/SamlConfigFormFields-DPOXKnN_.css",
+    "https://static.linear.app/client/assets/WorkspaceAuthenticationSettingsPage-BLaKZZpc.css",
+    "https://static.linear.app/client/assets/TriageSuggestionAutomationRules-BU5fqZde.css",
+    "https://static.linear.app/client/assets/LabelSettingsPage-BPkxqEea.css",
+    "https://static.linear.app/client/assets/EditTemplatePage-CctOojEf.css",
+    "https://static.linear.app/client/assets/TeamIssueStatusesSettingsPage-BLsZLhu-.css",
+    "https://static.linear.app/client/assets/TeamTriageMemoriesSettingsPage-BOa_O-dl.css",
+    "https://static.linear.app/client/assets/AsksWebPageSettingsPage-BQrj4Fjz.css",
+    "https://static.linear.app/client/assets/MigrationAssistantPage-DvDDKu0V.css",
+    "https://static.linear.app/client/assets/DraftsPage-DTCgMTNd.css",
+    "https://static.linear.app/client/assets/CyclesList-JloF_SgL.css",
+    "https://static.linear.app/client/assets/UpdateTitleHeader-aP2A4wk4.css",
+    "https://static.linear.app/client/assets/CustomerPage-DZEhuPTR.css"
+  ],
+  "scripts": [
+    "https://static.linear.app/client/assets/html.jxef_FVP.js"
+  ],
+  "bodyVarCount": 511,
+  "themedTag": "DIV.",
+  "resolvedFromBody": {
+    "--color-text-secondary": {
+      "raw": "lch(90.451% 1.2 272 / 1)",
+      "hex": "#e3e4e6"
+    },
+    "--content-bg-color": {
+      "raw": "lch(2.595% 0.4 272 / 1)",
+      "hex": "#09090a"
+    },
+    "--color-text-tertiary": {
+      "raw": "lch(61.803% 1.2 272 / 1)",
+      "hex": "#959597"
+    },
+    "--app-active-selection-bg": {
+      "raw": "lch(47.918% 59.303 288.421 / 0.4)",
+      "hex": "#5f69d266"
+    },
+    "--selection-bg": {
+      "raw": "lch(61.803% 1.2 272 / 0.2)",
+      "hex": "#96969633"
+    },
+    "--bg-sidebar-color": {
+      "raw": "lch(2.595% 0.4 272 / 1)",
+      "hex": "#09090a"
+    },
+    "--bg-base-color": {
+      "raw": "lch(5.52% 0.4 272)",
+      "hex": "#121213"
+    },
+    "--app-scrollbar-bg-hover": {
+      "raw": "lch(37.375% 1.2 272 / 1)",
+      "hex": "#57585a"
+    },
+    "--color-text-quaternary": {
+      "raw": "lch(36.975% 1.2 272 / 1)",
+      "hex": "#565759"
+    },
+    "--app-scrollbar-bg": {
+      "raw": "lch(37.275% 1.2 272 / 1)",
+      "hex": "#57585a"
+    },
+    "--bg-border-color": {
+      "raw": "lch(14.16% 1.48 272 / 1)",
+      "hex": "#232426"
+    },
+    "--color-border-secondary": {
+      "raw": "lch(14.16% 1.48 272 / 1)",
+      "hex": "#232426"
+    },
+    "--color-border-tertiary": {
+      "raw": "lch(16.32% 1.48 272 / 1)",
+      "hex": "#28282b"
+    },
+    "--app-scrollbar-bg-active": {
+      "raw": "lch(36.975% 1.2 272 / 1)",
+      "hex": "#565759"
+    },
+    "--color-border-primary": {
+      "raw": "lch(9.84% 1.48 272 / 1)",
+      "hex": "#1a1b1d"
+    },
+    "--app-link-color": {
+      "raw": "lch(100% 0 272 / 1)",
+      "hex": "#ffffff"
+    },
+    "--ai-selection-bg": {
+      "raw": "lch(61.803% 1.2 272 / 0.1)",
+      "hex": "#9393931a"
+    },
+    "--color-text-primary": {
+      "raw": "lch(100% 0 272 / 1)",
+      "hex": "#ffffff"
+    },
+    "--color-bg-tertiary": {
+      "raw": "lch(8.22% 1.3 272 / 1)",
+      "hex": "#17181a"
+    },
+    "--header-color": {
+      "raw": "lch(5.52% 0.4 272)",
+      "hex": "#121213"
+    },
+    "--color-bg-quaternary": {
+      "raw": "lch(9.345% 0.85 272 / 1)",
+      "hex": "#1a1a1b"
+    },
+    "--color-bg-primary": {
+      "raw": "lch(5.52% 0.4 272)",
+      "hex": "#121213"
+    },
+    "--bg-color": {
+      "raw": "lch(2.595% 0.4 272 / 1)",
+      "hex": "#09090a"
+    },
+    "--color-bg-secondary": {
+      "raw": "lch(7.32% 0.85 272 / 1)",
+      "hex": "#161617"
+    }
+  }
+}

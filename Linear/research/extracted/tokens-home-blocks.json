@@ -1,0 +1,697 @@
+[
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster][dir=\"ltr\"], html[dir=\"ltr\"]",
+    "decls": [
+      "--toast-icon-margin-start: -3px",
+      "--toast-icon-margin-end: 4px",
+      "--toast-svg-margin-start: -1px",
+      "--toast-svg-margin-end: 0px",
+      "--toast-button-margin-start: auto",
+      "--toast-button-margin-end: 0",
+      "--toast-close-button-start: 0",
+      "--toast-close-button-end: unset",
+      "--toast-close-button-transform: translate(-35%, -35%)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster][dir=\"rtl\"], html[dir=\"rtl\"]",
+    "decls": [
+      "--toast-icon-margin-start: 4px",
+      "--toast-icon-margin-end: -3px",
+      "--toast-svg-margin-start: 0px",
+      "--toast-svg-margin-end: -1px",
+      "--toast-button-margin-start: 0",
+      "--toast-button-margin-end: auto",
+      "--toast-close-button-start: unset",
+      "--toast-close-button-end: 0",
+      "--toast-close-button-transform: translate(35%, -35%)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster]",
+    "decls": [
+      "--gray1: hsl(0, 0%, 99%)",
+      "--gray2: hsl(0, 0%, 97.3%)",
+      "--gray3: hsl(0, 0%, 95.1%)",
+      "--gray4: hsl(0, 0%, 93%)",
+      "--gray5: hsl(0, 0%, 90.9%)",
+      "--gray6: hsl(0, 0%, 88.7%)",
+      "--gray7: hsl(0, 0%, 85.8%)",
+      "--gray8: hsl(0, 0%, 78%)",
+      "--gray9: hsl(0, 0%, 56.1%)",
+      "--gray10: hsl(0, 0%, 52.3%)",
+      "--gray11: hsl(0, 0%, 43.5%)",
+      "--gray12: hsl(0, 0%, 9%)",
+      "--border-radius: 8px"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast]",
+    "decls": [
+      "--y: translateY(100%)",
+      "--lift-amount: calc(var(--lift) * var(--gap))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-y-position=\"top\"]",
+    "decls": [
+      "--y: translateY(-100%)",
+      "--lift: 1",
+      "--lift-amount: calc(1 * var(--gap))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-y-position=\"bottom\"]",
+    "decls": [
+      "--y: translateY(100%)",
+      "--lift: -1",
+      "--lift-amount: calc(var(--lift) * var(--gap))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-mounted=\"true\"]",
+    "decls": [
+      "--y: translateY(0)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-expanded=\"false\"][data-front=\"false\"]",
+    "decls": [
+      "--scale: var(--toasts-before) * 0.05 + 1",
+      "--y: translateY(calc(var(--lift-amount) * var(--toasts-before))) scale(calc(-1 * var(--scale)))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-mounted=\"true\"][data-expanded=\"true\"]",
+    "decls": [
+      "--y: translateY(calc(var(--lift) * var(--offset)))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-removed=\"true\"][data-front=\"true\"][data-swipe-out=\"false\"]",
+    "decls": [
+      "--y: translateY(calc(var(--lift) * -100%))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-removed=\"true\"][data-front=\"false\"][data-swipe-out=\"false\"][data-expanded=\"true\"]",
+    "decls": [
+      "--y: translateY(calc(var(--lift) * var(--offset) + var(--lift) * -100%))"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toast][data-removed=\"true\"][data-front=\"false\"][data-swipe-out=\"false\"][data-expanded=\"false\"]",
+    "decls": [
+      "--y: translateY(40%)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster][data-sonner-theme=\"light\"]",
+    "decls": [
+      "--normal-bg: #fff",
+      "--normal-border: var(--gray4)",
+      "--normal-text: var(--gray12)",
+      "--success-bg: hsl(143, 85%, 96%)",
+      "--success-border: hsl(145, 92%, 87%)",
+      "--success-text: hsl(140, 100%, 27%)",
+      "--info-bg: hsl(208, 100%, 97%)",
+      "--info-border: hsl(221, 91%, 93%)",
+      "--info-text: hsl(210, 92%, 45%)",
+      "--warning-bg: hsl(49, 100%, 97%)",
+      "--warning-border: hsl(49, 91%, 84%)",
+      "--warning-text: hsl(31, 92%, 45%)",
+      "--error-bg: hsl(359, 100%, 97%)",
+      "--error-border: hsl(359, 100%, 94%)",
+      "--error-text: hsl(360, 100%, 45%)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster][data-sonner-theme=\"light\"] [data-sonner-toast][data-invert=\"true\"]",
+    "decls": [
+      "--normal-bg: #000",
+      "--normal-border: hsl(0, 0%, 20%)",
+      "--normal-text: var(--gray1)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster][data-sonner-theme=\"dark\"] [data-sonner-toast][data-invert=\"true\"]",
+    "decls": [
+      "--normal-bg: #fff",
+      "--normal-border: var(--gray3)",
+      "--normal-text: var(--gray12)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": "[data-sonner-toaster][data-sonner-theme=\"dark\"]",
+    "decls": [
+      "--normal-bg: #000",
+      "--normal-bg-hover: hsl(0, 0%, 12%)",
+      "--normal-border: hsl(0, 0%, 20%)",
+      "--normal-border-hover: hsl(0, 0%, 25%)",
+      "--normal-text: var(--gray1)",
+      "--success-bg: hsl(150, 100%, 6%)",
+      "--success-border: hsl(147, 100%, 12%)",
+      "--success-text: hsl(150, 86%, 65%)",
+      "--info-bg: hsl(215, 100%, 6%)",
+      "--info-border: hsl(223, 43%, 17%)",
+      "--info-text: hsl(216, 87%, 65%)",
+      "--warning-bg: hsl(64, 100%, 6%)",
+      "--warning-border: hsl(60, 100%, 9%)",
+      "--warning-text: hsl(46, 87%, 65%)",
+      "--error-bg: hsl(358, 76%, 10%)",
+      "--error-border: hsl(357, 89%, 16%)",
+      "--error-text: hsl(358, 100%, 81%)"
+    ]
+  },
+  {
+    "ctx": "inline",
+    "sel": ".sonner-loading-wrapper",
+    "decls": [
+      "--size: 16px"
+    ]
+  },
+  {
+    "ctx": "ext:VideoPlayer.DNAZEJf0.css",
+    "sel": "._91f_Kq_track",
+    "decls": [
+      "--track-size: 4px",
+      "--track-active-size: var(--track-size)"
+    ]
+  },
+  {
+    "ctx": "ext:VideoPlayer.DNAZEJf0.css",
+    "sel": "._91f_Kq_progress",
+    "decls": [
+      "--track-active-size: 7px",
+      "--moreHitArea-inset: -24px -8px"
+    ]
+  },
+  {
+    "ctx": "ext:VideoPlayer.DNAZEJf0.css",
+    "sel": "._91f_Kq_volumePositioner",
+    "decls": [
+      "--volume-size: 32px"
+    ]
+  },
+  {
+    "ctx": "ext:VideoPlayer.DNAZEJf0.css",
+    "sel": "._91f_Kq_volumeControl",
+    "decls": [
+      "--track-size: 4px",
+      "--moreHitArea-inset: -12px -2px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_root",
+    "decls": [
+      "--height: 24px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_size-small",
+    "decls": [
+      "--height: 20px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_size-regular",
+    "decls": [
+      "--height: 24px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_size-large",
+    "decls": [
+      "--height: 28px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_size-xxx-large",
+    "decls": [
+      "--height: 48px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_variant-business",
+    "decls": [
+      "--gradientBorder-gradient: linear-gradient(285.49deg, #bac0cb -14.61%, #767caf 106.06%)",
+      "--gradientBorder-size: 2px"
+    ]
+  },
+  {
+    "ctx": "ext:Badge.CNOVCKsB.css",
+    "sel": "._4H9I6q_variant-enterprise",
+    "decls": [
+      "--gradientBorder-gradient: linear-gradient(92.88deg, #be05ff 9.16%, #a954ff 43.89%, #a771ff 64.72%)"
+    ]
+  },
+  {
+    "ctx": "ext:Collapsibles.CKjyh1cv.css",
+    "sel": ".lAb7VG_root",
+    "decls": [
+      "--title-line-height: 24px",
+      "--padding: 16px"
+    ]
+  },
+  {
+    "ctx": "ext:Collapsibles.CKjyh1cv.css",
+    "sel": ".lAb7VG_root:target::before",
+    "decls": [
+      "--bg: var(--color-bg-tertiary)",
+      "--border: var(--color-border-secondary)"
+    ]
+  },
+  {
+    "ctx": "ext:Note.4CaDvCAO.css",
+    "sel": ".VAt0ja_size-defaults",
+    "decls": [
+      "--list-inset: 24px",
+      "--block-spacing-small: 8px",
+      "--block-spacing: 20px",
+      "--h1-size: var(--title-5-size)",
+      "--h1-line-height: var(--title-5-line-height)",
+      "--h1-letter-spacing: var(--title-5-letter-spacing)",
+      "--h2-size: var(--title-3-size)",
+      "--h2-line-height: var(--title-3-line-height)",
+      "--h2-letter-spacing: var(--title-3-letter-spacing)",
+      "--h2-bottom-margin: 12px",
+      "--h3-size: 20px",
+      "--h3-line-height: 1.6",
+      "--h3-letter-spacing: 0",
+      "--h3-bottom-margin: 6px",
+      "--h4-size: var(--title-1-size)",
+      "--h4-line-height: var(--title-1-line-height)",
+      "--h4-letter-spacing: var(--title-1-letter-spacing)",
+      "--h4-bottom-margin: 10px",
+      "--figure-margin: 20px"
+    ]
+  },
+  {
+    "ctx": "ext:Note.4CaDvCAO.css @media (max-width: 768px)",
+    "sel": ".VAt0ja_size-defaults",
+    "decls": [
+      "--h1-size: var(--title-4-size)",
+      "--h1-line-height: var(--title-4-line-height)",
+      "--h1-letter-spacing: var(--title-4-letter-spacing)",
+      "--h2-size: var(--title-2-size)",
+      "--h2-line-height: var(--title-2-line-height)",
+      "--h2-letter-spacing: var(--title-2-letter-spacing)",
+      "--h3-size: var(--title-1-size)",
+      "--h3-line-height: var(--title-1-line-height)",
+      "--h3-letter-spacing: var(--title-1-letter-spacing)",
+      "--h4-size: var(--text-regular-size)",
+      "--h4-line-height: var(--text-regular-line-height)",
+      "--h4-letter-spacing: var(--text-regular-letter-spacing)"
+    ]
+  },
+  {
+    "ctx": "ext:Note.4CaDvCAO.css",
+    "sel": ".VAt0ja_size-small",
+    "decls": [
+      "--block-spacing: 14px",
+      "--p-size: var(--text-small-size)",
+      "--p-line-height: var(--text-small-line-height)",
+      "--p-letter-spacing: var(--text-small-letter-spacing)"
+    ]
+  },
+  {
+    "ctx": "ext:Note.4CaDvCAO.css",
+    "sel": ".VAt0ja_size-regular",
+    "decls": [
+      "--block-spacing: 16px",
+      "--p-size: var(--text-regular-size)",
+      "--p-line-height: var(--text-regular-line-height)",
+      "--p-letter-spacing: var(--text-regular-letter-spacing)"
+    ]
+  },
+  {
+    "ctx": "ext:Note.4CaDvCAO.css",
+    "sel": ".VAt0ja_size-large",
+    "decls": [
+      "--p-size: var(--text-large-size)",
+      "--p-line-height: var(--text-large-line-height)",
+      "--p-letter-spacing: var(--text-large-letter-spacing)",
+      "--h1-size: var(--title-5-size)",
+      "--h1-line-height: var(--title-5-line-height)",
+      "--h1-letter-spacing: var(--title-5-letter-spacing)",
+      "--h2-size: var(--title-3-size)",
+      "--h2-line-height: var(--title-3-line-height)",
+      "--h2-letter-spacing: var(--title-3-letter-spacing)",
+      "--h3-size: var(--title-3-size)",
+      "--h3-line-height: var(--title-3-line-height)",
+      "--h3-letter-spacing: var(--title-3-letter-spacing)",
+      "--h3-bottom-margin: 16px",
+      "--h4-size: var(--title-1-size)",
+      "--h4-line-height: var(--title-1-line-height)",
+      "--h4-letter-spacing: var(--title-1-letter-spacing)",
+      "--h4-bottom-margin: 18px",
+      "--wide-inset: calc((var(--page-max-width) - var(--page-padding-left) - var(--page-padding-right) - var(--prose-max-width)))",
+      "--figure-margin: 32px",
+      "--image-figure-margin: 48px",
+      "--image-figure-margin-tablet: 32px"
+    ]
+  },
+  {
+    "ctx": "ext:Note.4CaDvCAO.css @media (max-width: 768px)",
+    "sel": ".VAt0ja_size-large",
+    "decls": [
+      "--p-size: var(--text-regular-size)",
+      "--p-line-height: var(--text-regular-line-height)",
+      "--p-letter-spacing: var(--text-regular-letter-spacing)",
+      "--h2-size: var(--title-3-size)",
+      "--h2-line-height: var(--title-3-line-height)",
+      "--h2-letter-spacing: var(--title-3-letter-spacing)",
+      "--h3-size: var(--title-2-size)",
+      "--h3-line-height: var(--title-2-line-height)",
+      "--h3-letter-spacing: var(--title-2-letter-spacing)"
+    ]
+  },
+  {
+    "ctx": "ext:LinkAnchor.DtA2msdz.css",
+    "sel": ".j8azeW_root:where(:hover, :focus) .j8azeW_inline",
+    "decls": [
+      "--visibility-delay: 0s"
+    ]
+  },
+  {
+    "ctx": "ext:LinkAnchor.DtA2msdz.css",
+    "sel": ".j8azeW_iconOnlyParent:where(:hover, :focus-within) .j8azeW_inline",
+    "decls": [
+      "--visibility-delay: 0s"
+    ]
+  },
+  {
+    "ctx": "ext:Separator.RnTSqYU1.css",
+    "sel": ".b6oLUa_root[data-orientation=\"horizontal\"]",
+    "decls": [
+      "--direction: to right"
+    ]
+  },
+  {
+    "ctx": "ext:Separator.RnTSqYU1.css",
+    "sel": ".b6oLUa_root[data-orientation=\"vertical\"]",
+    "decls": [
+      "--direction: to bottom"
+    ]
+  },
+  {
+    "ctx": "ext:Separator.RnTSqYU1.css",
+    "sel": ".b6oLUa_variant-fading",
+    "decls": [
+      "--color: rgba(var(--color-alpha), var(--color-alpha), var(--color-alpha), .1)"
+    ]
+  },
+  {
+    "ctx": "ext:DefaultRenderer.DsnN7ZPi.css",
+    "sel": ".react-tweet-theme",
+    "decls": [
+      "--tweet-container-margin: 1.5rem 0",
+      "--tweet-header-font-size: .9375rem",
+      "--tweet-header-line-height: 1.25rem",
+      "--tweet-body-font-size: 1.25rem",
+      "--tweet-body-font-weight: 400",
+      "--tweet-body-line-height: 1.5rem",
+      "--tweet-body-margin: 0",
+      "--tweet-quoted-container-margin: .75rem 0",
+      "--tweet-quoted-body-font-size: .938rem",
+      "--tweet-quoted-body-font-weight: 400",
+      "--tweet-quoted-body-line-height: 1.25rem",
+      "--tweet-quoted-body-margin: .25rem 0 .75rem 0",
+      "--tweet-info-font-size: .9375rem",
+      "--tweet-info-line-height: 1.25rem",
+      "--tweet-actions-font-size: .875rem",
+      "--tweet-actions-line-height: 1rem",
+      "--tweet-actions-font-weight: 700",
+      "--tweet-actions-icon-size: 1.25em",
+      "--tweet-actions-icon-wrapper-size: calc(var(--tweet-actions-icon-size) + .75em)",
+      "--tweet-replies-font-size: .875rem",
+      "--tweet-replies-line-height: 1rem",
+      "--tweet-replies-font-weight: 700"
+    ]
+  },
+  {
+    "ctx": "ext:DefaultRenderer.DsnN7ZPi.css",
+    "sel": ":is([data-theme=\"light\"], .light) :where(.react-tweet-theme), :where(.react-tweet-theme)",
+    "decls": [
+      "--tweet-skeleton-gradient: linear-gradient(270deg, #fafafa, #eaeaea, #eaeaea, #fafafa)",
+      "--tweet-border: 1px solid #cfd9de",
+      "--tweet-font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "--tweet-font-color: #0f1419",
+      "--tweet-font-color-secondary: #536471",
+      "--tweet-bg-color: #fff",
+      "--tweet-bg-color-hover: #f7f9f9",
+      "--tweet-quoted-bg-color-hover: #00000008",
+      "--tweet-color-blue-primary: #1d9bf0",
+      "--tweet-color-blue-primary-hover: #1a8cd8",
+      "--tweet-color-blue-secondary: #006fd6",
+      "--tweet-color-blue-secondary-hover: #006fd61a",
+      "--tweet-color-red-primary: #f91880",
+      "--tweet-color-red-primary-hover: #f918801a",
+      "--tweet-color-green-primary: #00ba7c",
+      "--tweet-color-green-primary-hover: #00ba7c1a",
+      "--tweet-twitter-icon-color: var(--tweet-font-color)",
+      "--tweet-verified-old-color: #829aab",
+      "--tweet-verified-blue-color: var(--tweet-color-blue-primary)"
+    ]
+  },
+  {
+    "ctx": "ext:DefaultRenderer.DsnN7ZPi.css",
+    "sel": ":is([data-theme=\"dark\"], .dark) :where(.react-tweet-theme)",
+    "decls": [
+      "--tweet-skeleton-gradient: linear-gradient(270deg, #15202b, #1e2732, #1e2732, #15202b)",
+      "--tweet-border: 1px solid #425364",
+      "--tweet-font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "--tweet-font-color: #f7f9f9",
+      "--tweet-font-color-secondary: #8b98a5",
+      "--tweet-bg-color: #15202b",
+      "--tweet-bg-color-hover: #1e2732",
+      "--tweet-quoted-bg-color-hover: #ffffff08",
+      "--tweet-color-blue-primary: #1d9bf0",
+      "--tweet-color-blue-primary-hover: #1a8cd8",
+      "--tweet-color-blue-secondary: #6bc9fb",
+      "--tweet-color-blue-secondary-hover: #6bc9fb1a",
+      "--tweet-color-red-primary: #f91880",
+      "--tweet-color-red-primary-hover: #f918801a",
+      "--tweet-color-green-primary: #00ba7c",
+      "--tweet-color-green-primary-hover: #00ba7c1a",
+      "--tweet-twitter-icon-color: var(--tweet-font-color)",
+      "--tweet-verified-old-color: #829aab",
+      "--tweet-verified-blue-color: #fff"
+    ]
+  },
+  {
+    "ctx": "ext:DefaultRenderer.DsnN7ZPi.css @media (prefers-color-scheme: dark)",
+    "sel": ":where(.react-tweet-theme)",
+    "decls": [
+      "--tweet-skeleton-gradient: linear-gradient(270deg, #15202b, #1e2732, #1e2732, #15202b)",
+      "--tweet-border: 1px solid #425364",
+      "--tweet-font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+      "--tweet-font-color: #f7f9f9",
+      "--tweet-font-color-secondary: #8b98a5",
+      "--tweet-bg-color: #15202b",
+      "--tweet-bg-color-hover: #1e2732",
+      "--tweet-color-blue-primary: #1d9bf0",
+      "--tweet-color-blue-primary-hover: #1a8cd8",
+      "--tweet-color-blue-secondary: #6bc9fb",
+      "--tweet-color-blue-secondary-hover: #6bc9fb1a",
+      "--tweet-color-red-primary: #f91880",
+      "--tweet-color-red-primary-hover: #f918801a",
+      "--tweet-color-green-primary: #00ba7c",
+      "--tweet-color-green-primary-hover: #00ba7c1a",
+      "--tweet-twitter-icon-color: var(--tweet-font-color)",
+      "--tweet-verified-old-color: #829aab",
+      "--tweet-verified-blue-color: #fff"
+    ]
+  },
+  {
+    "ctx": "ext:DefaultRenderer.DsnN7ZPi.css",
+    "sel": ".KSiuLW_theme > div",
+    "decls": [
+      "--tweet-font-family: var(--font-regular)",
+      "--tweet-container-margin: 0",
+      "--tweet-border: 1px solid var(--color-border-primary)",
+      "--tweet-bg-color: var(--color-bg-primary)",
+      "--tweet-bg-color-hover: var(--color-bg-secondary)",
+      "--tweet-quoted-bg-color-hover: var(--color-bg-tertiary)",
+      "--tweet-font-color: var(--color-text-primary)",
+      "--tweet-font-color-secondary: var(--color-text-tertiary)",
+      "--tweet-twitter-icon-color: var(--color-text-quaternary)",
+      "--tweet-body-font-size: 15px",
+      "--tweet-body-line-height: 22px",
+      "--tweet-body-font-weight: var(--font-weight-normal)",
+      "--tweet-header-font-size: 15px",
+      "--tweet-header-line-height: 22px",
+      "--tweet-info-font-size: 13px",
+      "--tweet-info-line-height: 13px"
+    ]
+  },
+  {
+    "ctx": "ext:page.BO__v7RW.css",
+    "sel": ".RTm11a_openSearchButtonWrapper .RTm11a_openSearchButton",
+    "decls": [
+      "--button-gap: 10px"
+    ]
+  },
+  {
+    "ctx": "ext:Plans.CxLxyzuM.css",
+    "sel": ".WWyNGG_container",
+    "decls": [
+      "--Switch-height: 20px",
+      "--Switch-width: 32px",
+      "--Switch-thumb-size: 14px",
+      "--diff: calc(var(--Switch-height) - var(--Switch-thumb-size))",
+      "--gap: calc(var(--diff) / 2)"
+    ]
+  },
+  {
+    "ctx": "ext:Comparison.BbtD2Cgj.css",
+    "sel": ".PDOlRq_table",
+    "decls": [
+      "--sticky-reserve: 125px",
+      "--first-row-gap: 57px",
+      "--table-bg: var(--color-bg-primary)"
+    ]
+  },
+  {
+    "ctx": "ext:Comparison.BbtD2Cgj.css @media (max-width: 1024px)",
+    "sel": ".PDOlRq_table",
+    "decls": [
+      "--sticky-reserve: 104px",
+      "--first-row-gap: 32px"
+    ]
+  },
+  {
+    "ctx": "ext:Comparison.BbtD2Cgj.css",
+    "sel": ".PDOlRq_row",
+    "decls": [
+      "--height: 44px"
+    ]
+  },
+  {
+    "ctx": "ext:Comparison.BbtD2Cgj.css @media (max-width: 1024px)",
+    "sel": ".PDOlRq_row",
+    "decls": [
+      "--height: 48px"
+    ]
+  },
+  {
+    "ctx": "ext:Hero.DXQofq3c.css",
+    "sel": ".NvyJ_q_assetInset",
+    "decls": [
+      "--asset-inset: 20px"
+    ]
+  },
+  {
+    "ctx": "ext:Hero.DXQofq3c.css @media (max-width: 1024px)",
+    "sel": ".NvyJ_q_assetInset",
+    "decls": [
+      "--asset-inset: 0px"
+    ]
+  },
+  {
+    "ctx": "ext:SurfacesSection.CzLcQo5J.css",
+    "sel": ".Acomoa_asset",
+    "decls": [
+      "--edge-highlight-radius: 8px"
+    ]
+  },
+  {
+    "ctx": "ext:FlowDiagram.DrA8NnQP.css",
+    "sel": ".IKScNq_stage",
+    "decls": [
+      "--px: calc(100cqw / var(--design-width))"
+    ]
+  },
+  {
+    "ctx": "ext:Carousel.HEI4fa47.css",
+    "sel": ".CBCcKq_column",
+    "decls": [
+      "--page-padding-left: calc(max(var(--homepage-outer-padding), (100vw - var(--homepage-max-width)) / 2 + var(--homepage-outer-padding)) + var(--homepage-padding-inset))",
+      "--page-max-width: calc((100vw - var(--page-padding-left) * 2) * (1164 / 1344))"
+    ]
+  },
+  {
+    "ctx": "ext:Carousel.HEI4fa47.css @media (min-width: 1536px)",
+    "sel": ".CBCcKq_column",
+    "decls": [
+      "--page-max-width: 1164px"
+    ]
+  },
+  {
+    "ctx": "ext:Carousel.HEI4fa47.css",
+    "sel": ".CBCcKq_track",
+    "decls": [
+      "--Carousel-gap: 20px"
+    ]
+  },
+  {
+    "ctx": "ext:Carousel.HEI4fa47.css @media (min-width: 1536px)",
+    "sel": ".CBCcKq_track",
+    "decls": [
+      "--Carousel-gap: 40px"
+    ]
+  },
+  {
+    "ctx": "ext:Carousel.HEI4fa47.css",
+    "sel": ".CBCcKq_slide",
+    "decls": [
+      "--slide-width: min(var(--page-max-width), calc(100vw - var(--page-padding-left) * 2))",
+      "--slide-radius: calc(var(--slide-width) * 12 / 1164)",
+      "--edge-highlight-color: #ffffff1f",
+      "--edge-highlight-radius: var(--slide-radius)"
+    ]
+  },
+  {
+    "ctx": "ext:HeroAssetClient.B10mUe5y.css",
+    "sel": ".lydwfW_stage",
+    "decls": [
+      "--px: calc(100cqw / var(--design-width))",
+      "--token-comment: #62666d",
+      "--token-string: #ffdf9f",
+      "--token-constant: #8fa6ff",
+      "--token-variable: #f7bf8b",
+      "--token-keyword: #e391cf",
+      "--token-entity: #83dcdc",
+      "--token-punctuation: #d0d6e0",
+      "--token-text: #d0d6e0",
+      "--diff-char-added-bg: #27a6442e",
+      "--diff-char-removed-bg: #fc31422e"
+    ]
+  },
+  {
+    "ctx": "ext:HeroAssetClient.B10mUe5y.css @media (max-width: 640px)",
+    "sel": ".lydwfW_stage",
+    "decls": [
+      "--px: calc(100cqw / 390)"
+    ]
+  },
+  {
+    "ctx": "ext:ContactLink.BDqMG6gX.css",
+    "sel": ".rWdRxW_linkCategory",
+    "decls": [
+      "--grid-gap: 0"
+    ]
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "total": 235,
+  "hits": [
+    {
+      "f": "store.aAzVydJL.js",
+      "size": 1968803,
+      "ctx": [
+        "color:`#bec2c8`},darkGrey:{label:`Dark Grey`,color:`#95a2b3`},controlPrimary:{label:`Purple`,color:`#5e6ad2`},tealBase:{label:`Teal`,color:`#26b5ce`},greenBase:{label:`Green`,color:`#4cb782`},yellowBase:{label:`Yellow`,color:`#f2c94c`},orangeBase:{label:`Orange`,color:`#f2994a`},redBg:{label:`Pink`,color:`#f7c8c1`},redBase:{label:`Red`,color:`#eb5757`}}",
+        "color:`#bec2c8`},{type:R.unstarted,name:`Todo`,color:`#e2e2e2`},{type:R.started,name:`In Progress`,color:`#f2c94c`},{type:R.completed,name:`Done`,color:`#5e6ad2`},{type:R.canceled,name:`Canceled`,color:`#95a2b3`},this.defaultDuplicateState]",
+        "default:`#bec2c8`})],X.prototype,`color`,void 0),x([A()],X.prototype,`icon`,void 0),x([A({persistence:`updateOnly`})],X.prototype,`trashed`,void 0),x([A({persistence:`none`})],X.prototype,`sourceMetadata`,void 0),x([E(()=>q,`initiatives`,{optional:!1,nullable:!1,indexed:!0,persistence:`none`})],X.prototype,`organization`,void 0),x([E(()=>Y,`initiatives`,{optional:!1,nullable:!1,indexed:!0,persistence:`none`})],X.prototype,`creator`,void 0),x([T],X.prototype,`parents`,null),x([T],X.prototype,`children`,null),x([T({keepAlive:!0})],X.prototype,`descendants`,null),x([E(()=>Y,`initiatives`,{nullable:!0,persistence:`createAndUpdate`})],X.prototype,`owner`,void 0),x([E(()=>K,`ledInitiatives`,{optional:!0,nullable:!1,indexed:!0})],X.prototype,`leadTeam`,void 0),x([T],X.prototype,`private`,null),x([T],X.prototype,`public`,null),x([T],X.prototype,`visibility`,null),x([k(()=>CZ,{index:`initiativeId`,order:new C(`n"
+      ]
+    }
+  ]
+}

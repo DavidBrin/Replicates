@@ -1,0 +1,198 @@
+{
+  "rows": [
+    {
+      "href": "ENG-9",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-4",
+      "h": 44,
+      "w": 1184,
+      "hovered": true,
+      "rowAppliedBg": "lch(9.345% 0.85 272 / 1)",
+      "rowAppliedBgHex": "#1a1a1b",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-3",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-2",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-8",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-6",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-7",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-5",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    },
+    {
+      "href": "ENG-1",
+      "h": 44,
+      "w": 1184,
+      "hovered": false,
+      "rowAppliedBg": "transparent",
+      "rowAppliedBgHex": "#00000000",
+      "radius": "8px",
+      "innerPadding": "0px",
+      "innerHeight": "44px",
+      "innerBg": "rgba(0, 0, 0, 0)",
+      "transition": "all"
+    }
+  ],
+  "groupHeaders": [
+    {
+      "text": "In Progress1",
+      "h": 36,
+      "bg": "rgba(0, 0, 0, 0)",
+      "bgHex": "#00000000",
+      "padding": "0px",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "radius": "8px"
+    },
+    {
+      "text": "In Progress1",
+      "h": 36,
+      "bg": "lch(9.232 0.85 272)",
+      "bgHex": "#1a1a1b",
+      "padding": "0px 8px 0px 0px",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "radius": "8px"
+    },
+    {
+      "text": "Todo1",
+      "h": 36,
+      "bg": "rgba(0, 0, 0, 0)",
+      "bgHex": "#00000000",
+      "padding": "0px",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "radius": "8px"
+    }
+  ],
+  "avatars": [
+    {
+      "w": 24,
+      "radius": "12px",
+      "bg": "lch(2.595 0.4 272)",
+      "fontSize": "16px",
+      "tag": "DIV"
+    },
+    {
+      "w": 18,
+      "radius": "50%",
+      "bg": "lch(70 60 230)",
+      "fontSize": "9px",
+      "tag": "DIV"
+    },
+    {
+      "w": 18,
+      "radius": "50%",
+      "bg": "lch(40 60 300)",
+      "fontSize": "9px",
+      "tag": "DIV"
+    },
+    {
+      "w": 18,
+      "radius": "50%",
+      "bg": "lch(40 60 300)",
+      "fontSize": "9px",
+      "tag": "DIV"
+    },
+    {
+      "w": 18,
+      "radius": "50%",
+      "bg": "lch(70 60 230)",
+      "fontSize": "9px",
+      "tag": "DIV"
+    },
+    {
+      "w": 18,
+      "radius": "50%",
+      "bg": "lch(40 60 300)",
+      "fontSize": "9px",
+      "tag": "DIV"
+    }
+  ],
+  "badges": []
+}

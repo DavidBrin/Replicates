@@ -1,0 +1,410 @@
+@import "tailwindcss" source(none);
+
+/**
+ * Scan the source tree, and only the source tree.
+ *
+ * Tailwind v4 detects content automatically by walking the project from the
+ * directory this stylesheet lives in. That walk found `research/screenshots`
+ * — eleven PNGs of the real application — and happily extracted "class names"
+ * from their compressed bytes, emitting rules like
+ * `.bg-\[var\(--bg-translu\=\)\]` and `.z-\[var\(--z-\$\)\]`. Those are not
+ * valid CSS, so the whole stylesheet failed to parse and every route returned
+ * a 500.
+ *
+ * The failure is worth naming because of how it presents: the error points at
+ * a line number in a *generated* file, names a token like `Delim('$')` that
+ * appears nowhere in this source, and only happens once someone adds a binary
+ * asset to the repository. Nothing about it says "your screenshots".
+ *
+ * `source(none)` turns the automatic walk off; the directive below puts back
+ * exactly the files that can contain a class name.
+ */
+@source "../**/*.{ts,tsx}";
+
+/* ==========================================================================
+   Design tokens
+   --------------------------------------------------------------------------
+   Every value here was measured, not guessed. The visual-research lane read
+   the custom properties off both linear.app and a running instance of the
+   application itself; `research/01-visual-design.md` records which is which.
+   Three of those measurements are the ones that actually make a screenshot
+   look like Linear rather than like a dark-mode admin panel:
+
+   1. **The greys are not grey.** Every neutral in the app is `lch(L 0.4–1.5
+      272)` — a violet hue at almost zero chroma. Substituting true neutrals
+      (#111, #222) is the single most obvious tell in a clone.
+   2. **Body text is 13px, and "normal" is weight 450.** Inter Variable is a
+      variable font, so Linear sits half a step above 400 for body and uses
+      590 — not 600 — for titles. Both are visible at a glance.
+   3. **Backgrounds move in four small steps**, 08090a → 0f1011 → 141516 →
+      191a1b, roughly two lightness points apart. Contrast between a row and
+      its hover state is deliberately slight.
+
+   The tokens are plain CSS custom properties rather than Tailwind theme keys
+   so the two themes can swap by overwriting one block, and `@theme inline`
+   below re-exports them as utilities so components never hardcode a colour.
+   ========================================================================== */
+
+:root {
+  /* --- surfaces --------------------------------------------------------
+     These are the *product's* values, not the marketing site's.
+     Almost every Linear hex circulating online — #08090a, #1c1c1f, #f7f8f8 —
+     is linear.app rather than the application: the marketing site is a shade
+     darker and a shade cooler. The app is #09090a chrome around a #121213
+     content pane, with #1a1a1b on hover, pixel-sampled from the running app
+     and corroborated by Linear's own splash CSS. Using the marketing palette
+     is a subtle, pervasive way to be wrong. */
+  --bg-app: #121213;
+  --bg-sidebar: #09090a;
+  --bg-panel: #121213;
+  --bg-elevated: #1a1a1b;
+  --bg-overlay: #191a1b;
+  --bg-hover: #1a1a1b;
+  --bg-active: #ffffff0d;
+  --bg-selected: #1c1c1f;
+  --bg-translucent: #ffffff0d;
+
+  /* --- borders -------------------------------------------------------- */
+  --border-subtle: #1b1c1f;
+  --border-default: #23252a;
+  --border-strong: #34343a;
+  --border-focus: #3e3e44;
+
+  /* --- text ----------------------------------------------------------- */
+  --text-primary: #f7f8f8;
+  --text-secondary: #d0d6e0;
+  --text-tertiary: #8a8f98;
+  --text-quaternary: #62666d;
+  --text-on-accent: #ffffff;
+
+  /* --- brand ---------------------------------------------------------- */
+  --accent: #5e6ad2;
+  --accent-hover: #6e79d6;
+  --accent-active: #828fff;
+  --accent-tint: #18182f;
+  --accent-text: #828fff;
+
+  /* --- semantic / status ---------------------------------------------
+     Linear's own workflow-state colours. `backlog` and `todo` deliberately
+     share the tertiary text grey; the difference between them is the glyph
+     (dashed ring vs solid ring), never the colour. */
+  --status-backlog: #8a8f98;
+  --status-todo: #8a8f98;
+  --status-started: #f2c94c;
+  --status-completed: #5e6ad2;
+  --status-canceled: #62666d;
+  --status-triage: #ff9500;
+
+  /* --- priority --------------------------------------------------------
+     `orangeBase` is defined twice in Linear's own theme: #f2994a as a label
+     swatch and #ff7235 as a theme token. The Urgent icon references the theme
+     token, so this is #ff7235 — the label swatch is a different orange that
+     happens to share a name. */
+  --priority-urgent-bg: #ff7235;
+  --priority-icon: #8a8f98;
+
+  /* --- feedback ------------------------------------------------------- */
+  --danger: #eb5757;
+  --danger-hover: #f06565;
+  --success: #4cb782;
+  --warning: #f2c94c;
+
+  /* --- typography ------------------------------------------------------
+     Sizes are rem against a 16px root, exactly as measured. The app's base
+     is `small` (13px), not `regular` — an important detail, since almost
+     every list row, sidebar item and property label uses it. */
+  --font-sans:
+    var(--font-inter), "Inter Variable", "SF Pro Display", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell,
+    "Open Sans", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --text-micro: 0.6875rem; /* 11px — counts, meta */
+  --text-mini: 0.75rem; /* 12px — labels, badges */
+  --text-small: 0.8125rem; /* 13px — the app's base */
+  --text-regular: 0.9375rem; /* 15px — issue description */
+  --text-large: 1.125rem; /* 18px — section titles */
+  --text-title3: 1.25rem; /* 20px */
+  --text-title2: 1.5rem; /* 24px — issue title */
+  --text-title1: 2.25rem; /* 36px — page titles */
+
+  --weight-light: 300;
+  --weight-normal: 450; /* not 400 — Inter Variable */
+  --weight-medium: 500;
+  --weight-title: 590; /* not 600 — Linear's title weight */
+  --weight-bold: 700;
+
+  /* --- layout ------------------------------------------------------------
+     Measured from the running app. The row is 44px, not the 40px a screenshot
+     suggests, and the sidebar is 244px rather than the 220px that is widely
+     reported. The content pane is inset 8px from the window on three sides
+     and rounded 12px — that inset is why the sidebar reads as *behind* the
+     content rather than beside it. */
+  --sidebar-width: 244px;
+  --sidebar-width-min: 180px;
+  --sidebar-width-max: 400px;
+  --header-height: 44px;
+  --row-height: 44px;
+  --group-header-height: 36px;
+  --shell-inset: 8px;
+  --shell-radius: 12px;
+  --detail-max-width: 80ch;
+  --properties-width: 260px;
+  --panel-width: 400px;
+  --panel-width-wide: 482px;
+
+  /* --- shape ----------------------------------------------------------- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  --shadow-low: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-medium: 0 4px 12px rgb(0 0 0 / 0.4);
+  --shadow-high: 0 8px 32px rgb(0 0 0 / 0.5);
+
+  /* --- motion -----------------------------------------------------------
+     Linear's own durations. Nothing in this app animates for longer than
+     350ms, and interaction feedback is 100ms — fast enough to read as
+     instant, which is the whole point of the product. */
+  --speed-quick: 0.1s;
+  --speed-regular: 0.25s;
+  --speed-slow: 0.35s;
+  /* A list row's background changes *instantly* on hover — only its shadow
+     eases. Animating the background is the single most common way a clone
+     feels sluggish next to the real thing, because a 150ms colour fade on a
+     row you are scanning past reads as lag. */
+  --speed-row-hover: 0s;
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 300;
+  --z-palette: 400;
+  --z-toast: 500;
+}
+
+/* Light theme. The app ships a light mode and it is not an inversion — the
+   sidebar is *darker* than the content pane (#efeff0 against #ffffff), which
+   is the opposite of the dark theme's relationship and the reason a naive
+   `invert()` looks wrong. */
+[data-theme="light"] {
+  --bg-app: #f8f8f9;
+  --bg-sidebar: #eeeeef;
+  --bg-panel: #f8f8f9;
+  --bg-elevated: #ffffff;
+  --bg-overlay: #ffffff;
+  --bg-hover: #eeeeef;
+  --bg-active: #0000000d;
+  --bg-selected: #e6e6e7;
+  --bg-translucent: #0000000d;
+
+  --border-subtle: #e8e8e9;
+  --border-default: #dedede;
+  --border-strong: #cccccd;
+  --border-focus: #b8babf;
+
+  --text-primary: #2f2f31;
+  --text-secondary: #45464a;
+  --text-tertiary: #5b5c5e;
+  --text-quaternary: #82838a;
+
+  --accent-tint: #eceefd;
+  --accent-text: #5e6ad2;
+
+  --status-backlog: #6b6f76;
+  --status-todo: #6b6f76;
+  --status-canceled: #8b8f96;
+
+  --shadow-low: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-medium: 0 4px 12px rgb(0 0 0 / 0.1);
+  --shadow-high: 0 8px 32px rgb(0 0 0 / 0.14);
+}
+
+/* ==========================================================================
+   Tailwind bridge
+   --------------------------------------------------------------------------
+   `@theme inline` maps the variables above onto Tailwind's utility
+   namespaces, so `bg-panel`, `text-tertiary` and `border-default` are all
+   real classes that follow the active theme. `inline` matters: it emits
+   `var(--bg-panel)` into the utility rather than resolving the value at build
+   time, which is what lets `[data-theme="light"]` re-point it at runtime.
+   ========================================================================== */
+
+@theme inline {
+  --color-app: var(--bg-app);
+  --color-sidebar: var(--bg-sidebar);
+  --color-panel: var(--bg-panel);
+  --color-elevated: var(--bg-elevated);
+  --color-overlay: var(--bg-overlay);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+  --color-selected: var(--bg-selected);
+
+  --color-subtle: var(--border-subtle);
+  --color-default: var(--border-default);
+  --color-strong: var(--border-strong);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
+  --color-quaternary: var(--text-quaternary);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-text: var(--accent-text);
+
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-micro: var(--text-micro);
+  --text-mini: var(--text-mini);
+  --text-small: var(--text-small);
+  --text-regular: var(--text-regular);
+  --text-large: var(--text-large);
+  --text-title3: var(--text-title3);
+  --text-title2: var(--text-title2);
+  --text-title1: var(--text-title1);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
+  --ease-quad: var(--ease-out-quad);
+}
+
+/* ==========================================================================
+   Base
+   --------------------------------------------------------------------------
+   Wrapped in `@layer base`, and that is load-bearing rather than tidy.
+
+   Tailwind emits its utilities into `@layer utilities`. **Unlayered CSS beats
+   layered CSS**, whatever the specificity — so with these rules sitting
+   outside a layer, the innocuous-looking `button, input, textarea { font:
+   inherit }` below silently defeated every typography utility applied to a
+   form element. The issue title is a `<textarea>` carrying `text-title2` and a
+   590 weight; it rendered at 13px/450, inheriting from `body`, and the same
+   was true of every styled input and button in the app.
+
+   Nothing about that failure points at the cause: the class is present in the
+   markup, the rule is present in the stylesheet, the custom property resolves
+   correctly, and the computed value is simply the inherited one. Declaring the
+   layer puts these resets where the cascade expects them — beneath the
+   utilities that are supposed to override them.
+   ========================================================================== */
+
+@layer base {
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-small);
+  font-weight: var(--weight-normal);
+  line-height: 1.5;
+  /* `cv01` — the single-storey `a`. Measured off the shipped app, not guessed:
+     `cv11` (single-storey `l`) is the feature people assume Linear runs, and
+     it is not the one it ships. */
+  font-feature-settings: "cv01", "ss03";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* The app is a fixed three-pane shell; only the panes scroll. Letting the
+   body scroll would drag the sidebar and header out of view on overscroll. */
+body[data-app-shell="true"] {
+  overflow: hidden;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+/* Keyboard focus only. A keyboard-first app shows focus rings constantly if
+   this is `:focus`, and never usefully if it is omitted. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Thin, hover-revealed scrollbars — the app's panes are dense and a
+   permanent 15px gutter would eat a column of the issue list. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+}

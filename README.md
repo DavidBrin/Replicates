@@ -7,6 +7,39 @@ and research notes.
 
 ---
 
+## [Linear](Linear) — the issue tracker, rebuilt from measurements
+
+> **four people, four permission levels, one keyboard**
+
+A rebuild of [Linear](https://linear.app) — issues, projects and teams, with
+membership that is actually enforced. A guest sees a different application to
+an admin, a private team is invisible even to a full workspace member, and
+adding someone to a project grants them edit rights on it.
+
+| Issue list | Issue detail | Board |
+|---|---|---|
+| <img src="Linear/docs/screenshots/issue-list.png" width="240" alt="Grouped issue list with status glyphs, priority icons and labels"> | <img src="Linear/docs/screenshots/issue-detail.png" width="240" alt="Issue detail with properties rail, activity feed and comments"> | <img src="Linear/docs/screenshots/board.png" width="240" alt="Board with columns from the current grouping"> |
+
+The colours are **measured from the running product, not the marketing site** —
+almost every Linear hex in circulation belongs to linear.app rather than the
+app. The status glyph's progress wedge uses radius 1.94, not 2, a 3% shortfall
+that stops it closing into a seamless disc. Manual ordering is a
+fractional-index string rather than Linear's float, which exhausts double
+precision after about fifty drags into the same gap and then silently stops
+holding its order.
+
+`npm install && npm run dev` and it runs — Postgres compiled to WebAssembly, so
+there is no database to install, and the same SQL runs on Neon when deployed.
+
+Next.js · 1,314 unit tests · 9 e2e permission tests · a 48×8 authorization
+matrix the compiler proves exhaustive. Built from six parallel research lanes,
+then seven parallel build slices.
+
+**[Read the README →](Linear/README.md)** ·
+[Spec](Linear/SPEC.md) · [Decisions](Linear/DECISIONS.md) · [Research](Linear/research)
+
+---
+
 ## [super-smash](super-smash) — Super Smash Bros. Ultimate, on a laptop keyboard
 
 > **eight fighters, one keyboard, sixty frames a second**
