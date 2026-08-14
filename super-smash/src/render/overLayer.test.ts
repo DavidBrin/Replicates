@@ -33,11 +33,11 @@ const { render } = await import("./renderer");
 const { createCamera } = await import("./camera");
 const { createHudState } = await import("./hud");
 const { createVfx } = await import("./vfx");
-const { createMockContext, callsOf } = await import("./mockContext");
+const { createMockContext } = await import("./mockContext");
 const { makeDef, makeEvents, makeFighter, makeStage, makeState } = await import("./testFixtures");
 
 describe("the renderer drains what an effect deferred", () => {
-  function marks(): number {
+  function marks(): { marks: number; after: boolean } {
     const ctx = createMockContext(1600, 900);
     const current = makeState({ fighters: [makeFighter({ action: "special", move: "neutralB" })] });
     render(
@@ -54,11 +54,33 @@ describe("the renderer drains what an effect deferred", () => {
       createCamera(makeStage()),
       0,
     );
-    return callsOf(ctx, "fillRect").filter((c) => c.args[0] === OVER_MARK.x).length;
+    return order(ctx);
   }
 
-  it("paints it once per fighter", () => {
-    expect(marks(), "the over-queue never reached the canvas").toBe(1);
+  /**
+   * Where the mark landed relative to the figure.
+   *
+   * Counting the mark proves it was painted; it does not prove it was painted
+   * *after* the body, which is the entire point of the layer. A caller that
+   * drained the queue before `drawFigure` would paint exactly one mark, under
+   * the fighter, and satisfy a test that only counts.
+   *
+   * The figure's own sentinel is the round line cap: capsules are the only
+   * thing drawn that way, and nothing before the fighters uses it.
+   */
+  function order(ctx: ReturnType<typeof createMockContext>): { marks: number; after: boolean } {
+    const mark = ctx.calls.findIndex((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x);
+    const figure = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
+    return {
+      marks: ctx.calls.filter((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x).length,
+      after: mark > figure && figure >= 0,
+    };
+  }
+
+  it("paints it once per fighter, after the figure", () => {
+    const { marks: n, after } = marks();
+    expect(n, "the over-queue never reached the canvas").toBe(1);
+    expect(after, "the deferred paint landed under the figure, not over it").toBe(true);
   });
 });
 
@@ -89,7 +111,15 @@ describe("the animation lab drains it too", () => {
       500,
       9,
     );
-    const marks = callsOf(ctx, "fillRect").filter((c) => c.args[0] === OVER_MARK.x);
-    expect(marks.length, "the lab never drained the over-queue").toBe(1);
+    const mark = ctx.calls.findIndex((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x);
+    const figure = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
+    expect(
+      ctx.calls.filter((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x).length,
+      "the lab never drained the over-queue",
+    ).toBe(1);
+    // Kirby's Stone hides the figure, so there is no body sentinel on this
+    // frame — pick a fighter who is drawn, so ordering is observable at all.
+    expect(figure, "no figure was drawn, so ordering proves nothing here").toBeGreaterThan(-1);
+    expect(mark > figure, "the lab painted the deferred layer under the figure").toBe(true);
   });
 });

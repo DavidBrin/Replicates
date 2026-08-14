@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fx } from "@/engine/fixed";
-import { createCamera } from "./camera";
+import { MIN_ZOOM, createCamera } from "./camera";
 import { createHudState } from "./hud";
 import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
 import {
@@ -634,5 +634,65 @@ describe("where the port tag sits", () => {
       .filter(([, r]) => (r.tagClearance ?? 0) > 0)
       .map(([k]) => k);
     expect(declaring).toEqual(["pikachu"]);
+  });
+});
+
+/**
+ * The rim reaches the canvas scaled — measured through the callers.
+ *
+ * Every other test of `rimWidthFor` calls it directly, so all of them stay
+ * green if a caller reverts to its own flat formula while the helper stays
+ * correct. That is not hypothetical: caller drift is what caused the bug. The
+ * animation lab had `Math.max(2, zoom * 0.5)` of its own and went on using it
+ * after the renderer became proportional.
+ *
+ * Measured by rendering *one* rig at two scales rather than two rigs at one
+ * scale. Bone thickness scales with the rig too, so comparing two different
+ * fighters mixes their proportions into the ratio; the same rig at 1× and 2×
+ * must produce stroke widths in exactly that ratio, and only does if the rim
+ * scales along with the bones.
+ *
+ * Pinned at `MIN_ZOOM`, which is where the floor applies and where the first
+ * fix was wrong.
+ */
+describe("the outline as the callers actually draw it", () => {
+  function widestStroke(id: string, scale: number): number {
+    const rig = CHARACTER_RIGS[id];
+    const original = rig.scale;
+    Object.defineProperty(rig, "scale", { value: scale, configurable: true, writable: true });
+    try {
+      const ctx = createMockContext(1600, 900);
+      const state = renderState({
+        current: makeState({ fighters: [makeFighter({ defId: id })] }),
+        fighters: [makeDef({ id })],
+      });
+      const cam = { ...createCamera(stage), zoom: MIN_ZOOM };
+      render(ctx, state, makeEvents(), cam, 0);
+      // Only the fighter's own strokes. The widest `lineWidth` on the canvas
+      // belongs to the stage or the HUD, neither of which scales with a rig —
+      // taking it produced a ratio of exactly 1 and a test that could never
+      // pass. Capsules are the only round-capped strokes, and the port tag's
+      // panel fill marks where the fighter ends.
+      const from = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
+      const ink = withAlpha(PANEL_INK, 0.82);
+      const to = ctx.calls.findIndex((c) => c.method === "set:fillStyle" && c.args[0] === ink);
+      expect(from, "no fighter was drawn").toBeGreaterThan(-1);
+      expect(to, "no port tag, so the fighter's extent is unbounded").toBeGreaterThan(from);
+      const widths = ctx.calls
+        .slice(from, to)
+        .filter((c) => c.method === "set:lineWidth")
+        .map((c) => c.args[0] as number)
+        .filter((w) => Number.isFinite(w));
+      expect(widths.length, "nothing was stroked").toBeGreaterThan(0);
+      return Math.max(...widths);
+    } finally {
+      Object.defineProperty(rig, "scale", { value: original, configurable: true, writable: true });
+    }
+  }
+
+  it("doubles when the rig doubles, at the zoom where the floor applies", () => {
+    const single = widestStroke("pikachu", 0.7);
+    const double = widestStroke("pikachu", 1.4);
+    expect(double / single, "the outline did not scale with the rig").toBeCloseTo(2, 2);
   });
 });
