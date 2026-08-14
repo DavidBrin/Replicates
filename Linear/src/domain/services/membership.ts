@@ -656,6 +656,69 @@ async function teamRoleOf(
 
 /* ================================================ project membership ===== */
 
+/**
+ * Make the project's two records of its lead agree — the invariant this file
+ * owns, for the same reason it owns the last-owner rule.
+ *
+ * A lead is stored twice. `project_members.role` is the *grant*: it is what
+ * `loadActor` reads and what the permission matrix answers from.
+ * `projects.lead_id` is the *denormalisation*: one nullable column, which is
+ * what every project header, card and list renders. Neither is redundant — the
+ * matrix cannot join a column and a list view cannot afford a per-row lookup —
+ * but they can disagree, and a disagreement is not cosmetic: a header naming
+ * somebody the matrix has never heard of, or a demoted lead who keeps editing.
+ *
+ * Two facts have to hold at commit time, which is why this runs inside the
+ * caller's `withProjectLock` transaction rather than as a follow-up write:
+ *
+ *  1. **At most one lead.** The schema cannot say so — a partial unique index
+ *     on `(project_id) where role = 'lead'` would be exactly the right
+ *     constraint, and adding one is a migration this slice does not own — so
+ *     the rule is enforced here, on the way past.
+ *  2. **`lead_id` names that row, or nothing.** Recomputed from the membership
+ *     rows rather than assumed, so a removal and a demotion clear the column
+ *     without either caller having to remember.
+ *
+ * `targetUserId` is whoever's row the caller just wrote. If that write left
+ * them holding the lead role then they are *the* lead and every other lead row
+ * yields to them; the promotion is what breaks the tie, not the join date.
+ * A removal passes the user who is now gone, whose `exists` clause is false, so
+ * nothing is demoted and the column is simply recomputed.
+ */
+async function reconcileProjectLead(
+  tx: SqlExecutor,
+  projectId: ProjectId,
+  targetUserId: UserId,
+): Promise<void> {
+  // One statement, so "is the target a lead" is answered by the same snapshot
+  // that acts on the answer — and so the demotion cannot fire on a read that a
+  // concurrent writer has already invalidated.
+  await tx.execute(
+    `update project_members set role = 'member'
+      where project_id = $1
+        and user_id <> $2
+        and role = 'lead'
+        and exists (select 1 from project_members pm
+                     where pm.project_id = $1
+                       and pm.user_id = $2
+                       and pm.role = 'lead')`,
+    [projectId, targetUserId],
+  );
+
+  const rows = await tx.query<{ user_id: UserId }>(
+    `select user_id from project_members
+      where project_id = $1 and role = 'lead'
+      order by joined_at asc, user_id asc
+      limit 1`,
+    [projectId],
+  );
+
+  await tx.execute("update projects set lead_id = $2 where id = $1", [
+    projectId,
+    rows[0]?.user_id ?? null,
+  ]);
+}
+
 export async function addProjectMember(
   input: {
     readonly projectId: ProjectId;
@@ -696,6 +759,7 @@ export async function addProjectMember(
        on conflict (project_id, user_id) do nothing`,
       [projectId, userId, role],
     );
+    await reconcileProjectLead(tx, projectId, userId);
     return allowed({ added: inserted > 0 });
   });
 }
@@ -740,6 +804,7 @@ export async function changeProjectMemberRole(
       [projectId, targetUserId, nextRole],
     );
     if (updated === 0) return denied({ code: "NOT_FOUND", what: "member" });
+    await reconcileProjectLead(tx, projectId, targetUserId);
     return allowed({ role: nextRole });
   });
 }
@@ -773,6 +838,9 @@ export async function removeProjectMember(
       [projectId, targetUserId],
     );
     if (removed === 0) return denied({ code: "NOT_FOUND", what: "member" });
+    // The departing user holds no row now, so this demotes nobody — it clears
+    // `lead_id` when the person who just left was the one it named.
+    await reconcileProjectLead(tx, projectId, targetUserId);
     return allowed({ removed: targetUserId });
   });
 }

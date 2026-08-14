@@ -8,6 +8,7 @@ import { POST as signup } from "@/app/api/auth/signup/route";
 import { POST as acceptInviteRoute } from "@/app/api/invites/accept/route";
 
 import { createInvite } from "../invites";
+import { resetAuthRateLimitForTests } from "../rate-limit";
 import { sessionCookieName } from "../session";
 
 /**
@@ -37,6 +38,13 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // The limiter's budgets live on `globalThis`, so they survive between tests
+  // in this file the way they survive between requests in a process. Without
+  // this the suite starts asserting on the limiter instead of on the route —
+  // sign-up's per-email budget is five, and the fixtures here spend more than
+  // that before the interesting assertion runs.
+  resetAuthRateLimitForTests();
+
   for (const table of [
     "invites",
     "team_members",

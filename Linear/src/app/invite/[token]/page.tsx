@@ -35,6 +35,12 @@ export const metadata: Metadata = { title: "Join a workspace" };
  * `accept-invite-submit`, because from the outside they are the same action
  * with two preconditions.
  *
+ * The address field starts empty even when the invitation named one. The link
+ * is a bearer token and may have been forwarded, so pre-filling it would show
+ * the intended recipient's email address to whoever opened the link — see
+ * `previewInvite`, which no longer returns it. The person the invitation is
+ * for knows their own address; nobody else is entitled to it.
+ *
  * ## `DECISIONS.md` D11, restated on the page
  *
  * There is no email provider on a free host, so an invite is a bearer link:
@@ -138,7 +144,6 @@ export default async function InvitePage({
         {user === null ? (
           <SignUpForm
             inviteToken={token}
-            initialEmail={invite.email ?? ""}
             submitLabel={`Join ${invite.workspaceName}`}
             submitTestId="accept-invite-submit"
             redirectTo={workspaceHome}

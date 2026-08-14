@@ -624,4 +624,49 @@ create table if not exists change_events (
 
 create index if not exists change_events_workspace_idx
   on change_events (workspace_id, seq);
+
+-- ============================================================== colours ====
+--
+-- Every user-chosen colour ends up assigned to a CSS property — a background,
+-- a border, an SVG fill. That makes the column script-adjacent rather than
+-- cosmetic: before this constraint, an authorised member could name a label
+-- \`url(//attacker.example/pixel)\` and every other member's browser would fetch
+-- it whenever the label rendered.
+--
+-- The API validates the same rule (\`src/domain/color.ts\`), and this is the
+-- second of the two enforcements — the one a future call site cannot forget.
+-- A whitelist, not a blacklist: six hex digits cannot express \`url()\`,
+-- \`image-set()\`, an escape, or a comment split, so there is no list of
+-- dangerous forms to keep up to date.
+--
+-- Added with a guard rather than inline so an existing database picks it up.
+do $$ begin
+  alter table teams add constraint teams_color_hex
+    check (color ~ '^#[0-9a-f]{6}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table workflow_states add constraint workflow_states_color_hex
+    check (color ~ '^#[0-9a-f]{6}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table labels add constraint labels_color_hex
+    check (color ~ '^#[0-9a-f]{6}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table projects add constraint projects_color_hex
+    check (color ~ '^#[0-9a-f]{6}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table users add constraint users_avatar_color_hex
+    check (avatar_color ~ '^#[0-9a-f]{6}$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table saved_views add constraint saved_views_color_hex
+    check (color ~ '^#[0-9a-f]{6}$');
+exception when duplicate_object then null; end $$;
 `;

@@ -15,7 +15,7 @@ model, and a workspace that boots with one command and no database to install.
 | <img src="docs/screenshots/projects.png" width="240" alt="Project list with health, lead and progress"> | <img src="docs/screenshots/members.png" width="240" alt="Workspace members with roles and invitations"> | <img src="docs/screenshots/marketing.png" width="240" alt="Marketing page"> |
 
 Next.js 16 · PostgreSQL everywhere (WASM locally, Neon deployed) ·
-**1,383 unit tests** · 14 e2e permission tests · built from six parallel
+**1,454 unit tests** · 14 e2e permission tests · built from six parallel
 research lanes, then seven parallel build slices.
 
 ```bash
@@ -151,7 +151,7 @@ Claims here are separated by how they were checked.
 That is the brief's headline requirement and the one-way-door rule (D19),
 working end to end.
 
-**Verified by the suites:** 1,383 unit tests, `tsc --noEmit` clean, `eslint`
+**Verified by the suites:** 1,454 unit tests, `tsc --noEmit` clean, `eslint`
 clean, `next build` succeeding, and **14 e2e permission tests, none skipped**,
 covering invitation, the one-way admin promotion, last-owner protection, guest
 team scoping, private-team invisibility, and the whole add-to-project → edit →
@@ -173,7 +173,31 @@ one permitted team smuggled a private one in beside it; and several 403-vs-404
 pairs that together formed an existence oracle. All eighteen are fixed, each
 with a regression test that was verified to fail against the code before it.
 
-**Four bugs the running app found that no unit test could:**
+**A second, wider review found twenty more.** The first pass was aimed at four
+areas; this one was pointed at everything. The ones worth naming:
+
+- **Colours were a script-adjacent surface** (D23). Every colour field was
+  `z.string().max(40)` and every colour ends up assigned to a CSS property, so
+  an authorised member could name a label `url(//attacker.example/pixel)` and
+  every *other* member's browser would fetch it whenever the label rendered.
+  React escapes text; it does not escape the value of a style property. Now a
+  whitelist — six hex digits — enforced in `src/domain/color.ts` *and* as a
+  `check` constraint on all six columns, so a future call site that forgets the
+  module cannot reopen it.
+- **The invite preview disclosed somebody else's email address.** It returned
+  `invites.email` to pre-fill the sign-up form, from an endpoint that asks for
+  no credential at all. The link is a bearer token, so its holder is not
+  necessarily the person it was meant for — a forwarded invite handed over the
+  address of whoever the admin actually meant to invite. The convenience it
+  bought was two seconds of typing for someone who knows their own address.
+- **The two endpoints that run scrypt for a stranger were unthrottled.** Both
+  spend 128 MB and ~200 ms before anything about the caller is established,
+  which is resource exhaustion and an online-guessing oracle wearing one
+  costume. Now a token bucket on *both* the IP and the email — either alone is
+  trivially walked past — spent before the derivation and refunded on a correct
+  password, so an honest user never meets it.
+
+**Five bugs the running app found that no unit test could:**
 
 - Tailwind v4's content detection scanned `research/screenshots/*.png` and
   generated class names from the compressed bytes, emitting invalid CSS that
@@ -194,6 +218,17 @@ with a regression test that was verified to fail against the code before it.
   from *saved*, a dependent mutation could overtake the one it depended on: a
   promote and a remove raced, the remove was answered first, and it deleted a
   still-`member` account.
+- The **e2e suite blamed the application for the harness**. It ran against
+  `next dev`, which compiles a route the first time something asks for it —
+  and that cost lands inside whichever assertion is first through a given page.
+  The symptom was `getByTestId('sidebar')` not found, with a sign-in button
+  frozen at "Signing in…", which reads exactly like a hung request. It moved
+  between runs: test 6 on one cold start, test 11 on the next, 14/14 against a
+  server that happened to be warm. Chasing it through the rate limiter and the
+  transaction queue found nothing, because nothing was wrong. The suite now
+  runs `next build && next start`, which pays the compile once, up front — and
+  as a side effect the assertions now describe the artifact that actually
+  deploys rather than a development bundle.
 
 ---
 
@@ -201,7 +236,7 @@ with a regression test that was verified to fail against the code before it.
 
 ```
 SPEC.md                 the contract every slice built against
-DECISIONS.md            21 numbered decisions, with the rejected alternative
+DECISIONS.md            23 numbered decisions, with the rejected alternative
 research/               9,095 lines from six parallel lanes
   01-visual-design.md     measured tokens, glyph geometry, layout
   02-features.md          product behaviour, 67 features ranked MUST/SHOULD/COULD
@@ -213,12 +248,12 @@ research/               9,095 lines from six parallel lanes
 
 | Path | What lives there |
 |---|---|
-| `src/domain/` | `entities.ts` (the vocabulary), `policy.ts` (authorization), `ordering.ts` (fractional index), `filters.ts`, `sorting.ts`, `services/membership.ts` |
+| `src/domain/` | `entities.ts` (the vocabulary), `policy.ts` (authorization), `ordering.ts` (fractional index), `color.ts` (the one definition of a colour), `filters.ts`, `sorting.ts`, `services/membership.ts` |
 | `src/ports/` | `repositories.ts`, `ai.ts` — interfaces in domain terms, no SQL |
 | `src/adapters/db/` | `driver.ts` (the seam), `pglite.ts`, `neon.ts`, `schema.sql` (25 tables), `schema.ts` (generated, drift-guarded) |
 | `src/adapters/repositories/` | one module per aggregate |
 | `src/adapters/ai/` | `anthropic.ts`, `openai.ts`, `shared.ts` — raw HTTP, symmetric on purpose |
-| `src/lib/` | `auth/` (scrypt, sessions, invites), `boot.ts`, `seed.ts`, `keyboard/`, `store/`, `ids.ts`, `markdown.ts` |
+| `src/lib/` | `auth/` (scrypt, sessions, invites, `rate-limit.ts`), `boot.ts`, `seed.ts`, `keyboard/`, `store/`, `ids.ts`, `markdown.ts` |
 | `src/components/ui/` | 16 primitives — combobox, popover, status/priority glyphs, avatar, toast |
 | `src/components/` | `app-shell` 11 · `issue-detail` 17 · `issues` 13 · `projects` 12 · `members` 8 · `marketing` 6 · `auth` 6 · `command-palette` 5 · `teams` 4 · `inbox` 4 · `search` 3 |
 | `src/app/` | 14 routes + 27 API handlers |
@@ -228,8 +263,8 @@ research/               9,095 lines from six parallel lanes
 
 ```bash
 npm run dev            # PGlite, seeded on first boot
-npm run verify         # typecheck + lint + 1,314 unit tests
-npm run test:e2e       # Playwright
+npm run verify         # typecheck + lint + 1,454 unit tests
+npm run test:e2e       # Playwright, against a production build
 npm run build:schema   # regenerate schema.ts from schema.sql
 npm run db:push        # apply the schema (Vercel build command)
 ```

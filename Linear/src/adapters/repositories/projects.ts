@@ -26,6 +26,18 @@ import "server-only";
  * repository only stores the membership — the grant itself is in the
  * authorization policy — but `listForUser` implements the visible half, which
  * is that a guest sees the projects they were added to and nothing else.
+ *
+ * ## The lead is one fact stored twice
+ *
+ * `projects.lead_id` is a column and `project_members.role = 'lead'` is a row,
+ * and neither is removable: the permission matrix answers from the row, every
+ * header and card renders the column. So every write that touches either must
+ * touch both, which is what {@link SqlProjectRepository.update}'s `leadId`,
+ * `addMember` and `removeMember` all funnel through here. The authorized entry
+ * point is `domain/services/membership.ts`, which does the same thing under the
+ * project's row lock; these are the storage-level half of the same invariant,
+ * so that no caller — the seed, a script, a future route — can leave the two
+ * disagreeing.
  */
 
 import type { SqlExecutor, SqlRow } from "@/adapters/db/driver";
@@ -301,9 +313,14 @@ export class SqlProjectRepository
       if (patch.color !== undefined && patch.color !== before.color) {
         set("color", "color", patch.color);
       }
-      if (patch.leadId !== undefined && patch.leadId !== before.leadId) {
-        set("lead_id", "leadId", patch.leadId);
-      }
+      // Not a plain column write — see `#writeLead`. Recorded in `fields` here
+      // so the change event still names it, and applied after the statement
+      // below so the membership row and the column move together.
+      const lead =
+        patch.leadId !== undefined && patch.leadId !== before.leadId
+          ? { to: patch.leadId }
+          : null;
+      if (lead !== null) fields.push("leadId");
       if (patch.startDate !== undefined && patch.startDate !== before.startDate) {
         set("start_date", "startDate", patch.startDate);
       }
@@ -335,13 +352,14 @@ export class SqlProjectRepository
         );
       }
 
-      if (sets.length === 0) return before;
+      if (sets.length === 0 && lead === null) return before;
 
       sets.push(`updated_at = ${params.bind(this.now())}`);
       await t.execute(
         `update projects set ${sets.join(", ")} where id = ${params.bind(id)}`,
         params.values,
       );
+      if (lead !== null) await this.#writeLead(t, id, lead.to);
       await appendChangeEvent(t, {
         workspaceId: before.workspaceId,
         entity: "project",
@@ -428,6 +446,96 @@ export class SqlProjectRepository
     };
   }
 
+  /* -------------------------------------------------------------- lead -- */
+
+  /**
+   * Name a lead — or nobody — and make the membership rows say the same.
+   *
+   * The entry point for a write that starts from the *column*: a `leadId` in a
+   * patch. The membership row is written first and the column is then derived
+   * from it by {@link SqlProjectRepository.#reconcileLead}, rather than both
+   * being set from the argument, so there is one place that decides what the
+   * column should say and no second copy of the rule to drift.
+   *
+   * The named lead is upserted as a member on the same reasoning as `create`:
+   * membership is what grants edit here (SPEC §4), so a lead who is not a member
+   * is somebody accountable for a project they cannot change.
+   */
+  async #writeLead(
+    t: SqlExecutor,
+    projectId: ProjectId,
+    leadId: UserId | null,
+  ): Promise<void> {
+    if (leadId === null) {
+      await t.execute(
+        `update project_members set role = 'member'
+          where project_id = $1 and role = 'lead'`,
+        [projectId],
+      );
+    } else {
+      await t.execute(
+        `insert into project_members (project_id, user_id, role, joined_at)
+         values ($1, $2, 'lead', $3)
+         on conflict (project_id, user_id) do update set role = 'lead'`,
+        [projectId, leadId, this.now()],
+      );
+    }
+    await this.#reconcileLead(t, projectId, leadId);
+  }
+
+  /**
+   * Make `projects.lead_id` agree with the membership rows, keeping at most one.
+   *
+   * The entry point for a write that starts from the *row*: `addMember`,
+   * `removeMember`, and — via {@link SqlProjectRepository.#writeLead} — a
+   * patched `leadId`. `targetUserId` is whoever's row was just written: if it
+   * left them holding the lead role then they are the lead and every other lead
+   * row yields, because the write is what breaks the tie and the join date is
+   * not. A removed user has no row, so nothing is demoted and the column is
+   * merely recomputed — which is how it clears itself.
+   *
+   * The "at most one" half cannot be a constraint: the partial unique index
+   * that would express it is a schema change this slice does not own, and the
+   * same reasoning `domain/services/membership.ts` gives for the last-owner
+   * rule applies — it is a property of the table at commit time, which is why
+   * this only ever runs inside the caller's transaction.
+   */
+  async #reconcileLead(
+    t: SqlExecutor,
+    projectId: ProjectId,
+    targetUserId: UserId | null,
+  ): Promise<void> {
+    if (targetUserId !== null) {
+      // One statement, so "is the target a lead" is answered by the same
+      // snapshot that acts on the answer.
+      await t.execute(
+        `update project_members set role = 'member'
+          where project_id = $1
+            and user_id <> $2
+            and role = 'lead'
+            and exists (select 1 from project_members pm
+                         where pm.project_id = $1
+                           and pm.user_id = $2
+                           and pm.role = 'lead')`,
+        [projectId, targetUserId],
+      );
+    }
+
+    const rows = await t.query(
+      `select user_id from project_members
+        where project_id = $1 and role = 'lead'
+        order by joined_at asc, user_id asc
+        limit 1`,
+      [projectId],
+    );
+    const row = rows[0];
+
+    await t.execute(`update projects set lead_id = $2 where id = $1`, [
+      projectId,
+      row === undefined ? null : text(row, "user_id"),
+    ]);
+  }
+
   /* ----------------------------------------------------------- members -- */
 
   async listMembers(id: ProjectId, tx?: Tx): Promise<ProjectMemberWithUser[]> {
@@ -465,12 +573,10 @@ export class SqlProjectRepository
          on conflict (project_id, user_id) do update set role = excluded.role`,
         [projectId, userId, role, now],
       );
-      if (role === "lead") {
-        await t.execute(`update projects set lead_id = $2 where id = $1`, [
-          projectId,
-          userId,
-        ]);
-      }
+      // Both directions, not just promotion: an upsert that writes `member`
+      // over the row the column names has to clear the column too, or the
+      // demoted lead keeps leading everywhere the column is rendered.
+      await this.#reconcileLead(t, projectId, userId);
       await appendChangeEvent(t, {
         workspaceId: project.workspaceId,
         entity: "projectMember",
@@ -495,11 +601,9 @@ export class SqlProjectRepository
         `delete from project_members where project_id = $1 and user_id = $2`,
         [projectId, userId],
       );
-      if (project.leadId === userId) {
-        await t.execute(`update projects set lead_id = null where id = $1`, [
-          projectId,
-        ]);
-      }
+      // The departing user has no row left, so this demotes nobody; it clears
+      // `lead_id` when the person who just left was the one it named.
+      await this.#reconcileLead(t, projectId, userId);
       await appendChangeEvent(t, {
         workspaceId: project.workspaceId,
         entity: "projectMember",

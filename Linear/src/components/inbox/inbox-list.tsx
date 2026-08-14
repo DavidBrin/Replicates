@@ -39,9 +39,18 @@ import type { InboxNotification } from "./types";
  * product; waiting a round trip per row for a checkbox to grey out is what
  * makes an inbox feel like a web page.
  *
- * `markAllRead` is the exception that proves the rule: it is one intention, so
- * it is one request, and its rollback restores the whole previous list rather
- * than N individual fields.
+ * **A rollback restores one notification, never the list.** Rows leave this list
+ * for two unrelated reasons — a snooze and a delete — and both are in flight at
+ * once the moment somebody works down their inbox at speed. Reverting a failed
+ * snooze by re-rendering the array as it was when the snooze started puts every
+ * row that has *since* been deleted back on screen, and the server has already
+ * agreed those are gone: the next refresh takes them away again, so the user
+ * sees a notification they dismissed reappear and then vanish. {@link restoreOne}
+ * puts back exactly the row whose request failed, at the index it left from.
+ *
+ * `markAllRead` is the exception that proves the rule: it is one intention over
+ * the whole list, so it is one request, and its rollback restores the whole
+ * previous list rather than N individual fields.
  */
 
 export interface InboxListProps {
@@ -98,6 +107,29 @@ export function InboxList({ workspaceKey, initial }: InboxListProps) {
     [],
   );
 
+  /**
+   * Put one notification back where it was.
+   *
+   * Idempotent — a row already present is left alone, so an undo racing a
+   * failure cannot produce two copies — and clamped, because the list it returns
+   * to is not the list it left: rows before it may have gone in the meantime.
+   */
+  const restoreOne = useCallback(
+    (item: InboxNotification, index: number) => {
+      setItems((current) => {
+        if (current.some((entry) => entry.id === item.id)) return current;
+        const next = [...current];
+        next.splice(Math.max(0, Math.min(index, next.length)), 0, item);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const drop = useCallback((id: string) => {
+    setItems((current) => current.filter((entry) => entry.id !== id));
+  }, []);
+
   const request = useCallback(
     async (
       id: string,
@@ -150,39 +182,35 @@ export function InboxList({ workspaceKey, initial }: InboxListProps) {
       const until = new Date();
       until.setDate(until.getDate() + 1);
       until.setHours(9, 0, 0, 0);
-      const snapshot = items;
+      const index = items.findIndex((entry) => entry.id === item.id);
 
       // Snoozing hides the row, because that is what snoozing *is*: `loadInbox`
       // filters out anything snoozed into the future, so leaving it on screen
       // with a badge would contradict what the next server render returns.
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
-      void request(
-        item.id,
-        { snoozeUntil: until.toISOString() },
-        () => setItems(snapshot),
+      drop(item.id);
+      void request(item.id, { snoozeUntil: until.toISOString() }, () =>
+        restoreOne(item, index),
       );
       toast({
         title: `Snoozed until ${until.toLocaleDateString(undefined, {
           weekday: "short",
         })} 9:00`,
         undo: () => {
-          setItems(snapshot);
-          void request(item.id, { snoozeUntil: null }, () =>
-            setItems((current) => current.filter((entry) => entry.id !== item.id)),
-          );
+          restoreOne(item, index);
+          void request(item.id, { snoozeUntil: null }, () => drop(item.id));
         },
       });
     },
-    [items, request, toast],
+    [items, drop, request, restoreOne, toast],
   );
 
   const remove = useCallback(
     (item: InboxNotification) => {
-      const snapshot = items;
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
-      void request(item.id, {}, () => setItems(snapshot), "DELETE");
+      const index = items.findIndex((entry) => entry.id === item.id);
+      drop(item.id);
+      void request(item.id, {}, () => restoreOne(item, index), "DELETE");
     },
-    [items, request],
+    [items, drop, request, restoreOne],
   );
 
   const markAllRead = useCallback(() => {

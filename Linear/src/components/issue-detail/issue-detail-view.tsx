@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/cn";
@@ -44,6 +44,23 @@ import {
  * issue — restoring a snapshot would also undo a concurrent edit to an unrelated
  * field that happened to land while the failed request was in flight.
  *
+ * Two edits of the same field are the case that separates a working optimistic
+ * pane from one that loses writes, and `lib/store/issues.ts` solved it for the
+ * list with a per-entity FIFO queue and a version-guarded rollback. The same two
+ * rules hold here, for the same reasons:
+ *
+ * - **One request at a time, in order.** Change a status twice inside 50ms and
+ *   two overlapping `PATCH`es reach the server in whatever order the network
+ *   feels like; the row then holds whichever *response* the database wrote last,
+ *   which can be the older value. Chaining every patch onto the last means the
+ *   server sees the user's edits in the order the user made them.
+ * - **A rollback that lost its race does nothing.** A failure's `restore` is a
+ *   snapshot of a field as it was *before that patch*. Applying it after a later
+ *   edit to the same field has already succeeded would delete the newer value
+ *   from the screen while the server keeps it. Each patch therefore stamps every
+ *   field it touches, and only rolls a field back if its stamp is still the
+ *   newest one.
+ *
  * `router.refresh()` after a successful write is what brings the *derived* data
  * back: the activity row the server wrote, the identifier it minted for a new
  * sub-issue, the inverse of a relation. Those cannot be computed here without
@@ -83,7 +100,19 @@ export function IssueDetailView({ data }: IssueDetailViewProps) {
   };
 
   /**
-   * Apply a patch locally, send it, and undo exactly what it touched on failure.
+   * The issue's FIFO queue, and the field stamps that guard its rollbacks.
+   *
+   * Refs rather than state: neither is rendered, and both are read and written
+   * inside a promise chain that must see the value as of *now* rather than as of
+   * the render that scheduled it.
+   */
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const stamps = useRef(new Map<keyof DetailIssue, number>());
+  const clock = useRef(0);
+
+  /**
+   * Apply a patch locally, send it in turn, and undo exactly what it touched —
+   * and only if nothing newer has touched it since.
    */
   const applyPatch = useCallback(
     (local: Partial<DetailIssue>, remote: api.IssuePatch): void => {
@@ -97,13 +126,36 @@ export function IssueDetailView({ data }: IssueDetailViewProps) {
         return { ...current, ...local };
       });
 
-      void api
-        .patchIssue(data.issue.id, remote)
-        .then(() => router.refresh())
-        .catch((error: unknown) => {
-          setIssue((current) => ({ ...current, ...restore }));
-          fail(error, "Could not save that change.");
-        });
+      // Stamped synchronously, before anything can await: the ordering that
+      // matters is the order the *user* pressed things in, not the order two
+      // microtasks happen to resume in.
+      const mine = new Map<keyof DetailIssue, number>();
+      for (const key of keys) {
+        clock.current += 1;
+        stamps.current.set(key, clock.current);
+        mine.set(key, clock.current);
+      }
+
+      queue.current = queue.current.then(() =>
+        api
+          .patchIssue(data.issue.id, remote)
+          .then(() => {
+            router.refresh();
+          })
+          .catch((error: unknown) => {
+            const undo = Object.fromEntries(
+              keys
+                .filter((key) => stamps.current.get(key) === mine.get(key))
+                .map((key) => [key, restore[key]]),
+            ) as Partial<DetailIssue>;
+            // Every field this patch touched has since been edited again: the
+            // newer edit owns the screen, and this failure has nothing to undo.
+            if (Object.keys(undo).length > 0) {
+              setIssue((current) => ({ ...current, ...undo }));
+            }
+            fail(error, "Could not save that change.");
+          }),
+      );
     },
     [data.issue.id, router],
   );

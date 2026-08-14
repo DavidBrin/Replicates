@@ -164,6 +164,38 @@ function authSecret(isProduction: boolean): string {
   return developmentSecret;
 }
 
+/**
+ * The one case where PGlite under `NODE_ENV=production` is not a mistake.
+ *
+ * The guard below exists because Vercel discards the directory PGlite writes
+ * to when an invocation ends, so a deployment that fell back to it would serve
+ * traffic while forgetting every write. That reasoning is about *serverless*,
+ * not about `NODE_ENV` — and `NODE_ENV` is the only thing the guard can
+ * actually see.
+ *
+ * The e2e suite is the case where the two come apart. It runs `next build &&
+ * next start` on a real filesystem, which is `production` by definition and has
+ * none of the property the guard is worried about: `.data/e2e` persists for the
+ * whole run and for as long afterwards as anyone cares to inspect it. The suite
+ * runs against the production build deliberately — a dev server compiles routes
+ * lazily, and that cost lands inside whichever assertion is first through a
+ * page, producing failures that blame the application for the harness (see
+ * `playwright.config.ts`).
+ *
+ * Two conditions, not one:
+ *
+ *  - The flag must be set explicitly. It is named for the only thing it is
+ *    for, so it cannot be mistaken for a performance or compatibility switch.
+ *  - `VERCEL` must be absent. This is the belt to the flag's braces: if the
+ *    variable is ever pasted into a real deployment's environment — the single
+ *    most likely way an escape hatch like this turns into the outage it was
+ *    written to prevent — the guard still fires, because the host announces
+ *    itself and no amount of local opt-in should outrank that.
+ */
+function allowsPgliteUnderProduction(): boolean {
+  return raw("E2E_ALLOW_PGLITE_PRODUCTION_BUILD") === "true" && !raw("VERCEL");
+}
+
 /* --------------------------------------------------------------- build --- */
 
 function build(): ServerConfig {
@@ -187,7 +219,7 @@ function build(): ServerConfig {
   // directory is discarded when the invocation ends — a deployment that fell
   // back to it would serve traffic while forgetting every write, which is
   // exactly the failure the sibling project `dollar-pixels` shipped once.
-  if (isProduction && driver === "pglite") {
+  if (isProduction && driver === "pglite" && !allowsPgliteUnderProduction()) {
     throw new Error(
       "DB_DRIVER=pglite cannot be used in production: its storage does not " +
         "survive a serverless invocation. Set DATABASE_URL to a Postgres " +

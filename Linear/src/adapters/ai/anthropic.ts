@@ -7,7 +7,15 @@ import {
   type AiResponse,
 } from "@/ports/ai";
 
-import { classifyHttpFailure, withTimeout } from "./shared";
+import {
+  capText,
+  classifyHttpFailure,
+  MAX_MESSAGE_CHARS,
+  oversizedResponse,
+  readCapped,
+  unreadableResponse,
+  withTimeout,
+} from "./shared";
 
 /**
  * The Anthropic adapter — Messages API, raw HTTP.
@@ -121,6 +129,10 @@ export class AnthropicConnector extends AiConnector {
           signal,
         });
       } catch (error) {
+        // An abort is not a network error and must not be dressed up as one:
+        // only `withTimeout` holds both signals and can tell a deadline from a
+        // caller who hung up, so it goes straight back out. See `shared.ts`.
+        if (signal.aborted) throw error;
         return {
           ok: false,
           reason: "upstream",
@@ -133,14 +145,25 @@ export class AnthropicConnector extends AiConnector {
       }
 
       if (!response.ok) {
+        // An oversized error body is read as an absent one: the status is the
+        // only part `classifyHttpFailure` trusts anyway.
         return classifyHttpFailure(
           this.provider,
           response.status,
-          await response.text().catch(() => ""),
+          (await readCapped(response).catch(() => null)) ?? "",
         );
       }
 
-      const payload = (await response.json()) as AnthropicResponse;
+      const raw = await readCapped(response);
+      if (raw === null) return oversizedResponse(this.provider);
+
+      let payload: AnthropicResponse;
+      try {
+        payload = JSON.parse(raw) as AnthropicResponse;
+      } catch {
+        // A 200 that is not JSON is a gateway's page, not the vendor's answer.
+        return unreadableResponse(this.provider);
+      }
 
       // A refusal is a successful HTTP response with no usable content.
       if (payload.stop_reason === "refusal") {
@@ -149,9 +172,13 @@ export class AnthropicConnector extends AiConnector {
           reason: "refused",
           provider: this.provider,
           retryable: false,
-          message:
+          // Capped to a toast's worth: this is upstream text on an error path,
+          // the same reasoning `extractMessage` applies to a vendor error body.
+          message: capText(
             payload.stop_details?.explanation ??
-            "The model declined to answer this request.",
+              "The model declined to answer this request.",
+            MAX_MESSAGE_CHARS,
+          ),
         };
       }
 
@@ -162,7 +189,7 @@ export class AnthropicConnector extends AiConnector {
 
       return {
         ok: true,
-        text,
+        text: capText(text),
         provider: this.provider,
         model: payload.model ?? this.cfg.model,
         usage: {

@@ -118,14 +118,43 @@ const ALLOWED_SCHEMES: ReadonlySet<string> = new Set([
 function decodeNumericEntities(value: string): string {
   return value
     .replace(/&#x([0-9a-f]+);?/gi, (_match, hex: string) =>
-      String.fromCodePoint(Number.parseInt(hex, 16)),
+      fromCodePoint(Number.parseInt(hex, 16)),
     )
     .replace(/&#([0-9]+);?/g, (_match, digits: string) =>
-      String.fromCodePoint(Number.parseInt(digits, 10)),
+      fromCodePoint(Number.parseInt(digits, 10)),
     )
     .replace(/&colon;?/gi, ":")
     .replace(/&Tab;?/gi, "\t")
     .replace(/&NewLine;?/gi, "\n");
+}
+
+/**
+ * `String.fromCodePoint`, for numbers that came out of a document.
+ *
+ * The bare call **throws** `RangeError` for anything that is not a code point:
+ * `&#x110000;` is one character past the top of Unicode, `&#99999999999;`
+ * overflows, and a decoder that lets the exception out takes the whole render
+ * with it. That is not a cosmetic failure — {@link safeUrl} runs on every link
+ * in every description, so `[boom](&#x110000;:x)` in one issue body would make
+ * the issue detail throw for *every* viewer, permanently, with no way to edit
+ * the body that causes it.
+ *
+ * The replacement character is what a browser substitutes for exactly these
+ * inputs (HTML's "numeric character reference end state" maps out-of-range
+ * values, surrogates and null to U+FFFD), so agreeing with it is both safe and
+ * accurate: `java&#x110000;script:` stays un-decoded into a live scheme here
+ * for the same reason it does in the browser.
+ */
+function fromCodePoint(value: number): string {
+  if (
+    !Number.isInteger(value) ||
+    value <= 0 ||
+    value > 0x10ffff ||
+    (value >= 0xd800 && value <= 0xdfff)
+  ) {
+    return "�";
+  }
+  return String.fromCodePoint(value);
 }
 
 /**
@@ -146,13 +175,25 @@ function decodeNumericEntities(value: string): string {
  * Protocol-relative URLs (`//host/path`) are refused: they inherit the page's
  * scheme, they are almost never what someone typed on purpose, and they are a
  * cheap way to smuggle an off-site link past a reader skimming for `http`.
+ *
+ * 4. **A backslash is a slash.** WHATWG URL parsing normalises `\` to `/`
+ *    before it decides anything, so `/\attacker.example/pixel` resolves to
+ *    *the same URL* as `//attacker.example/pixel` — protocol-relative,
+ *    off-site, and invisible to a check that only looks for two forward
+ *    slashes. `/\`, `\/` and `\\` are the same trick three ways. Normalising
+ *    first means the string this function reasons about is the string the
+ *    browser will resolve.
  */
 export function safeUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
   if (/[\u0000-\u001f\u007f]/.test(trimmed)) return null;
 
-  const probe = decodeNumericEntities(trimmed).replace(/\s+/g, "").toLowerCase();
+  const probe = decodeNumericEntities(trimmed)
+    .replace(/\s+/g, "")
+    // A backslash is a slash to the URL parser, so it must be one here too.
+    .replace(/\\/g, "/")
+    .toLowerCase();
   if (probe.startsWith("//")) return null;
 
   const colon = probe.indexOf(":");
@@ -604,6 +645,38 @@ export interface MarkdownHtmlOptions {
   readonly issueHref?: (identifier: string) => string | null;
 }
 
+/**
+ * The display name for a handle, or `null` if the workspace has no such member.
+ *
+ * A plain `mentions[handle]` is an inherited-property lookup, and every
+ * JavaScript object answers to a dozen handles nobody put in it: `@constructor`
+ * resolves to `Object.prototype.constructor`, `@toString` to a function. The
+ * consequence is a mention chip rendering `@function Object() { [native code] }`
+ * to every reader of the issue — a stranger's name in a workspace they are not
+ * in, as far as the reader can tell — from a body anyone may write.
+ *
+ * So: an *own* property, and a string. `hasOwnProperty` is called off
+ * `Object.prototype` rather than the map, because the map may legitimately have
+ * a null prototype (see `mentionDirectory`) and would then have no method to
+ * call. The `typeof` check is the second half of the same guard: an own
+ * property inherited through a spread of a hostile object could still be a
+ * function.
+ *
+ * Exported because the React renderer in `components/issue-detail/markdown.tsx`
+ * has to make the identical lookup, and two copies of a guard is one copy of a
+ * guard.
+ */
+export function mentionName(
+  mentions: Readonly<Record<string, string>> | undefined,
+  handle: string,
+): string | null {
+  if (!mentions) return null;
+  const key = handle.toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(mentions, key)) return null;
+  const name = mentions[key];
+  return typeof name === "string" ? name : null;
+}
+
 function inlineToHtml(
   nodes: readonly InlineNode[],
   options: MarkdownHtmlOptions,
@@ -631,7 +704,7 @@ function inlineToHtml(
           return `<a href="${escapeAttribute(href)}" rel="noopener noreferrer" target="_blank">${inner}</a>`;
         }
         case "mention": {
-          const name = options.mentions?.[node.handle.toLowerCase()];
+          const name = mentionName(options.mentions, node.handle);
           return `<span class="mention" data-mention="${escapeAttribute(node.handle)}">@${escapeHtml(name ?? node.handle)}</span>`;
         }
         case "issueRef": {

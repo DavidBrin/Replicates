@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import {
+  mentionName,
   parseMarkdown,
   safeUrl,
   type BlockNode,
@@ -98,7 +99,11 @@ function Inline({
         );
       }
       case "mention": {
-        const name = mentions?.[node.handle.toLowerCase()];
+        // `mentionName`, not `mentions[handle]`: an inherited-property lookup
+        // answers `@constructor` with `Object.prototype.constructor`, and the
+        // chip then prints a name nobody in this workspace has. See
+        // `lib/markdown.ts`.
+        const name = mentionName(mentions, node.handle);
         return (
           <span
             key={key}

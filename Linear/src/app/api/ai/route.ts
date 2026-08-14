@@ -21,6 +21,21 @@
  * with `workspace.view` is that check — and it is what stops this endpoint
  * being an unauthenticated proxy to a paid API, which is the failure mode that
  * costs money rather than privacy.
+ *
+ * ## Why the request's own signal is forwarded
+ *
+ * The other half of that same failure mode. A user who opens the summary panel
+ * and navigates away closes the connection, and without the signal the provider
+ * call runs to completion — or to the 60s timeout — and is billed for an answer
+ * nobody will read. `request.signal` is Next's abort signal for the closed
+ * connection; handing it to `runAiTask` is what turns hanging up into a
+ * cancelled upstream request rather than a slower one.
+ *
+ * It also means the adapter can now throw an `AbortError` at this handler
+ * instead of returning a typed failure, because there is no cancellation member
+ * in `AiFailure["reason"]` — and there should not be, since a failure exists to
+ * be rendered and there is nobody left to render it. {@link POST} answers that
+ * with a 499 into a socket that has already gone.
  */
 
 import { z } from "zod";
@@ -35,7 +50,7 @@ import {
   unauthorized,
 } from "@/components/members/workspace-access";
 import { can } from "@/domain/policy";
-import { AI_TASKS, type AiFailure } from "@/ports/ai";
+import { AI_TASKS, type AiFailure, type AiResponse } from "@/ports/ai";
 
 const Body = z.object({
   workspaceId: z.string().min(1).max(64),
@@ -82,7 +97,20 @@ export async function POST(request: Request): Promise<Response> {
     return forbidden("workspace.view", headers);
   }
 
-  const result = await runAiTask(parsed.data.task, parsed.data.input);
+  let result: AiResponse;
+  try {
+    result = await runAiTask(parsed.data.task, parsed.data.input, {
+      signal: request.signal,
+    });
+  } catch (error) {
+    // The caller hung up. Nothing is listening for this response; what mattered
+    // was that the provider request was cancelled with it, which the signal
+    // above has already done.
+    if (request.signal.aborted) {
+      return new Response(null, { status: 499, headers });
+    }
+    throw error;
+  }
 
   if (!result.ok) {
     return Response.json(

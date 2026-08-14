@@ -14,9 +14,23 @@
  * - **The last admin cannot be demoted or removed** (R5). Same shape as the
  *   last-owner rule one level up, same reason: the count is only true inside
  *   the transaction that holds the team row lock.
+ *
+ * ## One unanswered write per member
+ *
+ * Both rules above are decided by the *server's* current row, so two writes for
+ * one member must not overlap: promote-then-demote sent together arrive in
+ * whichever order the network chooses, and the row is left showing the second
+ * value while the database holds the first. The same guard `members-table.tsx`
+ * carries one level up applies here — a member with a request in flight has its
+ * controls disabled and a second attempt is refused outright, so the value on
+ * screen is always the value of the last request actually sent.
+ *
+ * The guard is a ref as well as state: the state drives `disabled` and
+ * `data-pending`, and the ref is what makes the check correct for two events
+ * dispatched inside one tick, before React has re-rendered anything.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { callApi, refusalMessage } from "@/components/members/mutations";
@@ -69,9 +83,27 @@ export function TeamMemberList({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [refusal, setRefusal] = useState<string | null>(null);
+  /** Members whose write has been sent and not yet answered. */
+  const [pending, setPending] = useState<readonly string[]>([]);
+  const inFlight = useRef<Set<string>>(new Set());
 
   const roleOf = (member: TeamMemberView): TeamRole =>
     roles[member.id] ?? member.role;
+
+  /** Claim the member's single in-flight slot, or refuse. */
+  function claim(userId: string): boolean {
+    if (inFlight.current.has(userId)) return false;
+    inFlight.current.add(userId);
+    setPending((current) => [...current, userId]);
+    return true;
+  }
+
+  function settle(userId: string): void {
+    inFlight.current.delete(userId);
+    setPending((current) => current.filter((entry) => entry !== userId));
+  }
+
+  const busy = (member: TeamMemberView): boolean => pending.includes(member.id);
 
   const visible = members.filter((member) => !removed.includes(member.id));
   const taken = new Set(visible.map((member) => member.id));
@@ -90,6 +122,7 @@ export function TeamMemberList({
     next: TeamRole,
   ): Promise<void> {
     const previous = roleOf(member);
+    if (!claim(member.id)) return;
     setRoles((current) => ({ ...current, [member.id]: next }));
 
     const result = await callApi(`/api/teams/${teamId}/members`, {
@@ -98,13 +131,16 @@ export function TeamMemberList({
     });
     if (result.ok) {
       router.refresh();
+      settle(member.id);
       return;
     }
     setRoles((current) => ({ ...current, [member.id]: previous }));
+    settle(member.id);
     setRefusal(refusalMessage(result.failure));
   }
 
   async function remove(member: TeamMemberView): Promise<void> {
+    if (!claim(member.id)) return;
     setRemoved((current) => [...current, member.id]);
     const result = await callApi(`/api/teams/${teamId}/members`, {
       method: "DELETE",
@@ -112,9 +148,11 @@ export function TeamMemberList({
     });
     if (result.ok) {
       router.refresh();
+      settle(member.id);
       return;
     }
     setRemoved((current) => current.filter((id) => id !== member.id));
+    settle(member.id);
     setRefusal(refusalMessage(result.failure));
   }
 
@@ -229,7 +267,16 @@ export function TeamMemberList({
             <li
               key={member.id}
               data-testid={`team-member-${member.email}`}
-              className="flex items-center gap-2.5 border-b border-subtle px-3 py-2 last:border-b-0"
+              // "Is there a change on this row the server has not answered
+              // yet?" — the same signal `members-table.tsx` publishes, and the
+              // reason a second write for this member is refused rather than
+              // sent alongside the first.
+              data-pending={busy(member) ? "true" : "false"}
+              aria-busy={busy(member)}
+              className={cn(
+                "flex items-center gap-2.5 border-b border-subtle px-3 py-2 last:border-b-0",
+                busy(member) && "opacity-70",
+              )}
             >
               <Avatar
                 id={member.id}
@@ -254,6 +301,7 @@ export function TeamMemberList({
                     aria-label={`Team role for ${member.name}`}
                     data-testid={`team-member-role-${member.email}`}
                     value={roleOf(member)}
+                    disabled={busy(member)}
                     onChange={(event) => {
                       void changeRole(member, event.target.value as TeamRole);
                     }}
@@ -268,6 +316,7 @@ export function TeamMemberList({
                   <Button
                     variant="ghost"
                     size="sm"
+                    disabled={busy(member)}
                     aria-label={`Remove ${member.name} from this team`}
                     onClick={() => {
                       void remove(member);

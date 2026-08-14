@@ -274,7 +274,6 @@ export interface InvitePreview {
   readonly inviterName: string;
   readonly role: WorkspaceRole;
   readonly teamNames: readonly string[];
-  readonly email: string | null;
 }
 
 /**
@@ -283,6 +282,22 @@ export interface InvitePreview {
  * Workspace name, who invited, the role, the team names — and nothing else. Not
  * the member list, not issue counts: the token is the only credential and its
  * holder is not yet a principal.
+ *
+ * ## Why `invites.email` is not in that list
+ *
+ * It used to be, pre-filled into the sign-up form as a convenience, and it was
+ * the one field here that is *somebody else's* personal data. Read the note at
+ * the top of this file and then read it again from the attacker's side: the
+ * link is a bearer token, so whoever holds it is by construction not
+ * necessarily the person it was meant for. A forwarded link, a link pasted into
+ * the wrong channel, a link in a mail thread with fifteen people on it — every
+ * one of those hands its holder the address of the person the admin actually
+ * meant to invite, from an endpoint that asks for no credential at all.
+ *
+ * The convenience it bought was two seconds of typing for the legitimate
+ * recipient, who knows their own address. `invites.email` still exists and is
+ * still shown in the members list, where the caller is an authenticated admin
+ * of the workspace that owns the row.
  *
  * Returns `null` for anything unusable, so the page cannot tell a wrong token
  * from an expired one and cannot be used to probe for real workspaces.
@@ -294,7 +309,6 @@ export async function previewInvite(
   const rows = await db.query<
     SqlRow & {
       role: WorkspaceRole;
-      email: string | null;
       team_ids: unknown;
       workspace_id: WorkspaceId;
       workspace_name: string;
@@ -304,7 +318,7 @@ export async function previewInvite(
       expires_at: string | Date;
     }
   >(
-    `select i.role, i.email, i.team_ids, i.status, i.expires_at, i.workspace_id,
+    `select i.role, i.team_ids, i.status, i.expires_at, i.workspace_id,
             w.name as workspace_name, w.url_key as workspace_url_key,
             u.name as inviter_name
        from invites i
@@ -340,7 +354,6 @@ export async function previewInvite(
     inviterName: row.inviter_name,
     role: row.role,
     teamNames: teams.map((team) => team.name),
-    email: row.email,
   };
 }
 
@@ -355,87 +368,124 @@ export interface AcceptedInvite {
 }
 
 /**
- * Redeem a link.
+ * Which workspace a token belongs to, or `null` if it belongs to none.
  *
- * Everything happens under the workspace lock and a `for update` on the invite
- * row, which is what makes a double-click one membership rather than two rows
- * and a unique-violation. The inserts are `on conflict do nothing` for the same
- * reason: re-accepting is a no-op that still ends with the user inside.
+ * The only thing that may be read outside the lock, and it decides nothing: it
+ * answers "which row do I lock?" and every fact that matters is re-read under
+ * the lock afterwards. Exported because `/api/auth/signup` needs the same
+ * answer to know which workspace to take the lock on before it creates
+ * anything.
+ */
+export async function workspaceForInviteToken(
+  token: string,
+  db: SqlDatabase = getDb(),
+): Promise<WorkspaceId | null> {
+  const located = await db.query<SqlRow & { workspace_id: WorkspaceId }>(
+    "select workspace_id from invites where token_hash = $1",
+    [hashInviteToken(token)],
+  );
+  return located[0]?.workspace_id ?? null;
+}
+
+/**
+ * Redeem a link, using an executor the caller already owns.
+ *
+ * This is the whole of acceptance and it takes a `SqlExecutor` rather than a
+ * database on purpose. Sign-up has to create an account, open a session and
+ * redeem an invitation as **one** transaction — anything less leaves a window
+ * where the user exists and the membership does not, and on the invitation-only
+ * path it leaves an account that the invitation never authorised. A function
+ * that opens its own transaction cannot be composed into that; one that takes
+ * the caller's can.
+ *
+ * The caller is responsible for the lock. {@link acceptInvite} supplies it via
+ * `withWorkspaceLock`; `/api/auth/signup` takes the same lock around a larger
+ * body of work. The `for update` below is what makes a double-click one
+ * membership rather than two rows and a unique-violation, and the inserts are
+ * `on conflict do nothing` for the same reason: re-accepting is a no-op that
+ * still ends with the user inside.
  *
  * Failures are specific — expired, already used, revoked — because the caller
  * already holds the token, so telling them *why* their own link is dead leaks
  * nothing. The generic answer is reserved for a token that matches no row,
  * which is the only case where a distinction would help someone guessing.
  */
+export async function redeemInvite(
+  tx: SqlExecutor,
+  input: { readonly token: string; readonly userId: UserId },
+): Promise<Authorized<AcceptedInvite>> {
+  const tokenHash = hashInviteToken(input.token);
+
+  const rows = await tx.query<InviteRow>(
+    `select id, workspace_id, email, role, team_ids, invited_by_id, status, expires_at
+       from invites where token_hash = $1 for update`,
+    [tokenHash],
+  );
+  const row = rows[0];
+  if (!row) return denied({ code: "INVITE_INVALID" });
+  const invite = toInvite(row);
+
+  if (invite.status === "accepted") return denied({ code: "INVITE_ALREADY_USED" });
+  if (invite.status !== "pending") return denied({ code: "INVITE_INVALID" });
+  if (invite.expiresAt.getTime() <= Date.now()) {
+    await tx.execute("update invites set status = 'expired' where id = $1", [
+      invite.id,
+    ]);
+    return denied({ code: "INVITE_EXPIRED" });
+  }
+
+  // §4.4.6 — the role is re-validated against the *inviter's current* rank.
+  // An invite minted by an admin who has since been demoted must not still
+  // hand out admin.
+  const inviter = await tx.query<SqlRow & { role: WorkspaceRole }>(
+    "select role from workspace_members where workspace_id = $1 and user_id = $2",
+    [invite.workspaceId, invite.invitedById],
+  );
+  const inviterRole = inviter[0]?.role;
+  if (!inviterRole) return denied({ code: "INVITE_INVALID" });
+  if (WORKSPACE_ROLE_RANK[invite.role] > WORKSPACE_ROLE_RANK[inviterRole]) {
+    return denied({ code: "CANNOT_GRANT_ABOVE_OWN_RANK", requested: invite.role });
+  }
+
+  const inserted = await tx.execute(
+    `insert into workspace_members (workspace_id, user_id, role)
+     values ($1, $2, $3)
+     on conflict (workspace_id, user_id) do nothing`,
+    [invite.workspaceId, input.userId, invite.role],
+  );
+
+  const joinedTeams = await addToTeams(tx, invite, input.userId);
+
+  await tx.execute(
+    `update invites set status = 'accepted', accepted_at = now(), accepted_by_id = $2
+      where id = $1`,
+    [invite.id, input.userId],
+  );
+
+  return allowed({
+    workspaceId: invite.workspaceId,
+    role: invite.role,
+    teamIds: joinedTeams,
+    alreadyMember: inserted === 0,
+  });
+}
+
+/**
+ * Redeem a link for a user who already exists.
+ *
+ * The lock-owning wrapper around {@link redeemInvite}, for the ordinary case
+ * where the caller is an authenticated principal clicking "join".
+ */
 export async function acceptInvite(
   input: { readonly token: string; readonly userId: UserId },
   db: SqlDatabase = getDb(),
 ): Promise<Authorized<AcceptedInvite>> {
-  const tokenHash = hashInviteToken(input.token);
-
-  // Read once, unlocked, only to find which workspace to lock. Everything that
-  // decides anything is re-read inside the transaction.
-  const located = await db.query<SqlRow & { workspace_id: WorkspaceId }>(
-    "select workspace_id from invites where token_hash = $1",
-    [tokenHash],
-  );
-  const workspaceId = located[0]?.workspace_id;
+  const workspaceId = await workspaceForInviteToken(input.token, db);
   if (!workspaceId) return denied({ code: "INVITE_INVALID" });
 
-  return withWorkspaceLock<AcceptedInvite>(db, workspaceId, async (tx) => {
-    const rows = await tx.query<InviteRow>(
-      `select id, workspace_id, email, role, team_ids, invited_by_id, status, expires_at
-         from invites where token_hash = $1 for update`,
-      [tokenHash],
-    );
-    const row = rows[0];
-    if (!row) return denied({ code: "INVITE_INVALID" });
-    const invite = toInvite(row);
-
-    if (invite.status === "accepted") return denied({ code: "INVITE_ALREADY_USED" });
-    if (invite.status !== "pending") return denied({ code: "INVITE_INVALID" });
-    if (invite.expiresAt.getTime() <= Date.now()) {
-      await tx.execute("update invites set status = 'expired' where id = $1", [
-        invite.id,
-      ]);
-      return denied({ code: "INVITE_EXPIRED" });
-    }
-
-    // §4.4.6 — the role is re-validated against the *inviter's current* rank.
-    // An invite minted by an admin who has since been demoted must not still
-    // hand out admin.
-    const inviter = await tx.query<SqlRow & { role: WorkspaceRole }>(
-      "select role from workspace_members where workspace_id = $1 and user_id = $2",
-      [invite.workspaceId, invite.invitedById],
-    );
-    const inviterRole = inviter[0]?.role;
-    if (!inviterRole) return denied({ code: "INVITE_INVALID" });
-    if (WORKSPACE_ROLE_RANK[invite.role] > WORKSPACE_ROLE_RANK[inviterRole]) {
-      return denied({ code: "CANNOT_GRANT_ABOVE_OWN_RANK", requested: invite.role });
-    }
-
-    const inserted = await tx.execute(
-      `insert into workspace_members (workspace_id, user_id, role)
-       values ($1, $2, $3)
-       on conflict (workspace_id, user_id) do nothing`,
-      [invite.workspaceId, input.userId, invite.role],
-    );
-
-    const joinedTeams = await addToTeams(tx, invite, input.userId);
-
-    await tx.execute(
-      `update invites set status = 'accepted', accepted_at = now(), accepted_by_id = $2
-        where id = $1`,
-      [invite.id, input.userId],
-    );
-
-    return allowed({
-      workspaceId: invite.workspaceId,
-      role: invite.role,
-      teamIds: joinedTeams,
-      alreadyMember: inserted === 0,
-    });
-  });
+  return withWorkspaceLock<AcceptedInvite>(db, workspaceId, (tx) =>
+    redeemInvite(tx, input),
+  );
 }
 
 /**

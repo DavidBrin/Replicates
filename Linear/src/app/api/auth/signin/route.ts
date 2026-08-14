@@ -13,12 +13,25 @@
  *
  * `verifyPassword(password, null)` is what keeps the two paths the same length:
  * it derives against a decoy hash rather than returning early.
+ *
+ * ## The throttle, and where it has to sit
+ *
+ * Constant cost is the right answer to *timing*, and it is what makes the
+ * endpoint expensive: every attempt, real or not, spends ~200 ms and 128 MB in
+ * scrypt. So the limiter runs **before the lookup and before the derivation** —
+ * after that point the work has already been done and there is nothing left to
+ * protect. Running it there also settles the question it would otherwise raise:
+ * a limiter consulted after the user was found would engage for real accounts
+ * and not for absent ones, which is precisely the membership oracle the rest of
+ * this file is built to deny. Refused-because-limited says the same sentence as
+ * refused-because-wrong, for the same reason.
  */
 
 import { z } from "zod";
 
 import { getDb, type SqlRow } from "@/adapters/db";
 import { hashPassword, needsRehash, verifyPassword } from "@/lib/auth/password";
+import { consumeAuthAttempt } from "@/lib/auth/rate-limit";
 import { createSession, sessionCookie } from "@/lib/auth/session";
 import type { UserId } from "@/domain/entities";
 
@@ -44,6 +57,23 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: REFUSAL }, { status: 401 });
   }
   const { email, password } = parsed.data;
+
+  // Before the lookup, before the derivation. The body is the ordinary refusal
+  // verbatim, so a throttled attempt is indistinguishable from a wrong password
+  // whether or not the address belongs to anybody. `Retry-After` is the one
+  // concession, and it is a property of the caller's own request rate — the
+  // same header comes back for an address that has never existed.
+  const throttle = consumeAuthAttempt("signin", request, email);
+  if (throttle.limited) {
+    return Response.json(
+      { error: REFUSAL },
+      {
+        status: 429,
+        headers: { "Retry-After": String(throttle.retryAfterSeconds) },
+      },
+    );
+  }
+
   const db = getDb();
 
   // `lower(email)` matches the expression the unique index is built on. Any
@@ -61,6 +91,11 @@ export async function POST(request: Request): Promise<Response> {
   if (!user || !matches || !user.active) {
     return Response.json({ error: REFUSAL }, { status: 401 });
   }
+
+  // The tokens go back: whoever holds the password is not who the budget is
+  // for, and a person signing in repeatedly from one office must never be
+  // throttled into a support ticket.
+  throttle.succeeded();
 
   // The one moment the plaintext exists and the cost parameters can be raised
   // without asking anyone to reset anything.

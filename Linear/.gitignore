@@ -11,17 +11,19 @@ coverage/
 *.db-wal
 *.db-shm
 
-# Research captures taken from the *authenticated* Linear app.
+# Screenshots of the *authenticated* Linear app.
 #
 # The visual-research lane found the browser already signed in to a real
-# workspace, so the highest-fidelity references it collected are screenshots and
-# DOM dumps of live company issues — team names, issue titles, member avatars.
-# They are the best reference material in the project and the one thing that
-# must not be pushed: this repository is public. The design tokens and geometry
-# measured from them live on in `research/01-visual-design.md`, which is the
-# part that was worth keeping anyway.
+# workspace, so its highest-fidelity references are captures of live company
+# issues — issue titles, and in the detail view the full names of three
+# people. Everything measured from them (the palette, the glyph geometry, the
+# layout constants) lives on in `research/01-visual-design.md` and in the
+# sanitised dumps under `research/extracted/`, which is the part worth keeping.
+#
+# The dumps were sanitised rather than deleted: identifiers were replaced with
+# neutral placeholders and all 511 measured token values kept. A screenshot
+# cannot be sanitised that way, so these two stay local.
 research/screenshots/linear-app-*
-research/screenshots/app-*.json
 
 test-results/
 playwright-report/

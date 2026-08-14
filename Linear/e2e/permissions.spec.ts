@@ -47,6 +47,12 @@ test.describe("workspace membership", () => {
     await signOut(page);
     await page.goto(new URL(link).pathname);
     await page.getByTestId("signup-name").fill("Newcomer");
+    // Typed, not pre-filled. The preview endpoint deliberately stopped
+    // returning `invites.email` (see `lib/auth/invites.ts`): the link is a
+    // bearer token, so pre-filling handed the invited person's address to
+    // whoever opened it, unauthenticated. The recipient knows their own
+    // address; the convenience was not worth the disclosure.
+    await page.getByTestId("signup-email").fill("newcomer@demo.test");
     // Twelve characters minimum — length is the only rule the app enforces,
     // which is why the seeded eight-character demo password cannot be reused
     // for a *new* account even though it still signs the demo users in.

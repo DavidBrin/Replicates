@@ -149,11 +149,25 @@ export interface IssueDetailData {
   readonly isFavorite: boolean;
 }
 
-/** `@handle` → display name, for the markdown renderer's mention chips. */
+/**
+ * `@handle` → display name, for the markdown renderer's mention chips.
+ *
+ * `Object.create(null)`, not `{}`. A plain object arrives pre-populated with
+ * every key on `Object.prototype`, so `@constructor` in a description would
+ * resolve against a directory that was never given one and render a chip
+ * reading `@function Object() { [native code] }` — and `@__proto__` is worse
+ * than useless as an assignment target. The keys here are handles chosen at
+ * sign-up, which makes the whole prototype an attacker-writable namespace.
+ *
+ * The renderer guards the read as well (`mentionName` in `lib/markdown.ts`),
+ * because this is not the only map that reaches it. Both halves are cheap and
+ * neither is sufficient alone: this one covers directories built here, that one
+ * covers every other caller.
+ */
 export function mentionDirectory(
   members: readonly DetailUser[],
 ): Readonly<Record<string, string>> {
-  const directory: Record<string, string> = {};
+  const directory = Object.create(null) as Record<string, string>;
   for (const member of members) directory[member.displayName.toLowerCase()] = member.name;
   return directory;
 }

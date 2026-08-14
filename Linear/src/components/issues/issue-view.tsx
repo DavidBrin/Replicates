@@ -52,6 +52,11 @@ import {
 import { keyForIndex } from "@/domain/ordering";
 import { newId } from "@/lib/ids";
 import {
+  useEscapeLayer,
+  useKeyboardScope,
+  type BindingInput,
+} from "@/lib/keyboard";
+import {
   createIssueStore,
   fetchTransport,
   type IssueCatalog,
@@ -66,6 +71,11 @@ import type { Crumb } from "@/components/app-shell/breadcrumbs";
 import { ViewTabs, type TeamView } from "@/components/app-shell/view-tabs";
 import { ViewToolbar } from "@/components/app-shell/toolbar";
 import { workspacePath } from "@/components/app-shell/workspace-context";
+import type { CommandEffect } from "@/components/command-palette/commands";
+import {
+  usePaletteContribution,
+  type PaletteContribution,
+} from "@/components/command-palette/palette-registry";
 import {
   DisplayOptionsPanel,
   DEFAULT_DISPLAY,
@@ -87,7 +97,6 @@ import {
 import { IssueBoard } from "@/components/issues/issue-board";
 import { IssueList } from "@/components/issues/issue-list";
 import type { RowProperty } from "@/components/issues/issue-row";
-import { useShortcuts, type Binding } from "@/components/issues/keyboard";
 import {
   NewIssueModal,
   type NewIssueDefaults,
@@ -375,6 +384,22 @@ export function IssueView({
     [store, targetIds],
   );
 
+  const toggleLabel = useCallback(
+    (labelId: LabelId): void => {
+      // Toggling against the *shared* set: adding a label everyone already has
+      // would otherwise remove it from all of them.
+      const shared = new Set(sharedLabelIds(targets));
+      for (const issue of targets) {
+        const current = issue.labels.map((label) => label.id);
+        const next = shared.has(labelId)
+          ? current.filter((id) => id !== labelId)
+          : [...new Set([...current, labelId])];
+        store.mutate([issue.id], { labelIds: next });
+      }
+    },
+    [store, targets],
+  );
+
   /* --- creation ------------------------------------------------------- */
 
   const [creating, setCreating] = useState(false);
@@ -495,43 +520,69 @@ export function IssueView({
     [basePath, currentView, router],
   );
 
-  const bindings = useMemo<readonly Binding[]>(() => {
-    const hasTargets = (): boolean => targetIds().length > 0;
-    const priorityBinding = (digit: number, priority: Priority): Binding => ({
-      id: `issue.priority.${priority}`,
-      keys: `shift+${digit}`,
-      when: hasTargets,
-      run: () => apply({ priority }),
-    });
+  /**
+   * The view's bindings, split by scope rather than by feature.
+   *
+   * One dispatcher owns `keydown` for the whole application
+   * (`lib/keyboard/dispatcher.ts`), and the scope a binding is registered at is
+   * the *only* thing that decides whether it survives a modal opening on top of
+   * it. That is not a tidiness argument: a second `document` listener alongside
+   * the shared one has no way to know the command palette is open, so `Cmd+A`
+   * typed into the palette would select every issue behind it — and swallow the
+   * palette input's own select-all on the way.
+   *
+   * - **global** — `C` files an issue from anywhere the view is mounted.
+   * - **view** — the cursor, the layout and the filters. Suppressed by a modal.
+   * - **selection** — everything that edits the targets. Registered whether or
+   *   not there are any, and gated by `when`, so the key falls through to the
+   *   layers below instead of being swallowed by an empty selection.
+   *
+   * The ids are the registry's, which is what keeps the `?` sheet and the
+   * palette's key hints honest: a binding whose behaviour is here and whose keys
+   * are in `registry.ts` cannot drift, because there is only one copy of the
+   * keys. The four with no registry entry — the arrow-key aliases — carry their
+   * own `keys`, because pure cursor movement by arrow is not a shortcut anybody
+   * needs documented next to `J`/`K`.
+   */
+  const globalBindings = useMemo<BindingInput[]>(
+    () => [{ id: "issue.create", run: () => openCreate() }],
+    [openCreate],
+  );
 
-    return [
-      { id: "issue.create", keys: "c", run: () => openCreate() },
+  const viewBindings = useMemo<BindingInput[]>(
+    () => [
       {
-        id: "list.toggleSelect",
-        keys: "x",
+        id: "view.toggleSelect",
         when: () => focusedId !== null,
         run: () => {
           const issue = focusedId ? snapshot.byId[focusedId] : undefined;
           if (issue) selectIssue(issue, "toggle");
         },
       },
-      { id: "list.down", keys: "j", run: () => moveCursor(1, false) },
-      { id: "list.up", keys: "k", run: () => moveCursor(-1, false) },
-      { id: "list.downArrow", keys: "ArrowDown", run: () => moveCursor(1, false) },
-      { id: "list.upArrow", keys: "ArrowUp", run: () => moveCursor(-1, false) },
+      { id: "view.cursorDown", run: () => moveCursor(1, false) },
+      { id: "view.cursorUp", run: () => moveCursor(-1, false) },
       {
-        id: "list.extendDown",
-        keys: "shift+ArrowDown",
+        id: "issues.cursorDownArrow",
+        keys: "arrowdown",
+        run: () => moveCursor(1, false),
+      },
+      {
+        id: "issues.cursorUpArrow",
+        keys: "arrowup",
+        run: () => moveCursor(-1, false),
+      },
+      {
+        id: "issues.extendDown",
+        keys: "shift+arrowdown",
         run: () => moveCursor(1, true),
       },
       {
-        id: "list.extendUp",
-        keys: "shift+ArrowUp",
+        id: "issues.extendUp",
+        keys: "shift+arrowup",
         run: () => moveCursor(-1, true),
       },
       {
-        id: "list.open",
-        keys: "Enter",
+        id: "view.open",
         when: () => focusedId !== null && picker === null && !creating,
         run: () => {
           const issue = focusedId ? snapshot.byId[focusedId] : undefined;
@@ -543,87 +594,218 @@ export function IssueView({
         },
       },
       {
-        id: "list.selectAll",
-        keys: "mod+a",
+        id: "view.selectAll",
         run: () => setSelected(new Set(order.map((issue) => issue.id))),
       },
       {
+        id: "view.layout",
+        run: () => setLayout(display.layout === "board" ? "list" : "board"),
+      },
+      { id: "view.filter", run: () => setFilterOpen(true) },
+      { id: "view.display", run: () => setDisplayOpen(true) },
+    ],
+    [
+      creating,
+      display.layout,
+      focusedId,
+      moveCursor,
+      order,
+      picker,
+      router,
+      selectIssue,
+      setLayout,
+      snapshot.byId,
+      workspaceUrlKey,
+    ],
+  );
+
+  const selectionBindings = useMemo<BindingInput[]>(() => {
+    const hasTargets = (): boolean => targetIds().length > 0;
+    const priorityBinding = (id: string, priority: Priority): BindingInput => ({
+      id,
+      when: hasTargets,
+      run: () => apply({ priority }),
+    });
+
+    return [
+      {
         id: "issue.status",
-        keys: "s",
         when: hasTargets,
         run: () => openPickerForTargets("status"),
       },
       {
         id: "issue.assignee",
-        keys: "a",
         when: hasTargets,
         run: () => openPickerForTargets("assignee"),
       },
       {
         id: "issue.priority",
-        keys: "p",
         when: hasTargets,
         run: () => openPickerForTargets("priority"),
       },
       {
-        id: "issue.labels",
-        keys: "l",
+        id: "issue.label",
         when: hasTargets,
         run: () => openPickerForTargets("labels"),
       },
       {
         id: "issue.project",
-        keys: "shift+p",
         when: hasTargets,
         run: () => openPickerForTargets("project"),
       },
       // Urgent…Low on Shift+1..4, and Shift+0 clears. Bare digits belong to
       // Triage (§1.10), which is why the modifier is not optional.
-      priorityBinding(1, 1),
-      priorityBinding(2, 2),
-      priorityBinding(3, 3),
-      priorityBinding(4, 4),
-      priorityBinding(0, 0),
-      {
-        id: "view.layout",
-        keys: "mod+b",
-        run: () => setLayout(display.layout === "board" ? "list" : "board"),
-      },
-      { id: "view.filter", keys: "f", run: () => setFilterOpen(true) },
-      { id: "view.display", keys: "shift+v", run: () => setDisplayOpen(true) },
-      {
-        // The Escape ladder's list rung (§1.11). The pickers and the modal
-        // handle their own Escape and stop it, so by the time it reaches here
-        // nothing else is open.
-        id: "list.clearSelection",
-        keys: "Escape",
-        when: () => selected.size > 0,
-        run: () => {
-          setSelected(new Set());
-          setAnchorId(null);
-        },
-      },
+      priorityBinding("issue.priority.urgent", 1),
+      priorityBinding("issue.priority.high", 2),
+      priorityBinding("issue.priority.medium", 3),
+      priorityBinding("issue.priority.low", 4),
+      priorityBinding("issue.priority.none", 0),
     ];
-  }, [
-    apply,
-    creating,
-    display.layout,
-    focusedId,
-    moveCursor,
-    openCreate,
-    openPickerForTargets,
-    order,
-    picker,
-    router,
-    selectIssue,
-    selected.size,
-    setLayout,
-    snapshot.byId,
-    targetIds,
-    workspaceUrlKey,
-  ]);
+  }, [apply, openPickerForTargets, targetIds]);
 
-  useShortcuts(bindings);
+  useKeyboardScope("global", globalBindings);
+  useKeyboardScope("view", viewBindings);
+  useKeyboardScope("selection", selectionBindings);
+
+  /**
+   * The Escape ladder's list rung (§1.11).
+   *
+   * A rung rather than a binding on `escape`, so the palette, a picker and a
+   * modal each get their press first and the selection is only cleared once
+   * nothing is standing on top of it — the ladder is what stops one `Escape`
+   * from closing a dialog *and* discarding a selection the user cannot see.
+   */
+  useEscapeLayer(
+    "issue-view-selection",
+    () => {
+      if (selected.size === 0) return false;
+      setSelected(new Set());
+      setAnchorId(null);
+      return true;
+    },
+    selected.size > 0,
+  );
+
+  /* --- the command palette -------------------------------------------- */
+
+  /**
+   * Run a palette command against the targets.
+   *
+   * The same {@link targetIds} the keyboard uses, so `Cmd+K → Change status →
+   * Done` and pressing `S` are one code path with two entrances — §1.6's "the
+   * same key does the same thing whether one issue is focused or many are
+   * selected", extended to the palette. Returns `false` for anything this view
+   * does not own, so the shell can answer for it instead of the row silently
+   * closing the palette and doing nothing.
+   */
+  const runCommand = useCallback(
+    (effect: CommandEffect): boolean => {
+      if (effect.kind !== "run") return false;
+      const value = effect.value;
+
+      switch (effect.action) {
+        case "issue.create":
+          openCreate();
+          return true;
+        case "view.layout":
+          setLayout(display.layout === "board" ? "list" : "board");
+          return true;
+        case "view.filter":
+          setFilterOpen(true);
+          return true;
+        case "view.display":
+          setDisplayOpen(true);
+          return true;
+        default:
+          break;
+      }
+
+      // Everything below acts on the targets, and a sub-menu row without a
+      // value is a bug in the palette rather than an empty edit — refuse it.
+      if (value === undefined) {
+        // The bare "Change status…" row pushes a page; only its children carry
+        // a value. Opening the view's own picker is the honest answer for a
+        // command that arrived without one.
+        switch (effect.action) {
+          case "issue.status":
+            openPickerForTargets("status");
+            return true;
+          case "issue.assignee":
+            openPickerForTargets("assignee");
+            return true;
+          case "issue.priority":
+            openPickerForTargets("priority");
+            return true;
+          case "issue.label":
+            openPickerForTargets("labels");
+            return true;
+          case "issue.project":
+            openPickerForTargets("project");
+            return true;
+          default:
+            return false;
+        }
+      }
+
+      switch (effect.action) {
+        case "issue.status":
+          apply({ stateId: value as StateId });
+          return true;
+        case "issue.assignee":
+          // The "No assignee" row carries an empty string, which is a value and
+          // not an absence: `null` is what the patch means by unassigned.
+          apply({ assigneeId: value === "" ? null : (value as UserId) });
+          return true;
+        case "issue.priority":
+          apply({ priority: Number(value) as Priority });
+          return true;
+        case "issue.label":
+          toggleLabel(value as LabelId);
+          return true;
+        default:
+          return false;
+      }
+    },
+    [
+      apply,
+      display.layout,
+      openCreate,
+      openPickerForTargets,
+      setLayout,
+      toggleLabel,
+    ],
+  );
+
+  const contribution = useMemo<PaletteContribution>(
+    () => ({
+      surface: display.layout === "board" ? "board" : "list",
+      selection: targets.map((issue) => ({
+        id: issue.id,
+        identifier: issue.identifier,
+        title: issue.title,
+      })),
+      statuses: catalog.states.map((state) => ({
+        id: state.id,
+        name: state.name,
+        type: state.type,
+        color: state.color,
+      })),
+      people: catalog.users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        displayName: user.displayName,
+      })),
+      labels: catalog.labels.map((label) => ({
+        id: label.id,
+        name: label.name,
+        color: label.color,
+      })),
+      run: runCommand,
+    }),
+    [display.layout, targets, catalog, runCommand],
+  );
+
+  usePaletteContribution(contribution);
 
   /* --- render --------------------------------------------------------- */
 
@@ -774,18 +956,7 @@ export function IssueView({
         anchor={anchorRef}
         labels={catalog.labels}
         values={sharedLabelIds(targets)}
-        onToggle={(labelId) => {
-          // Toggling against the *shared* set: adding a label everyone already
-          // has would otherwise remove it from all of them.
-          const shared = new Set(sharedLabelIds(targets));
-          for (const issue of targets) {
-            const current = issue.labels.map((label) => label.id);
-            const next = shared.has(labelId)
-              ? current.filter((id) => id !== labelId)
-              : [...new Set([...current, labelId])];
-            store.mutate([issue.id], { labelIds: next });
-          }
-        }}
+        onToggle={toggleLabel}
       />
       <ProjectPicker
         open={picker === "project"}

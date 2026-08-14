@@ -32,12 +32,33 @@
  * time they reach for bold.
  */
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { cn } from "@/lib/cn";
-import { useShortcuts, type Binding } from "@/components/issues/keyboard";
+import { useShortcut } from "@/lib/keyboard";
+import {
+  nextThemePreference,
+  readStoredPreference,
+  setThemePreference,
+} from "@/lib/theme";
+import { toast } from "@/components/ui/toast-provider";
 import { CommandSurface } from "@/components/command-palette";
+import {
+  PaletteRegistryProvider,
+  usePublishedContribution,
+} from "@/components/command-palette/palette-registry";
+import type {
+  Command,
+  CommandEffect,
+  PaletteContext,
+} from "@/components/command-palette/commands";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import {
   WorkspaceProvider,
@@ -138,7 +159,23 @@ export interface AppShellProps {
 }
 
 export function AppShell({ data, children }: AppShellProps) {
+  return (
+    <WorkspaceProvider value={data}>
+      {/*
+        The registry sits above both halves on purpose: `CommandSurface` is a
+        sibling of `children`, so the screen in view can only reach the palette
+        by publishing upward. See `command-palette/palette-registry.tsx`.
+      */}
+      <PaletteRegistryProvider>
+        <ShellFrame data={data}>{children}</ShellFrame>
+      </PaletteRegistryProvider>
+    </WorkspaceProvider>
+  );
+}
+
+function ShellFrame({ data, children }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const layout = useSyncExternalStore(
     subscribeToLayout,
     layoutSnapshot,
@@ -154,18 +191,84 @@ export function AppShell({ data, children }: AppShellProps) {
     };
   }, []);
 
-  const bindings: readonly Binding[] = [
-    {
-      id: "shell.toggleSidebar",
-      keys: "[",
-      run: () =>
-        updateLayout((current) => ({
-          ...current,
-          collapsed: !current.collapsed,
-        })),
+  const toggleSidebar = useCallback(() => {
+    updateLayout((current) => ({ ...current, collapsed: !current.collapsed }));
+  }, []);
+
+  // `[`, not `Cmd+B`. Registered on the one dispatcher the whole application
+  // shares, at the global scope the registry names — a second `document`
+  // listener would have no way to know a modal was open above it.
+  useShortcut("app.sidebar", toggleSidebar);
+
+  /* --- the command palette's context and effects ---------------------- */
+
+  const contribution = usePublishedContribution();
+  const teamKey = teamKeyFromPath(pathname);
+
+  /**
+   * What the palette knows.
+   *
+   * The shell owns the two facts that are true on every screen — the workspace
+   * the hrefs are built from, and the teams that are navigation destinations —
+   * and the screen in view contributes the rest. Mounted without this, the
+   * palette builds `/undefined/inbox` style hrefs off an empty workspace key and
+   * offers no issue actions at all, because it has no selection to offer them
+   * for.
+   */
+  const paletteContext = useMemo<PaletteContext>(
+    () => ({
+      workspaceKey: data.workspace.urlKey,
+      surface: contribution?.surface ?? "other",
+      selection: contribution?.selection ?? [],
+      statuses: contribution?.statuses ?? [],
+      people: contribution?.people ?? [],
+      labels: contribution?.labels ?? [],
+      teams: data.teams.map((team) => ({ key: team.key, name: team.name })),
+    }),
+    [data.workspace.urlKey, data.teams, contribution],
+  );
+
+  /**
+   * Route a chosen command to whoever owns it.
+   *
+   * The screen in view gets first refusal, because every issue action is a
+   * mutation against *its* optimistic store. What is left is the handful of
+   * things that belong to the frame itself — the rail, the theme, the session —
+   * and anything nobody claims is reported rather than swallowed: a palette row
+   * that closes and does nothing is the defect this exists to prevent, and a
+   * silent `default:` branch is how it comes back.
+   */
+  const handleCommand = useCallback(
+    (effect: CommandEffect, command: Command) => {
+      if (effect.kind !== "run") return;
+      if (contribution?.run?.(effect, command) === true) return;
+
+      switch (effect.action) {
+        case "app.sidebar":
+          toggleSidebar();
+          return;
+        case "app.theme":
+          setThemePreference(nextThemePreference(readStoredPreference()));
+          return;
+        case "app.signout":
+          void fetch("/api/auth/signout", { method: "POST" })
+            .catch(() => undefined)
+            // `push`, not `replace`: the session is gone either way, and a
+            // refresh is what clears the router cache of the pages it held.
+            .finally(() => {
+              router.push("/signin");
+              router.refresh();
+            });
+          return;
+        default:
+          toast({
+            title: `${command.label} is not available on this screen.`,
+            description: "Open a team's issues and try again.",
+          });
+      }
     },
-  ];
-  useShortcuts(bindings);
+    [contribution, router, toggleSidebar],
+  );
 
   const toggleTeam = (key: string): void => {
     updateLayout((current) => ({
@@ -186,21 +289,26 @@ export function AppShell({ data, children }: AppShellProps) {
   };
 
   return (
-    <WorkspaceProvider value={data}>
+    <>
       {/*
-        The keyboard surface: palette, search, the `?` sheet and the chord hint.
-        Mounted here because these are portalled overlays that must exist on
-        every workspace screen, and because neither slice could write this line
-        for itself — the palette lives in one and the shell in another.
+        The keyboard surface: palette, search, the `?` sheet, the `G` chords and
+        the chord hint. Mounted here because these are portalled overlays that
+        must exist on every workspace screen, and because neither slice could
+        write this line for itself — the palette lives in one and the shell in
+        another.
 
-        No `onCommand`: the palette's navigation commands are handled inside
-        `CommandSurface` (a router push needs nothing from the app), and its
-        mutation commands belong to whoever owns the optimistic store, which is
-        the issue view rather than the frame. A palette that reached into that
-        store from here would couple the app's most central surface to every
-        slice at once.
+        `context` and `onCommand` are the point: navigation stays inside
+        `CommandSurface` (a router push needs nothing from the app), the screen
+        in view answers for its own mutations through the registry, and what is
+        left is the frame's — the rail, the theme and the session. Nothing here
+        reaches into the optimistic store, which belongs to the issue view.
       */}
-      <CommandSurface workspaceKey={data.workspace.urlKey} />
+      <CommandSurface
+        workspaceKey={data.workspace.urlKey}
+        teamKey={teamKey}
+        context={paletteContext}
+        onCommand={handleCommand}
+      />
       <div className="flex h-dvh w-full overflow-hidden bg-[var(--bg-sidebar)]">
         <div
           data-collapsed={layout.collapsed}
@@ -232,6 +340,20 @@ export function AppShell({ data, children }: AppShellProps) {
           {children}
         </main>
       </div>
-    </WorkspaceProvider>
+    </>
   );
+}
+
+/**
+ * The team the URL is inside, or null.
+ *
+ * `G` `B` and `G` `A` are *a team's* backlog and active list — there is no
+ * workspace-wide one — so the chord needs a team, and the only live answer is
+ * the one in the address bar. Read from the path rather than threaded down from
+ * the page, because the pages that have a team are server components in three
+ * different route groups and none of them knows the shell exists.
+ */
+function teamKeyFromPath(pathname: string): string | null {
+  const match = /^\/[^/]+\/team\/([^/]+)/.exec(pathname);
+  return match?.[1] ?? null;
 }

@@ -322,6 +322,42 @@ and once by a coarser check in front of it. The `fixme` on
 `proj:member` files into a private team's project, and an actor with no project
 role gets the same `404` a nonexistent team gets.
 
+### D23 — A colour is six hex digits, enforced twice
+
+Teams, workflow states, labels, projects and avatars all carry a user-chosen
+colour, and every one of them is written into a CSS property when it renders.
+The write schemas accepted `z.string().max(40)`, which made the column a
+script-adjacent surface dressed as a cosmetic one.
+
+The concrete failure the second review found: an authorised member could name a
+label `url(//attacker.example/pixel)` — 29 characters, comfortably under the
+cap. It is stored, and thereafter every *other* member's browser fetches that
+URL whenever the label renders. A persistent, attacker-controlled request
+originating inside the workspace, with a referrer that names it. React escapes
+text, which is why this was not an XSS; it does not escape the *value* of a
+style property, which is why it was still a defect.
+
+The rule is a whitelist — `^#[0-9a-fA-F]{6}$` — and deliberately not a
+blacklist. "Reject `url(`" is unwinnable: CSS also has `image-set()`,
+`-webkit-image-set()`, backslash escapes, and comment-splitting, so the list of
+forbidden shapes needs maintenance forever. Six hex digits cannot express any
+of them, so there is nothing to keep up to date.
+
+It is enforced in two places on purpose. `src/domain/color.ts` holds the rule
+and the API schemas import it, so a caller gets a clear error. `schema.sql`
+carries the same rule as a `check` constraint on all six columns, so a future
+call site that forgets the module cannot reopen the hole. Both are proved
+rather than asserted: `src/domain/__tests__/color.test.ts` runs sixteen payloads
+through the predicate, and the schema test inserts a `url()` payload that must
+actually be rejected — a `check` that was never added, or added against the
+wrong column, leaves a migration exactly as green as one that works.
+
+One deliberate asymmetry: `isHexColor` refuses a trailing newline outright and
+is what the API path uses, because Zod's `.regex()` does not trim.
+`normalizeHexColor` trims first, so a colour pasted with stray whitespace is
+stored rather than refused. The disagreement is the safe way round — no amount
+of whitespace turns `url(...)` into six hex digits.
+
 ### D15 — Research captures from the authenticated app are not committed
 
 The visual-research lane found the browser already signed in to a real

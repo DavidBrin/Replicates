@@ -26,10 +26,27 @@
  * every user and every view (`SPEC.md` §3) — so dragging a row is editing
  * everyone's list, and that is a heavier grant than editing your own issue's
  * title.
+ *
+ * ## One patch is one transaction
+ *
+ * Labels live in a join table and the rest of the fields live on the row, so a
+ * patch carrying both used to be two writes — and the second one can fail. It
+ * did: `dueDate` reaches a Postgres `date` column, and a string that is not a
+ * date is rejected *by the driver*, after the labels had already committed. The
+ * caller got a 500 and a label set they never asked for, which the optimistic
+ * store then had no error to roll back from.
+ *
+ * Both halves are therefore fixed. The date is validated in {@link PatchBody},
+ * where a bad one is a 400 that names the field rather than a 500 that names a
+ * statement; and the two writes share a transaction, so any *other* failure —
+ * a constraint nobody predicted, a lost connection between them — takes the
+ * whole patch with it. Validation alone would only have closed the one hole
+ * that was found.
  */
 
 import { z } from "zod";
 
+import { getDb } from "@/adapters/db";
 import { getRepositories } from "@/adapters/repositories";
 import { isPriority, type Priority } from "@/domain/entities";
 import type { Action } from "@/domain/policy";
@@ -56,6 +73,30 @@ const priority = z.custom<Priority>((value) => isPriority(value), {
 });
 
 /**
+ * A real calendar day, in the format the `<input type="date">` behind this
+ * field already emits.
+ *
+ * `due_date` is a Postgres `date`. Anything else is rejected by the driver
+ * rather than here, which turns a typo into a 500 that names a SQL statement —
+ * and, before this patch became one transaction, into a 500 that had already
+ * written the *other* half of the request.
+ *
+ * The round trip is the second half of the check: `2026-02-31` matches the
+ * shape, and only re-serialising the parsed instant catches that February has
+ * no thirty-first.
+ */
+function isCalendarDate(value: string): boolean {
+  const parsed = Date.parse(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed)) return false;
+  return new Date(parsed).toISOString().slice(0, 10) === value;
+}
+
+const dueDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "A due date must look like 2026-03-16.")
+  .refine(isCalendarDate, "That is not a real date.");
+
+/**
  * `.strict()` so an unknown key is a 400 rather than a silent no-op.
  *
  * A client that misspells `assignee_id` should be told, not quietly ignored —
@@ -72,7 +113,7 @@ const PatchBody = z
     assigneeId: z.string().min(1).max(64).nullable().optional(),
     projectId: z.string().min(1).max(64).nullable().optional(),
     estimate: z.number().int().min(0).max(1_000).nullable().optional(),
-    dueDate: z.string().max(32).nullable().optional(),
+    dueDate: dueDate.nullable().optional(),
     sortOrder: z.string().min(1).max(256).optional(),
     labelIds: z.array(z.string().min(1).max(64)).max(50).optional(),
   })
@@ -118,17 +159,21 @@ export async function PATCH(
   const repositories = getRepositories();
   const { labelIds, ...fields } = patch;
 
-  // Labels first: `setLabels` writes one activity row per difference, and doing
-  // it before the field update means the returned row already carries the new
-  // set rather than needing a second read.
-  if (labelIds !== undefined) {
-    await repositories.issues.setLabels(issue.id, labelIds, viewer.user.id);
-  }
+  // One transaction for the whole patch — see the header. Both repository
+  // methods take the executor as their trailing argument and join it rather
+  // than opening one of their own, so this is the only boundary.
+  const updated = await getDb().transaction(async (tx) => {
+    // Labels first: `setLabels` writes one activity row per difference, and
+    // doing it before the field update means the returned row already carries
+    // the new set rather than needing a second read.
+    if (labelIds !== undefined) {
+      await repositories.issues.setLabels(issue.id, labelIds, viewer.user.id, tx);
+    }
 
-  const updated =
-    Object.keys(fields).length > 0
-      ? await repositories.issues.update(issue.id, fields, viewer.user.id)
-      : ((await repositories.issues.byId(issue.id)) ?? issue);
+    return Object.keys(fields).length > 0
+      ? await repositories.issues.update(issue.id, fields, viewer.user.id, tx)
+      : ((await repositories.issues.byId(issue.id, tx)) ?? issue);
+  });
 
   return respond({ issue: updated }, 200, viewer);
 }

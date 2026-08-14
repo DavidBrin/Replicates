@@ -411,8 +411,23 @@ describe("previewInvite", () => {
       inviterName: OWNER,
       role: "member",
       teamNames: ["Design"],
-      email: "who@example.com",
     });
+  });
+
+  it("does not disclose the address the invite was sent to", async () => {
+    // `toStrictEqual` above already fails if `email` comes back, but it fails
+    // for the generic reason that some key is unexpected. This one names the
+    // field, because the reason it is absent is not tidiness: the link is a
+    // bearer token, so its holder is not necessarily the person it was meant
+    // for, and a forwarded invite would otherwise hand over somebody else's
+    // address from an endpoint that asks for no credential at all.
+    const { token } = await inviteFrom(OWNER, "member", [TEAM]);
+
+    const preview = await previewInvite(token, db);
+
+    expect(preview).not.toBeNull();
+    expect(Object.keys(preview!)).not.toContain("email");
+    expect(JSON.stringify(preview)).not.toContain("who@example.com");
   });
 
   /**

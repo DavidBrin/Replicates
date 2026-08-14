@@ -7,7 +7,14 @@ import {
   type AiResponse,
 } from "@/ports/ai";
 
-import { classifyHttpFailure, withTimeout } from "./shared";
+import {
+  capText,
+  classifyHttpFailure,
+  oversizedResponse,
+  readCapped,
+  unreadableResponse,
+  withTimeout,
+} from "./shared";
 
 /**
  * The OpenAI adapter — Responses API, raw HTTP.
@@ -111,6 +118,11 @@ export class OpenAiConnector extends AiConnector {
           signal,
         });
       } catch (error) {
+        // The mirror of the Anthropic adapter, for the same reason: only
+        // `withTimeout` can tell its own deadline from the caller's abort, so
+        // an aborted signal's error goes back out rather than becoming a
+        // retryable `upstream`.
+        if (signal.aborted) throw error;
         return {
           ok: false,
           reason: "upstream",
@@ -121,14 +133,24 @@ export class OpenAiConnector extends AiConnector {
       }
 
       if (!response.ok) {
+        // An oversized error body is read as an absent one: the status is the
+        // only part `classifyHttpFailure` trusts anyway.
         return classifyHttpFailure(
           this.provider,
           response.status,
-          await response.text().catch(() => ""),
+          (await readCapped(response).catch(() => null)) ?? "",
         );
       }
 
-      const payload = (await response.json()) as OpenAiResponse;
+      const raw = await readCapped(response);
+      if (raw === null) return oversizedResponse(this.provider);
+
+      let payload: OpenAiResponse;
+      try {
+        payload = JSON.parse(raw) as OpenAiResponse;
+      } catch {
+        return unreadableResponse(this.provider);
+      }
 
       if (payload.status === "incomplete") {
         return {
@@ -152,7 +174,7 @@ export class OpenAiConnector extends AiConnector {
 
       return {
         ok: true,
-        text,
+        text: capText(text),
         provider: this.provider,
         model: payload.model ?? this.cfg.model,
         usage: {

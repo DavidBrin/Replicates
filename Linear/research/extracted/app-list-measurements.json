@@ -11,7 +11,7 @@
       "markup": "<svg><path d=\"M14.3 14.017c.618-.198.88-.925.568-1.502L8.934 1.561a1.058 1.058 0 0 0-1.868 0L1.132 12.515c-.312.577-.05 1.304.569 1.502q.2.063.402.123a20.66 20.66 0 0 0 12.196-.123m-3.833-6.21c-.229.35-.514.733-.899 1.012 0 0-1.057-1-1.5-1-.5 0-2 1-2 1s-.363-.452-.627-.841L8 3.254z\"></path></svg>"
     },
     {
-      "aria": "Acme Workspace Menu",
+      "aria": "acme Workspace Menu",
       "box": [
         101,
         26,
@@ -678,7 +678,7 @@
       "color": "lch(90.155 1.2 272)",
       "fontFamily": "\"Inter Variable\", \"SF Pro Display\", -app",
       "samples": [
-        "Acme"
+        "acme"
       ],
       "x": 43,
       "y": 19
@@ -835,8 +835,8 @@
       "fontFamily": "\"Inter Variable\", \"SF Pro Display\", -app",
       "samples": [
         "An issue title",
-        "Update Finances with Codex, li",
-        "Rotate Bedrock API key"
+        "An issue title",
+        "An issue title"
       ],
       "x": 386,
       "y": 148

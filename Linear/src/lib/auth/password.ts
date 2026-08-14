@@ -53,20 +53,76 @@ interface ScryptParameters {
 /**
  * The parameters new hashes are written with.
  *
- * `N = 2^15, r = 8, p = 1` is roughly 32 MB and ~100 ms of work per attempt on
- * a laptop — the point where a sign-in still feels instant and an offline
- * attacker's throughput has collapsed. Node's own default is `N = 2^14`, which
- * is where the OWASP minimum sits; going one doubling above it costs nothing a
- * user can perceive.
+ * `N = 2^17, r = 8, p = 1` — 128 MB and ~200 ms per derivation, measured on the
+ * development machine this was tuned on (2^15 → 52 ms, 2^16 → 103 ms,
+ * 2^17 → 203 ms). That is the floor `research/06-stack-deployment.md` §5 sets
+ * for interactive use and calls out as the thing to verify before shipping:
+ * *"OWASP's 2026 floor is `N = 2^17, r = 8, p = 1`"*. This file shipped at
+ * `2^15` — two doublings under its own written requirement, which is a quarter
+ * of the intended cost to an offline attacker.
+ *
+ * The number that matters is not the latency, it is the memory: scrypt's cost
+ * is `128 · N · r · p` bytes that an attacker must hold *per guess in flight*,
+ * so 32 MB → 128 MB is a 4× cut in how many guesses a given GPU or FPGA can run
+ * at once. 200 ms is still under the threshold at which a sign-in stops feeling
+ * immediate, and it is paid once per sign-in rather than per request.
+ *
+ * Raising this does not invalidate anything: {@link decode} reads the
+ * parameters from each stored hash, so every existing row keeps verifying under
+ * the parameters it was written with and {@link needsRehash} upgrades it on the
+ * owner's next successful sign-in.
  */
 const CURRENT: ScryptParameters = Object.freeze({
-  N: 32768,
+  N: 131072,
   r: 8,
   p: 1,
   keyLength: 64,
 });
 
 const SALT_BYTES = 16;
+
+/**
+ * How many derivations may be in flight at once, process-wide.
+ *
+ * This is the other half of raising the cost, and skipping it turns a hardening
+ * change into a denial-of-service vector. Each derivation holds
+ * `128 · N · r · p` = **128 MB** for its duration; twenty concurrent sign-in
+ * requests would ask the runtime for 2.5 GB at the same instant, and a
+ * serverless function with a 1 GB ceiling does not slow down under that, it
+ * dies. The attacker needs no credentials and no account — the memory is
+ * allocated before the password is compared.
+ *
+ * Four is chosen against the smallest deployment target rather than the
+ * largest: ~512 MB of scrypt arenas, which fits the 1 GB Vercel function, and
+ * on a multi-core laptop still keeps every core busy. Requests beyond it wait
+ * rather than fail, which is the right failure mode for a queue that drains in
+ * ~200 ms, and the rate limiter in front of the routes is what stops the queue
+ * growing without bound.
+ *
+ * It applies to `hashPassword` and `verifyPassword` alike, so the decoy path
+ * and the real path continue to cost the same — a gate that only queued real
+ * users would be a timing oracle wearing a helmet.
+ */
+const MAX_CONCURRENT_DERIVATIONS = 4;
+
+let inFlight = 0;
+const waiting: (() => void)[] = [];
+
+async function acquireSlot(): Promise<void> {
+  if (inFlight < MAX_CONCURRENT_DERIVATIONS) {
+    inFlight += 1;
+    return;
+  }
+  await new Promise<void>((resolve) => waiting.push(resolve));
+  inFlight += 1;
+}
+
+function releaseSlot(): void {
+  inFlight -= 1;
+  // FIFO: the request that has waited longest goes next, so a burst cannot
+  // starve the first arrival indefinitely.
+  waiting.shift()?.();
+}
 
 /**
  * Node's default `maxmem` is 32 MB and the memory scrypt actually needs is
@@ -84,14 +140,19 @@ async function derive(
   salt: Buffer,
   parameters: ScryptParameters,
 ): Promise<Buffer> {
-  // Normalising first means "é" typed as one codepoint and as two verifies the
-  // same way, which is otherwise a login failure nobody can explain.
-  return scrypt(password.normalize("NFKC"), salt, parameters.keyLength, {
-    N: parameters.N,
-    r: parameters.r,
-    p: parameters.p,
-    maxmem: maxmemFor(parameters),
-  });
+  await acquireSlot();
+  try {
+    // Normalising first means "é" typed as one codepoint and as two verifies
+    // the same way, which is otherwise a login failure nobody can explain.
+    return await scrypt(password.normalize("NFKC"), salt, parameters.keyLength, {
+      N: parameters.N,
+      r: parameters.r,
+      p: parameters.p,
+      maxmem: maxmemFor(parameters),
+    });
+  } finally {
+    releaseSlot();
+  }
 }
 
 function encode(parameters: ScryptParameters, salt: Buffer, hash: Buffer): string {
@@ -194,6 +255,14 @@ export async function verifyPassword(
  *
  * Call it after a *successful* verification — that is the one moment the plain
  * password is in hand and can be re-hashed at the current cost.
+ *
+ * All four parameters are compared, `p` included. Its omission was not
+ * harmless: `p` is a linear multiplier on the total work, so a row written at
+ * `p = 1` when the current tuple says `p = 2` costs an attacker half of what
+ * this file claims — and it would never be upgraded, because nothing else in
+ * the comparison can see the difference. Whichever way the tuple moves next,
+ * every column that contributes to the cost has to be able to trigger a
+ * rehash, or the weakest of them silently becomes the real setting.
  */
 export function needsRehash(stored: string): boolean {
   const decoded = decode(stored);
@@ -202,6 +271,7 @@ export function needsRehash(stored: string): boolean {
   return (
     parameters.N < CURRENT.N ||
     parameters.r < CURRENT.r ||
+    parameters.p < CURRENT.p ||
     parameters.keyLength < CURRENT.keyLength
   );
 }

@@ -184,4 +184,50 @@ describe("applying the schema", () => {
     const rows = await db.query<{ v: string }>(`select v from k order by v`);
     expect(rows.map((r) => r.v)).toEqual(["Zz", "a0", "a1", "b00"]);
   });
+
+  it("refuses a colour that is not six hex digits", async () => {
+    // The second of the two enforcements. The API validates colours
+    // (`domain/color.ts`), and this constraint is what holds when a future
+    // call site forgets to — the reason the rule is written down twice.
+    //
+    // Asserted by an insert that must actually be rejected: a `check` that was
+    // never added, or added against the wrong column, leaves a migration just
+    // as green as one that works.
+    await db.query(
+      `insert into workspaces (id, name, url_key) values ('wsp_c','C','c')
+       on conflict do nothing`,
+    );
+
+    await expect(
+      db.query(
+        `insert into teams (id, workspace_id, name, key, color)
+         values ('tem_c','wsp_c','Colour','CLR','url(//attacker.example/x)')`,
+      ),
+      "a url() payload must not be storable as a colour",
+    ).rejects.toThrow();
+
+    // Named colours and shorthand are refused too — they are valid CSS, which
+    // is exactly the point: the rule is a whitelist of one shape, not a list
+    // of dangerous forms to keep up to date.
+    for (const bad of ["red", "#fff", "var(--bg-app)"]) {
+      await expect(
+        db.query(
+          `insert into teams (id, workspace_id, name, key, color)
+           values ('tem_bad','wsp_c','Bad','BAD',$1)`,
+          [bad],
+        ),
+      ).rejects.toThrow();
+    }
+
+    // …and a real colour still goes in, so the constraint is not simply
+    // rejecting everything.
+    await db.query(
+      `insert into teams (id, workspace_id, name, key, color)
+       values ('tem_ok','wsp_c','Okay','OKY','#5e6ad2')`,
+    );
+    const rows = await db.query<{ color: string }>(
+      `select color from teams where id = 'tem_ok'`,
+    );
+    expect(rows).toStrictEqual([{ color: "#5e6ad2" }]);
+  });
 });

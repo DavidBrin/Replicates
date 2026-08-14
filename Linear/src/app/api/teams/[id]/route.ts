@@ -39,12 +39,26 @@ import {
 import { ESTIMATION_SCALES, STATE_TYPES, type Team } from "@/domain/entities";
 import type { Action } from "@/domain/policy";
 
+import { HEX_COLOR } from "@/domain/color";
+
+/**
+ * Every colour a caller may write.
+ *
+ * A colour reaches a CSS property, so `z.string().max(40)` let an authorised
+ * member store `url(//attacker.example/pixel)` and make every other member's
+ * browser fetch it. See `domain/color.ts`.
+ */
+const HEX_COLOR_SCHEMA = z
+  .string()
+  .regex(HEX_COLOR, "Colour must be a hex value such as #5e6ad2.")
+  .transform((value) => value.toLowerCase());
+
 const Patch = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   key: z.string().trim().min(1).max(5).optional(),
   description: z.string().max(2_000).nullable().optional(),
   icon: z.string().max(40).optional(),
-  color: z.string().max(40).optional(),
+  color: HEX_COLOR_SCHEMA.optional(),
   private: z.boolean().optional(),
   triageEnabled: z.boolean().optional(),
   estimationScale: z.enum(ESTIMATION_SCALES).optional(),
@@ -55,13 +69,13 @@ const Command = z.discriminatedUnion("action", [
     action: z.literal("createState"),
     name: z.string().trim().min(1).max(60),
     type: z.enum(STATE_TYPES),
-    color: z.string().min(1).max(40),
+    color: HEX_COLOR_SCHEMA,
   }),
   z.object({
     action: z.literal("updateState"),
     stateId: z.string().min(1).max(64),
     name: z.string().trim().min(1).max(60).optional(),
-    color: z.string().min(1).max(40).optional(),
+    color: HEX_COLOR_SCHEMA.optional(),
     position: z.number().finite().optional(),
   }),
   z.object({
@@ -71,13 +85,13 @@ const Command = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("createLabel"),
     name: z.string().trim().min(1).max(60),
-    color: z.string().min(1).max(40),
+    color: HEX_COLOR_SCHEMA,
   }),
   z.object({
     action: z.literal("updateLabel"),
     labelId: z.string().min(1).max(64),
     name: z.string().trim().min(1).max(60).optional(),
-    color: z.string().min(1).max(40).optional(),
+    color: HEX_COLOR_SCHEMA.optional(),
   }),
   z.object({
     action: z.literal("deleteLabel"),

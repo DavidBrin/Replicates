@@ -22,13 +22,27 @@ import {
 import { ESTIMATION_SCALES } from "@/domain/entities";
 import { can } from "@/domain/policy";
 
+import { HEX_COLOR } from "@/domain/color";
+
+/**
+ * Every colour a caller may write.
+ *
+ * A colour reaches a CSS property, so `z.string().max(40)` let an authorised
+ * member store `url(//attacker.example/pixel)` and make every other member's
+ * browser fetch it. See `domain/color.ts`.
+ */
+const HEX_COLOR_SCHEMA = z
+  .string()
+  .regex(HEX_COLOR, "Colour must be a hex value such as #5e6ad2.")
+  .transform((value) => value.toLowerCase());
+
 const Body = z.object({
   workspaceId: z.string().min(1).max(64),
   name: z.string().trim().min(1).max(120),
   key: z.string().trim().min(1).max(5).optional(),
   description: z.string().max(2_000).nullable().optional(),
   icon: z.string().max(40).optional(),
-  color: z.string().max(40).optional(),
+  color: HEX_COLOR_SCHEMA.optional(),
   private: z.boolean().optional(),
   triageEnabled: z.boolean().optional(),
   estimationScale: z.enum(ESTIMATION_SCALES).optional(),

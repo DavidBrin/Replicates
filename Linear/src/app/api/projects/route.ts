@@ -30,13 +30,25 @@ import {
 } from "@/domain/entities";
 import { can, canViewTeam, checkProjectRoleChange } from "@/domain/policy";
 
+import { HEX_COLOR } from "@/domain/color";
+
+/**
+ * A project colour, which reaches a CSS property when the project renders.
+ * `z.string().max(40)` let an authorised member store `url(...)` and make
+ * every other member's browser fetch it. See `domain/color.ts`.
+ */
+const HEX_COLOR_SCHEMA = z
+  .string()
+  .regex(HEX_COLOR, "Colour must be a hex value such as #5e6ad2.")
+  .transform((value) => value.toLowerCase());
+
 const Body = z.object({
   workspaceId: z.string().min(1).max(64),
   name: z.string().trim().min(1).max(200),
   description: z.string().max(20_000).optional(),
   summary: z.string().max(500).optional(),
   icon: z.string().max(40).optional(),
-  color: z.string().max(40).optional(),
+  color: HEX_COLOR_SCHEMA.optional(),
   state: z.enum(PROJECT_STATES).optional(),
   leadId: z.string().min(1).max(64).nullable().optional(),
   startDate: z.string().max(10).nullable().optional(),

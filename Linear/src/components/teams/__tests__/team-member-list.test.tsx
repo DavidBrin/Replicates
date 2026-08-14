@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -131,6 +131,152 @@ describe("role changes", () => {
       );
     });
     expect(select).toHaveValue("admin");
+  });
+});
+
+/* ============================================================ concurrency = */
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/**
+ * Two role changes for one member, overlapping.
+ *
+ * Both of this screen's rules — a guest may not hold admin (R7), a team keeps
+ * one admin (R5) — are decided against the row the server currently holds, so
+ * two writes for the same member are *ordered* operations. Sent together they
+ * arrive in whichever order the network chooses, and the row is left showing
+ * the second value while the database holds the first: the select says Member,
+ * the team says Admin, and nothing on screen ever says otherwise.
+ *
+ * The requests are genuine deferred promises settled concurrently rather than a
+ * simulated ordering, because "can a second write leave before the first is
+ * answered" is the whole question.
+ */
+describe("overlapping role changes", () => {
+  it("refuses a second write for a member whose first is unanswered", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    fetchMock
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const user = userEvent.setup();
+    renderList();
+    const select = screen.getByTestId("team-member-role-guest@demo.test");
+
+    await user.selectOptions(select, "admin");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Unanswered, and it says so: the row is busy rather than forbidden.
+    expect(select).toBeDisabled();
+    expect(screen.getByTestId("team-member-guest@demo.test")).toHaveAttribute(
+      "data-pending",
+      "true",
+    );
+
+    // A second change attempted before the answer lands — through the DOM
+    // event, because a disabled control is a hint and the guard is the code.
+    fireEvent.change(select, { target: { value: "member" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await Promise.all([
+        first.resolve(jsonResponse(200, { role: "admin" })),
+        second.resolve(jsonResponse(200, { role: "member" })),
+      ]);
+    });
+
+    // The value on screen is the value of the one request that was sent.
+    await waitFor(() => {
+      expect(select).toBeEnabled();
+    });
+    expect(select).toHaveValue("admin");
+    const bodies = fetchMock.mock.calls.map(([, init]) =>
+      JSON.parse(String((init as RequestInit).body)),
+    );
+    expect(bodies).toStrictEqual([{ userId: "usr_guest", role: "admin" }]);
+  });
+
+  it("does not make one member's write wait behind another's", async () => {
+    const forGuest = deferred<Response>();
+    const forOwner = deferred<Response>();
+    fetchMock
+      .mockReturnValueOnce(forGuest.promise)
+      .mockReturnValueOnce(forOwner.promise);
+
+    const user = userEvent.setup();
+    renderList();
+
+    await user.selectOptions(
+      screen.getByTestId("team-member-role-guest@demo.test"),
+      "admin",
+    );
+    await user.selectOptions(
+      screen.getByTestId("team-member-role-owner@demo.test"),
+      "member",
+    );
+
+    // Per member, not per table: a queue that serialised the whole screen would
+    // make administering a team feel broken.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await Promise.all([
+        forOwner.resolve(jsonResponse(200, { role: "member" })),
+        forGuest.resolve(jsonResponse(200, { role: "admin" })),
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("team-member-role-guest@demo.test"),
+      ).toBeEnabled();
+    });
+    expect(screen.getByTestId("team-member-role-guest@demo.test")).toHaveValue(
+      "admin",
+    );
+    expect(screen.getByTestId("team-member-role-owner@demo.test")).toHaveValue(
+      "member",
+    );
+  });
+
+  it("refuses a removal for a member whose role change is still in flight", async () => {
+    const first = deferred<Response>();
+    fetchMock.mockReturnValueOnce(first.promise);
+
+    const user = userEvent.setup();
+    renderList();
+    const row = screen.getByTestId("team-member-guest@demo.test");
+
+    await user.selectOptions(
+      screen.getByTestId("team-member-role-guest@demo.test"),
+      "admin",
+    );
+    expect(within(row).getByRole("button", { name: /remove/i })).toBeDisabled();
+
+    // Promotion then removal is the ordered pair the server's answer depends on.
+    fireEvent.click(within(row).getByRole("button", { name: /remove/i }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("team-member-guest@demo.test")).toBeInTheDocument();
+
+    await act(async () => {
+      first.resolve(jsonResponse(200, { role: "admin" }));
+    });
+    await waitFor(() => {
+      expect(
+        within(row).getByRole("button", { name: /remove/i }),
+      ).toBeEnabled();
+    });
   });
 });
 
