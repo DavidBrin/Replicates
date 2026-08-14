@@ -588,4 +588,51 @@ describe("where the port tag sits", () => {
   it("leaves a fighter who declares nothing exactly where they were", () => {
     expect(tagTop("mario", undefined)).toBe(tagTop("mario", 0));
   });
+
+  /**
+   * The declaration itself, not just the mechanism.
+   *
+   * Every test above overrides `tagClearance` with a value of its own, so all
+   * of them pass just as happily after Pikachu's production declaration is
+   * deleted — which is the actual defect: the ears are the shape that names him
+   * at sixty pixels and the tag sat across them. The mechanism was covered and
+   * the fix was not.
+   */
+  /**
+   * Pikachu's shipped declaration, and the honest limit of what this asserts.
+   *
+   * What is checked: that he declares headroom at all, and that the renderer
+   * consumes it. Every other test in this block overrides `tagClearance` with a
+   * value of its own, so all of them stay green after the production
+   * declaration is deleted — which is the defect itself, since the ears are the
+   * shape that names him at sixty pixels.
+   *
+   * What is **not** checked, and should be said rather than implied: that 3.2
+   * is *enough*. Proving non-overlap needs the ears' ink in canvas space, and a
+   * prop paints inside `translate`/`scale` while `mockContext` returns an
+   * identity matrix from `getTransform` — so a path op records its own local
+   * coordinates and comparing them to a canvas y is meaningless. An attempt at
+   * it here reported Pikachu's ears overhanging by 18 rig units, on a fighter
+   * seven units tall.
+   *
+   * The value was set the only way currently available: by capture. See
+   * `/tmp/pika-tag.png` in the round-two pass — tag fully clear of both ears
+   * across the jab. Making this assertable means teaching the mock to track the
+   * CTM, which is worth doing and is not this change.
+   */
+  it("declares headroom, and the renderer spends it", () => {
+    const declared = CHARACTER_RIGS["pikachu"].tagClearance;
+    expect(declared, "Pikachu no longer declares any headroom").toBeGreaterThan(0);
+    expect(tagTop("pikachu", declared)).toBeLessThan(tagTop("pikachu", 0));
+  });
+
+  it("is the only fighter on the roster who needs it", () => {
+    // Not decoration: it says the mechanism is opt-in and that nobody else has
+    // quietly acquired a value, which would make the tag float for no reason.
+    const declaring = Object.entries(CHARACTER_RIGS)
+      .filter(([k]) => !["default", "dk", "donkey-kong"].includes(k))
+      .filter(([, r]) => (r.tagClearance ?? 0) > 0)
+      .map(([k]) => k);
+    expect(declaring).toEqual(["pikachu"]);
+  });
 });

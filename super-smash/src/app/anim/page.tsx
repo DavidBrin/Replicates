@@ -24,7 +24,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { drawFigure, getCharacterRig, propAnimFor, resolvePalette, squashFor } from "@/render/characterArt";
+import {
+  drawFigure,
+  getCharacterRig,
+  propAnimFor,
+  resolvePalette,
+  rimWidthFor,
+  squashFor,
+} from "@/render/characterArt";
 import { rigHeight } from "@/render/skeleton";
 import {
   actionDurationFor,
@@ -40,7 +47,7 @@ import { drawMoveFx } from "@/render/specialFx";
 import { DREW_NOTHING } from "@/render/fxKit";
 import { createCamera } from "@/render/camera";
 import { FIGHTER_IDS, getFighter } from "@/fighters";
-import type { ActionState, FighterState, MoveSlot } from "@/engine/types";
+import type { ActionState, FighterDef, FighterState, MoveSlot } from "@/engine/types";
 
 /** Every action worth looking at, grouped the way an animator would think of them. */
 const GROUPS: ReadonlyArray<readonly [string, readonly ActionState[]]> = [
@@ -111,6 +118,53 @@ export function moveFor(o: Options): MoveSlot {
   return o.action === "grab" ? "grab" : o.move;
 }
 
+/** The moves that are only ever thrown in the air. */
+const AERIALS: ReadonlySet<MoveSlot> = new Set(["nair", "fair", "bair", "uair", "dair"]);
+
+/**
+ * Whether the lab should draw this option set standing on the ground.
+ *
+ * Exported so it can be tested, because getting it wrong is silent: the
+ * fighter looks the same either way, and only a prop that reads `airborne`
+ * behaves differently.
+ *
+ * It used to list the three states whose *names* say airborne, which drew a
+ * neutral air as a fighter standing on the floor. That was invisible until
+ * `propAnimFor` began reading `grounded`, at which point every
+ * airborne-dependent prop — Pikachu's tail, Marth's cape — behaved in the
+ * authoring view as it never would in a match. That is the third time in one
+ * pass the lab and the renderer have been caught disagreeing, which is why the
+ * velocity and the rim both went through a single shared function.
+ */
+export function groundedFor(o: Options): boolean {
+  if (AIRBORNE.has(o.action)) return false;
+  return !(usesMoveFor(o.action) && AERIALS.has(moveFor(o)));
+}
+
+/**
+ * The actions a fighter is off the ground for.
+ *
+ * `ledgeHang` and `ledgeJump` are here because a ledge is grabbed *from* the
+ * air and nothing re-grounds the fighter while they hang — `grabLedge` never
+ * touches `grounded`, and `applyMovement` returns early for anyone on a ledge.
+ * They were missing because the first version of this listed the three states
+ * whose names say airborne.
+ *
+ * `ledgeGetUp` is deliberately absent: it starts off the stage and finishes on
+ * it, so either answer is wrong for half the clip, and "on the ground" is right
+ * for the frames a prop is most likely to be read in.
+ */
+const AIRBORNE: ReadonlySet<ActionState> = new Set([
+  "jump",
+  "fall",
+  "airDodge",
+  "ledgeHang",
+  "ledgeJump",
+  // A tumbling fighter who touches the ground becomes `downed` on that frame,
+  // so every frame that is still `tumble` is a frame in the air.
+  "tumble",
+]);
+
 /** Whether this action performs a move, and so has frame data of its own. */
 export function usesMoveFor(action: ActionState): boolean {
   return action === "attack" || action === "special" || action === "throw" || action === "grab";
@@ -127,13 +181,63 @@ function fighterAt(o: Options, frame: number): FighterState {
     // A reel is as long as the hit that caused it; 24 is an average one.
     hitstun: o.action === "hitstun" ? Math.max(0, 24 - frame) : 0,
     charge: o.action === "landingLag" ? 16 : 0,
-    grounded: o.action !== "jump" && o.action !== "fall" && o.action !== "airDodge",
+    grounded: groundedFor(o),
     // Walk and run are paced by ground covered rather than by frames elapsed,
     // so a fighter standing still freezes mid-step. Give them their own speed
     // or the lab shows one motionless drawing for the cycles that move most.
     vx: speedFor(o),
+    vy: verticalFor(o, getFighter(o.fighterId)?.attributes, frame),
   });
 }
+
+/**
+ * A plausible vertical velocity for the state being shown.
+ *
+ * Zero for everything was the fourth way this file has been caught disagreeing
+ * with the renderer in one pass — a fall drawn at zero `vy` tells a prop the
+ * fighter is hanging at the apex, so Fox's tail and Marth's cape show their
+ * apex behaviour through a whole descent and never their falling one.
+ *
+ * An approximation, and deliberately a coarse one: the lab has no simulation
+ * and inventing an arc here would be inventing physics. A fall gets the
+ * fighter's own terminal speed, a jump gets its initial velocity decayed by
+ * gravity and clamped at that terminal, and everything else stays at zero
+ * because everything else genuinely is.
+ */
+export function verticalFor(
+  o: Options,
+  attrs: FighterDef["attributes"] | undefined,
+  frame: number,
+): number {
+  if (!attrs) return 0;
+  const terminal = -(o.fastFalling ? attrs.fastFallSpeed : attrs.fallSpeed);
+  if (o.action === "fall") return terminal;
+  if (o.action === "jump") {
+    // The second jump is a different number, and markedly so for DK, Fox and
+    // Kirby — the lab offers the choice, so it has to honour it.
+    const launch = o.jumpsUsed >= 2 ? attrs.airJumpVelocity : attrs.fullHopVelocity;
+    return Math.max(terminal, launch - attrs.gravity * frame);
+  }
+  return 0;
+}
+
+/**
+ * What this deliberately does **not** model, and why.
+ *
+ * An aerial attack keeps whatever velocity the fighter carried into it, and a
+ * move with `MoveDef.momentum` — Dolphin Slash, Fox Illusion — drives itself.
+ * Both were raised in review and both are declined here: reproducing them means
+ * running the simulation, and a hand-rolled approximation of it inside a dev
+ * harness is a second physics implementation that can disagree with the real
+ * one. A lab that is *approximately* right about velocity is worse than one
+ * that is plainly neutral, because an author cannot tell which they are looking
+ * at.
+ *
+ * The tool for a move's real velocity already exists and is what the character
+ * work is reviewed with: `scripts/fightsheet.mjs` plays the move in an actual
+ * match and hand-cranks the clock. The lab's job is the pose at its true
+ * length; the match's job is the motion.
+ */
 
 /** The fighter's own ground speed, for the clips that are paced by it. */
 function speedFor(o: Options): number {
@@ -144,8 +248,16 @@ function speedFor(o: Options): number {
   return 0;
 }
 
-/** Draw one fighter, centred on its feet, exactly as the renderer would. */
-function drawCell(
+/**
+ * Draw one fighter, centred on its feet, exactly as the renderer would.
+ *
+ * Exported for the tests. "Exactly as the renderer would" is the whole contract
+ * of this file and it has been broken three times in one pass — the prop
+ * velocity it never passed, the rim width it sized by its own formula, the
+ * aerials it drew standing on the floor — so the claim is worth something only
+ * if something checks it.
+ */
+export function drawCell(
   ctx: CanvasRenderingContext2D,
   o: Options,
   frame: number,
@@ -204,7 +316,11 @@ function drawCell(
   const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : DREW_NOTHING;
 
   if (!fx.hideFigure) {
-    drawFigure(ctx, { ...params, mode: "rim", rimWidth: Math.max(2, zoom * 0.5) });
+    // Through the same function the match uses. The lab had its own formula and
+    // no `rig.scale`, so the moment the renderer became proportional the
+    // authoring view stopped agreeing with the game for every fighter whose
+    // scale is not 1 — which is most of them.
+    drawFigure(ctx, { ...params, mode: "rim", rimWidth: rimWidthFor(rig.scale, zoom) });
     drawFigure(ctx, { ...params, mode: "body" });
   }
 

@@ -717,12 +717,26 @@ describe("his effects are wired to moves he actually has", () => {
     }
   });
 
-  it("keys every projectile painter to a projectile he launches", () => {
+  /**
+   * Both directions, because DK launches nothing.
+   *
+   * The one-directional loop ran zero assertions against an empty table and
+   * passed on nothing — and would go on passing if he later gained a projectile
+   * whose painter was never written, which is the silent half of the pair. This
+   * codebase has already shipped one vacuous fixture that stayed green through
+   * a reverted fix, so a loop over a possibly-empty table gets its count
+   * asserted.
+   */
+  it("has a painter for everything he launches, and launches everything it paints", () => {
     const launched = new Set(
       Object.values(donkeyKong.moves).flatMap((m) => (m?.projectiles ?? []).map((p) => p.id)),
     );
-    for (const id of Object.keys(projectiles)) {
-      expect(launched.has(id), `${id} is never launched`).toBe(true);
-    }
+    const painted = new Set(Object.keys(projectiles));
+
+    expect([...painted].filter((id) => !launched.has(id)), "painters for nothing").toEqual([]);
+    expect([...launched].filter((id) => !painted.has(id)), "projectiles with no painter").toEqual([]);
+    // States the fixture's shape rather than assuming it: DK throws no
+    // projectile today, so both sets are empty and that is the fact under test.
+    expect(painted.size).toBe(launched.size);
   });
 });

@@ -107,6 +107,7 @@ export {
   DEFAULT_RIG,
   PROP_STILL,
   propAnimFor,
+  rimWidthFor,
   type Brush,
   type DrawMode,
   type PropAnim,

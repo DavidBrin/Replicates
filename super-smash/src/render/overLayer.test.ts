@@ -61,3 +61,35 @@ describe("the renderer drains what an effect deferred", () => {
     expect(marks(), "the over-queue never reached the canvas").toBe(1);
   });
 });
+
+/**
+ * The lab is the other half of the contract, and it was not being checked.
+ *
+ * This file said "both callers that draw a fighter must drain the queue" and
+ * then only ever called `render`. Deleting the lab's own `for (const paint of
+ * fx.over)` loop left every assertion above green — so the test named the
+ * contract it was failing to enforce, which is the most expensive kind of test
+ * to have: it reads as coverage.
+ */
+describe("the animation lab drains it too", () => {
+  it("paints the deferred layer in the authoring view", async () => {
+    const { drawCell } = await import("@/app/anim/page");
+    const ctx = createMockContext(800, 600);
+    drawCell(
+      ctx as unknown as CanvasRenderingContext2D,
+      {
+        fighterId: "kirby",
+        action: "special",
+        move: "downB",
+        jumpsUsed: 0,
+        fastFalling: false,
+      },
+      12,
+      400,
+      500,
+      9,
+    );
+    const marks = callsOf(ctx, "fillRect").filter((c) => c.args[0] === OVER_MARK.x);
+    expect(marks.length, "the lab never drained the over-queue").toBe(1);
+  });
+});

@@ -243,14 +243,32 @@ describe("painting over the figure", () => {
     const result = drawMoveFx(
       ctx,
       kirby,
-      makeFighter({ defId: "kirby", action: "special", move: "downB", actionFrame: 20 }),
+      // Frame 30, not 20. Both hide the fighter and both carry a queue, but at
+      // 20 the deferred callback matches neither its flash nor its impact
+      // window and only calls `save()`/`restore()` — which move `calls.length`
+      // without painting a pixel, so an assertion on the call count passed
+      // against a queue that drew nothing. Measured: 20 yields 0 fills, 30
+      // yields 10.
+      makeFighter({ defId: "kirby", action: "special", move: "downB", actionFrame: 30 }),
       cam,
       13,
       960,
       540,
     );
     expect(result.hideFigure, "this frame is supposed to be the rock").toBe(true);
-    expect(Array.isArray(result.over), "the queue did not survive hideFigure").toBe(true);
+    // A non-empty queue, and then drained and seen to paint.
+    //
+    // `Array.isArray` was the whole assertion here, which passes just as well
+    // when `drawMoveFx` loses every deferred paint and hands back `over: []` —
+    // exactly the data loss this test was written to catch, on the one effect
+    // where the queue is the entire picture. The test described the bug and
+    // could not detect it.
+    expect(result.over.length, "the queue survived as a type but lost its contents").toBeGreaterThan(0);
+    // Fills and strokes, not calls: those are the ones that put ink down.
+    const inkBefore = countOf(ctx, "fill") + countOf(ctx, "stroke");
+    for (const paint of result.over) paint();
+    const inkAfter = countOf(ctx, "fill") + countOf(ctx, "stroke");
+    expect(inkAfter - inkBefore, "draining the queue painted nothing").toBeGreaterThan(0);
   });
 
   it("hands back a drainable queue on every path, including the misses", () => {

@@ -538,8 +538,28 @@ describe("the tail moves on its own, which is most of what makes it a tail", () 
     // `PROP_STILL` is what a character-select tile and the silhouette check get.
     // A prop that swayed there would make two drawings of the same fighter
     // differ for a reason no reader could see.
-    expect(tailSpine(PROP_STILL)).toEqual(tailSpine(PROP_STILL));
-    expect(tailAngle(PROP_STILL)).toBe(tailAngle({}));
+    //
+    // This used to assert `tailSpine(PROP_STILL)` equals `tailSpine(PROP_STILL)`
+    // and `tailAngle(PROP_STILL)` equals `tailAngle({})` — the same call twice,
+    // and a call whose defaults *are* `PROP_STILL`. Both are true of any
+    // deterministic function, so the test held after the still path broke.
+    const portrait = tailAngle(PROP_STILL);
+
+    // The guard on the guard: the clock has to move this tail at all, or
+    // everything below is satisfied by a tail that never moves.
+    const swaying = [12, 31, 57, 94].map((frame) => tailAngle({ frame }));
+    expect(
+      swaying.some((a) => Math.abs(a - portrait) > 0.5),
+      "the clock does not move the tail, so a still portrait proves nothing",
+    ).toBe(true);
+
+    // A portrait is the zero state, not a sample of the sway: `PROP_STILL` must
+    // agree with an explicitly motionless fighter, and its clock must be zero
+    // rather than merely constant — a fixed non-zero frame would freeze every
+    // portrait mid-wave.
+    expect(portrait).toBeCloseTo(tailAngle({ frame: 0, t: 0, vx: 0, vy: 0, airborne: false }), 9);
+    expect(PROP_STILL.frame, "a portrait reads a non-zero clock").toBe(0);
+    expect(PROP_STILL.vx, "a portrait streams as though running").toBe(0);
   });
 
   /**
