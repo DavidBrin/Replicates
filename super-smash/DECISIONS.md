@@ -1337,3 +1337,63 @@ restructured, because the assumption belongs to the engine.
 
 Every finding was checked against the code before being acted on, and every fix was
 mutation-verified — which is how the wrong one was caught.
+
+---
+
+## D52 — Round two, and what a review of it kept finding
+
+The second art pass ran eight character agents in parallel again, then took the shared code
+their reports converged on. The character work is theirs; this records what the round taught.
+
+**Three capabilities were missing, and each was blocking everybody at once.** An effect could
+only paint *under* the fighter, so the centre of Samus's drill was occluded by Samus. A prop was
+bolted rigidly to its bone, so Fox's tail could only move when a pose moved his hip. The port tag
+was placed from `rigHeight`, which measures bones and knows nothing about props, so Pikachu wore
+it on his ears. Each was reported independently by two to four agents before it was believed —
+convergence is what separates a real defect from one author's taste.
+
+**Parallel agents are a bug-finding instrument, and the bugs they find are in the shared code.**
+Round one found the inverted ear painters and `hexToRgb` returning black. Round two found:
+`PropAnim.vx` documented as world units and delivered as raw Q12, so a full run reached a painter
+as 9839 instead of 2.402; the animation lab never passing `anim` to `drawFigure` at all; and
+`resolveCollision` zeroing `vy` on a grounded fighter every frame, which silently disabled
+`MoveDef.momentum` for the entire roster — Samus's Screw Attack and Marth's Dolphin Slash both
+played their rising animation on the spot. Two agents found that last one from opposite ends of
+the roster, and each had first suspected their own capture tooling.
+
+**The lab and the renderer disagreed four times in one pass.** The velocity it never passed, the
+rim width it sized by its own formula, the aerials it drew standing on the floor, the second jump
+it gave the first jump's velocity. The fix each time was to move the arithmetic into one function
+both call, because an authoring view that quietly differs from the thing it authors for is worse
+than no authoring view: an author tunes against a fiction and cannot tell.
+
+**The review found twenty-one defects across ten rounds, and fifteen were in the tests.** That
+ratio is the finding. The production code had been mutation-tested as it was written; the tests
+had not been tested at all, and the pattern was consistent — a test that *named* the property it
+was failing to check. `Array.isArray(over)` is true of the empty array that is exactly the data
+loss it describes. Strengthened to count canvas calls, it then passed on `save`/`restore`, which
+move the count without painting. `overLayer.test.ts` declared a two-caller contract and exercised
+one. A tag test overwrote the shipped declaration it existed to protect. Fox's portrait test
+compared a call to itself. The rim tests would have passed `return 3 * rigScale`, and every one of
+them called the helper directly — so all stayed green against caller drift, which is the thing
+that actually caused the bug.
+
+Mutation-testing the implementation is now habit here. Mutation-testing the *test* — breaking the
+consumer rather than the function, and checking the test still bites — is the missing half, and it
+is where every one of those fifteen would have been caught at authoring time.
+
+**Two findings were declined and one limitation documented.** Modelling aerial trajectories and
+scripted momentum inside the lab means a second physics implementation that can disagree with the
+real one; `fightsheet.mjs` plays the real move in a real match and is what the character work is
+reviewed with. And the Pikachu tag test cannot assert its clearance is *sufficient*, because
+`mockContext` returns an identity matrix from `getTransform` and a prop's path ops are in its own
+local frame — an attempt at it reported his ears overhanging by 18 rig units on a seven-unit
+fighter. The value was set by capture instead, and the test says so rather than implying more
+than it checks.
+
+**The review scaffolding lied first.** Run against a base that predated a sibling project's
+commits, codex produced fourteen confident, detailed, entirely plausible findings — about a
+different application in the same repository, with nothing in its output indicating it had not
+reviewed what was asked. The same class of error as a capture tool that photographs the wrong
+move, and the same lesson: an instrument that lies does not produce doubt, it produces confident
+wrong conclusions.

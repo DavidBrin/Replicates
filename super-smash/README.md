@@ -106,6 +106,12 @@ Making one character look like themselves has its own guide:
 **[docs/character-art.md](docs/character-art.md)** — the four layers a fighter is made of, which
 files belong to which character, and the conventions that have each cost somebody a day.
 
+Eight people working on eight characters at once turns out to be a bug-finding instrument as much
+as an art pipeline: what it converges on is the *shared* code, and the second pass found a
+velocity delivered in the wrong units, an authoring view that disagreed with the renderer four
+different ways, and an engine branch that had silently disabled scripted vertical movement for the
+whole roster ([D52](DECISIONS.md#d52--round-two-and-what-a-review-of-it-kept-finding)).
+
 ---
 
 ## The game
