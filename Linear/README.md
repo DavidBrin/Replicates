@@ -21,7 +21,7 @@ then seven parallel build slices — plus one feature Linear does not have: a
 more than one hop of.
 
 ```bash
-npm install && npm run dev     # http://localhost:3000 — no database to set up
+pnpm install && pnpm run dev     # http://localhost:3000 — no database to set up
 ```
 
 Sign in as `owner@demo.test` / `demo1234`. Also `admin@`, `member@`, `guest@` —
@@ -309,11 +309,11 @@ research/               9,095 lines from six parallel lanes
 ### Commands
 
 ```bash
-npm run dev            # PGlite, seeded on first boot
-npm run verify         # typecheck + lint + 1,559 unit tests
-npm run test:e2e       # Playwright, against a production build
-npm run build:schema   # regenerate schema.ts from schema.sql
-npm run db:push        # apply the schema (Vercel build command)
+pnpm run dev            # PGlite, seeded on first boot
+pnpm run verify         # typecheck + lint + 1,559 unit tests
+pnpm run test:e2e       # Playwright, against a production build
+pnpm run build:schema   # regenerate schema.ts from schema.sql
+pnpm run db:push        # apply the schema (Vercel build command)
 ```
 
 ### Deploying

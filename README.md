@@ -28,7 +28,7 @@ fractional-index string rather than Linear's float, which exhausts double
 precision after about fifty drags into the same gap and then silently stops
 holding its order.
 
-`npm install && npm run dev` and it runs — Postgres compiled to WebAssembly, so
+`pnpm install && pnpm run dev` and it runs — Postgres compiled to WebAssembly, so
 there is no database to install, and the same SQL runs on Neon when deployed.
 
 Next.js · 1,314 unit tests · 9 e2e permission tests · a 48×8 authorization

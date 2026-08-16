@@ -5,10 +5,10 @@ A working replica of Notion — the marketing site and the product — built in 
 The app is a real project tracker, not a screenshot: pages are made of editable blocks, databases render as board / table / list / calendar views, cards drag between status columns, people can be invited with roles, and everything persists in your browser.
 
 ```bash
-npm install
-npm run dev      # http://localhost:3000
-npm test         # unit tests
-npm run build    # production build
+pnpm install
+pnpm run dev      # http://localhost:3000
+pnpm test         # unit tests
+pnpm run build    # production build
 ```
 
 Deploys to Vercel's free tier with **no environment variables and no database**. See [Deployment](#deployment).
@@ -256,10 +256,10 @@ The marketing site carries a **second, scoped palette** — Notion runs differen
 Vitest + React Testing Library + jsdom. **147 tests, about two seconds.**
 
 ```bash
-npm test
-npm run lint
-npm run typecheck
-npm run build
+pnpm test
+pnpm run lint
+pnpm run typecheck
+pnpm run build
 ```
 
 The suite is in two halves, because the first half alone was green while the app rendered nothing.

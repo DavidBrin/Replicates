@@ -50,8 +50,8 @@ contract.
 ## Usage
 
 ```bash
-npm install
-npm run dev          # http://localhost:3000
+pnpm install
+pnpm run dev          # http://localhost:3000
 ```
 
 The app opens **into a ringing call**. That is the product, not a shortcut:
@@ -114,12 +114,12 @@ afford.
 
 | Command | Does |
 |---|---|
-| `npm run dev` | Dev server |
-| `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Unit tests (363) |
-| `npm run test:e2e` | Playwright, three projects (mobile Safari, mobile Chrome, desktop) |
-| `npm run typecheck` · `npm run lint` | TypeScript · ESLint |
-| `npm run generate:assets` | Regenerate the ringtone WAVs and the PWA icons |
+| `pnpm run dev` | Dev server |
+| `pnpm run build` / `pnpm start` | Production build / serve |
+| `pnpm test` | Unit tests (363) |
+| `pnpm run test:e2e` | Playwright, three projects (mobile Safari, mobile Chrome, desktop) |
+| `pnpm run typecheck` · `pnpm run lint` | TypeScript · ESLint |
+| `pnpm run generate:assets` | Regenerate the ringtone WAVs and the PWA icons |
 
 Refresh the screenshots in this README with:
 
@@ -171,7 +171,7 @@ The camera and installability both need a secure origin, so `http://<your-lan-ip
 will not do:
 
 ```bash
-npm run build && npm start
+pnpm run build && pnpm start
 npx untun@latest tunnel http://localhost:3000   # or ngrok / cloudflared
 ```
 
@@ -226,7 +226,7 @@ Honest list. Some are platform limits, some are scope.
    call whose turns land on N instances can spend up to N times its token budget.
    Shared storage (Vercel KV, Redis) is what makes the token side exact.
 10. **Offline is verified manually, not in CI.** The service worker only
-    registers in production builds and Playwright runs against `npm run dev`, so
+    registers in production builds and Playwright runs against `pnpm run dev`, so
     the offline path was proved by hand against `next start` (13 `/_next/` assets
     cached; an offline reopen hydrates and navigates) rather than by a test.
 

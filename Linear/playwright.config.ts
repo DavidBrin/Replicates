@@ -64,7 +64,7 @@ export default defineConfig({
      * server they already have running — the flake is a cold-start property,
      * and a warm server does not have it.
      */
-    command: `npm run build && npm run start -- --port ${PORT}`,
+    command: `pnpm run build && pnpm run start -- --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     // The build is inside this budget now, so it buys minutes rather than the

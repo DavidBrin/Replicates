@@ -19,8 +19,8 @@ sits alongside as a separate destination.
 ## Quick start
 
 ```bash
-npm install
-npm run dev          # http://localhost:3000
+pnpm install
+pnpm run dev          # http://localhost:3000
 ```
 
 No database, no environment variables, no external services. The app boots with a fully
@@ -31,13 +31,13 @@ Open <http://localhost:3000>, hit **Start betting**, and pick **@dev** on the si
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Dev server on :3000 |
-| `npm run build` | Production build |
-| `npm start` | Serve the production build |
-| `npm test` | Unit + property + route tests (Vitest) |
-| `npm run test:e2e` | End-to-end tests (Playwright) |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint |
+| `pnpm run dev` | Dev server on :3000 |
+| `pnpm run build` | Production build |
+| `pnpm start` | Serve the production build |
+| `pnpm test` | Unit + property + route tests (Vitest) |
+| `pnpm run test:e2e` | End-to-end tests (Playwright) |
+| `pnpm run typecheck` | `tsc --noEmit` |
+| `pnpm run lint` | ESLint |
 
 ### Deploying to Vercel
 
@@ -162,8 +162,8 @@ resources return **404, not 403** — a 403 confirms the resource exists ([D6](D
 ## Testing
 
 ```bash
-npm test          # ~664 unit, property and route-handler tests
-npm run test:e2e  # Playwright end-to-end
+pnpm test          # ~664 unit, property and route-handler tests
+pnpm run test:e2e  # Playwright end-to-end
 ```
 
 - **Property tests** (`fast-check`) guard the pricing invariants. They're written to fail
@@ -184,7 +184,7 @@ Honest list. Nothing here is hidden behind a happy path.
 
 **Persistence**
 - **The default store is in-memory.** It's seeded at boot and requires no configuration,
-  which is what makes `npm install && npm run dev` and one-click Vercel deploys work.
+  which is what makes `pnpm install && pnpm run dev` and one-click Vercel deploys work.
   **On Vercel this means state is per-serverless-instance and resets on cold start** —
   writes can appear to vanish between requests hitting different instances. Correct for a
   demo, fatal for production. A `DataStore` port exists precisely so a Postgres adapter is

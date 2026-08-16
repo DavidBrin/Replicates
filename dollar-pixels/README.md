@@ -35,8 +35,8 @@ real path settle through the same code, so the switch is not a leap of faith.
 ## Quick start
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Open <http://localhost:3000>. Nothing to configure — no keys, no database server, no account.
@@ -48,15 +48,15 @@ the schema is applied when the file is opened. Delete the file to reset the wall
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Development server on :3000 |
-| `npm run build` | Production build |
-| `npm start` | Serve the production build |
-| `npm test` | Unit and property tests (vitest) |
-| `npm run test:watch` | The same, watching |
-| `npm run test:e2e` | Playwright end-to-end, desktop and mobile |
-| `npm run test:e2e:ui` | The same, with the Playwright inspector |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint |
+| `pnpm run dev` | Development server on :3000 |
+| `pnpm run build` | Production build |
+| `pnpm start` | Serve the production build |
+| `pnpm test` | Unit and property tests (vitest) |
+| `pnpm run test:watch` | The same, watching |
+| `pnpm run test:e2e` | Playwright end-to-end, desktop and mobile |
+| `pnpm run test:e2e:ui` | The same, with the Playwright inspector |
+| `pnpm run typecheck` | `tsc --noEmit` |
+| `pnpm run lint` | ESLint |
 
 Screenshots are captured, not taken by hand:
 
@@ -137,7 +137,7 @@ import React, Next, an adapter or a route; `src/components` may not import an ad
 
 ## Turning on real money
 
-1. `npm i` already includes the Stripe SDK.
+1. `pnpm install` already includes the Stripe SDK.
 2. Set the environment:
    ```
    PAYMENT_PROVIDER=stripe

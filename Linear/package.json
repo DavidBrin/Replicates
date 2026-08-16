@@ -13,7 +13,7 @@
     "test:e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
     "db:push": "node --experimental-strip-types scripts/db-push.ts",
-    "verify": "npm run typecheck && npm run lint && npm run test",
+    "verify": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "build:schema": "node scripts/build-schema.mjs",
     "prebuild": "node scripts/build-schema.mjs"
   },

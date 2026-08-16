@@ -6,7 +6,7 @@
     "dev": "next dev",
     "generate:audio": "node scripts/generate-audio.mjs",
     "generate:icons": "node scripts/generate-icons.mjs",
-    "generate:assets": "npm run generate:audio && npm run generate:icons",
+    "generate:assets": "pnpm run generate:audio && pnpm run generate:icons",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

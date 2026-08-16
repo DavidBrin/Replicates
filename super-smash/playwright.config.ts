@@ -44,7 +44,7 @@ export default defineConfig({
   },
   projects: [{ name: "desktop-chrome", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `npm run dev -- --port ${PORT}`,
+    command: `pnpm run dev -- --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
