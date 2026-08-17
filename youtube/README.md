@@ -185,7 +185,7 @@ needs zero flags. Two runs produce a **byte-identical** media tree.
 | `pnpm test` | 2,227 unit tests |
 | `pnpm test:e2e` | 38 specs, three browser projects, production build |
 | `pnpm verify` | typecheck + lint + tests |
-| `pnpm seed:demo` | optional Creative Commons clips, for screenshots |
+| `pnpm seed:demo` | optional Creative Commons clips — and the way to add **your own** video ([ADDING-VIDEOS.md](ADDING-VIDEOS.md)) |
 
 Setting `DATABASE_URL` switches to Neon; setting the R2 variables switches the
 blob store. Both are one environment variable, and both refuse to boot in
@@ -315,4 +315,4 @@ muxer reproducing an independently generated reference box for box · built
 from nine parallel research lanes, then twelve parallel build slices, then
 four rounds of review.
 
-[Spec](SPEC.md) · [Decisions](DECISIONS.md) · [Research](research)
+[Spec](SPEC.md) · [Decisions](DECISIONS.md) · [Adding videos](ADDING-VIDEOS.md) · [Research](research)

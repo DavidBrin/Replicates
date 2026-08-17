@@ -162,6 +162,22 @@ interface DemoAsset {
   readonly durationSeconds: number;
   /** Approximate download size, for the budget below. */
   readonly megabytes: number;
+  /**
+   * Where this lands on the home grid, as a view count. Defaults to 0.
+   *
+   * The home feed's fallback is ordered `view_count desc, published_at desc,
+   * id desc`, so a video with no views sits below every seeded one — which is
+   * correct for a demo asset and wrong for the case this field exists for:
+   * putting *your own* video at the top of the page in a portfolio. See
+   * `ADDING-VIDEOS.md`.
+   *
+   * `videos.view_count` has no repository setter — `updateVideo`'s column map
+   * deliberately omits it so that `{ view_count: 1e9 }` from a request body
+   * cannot reach it — so this is stamped with SQL here, exactly as
+   * `stampCorpusFacts` in `scripts/seed.ts` does for the synthetic corpus, and
+   * for the same reason.
+   */
+  readonly viewCount?: number;
 }
 
 /**
@@ -326,7 +342,14 @@ async function main(): Promise<void> {
   ).slice(0, options.limit);
 
   if (wanted.length === 0) {
-    log(`Nothing to do: every asset is above the ${DEFAULT_MAX_MEGABYTES} MB budget. Use --all.`);
+    // Two different reasons, said apart: "nothing survived the budget" and
+    // "you asked for none" are not the same message.
+    log(
+      options.limit === 0
+        ? "Nothing to do: --limit=0."
+        : `Nothing to do: every asset is above the ${DEFAULT_MAX_MEGABYTES} MB ` +
+          "budget. Use --all.",
+    );
     return;
   }
 
@@ -426,6 +449,18 @@ async function main(): Promise<void> {
       });
       await videosRepo.publishVideo(db, id);
 
+      // Raw SQL, and the only statement this script issues, for the reason
+      // `DemoAsset.viewCount` gives: the column has no setter on purpose.
+      // Skipped entirely at the default of zero, so a plain `pnpm seed:demo`
+      // writes exactly what it used to.
+      const viewCount = asset.viewCount ?? 0;
+      if (viewCount > 0) {
+        await db.execute(`update videos set view_count = $2 where id = $1`, [
+          id,
+          viewCount,
+        ]);
+      }
+
       await new searchModule.PostgresSearchIndex(db).index({
         id,
         kind: "video",
@@ -434,7 +469,7 @@ async function main(): Promise<void> {
         channelName: DEMO_CHANNEL.name,
         tags: asset.tags,
         publishedAt: new Date(),
-        viewCount: 0,
+        viewCount,
         likeCount: 0,
         dislikeCount: 0,
         durationSeconds: asset.durationSeconds,
@@ -594,7 +629,22 @@ function parseOptions(argv: readonly string[]): Options {
   for (const argument of argv) {
     const [name, value] = argument.split("=", 2);
     if (name === "--all") all = true;
-    else if (name === "--limit") limit = Math.max(0, Number(value));
+    else if (name === "--limit") {
+      // `--limit=2`, not `--limit 2`. Written as a rejection rather than a
+      // coercion because the coercion was silent and wrong in the same breath:
+      // `Number(undefined)` is `NaN`, `slice(0, NaN)` is empty, and the run
+      // then reported "every asset is above the budget" — a sentence about a
+      // filter that had nothing to do with it.
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        throw new Error(
+          `--limit needs a whole number written as --limit=N (got ${
+            value === undefined ? "no value" : `"${value}"`
+          }).`,
+        );
+      }
+      limit = parsed;
+    }
     else if (name === "--help") {
       process.stdout.write(USAGE);
       process.exit(0);
