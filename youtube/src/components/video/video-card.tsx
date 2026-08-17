@@ -5,6 +5,7 @@ export {
   watchHref,
   channelHrefFor,
 } from "./routes";
+import Link from "next/link";
 import {
   watchHref,
   channelHrefFor,
@@ -259,7 +260,7 @@ export function VideoCardView({
 
         <div className="min-w-0 flex-1">
           <h3 className="m-0">
-            <a
+            <Link
               id={titleId}
               href={href ?? watchHref(video)}
               data-card-link=""
@@ -272,20 +273,20 @@ export function VideoCardView({
               style={clampStyle(2)}
             >
               {video.title}
-            </a>
+            </Link>
           </h3>
 
           <div className="text-body text-secondary">
             {showChannel ? (
               <div className="mt-0.5">
-                <a
+                <Link
                   href={channelHref ?? channelHrefFor(video)}
                   data-channel-link=""
                   // A sibling of the card's anchor, never a descendant.
                   className={clsx(ABOVE_CARD_LINK, "hover:text-primary")}
                 >
                   {video.channelName}
-                </a>
+                </Link>
               </div>
             ) : null}
             <div className="mt-0.5">

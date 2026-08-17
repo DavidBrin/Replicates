@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { database } from "@/adapters/db";
 import type { SqlExecutor } from "@/adapters/db";
 import { listComments, listReplies } from "@/adapters/repositories/comments";
+import { authorizeVideoAccess } from "@/adapters/repositories/media-access";
 import { getViewerReactions } from "@/adapters/repositories/reactions";
 import { shortsFeed } from "@/adapters/repositories/recommendations";
 import { filterSubscribed } from "@/adapters/repositories/subscriptions";
@@ -164,6 +165,27 @@ export default async function ShortPage({
     const handle = await database();
     const cookieJar = await cookies();
     const caller = await resolveSession(cookieJar.get(SESSION_COOKIE)?.value ?? null);
+
+    /**
+     * A Server Function is a public endpoint.
+     *
+     * The comment above is right that re-resolving the session is what stops a
+     * caller claiming an identity — but it only fixed the *who*. The *what*
+     * was still whatever `videoId` the request carried, and this page renders
+     * a fixed list of shorts, so the argument reads like it could only ever be
+     * one of them. It cannot: the action is addressable directly, with any id,
+     * and it returned the comment thread of a private video to anyone who
+     * guessed one.
+     *
+     * Empty rather than an error, because this is a read behind a panel that
+     * opens on tap. A thrown Server Function error surfaces as a broken
+     * overlay; an empty thread is what a video with no comments looks like,
+     * and is the same answer an id that does not exist gives.
+     */
+    if ((await authorizeVideoAccess(videoId, caller?.userId ?? null)) === null) {
+      return [];
+    }
+
     return readThreads(handle, videoId, caller?.userId ?? null);
   }
 

@@ -294,7 +294,33 @@ async function expand(
   seedIds: readonly string[],
 ): Promise<HopCandidate[]> {
   const seen = new Set(seedIds);
-  const originOf = new Map(seedIds.map((id) => [id, id] as const));
+
+  /**
+   * The seeds a video was reached from — a **set** per video, not one origin.
+   *
+   * It was `Map<string, string>`, keeping only the first seed to reach each
+   * video, and that quietly dropped half the evidence at the second hop. Given
+   * S1→B, S2→B and B→X, B is expanded once (which is the intended saving) but
+   * its origin was whichever of S1 or S2 the rows happened to list first, so X
+   * was credited to one seed and scored as though only one of the viewer's
+   * videos led to it. A candidate sitting behind two things you watched is
+   * precisely the candidate that should rank highest, and it was ranking as
+   * though it sat behind one.
+   *
+   * The cost stays where the original comment put it: one expansion per video
+   * however many paths reach it. What changes is that the emission is per
+   * (origin, candidate) rather than per candidate, which is the granularity
+   * `aggregateAcrossSeeds` already de-duplicates at.
+   *
+   * Reading the set at *expansion* time rather than at discovery time is what
+   * makes the order of rows within a hop stop mattering: S2→B may be seen
+   * after B has already been queued, and B's origins are not consulted until
+   * the next hop, by which point both are recorded.
+   */
+  const originsOf = new Map<string, Set<string>>(
+    seedIds.map((id) => [id, new Set([id])] as const),
+  );
+
   const out: HopCandidate[] = [];
   let frontier: readonly string[] = seedIds;
 
@@ -306,11 +332,20 @@ async function expand(
     );
     const next: string[] = [];
     for (const row of rows) {
-      const origin = originOf.get(row.seedId) ?? row.seedId;
-      out.push({ id: row.candidateId, seedId: origin, score: row.score, hop });
+      const origins = originsOf.get(row.seedId) ?? new Set([row.seedId]);
+      for (const origin of origins) {
+        out.push({ id: row.candidateId, seedId: origin, score: row.score, hop });
+      }
+
+      const known = originsOf.get(row.candidateId);
+      if (known === undefined) {
+        originsOf.set(row.candidateId, new Set(origins));
+      } else {
+        for (const origin of origins) known.add(origin);
+      }
+
       if (seen.has(row.candidateId)) continue;
       seen.add(row.candidateId);
-      originOf.set(row.candidateId, origin);
       next.push(row.candidateId);
     }
     frontier = next;

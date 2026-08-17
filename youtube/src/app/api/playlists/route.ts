@@ -12,6 +12,7 @@ import {
   removeVideo,
   updatePlaylist,
 } from "@/adapters/repositories/playlists";
+import { authorizeVideoAccess } from "@/adapters/repositories/media-access";
 import { currentViewerId } from "@/lib/auth/guard";
 
 /**
@@ -139,6 +140,23 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ deleted: removed });
       }
       case "add": {
+        /**
+         * Owning the playlist is not permission to reference any video.
+         *
+         * The check above establishes that this caller owns the *container*.
+         * The thing being put into it is a second resource with its own
+         * visibility, and nothing here consulted it — so a private video could
+         * be added to a stranger's playlist by guessing its id, and the
+         * response distinguished "added" from "no such video", which makes the
+         * endpoint an existence oracle for ids that are otherwise unguessable.
+         *
+         * Refused as a 404 on the *playlist*'s wording deliberately: a message
+         * naming the video would confirm the route got as far as looking one
+         * up, which is the same disclosure in a politer form.
+         */
+        if ((await authorizeVideoAccess(command.videoId, viewerId)) === null) {
+          return Response.json({ error: "No such video." }, { status: 404 });
+        }
         const added = await addVideo(db, command.playlistId, command.videoId);
         // `false` means the video was already there — `appendItem` is
         // `on conflict do nothing`, and pressing a toggle that is already on is

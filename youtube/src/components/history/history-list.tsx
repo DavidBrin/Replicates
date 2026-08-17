@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { useState, type ReactNode } from "react";
 
-import { Button, MenuItem } from "@/components/primitives";
+import { Button } from "@/components/primitives";
 import { HistoryIcon, PauseIcon, SearchIcon, GearIcon } from "@/components/icons";
 import { VideoRowView } from "@/components/video";
 import type { VideoCard } from "@/domain/types";

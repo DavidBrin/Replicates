@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import { useState } from "react";
 
@@ -98,7 +99,7 @@ export function VideoInfo({
       {/* §10.3's `#top-row`: owner block on the left, actions on the right. */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <a
+          <Link
             href={`/@${channelHandle}`}
             data-owner-link=""
             className="flex items-center gap-3"
@@ -121,7 +122,7 @@ export function VideoInfo({
                 {formatSubscriberCount(subscriberCount)}
               </span>
             </span>
-          </a>
+          </Link>
 
           {membershipsOffered ? (
             // §8.3: the owner row reads `Join` (membership, when offered) then

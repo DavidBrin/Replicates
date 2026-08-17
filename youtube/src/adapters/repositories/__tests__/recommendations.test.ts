@@ -340,8 +340,11 @@ describe("the neighbour lists", () => {
 
     await watch("s3", [video(1), video(2)]);
 
+    // 3 co-visits over 3 seed sessions × 3 candidate sessions. This read
+    // `score: 1` while the denominator was the candidate's count alone; the
+    // pair is unchanged, the scale is not.
     expect(await neighboursOf(db, video(1))).toEqual([
-      { candidateId: video(2), score: 1, rank: 1 },
+      { candidateId: video(2), score: relatedness(3, 3, 3), rank: 1 },
     ]);
   });
 
@@ -383,7 +386,7 @@ describe("the neighbour lists", () => {
       neighbours.find((row) => row.candidateId === id)?.score;
 
     expect(scoreOf(replayed)).toBe(scoreOf(watchedOnce));
-    expect(scoreOf(replayed)).toBe(relatedness(3, 3));
+    expect(scoreOf(replayed)).toBe(relatedness(3, await sessionCount(db, seed), 3));
   });
 
   /**
@@ -408,10 +411,17 @@ describe("the neighbour lists", () => {
     }
 
     const weight = await pairWeight(db, video(1), video(2));
+    const seedSessions = await sessionCount(db, video(1));
     const candidateSessions = await sessionCount(db, video(2));
     const [stored] = await neighboursOf(db, video(1));
 
-    expect(stored?.score).toBe(relatedness(weight ?? 0, candidateSessions));
+    // Both counts, and they differ here — video(2) is in six sessions and
+    // video(1) in three — so an implementation that dropped either one would
+    // land on a different number rather than coincidentally agreeing.
+    expect(seedSessions).not.toBe(candidateSessions);
+    expect(stored?.score).toBe(
+      relatedness(weight ?? 0, seedSessions, candidateSessions),
+    );
   });
 
   /**
@@ -514,6 +524,55 @@ describe("candidate generation", () => {
     const reached = await relatedCandidates(seed, VIEWER, db);
     const twoHop = reached.find((row) => row.card.id === distant);
     expect(twoHop?.seedIds).toEqual([seed]);
+  });
+
+  /**
+   * A candidate sitting behind *two* of the viewer's videos must be scored as
+   * such.
+   *
+   * The expansion visits each video once, which is the intended saving, and it
+   * used to keep one origin per video along with it — whichever seed's row
+   * happened to come first. So for S1→B, S2→B, B→X, the second hop credited X
+   * to one seed and `aggregateAcrossSeeds` summed one contribution instead of
+   * two. The evidence that X is the best thing to show this viewer is exactly
+   * that both their videos lead to it, and that evidence was being halved.
+   *
+   * The corpus below is built so the two answers differ in *order*, not just
+   * in score: `far` is reachable only from `s1`, `shared` from both. With the
+   * bug they tie on one contribution each and `far` wins on the id tie-break;
+   * with both contributions counted, `shared` comes first.
+   */
+  it("credits a candidate reached from two seeds to both of them", async () => {
+    const s1 = video(1);
+    const s2 = video(2);
+    const bridge = video(3);
+    const shared = video(4);
+    const far = video(5);
+
+    await seedCatalogue(db, [
+      { id: s1 },
+      { id: s2, channelId: "ch2" },
+      { id: bridge, channelId: "ch3" },
+      { id: shared, channelId: "ch4" },
+      { id: far, channelId: "ch5" },
+    ]);
+    const watch = recorder(db);
+
+    // Both of the viewer's videos lead into the same bridge…
+    for (const session of ["a1", "a2", "a3"]) await watch(session, [s1, bridge]);
+    for (const session of ["b1", "b2", "b3"]) await watch(session, [s2, bridge]);
+    // …which leads on to `shared`.
+    for (const session of ["c1", "c2", "c3"]) await watch(session, [bridge, shared]);
+    // `far` hangs off s1 alone, at the same hop and the same weight.
+    for (const session of ["d1", "d2", "d3"]) await watch(session, [s1, far]);
+
+    // The viewer has watched both seeds, in their own session.
+    await watch(VIEWER.sessionKey, [s1, s2]);
+
+    const feed = (await homeFeed(VIEWER, db)).map((card) => card.id);
+    expect(feed).toContain(shared);
+    expect(feed).toContain(far);
+    expect(feed.indexOf(shared)).toBeLessThan(feed.indexOf(far));
   });
 
   it("never returns the seed itself", async () => {

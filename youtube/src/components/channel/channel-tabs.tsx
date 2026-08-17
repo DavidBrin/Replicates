@@ -1,3 +1,4 @@
+import Link from "next/link";
 import clsx from "clsx";
 
 /**
@@ -109,7 +110,7 @@ export function ChannelTabs({ handle, active, className }: ChannelTabsProps) {
           const selected = tab.id === active;
           return (
             <li key={tab.id} className="mr-6 last:mr-0">
-              <a
+              <Link
                 href={channelTabHref(handle, tab.id)}
                 data-channel-tab={tab.id}
                 data-selected={selected ? "" : undefined}
@@ -127,7 +128,7 @@ export function ChannelTabs({ handle, active, className }: ChannelTabsProps) {
                 )}
               >
                 {tab.label}
-              </a>
+              </Link>
             </li>
           );
         })}

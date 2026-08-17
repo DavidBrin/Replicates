@@ -186,6 +186,8 @@ export async function reactToComment(
   db: SqlDatabase,
   userId: string,
   commentId: string,
+  /** The video the comment must belong to. See the `where` clause below. */
+  videoId: string,
   value: ReactionValue,
   outer?: SqlExecutor,
 ): Promise<CommentReaction> {
@@ -198,12 +200,27 @@ export async function reactToComment(
       value,
     );
 
+    /**
+     * `video_id = $3` is the containment check, and it is in the `where`
+     * clause rather than in a lookup before it on purpose: a separate `select`
+     * would be a second statement whose answer could be stale by the time the
+     * `update` ran, and inside one transaction there is no reason to ask
+     * twice. A comment on another video simply matches no row and falls
+     * through to the same `ReactionTargetNotFoundError` a missing id gives.
+     *
+     * The route used to pass no video at all, and carried a comment defending
+     * that: the reaction is keyed on the comment alone, so a caller who
+     * guessed another video's comment id "gets exactly the reaction they would
+     * have got from that video's page". That is true for a public video and
+     * false for a private one — its page is not reachable, and its comment ids
+     * were the one thing this endpoint would still act on.
+     */
     const rows = await tx.query(
       `update comments
           set like_count = greatest(like_count + $2, 0)
-        where id = $1
+        where id = $1 and video_id = $3
        returning like_count`,
-      [commentId, transition.likeDelta],
+      [commentId, transition.likeDelta, videoId],
     );
 
     const row = first(rows);

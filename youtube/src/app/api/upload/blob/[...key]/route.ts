@@ -5,7 +5,10 @@ import {
   blobStore,
   isWritableBlobKey,
 } from "@/adapters/blob";
-import { guessContentType } from "@/adapters/blob/filesystem";
+import {
+  contentTypeForKey,
+  declaredTypeMatchesKey,
+} from "@/adapters/blob/content-types";
 import { mediaAccess } from "@/adapters/repositories/media-access";
 import { currentViewerId, mayWriteMedia } from "@/lib/auth/guard";
 
@@ -66,7 +69,29 @@ export async function PUT(
     return json(404, { error: "No such video or channel." });
   }
 
-  const contentType = request.headers.get("content-type") ?? guessContentType(key);
+  /**
+   * Derived from the key, never taken from the request.
+   *
+   * This line used to read `request.headers.get("content-type") ?? guess(key)`,
+   * which let an authenticated uploader store `text/html` under a key they own
+   * and have `/api/media/…` serve it back as a document on this origin, with
+   * the viewer's session cookie attached. See `adapters/blob/content-types.ts`.
+   *
+   * A declared type is still *checked* — a client that disagrees with the
+   * derivation is confused about what it is uploading and is better told so
+   * than silently corrected, because the mismatch usually means the file
+   * picker and the key have drifted apart.
+   */
+  const contentType = contentTypeForKey(key);
+  if (contentType === null) {
+    return json(415, { error: "That key names no storable media type." });
+  }
+  const declared = request.headers.get("content-type");
+  if (declared !== null && !declaredTypeMatchesKey(key, declared)) {
+    return json(415, {
+      error: `This key stores ${contentType}, not ${declared}.`,
+    });
+  }
   const declaredLength = Number(request.headers.get("content-length"));
   const store = await blobStore();
 

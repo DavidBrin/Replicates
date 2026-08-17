@@ -5,7 +5,10 @@ import {
   blobStore,
   isWritableBlobKey,
 } from "@/adapters/blob";
-import { guessContentType } from "@/adapters/blob/filesystem";
+import {
+  contentTypeForKey,
+  declaredTypeMatchesKey,
+} from "@/adapters/blob/content-types";
 import { mediaAccess } from "@/adapters/repositories/media-access";
 import { currentViewerId, mayWriteMedia } from "@/lib/auth/guard";
 
@@ -135,7 +138,29 @@ export async function POST(request: Request): Promise<Response> {
     return json(404, { error: "No such video or channel." });
   }
 
-  const contentType = parsed.data.contentType ?? guessContentType(key);
+  /**
+   * Derived from the key. The body's `contentType` is an assertion to be
+   * checked, not a value to be adopted.
+   *
+   * This one matters more than the proxy route's copy, because on R2 the
+   * signature this endpoint mints is what the browser then `PUT`s directly to
+   * the bucket — no request of ours is in the path to correct it. Whatever
+   * type is signed here is the type the object carries forever, and R2 will
+   * hand it back to `/api/media` or to a public custom domain exactly as
+   * stored. Accepting the caller's value made this endpoint a way to plant an
+   * executable document in the bucket under a key the caller legitimately
+   * owns; see `adapters/blob/content-types.ts`.
+   */
+  const contentType = contentTypeForKey(key);
+  if (contentType === null) {
+    return json(415, { error: "That key names no storable media type." });
+  }
+  const asserted = parsed.data.contentType;
+  if (asserted !== undefined && !declaredTypeMatchesKey(key, asserted)) {
+    return json(415, {
+      error: `This key stores ${contentType}, not ${asserted}.`,
+    });
+  }
   const expiresIn = parsed.data.expiresIn ?? DEFAULT_EXPIRES_IN;
   const store = await blobStore();
 

@@ -7,6 +7,7 @@ import {
   VideoNotFoundError,
   addComment,
 } from "@/adapters/repositories/comments";
+import { authorizeVideoAccess } from "@/adapters/repositories/media-access";
 import { currentViewerId } from "@/lib/auth/guard";
 
 /**
@@ -60,6 +61,25 @@ export async function POST(
   const viewerId = await currentViewerId(request);
   if (viewerId === null) {
     return Response.json({ error: "Sign in to comment." }, { status: 401 });
+  }
+
+  /**
+   * Authenticated is not authorised, and this route used to stop at the first.
+   *
+   * `addComment` enforces every rule about the *comment* — that the thread
+   * exists, that comments are enabled, that a reply to a reply gets
+   * re-parented — and none about whether this caller may address this video at
+   * all. It never reads `visibility`. So any signed-in account could post to a
+   * private video by guessing its id, and, because a 404 and a 201 are
+   * distinguishable, use the endpoint to discover which ids exist.
+   *
+   * The check has to be *here* rather than inside `addComment`, because the
+   * repository takes no viewer identity and giving it one would put an
+   * authorisation decision inside a function four other callers use for
+   * different reasons.
+   */
+  if ((await authorizeVideoAccess(videoId, viewerId)) === null) {
+    return Response.json({ error: "No such video." }, { status: 404 });
   }
 
   let payload: unknown;

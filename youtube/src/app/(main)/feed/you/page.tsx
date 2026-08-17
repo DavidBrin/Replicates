@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import type { Metadata } from "next";
 
@@ -152,12 +153,12 @@ export default async function YouPage() {
             <p className="m-0 mt-0.5 text-body text-secondary">
               <span>@{channel.handle}</span>
               <span className="mx-1">•</span>
-              <a
+              <Link
                 href={`/@${encodeURIComponent(channel.handle)}`}
                 className="hover:text-primary"
               >
                 View channel
-              </a>
+              </Link>
             </p>
           )}
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -694,7 +695,7 @@ export function PlaylistCard({
       </div>
 
       <h3 className="m-0 mt-3">
-        <a
+        <Link
           href={href}
           data-playlist-link=""
           className={clsx(
@@ -705,7 +706,7 @@ export function PlaylistCard({
           )}
         >
           {title}
-        </a>
+        </Link>
       </h3>
 
       <div className="mt-0.5 text-body text-secondary">

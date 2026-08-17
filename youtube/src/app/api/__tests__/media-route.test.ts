@@ -593,14 +593,31 @@ describe("POST /api/upload/target", () => {
     expect(body.headers["Content-Type"]).toBe("text/vtt");
   });
 
-  it("uses the content type the client stated", async () => {
-    const body = await (
+  /**
+   * This case was called "uses the content type the client stated", and it
+   * passed. The name was an accurate description of a vulnerability: whatever
+   * the client said became the type the object was stored and later served
+   * with, from this application's own origin.
+   *
+   * Inverted rather than deleted, because the shape it exercises — a body that
+   * disagrees with its key — is the one that has to keep being refused. A
+   * client that agrees is covered by the case above it, and a client that
+   * disagrees is covered here.
+   */
+  it("does not take the content type from the client", async () => {
+    const response = await uploadTarget({
+      key: "videos/v1/720p/seg-00001.m4s",
+      contentType: "video/mp4",
+    });
+    expect(response.status).toBe(415);
+
+    const agreed = await (
       await uploadTarget({
         key: "videos/v1/720p/seg-00001.m4s",
-        contentType: "video/mp4",
+        contentType: "video/iso.segment",
       })
     ).json();
-    expect(body.headers["Content-Type"]).toBe("video/mp4");
+    expect(agreed.headers["Content-Type"]).toBe("video/iso.segment");
   });
 
   /**
@@ -627,12 +644,17 @@ describe("POST /api/upload/target", () => {
    * §2.3: the content type is inside the signature and the upload's own header
    * must match byte-for-byte, or R2 answers a 403 the browser cannot read. The
    * response therefore has to name the header it signed, and name the same one.
+   *
+   * This used to pass `contentType: "video/mp4"` for an `.m4s` key, and the
+   * route adopted it — which is the behaviour that made this endpoint able to
+   * sign `text/html` onto an object in the bucket. The declared type now has
+   * to agree with the key, so the case says `video/mp4` about an `.mp4`.
    */
   it("signs the exact content type it tells the client to send", async () => {
     useR2Driver();
     const body = await (
       await uploadTarget({
-        key: "videos/v1/720p/seg-00001.m4s",
+        key: "videos/v1/source.mp4",
         contentType: "video/mp4",
       })
     ).json();
@@ -642,6 +664,31 @@ describe("POST /api/upload/target", () => {
     );
     expect(signedHeaders).toBe("content-type;host");
     expect(body.headers["Content-Type"]).toBe("video/mp4");
+  });
+
+  /**
+   * The vulnerability, as a test.
+   *
+   * An uploader who owns `videos/v1` may write segments there. Before the
+   * content type was derived rather than accepted, they could also decide
+   * those bytes were a document — and `/api/media/videos/v1/…` serves from
+   * this application's own origin, so opening it ran their markup with the
+   * viewer's session cookie attached. Ownership of the key was never the
+   * missing check; the type was.
+   *
+   * Both entry points are covered because they are separately exploitable:
+   * the proxy route writes the object itself, and the target route mints a
+   * signature the browser then uses to `PUT` straight to R2, where no request
+   * of ours is in the path to correct anything.
+   */
+  it("refuses a declared type the key does not imply", async () => {
+    useR2Driver();
+    const response = await uploadTarget({
+      key: "videos/v1/720p/seg-00001.m4s",
+      contentType: "text/html",
+    });
+    expect(response.status).toBe(415);
+    expect((await response.json()).error).toContain("video/iso.segment");
   });
 
   it("passes a shorter expiry through to the signature", async () => {
@@ -719,13 +766,34 @@ describe("PUT /api/upload/blob", () => {
     expect(await response.text()).toBe(CONTENT.slice(10, 20));
   });
 
-  // A PUT with no body is a zero-byte object, which is what the verb means.
+  /**
+   * A PUT with no body is a zero-byte object, which is what the verb means.
+   *
+   * The key was `empty.bin` with `application/octet-stream`, which is now two
+   * refusals rather than one: `.bin` names no storable type, and no key names
+   * `octet-stream`. That is the point of the allowlist being closed — the
+   * extension nobody thought about is the one an attacker picks — so the case
+   * keeps its subject and takes a key the packager actually writes.
+   */
   it("accepts an empty body as a zero-byte object", async () => {
-    const response = await uploadBlob(["videos", "v9", "empty.bin"], undefined, {
-      "content-type": "application/octet-stream",
-    });
+    const response = await uploadBlob(["videos", "v9", "empty.m4s"], undefined);
     expect(response.status).toBe(201);
     expect((await response.json()).size).toBe(0);
+  });
+
+  it("refuses a key whose extension names no storable media type", async () => {
+    const response = await uploadBlob(["videos", "v9", "payload.bin"], "x");
+    expect(response.status).toBe(415);
+  });
+
+  it("refuses to store markup under a key it would serve inline", async () => {
+    // The proxy half of the stored-XSS case; see the target route's twin.
+    const response = await uploadBlob(
+      ["videos", "v9", "seg-00001.m4s"],
+      "<script>fetch('/api/me')</script>",
+      { "content-type": "text/html" },
+    );
+    expect(response.status).toBe(415);
   });
 
   it("falls back to the key's extension when no type was declared", async () => {
@@ -816,6 +884,53 @@ describe("GET enforces visibility", () => {
 
   it("refuses a private video on HEAD as well as GET", async () => {
     expect((await media(PRIVATE, {}, "HEAD")).status).toBe(404);
+  });
+
+  /**
+   * The one case where a correct authorisation check simply is not consulted.
+   *
+   * Every other refusal above runs `mayViewMedia`. A cached response does not:
+   * the owner fetches their private segment, a shared cache stores it under
+   * the URL, and the next request for that URL is answered without this route
+   * executing at all. `public, max-age=31536000, immutable` — the policy every
+   * other object here correctly gets — is an explicit grant to do exactly
+   * that.
+   *
+   * `no-store` rather than `private`, because `private` still permits the
+   * browser's own disk cache, and "the owner's laptop is shared" is a more
+   * likely deployment than "there is a CDN in front of this".
+   */
+  it("does not let a private video be cached", async () => {
+    const response = await media(PRIVATE, signedInAs(ownerToken));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("vary")).toBe("Cookie");
+  });
+
+  it("still caches public media forever, and does not vary it by cookie", async () => {
+    // The other half: the fix must not fragment the cache for the traffic that
+    // is all of the bytes and none of the exposure.
+    const response = await media(SOURCE);
+    expect(response.headers.get("cache-control")).toContain("immutable");
+    expect(response.headers.get("vary")).toBeNull();
+  });
+
+  /**
+   * `nosniff` is what makes the derived `Content-Type` binding.
+   *
+   * Without it a browser may disregard the header and sniff the body, which
+   * hands the decision back to whoever controls the bytes — and in the case
+   * this defends against, that is the attacker. The type allowlist and this
+   * header are one mechanism in two places; either alone is bypassable.
+   */
+  it("tells the browser not to sniff, on every media response", async () => {
+    for (const response of [
+      await media(SOURCE),
+      await media(SOURCE, { range: "bytes=0-9" }),
+      await media(PRIVATE, signedInAs(ownerToken)),
+    ]) {
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    }
   });
 
   it("serves a channel's avatar to anyone", async () => {

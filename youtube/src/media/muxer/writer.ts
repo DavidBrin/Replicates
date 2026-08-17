@@ -166,13 +166,42 @@ export class ByteWriter {
     }
   }
 
+  /**
+   * The two methods below are the ones the note above was written about, and
+   * for a while they were the two that ignored it.
+   *
+   * `this.#bytes.set(source, this.#reserve(n))` reads as though the reserve
+   * happens first, because it is written first left-to-right *inside* the
+   * call. It does not. JavaScript evaluates the callee — `this.#bytes.set`,
+   * and with it the `this` the method will run against — before it evaluates
+   * any argument, so a `#reserve` that grows the buffer swaps `#bytes` for a
+   * new array *after* `set` has already bound the old one. The write lands in
+   * the abandoned buffer and is silently dropped, or throws `RangeError`,
+   * depending on whether the old array happened to be long enough.
+   *
+   * Neither case was reachable from the test suite: `ByteWriter` is
+   * constructed with a capacity that fits every init segment this project
+   * writes, so no `bytes()` call had ever crossed a growth boundary. A codec
+   * description a few hundred bytes long — an `avcC` for a high-profile
+   * stream, or any `hvcC` — is all it takes.
+   *
+   * **`zeros()` had the identical shape and was harmless**, which is worth
+   * recording rather than quietly fixing. `fill` clamps out-of-range indices
+   * instead of throwing, so the write to the abandoned array did nothing —
+   * and the grown array it should have written to is a fresh `Uint8Array`,
+   * already zero. The bug and its absence of symptoms coincided exactly. It is
+   * corrected because the next person to copy this line will not be filling
+   * with zero, and the growth test below cannot tell the two versions apart.
+   */
   bytes(source: Uint8Array): void {
-    this.#bytes.set(source, this.#reserve(source.byteLength));
+    const at = this.#reserve(source.byteLength);
+    this.#bytes.set(source, at);
   }
 
   /** Reserved and pre_defined runs, which ISO BMFF has a great many of. */
   zeros(count: number): void {
-    this.#bytes.fill(0, this.#reserve(count), this.#length);
+    const at = this.#reserve(count);
+    this.#bytes.fill(0, at, this.#length);
   }
 
   /* -------------------------------------------------------- fixed point -- */

@@ -8,13 +8,12 @@ import { ButtonLink } from "@/components/primitives";
 import { Shelf, VideoGrid } from "@/components/video";
 import type { VideoCard } from "@/domain/types";
 
-import {
-  ALL_CHIP_ID,
-  ALL_CHIP_LABEL,
-  FeedChipBar,
-  feedTabId,
-  type FeedChip,
-} from "./chip-bar";
+import { FeedChipBar, feedTabId } from "./chip-bar";
+// From `./chips`, not through `./chip-bar`. Both modules here are client
+// modules so nothing would break at runtime, but routing a plain constant
+// through a `"use client"` file is the shape that made `chipsForFeed` a client
+// reference, and leaving one live example of it invites the next one.
+import { ALL_CHIP_ID, ALL_CHIP_LABEL, type FeedChip } from "./chips";
 
 /**
  * The home feed: chip bar, Shorts shelf, grid, and the three states that are

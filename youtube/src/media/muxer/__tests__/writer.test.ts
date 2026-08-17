@@ -116,6 +116,51 @@ describe("bulk writes", () => {
       expect(view.getUint16(i * 2)).toBe(i & 0xffff);
     }
   });
+
+  /**
+   * The growth test above passes with `bytes()` broken, and that is the point
+   * of these two.
+   *
+   * `u16` and friends take the offset from `#reserve` into a local before
+   * touching `#view`, so growth is safe for them. `bytes()` and `zeros()` used
+   * to be written as `this.#bytes.set(source, this.#reserve(n))`, where the
+   * receiver is evaluated first and a growing reserve then replaces it — the
+   * write went to the abandoned array. Nothing here reached that path, because
+   * the default capacity fits every segment this project writes and the only
+   * growth case in the suite used primitives.
+   *
+   * So the case below starts from a capacity of 1 and hands over a payload
+   * that cannot fit. Reintroducing the old line makes it throw `RangeError` —
+   * checked, not assumed.
+   *
+   * The `zeros()` case that follows is **not** a regression test and is
+   * labelled so it is never mistaken for one. Under the old line it passed
+   * too: `fill` clamps rather than throwing, and the buffer it should have
+   * written to was freshly allocated and already zero. It is kept because it
+   * pins the offset arithmetic — a `fill` starting one byte early would eat
+   * the marker — but the correctness of `zeros()` rests on reading the code,
+   * not on this assertion.
+   */
+  it("copies a byte array that forces the buffer to grow", () => {
+    const payload = Uint8Array.from({ length: 300 }, (_, i) => (i * 7) & 0xff);
+    const bytes = written((w) => w.bytes(payload), 1);
+
+    expect(bytes.byteLength).toBe(300);
+    expect([...bytes]).toEqual([...payload]);
+  });
+
+  it("writes a zero run that forces the buffer to grow", () => {
+    // Preceded by a marker byte: a `fill` against a stale receiver would leave
+    // the tail untouched, and a `fill` with the wrong start would eat this.
+    const bytes = written((w) => {
+      w.u8(0xab);
+      w.zeros(300);
+    }, 1);
+
+    expect(bytes.byteLength).toBe(301);
+    expect(bytes[0]).toBe(0xab);
+    expect(bytes.subarray(1).every((b) => b === 0)).toBe(true);
+  });
 });
 
 describe("box headers", () => {

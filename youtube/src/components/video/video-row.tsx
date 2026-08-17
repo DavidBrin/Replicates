@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import { useId, useState, type ReactNode } from "react";
 
@@ -179,7 +180,7 @@ export function VideoRowView({
       <div className="flex min-w-0 flex-1">
         <div className="min-w-0 flex-1">
           <h3 className="m-0">
-            <a
+            <Link
               id={titleId}
               href={href ?? watchHref(video)}
               data-card-link=""
@@ -194,7 +195,7 @@ export function VideoRowView({
               style={clampStyle(spec.titleLines)}
             >
               {video.title}
-            </a>
+            </Link>
           </h3>
 
           <div className={clsx("text-secondary", spec.metaClass)}>
@@ -252,13 +253,13 @@ function ChannelLink({
   className?: string;
 }) {
   return (
-    <a
+    <Link
       href={channelHref ?? channelHrefFor(video)}
       data-channel-link=""
       className={clsx(ABOVE_CARD_LINK, "hover:text-primary", className)}
     >
       {video.channelName}
-    </a>
+    </Link>
   );
 }
 

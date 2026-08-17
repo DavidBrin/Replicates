@@ -474,7 +474,7 @@ describe("the comment panel is not an N+1", () => {
         authorId: author,
         body: `Comment ${i}`,
       });
-      await reactToComment(db, viewer, comment.id, 1);
+      await reactToComment(db, viewer, comment.id, videoId, 1);
     }
 
     db.reset();

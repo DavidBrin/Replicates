@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import type { ReactNode, SVGProps } from "react";
 
@@ -371,7 +372,7 @@ export function ActionRail({
       {/* Measured as the rail's last item in `19-shorts-1920.png`. 48px, so it
           shares the column width with the buttons above it. */}
       <div data-rail-item="channel" className="relative mt-2 flex flex-col items-center">
-        <a
+        <Link
           href={`/@${encodeURIComponent(channel.handle)}`}
           data-rail-channel-link=""
           aria-label={channel.name}
@@ -383,7 +384,7 @@ export function ActionRail({
             src={channel.avatarUrl}
             decorative={false}
           />
-        </a>
+        </Link>
         <button
           type="button"
           data-rail-subscribe=""

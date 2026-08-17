@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import { useState, type ReactNode } from "react";
 
@@ -233,14 +234,14 @@ function GuideEntry({
 
   if (href) {
     return (
-      <a
+      <Link
         href={href}
         aria-current={active ? "page" : undefined}
         className={className}
         onClick={onClick}
       >
         {content}
-      </a>
+      </Link>
     );
   }
 
@@ -481,16 +482,16 @@ export function Guide({
       <div className="px-6 pt-4 pb-6 text-[12px] leading-[16px] text-secondary">
         <p className="flex flex-wrap gap-x-1.5 gap-y-1 font-[var(--yt-weight-medium)]">
           {FOOTER_PRIMARY.map((item) => (
-            <a key={item} href="/about">
+            <Link key={item} href="/about">
               {item}
-            </a>
+            </Link>
           ))}
         </p>
         <p className="mt-2 flex flex-wrap gap-x-1.5 gap-y-1 font-[var(--yt-weight-medium)]">
           {FOOTER_SECONDARY.map((item) => (
-            <a key={item} href="/about">
+            <Link key={item} href="/about">
               {item}
-            </a>
+            </Link>
           ))}
         </p>
         <p className="mt-3">{FOOTER_COPYRIGHT}</p>
@@ -527,7 +528,7 @@ export function MiniGuide({
       )}
     >
       {MINI_ENTRIES.map((entry) => (
-        <a
+        <Link
           key={entry.href}
           href={entry.href}
           aria-current={activePath === entry.href ? "page" : undefined}
@@ -552,7 +553,7 @@ export function MiniGuide({
             className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[var(--yt-fill-color)]"
             style={{ opacity: "var(--yt-fill-opacity)" }}
           />
-        </a>
+        </Link>
       ))}
     </nav>
   );

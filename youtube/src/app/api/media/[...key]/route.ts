@@ -16,11 +16,13 @@ import {
   rangeLength,
   resolveRangeHeader,
 } from "@/lib/http/range";
+import { servableContentType } from "@/adapters/blob/content-types";
 import { mediaAccess } from "@/adapters/repositories/media-access";
 import {
   currentViewerId,
   mayViewMedia,
   needsViewerIdentity,
+  type VisibleResource,
 } from "@/lib/auth/guard";
 
 /**
@@ -139,15 +141,56 @@ export async function GET(
     });
 
     const { metadata } = result;
+
+    /**
+     * The type comes from the key, not from what the store recorded.
+     *
+     * These bytes are served from the application's own origin, so the
+     * `Content-Type` here is an instruction to the browser about what to *do*
+     * with them. An object stored with an executable type would run as a
+     * document with the viewer's cookies attached. The upload path no longer
+     * accepts a client-supplied type, and this is the second half of that fix:
+     * anything already in the store that cannot be placed by its key is served
+     * opaque and as an attachment rather than trusted.
+     *
+     * `nosniff` on every response regardless. Without it a browser is entitled
+     * to disregard the header and sniff the body, which puts the decision back
+     * in the attacker's hands — they control the bytes even when they no
+     * longer control the label.
+     */
+    const servable = servableContentType(key, metadata.contentType);
+
     const headers = new Headers({
-      "Content-Type": metadata.contentType,
+      "Content-Type": servable.contentType,
+      "X-Content-Type-Options": "nosniff",
       // §4.1: on *every* response, not only the partial ones. Its absence is
       // what tells a client that ranges are unavailable, and §4.2 is why that
       // matters more than it sounds.
       "Accept-Ranges": "bytes",
-      "Cache-Control": cacheControlForKey(key),
+      "Cache-Control": cacheControlForPolicy(key, subject),
       "Last-Modified": metadata.lastModified.toUTCString(),
     });
+
+    if (!servable.inline) {
+      headers.set("Content-Disposition", "attachment");
+    }
+
+    /**
+     * `Vary: Cookie` whenever the answer depended on who was asking.
+     *
+     * A private object's 200 is only valid for the session that earned it. A
+     * shared cache that stored it under the URL alone would hand it to the
+     * next person to ask — and this route deliberately returns the *same* 404
+     * for "no such object" and "not yours", so there is no distinguishing
+     * response for the cache to have stored instead.
+     *
+     * Only on the paths that consulted identity: adding it unconditionally
+     * would fragment the cache for public segments by cookie, which is the
+     * whole of the media traffic and none of the risk.
+     */
+    if (needsViewerIdentity(subject)) {
+      headers.set("Vary", "Cookie");
+    }
 
     // Only when there is one. An empty `ETag:` is not "no validator", it is a
     // validator equal to the empty string, and a cache that compares it against
@@ -233,6 +276,33 @@ async function requestedRange(
  * §15.5.17. `Content-Range: bytes * /<size>` is required, not decorative: it is
  * how the client learns the real size and can reissue a range that works.
  */
+/**
+ * The caching policy, which depends on *who may read the object* and not only
+ * on what the key is.
+ *
+ * `cacheControlForKey` answers the second question — a segment is written once
+ * and never rewritten, so it is immutable for a year; a playlist may still be
+ * growing, so it revalidates. Both of those answers begin `public`, and that
+ * word is a grant: any cache on the path may keep the response and serve it to
+ * anyone who asks for the same URL.
+ *
+ * For a private video's segments that is wrong in a way the 404 discipline
+ * elsewhere in this file cannot compensate for. The owner fetches a segment,
+ * the response is stored, and the next request for that URL is answered from
+ * the cache without this route — and therefore without `mayViewMedia` — ever
+ * running again. It is the one case where a correct authorisation check is
+ * simply not consulted.
+ *
+ * So a private object gets `no-store`, which is the only directive that also
+ * covers the browser's own disk cache on a shared machine. The public paths
+ * are untouched: they are all of the bytes and none of the exposure.
+ */
+function cacheControlForPolicy(key: string, subject: VisibleResource): string {
+  return needsViewerIdentity(subject)
+    ? "private, no-store"
+    : cacheControlForKey(key);
+}
+
 function unsatisfiable(totalSize: number): Response {
   return new Response(null, {
     status: 416,

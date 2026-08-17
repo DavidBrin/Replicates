@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import Link from "next/link";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 /**
@@ -361,6 +362,18 @@ export interface ButtonLinkProps
  * that navigates should be a link, and forcing every navigating control
  * through `<button onClick={router.push}>` breaks middle-click, "open in new
  * tab" and the status bar.
+ *
+ * ## Why the element is chosen at runtime
+ *
+ * An in-app destination renders `next/link`, which is what makes the
+ * navigation client-side: the App Router swaps the tree instead of the browser
+ * reloading the document. Everything else — a fragment (`#content`), a
+ * `mailto:`, an absolute URL — renders a plain anchor, because `Link` would
+ * hand those to the router, which has no route for them.
+ *
+ * `href` may also be absent. `ButtonLinkProps` inherits it as optional from
+ * `ComponentPropsWithoutRef<"a">`, and `Link` requires it, so the anchor is
+ * the only correct element in that case.
  */
 export function ButtonLink({
   variant,
@@ -375,25 +388,37 @@ export function ButtonLink({
   children,
   ...rest
 }: ButtonLinkProps) {
+  const classes = buttonClassName({
+    variant,
+    palette,
+    size,
+    segment,
+    iconOnly,
+    className,
+  });
+  const content = (
+    <ButtonContent leading={leading} trailing={trailing} hideLabel={hideLabel}>
+      {children}
+    </ButtonContent>
+  );
+
+  // A protocol-relative `//host` is an absolute URL wearing a leading slash,
+  // so the test is a single slash *not* followed by another.
+  const { href } = rest;
+  const internal =
+    typeof href === "string" && href.startsWith("/") && !href.startsWith("//");
+
+  if (internal) {
+    return (
+      <Link {...rest} href={href} className={classes}>
+        {content}
+      </Link>
+    );
+  }
+
   return (
-    <a
-      className={buttonClassName({
-        variant,
-        palette,
-        size,
-        segment,
-        iconOnly,
-        className,
-      })}
-      {...rest}
-    >
-      <ButtonContent
-        leading={leading}
-        trailing={trailing}
-        hideLabel={hideLabel}
-      >
-        {children}
-      </ButtonContent>
+    <a className={classes} {...rest}>
+      {content}
     </a>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import { useState, type FormEvent, type ReactNode } from "react";
 
@@ -73,7 +74,7 @@ export interface MastheadProps {
  */
 function Logo() {
   return (
-    <a
+    <Link
       href="/"
       aria-label="YouTube Home"
       className="flex h-14 w-[129px] shrink-0 items-center pl-4"
@@ -88,7 +89,7 @@ function Logo() {
       <span className="ml-1 text-[20px] leading-[20px] font-[var(--yt-weight-bold)] tracking-[-0.5px] text-[var(--yt-wordmark-text)]">
         YouTube
       </span>
-    </a>
+    </Link>
   );
 }
 

@@ -178,29 +178,45 @@ export function admitToSession(
 /* ------------------------------------------------------------- the score -- */
 
 /**
- * D10 Eq. 1, as it is actually computed.
+ * D10 Eq. 1: r(vi,vj) = cij / (ci·cj).
  *
- * The paper's score is r(vi,vj) = cij / f(vi,vj) with f(vi,vj) = ci·cj, and
- * then says outright that ci is constant across every candidate for a fixed
- * seed and can be dropped without changing the ranking. So this takes only the
- * candidate's count, and the stated consequence — the ranking favours less
- * popular candidates — is the normalisation working, not a bug in it.
+ * ## Why both counts, when the paper says one can be dropped
  *
- * `candidateSessionCount` is the number of distinct sessions containing the
- * candidate. It is not `videos.view_count`: the two diverge the moment anyone
+ * It does say that, and it is right: ci is constant across every candidate for
+ * a fixed seed, so dividing by it cannot reorder that seed's candidates. This
+ * function took only the candidate's count on exactly that reasoning, and the
+ * reasoning was sound about a premise this application does not hold.
+ *
+ * The premise is "one seed". {@link aggregateAcrossSeeds} **adds** a
+ * candidate's scores over every seed that reached it, and the moment two
+ * seeds' scores are added they have to share a scale. cij/cj does not: a seed
+ * appearing in 300 sessions produces numbers about a hundred times larger than
+ * one appearing in 3, so a viewer's recommendations collapse onto whichever of
+ * their recent videos was the most popular. The results still *look* right —
+ * they are genuinely related videos — which is why this survived until the
+ * scores were read rather than the rankings.
+ *
+ * It is also what the schema promises. The comment beside `covisitation` gives
+ * f(vi,vj) = ci·cj and calls the score symmetric; with one count in the
+ * denominator, r(A,B) and r(B,A) differed by the ratio of the two videos'
+ * popularity for one and the same pair.
+ *
+ * Neither count is `videos.view_count`. The two diverge the moment anyone
  * rewatches anything, and substituting the view count would penalise a video
  * for being rewatched, which is the opposite of what the signal means.
  *
- * The zero guard is unreachable through the write path — a video only acquires
- * a pair by being in a session, which is the same event that makes its count 1
- * — but a division by zero would take down the whole refresh rather than one
- * row, so it is cheaper to hold than to argue about.
+ * The zero guards are unreachable through the write path — a video only
+ * acquires a pair by being in a session, which is the same event that makes
+ * its count 1 — but a division by zero would take down the whole refresh
+ * rather than one row, so they are cheaper to hold than to argue about.
  */
 export function relatedness(
   coVisits: number,
+  seedSessionCount: number,
   candidateSessionCount: number,
 ): number {
-  return candidateSessionCount > 0 ? coVisits / candidateSessionCount : 0;
+  if (seedSessionCount <= 0 || candidateSessionCount <= 0) return 0;
+  return coVisits / (seedSessionCount * candidateSessionCount);
 }
 
 /** Research §3's raw-count floor, applied before scoring. */

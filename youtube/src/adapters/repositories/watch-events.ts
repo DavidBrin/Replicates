@@ -259,14 +259,53 @@ const AFFECTED_SEEDS = `
 `;
 
 /**
+ * Relatedness, written once.
+ *
+ * Both refresh paths interpolate this rather than spelling the division out,
+ * because for a while they spelled it out differently. See the note on
+ * `SCORED_NEIGHBOURS_FOR_AFFECTED`.
+ */
+const RELATEDNESS = `d.weight::double precision / (s.session_count * c.session_count)`;
+
+/** The two joins `RELATEDNESS` reads `s` and `c` from. Shared for the same reason. */
+const SESSION_COUNT_JOINS = `
+    join video_session_counts s
+      on s.video_id = d.seed_id and s.session_count > 0
+    join video_session_counts c
+      on c.video_id = d.candidate_id and c.session_count > 0
+`;
+
+/**
  * The scoring half of the refresh, shared by the full and the scoped rebuild so
  * the two cannot drift into two definitions of relatedness.
  *
  * `union all` over both column orders is what turns the write table's one
- * canonical row per pair into the read table's two directions. The join to
- * `video_session_counts` is on the *candidate*, which is D10 Eq. 1 after ci
- * drops out — joining on the seed instead would divide by a constant and change
- * nothing, which is exactly why it is an easy mistake to leave in.
+ * canonical row per pair into the read table's two directions.
+ *
+ * ## Both session counts are in the denominator, and the seed's is not optional
+ *
+ * D10 Eq. 1 is r(vi,vj) = cij / (ci·cj). This query divided by the
+ * *candidate's* count alone, on the reasoning that ci is constant within a
+ * seed's partition and therefore cannot change that seed's ranking. That
+ * reasoning is correct and the conclusion drawn from it was wrong, because the
+ * ranking inside one partition is not what these scores are used for.
+ *
+ * `aggregateAcrossSeeds` in the domain module **sums** a candidate's scores
+ * over every seed that reached it. The moment scores from different seeds are
+ * added together they have to be on the same scale, and cij/cj is not: a seed
+ * watched in 300 sessions contributes numbers roughly a hundred times larger
+ * than one watched in 3. The whole of a viewer's recommendations then comes
+ * from whichever of their recent videos happens to be the most popular, which
+ * looks entirely plausible — the results are still *related* videos — and is
+ * not what the model says.
+ *
+ * It also made the stored score asymmetric while the schema comment beside
+ * `covisitation` promises r(vi,vj) = r(vj,vi): with ci=3, cj=30, cij=3, the
+ * two directions came out 0.1 and 1.0 for one and the same pair.
+ *
+ * So the join happens twice, on the seed and on the candidate. `> 0` on both
+ * is what keeps the division defined; a video in `covisitation` always has a
+ * session count, so the guard costs nothing and removes the question.
  *
  * The `order by … , candidate_id` inside the window is not decoration. Without
  * it, two candidates with equal scores get their ranks assigned in whatever
@@ -277,10 +316,10 @@ const AFFECTED_SEEDS = `
 const SCORED_NEIGHBOURS = `
   select d.seed_id,
          d.candidate_id,
-         d.weight::double precision / c.session_count as score,
+         ${RELATEDNESS} as score,
          row_number() over (
            partition by d.seed_id
-           order by d.weight::double precision / c.session_count desc,
+           order by ${RELATEDNESS} desc,
                     d.candidate_id
          ) as rank
     from (
@@ -288,8 +327,7 @@ const SCORED_NEIGHBOURS = `
       union all
       select video_b as seed_id, video_a as candidate_id, weight from covisitation
     ) d
-    join video_session_counts c
-      on c.video_id = d.candidate_id and c.session_count > 0
+    ${SESSION_COUNT_JOINS}
    where d.weight >= $1
 `;
 
@@ -298,14 +336,24 @@ const SCORED_NEIGHBOURS = `
  * pushed into each arm of the union rather than applied to the union's result
  * so that both arms can use `covisitation_a_idx` and `covisitation_b_idx`
  * instead of scanning the pair table twice per watch.
+ *
+ * "The same scoring" is now enforced rather than asserted. It was a promise
+ * this file made in a comment and broke the moment the denominator changed in
+ * one query and not the other: the full rebuild started dividing by both
+ * session counts while the incremental path kept dividing by one, so a
+ * video's neighbours had different scores depending on which refresh last
+ * touched them. The suite caught it — `refreshRelatedVideos` is asserted to
+ * produce byte-identical rows to the incremental path — but only because that
+ * assertion already existed. Sharing the expression removes the possibility
+ * instead of relying on the test to notice.
  */
 const SCORED_NEIGHBOURS_FOR_AFFECTED = `
   select d.seed_id,
          d.candidate_id,
-         d.weight::double precision / c.session_count as score,
+         ${RELATEDNESS} as score,
          row_number() over (
            partition by d.seed_id
-           order by d.weight::double precision / c.session_count desc,
+           order by ${RELATEDNESS} desc,
                     d.candidate_id
          ) as rank
     from (
@@ -317,7 +365,6 @@ const SCORED_NEIGHBOURS_FOR_AFFECTED = `
         from covisitation
        where video_b in (select seed_id from affected)
     ) d
-    join video_session_counts c
-      on c.video_id = d.candidate_id and c.session_count > 0
+    ${SESSION_COUNT_JOINS}
    where d.weight >= $3
 `;

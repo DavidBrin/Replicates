@@ -6,6 +6,7 @@ import {
   reactToComment,
   reactToVideo,
 } from "@/adapters/repositories/reactions";
+import { authorizeVideoAccess } from "@/adapters/repositories/media-access";
 import { currentViewerId } from "@/lib/auth/guard";
 
 /**
@@ -17,12 +18,15 @@ import { currentViewerId } from "@/lib/auth/guard";
  * the alternative is a second route file this slice does not own. The
  * discriminator is in the body rather than in the path, which keeps one
  * endpoint, one auth check and one error mapping for what is one interaction
- * with two targets. `reactToComment` takes only the comment id, so the video in
- * the path is context rather than a parameter — and that is worth saying out
- * loud, because it means this route does **not** verify that the comment
- * belongs to the video in the URL. It does not need to: the reaction is keyed
- * on the comment alone, and a caller who guesses another video's comment id
- * gets exactly the reaction they would have got from that video's page.
+ * with two targets.
+ *
+ * This file used to argue that the video in the path was context rather than a
+ * parameter — that `reactToComment` is keyed on the comment alone, so a caller
+ * who guessed another video's comment id "gets exactly the reaction they would
+ * have got from that video's page". The argument assumes every video's page is
+ * reachable. A private video's is not, and its comment ids were then the one
+ * thing this endpoint would still act on for a stranger. The video is now
+ * authorised before either branch, and the comment must belong to it.
  *
  * ## Toggling is not this route's rule either
  *
@@ -58,6 +62,12 @@ export async function POST(
     return Response.json({ error: "Sign in to like videos." }, { status: 401 });
   }
 
+  // Authenticated is not authorised. Before either branch, because the comment
+  // branch's target is reached *through* this video and inherits its privacy.
+  if ((await authorizeVideoAccess(videoId, viewerId)) === null) {
+    return Response.json({ error: "No such video." }, { status: 404 });
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();
@@ -79,7 +89,13 @@ export async function POST(
       return Response.json(await reactToVideo(db, viewerId, videoId, parsed.data.value));
     }
     return Response.json(
-      await reactToComment(db, viewerId, parsed.data.commentId, parsed.data.value),
+      await reactToComment(
+        db,
+        viewerId,
+        parsed.data.commentId,
+        videoId,
+        parsed.data.value,
+      ),
     );
   } catch (cause) {
     if (cause instanceof ReactionTargetNotFoundError) {

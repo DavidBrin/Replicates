@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import clsx from "clsx";
 import {
   useCallback,
@@ -559,7 +560,7 @@ function MetaPanel({
       className="absolute inset-x-4 bottom-4 max-w-[480px] text-overlay-primary"
     >
       <div data-shorts-channel-bar="" className="flex h-8 items-center">
-        <a
+        <Link
           href={`/@${encodeURIComponent(short.channel.handle)}`}
           className="flex items-center"
           data-shorts-channel-link=""
@@ -574,7 +575,7 @@ function MetaPanel({
           <span className="px-2 text-[14px] leading-5 text-overlay-primary">
             @{short.channel.handle}
           </span>
-        </a>
+        </Link>
         <Button
           variant="filled"
           palette="overlay"

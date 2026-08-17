@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -354,7 +355,7 @@ function SortChips({ handle }: { handle: string }) {
   return (
     <div className="flex items-center gap-2">
       {options.map((option) => (
-        <a
+        <Link
           key={option.value}
           href={`/@${encodeURIComponent(handle)}/videos?sort=${option.value}`}
           data-sort-chip={option.value}
@@ -365,7 +366,7 @@ function SortChips({ handle }: { handle: string }) {
           )}
         >
           {option.label}
-        </a>
+        </Link>
       ))}
     </div>
   );

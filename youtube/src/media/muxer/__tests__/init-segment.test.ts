@@ -552,6 +552,32 @@ describe("the research's byte-verified worked example", () => {
    * every declared size. Reproducing its exact box tree is the strongest
    * available evidence that this implementation read the tables the same way,
    * because the numbers were not derived from this code.
+   *
+   * ## What this pair of cases does and does not prove
+   *
+   * It is worth being exact, because it is easy to inflate.
+   *
+   * **The reference is not from the ISO specification.** ISO/IEC 14496-12
+   * publishes field tables, not a worked binary; the artifact here was
+   * generated during the research lane from those tables by a script that
+   * shares no code with this muxer. That independence is the whole value — but
+   * it makes the reference *ours*, and calling it the spec's own example would
+   * be a claim nobody could check.
+   *
+   * **The comparison is not all 640 bytes.** The research document recorded
+   * the complete box tree — 23 boxes, every declared size — the total length,
+   * and the first 0x48 bytes as an annotated hex dump. That is what it
+   * recorded, so that is what can be compared; the remaining 568 bytes of the
+   * generated artifact were never written down and no amount of asserting here
+   * can recover them. Dumping this muxer's own output into a fixture and
+   * diffing against it would look like a stronger test and prove strictly
+   * nothing, which is the same trap the demuxer's round-trip note describes.
+   *
+   * So the honest reading: the *structure* is verified end to end against an
+   * independent generator, and the bytes are verified for the header. Every
+   * other field in the segment is covered by the assertions above — `matrix`,
+   * `hdlr`, the sample entries, `avcC`/`av1C`/`vpcC` payloads, `esds` — which
+   * check values against the standard rather than against a sibling artifact.
    */
   const bytes = buildInitSegment({
     tracks: [

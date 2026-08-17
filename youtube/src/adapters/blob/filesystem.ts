@@ -273,20 +273,21 @@ export class FilesystemBlobStore implements BlobStore {
   }
 }
 
-const CONTENT_TYPES: Record<string, string> = {
-  m3u8: "application/vnd.apple.mpegurl",
-  m4s: "video/iso.segment",
-  mp4: "video/mp4",
-  m4a: "audio/mp4",
-  webm: "video/webm",
-  vtt: "text/vtt",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-};
+/**
+ * Re-exported so the adapters and the routes cannot end up with two tables.
+ *
+ * The allowlist moved to `./content-types` when it stopped being a convenience
+ * for reads and became the authority for writes — see that module's header.
+ * It lived here, and `r2.ts` imported it *from the filesystem adapter*, which
+ * was already a sign it belonged to neither.
+ */
+export { guessContentType } from "./content-types";
 
-export function guessContentType(key: string): string {
-  const extension = key.split(".").pop()?.toLowerCase() ?? "";
-  return CONTENT_TYPES[extension] ?? "application/octet-stream";
-}
+/**
+ * Imported as well as re-exported, and the two lines are not redundant:
+ * `export … from` forwards a name to importers without binding it in this
+ * module's scope, so `readSidecar`'s fallback above would be a reference to an
+ * undeclared identifier with only the re-export. The same pair appears in
+ * `components/theme.tsx` for the same reason.
+ */
+import { guessContentType } from "./content-types";

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -206,7 +207,7 @@ function ChannelRow({
 
       <div className="min-w-0 flex-1">
         <h2 className="m-0 text-result font-[var(--yt-weight-regular)] text-primary">
-          <a href={href}>{channel.name}</a>
+          <Link href={href}>{channel.name}</Link>
         </h2>
 
         {/*

@@ -244,7 +244,11 @@ describe("liking is what puts a video in the liked playlist", () => {
 });
 
 describe("comment reactions", () => {
-  async function seedComment(): Promise<{ viewer: string; commentId: string }> {
+  async function seedComment(): Promise<{
+    viewer: string;
+    commentId: string;
+    videoId: string;
+  }> {
     const viewer = await seedUser(raw);
     const { channelId } = await seedCreator(raw);
     const videoId = await seedVideo(raw, channelId);
@@ -253,34 +257,36 @@ describe("comment reactions", () => {
        values ('cm-1', $1, $2, 'Nice')`,
       [videoId, viewer],
     );
-    return { viewer, commentId: "cm-1" };
+    // The video is returned because reacting to a comment now has to name the
+    // video it hangs off — containment is checked in the `update`'s `where`.
+    return { viewer, commentId: "cm-1", videoId };
   }
 
   it("counts likes and toggles them off", async () => {
-    const { viewer, commentId } = await seedComment();
+    const { viewer, commentId, videoId } = await seedComment();
 
-    expect((await reactToComment(db, viewer, commentId, 1)).likeCount).toBe(1);
-    expect((await reactToComment(db, viewer, commentId, 1)).likeCount).toBe(0);
+    expect((await reactToComment(db, viewer, commentId, videoId, 1)).likeCount).toBe(1);
+    expect((await reactToComment(db, viewer, commentId, videoId, 1)).likeCount).toBe(0);
   });
 
   it("stores a dislike without counting it", async () => {
-    const { viewer, commentId } = await seedComment();
+    const { viewer, commentId, videoId } = await seedComment();
 
-    const disliked = await reactToComment(db, viewer, commentId, -1);
+    const disliked = await reactToComment(db, viewer, commentId, videoId, -1);
     expect(disliked.viewerReaction).toBe(-1);
     expect(disliked.likeCount).toBe(0);
     // Stored, or pressing dislike again would have nothing to take back.
     expect(await reactionRows(viewer)).toBe(1);
 
-    expect((await reactToComment(db, viewer, commentId, -1)).viewerReaction)
+    expect((await reactToComment(db, viewer, commentId, videoId, -1)).viewerReaction)
       .toBeNull();
   });
 
   it("takes the like count down when a like becomes a dislike", async () => {
-    const { viewer, commentId } = await seedComment();
+    const { viewer, commentId, videoId } = await seedComment();
 
-    await reactToComment(db, viewer, commentId, 1);
-    expect((await reactToComment(db, viewer, commentId, -1)).likeCount).toBe(0);
+    await reactToComment(db, viewer, commentId, videoId, 1);
+    expect((await reactToComment(db, viewer, commentId, videoId, -1)).likeCount).toBe(0);
   });
 
   it("keeps a comment's reaction separate from a video's with the same id", async () => {
@@ -295,7 +301,7 @@ describe("comment reactions", () => {
     );
 
     await reactToVideo(db, viewer, "shared-id", 1);
-    await reactToComment(db, viewer, "shared-id", -1);
+    await reactToComment(db, viewer, "shared-id", videoId, -1);
 
     expect(await getViewerReaction(db, viewer, "video", "shared-id")).toBe(1);
     expect(await getViewerReaction(db, viewer, "comment", "shared-id")).toBe(-1);
@@ -304,7 +310,7 @@ describe("comment reactions", () => {
   it("refuses a comment that does not exist", async () => {
     const viewer = await seedUser(raw);
     await expect(
-      reactToComment(db, viewer, "missing", 1),
+      reactToComment(db, viewer, "missing", "v-missing", 1),
     ).rejects.toBeInstanceOf(ReactionTargetNotFoundError);
   });
 });

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import clsx from "clsx";
 import type { ReactNode } from "react";
 
@@ -288,17 +289,17 @@ function ChannelResultRow({
         className="flex shrink justify-center"
         style={{ flex: "0 1 420px", marginRight: 16 }}
       >
-        <a href={href} tabIndex={-1} aria-hidden="true">
+        <Link href={href} tabIndex={-1} aria-hidden="true">
           <Avatar size="legend" name={channel.name} src={channel.avatarUrl} />
-        </a>
+        </Link>
       </div>
 
       <div className="flex min-w-0 flex-1 items-center">
         <div className="min-w-0 flex-1">
           <h3 className="m-0 flex items-center">
-            <a href={href} className="text-result text-primary">
+            <Link href={href} className="text-result text-primary">
               {channel.name}
-            </a>
+            </Link>
             {channel.verified ? (
               <>
                 {/*

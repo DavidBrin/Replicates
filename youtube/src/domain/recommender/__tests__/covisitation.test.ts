@@ -55,36 +55,72 @@ describe("session admission", () => {
 });
 
 describe("relatedness", () => {
-  /** D10 Eq. 1 after ci drops out: cij over the candidate's session count. */
-  it("is the co-visit count over the candidate's session count", () => {
-    expect(relatedness(6, 3)).toBe(2);
-    expect(relatedness(1, 4)).toBe(0.25);
+  /** D10 Eq. 1: cij over ci·cj, both counts, exact values. */
+  it("is the co-visit count over the product of both session counts", () => {
+    expect(relatedness(6, 1, 3)).toBe(2);
+    expect(relatedness(1, 2, 2)).toBe(0.25);
+    expect(relatedness(3, 3, 30)).toBeCloseTo(3 / 90, 12);
   });
 
   /**
-   * The normaliser is a session count, and the two quantities diverge the
-   * moment anyone rewatches. Two candidates in three sessions each, one of them
-   * rewatched into a hundred views, score identically — substituting the view
-   * count is the mistake this asserts against, and it is worth writing the
-   * wrong denominator out to show how far apart the two answers land.
+   * The seed's count is in the denominator, and this is the case that says so.
+   *
+   * It has to be an *exact* expected value rather than a comparison, because
+   * the implementation that omits ci — which is what this file asserted for a
+   * while — satisfies every ordering property below. It ranks one seed's
+   * candidates identically, favours the less popular candidate identically,
+   * and is symmetric-looking until you compute both directions. Only the
+   * number is different.
+   */
+  it("puts the seed's own popularity in the denominator", () => {
+    // Same pair, same co-visits, seeds of very different popularity.
+    expect(relatedness(3, 3, 30)).not.toBe(relatedness(3, 30, 30));
+    expect(relatedness(3, 30, 30)).toBeCloseTo(relatedness(3, 3, 30) / 10, 12);
+  });
+
+  /**
+   * Symmetry, which the schema comment beside `covisitation` promises and
+   * which the one-count version quietly broke: r(A,B) came out ten times
+   * r(B,A) for a pair whose videos differed tenfold in popularity.
+   */
+  it("gives the same score to a pair read in either direction", () => {
+    expect(relatedness(3, 3, 30)).toBe(relatedness(3, 30, 3));
+  });
+
+  /**
+   * The normaliser is a session count, not a view count, and the two diverge
+   * the moment anyone rewatches.
+   *
+   * This case used to read `expect(relatedness(3, s)).toBe(relatedness(3, s))`
+   * — a call compared against itself, which holds for *any* deterministic
+   * function including one with the wrong denominator entirely. It was the
+   * test standing guard over the exact bug the review found, and it could not
+   * have failed. Rewritten to state the two competing answers and assert which
+   * one is computed.
    */
   it("is unmoved by the rewatching that a view count would notice", () => {
-    const sessions = 3;
-    const busyViewCount = 100;
-    const quietViewCount = 3;
+    // Two candidates, both in 3 distinct sessions, one rewatched into 100
+    // views. Sessions say they are equally related; views say otherwise.
+    const quiet = relatedness(3, 2, 3);
+    const busy = relatedness(3, 2, 3);
+    expect(quiet).toBe(busy);
+    expect(quiet).toBeCloseTo(0.5, 12);
 
-    expect(relatedness(3, sessions)).toBe(relatedness(3, sessions));
-    expect(3 / busyViewCount).not.toBe(3 / quietViewCount);
+    // What substituting the view count would have produced, written out so the
+    // assertion above is a choice between two numbers rather than a tautology.
+    const withViewCounts = 3 / (2 * 100);
+    expect(withViewCounts).not.toBeCloseTo(quiet, 12);
   });
 
-  /** The stated consequence of normalising by the candidate: less popular
-   * candidates outrank more popular ones at equal co-visitation. */
+  /** The stated consequence of normalising: less popular candidates outrank
+   * more popular ones at equal co-visitation. */
   it("favours the less popular of two equally co-visited candidates", () => {
-    expect(relatedness(3, 3)).toBeGreaterThan(relatedness(3, 30));
+    expect(relatedness(3, 5, 3)).toBeGreaterThan(relatedness(3, 5, 30));
   });
 
-  it("returns zero rather than dividing by zero", () => {
-    expect(relatedness(3, 0)).toBe(0);
+  it("returns zero rather than dividing by zero, on either count", () => {
+    expect(relatedness(3, 5, 0)).toBe(0);
+    expect(relatedness(3, 0, 5)).toBe(0);
   });
 });
 

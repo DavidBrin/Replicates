@@ -1,8 +1,6 @@
 "use client";
 
-// Imported as well as re-exported: `export … from` forwards a name without
-// binding it locally, and the component below reads both.
-import { ALL_CHIP_ID, ALL_CHIP_LABEL, type FeedChip } from "./chips";
+import type { FeedChip } from "./chips";
 
 import clsx from "clsx";
 import {
@@ -86,11 +84,16 @@ import { Button, Chip, ChipBar } from "@/components/primitives";
  * product does — the feed reloads as you arrow along the bar.
  */
 
-/** The first chip, always present and selected by default (R8 §8.3). */
-export { ALL_CHIP_ID } from "./chips";
-
-/** Its label, verbatim from R8 §8.3's exact strings. */
-export { ALL_CHIP_LABEL } from "./chips";
+/**
+ * `ALL_CHIP_ID` and `ALL_CHIP_LABEL` are **not** re-exported here.
+ *
+ * They live in `./chips`, which carries no `"use client"` directive, and
+ * forwarding them through this file would hand every importer a client
+ * reference for a pair of plain strings. That is the exact shape that broke
+ * `chipsForFeed` — see the note in `./index.ts`. Importers take them from
+ * `./chips` or from the barrel, both of which reach the defining module
+ * without passing through a client one.
+ */
 
 /** The tablist's accessible name. Ours — see where it is used. */
 export const FILTER_BAR_LABEL = "Filter the feed";

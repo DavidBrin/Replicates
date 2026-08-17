@@ -41,9 +41,12 @@ your file → MP4 demuxer → VideoDecoder → one decode pass
 ```
 
 No `ffmpeg.wasm`, no `mp4box.js`, no `hls.js`, no `mux.js`. The muxer's
-initialisation segment is **byte-identical** to the worked example in the ISO
-BMFF specification — produced by an independent generator and verified against
-it, box for box.
+initialisation segment reproduces a reference built by an **independent
+generator** — a script written during the research lane from the ISO BMFF field
+tables, sharing no code with the muxer — box for box: all 23 declared sizes,
+the 640-byte total, and the header bytes the reference recorded. ISO publishes
+field tables rather than a worked binary, so the reference is ours; what makes
+it evidence is that it was produced before this code existed and not from it.
 
 The demuxer exists because WebCodecs decodes but does not demux, and the
 alternative was a real-time pipeline where a ten-minute upload takes ten

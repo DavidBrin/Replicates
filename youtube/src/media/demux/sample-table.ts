@@ -385,11 +385,20 @@ export interface SampleTable {
   /** The `stts` delta, in the track's own timescale. */
   readonly durations: Uint32Array;
   /**
-   * Signed composition offsets, in the track's own timescale, or `undefined`
-   * when the track has no `ctts` — which is the ordinary case and means decode
-   * order is presentation order.
+   * Composition offsets, in the track's own timescale, or `undefined` when the
+   * track has no `ctts` — which is the ordinary case and means decode order is
+   * presentation order.
+   *
+   * `Float64Array` rather than `Int32Array`, and the reason is the version
+   * split {@link decodeCtts} exists to honour. A version-1 offset is `i32` and
+   * fits. A version-0 offset is **u32**, and its top half does not: an offset
+   * of `0x80000000` lands in an `Int32Array` as −2,147,483,648, turning a frame
+   * that should be presented far in the future into one presented far in the
+   * past. Storing both in a float keeps every legal value of either version
+   * exactly — u32 and i32 are both well inside 2^53 — instead of picking one
+   * version's width and silently corrupting the other's.
    */
-  readonly compositionOffsets: Int32Array | undefined;
+  readonly compositionOffsets: Float64Array | undefined;
   /**
    * 1 per sync sample, or `undefined` when there was no `stss` — which means
    * **every** sample is one. Use {@link isSyncSample} rather than reading this,
@@ -532,9 +541,9 @@ export function buildSampleTable(stbl: ParsedBox): SampleTable {
   /* ---- composition offsets ---- */
 
   const cttsBox = child(stbl, "ctts");
-  let compositionOffsets: Int32Array | undefined;
+  let compositionOffsets: Float64Array | undefined;
   if (cttsBox !== undefined) {
-    compositionOffsets = new Int32Array(sampleCount);
+    compositionOffsets = new Float64Array(sampleCount);
     let at = 0;
     for (const entry of decodeCtts(cttsBox).entries) {
       for (let i = 0; i < entry.sampleCount && at < sampleCount; i++) {

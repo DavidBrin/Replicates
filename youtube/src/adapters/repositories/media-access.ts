@@ -60,6 +60,7 @@ import "server-only";
 import { database } from "@/adapters/db";
 import type { SqlExecutor, SqlRow } from "@/adapters/db/driver";
 import type { Visibility } from "@/domain/types";
+import { mayViewMedia } from "@/lib/auth/guard";
 import type { BlobKey } from "@/ports/blob-store";
 
 import { first, text } from "./shared";
@@ -145,6 +146,32 @@ export interface MediaAccessRepository {
 
   /** The same answer, from a short-lived process-local cache. See the header. */
   cachedSubjectForKey(key: BlobKey): Promise<MediaSubject | null>;
+
+  /**
+   * The same subject, addressed by video id rather than by blob key.
+   *
+   * ## Why this is here and not in the videos repository
+   *
+   * Because the rule it feeds is this module's rule. `/api/media` resolves a
+   * key to an owner and a visibility and hands the pair to `mayViewMedia`;
+   * every route that lets a viewer *act* on a video — comment, react, add to
+   * a playlist, read a thread — needs the identical pair and the identical
+   * verdict. Those routes had no such check at all: they confirmed the caller
+   * was signed in and then trusted the id in the path, so any signed-in
+   * account could comment on, react to, or enumerate a private video by
+   * guessing it. The bytes were guarded and the metadata around them was not.
+   *
+   * Giving those routes the videos repository's own loader would have been the
+   * wrong shape: it returns a `Video`, which is a projection built for
+   * rendering, and a permission decision that reads a render model is one that
+   * silently changes meaning the next time the projection does.
+   *
+   * Uncached, deliberately. `cachedSubjectForKey` exists because playback asks
+   * the same question every couple of seconds; a comment is posted once, and a
+   * ten-second window in which a just-privatised video still accepts writes is
+   * not worth the round trip it saves.
+   */
+  subjectForVideo(videoId: string): Promise<MediaSubject | null>;
 }
 
 /**
@@ -201,6 +228,14 @@ export function createMediaAccessRepository(
       // whatever a scanner sent.
       return owner === null ? null : remember(owner, () => load(owner));
     },
+
+    async subjectForVideo(videoId) {
+      // Through `load` rather than around it, so the video branch has exactly
+      // one query and one row-to-subject mapping. Two spellings of the
+      // ownership chain is how a permission check ends up reading a different
+      // `owner_id` from the one the media path reads.
+      return load({ kind: "video", videoId });
+    },
   };
 }
 
@@ -244,6 +279,38 @@ function visibilityOf(row: SqlRow): Visibility {
  * short enough that "I made this private" is true almost immediately. Seconds
  * satisfies both; minutes would not satisfy the second.
  */
+/**
+ * The check every route that acts on a video by id owes, in one place.
+ *
+ * Returns the subject when this viewer may address this video, and `null`
+ * when they may not — **the same `null` a video that does not exist gives**.
+ * That collapse is the point rather than laziness: the caller turns it into
+ * one 404, so posting a comment on a private video and posting one on an
+ * invented id are indistinguishable. A 403 would confirm the id names
+ * something, which is the whole of what an unguessable id was protecting, and
+ * `/api/media` already made that choice for the bytes. The metadata routes
+ * making a different one would undo it — an enumerator does not care whether
+ * the oracle they found is a segment or a comment count.
+ *
+ * `viewerId` may be `null`. A signed-out caller is refused a private video
+ * here exactly as they are refused its segments, so a route may resolve
+ * identity once and pass whatever it got.
+ *
+ * The visibility rule itself is `mayViewMedia` and is not restated. There is
+ * one definition of who may address a video in this application, and a second
+ * copy phrased for comments is how the two drift.
+ */
+export async function authorizeVideoAccess(
+  videoId: string,
+  viewerId: string | null,
+  repository?: MediaAccessRepository,
+): Promise<MediaSubject | null> {
+  const access = repository ?? (await mediaAccess());
+  const subject = await access.subjectForVideo(videoId);
+  if (subject === null) return null;
+  return mayViewMedia(subject, viewerId) ? subject : null;
+}
+
 export const MEDIA_ACCESS_CACHE_TTL_MS = 10_000;
 
 /**
