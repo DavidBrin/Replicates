@@ -182,8 +182,8 @@ needs zero flags. Two runs produce a **byte-identical** media tree.
 | | |
 |---|---|
 | `pnpm dev` | the app, against PGlite and the filesystem blob store |
-| `pnpm test` | 2,122 unit tests |
-| `pnpm test:e2e` | 29 specs, three browser projects, production build |
+| `pnpm test` | 2,124 unit tests |
+| `pnpm test:e2e` | 31 specs, three browser projects, production build |
 | `pnpm verify` | typecheck + lint + tests |
 | `pnpm seed:demo` | optional Creative Commons clips, for screenshots |
 
@@ -242,8 +242,9 @@ cookie, every API call authenticated with it, and every page said "Sign in".
 Recorded because a replica that hides its seams is less useful than one that
 names them:
 
-- **Subscribe does not persist** from the watch page or Shorts. The
-  subscriptions API exists; those two surfaces do not call it.
+- **Subscribe does not persist from Shorts.** The watch page writes through
+  `/api/subscriptions` and survives a reload; the Shorts action rail does not
+  yet call it.
 - **No watch event is recorded from the UI.** Recording one needs a session
   cookie issued to signed-out viewers, and inventing one per page load would
   poison the co-visitation graph with one session per view. The recommender's
@@ -261,7 +262,7 @@ names them:
 
 ---
 
-Next.js · 2,122 unit tests and 29 e2e specs across three browser projects · a
+Next.js · 2,124 unit tests and 31 e2e specs across three browser projects · a
 23-table schema applying idempotently on PostgreSQL 18.3 · a hand-written fMP4
 muxer reproducing an independently generated reference box for box · built
 from nine parallel research lanes, then twelve parallel build slices, then

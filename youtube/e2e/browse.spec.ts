@@ -223,6 +223,52 @@ test.describe("signing in", () => {
   });
 });
 
+test.describe("subscribing", () => {
+  /**
+   * Persistence, asserted across a reload.
+   *
+   * This was in the known-gaps list as "subscribe does not persist", with a
+   * comment in `watch-view.tsx` explaining that the write "lives on a channels
+   * endpoint this slice does not own". `/api/subscriptions` had existed the
+   * whole time and took exactly that call. The gap was that nothing made it —
+   * and the comment made the absence look considered, which is why it stayed.
+   *
+   * The reload is the whole test. A button that flips is a button that flips;
+   * only a fresh render proves a row was written.
+   */
+  test("persists across a reload", async ({ page }) => {
+    await signIn(page, "viewer@example.test");
+    await page.goto(`/watch?v=${FIXTURE.videos.cables.id}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // The accessible name is the `aria-label` — "Subscribe to Field Notes." —
+    // not the visible text. An aria-label overrides the content, and the
+    // subscribed state hides the label entirely, so matching on "Subscribe"
+    // alone finds nothing in either direction.
+    const subscribe = page.getByRole("button", { name: /^subscribe to /i });
+    await expect(subscribe).toBeVisible();
+    await subscribe.click();
+
+    await expect(page.getByRole("button", { name: /^unsubscribe from /i })).toBeVisible();
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("button", { name: /^unsubscribe from /i })).toBeVisible();
+  });
+
+  test("sends a signed-out viewer to sign in, and back", async ({ page }) => {
+    await page.goto(`/watch?v=${FIXTURE.videos.cables.id}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.getByRole("button", { name: /^subscribe to /i }).click();
+
+    // Not a silent failure and not a dead button: the one thing missing is a
+    // session, so the viewer is sent to get one with a way back.
+    await page.waitForURL(/\/signin\?next=/);
+    expect(page.url()).toContain(encodeURIComponent(FIXTURE.videos.cables.id));
+  });
+});
+
 test.describe("the library surfaces", () => {
   for (const path of [
     "/feed/subscriptions",

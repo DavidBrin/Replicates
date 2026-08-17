@@ -79,6 +79,46 @@ export function WatchView({
   const [likeCount, setLikeCount] = useState(video.likeCount);
   const [following, setFollowing] = useState(subscribed);
 
+  /**
+   * The subscribe write, which this file used to say it did not own.
+   *
+   * The comment here read: "the subscribe write lives on a channels endpoint
+   * this slice does not own, so the button reflects the press and does not
+   * persist it". The endpoint is `/api/subscriptions`, it has existed the
+   * whole time, and it takes exactly this. The gap was that nothing called it
+   * — the same shape as the sign-in route, and it stayed in the known-gaps
+   * list for as long as the comment made it look considered.
+   *
+   * Optimistic, then reconciled: the pill flips immediately because a
+   * subscribe that waits on a round trip feels broken, and flips back if the
+   * write fails. A 401 is the one failure worth treating differently — it
+   * means "sign in", not "that did not work", so it sends the viewer to the
+   * form with a way back to this video.
+   */
+  const toggleSubscribe = useCallback(() => {
+    const next = !following;
+    setFollowing(next);
+
+    void fetch("/api/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: next ? "subscribe" : "unsubscribe",
+        channelId: video.channelId,
+      }),
+    })
+      .then((response) => {
+        if (response.ok) return;
+        if (response.status === 401) {
+          const here = `/watch?v=${encodeURIComponent(video.id)}`;
+          window.location.assign(`/signin?next=${encodeURIComponent(here)}`);
+          return;
+        }
+        setFollowing(!next);
+      })
+      .catch(() => setFollowing(!next));
+  }, [following, video.channelId, video.id]);
+
   const react = useCallback(
     (value: 1 | -1) => {
       // Optimistic, mirroring `applyTransition`'s rule: pressing what you
@@ -179,11 +219,7 @@ export function WatchView({
               viewerReaction={reaction}
               subscribed={following}
               onReact={react}
-              // Local only, and that is a real gap rather than a shortcut: the
-              // subscribe write lives on a channels endpoint this slice does
-              // not own, so the button reflects the press and does not persist
-              // it. Reported rather than faked with a silent no-op.
-              onToggleSubscribe={() => setFollowing((on) => !on)}
+              onToggleSubscribe={toggleSubscribe}
             />
 
             <Description

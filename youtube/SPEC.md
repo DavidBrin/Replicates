@@ -163,8 +163,8 @@ distinct.
 
 ## 9. What "done" means here
 
-`pnpm verify` — typecheck, lint, and 2,122 unit tests — plus `pnpm test:e2e`,
-29 specs across three browser projects against a production build.
+`pnpm verify` — typecheck, lint, and 2,124 unit tests — plus `pnpm test:e2e`,
+31 specs across three browser projects against a production build.
 
 **A test that has never failed is not evidence.** Structural checks and
 regression tests in this repository are mutation-tested: the bug is
@@ -174,8 +174,8 @@ than left to look like coverage.
 
 ## 10. Known gaps
 
-- **Subscribe does not persist** from the watch page or Shorts — there is a
-  subscriptions API but no write from those two surfaces.
+- **Subscribe does not persist from Shorts.** The watch page writes through
+  `/api/subscriptions`; the Shorts action rail still only flips local state.
 - **No watch event is recorded from the UI.** The recommender's graph comes
   from the seed. Recording live watches needs a session cookie issued to
   signed-out viewers, which does not exist yet.
