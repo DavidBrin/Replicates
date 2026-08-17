@@ -49,10 +49,27 @@ export interface SqlExecutor {
 export interface SqlDatabase extends SqlExecutor {
   /**
    * Run `fn` inside a transaction, committing on return and rolling back on
-   * throw. Not nestable: an inner call joins the outer transaction rather than
-   * opening a savepoint, because nothing in this application needs partial
-   * rollback and a savepoint that silently does nothing is worse than an
-   * honest absence.
+   * throw.
+   *
+   * **Not nestable, and it throws rather than coping.** This used to promise
+   * that "an inner call joins the outer transaction rather than opening a
+   * savepoint", which neither adapter did: PGlite has one connection and its
+   * queue deadlocks, and Neon takes a fresh pooled connection and opens a
+   * genuinely independent transaction that can commit while the outer one
+   * rolls back. A contract nothing implements is worse than no contract,
+   * because it is the one a caller reads before writing the code that relies
+   * on it.
+   *
+   * So both adapters now refuse identically, with a message naming the fix:
+   * pass the `SqlExecutor` this callback receives down to the inner function.
+   * That is already the shape every repository here takes — an optional
+   * trailing `tx` — and it is why the type of the callback's argument is
+   * `SqlExecutor`, which has no `transaction` on it, rather than
+   * `SqlDatabase`.
+   *
+   * Savepoints are still deliberately absent. Nothing in this application
+   * needs partial rollback, and a savepoint that silently does nothing is
+   * worse than an honest absence.
    */
   transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
 

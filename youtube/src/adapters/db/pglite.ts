@@ -104,7 +104,40 @@ class PGliteDatabase implements SqlDatabase {
     return result.affectedRows ?? 0;
   }
 
+  /**
+   * Nesting deadlocks, so it is refused rather than left to.
+   *
+   * `queue.run` serialises against the one PGlite connection, so a
+   * `transaction()` called from *inside* another one waits for a queue slot
+   * that cannot free until the outer call returns — which is waiting on the
+   * inner. No error, no timeout, just a request that never answers.
+   *
+   * The type system already prevents the obvious spelling: the callback
+   * receives a `SqlExecutor`, which has no `transaction`. What it cannot
+   * prevent is a repository handed the outer `SqlDatabase` and opening its
+   * own. That is what this flag catches, with a message naming the shape,
+   * instead of a hang.
+   */
+  #inTransaction = false;
+
   async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+    if (this.#inTransaction) {
+      throw new Error(
+        "Nested transaction: this handle already has one open. PGlite has a " +
+          "single connection, so the inner call would wait for a queue slot " +
+          "the outer call is holding. Pass the `SqlExecutor` the outer " +
+          "transaction gave you down to the inner function instead.",
+      );
+    }
+    this.#inTransaction = true;
+    try {
+      return await this.#runTransaction(fn);
+    } finally {
+      this.#inTransaction = false;
+    }
+  }
+
+  async #runTransaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
     return this.queue.run(async () => {
       await this.db.query("begin");
       try {

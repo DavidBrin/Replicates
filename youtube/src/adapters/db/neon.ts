@@ -141,7 +141,39 @@ class NeonDatabase implements SqlDatabase {
     }
   }
 
+  /**
+   * Nesting is refused here too, and for a worse reason than PGlite's.
+   *
+   * This takes a fresh pool connection per call, so an inner `transaction()`
+   * does not deadlock — it opens a **second, independent** transaction on a
+   * different connection. That one can commit while the outer one rolls back,
+   * which is a silent correctness failure rather than a visible hang, and it
+   * would appear only under Neon: the same code hangs against PGlite and
+   * half-commits against Postgres.
+   *
+   * Two adapters failing differently on the same input is the divergence this
+   * project has been most bitten by, so both refuse identically.
+   */
+  #inTransaction = false;
+
   async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+    if (this.#inTransaction) {
+      throw new Error(
+        "Nested transaction: this handle already has one open. A second " +
+          "transaction would run on a different pooled connection and could " +
+          "commit while the outer one rolls back. Pass the `SqlExecutor` the " +
+          "outer transaction gave you down to the inner function instead.",
+      );
+    }
+    this.#inTransaction = true;
+    try {
+      return await this.#runTransaction(fn);
+    } finally {
+      this.#inTransaction = false;
+    }
+  }
+
+  async #runTransaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     const executor: SqlExecutor = {
       query: async <R extends SqlRow>(
