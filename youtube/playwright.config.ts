@@ -13,6 +13,14 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.PORT ?? 3400);
 const BASE_URL = `http://localhost:${PORT}`;
 
+/**
+ * The desktop width the layout research measured at.
+ *
+ * Named because it has to be applied per project rather than once in `use` —
+ * see the note on `desktop-chrome`.
+ */
+const DESKTOP_VIEWPORT = { width: 1440, height: 900 } as const;
+
 export default defineConfig({
   testDir: "./e2e",
 
@@ -51,7 +59,19 @@ export default defineConfig({
     },
   },
   projects: [
-    { name: "desktop-chrome", use: { ...devices["Desktop Chrome"] } },
+    /**
+     * The viewport comes *after* the device descriptor.
+     *
+     * `use.viewport` at the top level is overridden by every `devices[…]`
+     * spread, because a descriptor carries its own — Desktop Chrome's is
+     * 1280×720. So the 1440×900 configured above applied to nothing, and the
+     * desktop project ran at a width the research never measured. Restated
+     * here, after the spread, where it wins.
+     */
+    {
+      name: "desktop-chrome",
+      use: { ...devices["Desktop Chrome"], viewport: DESKTOP_VIEWPORT },
+    },
 
     /**
      * Shorts is a different application wearing the same library: a vertical
@@ -77,13 +97,21 @@ export default defineConfig({
      * Rather than chase a real browser that lacks the API, this project
      * removes it: an init script deletes the WebCodecs constructors before any
      * page script runs, so feature detection genuinely fails and the app takes
-     * the fallback in earnest. The deletion happens in `e2e/fallback.setup.ts`
-     * so that the mechanism is visible in the suite rather than buried here.
+     * the fallback in earnest.
+     *
+     * The deletion lives in `e2e/support/no-webcodecs.ts`, which the fallback
+     * specs import as a fixture. It cannot be configured here: `addInitScript`
+     * is a method on a context or page, and a project's `use` block has no
+     * hook for one. The config previously named an `e2e/fallback.setup.ts`
+     * that did not exist and was not referenced by any `dependencies` entry
+     * either — so even once specs were written, the project would have run
+     * them against a browser that still had WebCodecs and quietly tested the
+     * ordinary path twice.
      */
     {
       name: "no-webcodecs",
       testMatch: /fallback/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], viewport: DESKTOP_VIEWPORT },
     },
   ],
   webServer: {
@@ -97,9 +125,33 @@ export default defineConfig({
      * around between runs. `next build` pays the cost once, and the suite then
      * tests the artifact that actually deploys.
      */
-    command: `pnpm run build && pnpm run start -- --port ${PORT}`,
+    /**
+     * `pnpm exec next start`, not `pnpm run start -- --port`.
+     *
+     * pnpm forwards the `--` to the script rather than consuming it, so the
+     * command that actually ran was `next start -- --port 3400`, and Next read
+     * `--` as the project directory:
+     *
+     *     Invalid project directory provided, no such directory: …/youtube/--
+     *
+     * The server therefore exited immediately and Playwright waited out its
+     * ten-minute timeout every run. Nothing caught it because `e2e/` was empty
+     * — a suite with no specs never starts its web server — so the config was
+     * broken for as long as it has existed and the first person to write a
+     * spec would have inherited it.
+     */
+    command: `pnpm run build && pnpm exec next start --port ${PORT}`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    /**
+     * Never reuse. The comment at the top of this file explains that a stray
+     * `next dev` from a sibling project holding a port has already happened
+     * here — and `reuseExistingServer` is exactly the setting that would let
+     * Playwright attach to it, run this suite against a different application,
+     * and leave it running afterwards. A configurable `PORT` reduces the
+     * chance of a collision; only this makes attaching to the wrong thing
+     * impossible.
+     */
+    reuseExistingServer: false,
     timeout: 600_000,
     env: {
       /**

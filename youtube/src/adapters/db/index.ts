@@ -37,6 +37,27 @@ async function create(): Promise<SqlDatabase> {
       : await (await import("./pglite")).createPGliteDatabase(env.DB_DATA_DIR);
 
   await db.migrate();
+
+  /**
+   * The consumer `SEED_DEMO_DATA` never had.
+   *
+   * It is set by `playwright.config.ts` and was parsed by `config/env.ts` and
+   * read by nothing, so the e2e database — `:memory:`, therefore empty on
+   * every boot — stayed empty while the config described a shared library for
+   * specs to act on. Seeding here rather than in a script is what makes it
+   * work at all: the suite's database lives in the server process, so there is
+   * no moment between `next start` and the first request when an external
+   * script could reach it.
+   *
+   * Guarded twice. The flag is off unless something sets it, and `seedDemoData`
+   * itself returns early when its first video is already present, so a
+   * persistent `DB_DATA_DIR` does not accumulate a second corpus per restart.
+   */
+  if (env.SEED_DEMO_DATA) {
+    const { seedDemoData } = await import("./seed-e2e");
+    await seedDemoData(db);
+  }
+
   return db;
 }
 

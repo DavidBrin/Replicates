@@ -15,7 +15,12 @@
     "verify": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "build:schema": "node scripts/build-schema.mjs",
     "prebuild": "node scripts/build-schema.mjs",
+    "predev": "node scripts/build-schema.mjs",
+    "pretest": "node scripts/build-schema.mjs",
+    "pretest:e2e": "pnpm exec playwright install --with-deps chromium",
+    "preseed": "node scripts/build-schema.mjs && pnpm exec playwright install chromium",
     "seed": "node --experimental-strip-types scripts/seed.ts",
+    "preseed:demo": "node scripts/build-schema.mjs && pnpm exec playwright install chromium",
     "seed:demo": "node --experimental-strip-types scripts/seed-demo.ts"
   },
   "dependencies": {
@@ -52,5 +57,8 @@
     "vite": "^8.2.1",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=22.15"
   }
 }
