@@ -8,6 +8,8 @@ import {
   admitToSession,
 } from "@/domain/recommender";
 
+import { recordView } from "./videos";
+
 import { bool, first, num } from "./shared";
 
 /**
@@ -73,6 +75,19 @@ export interface WatchRecorded {
  * load-bearing rather than incidental: the membership row must exist before the
  * pair insert reads the session's set, so the pair statement excludes the new
  * video by id rather than by relying on having run first.
+ *
+ * ## The view counter moved in here, and had to
+ *
+ * `videos.view_count` used to be bumped by the route, straight after this
+ * function returned. Two writes, one transaction between them — so a crash, a
+ * timeout or a failed statement in the gap left the session membership and the
+ * history row committed and the counter not. That state is **permanent**: every
+ * retry finds the session has already watched the video, skips this function
+ * entirely, and never increments the counter it missed.
+ *
+ * The two are defined to move together — the route's own comment said "so
+ * `videos.view_count` and the graph can never disagree about whether a viewing
+ * happened" — and the only way to mean that is to commit them together.
  */
 export async function recordWatch(
   event: WatchEvent,
@@ -181,6 +196,10 @@ export async function recordWatch(
     );
 
     if (newToSession) {
+      // Inside the transaction, for the reason in the header. `recordView` takes
+      // a `SqlExecutor`, so it composes into this one rather than opening its
+      // own — which is exactly the pattern the nesting guard exists to enforce.
+      await recordView(tx, event.videoId);
       await refreshRelatedFor(tx, event.sessionKey, event.videoId);
     }
 
@@ -189,34 +208,58 @@ export async function recordWatch(
 }
 
 /**
- * Has this session already watched this video?
+ * Has this session already **logged** a watch of this video?
  *
- * A cheap primary-key lookup that exists so a *caller* can avoid calling
+ * A cheap indexed lookup that exists so a *caller* can avoid calling
  * {@link recordWatch} at all, and it is worth being precise about why, because
  * `recordWatch` already deduplicates.
  *
- * What it deduplicates is the **graph**: the membership row, the session
- * counts and the pairs are all guarded by `on conflict do nothing`. The
- * `watch_events` insert is deliberately *not* guarded — that log "is logged
- * whether or not anything else happened", because it feeds the history page,
- * which genuinely wants a row per viewing.
+ * What it deduplicates is the **graph**: the membership row, the session counts,
+ * the pairs and the view counter are all guarded by `on conflict do nothing` on
+ * `session_videos`. The `watch_events` insert is deliberately *not* guarded —
+ * that log "is logged whether or not anything else happened", because it feeds
+ * the history page, which wants a row per viewing.
  *
  * That is exactly right for a caller who calls once per viewing. It is wrong
  * for the watch reporter, which posts every few seconds: without this read, one
  * ten-minute video would append a hundred and twenty history rows and run the
- * graph refresh a hundred and twenty times. So the route asks this first, and
- * `recordWatch`'s own `on conflict` remains the guarantee against two requests
- * that both pass the read — which is the concurrency case this cannot close and
- * was never meant to.
+ * graph refresh a hundred and twenty times.
+ *
+ * ## Why it asks `watch_events` and not `session_videos`
+ *
+ * `session_videos` is the obvious table — it is literally "videos this session
+ * has watched" — and it was the wrong one, because **`clearHistory` does not
+ * delete from it and cannot**. That table is keyed on the viewing cookie rather
+ * than on an identity, and its rows back aggregate counters other people's
+ * recommendations depend on.
+ *
+ * So a viewer who cleared their history and then rewatched a video in the same
+ * sitting hit a membership row that was still there, no `watch_events` row was
+ * written, and the history page stayed empty. Clearing history made that video
+ * unrecordable until the cookie rotated — up to twenty-four hours of watching
+ * silently going nowhere, which is the worst possible reading of a privacy
+ * control.
+ *
+ * Asking the log restores it: `clearHistory` deletes those rows, so the next
+ * watch records normally. The graph does not double-count, because
+ * `recordWatch`'s `on conflict do nothing` still sees the membership row and
+ * `newToSession` is still false — so the history entry comes back and the view
+ * counter, correctly, does not move again.
+ *
+ * The scan is on `watch_events_session_idx (session_key, watched_at desc)`,
+ * which does not carry `video_id`; one session's rows are bounded by
+ * `SESSION_VIDEO_CAP` watches plus replays, so the filter runs over tens of
+ * rows rather than thousands.
  */
-export async function sessionHasWatched(
+export async function sessionHasLoggedWatch(
   sql: SqlExecutor,
   sessionKey: string,
   videoId: string,
 ): Promise<boolean> {
   const rows = await sql.query(
-    `select 1 as present from session_videos
-      where session_key = $1 and video_id = $2`,
+    `select 1 as present from watch_events
+      where session_key = $1 and video_id = $2
+      limit 1`,
     [sessionKey, videoId],
   );
   return rows.length > 0;

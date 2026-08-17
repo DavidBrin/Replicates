@@ -25,7 +25,7 @@ export {
  * Four pages built this object by hand and all four agreed on the same wrong
  * fallback — `sessionKey: token ?? "anonymous"` — each carrying a comment
  * explaining that nothing issued a session cookie yet. Something does now
- * (`src/middleware.ts`), so this exists to make sure that fix lands in all four
+ * (`src/proxy.ts`), so this exists to make sure that fix lands in all four
  * places rather than in whichever one is edited next.
  *
  * ## The fallback is a per-request constant, not a shared bucket

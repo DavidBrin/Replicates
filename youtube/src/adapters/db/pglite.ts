@@ -1,5 +1,11 @@
 import "server-only";
 
+import {
+  inTransactionScope,
+  nestedTransactionError,
+  runInTransactionScope,
+} from "./transaction-scope";
+
 import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
@@ -115,26 +121,19 @@ class PGliteDatabase implements SqlDatabase {
    * The type system already prevents the obvious spelling: the callback
    * receives a `SqlExecutor`, which has no `transaction`. What it cannot
    * prevent is a repository handed the outer `SqlDatabase` and opening its
-   * own. That is what this flag catches, with a message naming the shape,
-   * instead of a hang.
+   * own. That is what this catches, with a message naming the shape, instead
+   * of a hang.
+   *
+   * **Scoped to the call chain, not to this instance.** It used to be a
+   * `#inTransaction` boolean on the adapter, and `database()` is memoised
+   * process-wide — so the flag meant "somebody is in a transaction", not "this
+   * caller is", and two concurrent requests were diagnosed as a nesting bug.
+   * See `./transaction-scope.ts`; concurrent transactions queue, which is what
+   * the queue is for.
    */
-  #inTransaction = false;
-
   async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-    if (this.#inTransaction) {
-      throw new Error(
-        "Nested transaction: this handle already has one open. PGlite has a " +
-          "single connection, so the inner call would wait for a queue slot " +
-          "the outer call is holding. Pass the `SqlExecutor` the outer " +
-          "transaction gave you down to the inner function instead.",
-      );
-    }
-    this.#inTransaction = true;
-    try {
-      return await this.#runTransaction(fn);
-    } finally {
-      this.#inTransaction = false;
-    }
+    if (inTransactionScope()) throw nestedTransactionError("PGlite");
+    return runInTransactionScope(() => this.#runTransaction(fn));
   }
 
   async #runTransaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {

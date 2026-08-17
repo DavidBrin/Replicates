@@ -55,7 +55,7 @@ import type { CommentThread } from "@/components/watch/comments";
  *
  * What *was* a gap is now closed: this file used to record that "nothing in
  * this application issues that cookie yet", so `Viewer.sessionKey` fell back to
- * a literal shared by every signed-out visitor. `src/middleware.ts` issues it,
+ * a literal shared by every signed-out visitor. `src/proxy.ts` issues it,
  * and `currentViewer()` reads it.
  */
 

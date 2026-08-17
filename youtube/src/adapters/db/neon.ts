@@ -1,5 +1,11 @@
 import "server-only";
 
+import {
+  inTransactionScope,
+  nestedTransactionError,
+  runInTransactionScope,
+} from "./transaction-scope";
+
 import { createHash } from "node:crypto";
 
 import type {
@@ -152,25 +158,16 @@ class NeonDatabase implements SqlDatabase {
    * half-commits against Postgres.
    *
    * Two adapters failing differently on the same input is the divergence this
-   * project has been most bitten by, so both refuse identically.
+   * project has been most bitten by, so both refuse identically — including
+   * how they *detect* it. See `./transaction-scope.ts`: a boolean on the
+   * adapter meant "somebody in this process is in a transaction", so under any
+   * concurrency at all it refused requests that had done nothing wrong. Here
+   * that would have been the worse half of the pair, because Neon's pool is
+   * built for exactly the concurrency the flag rejected.
    */
-  #inTransaction = false;
-
   async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-    if (this.#inTransaction) {
-      throw new Error(
-        "Nested transaction: this handle already has one open. A second " +
-          "transaction would run on a different pooled connection and could " +
-          "commit while the outer one rolls back. Pass the `SqlExecutor` the " +
-          "outer transaction gave you down to the inner function instead.",
-      );
-    }
-    this.#inTransaction = true;
-    try {
-      return await this.#runTransaction(fn);
-    } finally {
-      this.#inTransaction = false;
-    }
+    if (inTransactionScope()) throw nestedTransactionError("Neon");
+    return runInTransactionScope(() => this.#runTransaction(fn));
   }
 
   async #runTransaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {

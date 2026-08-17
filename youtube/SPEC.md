@@ -146,6 +146,14 @@ distinct.
 
 ## 8. Security
 
+- **Durations are read from the database, never from the request.** The watch
+  reporter knows how long a video is, so sending it looked natural — and it made
+  view inflation two lines, because the threshold *and* the "cap the claim at
+  the video's own length" guard were both reading the attacker's number.
+- **State-changing routes check the request's origin.** `SameSite=Lax` stops a
+  cross-site POST *carrying* a cookie; it does not stop the request being
+  delivered or its response's `Set-Cookie` being applied, which is enough to
+  switch off a visitor's watch history from any page on the internet.
 - **Media types are derived from the key, never accepted from the client.**
   Every blob is served from this origin, so the `Content-Type` is an
   instruction about what to *do* with the bytes. `X-Content-Type-Options:
@@ -163,7 +171,7 @@ distinct.
 
 ## 9. What "done" means here
 
-`pnpm verify` — typecheck, lint, and 2,209 unit tests — plus `pnpm test:e2e`,
+`pnpm verify` — typecheck, lint, and 2,227 unit tests — plus `pnpm test:e2e`,
 38 specs across three browser projects against a production build.
 
 **A test that has never failed is not evidence.** Structural checks and
@@ -174,7 +182,7 @@ than left to look like coverage.
 
 ## 10. Sessionisation
 
-The viewing session key is a cookie (`yt_vk`), issued by `src/middleware.ts`,
+The viewing session key is a cookie (`yt_vk`), issued by `src/proxy.ts`,
 and it implements `research/04` §1.1's rule with two different mechanisms:
 
 - **the 30-minute idle gap is the cookie's `Max-Age`**, rewritten on every
@@ -189,8 +197,19 @@ session, so it is 128 bits from the platform CSPRNG.
 
 Three writes hang off it, on three different schedules. Progress on every
 report; the watch event and the view **once per session per video**, gated by
-`sessionHasWatched` — the alternative is a hundred and twenty views and a
+`sessionHasLoggedWatch` — the alternative is a hundred and twenty views and a
 hundred and twenty graph refreshes for one ten-minute video.
+
+That gate asks the **event log**, not the membership table, and the difference
+is a privacy control working or not: `clearHistory` deletes the log and cannot
+delete the membership rows, which are keyed on the cookie and back counters
+other sessions contributed to. Gated on membership, clearing your history made
+every video you had watched unrecordable until the cookie rotated.
+
+The view and the graph commit in **one transaction**, because two writes with a
+gap between them can leave the membership row committed and the counter not —
+and that state is permanent, since every retry then sees the session has
+already watched the video.
 
 ## 11. Known gaps
 

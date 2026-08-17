@@ -14,6 +14,7 @@ import {
 import { VideoNotFoundError } from "../comments";
 import { DuplicateError } from "../shared";
 import { newVideoId } from "../videos";
+import { blobKeys } from "@/ports/blob-store";
 
 import { countingExecutor, createTestChannel, setupTestDatabase } from "./harness";
 
@@ -34,11 +35,52 @@ async function seedVideo(db: SqlDatabase): Promise<string> {
   return id;
 }
 
-const track = (videoId: string, language: string, label: string) => ({
+/**
+ * Through `blobKeys.captions`, not a template of our own.
+ *
+ * The fixture used to build the key by hand, which meant no test in the
+ * repository ever called the builder — so the bug it later grew (a key that
+ * ignored `source`, colliding an uploaded English track with an automatic one)
+ * could not have been caught here. A fixture that reimplements the thing under
+ * test is a fixture that agrees with whatever the code used to do.
+ */
+const track = (
+  videoId: string,
+  language: string,
+  label: string,
+  source: "uploaded" | "automatic" = "uploaded",
+) => ({
   videoId,
   language,
   label,
-  blobKey: `videos/${videoId}/captions-${language}.vtt`,
+  blobKey: blobKeys.captions(videoId, language, source),
+});
+
+describe("the caption blob key", () => {
+  it("separates the two sources of the same language", () => {
+    // `captions` is unique on `(video_id, language, source)`, so an uploaded
+    // English track and an automatic one are two legitimate rows for one video.
+    // With a key built from the language alone they were two rows pointing at
+    // one object, and the second write silently replaced the first — the CC
+    // menu offered both and played the same file for either.
+    const uploaded = blobKeys.captions("v1", "en", "uploaded");
+    const automatic = blobKeys.captions("v1", "en", "automatic");
+
+    expect(uploaded).not.toBe(automatic);
+    expect(uploaded).toContain("uploaded");
+    expect(automatic).toContain("automatic");
+  });
+
+  it("keeps distinct languages distinct, and stays under the video prefix", () => {
+    expect(blobKeys.captions("v1", "en", "uploaded")).not.toBe(
+      blobKeys.captions("v1", "es", "uploaded"),
+    );
+    // `videoPrefix` is what deletes a video's objects; a caption outside it
+    // would survive the video it belongs to.
+    expect(blobKeys.captions("v1", "en", "uploaded")).toContain(
+      blobKeys.videoPrefix("v1"),
+    );
+  });
 });
 
 describe("adding a caption track", () => {
@@ -55,7 +97,7 @@ describe("adding a caption track", () => {
       language: "en-GB",
       label: "English (United Kingdom)",
       source: "uploaded",
-      blobKey: `videos/${videoId}/captions-en-GB.vtt`,
+      blobKey: blobKeys.captions(videoId, "en-GB", "uploaded"),
     });
     expect(added.createdAt).toBeInstanceOf(Date);
     expect(await getCaptionTrack(t.db, added.id)).toEqual(added);

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   Sheet,
@@ -123,9 +123,34 @@ export function SaveToPlaylist({
   );
   const [notice, setNotice] = useState<string | null>(null);
 
+  /**
+   * How many presses each row has taken, so a stale reply cannot undo a fresh
+   * press.
+   *
+   * Two requests for one row can settle out of order — `add` then `remove`, the
+   * `remove` answering first — and a rollback written as "put it back to
+   * `!next`" then applies the *first* request's opposite to the *second*
+   * request's state. The UI lands on the reverse of what the viewer last asked
+   * for and the server on something else again, with no error shown, because
+   * from each handler's point of view nothing went wrong.
+   *
+   * A counter is enough: a reply whose sequence is not the current one is
+   * describing a press the viewer has already changed their mind about, so it
+   * is dropped. `useRef` rather than state, because reading it must not depend
+   * on a render having happened.
+   */
+  const sequence = useRef<Record<string, number>>({});
+
   const toggle = async (playlist: SaveTarget, next: boolean): Promise<void> => {
+    const ticket = (sequence.current[playlist.id] ?? 0) + 1;
+    sequence.current[playlist.id] = ticket;
+
     setSaved((current) => ({ ...current, [playlist.id]: next }));
     setNotice(null);
+
+    /** Only the most recent press for this row may change anything. */
+    const stale = (): boolean => sequence.current[playlist.id] !== ticket;
+
     try {
       const response = await fetch("/api/playlists", {
         method: "POST",
@@ -136,11 +161,12 @@ export function SaveToPlaylist({
           videoId,
         }),
       });
-      if (!response.ok) {
+      if (!response.ok && !stale()) {
         setSaved((current) => ({ ...current, [playlist.id]: !next }));
         setNotice(`Could not update ${playlist.title}.`);
       }
     } catch {
+      if (stale()) return;
       setSaved((current) => ({ ...current, [playlist.id]: !next }));
       setNotice(`Could not update ${playlist.title}.`);
     }

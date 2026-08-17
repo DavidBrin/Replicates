@@ -163,7 +163,7 @@ No `ffmpeg.wasm`, no `mp4box.js`, no `hls.js`. Content ID is Wang's landmark
 fingerprinting, with a match threshold derived from 3,086 leave-one-out pairs rather than
 chosen. Every video is synthetic, generated at seed time through the real WebCodecs path.
 
-Next.js · 2,209 unit tests · 38 e2e specs across three browser projects · a 23-table
+Next.js · 2,227 unit tests · 38 e2e specs across three browser projects · a 23-table
 schema on Postgres compiled to WebAssembly. Built from nine parallel research lanes, then
 twelve parallel build slices, then four rounds of codex review that returned seventy
 findings — including a client-reference bug none of the unit tests could see and a

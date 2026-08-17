@@ -102,7 +102,7 @@ async function HomeFeedSection() {
  * shared by every signed-out visitor.
  *
  * That fallback existed because nothing issued a per-visitor cookie.
- * `src/middleware.ts` now does, and the alias below is kept only so that this
+ * `src/proxy.ts` now does, and the alias below is kept only so that this
  * file's three call sites read as they did.
  */
 const feedViewer = currentViewer;

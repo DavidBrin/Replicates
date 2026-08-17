@@ -14,6 +14,8 @@ import { createVideo } from "@/adapters/repositories/videos";
 import { resetConfigForTests } from "@/config/env";
 import { SESSION_COOKIE, createSession } from "@/lib/auth";
 import { VIEWER_KEY_COOKIE, mintViewerKey } from "@/lib/viewer/session-key";
+import { HISTORY_PAUSED_COOKIE } from "@/lib/viewer/history-pause";
+import { clearHistory } from "@/adapters/repositories/history";
 import { num } from "@/adapters/repositories/shared";
 
 /**
@@ -38,6 +40,7 @@ const savedEnv = { ...process.env };
 
 let db: SqlDatabase;
 let ownerToken: string;
+let ownerId: string;
 
 /** A fresh key per test, so no two tests share a co-visitation session. */
 function freshKey(): string {
@@ -117,6 +120,7 @@ beforeAll(async () => {
     });
   }
 
+  ownerId = owner.id;
   ownerToken = (await createSession(owner.id)).token;
 });
 
@@ -146,7 +150,7 @@ describe("what a watch report writes", () => {
       expect(response.status).toBe(200);
     }
 
-    // The whole reason `sessionHasWatched` exists. Without the gate this is 20.
+    // The whole reason `sessionHasLoggedWatch` exists. Without it this is 20.
     expect(await viewCount("pub1")).toBe(1);
     expect(await countRows("watch_events", "video_id = $1", ["pub1"])).toBe(1);
     expect(
@@ -242,6 +246,60 @@ describe("what a watch report writes", () => {
   });
 });
 
+describe("what history's own controls do to it", () => {
+  it("records nothing at all while history is paused", async () => {
+    const key = freshKey();
+    const request = watchRequest(watched("pub1"), { key, session: ownerToken });
+    request.headers.set(
+      "cookie",
+      `${request.headers.get("cookie")}; ${HISTORY_PAUSED_COOKIE}=1`,
+    );
+
+    const response = await POST(request);
+
+    expect(await response.json()).toMatchObject({
+      progress: "paused",
+      viewRecorded: false,
+    });
+    expect(await viewCount("pub1")).toBe(0);
+    expect(await countRows("watch_events", "video_id = $1", ["pub1"])).toBe(0);
+    // The resume position too: a paused viewer who is told nothing is recorded
+    // and finds their position saved has been misled about what pause means.
+    expect(await countRows("watch_progress", "video_id = $1", ["pub1"])).toBe(0);
+  });
+
+  /**
+   * Clearing history and rewatching in the same sitting.
+   *
+   * The gate used to ask `session_videos`, which `clearHistory` does not delete
+   * from and cannot — that table is keyed on the viewing cookie and backs
+   * counters other people's recommendations depend on. So a viewer who cleared
+   * their history and rewatched hit a membership row that was still there, no
+   * log row was written, and the history page stayed empty. Clearing history
+   * made a video unrecordable for up to twenty-four hours, which is the worst
+   * possible reading of a privacy control.
+   */
+  it("records a rewatch after the history was cleared", async () => {
+    const key = freshKey();
+    await POST(watchRequest(watched("pub1"), { key, session: ownerToken }));
+    expect(await countRows("watch_events", "video_id = $1", ["pub1"])).toBe(1);
+    expect(await viewCount("pub1")).toBe(1);
+
+    await clearHistory(db, ownerId);
+    expect(await countRows("watch_events", "video_id = $1", ["pub1"])).toBe(0);
+
+    await POST(watchRequest(watched("pub1", 90), { key, session: ownerToken }));
+
+    // The history entry comes back…
+    expect(await countRows("watch_events", "video_id = $1", ["pub1"])).toBe(1);
+    // …and the view count does not move again, because the membership row is
+    // still there and `newToSession` is still false. Both halves matter: a fix
+    // that deleted `session_videos` would have restored history by handing out
+    // a second view.
+    expect(await viewCount("pub1")).toBe(1);
+  });
+});
+
 describe("who may report a watch", () => {
   it("stores a resume position for a signed-in viewer", async () => {
     const response = await POST(
@@ -310,7 +368,58 @@ describe("who may report a watch", () => {
 });
 
 describe("what the route refuses to believe", () => {
-  it("caps a claim at the video's own length", async () => {
+  /**
+   * The duration is the database's, and these are the tests that say so.
+   *
+   * The first version of this block passed `durationSeconds: 600` in the body
+   * of a video that really is 600 seconds long, so it could not tell a route
+   * that read the database from one that read the request — which is what the
+   * route did, and it made view inflation two lines. Every duration in a
+   * request below is therefore **deliberately wrong**.
+   */
+  it("does not let a small claimed duration buy a view", async () => {
+    const key = freshKey();
+    // `pub1` is 600 seconds. Claiming it is one second long puts the threshold
+    // at half a second, which the half-second of claimed viewing then clears.
+    const response = await POST(
+      watchRequest(
+        {
+          videoId: "pub1",
+          positionSeconds: 0.5,
+          watchedSeconds: 0.5,
+          durationSeconds: 1,
+          reason: "tick",
+        },
+        { key },
+      ),
+    );
+
+    expect(await response.json()).toMatchObject({ viewRecorded: false });
+    expect(await viewCount("pub1")).toBe(0);
+  });
+
+  it("does not let a huge claimed duration suppress one", async () => {
+    // The other direction, which a one-sided test would miss: claiming a short
+    // video is enormous would raise its threshold out of reach and let anyone
+    // freeze a rival's view count by reporting on their behalf.
+    const key = freshKey();
+    await POST(
+      watchRequest(
+        {
+          videoId: "short1", // really 15 seconds; threshold 7.5
+          positionSeconds: 8,
+          watchedSeconds: 8,
+          durationSeconds: 86_400,
+          reason: "ended",
+        },
+        { key },
+      ),
+    );
+
+    expect(await viewCount("short1")).toBe(1);
+  });
+
+  it("caps a claim at the video's real length, not the claimed one", async () => {
     const key = freshKey();
     await POST(
       watchRequest(
@@ -318,7 +427,7 @@ describe("what the route refuses to believe", () => {
           videoId: "pub1",
           positionSeconds: 600,
           watchedSeconds: 31_536_000, // a year
-          durationSeconds: 600,
+          durationSeconds: 31_536_000, // …and a matching lie about the video
           reason: "ended",
         },
         { key },
@@ -329,6 +438,8 @@ describe("what the route refuses to believe", () => {
       `select watched_seconds from watch_events where video_id = $1`,
       ["pub1"],
     );
+    // 600, the row's own duration — not the year, and not the year the request
+    // asked us to cap against.
     expect(num(rows[0] ?? {}, "watched_seconds")).toBe(600);
   });
 
@@ -351,6 +462,31 @@ describe("what the route refuses to believe", () => {
       const response = await POST(watchRequest(body, { key: freshKey() }));
       expect(response.status).toBe(400);
     }
+  });
+
+  it("refuses a cross-site request outright", async () => {
+    // `SameSite=Lax` stops the cookie being *sent*; it does not stop the
+    // request being delivered, and this one moves a public counter.
+    const request = watchRequest(watched("pub1"), { key: freshKey() });
+    request.headers.set("sec-fetch-site", "cross-site");
+
+    const response = await POST(request);
+    expect(response.status).toBe(403);
+    expect(await viewCount("pub1")).toBe(0);
+  });
+
+  it("refuses one whose Origin is not ours", async () => {
+    const request = watchRequest(watched("pub1"), { key: freshKey() });
+    request.headers.set("origin", "https://evil.example");
+
+    expect((await POST(request)).status).toBe(403);
+  });
+
+  it("allows one with no fetch metadata at all", async () => {
+    // curl, a mobile client, an old browser. None of them is the CSRF threat
+    // model, which is specifically a browser the victim is already using.
+    const response = await POST(watchRequest(watched("pub1"), { key: freshKey() }));
+    expect(response.status).toBe(200);
   });
 
   it("rejects a body that is not JSON", async () => {

@@ -182,7 +182,7 @@ needs zero flags. Two runs produce a **byte-identical** media tree.
 | | |
 |---|---|
 | `pnpm dev` | the app, against PGlite and the filesystem blob store |
-| `pnpm test` | 2,209 unit tests |
+| `pnpm test` | 2,227 unit tests |
 | `pnpm test:e2e` | 38 specs, three browser projects, production build |
 | `pnpm verify` | typecheck + lint + tests |
 | `pnpm seed:demo` | optional Creative Commons clips, for screenshots |
@@ -264,6 +264,30 @@ report; the watch event and the view **once per session per video**, because
 the watch event is a transaction that rebuilds neighbour lists and running it
 per tick is a hundred and twenty graph refreshes for one ten-minute video.
 
+## What the fifth review round found
+
+The four rounds above reviewed the finished build; a fifth reviewed the fixes,
+and the two worst findings were both in code written to close a gap.
+
+**A guard that meant the opposite of what it said.** Both database adapters
+refuse to nest transactions, and each held the flag on the adapter instance —
+but `database()` is memoised process-wide, so the flag meant *"somebody in this
+process is in a transaction"*, not *"this caller is"*. Two unrelated viewers
+whose requests overlapped by a millisecond were diagnosed as a nesting bug and
+the second was refused. It had been survivable while transactions were rare, and
+the new watch endpoint made it ordinary traffic. The fix is `AsyncLocalStorage`,
+which scopes the flag to the async call chain — so nesting is still caught, and
+concurrency is not. The test that existed could not have found it, because a
+nesting test is necessarily sequential.
+
+**A defence reading the attacker's number.** The watch route took
+`durationSeconds` from the request body, so `{"watchedSeconds":0.5,
+"durationSeconds":1}` bought a view of a ten-minute video — and the guard that
+capped a claim "at the video's own length" capped it at the length the request
+had just supplied. The test for that guard passed `600` from both the database
+and the request, so it could not tell a route that read the database from one
+that read the body. Every duration in those tests is now deliberately wrong.
+
 ## Known gaps
 
 Recorded because a replica that hides its seams is less useful than one that
@@ -285,7 +309,7 @@ names them:
 
 ---
 
-Next.js · 2,209 unit tests and 38 e2e specs across three browser projects · a
+Next.js · 2,227 unit tests and 38 e2e specs across three browser projects · a
 23-table schema applying idempotently on PostgreSQL 18.3 · a hand-written fMP4
 muxer reproducing an independently generated reference box for box · built
 from nine parallel research lanes, then twelve parallel build slices, then

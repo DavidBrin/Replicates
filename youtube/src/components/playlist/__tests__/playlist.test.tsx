@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -625,6 +625,48 @@ describe("SaveToPlaylist", () => {
       within(sheet).getByRole("menuitemcheckbox", { name: /Watch later/ }),
     ).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("status")).toHaveTextContent("Could not update");
+  });
+
+  it("ignores a reply to a press the viewer has already changed", async () => {
+    /**
+     * Two presses, answered out of order.
+     *
+     * The first (`add`) is left hanging and rejected only after the second
+     * (`remove`) has settled. A rollback written as "put it back to `!next`"
+     * then applies the *first* press's opposite — `saved: true` — to a row the
+     * viewer last asked to be unsaved, and shows an error about it. Nothing in
+     * either handler looks wrong from inside itself, which is why this needs a
+     * test rather than a careful read.
+     */
+    const user = userEvent.setup();
+    let failFirst: (reason: Error) => void = () => undefined;
+    fetchMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            failFirst = reject;
+          }),
+      )
+      .mockResolvedValueOnce(okResponse());
+
+    const sheet = await open();
+    const row = () =>
+      within(sheet).getByRole("menuitemcheckbox", { name: /Watch later/ });
+
+    await user.click(row()); // add — hangs
+    await user.click(row()); // remove — succeeds
+
+    expect(row()).toHaveAttribute("aria-checked", "false");
+
+    await act(async () => {
+      failFirst(new Error("network"));
+      await Promise.resolve();
+    });
+
+    // Still unsaved, and no error: the reply describes a press that no longer
+    // reflects what the viewer wants.
+    expect(row()).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("renders the liked playlist as an inoperable row carrying the reason", async () => {

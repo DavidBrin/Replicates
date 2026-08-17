@@ -2,9 +2,13 @@ import { z } from "zod";
 
 import { database } from "@/adapters/db";
 import { authorizeVideoAccess } from "@/adapters/repositories/media-access";
-import { recordWatch, sessionHasWatched } from "@/adapters/repositories/watch-events";
+import {
+  recordWatch,
+  sessionHasLoggedWatch,
+} from "@/adapters/repositories/watch-events";
 import { recordWatchProgress } from "@/adapters/repositories/watch-progress";
-import { recordView } from "@/adapters/repositories/videos";
+import { videoDurationSeconds } from "@/adapters/repositories/videos";
+import { crossOriginRefusal, isSameOrigin } from "@/lib/http/same-origin";
 import { currentViewerId } from "@/lib/auth/guard";
 import { VIEWER_KEY_COOKIE, parseViewerKey } from "@/lib/viewer/session-key";
 import { readCookie } from "@/lib/auth/session";
@@ -39,21 +43,36 @@ import {
  *    hundred-plus graph refreshes per video and a history page full of
  *    duplicates of one viewing. It runs **once per session per video**, gated
  *    by {@link sessionHasWatched}.
- *  - **The view** rides with it, for the same once-per-session reason and by
- *    the same rule, so `videos.view_count` and the graph can never disagree
- *    about whether a viewing happened.
+ *  - **The view** rides with it — inside the same transaction, so
+ *    `videos.view_count` and the graph cannot disagree about whether a viewing
+ *    happened even if the process dies between them.
  *
  * ## What earns the second and third
  *
- * `countsAsView` — watched seconds, never the position reached. The client
- * reports its own accumulated figure, so it is a client-supplied number that
- * increments a public counter, and that is worth naming rather than glossing:
- * it is forgeable. It is also forgeable in the real product, and the honest
- * mitigations are rate limiting and fraud analysis rather than a smarter
- * threshold. What is enforced here is the shape — finite, non-negative, and
- * never more than the video's own duration — so that a single report cannot
- * claim a year of viewing, and the once-per-session gate means repeating the
- * request cannot inflate anything at all.
+ * `countsAsView` — watched seconds, never the position reached.
+ *
+ * **The duration is the database's, never the request's.** That is the one
+ * thing here that is a security property rather than a correctness one. The
+ * body carried a `durationSeconds` and the threshold read it, which made view
+ * inflation a two-line request:
+ *
+ * ```
+ * {"videoId":"…","watchedSeconds":0.5,"durationSeconds":1}
+ * ```
+ *
+ * `viewThresholdSeconds(1)` is 0.5, so half a second bought a view of a
+ * ten-minute video — and the "cap the claim at the video's own length" guard
+ * capped it at the length the attacker had just supplied, so both halves of the
+ * defence were reading the attacker's number. The client's figure is now used
+ * for nothing at all; the field stays in the body only because the reporter
+ * sends it and rejecting it would be a 400 for an honest client.
+ *
+ * `watchedSeconds` is still the client's, and still forgeable — it has to be,
+ * since only the browser can measure it. What bounds it is that it is capped at
+ * the *real* duration, that a view is once per session per video, and that the
+ * session is a cookie this application issued. Beyond that the honest
+ * mitigations are rate limiting and fraud analysis, which this build does not
+ * have and which are named here rather than implied.
  *
  * ## Why the video is authorised
  *
@@ -70,12 +89,20 @@ const WatchBody = z.object({
   positionSeconds: z.number().finite().min(0),
   /** Forward playhead movement while playing — never the position. */
   watchedSeconds: z.number().finite().min(0),
-  /** Zero while the player has no metadata yet; completion is then impossible. */
+  /**
+   * Ignored. Kept in the schema because the reporter sends it and a 400 for an
+   * honest client would be worse than accepting a field and not reading it —
+   * see the header for what happened when this *was* read.
+   */
   durationSeconds: z.number().finite().min(0),
   reason: z.enum(["tick", "pause", "seek", "ended", "unload"]).optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
+  // A cross-site page can still *deliver* a POST under `SameSite=Lax`, and this
+  // one moves a public counter. See `lib/http/same-origin.ts`.
+  if (!isSameOrigin(request)) return crossOriginRefusal();
+
   const viewerId = await currentViewerId(request);
   const cookies = request.headers.get("cookie");
 
@@ -125,8 +152,25 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "No such video." }, { status: 404 });
   }
 
+  const db = await database();
+
   /**
-   * The claim is capped at the video's own length.
+   * The duration, from the database. See the header for what reading the
+   * request's copy cost.
+   *
+   * A second query on a path that runs every few seconds, and worth it: it is
+   * one indexed lookup of one column, and the alternative is a public counter
+   * an attacker controls the threshold of.
+   */
+  const durationSeconds = await videoDurationSeconds(db, report.videoId);
+  if (durationSeconds === null) {
+    // Deleted between the authorisation check and here. Same answer as a video
+    // that never existed, for the same reason.
+    return Response.json({ error: "No such video." }, { status: 404 });
+  }
+
+  /**
+   * The claim is capped at the video's real length.
    *
    * `watchedSeconds` accumulates forward movement, so a legitimate rewatch
    * within one page view genuinely can exceed the duration — but only the
@@ -134,19 +178,18 @@ export async function POST(request: Request): Promise<Response> {
    * truthful report nothing and takes the ceiling off a dishonest one.
    */
   const watchedSeconds =
-    report.durationSeconds > 0
-      ? Math.min(report.watchedSeconds, report.durationSeconds)
+    durationSeconds > 0
+      ? Math.min(report.watchedSeconds, durationSeconds)
       : report.watchedSeconds;
 
   const at = new Date();
-  const db = await database();
 
   const progress = await recordWatchProgress(db, {
     userId: viewerId,
     videoId: report.videoId,
     positionSeconds: report.positionSeconds,
     watchedSeconds,
-    durationSeconds: report.durationSeconds,
+    durationSeconds,
     reason: report.reason,
     at,
   });
@@ -154,8 +197,8 @@ export async function POST(request: Request): Promise<Response> {
   let recorded = false;
   if (
     key !== null &&
-    countsAsView({ watchedSeconds, durationSeconds: report.durationSeconds }) &&
-    !(await sessionHasWatched(db, key.value, report.videoId))
+    countsAsView({ watchedSeconds, durationSeconds }) &&
+    !(await sessionHasLoggedWatch(db, key.value, report.videoId))
   ) {
     const result = await recordWatch(
       {
@@ -167,11 +210,12 @@ export async function POST(request: Request): Promise<Response> {
       },
       db,
     );
-    // `newToSession` is false when a concurrent request won the race that
-    // `sessionHasWatched` cannot close. The view rides on the same flag, so the
-    // counter moves exactly as often as the graph does.
+    // `newToSession` is false when a concurrent request won the race this gate
+    // cannot close, and when the viewer cleared their history and rewatched in
+    // the same session — the log row is gone, so the watch is recorded again,
+    // and the membership row is still there, so the counter correctly is not
+    // moved twice. `recordWatch` bumps the counter itself, in its transaction.
     recorded = result.newToSession;
-    if (recorded) await recordView(db, report.videoId);
   }
 
   return Response.json({

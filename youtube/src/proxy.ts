@@ -9,11 +9,17 @@ import {
 /**
  * Issue the viewing session key, and nothing else.
  *
+ * Named `proxy.ts` rather than `middleware.ts`: Next 16.3 deprecates the
+ * middleware file convention in favour of this one and says so on every boot.
+ * The export is `proxy`, the config is unchanged, and the behaviour is
+ * identical — this is a rename the framework asked for, not a change of
+ * mechanism.
+ *
  * `src/lib/viewer/session-key.ts` holds the rule; this holds the one thing that
  * can only be done here. A cookie has to be set on the response to the request
  * that did not carry it, and a server component cannot set cookies at all —
  * `cookies()` is read-only outside an action or a route handler, by design. So
- * the first page a visitor loads has nowhere to mint a key except middleware.
+ * the first page a visitor loads has nowhere to mint a key except here.
  *
  * ## The forwarded request header is the half that is easy to miss
  *
@@ -50,7 +56,7 @@ export const config = {
   matcher: ["/((?!_next/static|_next/image|api/media|favicon.ico).*)"],
 };
 
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const presented = request.cookies.get(VIEWER_KEY_COOKIE)?.value ?? null;
   const decision = decideViewerKey(presented, Date.now());
 

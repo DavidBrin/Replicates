@@ -8,6 +8,7 @@ import {
   accumulateWatched,
   useWatchReporter,
   type WatchReport,
+  type WatchReporter,
 } from "../watch-reporter";
 
 /**
@@ -86,10 +87,31 @@ describe("useWatchReporter", () => {
     return { sent, view };
   }
 
-  /** Feed `seconds` of playback in quarter-second `timeupdate` steps. */
-  function play(onTime: (seconds: number) => void, from: number, seconds: number): void {
+  /**
+   * Feed `seconds` of playback in quarter-second `timeupdate` steps.
+   *
+   * Takes the whole reporter and starts with a `play` moment, because that is
+   * what a real element does and because nothing accumulates until the element
+   * says it is playing — a viewer scrubbing a paused video used to accrue its
+   * whole length in four-second bites.
+   */
+  function play(
+    reporter: WatchReporter,
+    from: number,
+    seconds: number,
+    { started = true }: { started?: boolean } = {},
+  ): void {
     act(() => {
-      for (let step = 1; step <= seconds * 4; step += 1) onTime(from + step / 4);
+      if (started) {
+        reporter.onPlaybackMoment({
+          reason: "play",
+          positionSeconds: from,
+          playing: true,
+        });
+      }
+      for (let step = 1; step <= seconds * 4; step += 1) {
+        reporter.onTimeUpdate(from + step / 4);
+      }
     });
   }
 
@@ -228,18 +250,158 @@ describe("useWatchReporter", () => {
     expect(sent[0]?.videoId).toBe("v2");
   });
 
-  it("stops listening once unmounted", () => {
+  it("flushes on unmount and then stops listening", () => {
+    // Two claims, and the first was missing: an earlier version cleared `sent`
+    // *after* unmounting, so removing the unmount flush entirely would still
+    // have passed. The flush is what records a watch when the whole watch page
+    // is replaced.
     const { sent, view } = setup();
     play(view.result.current, 0, 4);
     sent.length = 0;
+
     act(() => {
       view.unmount();
     });
-    sent.length = 0;
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.reason).toBe("unload");
+    expect(sent[0]?.watchedSeconds).toBeCloseTo(4);
 
     act(() => {
       window.dispatchEvent(new Event("pagehide"));
     });
-    expect(sent).toHaveLength(0);
+    expect(sent).toHaveLength(1);
+  });
+
+  /* --------------------------------------------------- playback moments -- */
+
+  describe("playback moments", () => {
+    it("flushes on pause, because the next tick may never come", () => {
+      // The gap codex found: `reason` carried five values and two were sent.
+      // An 8-second watch of a 15-second short reports one 5-second tick and
+      // stops — under the 7.5-second threshold — so the view existed only if
+      // the viewer happened to close the tab afterwards.
+      vi.useFakeTimers();
+      const { sent, view } = setup();
+      play(view.result.current, 0, 4);
+      expect(sent).toHaveLength(0);
+
+      act(() => {
+        view.result.current.onPlaybackMoment({
+          reason: "pause",
+          positionSeconds: 4,
+          playing: false,
+        });
+      });
+
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.reason).toBe("pause");
+      expect(sent[0]?.watchedSeconds).toBeCloseTo(4);
+    });
+
+    it("flushes on ended", () => {
+      vi.useFakeTimers();
+      const { sent, view } = setup();
+      play(view.result.current, 0, 4);
+
+      act(() => {
+        view.result.current.onPlaybackMoment({
+          reason: "ended",
+          positionSeconds: 4,
+          playing: false,
+        });
+      });
+
+      expect(sent[0]?.reason).toBe("ended");
+    });
+
+    it("counts nothing while the element is not playing", () => {
+      // A viewer dragging through a paused video: `timeupdate` does not fire,
+      // but `seeked` does and carries a position, so the whole length used to
+      // accumulate in four-second bites.
+      vi.useFakeTimers();
+      const { sent, view } = setup();
+
+      play(view.result.current, 0, 4, { started: false });
+      act(() => {
+        window.dispatchEvent(new Event("pagehide"));
+      });
+
+      // A report *is* sent, and that is right: the position moved, and a resume
+      // position is worth storing for a viewer who scrubbed and left. What must
+      // not have moved is the watched total.
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.watchedSeconds).toBe(0);
+      expect(sent[0]?.positionSeconds).toBeCloseTo(4);
+    });
+
+    it("does not count the step that spans a seek", () => {
+      // A four-second nudge is indistinguishable from four seconds of playback
+      // if all you have is two positions, and it is under the ceiling.
+      vi.useFakeTimers();
+      const { sent, view } = setup();
+      play(view.result.current, 0, 2);
+
+      act(() => {
+        view.result.current.onPlaybackMoment({
+          reason: "seek",
+          positionSeconds: 5,
+          playing: true,
+        });
+        // The element's first `timeupdate` after a seek lands on the
+        // destination, three seconds ahead of where playback had reached.
+        view.result.current.onTimeUpdate(5);
+        view.result.current.onTimeUpdate(5.25);
+      });
+      act(() => {
+        window.dispatchEvent(new Event("pagehide"));
+      });
+
+      const last = sent[sent.length - 1];
+      // 2 seconds of playback, plus the quarter after the seek. Not 5.25.
+      expect(last?.watchedSeconds).toBeCloseTo(2.25);
+    });
+
+    it("resumes counting after the seek settles", () => {
+      vi.useFakeTimers();
+      const { sent, view } = setup();
+      act(() => {
+        view.result.current.onPlaybackMoment({
+          reason: "seek",
+          positionSeconds: 100,
+          playing: true,
+        });
+      });
+      play(view.result.current, 100, 3);
+      act(() => {
+        window.dispatchEvent(new Event("pagehide"));
+      });
+
+      // The seek suppresses exactly one step, not everything after it.
+      expect(sent[sent.length - 1]?.watchedSeconds).toBeCloseTo(3);
+    });
+
+    it("does not flush on play — the pause before it already did", () => {
+      vi.useFakeTimers();
+      const { sent, view } = setup();
+      play(view.result.current, 0, 2);
+      act(() => {
+        view.result.current.onPlaybackMoment({
+          reason: "pause",
+          positionSeconds: 2,
+          playing: false,
+        });
+      });
+      const afterPause = sent.length;
+
+      act(() => {
+        view.result.current.onPlaybackMoment({
+          reason: "play",
+          positionSeconds: 2,
+          playing: true,
+        });
+      });
+
+      expect(sent).toHaveLength(afterPause);
+    });
   });
 });

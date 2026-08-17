@@ -101,6 +101,23 @@ export interface PlayerProps {
   readonly onNext?: (() => void) | undefined;
   readonly onPrevious?: (() => void) | undefined;
   readonly onTimeUpdate?: ((seconds: number) => void) | undefined;
+  /**
+   * The moments where the *next* `timeupdate` may never arrive.
+   *
+   * `onTimeUpdate` alone is not enough for anything that has to be flushed:
+   * a pause, a seek and an end are exactly the points at which the playhead
+   * stops producing events, and a reporter built on ticks alone loses whatever
+   * happened since the last one. `playing` rides along because a consumer
+   * measuring *watched* time has to know whether the playhead moving is
+   * playback or a scrub — see `components/watch/watch-reporter.ts`.
+   */
+  readonly onPlaybackMoment?:
+    | ((moment: {
+        readonly reason: "play" | "pause" | "seek" | "ended";
+        readonly positionSeconds: number;
+        readonly playing: boolean;
+      }) => void)
+    | undefined;
 
   /** Test seam. See the file comment. */
   readonly createEngine?: ((options: CreatePlayerOptions) => PlayerEngine) | undefined;
@@ -136,6 +153,7 @@ export function Player({
   onNext,
   onPrevious,
   onTimeUpdate,
+  onPlaybackMoment,
   createEngine,
   className,
 }: PlayerProps) {
@@ -268,15 +286,39 @@ export function Player({
     const media = videoRef.current;
     if (media === null) return;
 
+    /** `playing` read from the element, not from React state, which lags it. */
+    const moment = (reason: "play" | "pause" | "seek" | "ended"): void => {
+      onPlaybackMoment?.({
+        reason,
+        positionSeconds: media.currentTime,
+        playing: !media.paused && !media.ended,
+      });
+    };
+
     const sync = (): void => {
       setPlaying(!media.paused && !media.ended);
       setVolumeState(media.volume);
       setMuted(media.muted);
       setPlaybackRateState(media.playbackRate);
     };
+    const onPlay = (): void => {
+      sync();
+      moment("play");
+    };
+    const onPause = (): void => {
+      sync();
+      moment("pause");
+    };
     const onTime = (): void => {
       setCurrentTime(media.currentTime);
       onTimeUpdate?.(media.currentTime);
+    };
+    const onSeeked = (): void => {
+      // The moment first: a consumer accumulating watched time has to be told
+      // the playhead jumped *before* it is handed the position it jumped to,
+      // or it counts the jump as playback.
+      moment("seek");
+      onTime();
     };
     const onDuration = (): void => {
       setElementDuration(Number.isFinite(media.duration) ? media.duration : null);
@@ -285,15 +327,16 @@ export function Player({
       setPlaying(false);
       setRecentlyActive(true);
       setAnnouncement("Video ended");
+      moment("ended");
     };
 
     const events: [string, () => void][] = [
-      ["play", sync],
-      ["pause", sync],
+      ["play", onPlay],
+      ["pause", onPause],
       ["volumechange", sync],
       ["ratechange", sync],
       ["timeupdate", onTime],
-      ["seeked", onTime],
+      ["seeked", onSeeked],
       ["durationchange", onDuration],
       ["loadedmetadata", onDuration],
       ["ended", onEnded],
@@ -305,7 +348,7 @@ export function Player({
     return () => {
       for (const [type, listener] of events) media.removeEventListener(type, listener);
     };
-  }, [onTimeUpdate]);
+  }, [onTimeUpdate, onPlaybackMoment]);
 
   // The caption base size is a fraction of the player's height (research/07 §2
   // is why we place cues ourselves; the *size* following the box is so one

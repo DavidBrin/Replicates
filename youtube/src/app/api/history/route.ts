@@ -5,6 +5,7 @@ import { clearHistory } from "@/adapters/repositories/history";
 import { currentViewerId } from "@/lib/auth/guard";
 import { requestIsSecure } from "@/lib/auth/session";
 import { historyPausedCookie } from "@/lib/viewer/history-pause";
+import { crossOriginRefusal, isSameOrigin } from "@/lib/http/same-origin";
 
 /**
  * The two history controls that were rendered and inert.
@@ -39,6 +40,18 @@ const Body = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: Request): Promise<Response> {
+  /**
+   * The one endpoint here that needs no session, so `SameSite=Lax` protects
+   * nothing on it.
+   *
+   * `pause` deliberately requires no account — a signed-out viewer's watches
+   * are recorded and are just as pausable — and it answers with a `Set-Cookie`.
+   * A cross-site POST is not *sent* a Lax cookie but is still delivered and its
+   * response's cookies are still applied, so without this any page on the
+   * internet could silently switch off a visitor's watch history.
+   */
+  if (!isSameOrigin(request)) return crossOriginRefusal();
+
   let payload: unknown;
   try {
     payload = await request.json();

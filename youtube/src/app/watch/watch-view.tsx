@@ -93,7 +93,7 @@ export function WatchView({
    * the studio preview should record nothing at all. See
    * `components/watch/watch-reporter.ts`.
    */
-  const reportProgress = useWatchReporter({
+  const reporter = useWatchReporter({
     videoId: video.id,
     durationSeconds: video.durationSeconds,
   });
@@ -205,7 +205,12 @@ export function WatchView({
       frameRate={frameRate ?? undefined}
       theatre={theatre}
       onToggleTheatre={() => setTheatre((on) => !on)}
-      onTimeUpdate={reportProgress}
+      onTimeUpdate={reporter.onTimeUpdate}
+      // Pause, seek and end: the points at which the playhead stops producing
+      // ticks, and therefore the points at which the figure is final. Without
+      // them an eight-second watch of a fifteen-second short never reaches the
+      // server unless the tab happens to close.
+      onPlaybackMoment={reporter.onPlaybackMoment}
     />
   );
 

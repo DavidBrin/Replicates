@@ -567,14 +567,31 @@ export function ShortsFeed({
    * `location.pathname` (the pager rewrites that as you scroll, and a viewer who
    * pressed Subscribe on slide 4 should not come back to slide 1).
    */
+  /**
+   * How many presses each channel has taken, so a stale reply cannot undo a
+   * fresh one.
+   *
+   * Two writes for one channel can settle out of order — subscribe then
+   * unsubscribe, the unsubscribe answering first — and a rollback written as
+   * "put it back to `!next`" then applies the first press's opposite to the
+   * second press's state. The rail ends up showing the reverse of what was last
+   * asked for, with no error, because neither handler saw anything go wrong.
+   */
+  const subscribeSequence = useRef<Record<string, number>>({});
+
   const toggleSubscribe = useCallback(
     (short: ShortItem): void => {
       const channelId = short.channel.id;
       const next = !short.subscribed;
+      const ticket = (subscribeSequence.current[channelId] ?? 0) + 1;
+      subscribeSequence.current[channelId] = ticket;
+
       setSubscriptions((current) => ({ ...current, [channelId]: next }));
 
       const write = onSubscribe ?? postSubscription;
       void write(channelId, next).catch((cause: unknown) => {
+        // A press the viewer has already changed their mind about.
+        if (subscribeSequence.current[channelId] !== ticket) return;
         if (cause instanceof NotSignedInError) {
           const here = shortHref(short.id);
           // A document navigation rather than `router.push`, for the reason

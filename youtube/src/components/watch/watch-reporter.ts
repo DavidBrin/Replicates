@@ -23,13 +23,30 @@ import { PROGRESS_WRITE_INTERVAL_MS } from "@/domain/viewing";
  * a plausible amount. That single rule covers every case without the hook
  * having to track play state at all:
  *
- *  - **Paused**: `timeupdate` stops firing, so nothing accumulates.
- *  - **Seek forward**: one enormous delta, rejected by the ceiling.
  *  - **Seek backward**: a negative delta, rejected — and the rewatched span
  *    then accumulates again as it plays, which is correct. Watching the same
  *    ten seconds three times is thirty seconds of watching.
  *  - **Playback rate**: 2× halves the wall-clock cost of a second of video and
  *    this counts the video's seconds, which is what the column is.
+ *
+ * ## The rule needs the element's state as well as its position
+ *
+ * The two cases the delta alone gets wrong are both about a playhead that moved
+ * without anyone watching:
+ *
+ *  - **A seek of less than the ceiling.** A four-second nudge is
+ *    indistinguishable from four seconds of playback if all you have is two
+ *    positions. `Player` reports the seek *before* the position it lands on, so
+ *    the baseline moves to the destination and the next step is measured from
+ *    there — the jump contributes nothing whatever its size, and the ceiling is
+ *    left to do the one job it is good at.
+ *  - **Scrubbing while paused.** `timeupdate` does not fire, but `seeked` does,
+ *    and it carries a position — so a viewer dragging through a paused video
+ *    accumulated its whole length in four-second bites. Nothing accumulates
+ *    unless the element says it is playing.
+ *
+ * Both arrive through {@link UseWatchReporterOptions} as playback *moments*,
+ * which is the same channel that carries the flushes below.
  *
  * ## The ceiling is a real trade-off, stated
  *
@@ -58,6 +75,13 @@ import { PROGRESS_WRITE_INTERVAL_MS } from "@/domain/viewing";
  * mobile, where a tab is frequently discarded without it ever firing, and using
  * it suppresses the back/forward cache on some browsers, so it costs a real
  * feature to catch a case `visibilitychange` already catches.
+ *
+ * `pause`, `seek` and `ended` flush too, and that is not decoration: the
+ * `reason` field carried all five values from the start and only two were ever
+ * sent. An eight-second watch of a fifteen-second short reports one five-second
+ * tick and then stops — below the 7.5-second threshold — so the view existed
+ * only if the viewer happened to close the tab afterwards. The moment the
+ * player stops is the moment the figure is final.
  *
  * `keepalive: true` on the fetch is what lets that final request outlive the
  * document. Without it the browser cancels in-flight requests on navigation and
@@ -101,6 +125,18 @@ export interface UseWatchReporterOptions {
   readonly send?: (report: WatchReport) => void;
 }
 
+/** What {@link useWatchReporter} hands back. Both go to `<Player>`. */
+export interface WatchReporter {
+  /** `<Player onTimeUpdate>`. */
+  readonly onTimeUpdate: (seconds: number) => void;
+  /** `<Player onPlaybackMoment>`. */
+  readonly onPlaybackMoment: (moment: {
+    readonly reason: "play" | "pause" | "seek" | "ended";
+    readonly positionSeconds: number;
+    readonly playing: boolean;
+  }) => void;
+}
+
 /**
  * Returns the `onTimeUpdate` handler to hand to `<Player>`.
  *
@@ -114,7 +150,7 @@ export function useWatchReporter({
   videoId,
   durationSeconds,
   send,
-}: UseWatchReporterOptions): (seconds: number) => void {
+}: UseWatchReporterOptions): WatchReporter {
   const positionRef = useRef(0);
   const watchedRef = useRef(0);
   /**
@@ -142,6 +178,21 @@ export function useWatchReporter({
    */
   const lastSentWatchedRef = useRef(0);
   const lastSentPositionRef = useRef(0);
+  /**
+   * Whether the element is playing.
+   *
+   * Starts false: nothing has told us otherwise, and counting before the first
+   * `play` would mean a viewer scrubbing a video they never started still
+   * accrues watched time.
+   *
+   * There is deliberately no companion "we just seeked" flag. One was written
+   * and mutation testing showed it could not fail a test: the seek handler
+   * already moves the baseline to the destination, which is what stops the jump
+   * being counted, and a flag on top of that discards the first *genuine* step
+   * after the seek as well. A guard that only ever removes correct data is
+   * worse than no guard.
+   */
+  const playingRef = useRef(false);
 
   // The identity the listeners read. Kept in refs so that attaching them once
   // is correct even as the props change.
@@ -218,9 +269,13 @@ export function useWatchReporter({
     };
   }, [report]);
 
-  return useCallback(
+  const onTimeUpdate = useCallback(
     (seconds: number): void => {
-      watchedRef.current += accumulateWatched(positionRef.current, seconds);
+      // Nothing accumulates unless the element says it is playing. The jump
+      // itself is excluded by the seek handler moving the baseline, not here.
+      if (playingRef.current) {
+        watchedRef.current += accumulateWatched(positionRef.current, seconds);
+      }
       positionRef.current = seconds;
 
       const now = Date.now();
@@ -236,6 +291,47 @@ export function useWatchReporter({
     },
     [report],
   );
+
+  const onPlaybackMoment = useCallback(
+    (moment: {
+      readonly reason: "play" | "pause" | "seek" | "ended";
+      readonly positionSeconds: number;
+      readonly playing: boolean;
+    }): void => {
+      playingRef.current = moment.playing;
+
+      if (moment.reason === "seek") {
+        /**
+         * **The baseline moves to the destination, and that is the whole
+         * mechanism.** The next `timeupdate` is then measured from where the
+         * playhead landed rather than from where it left, so the jump — of any
+         * size, above or below the ceiling — contributes nothing, and the
+         * playback that follows it is measured normally.
+         *
+         * It also covers the paused scrub, which produces `seeked` and no
+         * `timeupdate` at all: each drag moves the baseline, and `playingRef`
+         * keeps any of it from counting.
+         */
+        positionRef.current = moment.positionSeconds;
+        report("seek");
+        return;
+      }
+
+      // `play` is a state change and nothing else — flushing on it would post a
+      // report identical to the one the pause before it already sent.
+      //
+      if (moment.reason === "play") {
+        positionRef.current = moment.positionSeconds;
+        return;
+      }
+
+      positionRef.current = moment.positionSeconds;
+      report(moment.reason);
+    },
+    [report],
+  );
+
+  return { onTimeUpdate, onPlaybackMoment };
 }
 
 /**

@@ -402,6 +402,37 @@ export async function replaceRenditions(
   );
 }
 
+/**
+ * How long a video actually is, according to the database.
+ *
+ * One column, because the caller is `POST /api/watch` and the answer decides
+ * whether a public counter moves. That route used to take the duration from the
+ * request body — the reporter knows it, so sending it looked natural — and the
+ * consequence is a two-line exploit:
+ *
+ * ```
+ * POST /api/watch {"videoId":"…","watchedSeconds":0.5,"durationSeconds":1}
+ * ```
+ *
+ * `viewThresholdSeconds(1)` is 0.5, so half a second of claimed viewing counts
+ * as a view of a ten-minute video, and the "cap the claim at the video's own
+ * length" guard capped it at the length the attacker had just supplied. Both
+ * halves of the defence were reading the attacker's number.
+ *
+ * `null` for a video that is not there, which the caller has already ruled out
+ * via `authorizeVideoAccess` — it is returned rather than thrown so the two
+ * absences are handled by the same branch.
+ */
+export async function videoDurationSeconds(
+  sql: SqlExecutor,
+  id: string,
+): Promise<number | null> {
+  const row = first(
+    await sql.query(`select duration_seconds from videos where id = $1`, [id]),
+  );
+  return row === undefined ? null : num(row, "duration_seconds");
+}
+
 /** Bump the denormalised counter the feeds sort and display. */
 export async function recordView(
   sql: SqlExecutor,

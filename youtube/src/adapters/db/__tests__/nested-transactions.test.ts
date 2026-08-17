@@ -33,4 +33,50 @@ describe("nested transactions", () => {
       t.db.transaction(async (tx) => (await tx.query("select 1 as n"))[0]?.n),
     ).resolves.toBe(1);
   });
+
+  /**
+   * The other half, which was missing and which the guard failed.
+   *
+   * `database()` is memoised process-wide, and the guard used to be a boolean
+   * on the adapter — so it meant "somebody in this process is in a
+   * transaction", not "this call chain is". Two unrelated requests overlapping
+   * by a millisecond were diagnosed as a nesting bug and the second was
+   * refused.
+   *
+   * That was survivable while transactions were rare and stopped being so the
+   * moment `POST /api/watch` existed: the reporter posts every few seconds per
+   * viewer and crossing the view threshold opens a transaction, so two people
+   * finishing a video at once is ordinary traffic.
+   *
+   * The test that existed could not see it, because a nesting test is
+   * necessarily sequential.
+   */
+  it("does not mistake two concurrent transactions for a nested one", async () => {
+    const results = await Promise.allSettled([
+      t.db.transaction(async (tx) => (await tx.query("select 1 as n"))[0]?.n),
+      t.db.transaction(async (tx) => (await tx.query("select 2 as n"))[0]?.n),
+      t.db.transaction(async (tx) => (await tx.query("select 3 as n"))[0]?.n),
+    ]);
+
+    expect(results.map((r) => r.status)).toEqual([
+      "fulfilled",
+      "fulfilled",
+      "fulfilled",
+    ]);
+  });
+
+  it("still refuses a nested one started inside a concurrent pair", async () => {
+    // The guard must not have been loosened into uselessness: scoping it to the
+    // async chain has to keep catching the case it exists for, *while* another
+    // transaction is open beside it.
+    const [concurrent, nested] = await Promise.allSettled([
+      t.db.transaction(async (tx) => (await tx.query("select 1 as n"))[0]?.n),
+      t.db.transaction(async () => {
+        await t.db.transaction(async () => "inner");
+      }),
+    ]);
+
+    expect(concurrent?.status).toBe("fulfilled");
+    expect(nested?.status).toBe("rejected");
+  });
 });

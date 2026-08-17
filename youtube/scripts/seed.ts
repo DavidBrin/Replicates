@@ -798,7 +798,7 @@ async function main(): Promise<void> {
   log(`seeded in ${(elapsed / 1000).toFixed(1)} s`);
   log(
     `  ${totals.clips} clips, ${totals.segments} media segments, ` +
-      `${formatBytes(totals.bytes)} of blobs`,
+      `${totals.captions} caption tracks, ${formatBytes(totals.bytes)} of blobs`,
   );
   log(`  ${(totals.encodeMs / 1000).toFixed(1)} s of that was in-page encoding`);
   log(`  sign in as ${corpus.people[0]?.email} / ${corpusModule.SEED_PASSWORD}`);
