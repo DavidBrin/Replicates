@@ -1,173 +1,385 @@
 // @vitest-environment node
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
 import { dirname, join, relative, resolve } from "node:path";
+
+import ts from "typescript";
+import { describe, expect, it } from "vitest";
 
 /**
  * The boundary this project got wrong five times.
  *
  * Next turns **every** export of a `"use client"` module into a client
  * *reference* — not only components, but plain strings and pure functions too.
- * A server component that imports one and *calls* it throws at request time:
+ * A server component that imports one and *uses its value* throws at request
+ * time:
  *
  *   Attempted to call thumbnailSrc() from the server but thumbnailSrc is on
  *   the client.
  *
  * It happened to `THEME_ATTRIBUTE`, `chipsForFeed`, `historyRowMenu`,
- * `thumbnailSrc` and `shortHref`. The last one alone broke ten routes.
+ * `thumbnailSrc` and `shortHref`. One of them alone broke ten routes.
  *
- * Every one of them passed the entire unit suite, because a unit test imports
- * the module directly and never crosses the boundary. Four of the five also
- * passed a route probe, because a `<Suspense>` fallback swallowed the error in
- * development, and one passed a probe against a *production* build too — it
- * only failed once the database had rows, since an empty feed never reached
- * the call.
+ * Every instance passed the whole unit suite, because a unit test imports the
+ * module directly and never crosses the boundary. Four also passed a route
+ * probe, because a `<Suspense>` fallback swallowed the error in development.
+ * One passed a probe against a *production* build too — it only failed once
+ * the database had rows, since an empty feed never reached the call. So no
+ * amount of ordinary testing finds this. It needs a rule checked structurally,
+ * which is what this file is.
  *
- * So no amount of ordinary testing finds this. It needs a rule checked
- * structurally, which is what this file is.
+ * ## Why this is an AST walk and not a set of regexes
  *
- * ## What counts as a violation
+ * It was regexes, and a review took it apart. They matched `import { a } from`
+ * and `export { a } from` and nothing else, so **every other import form was
+ * invisible**: a default import, `import * as x`, an `export *` barrel, a
+ * dynamic `import()`. The re-export handling read the alias on the wrong side
+ * of `as`. And the decision about *what* was dangerous rested on the name —
+ * lowercase-initial or SCREAMING_CASE — so a value called `Theme` or `mapURL`
+ * was waved through while a component called `renderRow` was flagged.
  *
- * A file under `src/app/` with no `"use client"` directive — a server
- * component — importing a **value** (a lowercase-initial function or a
- * SCREAMING_CASE constant) that a `"use client"` module exports. Components
- * are fine: rendering a client component from a server one is the entire point
- * of the boundary. Types are fine: they are erased.
+ * None of that was theoretical: `export *` alone would launder any value in
+ * the codebase past the check, and the guard reported clean the whole time.
+ * TypeScript is already a dependency and its parser answers all of it exactly,
+ * so the heuristics are gone.
  *
- * ## The corollary this also enforces
+ * ## The rule, stated precisely
+ *
+ * A module with no `"use client"` directive is a server module. If it imports
+ * a binding whose resolution passes through **any** `"use client"` module, and
+ * it then *uses that binding as a value* — calls it, reads it, spreads it,
+ * passes it as an argument — that is a violation.
+ *
+ * Rendering it as JSX is not. `<Menu />` on a client component is the entire
+ * point of the boundary, and a client reference is exactly what React needs
+ * there. So the discriminator is **how the identifier is used**, which the AST
+ * knows and a naming convention only guesses at. That is what replaced the
+ * casing rule, and it is why `VideoCardView` (rendered) and `watchHref`
+ * (called) no longer have to be told apart by their capital letters.
+ *
+ * ## The corollary
  *
  * Re-exporting a value *through* a client module does not launder it. The
  * first fix for `chipsForFeed` moved it to a server-safe module and had the
  * client module re-export it for compatibility — and the barrel still
- * forwarded from the client module, so the bug survived its own fix. This
- * check resolves what a barrel forwards, so that shape fails here too.
+ * forwarded from the client module, so the bug survived its own fix. Every
+ * module on the resolution path is checked, not just the defining one.
  */
 
 const SRC = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
-function read(path: string): string {
+function read(path: string): string | null {
   try {
     return readFileSync(path, "utf8");
   } catch {
-    return "";
+    return null;
   }
 }
 
-function isClientModule(source: string): boolean {
-  return /^\s*["']use client["']/.test(source);
+function parse(path: string): ts.SourceFile | null {
+  const source = read(path);
+  if (source === null) return null;
+  return ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 }
 
-/** Value exports: pure functions and constants, never components or types. */
-function valueExports(source: string): string[] {
-  const names = new Set<string>();
-  for (const m of source.matchAll(
-    /^export\s+(?:const|function)\s+([a-z][A-Za-z0-9_]*)/gm,
-  )) {
-    if (m[1]) names.add(m[1]);
+/**
+ * `"use client"` as the compiler sees it.
+ *
+ * A directive prologue is an expression statement whose expression is a string
+ * literal, before any other statement. Reading it off the AST rather than with
+ * `/^\s*["']use client["']/` means a file that opens with a comment, a shebang
+ * or a `/** @jsxImportSource *\/` pragma is still classified correctly.
+ */
+function isClientModule(file: ts.SourceFile): boolean {
+  for (const statement of file.statements) {
+    if (!ts.isExpressionStatement(statement)) break;
+    const { expression } = statement;
+    if (!ts.isStringLiteral(expression)) break;
+    if (expression.text === "use client") return true;
   }
-  for (const m of source.matchAll(/^export\s+const\s+([A-Z][A-Z0-9_]+)\b/gm)) {
-    if (m[1]) names.add(m[1]);
-  }
-  return [...names];
+  return false;
 }
 
-/** `export { a, b } from "./x"` — what a barrel forwards, and from where. */
-function reExports(source: string): Array<{ names: string[]; from: string }> {
-  const out: Array<{ names: string[]; from: string }> = [];
-  for (const m of source.matchAll(
-    /export\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g,
-  )) {
-    const names = (m[1] ?? "")
-      .split(",")
-      .map((n) => n.trim())
-      .filter((n) => n.length > 0 && !n.startsWith("type "))
-      .map((n) => (n.split(/\s+as\s+/)[1] ?? n).trim());
-    out.push({ names, from: m[2] ?? "" });
-  }
-  return out;
-}
-
+/** `@/x` and `./x` to a file on disk. Bare specifiers are node_modules. */
 function resolveSpecifier(fromFile: string, specifier: string): string | null {
   const base = specifier.startsWith("@/")
     ? join(SRC, specifier.slice(2))
     : specifier.startsWith(".")
       ? resolve(dirname(fromFile), specifier)
       : null;
-  if (!base) return null;
+  if (base === null) return null;
+
   for (const candidate of [
     `${base}.ts`,
     `${base}.tsx`,
     join(base, "index.ts"),
     join(base, "index.tsx"),
   ]) {
-    if (read(candidate)) return candidate;
+    if (read(candidate) !== null) return candidate;
   }
   return null;
 }
 
+/* ------------------------------------------------------------ resolution -- */
+
+interface Origin {
+  /** The module that declares the binding. */
+  readonly file: string;
+  /** Whether any module on the path from importer to declaration is a client module. */
+  readonly throughClient: boolean;
+}
+
 /**
- * Trace a name to its definition, reporting whether **any** module on the way
- * carries `"use client"`.
+ * Follow an exported name to where it is declared, remembering whether the
+ * path crossed a client module.
  *
- * The "any module on the way" part is the whole correctness of this check, and
- * the first version got it wrong: it followed the chain to the defining module
- * and reported only *that* file's directive. Under those semantics a barrel
- * forwarding a value *through* a client module looked clean, which is exactly
- * the bug it was written to catch — `chipsForFeed` had already been moved to a
- * server-safe module, and re-exporting it through `home-feed.tsx` kept it a
- * client reference anyway.
- *
- * The flaw was found by mutation: reintroducing that precise shape left the
- * suite green. A structural check that has never failed is not evidence, and
- * this one had to be made to fail before it was worth keeping.
+ * Handles every export form TypeScript has: a local declaration, a named
+ * re-export with or without an alias, a default re-export, and `export *`.
+ * The last is the one the regex version could not see at all.
  */
 function origin(
   file: string,
   name: string,
-  depth = 0,
-  taintedByPath = false,
-): { file: string; client: boolean } | null {
-  if (depth > 6) return null;
-  const source = read(file);
-  if (!source) return null;
+  seen: ReadonlySet<string> = new Set(),
+  tainted = false,
+): Origin | null {
+  if (seen.has(`${file}#${name}`)) return null; // A cycle; not a violation.
+  const source = parse(file);
+  if (source === null) return null;
 
-  const tainted = taintedByPath || isClientModule(source);
+  const here = tainted || isClientModule(source);
+  const visited = new Set(seen).add(`${file}#${name}`);
 
-  if (valueExports(source).includes(name)) {
-    return { file, client: tainted };
-  }
-  for (const { names, from } of reExports(source)) {
-    if (!names.includes(name)) continue;
-    const next = resolveSpecifier(file, from);
-    if (next) {
-      const found = origin(next, name, depth + 1, tainted);
-      if (found) return found;
+  const starExports: string[] = [];
+
+  for (const statement of source.statements) {
+    /* export { a, b as c } from "./x"  |  export { a, b as c } */
+    if (ts.isExportDeclaration(statement) && statement.exportClause) {
+      if (!ts.isNamedExports(statement.exportClause)) continue;
+      if (statement.isTypeOnly) continue;
+
+      for (const element of statement.exportClause.elements) {
+        if (element.isTypeOnly) continue;
+        // `exported as local` — `element.name` is what importers see and
+        // `element.propertyName` is the name in the source module. The regex
+        // version read these the wrong way round.
+        if (element.name.text !== name) continue;
+        const inner = (element.propertyName ?? element.name).text;
+
+        if (statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+          const next = resolveSpecifier(file, statement.moduleSpecifier.text);
+          if (next === null) return { file, throughClient: here };
+          const found = origin(next, inner, visited, here);
+          if (found) return found;
+          continue;
+        }
+        // A local `export { … }` — the declaration is in this file.
+        return { file, throughClient: here };
+      }
+      continue;
+    }
+
+    /* export * from "./x" */
+    if (
+      ts.isExportDeclaration(statement) &&
+      !statement.exportClause &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      !statement.isTypeOnly
+    ) {
+      starExports.push(statement.moduleSpecifier.text);
+      continue;
+    }
+
+    /* export default … — declaration or expression */
+    if (name === "default") {
+      if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+        return { file, throughClient: here };
+      }
+      if (
+        (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+        ts
+          .getModifiers(statement)
+          ?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+      ) {
+        return { file, throughClient: here };
+      }
+    }
+
+    /* export const x = … | export function x() {} | export class X {} */
+    if (
+      ts.canHaveModifiers(statement) &&
+      ts
+        .getModifiers(statement)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    ) {
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+            return { file, throughClient: here };
+          }
+        }
+      }
+      if (
+        (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+        statement.name?.text === name
+      ) {
+        return { file, throughClient: here };
+      }
     }
   }
+
+  // `export *` last: a named export shadows a starred one, so the explicit
+  // forms above have to be exhausted before falling through to these.
+  for (const specifier of starExports) {
+    const next = resolveSpecifier(file, specifier);
+    if (next === null) continue;
+    const found = origin(next, name, visited, here);
+    if (found) return found;
+  }
+
   return null;
+}
+
+/* --------------------------------------------------------------- imports -- */
+
+interface ImportedBinding {
+  /** The name as bound in the importing file. */
+  readonly local: string;
+  /** The name as exported by the target, or `default`. */
+  readonly exported: string;
+  readonly specifier: string;
+}
+
+/**
+ * Every value binding a file imports, in every form.
+ *
+ * Type-only imports are skipped: types are erased and cross the boundary
+ * freely. `import * as ns` binds the whole module object, which is a client
+ * reference in its entirety, so it is recorded under the sentinel `*`.
+ */
+function valueImports(source: ts.SourceFile): ImportedBinding[] {
+  const out: ImportedBinding[] = [];
+
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    const clause = statement.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+
+    if (clause.name) {
+      out.push({ local: clause.name.text, exported: "default", specifier });
+    }
+
+    if (clause.namedBindings) {
+      if (ts.isNamespaceImport(clause.namedBindings)) {
+        out.push({ local: clause.namedBindings.name.text, exported: "*", specifier });
+      } else {
+        for (const element of clause.namedBindings.elements) {
+          if (element.isTypeOnly) continue;
+          out.push({
+            local: element.name.text,
+            exported: (element.propertyName ?? element.name).text,
+            specifier,
+          });
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Is this identifier being used *as a value*, or only rendered?
+ *
+ * The whole soundness of the check sits here. A client reference may be
+ * rendered — `<VideoCardView />` is the boundary working as designed — and may
+ * not be called, read, spread or passed. So an occurrence is safe only when it
+ * is the tag of a JSX element, and dangerous otherwise.
+ *
+ * Everything else is deliberately treated as dangerous rather than
+ * enumerated: `f()`, `x.y`, `[...x]`, `g(x)`, `{ ...x }`, a template
+ * substitution, a default parameter — the list of ways to use a value is
+ * open, and a check that allow-lists it is a check with a hole in it.
+ */
+function usedAsValue(source: ts.SourceFile, local: string): boolean {
+  let used = false;
+
+  const isJsxTag = (node: ts.Node): boolean => {
+    const parent = node.parent;
+    if (!parent) return false;
+    if (
+      (ts.isJsxOpeningElement(parent) ||
+        ts.isJsxSelfClosingElement(parent) ||
+        ts.isJsxClosingElement(parent)) &&
+      parent.tagName === node
+    ) {
+      return true;
+    }
+    // `<ns.Thing />` — the namespace qualifier of a JSX tag.
+    if (
+      ts.isPropertyAccessExpression(parent) &&
+      parent.expression === node &&
+      parent.parent &&
+      (ts.isJsxOpeningElement(parent.parent) ||
+        ts.isJsxSelfClosingElement(parent.parent) ||
+        ts.isJsxClosingElement(parent.parent)) &&
+      parent.parent.tagName === parent
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (used) return;
+
+    // Skip the import statement that introduced the binding.
+    if (ts.isImportDeclaration(node)) return;
+    // A re-export is a forward, not a use — and is caught on the far side.
+    if (ts.isExportDeclaration(node)) return;
+
+    if (ts.isIdentifier(node) && node.text === local && !isJsxTag(node)) {
+      // A property *name* is not a reference: `{ shortHref: … }` and
+      // `obj.shortHref` both contain the identifier and neither reads the
+      // import.
+      const parent = node.parent;
+      const isPropertyName =
+        parent &&
+        ((ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+          (ts.isPropertyAssignment(parent) && parent.name === node) ||
+          (ts.isPropertySignature(parent) && parent.name === node) ||
+          (ts.isJsxAttribute(parent) && parent.name === node));
+      if (!isPropertyName) {
+        used = true;
+        return;
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  ts.forEachChild(source, visit);
+  return used;
+}
+
+/* ------------------------------------------------------------------ walk -- */
+
+function walk(directory: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const full = join(directory, entry.name);
+    if (entry.isDirectory()) out.push(...walk(full));
+    else if (/\.tsx?$/.test(entry.name)) out.push(full);
+  }
+  return out;
 }
 
 describe("the server/client boundary", () => {
   /**
-   * A plain recursive walk rather than a glob helper: `node:fs`'s `globSync`
-   * is not available across the Node versions this repository is expected to
-   * build on, and importing it failed the *production build* while leaving the
-   * test suite green — which is the same class of mistake this whole file
-   * exists to catch.
-   */
-  const walk = (directory: string): string[] => {
-    const out: string[] = [];
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const full = join(directory, entry.name);
-      if (entry.isDirectory()) out.push(...walk(full));
-      else if (/\.tsx?$/.test(entry.name)) out.push(full);
-    }
-    return out;
-  };
-
-  /**
-   * `src/components` as well as `src/app`, because a server component does not
+   * `src/app` and `src/components` both, because a server component does not
    * have to be a page.
    *
    * The first version of this check only walked `src/app`, and missed a real
@@ -177,52 +389,53 @@ describe("the server/client boundary", () => {
    * ones that fall back to those defaults — while every page file was clean.
    */
   const serverFiles = [...walk(join(SRC, "app")), ...walk(join(SRC, "components"))]
-    .filter((f) => !f.includes("__tests__"))
-    .filter((f) => !isClientModule(read(f)));
+    .filter((file) => !file.includes("__tests__"))
+    .filter((file) => {
+      const source = parse(file);
+      return source !== null && !isClientModule(source);
+    });
 
   it("finds server files to check", () => {
-    // Guards the guard: a glob that silently matches nothing would make every
+    // Guards the guard: a walk that silently matched nothing would make every
     // assertion below vacuously true, which is the classic way a structural
     // check stops checking anything.
     expect(serverFiles.length).toBeGreaterThan(5);
   });
 
-  it("no server component imports a value from a client module", () => {
+  it("no server component uses a value that came through a client module", () => {
     const violations: string[] = [];
 
     for (const file of serverFiles) {
-      const source = read(file);
-      for (const m of source.matchAll(
-        /import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/g,
-      )) {
-        const specifier = m[2] ?? "";
-        const target = resolveSpecifier(file, specifier);
-        if (!target) continue;
+      const source = parse(file);
+      if (source === null) continue;
 
-        const imported = (m[1] ?? "")
-          .split(",")
-          .map((n) => n.trim())
-          .filter((n) => n.length > 0 && !n.startsWith("type "))
-          .map((n) => (n.split(/\s+as\s+/)[0] ?? n).trim());
+      for (const binding of valueImports(source)) {
+        const target = resolveSpecifier(file, binding.specifier);
+        if (target === null) continue;
 
-        for (const name of imported) {
-          // Components are legitimate across the boundary; only values break.
-          if (!/^[a-z]/.test(name) && !/^[A-Z][A-Z0-9_]+$/.test(name)) continue;
-          const found = origin(target, name);
-          if (found?.client) {
-            // Names the import path rather than the defining file: when a
-            // barrel forwards a value *through* a client module, the
-            // definition itself is innocent and saying otherwise sends the
-            // reader to the wrong file.
-            violations.push(
-              `${relative(SRC, file)} imports \`${name}\` via ` +
-                `"${specifier}" (defined in ${relative(SRC, found.file)}), and ` +
-                `something on that path is a "use client" module. Import it ` +
-                `from the module that defines it, and make sure no module on ` +
-                `the way carries the directive.`,
-            );
-          }
-        }
+        // A namespace import binds the whole module. Any use of it is a use of
+        // a client reference if the target is a client module.
+        const found =
+          binding.exported === "*"
+            ? ((): Origin | null => {
+                const parsed = parse(target);
+                return parsed === null
+                  ? null
+                  : { file: target, throughClient: isClientModule(parsed) };
+              })()
+            : origin(target, binding.exported);
+
+        if (!found?.throughClient) continue;
+        if (!usedAsValue(source, binding.local)) continue;
+
+        violations.push(
+          `${relative(SRC, file)} uses \`${binding.local}\` as a value. It is ` +
+            `imported from "${binding.specifier}" (declared in ` +
+            `${relative(SRC, found.file)}) and something on that path is a ` +
+            `"use client" module, so it is a client reference at runtime. ` +
+            `Import it from the module that declares it, and make sure no ` +
+            `module on the way carries the directive.`,
+        );
       }
     }
 

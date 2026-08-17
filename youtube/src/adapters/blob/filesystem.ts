@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createReadStream } from "node:fs";
-import { mkdir, rm, readdir, stat, writeFile, rename } from "node:fs/promises";
+import { mkdir, open, rm, readdir, stat, writeFile, rename } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
@@ -75,25 +75,57 @@ export class FilesystemBlobStore implements BlobStore {
     const path = this.pathFor(key);
     await mkdir(dirname(path), { recursive: true });
 
-    const bytes =
-      body instanceof Uint8Array
-        ? body
-        : new Uint8Array(await new Response(body).arrayBuffer());
-
     /**
      * Write to a temporary name and rename into place.
      *
      * A segment is fetched by a player the instant the playlist naming it is
      * readable, and `rename` within one filesystem is atomic where a partial
-     * `writeFile` is not. Without this, a reader can open a segment that is
+     * write is not. Without this, a reader can open a segment that is
      * half-written — which surfaces as a decode error in the browser, several
      * layers away from the upload that caused it.
+     *
+     * ## Streamed, not buffered
+     *
+     * This used to be `new Response(body).arrayBuffer()` — the whole upload
+     * into memory before a byte reached disk. `BlobStore.put` accepts a
+     * `ReadableStream` precisely so that it need not, and a source file here is
+     * routinely a gigabyte: buffering one is a process that dies before it has
+     * written anything, on the path whose entire purpose is accepting large
+     * files.
+     *
+     * It also made the rename decorative. With the body already resident,
+     * `writeFile` is one call and there is no window in which anything is
+     * half-written, so an implementation that wrote straight to the final path
+     * behaved identically — which is why the atomicity test could not tell the
+     * two apart until this changed.
+     *
+     * The hash is computed incrementally over the same chunks, so the ETag
+     * costs one pass rather than a second traversal of a buffer.
      */
     const temporary = `${path}.${randomUUID()}.part`;
-    await writeFile(temporary, bytes);
+    const hash = createHash("sha256");
+    let size = 0;
+
+    if (body instanceof Uint8Array) {
+      hash.update(body);
+      size = body.byteLength;
+      await writeFile(temporary, body);
+    } else {
+      const handle = await open(temporary, "w");
+      try {
+        for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
+          hash.update(chunk);
+          size += chunk.byteLength;
+          await handle.write(chunk);
+        }
+      } finally {
+        await handle.close();
+      }
+    }
+
     await rename(temporary, path);
 
-    const etag = `"${createHash("sha256").update(bytes).digest("hex").slice(0, 32)}"`;
+    const etag = `"${hash.digest("hex").slice(0, 32)}"`;
     const sidecar: Sidecar = {
       contentType: options.contentType,
       etag,
@@ -103,7 +135,7 @@ export class FilesystemBlobStore implements BlobStore {
 
     return {
       key,
-      size: bytes.byteLength,
+      size,
       contentType: options.contentType,
       etag,
       lastModified: new Date(),

@@ -91,17 +91,62 @@ describe("put and get", () => {
     );
   });
 
-  /**
-   * A player fetches a segment the instant the playlist naming it is readable,
-   * so a partially-written file at the final path is a decode error several
-   * layers from the upload that caused it. The adapter writes to a temporary
-   * name and renames; the observable consequence is that nothing is left
-   * behind.
-   */
   it("leaves no partial files behind", async () => {
     await seed("videos/v1/source.mp4", "x");
     const entries = await readdir(join(root, "videos", "v1"));
     expect(entries.filter((name) => name.endsWith(".part"))).toEqual([]);
+  });
+
+  /**
+   * Atomicity, tested by observing a write in progress.
+   *
+   * The case above was the only coverage this had, and it does not test what
+   * it says: "no `.part` file remains afterwards" is equally true of an
+   * implementation that opens the final path and writes straight into it. The
+   * property that matters is what a *concurrent reader* sees, and the only way
+   * to assert that is to have one read while a write is open.
+   *
+   * A player fetches a segment the instant the playlist naming it is readable,
+   * so a partially-written file at the final path is a decode error several
+   * layers away from the upload that caused it — and on an overwrite it is a
+   * video that was working and now is not.
+   *
+   * The stream below hands over its first chunk and then waits, which puts the
+   * adapter reliably mid-write with no timing assumptions. A direct write
+   * would have already truncated the old object by this point; the rename
+   * approach has not touched it.
+   */
+  it("never exposes a half-written object to a concurrent reader", async () => {
+    await seed("videos/v1/source.mp4", "the-old-bytes");
+
+    let release: (() => void) | undefined;
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(new TextEncoder().encode("the-new-"));
+        await paused;
+        controller.enqueue(new TextEncoder().encode("bytes-are-longer"));
+        controller.close();
+      },
+    });
+
+    const writing = store.put("videos/v1/source.mp4", body, {
+      contentType: "video/mp4",
+    });
+
+    // Mid-write: the reader must still get the whole previous object.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const during = await store.get("videos/v1/source.mp4");
+    expect(await readAll(during.body)).toBe("the-old-bytes");
+
+    release?.();
+    await writing;
+
+    const after = await store.get("videos/v1/source.mp4");
+    expect(await readAll(after.body)).toBe("the-new-bytes-are-longer");
   });
 
   it("rejects a read of a key that was never written", async () => {
