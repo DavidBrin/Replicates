@@ -17,11 +17,27 @@ import type { BlobKey, BlobStore } from "@/ports/blob-store";
  * route's server bundle including the ones a filesystem-backed development run
  * never touches.
  */
-let instance: Promise<BlobStore> | null = null;
+/**
+ * Memoised on `globalThis`, not on a module binding.
+ *
+ * Next compiles server components and route handlers into separate module
+ * graphs, so this module is instantiated more than once per process and a
+ * module-level `let` gives each graph its own copy. `adapters/db/index.ts`
+ * carries the full account of how that presents — it cost an afternoon there —
+ * and the same reasoning applies to every process-wide singleton in this
+ * directory, so they are all built the same way rather than only the one that
+ * was caught.
+ */
+const BLOBSTORE_MEMO = Symbol.for("youtube-clone.blobStore");
+
+interface GlobalWithBlobStore {
+  [BLOBSTORE_MEMO]?: Promise<BlobStore>;
+}
 
 export function blobStore(): Promise<BlobStore> {
-  instance ??= create();
-  return instance;
+  const store = globalThis as GlobalWithBlobStore;
+  store[BLOBSTORE_MEMO] ??= create();
+  return store[BLOBSTORE_MEMO];
 }
 
 async function create(): Promise<BlobStore> {
@@ -46,7 +62,7 @@ async function create(): Promise<BlobStore> {
 
 /** Tests only: forget the memoised store so a new environment takes effect. */
 export function resetBlobStoreForTests(): void {
-  instance = null;
+  delete (globalThis as GlobalWithBlobStore)[BLOBSTORE_MEMO];
 }
 
 /* ----------------------------------------------------------------- keys --- */

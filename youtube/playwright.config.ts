@@ -70,6 +70,17 @@ export default defineConfig({
      */
     {
       name: "desktop-chrome",
+      /**
+       * Everything the two specialised projects do not claim.
+       *
+       * Without this, `desktop-chrome` — which declares no `testMatch` and
+       * therefore matches every file — ran the Shorts specs at a desktop
+       * viewport, where the vertical player and action rail do not render, and
+       * the fallback specs without the fixture that removes WebCodecs. Both
+       * then failed for reasons that had nothing to do with the code under
+       * test, which is the kind of noise that gets a suite disabled.
+       */
+      testIgnore: /shorts|mobile|fallback/,
       use: { ...devices["Desktop Chrome"], viewport: DESKTOP_VIEWPORT },
     },
 

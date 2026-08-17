@@ -27,6 +27,7 @@ export {
   createSession,
   deleteExpiredSessions,
   readCookie,
+  requestIsSecure,
   resolveSession,
   revokeSession,
   revokeSessionByToken,

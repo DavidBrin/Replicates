@@ -41,11 +41,27 @@ export type {
  * instead of racing to build two — here that matters only because it would
  * boot two PGlite instances against one data directory.
  */
-let instance: Promise<SearchIndex> | null = null;
+/**
+ * Memoised on `globalThis`, not on a module binding.
+ *
+ * Next compiles server components and route handlers into separate module
+ * graphs, so this module is instantiated more than once per process and a
+ * module-level `let` gives each graph its own copy. `adapters/db/index.ts`
+ * carries the full account of how that presents — it cost an afternoon there —
+ * and the same reasoning applies to every process-wide singleton in this
+ * directory, so they are all built the same way rather than only the one that
+ * was caught.
+ */
+const SEARCHINDEX_MEMO = Symbol.for("youtube-clone.searchIndex");
+
+interface GlobalWithSearchIndex {
+  [SEARCHINDEX_MEMO]?: Promise<SearchIndex>;
+}
 
 export function searchIndex(): Promise<SearchIndex> {
-  instance ??= create();
-  return instance;
+  const store = globalThis as GlobalWithSearchIndex;
+  store[SEARCHINDEX_MEMO] ??= create();
+  return store[SEARCHINDEX_MEMO];
 }
 
 async function create(): Promise<SearchIndex> {
@@ -65,5 +81,5 @@ export function createSearchIndex(db: SqlDatabase): SearchIndex {
 
 /** Tests only. */
 export function resetSearchIndexForTests(): void {
-  instance = null;
+  delete (globalThis as GlobalWithSearchIndex)[SEARCHINDEX_MEMO];
 }

@@ -14,18 +14,43 @@ export { PG_ERROR, isPgError } from "./driver";
 
 /**
  * The one database handle, resolved on first use and memoised for the life of
- * the process.
+ * the **process** — not of the module.
  *
- * Memoised on a module-level promise rather than a value, so that two requests
- * arriving before the first has finished booting share one instance instead of
- * racing to create two — PGlite in particular would otherwise open the same
- * data directory twice.
+ * Memoised on a promise rather than a value, so that two requests arriving
+ * before the first has finished booting share one instance instead of racing
+ * to create two.
+ *
+ * ## Why the memo lives on `globalThis`
+ *
+ * It was a module-level `let`, which is the obvious way to write this and is
+ * wrong under Next. Next compiles server components and route handlers into
+ * **separate module graphs**, so `adapters/db/index.ts` is instantiated more
+ * than once in a single server process and a module-level binding gives each
+ * graph its own copy.
+ *
+ * With a file-backed database that is merely wasteful — two connections to the
+ * same Postgres. With `DB_DATA_DIR=":memory:"`, which is what the e2e suite
+ * runs, it is fatal and silent: the sign-in **route** wrote its `sessions` row
+ * into one in-memory database, and the page **layout** that renders the
+ * masthead read from another. Signing in returned 200 with a valid cookie,
+ * every API call authenticated with it, and every rendered page said "Sign
+ * in". Three hours of that failure looks exactly like a cookie problem, which
+ * is where it sends you.
+ *
+ * `globalThis` is the standard escape hatch for this in Next and is why every
+ * database-client guide for the framework tells you to hang the client off it.
+ * The symbol is unique to this module so nothing else can collide with it.
  */
-let instance: Promise<SqlDatabase> | null = null;
+const DATABASE_MEMO = Symbol.for("youtube-clone.database");
+
+interface GlobalWithDatabase {
+  [DATABASE_MEMO]?: Promise<SqlDatabase>;
+}
 
 export function database(): Promise<SqlDatabase> {
-  instance ??= create();
-  return instance;
+  const store = globalThis as GlobalWithDatabase;
+  store[DATABASE_MEMO] ??= create();
+  return store[DATABASE_MEMO];
 }
 
 async function create(): Promise<SqlDatabase> {
@@ -63,8 +88,9 @@ async function create(): Promise<SqlDatabase> {
 
 /** Tests only. */
 export async function closeDatabaseForTests(): Promise<void> {
-  if (!instance) return;
-  const db = await instance;
-  instance = null;
-  await db.close();
+  const store = globalThis as GlobalWithDatabase;
+  const pending = store[DATABASE_MEMO];
+  if (!pending) return;
+  delete store[DATABASE_MEMO];
+  await (await pending).close();
 }

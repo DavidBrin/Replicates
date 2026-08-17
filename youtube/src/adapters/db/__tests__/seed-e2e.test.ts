@@ -5,8 +5,10 @@ import { setupTestDatabase } from "@/adapters/repositories/__tests__/harness";
 import { homeFeed, watchNextSidebar } from "@/adapters/repositories/recommendations";
 import { listComments } from "@/adapters/repositories/comments";
 import { createChannelsRepository } from "@/adapters/repositories/channels";
+import { createSearchIndex } from "@/adapters/search";
+import { verifyPassword } from "@/lib/auth/password";
 
-import { seedDemoData } from "../seed-e2e";
+import { E2E_PASSWORD, seedDemoData } from "../seed-e2e";
 
 /**
  * The e2e fixture, tested.
@@ -105,6 +107,41 @@ describe("the e2e demo corpus", () => {
       [channel!.id],
     );
     expect(channel!.videoCount).toBe(listed[0]?.n);
+  });
+
+  /**
+   * The omission the e2e suite found on its first real run.
+   *
+   * The fixture wrote videos and no search documents, so `/results` returned
+   * nothing and the failure presented as a broken query rather than as a
+   * missing row. Asserted here as well as in the browser, because this is
+   * where it is cheap to notice.
+   */
+  it("indexes its videos for search", async () => {
+    await seedDemoData(t.db);
+    const index = createSearchIndex(t.db);
+    const results = await index.query({ text: "river", limit: 10, offset: 0 });
+    expect(results.hits.map((hit) => hit.id)).toContain("vid_e2e_0001");
+  });
+
+  /**
+   * The stored hash has to be a real one.
+   *
+   * This file first carried an invented string shaped like a scrypt encoding.
+   * It would have made every sign-in fail with "wrong password" against a
+   * fixture whose comment claimed the opposite — so a spec exercising a
+   * signed-in flow would have failed in the login form, several layers away
+   * from the cause. Verified through the same function the application uses.
+   */
+  it("stores a password its own verifier accepts", async () => {
+    await seedDemoData(t.db);
+    const rows = await t.db.query<{ password_hash: string }>(
+      "select password_hash from users where id = 'usr_e2e_ada'",
+    );
+    const stored = rows[0]?.password_hash ?? "";
+
+    await expect(verifyPassword(E2E_PASSWORD, stored)).resolves.toBe(true);
+    await expect(verifyPassword("not-the-password", stored)).resolves.toBe(false);
   });
 
   it("gives every video a rendition ladder to play from", async () => {

@@ -273,16 +273,63 @@ export async function deleteExpiredSessions(
  * Next can provide, and a session module that cannot be tested outside the
  * framework is a session module that does not get tested.
  */
-export function sessionCookie(token: string, maxAgeSeconds?: number): string {
-  return buildCookie(token, maxAgeSeconds ?? SESSION_TTL_SECONDS);
+/**
+ * `Secure` is decided by the **request**, not by `NODE_ENV`.
+ *
+ * It was `config().isProduction`, guarded by a comment that got the mechanism
+ * exactly right — "localhost is http, and a `Secure` cookie there is simply
+ * never sent, which presents as 'sign-in does nothing'" — and drew the wrong
+ * line. `isProduction` is true for any *production build*, including
+ * `next start` on `http://localhost`, which is precisely what the e2e suite
+ * runs. So the cookie came back with `Secure`, Chromium dropped it, and
+ * signing in did nothing: the predicted failure, in the one configuration
+ * nobody had exercised.
+ *
+ * The property that matters is the scheme the response is travelling over, and
+ * that is knowable per request. A real https deployment still gets `Secure`;
+ * an http origin does not, whether the build is a production one or not.
+ *
+ * The parameter is required rather than defaulted, so a new call site has to
+ * decide rather than inherit a default that is right in one deployment.
+ */
+export function sessionCookie(
+  token: string,
+  options: { readonly secure: boolean; readonly maxAgeSeconds?: number },
+): string {
+  return buildCookie(
+    token,
+    options.maxAgeSeconds ?? SESSION_TTL_SECONDS,
+    options.secure,
+  );
 }
 
 /** `Max-Age=0` rather than a past `Expires`: no clock skew to get wrong. */
-export function clearedSessionCookie(): string {
-  return buildCookie("", 0);
+export function clearedSessionCookie(options: { readonly secure: boolean }): string {
+  return buildCookie("", 0, options.secure);
 }
 
-function buildCookie(value: string, maxAgeSeconds: number): string {
+/**
+ * Whether a request arrived over TLS.
+ *
+ * `x-forwarded-proto` first, because on Vercel — and behind any reverse proxy
+ * — the origin server is spoken to over http and the URL alone would say
+ * `http:` for a page the visitor loaded over https.
+ *
+ * The header is attacker-controllable in principle. Here it can only ever
+ * *add* `Secure` to a cookie, which fails closed: the worst a forged header
+ * achieves is a cookie the forger's own browser then refuses to send.
+ */
+export function requestIsSecure(request: Request): boolean {
+  const forwarded = request.headers.get("x-forwarded-proto");
+  if (forwarded !== null) return forwarded.split(",")[0]?.trim() === "https";
+  return new URL(request.url).protocol === "https:";
+}
+
+function buildCookie(
+  value: string,
+  maxAgeSeconds: number,
+  secure: boolean,
+): string {
   const parts = [
     `${SESSION_COOKIE}=${value}`,
     "Path=/",
@@ -292,9 +339,7 @@ function buildCookie(value: string, maxAgeSeconds: number): string {
     "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`,
   ];
-  // Omitted in development because localhost is http, and a `Secure` cookie
-  // there is simply never sent — which presents as "sign-in does nothing".
-  if (config().isProduction) parts.push("Secure");
+  if (secure) parts.push("Secure");
   return parts.join("; ");
 }
 

@@ -40,6 +40,15 @@ import type { SqlDatabase } from "./driver";
  * "newest first" has a defined answer.
  */
 
+/**
+ * The password every seeded account shares.
+ *
+ * Exported so the e2e suite signs in through the real form rather than
+ * fabricating a session cookie — a fabricated cookie tests the cookie parser
+ * and skips everything the sign-in route does.
+ */
+export const E2E_PASSWORD = "e2e-password";
+
 /** Deterministic ids. The prefixes match what the repositories mint. */
 const USERS = {
   ada: "usr_e2e_ada",
@@ -157,17 +166,24 @@ export async function seedDemoData(db: SqlDatabase): Promise<void> {
 
   await db.transaction(async (tx) => {
     /**
-     * The password hash is a literal rather than derived at boot.
+     * A literal rather than a derivation at boot.
      *
      * `hashPassword` is deliberately expensive — 128 MB and ~200ms per call by
      * design — and three of those on every `next start` is a quarter of a
-     * second of the suite's startup spent proving a constant. This is the
-     * encoding of `e2e-password`, produced by that same function, so the
-     * sign-in path is exercised for real.
+     * second of the suite's startup spent recomputing a constant.
+     *
+     * This is the real encoding of {@link E2E_PASSWORD}, produced by that same
+     * function and checked in both directions before being pasted here, so the
+     * sign-in path is exercised for real rather than stubbed. A previous
+     * version of this file carried an *invented* string that merely looked
+     * like one; it would have made every sign-in fail with "wrong password"
+     * against a fixture that claimed to work, which is a worse failure than no
+     * fixture at all. `src/lib/auth/__tests__/session.test.ts` covers the
+     * verifier itself.
      */
     const password =
-      "scrypt$131072$8$1$64$ZTJlLXNlZWQtc2FsdC0xNg==$" +
-      "ZTJlLXNlZWQtdmVyaWZpZXItbm90LWEtcmVhbC1zZWNyZXQtdmFsdWUtMDAwMDAwMDA=";
+      "scrypt$131072$8$1$64$BIv52Pwo2u/DDxsExSgV3w==$" +
+      "S8RuuGLS/6UNP9ldBRR/JzKxexFA3iNwRrmlDMICCxJic0mPIIJLxcOqhRJxLhaMHUebCZDa5A6KnXWq/rXmfw==";
 
     for (const [handle, id] of Object.entries(USERS)) {
       await tx.execute(
@@ -378,4 +394,40 @@ export async function seedDemoData(db: SqlDatabase): Promise<void> {
     "@/adapters/repositories/watch-events"
   );
   await refreshRelatedVideos(db);
+
+  /**
+   * The search index, through the adapter rather than by writing the rows.
+   *
+   * `search_documents.search_vector` is built by four `setweight(to_tsvector
+   * (…))` calls whose weight labels decide how a title ranks against a channel
+   * name — the whole of what makes search feel right. Copying that expression
+   * into this file would be a second definition of the ranking, and the first
+   * change to either would silently give the e2e suite different results from
+   * the application.
+   *
+   * This was the omission the e2e suite caught on its first real run: the
+   * fixture wrote videos and no documents, so `/results?search_query=river`
+   * returned nothing and the failure looked like a broken query.
+   */
+  const { createSearchIndex } = await import("@/adapters/search");
+  const channelNames = new Map([
+    [CHANNELS.fieldnotes, "Field Notes"],
+    [CHANNELS.patchbay, "The Patch Bay"],
+  ]);
+
+  await createSearchIndex(db).indexMany(
+    VIDEOS.map((video) => ({
+      id: video.id,
+      kind: "video" as const,
+      title: video.title,
+      description: video.description,
+      channelName: channelNames.get(video.channel) ?? "",
+      tags: [],
+      publishedAt: new Date(video.publishedAt),
+      viewCount: video.views,
+      durationSeconds: video.seconds,
+      likeCount: video.likes,
+      dislikeCount: video.dislikes,
+    })),
+  );
 }

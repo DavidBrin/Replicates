@@ -22,6 +22,7 @@ import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
   clearedSessionCookie,
+  requestIsSecure,
   createSession,
   deleteExpiredSessions,
   readCookie,
@@ -322,7 +323,7 @@ describe("the cookie", () => {
   });
 
   it("is httpOnly, Lax, and scoped to the whole site", () => {
-    const cookie = sessionCookie("a.b.c");
+    const cookie = sessionCookie("a.b.c", { secure: true });
     expect(cookie).toContain(`${SESSION_COOKIE}=a.b.c`);
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Lax");
@@ -330,26 +331,58 @@ describe("the cookie", () => {
     expect(cookie).toContain(`Max-Age=${SESSION_TTL_SECONDS}`);
   });
 
-  it("omits Secure in development, because localhost is http", () => {
-    expect(sessionCookie("a.b.c")).not.toContain("Secure");
-  });
-
-  it("sets Secure in production", () => {
+  /**
+   * `Secure` follows the request's scheme, not `NODE_ENV`.
+   *
+   * These two cases replace "omits Secure in development" and "sets Secure in
+   * production", which asserted the old rule faithfully — and the old rule was
+   * the bug. `isProduction` is true for any production *build*, including
+   * `next start` on `http://localhost`, which is exactly what the e2e suite
+   * runs: the cookie came back `Secure`, Chromium dropped it, and signing in
+   * silently did nothing. The pair of tests passed throughout, because they
+   * tested the environment flag rather than the property that matters.
+   */
+  it("omits Secure over http, whatever the build is", () => {
     setNodeEnv("production");
-    // The two flags `config()` needs to accept a production run backed by
-    // PGlite and the filesystem, which is what the e2e build does.
     process.env["E2E_ALLOW_PGLITE_PRODUCTION_BUILD"] = "true";
     process.env["AUTH_SECRET"] = "x".repeat(48);
     resetConfigForTests();
 
-    expect(sessionCookie("a.b.c")).toContain("Secure");
+    expect(sessionCookie("a.b.c", { secure: false })).not.toContain("Secure");
+  });
+
+  it("sets Secure over https", () => {
+    expect(sessionCookie("a.b.c", { secure: true })).toContain("Secure");
   });
 
   it("clears with Max-Age=0 rather than a past date", () => {
-    const cookie = clearedSessionCookie();
+    const cookie = clearedSessionCookie({ secure: true });
     expect(cookie).toContain(`${SESSION_COOKIE}=;`);
     expect(cookie).toContain("Max-Age=0");
     expect(cookie).not.toContain("Expires");
+  });
+});
+
+describe("deciding whether a request is secure", () => {
+  const from = (url: string, headers: Record<string, string> = {}) =>
+    requestIsSecure(new Request(url, { headers }));
+
+  it("reads the scheme when nothing is in front of us", () => {
+    expect(from("https://example.test/x")).toBe(true);
+    expect(from("http://localhost:3400/x")).toBe(false);
+  });
+
+  /**
+   * Behind a proxy the origin is spoken to over http, so the URL alone would
+   * report `http:` for a page the visitor loaded over https — and the cookie
+   * would lose `Secure` on precisely the deployment that needs it.
+   */
+  it("prefers x-forwarded-proto, and takes the first hop", () => {
+    expect(from("http://internal/x", { "x-forwarded-proto": "https" })).toBe(true);
+    expect(
+      from("http://internal/x", { "x-forwarded-proto": "https, http" }),
+    ).toBe(true);
+    expect(from("https://internal/x", { "x-forwarded-proto": "http" })).toBe(false);
   });
 });
 
