@@ -112,11 +112,44 @@ export const FAN_OUT = 5;
  * with the top bit set. Should those 6 reserved bits ever be used, the storage
  * layer is already correct; only this function would change.
  */
+/**
+ * The widths, as limits rather than as masks.
+ *
+ * `&` is a *silent* truncation, and this function had nothing but masks: a bin
+ * of 600 became 88, and a Δt of 257 became 1. Two genuinely different landmark
+ * pairs then produce the same hash, which does not fail — it matches. A false
+ * fingerprint match is the worst outcome this module has, because the whole
+ * threshold in `match.ts` was derived from a coincidence distribution that
+ * assumed distinct triples stay distinct.
+ *
+ * The defaults sit exactly at both ceilings — `FFT_SIZE` of 1024 gives bins
+ * 0…511, and `MAX_DT_HOPS` is 255 — so there is no headroom at all, and
+ * `FingerprintOptions` lets a caller raise `fftSize` or `maxDtHops` without
+ * anything noticing. That is the shape worth refusing rather than documenting.
+ */
+export const MAX_FREQ_BIN = FREQ_MASK;
+export const MAX_DT_VALUE = DT_MASK;
+
+function fitsIn(value: number, limit: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= limit;
+}
+
 export function packHash(freq1: number, freq2: number, dtHops: number): number {
+  if (!fitsIn(freq1, MAX_FREQ_BIN) || !fitsIn(freq2, MAX_FREQ_BIN)) {
+    throw new RangeError(
+      `Frequency bins (${freq1}, ${freq2}) do not fit the 9-bit hash fields ` +
+        `(0…${MAX_FREQ_BIN}). An fftSize above 1024 needs a wider layout, not ` +
+        `a mask — truncation makes two distinct pairs hash the same.`,
+    );
+  }
+  if (!fitsIn(dtHops, MAX_DT_VALUE)) {
+    throw new RangeError(
+      `Δt of ${dtHops} hops does not fit the 8-bit hash field ` +
+        `(0…${MAX_DT_VALUE}); raising maxDtHops needs a wider layout.`,
+    );
+  }
   return (
-    ((freq1 & FREQ_MASK) << FREQ1_SHIFT) |
-    ((freq2 & FREQ_MASK) << FREQ2_SHIFT) |
-    (dtHops & DT_MASK)
+    (freq1 << FREQ1_SHIFT) | (freq2 << FREQ2_SHIFT) | dtHops
   );
 }
 

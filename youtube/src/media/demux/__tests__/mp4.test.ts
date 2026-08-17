@@ -741,10 +741,17 @@ describe("chunk offsets and edit lists", () => {
     expect(sizes).toEqual(videoSamples(25).map((sample) => sample.data.byteLength));
   });
 
-  it("detects an edit list, reports what it asks for, and states that it was not applied", async () => {
-    // An empty edit (media_time -1) of 40ms in the movie timescale, then the
-    // real one. This is the shape an encoder writes for priming delay, and the
-    // one case where ignoring an edit list actually shifts a whole track.
+  /**
+   * The empty-edit shape, which is what an encoder writes for priming delay.
+   *
+   * This case used to assert `applied: false` — the demuxer computed the
+   * offset, published it, and left honouring it to the caller. No caller ever
+   * read it, so on every file with an edit list the number was calculated and
+   * thrown away, and the audio ran ahead of the video by the declared amount
+   * for the whole file. The reducible part is applied now, and the two numbers
+   * remain published because they are what says *what* was applied.
+   */
+  it("applies a reducible edit list and reports the numbers it used", async () => {
     const demuxed = await open(
       buildProgressiveMp4({
         movieTimescale: 1000,
@@ -759,10 +766,54 @@ describe("chunk offsets and edit lists", () => {
       }),
     );
     const edit = demuxed.tracks[0]?.editList;
-    expect(edit?.applied).toBe(false);
+    expect(edit?.applied).toBe(true);
     expect(edit?.entries).toHaveLength(2);
     expect(edit?.presentationOffsetUs).toBe(40_000); // 40 ticks at the MOVIE timescale
     expect(edit?.startTrimUs).toBe(100_100); // 3003 ticks at the TRACK's 30000
+  });
+
+  /**
+   * And the timestamps actually move, which the assertions above cannot show.
+   *
+   * Net shift is +40,000µs of empty edit minus 100,100µs of trim = −60,100µs,
+   * so the samples that would have started at 0 are dropped and the first one
+   * emitted is the first whose presentation time survives the shift. Reading
+   * the reported numbers back out of `samples()` is the only assertion that
+   * distinguishes "the demuxer knows about the edit" from "the demuxer honours
+   * it" — the distinction the previous version of this file got wrong.
+   */
+  it("shifts and trims the samples it emits", async () => {
+    const withEdit = await open(
+      buildProgressiveMp4({
+        movieTimescale: 1000,
+        tracks: [
+          videoTrack({
+            edits: [
+              { segmentDuration: 40, mediaTime: -1 },
+              { segmentDuration: 800, mediaTime: 3003 },
+            ],
+          }),
+        ],
+      }),
+    );
+    const plain = await open(buildProgressiveMp4({ tracks: [videoTrack()] }));
+
+    const stamps = async (file: Awaited<ReturnType<typeof open>>) => {
+      const out: number[] = [];
+      for await (const sample of file.tracks[0]?.samples() ?? []) {
+        out.push(sample.timestampUs);
+      }
+      return out;
+    };
+
+    const edited = await stamps(withEdit);
+    const unedited = await stamps(plain);
+
+    // Something was dropped from the front, and what remains is shifted.
+    expect(edited.length).toBeLessThan(unedited.length);
+    expect(edited[0]).toBeLessThan(unedited[unedited.length - edited.length]!);
+    // The shift is uniform: consecutive gaps are unchanged.
+    expect(edited[1]! - edited[0]!).toBe(unedited[1]! - unedited[0]!);
   });
 
   it("leaves editList undefined when the file has no edts", async () => {

@@ -224,28 +224,74 @@ export function unitsToMicroseconds(units: number, timescale: number): number {
   return sign * (seconds * 1_000_000 + Math.round((remainder * 1_000_000) / timescale));
 }
 
+/**
+ * The inverse, for the one value that arrives in microseconds and has to be
+ * added to numbers in a track's own timescale: the edit-list shift.
+ *
+ * Split the same way and for the same reason — `microseconds × timescale`
+ * overflows 2^53 for a long file at a fine timescale, and the whole point of
+ * doing it in two parts is that neither part ever gets that large. The sign is
+ * taken out and put back because an edit shift is legitimately negative when a
+ * track's first edit trims its opening samples, and `Math.floor` on a negative
+ * would bias the result by a tick.
+ */
+export function microsecondsToUnits(microseconds: number, timescale: number): number {
+  if (!Number.isFinite(microseconds) || !Number.isInteger(timescale) || timescale <= 0) {
+    throw new Mp4DemuxError(
+      `Cannot convert ${microseconds}µs to a timescale of ${timescale}`,
+    );
+  }
+  if (timescale === 1_000_000) return Math.round(microseconds);
+
+  const sign = microseconds < 0 ? -1 : 1;
+  const magnitude = Math.abs(microseconds);
+  const seconds = Math.floor(magnitude / 1_000_000);
+  const remainder = magnitude - seconds * 1_000_000;
+  if (!Number.isSafeInteger(seconds * timescale)) {
+    throw new Mp4DemuxError(
+      `${microseconds}µs at timescale ${timescale} exceeds 2^53 units`,
+    );
+  }
+  return sign * (seconds * timescale + Math.round((remainder * timescale) / 1_000_000));
+}
+
 /* ------------------------------------------------------------ edit lists -- */
 
 /**
  * What the file's `elst` asks for, and the statement that we did not do it.
  *
- * **This demuxer does not apply edit lists.** That is a defensible position for
- * a transcoder — the overwhelmingly common edit is a single entry trimming the
- * first frame or two of encoder priming delay, and ignoring it shifts the whole
- * output by that much rather than corrupting it. It is not a defensible thing to
- * do *silently*, because the two cases where it matters are real: an empty edit
- * (`media_time == -1`) is how a track declares "start me late", and ignoring it
- * puts audio ahead of video by the declared amount for the whole file.
+ * ## This demuxer applies the reducible part, and says when it could not
  *
- * So the edit is decoded, its effect is computed, and it is handed to the caller
- * on {@link DemuxedTrack.editList} with `applied: false`. A caller that cares
- * can shift every timestamp by {@link presentationOffsetUs} and drop everything
- * before {@link startTrimUs}; a caller that does not at least has the number in
- * front of it.
+ * It used to apply nothing, and hand the caller two numbers with
+ * `applied: false` so that acting on them was a decision. That is the right
+ * shape for a library and it was the wrong shape here, for a reason nothing in
+ * the type could show: **no caller ever read the field.** The transcode path
+ * consumes `samples()` and nothing else, so the offset was computed on every
+ * file that had one and discarded on every file that had one.
+ *
+ * The cost is not exotic. A leading empty edit (`media_time == -1`) is how a
+ * track says "start me late", and every AAC track an Apple encoder writes
+ * carries one to hide priming delay. Dropping it puts the audio ahead of the
+ * video by the declared amount, for the whole file, on exactly the recordings
+ * a phone produces.
+ *
+ * So `samples()` now shifts by {@link presentationOffsetUs}, trims before
+ * {@link startTrimUs}, and reports {@link applied} accordingly. `false` means
+ * the list is a genuine edit decision list — several real segments, cutting
+ * the track into pieces — which cannot be reduced to an offset at all. That
+ * case is still described rather than approximated, because a wrong
+ * reconstruction is worse than an unhandled one.
  */
 export interface EditListNotice extends EditList {
-  /** Always false. Named rather than implied, so that reading it is a decision. */
-  readonly applied: false;
+  /**
+   * Whether `samples()` honoured this list.
+   *
+   * `true` for the reducible shapes: any number of leading empty edits, plus
+   * at most one real edit. `false` for a multi-segment edit decision list,
+   * where the two numbers below describe only the beginning and the rest is
+   * the caller's problem to notice.
+   */
+  readonly applied: boolean;
   /**
    * How far the edit list would push this track's presentation, in microseconds
    * — the total duration of its leading empty edits.
@@ -259,13 +305,12 @@ export interface EditListNotice extends EditList {
 }
 
 /**
- * Reduces an edit list to the two numbers a caller would act on.
+ * Reduces an edit list to the two numbers `samples()` acts on.
  *
- * Only the leading empty edits and the first real edit are interpreted. A
- * multi-entry list that cuts a track into pieces is a genuine edit decision list
- * and cannot be reduced to an offset at all; that case is reported by the
- * entries being longer than one, and the two numbers below describe only its
- * beginning.
+ * Only the leading empty edits and the first real edit are interpreted, so
+ * `applied` is true exactly when there is nothing after that first real edit.
+ * A list with several real segments is a genuine edit decision list, cannot be
+ * reduced to an offset, and is reported unapplied.
  */
 function summariseEditList(list: EditList, mediaTimescale: number, movieTimescale: number): EditListNotice {
   let presentationOffset = 0;
@@ -283,7 +328,17 @@ function summariseEditList(list: EditList, mediaTimescale: number, movieTimescal
     break;
   }
 
-  return { ...list, applied: false, presentationOffsetUs: presentationOffset, startTrimUs };
+  // Reducible when at most one real edit exists: the empty ones compose into
+  // the offset, and one real one composes into the trim. Two or more real
+  // edits describe a timeline this cannot express.
+  const realEdits = list.entries.filter((entry) => entry.mediaTime >= 0).length;
+
+  return {
+    ...list,
+    applied: realEdits <= 1,
+    presentationOffsetUs: presentationOffset,
+    startTrimUs,
+  };
 }
 
 /* --------------------------------------------------- codec configuration -- */
@@ -626,6 +681,21 @@ export class DemuxedTrack {
     const { timescale } = this.config;
     const total = this.#table.sampleCount;
 
+    /**
+     * The edit list as a single signed shift, in this track's own timescale.
+     *
+     * A leading empty edit moves presentation *later* by its duration; a first
+     * real edit whose `media_time` is past zero moves it *earlier*, because
+     * the samples before that point are being discarded. They compose, and one
+     * addition applies both. A sample that lands before zero after the shift
+     * is one the edit asked to drop, and is skipped in the loop below.
+     */
+    const edit = this.editList;
+    const editShiftUnits =
+      edit === undefined
+        ? 0
+        : microsecondsToUnits(edit.presentationOffsetUs - edit.startTrimUs, timescale);
+
     let index = 0;
     while (index < total) {
       const runStart = offsets[index] ?? 0;
@@ -663,13 +733,40 @@ export class DemuxedTrack {
         const compositionOffset = compositionOffsets?.[at] ?? 0;
         const presentation = (decodeTimes[at] ?? 0) + compositionOffset;
 
+        /**
+         * The edit list, applied here rather than described and dropped.
+         *
+         * This demuxer used to decode `elst`, compute exactly these two
+         * numbers, hand them out on `DemuxedTrack.editList` with
+         * `applied: false`, and leave acting on them to the caller. The
+         * comment defending that is careful and it is the right shape for a
+         * library — but **no caller ever read the field**. The transcode path
+         * takes `samples()` and nothing else, so the offset was computed and
+         * discarded on every file that had one.
+         *
+         * The case it costs is not exotic. A leading empty edit
+         * (`media_time == -1`) is how a track says "start me late", and every
+         * AAC track from an Apple encoder carries one to hide priming delay.
+         * Ignoring it puts audio ahead of video by the declared amount for the
+         * whole file — a fixed lip-sync error, present from the first frame,
+         * on exactly the recordings a phone produces.
+         *
+         * Only the reducible part is applied: the leading empty edits become a
+         * shift, and a first real edit starting inside the media becomes a
+         * trim. A multi-entry list that genuinely cuts the track into pieces
+         * cannot be reduced to two numbers, and is still reported rather than
+         * approximated — see {@link EditListNotice}.
+         */
+        const shifted = presentation + editShiftUnits;
+        if (shifted < 0) continue;
+
         yield {
           // `slice`, not `subarray`. A view would pin the whole read buffer for
           // as long as any one sample of it is alive, so holding a single frame
           // would hold megabytes — the same foot-gun `ByteWriter.finish` argues
           // against handing out, for the same reason.
           data: bytes.slice(start, start + size),
-          timestampUs: unitsToMicroseconds(presentation, timescale),
+          timestampUs: unitsToMicroseconds(shifted, timescale),
           durationUs: unitsToMicroseconds(durations[at] ?? 0, timescale),
           isKeyFrame: isSyncSample(this.#table, at),
           ...(compositionOffset === 0

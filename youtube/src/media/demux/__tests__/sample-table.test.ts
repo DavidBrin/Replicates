@@ -558,7 +558,7 @@ describe("the join — every table at once", () => {
           stco([0]),
         ]),
       ),
-    ).toThrow(/stts covers 3 samples but stsz declares 9/);
+    ).toThrow(/stts describes 3 samples but stsz declares 9/);
   });
 
   it("refuses a chunk that references a second stsd entry", () => {

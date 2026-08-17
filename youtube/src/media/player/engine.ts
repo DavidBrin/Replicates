@@ -838,6 +838,36 @@ export function createLadderedEngine(options: LadderedEngineOptions): PlayerEngi
       // research §5 wants the fetch decision recomputed rather than left to the
       // periodic check — a tick now is the cheapest way to do both.
       metrics.onSeekStarted();
+      /**
+       * Clearing `complete` is what makes a backward seek recoverable.
+       *
+       * `complete` means "there is nothing left to fetch", and `pump` returns
+       * immediately when it is set. It was latched the moment
+       * `nextSegmentIndex` found no segment ahead of the playhead — which is
+       * true at the end of a stream, and *equally* true one second into a cold
+       * VOD if the viewer seeks straight to the last segment. Everything
+       * before it was never fetched, but the track called itself finished, so
+       * seeking back to the beginning stalled with no error and no recovery
+       * short of reloading the page.
+       *
+       * A seek is the one event that can invalidate the judgement, because it
+       * is the only thing that moves the playhead somewhere the buffer does
+       * not cover. Recomputing rather than clearing conditionally: the very
+       * next `pump` calls `nextSegmentIndex` again and re-latches immediately
+       * if the answer really is "nothing left", so a genuine end-of-stream
+       * costs one extra evaluation and a mistaken one is undone.
+       */
+      for (const track of tracks) track.complete = false;
+      /**
+       * And the latch on the other side of it.
+       *
+       * `endOfStream()` puts the `MediaSource` into `ended`; appending after
+       * that legitimately returns it to `open`, but `endOfStreamCalled` would
+       * still be set, so the stream would never be re-ended and `duration`
+       * would stay whatever the premature call fixed it to. Clearing both
+       * together keeps the pair meaning one thing.
+       */
+      endOfStreamCalled = false;
       void tick();
     });
     on("seeked", () => {
@@ -1302,7 +1332,28 @@ export function createLadderedEngine(options: LadderedEngineOptions): PlayerEngi
       });
 
       const elapsedMs = dependencies.now() - inFlight.startedAtMs;
-      throughput.onSegmentDownloaded(data.byteLength, elapsedMs);
+      /**
+       * Video segments only.
+       *
+       * `fetchAndAppend` runs for every track, so this fed audio downloads
+       * into the estimator that chooses **video** rungs. An audio segment is
+       * around 16 KiB against a 1080p segment's 3 MB, and a small transfer
+       * measures the connection badly: latency is a fixed cost that a short
+       * download cannot amortise, so a 16 KiB body arriving in 50 ms records
+       * ~2.6 Mbps on a link that would have carried twenty times that. Those
+       * samples enter the same EWMA as the real measurements and drag the
+       * estimate down, capping the ladder well below what the connection
+       * supports — and the more comfortably a viewer's bandwidth exceeds the
+       * top rung, the more the audio samples dominate, because the video
+       * samples stop being the slow ones.
+       *
+       * The audio track is not separately estimated because nothing selects an
+       * audio rendition: there is one audio rung. Measuring it would produce a
+       * number with no decision attached to it.
+       */
+      if (track.kind === "video") {
+        throughput.onSegmentDownloaded(data.byteLength, elapsedMs);
+      }
 
       await track.controller.append(data, segment.durationSeconds);
       track.lastAppendedIndex = index;

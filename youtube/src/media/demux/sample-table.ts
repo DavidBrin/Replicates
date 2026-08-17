@@ -522,11 +522,32 @@ export function buildSampleTable(stbl: ParsedBox): SampleTable {
 
   /* ---- times ---- */
 
+  /**
+   * The run counts are summed and compared *before* the table is expanded.
+   *
+   * The expansion loop stops at `sampleCount`, so it can only ever detect a
+   * table that describes too **few** samples. A table describing too many —
+   * `stsz.sample_count` of 1 against an `stts` run of 2 — filled the arrays
+   * exactly, left `sample === sampleCount`, and passed. The contradiction
+   * disappeared silently, taking a real sample's timing with it, and every
+   * downstream calculation then worked from a track one frame shorter than the
+   * file says it is.
+   *
+   * Both directions are a malformed file, and neither should be guessed at.
+   */
+  const sttsEntries = decodeStts(sttsBox);
+  const sttsTotal = sttsEntries.reduce((sum, entry) => sum + entry.sampleCount, 0);
+  if (sttsTotal !== sampleCount) {
+    throw new Error(
+      `stts describes ${sttsTotal} samples but stsz declares ${sampleCount}`,
+    );
+  }
+
   const durations = new Uint32Array(sampleCount);
   const decodeTimes = new Float64Array(sampleCount);
   let sample = 0;
   let clock = 0;
-  for (const entry of decodeStts(sttsBox)) {
+  for (const entry of sttsEntries) {
     for (let i = 0; i < entry.sampleCount && sample < sampleCount; i++) {
       decodeTimes[sample] = clock;
       durations[sample] = entry.sampleDelta;
@@ -534,25 +555,29 @@ export function buildSampleTable(stbl: ParsedBox): SampleTable {
       sample++;
     }
   }
-  if (sample !== sampleCount) {
-    throw new Error(`stts covers ${sample} samples but stsz declares ${sampleCount}`);
-  }
 
   /* ---- composition offsets ---- */
 
   const cttsBox = child(stbl, "ctts");
   let compositionOffsets: Float64Array | undefined;
   if (cttsBox !== undefined) {
+    // Summed first, for the same reason as `stts` above: the expansion loop
+    // can only notice a table that is short.
+    const cttsEntries = decodeCtts(cttsBox).entries;
+    const cttsTotal = cttsEntries.reduce((sum, entry) => sum + entry.sampleCount, 0);
+    if (cttsTotal !== sampleCount) {
+      throw new Error(
+        `ctts describes ${cttsTotal} samples but stsz declares ${sampleCount}`,
+      );
+    }
+
     compositionOffsets = new Float64Array(sampleCount);
     let at = 0;
-    for (const entry of decodeCtts(cttsBox).entries) {
+    for (const entry of cttsEntries) {
       for (let i = 0; i < entry.sampleCount && at < sampleCount; i++) {
         compositionOffsets[at] = entry.sampleOffset;
         at++;
       }
-    }
-    if (at !== sampleCount) {
-      throw new Error(`ctts covers ${at} samples but stsz declares ${sampleCount}`);
     }
   }
 
