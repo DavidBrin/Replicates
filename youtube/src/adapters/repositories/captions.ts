@@ -29,11 +29,20 @@ import {
  *
  * ## One default per video, decided here
  *
- * The schema has no constraint saying at most one track per video may be the
- * default, and it could not have a useful one — `unique (video_id) where
- * is_default` would make setting a new default a two-statement dance with a
- * moment of nothing selected between them. So the rule lives in this file, in
- * the same one-statement shape `pinComment` uses for the same reason.
+ * The schema **does** carry `unique (video_id) where is_default`, and this
+ * file used to argue that it could not: that the constraint "would make
+ * setting a new default a two-statement dance with a moment of nothing
+ * selected between them". Both halves of that are true and neither is a
+ * problem. The dance is two statements inside one transaction, and the moment
+ * with nothing selected is not observable outside it — where the alternative,
+ * a read-then-write with no constraint behind it, lets two concurrent first
+ * uploads both commit as the default and leaves a player picking whichever row
+ * the plan returns first.
+ *
+ * The index found a real ordering bug the moment it was added: the insert ran
+ * before the clear, so the forbidden state existed mid-transaction and a
+ * partial unique index is checked per statement. Three tests had been passing
+ * over it.
  *
  * The rule itself is §3.1's, from the HLS side: at most one rendition in a group
  * carries `DEFAULT=YES`, and a client with no explicit user choice plays it.
@@ -171,6 +180,27 @@ async function addCaptionTrack(
       (!bool(state, "has_default") ||
         (source === "uploaded" && !bool(state, "has_uploaded_default")));
 
+    /**
+     * Clear the old default **before** writing the new one.
+     *
+     * These two statements used to run the other way round, and the ordering
+     * was invisible until `captions_one_default_key` existed: between the
+     * insert and the clear, two rows for one video both had `is_default`, and
+     * a partial unique index is checked per statement rather than at commit.
+     *
+     * Reordering is strictly better than deferring the constraint. The window
+     * the old order opened was a state the rule forbids; the window this one
+     * opens is a video with *no* default for the length of one statement
+     * inside a transaction — which is the state a video with no tracks is
+     * already in, and which no reader outside the transaction can observe.
+     */
+    if (isDefault) {
+      await tx.execute(
+        "update captions set is_default = false where video_id = $1 and is_default",
+        [input.videoId],
+      );
+    }
+
     const rows = await translatingUniqueViolations(
       CONSTRAINTS,
       input.language,
@@ -194,14 +224,6 @@ async function addCaptionTrack(
 
     const created = first(rows);
     if (!created) throw new Error(`Caption track ${id} vanished between write and read.`);
-
-    if (isDefault) {
-      await tx.execute(
-        `update captions set is_default = false
-          where video_id = $1 and id <> $2 and is_default`,
-        [input.videoId, id],
-      );
-    }
 
     return toCaptionTrack(created);
   });

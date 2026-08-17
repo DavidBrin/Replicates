@@ -466,6 +466,19 @@ create table if not exists captions (
 create unique index if not exists captions_video_language_key
   on captions (video_id, language, source);
 
+-- One default track per video, enforced here rather than in the repository.
+--
+-- \`captions.ts\` reads the current default and then writes the new one, which
+-- is correct in a single-writer process and a race everywhere else: two first
+-- uploads for one video can both observe "no default yet" and both commit with
+-- \`is_default = true\`, leaving a player to pick whichever row the plan happens
+-- to return first. A partial unique index makes the second commit fail instead,
+-- which is the only version of this rule that does not depend on how the
+-- application happens to be deployed.
+create unique index if not exists captions_one_default_key
+  on captions (video_id)
+  where is_default;
+
 /* ------------------------------------------------------------ content id -- */
 
 -- A work a rights-holder has registered for matching. Its audio has been
@@ -531,6 +544,19 @@ create table if not exists claims (
 
 create index if not exists claims_video_idx on claims (video_id);
 create index if not exists claims_reference_idx on claims (reference_id);
+
+-- One live claim per (video, reference), enforced rather than assumed.
+--
+-- \`scanVideo\` reads the set of already-claimed references and then inserts,
+-- and the file's own comment says why that matters: "transcodes get retried
+-- and scanners get re-run, and a duplicate claim is indistinguishable from a
+-- second genuine reuse once it is a row". Two scans of the same video racing
+-- each other both see no live claim and both write one. A released claim is
+-- deliberately outside the index, because releasing and re-claiming the same
+-- work later is a legitimate sequence.
+create unique index if not exists claims_one_live_per_reference_key
+  on claims (video_id, reference_id)
+  where status <> 'released';
 
 /* ------------------------------------------------------------------- ads -- */
 

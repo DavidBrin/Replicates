@@ -128,7 +128,7 @@ clips, and their attribution lives in its own column rather than in the
 editable description — a licence condition must not sit in a field the uploader
 can rewrite.
 
-## The bug that 2,095 tests could not see
+## The bug that 2,000 tests could not see
 
 Next turns **every** export of a `"use client"` module into a client
 *reference* — plain strings and pure functions included. A server component
@@ -143,12 +143,27 @@ because a `<Suspense>` fallback swallowed the error in development. One passed
 a probe against a *production* build too — it only failed once the database had
 rows, since an empty feed never reached the call.
 
-`src/components/__tests__/client-boundary.test.ts` now checks the rule
-structurally. Its first version was itself worthless: it followed a name to its
-defining module and reported *that* file's directive, so re-exporting a value
-*through* a client module looked clean — which is the exact shape that let
-`chipsForFeed` survive its own fix. That was found by mutation, and the guard
-was made to fail before it was kept.
+`src/components/__tests__/client-boundary.test.ts` checks the rule
+structurally, on the TypeScript AST. Two earlier versions were worthless in
+different ways.
+
+The first followed a name to its defining module and reported *that* file's
+directive, so re-exporting a value *through* a client module looked clean —
+which is the exact shape that let `chipsForFeed` survive its own fix.
+
+The second was regexes, and a review took it apart: it matched `import { a }
+from` and nothing else, so a default import, `import * as x` and an
+`export *` barrel were all invisible — `export *` alone would launder any
+value in the codebase past it. It also decided what was dangerous from the
+*name*, waving through a value called `Theme` and flagging a component called
+`renderRow`.
+
+The current one asks the question that actually matters, which the AST can
+answer and a naming convention only guesses at: **is the identifier used as a
+value, or only rendered as JSX?** `<Menu />` is the boundary working as
+designed; `watchHref()` is the bug. It is mutation-tested against every shape
+the review named — each caught, and a render-only import correctly allowed,
+which is the half that shows it is not simply flagging everything.
 
 ## Running it
 
@@ -167,7 +182,8 @@ needs zero flags. Two runs produce a **byte-identical** media tree.
 | | |
 |---|---|
 | `pnpm dev` | the app, against PGlite and the filesystem blob store |
-| `pnpm test` | 2,095 unit tests |
+| `pnpm test` | 2,122 unit tests |
+| `pnpm test:e2e` | 29 specs, three browser projects, production build |
 | `pnpm verify` | typecheck + lint + tests |
 | `pnpm seed:demo` | optional Creative Commons clips, for screenshots |
 
@@ -186,31 +202,69 @@ segments and blocking playlist reloads on top of the VOD packager. Either half
 is comparable in size to three VOD slices. The finding the port records is that
 live would reuse the storage and playback halves unchanged — only ingest is new.
 
+## What the review changed
+
+Four codex passes over the finished build returned seventy findings. The ones
+worth repeating are not the bugs — they are the shapes.
+
+**A comment defending a decision is not the decision being right.** The
+reactions route explained at length why it need not check that a comment
+belongs to the video in its path; the argument assumed every video's page is
+reachable, which is false for a private one. The demuxer explained why not
+applying edit lists was defensible for a transcoder — and no caller ever read
+the field it published instead, so every AAC track's priming delay was
+silently dropped. `session.ts` predicted, in a comment, the exact failure that
+`Secure` on http would cause, and then set `Secure` from `NODE_ENV`, which is
+true for a production build on `http://localhost`.
+
+**Tests can name the property they do not check.** The rewatch-normaliser test
+compared `relatedness()` against the identical call. The atomic-write test
+asserted no `.part` file remained, which a non-atomic write also satisfies —
+and when rewritten to observe a write in progress it *still* could not fail,
+because `put` buffered the whole body first. The cookie tests asserted the
+environment flag rather than the scheme. Each was guarding the exact bug that
+was found.
+
+**One absence can present as several.** "Subscribe does not persist", "no
+watch event is recorded" and "upload needs an owner" were recorded as three
+gaps. There was no sign-in route: `verifyCredentials`, `createSession` and
+`sessionCookie` were all written and tested, and nothing called any of them.
+
+The e2e suite found three bugs on its first real run, including the one that
+took longest: `database()` was memoised on a module binding, and Next compiles
+server components and route handlers into separate module graphs, so the
+sign-in route wrote its session into one in-memory database and the layout
+rendering the masthead read from another. Signing in returned 200 with a valid
+cookie, every API call authenticated with it, and every page said "Sign in".
+
 ## Known gaps
 
 Recorded because a replica that hides its seams is less useful than one that
 names them:
 
-- **The watch page has no masthead.** It sits outside the `(main)` route group
-  because its two-column layout is what theatre mode rearranges, and it never
-  picked up that group's chrome.
-- **Subscribe does not persist** on the watch page or in Shorts — no channels
-  write endpoint exists.
-- **No watch event is recorded from the UI.** Nothing issues a session cookie
-  yet, and inventing one per page load would poison the co-visitation graph
-  with one session per view. The recommender's data comes from the seed.
+- **Subscribe does not persist** from the watch page or Shorts. The
+  subscriptions API exists; those two surfaces do not call it.
+- **No watch event is recorded from the UI.** Recording one needs a session
+  cookie issued to signed-out viewers, and inventing one per page load would
+  poison the co-visitation graph with one session per view. The recommender's
+  data comes from the seed.
 - **No caption track is wired to a video**, so the player renders the measured
   "unavailable" state. The whole caption stack is built and tested.
-- **`pnpm lint` is not clean** — 16 `react-hooks/set-state-in-effect` errors
-  across the theme provider, app shell, menu, sheet, player and Shorts.
+- **Several controls are decorative** and are listed in [SPEC.md](SPEC.md) §10
+  rather than left for a visitor to find: voice search, Create, notifications,
+  Share, Download, Remix, and history's Clear and Pause.
+- **Playlist mutations do not roll back** in the UI when a request fails.
 - **HEVC codec strings are unverified** against real footage — transcribed from
   the standard, and the first thing to doubt if an iPhone file is rejected.
+- **Nested transactions are described by the port and implemented by neither
+  adapter.** No caller nests today.
 
 ---
 
-Next.js · 2,095 unit tests · a 23-table schema applying idempotently on
-PostgreSQL 18.3 · a hand-written fMP4 muxer verified byte-for-byte against the
-specification · built from nine parallel research lanes, then twelve parallel
-build slices.
+Next.js · 2,122 unit tests and 29 e2e specs across three browser projects · a
+23-table schema applying idempotently on PostgreSQL 18.3 · a hand-written fMP4
+muxer reproducing an independently generated reference box for box · built
+from nine parallel research lanes, then twelve parallel build slices, then
+four rounds of review.
 
 [Spec](SPEC.md) · [Decisions](DECISIONS.md) · [Research](research)

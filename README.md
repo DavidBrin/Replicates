@@ -137,3 +137,37 @@ Built from five parallel research lanes, then five parallel build slices.
 
 **[Read the README →](dollar-pixels/README.md)** ·
 [Spec](dollar-pixels/SPEC.md) · [Decisions](dollar-pixels/DECISIONS.md) · [Research](dollar-pixels/research)
+
+---
+
+## [youtube](youtube) — the video platform, with the transcoding moved to the uploader
+
+> **the server never opens a codec**
+
+A rebuild of [YouTube](https://www.youtube.com)'s core: upload, an adaptive player,
+channels, subscriptions, playlists, threaded comments, search, a recommender, watch
+history, Shorts, and Content ID.
+
+| Home | Watch |
+|---|---|
+| <img src="youtube/docs/screenshots/replica-home-1920.png" width="240" alt="Home feed: three columns of cards with the guide rail expanded"> | <img src="youtube/docs/screenshots/replica-watch-1920.png" width="240" alt="Watch page: player, metadata, comments and the related sidebar"> |
+
+The bet is one line long: **the uploader's browser encodes the whole rendition ladder
+before anything is sent.** Transcoding scales with uploads rather than with revenue, so
+it moves to the one machine already idle and already holding the file — and the expensive
+part of the system then does not exist. No queue, no worker pool, no backlog.
+
+Everything between `VideoEncoder`'s output and a playing video is written here: an MP4
+demuxer, a hand-written fMP4 muxer, an HLS packager, and an MSE player with its own ABR.
+No `ffmpeg.wasm`, no `mp4box.js`, no `hls.js`. Content ID is Wang's landmark
+fingerprinting, with a match threshold derived from 3,086 leave-one-out pairs rather than
+chosen. Every video is synthetic, generated at seed time through the real WebCodecs path.
+
+Next.js · 2,122 unit tests · 29 e2e specs across three browser projects · a 23-table
+schema on Postgres compiled to WebAssembly. Built from nine parallel research lanes, then
+twelve parallel build slices, then four rounds of codex review that returned seventy
+findings — including a client-reference bug none of the unit tests could see and a
+database singleton that Next instantiated twice.
+
+**[Read the README →](youtube/README.md)** ·
+[Spec](youtube/SPEC.md) · [Decisions](youtube/DECISIONS.md) · [Research](youtube/research)
