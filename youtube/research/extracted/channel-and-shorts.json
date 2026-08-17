@@ -1,0 +1,5075 @@
+{
+  "chanHome": {
+    "url": "https://www.youtube.com/@veritasium",
+    "header": {
+      "pageHeader": {
+        "tag": "yt-page-header-renderer",
+        "rect": {
+          "x": 438,
+          "y": 278.98,
+          "w": 1284,
+          "h": 196
+        },
+        "text": "Veritasium\n@veritasium\n•\n21.1M subscribers\n•\n526 videos\nAn element of truth - videos about science, education, and anyth",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "1284px",
+        "height": "196px"
+      },
+      "banner": {
+        "tag": "yt-image-banner-view-model",
+        "class": "ytImageBannerViewModelHost ytImageBannerViewModelInset ytImageBannerViewModelPositionAbsolute",
+        "rect": {
+          "x": 438,
+          "y": 56,
+          "w": 1284,
+          "h": 206.98
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "borderRadius": "16px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "absolute",
+        "overflow": "hidden",
+        "width": "1284px",
+        "height": "206.977px"
+      },
+      "avatar": {
+        "tag": "img",
+        "class": "ytCoreImageHost ytSpecAvatarShapeImage ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleToFill ytCoreImageLoaded",
+        "rect": {
+          "x": 438,
+          "y": 296.98,
+          "w": 160,
+          "h": 160
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "borderRadius": "50%",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "overflow": "clip",
+        "minWidth": "1px",
+        "width": "160px",
+        "height": "160px"
+      },
+      "channelTitle": {
+        "tag": "h1",
+        "class": "dynamicTextViewModelH1",
+        "rect": {
+          "x": 614,
+          "y": 282.48,
+          "w": 207.73,
+          "h": 42.5
+        },
+        "text": "Veritasium",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "36px",
+          "weight": "700",
+          "lineHeight": "50px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "inline",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "handleRow": {
+        "tag": "yt-content-metadata-view-model",
+        "class": "ytPageHeaderViewModelContentMetadata ytContentMetadataViewModelHost ytContentMetadataViewModelInline ytContentMetadataViewModelMediumText",
+        "rect": {
+          "x": 614,
+          "y": 328.98,
+          "w": 1108,
+          "h": 22
+        },
+        "text": "@veritasium\n•\n21.1M subscribers\n•\n526 videos",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(96, 96, 96)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "1108px",
+        "height": "22px"
+      },
+      "description": {
+        "tag": "g",
+        "id": "description",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "inline",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "subscribeBtn": {
+        "missing": "#subscribe-button button, ytd-subscribe-button-renderer button, yt-subscribe-button-view-model button"
+      },
+      "tabs": {
+        "tag": "tp-yt-paper-tabs",
+        "id": "tabs",
+        "class": "style-scope ytd-tabbed-page-header",
+        "rect": {
+          "x": 438,
+          "y": 478.98,
+          "w": 1284,
+          "h": 48
+        },
+        "text": "Home\nVideos\nShorts\nPlaylists\nPosts",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "14px",
+          "weight": "500",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(96, 96, 96)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 198px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "overflow": "hidden",
+        "width": "1284px",
+        "height": "48px"
+      },
+      "tab": {
+        "tag": "yt-tab-shape",
+        "class": "ytTabShapeHost ytTabShapeHostClickable",
+        "rect": {
+          "x": 438,
+          "y": 478.98,
+          "w": 48,
+          "h": 48
+        },
+        "text": "Home",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "14px",
+          "weight": "500",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(96, 96, 96)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 24px 0px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "minWidth": "48px",
+        "width": "48px",
+        "height": "48px",
+        "flex": "0 0 auto"
+      },
+      "tabSelected": {
+        "tag": "yt-tab-shape",
+        "class": "ytTabShapeHost ytTabShapeHostClickable",
+        "rect": {
+          "x": 438,
+          "y": 478.98,
+          "w": 48,
+          "h": 48
+        },
+        "text": "Home",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "14px",
+          "weight": "500",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(96, 96, 96)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 24px 0px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "minWidth": "48px",
+        "width": "48px",
+        "height": "48px",
+        "flex": "0 0 auto"
+      }
+    },
+    "headerDump": [
+      {
+        "path": "0",
+        "tag": "yt-page-header-renderer",
+        "box": [
+          438,
+          278.98,
+          1284,
+          196
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0",
+        "tag": "yt-page-header-view-model",
+        "box": [
+          438,
+          278.98,
+          1284,
+          196
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "div",
+        "cls": "ytPageHeaderViewModelContent",
+        "box": [
+          438,
+          278.98,
+          1284,
+          196
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0",
+        "tag": "div",
+        "cls": "ytPageHeaderViewModelHeadline",
+        "box": [
+          438,
+          278.98,
+          1284,
+          196
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>0",
+        "tag": "yt-decorated-avatar-view-model",
+        "box": [
+          438,
+          296.98,
+          160,
+          160
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 16px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>0>0",
+        "tag": "yt-avatar-shape",
+        "box": [
+          438,
+          296.98,
+          160,
+          160
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>0>0>0",
+        "tag": "div",
+        "cls": "ytSpecAvatarShapeHost ytSpecAvatarShapeButton ytSpecAvatarShapeButtonGiant",
+        "box": [
+          438,
+          296.98,
+          160,
+          160
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          436,
+          294.98,
+          164,
+          164
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0",
+        "tag": "div",
+        "cls": "ytSpecAvatarShapeAvatarSizeGiant",
+        "box": [
+          438,
+          296.98,
+          160,
+          160
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "2px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>0",
+        "tag": "img",
+        "cls": "ytCoreImageHost ytSpecAvatarShapeImage ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageConte",
+        "box": [
+          438,
+          296.98,
+          160,
+          160
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>1",
+        "tag": "div",
+        "cls": "ytSpecAvatarShapeImageOverlays ytSpecAvatarShapeImage",
+        "box": [
+          438,
+          296.98,
+          160,
+          160
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1",
+        "tag": "div",
+        "cls": "ytPageHeaderViewModelHeadlineInfo",
+        "box": [
+          614,
+          278.98,
+          1108,
+          196
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>0",
+        "tag": "yt-dynamic-text-view-model",
+        "cls": "ytPageHeaderViewModelTitle ytPageHeaderViewModelTitleLarge dynamicTextViewModelHost",
+        "box": [
+          614,
+          278.98,
+          1108,
+          50
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flow-root"
+      },
+      {
+        "path": "0>0>0>0>1>0>0",
+        "tag": "h1",
+        "cls": "dynamicTextViewModelH1",
+        "box": [
+          614,
+          282.48,
+          207.73,
+          42.5
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+        "txt": "Veritasium",
+        "box": [
+          614,
+          282.48,
+          207.73,
+          42.5
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringLinkInheritColor",
+        "box": [
+          789.73,
+          282.48,
+          32,
+          42.5
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringInlineBlockMod",
+        "box": [
+          797.73,
+          278.98,
+          24,
+          50
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px 8px",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0>0>0",
+        "tag": "span",
+        "cls": "ytIconWrapperHost ytAttributedStringImageElement ytAttributedStringImageAlignmentVerticalCenter",
+        "box": [
+          797.73,
+          291.95,
+          24,
+          24
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-flex"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape ytSpecIconShapeHost",
+        "box": [
+          797.73,
+          291.95,
+          24,
+          24
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          797.73,
+          291.95,
+          24,
+          24
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          797.73,
+          291.95,
+          24,
+          24
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          798.73,
+          292.95,
+          22,
+          22
+        ],
+        "font": "36px/50px w700 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>1",
+        "tag": "yt-content-metadata-view-model",
+        "cls": "ytPageHeaderViewModelContentMetadata ytContentMetadataViewModelHost ytContentMetadataViewModelInline ytContent",
+        "box": [
+          614,
+          328.98,
+          1108,
+          22
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>0",
+        "tag": "div",
+        "cls": "ytContentMetadataViewModelMetadataRow ytContentMetadataViewModelMetadataRowMetadataRowInline",
+        "box": [
+          614,
+          330.98,
+          78.41,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "2px 0px 0px",
+        "disp": "inline-flex"
+      },
+      {
+        "path": "0>0>0>0>1>1>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart y",
+        "box": [
+          614,
+          330.98,
+          78.41,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>0>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringLinkInheritColor",
+        "txt": "@veritasium",
+        "box": [
+          614,
+          332.48,
+          78.41,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(19, 19, 19)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>1>1",
+        "tag": "span",
+        "cls": "ytContentMetadataViewModelDelimiter ytContentMetadataViewModelDelimiterStandalone",
+        "txt": "•",
+        "box": [
+          696.41,
+          330.98,
+          4.73,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "2px 4px 0px",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>0>0>1>1>2",
+        "tag": "div",
+        "cls": "ytContentMetadataViewModelMetadataRow ytContentMetadataViewModelMetadataRowMetadataRowInline",
+        "box": [
+          705.14,
+          330.98,
+          196.28,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "2px 0px 0px",
+        "disp": "inline-flex"
+      },
+      {
+        "path": "0>0>0>0>1>1>2>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytContentMetadataViewModelMetadataText ytAttributedStringWhiteSpacePreWrap ytAttributed",
+        "txt": "21.1M subscribers",
+        "box": [
+          705.14,
+          330.98,
+          115.76,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>2>1",
+        "tag": "span",
+        "cls": "ytContentMetadataViewModelDelimiter",
+        "txt": "•",
+        "box": [
+          824.9,
+          330.98,
+          4.73,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>2>2",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart y",
+        "box": [
+          833.63,
+          330.98,
+          67.8,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>2>2>0",
+        "tag": "span",
+        "txt": "526 videos",
+        "box": [
+          833.63,
+          332.48,
+          67.8,
+          16.5
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2",
+        "tag": "yt-description-preview-view-model",
+        "cls": "ytDescriptionPreviewViewModelHost ytPageHeaderViewModelDescription ytDescriptionPreviewViewModelClickable",
+        "box": [
+          614,
+          362.98,
+          600,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0",
+        "tag": "truncated-text",
+        "cls": "ytTruncatedTextHost ytTruncatedTextMediumText",
+        "box": [
+          614,
+          362.98,
+          600,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>0",
+        "tag": "truncated-text-content",
+        "cls": "ytTruncatedTextTruncatedTextContent",
+        "box": [
+          614,
+          362.98,
+          600,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+        "txt": "An element of truth - videos about science, education, and anything el",
+        "box": [
+          614,
+          364.48,
+          569.79,
+          16.5
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>0>1",
+        "tag": "button",
+        "cls": "ytTruncatedTextInlineButton",
+        "box": [
+          614,
+          382.98,
+          44.14,
+          20
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>0>1>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+        "box": [
+          614,
+          384.48,
+          44.14,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>0>1>0>0",
+        "tag": "span",
+        "txt": "...more",
+        "box": [
+          614,
+          384.48,
+          44.14,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>1",
+        "tag": "truncated-text-content",
+        "cls": "ytTruncatedTextTruncatedTextContent ytTruncatedTextHiddenTextContent",
+        "box": [
+          614,
+          362.98,
+          600,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>1>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+        "txt": "An element of truth - videos about science, education, and anything el",
+        "box": [
+          614,
+          364.48,
+          569.79,
+          16.5
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>1>1",
+        "tag": "button",
+        "cls": "ytTruncatedTextInlineButton",
+        "box": [
+          614,
+          382.98,
+          44.14,
+          20
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>1>1>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+        "box": [
+          614,
+          384.48,
+          44.14,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>1>1>0>0",
+        "tag": "span",
+        "txt": "...more",
+        "box": [
+          614,
+          384.48,
+          44.14,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>2",
+        "tag": "button",
+        "cls": "ytTruncatedTextAbsoluteButton",
+        "box": [
+          1169.86,
+          362.98,
+          44.14,
+          20
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>2>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+        "box": [
+          1169.86,
+          364.48,
+          44.14,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>2>0>2>0>0",
+        "tag": "span",
+        "txt": "...more",
+        "box": [
+          1169.86,
+          364.48,
+          44.14,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>3",
+        "tag": "yt-attribution-view-model",
+        "cls": "ytPageHeaderViewModelAttribution ytAttributionViewModelHost ytAttributionViewModelMediumText",
+        "box": [
+          614,
+          394.98,
+          600,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>3>0",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributionViewModelAttributionText ytAttributedStringWhiteSpaceNoWrap ytAttributedSt",
+        "box": [
+          614,
+          394.98,
+          109.1,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringLinkInheritColor",
+        "box": [
+          614,
+          396.48,
+          109.1,
+          16.5
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0",
+        "tag": "a",
+        "cls": "ytAttributedStringLink ytAttributedStringLinkCallToActionColor ytAttributedStringLinkInheritColor",
+        "txt": "ve42.co/YTBio",
+        "box": [
+          614,
+          396.48,
+          109.1,
+          16.5
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0>0",
+        "tag": "span",
+        "cls": "ytAttributedStringInlineBlockMod",
+        "box": [
+          614,
+          394.98,
+          14,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0>0>0",
+        "tag": "span",
+        "cls": "ytIconWrapperHost ytAttributedStringImageElement ytAttributedStringImageAlignmentVerticalCenter",
+        "box": [
+          614,
+          397.8,
+          14,
+          14
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-flex"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape ytSpecIconShapeHost",
+        "box": [
+          614,
+          397.8,
+          14,
+          14
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          614,
+          397.8,
+          14,
+          14
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          614,
+          397.8,
+          14,
+          14
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>3>0>0>0>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          614.58,
+          401.3,
+          12.83,
+          7
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>3>1",
+        "tag": "span",
+        "cls": "ytAttributedStringHost ytAttributionViewModelSuffix ytAttributedStringWhiteSpacePreWrap ytAttributedStringLink",
+        "box": [
+          727.1,
+          394.98,
+          103.52,
+          20
+        ],
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px 4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>3>1>0",
+        "tag": "span",
+        "box": [
+          727.1,
+          396.48,
+          103.52,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>3>1>0>0",
+        "tag": "a",
+        "cls": "ytAttributedStringLink ytAttributedStringLinkCallToActionColor ytAttributedStringLinkInheritColor",
+        "txt": "and 6 more links",
+        "box": [
+          727.1,
+          396.48,
+          103.52,
+          16.5
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>4",
+        "tag": "yt-flexible-actions-view-model",
+        "box": [
+          614,
+          426.98,
+          1108,
+          40
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 8px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>4>0",
+        "tag": "div",
+        "cls": "ytFlexibleActionsViewModelAction",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0",
+        "tag": "button-view-model",
+        "cls": "ytSpecButtonViewModelHost",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0",
+        "tag": "button",
+        "cls": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextFilled ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytS",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgb(15, 15, 15)",
+        "radius": "20px",
+        "pad": "0px 16px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0>0",
+        "tag": "div",
+        "cls": "ytSpecButtonShapeNextButtonTextContent ytSpecButtonShapeNextElevatedContent",
+        "txt": "Subscribe",
+        "box": [
+          630,
+          426.98,
+          62.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0>1",
+        "tag": "yt-touch-feedback-shape",
+        "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponseInverse",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "20px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0>1>0",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeStroke",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "20px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0>1>1",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeFill",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgb(255, 255, 255)",
+        "radius": "20px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0>2",
+        "tag": "yt-light-shape",
+        "cls": "contribYtLightShapeHost contribYtLightShapeStaticRimLight contribYtLightShapeStaticRimLightSolid",
+        "box": [
+          614,
+          426.98,
+          94.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "20px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>4>0>0>0>2>0",
+        "tag": "div",
+        "cls": "contribYtLightShapeStaticWashLight contribYtLightShapeStaticWashLightSolid",
+        "box": [
+          614,
+          406.98,
+          94.54,
+          40
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(255, 255, 255, 0.15)",
+        "radius": "20px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>1",
+        "tag": "div",
+        "cls": "ytPageHeaderViewModelHeadlineInfo",
+        "box": [
+          438,
+          474.98,
+          1284,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>2",
+        "tag": "div",
+        "cls": "ytPageHeaderViewModelHeadlineInfo",
+        "box": [
+          438,
+          474.98,
+          1284,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      }
+    ],
+    "headerText": "Veritasium\n@veritasium\n•\n21.1M subscribers\n•\n526 videos\nAn element of truth - videos about science, education, and anything else we find interesting. \n...more\n ve42.co/YTBio\nand 6 more links\nSubscribe",
+    "tabs": [
+      {
+        "text": "Home",
+        "selected": true,
+        "box": [
+          438,
+          478.98,
+          48,
+          48
+        ],
+        "color": "rgb(96, 96, 96)",
+        "font": [
+          "14px",
+          "500",
+          "normal",
+          "normal"
+        ],
+        "pad": "0px",
+        "borderBottom": "0px rgb(96, 96, 96)"
+      },
+      {
+        "text": "Videos",
+        "selected": false,
+        "box": [
+          510,
+          478.98,
+          49.31,
+          48
+        ],
+        "color": "rgb(96, 96, 96)",
+        "font": [
+          "14px",
+          "500",
+          "normal",
+          "normal"
+        ],
+        "pad": "0px",
+        "borderBottom": "0px rgb(96, 96, 96)"
+      },
+      {
+        "text": "Shorts",
+        "selected": false,
+        "box": [
+          583.31,
+          478.98,
+          48,
+          48
+        ],
+        "color": "rgb(96, 96, 96)",
+        "font": [
+          "14px",
+          "500",
+          "normal",
+          "normal"
+        ],
+        "pad": "0px",
+        "borderBottom": "0px rgb(96, 96, 96)"
+      },
+      {
+        "text": "Playlists",
+        "selected": false,
+        "box": [
+          655.31,
+          478.98,
+          60.6,
+          48
+        ],
+        "color": "rgb(96, 96, 96)",
+        "font": [
+          "14px",
+          "500",
+          "normal",
+          "normal"
+        ],
+        "pad": "0px",
+        "borderBottom": "0px rgb(96, 96, 96)"
+      },
+      {
+        "text": "Posts",
+        "selected": false,
+        "box": [
+          739.91,
+          478.98,
+          48,
+          48
+        ],
+        "color": "rgb(96, 96, 96)",
+        "font": [
+          "14px",
+          "500",
+          "normal",
+          "normal"
+        ],
+        "pad": "0px",
+        "borderBottom": "0px rgb(96, 96, 96)"
+      },
+      {
+        "text": "",
+        "selected": false,
+        "box": [
+          811.91,
+          478.98,
+          48,
+          48
+        ],
+        "color": "rgb(96, 96, 96)",
+        "font": [
+          "14px",
+          "500",
+          "normal",
+          "normal"
+        ],
+        "pad": "0px",
+        "borderBottom": "0px rgb(96, 96, 96)"
+      }
+    ],
+    "subscribeButton": null,
+    "shelves": [
+      {
+        "title": "Why It Was Almost Impossible to Make the Blue LED",
+        "h": 287
+      },
+      {
+        "title": "Videos",
+        "h": 299.13
+      },
+      {
+        "title": "Videos",
+        "h": 298.13
+      },
+      {
+        "title": "New Here? Try These!\nPlay all",
+        "h": 319.13
+      },
+      {
+        "title": "New Here? Try These!\nPlay all",
+        "h": 318.13
+      }
+    ]
+  },
+  "chanVideos": {
+    "url": "https://www.youtube.com/@veritasium/videos",
+    "grid": {
+      "columns": 3,
+      "itemW": 419.99,
+      "itemH": 314.24,
+      "hGap": 16,
+      "vGap": 32,
+      "ipr": "3",
+      "firstLeft": 426
+    },
+    "cardOnChannel": {
+      "thumbW": 419.99,
+      "thumbH": 236.24,
+      "thumbRadius": "12px",
+      "hasAvatar": false,
+      "titleFont": [
+        "16px",
+        "500",
+        "22px",
+        "rgb(15, 15, 15)"
+      ],
+      "text": [
+        "26:58",
+        "Is spider web really stronger than steel?",
+        "6M views",
+        "•",
+        "2 weeks ago"
+      ]
+    },
+    "samples": [
+      [
+        "26:58",
+        "Is spider web really stronger than steel?",
+        "6M views",
+        "•",
+        "2 weeks ago"
+      ],
+      [
+        "35:32",
+        "Why does every mammal get 1 billion heartbeats in their life?",
+        "5.3M views",
+        "•",
+        "3 weeks ago"
+      ],
+      [
+        "39:44",
+        "The Scariest Chart in Electrical Engineering",
+        "4.9M views",
+        "•",
+        "1 month ago"
+      ],
+      [
+        "23:22",
+        "We've Been Using The Wrong Science In Court For 50 years",
+        "2.4M views",
+        "•",
+        "1 month ago"
+      ],
+      [
+        "41:30",
+        "We're 99.9% sure this pattern is true, but no one can prove it",
+        "5.8M views",
+        "•",
+        "2 months ago"
+      ],
+      [
+        "34:17",
+        "Something is jamming GPS over Europe. Here's what we found",
+        "10M views",
+        "•",
+        "2 months ago"
+      ],
+      [
+        "29:54",
+        "Google Maps is unreasonably fast. Let me explain",
+        "Veritasium",
+        "and 2swap",
+        "7.9M views",
+        "•",
+        "2 months ago"
+      ],
+      [
+        "21:18",
+        "The CIA's new tech doesn't make sense",
+        "2.8M views",
+        "•",
+        "3 months ago"
+      ],
+      [
+        "33:25",
+        "The Crystal That Could Destroy All Medicine",
+        "9.9M views",
+        "•",
+        "3 months ago"
+      ],
+      [
+        "25:44",
+        "How easy is it to steal $10,000 from a locked phone?",
+        "8M views",
+        "•",
+        "4 months ago"
+      ],
+      [
+        "58:54",
+        "What happens if you drop 0.125 grams of antimatter?",
+        "10M views",
+        "•",
+        "4 months ago"
+      ],
+      [
+        "28:43",
+        "The Secret Spy Tech Inside Every Credit Card",
+        "5.8M views",
+        "•",
+        "4 months ago"
+      ],
+      [
+        "20:45",
+        "We Made A Giant Zipper To Explain How It Works",
+        "9.2M views",
+        "•",
+        "4 months ago"
+      ],
+      [
+        "25:40",
+        "This Paradox Splits Smart People 50/50",
+        "8.4M views",
+        "•",
+        "5 months ago"
+      ],
+      [
+        "53:00",
+        "The Internet Was Weeks Away From Disaster And No One Knew",
+        "15M views",
+        "•",
+        "5 months ago"
+      ],
+      [
+        "54:46",
+        "The asbestos problem is worse than we thought",
+        "10M views",
+        "•",
+        "5 months ago"
+      ],
+      [
+        "30:17",
+        "Why Cold Drinks Were Deadly Before 1914",
+        "9.1M views",
+        "•",
+        "6 months ago"
+      ],
+      [
+        "35:53",
+        "Do we know how magnets work yet?",
+        "9.6M views",
+        "•",
+        "6 months ago"
+      ],
+      [
+        "30:09",
+        "What Happens If You Keep Slowing Down?",
+        "10M views",
+        "•",
+        "6 months ago"
+      ],
+      [
+        "55:00",
+        "The World's Most Important Machine",
+        "36M views",
+        "•",
+        "7 months ago"
+      ]
+    ],
+    "chips": []
+  },
+  "shorts": {
+    "url": "https://www.youtube.com/shorts/EyCrvoB6Dv8",
+    "metrics": {
+      "shorts": {
+        "tag": "ytd-shorts",
+        "class": "style-scope ytd-page-manager",
+        "rect": {
+          "x": 240,
+          "y": 64,
+          "w": 1680,
+          "h": 1024
+        },
+        "text": "Search \"diy 3d print projects\"\n@Ludo-dojo\nSubscribe\nAvocado Clicker\n1M\n4,882\nShare\nRemix",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "8px 0px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "1680px",
+        "height": "1024px",
+        "flex": "1 1 1e-09px"
+      },
+      "reel": {
+        "tag": "ytd-reel-video-renderer",
+        "id": "reel-video-renderer",
+        "class": "style-scope ytd-shorts",
+        "rect": {
+          "x": 240,
+          "y": 64,
+          "w": 1584,
+          "h": 984
+        },
+        "text": "Search \"diy 3d print projects\"\n@Ludo-dojo\nSubscribe\nAvocado Clicker\n1M\n4,882\nShare\nRemix",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "right 0.3s linear",
+        "animation": "none",
+        "position": "relative",
+        "minWidth": "315px",
+        "width": "1584px",
+        "height": "984px"
+      },
+      "activeReel": {
+        "missing": "ytd-reel-video-renderer[is-active]"
+      },
+      "player": {
+        "tag": "div",
+        "id": "shorts-player",
+        "class": "html5-video-player ytp-hide-controls ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-exp-ppp-update ytp-livebadge-color ytp-delhi-modern ytp-delhi-modern-icons ytp-delhi-horizontal-volume-controls ytp-delhi-modern-compact-controls ytp-cards-teaser-dismissible ytp-hide-info-bar ytp-fit-cover-video playing-mode unstarted-mode",
+        "rect": {
+          "x": 755.25,
+          "y": 64,
+          "w": 553.5,
+          "h": 984
+        },
+        "text": "Avocado ClickerTap to unmute2xWatch laterShareCopy linkInfoShoppingIf playback doesn't begin shortly, try restarting you",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgb(0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "0",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "553.5px",
+        "height": "984px"
+      },
+      "video": {
+        "tag": "video",
+        "class": "video-stream html5-main-video",
+        "rect": {
+          "x": 755.25,
+          "y": -920,
+          "w": 554,
+          "h": 984
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "absolute",
+        "overflow": "clip",
+        "width": "554px",
+        "height": "984px"
+      },
+      "overlay": {
+        "tag": "ytd-reel-player-overlay-renderer",
+        "class": "style-scope ytd-reel-video-renderer",
+        "rect": {
+          "x": 240,
+          "y": 64,
+          "w": 1584,
+          "h": 984
+        },
+        "text": "Search \"diy 3d print projects\"\n@Ludo-dojo\nSubscribe\nAvocado Clicker\n1M\n4,882\nShare\nRemix",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "right 0.3s linear",
+        "animation": "none",
+        "position": "relative",
+        "minWidth": "315px",
+        "width": "1584px",
+        "height": "984px"
+      },
+      "actions": {
+        "tag": "div",
+        "id": "actions",
+        "class": "item style-scope ytd-watch-metadata",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "12px 0px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto",
+        "flex": "0 0 auto"
+      },
+      "actionButton": {
+        "missing": "#actions button, .YtReelActionBarViewModelHost button"
+      },
+      "metadataPanel": {
+        "tag": "yt-shorts-video-title-view-model",
+        "class": "ytShortsVideoTitleViewModelHost ytShortsVideoTitleViewModelHostClickable",
+        "rect": {
+          "x": 256,
+          "y": 1004,
+          "w": 145.59,
+          "h": 28
+        },
+        "text": "Avocado Clicker",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "145.586px",
+        "height": "28px"
+      },
+      "title": {
+        "tag": "h1",
+        "class": "ytShortsVideoTitleViewModelShortsVideoTitle ytShortsVideoTitleViewModelShortsVideoTitleLarge",
+        "rect": {
+          "x": 256,
+          "y": 1004,
+          "w": 145.59,
+          "h": 28
+        },
+        "text": "Avocado Clicker",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "20px",
+          "weight": "700",
+          "lineHeight": "28px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flow-root",
+        "transition": "all",
+        "animation": "none",
+        "overflow": "hidden",
+        "width": "145.586px",
+        "height": "28px"
+      },
+      "channelRow": {
+        "tag": "yt-reel-channel-bar-view-model",
+        "class": "ytReelChannelBarViewModelHost",
+        "rect": {
+          "x": 256,
+          "y": 956,
+          "w": 221.03,
+          "h": 40
+        },
+        "text": "@Ludo-dojo\nSubscribe",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "width": "221.031px",
+        "height": "40px"
+      },
+      "navUp": {
+        "tag": "button",
+        "class": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextTonal ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeXl ytSpecButtonShapeNextIconButton ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding",
+        "rect": {
+          "x": 1840,
+          "y": 576,
+          "w": 56,
+          "h": 56
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "24px",
+          "weight": "500",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0.05)",
+        "borderRadius": "28px",
+        "padding": "0px 24px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "56px",
+        "height": "56px",
+        "flex": "0 0 auto"
+      },
+      "navDown": {
+        "tag": "button",
+        "class": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextTonal ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeXl ytSpecButtonShapeNextIconButton ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding",
+        "rect": {
+          "x": 1840,
+          "y": 584,
+          "w": 56,
+          "h": 56
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "24px",
+          "weight": "500",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0.05)",
+        "borderRadius": "28px",
+        "padding": "0px 24px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "56px",
+        "height": "56px",
+        "flex": "0 0 auto"
+      }
+    },
+    "reelDump": [
+      {
+        "path": "0",
+        "tag": "ytd-reel-video-renderer",
+        "id": "reel-video-renderer",
+        "cls": "style-scope ytd-shorts",
+        "box": [
+          240,
+          64,
+          1584,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0",
+        "tag": "div",
+        "id": "short-video-container",
+        "cls": "short-video-container style-scope ytd-reel-video-renderer",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "div",
+        "id": "sticker-layer",
+        "cls": "sticker-layer style-scope ytd-reel-video-renderer",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1",
+        "tag": "div",
+        "id": "cinematic-container",
+        "cls": "cinematic-container style-scope ytd-reel-video-renderer",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0",
+        "tag": "div",
+        "id": "shorts-cinematic-container",
+        "cls": "style-scope ytd-shorts",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>2",
+        "tag": "div",
+        "id": "video-filtering-overlay-container",
+        "cls": "style-scope ytd-reel-video-renderer",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "12px",
+        "mar": "0px 515.25px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3",
+        "tag": "div",
+        "cls": "player-wrapper style-scope ytd-reel-video-renderer",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0",
+        "tag": "div",
+        "id": "player-container",
+        "cls": "player-container style-scope ytd-reel-video-renderer",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "12px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0",
+        "tag": "ytd-player",
+        "id": "player",
+        "cls": "style-scope ytd-shorts",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0",
+        "tag": "div",
+        "id": "container",
+        "cls": "style-scope ytd-player",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0",
+        "tag": "div",
+        "id": "shorts-player",
+        "cls": "html5-video-player ytp-hide-controls ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-exp-ppp-update ytp-",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgb(0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>0",
+        "tag": "div",
+        "cls": "html5-video-container",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>0>0",
+        "tag": "video",
+        "cls": "video-stream html5-main-video",
+        "box": [
+          755.25,
+          -920,
+          554,
+          984
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>1",
+        "tag": "div",
+        "cls": "ytp-gradient-top",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 0px 50px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2",
+        "tag": "div",
+        "cls": "ytp-chrome-top",
+        "box": [
+          767.25,
+          64,
+          529.5,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0",
+        "tag": "div",
+        "cls": "ytp-title-channel",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "25px",
+        "mar": "0px 0px 0px -5px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>0",
+        "tag": "div",
+        "cls": "ytp-title-beacon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "25px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>1",
+        "tag": "a",
+        "cls": "ytp-title-channel-logo",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "mar": "5px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>2",
+        "tag": "div",
+        "cls": "ytp-title-expanded-overlay",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 8px 0px 0px",
+        "disp": "contents"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>2>0",
+        "tag": "div",
+        "cls": "ytp-title-expanded-heading",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "5px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>2>0>0",
+        "tag": "div",
+        "cls": "ytp-title-expanded-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "16px/20.8px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>2>0>0>0",
+        "tag": "a",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "16px/20.8px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>0>2>0>1",
+        "tag": "div",
+        "cls": "ytp-title-expanded-subtitle",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>1",
+        "tag": "div",
+        "cls": "ytp-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>1>0",
+        "tag": "div",
+        "cls": "ytp-title-text ",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "18px/23.4px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "12px 0px 0px 4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>1>0>0",
+        "tag": "a",
+        "cls": "ytp-title-link yt-uix-sessionlink",
+        "txt": "Avocado Clicker",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "18px/23.4px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>1>0>1",
+        "tag": "div",
+        "cls": "ytp-title-subtext",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>2>1>0>1>0",
+        "tag": "a",
+        "cls": "ytp-title-channel-name",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "2.5px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3",
+        "tag": "button",
+        "cls": "ytp-unmute ytp-popup ytp-button ytp-unmute-animated ytp-unmute-shrink",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "2px",
+        "pad": "12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3>0",
+        "tag": "div",
+        "cls": "ytp-unmute-inner",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "2px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3>0>0",
+        "tag": "div",
+        "cls": "ytp-unmute-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgb(255, 255, 255)",
+        "radius": "2px",
+        "pad": "0px 0px 0px 2px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3>0>0>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3>0>1",
+        "tag": "div",
+        "cls": "ytp-unmute-text",
+        "txt": "Tap to unmute",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "1px 10px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>3>0>2",
+        "tag": "div",
+        "cls": "ytp-unmute-box",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/18.161px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgb(255, 255, 255)",
+        "radius": "2px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>0",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-background",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgb(0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>0>0",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-background-overlay",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.3)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>1",
+        "tag": "button",
+        "cls": "ytp-gated-actions-overlay-miniplayer-close-button ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>1>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>1>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>2",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-bar",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "8px",
+        "pad": "0px 6px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>2>0",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-text-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 6px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>2>0>0",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "16.5px/21.45px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>2>0>1",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-subtitle",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12.1px/15.73px w400 lsnormal",
+        "color": "rgba(255, 255, 255, 0.7)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>4>2>1",
+        "tag": "div",
+        "cls": "ytp-gated-actions-overlay-button-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>5",
+        "tag": "div",
+        "cls": "ytp-overlay ytp-speedmaster-overlay",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>5>0",
+        "tag": "div",
+        "cls": "ytp-speedmaster-user-edu ytp-speedmaster-has-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "18px",
+        "pad": "6px 16px",
+        "mar": "20px 0px 0px",
+        "disp": "inline-flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>5>0>0",
+        "tag": "div",
+        "cls": "ytp-speedmaster-label",
+        "txt": "2x",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>5>0>1",
+        "tag": "div",
+        "cls": "ytp-speedmaster-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px 4px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>5>0>1>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>5>0>1>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6",
+        "tag": "div",
+        "cls": "ytp-suggested-action",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0",
+        "tag": "div",
+        "cls": "ytp-button ytp-suggested-action-badge ytp-suggested-action-badge-with-controls ytp-suggested-action",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "8px",
+        "pad": "0px 8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>0",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-icon-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-expanded-content-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>0",
+        "tag": "label",
+        "cls": "ytp-suggested-action-badge-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 6px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1",
+        "tag": "a",
+        "cls": "ytp-suggested-action-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "4px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>0",
+        "tag": "img",
+        "cls": "ytp-suggested-action-badge-img",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgb(255, 255, 255)",
+        "radius": "4px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>1",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>2",
+        "tag": "div",
+        "cls": "ytp-suggested-action-details",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 8px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>2>0",
+        "tag": "text",
+        "cls": "ytp-suggested-action-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>2>1",
+        "tag": "text",
+        "cls": "ytp-suggested-action-subtitle",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>2>2",
+        "tag": "text",
+        "cls": "ytp-suggested-action-metadata-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>3",
+        "tag": "button",
+        "cls": "ytp-suggested-action-badge-dismiss-button-icon ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>6>0>1>1>4",
+        "tag": "button",
+        "cls": "ytp-featured-product-overflow-icon ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>7",
+        "tag": "div",
+        "cls": "ytp-cued-thumbnail-overlay",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>7>0",
+        "tag": "div",
+        "cls": "ytp-cued-thumbnail-overlay-image",
+        "box": [
+          755.25,
+          64,
+          553.5,
+          984
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>7>1",
+        "tag": "button",
+        "cls": "ytp-large-play-button ytp-button",
+        "box": [
+          998,
+          532,
+          68,
+          48
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "-24px 0px 0px -34px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>7>1>0",
+        "tag": "svg",
+        "box": [
+          998,
+          532,
+          68,
+          48
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>7>1>0>0",
+        "tag": "path",
+        "box": [
+          998,
+          532,
+          68,
+          48
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>7>1>0>1",
+        "tag": "path",
+        "box": [
+          1025,
+          546,
+          18,
+          20
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8",
+        "tag": "div",
+        "cls": "ytp-overlays-container",
+        "box": [
+          767.25,
+          72,
+          529.5,
+          896
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>0",
+        "tag": "div",
+        "cls": "ytp-overlay-top-left",
+        "box": [
+          767.25,
+          72,
+          529.5,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1",
+        "tag": "div",
+        "cls": "ytp-overlay-top-right",
+        "box": [
+          767.25,
+          72,
+          529.5,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0",
+        "tag": "div",
+        "cls": "ytp-chrome-top-buttons",
+        "box": [
+          767.25,
+          72,
+          529.5,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>0",
+        "tag": "button",
+        "cls": "ytp-watch-later-button ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>0>0",
+        "tag": "div",
+        "cls": "ytp-watch-later-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "auto",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>0>0>0>0",
+        "tag": "use",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>0>0>0>1",
+        "tag": "path",
+        "id": "ytp-id-6",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>0>1",
+        "tag": "div",
+        "cls": "ytp-watch-later-title",
+        "txt": "Watch later",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>1",
+        "tag": "button",
+        "cls": "ytp-button ytp-share-button ytp-share-button-visible",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>1>0",
+        "tag": "div",
+        "cls": "ytp-share-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "auto",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>1>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>1>0>0>0",
+        "tag": "use",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>1>0>0>1",
+        "tag": "path",
+        "id": "ytp-id-18",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>1>1",
+        "tag": "div",
+        "cls": "ytp-share-title",
+        "txt": "Share",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>2",
+        "tag": "button",
+        "cls": "ytp-button ytp-copylink-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>2>0",
+        "tag": "div",
+        "cls": "ytp-copylink-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "auto",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>2>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>2>0>0>0",
+        "tag": "use",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>2>0>0>1",
+        "tag": "path",
+        "id": "ytp-id-19",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>2>1",
+        "tag": "div",
+        "cls": "ytp-copylink-title",
+        "txt": "Copy link",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3",
+        "tag": "button",
+        "cls": "ytp-button ytp-cards-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>0",
+        "tag": "span",
+        "cls": "ytp-cards-button-icon-default",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>0>0",
+        "tag": "div",
+        "cls": "ytp-cards-button-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "auto",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>0>0>0>0",
+        "tag": "use",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>0>0>0>1",
+        "tag": "path",
+        "id": "ytp-id-1",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>0>1",
+        "tag": "div",
+        "cls": "ytp-cards-button-title",
+        "txt": "Info",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1",
+        "tag": "span",
+        "cls": "ytp-cards-button-icon-shopping",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1>0",
+        "tag": "div",
+        "cls": "ytp-cards-button-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "auto",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1>0>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1>0>0>1",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1>0>0>2",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>3>1>1",
+        "tag": "div",
+        "cls": "ytp-cards-button-title",
+        "txt": "Shopping",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4",
+        "tag": "div",
+        "cls": "ytp-cards-teaser",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>0",
+        "tag": "div",
+        "cls": "ytp-cards-teaser-box",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "2px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1",
+        "tag": "div",
+        "cls": "ytp-cards-teaser-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/31px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "18px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>0",
+        "tag": "button",
+        "cls": "ytp-cards-teaser-info-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>0>0>0",
+        "tag": "use",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>0>0>1",
+        "tag": "path",
+        "id": "ytp-id-9",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>1",
+        "tag": "img",
+        "cls": "ytp-cards-teaser-channel-avatar",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/31px w500 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "mar": "4px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>2",
+        "tag": "span",
+        "cls": "ytp-cards-teaser-label",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/30px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>3",
+        "tag": "button",
+        "cls": "ytp-cards-teaser-close-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 5px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>3>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>4>1>3>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>5",
+        "tag": "button",
+        "cls": "ytp-button ytp-overflow-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>5>0",
+        "tag": "div",
+        "cls": "ytp-overflow-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "auto",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>5>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>0>5>0>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1",
+        "tag": "button",
+        "cls": "ytp-playlist-menu-button ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "27px",
+        "mar": "0px 0px 12px auto",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1>0",
+        "tag": "div",
+        "cls": "ytp-playlist-menu-button-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1>0>0>0",
+        "tag": "use",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1>0>0>1",
+        "tag": "path",
+        "id": "ytp-id-3",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1>1",
+        "tag": "div",
+        "cls": "ytp-playlist-menu-button-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>1>1>2",
+        "tag": "div",
+        "cls": "ytp-playlist-menu-button-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/36px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 6px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2",
+        "tag": "div",
+        "cls": "ytp-overlay-bottom-left",
+        "box": [
+          767.25,
+          968,
+          529.5,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>0",
+        "tag": "div",
+        "cls": "ytp-suggested-action",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>0>0",
+        "tag": "button",
+        "cls": "ytp-button ytp-suggested-action-badge ytp-suggested-action-badge-with-controls",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "40px",
+        "pad": "0px 8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>0>0>0",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-icon-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>0>0>1",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-expanded-content-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>0>0>1>0",
+        "tag": "label",
+        "cls": "ytp-suggested-action-badge-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 6px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>0>0>1>1",
+        "tag": "button",
+        "cls": "ytp-suggested-action-badge-dismiss-button-icon ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1",
+        "tag": "div",
+        "cls": "ytp-suggested-action",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1>0",
+        "tag": "button",
+        "cls": "ytp-button ytp-suggested-action-badge ytp-suggested-action-badge-with-controls ytp-suggested-action-badge-expa",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "40px",
+        "pad": "12px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1>0>0",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-icon-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1>0>0>0",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1>0>1",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-expanded-content-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1>0>1>0",
+        "tag": "label",
+        "cls": "ytp-suggested-action-badge-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 6px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>1>0>1>1",
+        "tag": "button",
+        "cls": "ytp-suggested-action-badge-dismiss-button-icon ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2",
+        "tag": "div",
+        "cls": "ytp-suggested-action",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0",
+        "tag": "div",
+        "cls": "ytp-button ytp-suggested-action-badge ytp-suggested-action-badge-with-controls ytp-featured-product ytp-timely",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "8px",
+        "pad": "0px 8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>0",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-icon-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1",
+        "tag": "div",
+        "cls": "ytp-suggested-action-badge-expanded-content-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>0",
+        "tag": "label",
+        "cls": "ytp-suggested-action-badge-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 6px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>1",
+        "tag": "button",
+        "cls": "ytp-suggested-action-badge-dismiss-button-icon ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2",
+        "tag": "a",
+        "cls": "ytp-featured-product-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "4px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>0",
+        "tag": "div",
+        "cls": "ytp-featured-product-thumbnail",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgb(255, 255, 255)",
+        "radius": "4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>0>0",
+        "tag": "img",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>0>1",
+        "tag": "div",
+        "cls": "ytp-featured-product-open-in-new",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.8)",
+        "radius": "2px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1",
+        "tag": "div",
+        "cls": "ytp-featured-product-details",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 8px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>0",
+        "tag": "text",
+        "cls": "ytp-featured-product-title",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "14px/18.2px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>1",
+        "tag": "div",
+        "cls": "ytp-featured-product-price-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>1>0",
+        "tag": "text",
+        "cls": "ytp-featured-product-price-when-promotion-text-enabled",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>1>1",
+        "tag": "text",
+        "cls": "ytp-featured-product-promotion-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px 4px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>2",
+        "tag": "div",
+        "cls": "ytp-featured-product-when-promotion-text-enabled",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>2>0",
+        "tag": "text",
+        "cls": "ytp-featured-product-affiliate-disclaimer-when-promotion-text-enabled",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w500 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 4px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>2>1",
+        "tag": "div",
+        "cls": "ytp-featured-product-trending",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>2>1>0",
+        "tag": "div",
+        "cls": "ytp-featured-product-trending-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "2px 4px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>2>1>1",
+        "tag": "text",
+        "cls": "ytp-featured-product-trending-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>1>2>2",
+        "tag": "text",
+        "cls": "ytp-featured-product-vendor-when-promotion-text-enabled",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/15.6px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>2>2>0>1>2>2",
+        "tag": "button",
+        "cls": "ytp-featured-product-overflow-icon ytp-button",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>3",
+        "tag": "div",
+        "cls": "ytp-overlay-bottom-right",
+        "box": [
+          1296.75,
+          956,
+          0,
+          12
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>3>0",
+        "tag": "div",
+        "cls": "ytp-overlay-inline-container",
+        "box": [
+          1296.75,
+          968,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px 0px 0px",
+        "disp": "flex",
+        "gap": "12px"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>8>3>0>0",
+        "tag": "div",
+        "cls": "ytp-player-content ytp-timely-actions-content",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9",
+        "tag": "div",
+        "cls": "ytp-spinner",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px -32px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>0",
+        "tag": "div",
+        "cls": "ytp-spinner-container",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 0px 100%",
+        "mar": "-50% 0px 0px -50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>0>0",
+        "tag": "div",
+        "cls": "ytp-spinner-rotator",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>0>0>0",
+        "tag": "div",
+        "cls": "ytp-spinner-left",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>0>0>0>0",
+        "tag": "div",
+        "cls": "ytp-spinner-circle",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>0>0>1",
+        "tag": "div",
+        "cls": "ytp-spinner-right",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>0>0>1>0",
+        "tag": "div",
+        "cls": "ytp-spinner-circle",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>9>1",
+        "tag": "div",
+        "cls": "ytp-spinner-message",
+        "txt": "If playback doesn't begin shortly, try restarting your device.",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "13.97px/25.4254px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgb(0, 0, 0)",
+        "mar": "50% 0px 0px -150px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>10",
+        "tag": "div",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>10>0",
+        "tag": "div",
+        "cls": "ytp-bezel-text-wrapper",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>10>0>0",
+        "tag": "div",
+        "cls": "ytp-bezel-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "19.25px/25.025px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "3px",
+        "pad": "10px 20px",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>10>1",
+        "tag": "div",
+        "cls": "ytp-bezel",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "39px",
+        "mar": "-39px 0px 0px -39px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>10>1>0",
+        "tag": "div",
+        "cls": "ytp-bezel-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "12px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11",
+        "tag": "div",
+        "cls": "ytp-seek-overlay",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>0",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-animation ytp-seek-overlay-animation-back",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>0>0",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-arrow ytp-seek-overlay-arrow-persistent",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 20px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>0>0>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>0>1",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-duration",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "24px/24px w700 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>1",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-animation ytp-seek-overlay-animation-forward",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>1>0",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-duration",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "24px/24px w700 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>1>1",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-arrow ytp-seek-overlay-arrow-persistent",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px 20px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>1>1>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>1>1>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>2",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-message",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>2>0",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-message-icon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>11>2>1",
+        "tag": "div",
+        "cls": "ytp-seek-overlay-message-text",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "18px/23.4px w700 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>12",
+        "tag": "div",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>12>0",
+        "tag": "div",
+        "cls": "ytp-tooltip-text-wrapper",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "3px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>12>0>0",
+        "tag": "div",
+        "cls": "ytp-tooltip-edu",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>3>0>0>0>0>12>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11px/14.3px w400 lsnormal",
+        "color": "rgb(238, 238, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      }
+    ],
+    "reelText": "Search \"diy 3d print projects\"\n@Ludo-dojo\nSubscribe\nAvocado Clicker\n1M\n4,882\nShare\nRemix",
+    "video": {
+      "box": [
+        755.25,
+        -920,
+        554,
+        984
+      ],
+      "ratio": 0.56,
+      "radius": "0px",
+      "objectFit": "cover"
+    },
+    "actionButtons": [],
+    "actionLabels": [
+      " |        |          |          |        |     "
+    ]
+  }
+}

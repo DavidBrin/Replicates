@@ -1,0 +1,1856 @@
+{
+  "counts": {
+    "total": 37,
+    "ads": 4
+  },
+  "cardDump": [
+    {
+      "path": "0",
+      "tag": "ytd-rich-item-renderer",
+      "cls": "style-scope ytd-rich-grid-renderer",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        409.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "0px 8px 32px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0",
+      "tag": "div",
+      "id": "content",
+      "cls": "style-scope ytd-rich-item-renderer",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        409.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "flex-start",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0",
+      "tag": "yt-lockup-view-model",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        377.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "column",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0",
+      "tag": "div",
+      "cls": "ytLockupViewModelHost ytLockupViewModelVertical content-id-yekxxZjJ5Lo ytLockupViewModelRichGridLegacyMargin ytLockupViewModelFlexNone",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        377.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "column",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>0",
+      "tag": "yt-touch-feedback-shape",
+      "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse ytSpecTouchFeedbackShapeThumbnailSizeLarge ytSpecTouchFeedbackShapeTriggerEvents",
+      "box": [
+        801.33,
+        124,
+        557.33,
+        401.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "-12px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>0>0",
+      "tag": "div",
+      "cls": "ytSpecTouchFeedbackShapeHoverEffect",
+      "box": [
+        829.19,
+        144.1,
+        501.6,
+        361.79
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(220, 139, 50, 0.13)",
+      "radius": "16px",
+      "disp": "block",
+      "transition": "opacity 0.3s cubic-bezier(0.05, 0, 0, 1), transform 0.3s cubic-bezier(0.05, 0, 0, 1)"
+    },
+    {
+      "path": "0>0>0>0>0>1",
+      "tag": "div",
+      "cls": "ytSpecTouchFeedbackShapeStroke",
+      "box": [
+        801.33,
+        124,
+        557.33,
+        401.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "16px",
+      "disp": "block",
+      "transition": "all",
+      "border": "1px solid rgba(220, 139, 50, 0.13)"
+    },
+    {
+      "path": "0>0>0>0>0>2",
+      "tag": "div",
+      "cls": "ytSpecTouchFeedbackShapeFill",
+      "box": [
+        801.33,
+        124,
+        557.33,
+        401.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(220, 139, 50, 0.13)",
+      "radius": "16px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1",
+      "tag": "a",
+      "cls": "ytLockupViewModelContentImage",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        311.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "pad": "0px 0px 12px",
+      "disp": "flex",
+      "flexDir": "column",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0",
+      "tag": "yt-thumbnail-view-model",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        299.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "12px",
+      "pad": "299.992px 0px 0px",
+      "disp": "block",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0>0",
+      "tag": "div",
+      "cls": "ytThumbnailViewModelImage",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        299.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0>0>0",
+      "tag": "img",
+      "cls": "ytCoreImageHost ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleAspectFill ytCoreImageLoaded",
+      "box": [
+        813.33,
+        136,
+        533.33,
+        299.99
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline-block",
+      "overflow": "clip",
+      "transition": "all",
+      "objectFit": "cover"
+    },
+    {
+      "path": "0>0>0>0>1>0>1",
+      "tag": "yt-thumbnail-bottom-overlay-view-model",
+      "cls": "ytThumbnailBottomOverlayViewModelHost",
+      "box": [
+        813.33,
+        407.99,
+        533.33,
+        28
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "flex-end",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0>1>0",
+      "tag": "div",
+      "cls": "ytThumbnailBottomOverlayViewModelBadgeContainer ytThumbnailBottomOverlayViewModelBadgeContainerLarge",
+      "box": [
+        1296.2,
+        407.99,
+        50.45,
+        28
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "pad": "0px 8px 8px 0px",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0>1>0>0",
+      "tag": "yt-thumbnail-badge-view-model",
+      "cls": "ytThumbnailBadgeViewModelHost ytThumbnailBottomOverlayViewModelBadge",
+      "box": [
+        1300.2,
+        407.99,
+        38.45,
+        20
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "0px 0px 0px 4px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0>1>0>0>0",
+      "tag": "badge-shape",
+      "cls": "ytBadgeShapeHost ytBadgeShapeThumbnailDefault ytBadgeShapeThumbnailBadge ytBadgeShapeTypography",
+      "box": [
+        1300.2,
+        407.99,
+        38.45,
+        20
+      ],
+      "font": "Roboto 12px/18px w500 lsnormal",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgba(0, 0, 0, 0.6)",
+      "radius": "4px",
+      "pad": "1px 4px",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>1>0>1>0>0>0>0",
+      "tag": "div",
+      "cls": "ytBadgeShapeText",
+      "txt": "30:21",
+      "box": [
+        1304.2,
+        408.99,
+        30.45,
+        18
+      ],
+      "font": "Roboto 12px/18px w500 lsnormal",
+      "color": "rgb(255, 255, 255)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2",
+      "tag": "div",
+      "cls": "ytLockupViewModelMetadata",
+      "box": [
+        813.33,
+        447.99,
+        533.33,
+        66
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "column",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0",
+      "tag": "yt-lockup-metadata-view-model",
+      "cls": "ytLockupMetadataViewModelHost ytLockupMetadataViewModelVertical ytLockupMetadataViewModelStandard ytLockupMetadataViewModelTypographyBump ytLockupMetadataViewModelRichGridLegacyTypography ytLockupMetadataViewModelHasMenuButton",
+      "box": [
+        813.33,
+        447.99,
+        533.33,
+        66
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0",
+      "tag": "div",
+      "cls": "ytLockupMetadataViewModelAvatar",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        66
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "0px 12px 0px 0px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0",
+      "tag": "yt-decorated-avatar-view-model",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        36
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0>0",
+      "tag": "yt-avatar-shape",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        36
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0>0>0",
+      "tag": "div",
+      "cls": "ytSpecAvatarShapeHost ytSpecAvatarShapeButton ytSpecAvatarShapeButtonMedium ytSpecAvatarShapeTappable",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        36
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0>0>0>0",
+      "tag": "div",
+      "box": [
+        811.33,
+        445.99,
+        40,
+        40
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0>0>0>0>0",
+      "tag": "div",
+      "cls": "ytSpecAvatarShapeAvatarSizeMedium",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        36
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "2px",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0>0>0>0>0>0",
+      "tag": "img",
+      "cls": "ytCoreImageHost ytSpecAvatarShapeImage ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleToFill ytCoreImageLoaded",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        36
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "50%",
+      "disp": "block",
+      "overflow": "clip",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>0>0>0>0>0>0>1",
+      "tag": "div",
+      "cls": "ytSpecAvatarShapeImageOverlays ytSpecAvatarShapeImage",
+      "box": [
+        813.33,
+        447.99,
+        36,
+        36
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "50%",
+      "disp": "block",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1",
+      "tag": "div",
+      "cls": "ytLockupMetadataViewModelTextContainer",
+      "box": [
+        861.33,
+        447.99,
+        350.69,
+        66
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "column",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>0",
+      "tag": "h3",
+      "cls": "ytLockupMetadataViewModelHeadingReset",
+      "box": [
+        861.33,
+        447.99,
+        350.69,
+        22
+      ],
+      "font": "Roboto 11.7px/normal w700 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>0>0",
+      "tag": "a",
+      "cls": "ytLockupMetadataViewModelTitle",
+      "box": [
+        861.33,
+        447.99,
+        350.69,
+        22
+      ],
+      "font": "Roboto 16px/22px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "pad": "0px 24px 0px 0px",
+      "disp": "flow-root",
+      "overflow": "hidden",
+      "lineClamp": "2",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>0>0>0",
+      "tag": "span",
+      "cls": "ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap",
+      "txt": "How It's Made: Noodles, Pasta, Mac & Cheese",
+      "box": [
+        861.33,
+        449.49,
+        326.69,
+        19
+      ],
+      "font": "Roboto 16px/22px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1",
+      "tag": "div",
+      "cls": "ytLockupMetadataViewModelMetadata",
+      "box": [
+        861.33,
+        469.99,
+        350.69,
+        44
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0",
+      "tag": "yt-content-metadata-view-model",
+      "cls": "ytContentMetadataViewModelHost ytContentMetadataViewModelMediumText",
+      "box": [
+        861.33,
+        471.99,
+        350.69,
+        42
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0",
+      "tag": "div",
+      "cls": "ytContentMetadataViewModelMetadataRow",
+      "box": [
+        861.33,
+        471.99,
+        350.69,
+        20
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "2px 0px 0px",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0",
+      "tag": "span",
+      "cls": "ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor",
+      "box": [
+        861.33,
+        471.99,
+        130.03,
+        20
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0",
+      "tag": "span",
+      "box": [
+        861.33,
+        473.49,
+        130.03,
+        16.5
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0",
+      "tag": "a",
+      "cls": "ytAttributedStringLink ytAttributedStringLinkCallToActionColor ytAttributedStringLinkInheritColor",
+      "txt": "Captain Discovery",
+      "box": [
+        861.33,
+        473.49,
+        130.03,
+        16.5
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0",
+      "tag": "span",
+      "cls": "ytAttributedStringLinkInheritColor",
+      "box": [
+        973.36,
+        473.49,
+        18,
+        16.5
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0>0",
+      "tag": "span",
+      "cls": "ytAttributedStringInlineBlockMod",
+      "box": [
+        977.36,
+        471.99,
+        14,
+        20
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "0px 0px 0px 4px",
+      "disp": "inline-block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0>0>0",
+      "tag": "span",
+      "cls": "ytIconWrapperHost ytAttributedStringImageElement ytAttributedStringImageAlignmentVerticalCenter",
+      "box": [
+        977.36,
+        474.82,
+        14,
+        14
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline-flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0>0>0>0",
+      "tag": "span",
+      "cls": "yt-icon-shape ytSpecIconShapeHost",
+      "box": [
+        977.36,
+        474.82,
+        14,
+        14
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0>0>0>0>0",
+      "tag": "div",
+      "box": [
+        977.36,
+        474.82,
+        14,
+        14
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0>0>0>0>0>0",
+      "tag": "svg",
+      "box": [
+        977.36,
+        474.82,
+        14,
+        14
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>0>0>0>0>0>0>0>0>0>0>0",
+      "tag": "path",
+      "box": [
+        977.94,
+        475.4,
+        12.83,
+        12.83
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>1",
+      "tag": "div",
+      "cls": "ytContentMetadataViewModelMetadataRow",
+      "box": [
+        861.33,
+        493.99,
+        350.69,
+        20
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "2px 0px 0px",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>1>0",
+      "tag": "span",
+      "cls": "ytAttributedStringHost ytContentMetadataViewModelMetadataText ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor",
+      "txt": "961K views",
+      "box": [
+        861.33,
+        493.99,
+        71.22,
+        20
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>1>1",
+      "tag": "span",
+      "cls": "ytContentMetadataViewModelDelimiter",
+      "txt": "•",
+      "box": [
+        936.55,
+        493.99,
+        4.73,
+        20
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "0px 4px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>1>1>0>1>2",
+      "tag": "span",
+      "cls": "ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor",
+      "txt": "10 months ago",
+      "box": [
+        945.27,
+        493.99,
+        93.66,
+        20
+      ],
+      "font": "Roboto 14px/20px w400 lsnormal",
+      "color": "rgb(96, 96, 96)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2",
+      "tag": "div",
+      "cls": "ytLockupMetadataViewModelMenuButton",
+      "box": [
+        1316.66,
+        441.99,
+        40,
+        40
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0",
+      "tag": "button-view-model",
+      "cls": "ytSpecButtonViewModelHost",
+      "box": [
+        1316.66,
+        441.99,
+        40,
+        40
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "normal",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0",
+      "tag": "button",
+      "cls": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextText ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconButton ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding",
+      "box": [
+        1316.66,
+        441.99,
+        40,
+        40
+      ],
+      "font": "Roboto 14px/40px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "20px",
+      "pad": "0px 16px",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>0",
+      "tag": "div",
+      "cls": "ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent",
+      "box": [
+        1324.66,
+        449.99,
+        24,
+        24
+      ],
+      "font": "Roboto 14px/0px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>0>0",
+      "tag": "span",
+      "cls": "ytIconWrapperHost",
+      "box": [
+        1324.66,
+        449.99,
+        24,
+        24
+      ],
+      "font": "Roboto 14px/0px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline-flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>0>0>0",
+      "tag": "span",
+      "cls": "yt-icon-shape ytSpecIconShapeHost",
+      "box": [
+        1324.66,
+        449.99,
+        24,
+        24
+      ],
+      "font": "Roboto 14px/0px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "flex",
+      "flexDir": "row",
+      "align": "center",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>0>0>0>0",
+      "tag": "div",
+      "box": [
+        1324.66,
+        449.99,
+        24,
+        24
+      ],
+      "font": "Roboto 14px/0px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>0>0>0>0>0",
+      "tag": "svg",
+      "box": [
+        1324.66,
+        449.99,
+        24,
+        24
+      ],
+      "font": "Roboto 14px/0px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "block",
+      "overflow": "hidden",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>0>0>0>0>0>0",
+      "tag": "path",
+      "box": [
+        1334.66,
+        453.99,
+        4,
+        16
+      ],
+      "font": "Roboto 14px/0px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "disp": "inline",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>1",
+      "tag": "yt-touch-feedback-shape",
+      "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse",
+      "box": [
+        1316.66,
+        441.99,
+        40,
+        40
+      ],
+      "font": "Roboto 14px/40px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "20px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>1>0",
+      "tag": "div",
+      "cls": "ytSpecTouchFeedbackShapeStroke",
+      "box": [
+        1316.66,
+        441.99,
+        40,
+        40
+      ],
+      "font": "Roboto 14px/40px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "20px",
+      "disp": "block",
+      "transition": "all",
+      "border": "1px solid rgb(0, 0, 0)"
+    },
+    {
+      "path": "0>0>0>0>2>0>2>0>0>1>1",
+      "tag": "div",
+      "cls": "ytSpecTouchFeedbackShapeFill",
+      "box": [
+        1316.66,
+        441.99,
+        40,
+        40
+      ],
+      "font": "Roboto 14px/40px w500 lsnormal",
+      "color": "rgb(15, 15, 15)",
+      "bg": "rgb(0, 0, 0)",
+      "radius": "20px",
+      "disp": "block",
+      "transition": "all"
+    },
+    {
+      "path": "0>1",
+      "tag": "yt-interaction",
+      "id": "interaction",
+      "cls": "extended rounded-large style-scope ytd-rich-item-renderer",
+      "box": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "mar": "-4px",
+      "disp": "none",
+      "transition": "all"
+    },
+    {
+      "path": "0>1>0",
+      "tag": "div",
+      "cls": "stroke style-scope yt-interaction",
+      "box": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "radius": "12px",
+      "disp": "block",
+      "transition": "all",
+      "border": "1px solid rgb(0, 0, 0)"
+    },
+    {
+      "path": "0>1>1",
+      "tag": "div",
+      "cls": "fill style-scope yt-interaction",
+      "box": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font": "Roboto 10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "bg": "rgb(0, 0, 0)",
+      "radius": "12px",
+      "disp": "block",
+      "transition": "all"
+    }
+  ],
+  "cardHTML": "<ytd-rich-item-renderer class=\"style-scope ytd-rich-grid-renderer\" items-per-row=\"3\" lockup=\"true\" rendered-from-rich-grid=\"\"><!--css-build:shady--><!--css_build_scope:ytd-rich-item-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><div id=\"content\" class=\"style-scope ytd-rich-item-renderer\"><yt-lockup-view-model class=\"ytd-rich-item-renderer lockup ytLockupViewModelWrapper\"><div class=\"ytLockupViewModelHost ytLockupViewModelVertical content-id-yekxxZjJ5Lo ytLockupViewModelRichGridLegacyMargin ytLockupViewModelFlexNone\"><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse ytSpecTouchFeedbackShapeThumbnailSizeLarge ytSpecTouchFeedbackShapeTriggerEvents\" style=\"margin: -12px;\"><div class=\"ytSpecTouchFeedbackShapeHoverEffect\" style=\"background: rgba(220, 139, 50, 0.13);\"></div><div class=\"ytSpecTouchFeedbackShapeStroke\" style=\"border-color: rgba(220, 139, 50, 0.13);\"></div><div class=\"ytSpecTouchFeedbackShapeFill\" style=\"background-color: rgba(220, 139, 50, 0.13);\"></div></yt-touch-feedback-shape><a href=\"/watch?v=yekxxZjJ5Lo&amp;pp=ugUHEgVlbi1VUw%3D%3D\" class=\"ytLockupViewModelContentImage\" tabindex=\"-1\" aria-hidden=\"true\"><yt-thumbnail-view-model class=\"ytThumbnailViewModelHost ytThumbnailViewModelAspectRatio16By9 ytThumbnailViewModelLarge\"><div class=\"ytThumbnailViewModelImage\"><img class=\"ytCoreImageHost ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleAspectFill ytCoreImageLoaded\" alt=\"\" src=\"https://i.ytimg.com/vi/yekxxZjJ5Lo/hq720.jpg?sqp=-oaymwEnCNAFEJQDSFryq4qpAxkIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB&amp;rs=AOn4CLBbROVw7zj9WPQ-DlL46dCg6hruxw\"></div><yt-thumbnail-bottom-overlay-view-model class=\"ytThumbnailBottomOverlayViewModelHost\"><div class=\"ytThumbnailBottomOverlayViewModelBadgeContainer ytThumbnailBottomOverlayViewModelBadgeContainerLarge\"><yt-thumbnail-badge-view-model class=\"ytThumbnailBadgeViewModelHost ytThumbnailBottomOverlayViewModelBadge\"><badge-shape class=\"ytBadgeShapeHost ytBadgeShapeThumbnailDefault ytBadgeShapeThumbnailBadge ytBadgeShapeTypography\"><div class=\"ytBadgeShapeText\">30:21</div></badge-shape></yt-thumbnail-badge-view-model></div></yt-thumbnail-bottom-overlay-view-model><!----></yt-thumbnail-view-model></a><div class=\"ytLockupViewModelMetadata\"><yt-lockup-metadata-view-model class=\"ytLockupMetadataViewModelHost ytLockupMetadataViewModelVertical ytLockupMetadataViewModelStandard ytLockupMetadataViewModelTypographyBump ytLockupMetadataViewModelRichGridLegacyTypography ytLockupMetadataViewModelHasMenuButton\"><div class=\"ytLockupMetadataViewModelAvatar\"><yt-decorated-avatar-view-model class=\"ytDecoratedAvatarViewModelHost\"><yt-avatar-shape><div class=\"ytSpecAvatarShapeHost ytSpecAvatarShapeButton ytSpecAvatarShapeButtonMedium ytSpecAvatarShapeTappable\" aria-label=\"Go to channel Captain Discovery\" role=\"button\" tabindex=\"0\"><div class=\"\"><div class=\"ytSpecAvatarShapeAvatarSizeMedium\"><img class=\"ytCoreImageHost ytSpecAvatarShapeImage ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleToFill ytCoreImageLoaded\" alt=\"\" src=\"https://yt3.ggpht.com/qwE1f8a4Pu0SgHj9rftYr1UkFT8aQvsFZIRxHiK8QUev21ZWORqIuHgwXF1alW6yEXF0Mm_QVxY=s68-c-k-c0x00ffffff-no-rj\"><div class=\"ytSpecAvatarShapeImageOverlays ytSpecAvatarShapeImage\"></div></div></div></div></yt-avatar-shape></yt-decorated-avatar-view-model></div><div class=\"ytLockupMetadataViewModelTextContainer\"><h3 class=\"ytLockupMetadataViewModelHeadingReset\" title=\"How It's Made: Noodles, Pasta, Mac &amp; Cheese\" aria-label=\"How It's Made: Noodles, Pasta, Mac &amp; Cheese\"><a href=\"/watch?v=yekxxZjJ5Lo&amp;pp=ugUHEgVlbi1VUw%3D%3D\" class=\"ytLockupMetadataViewModelTitle\" aria-label=\"How It's Made: Noodles, Pasta, Mac &amp; Cheese 30 minutes\"><span class=\"ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap\" dir=\"auto\" role=\"text\" style=\"\">How It's Made: Noodles, Pasta, Mac &amp; Cheese</span></a></h3><div class=\"ytLockupMetadataViewModelMetadata\"><yt-content-metadata-view-model class=\"ytContentMetadataViewModelHost ytContentMetadataViewModelMediumText\"><div class=\"ytContentMetadataViewModelMetadataRow\" role=\"group\"><span class=\"ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor\" dir=\"auto\"><span class=\"\" dir=\"auto\" style=\"font-weight: 400;\"><a class=\"ytAttributedStringLink ytAttributedStringLinkCallToActionColor ytAttributedStringLinkInheritColor\" href=\"/@CaptainDiscover\" target=\"\" tabindex=\"0\" force-new-state=\"true\" style=\"\">Captain Discovery<span class=\"ytAttributedStringLinkInheritColor\" dir=\"auto\" style=\"color: rgb(96, 96, 96);\"><span class=\"ytAttributedStringInlineBlockMod\" style=\"margin-left: 4px;\"><span class=\"ytIconWrapperHost ytAttributedStringImageElement ytAttributedStringImageAlignmentVerticalCenter\" role=\"img\" aria-label=\"\" aria-hidden=\"true\" style=\"height: 14px; width: 14px;\"><span class=\"yt-icon-shape ytSpecIconShapeHost\"><div style=\"width: 100%; height: 100%; display: block; fill: currentcolor;\"><svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" focusable=\"false\" aria-hidden=\"true\" style=\"pointer-events: none; display: inherit; width: 100%; height: 100%;\"><path d=\"M12 1C5.925 1 1 5.925 1 12s4.925 11 11 11 11-4.925 11-11S18.075 1 12 1Zm5.707 7.293a1 1 0 010 1.414L10 17.414l-3.707-3.707a1 1 0 111.414-1.414L10 14.586l6.293-6.293a1 1 0 011.414 0Z\"></path></svg></div></span></span></span></span></a></span></span></div><div class=\"ytContentMetadataViewModelMetadataRow\" role=\"group\"><span class=\"ytAttributedStringHost ytContentMetadataViewModelMetadataText ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor\" dir=\"auto\" role=\"text\">961K views</span><span aria-hidden=\"true\" class=\"ytContentMetadataViewModelDelimiter\"> • </span><span class=\"ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor\" dir=\"auto\" aria-label=\"10 months ago\" role=\"text\">10 months ago</span></div></yt-content-metadata-view-model></div></div><div class=\"ytLockupMetadataViewModelMenuButton\"><button-view-model class=\"ytSpecButtonViewModelHost\"><button class=\"ytSpecButtonShapeNextHost ytSpecButtonShapeNextText ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconButton ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding\" title=\"\" aria-label=\"More actions\" aria-disabled=\"false\" style=\"\"><div aria-hidden=\"true\" class=\"ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent\"><span class=\"ytIconWrapperHost\" style=\"width: 24px; height: 24px;\"><span class=\"yt-icon-shape ytSpecIconShapeHost\"><div style=\"width: 100%; height: 100%; display: block; fill: currentcolor;\"><svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" focusable=\"false\" aria-hidden=\"true\" style=\"pointer-events: none; display: inherit; width: 100%; height: 100%;\"><path d=\"M12 4a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Z\"></path></svg></div></span></span></div><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse\"><div class=\"ytSpecTouchFeedbackShapeStroke\"></div><div class=\"ytSpecTouchFeedbackShapeFill\"></div></yt-touch-feedback-shape></button></button-view-model></div></yt-lockup-metadata-view-model></div></div></yt-lockup-view-model></div>\n<yt-interaction id=\"interaction\" class=\"extended rounded-large style-scope ytd-rich-item-renderer\" hidden=\"\"><!--css-build:shady--><!--css_build_scope:yt-interaction--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.ui.yt_interaction.yt.interaction.css.js--><div class=\"stroke style-scope yt-interaction\"></div><div class=\"fill style-scope yt-interaction\"></div></yt-interaction>\n</ytd-rich-item-renderer>",
+  "cardOutline": {
+    "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+    "box": "533.33x409.99",
+    "c": [
+      {
+        "n": "div#content.style-scope.ytd-rich-item-renderer",
+        "box": "533.33x409.99",
+        "c": [
+          {
+            "n": "yt-lockup-view-model",
+            "box": "533.33x377.99",
+            "c": [
+              {
+                "n": "div.ytLockupViewModelHost.ytLockupViewModelVertical.content-id-yekxxZjJ5Lo",
+                "box": "533.33x377.99",
+                "c": [
+                  {
+                    "n": "yt-touch-feedback-shape.ytSpecTouchFeedbackShapeHost.ytSpecTouchFeedbackShapeTouchResponse.ytSpecTouchFeedbackShapeThumbnailSizeLarge",
+                    "box": "557.33x401.99",
+                    "c": [
+                      {
+                        "n": "div.ytSpecTouchFeedbackShapeHoverEffect",
+                        "box": "501.6x361.79"
+                      },
+                      {
+                        "n": "div.ytSpecTouchFeedbackShapeStroke",
+                        "box": "557.33x401.99"
+                      },
+                      {
+                        "n": "div.ytSpecTouchFeedbackShapeFill",
+                        "box": "557.33x401.99"
+                      }
+                    ]
+                  },
+                  {
+                    "n": "a.ytLockupViewModelContentImage",
+                    "box": "533.33x311.99",
+                    "c": [
+                      {
+                        "n": "yt-thumbnail-view-model",
+                        "box": "533.33x299.99",
+                        "c": [
+                          {
+                            "n": "div.ytThumbnailViewModelImage",
+                            "box": "533.33x299.99",
+                            "c": [
+                              {
+                                "n": "img.ytCoreImageHost.ytCoreImageFillParentHeight.ytCoreImageFillParentWidth",
+                                "box": "533.33x299.99"
+                              }
+                            ]
+                          },
+                          {
+                            "n": "yt-thumbnail-bottom-overlay-view-model.ytThumbnailBottomOverlayViewModelHost",
+                            "box": "533.33x28",
+                            "c": [
+                              {
+                                "n": "div.ytThumbnailBottomOverlayViewModelBadgeContainer.ytThumbnailBottomOverlayViewModelBadgeContainerLarge",
+                                "box": "50.45x28",
+                                "c": [
+                                  {
+                                    "n": "yt-thumbnail-badge-view-model.ytThumbnailBadgeViewModelHost.ytThumbnailBottomOverlayViewModelBadge",
+                                    "box": "38.45x20",
+                                    "c": [
+                                      {
+                                        "n": "badge-shape.ytBadgeShapeHost.ytBadgeShapeThumbnailDefault.ytBadgeShapeThumbnailBadge",
+                                        "box": "38.45x20",
+                                        "c": [
+                                          {
+                                            "n": "div.ytBadgeShapeText",
+                                            "box": "30.45x18",
+                                            "t": "30:21"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "n": "div.ytLockupViewModelMetadata",
+                    "box": "533.33x66",
+                    "c": [
+                      {
+                        "n": "yt-lockup-metadata-view-model.ytLockupMetadataViewModelHost.ytLockupMetadataViewModelVertical.ytLockupMetadataViewModelStandard",
+                        "box": "533.33x66",
+                        "c": [
+                          {
+                            "n": "div.ytLockupMetadataViewModelAvatar",
+                            "box": "36x66",
+                            "c": [
+                              {
+                                "n": "yt-decorated-avatar-view-model",
+                                "box": "36x36",
+                                "c": [
+                                  {
+                                    "n": "yt-avatar-shape",
+                                    "box": "36x36",
+                                    "c": [
+                                      {
+                                        "n": "div.ytSpecAvatarShapeHost.ytSpecAvatarShapeButton.ytSpecAvatarShapeButtonMedium",
+                                        "box": "36x36",
+                                        "c": [
+                                          {
+                                            "n": "div",
+                                            "box": "40x40",
+                                            "c": [
+                                              {
+                                                "n": "div.ytSpecAvatarShapeAvatarSizeMedium",
+                                                "box": "36x36",
+                                                "c": [
+                                                  {
+                                                    "n": "img.ytCoreImageHost.ytSpecAvatarShapeImage.ytCoreImageFillParentHeight",
+                                                    "box": "36x36"
+                                                  },
+                                                  {
+                                                    "n": "div.ytSpecAvatarShapeImageOverlays.ytSpecAvatarShapeImage",
+                                                    "box": "36x36"
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "n": "div.ytLockupMetadataViewModelTextContainer",
+                            "box": "350.69x66",
+                            "c": [
+                              {
+                                "n": "h3.ytLockupMetadataViewModelHeadingReset",
+                                "box": "350.69x22",
+                                "c": [
+                                  {
+                                    "n": "a.ytLockupMetadataViewModelTitle",
+                                    "box": "350.69x22",
+                                    "c": [
+                                      {
+                                        "n": "span.ytAttributedStringHost.ytAttributedStringWhiteSpacePreWrap",
+                                        "box": "326.69x19",
+                                        "t": "How It's Made: Noodles, Pasta, Mac & Cheese"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "n": "div.ytLockupMetadataViewModelMetadata",
+                                "box": "350.69x44",
+                                "c": [
+                                  {
+                                    "n": "yt-content-metadata-view-model.ytContentMetadataViewModelHost.ytContentMetadataViewModelMediumText",
+                                    "box": "350.69x42",
+                                    "c": [
+                                      {
+                                        "n": "div.ytContentMetadataViewModelMetadataRow",
+                                        "box": "350.69x20",
+                                        "c": [
+                                          {
+                                            "n": "span.ytAttributedStringHost.ytContentMetadataViewModelMetadataText.ytContentMetadataViewModelMetadataTextLastPart",
+                                            "box": "130.03x20",
+                                            "c": [
+                                              {
+                                                "n": "span",
+                                                "box": "130.03x16.5",
+                                                "c": [
+                                                  {
+                                                    "n": "a.ytAttributedStringLink.ytAttributedStringLinkCallToActionColor.ytAttributedStringLinkInheritColor",
+                                                    "box": "130.03x16.5",
+                                                    "t": "Captain Discovery",
+                                                    "c": [
+                                                      {
+                                                        "n": "span.ytAttributedStringLinkInheritColor",
+                                                        "box": "18x16.5",
+                                                        "c": [
+                                                          {
+                                                            "n": "span.ytAttributedStringInlineBlockMod",
+                                                            "box": "14x20"
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "n": "div.ytContentMetadataViewModelMetadataRow",
+                                        "box": "350.69x20",
+                                        "c": [
+                                          {
+                                            "n": "span.ytAttributedStringHost.ytContentMetadataViewModelMetadataText.ytAttributedStringWhiteSpacePreWrap",
+                                            "box": "71.22x20",
+                                            "t": "961K views"
+                                          },
+                                          {
+                                            "n": "span.ytContentMetadataViewModelDelimiter",
+                                            "box": "4.73x20",
+                                            "t": "•"
+                                          },
+                                          {
+                                            "n": "span.ytAttributedStringHost.ytContentMetadataViewModelMetadataText.ytContentMetadataViewModelMetadataTextLastPart",
+                                            "box": "93.66x20",
+                                            "t": "10 months ago"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "n": "div.ytLockupMetadataViewModelMenuButton",
+                            "box": "40x40",
+                            "c": [
+                              {
+                                "n": "button-view-model.ytSpecButtonViewModelHost",
+                                "box": "40x40",
+                                "c": [
+                                  {
+                                    "n": "button.ytSpecButtonShapeNextHost.ytSpecButtonShapeNextText.ytSpecButtonShapeNextMono",
+                                    "box": "40x40",
+                                    "c": [
+                                      {
+                                        "n": "div.ytSpecButtonShapeNextIcon.ytSpecButtonShapeNextElevatedContent",
+                                        "box": "24x24",
+                                        "c": [
+                                          {
+                                            "n": "span.ytIconWrapperHost",
+                                            "box": "24x24",
+                                            "c": [
+                                              {
+                                                "n": "span.yt-icon-shape.ytSpecIconShapeHost",
+                                                "box": "24x24",
+                                                "c": [
+                                                  {
+                                                    "n": "div",
+                                                    "box": "24x24",
+                                                    "c": [
+                                                      {
+                                                        "n": "svg",
+                                                        "box": "24x24",
+                                                        "c": [
+                                                          {
+                                                            "n": "path",
+                                                            "box": "4x16"
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "n": "yt-touch-feedback-shape.ytSpecTouchFeedbackShapeHost.ytSpecTouchFeedbackShapeTouchResponse",
+                                        "box": "40x40",
+                                        "c": [
+                                          {
+                                            "n": "div.ytSpecTouchFeedbackShapeStroke",
+                                            "box": "40x40"
+                                          },
+                                          {
+                                            "n": "div.ytSpecTouchFeedbackShapeFill",
+                                            "box": "40x40"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div.stroke.style-scope.yt-interaction",
+            "box": "0x0"
+          },
+          {
+            "n": "div.fill.style-scope.yt-interaction",
+            "box": "0x0"
+          }
+        ]
+      }
+    ]
+  },
+  "gridGeometry": {
+    "columnsInRow": 2,
+    "itemW": 533.33,
+    "itemH": 409.99,
+    "hGap": 16,
+    "colPitch": 549.33,
+    "vGap": 76,
+    "firstLeft": 813.33
+  },
+  "shelf": {
+    "section": {
+      "tag": "ytd-rich-section-renderer",
+      "class": "style-scope ytd-rich-grid-renderer",
+      "rect": {
+        "x": 256,
+        "y": 577.99,
+        "w": 1648,
+        "h": 640.89
+      },
+      "text": "Shorts\n3 Things In Japan That are Weirdly Brilliant 🇯🇵\n5.3M views\nCalifornia's Biggest Map Mistake 🌎\n129K views\nWhat ",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1648px",
+      "height": "640.891px"
+    },
+    "shelf": {
+      "tag": "ytd-rich-shelf-renderer",
+      "class": "style-scope ytd-rich-section-renderer",
+      "rect": {
+        "x": 264,
+        "y": 577.99,
+        "w": 1632,
+        "h": 640.89
+      },
+      "text": "Shorts\n3 Things In Japan That are Weirdly Brilliant 🇯🇵\n5.3M views\nCalifornia's Biggest Map Mistake 🌎\n129K views\nWhat ",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1632px",
+      "height": "640.891px"
+    },
+    "shelfTitle": {
+      "tag": "h2",
+      "class": "style-scope ytd-rich-shelf-renderer",
+      "rect": {
+        "x": 272,
+        "y": 577.99,
+        "w": 95.66,
+        "h": 28
+      },
+      "text": "Shorts",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "15px",
+        "weight": "700",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "95.6641px",
+      "height": "28px"
+    },
+    "shortsItem": {
+      "tag": "ytm-shorts-lockup-view-model-v2",
+      "rect": {
+        "x": 264,
+        "y": 621.99,
+        "w": 313.59,
+        "h": 548.89
+      },
+      "text": "3 Things In Japan That are Weirdly Brilliant 🇯🇵\n5.3M views",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "313.594px",
+      "height": "548.891px"
+    }
+  },
+  "samples": [
+    {
+      "title": "How It's Made: Noodles, Pasta, Mac & Cheese",
+      "lines": [
+        "30:21",
+        "How It's Made: Noodles, Pasta, Mac & Cheese",
+        "Captain Discovery",
+        "961K views",
+        "•",
+        "10 months ago"
+      ]
+    },
+    {
+      "title": "The Beatles - Rooftop Concert (30/1/1969)",
+      "lines": [
+        "12:40",
+        "The Beatles - Rooftop Concert (30/1/1969)",
+        "The Beatles Performances",
+        "3.4M views",
+        "•",
+        "2 months ago"
+      ]
+    },
+    {
+      "title": "3 Things In Japan That are Weirdly Brilliant 🇯🇵",
+      "lines": [
+        "3 Things In Japan That are Weirdly Brilliant 🇯🇵",
+        "5.3M views"
+      ]
+    },
+    {
+      "title": "California's Biggest Map Mistake 🌎",
+      "lines": [
+        "California's Biggest Map Mistake 🌎",
+        "129K views"
+      ]
+    },
+    {
+      "title": "What North Korea Is Like Now",
+      "lines": [
+        "What North Korea Is Like Now",
+        "20M views"
+      ]
+    },
+    {
+      "title": "Sumerian Hamburger (2000 BC)",
+      "lines": [
+        "Sumerian Hamburger (2000 BC)",
+        "714K views"
+      ]
+    },
+    {
+      "title": "Why Delta Force Feared This Guy",
+      "lines": [
+        "Why Delta Force Feared This Guy",
+        "18M views"
+      ]
+    },
+    {
+      "title": "How Toilet Paper is Made - Industrial Process for Manufacturing Toilet Paper Rolls",
+      "lines": [
+        "12:43",
+        "How Toilet Paper is Made - Industrial Process for Manufacturing Toilet Paper Rolls",
+        "Tudo Tech HD",
+        "1.8M views",
+        "•",
+        "1 year ago",
+        "Dubbed"
+      ]
+    },
+    {
+      "title": "Living in Norway | The Truth About Life in the World's Richest and Most Beautiful Country | 4K",
+      "lines": [
+        "35:26",
+        "Living in Norway | The Truth About Life in the World's Richest and Most Beautiful Country | 4K",
+        "Happy Travel 99",
+        "1.4M views",
+        "•",
+        "1 month ago"
+      ]
+    },
+    {
+      "title": "Can I quit my job if I find this?…",
+      "lines": [
+        "Can I quit my job if I find this?…",
+        "6.6M views"
+      ]
+    },
+    {
+      "title": "Babies Are Born With Water Reflexes—Here’s What Swim Lessons Really Do",
+      "lines": [
+        "Babies Are Born With Water Reflexes—Here’s What Swim Lessons Really Do",
+        "7.7M views"
+      ]
+    },
+    {
+      "title": "Doctor reacts: extreme nail growth 😳",
+      "lines": [
+        "Doctor reacts: extreme nail growth 😳",
+        "1.7M views"
+      ]
+    },
+    {
+      "title": "Jacob Batalon Had the WORST Spider-Man Audition 😭🕷️…",
+      "lines": [
+        "Jacob Batalon Had the WORST Spider-Man Audition 😭🕷️…",
+        "3.4M views"
+      ]
+    },
+    {
+      "title": "How To See Underwater Without Goggles 😮",
+      "lines": [
+        "How To See Underwater Without Goggles 😮",
+        "15M views"
+      ]
+    },
+    {
+      "title": "11 Water Bottle Brands to Never Buy And 8 That Are Actually Safe",
+      "lines": [
+        "30:40",
+        "11 Water Bottle Brands to Never Buy And 8 That Are Actually Safe",
+        "Consumer Tips",
+        "812 views",
+        "•",
+        "1 day ago"
+      ]
+    },
+    {
+      "title": "How Ferrero Makes Millions Of Chocolates In America",
+      "lines": [
+        "19:20",
+        "How Ferrero Makes Millions Of Chocolates In America",
+        "Business Insider",
+        "166K views",
+        "•",
+        "1 day ago"
+      ]
+    },
+    {
+      "title": "How It's Made: M&Ms",
+      "lines": [
+        "9:34",
+        "How It's Made: M&Ms",
+        "How It's Made",
+        "1.5M views",
+        "•",
+        "3 years ago"
+      ]
+    },
+    {
+      "title": "Does Star Trek's USS Enterprise Design Make Sense?",
+      "lines": [
+        "21:00",
+        "Does Star Trek's USS Enterprise Design Make Sense?",
+        "Adam Savage’s Tested",
+        "2.6M views",
+        "•",
+        "10 days ago"
+      ]
+    },
+    {
+      "title": "Just so you know!!! :)",
+      "lines": [
+        "0:49",
+        "Just so you know!!! :)",
+        "Zendaya",
+        "10M views",
+        "•",
+        "15 years ago"
+      ]
+    },
+    {
+      "title": "Japan JUST UNVEILED an $8,000 Pickup That Changes Everything!",
+      "lines": [
+        "19:42",
+        "Japan JUST UNVEILED an $8,000 Pickup That Changes Everything!",
+        "Top4Cars",
+        "489 views",
+        "•",
+        "1 day ago"
+      ]
+    },
+    {
+      "title": "Is spider web really stronger than steel?",
+      "lines": [
+        "26:58",
+        "Is spider web really stronger than steel?",
+        "Veritasium",
+        "6M views",
+        "•",
+        "2 weeks ago"
+      ]
+    },
+    {
+      "title": "Medical TikToks Doctors Can't Ignore",
+      "lines": [
+        "17:39",
+        "Medical TikToks Doctors Can't Ignore",
+        "Doctor Mike",
+        "3.5M views",
+        "•",
+        "2 months ago"
+      ]
+    },
+    {
+      "title": "10 Things You SHOULD Be Buying at Costco in August 2026",
+      "lines": [
+        "17:55",
+        "10 Things You SHOULD Be Buying at Costco in August 2026",
+        "The Deal Guy",
+        "967K views",
+        "•",
+        "7 days ago"
+      ]
+    },
+    {
+      "title": "Avengers: Doomsday | Special Look | In Theaters December 18",
+      "lines": [
+        "2:10",
+        "LIVE",
+        "Avengers: Doomsday | Special Look | In Theaters December 18",
+        "Marvel Entertainment",
+        "26M views",
+        "•",
+        "1 day ago"
+      ]
+    },
+    {
+      "title": "Man Spent Two Years Building HUGE Wooden House for his Family | Start to Finish by @bjornbrenton",
+      "lines": [
+        "43:37",
+        "Man Spent Two Years Building HUGE Wooden House for his Family | Start to Finish by @bjornbrenton",
+        "World Build",
+        "4M views",
+        "•",
+        "1 month ago"
+      ]
+    },
+    {
+      "title": "Tom Holland and Jon Bernthal Team Up While Eating Spicy Wings | Hot Ones",
+      "lines": [
+        "29:21",
+        "Tom Holland and Jon Bernthal Team Up While Eating Spicy Wings | Hot Ones",
+        "First We Feast",
+        "12M views",
+        "•",
+        "3 weeks ago"
+      ]
+    },
+    {
+      "title": "American Airlines flies two jets with same flight number simultaneously in dangerous mistake",
+      "lines": [
+        "1:29",
+        "American Airlines flies two jets with same flight number simultaneously in dangerous mistake",
+        "CBS Evening News",
+        "387K views",
+        "•",
+        "1 day ago"
+      ]
+    },
+    {
+      "title": "What Archaeologists Discovered in Ancient Egypt | Lost Treasures of Egypt MEGA Episode | Nat Geo",
+      "lines": [
+        "2:12:23",
+        "LIVE",
+        "What Archaeologists Discovered in Ancient Egypt | Lost Treasures of Egypt MEGA Episode | Nat Geo",
+        "National Geographic",
+        "1.5M views",
+        "•",
+        "3 weeks ago"
+      ]
+    },
+    {
+      "title": "I filmed 2935 DAYS for this TIMELAPSE!",
+      "lines": [
+        "30:07",
+        "I filmed 2935 DAYS for this TIMELAPSE!",
+        "Interesting as FCK",
+        "11M views",
+        "•",
+        "1 year ago"
+      ]
+    },
+    {
+      "title": "Tropical Sunset Jazz 🌴 Warm Beach Lounge, Ocean Waves & Smooth Jazz Piano for Peaceful Evenings",
+      "lines": [
+        "LIVE",
+        "LIVE",
+        "Tropical Sunset Jazz 🌴 Warm Beach Lounge, Ocean Waves & Smooth Jazz Piano for Peaceful Evenings",
+        "Cozy Wood",
+        "338 watching"
+      ]
+    },
+    {
+      "title": "Live Mass 2026-08-16",
+      "lines": [
+        "1:34:50",
+        "Live Mass 2026-08-16",
+        "Our Lady Star Of The Sea",
+        "113 views",
+        "•",
+        "Streamed 4 hours ago"
+      ]
+    },
+    {
+      "title": "Can Pro Bikers Beat this IMPOSSIBLE Obstacle Course?",
+      "lines": [
+        "12:17",
+        "Can Pro Bikers Beat this IMPOSSIBLE Obstacle Course?",
+        "Red Bull Bike",
+        "17M views",
+        "•",
+        "2 weeks ago"
+      ]
+    },
+    {
+      "title": "What Exists in the Deepest Place on Earth?",
+      "lines": [
+        "22:11",
+        "What Exists in the Deepest Place on Earth?",
+        "BeyondTheBlue",
+        "2M views",
+        "•",
+        "4 months ago"
+      ]
+    }
+  ]
+}

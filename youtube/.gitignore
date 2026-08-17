@@ -1,0 +1,40 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+
+# The local database and the local blob store.
+#
+# `.data/blobs` is the filesystem `BlobStore` adapter's root: every segment
+# every local upload ever produced. It is regenerable by `pnpm seed` and it is
+# the one directory in this project that grows without bound.
+.data/
+*.db
+*.db-wal
+*.db-shm
+
+# Screenshots of the *signed-in* YouTube app.
+#
+# The visual-research lanes split by sensitivity: the logged-out captures are
+# reference material and stay, but the signed-in ones show a real account's
+# home feed, subscriptions and watch history, and a screenshot cannot be
+# sanitised the way a measurement table can. Everything extracted from them —
+# the token values, the type scale, the row geometry — lives on in
+# `research/09-youtube-signedin-surfaces.md`, which is the part worth keeping.
+research/screenshots/signedin-*
+
+# Source media pulled by the optional `pnpm seed:demo`. Creative Commons, but
+# still tens of megabytes of video that has no business in a git history.
+public/demo-media/
+
+test-results/
+playwright-report/
+blob-report/
+.playwright-mcp/
+*.tsbuildinfo
+.env
+.env.local
+.env*.local
+.DS_Store
+.vercel

@@ -1,0 +1,1275 @@
+{
+  "chips": {
+    "selectedDump": [
+      {
+        "path": "0",
+        "tag": "yt-chip-cloud-chip-renderer",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer iron-selected",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "12px 12px 12px 0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0",
+        "tag": "div",
+        "id": "chip-shape-container",
+        "cls": "style-scope yt-chip-cloud-chip-renderer",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "chip-shape",
+        "cls": "ytChipShapeHost",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0",
+        "tag": "button",
+        "cls": "ytChipShapeButtonReset",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0",
+        "tag": "div",
+        "cls": "ytChipShapeChip ytChipShapeActive ytChipShapeOnlyTextPadding",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgb(15, 15, 15)",
+        "radius": "8px",
+        "pad": "0px 12px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0",
+        "tag": "div",
+        "txt": "All",
+        "box": [
+          16.42,
+          20
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>1",
+        "tag": "yt-touch-feedback-shape",
+        "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>1>0",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeStroke",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "1px solid rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>1>1",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeFill",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "block",
+        "transition": "all"
+      }
+    ],
+    "unselectedDump": [
+      {
+        "path": "0",
+        "tag": "yt-chip-cloud-chip-renderer",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          112,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "12px 12px 12px 0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0",
+        "tag": "div",
+        "id": "chip-shape-container",
+        "cls": "style-scope yt-chip-cloud-chip-renderer",
+        "box": [
+          112,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "chip-shape",
+        "cls": "ytChipShapeHost",
+        "box": [
+          112,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0",
+        "tag": "button",
+        "cls": "ytChipShapeButtonReset",
+        "box": [
+          112,
+          32
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0",
+        "tag": "div",
+        "cls": "ytChipShapeChip ytChipShapeInactive ytChipShapeOnlyTextPadding",
+        "box": [
+          112,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "radius": "8px",
+        "pad": "0px 12px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0",
+        "tag": "div",
+        "txt": "How It's Made",
+        "box": [
+          88,
+          20
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>1",
+        "tag": "yt-touch-feedback-shape",
+        "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse",
+        "box": [
+          112,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>1>0",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeStroke",
+        "box": [
+          112,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "1px solid rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>1>1",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeFill",
+        "box": [
+          112,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      }
+    ],
+    "selectedHTML": "<yt-chip-cloud-chip-renderer class=\"style-scope ytd-feed-filter-chip-bar-renderer iron-selected\" chip-style=\"STYLE_HOME_FILTER\" selected=\"\"><!--css-build:shady--><!--css_build_scope:yt-chip-cloud-chip-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.ui.renderers.sections.yt_chip_cloud_chip_renderer.yt.chip.cloud.chip.renderer.css.js--><div id=\"chip-shape-container\" class=\"style-scope yt-chip-cloud-chip-renderer\">\n    <chip-shape class=\"ytChipShapeHost\"><button class=\"ytChipShapeButtonReset\" role=\"tab\" aria-selected=\"true\"><div class=\"ytChipShapeChip ytChipShapeActive ytChipShapeOnlyTextPadding\"><div>All</div><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse\"><div class=\"ytSpecTouchFeedbackShapeStroke\" style=\"border-radius: 8px;\"></div><div class=\"ytSpecTouchFeedbackShapeFill\" style=\"border-radius: 8px;\"></div></yt-touch-feedback-shape></div></button></chip-shape>\n</div>\n</yt-chip-cloud-chip-renderer>",
+    "barDump": [
+      {
+        "path": "0",
+        "tag": "ytd-feed-filter-chip-bar-renderer",
+        "cls": "style-scope ytd-rich-grid-renderer",
+        "box": [
+          1680,
+          56
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0",
+        "tag": "div",
+        "id": "chips-wrapper",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          1680,
+          56
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "div",
+        "id": "chips-content",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          1680,
+          56
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px 24px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0",
+        "tag": "div",
+        "id": "left-arrow",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "none",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0",
+        "tag": "div",
+        "id": "left-arrow-button",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0",
+        "tag": "ytd-button-renderer",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgb(255, 255, 255)",
+        "radius": "16px",
+        "pad": "0px",
+        "mar": "0px 12px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0",
+        "tag": "yt-button-shape",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0",
+        "tag": "button",
+        "cls": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextText ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconOnlyDefault ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "pad": "0px 16px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0",
+        "tag": "div",
+        "cls": "ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/0px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>0",
+        "tag": "span",
+        "cls": "ytIconWrapperHost",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/0px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape ytSpecIconShapeHost",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/0px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/0px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/0px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/0px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "inline",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>1",
+        "tag": "yt-touch-feedback-shape",
+        "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>1>0",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeStroke",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "1px solid rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0>0>1>1",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeFill",
+        "box": [
+          0,
+          0
+        ],
+        "font": "14px/40px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "50%",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>1",
+        "tag": "tp-yt-paper-tooltip",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>1>0",
+        "tag": "div",
+        "id": "tooltip",
+        "cls": "hidden style-scope tp-yt-paper-tooltip",
+        "txt": "Previous",
+        "box": [
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgb(97, 97, 97)",
+        "radius": "4px",
+        "pad": "8px",
+        "mar": "8px",
+        "border": "0px none rgb(255, 255, 255)",
+        "disp": "none",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>1",
+        "tag": "div",
+        "id": "filter",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          0,
+          56
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2",
+        "tag": "div",
+        "id": "scroll-container",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          1632,
+          56
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0",
+        "tag": "iron-selector",
+        "id": "chips",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer",
+        "box": [
+          2019.31,
+          56
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-block",
+        "transition": "0.15s cubic-bezier(0.05, 0, 0, 1)"
+      },
+      {
+        "path": "0>0>0>2>0>0",
+        "tag": "yt-chip-cloud-chip-renderer",
+        "cls": "style-scope ytd-feed-filter-chip-bar-renderer iron-selected",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "12px 12px 12px 0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0",
+        "tag": "div",
+        "id": "chip-shape-container",
+        "cls": "style-scope yt-chip-cloud-chip-renderer",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0",
+        "tag": "chip-shape",
+        "cls": "ytChipShapeHost",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0>0",
+        "tag": "button",
+        "cls": "ytChipShapeButtonReset",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "inline-flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0>0>0",
+        "tag": "div",
+        "cls": "ytChipShapeChip ytChipShapeActive ytChipShapeOnlyTextPadding",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgb(15, 15, 15)",
+        "radius": "8px",
+        "pad": "0px 12px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0>0>0>0",
+        "tag": "div",
+        "txt": "All",
+        "box": [
+          16.42,
+          20
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0>0>0>1",
+        "tag": "yt-touch-feedback-shape",
+        "cls": "ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0>0>0>1>0",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeStroke",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "1px solid rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>2>0>0>0>0>0>0>1>1",
+        "tag": "div",
+        "cls": "ytSpecTouchFeedbackShapeFill",
+        "box": [
+          40.42,
+          32
+        ],
+        "font": "14px/20px w500 lsnormal",
+        "color": "rgb(241, 241, 241)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "8px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(241, 241, 241)",
+        "disp": "block",
+        "transition": "all"
+      }
+    ],
+    "chipGap": 12,
+    "chipHeights": [
+      32,
+      32,
+      32,
+      32,
+      32,
+      32
+    ]
+  },
+  "chipHover": {
+    "cls": "style-scope yt-chip-cloud-chip-renderer",
+    "bg": "rgba(0, 0, 0, 0)",
+    "color": "rgb(0, 0, 0)",
+    "border": "rgb(0, 0, 0)",
+    "transition": "all"
+  },
+  "mini": {
+    "entryDump": [
+      {
+        "path": "0",
+        "tag": "ytd-mini-guide-entry-renderer",
+        "cls": "style-scope ytd-mini-guide-renderer",
+        "box": [
+          64,
+          76
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "10px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0",
+        "tag": "a",
+        "id": "endpoint",
+        "cls": "yt-simple-endpoint style-scope ytd-mini-guide-entry-renderer",
+        "box": [
+          64,
+          76
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "16px 0px 14px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "yt-icon",
+        "id": "icon",
+        "cls": "guide-icon style-scope ytd-mini-guide-entry-renderer",
+        "box": [
+          24,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px 0px 6px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape style-scope yt-icon ytSpecIconShapeHost",
+        "box": [
+          24,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flex",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          24,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          24,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          21.97,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "inline",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>1",
+        "tag": "span",
+        "cls": "title style-scope ytd-mini-guide-entry-renderer",
+        "txt": "Home",
+        "box": [
+          26.91,
+          16
+        ],
+        "font": "10px/16px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "flow-root",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>2",
+        "tag": "tp-yt-paper-tooltip",
+        "cls": "style-scope ytd-mini-guide-entry-renderer",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "none",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>2>0",
+        "tag": "div",
+        "id": "tooltip",
+        "cls": "hidden style-scope tp-yt-paper-tooltip",
+        "txt": "Home",
+        "box": [
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgb(97, 97, 97)",
+        "radius": "4px",
+        "pad": "8px",
+        "mar": "8px",
+        "border": "0px none rgb(255, 255, 255)",
+        "disp": "none",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>3",
+        "tag": "yt-interaction",
+        "cls": "style-scope ytd-mini-guide-entry-renderer",
+        "box": [
+          64,
+          76
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>3>0",
+        "tag": "div",
+        "cls": "stroke style-scope yt-interaction",
+        "box": [
+          64,
+          76
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "1px solid rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>0>3>1",
+        "tag": "div",
+        "cls": "fill style-scope yt-interaction",
+        "box": [
+          64,
+          76
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(15, 15, 15)",
+        "disp": "block",
+        "transition": "all"
+      },
+      {
+        "path": "0>1",
+        "tag": "span",
+        "cls": "style-scope ytd-mini-guide-entry-renderer",
+        "box": [
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "0px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "none",
+        "transition": "all"
+      },
+      {
+        "path": "0>1>0",
+        "tag": "button",
+        "id": "ally-menu-button",
+        "cls": "ally-menu-button style-scope ytd-mini-guide-entry-renderer",
+        "box": [
+          0,
+          0
+        ],
+        "font": "13.3333px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgb(239, 239, 239)",
+        "radius": "0px",
+        "pad": "0px",
+        "mar": "-1px",
+        "border": "0px none rgb(0, 0, 0)",
+        "disp": "block",
+        "transition": "all"
+      }
+    ],
+    "entries": [
+      {
+        "text": "Home",
+        "box": [
+          4,
+          60,
+          64,
+          76
+        ],
+        "active": false,
+        "titleFont": [
+          "10px",
+          "400",
+          "16px",
+          "normal",
+          "rgb(15, 15, 15)"
+        ]
+      },
+      {
+        "text": "Shorts",
+        "box": [
+          4,
+          136,
+          64,
+          76
+        ],
+        "active": false,
+        "titleFont": [
+          "10px",
+          "400",
+          "16px",
+          "normal",
+          "rgb(15, 15, 15)"
+        ]
+      },
+      {
+        "text": "Subscriptions",
+        "box": [
+          4,
+          212,
+          64,
+          76
+        ],
+        "active": false,
+        "titleFont": [
+          "10px",
+          "400",
+          "16px",
+          "normal",
+          "rgb(15, 15, 15)"
+        ]
+      },
+      {
+        "text": "You",
+        "box": [
+          4,
+          288,
+          64,
+          76
+        ],
+        "active": false,
+        "titleFont": [
+          "10px",
+          "400",
+          "16px",
+          "normal",
+          "rgb(15, 15, 15)"
+        ]
+      }
+    ],
+    "container": {
+      "box": [
+        0,
+        56,
+        72,
+        1024
+      ],
+      "bg": "rgba(0, 0, 0, 0)",
+      "pad": "0px 4px",
+      "width": "72px"
+    },
+    "entryGap": 0
+  }
+}

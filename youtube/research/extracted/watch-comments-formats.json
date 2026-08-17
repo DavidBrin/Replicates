@@ -1,0 +1,1510 @@
+{
+  "comments": {
+    "headerText": "233 Comments\nSort by\nAdd a comment...",
+    "countText": "",
+    "countStyle": {
+      "font": "10px/normal w400 lsnormal",
+      "color": "rgb(0, 0, 0)",
+      "family": "Roboto"
+    },
+    "top": {
+      "box": [
+        16,
+        -236.5,
+        1344,
+        106
+      ],
+      "avatarBox": [
+        16,
+        -236.5,
+        36,
+        36
+      ],
+      "avatarRadius": "0px",
+      "authorText": "@CaptainDiscover",
+      "authorStyle": {
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "family": "Roboto"
+      },
+      "authorBg": "rgba(0, 0, 0, 0)",
+      "timeText": "10 months ago",
+      "timeStyle": {
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "family": "Roboto"
+      },
+      "contentStyle": {
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "family": "Roboto"
+      },
+      "contentBox": [
+        68,
+        -185,
+        208.1,
+        16.5
+      ],
+      "contentText": "Do you often eat instant noodles?",
+      "toolbarBox": [
+        60,
+        -162.5,
+        1300,
+        32
+      ],
+      "toolbarStyle": "0px",
+      "avatarToText": -52,
+      "mainColumnLeft": 68
+    },
+    "reply": {
+      "box": [
+        64,
+        -118.5,
+        1296,
+        78
+      ],
+      "avatarBox": [
+        64,
+        -118.5,
+        24,
+        24
+      ],
+      "contentBox": [
+        104,
+        -95,
+        142.67,
+        16.5
+      ],
+      "contentStyle": {
+        "font": "14px/20px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "family": "Roboto"
+      },
+      "authorText": "@Graniteguy90"
+    },
+    "indent": {
+      "replyLeftMinusTopLeft": 48,
+      "repliesRendererPadding": "0px",
+      "repliesContentsMargin": "0px / 0px"
+    },
+    "toolbarButtons": [
+      {
+        "label": "Like this comment along with 47 other pe",
+        "text": "",
+        "box": [
+          32,
+          32
+        ]
+      },
+      {
+        "label": "Dislike this comment",
+        "text": "",
+        "box": [
+          32,
+          32
+        ]
+      },
+      {
+        "label": "Reply",
+        "text": "Reply",
+        "box": [
+          53.66,
+          32
+        ]
+      },
+      {
+        "label": "Like this reply along with 5 other peopl",
+        "text": "",
+        "box": [
+          32,
+          32
+        ]
+      },
+      {
+        "label": "Dislike this reply",
+        "text": "",
+        "box": [
+          32,
+          32
+        ]
+      },
+      {
+        "label": "Reply",
+        "text": "Reply",
+        "box": [
+          53.66,
+          32
+        ]
+      }
+    ],
+    "threadGap": -980
+  },
+  "meta": {
+    "subscribe": {
+      "text": "Subscribe",
+      "box": [
+        94.54,
+        40
+      ],
+      "bg": "rgb(15, 15, 15)",
+      "color": "rgb(241, 241, 241)",
+      "radius": "20px",
+      "pad": "0px 16px",
+      "border": "0px rgb(241, 241, 241)",
+      "font": [
+        "Roboto",
+        "14px",
+        "500",
+        "40px",
+        "normal"
+      ]
+    },
+    "title": {
+      "text": "How It's Made: Noodles, Pasta, Mac & Cheese",
+      "font": [
+        "Roboto",
+        "20px",
+        "700",
+        "28px",
+        "normal"
+      ],
+      "color": "rgb(15, 15, 15)",
+      "box": [
+        1344,
+        28
+      ],
+      "margin": "0px"
+    },
+    "infoLine": {
+      "text": "961K views  10 months ago",
+      "font": [
+        "14px",
+        "500",
+        "20px",
+        "normal"
+      ],
+      "color": "rgb(15, 15, 15)"
+    },
+    "owner": {
+      "name": "Captain Discovery",
+      "nameFont": [
+        "16px",
+        "500",
+        "22px",
+        "rgb(15, 15, 15)"
+      ],
+      "subCount": "222K subscribers",
+      "subFont": [
+        "12px",
+        "400",
+        "18px",
+        "rgb(96, 96, 96)"
+      ],
+      "avatar": 40
+    },
+    "description": {
+      "font": [
+        "Roboto",
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ],
+      "color": "rgb(15, 15, 15)",
+      "containerBg": "rgba(0, 0, 0, 0)",
+      "containerRadius": "0px",
+      "containerPad": "0px",
+      "snippet": "Ever wondered How It’s Made: Noodles, Pasta, Mac & Cheese? 🍜🍝🧀 In this episode, Captain Discovery takes you behind the scenes of the world’s most comforting foods. From the stretching of fresh nood"
+    },
+    "actionRow": [
+      {
+        "text": "6.2K",
+        "label": "like this video along with 6,259 other people",
+        "box": [
+          84.66,
+          40
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px 0px 0px 20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "",
+        "label": "Dislike this video",
+        "box": [
+          56,
+          40
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "0px 20px 20px 0px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "Share",
+        "label": "Share",
+        "box": [
+          92.13,
+          40
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "Save",
+        "label": "Save to playlist",
+        "box": [
+          86.29,
+          40
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "Download",
+        "label": "Download",
+        "box": [
+          0,
+          0
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "",
+        "label": "More actions",
+        "box": [
+          0,
+          0
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "0px",
+        "pad": "0px",
+        "font": [
+          "13.3333px",
+          "400",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "",
+        "label": "More actions",
+        "box": [
+          40,
+          40
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "6.2K",
+        "label": "like this video along with 6,259 other people",
+        "box": [
+          0,
+          0
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px 0px 0px 20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "",
+        "label": "Dislike this video",
+        "box": [
+          0,
+          0
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "0px 20px 20px 0px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      },
+      {
+        "text": "Share",
+        "label": "Share",
+        "box": [
+          0,
+          0
+        ],
+        "bg": "rgba(0, 0, 0, 0.05)",
+        "color": "rgb(15, 15, 15)",
+        "radius": "20px",
+        "pad": "0px 16px",
+        "font": [
+          "14px",
+          "500",
+          "normal"
+        ],
+        "gap": "normal"
+      }
+    ]
+  },
+  "sidebarBreakpoint": {
+    "narrowState": "hidden",
+    "lastAt": 999,
+    "firstAt": 1000,
+    "scan": [
+      [
+        1920,
+        "side"
+      ],
+      [
+        1600,
+        "side"
+      ],
+      [
+        1400,
+        "side"
+      ],
+      [
+        1300,
+        "side"
+      ],
+      [
+        1200,
+        "side"
+      ],
+      [
+        1100,
+        "side"
+      ],
+      [
+        1050,
+        "side"
+      ],
+      [
+        1016,
+        "side"
+      ],
+      [
+        1000,
+        "side"
+      ],
+      [
+        950,
+        "hidden"
+      ],
+      [
+        900,
+        "hidden"
+      ],
+      [
+        800,
+        "hidden"
+      ],
+      [
+        700,
+        "hidden"
+      ],
+      [
+        600,
+        "hidden"
+      ]
+    ]
+  },
+  "formatSamples": [
+    {
+      "q": "news",
+      "rows": [
+        [
+          "2:21",
+          "Now playing",
+          "Iran urges U.S. to ‘accept the reality of defeat’",
+          "191K views",
+          "22 hours ago",
+          "NBC News",
+          "A defiant Iran called on the U.S. to “accept the reality of defeat and stop indulging in delusions” after President Trump suggested ...",
+          "New",
+          "CC"
+        ],
+        [
+          "15:01",
+          "Now playing",
+          "Iran digs in, Trump’s ‘hot & cold’ diplomacy & more: Fareed’s Last Looks",
+          "439K views",
+          "11 hours ago",
+          "CNN",
+          "Why hasn't Iran been compelled to make peace, even as its regular citizens suffer? Has the war accelerated the switch to green ...",
+          "New",
+          "CC",
+          "3 chapters",
+          "Iran hasn’t been compelled to make peace. Why? (July 26) | The unexpected outcomes of the Strait of Hormuz closure (June 14) | Inside Trump’s “hot and cold” diplomacy (July 12)"
+        ],
+        [
+          "9:03:26",
+          "Now playing",
+          "LIVE: ABC News Live - Sunday, August 16 | ABC News",
+          "33K views",
+          "Streamed 1 hour ago",
+          "ABC News",
+          "Subscribe to ABC News on YouTube: https://abcnews.visitlink.me/59aJ1G ABC News is your daily source of breaking national ...",
+          "New",
+          "CC"
+        ],
+        [
+          "Iran war: Trump envoys in Middle East",
+          "35K views",
+          "7 hours ago",
+          "LiveNOW from FOX",
+          "USA Today White House Correspondent, Joey Garrison, joins LiveNOW from FOX to discuss the latest with the Iran conflict.",
+          "New",
+          "CC"
+        ],
+        [
+          "SABC News",
+          "@sabcdigitalnews•3.35M subscribers",
+          "SABC News, Africa's news leader at www.sabcnews.com is the online news portal of South Africa's public broadcaster. The South ...",
+          "Subscribe"
+        ],
+        [
+          "CBS News poll looks at whether Democrats are split over socialism",
+          "2.6K views",
+          "5 hours ago",
+          "Face the Nation",
+          "As Democrats debate the future of the party amid primaries this summer, CBS News executive director of elections and surveys ...",
+          "New"
+        ],
+        [
+          "Fox News",
+          "@FoxNews•15.5M subscribers",
+          "FOX News Channel (FNC) is a 24-hour all-encompassing news service dedicated to delivering breaking news as well as political ...",
+          "Subscribe"
+        ],
+        [
+          "Leaked video of Leavitt's 'tense' Trump talk before quitting",
+          "180K views",
+          "3 days ago",
+          "The Mirror US",
+          "Newly surfaced footage captures Karoline Leavitt in a heated exchange with Donald Trump and his assistant Natalie Harp - just ...",
+          "New"
+        ],
+        [
+          "DoorDasher suffers skull fractures, brain bleeds after BRUTAL assault #foxnews #news #us #fox",
+          "6.6K views",
+          "3 hours ago",
+          "Fox News",
+          "Fox News' Chanley Painter joins 'Fox & Friends Weekend' to report the latest after a DoorDash driver was attacked in North ...",
+          "New"
+        ],
+        [
+          "Trump makes BOLD prediction on AOC #foxnews #news #us #fox",
+          "13K views",
+          "2 hours ago",
+          "Fox News",
+          "President Donald Trump thinks AOC will run for president in 2028 after she tried to walk back her stance on defunding the police ...",
+          "New"
+        ],
+        [
+          "Perez Hilton Treated for Overdose After Self-Harm Livestream | E! News",
+          "20K views",
+          "1 day ago",
+          "E! News",
+          "When first responders arrived at Perez Hilton's house following his Aug. 4 livestream, during which he engaged in self-harm, a fire ...",
+          "New"
+        ],
+        [
+          "IHIP News: 🚨 Karoline Leavitt ABRUPTLY QUITS WH and the SHOCKING REASON Getting EXPOSED?!",
+          "1M views",
+          "3 days ago",
+          "I've Had It",
+          "MAGA's Liar-in-Chief is stepping down. Get $20 OFF the Waver Vibration Plate and Free Shipping at https://Lifeprofitness.com ...",
+          "New"
+        ],
+        [
+          "Ruling allows Americans to own short-barreled rifles, shotguns, silencers without registration",
+          "888K views",
+          "2 days ago",
+          "CBS News",
+          "Some Americans can now own short-barreled rifles, shotguns and silencers without registering them with the federal government ...",
+          "New"
+        ],
+        [
+          "CBS News",
+          "@CBSNews•7.06M subscribers",
+          "CBS News is a trusted source for the latest in politics, U.S. and world news. The network is home to award-winning broadcasts ...",
+          "Subscribe"
+        ],
+        [
+          "The Recent Back and Forth Between Meidas Touch News and U.S. Naval Forces Central Command.",
+          "12K views",
+          "3 hours ago",
+          "Kagan Dunlap",
+          "New"
+        ],
+        [
+          "Katy Tur shares why she’s not worried about American democracy",
+          "24K views",
+          "5 hours ago",
+          "MS NOW",
+          "\"I think Americans are much wiser today to Donald Trump's actions, his motivations, his hijinx, than they have been in the past.",
+          "New"
+        ],
+        [
+          "Trump asks Supreme Court to intervene in White House ballroom fight",
+          "46K views",
+          "1 day ago",
+          "CBS News",
+          "The Trump administration asked the Supreme Court on Friday to intervene and allow him to construct a new 90000-square-foot ...",
+          "New"
+        ],
+        [
+          "Selena Gomez sued for alleged fraud",
+          "17K views",
+          "2 days ago",
+          "Reuters",
+          "Selena Gomez's influence was reportedly part of her startup's appeal. Now, investors allege the company failed to deliver on key ...",
+          "New"
+        ],
+        [
+          "Hannity: They have created a ‘MONSTER’ #shorts #foxnews #news #us",
+          "74K views",
+          "1 day ago",
+          "Fox News",
+          "Fox News host Sean Hannity discusses the rhetoric coming from Democratic socialists and their influence on the Democratic Party ...",
+          "New"
+        ]
+      ]
+    },
+    {
+      "q": "music video",
+      "rows": [
+        [
+          "Mozart’s The Marriage of Figaro comes to San Francisco Opera October 31–November 29",
+          "See Mozart's classic this Fall at San Francisco Opera from October 31 to November 29",
+          "Sponsored",
+          "San Francisco Opera",
+          "Watch",
+          "Learn more"
+        ],
+        [
+          "3:53",
+          "Now playing",
+          "Owl City - Fireflies (Official Music Video)",
+          "631M views",
+          "16 years ago",
+          "Owl City",
+          "REMASTERED IN HD!! Official Music Video for Fireflies performed by Owl City. Watch more remastered videos!",
+          "CC"
+        ],
+        [
+          "7:02",
+          "Now playing",
+          "Ella Langley - Choosin' Texas (Official Video)",
+          "69M views",
+          "4 months ago",
+          "Ella Langley",
+          "Official Video for “Choosin' Texas” by Ella Langley out now: https://ellalangley.lnk.to/choosintexas Pre-Save 'Dandelion' out April ..."
+        ],
+        [
+          "3:20",
+          "Now playing",
+          "Bruno Mars - The Lazy Song (Official Music Video)",
+          "3.2B views",
+          "15 years ago",
+          "Bruno Mars",
+          "The official music video for Bruno Mars' \"The Lazy Song\" from the album 'Doo-Wops and Hooligans''. Stream: ..."
+        ],
+        [
+          "Sabrina Carpenter - House Tour (Official Video)",
+          "35M views",
+          "4 months ago",
+          "Sabrina Carpenter",
+          "Listen to 'Man's Best Friend': https://sabrinacarpenter.lnk.to/MansBestFriend New collection available: ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "Taylor Swift - The Fate of Ophelia (Official Music Video)",
+          "487M views",
+          "10 months ago",
+          "Taylor Swift",
+          "The official music video for “The Fate of Ophelia” Visit https://TaylorSwift.com to watch the official \"Opalite\" music video."
+        ],
+        [
+          "Britney Spears - ...Baby One More Time (Official Video)",
+          "1.2B views",
+          "16 years ago",
+          "Britney Spears",
+          "Watch the official music video for \"...Baby One More Time\" by Britney Spears Listen to Britney Spears: ...",
+          "CC"
+        ],
+        [
+          "Sabrina Carpenter - Manchild (Official Video)",
+          "207M views",
+          "1 year ago",
+          "Sabrina Carpenter",
+          "Stream “Manchild” here: https://sabrinacarpenter.lnk.to/Manchild New merch available: ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "Bruno Mars - Risk It All [Official Music Video]",
+          "137M views",
+          "5 months ago",
+          "Bruno Mars",
+          "Bruno Mars - Risk It All The Romantic – the new album from Bruno Mars, available now. Listen now: ...",
+          "4K"
+        ],
+        [
+          "100 videos",
+          "Music Videos 2026 - Top Music Videos & Best Music Videos - MTV Hits 2026",
+          "Lovely Tunes",
+          "•",
+          "Playlist",
+          "•",
+          "Updated 7 days ago",
+          "Ariana Grande - hate that i made you love me (official music video) · 5:01",
+          "Olivia Rodrigo - the cure (Official Music Video) · 5:15",
+          "View full playlist"
+        ],
+        [
+          "Maroon 5 - Sugar (Official Music Video)",
+          "4.4B views",
+          "11 years ago",
+          "Maroon 5",
+          "Buy Sugar on iTunes: http://smarturl.it/M5V Sign up for updates: http://smarturl.it/Maroon5.News Catch Maroon 5 on tour all year ...",
+          "CC"
+        ],
+        [
+          "Ariana Grande - hate that i made you love me (official music video)",
+          "71M views",
+          "2 months ago",
+          "Ariana Grande",
+          "The official music video for Ariana Grande's “hate that i made you love me” Listen to “hate that i made you love me”: ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "Jemaine Clement - Shiny (from Moana) (Official Video)",
+          "694M views",
+          "9 years ago",
+          "DisneyMusicVEVO",
+          "\"Moana\" is available on Disney+ Three thousand years ago, the greatest sailors in the world voyaged across the vast Pacific, ...",
+          "CC"
+        ],
+        [
+          "Chris Brown - It Depends/Obvious (Official Video)",
+          "8.3M views",
+          "1 month ago",
+          "Chris Brown",
+          "Stream “Obvious” Here: https://chrisbrown.lnk.to/BROWNDeluxe Follow Chris Brown: Instagram: ...",
+          "4K"
+        ],
+        [
+          "Ariana Grande - petal",
+          "23M views",
+          "2 weeks ago",
+          "Ariana Grande",
+          "The official music video for Ariana Grande's “petal” out july 31 at 11am et. 'petal': https://arianagrande.lnk.to/petal Shop the 'petal' ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "Laufey - Madwoman (Official Music Video)",
+          "21M views",
+          "4 months ago",
+          "Laufey",
+          "\"Madwoman\", the official music video starring Laufey, Hudson Williams, Alysa Liu, Megan Skiendiel and Lola Tung. Stream or ...",
+          "4K"
+        ],
+        [
+          "Troye Sivan - She’s the Best (Official Music Video)",
+          "1.1M views",
+          "2 days ago",
+          "Troye Sivan",
+          "Troye Sivan - She's the Best (Official Music Video) Pre-order 'She's the Best,' the album by Troye Sivan: ...",
+          "New",
+          "4K"
+        ],
+        [
+          "ROSÉ & Bruno Mars - APT. (Official Music Video)",
+          "2.6B views",
+          "1 year ago",
+          "ROSÉ",
+          "and Bruno Mars",
+          "ROSÉ & Bruno Mars - APT. Download/stream: https://rosesarerosie.lnk.to/APTID Order APT. single CD: ...",
+          "4K"
+        ],
+        [
+          "Benson Boone - Beautiful Things (Official Music Video)",
+          "1B views",
+          "2 years ago",
+          "Benson Boone",
+          "Benson Boone - Beautiful Things (Official Music Video) 'American Heart' the second album from Benson Boone – out now: ...",
+          "4K"
+        ],
+        [
+          "Shakira - Try Everything (Official Video)",
+          "809M views",
+          "10 years ago",
+          "Shakira",
+          "Stream Zootopia now Disney+. Disney+ is the ultimate streaming destination for entertainment from Disney, Pixar, Marvel, Star ...",
+          "CC"
+        ],
+        [
+          "Pennywise - Back In Derry (Official Music Video)",
+          "6.2M views",
+          "4 months ago",
+          "Dallas xy",
+          "Pennywise rap music video. Subscribe to my free patreon :) - https://dallasxy.com TikTok: https://www.tiktok.com/@dallas_xy?"
+        ],
+        [
+          "Weetya (Official Music Video)",
+          "3.6K views",
+          "13 hours ago",
+          "Pawaboy AB",
+          "Weetya was written and sang by Pawaboy AB Produced by Mello Beats.",
+          "New",
+          "4K"
+        ],
+        [
+          "Gotye - Somebody That I Used To Know (feat. Kimbra) [Official Music Video]",
+          "2.6B views",
+          "15 years ago",
+          "Gotye",
+          "The official music video for “Somebody That I Used To Know” by Gotye, featuring Kimbra. From the album Making Mirrors. Get the ..."
+        ],
+        [
+          "Olivia Rodrigo - the cure (Official Music Video)",
+          "32M views",
+          "2 months ago",
+          "Olivia Rodrigo",
+          "\"the cure\" out now: https://OliviaRodrigo.lnk.to/thecure Shop \"the cure\" on 7\" vinyl and cassette featuring an exclusive bonus song ...",
+          "4K",
+          "CC"
+        ]
+      ]
+    },
+    {
+      "q": "python tutorial",
+      "rows": [
+        [
+          "10:30",
+          "Now playing",
+          "Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)",
+          "1.5M views",
+          "5 years ago",
+          "Indently",
+          "In this crash course I'll be teaching you the basics of Python in less than 10 minutes. Python is super easy to learn compared to ...",
+          "9 chapters",
+          "Intro | Variables | Data Types | Logic Statements | For Loop | While Loop | Functions | Pass | Try Accept"
+        ],
+        [
+          "1:00:06",
+          "Now playing",
+          "Python for Beginners - Learn Coding with Python in 1 Hour",
+          "24M views",
+          "5 years ago",
+          "Programming with Mosh",
+          "... out my Complete Python Mastery course: - Full course: https://mosh.link/python-course - Subscribe for more Python tutorials like ...",
+          "0:02 In this Python tutorial you're going to learn everything you need to know to start programming in Python if you want to learn Python ..."
+        ],
+        [
+          "6:14:07",
+          "Now playing",
+          "1:49",
+          "6:14:07",
+          "Python Full Course for Beginners",
+          "48M views",
+          "7 years ago",
+          "Programming with Mosh",
+          "Learn Python for AI, machine learning, and web development with this beginner-friendly course! Get 6 months of PyCharm ...",
+          "CC",
+          "Matching chapter",
+          "1:49 Installing Python 3"
+        ],
+        [
+          "124 lessons",
+          "Python for Beginners (Full Course) | Programming Tutorial",
+          "Telusko",
+          "•",
+          "Course",
+          "#0 Python for Beginners | Programming Tutorial · 1:06",
+          "#1 Python Tutorial for Beginners | Introduction to Python · 4:13",
+          "View full course"
+        ],
+        [
+          "Python Tutorial for Beginners - Learn the basics in 20 Min",
+          "18K views",
+          "3 weeks ago",
+          "Tech With Tim",
+          "Never written a line of code before? Start with this Python tutorial to learn the basics. To go deeper, check out the DataCamp ...",
+          "4K",
+          "CC",
+          "17 chapters",
+          "Overview | Installing Python | Getting an IDE | Environment Setup | First Python Program | Hello World | Running Your Code | Variables | Datacamp | Strings | f Strings | User Input | Lists | Conditionals | For Loops | Functions | Full Program Example"
+        ],
+        [
+          "How I Would Learn Python FAST (if I could start over)",
+          "600K views",
+          "8 months ago",
+          "Sajjaad Khader",
+          "If I had to learn Python again from scratch.. and learn it FAST - this is exactly how I'd do it. After teaching myself Python in just two ...",
+          "4K",
+          "Matching chapter",
+          "0:00 How I Learned Python FAST"
+        ],
+        [
+          "How I Would Learn Python FAST (if I could start over)",
+          "480K views",
+          "4 months ago",
+          "Andrew Codesmith",
+          "Where I learnt python https://academy.zerotomastery.io/a/aff_yp0m7fjx/external?affcode=441520_jokk7aer ‍♂️ Python ...",
+          "4K",
+          "Matching chapter",
+          "1:12 Why learn Python"
+        ],
+        [
+          "Python Full Course for free 🐍",
+          "22M views",
+          "5 years ago",
+          "Bro Code",
+          "python #tutorial #beginners Python tutorial for beginners full course Python 12 Hour Full Course for free (2024): ...",
+          "Fundraiser",
+          "Matching chapter",
+          "0:00 1.Python tutorial for beginners"
+        ],
+        [
+          "10 Important Python Concepts In 20 Minutes",
+          "1.5M views",
+          "2 years ago",
+          "Indently",
+          "In today's video we are going to be learning about 10 important Python concepts. ▷ Become job-ready with Python: ...",
+          "4K",
+          "12 chapters",
+          "Intro | py files | Variables | Basic data types | Type annotations | Constants | Functions | Classes | Initialisers | Methods | Dunder methods | Conclusion"
+        ],
+        [
+          "How to Create Pivot Table in Excel",
+          "2.5M views",
+          "3 years ago",
+          "Kevin Stratvert",
+          "Learn Excel in just 2 hours: https://kevinstratvert.thinkific.com In this step-by-step tutorial for beginners, learn how to create a pivot ...",
+          "4K",
+          "CC",
+          "26 chapters",
+          "Introduction | Overview of data | Prep data | Turn data into table | Insert pivot table | Pivot table interface | Build basic pivot table with rows and values | Change formatting | Summarize values by | Remove fields | Sorting | Filtering | Show values as | Custom field headers | Multiple rows | Columns | Design | Pivot charts | Insert slicer | Insert timeline | Copy pivot table | Calculated fields | Refresh for new data | Source data | Recommended and Analyze Data | Wrap up"
+        ],
+        [
+          "👩‍💻 Python for Beginners Tutorial",
+          "4.5M views",
+          "5 years ago",
+          "Kevin Stratvert",
+          "In this step-by-step Python for beginner's tutorial, learn how you can get started programming in Python. In this video, I assume ...",
+          "4K",
+          "CC",
+          "20 chapters",
+          "Introduction | Why program? | Why Python? | Get Python | Run code in Python terminal | Write code in a text editor like Notepad | Get an IDE like Visual Studio Code for free | Set up VS Code | Run code in VS Code | Work with numbers & operators | Work with text / strings | Comments | Variables | Conditional logic | If, elif, & else statements | Functions | While & for loops | Import libraries | Troubleshooting code. | Wrap up"
+        ],
+        [
+          "43 lessons",
+          "Python Programming Tutorials",
+          "thenewboston",
+          "•",
+          "Course",
+          "Python Programming Tutorial - 1 - Installing Python · 3:19",
+          "Python Programming Tutorial - 2 - Numbers and Math · 5:40",
+          "View full course"
+        ],
+        [
+          "54 videos",
+          "Python Tutorial 2026 | Complete Python Course (Beginner to Advanced) | Telusko",
+          "Telusko",
+          "•",
+          "Playlist",
+          "Python Tutorial 2026 · 5:21",
+          "First Code in Python | 2 · 4:00",
+          "View full playlist"
+        ],
+        [
+          "23 videos",
+          "Python Tutorials",
+          "Programming with Mosh",
+          "•",
+          "Playlist",
+          "Python Full Course for Beginners · 6:14:07",
+          "Learn Python Programming - Python Course · 1:48:05",
+          "View full playlist"
+        ],
+        [
+          "Learn Python - Full Course for Beginners [Tutorial]",
+          "49M views",
+          "8 years ago",
+          "freeCodeCamp.org",
+          "This course will give you a full introduction into all of the core concepts in python. Follow along with the videos and you'll be a ...",
+          "CC",
+          "35 chapters",
+          "Introduction | Installing Python & PyCharm | Setup & Hello World | Drawing a Shape | Variables & Data Types | Working With Strings | Working With Numbers | Getting Input From Users | Building a Basic Calculator | Mad Libs Game | Lists | List Functions | Tuples | Functions | Return Statement | If Statements | If Statements & Comparisons | Building a better Calculator | Dictionaries | While Loop | Building a Guessing Game | For Loops | Exponent Function | 2D Lists & Nested Loops | Building a Translator | Comments | Try / Except | Reading Files | Writing to Files | Modules & Pip | Classes & Objects | Building a Multiple Choice Quiz | Object Functions | Inheritance | Python Interpreter"
+        ],
+        [
+          "How It's Made: McDonald's Fries, Chicken Nuggets, Coca Cola, Pepperoni",
+          "2.3M views",
+          "1 year ago",
+          "Captain Discovery",
+          "Ever wondered how McDonald's Chicken Nuggets, Fries, Coca Cola, Pepperoni are made? This video takes you inside the ..."
+        ],
+        [
+          "How It's Made: Noodles, Pasta, Mac & Cheese",
+          "961K views",
+          "10 months ago",
+          "Captain Discovery",
+          "Ever wondered How It's Made: Noodles, Pasta, Mac & Cheese? In this episode, Captain Discovery takes you behind the ..."
+        ],
+        [
+          "How It's Made: Onion rings, Cheese, Biscuits, Sandwich",
+          "254K views",
+          "1 year ago",
+          "Captain Discovery",
+          "Ever wondered how classic comfort foods are made? In How It's Made: Onion Rings, Cheese, Biscuits, Sandwich, we take you ..."
+        ],
+        [
+          "Python Tutorial for Beginners (with mini-projects)",
+          "1M views",
+          "2 years ago",
+          "freeCodeCamp.org",
+          "Learn Python programming in this complete course for beginners. This tutorial features mini-projects throughout so you can put ...",
+          "CC",
+          "24 chapters",
+          "Intro | Chapter 1 - Getting Started | Chapter 2 - Python Basics | Chapter 3 - Operators | Chapter 4 - Data Types | Chapter 5 - User Input | Chapter 6 - Lists & Tuples | Chapter 7 - Dictionaries & Sets | Chapter 8 - Loops | Chapter 9 - Functions | Chapter 10 - Recursion | Chapter 11 - Scope | Chapter 12 - Closures | Chapter 13 - f-Strings | Chapter 14 - Modules | Chapter 15 - Command Line Arguments | Chapter 16 - Challenges | Chapter 17 - Lambda & Higher Order Functions | Chapter 18 - Classes & Objects | Chapter 19 - Exceptions & Errors | Chapter 20 - OOP Project | Chapter 21 - Virtual Environments & PIP | Chapter 22 - File Operations | Chapter 23 - Final Project"
+        ],
+        [
+          "93 videos",
+          "Python tutorial for beginners 🐍",
+          "Bro Code",
+          "•",
+          "Playlist",
+          "Start coding with PYTHON in 5 minutes! 🐍 · 5:50",
+          "Learn Python VARIABLES in 10 minutes! ❎ · 10:16",
+          "View full playlist"
+        ],
+        [
+          "Python Full Course for free 🐍",
+          "11M views",
+          "1 year ago",
+          "Bro Code",
+          "python #tutorial #beginners Python tutorial for beginners' full course 2024 *Learn Python in 1 HOUR* ...",
+          "Fundraiser",
+          "Matching chapter",
+          "0:00 1.python tutorial for beginners"
+        ],
+        [
+          "158 lessons",
+          "Python Tutorials",
+          "Corey Schafer",
+          "•",
+          "Course",
+          "Python Tutorial for Beginners 1: Install and Setup for Mac and Windows · 15:29",
+          "Python Tutorial for Beginners 2: Strings - Working with Textual Data · 21:12",
+          "View full course"
+        ],
+        [
+          "12 videos",
+          "Python Tutorials",
+          "freeCodeCamp.org",
+          "•",
+          "Playlist",
+          "Python for Beginners – Full Course [Programming Tutorial] · 4:40:00",
+          "Intermediate Python Programming Course · 5:55:47",
+          "View full playlist"
+        ],
+        [
+          "Python Full Course for Beginners",
+          "7.2M views",
+          "1 year ago",
+          "Programming with Mosh",
+          "Master Python from scratch No fluff—just clear, practical coding skills to kickstart your journey! Want to dive deeper? - Check ...",
+          "Matching chapter",
+          "0:56 What is Python?"
+        ],
+        [
+          "Python in Excel - Beginner Tutorial",
+          "593K views",
+          "2 years ago",
+          "Kevin Stratvert",
+          "Learn Excel in just 2 hours: https://kevinstratvert.thinkific.com In this step-by-step tutorial, learn how you can use Python in ...",
+          "4K",
+          "CC",
+          "16 chapters",
+          "Introduction | How to insert Python code | Multi-line editor | Hello World example | Assign value to variables | Reference variables | Row major order | xl function | Python output in Excel calculations | Calculation options | Python object vs. Excel value | Import data with Power Query | Libraries | Pandas describe method | Matplotlib library and charting | Wrap up"
+        ]
+      ]
+    },
+    {
+      "q": "live",
+      "rows": [
+        [
+          "Live",
+          "@live•15.8M subscribers",
+          "YouTube Live - Watch great live streams, such as live gaming, live music, live sports, and live news.",
+          "Subscribe"
+        ],
+        [
+          "8:36",
+          "Now playing",
+          "Fortnite Season 4: Unstable | Live Event Trailer",
+          "132K views",
+          "1 day ago",
+          "CommunicGaming",
+          "NEW update Fortnite Chapter 7 Season 3 and map Changes update! In this video we look at Fortnite Season 4: Unstable | Event ...",
+          "New",
+          "4K"
+        ],
+        [
+          "Devour knowledge with Student Spaces",
+          "Student Spaces is a smarter way to study. Free for students.",
+          "Sponsored",
+          "Adobe",
+          "Watch",
+          "Learn more"
+        ],
+        [
+          "SHORTS",
+          "Now playing",
+          "IShowSpeed Shocked Completing 100 Hours With Kai Live 😭✨",
+          "196K views",
+          "2 days ago",
+          "Live Speedy",
+          "IShowSpeed Shocked Completing 100 Hours With Kai Live ✨ JOIN!",
+          "New"
+        ],
+        [
+          "Weird Signs You’ll Live Long",
+          "778K views",
+          "4 days ago",
+          "Sambucha",
+          "Follow me here: Instagram ▻ https://www.instagram.com/sambucha X ▻ https://www.x.com/sambucha Become a Member: ...",
+          "New",
+          "4K"
+        ],
+        [
+          "Reliable fiber-powered WiFi has officially moved in.",
+          "See if you qualify for free pro installation.",
+          "Sponsored",
+          "Xfinity",
+          "Watch",
+          "Shop now"
+        ],
+        [
+          "Live PD: Greatest Shifts — From Dispatch to Arrival | Full Episode",
+          "10K views",
+          "3 days ago",
+          "A&E",
+          "An unfiltered look at police departments in action. Stay up to date on all of A&E's premieres at https://www.aetv.com/schedule.",
+          "New",
+          "CC"
+        ],
+        [
+          "5 Nutrition Rules You Should Live By #nutrition #fasting #diet #eating #workout #nutritiontips #fyp",
+          "111K views",
+          "3 days ago",
+          "Trevorsinstinct",
+          "New"
+        ],
+        [
+          "Funky Dineva LIVE - Thursday August 13, 2026",
+          "104K views",
+          "Streamed 2 days ago",
+          "Funky Dineva",
+          "Donate To Jeanetta Brantley: ...",
+          "New"
+        ],
+        [
+          "THE MEDIUM KICK TAKES IT! shorts #clips #live #ceo2026 #cpt2026 #fgc",
+          "1K views",
+          "3 hours ago",
+          "Capcom Fighters",
+          "Street Fighter 6 Learn more at: http://www.streetfighter.com Facebook: http://www.facebook.com/streetfighter Twitter: ...",
+          "New"
+        ],
+        [
+          "0:16",
+          "Get Allstate",
+          "Coverage for more than just your car.",
+          "Sponsored",
+          "Allstate",
+          "Get quote"
+        ],
+        [
+          "Live - Heaven",
+          "7.4M views",
+          "16 years ago",
+          "LIVE",
+          "REMASTERED IN HD! Official Music Video for Heaven performed by Live. #Live #Heaven #Remastered.",
+          "CC"
+        ],
+        [
+          "Live - I Alone",
+          "27M views",
+          "17 years ago",
+          "LIVE",
+          "Music video by Live performing I Alone.© 1994 Radioactive Records J.V..",
+          "CC"
+        ],
+        [
+          "🔴 LIVE: Harry Potter Marathon | 24/7 Livestream",
+          "728 watching",
+          "Harry Potter",
+          "Some moments stay with you forever. From Harry discovering he wasn't 'just Harry' to the climactic moments during the battle at ...",
+          "LIVE"
+        ],
+        [
+          "LIVE",
+          "@livetheband•393K subscribers",
+          "LIVE - Official YouTube for the Band LIVE.",
+          "Subscribe"
+        ],
+        [
+          "0:15",
+          "Save big on everything you love. Get your faves fast with 1-hour Delivery.",
+          "Unlock insider savings with your myWalgreens® membership today.",
+          "Sponsored",
+          "Walgreens",
+          "Shop now"
+        ],
+        [
+          "Live PD: Police Patrol – Inside Look at Real Life Police Work Pt. 9 – Full Episode MARATHON | A&E",
+          "45K views",
+          "4 days ago",
+          "A&E",
+          "Get an inside look at real-life police work, from routine stops to high-stakes encounters, in part 8 of this action-packed marathon.",
+          "New",
+          "3 chapters",
+          "Episode 1 | Episode 2 | Episode 3"
+        ],
+        [
+          "Live - Dolphin's Cry",
+          "21M views",
+          "17 years ago",
+          "LIVE",
+          "Music video by Live performing Dolphin's Cry.© 1999 Radioactive Records J.V..",
+          "CC"
+        ],
+        [
+          "KAI & SPEED HARDCORE MINECRAFT MARATHON ⛏️🧱 BEATING ALL BOSSES | DAY 4 PART 2",
+          "2.2M views",
+          "Streamed 5 days ago",
+          "Kai Cenat Live",
+          "FOLLOW ME ON TWITCH: https://www.twitch.tv/kaicenat JOIN THE REDDIT : https://www.reddit.com/r/TheKM/ Follow My ...",
+          "New"
+        ],
+        [
+          "\"That was DISGUSTING!\" #shorts #live #cpt2026 #ceo2026",
+          "7.5K views",
+          "2 days ago",
+          "Capcom Fighters",
+          "Street Fighter 6 Learn more at: http://www.streetfighter.com Facebook: http://www.facebook.com/streetfighter Twitter: ...",
+          "New"
+        ],
+        [
+          "RAY X TORI PROM NIGHT",
+          "346K views",
+          "Streamed 2 days ago",
+          "RAY LIVE",
+          "RAY X TORI PROM NIGHT FOLLOW ME ON TWITCH: https://www.twitch.tv/rayasianboy Follow My Socials: Main channel ...",
+          "New"
+        ],
+        [
+          "*NEW* FORTNITE MASTERY MONDAY UPDATE RIGHT NOW! (Season 3 LIVE)",
+          "32K views",
+          "Streamed 6 days ago",
+          "Grxnt",
+          "DONATE HERE - https://streamlabs.com/mrgrxnt1 BECOME A MEMBER ON MOBILE - https://www.youtube.com/Grxnt/join ...",
+          "New"
+        ],
+        [
+          "David Gilmour - Comfortably Numb Live in Pompeii 2016",
+          "199M views",
+          "8 years ago",
+          "HDPinkFloyd",
+          "David Gilmour returns to Pompeii after 45 years. Chuck Leavell co-lead, Roger Waters' parts.back up vocals. David Gilmour ..."
+        ],
+        [
+          "Live PD: Greatest Shifts — Following Events as They Happen | Full Episode",
+          "23K views",
+          "10 days ago",
+          "A&E",
+          "An unfiltered look at police departments in action. Stay up to date on all of A&E's premieres at https://www.aetv.com/schedule.",
+          "CC"
+        ]
+      ]
+    },
+    {
+      "q": "nasa",
+      "rows": [
+        [
+          "NASA",
+          "@NASA•15.1M subscribers",
+          "NASA's mission is to pioneer the future in space exploration, scientific discovery, and aeronautics research. To do that, we have ...",
+          "Subscribe"
+        ],
+        [
+          "42:18",
+          "Now playing",
+          "Special Event Announcement (Aug. 14, 2026)",
+          "61K views",
+          "Streamed 2 days ago",
+          "NASA",
+          "We are holding a news conference to preview an upcoming event to be held at NASA's Kennedy Space Center later this year.",
+          "New",
+          "4K"
+        ],
+        [
+          "1:17",
+          "Now playing",
+          "MAX POWER at NASA's Kennedy Space Center | Nov. 7-8, 2026",
+          "21K views",
+          "2 days ago",
+          "NASA",
+          "America's newest and most exciting aerospace technology expo and air show is landing at NASA's Kennedy Space Center in ...",
+          "New",
+          "CC"
+        ],
+        [
+          "Devour knowledge with Student Spaces",
+          "Student Spaces is a smarter way to study. Free for students.",
+          "Sponsored",
+          "Adobe",
+          "Watch",
+          "Learn more"
+        ],
+        [
+          "2026 Total Solar Eclipse",
+          "3.4M views",
+          "Streamed 4 days ago",
+          "NASA",
+          "Come watch the eclipse with NASA. On Wednesday, Aug. 12, a total solar eclipse will be visible in parts of Greenland, Iceland, ...",
+          "New",
+          "4K"
+        ],
+        [
+          "NASA's Artemis II Crew Launches To The Moon (Official Broadcast)",
+          "19M views",
+          "Streamed 4 months ago",
+          "NASA",
+          "We're sending astronauts around the Moon for the first time in 50 years. Come watch with us. NASA's Artemis II mission is ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "From extreme climate to eruptions, see how Earth made one of its greatest recoveries yet.",
+          "Explore Earth’s greatest mass extinction. Stream EONS: Life and Death on Pangea on PBS.",
+          "Sponsored",
+          "PBS",
+          "Watch",
+          "Watch now"
+        ],
+        [
+          "LIVE: Total solar eclipse | NASA coverage",
+          "118K views",
+          "Streamed 4 days ago",
+          "WUSA9",
+          "The path of total darkness will pass through Iceland and Spain, but parts of the U.S. can get a glimpse of a partial solar eclipse.",
+          "New"
+        ],
+        [
+          "NASA Goddard",
+          "@NASAGoddard•1.69M subscribers",
+          "Your friendly neighborhood space flight center. ‍ NASA's Goddard Space Flight Center is home to the nation's largest ...",
+          "Subscribe"
+        ],
+        [
+          "WATCH LIVE: Solar Eclipse 2026 | NASA Live Views | NBC New York",
+          "9.8K views",
+          "Streamed 4 days ago",
+          "NBC New York",
+          "Streaming: http://4.nbcny.com/omTY3Qz Facebook: http://4.nbcny.com/mbeh714 Instagram: http://4.nbcny.com/g5YlkcI X: ...",
+          "New"
+        ],
+        [
+          "NASA Science",
+          "@NASAScience•218K subscribers",
+          "NASA Science drives NASA's exploration of the universe, supporting the nation's scientific community and advancing research ...",
+          "Subscribe"
+        ],
+        [
+          "0:23",
+          "That one coworker who loves to collaborate",
+          "Sponsored",
+          "Superhuman",
+          "Learn more"
+        ],
+        [
+          "The Strangest Encounters in Space | NASA's Unexplained Files (Full Episode)",
+          "9.4M views",
+          "7 years ago",
+          "Science Channel",
+          "Strange flying objects have been caught on NASA's cameras and astronauts have reported seeing UFOs. Some can be identified; ...",
+          "CC",
+          "10 chapters",
+          "Intro | Fireflies | The bogey | Gemini 11 encounter | Apollo 11 encounter | Skylab encounter | STS48 encounter | STS75 encounter | Unidentified and Unknown | STS115"
+        ],
+        [
+          "U.S. Spacewalk 96",
+          "122K views",
+          "Streamed 10 days ago",
+          "NASA",
+          "At approximately 8:35 a.m. EDT (1235 UTC) on Aug. 6, 2026, NASA astronauts Anil Menon and Jessica Meir will venture outside ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "How to Photograph a Total Solar Eclipse",
+          "67K views",
+          "6 days ago",
+          "NASA",
+          "On Aug. 12, 2026, a total solar eclipse will be visible in parts of Greenland, Iceland, northern Russia, the Atlantic Ocean, Spain, ...",
+          "New",
+          "4K"
+        ],
+        [
+          "NASA Live Coverage: U.S. Spacewalk 96 at the ISS",
+          "1.8K views",
+          "Streamed 10 days ago",
+          "FOX 4 Dallas-Fort Worth",
+          "Watch live NASA coverage of U.S. Spacewalk 96 as astronauts Jessica Meir and Anil Menon step outside the Space Station to ..."
+        ],
+        [
+          "NASA’s Artemis II Crew Comes Home (Official Broadcast)",
+          "25M views",
+          "Streamed 4 months ago",
+          "NASA",
+          "Around the Moon and back. Watch the Artemis II astronauts come home. NASA's Artemis II mission is splashing down in the ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "🔴NASA LIVE: Total Solar Eclipse LIVE 2026 | Eclipse Across Europe: Solar Eclipse 2026 Ring of Fire",
+          "92K views",
+          "Streamed 3 days ago",
+          "moneycontrol",
+          "NASA LIVE: Total Solar Eclipse LIVE 2026 | Eclipse Across Europe: Solar Eclipse 2026 Ring of FireLIVE UpdatesStreaming ...",
+          "New"
+        ],
+        [
+          "NASA Moon Base: Lunar Landers (August 2026 Update)",
+          "413K views",
+          "12 days ago",
+          "NASA",
+          "A permanent human presence on the Moon may sound like science fiction, but it's already taking shape. Over a series of Moon ...",
+          "4K",
+          "CC",
+          "7 chapters",
+          "Introduction | Lunar Landers | Firefly Aerospace: Blue Ghost | Voyager Lunar Systems: Griffin-1 | Blue Origin: Blue Moon Mark 1 Endurance | Intuitive Machines: Nova-C Trinity | Northrop Grumman: Lunar Infrastructure Demos"
+        ],
+        [
+          "ATEEZ(에이티즈) - 'NASA' Performance Video",
+          "22M views",
+          "6 months ago",
+          "KQ ENTERTAINMENT",
+          "and ATEEZ",
+          "ATEEZ(에이티즈) - GOLDEN HOUR : Part.4 ▷ ATEEZ Official Platform: http://ateez.kqent.com ▷ ATEEZ Official X: ...",
+          "4K",
+          "CC"
+        ],
+        [
+          "'This is a beast': What to know for NASA's Artemis II launch",
+          "316K views",
+          "4 months ago",
+          "CNN",
+          "More than half a century after the last lunar mission during the Apollo program, NASA is aiming to travel back to the vicinity of the ...",
+          "CC",
+          "4 chapters",
+          "Tom Foreman describes the SLS heavy-lift rocket | NASA Administrator Jared Isaacman on the conditions for a successful liftoff | Timelines compared to China's 2030 goals | Why are we devoting so much to this mission when there are problems here on Earth that that money can help address?"
+        ],
+        [
+          "NASA Jet Propulsion Laboratory",
+          "@NASAJPL•1.24M subscribers",
+          "Videos produced by NASA's Jet Propulsion Laboratory.",
+          "Subscribe"
+        ],
+        [
+          "Total Solar Eclipse 2026 wows skywatchers - NASA broadcast views",
+          "95K views",
+          "Streamed 4 days ago",
+          "VideoFromSpace",
+          "On Aug. 12, 2026, Europe will experience its first total solar eclipse since 1999, as the moon's shadow sweeps across Greenland, ...",
+          "New"
+        ],
+        [
+          "NASA Scientist Answers Alien Questions | Tech Support | WIRED",
+          "2.8M views",
+          "1 year ago",
+          "WIRED",
+          "Senior Scientist for Astrobiology Strategy at NASA David Dr. Grinspoon joins WIRED to answer the internet's burning questions ...",
+          "CC",
+          "27 chapters",
+          "Astrobiology Support | Interesting exoplanets | Are aliens real? | Arrival (2016) | Another exoplanet enquiry | What would you say you do here | There’s a starman waiting in the sky | Flying saucers | Life: Origins | Ceres | A scientific explanation behind UFO sightings? | Our nearest habitable neighbor | Water: Why Does Life Need It? | Assembly theory | ELI5 The Drake equation | Europa Clipper and the Moon | Area 51 | Fermi paradox | Detecting technosignatures | SETI | How did you even detect that | Confirmed sightings? | Shadow Biome? | Sailors fighting in the dance hall / Oh, man! Look at those cavemen go | Venus | Is a habitable planet with no tectonic activity plausible? | Intelligent life in the next 100 years?"
+        ],
+        [
+          "How We Are Going to the Moon - 4K",
+          "11M views",
+          "6 years ago",
+          "NASA",
+          "While Apollo placed the first steps on the Moon, Artemis opens the door for humanity to sustainably work and live on another ...",
+          "4K",
+          "CC"
+        ]
+      ]
+    }
+  ]
+}

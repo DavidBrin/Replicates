@@ -1,0 +1,1576 @@
+{
+  "cardOutline": {
+    "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+    "box": "533.33x409.99",
+    "c": [
+      {
+        "n": "div#content.style-scope.ytd-rich-item-renderer",
+        "box": "533.33x409.99",
+        "c": [
+          {
+            "n": "ytd-ad-slot-renderer.style-scope.ytd-rich-item-renderer",
+            "box": "533.33x409.99",
+            "c": [
+              {
+                "n": "div#fulfilled-layout.style-scope.ytd-ad-slot-renderer",
+                "box": "533.33x409.99",
+                "c": [
+                  {
+                    "n": "ytd-in-feed-ad-layout-renderer.style-scope.ytd-ad-slot-renderer",
+                    "box": "533.33x409.99",
+                    "c": [
+                      {
+                        "n": "div#rendering-content.style-scope.ytd-in-feed-ad-layout-renderer",
+                        "box": "533.33x409.99",
+                        "c": [
+                          {
+                            "n": "video-display-button-group-layout-view-model.ytwVideoDisplayButtonGroupLayoutViewModelHost",
+                            "box": "533.33x409.99",
+                            "c": [
+                              {
+                                "n": "div",
+                                "box": "533.33x409.99",
+                                "c": [
+                                  {
+                                    "n": "yt-lockup-view-model",
+                                    "box": "533.33x409.99",
+                                    "c": [
+                                      {
+                                        "n": "div.ytLockupViewModelHost.ytLockupViewModelVertical.content-id-EJ_xkuarNEU",
+                                        "box": "533.33x409.99",
+                                        "c": [
+                                          {
+                                            "n": "yt-touch-feedback-shape.ytSpecTouchFeedbackShapeHost.ytSpecTouchFeedbackShapeTouchResponse.ytSpecTouchFeedbackShapeThumbnailSizeLarge",
+                                            "box": "557.33x433.99",
+                                            "c": [
+                                              {
+                                                "n": "div.ytSpecTouchFeedbackShapeStroke",
+                                                "box": "557.33x433.99"
+                                              },
+                                              {
+                                                "n": "div.ytSpecTouchFeedbackShapeFill",
+                                                "box": "557.33x433.99"
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "n": "a.ytLockupViewModelContentImage",
+                                            "box": "533.33x311.99",
+                                            "c": [
+                                              {
+                                                "n": "yt-thumbnail-view-model",
+                                                "box": "533.33x299.99"
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "n": "div.ytLockupViewModelMetadata",
+                                            "box": "533.33x98",
+                                            "c": [
+                                              {
+                                                "n": "feed-ad-metadata-view-model.ytwFeedAdMetadataViewModelHostIsClickableAdComponent",
+                                                "box": "533.33x46"
+                                              },
+                                              {
+                                                "n": "lockup-attachments-view-model.ytLockupAttachmentsViewModelHost",
+                                                "box": "533.33x52"
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+        "box": "541.33x417.99",
+        "c": [
+          {
+            "n": "div.stroke.style-scope.yt-interaction",
+            "box": "541.33x417.99"
+          },
+          {
+            "n": "div.fill.style-scope.yt-interaction",
+            "box": "541.33x417.99"
+          }
+        ]
+      }
+    ]
+  },
+  "cardHTML": "<ytd-rich-item-renderer class=\"style-scope ytd-rich-grid-renderer\" items-per-row=\"3\" lockup=\"true\" rendered-from-rich-grid=\"\" rich-grid-hover-highlight=\"\" is-in-first-column=\"\"><!--css-build:shady--><!--css_build_scope:ytd-rich-item-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><div id=\"content\" class=\"style-scope ytd-rich-item-renderer\"><ytd-ad-slot-renderer class=\"style-scope ytd-rich-item-renderer\" layout=\"\"><!--css-build:shady--><!--css_build_scope:ytd-ad-slot-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><div id=\"fulfilled-layout\" class=\"style-scope ytd-ad-slot-renderer\"><ytd-in-feed-ad-layout-renderer class=\"style-scope ytd-ad-slot-renderer\"><!--css-build:shady--><!--css_build_scope:ytd-in-feed-ad-layout-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><div id=\"rendering-content\" class=\"style-scope ytd-in-feed-ad-layout-renderer\"><video-display-button-group-layout-view-model class=\"ytwVideoDisplayButtonGroupLayoutViewModelHost\"><div><yt-lockup-view-model class=\"ytLockupViewModelWrapper\"><div class=\"ytLockupViewModelHost ytLockupViewModelVertical content-id-EJ_xkuarNEU ytLockupViewModelRichGridLegacyMargin ytLockupViewModelFlexNone\"><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse ytSpecTouchFeedbackShapeThumbnailSizeLarge ytSpecTouchFeedbackShapeTriggerEvents\" style=\"margin: -12px;\"><div class=\"ytSpecTouchFeedbackShapeStroke\"></div><div class=\"ytSpecTouchFeedbackShapeFill\"></div></yt-touch-feedback-shape><a href=\"https://www.googleadservices.com/pagead/aclk?sa=L&amp;ai=CiwFA7jCCapeGGfXuivYPkYa7gA-p5I6JiQG1t7WK1hWwkB8QASAAYMm-8YbIo6AZggEXY2EtcHViLTYyMTk4MTE3NDcwNDkzNzGgAbH6_-oCqAMEyAMKqgT1AU_Q2Ab9kQe8Z8IoQ15uQuPeKkEjDuWPTLoyvjQFSR89csbWPrMnUTA8OUMc3trkRqtXrCTQosC5eXW1HAV7vLqRVBxCGQ2_DCJ5dBhxjVg0V_XhxIlhC5EbApAnjtuia83IOVd9X4O-U-nh7x7d8xGRjFVNcfhBTDzxweCXB9mMFQDJiOPAv0U3e5wOzWt1OaLvwgbqNqx7jiKFXKPImhEquktFJTkI7eQ99eH8xCX8352ThR8qLtrClNA2uKIZVpb8z9SmWFVnuojxWlEtVmP3kQx2iPuOQqU7pF--wK4G_PUTjZC0Wrw9BiI0aQXLymsFIr_4iAXm0O-tWJIFCggTaAF4-s2flQGgBqEBgAe3hYCVAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH77WxAqgH8LWxAqgH-dOxAqgHydqxAqgHqeCxAqgHhAioB6bUsQKoB6jSG6gHtgeoB7HcG6gHsJuxAqgHrrGxAqgH_bKxAqgHyM-xAqgHyc-xAqgHzcexAqgH8dGxAqgH_NWxAqgH-9WxAqgHjNaxAqgHi9axAqgHmuKxAqgHm-KxAqgHndexAqgHndSxAqgHgcYbqAf8r7ECqAfVzhuoB77ZsQKoB6vFG6gHnNwbqAe3obECqAfVqbECqAfn2rECqAfetbECqAfqsbECqAe-t7ECqAeZtbECqAeFwbECqAfrpbECqAfKqbECkggLRUpfeGt1YXJORVWoCAHSCC4IgEEQARheMgKCAjoPgEKAwICAgICAgAKqgIAQSNmg0jVQFFjAoof5kKaWA2ABmgkxaHR0cHM6Ly93d3cuYWRvYmUuY29tL2Fjcm9iYXQvc3R1ZGVudC1zcGFjZXMuaHRtbLEJQPqFr20hg5LICRfICY8ByAnCAboLQQgCEAUYBCAHKAEwGUABSABYZGAAaABwAYgBAJgBAaIBCAoAqAIB2AICqAEB2AEDgAIBiAISugMJdmljYmZ6YWNh0AsT4AsBogwdahYKFGNvbS5hZG9iZS5zcGFyay5wb3N0eACIAQDSDAIQAdoMJQoKELDQpN_unP_KZxICAQMaDRjm0O-tWCDX9fLl0wVAAUoCEB-aDQETqg0CVVPIDQHSDbEEaHR0cHM6Ly9hZC5kb3VibGVjbGljay5uZXQvZGRtL3RyYWNrY2xrL045NzI5NTIuMjc5MzgyQklETUFOQUdFUl9ERkFTSVRFL0IyMjM0NDQxMy4yNDE1MzkzMjE7ZGNfdHJrX2FpZD00MzgxMjg2MjI7ZGNfdHJrX2NpZD0xMTI4ODQ2MTM7ZGNfZGJtX3Rva2VuPUFPamVMTkVBQUFBNkNqTUtEQWdBRlFBQUFBQWRBQUFBQUJJTUNBQVZBQUFBQUIwQUFBQUFJaE1JNXREdnJWaW9Bc080OUFHd0FzeVc0dWtEUURzUWwtZTZBYXBTbzNMajY5SHFtUlNHRDdObEp0Yz07ZGNfbGF0PTtkY19yZGlkPTt0YWdfZm9yX2NoaWxkX2RpcmVjdGVkX3RyZWF0bWVudD07dGZ1YT07bHRkPTtkY190ZHY9MTtkY190cmFuc3BhcmVudD0xO2RjX3J1aT0xO2RjX2Vwcz1BSGFzOGNDRy1HWUlkR2h6djhwR3FvUmRGMGFHZ1Zwd0t3ZW90WkhYRjIxMWx1Zk9zRjVEX251VGNmMFEtRUdxZ3lLTFZMQ2h5bHJlV3ZKV2dRN1VQdztkY19wdWJpZD02P2h0dHBzOi8vd3d3LmFkb2JlLmNvbS9hY3JvYmF0L3N0dWRlbnQtc3BhY2VzLmh0bWw_c2RpZD1UVEdXS1FaOSZtdj1zb2NpYWwmbXYyPXBhaWRzb2MmZ2FkX3NvdXJjZT0ysBO53NMjuBP___________8BiBQEsBQCwBWBgIBA0BUB2BUBmBYBqBYBgBcBihcYCAMYASABKAEwATgBQAFIAVABWAFgAmgBoBcBqRdXv8ICGj4Y8LoXBigAMAA4AdAYAfAYAQ&amp;ase=2&amp;gclid=EAIaIQobChMIl7WH-ZCmlgMVdbfCCB0Rww7wEAEYASAAEgKdHvD_BwE&amp;num=1&amp;cid=CAASwgHkaJExfmlZ9HpEObOLiZkTdzNZNqed1JW47_tOfQlBXzcXbbtDSftZvOQeqelMsFfGHq2-wQ3J22bpr_2WznqLoL1D5Ka6DrF0d2HBN_c0cZ5luYdJboBIdJsOmG4Bz6mboXZpydGJgOQi4Tc43-87c1MzfpTLxxwMKe0w47fBXYfrynzPJEiJehXknS0ot7dPg1qDnVeLLZt-SHh_tl2Qd57_UaUKLBJp4exkPmcV-PlGAvFZeSfc6naXOUSqPgRFEA&amp;ad_cpn=%5BCPN%5D&amp;sig=AOD64_1SLObZAfEBl8bxeAxqAOux4fsCuQ&amp;ctype=110&amp;video_id=EJ_xkuarNEU&amp;label=video_click_to_advertiser_site&amp;ms=%5BCLICK_MS%5D&amp;nb=21&amp;nx=%5BNX%5D&amp;ny=%5BNY%5D&amp;dim=%5BDIM%5D\" rel=\"nofollow\" class=\"ytLockupViewModelContentImage\" target=\"_blank\" tabindex=\"-1\" aria-hidden=\"true\"><yt-thumbnail-view-model class=\"ytThumbnailViewModelHost ytThumbnailViewModelAspectRatio16By9 ytThumbnailViewModelLarge\"><div class=\"ytThumbnailViewModelImage\"><img class=\"ytCoreImageHost ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleAspectFill ytCoreImageLoaded\" alt=\"\" src=\"https://tpc.googlesyndication.com/simgad/7364103184507444661\"></div><thumbnail-overlay-button-view-model class=\"ytThumbnailOverlayButtonViewModelHost\"><div class=\"ytThumbnailOverlayButtonViewModelButton ytThumbnailOverlayButtonViewModelButtonBottomEndPosition ytThumbnailOverlayButtonViewModelButtonLegacyIcon\"><button-view-model class=\"ytSpecButtonViewModelHost\"><button class=\"ytSpecButtonShapeNextHost ytSpecButtonShapeNextTonal ytSpecButtonShapeNextOverlayDark ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconOnlyDefault ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding\" title=\"\" aria-disabled=\"false\" aria-hidden=\"true\" tabindex=\"-1\" style=\"background-color: rgba(0, 0, 0, 0.6);\"><div aria-hidden=\"true\" class=\"ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent\"><span class=\"ytIconWrapperHost\" style=\"width: 24px; height: 24px;\"><span class=\"yt-icon-shape ytSpecIconShapeHost\"><div style=\"width: 100%; height: 100%; display: block; filter: drop-shadow(0px 1px 4px rgba(0, 0, 0, 0.3)); fill: currentcolor;\"><svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" focusable=\"false\" aria-hidden=\"true\" style=\"pointer-events: none; display: inherit; width: 100%; height: 100%;\"><path d=\"M19 5H8a1 1 0 000 2h7.586L5.293 17.293a1 1 0 101.414 1.414L17 8.414V16a1 1 0 002 0V5Z\"></path></svg></div></span></span></div><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeOverlayTouchResponseInverse\"><div class=\"ytSpecTouchFeedbackShapeStroke\"></div><div class=\"ytSpecTouchFeedbackShapeFill\"></div></yt-touch-feedback-shape></button></button-view-model></div></thumbnail-overlay-button-view-model><yt-thumbnail-overlay-badge-view-model class=\"ytThumbnailOverlayBadgeViewModelHost ytThumbnailOverlayBadgeViewModelBottomEnd ytThumbnailOverlayBadgeViewModelLarge\"><yt-thumbnail-badge-view-model class=\"ytThumbnailBadgeViewModelHost ytThumbnailOverlayBadgeViewModelBadge\"></yt-thumbnail-badge-view-model></yt-thumbnail-overlay-badge-view-model></yt-thumbnail-view-model></a><div class=\"ytLockupViewModelMetadata\"><feed-ad-metadata-view-model class=\"ytwFeedAdMetadataViewModelHostIsClickableAdComponent\"><div class=\"ytwFeedAdMetadataViewModelHostAvatarStyleStandard\"><ad-avatar-view-model class=\"ytwAdAvatarViewModelHostIsClickableAdComponent\"><yt-avatar-shape><div class=\"ytSpecAvatarShapeHost ytSpecAvatarShapeButton ytSpecAvatarShapeButtonMedium ytSpecAvatarShapeTappable\" aria-label=\"Adobe Document Cloud Media\" role=\"button\" tabindex=\"0\"><div class=\"\"><div class=\"ytSpecAvatarShapeAvatarSizeMedium\"><img class=\"ytCoreImageHost ytSpecAvatarShapeImage ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleToFill ytCoreImageLoaded\" alt=\"\" src=\"https://yt3.ggpht.com/proxy/MOuz2I13I1fAnFfngtXtL_W4we9dtMgr0pZOHx9ZvXrWe0TzDLTj2mq2_seyh8bAOYiFhihUkC0bcCbQ2Rr3ROUyAm-g7fKx7ikqVy2aYwv8ap82JEQltB0uNj5JlrrMcTbQ-wFlNo0DfytWwYBrrCyx4-VnwgCwx-dn0fy6KEEwJzLjssuJHIvXA-MdWMvBvChh3bzxW7-sQCuvX2mDwrBOQUGt_eZzMbPzNL_oO6Ke1vjjr2458wPYmALVc80eUKLvvs8=w68-h68-nd\"></div></div></div></yt-avatar-shape></ad-avatar-view-model></div><div class=\"ytwFeedAdMetadataViewModelHostMetadata ytwFeedAdMetadataViewModelHostMetadataNoBottomMargin ytwFeedAdMetadataViewModelHostNoTopPadding\"><div class=\"ytwFeedAdMetadataViewModelHostTextsStyleStandardHeadline\"><span class=\"ytAttributedStringHost ytAttributedStringWhiteSpacePreWrap ytAttributedStringLinkInheritColor\" style=\"\"><a class=\"ytAttributedStringLink ytAttributedStringLinkCallToActionColor ytAttributedStringLinkInheritColor\" tabindex=\"0\" style=\"\"><a class=\"ytAttributedStringLink ytAttributedStringLinkCallToActionColor ytAttributedStringLinkInheritColor\" href=\"https://www.googleadservices.com/pagead/aclk?sa=L&amp;ai=CiwFA7jCCapeGGfXuivYPkYa7gA-p5I6JiQG1t7WK1hWwkB8QASAAYMm-8YbIo6AZggEXY2EtcHViLTYyMTk4MTE3NDcwNDkzNzGgAbH6_-oCqAMEyAMKqgT1AU_Q2Ab9kQe8Z8IoQ15uQuPeKkEjDuWPTLoyvjQFSR89csbWPrMnUTA8OUMc3trkRqtXrCTQosC5eXW1HAV7vLqRVBxCGQ2_DCJ5dBhxjVg0V_XhxIlhC5EbApAnjtuia83IOVd9X4O-U-nh7x7d8xGRjFVNcfhBTDzxweCXB9mMFQDJiOPAv0U3e5wOzWt1OaLvwgbqNqx7jiKFXKPImhEquktFJTkI7eQ99eH8xCX8352ThR8qLtrClNA2uKIZVpb8z9SmWFVnuojxWlEtVmP3kQx2iPuOQqU7pF--wK4G_PUTjZC0Wrw9BiI0aQXLymsFIr_4iAXm0O-tWJIFCggTaAF4-s2flQGgBqEBgAe3hYCVAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH77WxAqgH8LWxAqgH-dOxAqgHydqxAqgHqeCxAqgHhAioB6bUsQKoB6jSG6gHtgeoB7HcG6gHsJuxAqgHrrGxAqgH_bKxAqgHyM-xAqgHyc-xAqgHzcexAqgH8dGxAqgH_NWxAqgH-9WxAqgHjNaxAqgHi9axAqgHmuKxAqgHm-KxAqgHndexAqgHndSxAqgHgcYbqAf8r7ECqAfVzhuoB77ZsQKoB6vFG6gHnNwbqAe3obECqAfVqbECqAfn2rECqAfetbECqAfqsbECqAe-t7ECqAeZtbECqAeFwbECqAfrpbECqAfKqbECkggLRUpfeGt1YXJORVWoCAHSCC4IgEEQARheMgKCAjoPgEKAwICAgICAgAKqgIAQSNmg0jVQFFjAoof5kKaWA2ABmgkxaHR0cHM6Ly93d3cuYWRvYmUuY29tL2Fjcm9iYXQvc3R1ZGVudC1zcGFjZXMuaHRtbLEJQPqFr20hg5LICRfICY8ByAnCAboLQQgCEAUYBCAHKAEwGUABSABYZGAAaABwAYgBAJgBAaIBCAoAqAIB2AICqAEB2AEDgAIBiAISugMJdmljYmZ6YWNh0AsT4AsBogwdahYKFGNvbS5hZG9iZS5zcGFyay5wb3N0eACIAQDSDAIQAdoMJQoKELDQpN_unP_KZxICAQMaDRjm0O-tWCDX9fLl0wVAAUoCEB-aDQETqg0CVVPIDQHSDbEEaHR0cHM6Ly9hZC5kb3VibGVjbGljay5uZXQvZGRtL3RyYWNrY2xrL045NzI5NTIuMjc5MzgyQklETUFOQUdFUl9ERkFTSVRFL0IyMjM0NDQxMy4yNDE1MzkzMjE7ZGNfdHJrX2FpZD00MzgxMjg2MjI7ZGNfdHJrX2NpZD0xMTI4ODQ2MTM7ZGNfZGJtX3Rva2VuPUFPamVMTkVBQUFBNkNqTUtEQWdBRlFBQUFBQWRBQUFBQUJJTUNBQVZBQUFBQUIwQUFBQUFJaE1JNXREdnJWaW9Bc080OUFHd0FzeVc0dWtEUURzUWwtZTZBYXBTbzNMajY5SHFtUlNHRDdObEp0Yz07ZGNfbGF0PTtkY19yZGlkPTt0YWdfZm9yX2NoaWxkX2RpcmVjdGVkX3RyZWF0bWVudD07dGZ1YT07bHRkPTtkY190ZHY9MTtkY190cmFuc3BhcmVudD0xO2RjX3J1aT0xO2RjX2Vwcz1BSGFzOGNDRy1HWUlkR2h6djhwR3FvUmRGMGFHZ1Zwd0t3ZW90WkhYRjIxMWx1Zk9zRjVEX251VGNmMFEtRUdxZ3lLTFZMQ2h5bHJlV3ZKV2dRN1VQdztkY19wdWJpZD02P2h0dHBzOi8vd3d3LmFkb2JlLmNvbS9hY3JvYmF0L3N0dWRlbnQtc3BhY2VzLmh0bWw_c2RpZD1UVEdXS1FaOSZtdj1zb2NpYWwmbXYyPXBhaWRzb2MmZ2FkX3NvdXJjZT0ysBO53NMjuBP___________8BiBQEsBQCwBWBgIBA0BUB2BUBmBYBqBYBgBcBihcYCAMYASABKAEwATgBQAFIAVABWAFgAmgBoBcBqRdXv8ICGj4Y8LoXBigAMAA4AdAYAfAYAQ&amp;ase=2&amp;gclid=EAIaIQobChMIl7WH-ZCmlgMVdbfCCB0Rww7wEAEYASAAEgKdHvD_BwE&amp;num=1&amp;cid=CAASwgHkaJExfmlZ9HpEObOLiZkTdzNZNqed1JW47_tOfQlBXzcXbbtDSftZvOQeqelMsFfGHq2-wQ3J22bpr_2WznqLoL1D5Ka6DrF0d2HBN_c0cZ5luYdJboBIdJsOmG4Bz6mboXZpydGJgOQi4Tc43-87c1MzfpTLxxwMKe0w47fBXYfrynzPJEiJehXknS0ot7dPg1qDnVeLLZt-SHh_tl2Qd57_UaUKLBJp4exkPmcV-PlGAvFZeSfc6naXOUSqPgRFEA&amp;ad_cpn=%5BCPN%5D&amp;sig=AOD64_1SLObZAfEBl8bxeAxqAOux4fsCuQ&amp;ctype=110&amp;video_id=EJ_xkuarNEU&amp;label=video_click_to_advertiser_site&amp;ms=%5BCLICK_MS%5D&amp;nb=0&amp;nx=%5BNX%5D&amp;ny=%5BNY%5D&amp;dim=%5BDIM%5D\" rel=\"nofollow\" target=\"_blank\" tabindex=\"0\" force-new-state=\"true\" style=\"\">Devour knowledge with Student Spaces</a></a></span></div><div class=\"ytwFeedAdMetadataViewModelHostMetadataAdBadgeDetailsLineContainerStyleStandard\"><ad-badge-view-model class=\"ytwAdBadgeViewModelHostIsClickableAdComponent ytwAdBadgeViewModelHostStyleStandardBrowse\"><badge-shape class=\"ytBadgeShapeHost ytBadgeShapeAd ytBadgeShapeAdsIncludeDot ytBadgeShapeTypography\"><div class=\"ytBadgeShapeText\">Sponsored</div></badge-shape></ad-badge-view-model><ad-details-line-view-model class=\"ytwAdDetailsLineViewModelHostIsClickableAdComponent\"><span class=\"ytAttributedStringHost ytwAdDetailsLineViewModelHostTextStyleStandardBrowse ytAttributedStringWhiteSpacePreWrap\" role=\"text\" style=\"\">Adobe</span></ad-details-line-view-model></div></div><div class=\"ytwFeedAdMetadataViewModelHostMenuStyleStandard ytwFeedAdMetadataViewModelHostNoTopPadding ytwFeedAdMetadataViewModelHostMenuStyleStandardMenuPosAdjusted\"><button-view-model class=\"ytSpecButtonViewModelHost\"><button class=\"ytSpecButtonShapeNextHost ytSpecButtonShapeNextText ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconButton ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding\" title=\"\" aria-label=\"My Ad Center\" aria-disabled=\"false\" style=\"\"><div aria-hidden=\"true\" class=\"ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent\"><span class=\"ytIconWrapperHost\" style=\"width: 24px; height: 24px;\"><span class=\"yt-icon-shape ytSpecIconShapeHost\"><div style=\"width: 100%; height: 100%; display: block; fill: currentcolor;\"><svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" focusable=\"false\" aria-hidden=\"true\" style=\"pointer-events: none; display: inherit; width: 100%; height: 100%;\"><path d=\"M12 4a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Z\"></path></svg></div></span></span></div><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse\"><div class=\"ytSpecTouchFeedbackShapeStroke\"></div><div class=\"ytSpecTouchFeedbackShapeFill\"></div></yt-touch-feedback-shape></button></button-view-model></div></feed-ad-metadata-view-model><lockup-attachments-view-model class=\"ytLockupAttachmentsViewModelHost\"><div class=\"ytLockupAttachmentsViewModelAttachment\"><ad-button-group-view-model class=\"ytwAdButtonGroupViewModelHost\"><div class=\"ytwAdButtonGroupViewModelHostSecondaryButton\"><ad-button-view-model class=\"ytwAdButtonViewModelHost\" style=\"transition-duration: 0.3s;\"><a href=\"/watch?v=EJ_xkuarNEU\" class=\"ytSpecButtonShapeNextHost ytSpecButtonShapeNextTonal ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding\" force-new-state=\"true\" aria-label=\"Watch\" aria-disabled=\"false\"><div class=\"ytSpecButtonShapeNextButtonTextContent ytSpecButtonShapeNextElevatedContent\"><span class=\"ytAttributedStringHost ytAttributedStringWhiteSpaceNoWrap\" role=\"text\" style=\"\">Watch</span></div><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse\"><div class=\"ytSpecTouchFeedbackShapeStroke\"></div><div class=\"ytSpecTouchFeedbackShapeFill\"></div></yt-touch-feedback-shape><yt-light-shape aria-hidden=\"true\" class=\"contribYtLightShapeHost contribYtLightShapeStaticRimLight contribYtLightShapeStaticRimLightTonal\" style=\"--yt-light-wash-opacity: 0; --yt-light-wash-x: 0px; --yt-light-wash-y: 0px; --yt-light-wash-size: 0px;\"><div class=\"contribYtLightShapeStaticWashLight contribYtLightShapeStaticWashLightTonal\" style=\"\"></div></yt-light-shape></a></ad-button-view-model></div><div class=\"ytwAdButtonGroupViewModelHostPrimaryButton\"><ad-button-view-model class=\"ytwAdButtonViewModelHost\" style=\"transition-duration: 0.3s;\"><a href=\"https://www.googleadservices.com/pagead/aclk?sa=L&amp;ai=CiwFA7jCCapeGGfXuivYPkYa7gA-p5I6JiQG1t7WK1hWwkB8QASAAYMm-8YbIo6AZggEXY2EtcHViLTYyMTk4MTE3NDcwNDkzNzGgAbH6_-oCqAMEyAMKqgT1AU_Q2Ab9kQe8Z8IoQ15uQuPeKkEjDuWPTLoyvjQFSR89csbWPrMnUTA8OUMc3trkRqtXrCTQosC5eXW1HAV7vLqRVBxCGQ2_DCJ5dBhxjVg0V_XhxIlhC5EbApAnjtuia83IOVd9X4O-U-nh7x7d8xGRjFVNcfhBTDzxweCXB9mMFQDJiOPAv0U3e5wOzWt1OaLvwgbqNqx7jiKFXKPImhEquktFJTkI7eQ99eH8xCX8352ThR8qLtrClNA2uKIZVpb8z9SmWFVnuojxWlEtVmP3kQx2iPuOQqU7pF--wK4G_PUTjZC0Wrw9BiI0aQXLymsFIr_4iAXm0O-tWJIFCggTaAF4-s2flQGgBqEBgAe3hYCVAZAHBKgH8sCxAqgHuMSxAqgH4baxAqgHpc-xAqgH552xAqgH6J2xAqgH77WxAqgH8LWxAqgH-dOxAqgHydqxAqgHqeCxAqgHhAioB6bUsQKoB6jSG6gHtgeoB7HcG6gHsJuxAqgHrrGxAqgH_bKxAqgHyM-xAqgHyc-xAqgHzcexAqgH8dGxAqgH_NWxAqgH-9WxAqgHjNaxAqgHi9axAqgHmuKxAqgHm-KxAqgHndexAqgHndSxAqgHgcYbqAf8r7ECqAfVzhuoB77ZsQKoB6vFG6gHnNwbqAe3obECqAfVqbECqAfn2rECqAfetbECqAfqsbECqAe-t7ECqAeZtbECqAeFwbECqAfrpbECqAfKqbECkggLRUpfeGt1YXJORVWoCAHSCC4IgEEQARheMgKCAjoPgEKAwICAgICAgAKqgIAQSNmg0jVQFFjAoof5kKaWA2ABmgkxaHR0cHM6Ly93d3cuYWRvYmUuY29tL2Fjcm9iYXQvc3R1ZGVudC1zcGFjZXMuaHRtbLEJQPqFr20hg5LICRfICY8ByAnCAboLQQgCEAUYBCAHKAEwGUABSABYZGAAaABwAYgBAJgBAaIBCAoAqAIB2AICqAEB2AEDgAIBiAISugMJdmljYmZ6YWNh0AsT4AsBogwdahYKFGNvbS5hZG9iZS5zcGFyay5wb3N0eACIAQDSDAIQAdoMJQoKELDQpN_unP_KZxICAQMaDRjm0O-tWCDX9fLl0wVAAUoCEB-aDQETqg0CVVPIDQHSDbEEaHR0cHM6Ly9hZC5kb3VibGVjbGljay5uZXQvZGRtL3RyYWNrY2xrL045NzI5NTIuMjc5MzgyQklETUFOQUdFUl9ERkFTSVRFL0IyMjM0NDQxMy4yNDE1MzkzMjE7ZGNfdHJrX2FpZD00MzgxMjg2MjI7ZGNfdHJrX2NpZD0xMTI4ODQ2MTM7ZGNfZGJtX3Rva2VuPUFPamVMTkVBQUFBNkNqTUtEQWdBRlFBQUFBQWRBQUFBQUJJTUNBQVZBQUFBQUIwQUFBQUFJaE1JNXREdnJWaW9Bc080OUFHd0FzeVc0dWtEUURzUWwtZTZBYXBTbzNMajY5SHFtUlNHRDdObEp0Yz07ZGNfbGF0PTtkY19yZGlkPTt0YWdfZm9yX2NoaWxkX2RpcmVjdGVkX3RyZWF0bWVudD07dGZ1YT07bHRkPTtkY190ZHY9MTtkY190cmFuc3BhcmVudD0xO2RjX3J1aT0xO2RjX2Vwcz1BSGFzOGNDRy1HWUlkR2h6djhwR3FvUmRGMGFHZ1Zwd0t3ZW90WkhYRjIxMWx1Zk9zRjVEX251VGNmMFEtRUdxZ3lLTFZMQ2h5bHJlV3ZKV2dRN1VQdztkY19wdWJpZD02P2h0dHBzOi8vd3d3LmFkb2JlLmNvbS9hY3JvYmF0L3N0dWRlbnQtc3BhY2VzLmh0bWw_c2RpZD1UVEdXS1FaOSZtdj1zb2NpYWwmbXYyPXBhaWRzb2MmZ2FkX3NvdXJjZT0ysBO53NMjuBP___________8BiBQEsBQCwBWBgIBA0BUB2BUBmBYBqBYBgBcBihcYCAMYASABKAEwATgBQAFIAVABWAFgAmgBoBcBqRdXv8ICGj4Y8LoXBigAMAA4AdAYAfAYAQ&amp;ase=2&amp;gclid=EAIaIQobChMIl7WH-ZCmlgMVdbfCCB0Rww7wEAEYASAAEgKdHvD_BwE&amp;num=1&amp;cid=CAASwgHkaJExfmlZ9HpEObOLiZkTdzNZNqed1JW47_tOfQlBXzcXbbtDSftZvOQeqelMsFfGHq2-wQ3J22bpr_2WznqLoL1D5Ka6DrF0d2HBN_c0cZ5luYdJboBIdJsOmG4Bz6mboXZpydGJgOQi4Tc43-87c1MzfpTLxxwMKe0w47fBXYfrynzPJEiJehXknS0ot7dPg1qDnVeLLZt-SHh_tl2Qd57_UaUKLBJp4exkPmcV-PlGAvFZeSfc6naXOUSqPgRFEA&amp;ad_cpn=%5BCPN%5D&amp;sig=AOD64_1SLObZAfEBl8bxeAxqAOux4fsCuQ&amp;ctype=110&amp;video_id=EJ_xkuarNEU&amp;label=video_click_to_advertiser_site&amp;ms=%5BCLICK_MS%5D&amp;nb=8&amp;nx=%5BNX%5D&amp;ny=%5BNY%5D&amp;dim=%5BDIM%5D\" rel=\"nofollow\" class=\"ytSpecButtonShapeNextHost ytSpecButtonShapeNextFilled ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding\" force-new-state=\"true\" target=\"_blank\" aria-label=\"Learn more\" aria-disabled=\"false\"><div class=\"ytSpecButtonShapeNextButtonTextContent ytSpecButtonShapeNextElevatedContent\"><span class=\"ytAttributedStringHost ytAttributedStringWhiteSpaceNoWrap\" role=\"text\" style=\"\">Learn more</span></div><yt-touch-feedback-shape aria-hidden=\"true\" class=\"ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponseInverse\"><div class=\"ytSpecTouchFeedbackShapeStroke\"></div><div class=\"ytSpecTouchFeedbackShapeFill\"></div></yt-touch-feedback-shape><yt-light-shape aria-hidden=\"true\" class=\"contribYtLightShapeHost contribYtLightShapeStaticRimLight contribYtLightShapeStaticRimLightSolid\" style=\"--yt-light-wash-opacity: 0; --yt-light-wash-x: 0px; --yt-light-wash-y: 0px; --yt-light-wash-size: 0px;\"><div class=\"contribYtLightShapeStaticWashLight contribYtLightShapeStaticWashLightSolid\" style=\"\"></div></yt-light-shape></a></ad-button-view-model></div></ad-button-group-view-model></div></lockup-attachments-view-model></div></div></yt-lockup-view-model></div></video-display-button-group-layout-view-model></div>\n</ytd-in-feed-ad-layout-renderer></div>\n</ytd-ad-slot-renderer></div>\n<yt-interaction id=\"interaction\" class=\"extended rounded-large style-scope ytd-rich-item-renderer\"><!--css-build:shady--><!--css_build_scope:yt-interaction--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.ui.yt_interaction.yt.interaction.css.js--><div class=\"stroke style-scope yt-interaction\"></div><div class=\"fill style-scope yt-interaction\"></div></yt-interaction>\n</ytd-rich-item-renderer>",
+  "gridOutline": {
+    "n": "ytd-rich-grid-renderer.style-scope.ytd-two-column-browse-results-renderer",
+    "box": "1680x6117.2",
+    "c": [
+      {
+        "n": "div#header.style-scope.ytd-rich-grid-renderer",
+        "box": "1680x56",
+        "c": [
+          {
+            "n": "ytd-feed-filter-chip-bar-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "1680x56",
+            "c": [
+              {
+                "n": "div#chips-wrapper.style-scope.ytd-feed-filter-chip-bar-renderer",
+                "box": "1680x56"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "div#big-yoodle.style-scope.ytd-rich-grid-renderer",
+        "box": "1680x0"
+      },
+      {
+        "n": "div#masthead-ad.style-scope.ytd-rich-grid-renderer",
+        "box": "1680x0"
+      },
+      {
+        "n": "div#title-container.style-scope.ytd-rich-grid-renderer",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div#title.style-scope.ytd-rich-grid-renderer",
+            "box": "0x0"
+          }
+        ]
+      },
+      {
+        "n": "div#contents.style-scope.ytd-rich-grid-renderer",
+        "box": "1648x6061.2",
+        "c": [
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x409.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x409.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "541.33x417.99"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x409.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x409.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x409.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x409.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-section-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "1648x640.89",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-section-renderer",
+                "box": "1632x640.89"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x425.49",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x425.49"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x425.49",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x425.49"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x425.49",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x425.49"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "541.33x433.49"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-section-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "1648x640.89",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-section-renderer",
+                "box": "1632x640.89"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x401.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x401.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "541.33x409.99"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x401.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x401.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x401.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x401.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "541.33x407.99"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x399.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x399.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x377.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x377.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x377.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x377.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-rich-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "533.33x377.99",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-item-renderer",
+                "box": "533.33x377.99"
+              },
+              {
+                "n": "yt-interaction#interaction.extended.rounded-large.style-scope",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-continuation-item-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "1648x851.98",
+            "c": [
+              {
+                "n": "div#ghost-cards.style-scope.ytd-continuation-item-renderer",
+                "box": "1648x791.98"
+              },
+              {
+                "n": "div#ghost-comment-section.style-scope.ytd-continuation-item-renderer",
+                "box": "1648x0"
+              },
+              {
+                "n": "tp-yt-paper-spinner#spinner.style-scope.ytd-continuation-item-renderer",
+                "box": "28x28"
+              },
+              {
+                "n": "div#button.style-scope.ytd-continuation-item-renderer",
+                "box": "0x0"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "div#reload-content.style-scope.ytd-rich-grid-renderer",
+        "box": "0x0"
+      }
+    ]
+  },
+  "appOutline": {
+    "n": "ytd-app",
+    "box": "1920x6189.2",
+    "c": [
+      {
+        "n": "yt-guide-manager#guide-service.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "yt-mdx-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "yt-playlist-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "yt-hotkey-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "ytd-miniplayer.ytdMiniplayerComponentHost",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div.ytdMiniplayerComponentContent",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentDraggable",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "ytd-miniplayer-info-bar.ytdMiniplayerInfoBarHost",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "div.ytdMiniplayerComponentResizers",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerNorth",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerNorthCorner",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerDisabled",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerEastCorner",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerDisabled",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerSouthCorner",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerWest",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerWestCorner",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "div#content.style-scope.ytd-app",
+        "box": "1920x6133.2",
+        "c": [
+          {
+            "n": "div#frosted-glass.with-chipbar.style-scope.ytd-app",
+            "box": "1920x112"
+          },
+          {
+            "n": "div#masthead-container.style-scope.ytd-app",
+            "box": "1920x56",
+            "c": [
+              {
+                "n": "ytd-masthead#masthead.masthead-finish",
+                "box": "1920x56",
+                "c": [
+                  {
+                    "n": "iron-media-query.style-scope.ytd-masthead",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#ticker.style-scope.ytd-masthead",
+                    "box": "1920x0"
+                  },
+                  {
+                    "n": "div#interstitial.style-scope.ytd-masthead",
+                    "box": "1920x0"
+                  },
+                  {
+                    "n": "div#background.style-scope.ytd-masthead",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#container.style-scope.ytd-masthead",
+                    "box": "1920x56"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "tp-yt-app-drawer#guide.style-scope.ytd-app",
+            "box": "240x1144",
+            "c": [
+              {
+                "n": "div#scrim.style-scope.tp-yt-app-drawer",
+                "box": "240x1144"
+              },
+              {
+                "n": "div#contentContainer.style-scope.tp-yt-app-drawer",
+                "box": "240x1144",
+                "c": [
+                  {
+                    "n": "div#guide-wrapper.style-scope.ytd-app",
+                    "box": "240x1024"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "ytd-mini-guide-renderer.style-scope.ytd-app",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "div#items.style-scope.ytd-mini-guide-renderer",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-page-manager#page-manager.style-scope.ytd-app",
+            "box": "1680x6133.2",
+            "c": [
+              {
+                "n": "ytd-browse.style-scope.ytd-page-manager",
+                "box": "1680x6133.2",
+                "c": [
+                  {
+                    "n": "div#alert-banner.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#personal-greeting.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#masthead-ad.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#header.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#alerts.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "ytd-channel-legal-info-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-playlist-sidebar-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-playlist-header-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-settings-sidebar-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-two-column-browse-results-renderer.style-scope.ytd-browse.grid",
+                    "box": "1680x6117.2"
+                  },
+                  {
+                    "n": "div#survey.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#metadata.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#footer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-refresh#refresh.style-scope.ytd-browse",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "ytd-watch-flexy.style-scope.ytd-page-manager.watch-root-element",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "iron-media-query#two-column-query.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "iron-media-query#small-window-query.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "iron-media-query#large-window-query.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#microformat.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#full-bleed-container.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#single-column-container.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#columns.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#fixed-side-menu.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#survey.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#engagement-panel-scrim.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "div#persistent-panel-container.style-scope.ytd-app",
+            "box": "0x0"
+          }
+        ]
+      },
+      {
+        "n": "ytd-permission-role-bottom-bar-renderer.style-scope.ytd-app",
+        "box": "1680x0",
+        "c": [
+          {
+            "n": "div.pom-role-text.style-scope.ytd-permission-role-bottom-bar-renderer",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "yt-formatted-string.style-scope.ytd-permission-role-bottom-bar-renderer",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "yt-attributed-string",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "ytd-popup-container.style-scope.ytd-app",
+        "box": "1920x0"
+      },
+      {
+        "n": "ytd-third-party-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "snackbar-container.ytSnackbarContainerHost",
+        "box": "0x0"
+      },
+      {
+        "n": "div#video-preview.style-scope.ytd-app",
+        "box": "1920x0",
+        "c": [
+          {
+            "n": "ytd-video-preview-loader.ytdVideoPreviewLoaderHost",
+            "box": "1920x0",
+            "c": [
+              {
+                "n": "div.ytdVideoPreviewLoaderVideoPreviewContainer",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "ytd-video-preview",
+                    "box": "557.33x323.99"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "yt-ephemeral-actions.ytEphemeralActionsHost",
+        "box": "0x1"
+      },
+      {
+        "n": "yt-tooltip.ytTooltipContainerHost",
+        "box": "1920x0",
+        "c": [
+          {
+            "n": "yt-popover.ytPopoverComponentHost.ytTooltipContainerDefaultTooltipContent",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "span",
+                "box": "0x0"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "yt-page-navigation-progress.style-scope.ytd-app",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div#progress.style-scope.yt-page-navigation-progress",
+            "box": "0x0"
+          }
+        ]
+      }
+    ]
+  },
+  "mastheadOutline": {
+    "n": "ytd-masthead#masthead.masthead-finish",
+    "box": "1920x56",
+    "c": [
+      {
+        "n": "iron-media-query.style-scope.ytd-masthead",
+        "box": "0x0"
+      },
+      {
+        "n": "div#ticker.style-scope.ytd-masthead",
+        "box": "1920x0"
+      },
+      {
+        "n": "div#interstitial.style-scope.ytd-masthead",
+        "box": "1920x0"
+      },
+      {
+        "n": "div#background.style-scope.ytd-masthead",
+        "box": "0x0"
+      },
+      {
+        "n": "div#container.style-scope.ytd-masthead",
+        "box": "1920x56",
+        "c": [
+          {
+            "n": "div#start.style-scope.ytd-masthead",
+            "box": "169x56",
+            "c": [
+              {
+                "n": "yt-icon-button#back-button.style-scope.ytd-masthead",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "button#button.style-scope.yt-icon-button",
+                    "box": "0x0",
+                    "c": [
+                      {
+                        "n": "yt-icon.style-scope.ytd-masthead",
+                        "box": "0x0"
+                      }
+                    ]
+                  },
+                  {
+                    "n": "yt-interaction#interaction.circular.style-scope.yt-icon-button",
+                    "box": "0x0",
+                    "c": [
+                      {
+                        "n": "div.stroke.style-scope.yt-interaction",
+                        "box": "0x0"
+                      },
+                      {
+                        "n": "div.fill.style-scope.yt-interaction",
+                        "box": "0x0"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "n": "tp-yt-paper-tooltip#back-button-tooltip.style-scope.ytd-masthead",
+                "box": "0x0",
+                "t": "Back"
+              },
+              {
+                "n": "yt-icon-button#guide-button.style-scope.ytd-masthead",
+                "box": "40x40",
+                "c": [
+                  {
+                    "n": "button#button.style-scope.yt-icon-button",
+                    "box": "24x24",
+                    "c": [
+                      {
+                        "n": "yt-icon#guide-icon.style-scope.ytd-masthead",
+                        "box": "24x24",
+                        "c": [
+                          {
+                            "n": "span.yt-icon-shape.style-scope.yt-icon",
+                            "box": "24x24",
+                            "c": [
+                              {
+                                "n": "div",
+                                "box": "24x24",
+                                "c": [
+                                  {
+                                    "n": "svg",
+                                    "box": "24x24"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "n": "yt-interaction#interaction.circular.style-scope.yt-icon-button",
+                    "box": "40x40",
+                    "c": [
+                      {
+                        "n": "div.stroke.style-scope.yt-interaction",
+                        "box": "40x40"
+                      },
+                      {
+                        "n": "div.fill.style-scope.yt-interaction",
+                        "box": "40x40"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "n": "ytd-topbar-logo-renderer#logo.style-scope.ytd-masthead",
+                "box": "129x56",
+                "c": [
+                  {
+                    "n": "a#logo.yt-simple-endpoint.style-scope.ytd-topbar-logo-renderer",
+                    "box": "123x56",
+                    "c": [
+                      {
+                        "n": "div.style-scope.ytd-topbar-logo-renderer",
+                        "box": "123x56",
+                        "c": [
+                          {
+                            "n": "ytd-logo.style-scope.ytd-topbar-logo-renderer",
+                            "box": "123x12",
+                            "c": [
+                              {
+                                "n": "yt-icon#logo-icon.style-scope.ytd-logo",
+                                "box": "123x56",
+                                "c": [
+                                  {
+                                    "n": "span.yt-icon-shape.style-scope.yt-icon",
+                                    "box": "93x20"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "n": "ytd-yoodle-renderer.style-scope.ytd-topbar-logo-renderer",
+                        "box": "0x0",
+                        "c": [
+                          {
+                            "n": "picture.style-scope.ytd-yoodle-renderer",
+                            "box": "0x0",
+                            "c": [
+                              {
+                                "n": "source.style-scope.ytd-yoodle-renderer",
+                                "box": "0x0"
+                              },
+                              {
+                                "n": "img.style-scope.ytd-yoodle-renderer",
+                                "box": "0x0"
+                              }
+                            ]
+                          },
+                          {
+                            "n": "ytd-logo.style-scope.ytd-yoodle-renderer",
+                            "box": "0x0",
+                            "c": [
+                              {
+                                "n": "yt-icon#logo-icon.style-scope.ytd-logo",
+                                "box": "0x0",
+                                "c": [
+                                  {
+                                    "n": "span.yt-icon-shape.style-scope.yt-icon",
+                                    "box": "0x0"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "n": "ytd-lottie-player",
+                            "box": "0x0"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "n": "span#country-code.style-scope.ytd-topbar-logo-renderer",
+                    "box": "0x44"
+                  }
+                ]
+              },
+              {
+                "n": "div#skip-navigation.style-scope.ytd-masthead",
+                "box": "127.91x40",
+                "c": [
+                  {
+                    "n": "ytd-button-renderer.style-scope.ytd-masthead",
+                    "box": "127.91x40",
+                    "c": [
+                      {
+                        "n": "yt-button-shape",
+                        "box": "127.91x40",
+                        "c": [
+                          {
+                            "n": "button.ytSpecButtonShapeNextHost.ytSpecButtonShapeNextTonal.ytSpecButtonShapeNextMono",
+                            "box": "127.91x40",
+                            "c": [
+                              {
+                                "n": "div.ytSpecButtonShapeNextButtonTextContent.ytSpecButtonShapeNextElevatedContent",
+                                "box": "95.91x40",
+                                "c": [
+                                  {
+                                    "n": "span.ytAttributedStringHost.ytAttributedStringWhiteSpaceNoWrap",
+                                    "box": "95.91x16.5",
+                                    "t": "Skip navigation"
+                                  }
+                                ]
+                              },
+                              {
+                                "n": "yt-touch-feedback-shape.ytSpecTouchFeedbackShapeHost.ytSpecTouchFeedbackShapeTouchResponse",
+                                "box": "127.91x40",
+                                "c": [
+                                  {
+                                    "n": "div.ytSpecTouchFeedbackShapeStroke",
+                                    "box": "127.91x40"
+                                  },
+                                  {
+                                    "n": "div.ytSpecTouchFeedbackShapeFill",
+                                    "box": "127.91x40"
+                                  }
+                                ]
+                              },
+                              {
+                                "n": "yt-light-shape.contribYtLightShapeHost.contribYtLightShapeStaticRimLight.contribYtLightShapeStaticRimLightTonal",
+                                "box": "127.91x40",
+                                "c": [
+                                  {
+                                    "n": "div.contribYtLightShapeStaticWashLight.contribYtLightShapeStaticWashLightTonal",
+                                    "box": "127.91x40"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "n": "tp-yt-paper-tooltip",
+                        "box": "0x0"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "div#center.style-scope.ytd-masthead",
+            "box": "732x40",
+            "c": [
+              {
+                "n": "yt-searchbox.ytSearchboxComponentHost.ytSearchboxComponentDesktop.ytd-masthead",
+                "box": "640x40",
+                "c": [
+                  {
+                    "n": "div.ytSearchboxComponentInputWrapper",
+                    "box": "632x40",
+                    "c": [
+                      {
+                        "n": "div.ytSearchboxComponentInputContainer",
+                        "box": "632x40",
+                        "c": [
+                          {
+                            "n": "div.ytSearchboxComponentInputBox",
+                            "box": "536x40",
+                            "c": [
+                              {
+                                "n": "form.ytSearchboxComponentSearchForm",
+                                "box": "515x24",
+                                "c": [
+                                  {
+                                    "n": "input.ytSearchboxComponentInput.yt-searchbox-input.title",
+                                    "box": "515x24"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "n": "button.ytSearchboxComponentSearchButton",
+                            "box": "64x40",
+                            "c": [
+                              {
+                                "n": "span.ytIconWrapperHost",
+                                "box": "24x24",
+                                "c": [
+                                  {
+                                    "n": "span.yt-icon-shape.ytSpecIconShapeHost",
+                                    "box": "24x24"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "n": "div#i0.ytSearchboxComponentSuggestionsContainer.ytSearchboxComponentSuggestionsContainerScrollable",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-icon-button#search-button-narrow.style-scope.ytd-masthead",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "button#button.style-scope.yt-icon-button",
+                    "box": "0x0",
+                    "c": [
+                      {
+                        "n": "yt-icon.topbar-icons.style-scope.ytd-masthead",
+                        "box": "0x0"
+                      },
+                      {
+                        "n": "tp-yt-paper-tooltip.style-scope.ytd-masthead",
+                        "box": "0x0",
+                        "t": "Search"
+                      }
+                    ]
+                  },
+                  {
+                    "n": "yt-interaction#interaction.circular.style-scope.yt-icon-button",
+                    "box": "0x0",
+                    "c": [
+                      {
+                        "n": "div.stroke.style-scope.yt-interaction",
+                        "box": "0x0"
+                      },
+                      {
+                        "n": "div.fill.style-scope.yt-interaction",
+                        "box": "0x0"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "n": "div#voice-search-button.style-scope.ytd-masthead",
+                "box": "40x40",
+                "c": [
+                  {
+                    "n": "ytd-button-renderer.style-scope.ytd-masthead",
+                    "box": "40x40",
+                    "c": [
+                      {
+                        "n": "yt-button-shape",
+                        "box": "40x40",
+                        "c": [
+                          {
+                            "n": "button.ytSpecButtonShapeNextHost.ytSpecButtonShapeNextText.ytSpecButtonShapeNextMono",
+                            "box": "40x40",
+                            "c": [
+                              {
+                                "n": "div.ytSpecButtonShapeNextIcon.ytSpecButtonShapeNextElevatedContent",
+                                "box": "24x24",
+                                "c": [
+                                  {
+                                    "n": "span.ytIconWrapperHost",
+                                    "box": "24x24"
+                                  }
+                                ]
+                              },
+                              {
+                                "n": "yt-touch-feedback-shape.ytSpecTouchFeedbackShapeHost.ytSpecTouchFeedbackShapeTouchResponse",
+                                "box": "40x40",
+                                "c": [
+                                  {
+                                    "n": "div.ytSpecTouchFeedbackShapeStroke",
+                                    "box": "40x40"
+                                  },
+                                  {
+                                    "n": "div.ytSpecTouchFeedbackShapeFill",
+                                    "box": "40x40"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "n": "tp-yt-paper-tooltip",
+                        "box": "0x0",
+                        "c": [
+                          {
+                            "n": "div#tooltip.hidden.style-scope.tp-yt-paper-tooltip",
+                            "box": "0x0",
+                            "t": "Search with your voice"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "n": "div#ai-companion-button.style-scope.ytd-masthead",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "div#end.style-scope.ytd-masthead",
+            "box": "225x40",
+            "c": [
+              {
+                "n": "div#masthead-skeleton-icons",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.masthead-skeleton-icon",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div.masthead-skeleton-icon",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div.masthead-skeleton-icon",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "div#buttons.style-scope.ytd-masthead",
+                "box": "146.62x40",
+                "c": [
+                  {
+                    "n": "ytd-topbar-menu-button-renderer.style-scope.ytd-masthead.style-default",
+                    "box": "40x40",
+                    "c": [
+                      {
+                        "n": "ps-dom-if.style-scope.ytd-topbar-menu-button-renderer",
+                        "box": "0x0"
+                      },
+                      {
+                        "n": "div#button.style-scope.ytd-topbar-menu-button-renderer",
+                        "box": "40x40",
+                        "c": [
+                          {
+                            "n": "a.yt-simple-endpoint.style-scope.ytd-topbar-menu-button-renderer",
+                            "box": "40x40",
+                            "c": [
+                              {
+                                "n": "yt-icon-button#button.style-scope.ytd-topbar-menu-button-renderer.style-default",
+                                "box": "40x40",
+                                "c": [
+                                  {
+                                    "n": "button#button.style-scope.yt-icon-button",
+                                    "box": "24x24"
+                                  },
+                                  {
+                                    "n": "yt-interaction#interaction.circular.style-scope.yt-icon-button",
+                                    "box": "40x40"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "n": "ytd-button-renderer.style-scope.ytd-masthead",
+                    "box": "98.62x40",
+                    "c": [
+                      {
+                        "n": "yt-button-shape",
+                        "box": "98.62x40",
+                        "c": [
+                          {
+                            "n": "a.ytSpecButtonShapeNextHost.ytSpecButtonShapeNextOutline.ytSpecButtonShapeNextCallToAction",
+                            "box": "98.62x40",
+                            "c": [
+                              {
+                                "n": "div.ytSpecButtonShapeNextIcon.ytSpecButtonShapeNextElevatedContent",
+                                "box": "18x18",
+                                "c": [
+                                  {
+                                    "n": "span.ytIconWrapperHost",
+                                    "box": "18x18"
+                                  }
+                                ]
+                              },
+                              {
+                                "n": "div.ytSpecButtonShapeNextButtonTextContent.ytSpecButtonShapeNextElevatedContent",
+                                "box": "42.62x40",
+                                "c": [
+                                  {
+                                    "n": "span.ytAttributedStringHost.ytAttributedStringWhiteSpaceNoWrap",
+                                    "box": "42.62x16.5",
+                                    "t": "Sign in"
+                                  }
+                                ]
+                              },
+                              {
+                                "n": "yt-touch-feedback-shape.ytSpecTouchFeedbackShapeHost.ytSpecTouchFeedbackShapeTouchResponse",
+                                "box": "96.62x38",
+                                "c": [
+                                  {
+                                    "n": "div.ytSpecTouchFeedbackShapeStroke",
+                                    "box": "96.62x38"
+                                  },
+                                  {
+                                    "n": "div.ytSpecTouchFeedbackShapeFill",
+                                    "box": "96.62x38"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "n": "tp-yt-paper-tooltip",
+                        "box": "0x0"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "guideOutline": {
+    "n": "tp-yt-app-drawer#guide.style-scope.ytd-app",
+    "box": "240x1144",
+    "c": [
+      {
+        "n": "div#scrim.style-scope.tp-yt-app-drawer",
+        "box": "240x1144"
+      },
+      {
+        "n": "div#contentContainer.style-scope.tp-yt-app-drawer",
+        "box": "240x1144",
+        "c": [
+          {
+            "n": "div#guide-wrapper.style-scope.ytd-app",
+            "box": "240x1024",
+            "c": [
+              {
+                "n": "div#guide-spacer.style-scope.ytd-app",
+                "box": "240x0"
+              },
+              {
+                "n": "div#guide-content.style-scope.ytd-app",
+                "box": "240x1024",
+                "c": [
+                  {
+                    "n": "div#header.style-scope.ytd-app",
+                    "box": "0x0",
+                    "c": [
+                      {
+                        "n": "yt-icon-button#guide-button.style-scope.ytd-app",
+                        "box": "0x0",
+                        "c": [
+                          {
+                            "n": "button#button.style-scope.yt-icon-button",
+                            "box": "0x0"
+                          },
+                          {
+                            "n": "yt-interaction#interaction.circular.style-scope.yt-icon-button",
+                            "box": "0x0"
+                          }
+                        ]
+                      },
+                      {
+                        "n": "ytd-topbar-logo-renderer.style-scope.ytd-app",
+                        "box": "0x0",
+                        "c": [
+                          {
+                            "n": "a#logo.yt-simple-endpoint.style-scope.ytd-topbar-logo-renderer",
+                            "box": "0x0"
+                          },
+                          {
+                            "n": "span#country-code.style-scope.ytd-topbar-logo-renderer",
+                            "box": "0x0"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "n": "div#guide-inner-content.style-scope.ytd-app",
+                    "box": "240x1024",
+                    "c": [
+                      {
+                        "n": "ytd-guide-renderer#guide-renderer.style-scope.ytd-app",
+                        "box": "240x1087",
+                        "c": [
+                          {
+                            "n": "div#sections.style-scope.ytd-guide-renderer",
+                            "box": "240x848"
+                          },
+                          {
+                            "n": "div#footer.style-scope.ytd-guide-renderer",
+                            "box": "240x239"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

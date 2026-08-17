@@ -1,0 +1,418 @@
+{
+  "outline": null,
+  "html": null,
+  "gridOutline": {
+    "n": "ytd-rich-grid-renderer.style-scope.ytd-two-column-browse-results-renderer",
+    "box": "1680x156",
+    "c": [
+      {
+        "n": "div#header.style-scope.ytd-rich-grid-renderer",
+        "box": "0x0"
+      },
+      {
+        "n": "div#big-yoodle.style-scope.ytd-rich-grid-renderer",
+        "box": "1680x0"
+      },
+      {
+        "n": "div#masthead-ad.style-scope.ytd-rich-grid-renderer",
+        "box": "1680x0"
+      },
+      {
+        "n": "div#title-container.style-scope.ytd-rich-grid-renderer",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div#title.style-scope.ytd-rich-grid-renderer",
+            "box": "0x0"
+          }
+        ]
+      },
+      {
+        "n": "div#contents.style-scope.ytd-rich-grid-renderer",
+        "box": "1648x156",
+        "c": [
+          {
+            "n": "ytd-rich-section-renderer.style-scope.ytd-rich-grid-renderer",
+            "box": "1648x132",
+            "c": [
+              {
+                "n": "div#content.style-scope.ytd-rich-section-renderer",
+                "box": "1632x132"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "div#reload-content.style-scope.ytd-rich-grid-renderer",
+        "box": "0x0"
+      }
+    ]
+  },
+  "appOutline": {
+    "n": "ytd-app",
+    "box": "1920x1080",
+    "c": [
+      {
+        "n": "yt-guide-manager#guide-service.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "yt-mdx-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "yt-playlist-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "yt-hotkey-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "ytd-miniplayer.ytdMiniplayerComponentHost",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div.ytdMiniplayerComponentContent",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentDraggable",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "ytd-miniplayer-info-bar.ytdMiniplayerInfoBarHost",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "div.ytdMiniplayerComponentResizers",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerNorth",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerNorthCorner",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerDisabled",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerEastCorner",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerDisabled",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerSouthCorner",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "yt-draggable.ytDraggableComponentHost.ytdMiniplayerComponentResizer.ytdMiniplayerComponentResizerWest",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "div.ytdMiniplayerComponentResizerCorner.ytdMiniplayerComponentResizerWestCorner",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "div#content.style-scope.ytd-app",
+        "box": "1920x172",
+        "c": [
+          {
+            "n": "div#frosted-glass.without-chipbar.style-scope.ytd-app",
+            "box": "0x0"
+          },
+          {
+            "n": "div#masthead-container.style-scope.ytd-app",
+            "box": "1920x56",
+            "c": [
+              {
+                "n": "ytd-masthead#masthead.masthead-finish",
+                "box": "1920x56",
+                "c": [
+                  {
+                    "n": "iron-media-query.style-scope.ytd-masthead",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#ticker.style-scope.ytd-masthead",
+                    "box": "1920x0"
+                  },
+                  {
+                    "n": "div#interstitial.style-scope.ytd-masthead",
+                    "box": "1920x0"
+                  },
+                  {
+                    "n": "div#background.style-scope.ytd-masthead",
+                    "box": "1920x56"
+                  },
+                  {
+                    "n": "div#container.style-scope.ytd-masthead",
+                    "box": "1920x56"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "tp-yt-app-drawer#guide.style-scope.ytd-app",
+            "box": "240x1144",
+            "c": [
+              {
+                "n": "div#scrim.style-scope.tp-yt-app-drawer",
+                "box": "240x1144"
+              },
+              {
+                "n": "div#contentContainer.style-scope.tp-yt-app-drawer",
+                "box": "240x1144",
+                "c": [
+                  {
+                    "n": "div#guide-wrapper.style-scope.ytd-app",
+                    "box": "240x1024"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "ytd-mini-guide-renderer.style-scope.ytd-app",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "div#items.style-scope.ytd-mini-guide-renderer",
+                "box": "0x0"
+              }
+            ]
+          },
+          {
+            "n": "ytd-page-manager#page-manager.style-scope.ytd-app",
+            "box": "1680x172",
+            "c": [
+              {
+                "n": "ytd-browse.style-scope.ytd-page-manager",
+                "box": "1680x172",
+                "c": [
+                  {
+                    "n": "div#alert-banner.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#personal-greeting.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#masthead-ad.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#header.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "div#alerts.style-scope.ytd-browse",
+                    "box": "1680x0"
+                  },
+                  {
+                    "n": "ytd-channel-legal-info-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-playlist-sidebar-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-playlist-header-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-settings-sidebar-renderer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-two-column-browse-results-renderer.style-scope.ytd-browse.grid",
+                    "box": "1680x156"
+                  },
+                  {
+                    "n": "div#survey.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#metadata.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#footer.style-scope.ytd-browse",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "ytd-refresh#refresh.style-scope.ytd-browse",
+                    "box": "0x0"
+                  }
+                ]
+              },
+              {
+                "n": "ytd-watch-flexy.style-scope.ytd-page-manager.watch-root-element",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "iron-media-query#two-column-query.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "iron-media-query#small-window-query.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "iron-media-query#large-window-query.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#microformat.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#full-bleed-container.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#single-column-container.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#columns.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#fixed-side-menu.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#survey.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  },
+                  {
+                    "n": "div#engagement-panel-scrim.style-scope.ytd-watch-flexy",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "n": "div#persistent-panel-container.style-scope.ytd-app",
+            "box": "0x0"
+          }
+        ]
+      },
+      {
+        "n": "ytd-permission-role-bottom-bar-renderer.style-scope.ytd-app",
+        "box": "1680x0",
+        "c": [
+          {
+            "n": "div.pom-role-text.style-scope.ytd-permission-role-bottom-bar-renderer",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "yt-formatted-string.style-scope.ytd-permission-role-bottom-bar-renderer",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "yt-attributed-string",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "ytd-popup-container.style-scope.ytd-app",
+        "box": "1920x0"
+      },
+      {
+        "n": "ytd-third-party-manager.style-scope.ytd-app",
+        "box": "0x0"
+      },
+      {
+        "n": "snackbar-container.ytSnackbarContainerHost",
+        "box": "0x0"
+      },
+      {
+        "n": "div#video-preview.style-scope.ytd-app",
+        "box": "1920x0",
+        "c": [
+          {
+            "n": "ytd-video-preview-loader.ytdVideoPreviewLoaderHost",
+            "box": "1920x0",
+            "c": [
+              {
+                "n": "div.ytdVideoPreviewLoaderVideoPreviewContainer.ytdVideoPreviewLoaderHidden",
+                "box": "0x0",
+                "c": [
+                  {
+                    "n": "ytd-video-preview",
+                    "box": "0x0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "yt-ephemeral-actions.ytEphemeralActionsHost",
+        "box": "0x1"
+      },
+      {
+        "n": "yt-tooltip.ytTooltipContainerHost",
+        "box": "1920x0",
+        "c": [
+          {
+            "n": "yt-popover.ytPopoverComponentHost.ytTooltipContainerDefaultTooltipContent",
+            "box": "0x0",
+            "c": [
+              {
+                "n": "span",
+                "box": "0x0"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "n": "yt-page-navigation-progress.style-scope.ytd-app",
+        "box": "0x0",
+        "c": [
+          {
+            "n": "div#progress.style-scope.yt-page-navigation-progress",
+            "box": "0x0"
+          }
+        ]
+      }
+    ]
+  }
+}

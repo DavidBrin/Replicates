@@ -1,0 +1,804 @@
+@import "tailwindcss" source(none);
+
+/**
+ * Scan the source tree, and only the source tree.
+ *
+ * Tailwind v4 finds content by walking up from this stylesheet. That walk
+ * reaches `research/screenshots/` — fifty-two PNGs and JPEGs of the real
+ * product — and extracts "class names" from their compressed bytes, emitting
+ * rules like `.bg-\[var\(--yt-\=\)\]`. Those do not parse, so the whole
+ * stylesheet fails and every route 500s, while the error points at a line in a
+ * generated file and names a token that appears nowhere in this source.
+ *
+ * `source(none)` turns the walk off; the directive below puts back exactly the
+ * files that can contain a class name.
+ */
+@source "../**/*.{ts,tsx}";
+
+/* ==========================================================================
+   Design tokens
+   --------------------------------------------------------------------------
+   Every value in this block was read off the running product on 2026-08-16 and
+   is cited to the file it came from. `research/08-youtube-ui-measured.md` (R8,
+   logged out, incognito) and `research/09-youtube-signedin-surfaces.md` (R9,
+   signed in) are the two sources; the raw dumps are in `research/extracted/`.
+   Nothing here is remembered, and everything that could not be measured says
+   so at the point it is chosen.
+
+   Four findings override anything a tutorial or a generated stylesheet will
+   tell you about YouTube, and all four are load-bearing:
+
+   1. **`--yt-spec-*` is a dead namespace.** Of 1,469 custom properties in the
+      shipped stylesheets exactly one begins `--yt-spec-`, and it resolves to
+      nothing (R9 §1). The live namespace is `--yt-sys-color-*` — 190 resolved
+      on `<html>` — plus a `--ytd-*` component layer. Every
+      `--yt-spec-text-primary` on the internet describes a build that shipped
+      years ago.
+
+      There is a second trap behind it: the same values are *also* published
+      under 117 per-build minified aliases of the form `--t{16 hex digits}`,
+      which change on every deploy (R8 §0). Concrete values are inlined below;
+      no alias is referenced. The names preserve the `--yt-sys-color-baseline--`
+      *role* verbatim (`text-primary`, `additive-background`, `call-to-action`)
+      with the namespace noise dropped, so each greps straight back to
+      `research/extracted/tokens-theme-diff.json`.
+
+   2. **Buttons do not change background colour on hover.** They cross-fade a
+      `Stroke` + `Fill` overlay sibling at the `state-*` opacities below (R9
+      §2.1, §14). See `src/components/primitives/button.tsx`.
+
+   3. **Chips are 32px tall with an 8px radius.** Not a pill (R9 §2.2, and
+      `research/extracted/chips-and-miniguide.json`).
+
+   4. **The brand red is `#f03`, never `#ff0000`.** It is the play badge and
+      the scrubber handle and almost nothing else; YouTube's chrome is
+      otherwise colourless (R8 §0, §1.3).
+
+   Dark is the default and lives on `:root`, because dark is what YouTube is
+   now; `[data-theme="light"]` re-points the same names. Both sides come from
+   the measured `[light, dark]` pairs — the light theme is *not* a lightening
+   of the dark one, and several pairs are not inversions of each other.
+   ========================================================================== */
+
+:root {
+  /* --- surfaces ---------------------------------------------------------
+     Flat near-blacks rather than the blue-grey a clone reaches for.
+     `menu-background` (#282828) is two steps above the page and is what every
+     dropdown, tooltip and popup sits on. In light, all three collapse to
+     #ffffff — the light theme has no surface elevation by colour at all,
+     which is why its menus need a shadow and the dark theme's do not. */
+  --yt-base-background: #0f0f0f;
+  --yt-raised-background: #212121;
+  --yt-menu-background: #282828;
+  --yt-frosted-glass: rgba(15, 15, 15, 0.8);
+
+  /* The "inverted" family is a real surface role, not a filter: a Filled Mono
+     button is `inverted-background` with `text-primary-inverse` on it, which
+     in dark means a near-white pill with near-black text (R8 §1.2, the
+     Subscribe row). */
+  --yt-inverted-background: #f1f1f1;
+  --yt-inverted-background-hover: #d9d9d9;
+  --yt-solid-background: #e6e6e6;
+
+  /* --- text -------------------------------------------------------------
+     §8.5 of `research/07-captions-and-a11y.md` warns that YouTube's dark
+     secondary grey is a borderline WCAG case and must not be copied blind. It
+     was computed rather than assumed: #aaa on #0f0f0f is **8.25:1**,
+     comfortably over the 4.5:1 floor, so the measured value is kept and the
+     warning does not bind here. The one that does fail is `text-disabled`
+     (#717171 → 3.93:1) — exempt under SC 1.4.3 as disabled content, and never
+     used for live copy. Both figures are asserted in
+     `src/components/__tests__/primitives.test.tsx`. */
+  --yt-text-primary: #f1f1f1;
+  --yt-text-primary-inverse: #0f0f0f;
+  --yt-text-secondary: #aaa;
+  --yt-text-secondary-inverse: #606060;
+  --yt-text-disabled: #717171;
+  --yt-text-error: #ffbfbd;
+
+  /* --- accents ----------------------------------------------------------
+     `call-to-action` is every blue link, every "Sign in", every "N replies"
+     expander and the guide's new-video dot. */
+  --yt-call-to-action: #3ea6ff;
+  --yt-call-to-action-hover: #65b8ff;
+  --yt-call-to-action-inverse: #065fd4;
+  --yt-brand-red-contrast: #f57;
+  --yt-error-indicator: #f57;
+  --yt-themed-green: #2ba640;
+  --yt-icon-warning: #fbc02d;
+  --yt-suggested-action: #263850;
+  --yt-wordmark-text: #fff;
+
+  /* Theme-invariant by design: these describe ink over video and artwork, not
+     over the page, so they carry one value in both themes (R8 §1.1). */
+  --yt-static-brand-red: #f03;
+  --yt-red-indicator: #e1002d;
+  --yt-shadow-medium: rgba(0, 0, 0, 0.25);
+
+  /* --- tonal fills ------------------------------------------------------
+     `additive-background` is the workhorse: every Tonal button, every
+     unselected chip, every hovered guide row. It and `tonal-background` are
+     *not* the same token — additive is 5% black in light, tonal is 10% — and
+     the chip and guide-hover measurements both pick additive. */
+  --yt-additive-background: rgba(255, 255, 255, 0.1);
+  --yt-tonal-background: rgba(255, 255, 255, 0.1);
+  --yt-tonal-rim: rgba(255, 255, 255, 0.1);
+  --yt-tonal-wash: rgba(255, 255, 255, 0.05);
+  --yt-button-chip-background-hover: rgba(255, 255, 255, 0.2);
+  --yt-mono-filled-hover: #d9d9d9;
+
+  /* --- outlines ---------------------------------------------------------- */
+  --yt-outline: rgba(255, 255, 255, 0.2);
+  --yt-outline-opaque: #3f3f3f;
+  --yt-outline-rim: rgba(255, 255, 255, 0.15);
+
+  /**
+   * The guide's section dividers.
+   *
+   * **Two sources disagree and the screenshot breaks the tie.** R8 §10.1
+   * records `ytd-guide-section-renderer` as "padding: 12px, no border";
+   * `theme-light-dark-hover-motion.json` records
+   * `border-bottom: 1px solid rgba(0,0,0,0.2)` on the same element in *both*
+   * themes. `screenshots/04-nav-expanded-1920.png` and `20-home-dark-1920.png`
+   * both show rules between the sections, so a divider exists. The 20%-black
+   * value is taken as the light one; a 20%-black rule is invisible on a
+   * #0f0f0f page, so the dark side is its **mirror, not a measurement**. It is
+   * deliberately not `--yt-outline`, whose light value is 0.1 rather than 0.2.
+   */
+  --yt-guide-divider: rgba(255, 255, 255, 0.2);
+
+  /* --- overlay palette ---------------------------------------------------
+     For controls sitting on artwork or video, where the surface underneath is
+     unknown. Theme-invariant: white ink, black scrims, both themes. */
+  --yt-overlay-text-primary: #fff;
+  --yt-overlay-text-secondary: rgba(255, 255, 255, 0.7);
+  --yt-overlay-background-light: rgba(0, 0, 0, 0.1);
+  --yt-overlay-background-medium: rgba(0, 0, 0, 0.6); /* the duration badge */
+  --yt-overlay-background-heavy: rgba(0, 0, 0, 0.8);
+  --yt-overlay-button-secondary: rgba(255, 255, 255, 0.1);
+  --yt-overlay-tonal-background: rgba(255, 255, 255, 0.3);
+  --yt-overlay-tonal-hover: rgba(255, 255, 255, 0.2);
+  --yt-overlay-outline-rim: rgba(255, 255, 255, 0.15);
+  --yt-themed-overlay-background: rgba(0, 0, 0, 0.8);
+
+  /**
+   * Avatar fallback colours.
+   *
+   * The *choice* to render a letter on a colour when a channel has no image is
+   * this project's, not a measurement — no such channel was captured. What is
+   * not invented is the palette: these are the six measured
+   * `--yt-sys-color-baseline--add-on-*-text-primary` values, which are the dark
+   * end of each add-on ramp and therefore all clear 4.5:1 against the white
+   * letter. Theme-invariant, like the overlay palette, because the avatar is
+   * its own surface rather than part of the page.
+   */
+  --yt-avatar-fallback-1: #5c7e00; /* add-on-green */
+  --yt-avatar-fallback-2: #891c52; /* add-on-magenta */
+  --yt-avatar-fallback-3: #882712; /* add-on-orange */
+  --yt-avatar-fallback-4: #52077a; /* add-on-purple */
+  --yt-avatar-fallback-5: #7f0119; /* add-on-red */
+  --yt-avatar-fallback-6: #00673c; /* add-on-teal */
+
+  /* --- interaction states -----------------------------------------------
+     THE fidelity tell. YouTube never writes `:hover { background: … }` on a
+     button. It paints an absolutely-positioned `Fill` sibling in
+     `touch-response` and raises its *opacity*, so the effect composites over
+     whatever the button already is — a Tonal button hovered is
+     `rgba(255,255,255,0.1)` plus white at 5%, not a second flat colour.
+
+     The `filled` pair is the same mechanism with the polarity flipped: a
+     Filled Mono button is already near-white, so its overlay is
+     `touch-response-inverse` (black) at the same two opacities.
+
+     Values are the alpha channels of `--yt-sys-color-baseline--state-mono-*`;
+     the colours are `--yt-sys-color-baseline--touch-response{,-inverse}`. */
+  --yt-touch-response: #fff;
+  --yt-touch-response-inverse: #000;
+  --yt-state-hover-opacity: 0.05;
+  --yt-state-press-opacity: 0.1;
+  --yt-state-filled-hover-opacity: 0.05;
+  --yt-state-filled-press-opacity: 0.1;
+
+  /* The temporary guide drawer's scrim, below 1313px. Not separately measured
+     — `themed-overlay-background` is the only scrim-shaped token in the dump
+     and is what is used here. */
+  --yt-scrim: var(--yt-themed-overlay-background);
+
+  /* --- search field ------------------------------------------------------
+     R8 §1.2 and §9. The field is the one place in the chrome with an opaque
+     border and an inner shadow, and the focused state grows it 32px to the
+     *left* — the right edge does not move. */
+  --yt-search-background: #212121; /* measured: rgb(33,33,33) = raised */
+  /* The dark capture reports the *light* border and submit-button colours —
+     `rgb(198,198,198)` and `rgb(248,248,248)` — for both themes, which cannot
+     be right: `screenshots/20-home-dark-1920.png` shows a dark hairline and a
+     dark grey submit block. The light side of each pair is measured; the three
+     dark values here are **assumed**, chosen to sit one step off the field's
+     measured #212121. */
+  --yt-search-border: #303030;
+  --yt-search-border-focus: #1c62b9; /* rgb(28,98,185), measured light only */
+  --yt-search-inner-shadow: none;
+  --yt-search-button-background: rgba(255, 255, 255, 0.08);
+  --yt-search-button-background-hover: rgba(255, 255, 255, 0.12);
+
+  /* --- player -----------------------------------------------------------
+     Measured on the current "delhi-modern" chrome (R8 §1.3, §5). Two things
+     the player slice must not re-derive: the played portion is a **gradient
+     sized to the whole bar**, so the pink tail only appears near the end of a
+     video; and the familiar dark scrim behind the controls is `display: none`
+     in this build — the controls sit on `rgba(0,0,0,0.3)` pills instead. */
+  --yt-player-track: rgba(40, 40, 40, 0.6);
+  --yt-player-buffered: rgba(255, 255, 255, 0.4);
+  --yt-player-hover-ahead: rgba(255, 255, 255, 0.5);
+  --yt-player-played: linear-gradient(90deg, rgb(255, 0, 51) 80%, rgb(255, 39, 145));
+  --yt-player-played-ad: rgb(255, 204, 0);
+  --yt-player-scrubber: rgb(255, 0, 51);
+  --yt-player-pill: rgba(0, 0, 0, 0.3);
+  --yt-player-pill-hover: rgba(255, 255, 255, 0.1);
+  --yt-player-pill-active: rgba(255, 255, 255, 0.2);
+  --yt-player-ink: rgb(238, 238, 238);
+  --yt-player-panel: rgba(0, 0, 0, 0.6);
+  --yt-player-panel-rule: rgba(255, 255, 255, 0.2);
+
+  /* --- typography -------------------------------------------------------
+     The stack is measured verbatim: `Roboto, Arial, sans-serif` (R8 §2).
+     Roboto is Apache-2.0 and genuinely the face in use, but **no font file
+     ships here and there is no request to a font CDN** — a locally installed
+     Roboto is used and Arial is the fallback. Pulling it in with
+     `next/font/google` would self-host it at build time, which is a dependency
+     decision this slice is not entitled to make on the project's behalf.
+
+     YouTube's two display faces, `YouTube Sans` and `YouTube Noto`, are
+     proprietary and are not substituted for: they fall back to Roboto here,
+     which is what R8 §2 recommends.
+
+     **YouTube sets `html { font-size: 62.5% }`, so `1rem = 10px`** and every
+     token in its scale is a rem against that base (`1.4rem` = 14px). That is
+     why every computed style in the dumps which does not set a size reads
+     "10px". It is deliberately *not* copied: it breaks the user's browser
+     font-size preference and makes rem arithmetic lie. The root stays at the
+     UA default and the roles below are px, exactly as the product renders. */
+  --yt-font-sans: Roboto, Arial, sans-serif;
+
+  /* Type roles. Each was read off a named live element (R8 §2.2). */
+  --yt-type-mini: 10px; /* mini-guide label — the only 10px text  10/16 w400 */
+  --yt-type-mini-line: 16px;
+  --yt-type-small: 12px; /* badges, comment meta, sub count  12/18 */
+  --yt-type-small-line: 18px;
+  --yt-type-body: 14px; /* metadata, guide entry, menu row, chip  14/20 */
+  --yt-type-body-line: 20px;
+  --yt-type-shelf: 15px; /* shelf + comment-count headings  15/normal w700 */
+  --yt-type-title: 16px; /* card title, channel name, search input  16/22 */
+  --yt-type-title-line: 22px;
+  --yt-type-result: 18px; /* search-result title — the only 18/26 on the page */
+  --yt-type-result-line: 26px;
+  --yt-type-sheet-title: 18px; /* contextual sheet header  18/26 w700 */
+  --yt-type-sheet-title-line: 26px;
+  --yt-type-heading: 20px; /* watch-page h1  20/28 w700 */
+  --yt-type-heading-line: 28px;
+
+  --yt-weight-regular: 400;
+  --yt-weight-medium: 500;
+  --yt-weight-bold: 700;
+
+  /* Legacy letter-spacing tokens that still resolve. Everything else in the
+     chrome measures `letter-spacing: normal`. */
+  --yt-tracking-caption: 0.35px;
+  --yt-tracking-badge: 0.35px;
+  --yt-tracking-link: 0.25px;
+
+  /* --- measurement scales -----------------------------------------------
+     `--yt-sys-measurement--*`, all 68 of them, are t-shirt-named rather than a
+     4px ladder, and the names recur across every component: a 36px avatar is
+     "cozy" on the card and "cozy" in the Save sheet. Keeping the names is what
+     lets a later slice write `avatar-cozy` and be right by construction. */
+  --yt-radius-min: 2px;
+  --yt-radius-condensed: 4px;
+  --yt-radius-compact: 8px;
+  --yt-radius-cozy: 12px;
+  --yt-radius-comfortable: 16px;
+  --yt-radius-expanded: 18px;
+  --yt-radius-prominent: 20px;
+  --yt-radius-hero: 24px;
+  --yt-radius-huge: 32px;
+  --yt-radius-max: 48px;
+
+  --yt-size-hairline: 1px;
+  --yt-size-min: 4px;
+  --yt-size-tiny: 6px;
+  --yt-size-mini: 8px;
+  --yt-size-condensed: 12px;
+  --yt-size-compact: 16px;
+  --yt-size-cozy: 18px;
+  --yt-size-comfortable: 24px;
+  --yt-size-expanded: 32px;
+  --yt-size-prominent: 36px;
+  --yt-size-hero: 40px;
+  --yt-size-legend: 48px;
+  --yt-size-huge: 56px;
+
+  --yt-avatar-mini: 16px;
+  --yt-avatar-condensed: 24px;
+  --yt-avatar-compact: 32px;
+  --yt-avatar-cozy: 36px;
+  --yt-avatar-comfortable: 40px;
+  --yt-avatar-expanded: 48px;
+  --yt-avatar-prominent: 56px;
+  --yt-avatar-hero: 72px;
+  --yt-avatar-legend: 120px;
+  --yt-avatar-huge: 144px;
+  --yt-avatar-max: 160px;
+
+  --yt-icon-mini: 12px;
+  --yt-icon-standard: 16px;
+  --yt-icon-compact: 18px;
+  --yt-icon-cozy: 20px;
+  --yt-icon-comfortable: 24px;
+  --yt-icon-expanded: 36px;
+  --yt-icon-prominent: 40px;
+  --yt-icon-hero: 48px;
+
+  --yt-action-tiny: 24px;
+  --yt-action-compact: 32px;
+  --yt-action-standard: 36px; /* Studio's height; the main site never uses it */
+  --yt-action-prominent: 48px;
+  --yt-action-hero: 56px;
+
+  --yt-stroke-cozy: 0.5px;
+  --yt-stroke-comfortable: 1px;
+  --yt-stroke-expanded: 2px;
+
+  /* --- chrome geometry ---------------------------------------------------
+     R8 §3.1 and `research/extracted/layout-responsive-and-nav.json`, which
+     measured eleven viewport widths from 1920 down to 360. The masthead is
+     56px at *every* one of them; the guide is 240 expanded and 72 mini at
+     every one of them. Nothing here is width-dependent except the guide's
+     mode. */
+  --yt-masthead-height: 56px;
+  --yt-masthead-inset: 16px; /* #container padding: 0 16px */
+  --yt-guide-width: 240px;
+  --yt-guide-mini-width: 72px;
+  --yt-guide-section-padding: 12px;
+  --yt-guide-entry-height: 40px;
+  --yt-guide-entry-radius: 10px; /* not 8, not 20 — measured 10 */
+  --yt-guide-entry-icon-gap: 24px; /* icon margin-right; label lands at x+60 */
+  --yt-mini-entry-width: 64px;
+  --yt-mini-entry-height: 76px;
+  --yt-chipbar-height: 56px;
+  --yt-chip-height: 32px;
+  --yt-chip-radius: 8px;
+  --yt-chip-gap: 12px; /* feed filter bar; a chip *cloud* uses 8px */
+  --yt-page-inset: 24px; /* grid content padding, both sides, 1920→600 */
+
+  /* Rich-grid geometry, verbatim from the `--ytd-rich-grid-*` component layer
+     (R8 §3.3). `item-min-width` is recorded because it is measured, not
+     because it predicts anything — see the column-count block below. */
+  --yt-grid-item-margin: 16px;
+  --yt-grid-item-margin-narrow: 8px; /* ≤571px viewport */
+  --yt-grid-row-margin: 32px;
+  --yt-grid-gutter-margin: 16px;
+  --yt-grid-item-min-width: 326.8px;
+  --yt-grid-item-max-width: 700px;
+
+  /* Card internals, for the feed slice (R8 §4). The hover surface being 12px
+     larger on every side and rounded 16px — against the thumbnail's 12px — is
+     what makes the hover read as a card rather than a lit thumbnail. */
+  --yt-card-thumb-radius: 12px;
+  --yt-card-thumb-gap: 12px;
+  --yt-card-hover-inset: -12px;
+  --yt-card-hover-radius: 16px;
+  --yt-badge-radius: 4px;
+  --yt-badge-padding: 1px 4px;
+
+  /* Contextual sheet + menu (R9 §9.3, §10). */
+  --yt-sheet-width: 400px;
+  --yt-sheet-header-height: 48px;
+  --yt-sheet-shadow: 0 4px 32px rgba(0, 0, 0, 0.1);
+  --yt-menu-radius: 12px;
+  --yt-menu-item-height: 40px;
+  --yt-menu-inset: 16px;
+  --yt-menu-label-inset: 56px;
+  --yt-menu-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* measured on the search dropdown */
+
+  /* Stacking. The measured values are the guide drawer (2021), the mini guide
+     (2028) and the search suggestion dropdown (2010) — Polymer numbers, kept
+     so a later slice's popup does not have to guess which side of the rail it
+     lands on. The masthead's own z-index was not captured; 2040 is
+     **assumed**, chosen only to sit above every measured layer, which is what
+     the screenshots show. */
+  --yt-z-suggestions: 2010;
+  --yt-z-guide: 2021;
+  --yt-z-mini-guide: 2028;
+  --yt-z-masthead: 2040;
+  --yt-z-popup: 2050;
+
+  /* --- motion -----------------------------------------------------------
+     Two regimes, and conflating them is how a clone ends up feeling wrong in
+     both directions at once.
+
+     **App chrome does not transition at all.** Every element sampled in
+     `theme-light-dark-hover-motion.json` — the drawer, the page manager, the
+     masthead, guide links, chips, the touch-feedback fill and stroke, the
+     lockup, the thumbnail, buttons, the search box, tooltips — computes to
+     `transition: all 0s ease`. `transition-property: all` reads like an
+     animation until you notice the duration is zero. So hover and press states
+     here are instant, and that is a fidelity decision rather than an omission:
+     a 150ms fade on a card you are scanning past is exactly what makes a clone
+     feel slower than the product. The drawer is explicit about it —
+     `transition-property: visibility` only, so the rail appears and the
+     content reflows in the same frame, with no width animation (R8 §6).
+
+     **The player is the opposite** and has a real motion language, with two
+     easings that recur: `cubic-bezier(0.05,0,0,1)` for anything that moves and
+     the Material decelerate `cubic-bezier(0,0,0.2,1)` for anything that fades.
+
+     The `--yt-page-*` values are the view-transition manager's, read inline
+     off `<html>`; they drive thumbnail→watch navigation, not component state. */
+  --yt-duration-state: 0s;
+  --yt-ease-move: cubic-bezier(0.05, 0, 0, 1);
+  --yt-ease-fade: cubic-bezier(0, 0, 0.2, 1);
+  --yt-ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+
+  --yt-duration-autohide: 0.25s; /* control bar + gradient opacity */
+  --yt-duration-progress-grow: 0.2s; /* progress bar scaleY on hover */
+  --yt-duration-scrubber-grow: 0.1s; /* scrubber scale on hover */
+  --yt-duration-pill-hover: 0.2s; /* player pill background-color */
+  --yt-duration-menu-open: 0.1s; /* settings panel opacity */
+
+  --yt-page-exit: 50ms;
+  --yt-page-wait: 50ms;
+  --yt-page-delay: 100ms;
+  --yt-page-enter: 200ms;
+}
+
+/* ==========================================================================
+   Light theme
+   --------------------------------------------------------------------------
+   Straight from the `[light, dark]` pairs in `tokens-theme-diff.json`. Read
+   the odd ones — they are the reason `filter: invert()` cannot produce this:
+
+   * `tonal-wash` goes from 5% white (dark) to **20% white** (light). A wash
+     over a white page is still white; it is a highlight, not a shade.
+   * `mono-filled-hover` is #d9d9d9 dark but **#272727** light — the hover of a
+     Filled button, which is near-white in dark and near-black in light.
+   * `outline` is 20% white in dark and only **10%** black in light: the light
+     theme draws *weaker* hairlines, not equivalent ones.
+   * All three surface steps collapse to #ffffff, so light-theme menus are
+     separated from the page by shadow alone.
+   ========================================================================== */
+
+[data-theme="light"] {
+  --yt-base-background: #fff;
+  --yt-raised-background: #fff;
+  --yt-menu-background: #fff;
+  --yt-frosted-glass: rgba(255, 255, 255, 0.9);
+
+  --yt-inverted-background: #0f0f0f;
+  --yt-inverted-background-hover: #3f3f3f;
+  --yt-solid-background: #0f0f0f;
+
+  --yt-text-primary: #0f0f0f;
+  --yt-text-primary-inverse: #fff;
+  --yt-text-secondary: #606060;
+  --yt-text-secondary-inverse: #aaa;
+  --yt-text-disabled: #909090;
+  --yt-text-error: #990412;
+
+  --yt-call-to-action: #065fd4;
+  --yt-call-to-action-hover: #0556bf;
+  --yt-call-to-action-inverse: #3ea6ff;
+  --yt-brand-red-contrast: #c30027;
+  --yt-error-indicator: #c30027;
+  --yt-themed-green: #107516;
+  --yt-icon-warning: #be8800;
+  --yt-suggested-action: #def1ff;
+  --yt-wordmark-text: #000;
+
+  --yt-additive-background: rgba(0, 0, 0, 0.05);
+  --yt-tonal-background: rgba(0, 0, 0, 0.1);
+  --yt-tonal-rim: rgba(0, 0, 0, 0.05);
+  --yt-tonal-wash: rgba(255, 255, 255, 0.2);
+  --yt-button-chip-background-hover: rgba(0, 0, 0, 0.1);
+  --yt-mono-filled-hover: #272727;
+
+  --yt-outline: rgba(0, 0, 0, 0.1);
+  --yt-outline-opaque: #e5e5e5;
+  --yt-outline-rim: rgba(255, 255, 255, 0.3);
+  --yt-guide-divider: rgba(0, 0, 0, 0.2);
+
+  --yt-themed-overlay-background: rgba(255, 255, 255, 0.7);
+
+  /* Measured: the field is white with a #c6c6c6 hairline and a light-grey
+     inner shadow, which is the only inset shadow anywhere in the chrome. */
+  --yt-search-background: #fff;
+  --yt-search-border: #c6c6c6;
+  --yt-search-inner-shadow: inset 0 1px 2px #eee;
+  --yt-search-button-background: #f8f8f8;
+  --yt-search-button-background-hover: #f0f0f0;
+
+  /* The polarity of the interaction overlay flips with the theme, and this is
+     the whole reason the model is two tokens rather than one colour: on a
+     light page a hover *darkens*, on a dark page it *lightens*, and both are
+     the same 5%/10% opacity ramp over the same `Fill` element. */
+  --yt-touch-response: #000;
+  --yt-touch-response-inverse: #fff;
+}
+
+/* ==========================================================================
+   Rich-grid column count — derived from CONTENT width, not the viewport
+   --------------------------------------------------------------------------
+   The same viewport gives different answers depending on the rail: 1920 with
+   the guide expanded is **3 columns of 533.33px**, and 1920 with the guide
+   collapsed to the mini rail is **4 columns of 438px** (R8 §3.3, and
+   `screenshots/04-nav-expanded-1920.png` against `05b-nav-mini-detail-1920.png`).
+   So the rule has to be keyed on the content box, which is what the container
+   query below does. A viewport→columns table would be wrong at every width the
+   user can toggle the rail.
+
+   **The stated derivation does not reproduce the measurements.** R9 §4/§13.2
+   say columns fall out of `--ytd-rich-grid-item-min-width: 326.8px`. Against
+   the twelve captured rows it fails in both directions:
+
+     content 1680 → 1632 available → 1632/326.8 = 4.99 → 4.  Measured **3**.
+     content 1848 → 1800 available → 1800/326.8 = 5.50 → 5.  Measured **4**.
+     content  952 →  904 available →  904/326.8 = 2.77 → 2.  Measured **3**,
+       at an item width of 290.66px — *below* the stated minimum, so the
+       min-width is not a floor either.
+
+   Nor is there any other single min-width that fits: the 2→3 boundary sits at
+   890px of content and the 3→4 boundary above 1680px, and no `floor(w/m)` has
+   bands that uneven. The 326.8px value is kept as a token because it is
+   measured, and is used for nothing.
+
+   What *is* reproducible is the measured band table below, which matches all
+   twelve captured rows and both bisected breakpoints. The 3→4 edge is the one
+   soft one: 4 columns were observed only once, at 1848px of content, and never
+   bisected — so 1848 is an upper bound on that boundary, not the boundary.
+   ========================================================================== */
+
+.yt-content {
+  /* Named so the query below cannot accidentally bind to some later slice's
+     container. `inline-size` contains the inline axis only, which is what a
+     block-level content column already gets from its parent. */
+  container-type: inline-size;
+  container-name: yt-content;
+}
+
+.yt-content-inner {
+  --yt-grid-columns: 1;
+  /* At ≤571px the grid also drops its item margin from 16px to 8px, so the
+     1→2 boundary is a layout-mode change rather than a column calculation. */
+  --yt-grid-current-item-margin: var(--yt-grid-item-margin-narrow);
+}
+
+@container yt-content (min-width: 572px) {
+  /* bisected: 571 → 1 column, 572 → 2 */
+  .yt-content-inner {
+    --yt-grid-columns: 2;
+    --yt-grid-current-item-margin: var(--yt-grid-item-margin);
+  }
+}
+
+@container yt-content (min-width: 890px) {
+  /* bisected at the viewport as 961 → 962 with the 72px mini rail, i.e. 889 →
+     890 of content */
+  .yt-content-inner {
+    --yt-grid-columns: 3;
+  }
+}
+
+@container yt-content (min-width: 1848px) {
+  .yt-content-inner {
+    --yt-grid-columns: 4;
+  }
+}
+
+/* ==========================================================================
+   Tailwind bridge
+   --------------------------------------------------------------------------
+   `@theme inline` re-exports the variables above as utility namespaces, so
+   `bg-base`, `text-secondary` and `rounded-cozy` are real classes that follow
+   the active theme. `inline` is the load-bearing word: it emits
+   `var(--yt-base-background)` into the utility instead of resolving the value
+   at build time, which is what lets `[data-theme="light"]` re-point it at
+   runtime. Without it both themes would be baked and the attribute would do
+   nothing.
+   ========================================================================== */
+
+@theme inline {
+  --color-base: var(--yt-base-background);
+  --color-raised: var(--yt-raised-background);
+  --color-menu: var(--yt-menu-background);
+  --color-inverted: var(--yt-inverted-background);
+  --color-inverted-hover: var(--yt-inverted-background-hover);
+  --color-solid: var(--yt-solid-background);
+
+  --color-primary: var(--yt-text-primary);
+  --color-primary-inverse: var(--yt-text-primary-inverse);
+  --color-secondary: var(--yt-text-secondary);
+  --color-disabled: var(--yt-text-disabled);
+
+  --color-cta: var(--yt-call-to-action);
+  --color-cta-hover: var(--yt-call-to-action-hover);
+  --color-brand: var(--yt-static-brand-red);
+  --color-error: var(--yt-error-indicator);
+
+  --color-additive: var(--yt-additive-background);
+  --color-tonal: var(--yt-tonal-background);
+  --color-outline: var(--yt-outline);
+  --color-outline-opaque: var(--yt-outline-opaque);
+  --color-divider: var(--yt-guide-divider);
+
+  --color-overlay-primary: var(--yt-overlay-text-primary);
+  --color-overlay-secondary: var(--yt-overlay-text-secondary);
+  --color-overlay-medium: var(--yt-overlay-background-medium);
+
+  --font-sans: var(--yt-font-sans);
+
+  --text-mini: var(--yt-type-mini);
+  --text-mini--line-height: var(--yt-type-mini-line);
+  --text-small: var(--yt-type-small);
+  --text-small--line-height: var(--yt-type-small-line);
+  --text-body: var(--yt-type-body);
+  --text-body--line-height: var(--yt-type-body-line);
+  --text-shelf: var(--yt-type-shelf);
+  --text-title: var(--yt-type-title);
+  --text-title--line-height: var(--yt-type-title-line);
+  --text-result: var(--yt-type-result);
+  --text-result--line-height: var(--yt-type-result-line);
+  --text-sheet: var(--yt-type-sheet-title);
+  --text-sheet--line-height: var(--yt-type-sheet-title-line);
+  --text-heading: var(--yt-type-heading);
+  --text-heading--line-height: var(--yt-type-heading-line);
+
+  --radius-min: var(--yt-radius-min);
+  --radius-condensed: var(--yt-radius-condensed);
+  --radius-compact: var(--yt-radius-compact);
+  --radius-cozy: var(--yt-radius-cozy);
+  --radius-comfortable: var(--yt-radius-comfortable);
+  --radius-prominent: var(--yt-radius-prominent);
+  --radius-hero: var(--yt-radius-hero);
+  --radius-entry: var(--yt-guide-entry-radius);
+}
+
+/* ==========================================================================
+   Base
+   --------------------------------------------------------------------------
+   Wrapped in `@layer base`, and that is load-bearing rather than tidy.
+   Tailwind emits utilities into `@layer utilities`, and **unlayered CSS beats
+   layered CSS whatever the specificity** — so an innocuous
+   `button { font: inherit }` sitting outside a layer silently defeats every
+   typography utility applied to a form element. Declaring the layer puts these
+   resets where the cascade expects them: beneath the utilities meant to
+   override them.
+   ========================================================================== */
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--yt-base-background);
+    color: var(--yt-text-primary);
+    font-family: var(--yt-font-sans);
+    font-size: var(--yt-type-body);
+    line-height: var(--yt-type-body-line);
+    font-weight: var(--yt-weight-regular);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /**
+   * The document scrolls, and that is worth stating because the obvious
+   * alternative is wrong here.
+   *
+   * A fixed shell whose panes scroll independently is what a lot of app
+   * chrome does — the sibling `Linear` project locks `body` and scrolls three
+   * panes. YouTube does not: `ytd-app` measures **1920 × 6181** at a 1080-tall
+   * viewport (`theme-light-dark-hover-motion.json`), so the page itself is the
+   * scroller. Only the masthead and the guide are fixed, and the guide has its
+   * own `overflow: hidden auto` on the rail's inner content.
+   *
+   * Locking `body` here would break scroll restoration on back-navigation and
+   * put the scrollbar in the wrong place on every route.
+   */
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /**
+   * Keyboard focus only, and it must be *visible* — WCAG 2.4.7.
+   *
+   * The shipped product gives no usable measurement: the only focus-shaped
+   * element in the captured DOM is the `Stroke` div inside
+   * `yt-touch-feedback-shape`, and it sits at `opacity: 0` in every state that
+   * was sampled. So this ring is **assumed**. It is the call-to-action blue
+   * rather than a neutral because 2px of #3ea6ff clears the 3:1 non-text
+   * contrast floor against both measured page backgrounds (7.40:1 on #0f0f0f,
+   * and its light counterpart #065fd4 gives 5.84:1 on #fff).
+   */
+  :focus-visible {
+    outline: var(--yt-stroke-expanded) solid var(--yt-call-to-action);
+    outline-offset: 2px;
+  }
+
+  /* The guide's inner content is `overflow: hidden auto` (measured) and
+     YouTube leaves the platform scrollbar alone. Only the colour is set, so
+     the gutter follows the theme instead of flashing white on a dark page. */
+  * {
+    scrollbar-color: var(--yt-outline) transparent;
+  }
+
+  /**
+   * `prefers-reduced-motion`.
+   *
+   * With chrome state transitions measured at 0s there is little here to
+   * reduce, which is the point: this rule exists for the page-level view
+   * transitions and for the player's own motion language — the control-bar
+   * auto-hide fade, the progress-bar grow, the scrubber scale. Per §8.4 of
+   * `research/07-captions-and-a11y.md` the preference asks for non-essential
+   * motion to stop, not for the content to freeze, so the video element and
+   * the scrubber's travel with playback are untouched: they are the content.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ==========================================================================
+   Skip link
+   --------------------------------------------------------------------------
+   WCAG 2.4.1. Not an embellishment: the real masthead's first DOM text is
+   literally "Skip navigation" (measured, `home-1920.json` `masthead.text`).
+   Visually hidden until focused, and never `display: none`, which would take
+   it out of the tab order along with the view.
+   ========================================================================== */
+
+.yt-skip-link {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--yt-z-popup);
+  padding: 8px 16px;
+  border-radius: 0 0 var(--yt-radius-compact) 0;
+  background: var(--yt-menu-background);
+  color: var(--yt-text-primary);
+  font-size: var(--yt-type-body);
+  font-weight: var(--yt-weight-medium);
+  transform: translateY(-110%);
+}
+
+.yt-skip-link:focus-visible {
+  transform: none;
+}

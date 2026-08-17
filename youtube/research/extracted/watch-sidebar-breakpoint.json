@@ -1,0 +1,7 @@
+{
+  "SUPERSEDED": true,
+  "reason": "This file originally held a sidebar-stacking breakpoint of 1399/1400px. That measurement was WRONG: the probe compared #primary.top to #secondary.top, and a hidden #secondary reports an all-zero rect, so 'hidden' was misread as 'side by side'.",
+  "correctValue": "The related sidebar sits beside the player at >= 1000px and stops rendering at <= 999px.",
+  "correctSource": "watch-comments-formats.json -> sidebarBreakpoint (visibility-aware probe, with the full width scan)",
+  "documentedIn": "../08-youtube-ui-measured.md section 3.2"
+}

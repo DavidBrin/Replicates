@@ -1,0 +1,2381 @@
+{
+  "viewport": {
+    "w": 1920,
+    "h": 1080
+  },
+  "url": "https://www.youtube.com/",
+  "root": {
+    "htmlStyle": "font-size: 62.5%; font-family: Roboto, Arial, sans-serif; --ytd-vtm-exit-ms: 50ms; --ytd-vtm-wait-ms: 50ms; --ytd-vtm-delay-ms: 100ms; --ytd-vtm-enter-ms: 200ms; --ytd-vtm-watch-exit-ms: 50ms; --ytd-vtm-watch-wait-ms: 50ms; --ytd-vtm-watch-enter-ms: 50ms; --ytd-vtm-watch-next-exit-ms: 50ms; --ytd-vtm-watch-next-wait-ms: 50ms; --ytd-vtm-watch-next-delay-ms: 100ms; --ytd-vtm-watch-next-enter-ms: 200ms;",
+    "htmlAttrs": [
+      "style=font-size: 62.5%; font-family: Roboto, Arial, sans-serif; --ytd-vtm-exit-ms: 50ms; --ytd-vtm-wait-ms: 50ms; --ytd-vtm-delay-ms: 100ms; --ytd-vtm-enter-ms: 200ms; --ytd-vtm-watch-exit-ms: 50ms; --ytd-vtm-watch-wait-ms: 50ms; --ytd-vtm-watch-enter-ms: 50ms; --ytd-vtm-watch-next-exit-ms: 50ms; --ytd-vtm-watch-next-wait-ms: 50ms; --ytd-vtm-watch-next-delay-ms: 100ms; --ytd-vtm-watch-next-enter-ms: 200ms;",
+      "lang=en",
+      "darker-dark-theme=",
+      "darker-dark-theme-deprecate=",
+      "system-icons=",
+      "color-version=v2_0",
+      "typography=",
+      "typography-spacing="
+    ],
+    "bodyAttrs": [
+      "dir=ltr",
+      "rounded-container="
+    ],
+    "htmlFontSize": "10px",
+    "bodyFont": "Roboto, Arial, sans-serif",
+    "bodyBg": "rgba(0, 0, 0, 0)",
+    "bodyColor": "rgb(0, 0, 0)",
+    "pageBg": "rgb(255, 255, 255)"
+  },
+  "masthead": {
+    "masthead": {
+      "tag": "ytd-masthead",
+      "id": "masthead",
+      "class": "masthead-finish",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 56
+      },
+      "text": "Skip navigation\nSign in",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "1920px",
+      "height": "56px"
+    },
+    "container": {
+      "tag": "div",
+      "id": "container",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1920,
+        "h": 56
+      },
+      "text": "Skip navigation\nSign in",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "0px 16px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1888px",
+      "height": "56px"
+    },
+    "start": {
+      "tag": "div",
+      "id": "start",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 16,
+        "y": 0,
+        "w": 169,
+        "h": 56
+      },
+      "text": "Skip navigation",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "169px",
+      "height": "56px"
+    },
+    "center": {
+      "tag": "div",
+      "id": "center",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 566,
+        "y": 8,
+        "w": 732,
+        "h": 40
+      },
+      "text": "Search\n      \n    \n    \n    \n  Search with your voice",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "732px",
+      "height": "40px",
+      "flex": "0 1 732px"
+    },
+    "end": {
+      "tag": "div",
+      "id": "end",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 1679,
+        "y": 8,
+        "w": 225,
+        "h": 40
+      },
+      "text": "Sign in",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "minWidth": "225px",
+      "width": "225px",
+      "height": "40px",
+      "flex": "0 0 auto"
+    },
+    "guideButton": {
+      "tag": "yt-icon-button",
+      "id": "guide-button",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 16,
+        "y": 8,
+        "w": 40,
+        "h": 40
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "0px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "8px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "40px",
+      "height": "40px"
+    },
+    "guideButtonIcon": {
+      "tag": "yt-icon",
+      "id": "guide-icon",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 24,
+        "y": 16,
+        "w": 24,
+        "h": 24
+      },
+      "font": {
+        "family": "Arial",
+        "size": "13.3333px",
+        "weight": "400",
+        "lineHeight": "0px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "inline-flex",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "24px",
+      "height": "24px",
+      "fill": "rgb(15, 15, 15)"
+    },
+    "logo": {
+      "tag": "ytd-topbar-logo-renderer",
+      "id": "logo",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 56,
+        "y": 0,
+        "w": 129,
+        "h": 56
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "129px",
+      "height": "56px"
+    },
+    "logoLink": {
+      "tag": "a",
+      "id": "logo",
+      "class": "yt-simple-endpoint style-scope ytd-topbar-logo-renderer",
+      "rect": {
+        "x": 56,
+        "y": 0,
+        "w": 123,
+        "h": 56
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "123px",
+      "height": "56px",
+      "flex": "0 0 auto"
+    },
+    "searchbox": {
+      "tag": "yt-searchbox",
+      "class": "ytSearchboxComponentHost ytSearchboxComponentDesktop ytd-masthead ytSearchboxComponentHostNoSuggestions",
+      "rect": {
+        "x": 606,
+        "y": 8,
+        "w": 640,
+        "h": 40
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "0px 4px",
+      "margin": "0px 0px 0px 40px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "632px",
+      "height": "40px",
+      "flex": "1 1 0%"
+    },
+    "searchInputBox": {
+      "tag": "div",
+      "class": "ytSearchboxComponentInputBox",
+      "rect": {
+        "x": 642,
+        "y": 8,
+        "w": 536,
+        "h": 40
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgb(255, 255, 255)",
+      "border": {
+        "top": "1px solid rgb(198, 198, 198)",
+        "right": "0px none rgb(15, 15, 15)",
+        "bottom": "1px solid rgb(198, 198, 198)",
+        "left": "1px solid rgb(198, 198, 198)"
+      },
+      "borderRadius": "40px 0px 0px 40px",
+      "padding": "0px 4px 0px 16px",
+      "margin": "0px 0px 0px 32px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "boxShadow": "rgb(238, 238, 238) 0px 1px 2px 0px inset",
+      "position": "relative",
+      "width": "515px",
+      "height": "38px",
+      "flex": "1 1 0%"
+    },
+    "searchInput": {
+      "tag": "input",
+      "class": "ytSearchboxComponentInput yt-searchbox-input title",
+      "rect": {
+        "x": 659,
+        "y": 16,
+        "w": 515,
+        "h": 24
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "16px",
+        "weight": "400",
+        "lineHeight": "22px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "1px 0px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "overflow": "clip",
+      "width": "515px",
+      "height": "22px"
+    },
+    "searchButton": {
+      "tag": "button",
+      "class": "ytSearchboxComponentSearchButton",
+      "rect": {
+        "x": 1178,
+        "y": 8,
+        "w": 64,
+        "h": 40
+      },
+      "font": {
+        "family": "Arial",
+        "size": "13.3333px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgb(248, 248, 248)",
+      "border": {
+        "top": "1px solid rgb(211, 211, 211)",
+        "right": "1px solid rgb(211, 211, 211)",
+        "bottom": "1px solid rgb(211, 211, 211)",
+        "left": "1px solid rgb(211, 211, 211)"
+      },
+      "borderRadius": "0px 40px 40px 0px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "64px",
+      "height": "40px"
+    },
+    "voiceButton": {
+      "tag": "div",
+      "id": "voice-search-button",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 1258,
+        "y": 8,
+        "w": 40,
+        "h": 40
+      },
+      "text": "Search with your voice",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0.05)",
+      "borderRadius": "100px",
+      "margin": "0px 0px 0px 12px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "40px",
+      "height": "40px"
+    },
+    "settingsButton": {
+      "tag": "ytd-topbar-menu-button-renderer",
+      "class": "style-scope ytd-masthead style-default",
+      "rect": {
+        "x": 1757.38,
+        "y": 8,
+        "w": 40,
+        "h": 40
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "0px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal",
+        "textTransform": "uppercase"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "0px 8px 0px 0px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "40px",
+      "height": "40px"
+    },
+    "signInButton": {
+      "tag": "a",
+      "class": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextOutline ytSpecButtonShapeNextCallToAction ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconLeading ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding",
+      "rect": {
+        "x": 1805.38,
+        "y": 8,
+        "w": 98.62,
+        "h": 40
+      },
+      "text": "Sign in",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "14px",
+        "weight": "500",
+        "lineHeight": "40px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(6, 95, 212)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": {
+        "top": "1px solid rgba(0, 0, 0, 0.2)",
+        "right": "1px solid rgba(0, 0, 0, 0.2)",
+        "bottom": "1px solid rgba(0, 0, 0, 0.2)",
+        "left": "1px solid rgba(0, 0, 0, 0.2)"
+      },
+      "borderRadius": "20px",
+      "padding": "0px 15px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "98.6172px",
+      "height": "40px",
+      "flex": "1 1 1e-09px"
+    },
+    "signInShape": {
+      "tag": "a",
+      "class": "ytSpecButtonShapeNextHost ytSpecButtonShapeNextOutline ytSpecButtonShapeNextCallToAction ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconLeading ytSpecButtonShapeNextEnableBackdropFilterExperiment ytSpecButtonShapeNextMainstageIconSize ytSpecButtonShapeNextMainstagePadding",
+      "rect": {
+        "x": 1805.38,
+        "y": 8,
+        "w": 98.62,
+        "h": 40
+      },
+      "text": "Sign in",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "14px",
+        "weight": "500",
+        "lineHeight": "40px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(6, 95, 212)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": {
+        "top": "1px solid rgba(0, 0, 0, 0.2)",
+        "right": "1px solid rgba(0, 0, 0, 0.2)",
+        "bottom": "1px solid rgba(0, 0, 0, 0.2)",
+        "left": "1px solid rgba(0, 0, 0, 0.2)"
+      },
+      "borderRadius": "20px",
+      "padding": "0px 15px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "98.6172px",
+      "height": "40px",
+      "flex": "1 1 1e-09px"
+    },
+    "searchPlaceholder": "Search",
+    "searchAria": null
+  },
+  "guide": {
+    "drawer": {
+      "tag": "tp-yt-app-drawer",
+      "id": "guide",
+      "class": "style-scope ytd-app",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "w": 240,
+        "h": 1144
+      },
+      "text": "Home\nShorts\nSubscriptions\nYou\nHistory\nSign in to like videos, comment, and subscribe.\nSign in\nExplore\nShopping\nMusic\nMov",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "visibility",
+      "animation": "none",
+      "zIndex": "2021",
+      "position": "fixed",
+      "width": "240px",
+      "height": "1144px"
+    },
+    "guideRenderer": {
+      "tag": "ytd-guide-renderer",
+      "id": "guide-renderer",
+      "class": "style-scope ytd-app",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "w": 240,
+        "h": 1087
+      },
+      "text": "Home\nShorts\nSubscriptions\nYou\nHistory\nSign in to like videos, comment, and subscribe.\nSign in\nExplore\nShopping\nMusic\nMov",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "240px",
+      "height": "1087px"
+    },
+    "guideContent": {
+      "tag": "div",
+      "id": "guide-content",
+      "class": "style-scope ytd-app",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "w": 240,
+        "h": 1024
+      },
+      "text": "Home\nShorts\nSubscriptions\nYou\nHistory\nSign in to like videos, comment, and subscribe.\nSign in\nExplore\nShopping\nMusic\nMov",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "240px",
+      "height": "1024px",
+      "flex": "1 1 1e-09px"
+    },
+    "guideInner": {
+      "tag": "div",
+      "id": "guide-inner-content",
+      "class": "style-scope ytd-app",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "w": 240,
+        "h": 1024
+      },
+      "text": "Home\nShorts\nSubscriptions\nYou\nHistory\nSign in to like videos, comment, and subscribe.\nSign in\nExplore\nShopping\nMusic\nMov",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "overflow": "hidden auto",
+      "width": "240px",
+      "height": "1024px",
+      "flex": "1 1 1e-09px"
+    },
+    "section": {
+      "tag": "ytd-guide-section-renderer",
+      "class": "style-scope ytd-guide-renderer",
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "w": 240,
+        "h": 225
+      },
+      "text": "Home\nShorts\nSubscriptions\nYou\nHistory",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": {
+        "top": "0px none rgb(0, 0, 0)",
+        "right": "0px none rgb(0, 0, 0)",
+        "bottom": "1px solid rgba(0, 0, 0, 0.2)",
+        "left": "0px none rgb(0, 0, 0)"
+      },
+      "padding": "12px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "216px",
+      "height": "200px"
+    },
+    "entry": {
+      "tag": "ytd-guide-entry-renderer",
+      "class": "style-scope ytd-guide-section-renderer",
+      "rect": {
+        "x": 12,
+        "y": 68,
+        "w": 204,
+        "h": 40
+      },
+      "text": "Home",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0.05)",
+      "borderRadius": "10px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "204px",
+      "height": "40px"
+    },
+    "entryLink": {
+      "tag": "a",
+      "id": "endpoint",
+      "class": "yt-simple-endpoint style-scope ytd-guide-entry-renderer",
+      "rect": {
+        "x": 12,
+        "y": 68,
+        "w": 204,
+        "h": 40
+      },
+      "text": "Home",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "204px",
+      "height": "40px"
+    },
+    "entryIcon": {
+      "tag": "yt-icon",
+      "class": "guide-icon style-scope ytd-guide-entry-renderer",
+      "rect": {
+        "x": 24,
+        "y": 76,
+        "w": 24,
+        "h": 24
+      },
+      "font": {
+        "family": "Roboto, Noto, sans-serif",
+        "size": "16px",
+        "weight": "400",
+        "lineHeight": "24px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "0px 24px 0px 0px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "24px",
+      "height": "24px",
+      "fill": "rgb(15, 15, 15)"
+    },
+    "entryTitle": {
+      "tag": "yt-formatted-string",
+      "class": "title style-scope ytd-guide-entry-renderer",
+      "rect": {
+        "x": 72,
+        "y": 78,
+        "w": 132,
+        "h": 20
+      },
+      "text": "Home",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "14px",
+        "weight": "500",
+        "lineHeight": "20px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "overflow": "hidden",
+      "width": "132px",
+      "height": "20px",
+      "flex": "1 1 1e-09px"
+    },
+    "entryActive": {
+      "tag": "ytd-guide-entry-renderer",
+      "class": "style-scope ytd-guide-section-renderer",
+      "rect": {
+        "x": 12,
+        "y": 68,
+        "w": 204,
+        "h": 40
+      },
+      "text": "Home",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0.05)",
+      "borderRadius": "10px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "width": "204px",
+      "height": "40px"
+    },
+    "sectionTitle": {
+      "tag": "yt-formatted-string",
+      "id": "guide-section-title",
+      "class": "style-scope ytd-guide-section-renderer",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "16px",
+        "weight": "500",
+        "lineHeight": "22px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "6px 12px 4px",
+      "display": "flow-root",
+      "transition": "all",
+      "animation": "none",
+      "overflow": "hidden",
+      "width": "auto",
+      "height": "auto"
+    },
+    "signinPromo": {
+      "tag": "ytd-guide-signin-promo-renderer",
+      "class": "style-scope ytd-guide-renderer",
+      "rect": {
+        "x": 0,
+        "y": 281,
+        "w": 240,
+        "h": 125
+      },
+      "text": "Sign in to like videos, comment, and subscribe.\nSign in",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": {
+        "top": "0px none rgb(0, 0, 0)",
+        "right": "0px none rgb(0, 0, 0)",
+        "bottom": "1px solid rgba(0, 0, 0, 0.2)",
+        "left": "0px none rgb(0, 0, 0)"
+      },
+      "padding": "16px 32px",
+      "display": "inline-block",
+      "transition": "all",
+      "animation": "none",
+      "width": "176px",
+      "height": "92px"
+    },
+    "footer": {
+      "tag": "div",
+      "id": "footer",
+      "class": "style-scope ytd-guide-renderer",
+      "rect": {
+        "x": 0,
+        "y": 904,
+        "w": 240,
+        "h": 239
+      },
+      "text": "AboutPressCopyrightContact usCreatorsAdvertiseDevelopers\nTermsPrivacyPolicy & SafetyHow YouTube worksTest new featuresNF",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "240px",
+      "height": "239px"
+    }
+  },
+  "guideEntries": [
+    {
+      "text": "Home",
+      "href": "/",
+      "w": 204,
+      "h": 40,
+      "active": true,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "500",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Shorts",
+      "href": null,
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Subscriptions",
+      "href": "/feed/subscriptions",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "You",
+      "href": "/feed/you",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "History",
+      "href": "/feed/history",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Shopping",
+      "href": "/channel/UCkYQyvc_i9hXEo4xic9Hh2g",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Music",
+      "href": "/channel/UC-9-kyTW8ZkZNDHQJ6FgpwQ",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Movies & TV",
+      "href": "/feed/storefront",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Show more",
+      "href": null,
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Show less",
+      "href": null,
+      "w": 0,
+      "h": 0,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "YouTube Premium",
+      "href": "/premium",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "YouTube TV",
+      "href": "https://tv.youtube.com/?utm_source=youtube_web&utm_medium=ep&utm_campaign=home&ve=34273",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "YouTube Music",
+      "href": "https://music.youtube.com/",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "YouTube Kids",
+      "href": "https://www.youtubekids.com/?source=youtube_web",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    },
+    {
+      "text": "Report history",
+      "href": "/reporthistory",
+      "w": 204,
+      "h": 40,
+      "active": false,
+      "bg": "rgba(0, 0, 0, 0)",
+      "titleFont": [
+        "14px",
+        "400",
+        "20px",
+        "normal"
+      ]
+    }
+  ],
+  "guideSections": [
+    {
+      "title": null,
+      "h": 225,
+      "borderTop": "0px rgb(0, 0, 0)",
+      "padding": "12px",
+      "entries": [
+        "Home",
+        "Shorts",
+        "Subscriptions",
+        "You",
+        "History"
+      ]
+    },
+    {
+      "title": "Explore",
+      "h": 217,
+      "borderTop": "0px rgb(0, 0, 0)",
+      "padding": "12px",
+      "entries": [
+        "Shopping",
+        "Music",
+        "Movies & TV",
+        "Show more",
+        "Show less"
+      ]
+    },
+    {
+      "title": "More from YouTube",
+      "h": 217,
+      "borderTop": "0px rgb(0, 0, 0)",
+      "padding": "12px",
+      "entries": [
+        "YouTube Premium",
+        "YouTube TV",
+        "YouTube Music",
+        "YouTube Kids"
+      ]
+    },
+    {
+      "title": null,
+      "h": 64,
+      "borderTop": "0px rgb(0, 0, 0)",
+      "padding": "12px",
+      "entries": [
+        "Report history"
+      ]
+    }
+  ],
+  "guideFooterLinks": [
+    "Home",
+    "Shorts",
+    "Subscriptions",
+    "You",
+    "History",
+    "Sign in",
+    "Shopping",
+    "Music",
+    "Movies & TV",
+    "Show more",
+    "Show less",
+    "YouTube Premium",
+    "YouTube TV",
+    "YouTube Music",
+    "YouTube Kids",
+    "Report history",
+    "About",
+    "Press",
+    "Copyright",
+    "Contact us",
+    "Creators",
+    "Advertise",
+    "Developers",
+    "Terms",
+    "Privacy",
+    "Policy & Safety",
+    "How YouTube works",
+    "Test new features",
+    "NFL Sunday Ticket"
+  ],
+  "chipBar": {
+    "bar": {
+      "tag": "ytd-feed-filter-chip-bar-renderer",
+      "class": "style-scope ytd-rich-grid-renderer",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 56
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1680px",
+      "height": "56px"
+    },
+    "chipsWrapper": {
+      "tag": "div",
+      "id": "chips-wrapper",
+      "class": "style-scope ytd-feed-filter-chip-bar-renderer",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 56
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "zIndex": "2019",
+      "position": "fixed",
+      "width": "1680px",
+      "height": "56px"
+    },
+    "scrollContainer": {
+      "tag": "div",
+      "id": "scroll-container",
+      "class": "style-scope ytd-feed-filter-chip-bar-renderer",
+      "rect": {
+        "x": 264,
+        "y": 56,
+        "w": 1632,
+        "h": 56
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "relative",
+      "overflow": "hidden",
+      "width": "1632px",
+      "height": "56px"
+    },
+    "chips": {
+      "tag": "iron-selector",
+      "id": "chips",
+      "class": "style-scope ytd-feed-filter-chip-bar-renderer",
+      "rect": {
+        "x": 264,
+        "y": 56,
+        "w": 2085.31,
+        "h": 56
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "inline-block",
+      "transition": "0.15s cubic-bezier(0.05, 0, 0, 1)",
+      "animation": "none",
+      "width": "2085.31px",
+      "height": "56px"
+    },
+    "chip": {
+      "tag": "yt-chip-cloud-chip-renderer",
+      "class": "style-scope ytd-feed-filter-chip-bar-renderer iron-selected",
+      "rect": {
+        "x": 264,
+        "y": 68,
+        "w": 40.42,
+        "h": 32
+      },
+      "text": "All",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "12px 12px 12px 0px",
+      "display": "inline-flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "40.4219px",
+      "height": "32px"
+    },
+    "chipText": {
+      "missing": "yt-chip-cloud-chip-renderer #text"
+    },
+    "chipContainer": {
+      "missing": "yt-chip-cloud-chip-renderer #chip-container"
+    },
+    "rightArrow": {
+      "tag": "div",
+      "id": "right-arrow-button",
+      "class": "style-scope ytd-feed-filter-chip-bar-renderer",
+      "rect": {
+        "x": 1864,
+        "y": 56,
+        "w": 56,
+        "h": 56
+      },
+      "text": "Next",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "56px",
+      "height": "56px"
+    }
+  },
+  "chipList": [
+    {
+      "text": "All",
+      "selected": true,
+      "w": 40.42,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "How It's Made",
+      "selected": false,
+      "w": 112,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Candy",
+      "selected": false,
+      "w": 63.23,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Music",
+      "selected": false,
+      "w": 62.12,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "News",
+      "selected": false,
+      "w": 59.03,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Fast food restaurants",
+      "selected": false,
+      "w": 158.02,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Podcasts",
+      "selected": false,
+      "w": 82.63,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Roasting",
+      "selected": false,
+      "w": 79.48,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Gaming",
+      "selected": false,
+      "w": 72.59,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Live",
+      "selected": false,
+      "w": 49.48,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Metalworking",
+      "selected": false,
+      "w": 109.41,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Laboratories",
+      "selected": false,
+      "w": 102.84,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Power tools",
+      "selected": false,
+      "w": 98.27,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Bakeries",
+      "selected": false,
+      "w": 78.28,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Ideas",
+      "selected": false,
+      "w": 58.11,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Insects",
+      "selected": false,
+      "w": 69.66,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Amusement parks",
+      "selected": false,
+      "w": 138.37,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Camping",
+      "selected": false,
+      "w": 80.05,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Sculptures",
+      "selected": false,
+      "w": 90.99,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Fishing rods",
+      "selected": false,
+      "w": 100.85,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    },
+    {
+      "text": "Recently uploaded",
+      "selected": false,
+      "w": 139.48,
+      "h": 32,
+      "bg": "rgba(0, 0, 0, 0)",
+      "color": "rgb(0, 0, 0)",
+      "radius": "0px",
+      "padding": "0px",
+      "border": "0px none rgb(0, 0, 0)",
+      "font": [
+        "10px",
+        "400",
+        "normal",
+        "normal"
+      ]
+    }
+  ],
+  "grid": {
+    "browse": {
+      "tag": "ytd-browse",
+      "class": "style-scope ytd-page-manager",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 6133.2
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "overflow": "hidden",
+      "width": "1680px",
+      "height": "6133.2px",
+      "flex": "1 1 1e-09px",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "4",
+        "--ytd-rich-grid-item-max-width": "500px",
+        "--ytd-rich-grid-item-min-width": "310px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "6",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    },
+    "twoCol": {
+      "tag": "ytd-two-column-browse-results-renderer",
+      "class": "style-scope ytd-browse grid grid-disabled",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 6117.2
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "0px 0px 16px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1680px",
+      "height": "6117.2px",
+      "flex": "0 0 auto",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "4",
+        "--ytd-rich-grid-item-max-width": "500px",
+        "--ytd-rich-grid-item-min-width": "310px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "6",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    },
+    "primary": {
+      "tag": "div",
+      "id": "primary",
+      "class": "style-scope ytd-two-column-browse-results-renderer",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 6117.2
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "maxWidth": "100%",
+      "width": "1680px",
+      "height": "6117.2px",
+      "flex": "1 1 1e-09px",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "4",
+        "--ytd-rich-grid-item-max-width": "500px",
+        "--ytd-rich-grid-item-min-width": "310px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "6",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    },
+    "richGrid": {
+      "tag": "ytd-rich-grid-renderer",
+      "class": "style-scope ytd-two-column-browse-results-renderer",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 6117.2
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1680px",
+      "height": "6117.2px",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "3",
+        "--ytd-rich-grid-item-max-width": "700px",
+        "--ytd-rich-grid-item-min-width": "326.8px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "calc(3*(700px + 16px) - 16px)",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "5",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    },
+    "contents": {
+      "tag": "div",
+      "id": "contents",
+      "class": "style-scope ytd-rich-grid-renderer",
+      "rect": {
+        "x": 256,
+        "y": 112,
+        "w": 1648,
+        "h": 6061.2
+      },
+      "text": "Devour knowledge with Student Spaces\nSponsored\nAdobe\nWatch\nLearn more\n30:21\nHow It's Made: Noodles, Pasta, Mac & Cheese\n",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "24px 0px 0px",
+      "margin": "0px 16px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "maxWidth": "2148px",
+      "width": "1648px",
+      "height": "6037.2px",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "3",
+        "--ytd-rich-grid-item-max-width": "700px",
+        "--ytd-rich-grid-item-min-width": "326.8px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "calc(3*(700px + 16px) - 16px)",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "5",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    },
+    "row": {
+      "missing": "ytd-rich-grid-row"
+    },
+    "item": {
+      "tag": "ytd-rich-item-renderer",
+      "class": "style-scope ytd-rich-grid-renderer",
+      "rect": {
+        "x": 264,
+        "y": 136,
+        "w": 533.33,
+        "h": 409.99
+      },
+      "text": "Devour knowledge with Student Spaces\nSponsored\nAdobe\nWatch\nLearn more",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "0px 8px 32px",
+      "display": "block",
+      "transition": "border-radius 0.3s cubic-bezier(0.05, 0, 0, 1), background-color 0.3s cubic-bezier(0.05, 0, 0, 1), box-shadow 0.3s cubic-bezier(0.05, 0, 0, 1), outline 0.3s cubic-bezier(0.05, 0, 0, 1), outline-offset 0.3s cubic-bezier(0.05, 0, 0, 1)",
+      "animation": "none",
+      "position": "relative",
+      "width": "533.328px",
+      "height": "409.992px",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "3",
+        "--ytd-rich-grid-item-max-width": "700px",
+        "--ytd-rich-grid-item-min-width": "326.8px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "calc(3*(700px + 16px) - 16px)",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "5",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    },
+    "pageManager": {
+      "tag": "ytd-page-manager",
+      "id": "page-manager",
+      "class": "style-scope ytd-app",
+      "rect": {
+        "x": 240,
+        "y": 56,
+        "w": 1680,
+        "h": 6133.2
+      },
+      "text": "All\nHow It's Made\nCandy\nMusic\nNews\nFast food restaurants\nPodcasts\nRoasting\nGaming\nLive\nMetalworking\nLaboratories\nPower t",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "56px 0px 0px 240px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "width": "1680px",
+      "height": "6133.2px",
+      "flex": "1 1 1e-09px",
+      "extra": {
+        "--ytd-rich-grid-items-per-row": "4",
+        "--ytd-rich-grid-item-max-width": "500px",
+        "--ytd-rich-grid-item-min-width": "310px",
+        "--ytd-rich-grid-item-margin": "16px",
+        "--ytd-rich-grid-content-max-width": "",
+        "--ytd-rich-grid-gutter-margin": "16px",
+        "--ytd-rich-grid-posts-per-row": "3",
+        "--ytd-rich-grid-slim-items-per-row": "6",
+        "--ytd-rich-grid-item-max-width-mobile": ""
+      }
+    }
+  },
+  "card": {
+    "item": {
+      "tag": "ytd-rich-item-renderer",
+      "class": "style-scope ytd-rich-grid-renderer",
+      "rect": {
+        "x": 264,
+        "y": 136,
+        "w": 533.33,
+        "h": 409.99
+      },
+      "text": "Devour knowledge with Student Spaces\nSponsored\nAdobe\nWatch\nLearn more",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "margin": "0px 8px 32px",
+      "display": "block",
+      "transition": "border-radius 0.3s cubic-bezier(0.05, 0, 0, 1), background-color 0.3s cubic-bezier(0.05, 0, 0, 1), box-shadow 0.3s cubic-bezier(0.05, 0, 0, 1), outline 0.3s cubic-bezier(0.05, 0, 0, 1), outline-offset 0.3s cubic-bezier(0.05, 0, 0, 1)",
+      "animation": "none",
+      "position": "relative",
+      "width": "533.328px",
+      "height": "409.992px"
+    },
+    "media": {
+      "missing": "ytd-rich-grid-media"
+    },
+    "thumbnailWrap": {
+      "missing": "ytd-rich-grid-media #thumbnail"
+    },
+    "ytdThumbnail": {
+      "tag": "ytd-thumbnail",
+      "class": "player-container-background-image style-scope ytd-watch-flexy",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0)",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "absolute",
+      "width": "auto",
+      "height": "auto",
+      "flex": "0 0 auto"
+    },
+    "thumbImg": {
+      "missing": "ytd-thumbnail img"
+    },
+    "thumbAnchor": {
+      "tag": "a",
+      "id": "thumbnail",
+      "class": "yt-simple-endpoint inline-block style-scope ytd-thumbnail",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "borderRadius": "4px",
+      "margin": "0px auto",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "position": "absolute",
+      "overflow": "hidden",
+      "width": "auto",
+      "height": "100%"
+    },
+    "timeOverlay": {
+      "missing": "ytd-thumbnail-overlay-time-status-renderer"
+    },
+    "timeBadge": {
+      "missing": "ytd-thumbnail-overlay-time-status-renderer #text, .badge-shape-wiz__text"
+    },
+    "details": {
+      "missing": "ytd-rich-grid-media #details"
+    },
+    "avatarLink": {
+      "missing": "ytd-rich-grid-media #avatar-link"
+    },
+    "avatarImg": {
+      "missing": "ytd-rich-grid-media #avatar-link img"
+    },
+    "metaWrap": {
+      "missing": "ytd-rich-grid-media #meta"
+    },
+    "title": {
+      "missing": "ytd-rich-grid-media #video-title"
+    },
+    "channelName": {
+      "missing": "ytd-rich-grid-media ytd-channel-name"
+    },
+    "channelText": {
+      "missing": "ytd-rich-grid-media #channel-name #text"
+    },
+    "metadataLine": {
+      "missing": "ytd-rich-grid-media #metadata-line"
+    },
+    "metaSpan": {
+      "missing": "ytd-rich-grid-media #metadata-line span"
+    },
+    "menuButton": {
+      "missing": "ytd-rich-grid-media ytd-menu-renderer button"
+    }
+  },
+  "cardSamples": [
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    },
+    {
+      "title": null,
+      "titleAttr": null,
+      "aria": null,
+      "channel": null,
+      "meta": [],
+      "badges": [],
+      "duration": null
+    }
+  ],
+  "gridGeometry": {
+    "columns": 3,
+    "itemW": 533.33,
+    "itemH": 409.99,
+    "hGap": 16,
+    "colPitch": 549.33,
+    "vGap": 76,
+    "firstLeft": 264,
+    "lastRight": 1895.98
+  }
+}

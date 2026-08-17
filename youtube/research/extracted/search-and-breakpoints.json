@@ -1,0 +1,3277 @@
+{
+  "breakpoints": {
+    "guide_mini_to_expanded": {
+      "lastAt": 1312,
+      "firstAt": 1313
+    },
+    "guide_hidden_to_mini": {
+      "lastAt": 791,
+      "firstAt": 792
+    },
+    "ipr_2_to_3": {
+      "lastAt": 961,
+      "firstAt": 962
+    },
+    "ipr_1_to_2": {
+      "lastAt": 571,
+      "firstAt": 572
+    }
+  },
+  "searchFocused": {
+    "searchbox": {
+      "tag": "yt-searchbox",
+      "class": "ytSearchboxComponentHost ytSearchboxComponentDesktop ytSearchboxComponentHostIsFocused ytSearchboxComponentHostNoSuggestions",
+      "rect": {
+        "x": 606,
+        "y": 8,
+        "w": 640,
+        "h": 40
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "0px 4px",
+      "margin": "0px 0px 0px 40px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "zIndex": "2021",
+      "position": "relative",
+      "width": "632px",
+      "height": "40px",
+      "flex": "1 1 0%"
+    },
+    "inputBox": {
+      "tag": "div",
+      "class": "ytSearchboxComponentInputBox ytSearchboxComponentInputBoxHasFocus",
+      "rect": {
+        "x": 610,
+        "y": 8,
+        "w": 568,
+        "h": 40
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgb(255, 255, 255)",
+      "border": {
+        "top": "1px solid rgb(28, 98, 185)",
+        "right": "1px solid rgb(28, 98, 185)",
+        "bottom": "1px solid rgb(28, 98, 185)",
+        "left": "1px solid rgb(28, 98, 185)"
+      },
+      "borderRadius": "40px 0px 0px 40px",
+      "padding": "2px 4px 2px 48px",
+      "display": "flex",
+      "transition": "all",
+      "animation": "none",
+      "boxShadow": "rgba(0, 0, 0, 0.3) 0px 1px 2px 0px inset",
+      "position": "relative",
+      "width": "514px",
+      "height": "34px",
+      "flex": "1 1 0%"
+    },
+    "input": {
+      "tag": "input",
+      "class": "ytSearchboxComponentInput yt-searchbox-input title",
+      "rect": {
+        "x": 659,
+        "y": 16,
+        "w": 514,
+        "h": 24
+      },
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "16px",
+        "weight": "400",
+        "lineHeight": "22px",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgba(0, 0, 0, 0)",
+      "padding": "1px 0px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "overflow": "clip",
+      "width": "514px",
+      "height": "22px"
+    },
+    "searchBtn": {
+      "tag": "button",
+      "class": "ytSearchboxComponentSearchButton",
+      "rect": {
+        "x": 1178,
+        "y": 8,
+        "w": 64,
+        "h": 40
+      },
+      "font": {
+        "family": "Arial",
+        "size": "13.3333px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(15, 15, 15)",
+      "background": "rgb(248, 248, 248)",
+      "border": {
+        "top": "1px solid rgb(211, 211, 211)",
+        "right": "1px solid rgb(211, 211, 211)",
+        "bottom": "1px solid rgb(211, 211, 211)",
+        "left": "1px solid rgb(211, 211, 211)"
+      },
+      "borderRadius": "0px 40px 40px 0px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "64px",
+      "height": "40px"
+    },
+    "clearBtn": {
+      "missing": ".ytSearchboxComponentClearButton"
+    },
+    "voice": {
+      "tag": "div",
+      "id": "voice-search-button",
+      "class": "style-scope ytd-masthead",
+      "rect": {
+        "x": 1258,
+        "y": 8,
+        "w": 40,
+        "h": 40
+      },
+      "text": "Search with your voice",
+      "font": {
+        "family": "Roboto, Arial, sans-serif",
+        "size": "10px",
+        "weight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal"
+      },
+      "color": "rgb(0, 0, 0)",
+      "background": "rgba(0, 0, 0, 0.05)",
+      "borderRadius": "100px",
+      "margin": "0px 0px 0px 12px",
+      "display": "block",
+      "transition": "all",
+      "animation": "none",
+      "width": "40px",
+      "height": "40px"
+    }
+  },
+  "suggestions": {
+    "metrics": {
+      "container": {
+        "missing": ".ytSuggestionComponentSuggestionsContainer, #suggestions-container, tp-yt-paper-listbox"
+      },
+      "popup": {
+        "tag": "div",
+        "id": "i0",
+        "class": "ytSearchboxComponentSuggestionsContainer ytSearchboxComponentSuggestionsContainerScrollable",
+        "rect": {
+          "x": 610,
+          "y": 52,
+          "w": 570,
+          "h": 647
+        },
+        "text": "how it's made chocolate\nhow it's done\nHow It's Made\nTelevision series\nhow it's done huntrix song\nhow it's done kpop demo",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgb(255, 255, 255)",
+        "border": {
+          "top": "0px none rgb(15, 15, 15)",
+          "right": "1px solid rgb(204, 204, 204)",
+          "bottom": "1px solid rgb(204, 204, 204)",
+          "left": "1px solid rgb(204, 204, 204)"
+        },
+        "borderRadius": "12px",
+        "padding": "8px 0px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "boxShadow": "rgba(0, 0, 0, 0.2) 0px 2px 4px 0px",
+        "zIndex": "2010",
+        "position": "absolute",
+        "overflow": "auto",
+        "minWidth": "568px",
+        "width": "568px",
+        "height": "630px"
+      },
+      "row": {
+        "tag": "div",
+        "class": "ytSuggestionComponentSuggestion ytSuggestionComponentLargerSuggestion ytSuggestionComponentThumbnailSuggestion ytSuggestionComponentRoundedSuggestion ytSuggestionComponentThumbnailPadding",
+        "rect": {
+          "x": 619,
+          "y": 60,
+          "w": 552,
+          "h": 44
+        },
+        "text": "how it's made chocolate",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "16px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "borderRadius": "8px",
+        "padding": "0px 28px 0px 16px",
+        "margin": "0px 8px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "width": "508px",
+        "height": "44px"
+      },
+      "rowText": {
+        "missing": ".ytSuggestionComponentSuggestionText, .sbqs_c span"
+      },
+      "icon": {
+        "missing": ".ytSuggestionComponentSuggestionIcon, .sbqs_c .ytIconWrapperHost"
+      }
+    },
+    "rows": [
+      {
+        "text": "how it's made chocolate",
+        "box": [
+          619,
+          60,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done",
+        "box": [
+          619,
+          104,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "How It's Made | Television series",
+        "box": [
+          619,
+          148,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done huntrix song",
+        "box": [
+          619,
+          192,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done kpop demon hunters",
+        "box": [
+          619,
+          236,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's actually made",
+        "box": [
+          619,
+          280,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done karaoke",
+        "box": [
+          619,
+          324,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "How It Should Have Ended | Animated series",
+        "box": [
+          619,
+          368,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done lyrics",
+        "box": [
+          619,
+          412,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done huntrix",
+        "box": [
+          619,
+          456,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it was future",
+        "box": [
+          619,
+          500,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it go",
+        "box": [
+          619,
+          544,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done reaction",
+        "box": [
+          619,
+          588,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      },
+      {
+        "text": "how it's done 1 hour",
+        "box": [
+          619,
+          632,
+          552,
+          44
+        ],
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(15, 15, 15)",
+        "pad": "0px 28px 0px 16px",
+        "font": [
+          "16px",
+          "400",
+          "normal",
+          "normal"
+        ]
+      }
+    ],
+    "popupCandidates": [
+      {
+        "tag": "div",
+        "cls": "ytSearchboxComponentSuggestionsContainer ytSearchboxComponentSuggestionsContainerScrollabl",
+        "box": [
+          610,
+          52,
+          570,
+          647
+        ],
+        "bg": "rgb(255, 255, 255)",
+        "radius": "12px",
+        "shadow": "rgba(0, 0, 0, 0.2) 0px 2px 4px 0px",
+        "pad": "8px 0px",
+        "zIndex": "2010",
+        "border": ""
+      }
+    ],
+    "searchboxFocused": {
+      "inputBox": {
+        "tag": "div",
+        "class": "ytSearchboxComponentInputBox ytSearchboxComponentInputBoxHasFocus",
+        "rect": {
+          "x": 610,
+          "y": 8,
+          "w": 568,
+          "h": 40
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgb(255, 255, 255)",
+        "border": {
+          "top": "1px solid rgb(28, 98, 185)",
+          "right": "1px solid rgb(28, 98, 185)",
+          "bottom": "1px solid rgb(28, 98, 185)",
+          "left": "1px solid rgb(28, 98, 185)"
+        },
+        "borderRadius": "40px 0px 0px 40px",
+        "padding": "2px 4px 2px 48px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "boxShadow": "rgba(0, 0, 0, 0.3) 0px 1px 2px 0px inset",
+        "position": "relative",
+        "width": "514px",
+        "height": "34px",
+        "flex": "1 1 0%"
+      },
+      "input": {
+        "tag": "input",
+        "class": "ytSearchboxComponentInput yt-searchbox-input title",
+        "rect": {
+          "x": 659,
+          "y": 16,
+          "w": 490,
+          "h": 24
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "16px",
+          "weight": "400",
+          "lineHeight": "22px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "padding": "1px 0px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "overflow": "clip",
+        "width": "490px",
+        "height": "22px"
+      }
+    },
+    "suggestionText": [
+      "how it's made chocolate",
+      "how it's done",
+      "How It's Made\nTelevision series",
+      "how it's done huntrix song",
+      "how it's done kpop demon hunters",
+      "how it's actually made",
+      "how it's done karaoke",
+      "How It Should Have Ended\nAnimated series",
+      "how it's done lyrics",
+      "how it's done huntrix",
+      "how it was future",
+      "how it go"
+    ]
+  },
+  "results": {
+    "url": "https://www.youtube.com/results?search_query=how+it+is+made",
+    "metrics": {
+      "browse": {
+        "tag": "ytd-search",
+        "class": "style-scope ytd-page-manager",
+        "rect": {
+          "x": 240,
+          "y": 56,
+          "w": 1680,
+          "h": 7559.33
+        },
+        "text": "All\nShorts\nUnwatched\nWatched\nVideos\nRecently uploaded\nLive\nFilters\nDid you mean: how it's made\nHow It Is Made\nComplete S",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "padding": "0px 24px 16px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "0",
+        "position": "relative",
+        "overflow": "auto hidden",
+        "width": "1632px",
+        "height": "7543.33px",
+        "flex": "1 1 1e-09px"
+      },
+      "twoCol": {
+        "tag": "ytd-two-column-search-results-renderer",
+        "class": "style-scope ytd-search",
+        "rect": {
+          "x": 440,
+          "y": 112,
+          "w": 1280,
+          "h": 7487.33
+        },
+        "text": "Did you mean: how it's made\nHow It Is Made\nComplete Series Collections - Browse award-winning films and binge-worthy ser",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "maxWidth": "1280px",
+        "width": "1280px",
+        "height": "7487.33px",
+        "flex": "1 1 1e-09px"
+      },
+      "primary": {
+        "tag": "div",
+        "id": "primary",
+        "class": "style-scope ytd-two-column-search-results-renderer",
+        "rect": {
+          "x": 440,
+          "y": 112,
+          "w": 855,
+          "h": 7487.33
+        },
+        "text": "Did you mean: how it's made\nHow It Is Made\nComplete Series Collections - Browse award-winning films and binge-worthy ser",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "maxWidth": "1250px",
+        "width": "855px",
+        "height": "7487.33px",
+        "flex": "1 1 auto"
+      },
+      "contents": {
+        "tag": "div",
+        "id": "contents",
+        "class": " style-scope ytd-item-section-renderer style-scope ytd-item-section-renderer",
+        "rect": {
+          "x": 440,
+          "y": 112,
+          "w": 855,
+          "h": 44
+        },
+        "text": "Did you mean: how it's made",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "855px",
+        "height": "44px"
+      },
+      "chipBar": {
+        "tag": "yt-chip-cloud-renderer",
+        "class": "style-scope ytd-search-header-renderer",
+        "rect": {
+          "x": 440,
+          "y": 58.75,
+          "w": 1184.83,
+          "h": 50.5
+        },
+        "text": "All\nShorts\nUnwatched\nWatched\nVideos\nRecently uploaded\nLive",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "inline",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "filterButton": {
+        "tag": "div",
+        "id": "filter-button",
+        "class": "style-scope ytd-search-header-renderer",
+        "rect": {
+          "x": 1624.83,
+          "y": 64,
+          "w": 95.17,
+          "h": 40
+        },
+        "text": "Filters",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "95.1719px",
+        "height": "40px"
+      },
+      "videoRenderer": {
+        "tag": "ytd-video-renderer",
+        "rect": {
+          "x": 440,
+          "y": 559.67,
+          "w": 855,
+          "h": 235.38
+        },
+        "text": "1:08:47\nNow playing\nOddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel\n318K views\n1 month ag",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "16px 0px 0px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "855px",
+        "height": "235.375px"
+      },
+      "lockup": {
+        "tag": "yt-lockup-view-model",
+        "rect": {
+          "x": 440,
+          "y": 1825.3,
+          "w": 855,
+          "h": 250.47
+        },
+        "text": "623 videos\nHow It's Made - alphabetical order\nKaoru GreenEmerald\n•\nPlaylist\n•\nUpdated yesterday\nHow It's Made: Artist Pa",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "16px 0px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "width": "855px",
+        "height": "250.469px"
+      },
+      "thumb": {
+        "tag": "ytd-thumbnail",
+        "class": "style-scope ytd-video-renderer",
+        "rect": {
+          "x": 440,
+          "y": 559.67,
+          "w": 419.5,
+          "h": 235.38
+        },
+        "text": "1:08:47\nNow playing",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 16px 0px 0px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "minWidth": "240px",
+        "maxWidth": "500px",
+        "width": "419.5px",
+        "height": "235.375px",
+        "flex": "1 1 1e-09px"
+      },
+      "title": {
+        "tag": "a",
+        "id": "video-title",
+        "class": "yt-simple-endpoint style-scope ytd-video-renderer",
+        "rect": {
+          "x": 875.5,
+          "y": 559.67,
+          "w": 371.5,
+          "h": 52
+        },
+        "text": "Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "18px",
+          "weight": "400",
+          "lineHeight": "26px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flow-root",
+        "transition": "all",
+        "animation": "none",
+        "overflow": "hidden",
+        "width": "371.5px",
+        "height": "52px"
+      },
+      "channelRow": {
+        "tag": "div",
+        "id": "channel-info",
+        "class": "style-scope ytd-video-renderer",
+        "rect": {
+          "x": 875.5,
+          "y": 629.67,
+          "w": 419.5,
+          "h": 50.5
+        },
+        "text": "Science Channel",
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "10px",
+          "weight": "400",
+          "lineHeight": "normal",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(15, 15, 15)",
+        "background": "rgba(0, 0, 0, 0)",
+        "padding": "12px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "width": "419.5px",
+        "height": "26.5px"
+      },
+      "description": {
+        "tag": "yt-formatted-string",
+        "id": "description-text",
+        "class": "style-scope ytd-video-renderer",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "Roboto, Arial, sans-serif",
+          "size": "12px",
+          "weight": "400",
+          "lineHeight": "18px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(96, 96, 96)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 0px 8px",
+        "display": "none",
+        "transition": "all",
+        "animation": "none",
+        "overflow": "hidden",
+        "width": "auto",
+        "height": "auto"
+      }
+    },
+    "resultDump": [
+      {
+        "path": "0",
+        "tag": "ytd-video-renderer",
+        "box": [
+          440,
+          559.67,
+          855,
+          235.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "16px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0",
+        "tag": "div",
+        "id": "dismissible",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          440,
+          559.67,
+          855,
+          235.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0",
+        "tag": "ytd-thumbnail",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          440,
+          559.67,
+          419.5,
+          235.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 16px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0",
+        "tag": "a",
+        "id": "thumbnail",
+        "cls": "yt-simple-endpoint inline-block style-scope ytd-thumbnail",
+        "box": [
+          440,
+          559.67,
+          419.5,
+          235.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "12px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>0",
+        "tag": "yt-image",
+        "box": [
+          440,
+          785.55,
+          419.5,
+          12
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>0>0",
+        "tag": "img",
+        "cls": "ytCoreImageHost ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleAs",
+        "box": [
+          440,
+          559.67,
+          419.5,
+          235.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>0>0>1",
+        "tag": "div",
+        "id": "overlays",
+        "cls": "style-scope ytd-thumbnail",
+        "box": [
+          440,
+          797.55,
+          419.5,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>0",
+        "tag": "ytd-thumbnail-overlay-time-status-renderer",
+        "cls": "style-scope ytd-thumbnail",
+        "box": [
+          799.06,
+          767.05,
+          52.44,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "8px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>0>0",
+        "tag": "ytd-badge-supported-renderer",
+        "cls": "style-scope ytd-thumbnail-overlay-time-status-renderer",
+        "box": [
+          799.06,
+          767.05,
+          0,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0",
+        "tag": "dom-repeat",
+        "id": "repeat",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>0>0>1>0>0>1",
+        "tag": "yt-badge-supported-renderer",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          799.06,
+          777.05,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>0>1",
+        "tag": "div",
+        "cls": "thumbnail-overlay-badge-shape style-scope ytd-thumbnail-overlay-time-status-renderer",
+        "box": [
+          803.06,
+          767.05,
+          48.44,
+          20
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 0px 4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>0>1>0",
+        "tag": "badge-shape",
+        "cls": "ytBadgeShapeHost ytBadgeShapeThumbnailDefault ytBadgeShapeThumbnailBadge ytBadgeShapeTypography",
+        "box": [
+          803.06,
+          767.05,
+          48.44,
+          20
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "4px",
+        "pad": "1px 4px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>0>1>0>0",
+        "tag": "div",
+        "cls": "ytBadgeShapeText",
+        "txt": "1:08:47",
+        "box": [
+          807.06,
+          768.05,
+          40.44,
+          18
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>0>2",
+        "tag": "div",
+        "id": "time-status",
+        "cls": "style-scope ytd-thumbnail-overlay-time-status-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/12px w500 ls0.35px",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0.8)",
+        "radius": "4px",
+        "pad": "3px 4px",
+        "mar": "0px 0px 0px 4px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>0>0>1>0>2>0",
+        "tag": "yt-icon",
+        "cls": "style-scope ytd-thumbnail-overlay-time-status-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/12px w500 ls0.35px",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 4px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>0>0>1>0>2>1",
+        "tag": "span",
+        "id": "text",
+        "cls": "style-scope ytd-thumbnail-overlay-time-status-renderer",
+        "txt": "1:08:47",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/12px w500 ls0.35px",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>1",
+        "tag": "ytd-thumbnail-overlay-now-playing-renderer",
+        "cls": "style-scope ytd-thumbnail",
+        "box": [
+          763.69,
+          769.05,
+          91.81,
+          22
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0.6)",
+        "radius": "4px",
+        "pad": "1px 4px",
+        "mar": "4px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>1>0",
+        "tag": "span",
+        "id": "overlay-text",
+        "cls": "style-scope ytd-thumbnail-overlay-now-playing-renderer",
+        "txt": "Now playing",
+        "box": [
+          785.69,
+          771.05,
+          65.81,
+          18
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>1",
+        "tag": "ytd-thumbnail-overlay-equalizer",
+        "cls": "style-scope ytd-thumbnail-overlay-now-playing-renderer",
+        "box": [
+          767.69,
+          768.05,
+          16,
+          16
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "-8px 2px 0px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>0>0>1>1>1>0",
+        "tag": "svg",
+        "id": "equalizer",
+        "box": [
+          767.69,
+          768.05,
+          16,
+          16
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>1>1>1>0>0",
+        "tag": "g",
+        "box": [
+          771.06,
+          783.1,
+          9.26,
+          0.94
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>1>1>0>0>0",
+        "tag": "rect",
+        "box": [
+          777.79,
+          783.1,
+          2.53,
+          0.94
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>1>1>0>0>1",
+        "tag": "rect",
+        "box": [
+          774.42,
+          783.1,
+          2.53,
+          0.94
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>1>1>1>0>0>2",
+        "tag": "rect",
+        "box": [
+          771.06,
+          783.1,
+          2.53,
+          0.94
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>0>0>2",
+        "tag": "div",
+        "id": "mouseover-overlay",
+        "cls": "style-scope ytd-thumbnail",
+        "box": [
+          440,
+          797.55,
+          419.5,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>0>0>3",
+        "tag": "div",
+        "id": "hover-overlays",
+        "cls": "style-scope ytd-thumbnail",
+        "box": [
+          440,
+          797.55,
+          419.5,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1",
+        "tag": "div",
+        "cls": "text-wrapper style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          559.67,
+          419.5,
+          146.5
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0",
+        "tag": "div",
+        "id": "meta",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          559.67,
+          419.5,
+          70
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0",
+        "tag": "div",
+        "id": "title-wrapper",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          559.67,
+          419.5,
+          52
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>0>0",
+        "tag": "h3",
+        "cls": "title-and-badge style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          559.67,
+          371.5,
+          52
+        ],
+        "font": "11.7px/normal w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 8px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>0>0",
+        "tag": "ytd-badge-supported-renderer",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11.7px/normal w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>0>0>0>0",
+        "tag": "dom-repeat",
+        "id": "repeat",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11.7px/normal w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>0>0>0>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11.7px/normal w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>0>0>0>1",
+        "tag": "yt-badge-supported-renderer",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "11.7px/normal w700 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>0>0>0>1",
+        "tag": "a",
+        "id": "video-title",
+        "cls": "yt-simple-endpoint style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          559.67,
+          371.5,
+          52
+        ],
+        "font": "18px/26px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flow-root",
+        "lineClamp": "2"
+      },
+      {
+        "path": "0>0>1>0>0>0>1>0",
+        "tag": "yt-icon",
+        "id": "inline-title-icon",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "18px/26px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>0>0>1>1",
+        "tag": "yt-formatted-string",
+        "cls": "style-scope ytd-video-renderer",
+        "txt": "Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science",
+        "box": [
+          875.5,
+          562.17,
+          366.42,
+          47
+        ],
+        "font": "18px/26px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>0>0>1",
+        "tag": "div",
+        "id": "menu",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          1255,
+          559.67,
+          40,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0",
+        "tag": "ytd-menu-renderer",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          1255,
+          548.67,
+          40,
+          40
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "-11px 0px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>0",
+        "tag": "div",
+        "id": "top-level-buttons-computed",
+        "cls": "top-level-buttons style-scope ytd-menu-renderer",
+        "box": [
+          1255,
+          548.67,
+          0,
+          40
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>1",
+        "tag": "div",
+        "id": "flexible-item-buttons",
+        "cls": "style-scope ytd-menu-renderer",
+        "box": [
+          1255,
+          548.67,
+          0,
+          40
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2",
+        "tag": "yt-icon-button",
+        "id": "button",
+        "cls": "dropdown-trigger style-scope ytd-menu-renderer",
+        "box": [
+          1255,
+          548.67,
+          40,
+          40
+        ],
+        "font": "0px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>0",
+        "tag": "button",
+        "id": "button",
+        "cls": "style-scope yt-icon-button",
+        "box": [
+          1255,
+          548.67,
+          40,
+          40
+        ],
+        "font": "13.3333px/0px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>0>0",
+        "tag": "yt-icon",
+        "cls": "style-scope ytd-menu-renderer",
+        "box": [
+          1263,
+          556.67,
+          24,
+          24
+        ],
+        "font": "13.3333px/0px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-flex"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape style-scope yt-icon ytSpecIconShapeHost",
+        "box": [
+          1263,
+          556.67,
+          24,
+          24
+        ],
+        "font": "13.3333px/0px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>0>0>0>0",
+        "tag": "div",
+        "box": [
+          1263,
+          556.67,
+          24,
+          24
+        ],
+        "font": "13.3333px/0px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          1263,
+          556.67,
+          24,
+          24
+        ],
+        "font": "13.3333px/0px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          1273,
+          560.67,
+          4,
+          16
+        ],
+        "font": "13.3333px/0px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>1",
+        "tag": "yt-interaction",
+        "id": "interaction",
+        "cls": "circular style-scope yt-icon-button",
+        "box": [
+          1255,
+          548.67,
+          40,
+          40
+        ],
+        "font": "0px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>1>0",
+        "tag": "div",
+        "cls": "stroke style-scope yt-interaction",
+        "box": [
+          1255,
+          548.67,
+          40,
+          40
+        ],
+        "font": "0px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>2>1>1",
+        "tag": "div",
+        "cls": "fill style-scope yt-interaction",
+        "box": [
+          1255,
+          548.67,
+          40,
+          40
+        ],
+        "font": "0px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "50%",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>0>1>0>3",
+        "tag": "yt-button-shape",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1",
+        "tag": "ytd-video-meta-block",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          611.67,
+          419.5,
+          18
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0",
+        "tag": "div",
+        "id": "metadata",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          875.5,
+          611.67,
+          419.5,
+          18
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0",
+        "tag": "div",
+        "id": "byline-container",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>0",
+        "tag": "div",
+        "id": "attributed-channel-name",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1",
+        "tag": "ytd-channel-name",
+        "id": "channel-name",
+        "cls": " style-scope ytd-video-meta-block style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>0",
+        "tag": "div",
+        "id": "container",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>0>0",
+        "tag": "div",
+        "id": "text-container",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>0>0>0",
+        "tag": "yt-formatted-string",
+        "id": "text",
+        "cls": "style-scope ytd-channel-name complex-string",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>0>0>0>0",
+        "tag": "a",
+        "cls": "yt-simple-endpoint style-scope yt-formatted-string",
+        "txt": "Science Channel",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 1.2px 0px 0px",
+        "mar": "0px -1.2px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>0>1",
+        "tag": "tp-yt-paper-tooltip",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>0>1>0",
+        "tag": "div",
+        "id": "tooltip",
+        "cls": "hidden style-scope tp-yt-paper-tooltip",
+        "txt": "Science Channel",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgb(97, 97, 97)",
+        "radius": "4px",
+        "pad": "8px",
+        "mar": "8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1",
+        "tag": "ytd-badge-supported-renderer",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 8px 0px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>0",
+        "tag": "dom-repeat",
+        "id": "repeat",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1",
+        "tag": "yt-badge-supported-renderer",
+        "cls": "ytBadgeSupportedRendererHost",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0",
+        "tag": "div",
+        "cls": "badge-shape ytBadgeSupportedRendererBadgeShape ytBadgeSupportedRendererBadgeShapeStyleTypeVerifiedAr",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 0px 0px 4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0",
+        "tag": "yt-metadata-badge-renderer",
+        "cls": "ytMetadataBadgeRendererHost",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0",
+        "tag": "badge-shape",
+        "cls": "ytBadgeShapeHost ytBadgeShapeDefault ytBadgeShapeNoText ytBadgeShapeModern ytBadgeShapeTypography",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "2px",
+        "pad": "0px 1px 0px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0>0",
+        "tag": "div",
+        "cls": "ytBadgeShapeIcon",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape ytSpecIconShapeHost",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>1>1>1>0>0>0>1",
+        "tag": "div",
+        "cls": "ytBadgeShapeText",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>2",
+        "tag": "div",
+        "id": "separator",
+        "cls": "style-scope ytd-video-meta-block",
+        "txt": "•",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>3",
+        "tag": "yt-formatted-string",
+        "id": "video-info",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>0>3>0",
+        "tag": "yt-attributed-string",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>0>1>0>1",
+        "tag": "div",
+        "id": "metadata-line",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          875.5,
+          611.67,
+          140.44,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>0",
+        "tag": "ytd-badge-supported-renderer",
+        "cls": "inline-metadata-badge style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 8px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>0>0",
+        "tag": "dom-repeat",
+        "id": "repeat",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>0>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>0>1",
+        "tag": "yt-badge-supported-renderer",
+        "cls": "ytBadgeSupportedRendererHost",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>1",
+        "tag": "div",
+        "id": "separator",
+        "cls": "style-scope ytd-video-meta-block",
+        "txt": "•",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>2",
+        "tag": "span",
+        "cls": "inline-metadata-item style-scope ytd-video-meta-block",
+        "txt": "318K views",
+        "box": [
+          875.5,
+          611.67,
+          61.05,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>3",
+        "tag": "span",
+        "cls": "inline-metadata-item style-scope ytd-video-meta-block",
+        "txt": "1 month ago",
+        "box": [
+          936.55,
+          611.67,
+          79.39,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>4",
+        "tag": "dom-repeat",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>0>1>4>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>1",
+        "tag": "div",
+        "id": "additional-metadata-line",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          875.5,
+          629.67,
+          419.5,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>0>1>1>0",
+        "tag": "dom-repeat",
+        "cls": "style-scope ytd-video-meta-block",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>0>1>1>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>1",
+        "tag": "div",
+        "id": "channel-info",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          629.67,
+          419.5,
+          50.5
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "12px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>1>0",
+        "tag": "a",
+        "id": "channel-thumbnail",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          641.67,
+          32,
+          26.5
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 8px 0px 0px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>0>0",
+        "tag": "yt-img-shadow",
+        "cls": "style-scope ytd-video-renderer no-transition",
+        "box": [
+          875.5,
+          641.67,
+          24,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "50%",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>1>1>0>0>0",
+        "tag": "img",
+        "id": "img",
+        "cls": "style-scope yt-img-shadow",
+        "box": [
+          875.5,
+          641.67,
+          24,
+          24
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 238)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>1",
+        "tag": "div",
+        "id": "avatar",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 8px 0px 0px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>1>2",
+        "tag": "div",
+        "id": "attributed-channel-name",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>1>3",
+        "tag": "ytd-channel-name",
+        "id": "channel-name",
+        "cls": "long-byline style-scope ytd-video-renderer",
+        "box": [
+          907.5,
+          645.92,
+          105.42,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>1>3>0",
+        "tag": "div",
+        "id": "container",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          907.5,
+          645.92,
+          88.42,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>0>0",
+        "tag": "div",
+        "id": "text-container",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          907.5,
+          645.92,
+          88.42,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>0>0>0",
+        "tag": "yt-formatted-string",
+        "id": "text",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          907.5,
+          647.92,
+          88.42,
+          14
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>1>3>0>0>0>0",
+        "tag": "a",
+        "cls": "yt-simple-endpoint style-scope yt-formatted-string",
+        "txt": "Science Channel",
+        "box": [
+          907.5,
+          645.92,
+          88.42,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline-block"
+      },
+      {
+        "path": "0>0>1>1>3>0>1",
+        "tag": "tp-yt-paper-tooltip",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          907.5,
+          663.92,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>0>1>0",
+        "tag": "div",
+        "id": "tooltip",
+        "cls": "hidden style-scope tp-yt-paper-tooltip",
+        "txt": "Science Channel",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgb(97, 97, 97)",
+        "radius": "4px",
+        "pad": "8px",
+        "mar": "8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>1>3>1",
+        "tag": "ytd-badge-supported-renderer",
+        "cls": "style-scope ytd-channel-name",
+        "box": [
+          995.92,
+          645.92,
+          17,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>1>3>1>0",
+        "tag": "dom-repeat",
+        "id": "repeat",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>1>3>1>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>1>3>1>1",
+        "tag": "yt-badge-supported-renderer",
+        "cls": "ytBadgeSupportedRendererHost",
+        "box": [
+          995.92,
+          645.92,
+          17,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0",
+        "tag": "div",
+        "cls": "badge-shape ytBadgeSupportedRendererBadgeShape ytBadgeSupportedRendererBadgeShapeStyleTypeVerifiedAr",
+        "box": [
+          995.92,
+          645.92,
+          17,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "pad": "0px 0px 0px 4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0",
+        "tag": "yt-metadata-badge-renderer",
+        "cls": "ytMetadataBadgeRendererHost",
+        "box": [
+          999.92,
+          645.92,
+          13,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0",
+        "tag": "badge-shape",
+        "cls": "ytBadgeShapeHost ytBadgeShapeDefault ytBadgeShapeNoText ytBadgeShapeModern ytBadgeShapeTypography",
+        "box": [
+          999.92,
+          645.92,
+          13,
+          18
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "2px",
+        "pad": "0px 1px 0px 0px",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0>0",
+        "tag": "div",
+        "cls": "ytBadgeShapeIcon",
+        "box": [
+          999.92,
+          648.92,
+          12,
+          12
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0>0>0",
+        "tag": "span",
+        "cls": "yt-icon-shape ytSpecIconShapeHost",
+        "box": [
+          999.92,
+          648.92,
+          12,
+          12
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "flex"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0>0>0>0",
+        "tag": "div",
+        "box": [
+          999.92,
+          642.92,
+          12,
+          24
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0>0>0>0>0",
+        "tag": "svg",
+        "box": [
+          999.92,
+          642.92,
+          12,
+          24
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0>0>0>0>0>0",
+        "tag": "path",
+        "box": [
+          1000.42,
+          649.42,
+          11,
+          11
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>1>3>1>1>0>0>0>1",
+        "tag": "div",
+        "cls": "ytBadgeShapeText",
+        "box": [
+          1011.92,
+          654.92,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>2",
+        "tag": "yt-formatted-string",
+        "id": "description-text",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 8px",
+        "disp": "none",
+        "lineClamp": "2"
+      },
+      {
+        "path": "0>0>1>2>0",
+        "tag": "yt-attributed-string",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>3",
+        "tag": "div",
+        "cls": "metadata-snippet-container-one-line style-scope ytd-video-renderer style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          680.17,
+          419.5,
+          18
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 8px",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>3>0",
+        "tag": "a",
+        "cls": "yt-simple-endpoint metadata-snippet-timestamp style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>3>0>0",
+        "tag": "span",
+        "id": "time",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w500 lsnormal",
+        "color": "rgb(6, 95, 212)",
+        "bg": "rgb(222, 241, 255)",
+        "radius": "2px",
+        "pad": "2px 6px",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>3>0>1",
+        "tag": "yt-formatted-string",
+        "cls": "metadata-snippet-text-navigation style-scope ytd-video-renderer",
+        "txt": "From surgical gloves and springs to ball bearings, crayons, balloons, ",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>3>1",
+        "tag": "yt-formatted-string",
+        "cls": "metadata-snippet-text style-scope ytd-video-renderer",
+        "txt": "From surgical gloves and springs to ball bearings, crayons, balloons, ",
+        "box": [
+          875.5,
+          682.17,
+          686.53,
+          14
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(96, 96, 96)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>3>2",
+        "tag": "tp-yt-paper-tooltip",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          698.17,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>3>2>0",
+        "tag": "div",
+        "id": "tooltip",
+        "cls": "hidden style-scope tp-yt-paper-tooltip",
+        "txt": "From the video description",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "12px/18px w400 lsnormal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgb(97, 97, 97)",
+        "radius": "4px",
+        "pad": "8px",
+        "mar": "8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>4",
+        "tag": "dom-repeat",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>4>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>5",
+        "tag": "ytd-badge-supported-renderer",
+        "id": "badges",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "0px 0px 8px",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>5>0",
+        "tag": "dom-repeat",
+        "id": "repeat",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>5>0>0",
+        "tag": "template",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>0>1>5>1",
+        "tag": "yt-badge-supported-renderer",
+        "cls": "style-scope ytd-badge-supported-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "inline"
+      },
+      {
+        "path": "0>0>1>6",
+        "tag": "div",
+        "id": "expandable-metadata",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          706.17,
+          419.5,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>0>1>7",
+        "tag": "div",
+        "id": "buttons",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          875.5,
+          706.17,
+          419.5,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(15, 15, 15)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "block"
+      },
+      {
+        "path": "0>1",
+        "tag": "div",
+        "id": "dismissed",
+        "cls": "style-scope ytd-video-renderer",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "disp": "none"
+      },
+      {
+        "path": "0>2",
+        "tag": "yt-interaction",
+        "id": "interaction",
+        "cls": "extended style-scope ytd-video-renderer",
+        "box": [
+          436,
+          555.67,
+          863,
+          243.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "mar": "-4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>2>0",
+        "tag": "div",
+        "cls": "stroke style-scope yt-interaction",
+        "box": [
+          436,
+          555.67,
+          863,
+          243.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)",
+        "radius": "4px",
+        "disp": "block"
+      },
+      {
+        "path": "0>2>1",
+        "tag": "div",
+        "cls": "fill style-scope yt-interaction",
+        "box": [
+          436,
+          555.67,
+          863,
+          243.38
+        ],
+        "font": "10px/normal w400 lsnormal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgb(0, 0, 0)",
+        "radius": "4px",
+        "disp": "block"
+      }
+    ],
+    "resultHTML": "<ytd-video-renderer class=\"style-scope ytd-item-section-renderer\" bigger-thumbs-style=\"BIG\" lockup=\"true\" is-search=\"\" use-search-ui=\"\" use-standard-config-width=\"\" use-bigger-thumbs=\"\" inline-title-icon=\"\"><!--css-build:shady--><!--css_build_scope:ytd-video-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><div id=\"dismissible\" class=\"style-scope ytd-video-renderer\">\n  <ytd-thumbnail use-hovered-property=\"\" class=\"style-scope ytd-video-renderer\" size=\"large\" loaded=\"\"><!--css-build:shady--><!--css_build_scope:ytd-thumbnail--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><a id=\"thumbnail\" class=\"yt-simple-endpoint inline-block style-scope ytd-thumbnail\" aria-hidden=\"true\" tabindex=\"-1\" rel=\"null\" href=\"/watch?v=OuKU-ys8OGE&amp;pp=ygUOaG93IGl0IGlzIG1hZGU%3D\">\n  <yt-image class=\"style-scope ytd-thumbnail\">\n  <img class=\"ytCoreImageHost ytCoreImageFillParentHeight ytCoreImageFillParentWidth ytCoreImageContentModeScaleAspectFill ytCoreImageLoaded\" alt=\"true\" style=\"background-color: transparent;\" src=\"https://i.ytimg.com/vi/OuKU-ys8OGE/hq720.jpg?sqp=-oaymwEnCNAFEJQDSFryq4qpAxkIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB&amp;rs=AOn4CLBhBsIFFN5oWuNQGXMnHVzy_MbB9g\"></yt-image>\n  \n  <div id=\"overlays\" class=\"style-scope ytd-thumbnail\"><ytd-thumbnail-overlay-time-status-renderer class=\"style-scope ytd-thumbnail\" hide-time-status=\"\" overlay-style=\"DEFAULT\"><!--css-build:shady--><!--css_build_scope:ytd-thumbnail-overlay-time-status-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><ytd-badge-supported-renderer is-thumbnail-badge=\"\" class=\"style-scope ytd-thumbnail-overlay-time-status-renderer\" system-icons=\"\"><!--css-build:shady--><!--css_build_scope:ytd-badge-supported-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><dom-repeat id=\"repeat\" as=\"badge\" class=\"style-scope ytd-badge-supported-renderer\"><template is=\"dom-repeat\"></template></dom-repeat><yt-badge-supported-renderer class=\"style-scope ytd-badge-supported-renderer\"></yt-badge-supported-renderer></ytd-badge-supported-renderer><div class=\"thumbnail-overlay-badge-shape style-scope ytd-thumbnail-overlay-time-status-renderer\"><badge-shape class=\"ytBadgeShapeHost ytBadgeShapeThumbnailDefault ytBadgeShapeThumbnailBadge ytBadgeShapeTypography\" role=\"img\" aria-label=\"1 hour, 8 minutes, 47 seconds\"><div class=\"ytBadgeShapeText\">1:08:47</div></badge-shape></div><div id=\"time-status\" class=\"style-scope ytd-thumbnail-overlay-time-status-renderer\" hidden=\"\"><yt-icon class=\"style-scope ytd-thumbnail-overlay-time-status-renderer\" disable-upgrade=\"\" hidden=\"\"></yt-icon><span id=\"text\" class=\"style-scope ytd-thumbnail-overlay-time-status-renderer\" aria-label=\"1 hour, 8 minutes, 47 seconds\">\n    1:08:47\n  </span></div></ytd-thumbnail-overlay-time-status-renderer><ytd-thumbnail-overlay-now-playing-renderer class=\"style-scope ytd-thumbnail\"><!--css-build:shady--><!--css_build_scope:ytd-thumbnail-overlay-now-playing-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><span id=\"overlay-text\" class=\"style-scope ytd-thumbnail-overlay-now-playing-renderer\">Now playing</span>\n<ytd-thumbnail-overlay-equalizer class=\"style-scope ytd-thumbnail-overlay-now-playing-renderer\"><!--css-build:shady--><!--css_build_scope:ytd-thumbnail-overlay-equalizer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><svg xmlns=\"http://www.w3.org/2000/svg\" id=\"equalizer\" viewBox=\"0 0 55 95\" class=\"style-scope ytd-thumbnail-overlay-equalizer\">\n  <g class=\"style-scope ytd-thumbnail-overlay-equalizer\">\n    <rect class=\"bar style-scope ytd-thumbnail-overlay-equalizer\" x=\"0\"></rect>\n    <rect class=\"bar style-scope ytd-thumbnail-overlay-equalizer\" x=\"20\"></rect>\n    <rect class=\"bar style-scope ytd-thumbnail-overlay-equalizer\" x=\"40\"></rect>\n  </g>\n</svg>\n</ytd-thumbnail-overlay-equalizer>\n</ytd-thumbnail-overlay-now-playing-renderer></div>\n  <div id=\"mouseover-overlay\" class=\"style-scope ytd-thumbnail\"></div>\n  <div id=\"hover-overlays\" class=\"style-scope ytd-thumbnail\"></div>\n</a>\n</ytd-thumbnail>\n  <div class=\"text-wrapper style-scope ytd-video-renderer\">\n    <div id=\"meta\" class=\"style-scope ytd-video-renderer\">\n      <div id=\"title-wrapper\" class=\"style-scope ytd-video-renderer\">\n        <h3 class=\"title-and-badge style-scope ytd-video-renderer\">\n          <ytd-badge-supported-renderer collection-truncate=\"\" class=\"style-scope ytd-video-renderer\" system-icons=\"\" hidden=\"\"><!--css-build:shady--><!--css_build_scope:ytd-badge-supported-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><dom-repeat id=\"repeat\" as=\"badge\" class=\"style-scope ytd-badge-supported-renderer\"><template is=\"dom-repeat\"></template></dom-repeat><yt-badge-supported-renderer class=\"style-scope ytd-badge-supported-renderer\"></yt-badge-supported-renderer></ytd-badge-supported-renderer>\n          <a id=\"video-title\" class=\"yt-simple-endpoint style-scope ytd-video-renderer\" title=\"Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel\" aria-label=\"Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel 1 hour, 8 minutes\" href=\"/watch?v=OuKU-ys8OGE&amp;pp=ygUOaG93IGl0IGlzIG1hZGU%3D\">\n            <yt-icon id=\"inline-title-icon\" class=\"style-scope ytd-video-renderer\" hidden=\"\"><!--css-build:shady--><!--css_build_scope:yt-icon--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.core.yt_icon.yt.icon.css.js--></yt-icon>\n            <yt-formatted-string class=\"style-scope ytd-video-renderer\" aria-label=\"Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel 1 hour, 8 minutes\">Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel</yt-formatted-string>\n          </a>\n        </h3>\n        <div id=\"menu\" class=\"style-scope ytd-video-renderer\"><ytd-menu-renderer class=\"style-scope ytd-video-renderer\" safe-area=\"\" menu-active=\"\"><!--css-build:shady--><!--css_build_scope:ytd-menu-renderer--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js--><div id=\"top-level-buttons-computed\" class=\"top-level-buttons style-scope ytd-menu-renderer\"></div><div id=\"flexible-item-buttons\" class=\"style-scope ytd-menu-renderer\"></div><yt-icon-button id=\"button\" class=\"dropdown-trigger style-scope ytd-menu-renderer\" style-target=\"button\"><!--css-build:shady--><!--css_build_scope:yt-icon-button--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.ui.yt_icon_button.yt.icon.button.css.js--><button id=\"button\" class=\"style-scope yt-icon-button\" aria-label=\"Action menu\"><yt-icon class=\"style-scope ytd-menu-renderer\"><!--css-build:shady--><!--css_build_scope:yt-icon--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.core.yt_icon.yt.icon.css.js--><span class=\"yt-icon-shape style-scope yt-icon ytSpecIconShapeHost\"><div style=\"width: 100%; height: 100%; display: block; fill: currentcolor;\"><svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\" focusable=\"false\" aria-hidden=\"true\" style=\"pointer-events: none; display: inherit; width: 100%; height: 100%;\"><path d=\"M12 4a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Z\"></path></svg></div></span></yt-icon></button><yt-interaction id=\"interaction\" class=\"circular style-scope yt-icon-button\"><!--css-build:shady--><!--css_build_scope:yt-interaction--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js,video.youtube.src.web.polymer.shared.ui.yt_interaction.yt.interaction.css.js--><div class=\"stroke style-scope yt-interaction\"></div><div class=\"fill style-scope yt-interaction\"></div></yt-interaction></yt-icon-button><yt-button-shape id=\"button-shape\" class=\"style-scope ytd-menu-renderer\" hidden=\"\"></yt-button-shape></ytd-menu-renderer></div>\n      </div>\n      <ytd-video-meta-block class=\"style-scope ytd-video-renderer\"><!--css-build:shady--><!--css_build_scope:ytd-video-meta-block--><!--css_build_styles:video.youtube.src.web.polymer.shared.ui.styles.yt_base_styles.yt.base.styles.css.js-->\n<div id=\"metadata\" class=\"style-scope ytd-video-meta-block\">\n  <div id=\"byline-container\" class=\"style-scope ytd-video-meta-block\" hidden=\"\">\n    <div id=\"attributed-channel-name\" class=\"style-scope ytd-video-meta-block\" hidden=\"\"></div>\n    <ytd-channel-name id=\"channel-name\" class=\" style-scope ytd-video-meta-bl",
+    "filterChips": [
+      "All",
+      "Shorts",
+      "Unwatched",
+      "Watched",
+      "Videos",
+      "Recently uploaded",
+      "Live"
+    ],
+    "headerButtons": [
+      "Previous",
+      "All",
+      "Shorts",
+      "Unwatched",
+      "Watched",
+      "Videos",
+      "Recently uploaded",
+      "Live",
+      "Next",
+      "Search filters",
+      "My Ad Center",
+      "Action menu"
+    ],
+    "samples": [
+      [
+        "1:08:47",
+        "Now playing",
+        "Oddly Satisfying Manufacturing Processes! ⚙️😌 How It's Made | Science Channel",
+        "318K views",
+        "1 month ago",
+        "Science Channel",
+        "From surgical gloves and springs to ball bearings, crayons, balloons, and more, watch the fascinating manufacturing processes ..."
+      ],
+      [
+        "10:32",
+        "Now playing",
+        "How It's Made: Chocolate",
+        "640K views",
+        "3 years ago",
+        "How It's Made",
+        "How It's Made: Chocolate What sweet delight pairs well with birthdays, Valentine's day, Easter, or any other celebration?",
+        "17 chapters",
+        "Intro | CULTIVATION OF CACAO TREES | HARVESTING | EXTRACTING THE COCOA BEANS | FERMENTATION | DRYING THE COCOA BEANS | BAGGING AND SHIPPING THE COCOA BEANS | CLEANING | QUALITY INSPECTION | CRUSHING | ROASTING | BLENDING | GRINDING AND REFINING | CONCHING | TEMPERING | MAKING PRALINE CHOCOLATES | COATING AND DECORATION"
+      ],
+      [
+        "50:05",
+        "Now playing",
+        "Gummie Candy, Croissants, Sandwich Cookies, & More Snacks | How It's Made | Science Channel",
+        "7.9M views",
+        "2 years ago",
+        "Science Channel",
+        "A feast for the eyes, literally! Chapters: 00:00 Sandwich Cookies- Originally aired 2009 04:59 Gummie Candy- Originally aired ...",
+        "10 chapters",
+        "Sandwich Cookies- Originally aired 2009 | Gummie Candy- Originally aired 2005 | Marshmallow Cookies- Originally aired 2006 | Croissants- Originally aired 2012 | Sandwich Crackers- Originally aired 2011 | Jawbreakers- Originally aired 2006 | Fig Cookies- Originally aired 2006 | Stackable Potato Chips- Originally aired 2007 | Jelly Beans- Originally aired 2006 | Tortilla Chips- Originally aired 2008"
+      ],
+      [
+        "623 videos",
+        "How It's Made - alphabetical order",
+        "Kaoru GreenEmerald",
+        "•",
+        "Playlist",
+        "•",
+        "Updated yesterday",
+        "How It's Made: Artist Paint Brushes · 5:13",
+        "How It's Made - Billiard Cues · 5:05",
+        "View full playlist"
+      ],
+      [
+        "BINGE: 8 HOURS of The Most RANDOM How It's Made 🔀 | Science Channel",
+        "1M views",
+        "1 month ago",
+        "Science Channel",
+        "Take a behind-the-scenes look at how a completely random mix of products is made, from gummy worms and crayons to wax ..."
+      ],
+      [
+        "Ice Cream Sandwiches | How It's Made",
+        "27M views",
+        "10 years ago",
+        "Science Channel",
+        "HowItsMade Mondays 9/8c on Science 87% of Americans have ice cream in their freezer at any given time. Chocolate syrup is the ...",
+        "CC"
+      ],
+      [
+        "Breakfast Time! How All Your Favorites Are Made! | How It's Made | Science Channel",
+        "1.6M views",
+        "5 months ago",
+        "Science Channel",
+        "From pancakes to waffles to doughnuts, watch as all your favorite breakfast foods are made! Frozen Pancakes - 00:00 - 04:59 ...",
+        "13 chapters",
+        "Frozen Pancakes. | Doughnuts. | Frozen Waffles. | Bacon. | Frosted Cereal. | Bagels. | Yogurt. | Butter. | Eggs. | Cereal and Granola Bars. | Honey. | Milk. | Coffee."
+      ],
+      [
+        "How It's Made: Noodles, Pasta, Mac & Cheese",
+        "961K views",
+        "10 months ago",
+        "Captain Discovery",
+        "Ever wondered How It's Made: Noodles, Pasta, Mac & Cheese? In this episode, Captain Discovery takes you behind the ..."
+      ],
+      [
+        "How It's Made: McDonald's Fries, Chicken Nuggets, Coca Cola, Pepperoni",
+        "2.3M views",
+        "1 year ago",
+        "Captain Discovery",
+        "Ever wondered how McDonald's Chicken Nuggets, Fries, Coca Cola, Pepperoni are made? This video takes you inside the ..."
+      ],
+      [
+        "60 videos",
+        "How It's Made",
+        "How It's Made",
+        "•",
+        "Playlist",
+        "How It's Made Hot Dog · 3:17",
+        "How Glass Is Made · 3:30",
+        "View full playlist"
+      ],
+      [
+        "2 HOUR Mouthwatering Mega Food Mix | How It's Made | Science Channel",
+        "6.2M views",
+        "1 year ago",
+        "Science Channel",
+        "Chapters 00:00 Soda Crackers - Originally aired 2008 04:58 Ice Cream Cones - Originally aired 2008 09:58 Peanut Butter ...",
+        "25 chapters",
+        "Soda Crackers - Originally aired 2008 | Ice Cream Cones - Originally aired 2008 | Peanut Butter - Originally aired 2005 | Doughnuts - Originally aired 2008 | Popcorn - Originally aired 2009 | Frozen Treats - Originally aired 2005 | Waffles - Originally aired 2009 | Sandwich Cookies - Originally aired 2009 | Gummie Candy - Originally aired 2005 | Marshmallow Cookie - Originally aired 2006 | Croissants - Originally aired 2012 | Sandwich Crackers - Originally aired 2011 | Jawbreakers - Originally aired 2006 | Fig Cookie - Originally aired 2009 | Stackable Potato Chips - Originally aired 2007 | Jelly Beans - Originally aired 2006 | Tortilla Chips - Originally aired 2008 | Deli Meats - Originally aired 2009 | Stilton Cheese - Originally aired 2011 | Baklava - Originally aired 2014 | Stuffed Olives - Originally aired 2009 | Canned Soup - Originally aired 2012 | Sundae Cups - Originally aired 2017 | Yogurt - Originally aired 2006 | Chocolate Mints - Originally aired 2014"
+      ],
+      [
+        "BALLOONS | How It's Made",
+        "5M views",
+        "8 years ago",
+        "Discovery UK",
+        "Ever wondered how balloons are made? Get the full history and 'making of' right here! Subscribe to Discovery UK for more great ..."
+      ]
+    ]
+  }
+}

@@ -1,0 +1,1960 @@
+{
+  "rest": {
+    "metrics": {
+      "player": {
+        "tag": "div",
+        "id": "movie_player",
+        "class": "html5-video-player ytp-transparent ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-exp-ppp-update ytp-livebadge-color ytp-grid-scrollable ytp-delhi-modern ytp-delhi-modern-icons ytp-delhi-horizontal-volume-controls ytp-delhi-modern-compact-controls ad-created ytp-fit-cover-video ytp-fine-scrubbing-exp ytp-cards-teaser-dismissible ytp-hide-info-bar ytp-large-width-mode ytp-disable-bottom-gradient ytp-autonav-endscreen-cancelled-state ytp-branding-shown ytp-hide-fullscreen-title ytp-fullscreen-metadata-top ytp-heat-map ytp-iv-drawer-enabled playing-mode",
+        "rect": {
+          "x": 16,
+          "y": 68,
+          "w": 1344,
+          "h": 756
+        },
+        "text": "stop to consider.\nIn your kitchen cabinet, a pack of\ninstant\n0:05 / 30:20",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "0",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "1344px",
+        "height": "756px"
+      },
+      "video": {
+        "tag": "video",
+        "class": "video-stream html5-main-video",
+        "rect": {
+          "x": 16,
+          "y": 68,
+          "w": 1344,
+          "h": 756
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "absolute",
+        "overflow": "clip",
+        "width": "1344px",
+        "height": "756px"
+      },
+      "chromeBottom": {
+        "tag": "div",
+        "class": "ytp-chrome-bottom",
+        "rect": {
+          "x": 28,
+          "y": 765,
+          "w": 1320,
+          "h": 59
+        },
+        "text": "0:05 / 30:20",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "padding": "3px 0px 0px",
+        "display": "block",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "zIndex": "59",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "56px"
+      },
+      "chromeControls": {
+        "tag": "div",
+        "class": "ytp-chrome-controls",
+        "rect": {
+          "x": 28,
+          "y": 768,
+          "w": 1320,
+          "h": 56
+        },
+        "text": "0:05 / 30:20",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "width": "1320px",
+        "height": "56px"
+      },
+      "leftControls": {
+        "tag": "div",
+        "class": "ytp-left-controls",
+        "rect": {
+          "x": 28,
+          "y": 768,
+          "w": 1072,
+          "h": 56
+        },
+        "text": "0:05 / 30:20",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "59",
+        "overflow": "hidden",
+        "width": "1072px",
+        "height": "56px",
+        "flex": "1 1 0%"
+      },
+      "rightControls": {
+        "tag": "div",
+        "class": "ytp-right-controls",
+        "rect": {
+          "x": 1100,
+          "y": 776,
+          "w": 248,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0.3)",
+        "borderRadius": "28px",
+        "padding": "0px 4px",
+        "margin": "8px 0px 0px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "59",
+        "width": "240px",
+        "height": "40px"
+      },
+      "progressContainer": {
+        "tag": "div",
+        "class": "ytp-progress-bar-container",
+        "rect": {
+          "x": 28,
+          "y": 762,
+          "w": 1320,
+          "h": 6
+        },
+        "text": "0:00",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "60",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "6px"
+      },
+      "progressBar": {
+        "tag": "div",
+        "class": "ytp-progress-bar",
+        "rect": {
+          "x": 28,
+          "y": 762,
+          "w": 1320,
+          "h": 6
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "31",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "6px"
+      },
+      "progressList": {
+        "tag": "div",
+        "class": "ytp-progress-list ytp-progress-bar-start ytp-progress-bar-end",
+        "rect": {
+          "x": 28,
+          "y": 763,
+          "w": 1320,
+          "h": 4
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(40, 40, 40, 0.6)",
+        "borderRadius": "3px",
+        "display": "block",
+        "transition": "transform 0.2s cubic-bezier(0.05, 0, 0, 1), -webkit-transform 0.2s cubic-bezier(0.05, 0, 0, 1)",
+        "animation": "none",
+        "zIndex": "39",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "1320px",
+        "height": "6px"
+      },
+      "playProgress": {
+        "tag": "div",
+        "class": "ytp-play-progress ytp-swatch-background-color",
+        "rect": {
+          "x": 28,
+          "y": 763,
+          "w": 3.8,
+          "h": 4
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "linear-gradient(90deg, rgb(255, 0, 51) 80%, rgb(255, 39, 145))",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "34",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "6px"
+      },
+      "loadProgress": {
+        "tag": "div",
+        "class": "ytp-load-progress",
+        "rect": {
+          "x": 28,
+          "y": 763,
+          "w": 14.5,
+          "h": 4
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(255, 255, 255, 0.4)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "33",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "6px"
+      },
+      "hoverProgress": {
+        "tag": "div",
+        "class": "ytp-hover-progress",
+        "rect": {
+          "x": 31.79,
+          "y": 763,
+          "w": 0,
+          "h": 4
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0.125)",
+        "display": "block",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "opacity": "0",
+        "zIndex": "35",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "6px"
+      },
+      "scrubberContainer": {
+        "tag": "div",
+        "class": "ytp-scrubber-container",
+        "rect": {
+          "x": 25.8,
+          "y": 759,
+          "w": 12,
+          "h": 12
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "43",
+        "position": "absolute",
+        "width": "12px",
+        "height": "12px"
+      },
+      "scrubberButton": {
+        "tag": "div",
+        "class": "ytp-scrubber-button ytp-swatch-background-color",
+        "rect": {
+          "x": 25.8,
+          "y": 759,
+          "w": 12,
+          "h": 12
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgb(255, 0, 51)",
+        "borderRadius": "6px",
+        "display": "block",
+        "transition": "transform 0.1s cubic-bezier(0.4, 0, 1, 1), -webkit-transform 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "width": "12px",
+        "height": "12px"
+      },
+      "playButton": {
+        "tag": "button",
+        "class": "ytp-play-button ytp-button",
+        "rect": {
+          "x": 28,
+          "y": 776,
+          "w": 40,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0.3)",
+        "borderRadius": "50%",
+        "margin": "8px 0px 0px",
+        "display": "block",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "40px",
+        "height": "40px",
+        "flex": "0 0 auto"
+      },
+      "nextButton": {
+        "tag": "a",
+        "class": "ytp-next-button ytp-button ytp-playlist-ui",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0.3)",
+        "borderRadius": "0px 28px 28px 0px",
+        "padding": "0px 4px 0px 0px",
+        "margin": "8px 0px 0px",
+        "display": "none",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "48px",
+        "height": "40px",
+        "flex": "0 0 auto"
+      },
+      "volumeArea": {
+        "tag": "span",
+        "class": "ytp-volume-area",
+        "rect": {
+          "x": 80,
+          "y": 776,
+          "w": 40,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0.3)",
+        "borderRadius": "28px",
+        "margin": "8px 0px 8px 12px",
+        "display": "flex",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "40px",
+        "height": "40px"
+      },
+      "muteButton": {
+        "tag": "div",
+        "class": "ytp-mute-button",
+        "rect": {
+          "x": 80,
+          "y": 776,
+          "w": 40,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "40px",
+        "height": "40px"
+      },
+      "volumePanel": {
+        "tag": "div",
+        "class": "ytp-volume-panel",
+        "rect": {
+          "x": 120,
+          "y": 776,
+          "w": 0,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "margin 0.2s cubic-bezier(0.4, 0, 1, 1), width 0.2s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "width": "0px",
+        "height": "40px"
+      },
+      "volumeSlider": {
+        "tag": "div",
+        "class": "ytp-volume-slider",
+        "rect": {
+          "x": 120,
+          "y": 776,
+          "w": 0,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "0px",
+        "height": "40px"
+      },
+      "volumeHandle": {
+        "tag": "div",
+        "class": "ytp-volume-slider-handle",
+        "rect": {
+          "x": 160,
+          "y": 790,
+          "w": 12,
+          "h": 12
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgb(255, 255, 255)",
+        "borderRadius": "6px",
+        "margin": "-6px 0px 0px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "position": "absolute",
+        "width": "12px",
+        "height": "12px"
+      },
+      "timeDisplay": {
+        "tag": "div",
+        "class": "ytp-time-display notranslate",
+        "rect": {
+          "x": 120,
+          "y": 768,
+          "w": 123.16,
+          "h": 56
+        },
+        "text": "0:05 / 30:20",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "14px",
+          "weight": "500",
+          "lineHeight": "40px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "padding": "8px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "107.164px",
+        "height": "40px"
+      },
+      "timeCurrent": {
+        "tag": "span",
+        "class": "ytp-time-current",
+        "rect": {
+          "x": 144,
+          "y": 787.5,
+          "w": 27.57,
+          "h": 16.5
+        },
+        "text": "0:05",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "14px",
+          "weight": "500",
+          "lineHeight": "40px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(255, 255, 255)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "inline",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "timeSeparator": {
+        "tag": "span",
+        "class": "ytp-time-separator",
+        "rect": {
+          "x": 171.57,
+          "y": 787.5,
+          "w": 12.73,
+          "h": 16.5
+        },
+        "text": "/",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "14px",
+          "weight": "400",
+          "lineHeight": "40px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(255, 255, 255)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "inline",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "timeDuration": {
+        "tag": "span",
+        "class": "ytp-time-duration",
+        "rect": {
+          "x": 184.3,
+          "y": 787.5,
+          "w": 34.87,
+          "h": 16.5
+        },
+        "text": "30:20",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "14px",
+          "weight": "400",
+          "lineHeight": "40px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(255, 255, 255)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "inline",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "subtitlesButton": {
+        "tag": "button",
+        "class": "ytp-subtitles-button ytp-button",
+        "rect": {
+          "x": 1152,
+          "y": 776,
+          "w": 48,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "opacity 0.1s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "48px",
+        "height": "40px"
+      },
+      "settingsButton": {
+        "tag": "button",
+        "class": "ytp-button ytp-settings-button",
+        "rect": {
+          "x": 1200,
+          "y": 776,
+          "w": 48,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "48px",
+        "height": "40px"
+      },
+      "miniplayerButton": {
+        "missing": ".ytp-miniplayer-button"
+      },
+      "sizeButton": {
+        "tag": "button",
+        "class": "ytp-size-button ytp-button",
+        "rect": {
+          "x": 1248,
+          "y": 776,
+          "w": 48,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "48px",
+        "height": "40px"
+      },
+      "fullscreenButton": {
+        "tag": "button",
+        "class": "ytp-fullscreen-button ytp-button",
+        "rect": {
+          "x": 1296,
+          "y": 776,
+          "w": 48,
+          "h": 40
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "position": "relative",
+        "overflow": "hidden",
+        "width": "48px",
+        "height": "40px"
+      },
+      "autonavButton": {
+        "tag": "div",
+        "class": "ytp-autonav-toggle-button",
+        "rect": {
+          "x": 1113,
+          "y": 787,
+          "w": 30,
+          "h": 18
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11.99px",
+          "weight": "400",
+          "lineHeight": "56px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgb(255, 255, 255)",
+        "borderRadius": "9px",
+        "margin": "0px 9px",
+        "display": "block",
+        "transition": "0.08s cubic-bezier(0.4, 0, 1, 1)",
+        "animation": "none",
+        "position": "relative",
+        "width": "30px",
+        "height": "18px"
+      },
+      "gradientBottom": {
+        "tag": "div",
+        "class": "ytp-gradient-bottom",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADGCAYAAAAT+OqFAAAAdklEQVQoz42QQQ7AIAgEF/T/D+kbq/RWAlnQyyazA4aoAB4FsBSA/bFjuF1EOL7VbrIrBuusmrt4ZZORfb6ehbWdnRHEIiITaEUKa5EJqUakRSaEYBJSCY2dEstQY7AuxahwXFrvZmWl2rh4JZ07z9dLtesfNj5q0FU3A5ObbwAAAABJRU5ErkJggg==\")",
+        "padding": "37px 0px 0px",
+        "display": "none",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "zIndex": "24",
+        "position": "absolute",
+        "width": "100%",
+        "height": "61px"
+      },
+      "gradientTop": {
+        "tag": "div",
+        "class": "ytp-gradient-top",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "backgroundImage": "url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADGCAYAAAAT+OqFAAAAdklEQVQoz42QQQ7AIAgEF/T/D+kbq/RWAlnQyyazA4aoAB4FsBSA/bFjuF1EOL7VbrIrBuusmrt4ZZORfb6ehbWdnRHEIiITaEUKa5EJqUakRSaEYBJSCY2dEstQY7AuxahwXFrvZmWl2rh4JZ07z9dLtesfNj5q0FU3A5ObbwAAAABJRU5ErkJggg==\")",
+        "padding": "0px 0px 50px",
+        "display": "none",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "zIndex": "25",
+        "position": "absolute",
+        "width": "100%",
+        "height": "48px"
+      },
+      "chromeTop": {
+        "tag": "div",
+        "class": "ytp-chrome-top",
+        "rect": {
+          "x": 28,
+          "y": 68,
+          "w": 1320,
+          "h": 0
+        },
+        "text": "How It's Made: Noodles, Pasta, Mac & Cheese",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "flex",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "zIndex": "58",
+        "position": "absolute",
+        "width": "1320px",
+        "height": "0px"
+      },
+      "title": {
+        "tag": "a",
+        "class": "ytp-title-link yt-uix-sessionlink ytp-title-fullerscreen-link",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "text": "How It's Made: Noodles, Pasta, Mac & Cheese",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "18px",
+          "weight": "400",
+          "lineHeight": "23.4px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "color 0.1s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "overflow": "hidden",
+        "width": "auto",
+        "height": "auto"
+      },
+      "bigPlay": {
+        "tag": "button",
+        "class": "ytp-large-play-button ytp-button",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "-24px 0px 0px -34px",
+        "display": "block",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+        "animation": "none",
+        "zIndex": "63",
+        "position": "absolute",
+        "width": "68px",
+        "height": "48px"
+      },
+      "spinner": {
+        "tag": "div",
+        "class": "ytp-spinner",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "text": "If playback doesn't begin shortly, try restarting your device.",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 0px 0px -32px",
+        "display": "none",
+        "transition": "all",
+        "animation": "none",
+        "zIndex": "18",
+        "position": "absolute",
+        "width": "64px",
+        "height": "auto"
+      },
+      "tooltip": {
+        "tag": "div",
+        "class": "ytp-tooltip ytp-bottom",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "text": "Pause",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "12.98px",
+          "weight": "500",
+          "lineHeight": "15px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "none",
+        "transition": "transform 0.2s cubic-bezier(0.05, 0, 0, 1), opacity 0.2s cubic-bezier(0.05, 0, 0, 1), top 0.2s cubic-bezier(0.05, 0, 0, 1), -webkit-transform 0.2s cubic-bezier(0.05, 0, 0, 1), opacity 0.2s cubic-bezier(0.05, 0, 0, 1), top 0.2s cubic-bezier(0.05, 0, 0, 1)",
+        "animation": "none",
+        "zIndex": "1003",
+        "position": "absolute",
+        "maxWidth": "300px",
+        "width": "auto",
+        "height": "auto"
+      },
+      "tooltipText": {
+        "tag": "span",
+        "class": "ytp-tooltip-text",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "text": "Pause",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "12.98px",
+          "weight": "500",
+          "lineHeight": "15px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "auto",
+        "height": "auto"
+      },
+      "tooltipBg": {
+        "tag": "div",
+        "class": "ytp-tooltip-bg",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "12.98px",
+          "weight": "500",
+          "lineHeight": "15px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgb(0, 0, 0)",
+        "borderRadius": "8px",
+        "display": "none",
+        "transition": "all",
+        "animation": "none",
+        "position": "relative",
+        "width": "auto",
+        "height": "auto"
+      },
+      "cardsButton": {
+        "tag": "button",
+        "class": "ytp-button ytp-cards-button",
+        "rect": {
+          "x": 1312,
+          "y": 76,
+          "w": 36,
+          "h": 36
+        },
+        "text": "InfoShopping",
+        "font": {
+          "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+          "size": "11px",
+          "weight": "400",
+          "lineHeight": "14.3px",
+          "letterSpacing": "normal"
+        },
+        "color": "rgb(238, 238, 238)",
+        "background": "rgba(0, 0, 0, 0)",
+        "margin": "0px 0px 12px",
+        "display": "block",
+        "transition": "all",
+        "animation": "none",
+        "width": "36px",
+        "height": "36px"
+      },
+      "watchLater": {
+        "missing": ".ytp-watch-later-button"
+      }
+    },
+    "playerClasses": "html5-video-player ytp-transparent ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-exp-ppp-update ytp-livebadge-color ytp-grid-scrollable ytp-delhi-modern ytp-delhi-modern-icons ytp-delhi-horizontal-volume-controls ytp-delhi-modern-compact-controls ad-created ytp-fit-cover-video ytp-fine-scrubbing-exp ytp-cards-teaser-dismissible ytp-hide-info-bar ytp-large-width-mode ytp-disable-bottom-gradient ytp-autonav-endscreen-cancelled-state ytp-branding-shown ytp-hide-fullscreen-title ytp-fullscreen-metadata-top ytp-heat-map ytp-iv-drawer-enabled playing-mode",
+    "controlsVisible": true,
+    "gradients": {
+      "bottom": {
+        "backgroundImage": "url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADGCAYAAAAT+OqFAAAAdklEQVQoz42QQQ7AIAgEF/T/D+kbq/RWAlnQyyazA4aoAB4FsBSA/bFjuF1EOL7VbrIrBuusmrt4ZZORfb6ehbWdnRHEIiITaEUKa5EJqUakRSaEYBJSCY2dEstQY7AuxahwXFrvZmWl2rh4JZ07z9dLtesfNj5q0FU3A5ObbwAAAABJRU5ErkJggg==\")",
+        "height": "61px",
+        "bottom": "0px",
+        "width": "100%",
+        "paddingTop": "37px",
+        "backgroundSize": "auto",
+        "backgroundRepeat": "repeat-x",
+        "backgroundPosition": "50% 100%",
+        "opacity": "1",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)"
+      },
+      "top": {
+        "backgroundImage": "url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADGCAYAAAAT+OqFAAAAdklEQVQoz42QQQ7AIAgEF/T/D+kbq/RWAlnQyyazA4aoAB4FsBSA/bFjuF1EOL7VbrIrBuusmrt4ZZORfb6ehbWdnRHEIiITaEUKa5EJqUakRSaEYBJSCY2dEstQY7AuxahwXFrvZmWl2rh4JZ07z9dLtesfNj5q0FU3A5ObbwAAAABJRU5ErkJggg==\")",
+        "height": "48px",
+        "width": "100%",
+        "paddingBottom": "50px",
+        "opacity": "1",
+        "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)"
+      }
+    },
+    "progressRest": {
+      "container": {
+        "height": "6px",
+        "bottom": "56px",
+        "position": "absolute",
+        "transition": "all"
+      },
+      "bar": {
+        "height": "6px",
+        "transform": "none",
+        "transition": "all"
+      },
+      "list": {
+        "height": "6px",
+        "background": "rgba(40, 40, 40, 0.6)",
+        "transform": "matrix(1, 0, 0, 0.667, 0, 0)",
+        "transition": "transform 0.2s cubic-bezier(0.05, 0, 0, 1), -webkit-transform 0.2s cubic-bezier(0.05, 0, 0, 1)"
+      },
+      "play": {
+        "height": "6px",
+        "background": "rgba(0, 0, 0, 0)",
+        "transform": "matrix(0.00287634, 0, 0, 1, 0, 0)",
+        "transformOrigin": "0px 0px"
+      },
+      "load": {
+        "height": "6px",
+        "background": "rgba(255, 255, 255, 0.4)",
+        "transform": "matrix(0.010988, 0, 0, 1, 0, 0)"
+      },
+      "hover": {
+        "height": "6px",
+        "background": "rgba(0, 0, 0, 0.125)",
+        "transform": "matrix(0, 0, 0, 1, 0, 0)"
+      },
+      "scrubber": {
+        "width": "12px",
+        "height": "12px",
+        "background": "rgb(255, 0, 51)",
+        "borderRadius": "6px",
+        "transform": "none",
+        "transition": "transform 0.1s cubic-bezier(0.4, 0, 1, 1), -webkit-transform 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "opacity": "1"
+      }
+    },
+    "timeText": "0:05 / 30:20",
+    "timeParts": {
+      "current": "0:05",
+      "sep": " / ",
+      "duration": "30:20"
+    },
+    "buttons": [
+      {
+        "cls": "ytp-play-button",
+        "label": "Pause keyboard shortcut k",
+        "box": [
+          28,
+          776,
+          40,
+          40
+        ],
+        "pad": "0px",
+        "mar": "8px 0px 0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 36 36",
+          "w": "36",
+          "h": "36",
+          "fill": "none"
+        }
+      },
+      {
+        "cls": "ytp-prev-button",
+        "label": "",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px 0px 0px 4px",
+        "mar": "8px 0px 0px 8px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "none"
+        }
+      },
+      {
+        "cls": "ytp-next-button  ytp-playlist-ui",
+        "label": "Next (SHIFT+n)",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px 4px 0px 0px",
+        "mar": "8px 0px 0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "none"
+        }
+      },
+      {
+        "cls": "ytp-volume-icon",
+        "label": "Mute (m)",
+        "box": [
+          80,
+          776,
+          40,
+          40
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-live-badge",
+        "label": "",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px 2px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": null
+      },
+      {
+        "cls": "ytp-chapter-title  ytp-chapter-container-disabled",
+        "label": "",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px 16px",
+        "mar": "0px",
+        "opacity": "0.9",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "100%",
+          "h": "100%",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-chapter-title  ytp-chapter-container-disabled",
+        "label": "",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px 16px",
+        "mar": "0px",
+        "opacity": "0.9",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "100%",
+          "h": "100%",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-expand-right-bottom-section-button",
+        "label": "",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 32 32",
+          "w": "100%",
+          "h": "100%",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-autonav-toggle delhi-fast-follow-autonav-toggle",
+        "label": "Autoplay is on",
+        "box": [
+          1104,
+          776,
+          48,
+          40
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": null
+      },
+      {
+        "cls": "ytp-subtitles-button",
+        "label": "Subtitles/closed captions unavailable",
+        "box": [
+          1152,
+          776,
+          48,
+          40
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0, 0, 0.2, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-settings-button",
+        "label": "Settings",
+        "box": [
+          1200,
+          776,
+          48,
+          40
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "none"
+        }
+      },
+      {
+        "cls": "ytp-size-button",
+        "label": "Theater mode (t)",
+        "box": [
+          1248,
+          776,
+          48,
+          40
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-remote-button",
+        "label": "Play on TV",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "none"
+        }
+      },
+      {
+        "cls": "ytp-fullscreen-button",
+        "label": "Full screen (f)",
+        "box": [
+          1296,
+          776,
+          48,
+          40
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "rgb(0, 0, 0)"
+        }
+      },
+      {
+        "cls": "ytp-pip-button",
+        "label": "Picture-in-picture",
+        "box": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "pad": "0px",
+        "mar": "0px",
+        "opacity": "1",
+        "transition": "opacity 0.1s cubic-bezier(0.4, 0, 1, 1)",
+        "svg": {
+          "viewBox": "0 0 24 24",
+          "w": "24",
+          "h": "24",
+          "fill": "rgb(238, 238, 238)"
+        }
+      }
+    ],
+    "chromeBottomStyle": {
+      "height": "56px",
+      "width": "1320px",
+      "left": "12px",
+      "bottom": "0px",
+      "padding": "3px 0px 0px",
+      "opacity": "1",
+      "transition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+      "zIndex": "59"
+    },
+    "controlsStyle": {
+      "height": "56px",
+      "display": "flex",
+      "alignItems": "normal",
+      "padding": "0px"
+    },
+    "playerFont": {
+      "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+      "size": "11px"
+    },
+    "timeFont": {
+      "family": "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+      "size": "14px",
+      "weight": "500",
+      "lineHeight": "40px",
+      "letterSpacing": "normal",
+      "color": "rgb(238, 238, 238)",
+      "padding": "8px"
+    }
+  },
+  "hovered": {
+    "progressBarHeightHover": "6px",
+    "listHeightHover": "6px",
+    "listTransform": "none",
+    "playHeightHover": "6px",
+    "hoverProgress": {
+      "h": "6px",
+      "bg": "rgba(255, 255, 255, 0.5)",
+      "transform": "matrix(0.446395, 0, 0, 1, 0, 0)"
+    },
+    "scrubber": {
+      "box": [
+        22.74,
+        754.98,
+        20.04,
+        20.04
+      ],
+      "style": {
+        "w": "12px",
+        "h": "12px",
+        "bg": "rgb(255, 0, 51)",
+        "radius": "6px",
+        "transform": "matrix(1.67, 0, 0, 1.67, 0, 0)",
+        "opacity": "1"
+      }
+    },
+    "containerBox": [
+      28,
+      762,
+      1320,
+      6
+    ],
+    "tooltip": {
+      "visible": true,
+      "box": [
+        500,
+        551,
+        242.36,
+        138
+      ],
+      "bg": "rgb(255, 255, 255)",
+      "color": "rgb(238, 238, 238)",
+      "font": [
+        "12.98px",
+        "500",
+        "15px"
+      ],
+      "radius": "8px",
+      "pad": "1px",
+      "text": "Pull up for precise seeking\n13:39",
+      "cls": "ytp-tooltip ytp-bottom ytp-tooltip-progress-bar-style ytp-preview"
+    },
+    "tooltipBg": {
+      "box": [
+        240.36,
+        136
+      ],
+      "bgImage": "url(\"https://i.ytimg.com/sb/yekxxZjJ5Lo/storyboard3_L3/M9.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgiEiJPHBg==&sigh=rs%24AOn4CLCMMgDSJN8PyPOfO4FIImH1ZGK-rA\")",
+      "radius": "8px",
+      "border": "0px none rgb(238, 238, 238)",
+      "overflow": "visible"
+    },
+    "tooltipText": {
+      "text": "Pause",
+      "font": [
+        "12.98px",
+        "500",
+        "15px"
+      ],
+      "color": "rgb(238, 238, 238)",
+      "bg": "rgba(0, 0, 0, 0)",
+      "pad": "0px",
+      "radius": "0px"
+    },
+    "previewThumb": {
+      "box": [
+        0,
+        0
+      ],
+      "bgImage": "none",
+      "bgSize": "auto",
+      "bgPosition": "0% 0%"
+    }
+  },
+  "settings": {
+    "panel": {
+      "box": [
+        963,
+        361,
+        385,
+        401
+      ],
+      "bg": "rgba(0, 0, 0, 0.6)",
+      "radius": "12px",
+      "pad": "0px",
+      "shadow": "none",
+      "opacity": "1",
+      "transition": "opacity 0.1s cubic-bezier(0, 0, 0.2, 1)",
+      "font": [
+        "\"YouTube Noto\", Roboto, Arial, Helvetica, sans-serif",
+        "11px"
+      ],
+      "overflow": "hidden",
+      "minWidth": "0px"
+    },
+    "rows": [
+      {
+        "text": "Stable Volume",
+        "box": [
+          971,
+          369,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Voice boost",
+        "box": [
+          971,
+          417.13,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Annotations",
+        "box": [
+          971,
+          465.25,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Audio track\tEnglish (US) original",
+        "box": [
+          971,
+          513.38,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Subtitles/CC\tEnglish (auto-generated)",
+        "box": [
+          971,
+          561.5,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Sleep timer\tOff",
+        "box": [
+          971,
+          609.63,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Playback speed\tNormal",
+        "box": [
+          971,
+          657.75,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      },
+      {
+        "text": "Quality\t | Auto (720p)",
+        "box": [
+          971,
+          705.88,
+          369,
+          48.13
+        ],
+        "pad": "0px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "color": "rgb(238, 238, 238)",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ],
+        "labelFont": [
+          "14px",
+          "400",
+          "0px 15px 0px 0px"
+        ],
+        "contentColor": "rgba(255, 255, 255, 0.7)"
+      }
+    ],
+    "panelInner": {
+      "box": [
+        385,
+        401
+      ],
+      "pad": "8px",
+      "minWidth": "0px"
+    },
+    "text": "\tStable Volume\t\n\n\n\tVoice boost\t\n\n\n\tAnnotations\t\n\n\n\tAudio track\tEnglish (US) original\n\n\tSubtitles/CC\tEnglish (auto-generated)\n\n\tSleep timer\tOff\n\n\tPlayback speed\tNormal\n\n\tQuality\t\nAuto (720p)"
+  },
+  "quality": {
+    "text": "Quality\n1080p HD\n\n\n720p\n\n\n480p\n\n\n360p\n\n\n240p\n\n\n144p\n\n\nAuto",
+    "panel": {
+      "box": [
+        1097,
+        352,
+        251,
+        410
+      ],
+      "bg": "rgba(0, 0, 0, 0.6)",
+      "radius": "12px",
+      "pad": "0px"
+    },
+    "header": {
+      "text": "Quality",
+      "box": [
+        251,
+        57
+      ],
+      "pad": "8px 0px",
+      "border": "1px rgba(255, 255, 255, 0.2)",
+      "font": [
+        "11.99px",
+        "400"
+      ]
+    },
+    "rows": [
+      {
+        "text": "1080p HD",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "false",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      },
+      {
+        "text": "720p",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "false",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      },
+      {
+        "text": "480p",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "false",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      },
+      {
+        "text": "360p",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "false",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      },
+      {
+        "text": "240p",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "false",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      },
+      {
+        "text": "144p",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "false",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      },
+      {
+        "text": "Auto",
+        "h": 48,
+        "w": 235,
+        "pad": "0px",
+        "checked": "true",
+        "font": [
+          "11px",
+          "400",
+          "14.3px"
+        ]
+      }
+    ]
+  },
+  "theatre": {
+    "theater": true,
+    "flexyAttrs": [
+      "class",
+      "video-id",
+      "reduced-top-margin",
+      "thumbnail-to-watch-transition",
+      "view-transition-enabled",
+      "respect-aspect-ratio",
+      "is-four-three-to-sixteen-nine-video_",
+      "hidden-action-button-target-ids",
+      "is-two-columns_",
+      "flexy-large-window_",
+      "role",
+      "cinematic-light-theme",
+      "watch-metadata-refresh",
+      "has-metadata",
+      "response-has-comments",
+      "theater",
+      "full-bleed-player",
+      "cinematics-active",
+      "style"
+    ],
+    "playerBox": [
+      0,
+      56,
+      1920,
+      911
+    ],
+    "primaryBox": [
+      1360
+    ],
+    "secondaryTop": 991,
+    "containerH": "auto",
+    "maxHeightVar": "calc(100vh - 56px - 12px - 48px)",
+    "minHeightVar": "480px"
+  },
+  "fullscreen": {
+    "isFullscreen": true,
+    "fsElement": "HTML",
+    "playerBox": [
+      1920,
+      1080
+    ],
+    "playerClasses": "html5-video-player ytp-transparent ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-exp-ppp-update ytp-livebadge-color ytp-grid-scrollable ytp-delhi-modern ytp-delhi-modern-icons ytp-delhi-horizontal-volume-controls ytp-delhi-modern-compact-controls ad-created ytp-fit-cover-video ytp-fine-scrubbing-exp ytp-cards-teaser-dismissible ytp-disable-bottom-gradient ytp-autonav-endscreen-cancelled-state ytp-branding-shown ytp-hide-fullscreen-title ytp-fullscreen-metadata-top ytp-heat-map ytp-iv-drawer-enabled paused-mode ytp-fullscreen-grid-peeking ytp-full-bleed-player ytp-fullscreen ytp-large-width-mode",
+    "chromeBottom": {
+      "h": "56px",
+      "w": "1896px",
+      "left": "12px",
+      "padding": "3px 0px 0px"
+    },
+    "progressBarH": "6px",
+    "buttonSizes": [
+      "40x40",
+      "0x0",
+      "0x0",
+      "40x40",
+      "0x0",
+      "0x0"
+    ],
+    "fontSize": "14px"
+  },
+  "autohide": {
+    "playerClasses": "html5-video-player ytp-transparent ytp-exp-bottom-control-flexbox ytp-modern-caption ytp-exp-ppp-update ytp-livebadge-color ytp-grid-scrollable ytp-delhi-modern ytp-delhi-modern-icons ytp-delhi-horizontal-volume-controls ytp-delhi-modern-compact-controls ad-created ytp-fit-cover-video ytp-fine-scrubbing-exp ytp-cards-teaser-dismissible ytp-disable-bottom-gradient ytp-autonav-endscreen-cancelled-state ytp-branding-shown ytp-hide-fullscreen-title ytp-fullscreen-metadata-top ytp-heat-map ytp-iv-drawer-enabled paused-mode ytp-fullscreen-grid-peeking ytp-full-bleed-player ytp-fullscreen ytp-large-width-mode",
+    "autohideTransition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+    "gradientTransition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)",
+    "chromeTopTransition": "opacity 0.25s cubic-bezier(0, 0, 0.2, 1)"
+  },
+  "playerBox": [
+    16,
+    68,
+    1344,
+    756
+  ]
+}

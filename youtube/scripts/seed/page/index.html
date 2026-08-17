@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Seed encoder</title>
+    <!--
+      The page the seed script's encoder runs in.
+
+      It exists for one reason, recorded in `research/01-webcodecs-encode.md`
+      §4.1 and in DECISIONS.md D8: **WebCodecs requires a secure context**, and
+      an un-navigated page is not one. On Playwright's default blank page
+      `typeof VideoEncoder` is `"undefined"` in *every* mode tested, headed
+      included — which is almost certainly what the secondhand "headless
+      Chromium has no VideoEncoder" reports actually hit. Serving this file from
+      `http://127.0.0.1`, which Chrome treats as a potentially-trustworthy
+      origin, is the whole fix. Nothing else here is load-bearing.
+
+      The import map is the second half of that: `scripts/seed/generate-clips.ts`
+      serves the project's TypeScript straight from disk, transpiled per request
+      and never bundled, so the modules below reach the browser with the same
+      `@/…` specifiers they carry on the server. One prefix mapping is all that
+      takes, and it means the page runs the real `src/media/encode` pipeline
+      rather than a copy of it compiled for the browser.
+    -->
+    <script type="importmap">
+      { "imports": { "@/": "/src/" } }
+    </script>
+    <style>
+      html {
+        background: #0b0b0e;
+        color: #e7e7ea;
+        font: 14px/1.5 system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+      }
+      code {
+        font-family: ui-monospace, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Seed encoder</h1>
+    <p>
+      Driven by <code>scripts/seed/generate-clips.ts</code>. Nothing is rendered
+      here — every frame is drawn into an <code>OffscreenCanvas</code> and handed
+      straight to <code>VideoEncoder</code>.
+    </p>
+    <p id="status">loading…</p>
+    <script type="module" src="/scripts/seed/page/main.ts"></script>
+  </body>
+</html>

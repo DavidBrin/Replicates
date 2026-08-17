@@ -1,0 +1,1402 @@
+{
+  "--paper-checkbox-checked-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-checkbox-checked-ink-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-checkbox-label-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-checkbox-unchecked-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-checkbox-unchecked-ink-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-dialog-background-color": [
+    "#fff",
+    "#212121"
+  ],
+  "--paper-input-container-focus-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-input-container-input-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-input-container-invalid-color": [
+    "#c30027",
+    "#f57"
+  ],
+  "--paper-listbox-background-color": [
+    "#fff",
+    "#212121"
+  ],
+  "--paper-listbox-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-menu-background-color": [
+    "#fff",
+    "#212121"
+  ],
+  "--paper-menu-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-menu-disabled-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-radio-button-checked-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-radio-button-checked-ink-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-radio-button-label-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-radio-button-unchecked-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-radio-button-unchecked-ink-color": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--paper-spinner-color": [
+    "#606060",
+    "#aaa"
+  ],
+  "--paper-spinner-layer-1-color": [
+    "#606060",
+    "#aaa"
+  ],
+  "--paper-spinner-layer-2-color": [
+    "#606060",
+    "#aaa"
+  ],
+  "--paper-spinner-layer-3-color": [
+    "#606060",
+    "#aaa"
+  ],
+  "--paper-spinner-layer-4-color": [
+    "#606060",
+    "#aaa"
+  ],
+  "--paper-toggle-button-checked-bar-color": [
+    "#909090",
+    "#717171"
+  ],
+  "--paper-toggle-button-checked-button-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-toggle-button-checked-ink-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--paper-toggle-button-unchecked-bar-color": [
+    "#909090",
+    "#717171"
+  ],
+  "--paper-toggle-button-unchecked-button-color": [
+    "#606060",
+    "#aaa"
+  ],
+  "--paper-toggle-button-unchecked-ink-color": [
+    "#000",
+    "#fff"
+  ],
+  "--t08a7c6c176cbc5c2": [
+    "#fff",
+    "#282828"
+  ],
+  "--t0a1249f7c9e82b5e": [
+    "rgba(255,255,255,0.2)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--t0ccd1ace000d5e93": [
+    "rgba(255,255,255,0.7)",
+    "rgba(0,0,0,0.8)"
+  ],
+  "--t1405e70a39276293": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--t1aab759cd9ddbe39": [
+    "rgba(0,0,0,0.05)",
+    "rgba(255,255,255,0.05)"
+  ],
+  "--t1f1729a8e756e8bf": [
+    "#52077a",
+    "#eabfff"
+  ],
+  "--t20480717de80f555": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--t206f3fa2e01af22d": [
+    "#2c2ea7",
+    "#a4a6ff"
+  ],
+  "--t21af08fdbf6a1406": [
+    "#2f3032",
+    "#fff"
+  ],
+  "--t264e2c9cb87891f9": [
+    "#3b3fff",
+    "#8689fc"
+  ],
+  "--t296c7f81dd09a9c3": [
+    "rgba(0,0,0,0.6)",
+    "#fff"
+  ],
+  "--t2986df03ecf88759": [
+    "#ffd7ca",
+    "#882712"
+  ],
+  "--t2c3bbff6c15a3eb2": [
+    "#2ba640",
+    "#107516"
+  ],
+  "--t2c3e55cb638348df": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--t2d807bb79e75606d": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--t331d13276596b01e": [
+    "#00ad65",
+    "#00673c"
+  ],
+  "--t34f46f0f2c13d328": [
+    "#202275",
+    "#c8c9f9"
+  ],
+  "--t3a480c2f814ef19c": [
+    "#fbfee6",
+    "#5c7e00"
+  ],
+  "--t3e41d7b17b187f69": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--t3f3bdb4140d3ead7": [
+    "#7c2900",
+    "#ffcd97"
+  ],
+  "--t416e5931fc464589": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--t42381e7a43d9caf4": [
+    "#00673c",
+    "#d3ffec"
+  ],
+  "--t432fbdbd7f2f3f71": [
+    "rgba(255,255,255,0.15)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--t441a0e44e495381a": [
+    "#263850",
+    "#def1ff"
+  ],
+  "--t4726c68ef6d7b08f": [
+    "#deffde",
+    "rgba(0,63,13,0.6)"
+  ],
+  "--t4a6da19e16bf221a": [
+    "#606060",
+    "#aaa"
+  ],
+  "--t4d7776c28db21122": [
+    "#005917",
+    "#a4ffa4"
+  ],
+  "--t4f0922e5a3d0c20f": [
+    "#8abb03",
+    "#f5ffb7"
+  ],
+  "--t4fb0f67b251e1a42": [
+    "#000",
+    "#fff"
+  ],
+  "--t5088a11581fecd14": [
+    "#d3ffec",
+    "#00673c"
+  ],
+  "--t518e925f61bdcb91": [
+    "#fff",
+    "#212121"
+  ],
+  "--t5208fd177a788cfa": [
+    "#990412",
+    "#ffbfbd"
+  ],
+  "--t53991d599b1488f5": [
+    "#f57",
+    "#c30027"
+  ],
+  "--t53c1a9d86136aded": [
+    "#ff8099",
+    "#7f0119"
+  ],
+  "--t53dda9125e8d1324": [
+    "rgba(255,255,255,0.3)",
+    "rgba(255,255,255,0.15)"
+  ],
+  "--t544e31714f63d53c": [
+    "rgba(255,255,255,0.15)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--t5978da8d584b8fe9": [
+    "rgba(255,255,255,0.9)",
+    "rgba(15,15,15,0.7)"
+  ],
+  "--t617db776af0de196": [
+    "#0556bf",
+    "#65b8ff"
+  ],
+  "--t6931aa1826b373b2": [
+    "rgba(255,255,255,0.15)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--t735e435a8b7ad67c": [
+    "#666",
+    "#fff"
+  ],
+  "--t77e217518bcd986b": [
+    "#8abb03",
+    "#5c7e00"
+  ],
+  "--t7a2234c5eadde886": [
+    "#fb99c9",
+    "#891c52"
+  ],
+  "--t7c4965c11f8537c0": [
+    "rgba(0,0,0,0.05)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--t7d8b8e5ee291aec0": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--t7dfa6f84c9346edf": [
+    "#373740",
+    "#edecfb"
+  ],
+  "--t7e34d5baa4ea6277": [
+    "#909090",
+    "#717171"
+  ],
+  "--t7f4f2c6d54836ce0": [
+    "rgba(0,0,0,0.05)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--t7f9b7e1603e20b94": [
+    "#000",
+    "#fff"
+  ],
+  "--t832f22ce6618e99e": [
+    "#0f0f0f",
+    "#e6e6e6"
+  ],
+  "--t8533f30445e4a126": [
+    "#c30027",
+    "#f57"
+  ],
+  "--t854c79338d8ca8a7": [
+    "#c30027",
+    "#f57"
+  ],
+  "--t8cdc9846a76caf1f": [
+    "#272727",
+    "#d9d9d9"
+  ],
+  "--t904a88c623ca27ab": [
+    "#107516",
+    "#2ba640"
+  ],
+  "--t933d7922f3158dc5": [
+    "#8689fc",
+    "#3b3fff"
+  ],
+  "--t965644ecdbe4b7b8": [
+    "#ecf1fb",
+    "#2b3138"
+  ],
+  "--t99f774684cbb9703": [
+    "rgba(127,14,127,0.2)",
+    "rgba(127,14,127,0.3)"
+  ],
+  "--t9bc0b740242da017": [
+    "#dadfe6",
+    "#515561"
+  ],
+  "--t9d7bdcaefc975d44": [
+    "rgba(255,255,255,0.05)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--ta057e2d872f2a0d4": [
+    "rgba(255,255,255,0.05)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--ta08e036410c14538": [
+    "#fff",
+    "#000"
+  ],
+  "--ta1001186d5b625f8": [
+    "#891c52",
+    "#fb99c9"
+  ],
+  "--ta5930fb3c4c7209c": [
+    "#7406ac",
+    "#dd98ff"
+  ],
+  "--ta7d628facfe84d18": [
+    "#bbc6e7",
+    "#a0abcb"
+  ],
+  "--ta889dfda9605a358": [
+    "rgba(255,255,255,0.9)",
+    "rgba(15,15,15,0.8)"
+  ],
+  "--tab8059236063cadb": [
+    "#171c23",
+    "#ecf1fb"
+  ],
+  "--tad8443faed66c111": [
+    "#3f3f3f",
+    "#d9d9d9"
+  ],
+  "--taf1bdd961423c15f": [
+    "rgba(255,255,255,0.2)",
+    "rgba(255,255,255,0.05)"
+  ],
+  "--tb13ff8797829e79e": [
+    "#fff",
+    "#2b3138"
+  ],
+  "--tb14a10c3b43a15a3": [
+    "#fff",
+    "#171c23"
+  ],
+  "--tb628117fc164ad87": [
+    "#3ea6ff",
+    "#065fd4"
+  ],
+  "--tb7d74bb3291c951d": [
+    "rgba(255,255,255,0.2)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--tb8b31ac562fbe9b5": [
+    "rgba(170,9,170,0.2)",
+    "rgba(170,9,170,0.3)"
+  ],
+  "--tb927f5c0149004c6": [
+    "#f57",
+    "#f03"
+  ],
+  "--tbe42269534655e67": [
+    "#caced6",
+    "#30353b"
+  ],
+  "--tc04ba3e73561953c": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--tc2512a21369bd447": [
+    "#7f0119",
+    "#ff8099"
+  ],
+  "--tc4b26042d4cb141f": [
+    "#717171",
+    "#909090"
+  ],
+  "--tc5e0863356bf5767": [
+    "#5c7e00",
+    "#fbfee6"
+  ],
+  "--tc604113d09fee05d": [
+    "#46494f",
+    "#c5cbd4"
+  ],
+  "--tc87f6a7f05e65fc4": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--tc980c5478124c8c7": [
+    "#a6c9fa",
+    "#d5e3fc"
+  ],
+  "--td340014d093b0821": [
+    "#c62273",
+    "#fc7aba"
+  ],
+  "--td545df04e2c659d7": [
+    "#c30027",
+    "#f57"
+  ],
+  "--td8562cdc203bc683": [
+    "#e5e5e5",
+    "#3f3f3f"
+  ],
+  "--td9c19f4f8cecd56e": [
+    "#aaa",
+    "#606060"
+  ],
+  "--tdbe50d27d51f5093": [
+    "rgba(0,122,101,0.2)",
+    "rgba(0,122,101,0.3)"
+  ],
+  "--tde41338fc2bd4ba5": [
+    "#000",
+    "#fff"
+  ],
+  "--te0c856964146535b": [
+    "#bd3d19",
+    "#ffb39b"
+  ],
+  "--te1b64e6971040396": [
+    "#d9d9d9",
+    "#272727"
+  ],
+  "--te2867b13d771d055": [
+    "#a4a6ff",
+    "#2c2ea7"
+  ],
+  "--te5668e6111aba0ed": [
+    "#dbe2fc",
+    "#42474f"
+  ],
+  "--te6d2b428de68554a": [
+    "#ecf1fb",
+    "#171c23"
+  ],
+  "--tecbdf924b63b27fc": [
+    "#be8800",
+    "#fbc02d"
+  ],
+  "--ted4236536899e4b3": [
+    "rgba(255,255,255,0.3)",
+    "rgba(255,255,255,0.15)"
+  ],
+  "--tef70ca245445b52b": [
+    "rgba(255,78,69,0.2)",
+    "rgba(255,78,69,0.3)"
+  ],
+  "--tf0a0d1154827847f": [
+    "#ffeacf",
+    "rgba(124,41,0,0.6)"
+  ],
+  "--tf5f050c65aebead5": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--tf630d2cff7da8057": [
+    "#882712",
+    "#ffd7ca"
+  ],
+  "--tf69032263d26c015": [
+    "#eabfff",
+    "#52077a"
+  ],
+  "--tfa3475c508f5dfef": [
+    "#def1ff",
+    "#263850"
+  ],
+  "--tfaae96692cc182e4": [
+    "#7406ac",
+    "#dd98ff"
+  ],
+  "--tff65993384bb4560": [
+    "#c8c9f9",
+    "#202275"
+  ],
+  "--tffc2fd3a644f6275": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--yt-deprecated-general-background-a": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-deprecated-general-background-b": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-deprecated-general-background-c": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-deprecated-paper-tab-ink": [
+    "rgba(0,0,0,0.3)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-emoji-picker-base-with-variants-border": [
+    "rgba(0,0,0,0.15)",
+    "rgba(255,255,255,0.25)"
+  ],
+  "--yt-emoji-picker-category-background-color": [
+    "hsla(0,0%,97%,0.8)",
+    "rgba(40,40,40,0.8)"
+  ],
+  "--yt-emoji-picker-category-button-color": [
+    "#909090",
+    "#717171"
+  ],
+  "--yt-emoji-picker-category-color": [
+    "hsla(0,0%,6.7%,0.6)",
+    "rgba(255,255,255,0.7)"
+  ],
+  "--yt-emoji-picker-search-background-color": [
+    "#f9f9f9",
+    "#444"
+  ],
+  "--yt-emoji-picker-search-color": [
+    "hsla(0,0%,6.7%,0.8)",
+    "#fff"
+  ],
+  "--yt-emoji-picker-search-placeholder-color": [
+    "hsla(0,0%,6.7%,0.6)",
+    "#999"
+  ],
+  "--yt-emoji-picker-variant-selector-bg-color": [
+    "#e0e0e0",
+    "#2f2f2f"
+  ],
+  "--yt-live-chat-action-panel-background-color": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-live-chat-action-panel-background-color-transparent": [
+    "hsla(0,0%,97%,0.8)",
+    "rgba(40,40,40,0.8)"
+  ],
+  "--yt-live-chat-action-panel-gradient-scrim": [
+    "linear-gradient(0deg,rgba(255,255,255,0.95),transparent)",
+    "linear-gradient(0deg,rgba(40,40,40,0.95),transparent)"
+  ],
+  "--yt-live-chat-action-panel-renderer-fallback-background-color": [
+    "#f2f2f2",
+    "#272727"
+  ],
+  "--yt-live-chat-additional-inline-action-button-background-color": [
+    "hsla(0,0%,26%,0.8)",
+    "hsla(0,0%,93.3%,0.8)"
+  ],
+  "--yt-live-chat-additional-inline-action-button-background-color-hover": [
+    "hsla(0,0%,26%,1)",
+    "hsl(0,0%,93.3%)"
+  ],
+  "--yt-live-chat-additional-inline-action-button-color": [
+    "#fff",
+    null
+  ],
+  "--yt-live-chat-additive-background-inverse": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--yt-live-chat-author-chip-owner-text-color": [
+    "rgba(0,0,0,0.87)",
+    "hsl(0,0%,6.7%)"
+  ],
+  "--yt-live-chat-author-chip-verified-background-color": [
+    "#ccc",
+    "#606060"
+  ],
+  "--yt-live-chat-author-chip-verified-text-color": [
+    "#606060",
+    "#e9e9e9"
+  ],
+  "--yt-live-chat-automod-button-background-color": [
+    "hsl(0,0%,93.3%)",
+    "hsla(0,0%,53.3%,0.4)"
+  ],
+  "--yt-live-chat-automod-button-background-color-hover": [
+    "hsla(0,0%,6.7%,0.2)",
+    "rgba(255,255,255,0.5)"
+  ],
+  "--yt-live-chat-background-color": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-live-chat-banner-border-color": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-live-chat-banner-gradient-scrim": [
+    "linear-gradient(rgba(255,255,255,0.95),transparent)",
+    "linear-gradient(rgba(40,40,40,0.95),transparent)"
+  ],
+  "--yt-live-chat-count-color-error": [
+    "#c30027",
+    "#f57"
+  ],
+  "--yt-live-chat-countdown-opacity": [
+    "0.3",
+    "0.5"
+  ],
+  "--yt-live-chat-deleted-message-bar-color": [
+    "rgba(11,11,11,0.2)",
+    "rgba(255,255,255,0.5)"
+  ],
+  "--yt-live-chat-deleted-message-color": [
+    "rgba(0,0,0,0.5)",
+    "rgba(255,255,255,0.5)"
+  ],
+  "--yt-live-chat-dialog-background-color": [
+    "#fff",
+    "#424242"
+  ],
+  "--yt-live-chat-dialog-text-color": [
+    "hsla(0,0%,6.7%,0.6)",
+    "#fff"
+  ],
+  "--yt-live-chat-disabled-button-background-color": [
+    "hsl(0,0%,93.3%)",
+    "#444"
+  ],
+  "--yt-live-chat-disabled-button-text-color": [
+    "hsla(0,0%,6.7%,0.4)",
+    "rgba(255,255,255,0.7)"
+  ],
+  "--yt-live-chat-disabled-icon-button-color": [
+    "hsla(0,0%,6.7%,0.2)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-live-chat-enabled-send-button-color": [
+    "#4285f4",
+    "#fff"
+  ],
+  "--yt-live-chat-error-message-color": [
+    "hsl(10,51%,49%)",
+    "#f57"
+  ],
+  "--yt-live-chat-header-background-color": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-live-chat-header-bottom-border": [
+    "1px solid rgba(0,0,0,0.1)",
+    "1px solid rgba(255,255,255,0.2)"
+  ],
+  "--yt-live-chat-header-button-color": [
+    "hsl(0,0%,6.7%)",
+    "rgba(255,255,255,0.7)"
+  ],
+  "--yt-live-chat-icon-button-color": [
+    "#0f0f0f",
+    "#fff"
+  ],
+  "--yt-live-chat-mode-change-background-color": [
+    "hsla(0,0%,93.3%,0.4)",
+    "#333"
+  ],
+  "--yt-live-chat-moderation-mode-hover-background-color": [
+    "hsla(0,0%,6.7%,0.2)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-live-chat-moderator-color": [
+    "hsl(225,84%,66%)",
+    "#5e84f1"
+  ],
+  "--yt-live-chat-new-moderator-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--yt-live-chat-ninja-message-background-color": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-live-chat-overlay-color": [
+    "hsla(0,0%,0%,0.6)",
+    "rgba(0,0,0,0.5)"
+  ],
+  "--yt-live-chat-owner-color": [
+    "hsl(40,76%,55%)",
+    "#ffd600"
+  ],
+  "--yt-live-chat-picker-button-active-color": [
+    "hsla(0,0%,6.7%,0.8)",
+    "#fff"
+  ],
+  "--yt-live-chat-picker-button-color": [
+    "hsla(0,0%,6.7%,0.4)",
+    "rgba(255,255,255,0.54)"
+  ],
+  "--yt-live-chat-picker-button-disabled-color": [
+    "hsla(0,0%,6.7%,0.2)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-live-chat-picker-button-hover-color": [
+    "hsla(0,0%,6.7%,0.6)",
+    "rgba(255,255,255,0.74)"
+  ],
+  "--yt-live-chat-poll-banner-border-highlight-color": [
+    "#f1f1f1",
+    "#161616"
+  ],
+  "--yt-live-chat-poll-choice-additive-background-color": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-live-chat-poll-choice-additive-background-color-inverse": [
+    "rgba(255,255,255,0.2)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--yt-live-chat-poll-choice-border": [
+    "1px solid rgba(255,255,255,0.3)",
+    "1px solid rgba(0,0,0,0.3)"
+  ],
+  "--yt-live-chat-poll-choice-text-color": [
+    "#aaa",
+    "#606060"
+  ],
+  "--yt-live-chat-poll-choice-vote-bar-color": [
+    "#e6e6e6",
+    "#3d3d3d"
+  ],
+  "--yt-live-chat-poll-editor-panel-header-border-color": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-live-chat-poll-editor-start-button-background-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--yt-live-chat-poll-editor-start-button-background-color-disabled": [
+    "rgba(0,0,0,0.05)",
+    "#ccc"
+  ],
+  "--yt-live-chat-poll-primary-text-color": [
+    "#aaa",
+    "#606060"
+  ],
+  "--yt-live-chat-poll-secondary-text-color": [
+    "#aaa",
+    "#606060"
+  ],
+  "--yt-live-chat-primary-text-color": [
+    "#0f0f0f",
+    "#fff"
+  ],
+  "--yt-live-chat-product-picker-disabled-icon-color": [
+    "rgba(17,17,17,0.4)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-live-chat-product-picker-hover-color": [
+    "rgba(17,17,16,0.1)",
+    "rgba(68,68,68,1)"
+  ],
+  "--yt-live-chat-product-picker-icon-color": [
+    "rgba(17,17,17,0.6)",
+    "rgba(255,255,255,0.5)"
+  ],
+  "--yt-live-chat-qna-panel-start-button-color": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-live-chat-reconnect-message-color": [
+    "hsla(0,0%,7%,0.2)",
+    "#fff"
+  ],
+  "--yt-live-chat-secondary-background-color": [
+    "hsl(0,0%,93.3%)",
+    "#282828"
+  ],
+  "--yt-live-chat-secondary-text-color": [
+    "hsla(0,0%,6.7%,0.6)",
+    "rgba(255,255,255,0.7)"
+  ],
+  "--yt-live-chat-secondary-text-color-inverse": [
+    "#aaa",
+    "#606060"
+  ],
+  "--yt-live-chat-shimmer-background-color": [
+    "rgba(136,136,136,0.2)",
+    "rgba(17,17,17,0.4)"
+  ],
+  "--yt-live-chat-shimmer-linear-gradient": [
+    "linear-gradient(0deg,rgba(255,255,255,0) 40%,rgba(255,255,255,0.5) 50%,rgba(255,255,255,0) 65%)",
+    "linear-gradient(0deg,rgba(0,0,0,0.1) 40%,rgba(100,100,100,0.3) 50%,rgba(0,0,0,0.1) 60%)"
+  ],
+  "--yt-live-chat-slider-container-color": [
+    "#c8c8c8",
+    "#515151"
+  ],
+  "--yt-live-chat-slider-markers-color": [
+    "#505050",
+    "#fff"
+  ],
+  "--yt-live-chat-sponsor-color": [
+    "#107516",
+    "#2ba640"
+  ],
+  "--yt-live-chat-tertiary-text-color": [
+    "hsla(0,0%,6.7%,0.4)",
+    "rgba(255,255,255,0.54)"
+  ],
+  "--yt-live-chat-tertiary-text-color-inverse": [
+    "rgba(255,255,255,0.3)",
+    "rgba(0,0,0,0.3)"
+  ],
+  "--yt-live-chat-text-input-field-inactive-underline-color": [
+    "#b8b8b8",
+    "#666"
+  ],
+  "--yt-live-chat-text-input-field-placeholder-color": [
+    "hsla(0,0%,6.7%,0.6)",
+    "rgba(255,255,255,0.7)"
+  ],
+  "--yt-live-chat-text-input-field-suggestion-background-color": [
+    "#fff",
+    "#3e3e3e"
+  ],
+  "--yt-live-chat-text-input-field-suggestion-background-color-hover": [
+    "#eee",
+    "#343434"
+  ],
+  "--yt-live-chat-text-input-field-suggestion-text-color": [
+    "#666",
+    "#fff"
+  ],
+  "--yt-live-chat-text-input-field-suggestion-text-color-hover": [
+    "#333",
+    "#fff"
+  ],
+  "--yt-live-chat-ticker-arrow-background": [
+    "hsl(0,0%,97.3%)",
+    "#0f0f0f"
+  ],
+  "--yt-live-chat-toast-background-color": [
+    "hsl(0,0%,20%)",
+    "#323232"
+  ],
+  "--yt-live-chat-vem-background-color": [
+    "hsl(0,0%,93.3%)",
+    "#3e3e3e"
+  ],
+  "--yt-pdg-paid-stickers-tab-selection-bar-color": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--yt-sys-color-baseline--add-on-green-base-background": [
+    "#fbfee6",
+    "#5c7e00"
+  ],
+  "--yt-sys-color-baseline--add-on-green-primary": [
+    "#8abb03",
+    "#5c7e00"
+  ],
+  "--yt-sys-color-baseline--add-on-green-text-primary": [
+    "#5c7e00",
+    "#fbfee6"
+  ],
+  "--yt-sys-color-baseline--add-on-magenta-base-background": [
+    "#fb99c9",
+    "#891c52"
+  ],
+  "--yt-sys-color-baseline--add-on-magenta-primary": [
+    "#c62273",
+    "#fc7aba"
+  ],
+  "--yt-sys-color-baseline--add-on-magenta-text-prinary": [
+    "#891c52",
+    "#fb99c9"
+  ],
+  "--yt-sys-color-baseline--add-on-orange-base-background": [
+    "#ffd7ca",
+    "#882712"
+  ],
+  "--yt-sys-color-baseline--add-on-orange-primary": [
+    "#bd3d19",
+    "#ffb39b"
+  ],
+  "--yt-sys-color-baseline--add-on-orange-text-primary": [
+    "#882712",
+    "#ffd7ca"
+  ],
+  "--yt-sys-color-baseline--add-on-purple-base-background": [
+    "#eabfff",
+    "#52077a"
+  ],
+  "--yt-sys-color-baseline--add-on-purple-primary": [
+    "#7406ac",
+    "#dd98ff"
+  ],
+  "--yt-sys-color-baseline--add-on-purple-text-primary": [
+    "#52077a",
+    "#eabfff"
+  ],
+  "--yt-sys-color-baseline--add-on-red-base-background": [
+    "#ff8099",
+    "#7f0119"
+  ],
+  "--yt-sys-color-baseline--add-on-red-primary": [
+    "#c30027",
+    "#f57"
+  ],
+  "--yt-sys-color-baseline--add-on-red-text-primary": [
+    "#7f0119",
+    "#ff8099"
+  ],
+  "--yt-sys-color-baseline--add-on-teal-base-background": [
+    "#d3ffec",
+    "#00673c"
+  ],
+  "--yt-sys-color-baseline--add-on-teal-primary": [
+    "#00ad65",
+    "#00673c"
+  ],
+  "--yt-sys-color-baseline--add-on-teal-text-primary": [
+    "#00673c",
+    "#d3ffec"
+  ],
+  "--yt-sys-color-baseline--additive-background": [
+    "rgba(0,0,0,0.05)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--yt-sys-color-baseline--additive-background-inverse": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--yt-sys-color-baseline--assistive-feed-themed-gradient-1": [
+    "#d4fff8",
+    "#005446"
+  ],
+  "--yt-sys-color-baseline--assistive-feed-themed-gradient-2": [
+    "#ffdeff",
+    "#39003f"
+  ],
+  "--yt-sys-color-baseline--assistive-feed-themed-gradient-3": [
+    "#ffe6e6",
+    "#590000"
+  ],
+  "--yt-sys-color-baseline--background-complete": [
+    "#deffde",
+    "rgba(0,63,13,0.6)"
+  ],
+  "--yt-sys-color-baseline--background-warning": [
+    "#ffeacf",
+    "rgba(124,41,0,0.6)"
+  ],
+  "--yt-sys-color-baseline--base-background": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-sys-color-baseline--blue-1": [
+    "#c8c9f9",
+    "#202275"
+  ],
+  "--yt-sys-color-baseline--blue-2": [
+    "#a4a6ff",
+    "#2c2ea7"
+  ],
+  "--yt-sys-color-baseline--blue-3": [
+    "#8689fc",
+    "#3b3fff"
+  ],
+  "--yt-sys-color-baseline--blue-5": [
+    "#3b3fff",
+    "#8689fc"
+  ],
+  "--yt-sys-color-baseline--blue-6": [
+    "#2c2ea7",
+    "#a4a6ff"
+  ],
+  "--yt-sys-color-baseline--blue-7": [
+    "#202275",
+    "#c8c9f9"
+  ],
+  "--yt-sys-color-baseline--brand-red-contrast": [
+    "#c30027",
+    "#f57"
+  ],
+  "--yt-sys-color-baseline--button-chip-background-hover": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-sys-color-baseline--call-to-action": [
+    "#065fd4",
+    "#3ea6ff"
+  ],
+  "--yt-sys-color-baseline--call-to-action-hover": [
+    "#0556bf",
+    "#65b8ff"
+  ],
+  "--yt-sys-color-baseline--call-to-action-inverse": [
+    "#3ea6ff",
+    "#065fd4"
+  ],
+  "--yt-sys-color-baseline--error-indicator": [
+    "#c30027",
+    "#f57"
+  ],
+  "--yt-sys-color-baseline--error-indicator-inverse": [
+    "#f57",
+    "#c30027"
+  ],
+  "--yt-sys-color-baseline--frosted-glass-desktop": [
+    "rgba(255,255,255,0.9)",
+    "rgba(15,15,15,0.8)"
+  ],
+  "--yt-sys-color-baseline--frosted-glass-mobile": [
+    "rgba(255,255,255,0.9)",
+    "rgba(15,15,15,0.7)"
+  ],
+  "--yt-sys-color-baseline--genai-1-additive": [
+    "rgba(0,122,101,0.2)",
+    "rgba(0,122,101,0.3)"
+  ],
+  "--yt-sys-color-baseline--genai-2-additive": [
+    "rgba(127,14,127,0.2)",
+    "rgba(127,14,127,0.3)"
+  ],
+  "--yt-sys-color-baseline--genai-3-additive": [
+    "rgba(170,9,170,0.2)",
+    "rgba(170,9,170,0.3)"
+  ],
+  "--yt-sys-color-baseline--genai-4-additive": [
+    "rgba(255,78,69,0.2)",
+    "rgba(255,78,69,0.3)"
+  ],
+  "--yt-sys-color-baseline--green-6": [
+    "#8abb03",
+    "#f5ffb7"
+  ],
+  "--yt-sys-color-baseline--grey-6": [
+    "#373740",
+    "#edecfb"
+  ],
+  "--yt-sys-color-baseline--icon-warning": [
+    "#be8800",
+    "#fbc02d"
+  ],
+  "--yt-sys-color-baseline--inverted-background": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--yt-sys-color-baseline--inverted-background-hover": [
+    "#3f3f3f",
+    "#d9d9d9"
+  ],
+  "--yt-sys-color-baseline--keyboard-background": [
+    "#ecf1fb",
+    "#171c23"
+  ],
+  "--yt-sys-color-baseline--keyboard-background-action": [
+    "#a6c9fa",
+    "#d5e3fc"
+  ],
+  "--yt-sys-color-baseline--keyboard-background-bar": [
+    "#ecf1fb",
+    "#2b3138"
+  ],
+  "--yt-sys-color-baseline--keyboard-background-emoji": [
+    "#fff",
+    "#171c23"
+  ],
+  "--yt-sys-color-baseline--keyboard-background-key": [
+    "#fff",
+    "#2b3138"
+  ],
+  "--yt-sys-color-baseline--keyboard-background-key-alt": [
+    "#dbe2fc",
+    "#42474f"
+  ],
+  "--yt-sys-color-baseline--keyboard-background-switch": [
+    "#bbc6e7",
+    "#a0abcb"
+  ],
+  "--yt-sys-color-baseline--keyboard-divider": [
+    "#caced6",
+    "#30353b"
+  ],
+  "--yt-sys-color-baseline--keyboard-text-character": [
+    "#171c23",
+    "#ecf1fb"
+  ],
+  "--yt-sys-color-baseline--keyboard-text-chevron": [
+    "#666",
+    "#fff"
+  ],
+  "--yt-sys-color-baseline--keyboard-text-icon": [
+    "#2f3032",
+    "#fff"
+  ],
+  "--yt-sys-color-baseline--keyboard-text-symbol": [
+    "#46494f",
+    "#c5cbd4"
+  ],
+  "--yt-sys-color-baseline--menu-background": [
+    "#fff",
+    "#282828"
+  ],
+  "--yt-sys-color-baseline--mono-filled-hover": [
+    "#272727",
+    "#d9d9d9"
+  ],
+  "--yt-sys-color-baseline--mono-filled-hover-inverse": [
+    "#d9d9d9",
+    "#272727"
+  ],
+  "--yt-sys-color-baseline--mono-tonal-hover": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-sys-color-baseline--mono-tonal-hover-inverse": [
+    "rgba(255,255,255,0.2)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--yt-sys-color-baseline--outline": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-sys-color-baseline--outline-inverse": [
+    "rgba(255,255,255,0.2)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--yt-sys-color-baseline--outline-inverse-opaque": [
+    "#3f3f3f",
+    "#e5e5e5"
+  ],
+  "--yt-sys-color-baseline--outline-opaque": [
+    "#e5e5e5",
+    "#3f3f3f"
+  ],
+  "--yt-sys-color-baseline--outline-rim": [
+    "rgba(255,255,255,0.3)",
+    "rgba(255,255,255,0.15)"
+  ],
+  "--yt-sys-color-baseline--outline-rim-inverse": [
+    "rgba(255,255,255,0.15)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-sys-color-baseline--purple-6": [
+    "#7406ac",
+    "#dd98ff"
+  ],
+  "--yt-sys-color-baseline--raised-background": [
+    "#fff",
+    "#212121"
+  ],
+  "--yt-sys-color-baseline--red-3": [
+    "#f57",
+    "#f03"
+  ],
+  "--yt-sys-color-baseline--scrim-background-gradient-1": [
+    "rgba(255,255,255,0)",
+    "rgba(15,15,15,0)"
+  ],
+  "--yt-sys-color-baseline--scrim-background-gradient-2": [
+    "rgba(255,255,255,0.3)",
+    "rgba(15,15,15,0.3)"
+  ],
+  "--yt-sys-color-baseline--scrim-background-gradient-3": [
+    "rgba(255,255,255,0.6)",
+    "rgba(15,15,15,0.6)"
+  ],
+  "--yt-sys-color-baseline--scrim-background-gradient-4": [
+    "rgba(255,255,255,0.9)",
+    "rgba(15,15,15,0.9)"
+  ],
+  "--yt-sys-color-baseline--scrim-background-gradient-5": [
+    "white",
+    "#0f0f0f"
+  ],
+  "--yt-sys-color-baseline--solid-background": [
+    "#0f0f0f",
+    "#e6e6e6"
+  ],
+  "--yt-sys-color-baseline--solid-background-inverse": [
+    "#e6e6e6",
+    "#0f0f0f"
+  ],
+  "--yt-sys-color-baseline--solid-wash": [
+    "rgba(255,255,255,0.15)",
+    "rgba(255,255,255,0.3)"
+  ],
+  "--yt-sys-color-baseline--solid-wash-inverse": [
+    "rgba(255,255,255,0.3)",
+    "rgba(255,255,255,0.15)"
+  ],
+  "--yt-sys-color-baseline--state-mono-filled-hovered": [
+    "rgba(255,255,255,0.05)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--yt-sys-color-baseline--state-mono-filled-pressed": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--yt-sys-color-baseline--state-mono-standard-hovered": [
+    "rgba(0,0,0,0.05)",
+    "rgba(255,255,255,0.05)"
+  ],
+  "--yt-sys-color-baseline--state-mono-standard-pressed": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--yt-sys-color-baseline--status-bar": [
+    "rgba(0,0,0,0.6)",
+    "#fff"
+  ],
+  "--yt-sys-color-baseline--suggested-action": [
+    "#def1ff",
+    "#263850"
+  ],
+  "--yt-sys-color-baseline--suggested-action-hover": [
+    "#dadfe6",
+    "#515561"
+  ],
+  "--yt-sys-color-baseline--suggested-action-inverse": [
+    "#263850",
+    "#def1ff"
+  ],
+  "--yt-sys-color-baseline--system-bar": [
+    "#000",
+    "#fff"
+  ],
+  "--yt-sys-color-baseline--text-complete": [
+    "#005917",
+    "#a4ffa4"
+  ],
+  "--yt-sys-color-baseline--text-disabled": [
+    "#909090",
+    "#717171"
+  ],
+  "--yt-sys-color-baseline--text-disabled-inverse": [
+    "#717171",
+    "#909090"
+  ],
+  "--yt-sys-color-baseline--text-error": [
+    "#990412",
+    "#ffbfbd"
+  ],
+  "--yt-sys-color-baseline--text-primary": [
+    "#0f0f0f",
+    "#f1f1f1"
+  ],
+  "--yt-sys-color-baseline--text-primary-inverse": [
+    "#fff",
+    "#0f0f0f"
+  ],
+  "--yt-sys-color-baseline--text-secondary": [
+    "#606060",
+    "#aaa"
+  ],
+  "--yt-sys-color-baseline--text-secondary-inverse": [
+    "#aaa",
+    "#606060"
+  ],
+  "--yt-sys-color-baseline--text-warning": [
+    "#7c2900",
+    "#ffcd97"
+  ],
+  "--yt-sys-color-baseline--themed-green": [
+    "#107516",
+    "#2ba640"
+  ],
+  "--yt-sys-color-baseline--themed-green-inverse": [
+    "#2ba640",
+    "#107516"
+  ],
+  "--yt-sys-color-baseline--themed-overlay-background": [
+    "rgba(255,255,255,0.7)",
+    "rgba(0,0,0,0.8)"
+  ],
+  "--yt-sys-color-baseline--tonal-background": [
+    "rgba(0,0,0,0.1)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--yt-sys-color-baseline--tonal-background-inverse": [
+    "rgba(255,255,255,0.1)",
+    "rgba(0,0,0,0.1)"
+  ],
+  "--yt-sys-color-baseline--tonal-rim": [
+    "rgba(0,0,0,0.05)",
+    "rgba(255,255,255,0.1)"
+  ],
+  "--yt-sys-color-baseline--tonal-rim-inverse": [
+    "rgba(255,255,255,0.15)",
+    "rgba(0,0,0,0.05)"
+  ],
+  "--yt-sys-color-baseline--tonal-wash": [
+    "rgba(255,255,255,0.2)",
+    "rgba(255,255,255,0.05)"
+  ],
+  "--yt-sys-color-baseline--tonal-wash-inverse": [
+    "rgba(255,255,255,0.05)",
+    "rgba(255,255,255,0.2)"
+  ],
+  "--yt-sys-color-baseline--touch-response": [
+    "#000",
+    "#fff"
+  ],
+  "--yt-sys-color-baseline--touch-response-inverse": [
+    "#fff",
+    "#000"
+  ],
+  "--yt-sys-color-baseline--wordmark-text": [
+    "#000",
+    "#fff"
+  ],
+  "--ytd-searchbox-background": [
+    "hsl(0,0%,100%)",
+    "hsl(0,0%,7%)"
+  ],
+  "--ytd-searchbox-border-color": [
+    "hsla(0,0%,53.3%,0.2)",
+    "hsla(0,0%,53.3%,0.4)"
+  ],
+  "--ytd-searchbox-legacy-border-color": [
+    "#ccc",
+    "hsl(0,0%,18.82%)"
+  ],
+  "--ytd-searchbox-legacy-border-shadow-color": [
+    "#eee",
+    "hsla(0,0%,0%,0)"
+  ],
+  "--ytd-searchbox-legacy-button-border-color": [
+    "#d3d3d3",
+    "hsl(0,0%,18.82%)"
+  ],
+  "--ytd-searchbox-legacy-button-color": [
+    "#f8f8f8",
+    "hsla(0,0%,100%,0.08)"
+  ],
+  "--ytd-searchbox-legacy-button-focus-color": [
+    "#e9e9e9",
+    "hsla(0,0%,100%,0.08)"
+  ],
+  "--ytd-searchbox-legacy-button-hover-border-color": [
+    "#c6c6c6",
+    "hsl(0,0%,18.82%)"
+  ],
+  "--ytd-searchbox-legacy-button-hover-color": [
+    "#f0f0f0",
+    "hsla(0,0%,100%,0.08)"
+  ],
+  "--ytd-searchbox-legacy-button-icon-color": [
+    "#030303",
+    "#fff"
+  ],
+  "--ytd-searchbox-text-color": [
+    "hsl(0,0%,6.7%)",
+    "hsla(0,100%,100%,0.88)"
+  ]
+}
