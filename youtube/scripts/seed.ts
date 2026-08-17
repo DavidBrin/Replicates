@@ -304,6 +304,8 @@ async function main(): Promise<void> {
     playlistsRepo,
     watchEventsRepo,
     contentIdRepo,
+    captionsRepo,
+    vttModule,
     fingerprintModule,
     searchModule,
   ] = await Promise.all([
@@ -325,6 +327,8 @@ async function main(): Promise<void> {
     import("@/adapters/repositories/playlists"),
     import("@/adapters/repositories/watch-events"),
     import("@/adapters/repositories/content-id"),
+    import("@/adapters/repositories/captions"),
+    import("@/domain/captions"),
     import("@/domain/fingerprint"),
     import("@/adapters/search/postgres"),
   ]);
@@ -379,7 +383,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const totals = { segments: 0, bytes: 0, clips: 0, encodeMs: 0 };
+  const totals = { segments: 0, bytes: 0, clips: 0, captions: 0, encodeMs: 0 };
   const userIdByKey = new Map<string, string>();
   const channelIdByKey = new Map<string, string>();
 
@@ -525,6 +529,49 @@ async function main(): Promise<void> {
           previewKey: preview.key,
           durationSeconds: published.durationSeconds,
         });
+      }
+
+      /**
+       * Caption tracks — the `.vtt` in the store, then the row that names it.
+       *
+       * In that order, and the order matters for the same reason the segment
+       * writes come before `publishVideo`: a row pointing at a key that is not
+       * there yet is a 404 inside a `<track>`, which the player reports as a
+       * caption failure rather than as a missing file.
+       *
+       * `serialiseVtt` is `src/domain/captions.ts`'s own writer, so the seed
+       * exercises the same code the uploader path would — a hand-rolled
+       * template here would be a second WebVTT emitter, and the one thing that
+       * file is most careful about (§1.2's two-digit minutes) is exactly what a
+       * template gets wrong.
+       */
+      for (const track of video.captions) {
+        const key = blobKeys.captions(video.id, track.language, track.source);
+        const vtt = vttModule.serialiseVtt({
+          cues: track.cues.map((cue, cueIndex) => ({
+            id: String(cueIndex + 1),
+            startSeconds: cue.atSeconds,
+            endSeconds: cue.atSeconds + cue.seconds,
+            settings: {},
+            text: cue.text,
+          })),
+        });
+        const bytes = new TextEncoder().encode(vtt);
+        await store.put(key, bytes, { contentType: "text/vtt", immutable: true });
+        totals.bytes += bytes.byteLength;
+        totals.captions += 1;
+
+        const input = {
+          videoId: video.id,
+          language: track.language,
+          label: track.label,
+          blobKey: key,
+        };
+        if (track.source === "uploaded") {
+          await captionsRepo.addUploadedCaptionTrack(db, input);
+        } else {
+          await captionsRepo.addAutomaticCaptionTrack(db, input);
+        }
       }
 
       await videosRepo.publishVideo(db, video.id);

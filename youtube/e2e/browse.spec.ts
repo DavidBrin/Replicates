@@ -140,6 +140,44 @@ test.describe("the watch page", () => {
     await gotoAndSettle(page, `/watch?v=${FIXTURE.videos.river.id}`);
     await expect(page.getByRole("link", { name: "YouTube Home" })).toBeVisible();
   });
+
+  /**
+   * Captions, which the whole stack had and nothing served.
+   *
+   * The `captions` table, its repository and the WebVTT parser and writer were
+   * all built and tested; the watch page passed `captionTracks={[]}` with a
+   * comment explaining that "nothing writes a `.vtt` key to a column". The key
+   * was never in a column — it is a row in `captions`, and `listCaptionTracks`
+   * had no caller.
+   *
+   * The assertion is on the control bar's accessible name, because that is
+   * where the difference is observable: §8.3's measured empty state is a
+   * *disabled* button reading "Subtitles/closed captions unavailable", and a
+   * video with a track gets an enabled one. Asserting on the cue text would
+   * need the media to decode, which this seed deliberately does not carry.
+   */
+  test("offers captions on a video that has a track", async ({ page }) => {
+    await gotoAndSettle(page, `/watch?v=${FIXTURE.videos.river.id}`);
+
+    const button = page.getByRole("button", {
+      name: /^subtitles\/closed captions \(c\)$/i,
+    });
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
+  });
+
+  test("says captions are unavailable on a video with none", async ({ page }) => {
+    // The other half, and the reason the e2e seed captions one video rather
+    // than all of them: a corpus where every video has a track makes the
+    // measured empty state unreachable.
+    await gotoAndSettle(page, `/watch?v=${FIXTURE.videos.cables.id}`);
+
+    const button = page.getByRole("button", {
+      name: /^subtitles\/closed captions unavailable$/i,
+    });
+    await expect(button).toBeVisible();
+    await expect(button).toBeDisabled();
+  });
 });
 
 test.describe("search", () => {

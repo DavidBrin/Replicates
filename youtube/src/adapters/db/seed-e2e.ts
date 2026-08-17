@@ -139,6 +139,31 @@ const VIDEOS = [
   },
 ] as const;
 
+/**
+ * Two caption tracks on the first video. See the insert for why two.
+ *
+ * The labels are what the CC menu renders, so `(auto-generated)` is part of the
+ * data rather than something a component appends — only the caller knows which
+ * language it is naming the track *in*, which is why `captions.label` is a
+ * column and not a derivation.
+ */
+const CAPTIONS = [
+  {
+    id: "cap_e2e_en_uploaded",
+    language: "en",
+    label: "English",
+    source: "uploaded",
+    isDefault: true,
+  },
+  {
+    id: "cap_e2e_en_automatic",
+    language: "en",
+    label: "English (auto-generated)",
+    source: "automatic",
+    isDefault: false,
+  },
+] as const;
+
 /** The ladder every long-form fixture carries. Shorts get the bottom two. */
 const LADDER = [
   { id: "360p", height: 360, width: 640, bitrate: 800_000 },
@@ -285,6 +310,42 @@ export async function seedDemoData(db: SqlDatabase): Promise<void> {
       await tx.execute(
         "update videos set master_playlist_key = $2 where id = $1",
         [video.id, `videos/${video.id}/master.m3u8`],
+      );
+    }
+
+    /**
+     * Caption tracks on the first video, and on no other.
+     *
+     * Two rows rather than one, because the pair is what the CC menu is for and
+     * because they exercise the `(video_id, language, source)` uniqueness: an
+     * uploaded English track and an automatic English track are two legitimate
+     * rows for one video, and they were two rows pointing at one blob key until
+     * `blobKeys.captions` learned about `source`.
+     *
+     * Only `is_default` on the uploaded one — the partial unique index
+     * `captions_one_default_key` makes a second one a constraint violation
+     * rather than a preference the player has to break a tie on.
+     *
+     * The `.vtt` bytes are absent, like every other blob here. That is the
+     * point of leaving them out: a spec can assert the menu offers two tracks
+     * and that the default is the uploaded one without a decoded frame, and the
+     * one spec that needs the cues themselves runs against `pnpm seed`'s tree.
+     */
+    for (const track of CAPTIONS) {
+      await tx.execute(
+        `insert into captions
+           (id, video_id, language, label, source, blob_key, is_default, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7, '2026-01-02T09:00:00Z'::timestamptz)
+         on conflict (id) do nothing`,
+        [
+          track.id,
+          VIDEOS[0].id,
+          track.language,
+          track.label,
+          track.source,
+          `videos/${VIDEOS[0].id}/captions-${track.source}-${track.language}.vtt`,
+          track.isDefault,
+        ],
       );
     }
 

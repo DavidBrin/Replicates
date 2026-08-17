@@ -528,6 +528,82 @@ describe("the Content ID demonstration", () => {
   });
 });
 
+describe("caption tracks", () => {
+  const corpus = buildCorpus();
+  const captioned = corpus.videos.filter((video) => video.captions.length > 0);
+
+  it("captions some videos and deliberately not others", () => {
+    // Both halves are load-bearing. Without any, the player's caption path is
+    // dead code that nothing renders; with all, the *measured* empty state —
+    // the disabled `Subtitles/closed captions unavailable` button — becomes
+    // unreachable and untested.
+    expect(captioned.length).toBeGreaterThan(0);
+    expect(captioned.length).toBeLessThan(corpus.videos.length);
+  });
+
+  it("covers all three shapes the CC menu can take", () => {
+    const shapes = captioned.map((video) => ({
+      uploaded: video.captions.filter((t) => t.source === "uploaded").length,
+      automatic: video.captions.filter((t) => t.source === "automatic").length,
+    }));
+
+    expect(shapes.some((s) => s.uploaded > 0 && s.automatic === 0)).toBe(true);
+    expect(shapes.some((s) => s.uploaded > 0 && s.automatic > 0)).toBe(true);
+    expect(shapes.some((s) => s.uploaded === 0 && s.automatic > 0)).toBe(true);
+  });
+
+  it("gives no video two tracks the schema would reject", () => {
+    // `captions` is unique on `(video_id, language, source)`. A corpus that
+    // violates it fails at seed time with a constraint error rather than here,
+    // which is a slow and confusing way to find a typo.
+    for (const video of captioned) {
+      const keys = video.captions.map((t) => `${t.language}/${t.source}`);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+  });
+
+  it("labels an automatic track as one", () => {
+    for (const video of captioned) {
+      for (const track of video.captions) {
+        if (track.source === "automatic") {
+          expect(track.label).toContain("auto-generated");
+        } else {
+          expect(track.label).not.toContain("auto-generated");
+        }
+      }
+    }
+  });
+
+  it("times every cue inside the clip it belongs to", () => {
+    // A transcript timed to a video that does not exist is the failure this
+    // whole gap was: captions that are present, parse, and never appear.
+    for (const video of captioned) {
+      for (const track of video.captions) {
+        for (const cue of track.cues) {
+          expect(cue.atSeconds).toBeGreaterThanOrEqual(0);
+          expect(cue.seconds).toBeGreaterThan(0);
+          expect(cue.atSeconds + cue.seconds).toBeLessThanOrEqual(
+            video.clip.durationSeconds,
+          );
+        }
+      }
+    }
+  });
+
+  it("does not overlap two cues of one track", () => {
+    for (const video of captioned) {
+      for (const track of video.captions) {
+        for (let i = 1; i < track.cues.length; i += 1) {
+          const previous = track.cues[i - 1]!;
+          expect(track.cues[i]!.atSeconds).toBeGreaterThanOrEqual(
+            previous.atSeconds + previous.seconds,
+          );
+        }
+      }
+    }
+  });
+});
+
 describe("the ladder budget", () => {
   it("keeps the seed ladder small enough to encode in a sitting", () => {
     // Two rungs is the smallest ladder that can demonstrate a mid-playback

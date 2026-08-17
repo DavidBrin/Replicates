@@ -278,6 +278,28 @@ export interface CorpusChannel {
   readonly monogram: string;
 }
 
+/**
+ * One line of a seeded caption track.
+ *
+ * Timed in clip seconds, so the corpus's own six-to-twelve-second clips carry
+ * captions that actually land on the media rather than a plausible-looking
+ * transcript timed to a video that does not exist.
+ */
+export interface CorpusCue {
+  readonly atSeconds: number;
+  readonly seconds: number;
+  readonly text: string;
+}
+
+export interface CorpusCaptionTrack {
+  /** BCP-47, as `captions.language` stores it. */
+  readonly language: string;
+  /** What the CC menu shows. Includes `(auto-generated)` where that is true. */
+  readonly label: string;
+  readonly source: "uploaded" | "automatic";
+  readonly cues: readonly CorpusCue[];
+}
+
 export interface CorpusVideo {
   readonly id: string;
   readonly channelKey: string;
@@ -298,6 +320,8 @@ export interface CorpusVideo {
   /** The hover preview's window, in clip seconds. */
   readonly previewStartSeconds: number;
   readonly previewSeconds: number;
+  /** Empty for most of the corpus — see {@link CAPTIONED}. */
+  readonly captions: readonly CorpusCaptionTrack[];
 }
 
 export interface CorpusReply {
@@ -522,6 +546,136 @@ interface VideoSource {
  * player bug wearing a plausible number, so the corpus tells the truth and
  * accepts that its videos are short.
  */
+/**
+ * The captioned videos, keyed by title.
+ *
+ * Three videos rather than all twenty-four, and that is the point rather than
+ * a shortcut: the player's *measured* state for a video with no track is the
+ * disabled `Subtitles/closed captions unavailable` button, and a corpus where
+ * every video had captions would make that state unreachable and untested. The
+ * three chosen cover the three shapes the CC menu has:
+ *
+ *   one uploaded track          the ordinary case
+ *   uploaded + automatic        two entries, uploaded first and default
+ *   automatic only              the `(auto-generated)` label on its own
+ *
+ * ## Why the automatic ones look worse
+ *
+ * They are written the way our own auto-caption path produces them, which
+ * `research/07-captions-and-a11y.md` §5.4 describes: utterance-level segments
+ * timed to observed result-event boundaries, no punctuation the recogniser did
+ * not infer, and proper nouns it has never heard rendered phonetically. An
+ * automatic track that reads like a copy-edited transcript would make the
+ * `(auto-generated)` label a lie and would hide the exact difference the
+ * `source` column exists to record.
+ *
+ * Timings are in clip seconds against clips of 16–22 seconds, so every cue
+ * lands on real media.
+ */
+const CAPTIONED: Readonly<Record<string, readonly CorpusCaptionTrack[]>> = {
+  "The £40 lamp that fixed my whole desk": [
+    {
+      language: "en",
+      label: "English",
+      source: "uploaded",
+      cues: [
+        { atSeconds: 0.4, seconds: 3.2, text: "Right — the ceiling light is the enemy." },
+        {
+          atSeconds: 3.8,
+          seconds: 3.6,
+          text: "Not because it is dim.\nBecause it is behind you.",
+        },
+        { atSeconds: 7.6, seconds: 3.4, text: "This lamp is forty pounds." },
+        {
+          atSeconds: 11.2,
+          seconds: 3.8,
+          text: "Two thousand seven hundred kelvin,\nand it clips to the back of the desk.",
+        },
+        { atSeconds: 15.2, seconds: 2.6, text: "That is the whole video." },
+      ],
+    },
+    {
+      language: "es",
+      label: "Español",
+      source: "uploaded",
+      cues: [
+        { atSeconds: 0.4, seconds: 3.2, text: "La luz del techo es el enemigo." },
+        {
+          atSeconds: 3.8,
+          seconds: 3.6,
+          text: "No porque sea débil.\nPorque está detrás de ti.",
+        },
+        { atSeconds: 7.6, seconds: 3.4, text: "Esta lámpara cuesta cuarenta libras." },
+        {
+          atSeconds: 11.2,
+          seconds: 3.8,
+          text: "Dos mil setecientos kelvin,\ny se sujeta al fondo del escritorio.",
+        },
+        { atSeconds: 15.2, seconds: 2.6, text: "Ese es todo el vídeo." },
+      ],
+    },
+  ],
+
+  "Reading SQLite's B-tree code, part 1": [
+    {
+      language: "en",
+      label: "English",
+      source: "uploaded",
+      cues: [
+        { atSeconds: 0.5, seconds: 3.4, text: "We are starting in btree.c, line one." },
+        {
+          atSeconds: 4.2,
+          seconds: 4.0,
+          text: "One INSERT, all the way down\nto the page cache. No slides.",
+        },
+        {
+          atSeconds: 8.6,
+          seconds: 3.8,
+          text: "The comment at the top of this file\nis longer than most papers.",
+        },
+        { atSeconds: 12.8, seconds: 3.6, text: "Read it. It is the actual design document." },
+        {
+          atSeconds: 16.8,
+          seconds: 4.2,
+          text: "Overflow pages and the freelist\nare part two.",
+        },
+      ],
+    },
+    {
+      language: "en",
+      label: "English (auto-generated)",
+      source: "automatic",
+      // §5.4's shape: no sentence casing, no full stops, and `btree.c`
+      // transcribed as it sounds. This is what our recogniser would return.
+      cues: [
+        { atSeconds: 0.5, seconds: 3.4, text: "we're starting in b tree dot c line one" },
+        { atSeconds: 4.2, seconds: 4.0, text: "one insert all the way down to the page cache" },
+        { atSeconds: 8.6, seconds: 3.8, text: "no slides the comment at the top of this file" },
+        { atSeconds: 12.8, seconds: 3.6, text: "is longer than most papers read it" },
+        {
+          atSeconds: 16.8,
+          seconds: 4.2,
+          text: "it's the actual design document overflow pages\nand the free list are part two",
+        },
+      ],
+    },
+  ],
+
+  "Bread with four ingredients and no machine": [
+    {
+      language: "en",
+      label: "English (auto-generated)",
+      source: "automatic",
+      cues: [
+        { atSeconds: 0.3, seconds: 3.5, text: "five hundred grams of flour three fifty water" },
+        { atSeconds: 4.0, seconds: 3.4, text: "ten grams salt two grams yeast that's it" },
+        { atSeconds: 7.6, seconds: 3.6, text: "eighteen hours most of it doing nothing" },
+        { atSeconds: 11.4, seconds: 4.0, text: "the fold is the only part that matters" },
+      ],
+    },
+  ],
+};
+
 const VIDEO_SOURCE: readonly VideoSource[] = [
   {
     channelKey: "lumen",
@@ -1049,6 +1203,21 @@ export function buildCorpus(options: BuildCorpusOptions = {}): Corpus {
   const rankOrder = draw.shuffle(ids.map((_, index) => index));
   const rankOf = new Map(rankOrder.map((videoIndex, rank) => [videoIndex, rank]));
 
+  /**
+   * A caption transcript keyed to a title no video has is a silent no-op.
+   *
+   * `CAPTIONED` is looked up by title, so a typo — or a title edited in
+   * `VIDEO_SOURCE` and not here — produces a corpus with no captions at all
+   * and no complaint. That is the one failure mode of keying by a human string,
+   * and it costs three lines to close.
+   */
+  const titles = new Set(VIDEO_SOURCE.map((source) => source.title));
+  for (const title of Object.keys(CAPTIONED)) {
+    if (!titles.has(title)) {
+      throw new Error(`Captions are keyed to "${title}", which is not a video.`);
+    }
+  }
+
   const videos: CorpusVideo[] = VIDEO_SOURCE.map((source, index) => {
     const palette = paletteOf.get(source.channelKey);
     if (!palette) throw new Error(`Video "${source.title}" names no known channel.`);
@@ -1103,6 +1272,7 @@ export function buildCorpus(options: BuildCorpusOptions = {}): Corpus {
       thumbnailAtSeconds: Number((source.seconds * 0.34).toFixed(3)),
       previewStartSeconds: Number((source.seconds * 0.28).toFixed(3)),
       previewSeconds: Math.min(3, Math.max(2, Math.round(source.seconds * 0.2))),
+      captions: CAPTIONED[source.title] ?? [],
     };
   });
 

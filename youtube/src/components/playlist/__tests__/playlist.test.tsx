@@ -62,10 +62,35 @@ function okResponse(): Response {
   return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
 }
 
+/**
+ * A 409 — what the repository actually returns for a refused mutation.
+ *
+ * Not a rejected promise. That distinction is the whole point of these tests:
+ * `SystemPlaylistIsFixedError` and `LikedPlaylistIsDerivedError` come back as
+ * perfectly well-formed HTTP responses, which a `.then()` with no `response.ok`
+ * check treats as success. A test that simulated failure by throwing would pass
+ * against code that only handles the network dropping.
+ */
+function failedResponse(): Response {
+  return { ok: false, status: 409, json: async () => ({}) } as unknown as Response;
+}
+
 let fetchMock: ReturnType<typeof vi.fn>;
+/** Where `router.push` was asked to go. See the `next/navigation` mock. */
+let pushed: string[];
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: (href: string) => {
+      pushed.push(href);
+    },
+    refresh: () => undefined,
+  }),
+}));
 
 beforeEach(() => {
   fetchMock = vi.fn(async () => okResponse());
+  pushed = [];
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -201,6 +226,65 @@ describe("PlaylistPanel", () => {
     });
   });
 
+  /**
+   * What a refused mutation leaves behind.
+   *
+   * Every mutation on this panel used to be `void fetch(...)` with no branch on
+   * the response, so all three tests below passed against a UI that had simply
+   * assumed success. The refusals are not hypothetical: `rename` and `delete`
+   * on a system playlist are 409s the repository raises by design, and the menu
+   * rows that trigger them are `disabled` rather than absent — which stops a
+   * pointer and not a scripted click or a stale page.
+   */
+  it("puts the old title back when a rename is refused", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(failedResponse());
+    renderPanel("user");
+    const menu = await openMenu();
+    await user.click(within(menu).getByRole("menuitem", { name: "Rename" }));
+
+    const field = screen.getByLabelText("Playlist name");
+    await user.clear(field);
+    await user.type(field, "Something The Server Hates");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // The form reopens on the *server's* title. `router.refresh()` alone could
+    // not fix this — the fresh title arrives as a prop and `name` is state
+    // seeded from it once, so the panel would show a rejected name until a
+    // full reload.
+    await expect
+      .poll(() => screen.getByLabelText("Playlist name").getAttribute("value"))
+      .toBe("Party Songs");
+    expect(screen.getByRole("status")).toHaveTextContent("could not be saved");
+  });
+
+  it("does not navigate away when a delete is refused", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(failedResponse());
+    renderPanel("user");
+    const menu = await openMenu();
+    await user.click(within(menu).getByRole("menuitem", { name: "Delete playlist" }));
+
+    // Leaving for the library from a playlist that still exists is worse than
+    // doing nothing: the playlist reappears in that fresh server render, which
+    // reads as the delete having been undone by something.
+    await expect
+      .poll(() => screen.queryByRole("status")?.textContent ?? "")
+      .toContain("could not be deleted");
+    expect(pushed).toEqual([]);
+  });
+
+  it("navigates away when a delete succeeds", async () => {
+    // The other half — without it the test above passes against a Delete that
+    // never navigates at all.
+    const user = userEvent.setup();
+    renderPanel("user");
+    const menu = await openMenu();
+    await user.click(within(menu).getByRole("menuitem", { name: "Delete playlist" }));
+
+    await expect.poll(() => pushed).toEqual(["/feed/playlists"]);
+  });
+
   it("greys Play all and Shuffle out on an empty playlist", () => {
     render(
       <PlaylistPanel
@@ -296,6 +380,37 @@ describe("PlaylistItemList", () => {
         (node) => node.textContent,
       ),
     ).toEqual(["1", "2"]);
+  });
+
+  it("puts the row back when the removal is refused", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(failedResponse());
+    render(
+      <PlaylistItemList
+        playlistId="pl1"
+        kind="user"
+        items={items}
+        editable
+        now={NOW}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions for Second" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Remove from playlist" }),
+    );
+
+    // A row that vanished and stayed vanished while still being in the playlist
+    // is the version of this bug that costs data on the *next* visit rather
+    // than now — the viewer believes it is gone and does not remove it again.
+    await expect
+      .poll(() => screen.queryByRole("link", { name: "Second" }) !== null)
+      .toBe(true);
+    expect(
+      Array.from(document.querySelectorAll("[data-playlist-index]")).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["1", "2", "3"]);
   });
 
   it("disables Remove on the liked playlist instead of letting it throw", async () => {

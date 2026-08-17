@@ -106,6 +106,42 @@ export const SYSTEM_PLAYLIST_REASON: Readonly<
   liked: "Liked videos follows your likes — unlike a video to remove it.",
 };
 
+/**
+ * Post a playlist mutation, and say whether it landed.
+ *
+ * Every mutation on this page used to be `void fetch(...)` followed by
+ * `router.refresh()` or a state change, with no branch on the response. That
+ * is not a small omission on this surface, because three of the four are
+ * **destructive or navigational**: Delete left the page before the server had
+ * agreed to anything, Remove hid a row that was still in the playlist, and
+ * Rename replaced the title with one the server had rejected — and then called
+ * `router.refresh()`, so the fresh server data arrived and lost to the local
+ * state that was already wrong.
+ *
+ * A refusal is the interesting case rather than a network failure: `remove` on
+ * the liked playlist is a 409 (`LikedPlaylistIsDerivedError`), a rename of a
+ * system playlist is a 409, and both are things the UI disables but a
+ * keyboard-driven menu can still reach. Those come back as a clean HTTP
+ * response, which `.then()` treats as success.
+ *
+ * Returns a boolean rather than throwing: every caller's response to failure is
+ * to put something back, not to unwind.
+ */
+async function mutatePlaylist(body: Record<string, unknown>): Promise<boolean> {
+  try {
+    const response = await fetch("/api/playlists", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return response.ok;
+  } catch {
+    // Offline, or the request was cancelled by a navigation. Indistinguishable
+    // from here and the same repair either way.
+    return false;
+  }
+}
+
 /** `null` for an ordinary playlist; the kind for one of the two fixed ones. */
 export function systemKind(
   kind: PlaylistKind,
@@ -188,6 +224,8 @@ export function PlaylistPanel({
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(title);
+  /** What went wrong, if anything. `role="status"`, so it is announced. */
+  const [notice, setNotice] = useState<string | null>(null);
   const system = systemKind(kind);
   const empty = itemCount === 0;
 
@@ -237,11 +275,23 @@ export function PlaylistPanel({
               const next = name.trim();
               if (next.length === 0) return;
               setRenaming(false);
-              void fetch("/api/playlists", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ action: "rename", playlistId, title: next }),
-              }).then(() => router.refresh());
+              setNotice(null);
+              void mutatePlaylist({ action: "rename", playlistId, title: next }).then(
+                (ok) => {
+                  if (ok) {
+                    router.refresh();
+                    return;
+                  }
+                  // Back to the server's title, and the form reopened on it.
+                  // `router.refresh()` on its own could not fix this: the fresh
+                  // title arrives as a *prop*, and `name` is state seeded from
+                  // it once, so the panel would go on showing a name the server
+                  // had rejected until a full reload.
+                  setName(title);
+                  setRenaming(true);
+                  setNotice("That name could not be saved.");
+                },
+              );
             }}
           >
             <input
@@ -314,8 +364,12 @@ export function PlaylistPanel({
             title={title}
             system={system}
             editable={editable}
-            onRename={() => setRenaming(true)}
+            onRename={() => {
+              setNotice(null);
+              setRenaming(true);
+            }}
             onDeleted={() => router.push("/feed/playlists")}
+            onFailed={setNotice}
           />
         </div>
 
@@ -347,6 +401,19 @@ export function PlaylistPanel({
             Shuffle
           </ButtonLink>
         </div>
+
+        {/* `role="status"` so a refusal reaches a screen reader too — the menu
+            that triggered it has already closed, and a visual-only message
+            about a destructive action failing is the wrong one to drop. */}
+        {notice === null ? null : (
+          <p
+            role="status"
+            data-playlist-notice=""
+            className="mt-3 text-small text-overlay-secondary"
+          >
+            {notice}
+          </p>
+        )}
       </div>
     </aside>
   );
@@ -368,6 +435,7 @@ function PlaylistOverflowMenu({
   editable,
   onRename,
   onDeleted,
+  onFailed,
 }: {
   playlistId: string;
   title: string;
@@ -375,6 +443,8 @@ function PlaylistOverflowMenu({
   editable: boolean;
   onRename: () => void;
   onDeleted: () => void;
+  /** Surfaced by the panel, because a menu closes on select. */
+  onFailed: (message: string) => void;
 }) {
   const label = `Actions for ${title}`;
   const fixed = system !== null;
@@ -405,11 +475,14 @@ function PlaylistOverflowMenu({
         disabled={!editable || fixed}
         title={reason ?? undefined}
         onSelect={() => {
-          void fetch("/api/playlists", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ action: "delete", playlistId }),
-          }).then(onDeleted);
+          void mutatePlaylist({ action: "delete", playlistId }).then((ok) => {
+            // `onDeleted` navigates. Calling it unconditionally sent the viewer
+            // to the library from a playlist that still exists — and because
+            // the library is a fresh server render, it reappeared there, which
+            // reads as the delete having been undone by something.
+            if (ok) onDeleted();
+            else onFailed("That playlist could not be deleted.");
+          });
         }}
       >
         Delete playlist
@@ -499,6 +572,9 @@ export function PlaylistItemList({
                   kind={kind}
                   videoId={video.id}
                   onRemoved={() => setRemoved((current) => [...current, video.id])}
+                  onRestored={() =>
+                    setRemoved((current) => current.filter((id) => id !== video.id))
+                  }
                 />
               ) : undefined
             }
@@ -521,11 +597,14 @@ function PlaylistItemMenuItems({
   kind,
   videoId,
   onRemoved,
+  onRestored,
 }: {
   playlistId: string;
   kind: PlaylistKind;
   videoId: string;
   onRemoved: () => void;
+  /** Put the row back: the server refused, or never heard. */
+  onRestored: () => void;
 }) {
   const derived = kind === "liked";
 
@@ -537,10 +616,13 @@ function PlaylistItemMenuItems({
         title={derived ? SYSTEM_PLAYLIST_REASON.liked : undefined}
         onSelect={() => {
           onRemoved();
-          void fetch("/api/playlists", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ action: "remove", playlistId, videoId }),
+          void mutatePlaylist({ action: "remove", playlistId, videoId }).then((ok) => {
+            // The row goes first, because a removal that waits on a round trip
+            // reads as a menu that did nothing. It comes back if the server
+            // disagreed — a row that vanished and stayed vanished while still
+            // being in the playlist is the shape of this bug that costs data on
+            // the next visit rather than now.
+            if (!ok) onRestored();
           });
         }}
       >
@@ -746,6 +828,7 @@ export function NewPlaylistButton({ children, className }: NewPlaylistButtonProp
   const router = useRouter();
   const [naming, setNaming] = useState(false);
   const [title, setTitle] = useState("");
+  const [failed, setFailed] = useState(false);
 
   if (!naming) {
     return (
@@ -764,29 +847,45 @@ export function NewPlaylistButton({ children, className }: NewPlaylistButtonProp
   return (
     <form
       data-new-playlist-form=""
-      className={clsx("flex items-center gap-2", className)}
+      className={clsx("flex flex-col gap-2", className)}
       onSubmit={(event) => {
         event.preventDefault();
         const next = title.trim();
         if (next.length === 0) return;
         setTitle("");
         setNaming(false);
-        void fetch("/api/playlists", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "create", title: next }),
-        }).then(() => router.refresh());
+        setFailed(false);
+        void mutatePlaylist({ action: "create", title: next }).then((ok) => {
+          if (ok) {
+            router.refresh();
+            return;
+          }
+          // The typed name back in the reopened form, so the viewer is not
+          // asked to remember what they had written. A silent no-op here read
+          // as "the playlist was created and the list has not caught up yet",
+          // which is the worst thing a create can look like.
+          setTitle(next);
+          setNaming(true);
+          setFailed(true);
+        });
       }}
     >
-      <input
-        aria-label="Playlist name"
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        className="h-10 min-w-0 flex-1 rounded-prominent bg-additive px-4 text-body text-primary outline-none"
-      />
-      <Button variant="filled" size="m" type="submit">
-        Create
-      </Button>
+      <div className="flex items-center gap-2">
+        <input
+          aria-label="Playlist name"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          className="h-10 min-w-0 flex-1 rounded-prominent bg-additive px-4 text-body text-primary outline-none"
+        />
+        <Button variant="filled" size="m" type="submit">
+          Create
+        </Button>
+      </div>
+      {failed ? (
+        <p role="status" data-new-playlist-error="" className="text-small text-secondary">
+          That playlist could not be created.
+        </p>
+      ) : null}
     </form>
   );
 }

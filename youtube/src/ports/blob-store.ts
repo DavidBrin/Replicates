@@ -233,8 +233,26 @@ export const blobKeys = {
   /** The animated hover preview: a handful of seconds, no audio. */
   preview: (videoId: string): BlobKey => `videos/${videoId}/preview.mp4`,
 
-  captions: (videoId: string, language: string): BlobKey =>
-    `videos/${videoId}/captions-${language}.vtt`,
+  /**
+   * A caption track.
+   *
+   * **`source` is part of the key, and it has to be.** This took only the
+   * language, which reads as sufficient until you look at what the schema
+   * permits: `captions` is unique on `(video_id, language, source)`, so an
+   * English track a creator uploaded and an English one the recogniser produced
+   * are two legitimate rows for one video — and they were two rows pointing at
+   * one blob key, where the second write silently replaced the first. The CC
+   * menu would then offer both and play the same file for either.
+   *
+   * `automatic` rather than `auto` in the path because it is the column's own
+   * value, so the key can be read back to the row it belongs to without a
+   * lookup table of abbreviations.
+   */
+  captions: (
+    videoId: string,
+    language: string,
+    source: "uploaded" | "automatic" = "uploaded",
+  ): BlobKey => `videos/${videoId}/captions-${source}-${language}.vtt`,
 
   avatar: (channelId: string): BlobKey => `channels/${channelId}/avatar.jpg`,
 

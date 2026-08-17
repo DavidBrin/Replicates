@@ -8,8 +8,13 @@ import { getViewerReaction } from "@/adapters/repositories/reactions";
 import { watchNextSidebar } from "@/adapters/repositories/recommendations";
 import { createChannelsRepository } from "@/adapters/repositories/channels";
 import { getSubscription } from "@/adapters/repositories/subscriptions";
+import {
+  listCaptionTracks,
+  type CaptionTrack,
+} from "@/adapters/repositories/captions";
 import { currentViewer } from "@/lib/viewer";
 import { thumbnailSrc } from "@/components/video";
+import type { PlayerCaptionTrack } from "@/components/player";
 import type { ProgressiveSource } from "@/media/player";
 import type { Comment } from "@/domain/types";
 
@@ -108,11 +113,12 @@ export default async function WatchPage({
   const viewerChannel =
     viewerId === null ? null : ((await channels.listForOwner(viewerId))[0] ?? null);
 
-  const [topLevel, related, reaction, subscription] = await Promise.all([
+  const [topLevel, related, reaction, subscription, captions] = await Promise.all([
     listComments(db, videoId, { viewerId, limit: COMMENT_PAGE }),
     watchNextSidebar(videoId, viewer, db),
     getViewerReaction(db, viewerId, "video", videoId),
     viewerId === null ? null : getSubscription(db, viewerId, video.channelId),
+    listCaptionTracks(db, videoId),
   ]);
 
   // One query per thread that has replies — bounded by `COMMENT_PAGE` and run
@@ -145,13 +151,13 @@ export default async function WatchPage({
       renditionCodecs={renditions.map((rendition) => rendition.codec)}
       frameRate={renditions[0]?.frameRate ?? null}
       posterUrl={video.thumbnailKey === null ? null : thumbnailSrc(video.thumbnailKey)}
-      // No caption asset is stored on `videos` yet — `src/domain/captions.ts`
-      // is the parser and the ASR port is the producer, but nothing writes a
-      // `.vtt` key to a column. An empty list is what makes the `c` shortcut
-      // inert and the control-bar button read
-      // `Subtitles/closed captions unavailable`, which is the measured state
-      // for a video with no track.
-      captionTracks={[]}
+      // The `captions` table, not a column: this used to be a hard-coded `[]`
+      // with a comment saying "nothing writes a `.vtt` key to a column", which
+      // was true and looked for the key in the wrong place. `captions.ts` had
+      // the whole read path — `listCaptionTracks`, ordered uploaded-first —
+      // and no caller. A video with no track still gets an empty list, which
+      // is the measured `Subtitles/closed captions unavailable` state.
+      captionTracks={captions.map(playerCaptionTrack)}
       threads={threads}
       related={related}
       viewer={
@@ -171,6 +177,28 @@ export default async function WatchPage({
       now={new Date()}
     />
   );
+}
+
+/**
+ * A stored caption track, as the player takes it.
+ *
+ * The `blobKey` goes through `thumbnailSrc` like every other stored asset, so a
+ * `.vtt` is served by `/api/media` and inherits the same visibility gate as the
+ * video's segments — a private video's captions are not readable by anyone who
+ * guesses the id, which they would be if this built a URL of its own.
+ *
+ * `isDefault` becomes `default`, which is the `<track>` attribute's name and
+ * the reason the two do not simply share one. Only one track can carry it; the
+ * schema's partial unique index is what guarantees that, so nothing here has to
+ * pick between two.
+ */
+function playerCaptionTrack(track: CaptionTrack): PlayerCaptionTrack {
+  return {
+    src: thumbnailSrc(track.blobKey),
+    srcLang: track.language,
+    label: track.label,
+    default: track.isDefault,
+  };
 }
 
 /**
