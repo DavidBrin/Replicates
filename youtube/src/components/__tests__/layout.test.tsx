@@ -311,11 +311,18 @@ describe("Masthead", () => {
   it("shows Sign in when logged out and the account cluster when logged in", () => {
     const { rerender } = renderChrome(<Masthead />);
     expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Create" })).not.toBeInTheDocument();
 
     rerender(<Masthead signedIn account={{ name: "A Channel" }} />);
     expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+    // A **link**, not a button: the product's Create opens a menu of three
+    // things, two of which this application deliberately does not have (there
+    // is no live ingest adapter and there are no posts). One real destination
+    // is a link to it.
+    expect(screen.getByRole("link", { name: "Create" })).toHaveAttribute(
+      "href",
+      "/studio/upload",
+    );
     expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
   });

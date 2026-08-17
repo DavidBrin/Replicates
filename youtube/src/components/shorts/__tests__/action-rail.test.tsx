@@ -171,25 +171,37 @@ describe("the rail's actions", () => {
     expect(onReact.mock.calls).toEqual([[1], [-1]]);
   });
 
-  it("wires comments, share, remix and subscribe to their own callbacks", async () => {
+  it("wires comments, share and subscribe to their own callbacks", async () => {
     const onToggleComments = vi.fn();
     const onShare = vi.fn();
-    const onRemix = vi.fn();
     const onToggleSubscribe = vi.fn();
     render(
-      <ActionRail
-        {...props({ onToggleComments, onShare, onRemix, onToggleSubscribe })}
-      />,
+      <ActionRail {...props({ onToggleComments, onShare, onToggleSubscribe })} />,
     );
 
     await userEvent.click(screen.getByLabelText("4,882 Comments"));
     await userEvent.click(screen.getByLabelText("Share Avocado Clicker"));
-    await userEvent.click(screen.getByLabelText("Remix Avocado Clicker"));
     await userEvent.click(screen.getByLabelText("Subscribe to Ludo dojo"));
 
     expect(onToggleComments).toHaveBeenCalledOnce();
     expect(onShare).toHaveBeenCalledOnce();
-    expect(onRemix).toHaveBeenCalledOnce();
     expect(onToggleSubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("renders Remix disabled, carrying the reason", async () => {
+    // Remix is measured as one of §11's four rail buttons, so it renders — but
+    // it opens the Shorts editor, which is a creation surface this application
+    // does not have. It used to be pressable and bound to a `noop`, which is
+    // the one option that teaches a visitor the app is broken rather than that
+    // the feature is absent.
+    const onRemix = vi.fn();
+    render(<ActionRail {...props({ onRemix })} />);
+
+    const remix = screen.getByLabelText("Remix Avocado Clicker");
+    expect(remix).toBeDisabled();
+    expect(remix).toHaveAttribute("title", expect.stringContaining("not part of this build"));
+
+    await userEvent.click(remix);
+    expect(onRemix).not.toHaveBeenCalled();
   });
 });

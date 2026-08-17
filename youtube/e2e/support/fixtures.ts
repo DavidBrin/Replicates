@@ -110,7 +110,10 @@ export async function signIn(
   // Scoped to the banner: the guide rail carries its own Sign in link, so an
   // unscoped locator matches two elements and fails strict mode for a reason
   // that has nothing to do with the session.
-  await expect(masthead(page).getByRole("button", { name: /create/i })).toBeVisible();
+  // A **link**, not a button: Create points at /studio/upload, because the
+  // product's menu of three options is two things this application does not
+  // have (no live ingest adapter, no posts) beside one that it does.
+  await expect(masthead(page).getByRole("link", { name: /create/i })).toBeVisible();
 }
 
 /** The masthead, as a scope. See the note in {@link signIn}. */

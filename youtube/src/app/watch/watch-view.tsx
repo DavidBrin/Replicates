@@ -9,6 +9,7 @@ import { Description } from "@/components/watch/description";
 import { WatchSidebar } from "@/components/watch/sidebar";
 import { useWatchReporter } from "@/components/watch/watch-reporter";
 import { VideoInfo } from "@/components/watch/video-info";
+import type { SaveTarget } from "@/components/playlist";
 import type { ReactionState } from "@/adapters/repositories/reactions";
 import type { ProgressiveSource } from "@/media/player";
 import type { Video, VideoCard } from "@/domain/types";
@@ -55,6 +56,8 @@ export interface WatchViewProps {
   readonly viewer: CommentsViewer | null;
   readonly viewerReaction: ReactionState;
   readonly subscribed: boolean;
+  /** The Save sheet's rows. Empty for a signed-out viewer. */
+  readonly saveTargets: readonly SaveTarget[];
   /** The server's clock, so every relative time hydrates identically. */
   readonly now: Date;
 }
@@ -73,6 +76,7 @@ export function WatchView({
   viewer,
   viewerReaction,
   subscribed,
+  saveTargets,
   now,
 }: WatchViewProps) {
   const [theatre, setTheatre] = useState(false);
@@ -244,6 +248,7 @@ export function WatchView({
             style={{ marginTop: theatre ? "24px" : "12px" }}
           >
             <VideoInfo
+              videoId={video.id}
               title={video.title}
               channelName={video.channelName}
               channelHandle={video.channelHandle}
@@ -254,6 +259,8 @@ export function WatchView({
               subscribed={following}
               onReact={react}
               onToggleSubscribe={toggleSubscribe}
+              saveTargets={saveTargets}
+              signedIn={viewer !== null}
             />
 
             <Description

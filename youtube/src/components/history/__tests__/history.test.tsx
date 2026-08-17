@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -36,7 +36,44 @@ import type { VideoCard } from "@/domain/types";
  * assert that every day becomes one section with one heading, in the order
  * supplied, and that no row escapes its day — which is the whole of this
  * component's contract.
+ *
+ * ## The rail's two actions are real now, and the tests say what they do
+ *
+ * Clear and Pause used to render a notice reading "not wired up yet", and three
+ * tests asserted exactly that. They are `/api/history` calls now, so the
+ * assertions are about the request that goes out and the state that comes back
+ * — including the refusal paths, because a Pause button that says "Resume"
+ * while recording continues tells a viewer they are private when they are not.
  */
+
+/** A JSON response, as `fetch` hands it back. */
+function jsonResponse(body: unknown): Response {
+  return { ok: true, status: 200, json: async () => body } as unknown as Response;
+}
+
+function failedResponse(): Response {
+  return { ok: false, status: 500, json: async () => ({}) } as unknown as Response;
+}
+
+function bodyOf(call: unknown[]): Record<string, unknown> {
+  const init = call[1] as RequestInit | undefined;
+  return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: () => undefined, refresh: () => undefined }),
+}));
+
+beforeEach(() => {
+  fetchMock = vi.fn(async () => jsonResponse({ events: 0, progress: 0 }));
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const NOW = new Date("2026-08-16T12:00:00Z");
 const YESTERDAY = new Date("2026-08-15T20:00:00Z");
@@ -232,15 +269,70 @@ describe("HistoryControls", () => {
     ).toContain("border-b");
   });
 
-  it("asks before clearing, and is honest that nothing was deleted", async () => {
+  it("asks before clearing, then deletes and says how much", async () => {
     const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: 12, progress: 4 }));
     render(<HistoryControls />);
 
     await user.click(screen.getByRole("button", { name: "Clear all watch history" }));
+    // The confirm is not ceremony: this is the only irreversible action in the
+    // application, and `clearHistory` is a `delete` with no undo.
     expect(document.querySelector("[data-history-confirm]")).not.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Clear" }));
-    expect(screen.getByRole("status")).toHaveTextContent("nothing was deleted");
+
+    expect(bodyOf(fetchMock.mock.calls[0] ?? [])).toEqual({ action: "clear" });
+    // The count rather than "Done" — a destructive action that reports nothing
+    // is one the viewer has to go and check.
+    await expect
+      .poll(() => screen.queryByRole("status")?.textContent ?? "")
+      .toContain("12 entries removed");
+  });
+
+  it("says so rather than claiming success when the clear fails", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(failedResponse());
+    render(<HistoryControls />);
+
+    await user.click(screen.getByRole("button", { name: "Clear all watch history" }));
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    await expect
+      .poll(() => screen.queryByRole("status")?.textContent ?? "")
+      .toContain("could not be cleared");
+  });
+
+  it("pauses recording, and flips its own label", async () => {
+    const user = userEvent.setup();
+    render(<HistoryControls />);
+
+    await user.click(screen.getByRole("button", { name: "Pause watch history" }));
+
+    expect(bodyOf(fetchMock.mock.calls[0] ?? [])).toEqual({
+      action: "pause",
+      paused: true,
+    });
+    await expect
+      .poll(() => screen.queryByRole("button", { name: "Resume watch history" }) !== null)
+      .toBe(true);
+  });
+
+  it("does not flip the label when the pause is refused", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(failedResponse());
+    render(<HistoryControls />);
+
+    await user.click(screen.getByRole("button", { name: "Pause watch history" }));
+
+    // A button that says "Resume" while recording continues is the worst
+    // outcome available here: the viewer believes they are private and is not.
+    await expect
+      .poll(() => screen.queryByRole("status")?.textContent ?? "")
+      .toContain("could not be changed");
+    expect(
+      screen.getByRole("button", { name: "Pause watch history" }),
+    ).toBeInTheDocument();
   });
 
   it("backs out of the confirm without saying anything happened", async () => {
@@ -254,25 +346,36 @@ describe("HistoryControls", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("labels the pause control by its current state", () => {
-    const { rerender } = render(<HistoryControls />);
+  it("labels the pause control by the state the server read", () => {
+    // Two renders rather than a `rerender`: the prop is the *initial* value and
+    // the component owns it afterwards, because the cookie the server read is
+    // the cookie this component is about to change. Re-deriving from the prop
+    // would flip the button back on the next render.
+    const off = render(<HistoryControls />);
     expect(
       screen.getByRole("button", { name: "Pause watch history" }),
     ).toHaveAttribute("aria-pressed", "false");
+    off.unmount();
 
-    rerender(<HistoryControls paused />);
+    render(<HistoryControls paused />);
     expect(
       screen.getByRole("button", { name: "Resume watch history" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("disables the actions a signed-out viewer cannot take", () => {
+  it("disables Clear for a signed-out viewer, and leaves Pause usable", () => {
     render(<HistoryControls signedIn={false} />);
+
+    // The asymmetry is the schema's. `watch_progress` is keyed by user, so a
+    // signed-out viewer has nothing to clear — but `watch_events.user_id` is
+    // nullable, so their watches *are* recorded against the viewing key and
+    // are just as pausable. Disabling both would leave the larger half of the
+    // recording unpausable by the people most likely to want it paused.
     expect(
       screen.getByRole("button", { name: "Clear all watch history" }),
     ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Pause watch history" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
   });
 });

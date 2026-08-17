@@ -221,7 +221,7 @@ test.describe("signing in", () => {
 
     await signIn(page);
 
-    await expect(masthead(page).getByRole("button", { name: /create/i })).toBeVisible();
+    await expect(masthead(page).getByRole("link", { name: /create/i })).toBeVisible();
     await expect(masthead(page).getByRole("link", { name: /sign in/i })).toHaveCount(0);
   });
 
@@ -251,7 +251,7 @@ test.describe("signing in", () => {
     // The cookie is the session; a reload is what proves it was actually set
     // rather than held in a React state that a navigation discards.
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(masthead(page).getByRole("button", { name: /create/i })).toBeVisible();
+    await expect(masthead(page).getByRole("link", { name: /create/i })).toBeVisible();
 
     const response = await page.request.delete("/api/auth/session");
     expect(response.status()).toBe(204);
@@ -304,6 +304,97 @@ test.describe("subscribing", () => {
     // session, so the viewer is sent to get one with a way back.
     await page.waitForURL(/\/signin\?next=/);
     expect(page.url()).toContain(encodeURIComponent(FIXTURE.videos.cables.id));
+  });
+});
+
+/**
+ * The viewing-telemetry cookie, and the controls that depend on it.
+ *
+ * `recordWatch`, `recordWatchProgress` and `recordView` were all written and
+ * called by nothing, because nothing issued a session key — so four pages fell
+ * back to `sessionKey: token ?? "anonymous"`, one bucket for every signed-out
+ * visitor. These assert the middleware's half, which is the half a unit test
+ * cannot see: a cookie has to survive the response, and only a browser can say
+ * whether it did.
+ */
+test.describe("the viewing session key", () => {
+  test("is issued on the first request and kept on the next", async ({ page }) => {
+    await gotoAndSettle(page, "/");
+
+    const issued = (await page.context().cookies()).find((c) => c.name === "yt_vk");
+    expect(issued).toBeDefined();
+    // 30 minutes, refreshed per response — that attribute *is* research §1.1's
+    // idle gap. `httpOnly`, because nothing client-side reads it.
+    expect(issued?.httpOnly).toBe(true);
+    expect(issued?.sameSite).toBe("Lax");
+
+    await gotoAndSettle(page, "/feed/playlists");
+    const kept = (await page.context().cookies()).find((c) => c.name === "yt_vk");
+    // The same key, not a new one: a fresh key per page load is the failure the
+    // watch page's old comment predicted — one session per page view, a graph
+    // with no pairs in it at all.
+    expect(kept?.value).toBe(issued?.value);
+  });
+
+  test("is not attached to a media response", async ({ page }) => {
+    // `/api/media` is excluded from the matcher: it serves thousands of cached
+    // segment requests, and a per-viewer `Set-Cookie` on a cacheable response
+    // is how a CDN hands one viewer's key to everyone.
+    const seen: string[] = [];
+    page.on("response", (response) => {
+      if (!response.url().includes("/api/media/")) return;
+      const header = response.headers()["set-cookie"];
+      if (header !== undefined) seen.push(header);
+    });
+
+    await gotoAndSettle(page, `/watch?v=${FIXTURE.videos.river.id}`);
+    expect(seen).toEqual([]);
+  });
+});
+
+test.describe("watch history", () => {
+  test("pauses recording, and the state survives a reload", async ({ page }) => {
+    await signIn(page);
+    await gotoAndSettle(page, "/feed/history");
+
+    await page.getByRole("button", { name: "Pause watch history" }).click();
+    await expect(
+      page.getByRole("button", { name: "Resume watch history" }),
+    ).toBeVisible();
+
+    // The preference is a cookie the server reads during render, so the button
+    // must come back already correct — a pause that renders as "Pause" and
+    // flips after hydration reads as the setting not having stuck.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("button", { name: "Resume watch history" }),
+    ).toBeVisible();
+  });
+});
+
+test.describe("the controls that are honest about not working", () => {
+  /**
+   * Every one of these was a pressable button bound to nothing.
+   *
+   * A control that does nothing when pressed teaches a visitor the application
+   * is broken; a greyed one carrying the reason teaches them the feature is
+   * absent. Asserted rather than left to a comment, because the difference is
+   * invisible in the source of a `<Button>` and obvious to anyone using it.
+   */
+  test("greys the features this build does not have", async ({ page }) => {
+    await gotoAndSettle(page, "/");
+    await expect(
+      page.getByRole("button", { name: "Search with your voice" }),
+    ).toBeDisabled();
+
+    await gotoAndSettle(page, `/watch?v=${FIXTURE.videos.river.id}`);
+    await expect(page.getByRole("button", { name: "Download" })).toBeDisabled();
+  });
+
+  test("points Create at the one destination that exists", async ({ page }) => {
+    await signIn(page);
+    await masthead(page).getByRole("link", { name: /create/i }).click();
+    await page.waitForURL(/\/studio\/upload/);
   });
 });
 

@@ -205,6 +205,14 @@ function SaveTrigger({ triggerProps }: { triggerProps: SheetTriggerProps }) {
     <button
       {...triggerProps}
       type="button"
+      // The measured accessible name is `Save to playlist` (R8 §8.3) while the
+      // *visible* label is `Save` — the button is 86px wide and the longer
+      // string does not fit. The two differ on purpose, and the label is the
+      // one that has to be the measurement, because a screen reader reading
+      // "Save" beside a Share and a Download button does not say what is being
+      // saved or where. This was the one place the watch page's inert button
+      // was more correct than the working component that replaced it.
+      aria-label="Save to playlist"
       data-save-trigger=""
       className={buttonClassName({ variant: "tonal", size: "m" })}
     >

@@ -273,15 +273,35 @@ function EndCluster({
 
   return (
     <>
-      <Button
+      {/* A link, not a button with a menu. The product opens a menu with
+          `Upload video` / `Go live` / `Create post`; two of those three are
+          surfaces this application deliberately does not have — live streaming
+          has no adapter by design, and there are no posts — so a menu here
+          would be one working row beside two that lie. The one real
+          destination is the one it goes to. */}
+      <ButtonLink
+        href="/studio/upload"
         variant="tonal"
         size="m"
         className="mr-2"
         leading={<PlusIcon size={24} />}
       >
         Create
-      </Button>
-      <Button variant="text" size="m" iconOnly aria-label="Notifications">
+      </ButtonLink>
+      <Button
+        variant="text"
+        size="m"
+        iconOnly
+        aria-label="Notifications"
+        // Disabled with the reason. `subscriptions.notification_level` records
+        // what a viewer asked to be told about and there is no table of things
+        // to tell them — a notification is an event with a read state, which
+        // is a schema this application does not have. The bell that *does*
+        // work is the per-channel one on the channel header, because that
+        // writes the preference rather than reading a feed.
+        disabled
+        title="Notifications are not available in this build."
+      >
         <BellIcon size={24} />
       </Button>
       <Menu
@@ -363,6 +383,17 @@ export function Masthead({
           size="m"
           iconOnly
           aria-label="Search with your voice"
+          // Disabled with the reason, rather than a button that opens nothing.
+          //
+          // `src/ports/speech-recogniser.ts` is the port this would go through
+          // and it has a stub adapter only — the same deliberate no-adapter
+          // position `LiveIngest` takes. Wiring the browser's own
+          // `SpeechRecognition` here instead would put a second, differently
+          // shaped recogniser in the application beside the one the caption
+          // path uses, and the two would disagree about a language tag on the
+          // first non-English query.
+          disabled
+          title="Voice search is not available in this build."
           className="ml-3"
         >
           <MicIcon size={24} />

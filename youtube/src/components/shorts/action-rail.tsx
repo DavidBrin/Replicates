@@ -231,6 +231,8 @@ function RailItem({
   label,
   caption,
   pressed,
+  disabled,
+  title,
   onClick,
   children,
 }: {
@@ -238,6 +240,9 @@ function RailItem({
   label: string;
   caption: string;
   pressed?: boolean;
+  /** Greyed, with {@link title} as the reason. See Remix in {@link ActionRail}. */
+  disabled?: boolean;
+  title?: string;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -247,8 +252,10 @@ function RailItem({
         type="button"
         aria-label={label}
         aria-pressed={pressed}
+        disabled={disabled}
+        title={title}
         onClick={onClick}
-        className={RAIL_BUTTON}
+        className={clsx(RAIL_BUTTON, disabled && "opacity-50")}
       >
         {children}
         <TouchFill />
@@ -336,7 +343,20 @@ export function ActionRail({
         <ShareIcon size={24} />
       </RailItem>
 
-      <RailItem name="remix" label={`Remix ${title}`} caption="Remix" onClick={onRemix}>
+      {/* Disabled with the reason rather than a `noop`.
+          Remix opens the Shorts editor — trimming a source video, laying audio
+          over it and publishing the result — which is a creation surface this
+          application does not have. The button is measured, so it renders; a
+          pressable one that did nothing would teach a visitor that the app is
+          broken rather than that the feature is absent. */}
+      <RailItem
+        name="remix"
+        label={`Remix ${title}`}
+        caption="Remix"
+        disabled
+        title="The Shorts editor is not part of this build."
+        onClick={onRemix}
+      >
         <RemixIcon size={24} />
       </RailItem>
 

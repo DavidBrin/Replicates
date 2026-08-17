@@ -527,7 +527,7 @@ describe("SaveToPlaylist", () => {
   async function open(): Promise<HTMLElement> {
     const user = userEvent.setup();
     render(<SaveToPlaylist videoId="v1" playlists={targets} />);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save to playlist" }));
     return screen.getByRole("dialog");
   }
 
@@ -546,6 +546,9 @@ describe("SaveToPlaylist", () => {
     // The old design was a checkbox list with Cancel and Save in the footer.
     // R9 §9.3 and §14 record that it is gone; this fails if it comes back.
     expect(within(sheet).queryByRole("button", { name: "Cancel" })).toBeNull();
+    // Scoped to the sheet: the *trigger* outside it is named "Save to
+    // playlist" and the old design's footer commit was named "Save", so an
+    // unscoped negative would be about the wrong button entirely.
     expect(within(sheet).queryByRole("button", { name: /^Save$/ })).toBeNull();
     expect(
       within(sheet).getByRole("button", { name: "New playlist" }),
@@ -645,7 +648,7 @@ describe("SaveToPlaylist", () => {
   it("explains itself to a signed-out viewer instead of showing an empty list", async () => {
     const user = userEvent.setup();
     render(<SaveToPlaylist videoId="v1" playlists={targets} signedIn={false} />);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save to playlist" }));
 
     const sheet = screen.getByRole("dialog");
     expect(sheet.querySelector("[data-save-signed-out]")).not.toBeNull();

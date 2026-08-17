@@ -182,8 +182,8 @@ needs zero flags. Two runs produce a **byte-identical** media tree.
 | | |
 |---|---|
 | `pnpm dev` | the app, against PGlite and the filesystem blob store |
-| `pnpm test` | 2,124 unit tests |
-| `pnpm test:e2e` | 31 specs, three browser projects, production build |
+| `pnpm test` | 2,209 unit tests |
+| `pnpm test:e2e` | 38 specs, three browser projects, production build |
 | `pnpm verify` | typecheck + lint + tests |
 | `pnpm seed:demo` | optional Creative Commons clips, for screenshots |
 
@@ -237,32 +237,55 @@ sign-in route wrote its session into one in-memory database and the layout
 rendering the masthead read from another. Signing in returned 200 with a valid
 cookie, every API call authenticated with it, and every page said "Sign in".
 
+## The cookie that five features were waiting on
+
+`recordWatch`, `recordWatchProgress` and `recordView` were written, tested, and
+called by nothing. So the red resume bar never appeared, Continue watching was
+always empty, history showed only the seed, every view count was frozen, and
+the recommender could not learn anything from anyone using the application.
+
+That looked like five gaps and was one. Nothing issued a session key, so four
+pages fell back to `sessionKey: token ?? "anonymous"` — **one grouping bucket
+for every signed-out visitor on the planet**. It was harmless only because
+nothing wrote to the graph; the moment anything did, every video would
+co-visit with every other one, and the recommender would confidently relate a
+chess opening to a cake recipe.
+
+The fix implements research §1.1's sessionisation rule with two different
+mechanisms, which is the part worth stealing: **the 30-minute idle gap is the
+cookie's `Max-Age`, rewritten on every response**, so the browser is the timer
+and there is no clock comparison anywhere. **The 24-hour cap is the issue time
+carried inside the value**, because a rolling `Max-Age` never expires for
+someone who never idles — §1.1's "videos left playing in a background tab for a
+week".
+
+The three writes then run on three different schedules. Progress on every
+report; the watch event and the view **once per session per video**, because
+the watch event is a transaction that rebuilds neighbour lists and running it
+per tick is a hundred and twenty graph refreshes for one ten-minute video.
+
 ## Known gaps
 
 Recorded because a replica that hides its seams is less useful than one that
 names them:
 
-- **Subscribe does not persist from Shorts.** The watch page writes through
-  `/api/subscriptions` and survives a reload; the Shorts action rail does not
-  yet call it.
-- **No watch event is recorded from the UI.** Recording one needs a session
-  cookie issued to signed-out viewers, and inventing one per page load would
-  poison the co-visitation graph with one session per view. The recommender's
-  data comes from the seed.
-- **No caption track is wired to a video**, so the player renders the measured
-  "unavailable" state. The whole caption stack is built and tested.
-- **Several controls are decorative** and are listed in [SPEC.md](SPEC.md) §10
-  rather than left for a visitor to find: voice search, Create, notifications,
-  Share, Download, Remix, and history's Clear and Pause.
-- **Playlist mutations do not roll back** in the UI when a request fails.
 - **HEVC codec strings are unverified** against real footage — transcribed from
   the standard, and the first thing to doubt if an iPhone file is rejected.
 - **Nested transactions are described by the port and implemented by neither
   adapter.** No caller nests today.
+- **Four features are absent rather than broken**, and each renders as a
+  disabled control carrying the reason rather than a button that does nothing:
+  offline Download, notifications, voice search, and the Shorts Remix editor.
+  [SPEC.md](SPEC.md) §11 says what each would need.
+- **Clearing history does not unlearn the recommender**, and cannot: the graph
+  is keyed on the viewing cookie rather than an identity, and its counters are
+  aggregates many sessions contributed to. Undoing one viewer's share would
+  mean storing who contributed what — a more detailed record of viewing than
+  the one being deleted.
 
 ---
 
-Next.js · 2,124 unit tests and 31 e2e specs across three browser projects · a
+Next.js · 2,209 unit tests and 38 e2e specs across three browser projects · a
 23-table schema applying idempotently on PostgreSQL 18.3 · a hand-written fMP4
 muxer reproducing an independently generated reference box for box · built
 from nine parallel research lanes, then twelve parallel build slices, then

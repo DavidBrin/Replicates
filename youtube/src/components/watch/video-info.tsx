@@ -2,19 +2,19 @@
 
 import Link from "next/link";
 import clsx from "clsx";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   BellIcon,
   ChevronIcon,
   DownloadIcon,
   MoreHorizontalIcon,
-  SaveIcon,
   ShareIcon,
   ThumbDownIcon,
   ThumbUpIcon,
 } from "@/components/icons";
 import { Avatar, Button } from "@/components/primitives";
+import { SaveToPlaylist, type SaveTarget } from "@/components/playlist";
 import {
   exactCount,
   formatLikeCount,
@@ -56,6 +56,8 @@ import type { ReactionState } from "@/adapters/repositories/reactions";
  */
 
 export interface VideoInfoProps {
+  /** Needed by Share and Save, both of which act on the video rather than the page. */
+  readonly videoId: string;
   readonly title: string;
   readonly channelName: string;
   readonly channelHandle: string;
@@ -68,10 +70,20 @@ export interface VideoInfoProps {
   readonly membershipsOffered?: boolean;
   readonly onReact: (value: 1 | -1) => void;
   readonly onToggleSubscribe: () => void;
+  /**
+   * The Save sheet. Omitted → a disabled Save button.
+   *
+   * Passed in rather than fetched here because the membership of every one of
+   * the viewer's playlists is a server read, and this is a leaf component under
+   * a `"use client"` boundary. The watch page resolves it in one query.
+   */
+  readonly saveTargets?: readonly SaveTarget[] | undefined;
+  readonly signedIn?: boolean;
   readonly className?: string;
 }
 
 export function VideoInfo({
+  videoId,
   title,
   channelName,
   channelHandle,
@@ -83,8 +95,40 @@ export function VideoInfo({
   membershipsOffered = false,
   onReact,
   onToggleSubscribe,
+  saveTargets,
+  signedIn = true,
   className,
 }: VideoInfoProps) {
+  /**
+   * "Link copied", for a couple of seconds.
+   *
+   * The product opens a share dialog with a link, a copy button and a row of
+   * networks. No capture in `research/` contains it, so building one would be a
+   * whole surface of guesses — and the one thing everybody actually uses it for
+   * is the copy. So Share copies, and says it did.
+   */
+  const [shared, setShared] = useState(false);
+  useEffect(() => {
+    if (!shared) return;
+    const timer = window.setTimeout(() => setShared(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [shared]);
+
+  const share = (): void => {
+    const url = new URL(
+      `/watch?v=${encodeURIComponent(videoId)}`,
+      window.location.origin,
+    ).toString();
+    // `?.` on both: `navigator.clipboard` is absent on an http origin that is
+    // not localhost, and in jsdom. The failure branch is real, not defensive.
+    void navigator.clipboard
+      ?.writeText?.(url)
+      .then(() => setShared(true))
+      .catch(() => {
+        /* The link is in the address bar either way. */
+      });
+  };
+
   return (
     <section data-video-info="" className={clsx("flex flex-col gap-3", className)}>
       <h1
@@ -176,16 +220,25 @@ export function VideoInfo({
             </Button>
           </div>
 
-          <Button variant="tonal" aria-label="Share" leading={<ShareIcon size={24} />}>
-            Share
-          </Button>
           <Button
             variant="tonal"
-            aria-label="Save to playlist"
-            leading={<SaveIcon size={24} />}
+            aria-label={shared ? "Link copied" : "Share"}
+            leading={<ShareIcon size={24} />}
+            onClick={share}
           >
-            Save
+            {shared ? "Link copied" : "Share"}
           </Button>
+
+          {/* The real sheet, which existed and was rendered nowhere: the button
+              here used to be a bare `<Button>` while `SaveToPlaylist` — with
+              its own suite asserting that a toggle writes immediately and puts
+              the row back on failure — had no call site in the application. */}
+          <SaveToPlaylist
+            videoId={videoId}
+            playlists={saveTargets ?? []}
+            signedIn={signedIn}
+          />
+
           <Button
             variant="tonal"
             aria-label="Download"
@@ -193,11 +246,19 @@ export function VideoInfo({
             // Measured at 0×0 on the sampled page — the button exists in the
             // DOM and was not rendered for a logged-out viewer. Rendered here
             // because §8.3 lists it among the watch actions.
+            //
+            // Disabled, with the reason, rather than pressable: offline
+            // download needs a storage quota, a background fetch and an
+            // eviction policy, and none of the three is a thing this
+            // application has anywhere to put. A pressable button that did
+            // nothing would be worse than a greyed one that says why.
+            disabled
+            title="Downloads are not available in this build."
             className="max-lg:hidden"
           >
             Download
           </Button>
-          <Button variant="tonal" iconOnly aria-label="More actions">
+          <Button variant="tonal" iconOnly aria-label="More actions" disabled>
             <MoreHorizontalIcon size={24} />
           </Button>
         </div>

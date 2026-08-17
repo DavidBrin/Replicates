@@ -163,8 +163,8 @@ distinct.
 
 ## 9. What "done" means here
 
-`pnpm verify` — typecheck, lint, and 2,124 unit tests — plus `pnpm test:e2e`,
-31 specs across three browser projects against a production build.
+`pnpm verify` — typecheck, lint, and 2,209 unit tests — plus `pnpm test:e2e`,
+38 specs across three browser projects against a production build.
 
 **A test that has never failed is not evidence.** Structural checks and
 regression tests in this repository are mutation-tested: the bug is
@@ -172,19 +172,43 @@ reintroduced, the test is confirmed to fail, and only then is it kept. Where
 a test *cannot* be made to discriminate, that is recorded next to it rather
 than left to look like coverage.
 
-## 10. Known gaps
+## 10. Sessionisation
 
-- **Subscribe does not persist from Shorts.** The watch page writes through
-  `/api/subscriptions`; the Shorts action rail still only flips local state.
-- **No watch event is recorded from the UI.** The recommender's graph comes
-  from the seed. Recording live watches needs a session cookie issued to
-  signed-out viewers, which does not exist yet.
-- **No caption track is wired to a video**, so the player renders the measured
-  "unavailable" state. The caption stack is built and tested.
-- **Several controls are decorative**: voice search, Create, notifications,
-  Share, Download, Remix, and history's Clear and Pause. They are named here
-  rather than left for a visitor to discover.
-- **Playlist mutations do not roll back** a failed request in the UI.
+The viewing session key is a cookie (`yt_vk`), issued by `src/middleware.ts`,
+and it implements `research/04` §1.1's rule with two different mechanisms:
+
+- **the 30-minute idle gap is the cookie's `Max-Age`**, rewritten on every
+  response, so the browser is the timer and no clock comparison is needed;
+- **the 24-hour cap is the issue time carried inside the value**, because a
+  rolling `Max-Age` never expires for someone who never idles — §1.1's
+  "background tab for a week".
+
+It confers no authority and names no user. What it must not be is
+guessable in bulk, since a collision merges two strangers' viewing into one
+session, so it is 128 bits from the platform CSPRNG.
+
+Three writes hang off it, on three different schedules. Progress on every
+report; the watch event and the view **once per session per video**, gated by
+`sessionHasWatched` — the alternative is a hundred and twenty views and a
+hundred and twenty graph refreshes for one ten-minute video.
+
+## 11. Known gaps
+
 - **HEVC codec strings are unverified** against real footage.
 - The PGlite and Neon adapters **do not implement nested transactions** the
   way `SqlDatabase` describes them; no caller nests today.
+- **The history page groups in UTC**, not the viewer's zone. The zone is a
+  client fact and no cookie carries it.
+- **Four surfaces are absent rather than broken**, and each renders as a
+  disabled control carrying the reason: offline **Download** (needs a storage
+  quota, a background fetch and an eviction policy), **Notifications** (a
+  notification is an event with a read state; there is no such table), **voice
+  search** (`SpeechRecogniser` has a stub adapter only), and Shorts **Remix**
+  (the Shorts editor is a creation surface this build does not have). A
+  pressable control that did nothing would teach a visitor the application is
+  broken rather than that the feature is absent.
+- **Clearing history does not unlearn the co-visitation graph.** It cannot: the
+  graph is keyed on the viewing cookie rather than on an identity, and its
+  counters are aggregates many sessions contributed to. Decrementing one
+  viewer's share would mean storing who contributed what — a *more* detailed
+  record of viewing than the one being deleted. See `clearHistory`.

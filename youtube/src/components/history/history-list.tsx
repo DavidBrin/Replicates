@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/primitives";
@@ -170,18 +171,22 @@ export interface HistoryControlsProps {
 /**
  * The right rail.
  *
- * The three actions are **not** wired to endpoints, and that is a decision
- * rather than an omission: pausing history and clearing it are writes against
- * `watch_events`, and `src/adapters/repositories/watch-events.ts` is the write
- * path for that table — a slice this one does not own, with no pause flag on
- * any table and no bulk-delete in its API. Rendering enabled buttons that
- * silently do nothing would be worse than either alternative, so each one
- * confirms in place and then says plainly that nothing was recorded. When the
- * endpoint lands, the confirm step is already here.
+ * Clear and Pause post to `/api/history`. They used to confirm in place and
+ * then say "not wired up yet", on the argument that both are writes against
+ * `watch_events` and belong to a slice this one does not own. The ownership
+ * argument was sound; the conclusion outlived it. Neither could have been wired
+ * before `POST /api/watch` existed — there was nothing recording to pause and
+ * nothing but the seed to clear — and both became one call each the moment it
+ * did.
+ *
+ * The confirm step on Clear is kept and is not ceremony: it is the only
+ * irreversible action in this application, and `clearHistory` is a `delete`
+ * with no undo.
  *
  * "Manage all history" and its three sub-links point at Google account
  * surfaces in the product and have no equivalent here; they render as the
- * measured rows, disabled.
+ * measured rows, disabled. That is the one thing on this rail that stays
+ * decorative, because the surface it links to does not exist to link to.
  */
 export function HistoryControls({
   paused = false,
@@ -189,8 +194,74 @@ export function HistoryControls({
   query = "",
   className,
 }: HistoryControlsProps) {
+  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The pause state as this page currently believes it.
+   *
+   * Seeded from the prop and then owned locally, because the cookie the server
+   * read is the cookie *this component is about to change* — deriving it from
+   * the prop on every render would flip the button back on the next re-render
+   * and before `router.refresh()` returned.
+   */
+  const [pausedNow, setPausedNow] = useState(paused);
+  /** A request is in flight; both buttons are held so a double press cannot race. */
+  const [busy, setBusy] = useState(false);
+
+  const clear = async (): Promise<void> => {
+    setConfirming(false);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/history", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "clear" }),
+      });
+      if (!response.ok) {
+        setNotice("Your history could not be cleared.");
+        return;
+      }
+      const result = (await response.json()) as { events?: number };
+      // The count, not "Done": a destructive action that reports nothing is one
+      // the viewer has to go and check.
+      const events = typeof result.events === "number" ? result.events : 0;
+      setNotice(
+        events === 1 ? "1 entry removed." : `${events} entries removed.`,
+      );
+      router.refresh();
+    } catch {
+      setNotice("Your history could not be cleared.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const togglePause = async (): Promise<void> => {
+    const next = !pausedNow;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/history", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "pause", paused: next }),
+      });
+      if (!response.ok) {
+        setNotice("That could not be changed.");
+        return;
+      }
+      setPausedNow(next);
+      setNotice(
+        next
+          ? "Watch history is paused. Nothing you watch will be recorded."
+          : "Watch history is on again.",
+      );
+    } catch {
+      setNotice("That could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <aside
@@ -230,11 +301,9 @@ export function HistoryControls({
               <Button
                 variant="filled"
                 size="s"
+                disabled={busy}
                 onClick={() => {
-                  setConfirming(false);
-                  setNotice(
-                    "Clearing history is not wired up yet — nothing was deleted.",
-                  );
+                  void clear();
                 }}
               >
                 Clear
@@ -263,17 +332,19 @@ export function HistoryControls({
           <Button
             variant="text"
             size="m"
-            disabled={!signedIn}
+            // Not gated on `signedIn`: `watch_events.user_id` is nullable, so a
+            // signed-out viewer's watches are recorded against the viewing key
+            // and are just as pausable. Clear is the one that needs an account,
+            // because there is no row keyed to a signed-out viewer to delete.
+            disabled={busy}
             data-history-action="pause"
-            aria-pressed={paused}
+            aria-pressed={pausedNow}
             leading={<PauseIcon size={24} />}
-            onClick={() =>
-              setNotice(
-                "Pausing history is not wired up yet — recording is unchanged.",
-              )
-            }
+            onClick={() => {
+              void togglePause();
+            }}
           >
-            {paused ? "Resume watch history" : "Pause watch history"}
+            {pausedNow ? "Resume watch history" : "Pause watch history"}
           </Button>
 
           <Button

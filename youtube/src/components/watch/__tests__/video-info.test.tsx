@@ -19,6 +19,7 @@ function renderInfo(overrides: Partial<VideoInfoProps> = {}) {
   const onToggleSubscribe = vi.fn();
   render(
     <VideoInfo
+      videoId="v1"
       title="How It's Made: Noodles, Pasta, Mac & Cheese"
       channelName="Captain Discovery"
       channelHandle="captaindiscovery"

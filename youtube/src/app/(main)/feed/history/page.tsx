@@ -5,6 +5,10 @@ import { database } from "@/adapters/db";
 import { listHistory } from "@/adapters/repositories/history";
 import { HistoryControls, HistoryList, historyRowMenu } from "@/components/history";
 import { SESSION_COOKIE, resolveSession } from "@/lib/auth/session";
+import {
+  HISTORY_PAUSED_COOKIE,
+  historyIsPaused,
+} from "@/lib/viewer/history-pause";
 
 /**
  * Watch history — `/feed/history`.
@@ -93,7 +97,13 @@ export default async function HistoryPage() {
         />
       </div>
 
-      <HistoryControls signedIn={viewerId !== null} />
+      <HistoryControls
+        signedIn={viewerId !== null}
+        // Read here rather than in the component, so the button's first paint
+        // is already right — a pause that renders as "Pause" and then flips
+        // after hydration reads as the setting not having stuck.
+        paused={historyIsPaused(jar.get(HISTORY_PAUSED_COOKIE)?.value ?? null)}
+      />
     </div>
   );
 }

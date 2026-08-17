@@ -224,6 +224,36 @@ export async function listPlaylists(
   return rows.map(toPlaylist);
 }
 
+/**
+ * Which of this viewer's playlists already contain a video.
+ *
+ * One query rather than one per playlist, because the Save sheet renders every
+ * playlist the viewer owns and needs a tick against each. A viewer with thirty
+ * playlists is thirty round trips otherwise, on a sheet that opens instantly in
+ * the product.
+ *
+ * Joined through `playlists` rather than reading `playlist_items` by video id
+ * alone: `playlist_items` has no owner, so the bare query would return the ids
+ * of *other people's* playlists containing this video, and the sheet would then
+ * be told about lists it must never show. Restricting by owner here means a
+ * caller cannot get that wrong by forgetting to filter.
+ */
+export async function playlistsContaining(
+  sql: SqlExecutor,
+  ownerId: string | null,
+  videoId: string,
+): Promise<Set<string>> {
+  if (!ownerId) return new Set();
+  const rows = await sql.query(
+    `select pi.playlist_id
+       from playlist_items pi
+       join playlists p on p.id = pi.playlist_id
+      where p.owner_id = $1 and pi.video_id = $2`,
+    [ownerId, videoId],
+  );
+  return new Set(rows.map((row) => text(row, "playlist_id")));
+}
+
 export interface PlaylistPatch {
   readonly title?: string;
   readonly description?: string;

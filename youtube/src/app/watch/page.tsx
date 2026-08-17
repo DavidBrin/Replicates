@@ -9,6 +9,10 @@ import { watchNextSidebar } from "@/adapters/repositories/recommendations";
 import { createChannelsRepository } from "@/adapters/repositories/channels";
 import { getSubscription } from "@/adapters/repositories/subscriptions";
 import {
+  listPlaylists,
+  playlistsContaining,
+} from "@/adapters/repositories/playlists";
+import {
   listCaptionTracks,
   type CaptionTrack,
 } from "@/adapters/repositories/captions";
@@ -113,13 +117,20 @@ export default async function WatchPage({
   const viewerChannel =
     viewerId === null ? null : ((await channels.listForOwner(viewerId))[0] ?? null);
 
-  const [topLevel, related, reaction, subscription, captions] = await Promise.all([
-    listComments(db, videoId, { viewerId, limit: COMMENT_PAGE }),
-    watchNextSidebar(videoId, viewer, db),
-    getViewerReaction(db, viewerId, "video", videoId),
-    viewerId === null ? null : getSubscription(db, viewerId, video.channelId),
-    listCaptionTracks(db, videoId),
-  ]);
+  const [topLevel, related, reaction, subscription, captions, playlists, inPlaylists] =
+    await Promise.all([
+      listComments(db, videoId, { viewerId, limit: COMMENT_PAGE }),
+      watchNextSidebar(videoId, viewer, db),
+      getViewerReaction(db, viewerId, "video", videoId),
+      viewerId === null ? null : getSubscription(db, viewerId, video.channelId),
+      listCaptionTracks(db, videoId),
+      // Two queries rather than one join, because they answer two questions:
+      // "which lists does this viewer have" and "which of them hold this
+      // video". A join would return the second and silently drop every empty
+      // playlist from the sheet.
+      listPlaylists(db, viewerId),
+      playlistsContaining(db, viewerId, videoId),
+    ]);
 
   // One query per thread that has replies — bounded by `COMMENT_PAGE` and run
   // in parallel. `listReplies` takes a parent id, so there is no batched form
@@ -174,6 +185,15 @@ export default async function WatchPage({
       }
       viewerReaction={reaction}
       subscribed={subscription !== null}
+      saveTargets={playlists.map((playlist) => ({
+        id: playlist.id,
+        title: playlist.title,
+        kind: playlist.kind,
+        visibility: playlist.visibility,
+        saved: inPlaylists.has(playlist.id),
+        coverUrl:
+          playlist.thumbnailKey === null ? null : thumbnailSrc(playlist.thumbnailKey),
+      }))}
       now={new Date()}
     />
   );

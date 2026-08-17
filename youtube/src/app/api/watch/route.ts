@@ -9,6 +9,10 @@ import { currentViewerId } from "@/lib/auth/guard";
 import { VIEWER_KEY_COOKIE, parseViewerKey } from "@/lib/viewer/session-key";
 import { readCookie } from "@/lib/auth/session";
 import { countsAsView } from "@/domain/viewing";
+import {
+  HISTORY_PAUSED_COOKIE,
+  historyIsPaused,
+} from "@/lib/viewer/history-pause";
 
 /**
  * Where a viewer is in a video, and — once — that they watched it.
@@ -73,6 +77,19 @@ const WatchBody = z.object({
 
 export async function POST(request: Request): Promise<Response> {
   const viewerId = await currentViewerId(request);
+  const cookies = request.headers.get("cookie");
+
+  /**
+   * "Pause watch history", honoured before anything is read or written.
+   *
+   * Before the authorisation check too, which is the ordering worth stating: a
+   * paused viewer's request must not distinguish a private video from a
+   * missing one, because that would make the pause a slightly quieter oracle
+   * rather than no oracle. Nothing about this response depends on the video.
+   */
+  if (historyIsPaused(readCookie(cookies, HISTORY_PAUSED_COOKIE))) {
+    return Response.json({ progress: "paused", viewRecorded: false });
+  }
 
   /**
    * The session key, from the cookie the middleware issues.
@@ -86,9 +103,7 @@ export async function POST(request: Request): Promise<Response> {
    * exists for a client that strips cookies, and its honest answer is that this
    * viewing cannot be attributed.
    */
-  const key = parseViewerKey(
-    readCookie(request.headers.get("cookie"), VIEWER_KEY_COOKIE),
-  );
+  const key = parseViewerKey(readCookie(cookies, VIEWER_KEY_COOKIE));
 
   let payload: unknown;
   try {

@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { SqlExecutor } from "@/adapters/db/driver";
+import type { SqlDatabase, SqlExecutor } from "@/adapters/db/driver";
 import type { VideoCard } from "@/domain/types";
 import { dayKeyInZone, formatDayHeading } from "@/domain/format";
 
@@ -221,4 +221,58 @@ export async function getWatchPositions(
     if (seconds !== null) positions.set(text(row, "video_id"), seconds);
   }
   return positions;
+}
+
+/** What {@link clearHistory} removed. */
+export interface HistoryCleared {
+  readonly events: number;
+  readonly progress: number;
+}
+
+/**
+ * Delete this viewer's watch history — the "Clear all watch history" control.
+ *
+ * A write, in the read-side file, and that is deliberate rather than sloppy:
+ * this is the *inverse* of the two reads above and has to stay beside them. If
+ * it lived in `watch-events.ts` it would sit next to `recordWatch`, whose whole
+ * subject is the co-visitation graph — and the first question anyone would ask
+ * of it there is "does this rebuild the graph?", which is exactly the question
+ * this function answers no to.
+ *
+ * ## The co-visitation graph is deliberately not touched
+ *
+ * `session_videos`, `video_session_counts`, `covisitation` and `related_videos`
+ * are all left alone. That is a decision worth stating, because "delete my
+ * history" plausibly means "and unlearn what you learned from it".
+ *
+ * It does not, for two reasons. The graph is keyed on `session_key`, which is a
+ * cookie and not an identity — so there is nothing in it that identifies this
+ * viewer to delete. And the counters are aggregates that many sessions have
+ * contributed to: decrementing one viewer's contribution would mean either
+ * storing who contributed what (which is a *more* detailed record of viewing
+ * than the one being deleted) or corrupting counts that other people's
+ * recommendations depend on. What the viewer gets back is the honest promise:
+ * the record of what they watched is gone, and the aggregate statistics it
+ * contributed to are not personally identifying and remain.
+ *
+ * ## One transaction
+ *
+ * The log and the positions go together. Clearing one and failing on the other
+ * leaves a viewer whose history page is empty and whose Continue watching shelf
+ * is not — which reads as the deletion having half-worked, and is the version
+ * of this bug that gets reported as "it came back".
+ */
+export async function clearHistory(
+  db: SqlDatabase,
+  viewerId: string,
+): Promise<HistoryCleared> {
+  return db.transaction(async (tx) => {
+    const events = await tx.execute(`delete from watch_events where user_id = $1`, [
+      viewerId,
+    ]);
+    const progress = await tx.execute(`delete from watch_progress where user_id = $1`, [
+      viewerId,
+    ]);
+    return { events, progress };
+  });
 }
