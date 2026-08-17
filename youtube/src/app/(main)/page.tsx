@@ -1,12 +1,10 @@
 import { Suspense } from "react";
-import { cookies } from "next/headers";
 
 import { database } from "@/adapters/db";
 import { homeFeed, shortsFeed } from "@/adapters/repositories/recommendations";
 import { listSubscriptions } from "@/adapters/repositories/subscriptions";
 import { FeedSkeleton, HomeFeed, chipsForFeed } from "@/components/feed";
-import type { Viewer } from "@/domain/recommender";
-import { SESSION_COOKIE, resolveSession } from "@/lib/auth";
+import { currentViewer } from "@/lib/viewer";
 
 /**
  * `/` — the home feed.
@@ -94,29 +92,17 @@ async function HomeFeedSection() {
 }
 
 /**
- * Who is asking.
+ * Who is asking — now one function, in `src/lib/viewer/`.
  *
- * Repeated in each of this slice's three pages rather than shared, because
- * the two places it could live both refuse it: a `layout.tsx` may only export
- * the fields Next's generated route types recognise, and
- * `src/components/feed/` is imported by client components and must not pull
- * `next/headers` or a database driver into their bundle. A `viewer()` helper
- * belongs in `src/lib/auth/`, which this slice does not own.
+ * This was written out by hand in each of this slice's three pages, on the
+ * argument that *"a `viewer()` helper belongs in `src/lib/auth/`, which this
+ * slice does not own"*. The reasoning about ownership was fine and the
+ * consequence was not: four copies of the same object, and all four carried the
+ * same `sessionKey: token ?? "anonymous"` fallback — a single grouping key
+ * shared by every signed-out visitor.
  *
- * `sessionKey` follows `src/app/watch/page.tsx` exactly, and the reason is
- * recorded there: **nothing in this application issues a session cookie for a
- * signed-out visitor yet**, so there is no per-visitor key to group anonymous
- * watches by. The session token stands in where there is one and a single
- * shared bucket where there is not. It only feeds `recentSeeds`, so the
- * consequence is that signed-out viewers share one seed set — which on a
- * corpus with no watch history at all is a seed set of nothing, and the
- * fallback pool answers regardless.
+ * That fallback existed because nothing issued a per-visitor cookie.
+ * `src/middleware.ts` now does, and the alias below is kept only so that this
+ * file's three call sites read as they did.
  */
-async function feedViewer(): Promise<Viewer> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value ?? null;
-  const session = await resolveSession(token);
-  return {
-    userId: session?.userId ?? null,
-    sessionKey: token ?? "anonymous",
-  };
-}
+const feedViewer = currentViewer;

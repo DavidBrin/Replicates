@@ -189,6 +189,40 @@ export async function recordWatch(
 }
 
 /**
+ * Has this session already watched this video?
+ *
+ * A cheap primary-key lookup that exists so a *caller* can avoid calling
+ * {@link recordWatch} at all, and it is worth being precise about why, because
+ * `recordWatch` already deduplicates.
+ *
+ * What it deduplicates is the **graph**: the membership row, the session
+ * counts and the pairs are all guarded by `on conflict do nothing`. The
+ * `watch_events` insert is deliberately *not* guarded — that log "is logged
+ * whether or not anything else happened", because it feeds the history page,
+ * which genuinely wants a row per viewing.
+ *
+ * That is exactly right for a caller who calls once per viewing. It is wrong
+ * for the watch reporter, which posts every few seconds: without this read, one
+ * ten-minute video would append a hundred and twenty history rows and run the
+ * graph refresh a hundred and twenty times. So the route asks this first, and
+ * `recordWatch`'s own `on conflict` remains the guarantee against two requests
+ * that both pass the read — which is the concurrency case this cannot close and
+ * was never meant to.
+ */
+export async function sessionHasWatched(
+  sql: SqlExecutor,
+  sessionKey: string,
+  videoId: string,
+): Promise<boolean> {
+  const rows = await sql.query(
+    `select 1 as present from session_videos
+      where session_key = $1 and video_id = $2`,
+    [sessionKey, videoId],
+  );
+  return rows.length > 0;
+}
+
+/**
  * Rebuild every seed's neighbour list from the pair counts.
  *
  * This is research §4.5's batch job, and it is the most expensive thing in the

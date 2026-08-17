@@ -17,6 +17,7 @@
 
 export {
   ShortsFeed,
+  NotSignedInError,
   KEEP_BEHIND,
   PRELOAD_AHEAD,
   SHORTS_MUTED_STORAGE_KEY,

@@ -7,6 +7,7 @@ import { Player, type PlayerCaptionTrack } from "@/components/player";
 import { Comments, type CommentThread, type CommentsViewer } from "@/components/watch/comments";
 import { Description } from "@/components/watch/description";
 import { WatchSidebar } from "@/components/watch/sidebar";
+import { useWatchReporter } from "@/components/watch/watch-reporter";
 import { VideoInfo } from "@/components/watch/video-info";
 import type { ReactionState } from "@/adapters/repositories/reactions";
 import type { ProgressiveSource } from "@/media/player";
@@ -80,6 +81,20 @@ export function WatchView({
   const [following, setFollowing] = useState(subscribed);
 
   /**
+   * The watch report — the resume position, the view count and the
+   * co-visitation graph, all of which had a write path and no caller.
+   *
+   * Given to the player as `onTimeUpdate` rather than owned by the player,
+   * because it is a property of *this page*: Shorts have their own surface and
+   * the studio preview should record nothing at all. See
+   * `components/watch/watch-reporter.ts`.
+   */
+  const reportProgress = useWatchReporter({
+    videoId: video.id,
+    durationSeconds: video.durationSeconds,
+  });
+
+  /**
    * The subscribe write, which this file used to say it did not own.
    *
    * The comment here read: "the subscribe write lives on a channels endpoint
@@ -111,6 +126,24 @@ export function WatchView({
         if (response.ok) return;
         if (response.status === 401) {
           const here = `/watch?v=${encodeURIComponent(video.id)}`;
+          /**
+           * A document navigation rather than `router.push`, and the lint rule
+           * that objects is worth answering rather than silencing.
+           *
+           * The state this page is holding is stale the moment the viewer is
+           * about to sign in: the like it just drew, the subscribe pill it just
+           * flipped, and the comment composer's identity all belong to a
+           * signed-out viewer. `router.push` would keep every one of them in
+           * the Router Cache, and the sign-in form's own `location.assign` back
+           * to `next` is what would eventually discard them — so the full load
+           * happens either way, and doing it here means the viewer never sees
+           * a page mid-way between two identities.
+           *
+           * `next` is built from the video id rather than from
+           * `location.pathname`, so it survives theatre mode and any query the
+           * page happens to be carrying.
+           */
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.assign(`/signin?next=${encodeURIComponent(here)}`);
           return;
         }
@@ -168,6 +201,7 @@ export function WatchView({
       frameRate={frameRate ?? undefined}
       theatre={theatre}
       onToggleTheatre={() => setTheatre((on) => !on)}
+      onTimeUpdate={reportProgress}
     />
   );
 

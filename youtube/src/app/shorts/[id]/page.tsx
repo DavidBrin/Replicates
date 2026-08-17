@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { database } from "@/adapters/db";
@@ -15,7 +14,7 @@ import type { CommentThread } from "@/components/watch/comments";
 import { thumbnailSrc } from "@/components/video";
 import type { Comment, Rendition, Video } from "@/domain/types";
 import type { ProgressiveSource } from "@/media/player";
-import { SESSION_COOKIE, resolveSession } from "@/lib/auth/session";
+import { currentViewer } from "@/lib/viewer";
 
 /**
  * `/shorts/<id>` — the feed, opened on one short.
@@ -77,10 +76,11 @@ export default async function ShortPage({
   const { id } = await params;
   const db = await database();
 
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value ?? null;
-  const session = await resolveSession(token);
-  const viewerId = session?.userId ?? null;
+  // One resolution for both questions: `currentViewer` reads the session and
+  // the viewing key together, so the feed and the reaction lookup below cannot
+  // disagree about who is asking.
+  const viewer = await currentViewer();
+  const viewerId = viewer.userId;
 
   const requested = await getVideoWithRenditions(db, id);
   // Not `notFound()` for "exists but is not a short": a 16:9 video reached
@@ -89,10 +89,7 @@ export default async function ShortPage({
   // belongs, and 404 is the honest answer from here.
   if (requested === null || !isPlayableShort(requested.video)) notFound();
 
-  const feed = await shortsFeed(
-    { userId: viewerId, sessionKey: token ?? "anonymous" },
-    db,
-  );
+  const feed = await shortsFeed(viewer, db);
 
   const orderedIds = [
     id,
@@ -163,8 +160,7 @@ export default async function ShortPage({
   async function loadCommentThreads(videoId: string): Promise<CommentThread[]> {
     "use server";
     const handle = await database();
-    const cookieJar = await cookies();
-    const caller = await resolveSession(cookieJar.get(SESSION_COOKIE)?.value ?? null);
+    const caller = await currentViewer();
 
     /**
      * A Server Function is a public endpoint.
@@ -182,11 +178,11 @@ export default async function ShortPage({
      * overlay; an empty thread is what a video with no comments looks like,
      * and is the same answer an id that does not exist gives.
      */
-    if ((await authorizeVideoAccess(videoId, caller?.userId ?? null)) === null) {
+    if ((await authorizeVideoAccess(videoId, caller.userId)) === null) {
       return [];
     }
 
-    return readThreads(handle, videoId, caller?.userId ?? null);
+    return readThreads(handle, videoId, caller.userId);
   }
 
   return (

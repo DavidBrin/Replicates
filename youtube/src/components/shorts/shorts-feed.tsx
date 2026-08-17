@@ -185,11 +185,19 @@ export function indexFromPopState(
 
 /* --------------------------------------------------------------- props --- */
 
-/** What a like or a subscribe changes, held outside the server's copy. */
+/**
+ * What a like changes, held outside the server's copy.
+ *
+ * Subscription is deliberately **not** in here. A reaction belongs to a video,
+ * so a per-short record is the right shape for it; a subscription belongs to a
+ * channel, and a feed routinely shows two shorts by the same one. Keying it per
+ * short let the rail on slide 3 say "Subscribed" while slide 7 — same channel —
+ * still said "Subscribe", with one of the two contradicting the server. It
+ * lives in {@link ShortsFeed}'s `subscriptions` map, keyed by channel id.
+ */
 interface ShortInteraction {
   readonly viewerReaction: ReactionState;
   readonly likeCount: number;
-  readonly subscribed: boolean;
 }
 
 export interface ShortsFeedProps {
@@ -216,6 +224,18 @@ export interface ShortsFeedProps {
     videoId: string,
     value: 1 | -1,
   ) => Promise<{ readonly likeCount: number; readonly viewerReaction: ReactionState }>;
+  /**
+   * Persist a subscription. Defaults to `POST /api/subscriptions`, the same
+   * endpoint the watch page's Subscribe button writes to.
+   *
+   * Rejects with a {@link NotSignedInError} when the endpoint answers 401, so
+   * the caller can tell "sign in" apart from "that did not work" — the two want
+   * different repairs and only one of them is a failure.
+   */
+  readonly onSubscribe?: (
+    channelId: string,
+    subscribed: boolean,
+  ) => Promise<void>;
   /** Test seam, forwarded to every player. Must be referentially stable. */
   readonly createEngine?: (options: CreatePlayerOptions) => PlayerEngine;
   readonly className?: string;
@@ -236,6 +256,7 @@ export function ShortsFeed({
   now,
   loadComments,
   onReact,
+  onSubscribe,
   createEngine,
   className,
 }: ShortsFeedProps) {
@@ -267,6 +288,10 @@ export function ShortsFeed({
   const [interactions, setInteractions] = useState<
     Readonly<Record<string, ShortInteraction>>
   >({});
+  /** Channel id → this session's subscription state. See {@link ShortInteraction}. */
+  const [subscriptions, setSubscriptions] = useState<Readonly<Record<string, boolean>>>(
+    {},
+  );
 
   const ids = useMemo(() => items.map((item) => item.id), [items]);
   const hot = useMemo(() => new Set(hotIndices(nav.index, items.length)), [
@@ -283,9 +308,15 @@ export function ShortsFeed({
     () =>
       items.map((item) => {
         const local = interactions[item.id];
-        return local === undefined ? item : { ...item, ...local };
+        const following = subscriptions[item.channel.id];
+        if (local === undefined && following === undefined) return item;
+        return {
+          ...item,
+          ...local,
+          ...(following === undefined ? {} : { subscribed: following }),
+        };
       }),
-    [items, interactions],
+    [items, interactions, subscriptions],
   );
 
   /* ------------------------------------------------------------ motion -- */
@@ -493,7 +524,6 @@ export function ShortsFeed({
           short.likeCount + ((next === 1 ? 1 : 0) - (held === 1 ? 1 : 0)),
           0,
         ),
-        subscribed: short.subscribed,
       };
       setInteractions((current) => ({ ...current, [short.id]: optimistic }));
 
@@ -505,7 +535,6 @@ export function ShortsFeed({
             [short.id]: {
               viewerReaction: settled.viewerReaction,
               likeCount: settled.likeCount,
-              subscribed: current[short.id]?.subscribed ?? short.subscribed,
             },
           }));
         })
@@ -514,31 +543,55 @@ export function ShortsFeed({
           // failed write is a lie the next page load contradicts.
           setInteractions((current) => ({
             ...current,
-            [short.id]: {
-              viewerReaction: held,
-              likeCount: short.likeCount,
-              subscribed: current[short.id]?.subscribed ?? short.subscribed,
-            },
+            [short.id]: { viewerReaction: held, likeCount: short.likeCount },
           }));
         });
     },
     [onReact],
   );
 
-  const toggleSubscribe = useCallback((short: ShortItem): void => {
-    // Local only, and that is a real gap rather than a shortcut: the subscribe
-    // write lives on a channels endpoint this slice does not own, so the button
-    // reflects the press and does not persist it. The watch page's own
-    // subscribe button has the same gap for the same reason.
-    setInteractions((current) => ({
-      ...current,
-      [short.id]: {
-        viewerReaction: current[short.id]?.viewerReaction ?? short.viewerReaction,
-        likeCount: current[short.id]?.likeCount ?? short.likeCount,
-        subscribed: !short.subscribed,
-      },
-    }));
-  }, []);
+  /**
+   * The subscribe write, which this file used to say it did not own.
+   *
+   * The comment here read: *"the subscribe write lives on a channels endpoint
+   * this slice does not own"*. `/api/subscriptions` has existed the whole time
+   * and takes exactly this call — the watch page's button now makes it. The gap
+   * was never a missing endpoint; it was that nothing called the one that was
+   * already there, and the comment made the omission look deliberate for long
+   * enough that it got written down as a known limitation twice.
+   *
+   * Optimistic, then reverted on failure — same rule as `react` above and the
+   * watch page's pill. A 401 is the one outcome that is not a failure: it means
+   * *sign in*, so it sends the viewer to the form with a way back to **this
+   * short**, which is why the link is built from the id rather than from
+   * `location.pathname` (the pager rewrites that as you scroll, and a viewer who
+   * pressed Subscribe on slide 4 should not come back to slide 1).
+   */
+  const toggleSubscribe = useCallback(
+    (short: ShortItem): void => {
+      const channelId = short.channel.id;
+      const next = !short.subscribed;
+      setSubscriptions((current) => ({ ...current, [channelId]: next }));
+
+      const write = onSubscribe ?? postSubscription;
+      void write(channelId, next).catch((cause: unknown) => {
+        if (cause instanceof NotSignedInError) {
+          const here = shortHref(short.id);
+          // A document navigation rather than `router.push`, for the reason
+          // `app/watch/watch-view.tsx` sets out at the same call: every piece
+          // of viewer state this feed is holding belongs to a signed-out
+          // viewer, and the Router Cache would carry all of it across the
+          // sign-in. It also keeps this component free of a router context,
+          // which is what lets its suite render it directly.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+          window.location.assign(`/signin?next=${encodeURIComponent(here)}`);
+          return;
+        }
+        setSubscriptions((current) => ({ ...current, [channelId]: !next }));
+      });
+    },
+    [onSubscribe],
+  );
 
   /* -------------------------------------------------------------- view -- */
 
@@ -834,4 +887,36 @@ async function postReaction(
     likeCount: number;
     viewerReaction: ReactionState;
   };
+}
+
+/**
+ * A 401, as a type rather than as a status code inspected at the call site.
+ *
+ * `toggleSubscribe` has to tell "sign in" apart from "the write failed",
+ * because one sends the viewer somewhere and the other quietly puts the button
+ * back. Making that a class rather than a `{ status }` field on a thrown object
+ * means the `onSubscribe` seam can express it too: a test double raises this
+ * and gets the real redirect branch, without a `fetch` mock and without this
+ * component knowing that HTTP was involved at all.
+ */
+export class NotSignedInError extends Error {
+  constructor() {
+    super("Sign in to subscribe to channels.");
+    this.name = "NotSignedInError";
+  }
+}
+
+/** The default subscribe write — the same endpoint the watch page posts to. */
+async function postSubscription(channelId: string, subscribed: boolean): Promise<void> {
+  const response = await fetch("/api/subscriptions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: subscribed ? "subscribe" : "unsubscribe",
+      channelId,
+    }),
+  });
+  if (response.ok) return;
+  if (response.status === 401) throw new NotSignedInError();
+  throw new Error(String(response.status));
 }

@@ -44,20 +44,20 @@ import { first, num, text, timestamp } from "./shared";
 /**
  * At most one write every five seconds per viewer per video.
  *
- * **Assumed, not measured** — this is a judgement about two costs, and the
- * numbers on both sides are ours to choose:
- *
- *   - A crash, a closed laptop or a killed tab loses at most one interval of
- *     position. Five seconds of a video is inside what a viewer would scrub
- *     past without noticing; thirty would not be.
- *   - Five seconds caps a viewer at 12 writes a minute instead of up to 3,960.
- *
- * The interval is also what makes the *progress bar* honest without making it
- * expensive: at five seconds, a card's red bar is never more than five seconds
- * of the video stale, which on a 300px card of a ten-minute video is under
- * three pixels.
+ * Defined in `@/domain/viewing` and re-exported here, because the browser's
+ * reporter throttles on the same number and cannot import a `server-only`
+ * module. See that file for the reasoning behind the value; this line exists so
+ * that every existing reader of `watch-progress.ts` keeps working and so that
+ * the SQL below and the reporter cannot end up with two intervals.
  */
-export const PROGRESS_WRITE_INTERVAL_MS = 5_000;
+export { PROGRESS_WRITE_INTERVAL_MS } from "@/domain/viewing";
+
+/**
+ * Imported as well as re-exported: `export … from` forwards a name without
+ * binding it locally, and {@link recordWatchProgress}'s SQL reads it. The same
+ * pair appears in `adapters/blob/filesystem.ts` and `components/theme.tsx`.
+ */
+import { PROGRESS_WRITE_INTERVAL_MS } from "@/domain/viewing";
 
 /**
  * …and only if the position actually moved by a second.

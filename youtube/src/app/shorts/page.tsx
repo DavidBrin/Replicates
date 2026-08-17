@@ -1,9 +1,8 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { database } from "@/adapters/db";
 import { shortsFeed } from "@/adapters/repositories/recommendations";
-import { SESSION_COOKIE, resolveSession } from "@/lib/auth/session";
+import { currentViewer } from "@/lib/viewer";
 
 /**
  * `/shorts` — which is not a page so much as an entry point.
@@ -30,18 +29,7 @@ import { SESSION_COOKIE, resolveSession } from "@/lib/auth/session";
 
 export default async function ShortsIndexPage() {
   const db = await database();
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value ?? null;
-  const session = await resolveSession(token);
-
-  const feed = await shortsFeed(
-    // `sessionKey` has no issuer in this application yet — the watch page
-    // documents the same gap. The token is a stable per-viewer value where
-    // there is one; the literal is an honest single shared bucket for everyone
-    // else, and it only feeds an exclusion that is a no-op on an empty graph.
-    { userId: session?.userId ?? null, sessionKey: token ?? "anonymous" },
-    db,
-  );
+  const feed = await shortsFeed(await currentViewer(), db);
 
   const first = feed[0];
   if (first === undefined) {

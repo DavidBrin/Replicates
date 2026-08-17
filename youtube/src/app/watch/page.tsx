@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -9,7 +8,7 @@ import { getViewerReaction } from "@/adapters/repositories/reactions";
 import { watchNextSidebar } from "@/adapters/repositories/recommendations";
 import { createChannelsRepository } from "@/adapters/repositories/channels";
 import { getSubscription } from "@/adapters/repositories/subscriptions";
-import { SESSION_COOKIE, resolveSession } from "@/lib/auth/session";
+import { currentViewer } from "@/lib/viewer";
 import { thumbnailSrc } from "@/components/video";
 import type { ProgressiveSource } from "@/media/player";
 import type { Comment } from "@/domain/types";
@@ -38,14 +37,17 @@ import type { CommentThread } from "@/components/watch/comments";
  * `Video` does not carry), the top-level comments and their replies, the
  * related rail, and the viewer's own reaction and subscription.
  *
- * Not read, and not written: **the watch event**. `recordWatch` needs a
- * session key, and `src/adapters/repositories/watch-events.ts` is explicit that
- * "sessionisation is upstream of this file … the boundary is whatever the
- * caller's cookie says" — and nothing in this application issues that cookie
- * yet. Recording a watch against a key invented here would poison the
- * co-visitation graph with one session per page load, which is worse than not
- * recording it. The same gap is why the sidebar's `Viewer.sessionKey` falls
- * back the way it does below.
+ * Not written from *here*: **the watch event**. It is not written from a page
+ * render for a reason that outlives the gap it used to describe — a render is
+ * not evidence that anything was watched. Opening a link and closing it
+ * immediately would count, and a prefetch or a bot would count too. The report
+ * comes from the player instead, once it has actually played (see
+ * `components/watch/watch-reporter.ts` and `api/watch/route.ts`).
+ *
+ * What *was* a gap is now closed: this file used to record that "nothing in
+ * this application issues that cookie yet", so `Viewer.sessionKey` fell back to
+ * a literal shared by every signed-out visitor. `src/middleware.ts` issues it,
+ * and `currentViewer()` reads it.
  */
 
 export const metadata: Metadata = {
@@ -78,9 +80,8 @@ export default async function WatchPage({
 
   const db = await database();
 
-  const jar = await cookies();
-  const session = await resolveSession(jar.get(SESSION_COOKIE)?.value ?? null);
-  const viewerId = session?.userId ?? null;
+  const viewer = await currentViewer();
+  const viewerId = viewer.userId;
 
   const found = await getVideoWithRenditions(db, videoId);
   if (found === null) notFound();
@@ -109,16 +110,7 @@ export default async function WatchPage({
 
   const [topLevel, related, reaction, subscription] = await Promise.all([
     listComments(db, videoId, { viewerId, limit: COMMENT_PAGE }),
-    watchNextSidebar(
-      videoId,
-      // `sessionKey` has no issuer yet — see the file comment. The session
-      // token is a stable per-viewer value where there is one, and the literal
-      // below is honest about being a single shared bucket for everyone else.
-      // It only feeds the "already watched this sitting" exclusion, which is a
-      // no-op on an empty graph.
-      { userId: viewerId, sessionKey: jar.get(SESSION_COOKIE)?.value ?? "anonymous" },
-      db,
-    ),
+    watchNextSidebar(videoId, viewer, db),
     getViewerReaction(db, viewerId, "video", videoId),
     viewerId === null ? null : getSubscription(db, viewerId, video.channelId),
   ]);

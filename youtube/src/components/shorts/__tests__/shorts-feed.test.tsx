@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import {
   KEEP_BEHIND,
+  NotSignedInError,
   PRELOAD_AHEAD,
   SHORTS_MUTED_STORAGE_KEY,
   SWIPE_THRESHOLD_PX,
@@ -12,8 +13,9 @@ import {
   indexFromPopState,
   shortHref,
 } from "../shorts-feed";
+import type { ShortItem } from "../shorts-player";
 
-import { engineSpy, makeFeed } from "./fixtures";
+import { engineSpy, makeFeed, makeShort } from "./fixtures";
 
 /**
  * The pager.
@@ -562,6 +564,180 @@ describe("the snap animation", () => {
     // shorts they did not ask for.
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
     expect(activeId()).toBe("s3");
+  });
+});
+
+/* ----------------------------------------------------------- subscribe --- */
+
+/**
+ * The rail's subscribe badge.
+ *
+ * This was a known gap for two rounds — the button flipped a local flag and the
+ * comment beside it said the endpoint belonged to another slice. It did not;
+ * `/api/subscriptions` took the call the whole time. So the first test here is
+ * simply that a press reaches a writer at all.
+ *
+ * The second is the one worth keeping. A subscription is a property of a
+ * **channel** and the feed routinely shows two shorts by the same one, so state
+ * keyed by short id makes two rails disagree with each other and one of them
+ * disagree with the server. Nothing about a single-short fixture can catch
+ * that, which is why `sameChannel` exists.
+ */
+describe("subscribe", () => {
+  /** Set by the one test that swaps `window.location`; see it for why. */
+  let locationRestore: (() => void) | null = null;
+
+  afterEach(() => {
+    locationRestore?.();
+    locationRestore = null;
+  });
+
+  /** Two shorts, one channel — the shape that catches per-short keying. */
+  function sameChannel(): readonly ShortItem[] {
+    const channel = {
+      id: "channel-shared",
+      name: "Shared",
+      handle: "shared",
+      avatarUrl: null,
+    };
+    return [makeShort("s0", { channel }), makeShort("s1", { channel })];
+  }
+
+  /** The rail's badge on whichever slide is active — only that one renders it. */
+  function badge(): HTMLElement {
+    const node = document.querySelector<HTMLElement>("[data-rail-subscribe]");
+    if (node === null) throw new Error("no subscribe badge rendered");
+    return node;
+  }
+
+  it("writes through the endpoint the watch page uses", async () => {
+    const user = userEvent.setup();
+    const onSubscribe = vi.fn(async () => undefined);
+    const spy = engineSpy();
+    render(
+      <ShortsFeed items={makeFeed(1)} onSubscribe={onSubscribe} createEngine={spy.factory} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Subscribe to Channel s0" }));
+
+    expect(onSubscribe).toHaveBeenCalledWith("channel-s0", true);
+    expect(
+      screen.getByRole("button", { name: "Unsubscribe from Channel s0" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("unsubscribes from a channel already followed", async () => {
+    const user = userEvent.setup();
+    const onSubscribe = vi.fn(async () => undefined);
+    const spy = engineSpy();
+    render(
+      <ShortsFeed
+        items={[makeShort("s0", { subscribed: true })]}
+        onSubscribe={onSubscribe}
+        createEngine={spy.factory}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Unsubscribe from Channel s0" }),
+    );
+
+    expect(onSubscribe).toHaveBeenCalledWith("channel-s0", false);
+  });
+
+  it("carries to the next short by the same channel", async () => {
+    const user = userEvent.setup();
+    const onSubscribe = vi.fn(async () => undefined);
+    const spy = engineSpy();
+    render(
+      <ShortsFeed
+        items={sameChannel()}
+        onSubscribe={onSubscribe}
+        createEngine={spy.factory}
+      />,
+    );
+
+    expect(badge()).toHaveAttribute("aria-pressed", "false");
+    await user.click(badge());
+    expect(badge()).toHaveAttribute("aria-pressed", "true");
+
+    // Only the active slide renders chrome, so the second rail is a swipe
+    // away rather than already on screen. Keyed by short id, this badge would
+    // read "Subscribe" — for a channel this viewer just subscribed to, and
+    // which the server would contradict on the next load.
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    });
+    expect(activeId()).toBe("s1");
+    expect(badge()).toHaveAttribute("aria-pressed", "true");
+
+    // One press, one write — the second slide reads the state, it does not
+    // re-post it.
+    expect(onSubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts the badge back when the write fails", async () => {
+    const user = userEvent.setup();
+    const onSubscribe = vi.fn(async () => {
+      throw new Error("500");
+    });
+    const spy = engineSpy();
+    render(
+      <ShortsFeed items={makeFeed(1)} onSubscribe={onSubscribe} createEngine={spy.factory} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Subscribe to Channel s0" }));
+
+    // The rejection settles in a microtask after the click, so the optimistic
+    // state is real and brief: wait for the revert rather than asserting into
+    // the gap.
+    await vi.waitFor(() =>
+      expect(badge()).toHaveAttribute("aria-pressed", "false"),
+    );
+    expect(
+      screen.getByRole("button", { name: "Subscribe to Channel s0" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sends a signed-out viewer to sign in, and back to the short they pressed", async () => {
+    const user = userEvent.setup();
+    const assign = vi.fn();
+    // jsdom's `location.assign` is a hard "not implemented" and the method
+    // itself is non-configurable, so the whole `location` is swapped for the
+    // duration. `afterEach` restores it.
+    const realLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...realLocation, assign, origin: realLocation.origin },
+    });
+    locationRestore = () => {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: realLocation,
+      });
+    };
+
+    const onSubscribe = vi.fn(async () => {
+      throw new NotSignedInError();
+    });
+    const spy = engineSpy();
+    render(
+      <ShortsFeed
+        items={makeFeed(5)}
+        initialIndex={3}
+        onSubscribe={onSubscribe}
+        createEngine={spy.factory}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Subscribe to Channel s3" }));
+    await vi.waitFor(() => expect(assign).toHaveBeenCalled());
+
+    // `/shorts/s3`, not `/shorts/s0`: the viewer pressed Subscribe on the
+    // fourth item and has to come back to it.
+    expect(assign).toHaveBeenCalledWith(
+      `/signin?next=${encodeURIComponent("/shorts/s3")}`,
+    );
   });
 });
 
