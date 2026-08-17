@@ -298,14 +298,31 @@ function buildCookie(value: string, maxAgeSeconds: number): string {
   return parts.join("; ");
 }
 
-/** Parse one cookie out of a `Cookie` header. */
+/**
+ * Parse one cookie out of a `Cookie` header.
+ *
+ * `decodeURIComponent` **throws** on a malformed escape — a bare `%`, or `%zz`
+ * — rather than returning anything. This function is called on the way in to
+ * every authenticated route, before any handler runs, so an unhandled throw
+ * here turns `Cookie: yt_session=%` into a 500 on a request that should simply
+ * have been treated as signed out. It is trivially reachable by anyone, needs
+ * no session, and would look like a server fault rather than a bad request.
+ *
+ * A cookie that cannot be decoded is not a token, so the answer is `null`:
+ * exactly what an absent cookie gives, and the same path a forged or expired
+ * one already takes.
+ */
 export function readCookie(header: string | null, name: string): string | null {
   if (!header) return null;
   for (const pair of header.split(";")) {
     const separator = pair.indexOf("=");
     if (separator === -1) continue;
     if (pair.slice(0, separator).trim() !== name) continue;
-    return decodeURIComponent(pair.slice(separator + 1).trim());
+    try {
+      return decodeURIComponent(pair.slice(separator + 1).trim());
+    } catch {
+      return null;
+    }
   }
   return null;
 }

@@ -55,6 +55,24 @@ export class PlaylistNotFoundError extends Error {
 }
 
 /**
+ * Raised when a move or a removal names a video the playlist does not hold.
+ *
+ * Distinct from {@link PlaylistNotFoundError} because the two send a caller to
+ * different places: the playlist missing means the id or the owner is wrong,
+ * the item missing means the client's idea of the playlist's contents is
+ * stale — usually a second tab, or a drag that raced a removal.
+ */
+export class PlaylistItemNotFoundError extends Error {
+  constructor(
+    readonly playlistId: string,
+    readonly videoId: string,
+  ) {
+    super(`Playlist ${playlistId} does not contain ${videoId}`);
+    this.name = "PlaylistItemNotFoundError";
+  }
+}
+
+/**
  * Raised when something tries to edit the liked playlist directly.
  *
  * Deliberately loud rather than silently forwarded to the reaction path: a
@@ -123,9 +141,34 @@ export async function createPlaylist(
  * racing to create the same one produce a conflict, not a second playlist.
  *
  * One statement. `on conflict do nothing` returns no row when the playlist
- * already existed, and the `coalesce` falls through to the pre-existing row —
- * which the statement's own snapshot can see precisely because it was not
- * written by this statement.
+ * already existed, and the `coalesce` falls through to the pre-existing row.
+ *
+ * ## The case the `coalesce` alone does not cover
+ *
+ * The comment above used to end "which the statement's own snapshot can see
+ * precisely because it was not written by this statement". That is true of a
+ * row that was already committed when this statement began, and false of the
+ * row that *caused* the conflict when the conflict was caused by a concurrent
+ * transaction. Under read-committed, `on conflict do nothing` waits for the
+ * other transaction and then takes neither branch: the insert produced no row,
+ * and the fallback `select` runs against a snapshot taken before the other
+ * commit, so it finds nothing either. `coalesce` returns `null` and this
+ * function throws — on a request that did nothing wrong, in the one situation
+ * the partial unique index was supposed to make safe.
+ *
+ * `on conflict … do update` closes it: an update always returns its row,
+ * conflict or not, and the assignment is a no-op write of the column's own
+ * value so nothing about the existing playlist changes.
+ *
+ * The target has to be spelled out for `do update` — `do nothing` may be
+ * unqualified, `do update` may not — and it is spelled as an *inference*,
+ * `(owner_id, kind) where kind <> 'user'`, rather than as
+ * `on constraint playlists_system_key`. `playlists_system_key` is a partial
+ * unique index created with `create unique index`, and Postgres reserves
+ * `ON CONSTRAINT` for table constraints; naming an index there fails with
+ * "constraint … does not exist" at runtime rather than at parse time. The
+ * `where` clause is not optional either: it is what selects this partial index
+ * instead of leaving the inference ambiguous.
  */
 export async function ensureSystemPlaylist(
   sql: SqlExecutor,
@@ -133,16 +176,11 @@ export async function ensureSystemPlaylist(
   kind: Exclude<PlaylistKind, "user">,
 ): Promise<string> {
   const rows = await sql.query(
-    `with created as (
-       insert into playlists (id, owner_id, title, kind, visibility)
-       values ($1, $2, $3, $4, 'private')
-       on conflict do nothing
-       returning id
-     )
-     select coalesce(
-       (select id from created),
-       (select id from playlists where owner_id = $2 and kind = $4)
-     ) as id`,
+    `insert into playlists (id, owner_id, title, kind, visibility)
+     values ($1, $2, $3, $4, 'private')
+     on conflict (owner_id, kind) where kind <> 'user'
+       do update set owner_id = playlists.owner_id
+     returning id`,
     [newId("pl"), ownerId, SYSTEM_TITLES[kind], kind],
   );
 
@@ -420,11 +458,27 @@ export async function moveVideo(
       }
     }
 
-    await tx.execute(
+    /**
+     * `returning` rather than a bare `execute`, because the row may not be
+     * there.
+     *
+     * `neighbourhood` reads the *anchor* — the item being moved after — and is
+     * satisfied by a valid anchor whether or not the item being moved exists.
+     * So moving a video that is not in this playlist computed a plausible
+     * position, updated nothing, bumped the playlist's `updated_at`, and
+     * returned the position as though the move had happened. The caller's
+     * optimistic reorder then stuck until a reload put it back.
+     */
+    const moved = await tx.query(
       `update playlist_items set position = $3
-        where playlist_id = $1 and video_id = $2`,
+        where playlist_id = $1 and video_id = $2
+       returning video_id`,
       [playlistId, videoId, position],
     );
+    if (moved.length === 0) {
+      throw new PlaylistItemNotFoundError(playlistId, videoId);
+    }
+
     await touch(tx, playlistId);
     return position;
   });

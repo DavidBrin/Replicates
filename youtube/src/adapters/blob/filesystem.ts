@@ -189,12 +189,34 @@ export class FilesystemBlobStore implements BlobStore {
    * where `ListObjectsV2` caps at 1000 keys. A ladder for a long video passes
    * that easily, and an adapter-shaped difference in truncation behaviour is
    * exactly the kind that ships.
+   *
+   * ## A prefix is lexical, not a directory
+   *
+   * S3 and R2 have no directories. `ListObjectsV2` with `Prefix=` returns
+   * every key that *starts with* that string, so `videos/v1/720p/seg-` matches
+   * `…/seg-00001.m4s` and stops at `…/init.mp4`. This adapter resolved the
+   * prefix to a path and walked it as a directory, so the same call returned
+   * nothing at all locally — the directory `seg-` does not exist — while
+   * returning the segments in production.
+   *
+   * That is the worst shape a port divergence can take: not a crash, but two
+   * adapters quietly disagreeing about the answer to the same question, with
+   * the disagreement visible only in the environment that has no debugger
+   * attached.
+   *
+   * So the walk starts at the nearest real ancestor directory and filters full
+   * keys with `startsWith`. A prefix that *is* a directory still behaves as
+   * before, because every key beneath it starts with it.
    */
   async list(
     prefix: string,
     options?: BlobListOptions,
   ): Promise<BlobListResult> {
-    const base = this.pathFor(prefix);
+    // The ancestor to walk from: everything up to the last separator. A prefix
+    // with no separator at all is walked from the store root.
+    const lastSlash = prefix.lastIndexOf("/");
+    const directoryKey = lastSlash === -1 ? "" : prefix.slice(0, lastSlash);
+    const base = directoryKey === "" ? this.root : this.pathFor(directoryKey);
     const keys: string[] = [];
 
     const walk = async (directory: string, keyPrefix: string) => {
@@ -216,7 +238,14 @@ export class FilesystemBlobStore implements BlobStore {
       }
     };
 
-    await walk(base, prefix.replace(/\/$/, ""));
+    await walk(base, directoryKey);
+
+    // The lexical filter R2 applies for us. `walk` collected everything under
+    // the ancestor directory; only the keys the caller actually asked for
+    // survive.
+    const matching = keys.filter((key) => key.startsWith(prefix));
+    keys.length = 0;
+    keys.push(...matching);
 
     const limit = options?.limit ?? 1000;
     const start = options?.cursor ? keys.indexOf(options.cursor) + 1 : 0;

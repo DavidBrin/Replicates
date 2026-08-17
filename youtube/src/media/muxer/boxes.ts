@@ -22,7 +22,12 @@
 
 import type { TrackConfig, TrackKind } from "../types";
 
-import { ByteWriter, BOX_HEADER_SIZE, LARGE_BOX_HEADER_SIZE } from "./writer";
+import {
+  ByteWriter,
+  BOX_HEADER_SIZE,
+  LARGE_BOX_HEADER_SIZE,
+  U32_MAX,
+} from "./writer";
 
 /* ----------------------------------------------------------------- time -- */
 
@@ -224,7 +229,7 @@ export function writeMvhd(w: ByteWriter, header: MovieHeader): void {
   w.u32(0); // creation_time
   w.u32(0); // modification_time
   w.u32(header.timescale);
-  w.u32(header.duration);
+  w.u32(refuseOverflow("mvhd.duration", header.duration));
   w.fixed16_16(1); // rate = 1.0, normal playback speed
   w.fixed8_8(1); // volume = 1.0
   w.zeros(2); // reserved
@@ -272,7 +277,7 @@ export function writeTkhd(w: ByteWriter, header: TrackHeader): void {
   w.u32(0); // modification_time
   w.u32(header.trackId);
   w.u32(0); // reserved
-  w.u32(header.durationInMovieTimescale);
+  w.u32(refuseOverflow("tkhd.duration", header.durationInMovieTimescale));
   w.zeros(8); // reserved 2×u32
   w.i16(0); // layer
   w.i16(0); // alternate_group
@@ -293,20 +298,74 @@ export interface MediaHeader {
 }
 
 /**
- * `mdhd` — Media Header Box, research §1.7. `FullBox` version 0.
+ * `mdhd` — Media Header Box, research §1.7.
+ *
+ * Version 0:
  *
  *     creation_time u32 / modification_time u32 / timescale u32 / duration u32
  *     language u16 (1 pad bit + 3×5 bits) / pre_defined u16
+ *
+ * Version 1 widens the three time fields — but **not** `timescale`:
+ *
+ *     creation_time u64 / modification_time u64 / timescale u32 / duration u64
+ *     language u16 / pre_defined u16
+ *
+ * ## Why this box needs version 1 and its neighbours do not
+ *
+ * `mdhd.duration` is in the **track's own** timescale, and this project runs
+ * video tracks at 1,000,000 — WebCodecs timestamps are microseconds, and
+ * matching the timescale to them is what keeps the muxer from rounding every
+ * sample. A u32 holds 4,294,967,295 of those, which is **71 minutes and 35
+ * seconds**. Past that the field wraps: a two-hour upload advertised itself as
+ * roughly 48 minutes, in a box every demuxer reads to lay out its seek table.
+ *
+ * `mvhd` and `tkhd` carry the *movie* timescale, which is 1000, where the same
+ * field holds 49 days. Their comments say so and they are right — but they say
+ * it about a constant declared elsewhere, so the guards below turn "this
+ * cannot overflow" into something that fails loudly if it ever does rather
+ * than wrapping the way this box did.
+ *
+ * Version 0 is still emitted whenever it fits, so the common case is byte-for
+ * -byte what it was and the research lane's worked example still matches.
  */
 export function writeMdhd(w: ByteWriter, header: MediaHeader): void {
-  const start = w.beginFullBox("mdhd", 0, 0);
-  w.u32(0); // creation_time
-  w.u32(0); // modification_time
-  w.u32(header.timescale);
-  w.u32(header.duration);
+  const version = header.duration > U32_MAX ? 1 : 0;
+  const start = w.beginFullBox("mdhd", version, 0);
+  if (version === 1) {
+    w.u64(0); // creation_time
+    w.u64(0); // modification_time
+    w.u32(header.timescale); // still 32-bit in version 1
+    w.u64(header.duration);
+  } else {
+    w.u32(0); // creation_time
+    w.u32(0); // modification_time
+    w.u32(header.timescale);
+    w.u32(header.duration);
+  }
   w.u16(UNDETERMINED_LANGUAGE);
   w.u16(0); // pre_defined
   w.endBox(start);
+}
+
+/**
+ * Refuse a value that would silently wrap a 32-bit field.
+ *
+ * Used for the two headers that are on the movie timescale, where version 1 is
+ * genuinely unnecessary — 49 days — and where a value past the ceiling means
+ * the caller has passed the wrong timescale's number rather than that the
+ * movie is long. That is exactly the mistake `tkhd`'s own comment calls a
+ * "documented silent-drift bug", so it is better as a throw than as a wider
+ * field that would encode the wrong duration accurately.
+ */
+function refuseOverflow(field: string, value: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > U32_MAX) {
+    throw new Error(
+      `${field} is ${value}, which does not fit a 32-bit field. At the movie ` +
+        `timescale this is 49 days, so the value is far more likely to be in ` +
+        `the track's timescale by mistake — see the note on writeTkhd.`,
+    );
+  }
+  return value;
 }
 
 /* ----------------------------------------------------------------- hdlr -- */

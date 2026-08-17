@@ -18,18 +18,40 @@ const t = setupTestDatabase();
 const channels = () => createChannelsRepository(t.db);
 
 /** A published, ready video on `channelId`. */
+/**
+ * A published video, which means `published_at` as well as the status.
+ *
+ * The helper is called `publishVideo` and did not stamp a publish date, so
+ * every fixture here produced a row in a state the real publish path cannot
+ * create: `publishVideo` in the repository sets `upload_status` and
+ * `published_at` in one statement, and `stampVideoFixtureFacts` warns in so
+ * many words that a video with one and not the other is "a video no feed can
+ * find". The counts asserted below were therefore counting rows that appear in
+ * no feed, which is exactly the disagreement between the number and the grid
+ * that this describe block exists to prevent.
+ */
 async function publishVideo(
   channelId: string,
-  overrides: { visibility?: string; uploadStatus?: string } = {},
+  overrides: {
+    visibility?: string;
+    uploadStatus?: string;
+    publishedAt?: Date | null;
+  } = {},
 ): Promise<void> {
+  const publishedAt =
+    overrides.publishedAt === undefined
+      ? new Date("2026-01-01T00:00:00Z")
+      : overrides.publishedAt;
   await t.db.execute(
-    `insert into videos (id, channel_id, title, visibility, upload_status)
-     values ($1, $2, 'A video', $3, $4)`,
+    `insert into videos
+       (id, channel_id, title, visibility, upload_status, published_at)
+     values ($1, $2, 'A video', $3, $4, $5::timestamptz)`,
     [
       `vid${Math.random().toString(36).slice(2, 10)}`,
       channelId,
       overrides.visibility ?? "public",
       overrides.uploadStatus ?? "ready",
+      publishedAt === null ? null : publishedAt.toISOString(),
     ],
   );
 }
@@ -351,6 +373,11 @@ describe("the computed counts", () => {
     await publishVideo(channel.id, { visibility: "unlisted" });
     await publishVideo(channel.id, { uploadStatus: "uploading" });
     await publishVideo(channel.id, { uploadStatus: "failed" });
+    // Public and ready, but never published — scheduled, or a publish that
+    // failed after flipping the status. Every feed query in the application
+    // carries `published_at is not null`; this count did not, so this row was
+    // the one that made the number disagree with the grid.
+    await publishVideo(channel.id, { publishedAt: null });
 
     await expect(channels().findById(channel.id)).resolves.toMatchObject({
       videoCount: 2,

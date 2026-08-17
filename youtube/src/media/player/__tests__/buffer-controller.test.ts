@@ -149,10 +149,24 @@ class FakeSourceBuffer implements SourceBufferLike {
     this.fire("updateend");
   }
 
+  /**
+   * Synchronous, and emphatically **no `updateend`**.
+   *
+   * This called `settle()`, which fires `updateend` like every other operation
+   * here — and no real `SourceBuffer` does. MSE specifies `changeType()` as a
+   * fully synchronous state change: it resets the parser and sets the new MIME
+   * type in the calling task, never sets `updating`, and therefore has no
+   * completion event to emit.
+   *
+   * The controller was awaiting one, so a codec-changing rendition switch
+   * hung the buffer queue forever against a real browser and passed here. A
+   * double that is more generous than the API it stands for makes the one
+   * interesting case the one case nothing tests, so this now models the real
+   * behaviour and the controller no longer waits.
+   */
   changeType(type: string): void {
     this.guard("changeType");
     this.calls.push(`changeType:${type}`);
-    this.settle();
   }
 
   /** `buffered` is spec-normalised: sorted, non-overlapping, contiguous ranges coalesced. */
@@ -274,6 +288,32 @@ describe("the append queue", () => {
       controller.append(bytes(300)),
     ]);
     expect(buffer.calls).toEqual(["append:100", "append:200", "append:300"]);
+  });
+
+  /**
+   * The stall this whole pair of comments is about, as an assertion with a
+   * deadline.
+   *
+   * `changeType` returning at all is the property. Awaiting it under the old
+   * implementation never settles, so without a timeout the failure mode is a
+   * hung suite rather than a red test — and a hung suite gets attributed to
+   * the runner. `Promise.race` turns it into a value.
+   */
+  it("returns from changeType without waiting for an event", async () => {
+    const { buffer, controller } = harness();
+    const outcome = await Promise.race([
+      controller.changeType('video/mp4; codecs="avc1.4d401f"').then(() => "settled"),
+      new Promise((resolve) => setTimeout(() => resolve("hung"), 50)),
+    ]);
+
+    expect(outcome).toBe("settled");
+    expect(buffer.calls).toEqual(['changeType:video/mp4; codecs="avc1.4d401f"']);
+
+    // And the queue is still usable afterwards — a `changeType` that resolved
+    // but left `runExclusive` holding its lock would be the same stall one
+    // operation later.
+    await controller.append(bytes(10));
+    expect(buffer.calls).toContain("append:10");
   });
 
   it("serialises appends against removes and changeTypes too", async () => {

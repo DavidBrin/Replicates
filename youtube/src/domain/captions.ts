@@ -407,15 +407,38 @@ const ESCAPES: Readonly<Record<string, string>> = {
   "‏": "&rlm;",
 };
 
+/**
+ * Whether a numeric reference names a character that exists.
+ *
+ * `Number.isFinite` was the whole guard, and it is not one:
+ * `String.fromCodePoint` throws `RangeError` for anything above U+10FFFF or
+ * for a surrogate half, both of which are finite. A caption file containing
+ * `&#99999999;` — malformed, or simply a `&#` followed by digits in ordinary
+ * prose — therefore did not degrade to leaving the text alone, it aborted the
+ * parse of the whole track and took the video's captions with it.
+ *
+ * Surrogates are excluded as well as out-of-range values: D800–DFFF are code
+ * points that only exist as halves of a UTF-16 pair, and `fromCodePoint`
+ * rejects them for the same reason.
+ */
+function isScalarValue(code: number): boolean {
+  return (
+    Number.isInteger(code) &&
+    code >= 0 &&
+    code <= 0x10ffff &&
+    !(code >= 0xd800 && code <= 0xdfff)
+  );
+}
+
 export function decodeCharacterReferences(text: string): string {
   return text.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (whole, body: string) => {
     if (body.startsWith("#x") || body.startsWith("#X")) {
       const code = Number.parseInt(body.slice(2), 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+      return isScalarValue(code) ? String.fromCodePoint(code) : whole;
     }
     if (body.startsWith("#")) {
       const code = Number.parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+      return isScalarValue(code) ? String.fromCodePoint(code) : whole;
     }
     // An unrecognised name is left exactly as it was found rather than dropped:
     // `&foo;` is more likely to be somebody's text than a reference we failed

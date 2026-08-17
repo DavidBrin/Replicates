@@ -52,13 +52,21 @@ const CHANNEL_COLUMNS = `c.id, c.owner_id, c.handle, c.name, c.description,
 /**
  * The two computed counts.
  *
- * `videoCount` counts *public, ready* videos only, and that is the number a
- * channel page shows next to the subscriber count. Counting everything would
- * mean a visitor reads "42 videos" above a grid of 37, because the other five
- * are private, unlisted, or still uploading — and the reflex diagnosis for that
- * ("the grid is dropping rows") sends you looking in entirely the wrong place.
- * An owner's own dashboard wants a different number and should ask a different
- * question rather than widening this one.
+ * `videoCount` counts *public, ready, published* videos only, and that is the
+ * number a channel page shows next to the subscriber count. Counting
+ * everything would mean a visitor reads "42 videos" above a grid of 37,
+ * because the other five are private, unlisted, or still uploading — and the
+ * reflex diagnosis for that ("the grid is dropping rows") sends you looking in
+ * entirely the wrong place. An owner's own dashboard wants a different number
+ * and should ask a different question rather than widening this one.
+ *
+ * **`published_at is not null` was the missing third clause**, and it is the
+ * one that made the paragraph above describe a bug rather than a rule. Every
+ * surface that lists videos carries it — `videos.ts`, `recommendations.ts`,
+ * and both queries in `subscriptions.ts` — so a public, ready row awaiting its
+ * scheduled publication counted here and appeared in no feed anywhere. The
+ * count was wrong in exactly the direction the comment says is confusing, and
+ * only for videos in a state a demo corpus rarely produces.
  *
  * Both subqueries are index lookups: `subscriptions_channel_idx` and
  * `videos_channel_idx` are each keyed on the column being matched.
@@ -68,7 +76,8 @@ const COUNT_COLUMNS = `(select count(*) from subscriptions s
     (select count(*) from videos v
       where v.channel_id = c.id
         and v.visibility = 'public'
-        and v.upload_status = 'ready') as video_count`;
+        and v.upload_status = 'ready'
+        and v.published_at is not null) as video_count`;
 
 /**
  * The index this module can violate as a matter of domain rules.

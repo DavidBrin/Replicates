@@ -562,7 +562,34 @@ export class BufferController {
    */
   changeType(mimeType: string): Promise<void> {
     return this.runExclusive(async () => {
-      await this.invoke("changeType", () => this.sourceBuffer.changeType(mimeType));
+      /**
+       * **Not through `invoke`.** `invoke` waits for `updateend`, and
+       * `changeType()` never fires one.
+       *
+       * It is one of the few `SourceBuffer` methods that is fully synchronous:
+       * MSE has it reset the parser state and set the new MIME type in the
+       * calling task, and it never sets `updating`, so there is no async
+       * operation and no completion event. A promise awaiting `updateend`
+       * after it therefore never settles — and because this sits inside
+       * `runExclusive`, the whole buffer queue stops with it. The video does
+       * not error; it stalls forever at the moment of the first switch whose
+       * codec string differs.
+       *
+       * It survived because the test double emitted `updateend` from its
+       * `changeType`, which no real implementation does. A fake that is more
+       * generous than the API it stands in for turns the one interesting case
+       * into the one case nothing exercises.
+       *
+       * `whenIdle` is still awaited: calling `changeType` while an append is
+       * in flight throws `InvalidStateError`.
+       */
+      await this.whenIdle();
+      if (this.destroyed) {
+        throw new Error(
+          `The ${this.label} buffer controller was destroyed mid-queue`,
+        );
+      }
+      this.sourceBuffer.changeType(mimeType);
       this.primed = false;
     });
   }

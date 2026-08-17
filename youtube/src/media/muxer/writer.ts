@@ -50,7 +50,14 @@ export const BOX_HEADER_SIZE = 8;
  */
 export const LARGE_BOX_HEADER_SIZE = 16;
 
-const U32_MAX = 0xffff_ffff;
+/**
+ * The ceiling of every 32-bit field in this format.
+ *
+ * Exported because `boxes.ts` needs it to decide when a header has to be
+ * written as version 1 — `mdhd.duration` at a microsecond timescale crosses it
+ * after 71 minutes and 35 seconds of video.
+ */
+export const U32_MAX = 0xffff_ffff;
 
 export class ByteWriter {
   #bytes: Uint8Array;

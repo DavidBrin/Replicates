@@ -544,6 +544,73 @@ describe("rejections", () => {
   });
 });
 
+describe("durations past a 32-bit field", () => {
+  /**
+   * 71 minutes and 35 seconds is where `mdhd.duration` stops fitting.
+   *
+   * The track timescale here is 1,000,000, because WebCodecs timestamps are
+   * microseconds and matching the timescale to them keeps every sample exact.
+   * A u32 holds 4,294,967,295 of those. Past that the version-0 field wraps,
+   * and a two-hour upload declares itself as roughly 48 minutes — in the box a
+   * demuxer reads to build its seek table, so the video is unseekable past the
+   * wrap point rather than merely mislabelled.
+   *
+   * `mvhd` and `tkhd` are on the movie timescale of 1000 and are asserted to
+   * stay version 0 at the same duration, which is what shows the fix is scoped
+   * to the field that actually overflows rather than widening everything.
+   */
+  const TWO_HOURS_US = 2 * 60 * 60 * 1_000_000;
+
+  function boxesFor(durationUs: number) {
+    return parseBoxes(
+      buildInitSegment({
+        tracks: [
+          {
+            id: 1,
+            config: {
+              kind: "video",
+              codec: "avc1.640028",
+              description: AVCC,
+              timescale: 1_000_000,
+              width: 1920,
+              height: 1080,
+            },
+          },
+        ],
+        movieTimescale: 1000,
+        durationUs,
+      }),
+    );
+  }
+
+  it("keeps mdhd at version 0 while the duration fits", () => {
+    const mdhd = requireBox(boxesFor(60 * 1_000_000), "moov.trak.mdia.mdhd");
+    expect(mdhd.payload[0]).toBe(0);
+  });
+
+  it("promotes mdhd to version 1 rather than wrapping", () => {
+    const boxes = boxesFor(TWO_HOURS_US);
+    const mdhd = requireBox(boxes, "moov.trak.mdia.mdhd");
+    expect(mdhd.payload[0]).toBe(1);
+
+    // version(1) + flags(3) + creation(8) + modification(8) + timescale(4),
+    // then the 64-bit duration. `timescale` stays 32-bit in version 1.
+    const view = new DataView(
+      mdhd.payload.buffer,
+      mdhd.payload.byteOffset,
+      mdhd.payload.byteLength,
+    );
+    expect(view.getUint32(20)).toBe(1_000_000);
+    expect(Number(view.getBigUint64(24))).toBe(TWO_HOURS_US);
+  });
+
+  it("leaves the movie-timescale headers at version 0", () => {
+    const boxes = boxesFor(TWO_HOURS_US);
+    expect(requireBox(boxes, "moov.mvhd").payload[0]).toBe(0);
+    expect(requireBox(boxes, "moov.trak.tkhd").payload[0]).toBe(0);
+  });
+});
+
 describe("the research's byte-verified worked example", () => {
   /**
    * research/02-fmp4-hls-packaging.md closes with a 640-byte init segment —

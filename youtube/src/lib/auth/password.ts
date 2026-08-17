@@ -85,6 +85,24 @@ const CURRENT: ScryptParameters = Object.freeze({
 const SALT_BYTES = 16;
 
 /**
+ * The ceilings {@link decode} rejects above.
+ *
+ * One doubling above {@link CURRENT} for `N` and `r`, which is what the cost
+ * would be raised to next, so a legitimate future increase is one edit here
+ * and a hostile or corrupt row is still bounded. At `N = 2^18, r = 16` a
+ * single derivation asks for about 512 MB — large, survivable, and four
+ * orders of magnitude below what an unbounded `N` would request before the
+ * process died.
+ *
+ * `p` is a parallelism factor and multiplies time rather than memory;
+ * `keyLength` is bounded because `scrypt` will happily derive megabytes.
+ */
+const MAX_N = 262_144;
+const MAX_R = 16;
+const MAX_P = 16;
+const MAX_KEY_LENGTH = 128;
+
+/**
  * How many derivations may be in flight at once, process-wide.
  *
  * This is the other half of choosing an expensive parameter set, and omitting
@@ -220,15 +238,42 @@ function decode(stored: string): DecodedHash | null {
     p: Number(p),
     keyLength: Number(keyLength),
   };
+  /**
+   * Floors *and* ceilings, and `N` a power of two.
+   *
+   * The floors alone left two ways for a stored row to reach `scrypt()` with
+   * parameters it refuses. `N` must be a power of two greater than 1 — the
+   * algorithm indexes a table of that size — so a stored `N` of 3 passes
+   * `>= 2` and then makes `verifyPassword` throw "Invalid scrypt params"
+   * rather than return `false`. A sign-in attempt against such a row is a 500,
+   * not a rejection.
+   *
+   * The ceilings matter more. `scrypt`'s cost is roughly `128 · N · r` bytes
+   * of memory, so a row claiming `N = 2^30, r = 8` asks Node for about a
+   * terabyte and takes the process down. Whoever can write that row can
+   * already do worse — but "the parameters came from the database, so they are
+   * ours" is precisely the assumption that a restored backup, a migrated
+   * column, or a seeded fixture quietly breaks. The bound is what makes
+   * decoding total.
+   *
+   * The limits are one step above what {@link DEFAULT_PARAMETERS} uses, so a
+   * future increase is a deliberate edit here rather than a silent widening.
+   */
+  const isPowerOfTwo = (value: number): boolean =>
+    Number.isInteger(value) && value > 1 && (value & (value - 1)) === 0;
+
   if (
-    !Number.isInteger(parameters.N) ||
+    !isPowerOfTwo(parameters.N) ||
     !Number.isInteger(parameters.r) ||
     !Number.isInteger(parameters.p) ||
     !Number.isInteger(parameters.keyLength) ||
-    parameters.N < 2 ||
+    parameters.N > MAX_N ||
     parameters.r < 1 ||
+    parameters.r > MAX_R ||
     parameters.p < 1 ||
-    parameters.keyLength < 16
+    parameters.p > MAX_P ||
+    parameters.keyLength < 16 ||
+    parameters.keyLength > MAX_KEY_LENGTH
   ) {
     return null;
   }
