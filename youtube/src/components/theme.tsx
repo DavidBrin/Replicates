@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -139,6 +140,60 @@ export function readAppliedTheme(): ResolvedTheme {
     : "dark";
 }
 
+/* --------------------------------------------------------- the stores --- */
+
+/**
+ * The stored preference as an external store.
+ *
+ * Two sources of change, and both matter. `storage` fires when *another tab*
+ * writes the key, which is the case that makes a theme choice follow the user
+ * across windows. The local set is not covered by that event — `storage` is
+ * deliberately not delivered to the tab that caused it — so `setPreference`
+ * notifies these listeners itself.
+ *
+ * A `Set` of callbacks rather than a `useState` in a shared parent: this has
+ * to be readable from `getSnapshot` during render, and it has to survive
+ * multiple providers in a test file without them fighting over one value.
+ */
+const preferenceListeners = new Set<() => void>();
+
+function subscribeToStoredPreference(onChange: () => void): () => void {
+  preferenceListeners.add(onChange);
+  const onStorage = (event: StorageEvent): void => {
+    if (event.key === null || event.key === THEME_STORAGE_KEY) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    preferenceListeners.delete(onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function notifyPreferenceChanged(): void {
+  for (const listener of preferenceListeners) listener();
+}
+
+/**
+ * `prefers-color-scheme` as an external store.
+ *
+ * `addListener` is kept alongside `addEventListener` because jsdom's shim and
+ * older Safari implement only the deprecated one, and losing the subscription
+ * silently is worse than four lines — the same reasoning the effect this
+ * replaced carried, preserved because it is still true.
+ */
+function subscribeToDeviceTheme(onChange: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
+  }
+  const query = window.matchMedia(DARK_MEDIA_QUERY);
+  if (typeof query.addEventListener === "function") {
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }
+  query.addListener(onChange);
+  return () => query.removeListener(onChange);
+}
+
 /* ------------------------------------------------------------- context --- */
 
 export interface ThemeContextValue {
@@ -167,49 +222,83 @@ export function ThemeProvider({
   children: ReactNode;
   initialPreference?: ThemePreference;
 }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>(
-    initialPreference ?? "device",
+  /**
+   * `useSyncExternalStore`, not state corrected by an effect.
+   *
+   * The previous shape started at the default, read `localStorage` in an
+   * effect, and called two setters — a cascading render on every mount, which
+   * is exactly what `react-hooks/set-state-in-effect` is about. The comment
+   * defending it was right about the constraint (reading storage during render
+   * makes the first client render disagree with the server's HTML) and reached
+   * for the wrong tool: `useSyncExternalStore` exists for precisely this, and
+   * `getServerSnapshot` is the supported way to say "the server saw the
+   * default". React renders the server snapshot during hydration and re-reads
+   * afterwards, with no mismatch and no effect.
+   *
+   * There are two stores because there are two independent sources: what the
+   * user chose, which lives in `localStorage`, and what the device reports,
+   * which lives in `matchMedia`. `resolved` is then a *derivation* of the two
+   * rather than a third piece of state that has to be kept in step — which is
+   * what removes the second effect entirely.
+   */
+  const stored = useSyncExternalStore(
+    subscribeToStoredPreference,
+    readStoredPreference,
+    () => "device" as ThemePreference,
   );
-  const [resolved, setResolved] = useState<ResolvedTheme>(() =>
-    initialPreference ? resolveTheme(initialPreference) : "dark",
+  const deviceTheme = useSyncExternalStore(
+    subscribeToDeviceTheme,
+    getDeviceTheme,
+    () => "dark" as ResolvedTheme,
   );
 
-  useEffect(() => {
-    if (initialPreference) return;
-    const stored = readStoredPreference();
-    setPreferenceState(stored);
-    setResolved(applyTheme(stored));
-  }, [initialPreference]);
+  /**
+   * `initialPreference` is a *starting* value, not an override.
+   *
+   * It was the initial argument to `useState` before this file used a store,
+   * so a caller passing `"dark"` got dark until something called
+   * `setPreference` — after which the user's choice won. Treating it as a
+   * permanent override instead would pin the provider: the toggle would write
+   * storage, the store would update, and `preference` would keep reporting the
+   * seed, so the control could be pressed once and then did nothing.
+   *
+   * `chosen` is set from an event handler rather than an effect, so it is an
+   * ordinary state transition and not a cascading render.
+   */
+  const [chosen, setChosen] = useState(false);
+  const preference = initialPreference !== undefined && !chosen ? initialPreference : stored;
+  const resolved: ResolvedTheme =
+    preference === "device" ? deviceTheme : preference;
 
-  // Only meaningful while the preference is `device`; the guard is what makes
-  // an explicit choice stick when the OS flips at sunset.
+  /**
+   * Writing the attribute is a genuine external-system sync, which is what an
+   * effect is for — and it sets no state, so nothing cascades.
+   *
+   * It is idempotent: the bootstrap script in `layout.tsx` has already put the
+   * right value on `<html>` before first paint, so on a cold load this writes
+   * what is already there. It earns its place on the *later* transitions, when
+   * the OS flips at sunset while the preference is `device`.
+   */
   useEffect(() => {
-    if (preference !== "device") return;
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-    const query = window.matchMedia(DARK_MEDIA_QUERY);
-    const handler = (): void => setResolved(applyTheme("device"));
-    // `addEventListener` is the modern form; the deprecated `addListener` is
-    // kept because jsdom's shim and older Safari implement only that one, and
-    // losing the subscription silently is worse than four lines.
-    if (typeof query.addEventListener === "function") {
-      query.addEventListener("change", handler);
-      return () => query.removeEventListener("change", handler);
-    }
-    query.addListener(handler);
-    return () => query.removeListener(handler);
-  }, [preference]);
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.setAttribute(THEME_ATTRIBUTE, resolved);
+    root.style.colorScheme = resolved;
+  }, [resolved]);
 
   const setPreference = useCallback((next: ThemePreference) => {
-    setPreferenceState(next);
-    setResolved(applyTheme(next));
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
       // Unwritable storage costs persistence across reloads, not the change
       // the user just asked for. Carry on.
     }
+    // Painted synchronously from the event handler rather than waiting for the
+    // effect above: a passive effect runs after paint, so deferring would show
+    // one frame of the old theme on a deliberate toggle.
+    applyTheme(next);
+    setChosen(true);
+    notifyPreferenceChanged();
   }, []);
 
   const value = useMemo<ThemeContextValue>(

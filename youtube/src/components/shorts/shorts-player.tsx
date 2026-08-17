@@ -262,8 +262,19 @@ export function ShortsPlayer({
    * with no explanation.
    */
   const [fellBack, setFellBack] = useState(false);
-  const autoplay: ShortsAutoplayState =
-    attempt === "playing" && fellBack ? "muted-fallback" : attempt;
+  /**
+   * What the badge shows.
+   *
+   * `!active` short-circuits to `idle` rather than being written back into
+   * `attempt` by the playback effect. The two are equivalent once the effect
+   * has run; the difference is the render in between, where the previous
+   * item's "blocked" would still be on screen.
+   */
+  const autoplay: ShortsAutoplayState = !active
+    ? "idle"
+    : attempt === "playing" && fellBack
+      ? "muted-fallback"
+      : attempt;
 
   /**
    * The engine's options, memoised on the media fields alone.
@@ -357,9 +368,12 @@ export function ShortsPlayer({
     if (media === null || !hot) return;
 
     if (!active) {
+      // Pausing is the external-system half and stays. The state reset that
+      // used to sit here — `setAttempt("idle")`, `setFellBack(false)` — is
+      // now a derivation: `autoplay` reports "idle" whenever the item is not
+      // active, so an inactive short cannot display a stale "blocked" badge
+      // even for the frame before an effect would have cleared it.
       media.pause();
-      setAttempt("idle");
-      setFellBack(false);
       return;
     }
 
@@ -513,6 +527,10 @@ export function ShortsPlayer({
 
       {active && commentsOpen ? (
         <CommentsPanel
+          // Identity, not just data: a different short is a different panel,
+          // so its `threads`/`failed` reset by remounting rather than by an
+          // effect clearing them. See the note in `CommentsPanel`.
+          key={short.id}
           short={short}
           loadComments={loadComments}
           viewer={commentsViewer}
@@ -704,11 +722,20 @@ function CommentsPanel({
   const [threads, setThreads] = useState<readonly CommentThread[] | null>(null);
   const [failed, setFailed] = useState(false);
 
+  /**
+   * No `setThreads(null)` / `setFailed(false)` here any more.
+   *
+   * Those two lines existed to clear the *previous* short's thread before
+   * loading this one — a reset of everything this component holds, written as
+   * a synchronous `setState` in an effect. React has a direct way to say "this
+   * is a different one": the call site passes `key={short.id}`, so a new short
+   * mounts a new component whose state starts at its initial values. The reset
+   * is then structural rather than something that has to be remembered every
+   * time a piece of state is added here.
+   */
   useEffect(() => {
     if (loadComments === undefined) return;
     let cancelled = false;
-    setThreads(null);
-    setFailed(false);
     void loadComments(short.id)
       .then((loaded) => {
         if (!cancelled) setThreads(loaded);

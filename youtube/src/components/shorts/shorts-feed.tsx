@@ -15,6 +15,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type TouchEvent as ReactTouchEvent,
   type UIEvent as ReactUIEvent,
 } from "react";
@@ -262,7 +263,6 @@ export function ShortsFeed({
     navRef.current = nav.index;
   }, [nav.index]);
 
-  const [muted, setMuted] = useState(true);
   const [commentsOpenFor, setCommentsOpenFor] = useState<string | null>(null);
   const [interactions, setInteractions] = useState<
     Readonly<Record<string, ShortInteraction>>
@@ -457,15 +457,26 @@ export function ShortsFeed({
 
   /* ------------------------------------------------------------- audio -- */
 
-  // Read after mount, never during render: the server has no storage and a
-  // seeded-from-storage first render would hydrate as a mismatch.
-  useEffect(() => {
-    setMuted(readStoredMuted());
-  }, []);
+  /**
+   * The stored mute preference, as an external store.
+   *
+   * The constraint the previous comment named is real — the server has no
+   * storage, and seeding the first render from it hydrates as a mismatch — but
+   * an effect that calls `setMuted` is the wrong instrument for it. This is
+   * the same substitution `components/theme.tsx` makes and for the same
+   * reason: `getServerSnapshot` is the supported way to say "the server saw
+   * the default", with no second render and no window in which a viewer who
+   * muted the feed last week gets one autoplay at full volume.
+   */
+  const muted = useSyncExternalStore(
+    subscribeToStoredMuted,
+    readStoredMuted,
+    () => DEFAULT_MUTED,
+  );
 
   const changeMuted = useCallback((next: boolean): void => {
-    setMuted(next);
     writeStoredMuted(next);
+    notifyMutedChanged();
   }, []);
 
   /* -------------------------------------------------------- reactions --- */
@@ -715,17 +726,64 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
+/**
+ * `prefers-reduced-motion`, as an external store rather than as state caught
+ * up by an effect.
+ *
+ * The previous shape rendered `false`, then read `matchMedia` in an effect and
+ * set state — a cascading render on every mount, and a frame of animated
+ * transition shown to someone who asked for none. `useSyncExternalStore`
+ * removes both: `getServerSnapshot` returns `false` because the server cannot
+ * know, and the client reads the real value as part of the first client
+ * render rather than after it.
+ */
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeToReducedMotion(onChange: () => void): () => void {
+  const query = window.matchMedia?.(REDUCED_MOTION_QUERY);
+  if (query === undefined) return () => {};
+  query.addEventListener?.("change", onChange);
+  return () => query.removeEventListener?.("change", onChange);
+}
+
+function readReducedMotion(): boolean {
+  return window.matchMedia?.(REDUCED_MOTION_QUERY).matches ?? false;
+}
+
 function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (query === undefined) return;
-    setReduced(query.matches);
-    const onChange = (): void => setReduced(query.matches);
-    query.addEventListener?.("change", onChange);
-    return () => query.removeEventListener?.("change", onChange);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(
+    subscribeToReducedMotion,
+    readReducedMotion,
+    () => false,
+  );
+}
+
+/**
+ * Muted is the safe default in every browser: an autoplay with sound is
+ * refused by policy, and the fallback would write it straight back anyway.
+ */
+const DEFAULT_MUTED = true;
+
+/**
+ * The listeners `changeMuted` notifies.
+ *
+ * `sessionStorage` fires no event for a write made by the same document, so a
+ * store built on it has to publish its own changes. `storage` is subscribed to
+ * as well, because two Shorts tabs in one session should agree.
+ */
+const mutedListeners = new Set<() => void>();
+
+function subscribeToStoredMuted(onChange: () => void): () => void {
+  mutedListeners.add(onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    mutedListeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function notifyMutedChanged(): void {
+  for (const listener of mutedListeners) listener();
 }
 
 function readStoredMuted(): boolean {
@@ -738,7 +796,7 @@ function readStoredMuted(): boolean {
   } catch {
     // Storage throws rather than returning null in a partitioned or
     // storage-blocked context. Muted is the safe default in every browser.
-    return true;
+    return DEFAULT_MUTED;
   }
 }
 

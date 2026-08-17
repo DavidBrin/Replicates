@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -47,7 +48,6 @@ import {
  */
 
 export interface SheetTriggerProps {
-  ref: (node: HTMLButtonElement | null) => void;
   "aria-haspopup": "dialog";
   "aria-expanded": boolean;
   "aria-controls": string | undefined;
@@ -76,13 +76,19 @@ export function Sheet({
   const sheetId = useId();
   const titleId = `${sheetId}-title`;
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
+  /** Found through the wrapper, for the reason `primitives/menu.tsx` sets out. */
+  const focusTrigger = useCallback(() => {
+    wrapperRef.current
+      ?.querySelector<HTMLElement>('[aria-haspopup="dialog"]')
+      ?.focus();
+  }, []);
+
   const close = (restoreFocus = true): void => {
     setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
+    if (restoreFocus) focusTrigger();
   };
 
   /**
@@ -123,10 +129,31 @@ export function Sheet({
 
   return (
     <div ref={wrapperRef} className="relative inline-flex">
+      {/*
+        eslint-disable-next-line react-hooks/refs --
+        A false positive that this component cannot restructure away, recorded
+        rather than worked around.
+
+        The rule sees a function that (transitively) reads a ref being passed
+        into ``trigger``, which *is* called during render, and cannot prove the
+        function is not called during render too. It is not: `onClick` is
+        handed to React and invoked on user interaction, and the ref it reaches
+        is read inside `close`, from an event handler.
+
+        Two restructures were tried before settling here. Removing the ref from
+        the trigger props — the popup's own wrapper is already in the tree, and
+        the trigger is the one descendant carrying ``aria-haspopup="dialog"``, so focus
+        restoration can find it by query — is kept, because it takes a ref out
+        of a public API. It does not silence the rule, because the handler
+        still reads a ref. Replacing the render prop with `cloneElement` would,
+        and this file's own comment explains why that is worse: cloning
+        silently drops attributes the caller also set.
+
+        The behaviour the rule is protecting is asserted directly in
+        `src/components/__tests__/primitives.test.tsx` — Escape closes and
+        focus returns to the trigger.
+      */}
       {trigger({
-        ref: (node) => {
-          triggerRef.current = node;
-        },
         "aria-haspopup": "dialog",
         "aria-expanded": open,
         "aria-controls": open ? sheetId : undefined,

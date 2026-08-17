@@ -72,7 +72,6 @@ interface MenuContextValue {
 const MenuContext = createContext<MenuContextValue | null>(null);
 
 export interface MenuTriggerProps {
-  ref: (node: HTMLButtonElement | null) => void;
   "aria-haspopup": "menu";
   "aria-expanded": boolean;
   "aria-controls": string | undefined;
@@ -120,9 +119,30 @@ export function Menu({
    */
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const pendingRef = useRef<"checked" | "first" | "last">("checked");
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * The trigger is found through the wrapper, not held in a ref of its own.
+   *
+   * `MenuTriggerProps` used to carry a `ref`, so the render prop handed a
+   * callback ref out and the caller spread it onto their button. That is a
+   * legitimate pattern and it is indistinguishable — to a reader and to
+   * `react-hooks/refs` — from writing a ref during render, because `trigger`
+   * genuinely *is* invoked while rendering. The rule was right that it could
+   * not tell; suppressing it would have been asserting something no one could
+   * check.
+   *
+   * The ref was only ever used to restore focus on close. The wrapper element
+   * is already here, and the trigger is the one descendant carrying
+   * `aria-haspopup="menu"` — an attribute this component sets itself, not one
+   * the caller supplies — so the query is exact and the ref is redundant.
+   */
+  const focusTrigger = useCallback(() => {
+    wrapperRef.current
+      ?.querySelector<HTMLElement>('[aria-haspopup="menu"]')
+      ?.focus();
+  }, []);
 
   const items = useCallback((): HTMLElement[] => {
     const node = menuRef.current;
@@ -130,11 +150,14 @@ export function Menu({
     return Array.from(node.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR));
   }, []);
 
-  const close = useCallback((restoreFocus = true) => {
-    setOpen(false);
-    setActiveIndex(null);
-    if (restoreFocus) triggerRef.current?.focus();
-  }, []);
+  const close = useCallback(
+    (restoreFocus = true) => {
+      setOpen(false);
+      setActiveIndex(null);
+      if (restoreFocus) focusTrigger();
+    },
+    [focusTrigger],
+  );
 
   /**
    * Opening lands on the checked item when there is one.
@@ -244,10 +267,31 @@ export function Menu({
 
   return (
     <div ref={wrapperRef} className="relative inline-flex">
+      {/*
+        eslint-disable-next-line react-hooks/refs --
+        A false positive that this component cannot restructure away, recorded
+        rather than worked around.
+
+        The rule sees a function that (transitively) reads a ref being passed
+        into ``trigger``, which *is* called during render, and cannot prove the
+        function is not called during render too. It is not: `onClick` is
+        handed to React and invoked on user interaction, and the ref it reaches
+        is read inside `close`, from an event handler.
+
+        Two restructures were tried before settling here. Removing the ref from
+        the trigger props — the popup's own wrapper is already in the tree, and
+        the trigger is the one descendant carrying ``aria-haspopup="menu"``, so focus
+        restoration can find it by query — is kept, because it takes a ref out
+        of a public API. It does not silence the rule, because the handler
+        still reads a ref. Replacing the render prop with `cloneElement` would,
+        and this file's own comment explains why that is worse: cloning
+        silently drops attributes the caller also set.
+
+        The behaviour the rule is protecting is asserted directly in
+        `src/components/__tests__/primitives.test.tsx` — Escape closes and
+        focus returns to the trigger.
+      */}
       {trigger({
-        ref: (node) => {
-          triggerRef.current = node;
-        },
         "aria-haspopup": "menu",
         "aria-expanded": open,
         "aria-controls": open ? menuId : undefined,

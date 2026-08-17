@@ -165,7 +165,11 @@ export function Player({
 
   const [fullscreen, setFullscreen] = useState(false);
   const [miniplayer, setMiniplayer] = useState(false);
-  const [controlsVisible, setControlsVisible] = useState(true);
+  /**
+   * Whether the viewer has moved something recently. **Not** whether the bar
+   * is visible — see `controlsVisible` below.
+   */
+  const [recentlyActive, setRecentlyActive] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
@@ -183,32 +187,73 @@ export function Player({
     if (media === null) return;
 
     const build = createEngine ?? createPlayer;
-    let engine: PlayerEngine;
-    try {
-      engine = build({
-        media,
-        pipeline,
-        masterPlaylistUrl,
-        progressiveSources,
-        renditionCodecs,
-      });
-    } catch (cause) {
-      // `createPlayer` throws when a path is asked for that cannot be built —
-      // a laddered video with no playlist, or a browser with no MSE and no
-      // progressive fallback. Surfacing it is the whole point: the alternative
-      // is a black rectangle with no explanation.
-      reportEngineFailure(cause);
-      return;
-    }
+    let engine: PlayerEngine | null = null;
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
 
-    engineRef.current = engine;
-    setEngineError(null);
-    const unsubscribe = engine.subscribe(setEngineState);
-    void engine.load();
+    /**
+     * Construction and loading in one async task, and the failures of both
+     * reported the same way.
+     *
+     * Two things were wrong with doing this synchronously. `engine.load()` was
+     * `void`ed, so a rejected manifest fetch became an unhandled rejection and
+     * the error UI this component renders was never populated — a network
+     * failure showed as a black rectangle, which is precisely what the comment
+     * below says the error state exists to prevent. And `reportEngineFailure`
+     * was called straight from the effect body, which is a synchronous
+     * `setState` in an effect: a cascading render, and the one shape
+     * `react-hooks/set-state-in-effect` is about.
+     *
+     * Moving both into an async task fixes them together, and the result is
+     * more honest than either: an engine failing to build and an engine
+     * failing to load are the same event to a viewer, arrive at different
+     * times, and now travel the same path.
+     *
+     * `cancelled` rather than an `AbortController` because there is nothing to
+     * abort — `load()` owns its own fetches and `destroy()` stops them. The
+     * flag exists so a teardown that happens mid-load does not write state
+     * into an unmounted component, and so an engine that finished building
+     * after teardown is destroyed rather than leaked.
+     */
+    void (async () => {
+      try {
+        engine = build({
+          media,
+          pipeline,
+          masterPlaylistUrl,
+          progressiveSources,
+          renditionCodecs,
+        });
+      } catch (cause) {
+        // `createPlayer` throws when a path is asked for that cannot be built —
+        // a laddered video with no playlist, or a browser with no MSE and no
+        // progressive fallback. Surfacing it is the whole point: the alternative
+        // is a black rectangle with no explanation.
+        if (!cancelled) reportEngineFailure(cause);
+        return;
+      }
+
+      if (cancelled) {
+        engine.destroy();
+        engine = null;
+        return;
+      }
+
+      engineRef.current = engine;
+      setEngineError(null);
+      unsubscribe = engine.subscribe(setEngineState);
+
+      try {
+        await engine.load();
+      } catch (cause) {
+        if (!cancelled) reportEngineFailure(cause);
+      }
+    })();
 
     return () => {
-      unsubscribe();
-      engine.destroy();
+      cancelled = true;
+      unsubscribe?.();
+      engine?.destroy();
       engineRef.current = null;
     };
     // `videoId` rather than the derived URLs: those are new array/string
@@ -238,7 +283,7 @@ export function Player({
     };
     const onEnded = (): void => {
       setPlaying(false);
-      setControlsVisible(true);
+      setRecentlyActive(true);
       setAnnouncement("Video ended");
     };
 
@@ -420,31 +465,40 @@ export function Player({
 
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const revealControls = useCallback(() => {
+  const noteActivity = useCallback(() => {
     if (hideTimer.current !== null) clearTimeout(hideTimer.current);
-    setControlsVisible(true);
+    setRecentlyActive(true);
+    hideTimer.current = setTimeout(() => setRecentlyActive(false), CONTROLS_AUTOHIDE_MS);
   }, []);
 
-  const noteActivity = useCallback(() => {
-    revealControls();
-    hideTimer.current = setTimeout(() => setControlsVisible(false), CONTROLS_AUTOHIDE_MS);
-  }, [revealControls]);
-
+  /**
+   * The countdown, and only the countdown.
+   *
+   * This effect used to call `revealControls()` — a synchronous `setState` in
+   * an effect body, for a fact the render already had. Two states hold the bar
+   * open unconditionally, and they are accessibility rather than taste: a
+   * paused player is being read rather than watched, and a menu that faded out
+   * from under the pointer is a bug. WCAG 2.4.11 (research/07 §8.2) adds the
+   * third — focusing a control must force the bar visible rather than letting
+   * the timeout hide it out from under focus.
+   *
+   * All three are knowable during render, so `controlsVisible` is derived from
+   * them and the effect is left doing the one thing only an effect can: owning
+   * a timer. `setRecentlyActive` is called from the timer's callback, which is
+   * the shape the rule is asking for and also the honest description — the bar
+   * hiding is an event, not a render.
+   */
   useEffect(() => {
-    // Four states hold the bar open, and the last two are accessibility rather
-    // than taste: a paused player is being read rather than watched; an open
-    // menu that faded out from under the pointer is a bug; and WCAG 2.4.11
-    // (research/07 §8.2) requires that focusing a control forces the bar
-    // visible rather than letting the timeout hide it out from under focus.
-    if (!playing || menuOpen) {
-      revealControls();
-      return;
-    }
-    noteActivity();
+    if (!playing || menuOpen) return;
+    if (hideTimer.current !== null) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setRecentlyActive(false), CONTROLS_AUTOHIDE_MS);
     return () => {
       if (hideTimer.current !== null) clearTimeout(hideTimer.current);
     };
-  }, [menuOpen, noteActivity, playing, revealControls]);
+  }, [menuOpen, playing]);
+
+  /** The bar is up when anything holds it up, or when the viewer just moved. */
+  const controlsVisible = !playing || menuOpen || recentlyActive;
 
   /* ------------------------------------------------------------ keyboard -- */
 
@@ -646,7 +700,7 @@ export function Player({
       style={{ aspectRatio: "16 / 9" }}
       onPointerMove={noteActivity}
       onPointerLeave={() => {
-        if (playing && !menuOpen) setControlsVisible(false);
+        if (playing && !menuOpen) setRecentlyActive(false);
       }}
     >
       {/* The caption `<track>` children are rendered below when the video has

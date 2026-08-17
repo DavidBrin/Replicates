@@ -84,7 +84,7 @@ export function AppShell({
    */
   const [viewportWidth, setViewportWidth] = useState<number | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerRequested, setDrawerRequested] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
@@ -105,11 +105,21 @@ export function AppShell({
       : "expanded"
     : naturalMode;
 
-  // Growing past 1313 while the temporary drawer is open would leave a
-  // scrimmed overlay on top of a persistent rail showing the same thing.
-  useEffect(() => {
-    if (persistent && drawerOpen) setDrawerOpen(false);
-  }, [persistent, drawerOpen]);
+  /**
+   * Derived, not corrected.
+   *
+   * Growing past 1313 while the temporary drawer is open would leave a
+   * scrimmed overlay on top of a persistent rail showing the same thing. That
+   * was handled by an effect that noticed the combination and called
+   * `setDrawerOpen(false)` — a render, then an effect, then a second render,
+   * for a fact that was already knowable in the first one.
+   *
+   * `drawerRequested` is what the user asked for and is the only thing stored;
+   * whether the drawer is *shown* is a function of that and the viewport. The
+   * state cannot now hold the impossible combination even for one frame, which
+   * is a stronger guarantee than correcting it afterwards.
+   */
+  const drawerOpen = drawerRequested && !persistent;
 
   const toggleGuide = useCallback(() => {
     if (persistent) {
@@ -120,11 +130,11 @@ export function AppShell({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    setDrawerOpen((open) => !open);
+    setDrawerRequested((open) => !open);
   }, [persistent]);
 
   const closeDrawer = useCallback(() => {
-    setDrawerOpen(false);
+    setDrawerRequested(false);
     restoreFocusRef.current?.focus();
   }, []);
 

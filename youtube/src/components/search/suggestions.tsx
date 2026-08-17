@@ -125,6 +125,15 @@ export interface SearchSuggestionsProps {
 
 /* ------------------------------------------------------------ the widget -- */
 
+/**
+ * A stable empty array.
+ *
+ * A fresh `[]` per render would give `items` a new identity every time and
+ * re-run every `useCallback`/`useMemo` that depends on it — cheap here, but
+ * the kind of churn that is invisible until a child memo stops holding.
+ */
+const EMPTY_SUGGESTIONS: readonly string[] = Object.freeze([]);
+
 export function SearchSuggestions({
   query,
   inputRef,
@@ -137,7 +146,10 @@ export function SearchSuggestions({
 }: SearchSuggestionsProps) {
   const listboxId = useId();
 
-  const [items, setItems] = useState<readonly string[]>([]);
+  /**
+   * The last list the server returned. Not what is shown — see `items` below.
+   */
+  const [fetched, setFetched] = useState<readonly string[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -176,6 +188,24 @@ export function SearchSuggestions({
     onPreviewRef.current = onPreview;
   });
 
+  /**
+   * What is actually shown: the last fetched list, unless the field is empty.
+   *
+   * This was `setItems([])` inside the fetching effect, defended by a comment
+   * arguing that deriving it would "make it empty for the debounce window
+   * after *any* keystroke, so the popup would blink closed on every
+   * character". That does not follow. The condition is on `query`, not on
+   * whether a request is in flight — after typing `a` the query is `"a"`, so
+   * the derivation returns the previous list and the popup stays up, which is
+   * precisely the behaviour the comment wanted to protect. It empties only
+   * while the field really is empty.
+   *
+   * The watermark bump in the effect stays and is doing separate work: it
+   * stops a response issued for the previous keystroke landing after the field
+   * was cleared and repopulating `fetched`.
+   */
+  const items: readonly string[] = query.trim() === "" ? EMPTY_SUGGESTIONS : fetched;
+
   const open = focused && !dismissed && items.length > 0;
 
   /* ------------------------------------------------------------- fetching -- */
@@ -203,14 +233,6 @@ export function SearchSuggestions({
       // Bump the applied watermark so a request issued for the previous
       // keystroke cannot land after the field was cleared.
       appliedRef.current = issuedRef.current;
-      // `react-hooks/set-state-in-effect` objects to this line, and the
-      // alternative is worse. Deriving the visible list — "empty whenever the
-      // field is" — would also make it empty for the debounce window after
-      // *any* keystroke, so the popup would blink closed on every character.
-      // Clearing here empties it for a cleared field only, and leaves the last
-      // good list up while the next one is in flight, which is the behaviour
-      // the failure path already relies on.
-      setItems([]);
       return;
     }
 
@@ -227,7 +249,7 @@ export function SearchSuggestions({
           // still resolve, and two live requests can finish in either order.
           if (sequence <= appliedRef.current) return;
           appliedRef.current = sequence;
-          setItems(result);
+          setFetched(result);
           setActiveIndex(-1);
         })
         .catch(() => {
