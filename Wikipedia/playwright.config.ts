@@ -32,7 +32,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm run dev -- --port ${PORT}`,
+    // No `--` separator: this pnpm version (11.x) forwards it through
+    // literally instead of stripping it the way npm does, which makes
+    // `next dev` see a literal `--` token and fail to parse `--port`.
+    command: `pnpm run dev --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
