@@ -58,3 +58,22 @@ backends. This site has no IO: content is code, search is in-memory, deployment
 is static. A ports layer here would be ceremony. **What it costs:** if articles
 ever move to a CMS, a seam has to be cut then — the cheapest possible time to
 cut it, since the content types already exist.
+
+### D7 — Measured body type beats the research hedge (2026-08-18)
+
+Research lane 3 could not resolve Vector's `--font-size-medium` token and hedged
+"historically 14px". The design-comparison rounds measured the served page at
+Text = Standard: **16px/26px**, which had made every derived size (~h1 26px vs
+the real 28.8px) about 12% small. The measured constants were added to `:root`
+with provenance comments; no value the research marked *verified* was changed.
+The lesson is the repo's standing one: measure the running product, and treat a
+hedge in a research note as a todo, not a fact.
+
+### D8 — The sticky header shows for everyone (2026-08-18)
+
+en.wikipedia.org only renders the sticky condensed header for logged-in
+accounts. This replica has no accounts, and the sticky header is one of Vector
+2022's most recognisable behaviors, so it shows for all readers. **What it
+costs:** the TOC's sticky offset moves to 4rem (documented in `Toc.tsx`), a
+divergence from the logged-out page geometry that is invisible unless you diff
+scroll positions against the real site while logged out.
