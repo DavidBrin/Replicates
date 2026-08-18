@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   // The dev badge floats over the bottom-left corner, exactly where a
   // fidelity-comparison screenshot wants to be clean. Nothing here needs it.
   devIndicators: false,
+  // Don't write AGENTS.md/CLAUDE.md into the project on `next dev` (repo convention).
+  agentRules: false,
 
   // Pin Turbopack's inferred workspace root to this package. Without it,
   // Turbopack walks up from cwd looking for the "highest" lockfile and can
