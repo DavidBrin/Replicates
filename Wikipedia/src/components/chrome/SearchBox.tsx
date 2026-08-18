@@ -4,6 +4,11 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { searchTitles } from "@/lib/registry";
 
+/** Stable id for a suggestion row, so `aria-activedescendant` can target it. */
+function optionId(listboxId: string, index: number): string {
+  return `${listboxId}-option-${index}`;
+}
+
 /**
  * Codex-style search-suggest box: client-side prefix/substring match via
  * `searchTitles()`, a typeahead dropdown of thumbnail/title/description rows,
@@ -99,6 +104,9 @@ export function SearchBox() {
             aria-expanded={showDropdown}
             aria-controls={listboxId}
             aria-autocomplete="list"
+            aria-activedescendant={
+              showDropdown && activeIndex >= 0 ? optionId(listboxId, activeIndex) : undefined
+            }
             className="h-full w-full border-0 bg-transparent py-1 pl-[34px] pr-2 text-[14px] leading-[22px] text-[color:var(--text)] outline-none"
             onChange={(event) => {
               setQuery(event.target.value);
@@ -125,7 +133,12 @@ export function SearchBox() {
             className="absolute inset-x-0 top-full z-50 max-h-[70vh] overflow-y-auto border border-[color:var(--rule)] bg-white shadow-[0_4px_4px_rgba(0,0,0,0.06),0_0_8px_rgba(0,0,0,0.06)]"
           >
             {results.map((meta, i) => (
-              <li key={meta.slug} role="option" aria-selected={i === activeIndex}>
+              <li
+                key={meta.slug}
+                id={optionId(listboxId, i)}
+                role="option"
+                aria-selected={i === activeIndex}
+              >
                 <button
                   type="button"
                   className={`flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-3 py-2 text-left ${

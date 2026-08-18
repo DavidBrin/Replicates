@@ -1,5 +1,6 @@
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { notionMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -24,13 +25,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const notion: ArticleModule = {
-  meta: {
-    slug: project.slug,
-    title: "Notion (replica)",
-    shortDescription: "A rebuild of the Notion workspace tool, entirely client-side",
-    categories: ["Software replicas", "Note-taking software"],
-    lastEdited: "18 August 2026",
-  },
+  meta: notionMeta,
   body: (
     <>
       <Hatnote>
@@ -109,7 +104,7 @@ export const notion: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Linear_(replica)">Linear (replica)</WikiLink>
@@ -123,7 +118,7 @@ export const notion: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

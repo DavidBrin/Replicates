@@ -46,7 +46,7 @@ export const sandbox: ArticleModule = {
           renders as a red link instead.
         </P>
 
-        <Section heading="A subsection" editable={false}>
+        <Section heading="A subsection">
           <P>
             Subsections render as an <code>h3</code> nested under the parent
             section&apos;s <code>h2</code>, without their own edit
@@ -80,7 +80,7 @@ export const sandbox: ArticleModule = {
         </WikiTable>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

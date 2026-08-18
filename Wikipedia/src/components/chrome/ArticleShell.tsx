@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Toc, type TocEntry } from "./Toc";
 import { PageTitlebar } from "./PageTitlebar";
 import { PageToolbar } from "./PageToolbar";
-import { PageTools } from "./PageTools";
 import { Footer } from "./Footer";
 
 /**
@@ -56,19 +55,24 @@ export function ArticleShell({
       {/*
         Three columns, not two: on the served page at 1440x900 the left rail
         occupies a 196px slot, the content column 912px, and a 196px right
-        rail carries the page-tools panel — 196 + 24 + 912 + 24 + 196 = the
-        1352px inner container exactly. Dropping the right rail (as this used
-        to) left the content column hanging left of centre with a 220px hole
-        beside it, which is the first thing a daily reader notices.
-        `minmax(0, var(--content-max))` keeps the 948px ceiling research/03
-        measured while letting the column shrink to 912px here.
+        rail slot — 196 + 24 + 912 + 24 + 196 = the 1352px inner container
+        exactly. That right rail used to carry a page-tools panel; every item
+        in it was non-functional, so per DECISIONS D5 (superseded
+        2026-08-18) the panel was removed rather than greyed. The empty
+        third grid track is kept (not collapsed to two columns) because
+        `grid-template-columns` sizes `var(--rail)` as a fixed 196px length
+        regardless of whether a track has any content — dropping the track
+        itself would leave the content column hanging left of centre with a
+        220px hole beside it, which is the first thing a daily reader
+        notices. `minmax(0, var(--content-max))` keeps the 948px ceiling
+        research/03 measured while letting the column shrink to 912px here.
       */}
       <main
         id="content"
         className="mw-body grid grid-cols-1 gap-x-6 pt-6 min-[1120px]:grid-cols-[var(--rail)_minmax(0,var(--content-max))_var(--rail)]"
       >
-        {/* The rails hang 2.8rem below the content column's top edge, level
-            with the toolbar rather than the title. */}
+        {/* The left rail hangs 2.8rem below the content column's top edge,
+            level with the toolbar rather than the title. */}
         <div className="order-2 mt-0 min-[1120px]:order-1 min-[1120px]:mt-[2.8rem]">
           <Toc sections={sections} />
         </div>
@@ -78,9 +82,6 @@ export function ArticleShell({
           <div ref={contentRef} className="mw-body-content mt-4">
             {children}
           </div>
-        </div>
-        <div className="order-3 hidden min-[1120px]:mt-[2.8rem] min-[1120px]:block">
-          <PageTools />
         </div>
       </main>
       <Footer lastEdited={lastEdited} />

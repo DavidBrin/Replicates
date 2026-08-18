@@ -20,7 +20,7 @@ test.describe("article anatomy", () => {
     await expect(page.locator("#siteSub")).toHaveText("From Wikipedia, the free encyclopedia");
   });
 
-  test("Article and Read tabs are selected, Talk and Edit are greyed", async ({ page }) => {
+  test("Article and Read tabs are selected; Talk, Edit and View history are absent", async ({ page }) => {
     const article = page.getByText("Article", { exact: true });
     const read = page.getByText("Read", { exact: true });
     await expect(article).toBeVisible();
@@ -28,10 +28,9 @@ test.describe("article anatomy", () => {
     await expect(article).not.toHaveAttribute("aria-disabled", "true");
     await expect(read).not.toHaveAttribute("aria-disabled", "true");
 
-    const talk = page.getByText("Talk", { exact: true });
-    const edit = page.getByText("Edit", { exact: true });
-    await expect(talk).toHaveAttribute("aria-disabled", "true");
-    await expect(edit).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByText("Talk", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Edit", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("View history", { exact: true })).toHaveCount(0);
   });
 
   test("infobox is present with a Website row", async ({ page }) => {

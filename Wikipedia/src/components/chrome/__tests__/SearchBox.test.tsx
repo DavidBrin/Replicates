@@ -55,6 +55,27 @@ describe("SearchBox", () => {
     expect(routerMock.push).toHaveBeenCalledWith("/wiki/Linear_(replica)");
   });
 
+  it("sets aria-activedescendant to the highlighted option's id, per the ARIA combobox pattern", async () => {
+    const user = userEvent.setup();
+    render(<SearchBox />);
+
+    const input = screen.getByRole("combobox");
+    await user.type(input, "replica");
+    expect(input).not.toHaveAttribute("aria-activedescendant");
+
+    await user.keyboard("{ArrowDown}");
+    const options = screen.getAllByRole("option");
+    const active = options[0];
+    expect(active).toHaveAttribute("id");
+    expect(input).toHaveAttribute("aria-activedescendant", active.id);
+    expect(active).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowDown}");
+    expect(input).toHaveAttribute("aria-activedescendant", options[1].id);
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+    expect(options[0]).toHaveAttribute("aria-selected", "false");
+  });
+
   it("closes the dropdown on Escape", async () => {
     const user = userEvent.setup();
     render(<SearchBox />);

@@ -1,8 +1,8 @@
-import { Greyed } from "./Greyed";
-
 /**
- * `.vector-page-toolbar`: Article | Talk tabs on the left, Read | Edit |
- * View history tabs on the right — only Article + Read are real per D5.
+ * `.vector-page-toolbar`: Article tab on the left, Read tab on the right —
+ * the only two tabs this replica supports. Talk, Edit, View history and the
+ * Tools (⋮) dropdown had no honest behavior in a static replica, so per
+ * DECISIONS D5 (superseded 2026-08-18) they are removed rather than greyed.
  * `#siteSub` renders below.
  *
  * Geometry measured off the served page at 1440x900: the tab strip is a
@@ -24,46 +24,10 @@ export function PageToolbar() {
             <li>
               <span className={SELECTED}>Article</span>
             </li>
-            <li>
-              <Greyed
-                as="span"
-                className={TAB}
-                title="Talk pages are not functional in this replica"
-              >
-                Talk
-              </Greyed>
-            </li>
           </ul>
           <ul className="m-0 flex list-none items-end gap-4 p-0">
             <li>
               <span className={SELECTED}>Read</span>
-            </li>
-            <li>
-              <Greyed
-                as="span"
-                className={TAB}
-                title="Editing is not available in this replica"
-              >
-                Edit
-              </Greyed>
-            </li>
-            <li>
-              <Greyed
-                as="span"
-                className={TAB}
-                title="Page history is not tracked in this replica"
-              >
-                View history
-              </Greyed>
-            </li>
-            <li>
-              <Greyed
-                as="span"
-                className={`${TAB} px-1`}
-                title="The tools menu is not functional in this replica"
-              >
-                <span aria-hidden="true" className="text-[16px] leading-none">⋮</span>
-              </Greyed>
             </li>
           </ul>
         </div>

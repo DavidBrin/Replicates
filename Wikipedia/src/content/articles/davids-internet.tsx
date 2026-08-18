@@ -1,5 +1,6 @@
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { davidsInternetMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -24,13 +25,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const davidsInternet: ArticleModule = {
-  meta: {
-    slug: "Davids_Internet",
-    title: "David's Internet",
-    shortDescription: "A planned search engine over a portfolio of software replicas",
-    categories: ["Portfolio indexes", "Software replicas", "2026 establishments"],
-    lastEdited: "18 August 2026",
-  },
+  meta: davidsInternetMeta,
   body: (
     <>
       <Hatnote>
@@ -138,7 +133,7 @@ export const davidsInternet: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Linear_(replica)">Linear (replica)</WikiLink>
@@ -152,7 +147,7 @@ export const davidsInternet: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

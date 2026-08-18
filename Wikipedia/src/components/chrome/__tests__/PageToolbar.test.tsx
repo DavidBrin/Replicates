@@ -3,13 +3,13 @@ import { render, screen } from "@testing-library/react";
 import { PageToolbar } from "../PageToolbar";
 
 describe("PageToolbar", () => {
-  it("marks Talk, Edit, and View history as greyed/disabled", () => {
+  it("renders no Talk, Edit, View history or Tools controls", () => {
     render(<PageToolbar />);
 
-    for (const label of ["Talk", "Edit", "View history"]) {
-      const el = screen.getByText(label);
-      expect(el).toHaveAttribute("aria-disabled", "true");
-      expect(el).toHaveAttribute("title");
+    // "\u22ee" is the vertical-ellipsis glyph the removed Tools dropdown
+    // actually rendered — asserting only the word "Tools" would miss it.
+    for (const label of ["Talk", "Edit", "View history", "Tools", "\u22ee"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
   });
 

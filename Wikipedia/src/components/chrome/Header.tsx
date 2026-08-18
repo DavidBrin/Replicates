@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { Logo } from "./Logo";
 import { SearchBox } from "./SearchBox";
-import { Greyed } from "./Greyed";
 import { Navigation } from "./Navigation";
 
 /**
  * The real page header (`.vector-header`): hamburger main-menu toggle +
- * logo lockup on the start side, search box + user links + Appearance
- * controls on the end side. Per research/03.
+ * logo lockup on the start side, search box on the end side. The user-links
+ * cluster (Create account, Log in, Appearance) and any notification bell had
+ * no honest behavior in a static replica, so per DECISIONS D5 (superseded
+ * 2026-08-18) they are removed rather than greyed. Per research/03.
  */
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -47,19 +48,6 @@ export function Header() {
         <div className="w-full max-w-[474px] shrink">
           <SearchBox />
         </div>
-
-        <nav
-          aria-label="User links"
-          className="ml-auto flex shrink-0 items-center gap-4 pl-4 text-[14px]"
-        >
-          <Greyed title="Account creation is not functional in this replica">
-            Create account
-          </Greyed>
-          <Greyed title="Login is not functional in this replica">Log in</Greyed>
-          <Greyed title="Appearance settings are not functional in this replica">
-            Appearance
-          </Greyed>
-        </nav>
       </header>
 
       {menuOpen && (

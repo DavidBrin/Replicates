@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { randomSlug } from "@/lib/registry";
-import { Greyed } from "./Greyed";
 
 /**
- * The main-menu sidebar panel: "Main page" and "Random article" are real
- * navigation (D-nothing — these are the two functional sidebar links per
- * SPEC §5); the Contribute group is greyed like every other non-functional
- * control (D5).
+ * The main-menu sidebar panel: "Main page" and "Random article" are the two
+ * functional sidebar links per SPEC §5. The Contribute group (Help, Community
+ * portal, Recent changes, Upload file, ...) had no honest behavior in a
+ * static replica, so per DECISIONS D5 (superseded 2026-08-18) it is removed
+ * outright rather than greyed.
  */
 export function Navigation() {
   const router = useRouter();
@@ -35,25 +35,6 @@ export function Navigation() {
               Random article
             </button>
           </li>
-        </ul>
-      </div>
-
-      <div>
-        <h3 className="mb-1 px-2 text-[12px] font-bold uppercase tracking-wide text-[color:var(--text)]/60">
-          Contribute
-        </h3>
-        <ul className="m-0 list-none p-0">
-          {["Help", "Community portal", "Recent changes", "Upload file"].map((item) => (
-            <li key={item}>
-              <Greyed
-                as="span"
-                className="block px-2 py-1"
-                title="Contribution tools are not functional in this replica"
-              >
-                {item}
-              </Greyed>
-            </li>
-          ))}
         </ul>
       </div>
     </nav>

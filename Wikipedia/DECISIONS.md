@@ -43,13 +43,30 @@ untyped seam for exactly eight articles). **What it costs:** article authoring
 requires editing TSX; acceptable because articles change when projects change,
 which is a code event anyway.
 
-### D5 — Non-functional chrome is greyed, never fake-clickable (2026-08-18)
+### D5 — Non-functional chrome is removed outright, never greyed (superseded 2026-08-18)
 
-Edit, View history, Talk, the language pill and the Appearance menu have no
-behavior a static replica can honestly provide. They render greyed with a
-tooltip saying so, matching this repo's precedent (youtube: "Make the decorative
-controls real, or honestly greyed"). **Rejected:** live-looking tabs that do
-nothing — the uncanny valley of replicas.
+**Originally (2026-08-18):** Edit, View history, Talk, the language pill and
+the Appearance menu had no behavior a static replica could honestly provide.
+They rendered greyed with a tooltip saying so, matching this repo's precedent
+(youtube: "Make the decorative controls real, or honestly greyed").
+**Rejected then:** live-looking tabs that do nothing — the uncanny valley of
+replicas.
+
+**Superseded 2026-08-18, at David's direction:** greyed-but-present chrome is
+itself a kind of uncanny valley — a control that visibly exists but can never
+work. The rule is now: controls for features this replica will never support
+are removed entirely (markup and all), not greyed. This applies to Create
+account, Log in, the Appearance dropdown and any notification bell in the
+header/sticky header; the Talk tab, Edit, View history and the Tools (⋮)
+dropdown in the page toolbar; the `[edit]` section affordance; the sidebar's
+Contribute group; and the right-rail Tools panel (removed entirely — its
+grid track is kept empty, at its fixed `var(--rail)` width, purely to hold
+the 912px content-column geometry the served page measures, not to house a
+inert panel). **Kept greyed, not removed:** the "1 language" pill (it is
+informational — "this article has 1 language" is a true fact, not a broken
+control) and the footer's non-Wikipedia-replica link row (About, Privacy
+policy, etc. — same reasoning, pages that plainly don't exist in a personal
+replica rather than features attempted and abandoned).
 
 ### D6 — No ports/adapters layer (2026-08-18)
 
@@ -77,3 +94,22 @@ accounts. This replica has no accounts, and the sticky header is one of Vector
 costs:** the TOC's sticky offset moves to 4rem (documented in `Toc.tsx`), a
 divergence from the logged-out page geometry that is invisible unless you diff
 scroll positions against the real site while logged out.
+
+### D9 — Seven codex rounds, and most findings were repairs of repairs (2026-08-18)
+
+The review convergence ran two reviewers (a Claude code-reviewer and codex) and
+then looped codex against every fix round until a pass came back clean. Rounds
+1–2 found 10 distinct real defects in the built code (a `/wiki/__proto__`
+crash, a double `decodeURIComponent` 500, every article's JSX riding in the
+client search chunk, soft-404s, a sticky-header focus trap, stale TOC
+highlighting, and four doc/test-integrity gaps). Rounds 3–7 found 13 more — and
+nearly all of them were defects in the previous round's own repairs: an
+overbroad middleware matcher, an e2e suite validating `next dev` while the bug
+lived in `next start`, a TOC boundary constant not actually derived from the
+sticky header it named, a bundle guard proving one sentinel instead of eight,
+and finally an IntersectionObserver model whose staleness had now been patched
+twice, replaced outright with direct measurement (the plain scrollspy rule).
+codex concurred explicitly on round 7. **The lesson this repo keeps learning:**
+one clean pass after a fix round proves little; the fix rounds themselves are
+where the next round's findings come from, and the loop only ends when a pass
+finds nothing.

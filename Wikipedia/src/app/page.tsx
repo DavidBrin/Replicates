@@ -1,4 +1,4 @@
-import { getArticle } from "@/lib/registry";
+import { getArticle } from "@/lib/article";
 import { ArticleShell } from "@/components/chrome";
 
 /**

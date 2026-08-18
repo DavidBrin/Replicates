@@ -1,5 +1,6 @@
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { betMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -24,13 +25,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const bet: ArticleModule = {
-  meta: {
-    slug: project.slug,
-    title: "Bet (app)",
-    shortDescription: "A private, friend-first prediction market",
-    categories: ["Software replicas", "Prediction markets"],
-    lastEdited: "18 August 2026",
-  },
+  meta: betMeta,
   body: (
     <>
       <Hatnote>
@@ -104,7 +99,7 @@ export const bet: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Fake_Phone">Fake Phone</WikiLink>
@@ -118,7 +113,7 @@ export const bet: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

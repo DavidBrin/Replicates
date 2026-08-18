@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { youtubeMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -26,13 +27,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const youtube: ArticleModule = {
-  meta: {
-    slug: project.slug,
-    title: "YouTube (replica)",
-    shortDescription: "A rebuild of YouTube's core video platform",
-    categories: ["Software replicas", "Video hosting services"],
-    lastEdited: "18 August 2026",
-  },
+  meta: youtubeMeta,
   body: (
     <>
       <Hatnote>
@@ -132,7 +127,7 @@ export const youtube: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Linear_(replica)">Linear (replica)</WikiLink>
@@ -146,7 +141,7 @@ export const youtube: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

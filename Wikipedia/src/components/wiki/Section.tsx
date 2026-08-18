@@ -13,29 +13,21 @@ export interface SectionProps {
   id?: string;
   children: ReactNode;
   subsections?: Subsection[];
-  /** Sections render an edit affordance by default; article intros do not. */
-  editable?: boolean;
 }
 
 /**
- * An h2 section with a derived anchor id, an optional [edit] affordance
- * (greyed — this replica has no editing), and optional h3 subsections.
+ * An h2 section with a derived anchor id and optional h3 subsections. This
+ * replica has no editing, so it carries no `[edit]` affordance at all — per
+ * DECISIONS D5 (superseded 2026-08-18), controls for unsupported features are
+ * removed outright rather than greyed.
  */
-export function Section({ heading, id, children, subsections, editable = true }: SectionProps) {
+export function Section({ heading, id, children, subsections }: SectionProps) {
   const sectionId = id ?? slugifyHeading(heading);
 
   return (
     <section aria-labelledby={sectionId}>
-      {/*
-        The edit affordance follows the heading text inline. On the served
-        page `.mw-editsection` sits 13px to the right of the last word, not
-        flush against the right end of the rule — this used to render it as a
-        `justify-between` flex row, which put `[edit]` ~600px away from the
-        heading it edits.
-      */}
       <h2 id={sectionId}>
         <span className="mw-headline">{heading}</span>
-        {editable && <EditAffordance />}
       </h2>
       {children}
       {subsections?.map((sub) => {
@@ -48,22 +40,5 @@ export function Section({ heading, id, children, subsections, editable = true }:
         );
       })}
     </section>
-  );
-}
-
-/**
- * The classic `[edit]` link, greyed rather than removed: this is a static
- * replica with nothing to edit, but a live-looking-then-dead control is
- * worse than an honestly inert one (DECISIONS D5).
- */
-function EditAffordance() {
-  return (
-    <span
-      className="mw-editsection select-none text-[color:var(--text)]/50"
-      title="Editing is not available in this replica"
-      aria-hidden="true"
-    >
-      [edit]
-    </span>
   );
 }

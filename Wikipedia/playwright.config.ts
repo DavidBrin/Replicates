@@ -32,12 +32,26 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // No `--` separator: this pnpm version (11.x) forwards it through
-    // literally instead of stripping it the way npm does, which makes
-    // `next dev` see a literal `--` token and fail to parse `--port`.
-    command: `pnpm run dev --port ${PORT}`,
+    /**
+     * A production build, not `next dev`.
+     *
+     * The `/wiki/%25` 500 that `src/proxy.ts` fixes is a production-only
+     * regression: Next's dev server doesn't run the same route-matching
+     * path (or doesn't crash the same way) that `next start` does after
+     * `next build`, so a suite that boots via `next dev` would pass while
+     * the deployed artifact 500s. Matching the youtube sibling's config
+     * (`../youtube/playwright.config.ts`) so this suite tests what actually
+     * ships.
+     *
+     * No `--` separator: this pnpm version (11.x) forwards it through
+     * literally instead of stripping it the way npm does, which makes
+     * `pnpm exec next start -- --port` see a literal `--` token and fail to
+     * parse `--port` (`next start -- --port 3211` reads `--` as the project
+     * directory and exits immediately).
+     */
+    command: `pnpm run build && pnpm exec next start --port ${PORT}`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    reuseExistingServer: false,
+    timeout: 600_000,
   },
 });

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { linearMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -26,13 +27,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const linear: ArticleModule = {
-  meta: {
-    slug: project.slug,
-    title: "Linear (replica)",
-    shortDescription: "A rebuild of the Linear issue tracker",
-    categories: ["Software replicas", "Issue tracking systems"],
-    lastEdited: "18 August 2026",
-  },
+  meta: linearMeta,
   body: (
     <>
       <Hatnote>
@@ -130,7 +125,7 @@ export const linear: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Notion_(replica)">Notion (replica)</WikiLink>
@@ -144,7 +139,7 @@ export const linear: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

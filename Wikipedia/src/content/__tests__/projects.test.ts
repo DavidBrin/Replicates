@@ -18,14 +18,27 @@ describe("projects.ts <-> articles registry", () => {
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 
-  // `liveUrl` is null for every project because nothing in the repo is
-  // deployed yet (research/02-project-dossiers.md, "Root repo"). Update this
-  // test — and the projects it names — the day a project's `liveUrl` is
-  // filled in with a real deployment URL; it should then assert that
-  // project's link renders as a normal (non-stub) external link instead.
-  it("has liveUrl: null for every project (nothing is deployed yet)", () => {
+  // The explicit expectation list README.md's "Adding a live project link"
+  // step (4) refers to. `liveUrl` is null for every project because nothing
+  // in the repo is deployed yet (research/02-project-dossiers.md, "Root
+  // repo"). The day a project's `liveUrl` goes from `null` to a real
+  // deployment URL, add that project's slug here — and only here.
+  const EXPECTED_LIVE: string[] = [];
+
+  it("has a non-null liveUrl iff the project is listed in EXPECTED_LIVE (src/content/__tests__/projects.test.ts)", () => {
     for (const project of projects) {
-      expect(project.liveUrl, `${project.name} has a non-null liveUrl`).toBeNull();
+      const shouldBeLive = EXPECTED_LIVE.includes(project.slug);
+      if (shouldBeLive) {
+        expect(
+          project.liveUrl,
+          `${project.name} is listed in EXPECTED_LIVE (src/content/__tests__/projects.test.ts) but still has liveUrl: null`,
+        ).not.toBeNull();
+      } else {
+        expect(
+          project.liveUrl,
+          `${project.name} has a non-null liveUrl but isn't listed in EXPECTED_LIVE (src/content/__tests__/projects.test.ts) — add its slug there`,
+        ).toBeNull();
+      }
     }
   });
 

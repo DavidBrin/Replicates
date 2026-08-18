@@ -6,7 +6,7 @@
 export function PageTitlebar({ title }: { title: string }) {
   return (
     <header className="mw-body-header flex min-h-10 flex-wrap items-center justify-between gap-2">
-      <h1 id="firstHeading" className="scroll-mt-24">
+      <h1 id="firstHeading">
         {title}
       </h1>
       {/*

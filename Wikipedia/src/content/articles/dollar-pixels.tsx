@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { dollarPixelsMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -26,13 +27,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const dollarPixels: ArticleModule = {
-  meta: {
-    slug: project.slug,
-    title: "Dollar Pixels",
-    shortDescription: "A rebuild of the Million Dollar Homepage",
-    categories: ["Software replicas", "Advertising websites"],
-    lastEdited: "18 August 2026",
-  },
+  meta: dollarPixelsMeta,
   body: (
     <>
       <Hatnote>
@@ -123,7 +118,7 @@ export const dollarPixels: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Bet_(app)">Bet (app)</WikiLink>
@@ -137,7 +132,7 @@ export const dollarPixels: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

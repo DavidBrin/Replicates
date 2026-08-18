@@ -10,4 +10,3 @@ export { Footer } from "./Footer";
 export { ArticleShell } from "./ArticleShell";
 export { Logo } from "./Logo";
 export { Greyed } from "./Greyed";
-export { PageTools } from "./PageTools";

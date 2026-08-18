@@ -395,3 +395,16 @@ input[type="search"]::-webkit-search-cancel-button {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Anchor jumps (TOC entries, #firstHeading links) must clear the sticky
+ * header. The offset is published by layout.tsx from
+ * components/chrome/layout-constants.ts (SCROLL_ANCHOR_OFFSET_PX) so the
+ * TOC's active-section boundary and this rule can never disagree; the
+ * fallback matches that constant's current value.
+ */
+h1[id],
+h2[id],
+h3[id] {
+  scroll-margin-top: var(--scroll-anchor-offset, 58px);
+}

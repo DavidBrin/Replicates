@@ -28,11 +28,13 @@ and `research/03-wikipedia-vector-2022.md`. Nothing here is specced from memory.
 4. **Search**: header search box does client-side prefix/substring match over
    article titles with a suggestion dropdown (Codex-style), Enter/click navigates.
 5. **Navigation chrome**: main-menu sidebar (Main page, Random article — both
-   functional), sticky Contents TOC with "(Top)" and active-section highlight,
-   Article/Talk + Read/Edit/View history toolbar (non-functional controls are
-   greyed with an explanatory tooltip, never dead-looking-but-clickable),
-   "N languages" pill (greyed, "1 language"), footer with last-edited line and
-   license row.
+   functional; the Contribute group is not shown), sticky Contents TOC with
+   "(Top)" and active-section highlight, Article/Read page toolbar (Talk,
+   Edit, View history and the Tools dropdown are not shown — this replica has
+   no editing, talk pages, page history or per-page tools, so per DECISIONS
+   D5 those controls are removed outright rather than rendered greyed),
+   "1 language" pill (greyed — informational, not a broken control), footer
+   with last-edited line and license row.
 6. **Fidelity bar**: side-by-side screenshot comparison against en.wikipedia.org
    at 1440px must show matching chrome layout, title typography, link colors,
    infobox geometry, section rules and TOC placement. Iterated by a design agent

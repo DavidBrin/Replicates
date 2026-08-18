@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ArticleModule } from "@/lib/registry";
 import { projects } from "@/content/projects";
+import { fakePhoneMeta } from "@/content/articles/meta";
 import {
   B,
   Categories,
@@ -25,13 +26,7 @@ export const sections: Array<{ id: string; heading: string }> = [
 ];
 
 export const fakePhone: ArticleModule = {
-  meta: {
-    slug: project.slug,
-    title: "Fake Phone",
-    shortDescription: "A personal-safety app replicating iOS and Android incoming-call screens",
-    categories: ["Software replicas", "Personal safety software", "Progressive web applications"],
-    lastEdited: "18 August 2026",
-  },
+  meta: fakePhoneMeta,
   body: (
     <>
       <Hatnote>
@@ -112,7 +107,7 @@ export const fakePhone: ArticleModule = {
         </P>
       </Section>
 
-      <Section heading="See also" editable={false}>
+      <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Super_Smash_(replica)">Super Smash (replica)</WikiLink>
@@ -126,7 +121,7 @@ export const fakePhone: ArticleModule = {
         </ul>
       </Section>
 
-      <Section heading="References" editable={false}>
+      <Section heading="References">
         <References
           refs={[
             <span key="1">

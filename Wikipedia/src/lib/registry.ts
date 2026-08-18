@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { articles } from "@/content/articles";
+import { articleMetas } from "@/content/articles/meta";
 
 /**
  * Metadata every article carries, independent of its body content. Body
@@ -50,29 +50,55 @@ export interface ProjectInfo {
 /** The static article map. Content agent fills this in via `src/content/articles/index.ts`. */
 export type ArticleRegistry = Record<string, ArticleModule>;
 
-function normalize(slug: string): string {
-  return decodeURIComponent(slug).trim();
+/**
+ * `decodeURIComponent`, but safe against a slug that is already decoded.
+ * Next's dynamic route params arrive pre-decoded (verified empirically: a
+ * request for `/wiki/%25` reaches this module with `slug === "%"`, not
+ * `"%25"`), so decoding again throws a `URIError` on any percent sign that
+ * isn't itself valid percent-encoding — e.g. `decodeURIComponent("%")`.
+ * Falling back to the raw string on failure means a slug like that is
+ * treated as literally itself rather than crashing the route.
+ */
+export function safeDecode(slug: string): string {
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
+  }
 }
 
-export function getArticle(slug: string): ArticleModule | undefined {
-  return articles[normalize(slug)];
+export function normalize(slug: string): string {
+  return safeDecode(slug).trim();
 }
+
+/**
+ * Metadata-only surface: `allArticles`/`articleExists`/`randomSlug`/
+ * `searchTitles` read `src/content/articles/meta.ts` and never import
+ * `src/content/articles/index.ts` (the article bodies). This file must stay
+ * that way — `getArticle`, which does need bodies for route rendering,
+ * lives in `@/lib/article` specifically so a client component that only
+ * needs metadata (`SearchBox`, `Navigation`, `WikiLink`) can import from
+ * here without pulling every article's JSX into its bundle. A static
+ * import of `@/content/articles` anywhere in *this* file would defeat that
+ * split even if nothing here calls it — see
+ * `src/lib/__tests__/bundle.build.test.ts`.
+ */
 
 export function allArticles(): ArticleMeta[] {
-  return Object.values(articles).map((article) => article.meta);
+  return articleMetas;
 }
 
 export function articleExists(slug: string): boolean {
-  return normalize(slug) in articles;
+  const key = normalize(slug);
+  return articleMetas.some((meta) => meta.slug === key);
 }
 
 export function randomSlug(): string {
-  const slugs = Object.keys(articles);
-  if (slugs.length === 0) {
+  if (articleMetas.length === 0) {
     throw new Error("randomSlug() called with an empty article registry");
   }
-  const index = Math.floor(Math.random() * slugs.length);
-  return slugs[index];
+  const index = Math.floor(Math.random() * articleMetas.length);
+  return articleMetas[index].slug;
 }
 
 /**

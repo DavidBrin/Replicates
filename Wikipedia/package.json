@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:bundle": "next build && BUILD_CHECK=1 vitest run src/lib/__tests__/bundle.build.test.ts",
+    "verify": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:bundle"
   },
   "dependencies": {
     "clsx": "^2.1.1",

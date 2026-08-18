@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Greyed } from "./Greyed";
 import { SearchBox } from "./SearchBox";
+import { STICKY_HEADER_HEIGHT_PX } from "./layout-constants";
+
+// Re-exported so anything already importing the component module can still
+// get the constant; `Toc.tsx` imports it from `./layout-constants` directly
+// instead, to avoid pulling this "use client" component's own imports
+// (Link, Greyed, SearchBox) into its bundle just for one number.
+export { STICKY_HEADER_HEIGHT_PX };
 
 /**
  * A separate, duplicate condensed bar (`#vector-sticky-header`) that slides
@@ -36,6 +42,12 @@ export function StickyHeader() {
         visible ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
       aria-hidden={!visible}
+      // WCAG 4.1.2: opacity/pointer-events alone hide the bar visually but
+      // leave its link/input/button in the tab order while invisible.
+      // `inert` (driven by the same `visible` state as `aria-hidden`)
+      // removes them from focus and interaction, not just from the a11y
+      // tree.
+      inert={!visible}
     >
       <div className="flex min-h-[3.125rem] items-center gap-4">
         <Link
@@ -49,9 +61,6 @@ export function StickyHeader() {
           <SearchBox />
         </div>
         <div className="flex-1" />
-        <Greyed title="Login is not functional in this replica" className="shrink-0 text-[13px]">
-          Log in
-        </Greyed>
       </div>
     </div>
   );

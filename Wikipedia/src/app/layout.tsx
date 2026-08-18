@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SCROLL_ANCHOR_OFFSET_PX } from "@/components/chrome/layout-constants";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { Header, StickyHeader } from "@/components/chrome";
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-[color:var(--subtle-bg)]">
+      <body
+        className="bg-[color:var(--subtle-bg)]"
+        style={{ "--scroll-anchor-offset": `${SCROLL_ANCHOR_OFFSET_PX}px` } as React.CSSProperties}
+      >
         {/*
           `padding-inline` is 1.5rem on narrow viewports and widens to 44px
           from 1120px up — measured on the served page at 1440x900, where
