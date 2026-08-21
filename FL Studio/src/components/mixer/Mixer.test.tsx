@@ -199,3 +199,40 @@ describe("Mixer — pan knob", () => {
     expect(useAppStore.getState().project.mixerTracks["mix-1"]!.pan).toBe(1);
   });
 });
+
+/*
+ * Round 7 #6. Every button opened a fader drag. A right-click on the fader
+ * (whose context menu swallows the `pointerup`) or a middle press (the
+ * browser's autoscroll, likewise) armed a gesture that then moved the level on
+ * plain buttonless hover — the knob has guarded this since round 6.
+ */
+describe("Mixer — only the PRIMARY button drags a fader (round 7 #6)", () => {
+  for (const [name, button] of [
+    ["middle", 1],
+    ["right", 2],
+  ] as const) {
+    it(`ignores a ${name}-button press and the move that follows it`, () => {
+      render(<Mixer />);
+      const fader = screen.getByTestId("fader-Insert 1 volume");
+      const before = useAppStore.getState().project.mixerTracks["mix-1"]!.volume;
+
+      fireEvent.pointerDown(fader, { clientY: 100, button });
+      fireEvent.pointerMove(fader, { clientY: 20 });
+      fireEvent.pointerUp(fader, { clientY: 20 });
+
+      expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(before);
+      expect(useAppStore.getState().history.past).toHaveLength(0);
+    });
+  }
+
+  it("still drags on the primary button", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+
+    fireEvent.pointerDown(fader, { clientY: 100, button: 0 });
+    fireEvent.pointerMove(fader, { clientY: 60 });
+    fireEvent.pointerUp(fader, { clientY: 60 });
+
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBeGreaterThan(0.8);
+  });
+});

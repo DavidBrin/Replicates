@@ -2,6 +2,8 @@
 
 import { useRef } from "react";
 
+import { useGestureHold } from "@/lib/gestureHold";
+
 /**
  * Shared pan/volume knob (SPEC §1.1 "Pan knob" / "Volume knob"; lane 1 §1.4,
  * §8–9). Vertical drag adjusts the value, ten times finer while `Ctrl` is
@@ -64,6 +66,8 @@ export function Knob({
   formatValue,
 }: KnobProps) {
   const dragState = useRef<DragState | null>(null);
+  // SPEC §2.2: no autosave lands while this knob is held (`@/lib/gestureHold`).
+  const gesture = useGestureHold("knob");
 
   function mintCoalesceKey(): string {
     gestureCounter += 1;
@@ -82,6 +86,7 @@ export function Knob({
     }
     if (event.button !== 0) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
+    gesture.hold();
     dragState.current = {
       startY: event.clientY,
       startValue: value,
@@ -108,6 +113,7 @@ export function Knob({
       (event.target as Element).releasePointerCapture?.(event.pointerId);
     }
     dragState.current = null;
+    gesture.release();
   }
 
   /**
@@ -118,6 +124,7 @@ export function Knob({
    */
   function handlePointerCancel() {
     dragState.current = null;
+    gesture.release();
   }
 
   function resetToDefault(): void {

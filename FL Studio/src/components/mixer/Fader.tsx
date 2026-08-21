@@ -2,6 +2,8 @@
 
 import { useRef } from "react";
 
+import { useGestureHold } from "@/lib/gestureHold";
+
 /**
  * The mixer's long-throw vertical level fader (SPEC §4.3 mixer tokens; lane
  * 1 §5.2: "a wide, short, pale horizontal-cap slider handle running in a
@@ -39,6 +41,8 @@ function clamp(value: number, min: number, max: number): number {
 
 export function Fader({ value, min, max, defaultValue, label, travelPx = 140, onChange }: FaderProps) {
   const dragState = useRef<DragState | null>(null);
+  // SPEC §2.2: no autosave lands while the fader is held (`@/lib/gestureHold`).
+  const gesture = useGestureHold("fader");
 
   function mintCoalesceKey(): string {
     gestureCounter += 1;
@@ -50,7 +54,13 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>): void {
+    // Primary button only. Every button opened a drag, so a right-click on the
+    // fader (which delivers no `pointerup` once the context menu takes over,
+    // and none at all on the middle button's autoscroll) armed a gesture that
+    // then moved the level on plain hover. The knob already guards this way.
+    if (event.button !== 0) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
+    gesture.hold();
     dragState.current = {
       startY: event.clientY,
       startValue: value,
@@ -72,6 +82,7 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
       (event.target as Element).releasePointerCapture?.(event.pointerId);
     }
     dragState.current = null;
+    gesture.release();
   }
 
   /**
@@ -81,6 +92,7 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
    */
   function handlePointerCancel(): void {
     dragState.current = null;
+    gesture.release();
   }
 
   const percent = ((value - min) / (max - min)) * 100;

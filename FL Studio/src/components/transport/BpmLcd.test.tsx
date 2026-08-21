@@ -140,3 +140,73 @@ describe("BpmLcd", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+/*
+ * Round 7 #3. The spinner buttons live INSIDE the `.fl-lcd` plate, so their
+ * pointer events bubbled straight into the LCD's drag initializer: holding a
+ * spinner and twitching dragged the tempo, and the release then applied the
+ * button's ±1 on top — two edits from one press.
+ */
+describe("BpmLcd — the spinner is not a tempo drag handle (round 7 #3)", () => {
+  it("does not drag the tempo when the press landed on the ▲ spinner", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+    const up = screen.getByLabelText("Increase tempo");
+
+    fireEvent.pointerDown(up, { clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(lcd, { clientY: 60, pointerId: 1 }); // a 40px twitch
+    fireEvent.pointerUp(lcd, { clientY: 60, pointerId: 1 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still applies exactly the ±1 increment from that same press", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<BpmLcd value={140} onChange={onChange} />);
+
+    await user.click(screen.getByLabelText("Decrease tempo"));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(139);
+  });
+
+  it("does not drag from the ▼ spinner either", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(screen.getByLabelText("Decrease tempo"), {
+      clientY: 100,
+      pointerId: 1,
+      button: 0,
+    });
+    fireEvent.pointerMove(lcd, { clientY: 140, pointerId: 1 });
+    fireEvent.pointerUp(lcd, { clientY: 140, pointerId: 1 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("ignores a NON-primary press on the value face", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(lcd, { clientY: 100, pointerId: 1, button: 2 });
+    fireEvent.pointerMove(lcd, { clientY: 60, pointerId: 1 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still drags from a primary press on the value face", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(screen.getByText("140"), { clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(lcd, { clientY: 90, pointerId: 1 });
+
+    expect(onChange).toHaveBeenLastCalledWith(150);
+  });
+});

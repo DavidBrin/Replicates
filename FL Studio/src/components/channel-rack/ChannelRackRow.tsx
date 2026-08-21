@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Command } from "@/domain/commands/types";
 import { addNotes, composite, isStepOn, notesAtStep, removeNotes, stepNote } from "@/domain/commands";
 import { nextId } from "@/domain/ids";
+import { useGestureHold } from "@/lib/gestureHold";
 import type { Channel, MixerTrack, Pattern, PatternId } from "@/domain/types";
 import { Knob } from "./Knob";
 import { StepCell } from "./StepCell";
@@ -33,6 +34,13 @@ export interface ChannelRackRowProps {
   onMoveDown: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  /**
+   * `store.historyRevision` — bumped by every undo and redo. A stroke buffers
+   * its commands locally, so an undo landing mid-stroke can delete the very
+   * notes those buffered commands name; the stroke carries the revision it was
+   * opened at and is dropped the moment they differ. See {@link PaintSession}.
+   */
+  historyRevision?: number;
 }
 
 interface PaintSession {
@@ -50,6 +58,27 @@ interface PaintSession {
    * discarded the moment it stops matching.
    */
   patternId: PatternId;
+  /**
+   * The `historyRevision` this stroke was opened at.
+   *
+   * The `patternId` guard above catches only the case where the pattern itself
+   * went away. It does NOT catch the commoner one: `Ctrl+Z` mid-stroke undoing
+   * an earlier *note* edit inside the SAME pattern. A right-drag erase buffers
+   * `removeNotes(patternId, [noteId])`; the undo deletes that note; the id
+   * still names the live pattern, so the stroke survived the check and
+   * pointer-up dispatched a removal of a note that is gone — `requireNote`
+   * threw `CommandError` straight out of the pointer handler. (The mirror
+   * hazard exists for redo.)
+   *
+   * Cancelling on ANY undo/redo is the fix rather than filtering the buffer at
+   * commit time, because filtering leaves the stroke's optimistic `preview`
+   * asserting cells the project no longer agrees with — and because it is the
+   * same rule the rest of the app already follows: the store's `resetGestures`
+   * cancels the piano roll's drag on every undo and redo for exactly this
+   * reason. The rack's stroke lives in a ref, where `resetGestures` cannot
+   * reach it, so it watches the revision counter instead.
+   */
+  historyRevision: number;
 }
 
 /**
@@ -88,8 +117,11 @@ export function ChannelRackRow({
   onMoveDown,
   canMoveUp,
   canMoveDown,
+  historyRevision = 0,
 }: ChannelRackRowProps) {
   const painting = useRef<PaintSession | null>(null);
+  // SPEC §2.2: a stroke holds off persistence until it commits.
+  const gesture = useGestureHold("rack-paint");
   const [preview, setPreview] = useState<Map<number, boolean> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -119,6 +151,7 @@ export function ChannelRackRow({
     // Nothing may be added to a stroke that no longer belongs to the pattern
     // on screen; `cancelPaint` will drop it, and until then it must not grow.
     if (session.patternId !== pattern.id) return;
+    if (session.historyRevision !== historyRevision) return;
     const currentlyOn = session.touched.get(step) ?? isStepOn(pattern, channel.id, step);
     const desiredOn = session.mode === "on";
     if (currentlyOn === desiredOn) return; // idempotent re-entry — nothing to do
@@ -147,11 +180,19 @@ export function ChannelRackRow({
     if (
       painting.current &&
       painting.current.mode === mode &&
-      painting.current.patternId === pattern.id
+      painting.current.patternId === pattern.id &&
+      painting.current.historyRevision === historyRevision
     ) {
       return;
     }
-    painting.current = { mode, commands: [], touched: new Map(), patternId: pattern.id };
+    painting.current = {
+      mode,
+      commands: [],
+      touched: new Map(),
+      patternId: pattern.id,
+      historyRevision,
+    };
+    gesture.hold();
     if (!windowPointerUpListener.current) {
       const listener = () => endPaint();
       windowPointerUpListener.current = listener;
@@ -172,6 +213,7 @@ export function ChannelRackRow({
   /** Tear the stroke down without committing anything. */
   function cancelPaint(): void {
     painting.current = null;
+    gesture.release();
     setPreview(null);
     if (windowPointerUpListener.current) {
       window.removeEventListener("pointerup", windowPointerUpListener.current);
@@ -181,12 +223,14 @@ export function ChannelRackRow({
 
   function endPaint(): void {
     const session = painting.current;
-    const stale = session !== null && session.patternId !== pattern.id;
+    const stale =
+      session !== null &&
+      (session.patternId !== pattern.id || session.historyRevision !== historyRevision);
     cancelPaint();
     if (!session || session.commands.length === 0) return;
-    // The buffer names a pattern that is no longer the one this row edits —
-    // it was undone, deleted or switched away from mid-stroke. Dispatching it
-    // would throw out of the pointer handler; the stroke is simply abandoned.
+    // The buffer names a pattern that is no longer the one this row edits, or
+    // was built against a project an undo/redo has since replaced. Dispatching
+    // it would throw out of the pointer handler; the stroke is abandoned.
     if (stale) return;
     onCommitSteps(session.commands.length === 1 ? session.commands[0]! : composite(session.commands));
   }
@@ -196,7 +240,11 @@ export function ChannelRackRow({
   // discovered at pointer-up (the preview would otherwise keep painting cells
   // of the old pattern over the new one's grid).
   useEffect(() => {
-    if (painting.current !== null && painting.current.patternId !== pattern.id) {
+    if (painting.current === null) return;
+    if (
+      painting.current.patternId !== pattern.id ||
+      painting.current.historyRevision !== historyRevision
+    ) {
       cancelPaint();
     }
   });
@@ -377,7 +425,12 @@ export function ChannelRackRow({
             on={stepIsOn(step)}
             isPlayhead={playheadStep === step}
             onPointerDown={(button) => {
-              if (button === 2) return; // right button handled by onContextMenu
+              // Left paints, right erases (via `onContextMenu`), and MIDDLE —
+              // the pan/autoscroll button everywhere else in this app — does
+              // nothing to the pattern. It used to fall through to
+              // `beginLeftPaint`, so a middle press opened a stroke and
+              // toggled the cell on release.
+              if (button !== 0) return;
               beginLeftPaint(step);
             }}
             onContextMenu={() => beginRightPaint(step)}

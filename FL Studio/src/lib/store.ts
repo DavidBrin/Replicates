@@ -99,6 +99,38 @@ export interface DomainSlice {
   history: History;
 
   /**
+   * Bumped by every {@link DomainSlice.undo} / {@link DomainSlice.redo}.
+   *
+   * Surfaces that buffer a gesture's commands locally instead of dispatching
+   * them one at a time (the Channel Rack's paint stroke) cannot be reached by
+   * `resetGestures`, because their stroke lives in a ref, not in the store.
+   * They watch this counter instead: a stroke that was opened at a different
+   * revision is a stroke whose buffered commands were built against a project
+   * that no longer exists, and it is dropped rather than dispatched.
+   *
+   * A counter rather than a boolean flag so a watcher can compare, not
+   * subscribe-and-clear — two rows watching the same undo must both see it.
+   */
+  historyRevision: number;
+
+  /**
+   * The gestures currently in flight, by id (SPEC.md §2.2: persistence
+   * "never fires mid-drag").
+   *
+   * Ids, not a bare counter, so an unbalanced `endGesture` — a pointercancel
+   * racing an unmount — cannot drive the count negative or, worse, leave a
+   * phantom gesture that silences autosave for the rest of the session:
+   * releasing an id that is not held is a no-op, and releasing one twice
+   * removes it once.
+   *
+   * In-store drag flags count too — see {@link selectHasActiveGesture}, which
+   * also reads the piano roll's `dragKind`, so roll drags need no wiring.
+   */
+  activeGestureIds: readonly string[];
+  /** Open a gesture: hold persistence off until the matching `endGesture`. */
+  beginGesture: (gestureId: string) => void;
+
+  /**
    * The only way domain state changes (SPEC.md §5). Applies the command and
    * pushes an undo entry; pass `{ coalesceKey }` during a drag so the whole
    * gesture folds into one entry, committed on pointer-up.
@@ -114,8 +146,12 @@ export interface DomainSlice {
    * The escape hatch for gestures with no natural id; the preferred form is
    * `dispatch(cmd, { coalesceKey, gestureId })` — see `domain/undo.ts`'s
    * header for the canonical pattern.
+   *
+   * Pass the id given to {@link DomainSlice.beginGesture} to *also* release
+   * the persistence hold. Called bare (the historical form) it only seals the
+   * undo entry, so every existing caller keeps its meaning.
    */
-  endGesture: () => void;
+  endGesture: (gestureId?: string) => void;
 
   /**
    * Navigation, **not** an edit: persisted domain state that bypasses the
@@ -383,6 +419,8 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
   return {
     project: adoptProject(createDefaultProject({ now: nowIso() })),
     history: createHistory(),
+    historyRevision: 0,
+    activeGestureIds: [],
 
     dispatch: (command, options) => {
       const { project, history } = get();
@@ -395,19 +433,37 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     // ids that no longer exist. Resetting the gesture is what stops that —
     // the host relays the cleared `dragKind` into the controller's `cancel()`.
     undo: () => {
-      const { project, history } = get();
+      const { project, history, historyRevision } = get();
+      set({ historyRevision: historyRevision + 1 });
       commit(historyUndo(project, history), { resetGestures: true });
     },
 
     redo: () => {
-      const { project, history } = get();
+      const { project, history, historyRevision } = get();
+      set({ historyRevision: historyRevision + 1 });
       commit(historyRedo(project, history), { resetGestures: true });
     },
 
-    endGesture: () => {
-      const { history } = get();
-      const next = historyEndGesture(history);
-      if (next !== history) set({ history: next });
+    beginGesture: (gestureId) => {
+      const { activeGestureIds } = get();
+      if (activeGestureIds.includes(gestureId)) return;
+      set({ activeGestureIds: [...activeGestureIds, gestureId] });
+    },
+
+    endGesture: (gestureId) => {
+      const { history, activeGestureIds } = get();
+      const patch: { history?: History; activeGestureIds?: readonly string[] } = {};
+      const nextHistory = historyEndGesture(history);
+      if (nextHistory !== history) patch.history = nextHistory;
+      if (gestureId !== undefined && activeGestureIds.includes(gestureId)) {
+        patch.activeGestureIds = activeGestureIds.filter((id) => id !== gestureId);
+      }
+      // Still `set` when only the gesture list moved: the autosave subscriber
+      // is what notices a deferred write has become due, and it only runs on
+      // a store change.
+      if (patch.history !== undefined || patch.activeGestureIds !== undefined) {
+        set(patch as Partial<AppState>);
+      }
     },
 
     setActivePatternId: (patternId) => {
@@ -555,6 +611,21 @@ export const selectNotesForChannel =
 export const selectTimeline = (state: AppState): CompiledTimeline =>
   compileTimelineCached(state.project);
 
+/** See {@link DomainSlice.historyRevision} — what a buffered stroke compares against. */
+export const selectHistoryRevision = (state: AppState): number => state.historyRevision;
+
+/**
+ * Is *any* gesture in flight anywhere (SPEC.md §2.2's "never mid-drag")?
+ *
+ * Two sources, deliberately: the explicit `beginGesture`/`endGesture` holds
+ * taken by the surfaces whose drag state lives in a ref (knob, fader, tempo
+ * LCD, rack swing, clip drag, paint stroke), and the piano roll's `dragKind`,
+ * which is already store state — wiring the roll a second time would only
+ * give it two ways to leak.
+ */
+export const selectHasActiveGesture = (state: AppState): boolean =>
+  state.activeGestureIds.length > 0 || state.pianoRoll.dragKind !== null;
+
 export const selectCanUndo = (state: AppState): boolean => historyCanUndo(state.history);
 export const selectCanRedo = (state: AppState): boolean => historyCanRedo(state.history);
 export const selectUndoLabel = (state: AppState): string | null => historyUndoLabel(state.history);
@@ -625,20 +696,37 @@ export const AUTOSAVE_DELAY_MS = 750;
 
 /**
  * Debounced autosave (SPEC.md §2.2: "writes are debounced and never fire
- * mid-drag"). The debounce is what keeps a drag quiet: a coalescing gesture
- * dispatches continuously, and the timer only fires once it settles.
+ * mid-drag"). The debounce is most of it — a coalescing gesture dispatches
+ * continuously, so the timer keeps re-arming and never fires — but the
+ * debounce alone does NOT deliver the second half of that sentence: a drag
+ * held still for longer than `delayMs` (a pointer down on a knob, paused, then
+ * moved on) lets the timer expire with the button still down, and the write
+ * lands in the middle of the gesture. That is the case this gate covers.
  *
- * Returns an unsubscribe that also flushes a pending write.
+ * When a flush comes due mid-gesture it is *deferred*, not dropped: the
+ * pending project stays pending, and the store subscription — which fires on
+ * the `endGesture` write itself — performs it the moment the last gesture
+ * closes. Exactly one write, after the gesture, not one per expiry.
+ *
+ * Returns an unsubscribe that also flushes a pending write, gesture or no
+ * gesture: a teardown is the end of everything, including the drag.
  */
 export function startAutosave(delayMs: number = AUTOSAVE_DELAY_MS): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: Project | null = null;
+  /** A flush whose timer already expired, waiting only for the gesture to end. */
+  let deferred = false;
 
-  const flush = (): void => {
+  const clearTimer = (): void => {
     if (timer !== null) {
       clearTimeout(timer);
       timer = null;
     }
+  };
+
+  const write = (): void => {
+    clearTimer();
+    deferred = false;
     if (pending !== null) {
       // Autosave stays quiet on failure by design (SPEC §2.2: writes must
       // never interrupt); the explicit Save button is what surfaces it.
@@ -647,15 +735,30 @@ export function startAutosave(delayMs: number = AUTOSAVE_DELAY_MS): () => void {
     }
   };
 
+  const onTimeout = (): void => {
+    timer = null;
+    if (selectHasActiveGesture(useAppStore.getState())) {
+      deferred = true;
+      return;
+    }
+    write();
+  };
+
   const unsubscribe = useAppStore.subscribe((state, previous) => {
-    if (state.project === previous.project) return;
-    pending = state.project;
-    if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(flush, delayMs);
+    if (state.project !== previous.project) {
+      pending = state.project;
+      // A fresh edit restarts the debounce; whatever was deferred is folded
+      // into this write, since `pending` is the whole project either way.
+      deferred = false;
+      clearTimer();
+      timer = setTimeout(onTimeout, delayMs);
+      return;
+    }
+    if (deferred && !selectHasActiveGesture(state)) write();
   });
 
   return () => {
-    flush();
+    write();
     unsubscribe();
   };
 }

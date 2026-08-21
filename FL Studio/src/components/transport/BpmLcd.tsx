@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import { TEMPO_MAX, TEMPO_MIN, clampTempo } from "@/components/shell/wiring";
+import { useGestureHold } from "@/lib/gestureHold";
 
 /** Vertical travel below which a press is still a click, not a tempo drag. */
 const DRAG_SLOP_PX = 2;
@@ -46,6 +47,8 @@ export function BpmLcd({
    * click that follows.
    */
   const suppressNextClick = useRef(false);
+  // SPEC §2.2: no autosave lands while the LCD is being dragged.
+  const gesture = useGestureHold("bpm-lcd");
 
   function beginEditing(): void {
     setDraft(String(value));
@@ -58,9 +61,23 @@ export function BpmLcd({
     setEditing(false);
   }
 
+  /**
+   * The `▲`/`▼` spinner lives INSIDE the LCD plate, so its pointer events
+   * bubble straight into this initializer: pressing a spinner armed a tempo
+   * drag, and the smallest twitch before release both dragged the tempo *and*
+   * then applied the button's ±1 on click — two edits from one press, the
+   * drag's landing value silently overwritten by the increment.
+   *
+   * A drag starts only on a PRIMARY press on the plate itself (the value face
+   * and its surrounding chrome). Any press inside the spinner is the
+   * spinner's, and any non-primary press is nobody's.
+   */
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (editing) return;
+    if (event.button !== 0) return;
+    if ((event.target as Element).closest?.(".fl-lcd__spinner")) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
+    gesture.hold();
     dragState.current = { startY: event.clientY, startValue: value, moved: false };
     suppressNextClick.current = false;
   }
@@ -80,6 +97,7 @@ export function BpmLcd({
       suppressNextClick.current = drag.moved;
     }
     dragState.current = null;
+    gesture.release();
   }
 
   /**
@@ -90,6 +108,7 @@ export function BpmLcd({
   function handlePointerCancel() {
     dragState.current = null;
     suppressNextClick.current = false;
+    gesture.release();
   }
 
   return (

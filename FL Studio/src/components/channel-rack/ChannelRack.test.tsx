@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { updateProject } from "@/domain/commands";
 import { createDefaultProject } from "@/domain/defaultProject";
 import { resetIds } from "@/domain/ids";
 import { createHistory } from "@/domain/undo";
@@ -803,5 +804,200 @@ describe("ChannelRack — alt+wheel velocity nudges", () => {
 
     expect(fireEvent.wheel(cell, { deltaY: -100 })).toBe(true);
     expect(velocityOfStepZero()).toBe(velocityBefore);
+  });
+});
+
+/*
+ * Round 7 #1. The stroke's `patternId` guard catches only a stroke whose
+ * PATTERN went away. `Ctrl+Z` mid-stroke undoing an earlier note edit inside
+ * the SAME pattern left the id matching, so the buffer survived and pointer-up
+ * dispatched `removeNotes` for a note the undo had already deleted —
+ * `requireNote` threw `CommandError` out of the pointer handler.
+ */
+describe("ChannelRack — undo lands mid-stroke (round 7 #1)", () => {
+  /** The same spy seam the pattern-death cases use — jsdom swallows the throw. */
+  function withDispatchSpy(run: (dispatch: ReturnType<typeof vi.fn>) => void): void {
+    const real = useAppStore.getState().dispatch;
+    const dispatch = vi.fn(real);
+    act(() => {
+      useAppStore.setState({ dispatch });
+    });
+    try {
+      run(dispatch);
+    } finally {
+      act(() => {
+        useAppStore.setState({ dispatch: real });
+      });
+    }
+  }
+
+  it("dispatches nothing when an undo deleted a note the ERASE stroke had buffered", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    await user.click(kickStep(0)); // entry 1 — note at step 0
+    await user.click(kickStep(1)); // entry 2 — note at step 1
+
+    // A right-drag erase sweeping both lit cells, buffered, not yet committed.
+    fireEvent.contextMenu(kickStep(0));
+    fireEvent.pointerEnter(kickStep(1), { buttons: 2 });
+
+    // Ctrl+Z with the button still down: entry 2's note is gone, and the
+    // buffered `removeNotes` for it now names nothing.
+    act(() => {
+      useAppStore.getState().undo();
+    });
+
+    withDispatchSpy((dispatch) => {
+      fireEvent.pointerUp(window);
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    // The undo's own effect stands, untouched by the abandoned stroke.
+    const notes = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ positionTicks: 0 });
+  });
+
+  it("abandons a PAINT stroke across an undo too, rather than adding to a moved project", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    await user.click(kickStep(0));
+
+    fireEvent.pointerDown(kickStep(4), { buttons: 1, button: 0 });
+    fireEvent.pointerEnter(kickStep(5), { buttons: 1 });
+
+    act(() => {
+      useAppStore.getState().undo();
+    });
+
+    withDispatchSpy((dispatch) => {
+      fireEvent.pointerUp(window);
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+  });
+
+  it("clears the optimistic preview the abandoned stroke had painted", () => {
+    render(<ChannelRack />);
+    fireEvent.pointerDown(kickStep(4), { buttons: 1, button: 0 });
+    fireEvent.pointerEnter(kickStep(5), { buttons: 1 });
+    expect(kickStep(4)).toHaveAttribute("data-on", "true");
+
+    act(() => {
+      useAppStore.getState().dispatch(updateProject({ tempo: 128 }));
+    });
+    act(() => {
+      useAppStore.getState().undo();
+    });
+
+    for (const step of [4, 5]) expect(kickStep(step)).toHaveAttribute("data-on", "false");
+  });
+
+  it("starts a clean stroke after the undo instead of extending the abandoned one", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    await user.click(kickStep(0));
+
+    fireEvent.pointerDown(kickStep(4), { buttons: 1, button: 0 });
+    act(() => {
+      useAppStore.getState().undo();
+    });
+
+    fireEvent.pointerDown(kickStep(9), { buttons: 1, button: 0 });
+    fireEvent.pointerUp(kickStep(9));
+
+    const notes = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ positionTicks: 9 * TICKS_PER_STEP });
+  });
+});
+
+/*
+ * Round 7 #7. SPEC §4.4 gives left = paint and right = delete; middle is the
+ * pan/autoscroll button everywhere else in this app. It fell through to
+ * `beginLeftPaint`, so a middle press opened a stroke and toggled the cell on
+ * release.
+ */
+describe("ChannelRack — the middle button does not paint (round 7 #7)", () => {
+  it("neither opens a stroke nor toggles the cell", () => {
+    render(<ChannelRack />);
+    const cell = kickStep(3);
+
+    fireEvent.pointerDown(cell, { button: 1, buttons: 4 });
+    fireEvent.pointerUp(cell);
+
+    expect(cell).toHaveAttribute("data-on", "false");
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+    expect(useAppStore.getState().history.past).toHaveLength(0);
+  });
+
+  it("does not paint the cells a middle-drag sweeps across either", () => {
+    render(<ChannelRack />);
+
+    fireEvent.pointerDown(kickStep(3), { button: 1, buttons: 4 });
+    fireEvent.pointerEnter(kickStep(4), { buttons: 4 });
+    fireEvent.pointerUp(kickStep(4));
+
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+  });
+
+  it("leaves the left button painting exactly as before", () => {
+    render(<ChannelRack />);
+    fireEvent.pointerDown(kickStep(3), { button: 0, buttons: 1 });
+    fireEvent.pointerUp(kickStep(3));
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(1);
+  });
+});
+
+/*
+ * Round 7 #8. Only `pointerup` closed a swing drag. A CANCELLED pointer never
+ * delivers one, so the dead drag's coalesce key stayed live in the ref and the
+ * next change — a keyboard arrow minutes later — merged into the abandoned
+ * drag's undo entry.
+ */
+describe("ChannelRack — a cancelled swing drag closes its coalesce key (round 7 #8)", () => {
+  it("does not merge a later change into the cancelled drag's entry", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.2" } });
+    fireEvent.pointerCancel(slider);
+
+    // A keyboard nudge afterwards — a separate edit, a separate entry.
+    fireEvent.change(slider, { target: { value: "0.5" } });
+
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.5);
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+  });
+
+  it("closes it on blur as well", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.2" } });
+    fireEvent.blur(slider);
+
+    fireEvent.change(slider, { target: { value: "0.5" } });
+
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+  });
+
+  it("still folds one uninterrupted drag into a single entry", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+    const before = useAppStore.getState().project;
+
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.1" } });
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    fireEvent.pointerUp(slider);
+
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project).toEqual(before);
   });
 });

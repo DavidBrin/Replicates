@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import { TICKS_PER_BAR, type Pattern, type PatternClip } from "@/domain/types";
+import { useGestureHold } from "@/lib/gestureHold";
 import { ClipMiniature } from "./ClipMiniature";
 import { LANE_HEIGHT_PX, ticksToPx } from "./geometry";
 
@@ -127,11 +128,15 @@ export function ClipView({
 }: ClipViewProps) {
   const dragState = useRef<DragState | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  // SPEC §2.2: a shift-clone dispatches at pointer-DOWN, so a slow drag can
+  // otherwise let the autosave debounce expire with the button still held.
+  const gesture = useGestureHold("playlist-clip");
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     // jsdom (component tests) has no Pointer Events capture implementation.
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    gesture.hold();
     const coalesceKey = nextCoalesceKey();
     const activeClipId =
       event.shiftKey && onCloneStart ? onCloneStart(clip.id, coalesceKey) : clip.id;
@@ -157,7 +162,10 @@ export function ClipView({
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     dragState.current = null;
-    if (drag === null) return;
+    if (drag === null) {
+      gesture.release();
+      return;
+    }
     const deltaPx = event.clientX - drag.startClientX;
     const deltaYPx = event.clientY - drag.startClientY;
     const deltaTrackIndex = Math.round(deltaYPx / LANE_HEIGHT_PX);
@@ -173,6 +181,10 @@ export function ClipView({
     } else {
       onSelect(drag.activeClipId);
     }
+    // AFTER the commit, never before: `release` also seals the top undo entry,
+    // and sealing first would stop a shift-clone's `addClip` (dispatched at
+    // pointer-down under the same key) from folding into the move it started.
+    gesture.release();
   }
 
   /**

@@ -10,11 +10,13 @@ import type { Command } from "@/domain/commands/types";
 import { nextId } from "@/domain/ids";
 import { colorAt, PALETTE } from "@/domain/palette";
 import { MASTER_MIXER_TRACK_ID, type Channel, type ChannelId, type Pattern, type VoiceKind } from "@/domain/types";
+import { useGestureHold } from "@/lib/gestureHold";
 import { createWheelGestureKeyring, type WheelGestureKeyring } from "@/lib/wheelGesture";
 import {
   selectActivePattern,
   selectChannels,
   selectGlobalSwing,
+  selectHistoryRevision,
   selectMixerTracks,
   useAppStore,
 } from "@/lib/store";
@@ -63,6 +65,9 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   const pattern = useAppStore(selectActivePattern);
   const mixerTracks = useAppStore(useShallow(selectMixerTracks));
   const globalSwing = useAppStore(selectGlobalSwing);
+  // Every buffered paint stroke is dropped when this moves — see
+  // `ChannelRackRow`'s `PaintSession.historyRevision`.
+  const historyRevision = useAppStore(selectHistoryRevision);
   const dispatch = useAppStore((state) => state.dispatch);
   const project = useAppStore((state) => state.project);
 
@@ -82,9 +87,23 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   // undo entry (mirrors `Knob.tsx`'s per-gesture counter).
   const swingGestureCounter = useRef(0);
   const swingCoalesceKey = useRef<string | null>(null);
+  const swingGesture = useGestureHold("rack-swing");
   function mintSwingCoalesceKey(): string {
     swingGestureCounter.current += 1;
     return `rack-swing#${swingGestureCounter.current}`;
+  }
+  /**
+   * Every way a swing drag can end, in one place.
+   *
+   * `pointerup` was the only one wired, and a *cancelled* pointer (capture
+   * lost, a system gesture, the tab hidden) never delivers one — so the dead
+   * drag's key stayed live in the ref and the next change of the slider,
+   * including a keyboard arrow minutes later, coalesced into the abandoned
+   * drag's undo entry. Blur closes the keyboard-only case for free.
+   */
+  function endSwingGesture(): void {
+    swingCoalesceKey.current = null;
+    swingGesture.release();
   }
 
   if (!pattern) return null;
@@ -235,10 +254,11 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             aria-label="Rack swing"
             onPointerDown={() => {
               swingCoalesceKey.current = mintSwingCoalesceKey();
+              swingGesture.hold();
             }}
-            onPointerUp={() => {
-              swingCoalesceKey.current = null;
-            }}
+            onPointerUp={endSwingGesture}
+            onPointerCancel={endSwingGesture}
+            onBlur={endSwingGesture}
             onChange={(event) =>
               dispatch(updateProject({ globalSwing: Number.parseFloat(event.target.value) }), {
                 coalesceKey: swingCoalesceKey.current ?? mintSwingCoalesceKey(),
@@ -272,6 +292,7 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             onRecolor={() => handleRecolorChannel(channel.id)}
             onMoveUp={() => handleMoveChannel(channel.id, -1)}
             onMoveDown={() => handleMoveChannel(channel.id, 1)}
+            historyRevision={historyRevision}
             canMoveUp={index > 0}
             canMoveDown={index < channels.length - 1}
           />

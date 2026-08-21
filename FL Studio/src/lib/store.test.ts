@@ -24,6 +24,8 @@ import {
   selectMixerTracks,
   selectNotesForChannel,
   selectPatterns,
+  selectHasActiveGesture,
+  selectHistoryRevision,
   selectPlaybackMode,
   selectPlaylistTracks,
   selectTempo,
@@ -865,5 +867,135 @@ describe("wholesale is DECLARED by the command, not inferred from the id (round 
   it("does not leak the `wholesale` report into store state", () => {
     useAppStore.getState().dispatch(updateProject({ tempo: 131 }));
     expect("wholesale" in useAppStore.getState()).toBe(false);
+  });
+});
+
+/*
+ * Round 7 #4. SPEC.md §2.2: "Writes are debounced and never fire mid-drag."
+ * The debounce delivers the first half only. A gesture that dispatches
+ * continuously keeps re-arming the timer, but a gesture that goes QUIET while
+ * the button is still held — a pointer down on a knob, paused, then moved on —
+ * lets the timer expire mid-drag and the write landed in the middle of it.
+ */
+describe("autosave never fires mid-gesture (SPEC §2.2)", () => {
+  beforeEach(() => {
+    useAppStore.setState({ activeGestureIds: [] });
+  });
+
+  afterEach(() => {
+    useAppStore.setState({ activeGestureIds: [] });
+  });
+
+  it("defers a flush that comes due while a gesture is held, then writes EXACTLY once", () => {
+    vi.useFakeTimers();
+    const stop = startAutosave(AUTOSAVE_DELAY_MS);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    const { beginGesture, dispatch } = useAppStore.getState();
+    beginGesture("knob#1");
+    dispatch(updateChannel("ch-kick", { volume: 0.5 }), { coalesceKey: "knob#1" });
+
+    // The pointer is still down and the debounce has expired twice over.
+    vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 2);
+    expect(setItem).not.toHaveBeenCalled();
+
+    useAppStore.getState().endGesture("knob#1");
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(loadPersistedProject()!.channels["ch-kick"]!.volume).toBe(0.5);
+
+    // …and nothing further, once the gesture is over.
+    vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 2);
+    expect(setItem).toHaveBeenCalledTimes(1);
+
+    stop();
+    setItem.mockRestore();
+  });
+
+  it("folds several mid-gesture dispatches into the ONE write at gesture end", () => {
+    vi.useFakeTimers();
+    const stop = startAutosave(AUTOSAVE_DELAY_MS);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    useAppStore.getState().beginGesture("knob#2");
+    for (const volume of [0.7, 0.6, 0.5]) {
+      useAppStore
+        .getState()
+        .dispatch(updateChannel("ch-kick", { volume }), { coalesceKey: "knob#2" });
+      vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 2);
+    }
+    expect(setItem).not.toHaveBeenCalled();
+
+    useAppStore.getState().endGesture("knob#2");
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(loadPersistedProject()!.channels["ch-kick"]!.volume).toBe(0.5);
+
+    stop();
+    setItem.mockRestore();
+  });
+
+  it("still writes on the debounce alone when no gesture is held", () => {
+    vi.useFakeTimers();
+    const stop = startAutosave(AUTOSAVE_DELAY_MS);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    useAppStore.getState().dispatch(updateProject({ tempo: 128 }));
+    vi.advanceTimersByTime(AUTOSAVE_DELAY_MS);
+    expect(setItem).toHaveBeenCalledTimes(1);
+
+    stop();
+    setItem.mockRestore();
+  });
+
+  it("counts the piano roll's in-store dragKind as a gesture, with no begin/end wiring", () => {
+    vi.useFakeTimers();
+    const stop = startAutosave(AUTOSAVE_DELAY_MS);
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    useAppStore.getState().setPianoRollDragKind("move");
+    useAppStore.getState().dispatch(updateProject({ tempo: 133 }));
+    vi.advanceTimersByTime(AUTOSAVE_DELAY_MS * 2);
+    expect(setItem).not.toHaveBeenCalled();
+
+    useAppStore.getState().setPianoRollDragKind(null);
+    expect(setItem).toHaveBeenCalledTimes(1);
+
+    stop();
+    setItem.mockRestore();
+  });
+
+  it("releasing an id that is not held, or releasing twice, cannot strand the hold", () => {
+    const { beginGesture, endGesture } = useAppStore.getState();
+    beginGesture("a");
+    beginGesture("a"); // re-entrant: still ONE hold
+    endGesture("never-held");
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+    endGesture("a");
+    endGesture("a");
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("flushes on teardown even mid-gesture — a teardown ends everything", () => {
+    vi.useFakeTimers();
+    const stop = startAutosave(10_000);
+    useAppStore.getState().beginGesture("held");
+    useAppStore.getState().dispatch(updateProject({ tempo: 111 }));
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    stop();
+    expect(loadPersistedProject()!.tempo).toBe(111);
+    useAppStore.getState().endGesture("held");
+  });
+});
+
+/* Round 7 #1's mechanism — see `ChannelRackRow`'s `PaintSession`. */
+describe("historyRevision", () => {
+  it("advances on every undo and every redo, and on nothing else", () => {
+    const start = selectHistoryRevision(useAppStore.getState());
+    useAppStore.getState().dispatch(updateProject({ tempo: 128 }));
+    expect(selectHistoryRevision(useAppStore.getState())).toBe(start);
+
+    useAppStore.getState().undo();
+    expect(selectHistoryRevision(useAppStore.getState())).toBe(start + 1);
+    useAppStore.getState().redo();
+    expect(selectHistoryRevision(useAppStore.getState())).toBe(start + 2);
   });
 });

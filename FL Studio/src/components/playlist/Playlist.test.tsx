@@ -570,3 +570,113 @@ describe("right-drag erases a sweep of clips (round 6 #6)", () => {
     expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(3);
   });
 });
+
+/*
+ * Round 7 #2. SPEC.md §7 / §2.1: a drag is ONE undo entry. The sweep deletes
+ * through `ClipView`'s `onPointerEnter`, one `removeClip` dispatch per clip
+ * crossed, and each landed as its own history entry — wiping eight bars took
+ * eight Ctrl+Z.
+ */
+describe("an erase sweep is ONE undo entry (round 7 #2)", () => {
+  function sweepThree(): void {
+    for (const [index, id] of ["clip-a", "clip-b", "clip-c"].entries()) {
+      placeClip(id, { startTick: TICKS_PER_BAR * index });
+    }
+    render(<Playlist />);
+    const main = screen.getByTestId("playlist-main");
+
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 7 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2 });
+    fireEvent.pointerUp(main, { pointerId: 7 });
+  }
+
+  it("records one history entry for the whole sweep, not one per clip", () => {
+    sweepThree();
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(0);
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+  });
+
+  it("restores every swept clip on a SINGLE undo", () => {
+    sweepThree();
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    expect(Object.keys(useAppStore.getState().project.clips).sort()).toEqual([
+      "clip-a",
+      "clip-b",
+      "clip-c",
+    ]);
+  });
+
+  it("keeps two separate sweeps as two separate entries", () => {
+    placeClip("clip-a", { startTick: 0 });
+    placeClip("clip-b", { startTick: TICKS_PER_BAR });
+    render(<Playlist />);
+    const main = screen.getByTestId("playlist-main");
+
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    fireEvent.pointerUp(main, { pointerId: 1 });
+
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 2 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-b"));
+    fireEvent.pointerUp(main, { pointerId: 2 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    expect(Object.keys(useAppStore.getState().project.clips)).toEqual(["clip-b"]);
+  });
+
+  it("does not weld an unrelated delete onto a sweep the pointer never closed", () => {
+    placeClip("clip-a", { startTick: 0 });
+    placeClip("clip-b", { startTick: TICKS_PER_BAR });
+    render(<Playlist />);
+    const main = screen.getByTestId("playlist-main");
+
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    fireEvent.pointerCancel(main, { pointerId: 1 });
+
+    // A later, unrelated delete through the header menu.
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-b"));
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+  });
+});
+
+/*
+ * Round 7 #5, through the surface: `Math.round`'s tie-toward-+∞ made a drag of
+ * exactly half a bar move the clip rightward and NOT leftward.
+ */
+describe("a half-bar drag moves the same distance both ways (round 7 #5)", () => {
+  it("drops a clip a bar back on an exactly-half-bar leftward drag", () => {
+    placeClip("clip-existing", { startTick: TICKS_PER_BAR * 2 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    // 40px of the default 80px/bar is exactly half a bar.
+    fireEvent.pointerDown(clip, { clientX: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 60, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 60, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR);
+  });
+
+  it("advances it a bar on the mirror-image rightward drag", () => {
+    placeClip("clip-existing", { startTick: TICKS_PER_BAR * 2 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    fireEvent.pointerDown(clip, { clientX: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 140, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 140, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(
+      TICKS_PER_BAR * 3,
+    );
+  });
+});

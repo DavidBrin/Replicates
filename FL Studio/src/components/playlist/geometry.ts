@@ -5,7 +5,7 @@
  * `src/domain/tickMath.ts`'s bar/tick constants.
  */
 
-import { snapTicks, snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
+import { SNAP_TICKS, snapTicks, snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
 import { TICKS_PER_BAR } from "@/domain/types";
 
 export const LANE_HEIGHT_PX = 64;
@@ -52,11 +52,34 @@ export function snapPointerToBar(
  * and jumped the clip a whole bar, while four pixels rightward did nothing.
  * Rounding puts the boundary where the user sees it, halfway.
  *
+ * **The exact halfway tick needs `direction`.** `Math.round` breaks ties
+ * *upward* — toward +∞ — and a drag distance is signed, so plain rounding is
+ * asymmetric at precisely the boundary it exists to place: dragging a clip
+ * right by exactly half a bar advanced it a full bar (1.5 → 2), while dragging
+ * it left by exactly half a bar left it where it started (1.5 → 2 again, i.e.
+ * back to its own position). Two mirror-image gestures, two different answers.
+ *
+ * At an exact tie the clip goes the way the pointer went — `direction`
+ * carries the sign of the drag delta — so ±half a bar both move it one bar,
+ * each in its own direction. Away from the tie nothing changes, and
+ * `direction: 0` (an unsigned caller, a keyboard nudge) keeps the old
+ * round-half-up behaviour rather than inventing a third rule.
+ *
  * `bypassSnap` is Alt: the clip keeps the exact tick offset it was dragged by.
  */
-export function snapMovedClipTick(rawTicks: number, bypassSnap = false): number {
+export function snapMovedClipTick(
+  rawTicks: number,
+  bypassSnap = false,
+  direction = 0,
+): number {
   const clamped = Math.max(0, rawTicks);
   if (bypassSnap) return Math.round(clamped);
+  const size = SNAP_TICKS.bar;
+  const quotient = clamped / size;
+  const floor = Math.floor(quotient);
+  if (direction !== 0 && quotient - floor === 0.5) {
+    return (direction > 0 ? floor + 1 : floor) * size;
+  }
   return snapTicks(clamped, "bar" satisfies SnapUnit);
 }
 

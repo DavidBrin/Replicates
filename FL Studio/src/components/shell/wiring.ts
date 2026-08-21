@@ -320,9 +320,23 @@ export function nextGestureId(prefix = "gesture"): string {
   return `${prefix}-${gestureCounter}`;
 }
 
-/** Seal the coalescing entry in flight — the store-level gesture boundary. */
-export function endGesture(): void {
-  useAppStore.getState().endGesture();
+/**
+ * Open a gesture (SPEC §2.2): persistence is held off until the matching
+ * {@link endGesture}. Pointer-driven controls whose drag state lives in a ref
+ * call this on pointer-down — the store cannot see a ref.
+ */
+export function beginGesture(gestureId: string): void {
+  useAppStore.getState().beginGesture(gestureId);
+}
+
+/**
+ * Seal the coalescing entry in flight — the store-level gesture boundary.
+ *
+ * With an id it also releases {@link beginGesture}'s persistence hold; bare,
+ * it is exactly what it always was.
+ */
+export function endGesture(gestureId?: string): void {
+  useAppStore.getState().endGesture(gestureId);
 }
 
 /**

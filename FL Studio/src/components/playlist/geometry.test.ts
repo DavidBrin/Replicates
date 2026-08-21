@@ -88,3 +88,52 @@ describe("snapMovedClipTick", () => {
     expect(snapMovedClipTick(-TICKS_PER_BAR, true)).toBe(0);
   });
 });
+
+/*
+ * Round 7 #5. `Math.round` breaks ties toward +∞, and a drag delta is signed,
+ * so the ONE tick the nearest-bar rule exists to place — the exact halfway
+ * point — was the one it handled asymmetrically.
+ */
+describe("snapMovedClipTick — the exact half-bar tie is direction-aware", () => {
+  const half = TICKS_PER_BAR / 2;
+
+  it("advances a bar on a rightward drag of exactly half a bar", () => {
+    // Clip at bar 1, dragged RIGHT by exactly half a bar.
+    expect(snapMovedClipTick(TICKS_PER_BAR + half, false, 1)).toBe(TICKS_PER_BAR * 2);
+  });
+
+  it("retreats a bar on a leftward drag of exactly half a bar — the mirror image", () => {
+    // Clip at bar 1, dragged LEFT by exactly half a bar. Round-half-up put it
+    // back at bar 1, so the same distance moved the clip one way and not the
+    // other.
+    expect(snapMovedClipTick(TICKS_PER_BAR - half, false, -1)).toBe(0);
+  });
+
+  it("moves both signs by the SAME number of bars from the same start", () => {
+    const start = TICKS_PER_BAR * 4;
+    const right = snapMovedClipTick(start + half, false, 1);
+    const left = snapMovedClipTick(start - half, false, -1);
+    expect(right - start).toBe(TICKS_PER_BAR);
+    expect(start - left).toBe(TICKS_PER_BAR);
+  });
+
+  it("changes nothing away from the tie, in either direction", () => {
+    expect(snapMovedClipTick(TICKS_PER_BAR + half - 1, false, 1)).toBe(TICKS_PER_BAR);
+    expect(snapMovedClipTick(TICKS_PER_BAR + half + 1, false, 1)).toBe(TICKS_PER_BAR * 2);
+    expect(snapMovedClipTick(TICKS_PER_BAR + half - 1, false, -1)).toBe(TICKS_PER_BAR);
+    expect(snapMovedClipTick(TICKS_PER_BAR + half + 1, false, -1)).toBe(TICKS_PER_BAR * 2);
+  });
+
+  it("keeps round-half-up for a caller with no direction to offer", () => {
+    expect(snapMovedClipTick(half)).toBe(TICKS_PER_BAR);
+    expect(snapMovedClipTick(half, false, 0)).toBe(TICKS_PER_BAR);
+  });
+
+  it("still never returns a negative tick at a leftward tie", () => {
+    expect(snapMovedClipTick(-half, false, -1)).toBe(0);
+  });
+
+  it("leaves Alt (bypassSnap) alone — the tie policy is a SNAP rule", () => {
+    expect(snapMovedClipTick(TICKS_PER_BAR + half, true, -1)).toBe(TICKS_PER_BAR + half);
+  });
+});

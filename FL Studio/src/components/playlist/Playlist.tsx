@@ -103,6 +103,43 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
 
   const dispatch = useAppStore.getState().dispatch;
 
+  /**
+   * One undo entry per right-drag ERASE SWEEP, not one per clip (SPEC.md §7's
+   * drag-coalescing rule, the same one the rack's paint stroke and the roll's
+   * erase already obey).
+   *
+   * A sweep deletes through `ClipView`'s `onPointerEnter`, i.e. one
+   * `removeClip` dispatch per clip crossed, and each landed as its own history
+   * entry: wiping eight bars took eight `Ctrl+Z`. The whole gesture now shares
+   * one key — a stable `coalesceKey` naming the control plus a `gestureId`
+   * minted at the pointer-down that opened the sweep, which is
+   * `domain/undo.ts`'s canonical pairing. Consecutive deletions fold into a
+   * single entry whose inverse is the composite of theirs in reverse, so one
+   * undo puts every swept clip back.
+   *
+   * The pointer-down is watched on the surface root rather than on each clip
+   * because a sweep may START on empty lane space and only then reach clips —
+   * `ClipView` ignores non-primary presses without stopping them, so they
+   * bubble here.
+   */
+  const eraseGestureCounter = useRef(0);
+  const eraseGestureId = useRef<string | null>(null);
+  function mintEraseGestureId(): string {
+    eraseGestureCounter.current += 1;
+    return `playlist-erase#${eraseGestureCounter.current}`;
+  }
+  /**
+   * With no sweep open — a bare context-menu delete, a menu item, a test
+   * firing `contextmenu` directly — every call gets its OWN fresh id, so
+   * unrelated deletions can never fold into each other.
+   */
+  function eraseOptions(): { coalesceKey: string; gestureId: string } {
+    return {
+      coalesceKey: "playlist:erase",
+      gestureId: eraseGestureId.current ?? mintEraseGestureId(),
+    };
+  }
+
   function handleToggleMute(trackId: PlaylistTrackId, muted: boolean) {
     dispatch(updatePlaylistTrack(trackId, { muted: !muted }));
   }
@@ -141,7 +178,7 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     const hit = (clipsByTrack.get(trackId) ?? []).find(
       (clip) => pointerTicks >= clip.startTick && pointerTicks < clip.startTick + TICKS_PER_BAR,
     );
-    if (hit) dispatch(removeClip(hit.id));
+    if (hit) dispatch(removeClip(hit.id), eraseOptions());
   }
 
   function handleSelectClip(clipId: string) {
@@ -156,7 +193,7 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   }
 
   function handleDeleteClip(clipId: string) {
-    dispatch(removeClip(clipId));
+    dispatch(removeClip(clipId), eraseOptions());
   }
 
   /** "Make unique" (SPEC.md D4): fork the pattern, repoint only this clip. */
@@ -204,7 +241,14 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   ) {
     const clip = useAppStore.getState().project.clips[clipId];
     if (!clip) return;
-    const nextTick = snapMovedClipTick(clip.startTick + deltaTicks, bypassSnap);
+    // The sign of the drag is what breaks an exact half-bar tie (see
+    // `snapMovedClipTick`) — without it, dragging left by half a bar and
+    // dragging right by half a bar do not mirror each other.
+    const nextTick = snapMovedClipTick(
+      clip.startTick + deltaTicks,
+      bypassSnap,
+      Math.sign(deltaTicks),
+    );
     const currentIndex = tracks.findIndex((track) => track.id === clip.trackId);
     const rawIndex = (currentIndex === -1 ? 0 : currentIndex) + deltaTrackIndex;
     const nextIndex = Math.min(tracks.length - 1, Math.max(0, rawIndex));
@@ -266,6 +310,8 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
 
   /** Middle-drag pans both axes (SPEC.md §4.4), matching the piano roll's feel. */
   function handleMainPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    // Secondary press opens an erase sweep — see `eraseOptions`.
+    if (event.button === 2) eraseGestureId.current = mintEraseGestureId();
     if (event.button !== 1) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -289,6 +335,10 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   }
 
   function handleMainPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    // The sweep closes on ANY release: a cancelled pointer that left the key
+    // live would weld the next unrelated delete onto the dead sweep's entry,
+    // which is the same hole the rack's swing slider had.
+    eraseGestureId.current = null;
     if (middlePan.current === null) return;
     middlePan.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
