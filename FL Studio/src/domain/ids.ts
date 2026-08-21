@@ -45,6 +45,15 @@ export function peekIdCounter(): number {
 const SUFFIX = /-(\d+)$/;
 
 /**
+ * How far below `Number.MAX_SAFE_INTEGER` a suffix must sit to seed the
+ * counter. Exported so the boundary test names the same number the guard does.
+ */
+export const SEED_HEADROOM = 2 ** 20;
+
+/** The largest suffix that may seed the counter. */
+export const MAX_SEED = Number.MAX_SAFE_INTEGER - SEED_HEADROOM;
+
+/**
  * Push the counter past every numeric id already present in `project`, so ids
  * minted after a load can never collide with ids minted before the save.
  *
@@ -57,12 +66,22 @@ const SUFFIX = /-(\d+)$/;
  * `CommandError` out of the click handler, and every mint after it returned
  * the same id again.
  *
- * `MAX_SAFE_INTEGER` itself is rejected for the same reason one short:
- * incrementing it leaves the safe range. Unusable suffixes are skipped, not
- * clamped — clamping down would seed the counter BELOW an id in the project
- * and manufacture the collision it exists to prevent, and the ids in question
- * are unreachable by counting anyway.
+ * Rejecting only `>= MAX_SAFE_INTEGER` was one guard too tight to help. A
+ * suffix of `MAX_SAFE_INTEGER - 1` passed, and the counter then had exactly
+ * two mints of headroom before it reached `9007199254740992` — the value
+ * where `n + 1 === n` — and stuck there, handing out the same id forever. The
+ * seed therefore has to leave real room to count, not one increment: anything
+ * within {@link SEED_HEADROOM} of the safe ceiling is refused. The headroom is
+ * ~1e6 ids, which no project reachable by this app's own minting can approach
+ * (a project holding that many entities is not a project), so the rule only
+ * ever fires on a hand-edited file, a hostile import, or another tool's id
+ * scheme.
+ *
+ * Unusable suffixes are skipped, not clamped — clamping down would seed the
+ * counter BELOW an id in the project and manufacture the collision it exists
+ * to prevent, and the ids in question are unreachable by counting anyway.
  */
+
 export function reseedIds(project: Project): void {
   let max = counter;
   const consider = (id: string): void => {
@@ -70,7 +89,7 @@ export function reseedIds(project: Project): void {
     if (match === null) return;
     const n = Number(match[1]);
     if (!Number.isSafeInteger(n)) return;
-    if (n >= Number.MAX_SAFE_INTEGER) return;
+    if (n > MAX_SEED) return;
     if (n > max) max = n;
   };
 

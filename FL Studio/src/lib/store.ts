@@ -470,7 +470,9 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     endGesture: (gestureId) => {
       const { history, activeGestureIds } = get();
       const patch: { history?: History; activeGestureIds?: readonly string[] } = {};
-      const nextHistory = historyEndGesture(history);
+      // Scoped by id: sealing "the top entry" seals a CONCURRENT gesture's
+      // still-open entry whenever two gestures overlap (`domain/undo.ts`).
+      const nextHistory = historyEndGesture(history, gestureId);
       if (nextHistory !== history) patch.history = nextHistory;
       if (gestureId !== undefined && activeGestureIds.includes(gestureId)) {
         patch.activeGestureIds = activeGestureIds.filter((id) => id !== gestureId);

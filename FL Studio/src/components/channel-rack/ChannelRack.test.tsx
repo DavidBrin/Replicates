@@ -1154,6 +1154,38 @@ describe("rack swing — the gesture class (round 8)", () => {
     expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 
+  /*
+   * Round 9 #1, rack half. The slider's `onChange` called `begin()`, which is
+   * right for a drag (the pointer-down already took the hold) and wrong for a
+   * keyboard arrow: nothing but `blur` closes it, so a nudged-and-left-focused
+   * slider deferred every autosave for the rest of the session.
+   */
+  it("takes NO hold for a keyboard-only edit (round 9 #1)", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+
+    fireEvent.focus(slider);
+    fireEvent.change(slider, { target: { value: "0.3" } });
+
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.3);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    expect(useAppStore.getState().activeGestureIds).toEqual([]);
+  });
+
+  it("still folds a run of keyboard edits into one undo entry (round 9 #1)", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+    const before = useAppStore.getState().project;
+
+    fireEvent.change(slider, { target: { value: "0.1" } });
+    fireEvent.change(slider, { target: { value: "0.4" } });
+
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    expect(useAppStore.getState().project).toEqual(before);
+  });
+
   it("does not weld a drag onto the previous MOUNT's drag (rule c)", () => {
     const first = render(<ChannelRack />);
     const dragTo = (value: string) => {

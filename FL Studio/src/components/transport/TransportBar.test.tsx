@@ -395,16 +395,47 @@ describe("TransportBar swing — the gesture class (round 8)", () => {
     expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
   });
 
-  it("gives a keyboard-only edit its own hold, released on blur (rules a, b)", () => {
+  /*
+   * Round 9 #1. A keyboard edit used to `begin()` the session, and the only
+   * terminator a keyboard gesture ever reaches is `blur`: arrow the slider
+   * once, leave it focused, and autosave was deferred for as long as the
+   * control kept focus — which is forever, if nothing else is clicked.
+   */
+  it("takes NO hold for a keyboard-only edit, so a focused slider cannot block autosave", () => {
     render(<TransportBar />);
 
-    // No pointer at all: focus, then change. The edit takes the hold...
     fireEvent.focus(slider());
-    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false); // ...focus alone does not
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false); // focus alone does not
     fireEvent.change(slider(), { target: { value: "0.25" } });
-    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
 
-    fireEvent.blur(slider());
+    // The edit committed...
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.25);
+    // ...and left nothing open behind it. Still focused, still no hold.
     expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("still folds a RUN of keyboard edits into one undo entry", () => {
+    render(<TransportBar />);
+
+    fireEvent.focus(slider());
+    fireEvent.change(slider(), { target: { value: "0.1" } });
+    fireEvent.change(slider(), { target: { value: "0.2" } });
+    fireEvent.change(slider(), { target: { value: "0.3" } });
+
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+    act(() => useAppStore.getState().undo());
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0);
+  });
+
+  it("does not fold a keyboard edit into the drag that just ended", () => {
+    render(<TransportBar />);
+
+    drag([0.2]);
+    fireEvent.pointerUp(slider(), { pointerId: 1 });
+    fireEvent.change(slider(), { target: { value: "0.5" } });
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+    act(() => useAppStore.getState().undo());
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
   });
 });

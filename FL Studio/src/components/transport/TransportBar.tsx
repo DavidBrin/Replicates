@@ -168,11 +168,16 @@ export function TransportBar({
       onSwingChange(value);
       return;
     }
-    // `begin`, not `keyFor`: the slider is keyboard-reachable, so the EDIT
-    // opens the session (and takes the hold) whether or not a pointer did.
-    // Focus alone must not — a focused, untouched slider would otherwise
-    // silence autosave until it blurred.
-    setGlobalSwing(value, swingGesture.begin());
+    // `keyForEdit`, not `begin`: a DRAG's edits get the open session's id (the
+    // pointer-down took the hold), and a KEYBOARD edit — arrow keys on the
+    // focused slider — gets a time-bounded one-shot key that takes no hold.
+    //
+    // `begin()` here was the leak: an arrow press opened a hold whose only
+    // terminator is `blur`, so a slider nudged once and left focused (the
+    // pointer moves on, the tab is switched, the user simply stops) deferred
+    // every autosave from then on. The edit run still folds into one undo
+    // entry — the keyring's gap is what bounds it (`@/lib/gestureHold`).
+    setGlobalSwing(value, swingGesture.keyForEdit());
   }
 
   function handleUndo() {

@@ -974,6 +974,57 @@ describe("autosave never fires mid-gesture (SPEC §2.2)", () => {
     expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 
+  /*
+   * Round 9 #5, through the store: `endGesture` has to pass the ending id down
+   * to `domain/undo.ts`, or the seal is "whatever is on top" again and a
+   * concurrent gesture's entry is the casualty.
+   */
+  it("ending one gesture does not seal a CONCURRENT gesture's open entry", () => {
+    const store = useAppStore.getState();
+    store.beginGesture("swing#1");
+    store.beginGesture("tempo#2");
+    store.dispatch(updateProject({ globalSwing: 0.3 }), {
+      coalesceKey: "transport:swing",
+      gestureId: "swing#1",
+    });
+    store.dispatch(updateProject({ tempo: 140 }), {
+      coalesceKey: "transport:tempo",
+      gestureId: "tempo#2",
+    });
+
+    // The swing slider is let go; the tempo drag is still down.
+    useAppStore.getState().endGesture("swing#1");
+    const entries = useAppStore.getState().history.past.length;
+    useAppStore.getState().dispatch(updateProject({ tempo: 150 }), {
+      coalesceKey: "transport:tempo",
+      gestureId: "tempo#2",
+    });
+
+    // The tempo drag is still ONE entry — it coalesced.
+    expect(useAppStore.getState().history.past).toHaveLength(entries);
+    useAppStore.getState().endGesture("tempo#2");
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project.tempo).not.toBe(150);
+  });
+
+  it("does seal the ending gesture's OWN entry, id and all", () => {
+    const store = useAppStore.getState();
+    store.beginGesture("swing#3");
+    const drag = { coalesceKey: "transport:swing", gestureId: "swing#3" };
+    store.dispatch(updateProject({ globalSwing: 0.2 }), drag);
+    const entries = useAppStore.getState().history.past.length;
+
+    useAppStore.getState().endGesture("swing#3");
+    // The slider is let go and grabbed again. Same key, same id — a dead
+    // gesture's id can recur after a remount (rule (c) guards the id source,
+    // not the store) and the sealed entry must refuse it either way. Dropping
+    // the id at the store boundary leaves this entry open, because the seal
+    // then has no claim on an entry that names a gesture.
+    useAppStore.getState().dispatch(updateProject({ globalSwing: 0.9 }), drag);
+
+    expect(useAppStore.getState().history.past).toHaveLength(entries + 1);
+  });
+
   it("flushes on teardown even mid-gesture — a teardown ends everything", () => {
     vi.useFakeTimers();
     const stop = startAutosave(10_000);

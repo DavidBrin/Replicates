@@ -173,20 +173,56 @@ export function dispatchCommand(
 }
 
 /**
- * Close the current gesture: seal the top entry so nothing can extend it.
+ * Close a gesture: seal **its** entry so nothing can extend it.
  *
- * The escape hatch for callers whose gesture has no natural id — a blur, a
- * debounce settling, a keyboard nudge run. Returns the same object when there
- * is nothing to seal, so a store may `set()` it unconditionally without
- * inventing a render.
+ * Sealing was unconditionally "the top entry", and gestures are not
+ * exclusive — two of them run at once whenever a second pointer, a wheel over
+ * another surface, or a keyboard edit lands mid-drag. Gesture A ending then
+ * sealed whatever happened to be on top, which is routinely gesture B's still
+ * OPEN entry: B's next dispatch could no longer coalesce, so the second half
+ * of one drag became a separate undo entry, and B's own end sealed a third
+ * party's in turn. The entry carrying `gestureId` is found and sealed instead,
+ * wherever it sits in the stack.
+ *
+ * Without a `gestureId` — the knob/fader shape, which mints a unique
+ * `coalesceKey` per gesture and holds no id in history — the top entry is
+ * still sealed, but ONLY when it carries no `gestureId` of its own. A top
+ * entry that names a gesture belongs to that gesture, and an anonymous
+ * caller has no claim on it.
+ *
+ * Returns the same object when there is nothing to seal, so a store may
+ * `set()` it unconditionally without inventing a render.
  */
-export function endGesture(history: History): History {
-  const top = history.past[history.past.length - 1];
-  if (top === undefined || (top.coalesceKey === undefined && top.gestureId === undefined)) {
-    return history;
+export function endGesture(history: History, gestureId?: string): History {
+  const index = sealIndex(history.past, gestureId);
+  if (index === -1) return history;
+  const entry = history.past[index]!;
+  const sealed: HistoryEntry = { command: entry.command, inverse: entry.inverse };
+  const past = [...history.past];
+  past[index] = sealed;
+  return { past, future: history.future };
+}
+
+/** Which entry (if any) the ending gesture is entitled to seal. */
+function sealIndex(past: readonly HistoryEntry[], gestureId: string | undefined): number {
+  if (gestureId !== undefined) {
+    // Topmost first: a gesture id is unique per gesture, so at most one entry
+    // carries it, but searching downward keeps the common case (it IS the
+    // top) one comparison long.
+    for (let i = past.length - 1; i >= 0; i -= 1) {
+      if (past[i]!.gestureId === gestureId) return i;
+    }
+    // The gesture dispatched nothing, or its entry has already been sealed —
+    // and the top belongs to somebody else. Sealing it would cut another
+    // gesture's entry in half.
+    const top = past[past.length - 1];
+    if (top === undefined || top.gestureId !== undefined) return -1;
+    return top.coalesceKey === undefined ? -1 : past.length - 1;
   }
-  const sealed: HistoryEntry = { command: top.command, inverse: top.inverse };
-  return { past: [...history.past.slice(0, -1), sealed], future: history.future };
+  const top = past[past.length - 1];
+  if (top === undefined) return -1;
+  if (top.gestureId !== undefined) return -1;
+  return top.coalesceKey === undefined ? -1 : past.length - 1;
 }
 
 /** One step back. A no-op (same objects) when there is nothing to undo. */

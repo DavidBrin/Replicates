@@ -248,16 +248,16 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             aria-label="Rack swing"
             onPointerDown={swing.begin}
             {...swing.terminators}
-            // `begin`, not `keyFor`: the session is opened by the EDIT, not by
-            // focus. A keyboard-only edit (arrow keys on a focused slider)
-            // therefore takes the persistence hold too and folds its whole
-            // run into one undo entry, while a slider that merely holds focus
-            // and is never touched holds nothing — `onFocus={begin}` would
-            // silence autosave for as long as the control stayed focused.
-            // `terminators` closes it on blur, pointer-cancel or unmount.
+            // `keyForEdit`: a drag's edits carry the open session's id (the
+            // pointer-down took the hold), a keyboard edit carries a
+            // time-bounded one-shot key and takes NO hold. `begin()` here used
+            // to open a hold on an arrow press whose only terminator is
+            // `blur` — nudge the slider, leave it focused, and autosave was
+            // deferred for the rest of the session. `terminators` still closes
+            // the pointer drag on blur, pointer-cancel or unmount.
             onChange={(event) =>
               dispatch(updateProject({ globalSwing: Number.parseFloat(event.target.value) }), {
-                coalesceKey: swing.begin(),
+                coalesceKey: swing.keyForEdit(),
               })
             }
           />

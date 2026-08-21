@@ -744,6 +744,42 @@ describe("Playlist root drags — the gesture class (round 8)", () => {
     expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 
+  /*
+   * Round 9 #2. The sweep is a SECONDARY-button drag, so it cannot take
+   * pointer capture without swallowing the context menu, and `onPointerUp` on
+   * the surface only fires for a release inside its bounds. Sweeping off the
+   * lanes and releasing over another panel — or losing the pointer to a
+   * system gesture, which delivers `pointercancel` and no `pointerup` at all —
+   * stranded the hold, and autosave stayed deferred for the rest of the
+   * session. A window backstop closes both (`@/lib/gestureHold` rule (f)).
+   */
+  it.each([
+    ["pointerup", () => fireEvent.pointerUp(window, { pointerId: 1 })],
+    ["pointercancel", () => fireEvent.pointerCancel(window, { pointerId: 1 })],
+  ])("releases a sweep whose %s landed OFF the playlist (round 9 #2)", (_name, terminate) => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    terminate();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("releases a middle-drag pan that ended off the playlist too (round 9 #2)", () => {
+    render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 2 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerCancel(window, { pointerId: 2 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
   it("does not weld a sweep onto the previous MOUNT's sweep (rule c)", () => {
     placeClip("clip-a", { startTick: 0 });
     placeClip("clip-b", { startTick: TICKS_PER_BAR });

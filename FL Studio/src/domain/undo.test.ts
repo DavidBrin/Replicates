@@ -336,6 +336,63 @@ describe("coalescing separates gestures, not just keys", () => {
     expect(endGesture(unkeyed)).toBe(unkeyed);
   });
 
+  /*
+   * Round 9 #5. Sealing was unconditionally "the top entry", and gestures
+   * overlap: a wheel nudge on another surface, a second pointer, a keyboard
+   * edit mid-drag. Gesture A ending sealed whatever was on top — routinely
+   * gesture B's still-OPEN entry — so B's next dispatch could no longer
+   * coalesce and one drag became two undo entries.
+   */
+  describe("endGesture(gestureId) seals only ITS gesture's entry (round 9 #5)", () => {
+    const dragA = { coalesceKey: "swing", gestureId: "A" };
+    const dragB = { coalesceKey: "tempo", gestureId: "B" };
+
+    it("leaves a concurrent gesture's entry open when the other one ends", () => {
+      let state = dispatchCommand(project, createHistory(), tempo(150), dragA);
+      state = dispatchCommand(state.project, state.history, tempo(160), dragB);
+
+      // A ends while B is still down. B's entry is on top.
+      state = { ...state, history: endGesture(state.history, "A") };
+      state = dispatchCommand(state.project, state.history, tempo(170), dragB);
+
+      // B is still one entry: A's ending did not cut it in half.
+      expect(state.history.past).toHaveLength(2);
+      expect(state.history.past[1]!.gestureId).toBe("B");
+      // ...and A's own entry really was sealed.
+      expect(state.history.past[0]!.gestureId).toBeUndefined();
+      expect(state.history.past[0]!.coalesceKey).toBeUndefined();
+    });
+
+    it("finds its entry beneath the top of the stack", () => {
+      let state = dispatchCommand(project, createHistory(), tempo(150), dragA);
+      state = dispatchCommand(state.project, state.history, tempo(160), dragB);
+      state = { ...state, history: endGesture(state.history, "A") };
+
+      // A cannot be extended even though its entry was buried.
+      state = dispatchCommand(state.project, state.history, tempo(170), dragA);
+      expect(state.history.past).toHaveLength(3);
+    });
+
+    it("is a no-op when its gesture dispatched nothing and the top is somebody else's", () => {
+      const state = dispatchCommand(project, createHistory(), tempo(150), dragB);
+      expect(endGesture(state.history, "A")).toBe(state.history);
+    });
+
+    it("still seals an anonymous top entry — the knob/fader shape, which holds no id", () => {
+      // `useGestureHold` releases an id that never reaches history: the knob
+      // mints a unique `coalesceKey` per drag instead.
+      let state = dispatchCommand(project, createHistory(), tempo(150), {
+        coalesceKey: "knob:volume:7",
+      });
+      state = { ...state, history: endGesture(state.history, "knob#3") };
+      state = dispatchCommand(state.project, state.history, tempo(160), {
+        coalesceKey: "knob:volume:7",
+      });
+
+      expect(state.history.past).toHaveLength(2);
+    });
+  });
+
   it("does not disturb the redo stack it seals over", () => {
     let state = dispatchCommand(project, createHistory(), tempo(150), {
       coalesceKey: "transport:tempo",

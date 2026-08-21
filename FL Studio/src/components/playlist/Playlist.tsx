@@ -125,7 +125,19 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
    * `ClipView` ignores non-primary presses without stopping them, so they
    * bubble here.
    */
-  const eraseSweep = useGestureSession("playlist-erase");
+  /*
+   * `windowBackstop`, because this sweep can end where the surface never hears
+   * it. The press is the SECONDARY button, so it cannot take pointer capture
+   * without swallowing the context menu, and `onPointerUp` on the playlist
+   * root only fires for a release inside its bounds: sweeping off the lanes
+   * and letting go over the rack — or losing the pointer to a system gesture,
+   * which delivers `pointercancel` and no `pointerup` at all — stranded the
+   * hold, and autosave stayed deferred for the rest of the session. The hook
+   * listens on the window for both terminators while the sweep is open
+   * (`@/lib/gestureHold` rule (f)), the same backstop the rack row wires for
+   * its buffered stroke.
+   */
+  const eraseSweep = useGestureSession("playlist-erase", { windowBackstop: true });
   /**
    * With no sweep open — a bare context-menu delete, a menu item, a test
    * firing `contextmenu` directly — every call gets its OWN fresh id, so
@@ -271,7 +283,7 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
    * an exception is a rule nobody applies. The hold costs one entry in a
    * string array and buys the same unmount/cancel guarantees.
    */
-  const panGesture = useGestureSession("playlist-pan");
+  const panGesture = useGestureSession("playlist-pan", { windowBackstop: true });
   const middlePan = useRef<{
     startClientX: number;
     startClientY: number;

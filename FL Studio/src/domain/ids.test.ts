@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { nextId, peekIdCounter, reseedIds, resetIds } from "./ids";
+import { MAX_SEED, SEED_HEADROOM, nextId, peekIdCounter, reseedIds, resetIds } from "./ids";
 import { addNotes } from "./commands/patterns";
 import { fixtureProject } from "./testKit";
 
@@ -101,10 +101,50 @@ describe("reseedIds — only countable suffixes seed the counter (round 8 #8)", 
     expect(peekIdCounter()).toBe(4_000);
   });
 
+  /*
+   * Round 9 #4. Rejecting only `>= MAX_SAFE_INTEGER` left exactly two mints of
+   * headroom: seeding at `MAX_SAFE_INTEGER - 1` minted `MAX_SAFE_INTEGER`, then
+   * `9007199254740992`, and there the counter STUCK — `n + 1 === n` — handing
+   * out that same id for every mint afterwards. A seed has to leave room to
+   * count, so anything within `SEED_HEADROOM` of the ceiling is refused.
+   */
+  it("rejects MAX_SAFE_INTEGER - 1, which reaches the uncountable value in two mints", () => {
+    resetIds(0);
+    reseedIds(withNote(`n-${Number.MAX_SAFE_INTEGER - 1}`));
+
+    const minted = [nextId("note"), nextId("note"), nextId("note")];
+    expect(new Set(minted).size).toBe(3);
+    expect(peekIdCounter()).toBeLessThanOrEqual(MAX_SEED + 3);
+  });
+
+  it("takes the largest seed with full headroom, and refuses the first one without", () => {
+    resetIds(0);
+    reseedIds(withNote(`n-${MAX_SEED}`));
+    expect(peekIdCounter()).toBe(MAX_SEED);
+
+    resetIds(0);
+    reseedIds(withNote(`n-${MAX_SEED + 1}`));
+    // Refused — the counter stays where the fixture's own ids put it.
+    expect(peekIdCounter()).toBeLessThan(1_000);
+  });
+
+  it("leaves a full headroom of countable ids above the largest accepted seed", () => {
+    // Every position the headroom covers still counts — the property the old
+    // guard could not deliver even for one mint past its own boundary.
+    for (const step of [0, 1, SEED_HEADROOM - 2]) {
+      resetIds(MAX_SEED + step);
+      const next = Number(nextId("note").slice(2));
+      expect(next).toBe(MAX_SEED + step + 1);
+      expect(Number.isSafeInteger(next)).toBe(true);
+    }
+  });
+
   it("still seeds from a large but safe suffix", () => {
     resetIds(0);
     reseedIds(withNote("n-9007199254740990"));
 
-    expect(nextId("note")).toBe("n-9007199254740991");
+    expect(peekIdCounter()).toBeLessThan(1_000); // no headroom — refused
+    reseedIds(withNote("n-9007199000000000"));
+    expect(nextId("note")).toBe("n-9007199000000001");
   });
 });
