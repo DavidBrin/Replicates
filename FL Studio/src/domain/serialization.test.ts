@@ -4,9 +4,12 @@ import { addNotes } from "./commands/patterns";
 import { addClip } from "./commands/playlist";
 import { updateChannel } from "./commands/channels";
 import { createDefaultProject } from "./defaultProject";
+import { PALETTE, colorAt } from "./palette";
 import {
+  DEFAULT_COLOR,
   MIGRATIONS,
   deserializeProject,
+  isSafeColor,
   migrate,
   parseSaveFile,
   readProject,
@@ -638,5 +641,66 @@ describe("prototype-bearing JSON cannot pollute or forge membership", () => {
     // `MIGRATIONS["constructor"]` is a function — a bare lookup would call it.
     expect(migrate({ schemaVersion: 2, project: {} })).toBeNull();
     expect(MIGRATIONS[1]).toBeTypeOf("function");
+  });
+});
+
+describe("an imported colour cannot inject CSS (round 11 #8)", () => {
+  /*
+   * A colour goes straight into an inline style, so `str()` accepting any
+   * string handed the file's author the page's CSS: `url(...)` in a pattern's
+   * colour made the browser fetch it the moment the project was imported — a
+   * beacon that fires on open. Validation is at the door; the renderers'
+   * switch to the `backgroundColor` longhand is the second layer.
+   */
+  function importedColors(color: unknown): { pattern: string; track: string; channel: string } {
+    const project = fixtureProject();
+    const restored = readProject({
+      ...project,
+      patterns: { "pat-1": { ...project.patterns["pat-1"], color } },
+      playlistTracks: { "trk-1": { ...project.playlistTracks["trk-1"], color } },
+      channels: { "ch-kick": { ...project.channels["ch-kick"], color } },
+    })!;
+    return {
+      pattern: restored.patterns["pat-1"]!.color,
+      track: restored.playlistTracks["trk-1"]!.color,
+      channel: restored.channels["ch-kick"]!.color,
+    };
+  }
+
+  it.each([
+    ["a remote image", "url(https://tracker.example/beacon.png)"],
+    ["an image-set", "-webkit-image-set(url(https://tracker.example/x.png) 1x)"],
+    ["a theme variable read", "var(--fl-chrome)"],
+    ["a shorthand with an image", "red url(https://tracker.example/x.png)"],
+    ["a style-attribute break-out", 'red; background-image: url("https://x.example/y")'],
+    ["a non-string", 42],
+    ["an expression", "hsl(200, 52%, 55%) /*x*/ url(x)"],
+  ])("replaces %s with the default colour", (_name, hostile) => {
+    const colors = importedColors(hostile);
+    expect(colors.pattern).toBe(DEFAULT_COLOR);
+    expect(colors.track).toBe(DEFAULT_COLOR);
+    expect(colors.channel).toBe(DEFAULT_COLOR);
+    expect(isSafeColor(hostile)).toBe(false);
+  });
+
+  it.each([
+    ["the palette's own format", "hsl(4, 55%, 55%)"],
+    ["a fractional hsl", "hsl(200.5, 52.25%, 55%)"],
+    ["six-digit hex", "#1a2b3c"],
+    ["three-digit hex", "#abc"],
+  ])("keeps %s", (_name, legal) => {
+    expect(isSafeColor(legal)).toBe(true);
+    expect(importedColors(legal).pattern).toBe(legal);
+  });
+
+  it("keeps every colour the palette itself emits", () => {
+    for (const entry of PALETTE) expect(isSafeColor(entry)).toBe(true);
+    expect(isSafeColor(colorAt(7))).toBe(true);
+  });
+
+  it("survives a round trip of a real project untouched", () => {
+    const project = richProject();
+    const restored = deserializeProject(serializeProject(project))!;
+    expect(restored.patterns["pat-1"]!.color).toBe(project.patterns["pat-1"]!.color);
   });
 });

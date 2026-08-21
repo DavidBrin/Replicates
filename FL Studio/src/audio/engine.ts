@@ -186,6 +186,7 @@ async function resumeIfNeeded(ctx: BaseAudioContext): Promise<void> {
  * transport is re-armed only when the schedule actually changed.
  */
 export function syncProject(next: Project): void {
+  const previous = project;
   project = next;
 
   if (state === null) {
@@ -204,6 +205,57 @@ export function syncProject(next: Project): void {
   state.graph.sync(next);
   state.transport.bpm.value = next.tempo;
   if (needsRearm(next)) rearm();
+  releaseMutedTrackVoices(previous, next);
+}
+
+/**
+ * Mute must be audible NOW, not from the next note on.
+ *
+ * A playlist track's mute is a *compile-time* fact: `compileSongMode` drops a
+ * muted track's clips, so a re-arm stops scheduling them. Everything already
+ * sounding kept sounding — the voice's envelope is queued on the audio thread
+ * and owes nothing to the transport — so muting a track under a pad, or any
+ * note longer than the gap to the next callback, did nothing you could hear
+ * until it ended on its own. The affected voices are released here with the
+ * standard choke ramp, which is the same shape every other "stop this now"
+ * path uses (`stop`, `setMode`, `panic`).
+ *
+ * CHANNEL mute needs no equivalent and deliberately has none: a channel is a
+ * mixer strip, and `MixerGraph.sync` ramps a muted channel's gain to 0 in
+ * `PARAM_RAMP_SEC`, silencing the ringing voices along with everything else.
+ * A playlist track is not a strip — it has no node of its own to turn down —
+ * which is exactly why this gap existed only on that side.
+ *
+ * The release is CHANNEL-granular because voices are pooled per channel and
+ * carry no memory of which clip triggered them. So a channel that is also
+ * sounding from an unmuted track's clip is cut too. That is the deliberate
+ * side: "mute means silence" is the property the user pressed the button for,
+ * and the alternative — tagging every voice with its originating clip so the
+ * pool can be filtered — buys a rarer case at the cost of a field on the hot
+ * path. Only channels the muted track was actually contributing are touched.
+ */
+function releaseMutedTrackVoices(previous: Project | null, next: Project): void {
+  if (state === null || previous === null) return;
+  // Pattern mode is not playing the arrangement, so its clips' mutes are not
+  // sounding anything to release.
+  if (!playing || next.playbackMode !== "song") return;
+
+  const nowMuted = new Set<string>();
+  for (const [id, track] of Object.entries(next.playlistTracks)) {
+    if (track.muted && previous.playlistTracks[id]?.muted === false) nowMuted.add(id);
+  }
+  if (nowMuted.size === 0) return;
+
+  const channels = new Set<string>();
+  for (const clip of Object.values(next.clips)) {
+    if (!nowMuted.has(clip.trackId)) continue;
+    const pattern = next.patterns[clip.patternId];
+    if (pattern === undefined) continue;
+    for (const note of Object.values(pattern.notes)) channels.add(note.channelId);
+  }
+
+  const time = state.ctx.currentTime;
+  for (const channelId of channels) state.voices.releaseChannel(channelId, time);
 }
 
 function armedInputsOf(current: Project): ArmedInputs {

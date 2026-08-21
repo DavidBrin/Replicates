@@ -37,6 +37,27 @@ export const EXPORT_TAIL_SECONDS = 2;
 export const EXPORT_SAMPLE_RATE = 44100;
 export const EXPORT_CHANNELS = 2;
 
+/**
+ * The longest render this app will attempt, in seconds.
+ *
+ * The arrangement bound is 1000 bars (`MAX_ARRANGEMENT_BARS`), and bars are
+ * measured in TICKS, not seconds — so the tempo decides how much audio that
+ * is. At the minimum tempo of 10 BPM, 1000 bars is roughly 6.7 hours: the
+ * export allocated `frames × 2 channels × 4 bytes` of float PCM up front,
+ * about 8.5 GB, and the tab died on a `RangeError` (or the OS killed it)
+ * before a single sample was rendered. The encoder then wants a second
+ * buffer of its own.
+ *
+ * Ten minutes is the ceiling, and it is deliberately the EXPORT's ceiling
+ * rather than the arrangement's: a long, slow arrangement is still a legal
+ * project to write, play and save — it is only rendering the whole of it to
+ * one WAV in memory that has no answer. Ten minutes is ~106 MB of float PCM
+ * plus ~53 MB of 16-bit output, which every browser handles, and it is longer
+ * than any track this app is for. The refusal names the number so the user
+ * can lower the arrangement or raise the tempo.
+ */
+export const EXPORT_MAX_SECONDS = 600;
+
 export type OfflineContextFactory = (
   channels: number,
   frames: number,
@@ -84,7 +105,17 @@ export async function renderProject(
   const mode = options.mode ?? project.playbackMode;
   const sampleRate = options.sampleRate ?? EXPORT_SAMPLE_RATE;
   const timeline = timelineFor(project, mode);
-  const frames = Math.max(1, Math.ceil(renderLengthSeconds(timeline, project.tempo) * sampleRate));
+  const seconds = renderLengthSeconds(timeline, project.tempo);
+  // Computed and checked BEFORE the allocation, which is the whole point:
+  // `new OfflineAudioContext(2, frames, rate)` is where the memory goes, and
+  // an 8.5 GB request does not fail politely.
+  if (!Number.isFinite(seconds) || seconds > EXPORT_MAX_SECONDS) {
+    throw new Error(
+      `Arrangement is too long to export: ${Math.round(seconds)}s at ${project.tempo} BPM ` +
+        `exceeds the ${EXPORT_MAX_SECONDS}s limit. Shorten the arrangement or raise the tempo.`,
+    );
+  }
+  const frames = Math.max(1, Math.ceil(seconds * sampleRate));
 
   const factory = options.createOfflineContext ?? defaultOfflineFactory;
   const ctx = factory(EXPORT_CHANNELS, frames, sampleRate);

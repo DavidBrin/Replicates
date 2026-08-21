@@ -245,7 +245,7 @@ export function ClipView({
         left: ticksToPx(clip.startTick, pxPerBar),
         width: pxPerBar,
         borderColor: pattern.color,
-        background: pattern.color,
+        backgroundColor: pattern.color,
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -256,7 +256,7 @@ export function ClipView({
       onDoubleClick={() => onOpen(clip)}
       onContextMenu={handleContextMenu}
     >
-      <div className="fl-clip__header" style={{ background: pattern.color }}>
+      <div className="fl-clip__header" style={{ backgroundColor: pattern.color }}>
         {pattern.name}
       </div>
       <div className="fl-clip__body">

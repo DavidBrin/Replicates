@@ -6,14 +6,15 @@
  * except {@link makeUnique}, which is the single sanctioned fork.
  */
 
-import type {
-  ClipId,
-  Pattern,
-  PatternClip,
-  PatternId,
-  PlaylistTrack,
-  PlaylistTrackId,
-  Project,
+import {
+  MAX_CLIP_START_TICK,
+  type ClipId,
+  type Pattern,
+  type PatternClip,
+  type PatternId,
+  type PlaylistTrack,
+  type PlaylistTrackId,
+  type Project,
 } from "../types";
 import { addPattern, removePattern } from "./patterns";
 import {
@@ -44,6 +45,33 @@ function requireClip(project: Project, id: ClipId): PatternClip {
   const clip = project.clips[id];
   if (clip === undefined) throw new CommandError(`No such clip: ${id}`);
   return clip;
+}
+
+/**
+ * The arrangement bound, enforced where clips are WRITTEN.
+ *
+ * `domain/serialization.ts`'s `readClip` drops an imported clip past
+ * {@link MAX_CLIP_START_TICK}, which made the bound a property of *files* and
+ * not of projects: a clip placed past it by any other route survived in
+ * memory, rendered, played, saved — and then vanished on the next load, with
+ * no report. That is silent data loss, and the only honest place for the rule
+ * is here, because a command is the one way domain state ever changes
+ * (SPEC §5).
+ *
+ * Rejected rather than clamped, matching `readClip`: a clip at bar 10^300 has
+ * no meaningful home at the last bar, and stacking every out-of-range clip
+ * onto bar 1000 is an unexplainable silent edit. A `CommandError` names the
+ * bug at the call site instead. Nothing in the UI can reach it — the playlist
+ * only paints where it draws, and its drag clamps — so this is a guard against
+ * a future caller, not a user-facing path.
+ */
+function requireStartTick(startTick: number): number {
+  if (!Number.isInteger(startTick) || startTick < 0 || startTick > MAX_CLIP_START_TICK) {
+    throw new CommandError(
+      `Clip startTick out of range (0..${MAX_CLIP_START_TICK}): ${startTick}`,
+    );
+  }
+  return startTick;
 }
 
 /* -------------------------------------------------------------- tracks -- */
@@ -148,6 +176,7 @@ export function addClip(clip: PatternClip): Command {
     type: "addClip",
     label: "Place clip",
     apply(project) {
+      requireStartTick(clip.startTick);
       if (project.clips[clip.id] !== undefined) {
         throw new CommandError(`Clip already exists: ${clip.id}`);
       }
@@ -185,6 +214,7 @@ export function updateClip(id: ClipId, patch: ClipPatch): Command {
     apply(project) {
       const clip = requireClip(project, id);
       const next = { ...clip, ...patch };
+      requireStartTick(next.startTick);
       if (project.patterns[next.patternId] === undefined) {
         throw new CommandError(`Clip references missing pattern: ${next.patternId}`);
       }

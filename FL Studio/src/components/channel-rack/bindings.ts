@@ -15,6 +15,7 @@
 
 import { updateChannel } from "@/domain/commands/channels";
 import type { ChannelId } from "@/domain/types";
+import { oneShotGestureKey } from "@/lib/gestureHold";
 import { appStore } from "@/lib/store";
 import { registerBindings, type KeyBinding } from "@/lib/keyboard";
 import type { ChannelRackUiSlice } from "./uiState";
@@ -71,12 +72,27 @@ export function registerChannelRackBindings(
     code,
     description: `Mute channel ${index + 1}`,
     handler: () => {
+      /*
+       * A keyboard mutation is a gesture too, and it goes through the shared
+       * one-shot path (`@/lib/gestureHold`) rather than straight to
+       * `dispatch`.
+       *
+       * Dispatching bare bypassed the single-active-mutating-gesture
+       * invariant in both directions: a knob drag or a rack paint stroke that
+       * was open stayed open across the keystroke — still holding autosave
+       * off, still coalescing — and this mute landed in the middle of it, so
+       * one drag came back as two undo entries with a mute wedged between
+       * them. `oneShotGestureKey` seals and releases whatever was in flight
+       * and hands back the id this dispatch travels under; it takes no hold
+       * of its own, because a keypress has no pointer-up coming (rule (e)).
+       */
+      const gestureId = oneShotGestureKey(`${SURFACE_ID}-mute`);
       const { project, dispatch } = appStore.getState();
       const channelId = project.channelOrder[index];
       if (!channelId) return;
       const channel = project.channels[channelId];
       if (!channel) return;
-      dispatch(updateChannel(channelId, { muted: !channel.muted }));
+      dispatch(updateChannel(channelId, { muted: !channel.muted }), { gestureId });
     },
   }));
 

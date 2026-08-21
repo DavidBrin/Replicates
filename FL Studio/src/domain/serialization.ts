@@ -118,6 +118,46 @@ function int(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback;
 }
 
+/**
+ * The colour formats a project file may carry — everything else is replaced.
+ *
+ * A colour is not decoration here: it goes straight into an inline style
+ * (`ClipView`, `PatternPicker`, `TrackHeader`, the rack row's name plate), so
+ * an imported string is a string the file's author gets to put in the page's
+ * CSS. `str()` accepted any of them, and `url(https://tracker.example/x.png)`
+ * in a pattern's `color` made the browser fetch it the moment the project was
+ * imported — a beacon that fires on open, from a file the user was told was
+ * just a song. `image-set(...)` and `-webkit-image-set(...)` do the same;
+ * `var(--x)` reads the app's own theme; the shorthand property those styles
+ * used would even take `background: red url(...)`.
+ *
+ * Both halves of the fix are needed and neither is sufficient: the renderers
+ * now write `backgroundColor` (a longhand that cannot take an image at all),
+ * and validation here keeps a hostile value out of the *project* rather than
+ * relying on every present and future consumer to be careful with it.
+ *
+ * The allowlist is exactly what this app can produce: `domain/palette.ts`
+ * emits `hsl(h, s%, l%)`, and hex is accepted because it is the other format
+ * a colour picker or a hand-written file will use. Both are matched
+ * strictly — no `url`, no `var`, no function call, no whitespace tricks — and
+ * anything else falls back to the default, which loses only a colour.
+ */
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const HSL_COLOR = /^hsl\(\s*-?\d{1,3}(?:\.\d+)?\s*,\s*\d{1,3}(?:\.\d+)?%\s*,\s*\d{1,3}(?:\.\d+)?%\s*\)$/;
+
+export const DEFAULT_COLOR = "hsl(200, 52%, 55%)";
+
+/** True for a colour this app is willing to put in a style attribute. */
+export function isSafeColor(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return HEX_COLOR.test(trimmed) || HSL_COLOR.test(trimmed);
+}
+
+function color(value: unknown): string {
+  return isSafeColor(value) ? value.trim() : DEFAULT_COLOR;
+}
+
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -135,7 +175,7 @@ function readChannel(id: string, raw: unknown, index: number): Channel {
   const channel: Channel = {
     id,
     name: str(source.name, `Channel ${index + 1}`),
-    color: str(source.color, "hsl(200, 52%, 55%)"),
+    color: color(source.color),
     voice: voiceKind(source.voice),
     volume: clamp(num(source.volume, 0.8), 0, 1),
     pan: clamp(num(source.pan, 0), -1, 1),
@@ -206,7 +246,7 @@ function readPattern(id: string, raw: unknown, index: number): Pattern {
   return {
     id,
     name: str(source.name, `Pattern ${index + 1}`),
-    color: str(source.color, "hsl(200, 52%, 55%)"),
+    color: color(source.color),
     notes,
   };
 }
@@ -216,7 +256,7 @@ function readPlaylistTrack(id: string, raw: unknown, index: number): PlaylistTra
   return {
     id,
     name: str(source.name, `Track ${index + 1}`),
-    color: str(source.color, "hsl(200, 52%, 55%)"),
+    color: color(source.color),
     muted: bool(source.muted, false),
   };
 }

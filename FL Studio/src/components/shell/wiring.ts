@@ -50,6 +50,7 @@ import {
   type PlaybackMode as DomainPlaybackMode,
   type Project,
 } from "@/domain/types";
+import { oneShotGestureKey } from "@/lib/gestureHold";
 import {
   exportProjectJson,
   loadPersistedProject,
@@ -382,8 +383,17 @@ export function selectAdjacentPattern(direction: 1 | -1): void {
   if (nextId !== undefined) setActivePatternId(nextId);
 }
 
-/** Creating a pattern IS an edit, so it goes on the undo stack (SPEC §2.1). */
+/**
+ * Creating a pattern IS an edit, so it goes on the undo stack (SPEC §2.1).
+ *
+ * Reachable from the keyboard (`F4`'s "next empty pattern" mints one when
+ * there is none), so it takes the shared one-shot gesture key rather than
+ * dispatching bare: whatever drag was open is sealed and released first, and
+ * this edit is its own undo entry instead of landing inside somebody else's
+ * (`@/lib/gestureHold`, and see `channel-rack/bindings.ts` for the same rule).
+ */
 export function addPattern(): void {
+  const gestureId = oneShotGestureKey("add-pattern");
   const { project, dispatch } = useAppStore.getState();
   const index = project.patternOrder.length;
   dispatch(
@@ -393,6 +403,7 @@ export function addPattern(): void {
       color: colorAt(index + 6),
       notes: {},
     }),
+    { gestureId },
   );
   const created = useAppStore.getState().project.patternOrder[index];
   if (created !== undefined) setActivePatternId(created);

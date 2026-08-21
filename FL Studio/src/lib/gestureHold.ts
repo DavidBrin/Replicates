@@ -49,9 +49,11 @@
  *
  * Three properties of the hold itself, and they are why this is stateful:
  *
- * 1. **Re-entrant open is a no-op.** A second pointer-down without an
- *    intervening release does not stack two ids, so it cannot need two
- *    releases.
+ * 1. **Re-entrant open is a no-op — within one press.** A second call while
+ *    the same press is still down does not stack two ids, so it cannot need
+ *    two releases. A *different* press on the same control is a different
+ *    gesture: the open one is sealed and a fresh session opens, rather than
+ *    two pointers sharing one id (see `pressTokenFor`).
  * 2. **Release without a hold is a no-op** — pointerup and pointercancel may
  *    both arrive, and a surface may release defensively.
  * 3. **Unmounting releases.** A control torn down mid-drag (the rack row
@@ -71,9 +73,13 @@
  * the same reason the id counter is, since the gesture being pre-empted
  * belongs to a *different component*.
  *
- * The one exception is two sessions opened by the SAME pointer — the tempo
- * wrapper around the BPM plate — which are one gesture wearing two hats, not
- * two gestures.
+ * The one exception is two sessions opened by the same PRESS — the tempo
+ * wrapper around the BPM plate, a rack paint stroke that walks from one row
+ * into the next — which are one gesture wearing two hats, not two gestures.
+ * "Same press" is the pointer id *and* the press token minted for that
+ * pointer-down (`pressTokenFor`), never the id alone: a mouse keeps id 1 for
+ * life, so an id-only exemption also exempts a session leaked from a press
+ * five clicks ago.
  *
  * Two consequences, both deliberate:
  *
@@ -128,6 +134,90 @@ interface ActiveGesture {
   end: () => void;
   /** The pointer that opened it, or `null` for a keyboard/focus open. */
   pointerId: number | null;
+  /**
+   * WHICH press of that pointer opened it — see {@link pressTokenFor}. `null`
+   * only when {@link ActiveGesture.pointerId} is.
+   */
+  pressToken: number | null;
+}
+
+/* ------------------------------------------------------- press identity -- */
+
+/**
+ * A pointer id is not a gesture id, and the difference is a whole class of bug.
+ *
+ * A mouse reuses `pointerId === 1` for every click it will ever make, so "same
+ * pointer id" cannot mean "same press". The nesting exemption below
+ * ({@link preemptOtherGestures}) is written for one press opening two sessions
+ * — `TransportBar`'s tempo wrapper around `BpmLcd`'s plate, a rack paint
+ * stroke crossing from one row into the next — and keyed on the id alone it
+ * also exempted a session that had *leaked* from an earlier press: the stale
+ * session survived every later click of that mouse, kept its persistence hold,
+ * and went on extending its undo entry from under whatever the user was
+ * actually editing.
+ *
+ * So a press gets an identity of its own. The counter is bumped by the real
+ * `pointerdown` (captured on the window, before any React handler runs) and
+ * the entry is dropped on `pointerup`/`pointercancel`, which is what makes the
+ * NEXT press of the same physical mouse a different press here.
+ *
+ * {@link pressTokenFor} mints one on demand for a pointer no listener saw —
+ * a synthetic `begin(1)` in a test, an environment with no window. That
+ * fallback is still press-scoped: the real `pointerup` clears it, so the
+ * following press mints a fresh token exactly as a real press would.
+ */
+let pressCounter = 0;
+const livePresses = new Map<number, number>();
+
+function notePressDown(event: PointerEvent): void {
+  // Only the FIRST down for a pointer starts a press. A pointer cannot go
+  // down twice without an intervening up in the real world, and treating a
+  // repeated `pointerdown` as a new press would break the one thing this is
+  // here to protect: two sessions opened from one press must still nest.
+  if (livePresses.has(event.pointerId)) return;
+  pressCounter += 1;
+  livePresses.set(event.pointerId, pressCounter);
+}
+
+function notePressEnd(event: PointerEvent): void {
+  livePresses.delete(event.pointerId);
+}
+
+if (typeof window !== "undefined") {
+  // Capture phase: this must run before the React handler that calls `begin`,
+  // otherwise the press that is opening a session has no token yet.
+  window.addEventListener("pointerdown", notePressDown, true);
+  window.addEventListener("pointerup", notePressEnd, true);
+  window.addEventListener("pointercancel", notePressEnd, true);
+}
+
+/** The token of the press `pointerId` is currently in, or `null` for no pointer. */
+function pressTokenFor(pointerId: number | null): number | null {
+  if (pointerId === null) return null;
+  const known = livePresses.get(pointerId);
+  if (known !== undefined) return known;
+  pressCounter += 1;
+  livePresses.set(pointerId, pressCounter);
+  return pressCounter;
+}
+
+/**
+ * Whether two opens belong to the same press, and may therefore nest.
+ *
+ * Both `null` cases are deliberate abstentions rather than claims: an open
+ * with no pointer (keyboard/focus, or a surface that re-opens its own session
+ * without repeating the id) makes no claim to be a *different* press, and a
+ * session opened without a pointer is not one a pointer press can be said to
+ * interrupt on identity grounds.
+ */
+function isSamePress(
+  aPointerId: number | null,
+  aPressToken: number | null,
+  bPointerId: number | null,
+  bPressToken: number | null,
+): boolean {
+  if (aPointerId === null || bPointerId === null) return true;
+  return aPointerId === bPointerId && aPressToken === bPressToken;
 }
 
 /**
@@ -149,8 +239,9 @@ const openGestures = new Set<ActiveGesture>();
 /**
  * End every open gesture that is not `self` and not part of the same press.
  *
- * "Same press" is `pointerId` equality: a physical pointer cannot pre-empt
- * itself, and nested surfaces sharing one press are one gesture (see
+ * "Same press" is `pointerId` **and** press token equality (see
+ * {@link pressTokenFor}): a physical pointer cannot pre-empt itself *within
+ * one press*, and nested surfaces sharing one press are one gesture (see
  * {@link openGestures}). A keyboard/focus open — `pointerId === null` — makes
  * no such claim and pre-empts everything, which is exactly the case the
  * invariant exists for: a keyboard edit landing mid-drag.
@@ -159,20 +250,78 @@ const openGestures = new Set<ActiveGesture>();
  * re-entrant `end` that `onCancel` owners trigger (`ChannelRackRow`'s
  * `cancelPaint` calls `release()`) cannot see it still open.
  */
-function preemptOtherGestures(self: ActiveGesture, pointerId: number | null): void {
+function preemptOtherGestures(
+  self: ActiveGesture | null,
+  pointerId: number | null,
+  pressToken: number | null,
+): void {
   if (openGestures.size === 0) return;
   for (const other of [...openGestures]) {
     if (other === self) continue;
-    if (pointerId !== null && other.pointerId === pointerId) continue;
+    if (
+      pointerId !== null &&
+      isSamePress(other.pointerId, other.pressToken, pointerId, pressToken)
+    ) {
+      continue;
+    }
     openGestures.delete(other);
     other.end();
   }
+}
+
+/**
+ * A mutating action that begins and ends in one call, for code that is not a
+ * React component — a keyboard binding in a `bindings.ts`.
+ *
+ * This is {@link GestureSession.keyFor} without the hook: it ENDS whatever
+ * gesture was active (the single-active-mutating-gesture invariant) and
+ * returns a fresh id to pass as `gestureId`, taking no hold of its own
+ * because there is no pointer-up coming (rule (e)).
+ *
+ * Every direct `dispatch` from a keyboard handler must come through here. A
+ * bare dispatch is invisible to the registry, so the drag it lands in the
+ * middle of stays open with snapshots of entities the keystroke may have just
+ * deleted — the piano roll's `Delete` binding threw out of the very next
+ * `pointermove` for exactly that reason — and its undo entry keeps growing
+ * across the keystroke.
+ */
+export function oneShotGestureKey(prefix: string): string {
+  preemptOtherGestures(null, null, null);
+  return nextGestureId(prefix);
+}
+
+/**
+ * Put a gesture that is NOT a {@link useGestureSession} into the app-wide
+ * registry, so it pre-empts and can be pre-empted like any other.
+ *
+ * For the one surface whose gesture is neither a hook nor a ref but a closure
+ * inside a controller — the piano roll's `interactions.ts`, whose in-flight
+ * gesture holds note snapshots. `end` must be that controller's cancel: it is
+ * called when another gesture (a knob press, a keyboard edit) takes over, and
+ * everything the gesture was holding has to go with it.
+ *
+ * Returns the unregister function; calling it after `end` has run is a no-op,
+ * which is what makes a controller free to unregister in its own cancel path.
+ */
+export function registerExternalGesture(
+  end: () => void,
+  options: { pointerId?: number | null } = {},
+): () => void {
+  const pointerId = options.pointerId ?? null;
+  const entry: ActiveGesture = { end, pointerId, pressToken: pressTokenFor(pointerId) };
+  preemptOtherGestures(entry, pointerId, entry.pressToken);
+  openGestures.add(entry);
+  return () => {
+    openGestures.delete(entry);
+  };
 }
 
 /** Test seam: deterministic ids across test files. */
 export function __resetGestureCounterForTests(): void {
   gestureCounter = 0;
   openGestures.clear();
+  livePresses.clear();
+  pressCounter = 0;
 }
 
 /**
@@ -350,6 +499,8 @@ export function useGestureSession(
   const keyringRef = useRef<WheelGestureKeyring | null>(null);
   /** The pointer that opened the session, or `null` for a keyboard/focus open. */
   const pointerIdRef = useRef<number | null>(null);
+  /** Which press of that pointer opened it — see {@link pressTokenFor}. */
+  const pressTokenRef = useRef<number | null>(null);
   /**
    * The owner's cleanup, held through a ref so a caller may pass an inline
    * arrow. Reading it out of `options` directly would change `end`'s identity
@@ -358,7 +509,7 @@ export function useGestureSession(
    */
   const onCancelRef = useRef(onCancel);
   /** This session's stable identity in the app-wide {@link openGestures} registry. */
-  const selfRef = useRef<ActiveGesture>({ end: () => {}, pointerId: null });
+  const selfRef = useRef<ActiveGesture>({ end: () => {}, pointerId: null, pressToken: null });
 
   const detachBackstop = useCallback((): void => {
     const detach = backstopRef.current;
@@ -382,6 +533,7 @@ export function useGestureSession(
     // `cancelPaint` calls `release()` — returns here instead of recursing.
     idRef.current = null;
     pointerIdRef.current = null;
+    pressTokenRef.current = null;
     // The owner's state goes with the session: a `dragState`/`middlePan` ref
     // left set makes the next pointermove edit the REPLACEMENT project with
     // this dead gesture's values (module header, "Owner state dies with the
@@ -419,23 +571,43 @@ export function useGestureSession(
 
   const begin = useCallback(
     (pointer?: PointerIdSource): string => {
-      const open = idRef.current;
-      if (open !== null) return open;
       const pointerId = readPointerId(pointer);
+      const pressToken = pressTokenFor(pointerId);
+      const open = idRef.current;
+      if (open !== null) {
+        /*
+         * Re-entrant open is a no-op only WITHIN one press.
+         *
+         * A second finger landing on a control whose first finger is still
+         * down used to be handed the running session's id: two pointers then
+         * drove one gesture, the first one's release ended it under the
+         * second, and the second's dispatches went on extending an undo entry
+         * that had already been sealed. The invariant is one gesture at a
+         * time, and a different press is a different gesture even on the same
+         * control — so the old one is SERIALIZED out (sealed, hold dropped,
+         * `onCancel` run) and a fresh session opens for the new press.
+         */
+        if (isSamePress(pointerIdRef.current, pressTokenRef.current, pointerId, pressToken)) {
+          return open;
+        }
+        end();
+      }
       // The invariant: one mutating gesture at a time, app-wide. Whatever was
       // being edited is sealed and released before this one opens.
-      preemptOtherGestures(selfRef.current, pointerId);
+      preemptOtherGestures(selfRef.current, pointerId, pressToken);
       const id = nextGestureId(prefix);
       idRef.current = id;
       pointerIdRef.current = pointerId;
+      pressTokenRef.current = pressToken;
       selfRef.current.pointerId = pointerId;
+      selfRef.current.pressToken = pressToken;
       revisionRef.current = useAppStore.getState().projectRevision;
       openGestures.add(selfRef.current);
       useAppStore.getState().beginGesture(id);
       if (windowBackstop) attachBackstop();
       return id;
     },
-    [prefix, windowBackstop, attachBackstop],
+    [prefix, windowBackstop, attachBackstop, end],
   );
 
   const keyFor = useCallback((): string => {
@@ -443,7 +615,7 @@ export function useGestureSession(
     if (open !== null) return open;
     // A one-shot is a mutating gesture too — it just begins and ends inside
     // one call — so it seals the gesture in flight exactly as `begin` does.
-    preemptOtherGestures(selfRef.current, null);
+    preemptOtherGestures(selfRef.current, null, null);
     return nextGestureId(prefix);
   }, [prefix]);
 
@@ -454,7 +626,7 @@ export function useGestureSession(
       // A keyboard/wheel edit run is a mutating gesture (module header), so
       // it pre-empts too — the run itself is bounded by the keyring's gap
       // rather than by a hold, which is why it takes no session of its own.
-      preemptOtherGestures(selfRef.current, null);
+      preemptOtherGestures(selfRef.current, null, null);
       keyringRef.current ??= createWheelGestureKeyring(prefix, editGapMs);
       // One keyring per session, so the target is the session itself; the
       // keyring's own counter keeps the key distinct from every gesture id

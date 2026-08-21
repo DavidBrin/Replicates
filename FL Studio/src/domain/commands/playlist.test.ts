@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { compileSongMode } from "../compile";
 import { fixtureProject, roundTrip } from "../testKit";
-import { TICKS_PER_BAR, type Note, type PatternClip } from "../types";
+import { MAX_CLIP_START_TICK, TICKS_PER_BAR, type Note, type PatternClip } from "../types";
 import { addNotes, addPattern } from "./patterns";
 import {
   addClip,
@@ -161,5 +161,52 @@ describe("makeUnique (D4)", () => {
     const again = makeUnique("clip-b", "pat-clone-2").apply(project);
     expect(again.clips["clip-b"]!.patternId).toBe("pat-clone-2");
     expect(again.patterns["pat-1"]).toBeDefined();
+  });
+});
+
+describe("the arrangement bound is enforced by the COMMAND (round 11 #6)", () => {
+  /*
+   * `serialization.ts` drops a clip past `MAX_CLIP_START_TICK` on load, which
+   * made the bound a property of files rather than of projects: a clip placed
+   * past it survived in memory, rendered, played and saved — and then vanished
+   * on the next load, silently. A command is the only way domain state
+   * changes (SPEC §5), so the invariant belongs here.
+   */
+  const far = (startTick: number): PatternClip => ({
+    id: "clip-far",
+    trackId: "trk-1",
+    patternId: "pat-1",
+    startTick,
+  });
+
+  it("accepts the last legal bar", () => {
+    const project = addClip(far(MAX_CLIP_START_TICK)).apply(fixtureProject());
+    expect(project.clips["clip-far"]!.startTick).toBe(MAX_CLIP_START_TICK);
+  });
+
+  it.each([
+    ["one tick past the limit", MAX_CLIP_START_TICK + 1],
+    ["one bar past the limit", MAX_CLIP_START_TICK + TICKS_PER_BAR],
+    ["a finite absurdity that would size an array", 1e308],
+    ["a negative position", -TICKS_PER_BAR],
+    ["a fractional tick", 1.5],
+  ])("rejects addClip with %s", (_name, startTick) => {
+    expect(() => addClip(far(startTick)).apply(fixtureProject())).toThrow(CommandError);
+  });
+
+  it("rejects a MOVE past the limit, so a drag cannot walk a clip out of range", () => {
+    const project = addClip(clipA).apply(fixtureProject());
+    expect(() =>
+      updateClip("clip-a", { startTick: MAX_CLIP_START_TICK + TICKS_PER_BAR }).apply(project),
+    ).toThrow(CommandError);
+    // …and the legal edge still moves.
+    const moved = updateClip("clip-a", { startTick: MAX_CLIP_START_TICK }).apply(project);
+    expect(moved.clips["clip-a"]!.startTick).toBe(MAX_CLIP_START_TICK);
+  });
+
+  it("leaves a patch that does not touch startTick alone", () => {
+    const project = addClip(clipA).apply(fixtureProject());
+    const moved = updateClip("clip-a", { trackId: "trk-2" }).apply(project);
+    expect(moved.clips["clip-a"]!.trackId).toBe("trk-2");
   });
 });

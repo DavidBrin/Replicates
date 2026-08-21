@@ -20,6 +20,7 @@
 
 import { removeNotes, updateNotes, type Command } from "@/domain/commands";
 import type { Note, NoteId, PatternId } from "@/domain/types";
+import { oneShotGestureKey } from "@/lib/gestureHold";
 import { registerBindings, type KeyBinding } from "@/lib/keyboard";
 
 import { clampPitch, zoomAboutGridCenter, type RollViewport } from "./geometry";
@@ -35,7 +36,7 @@ export interface PianoRollBindingScene {
 
 export interface PianoRollBindingDeps {
   getScene: () => PianoRollBindingScene;
-  dispatch: (command: Command, options?: { coalesceKey?: string }) => void;
+  dispatch: (command: Command, options?: { coalesceKey?: string; gestureId?: string }) => void;
   setSelection: (noteIds: NoteId[]) => void;
   toggleSnap: () => void;
   /** Current viewport — `PgUp`/`PgDn` zoom needs the geometry, not the notes. */
@@ -84,11 +85,32 @@ export function deleteSelectionCommand(scene: PianoRollBindingScene): Command | 
  * touching the global registry.
  */
 export function createPianoRollBindings(deps: PianoRollBindingDeps): KeyBinding[] {
-  const transpose = (semitones: number) => (): void => {
-    const scene = deps.getScene();
-    const command = transposeCommand(scene, semitones);
-    if (command !== null) deps.dispatch(command);
+  /**
+   * Every mutating keystroke on this surface goes through here.
+   *
+   * `oneShotGestureKey` (`@/lib/gestureHold`) ENDS whatever gesture is open
+   * app-wide before the command is built, and hands back an id to dispatch
+   * under. Both halves matter, and the first is why this exists at all: with a
+   * bare `dispatch`, pressing `Delete` in the middle of a note drag removed
+   * the notes while the roll's controller went on holding SNAPSHOTS of them,
+   * and the next `pointermove` dispatched `updateNotes` against ids the
+   * project no longer had — `requireNote` threw straight out of the pointer
+   * handler. The roll's drag is registered with the same registry (see
+   * `interactions.ts`'s `registerGesture`), so pre-empting it here cancels it.
+   *
+   * The command is built AFTER the pre-emption: cancelling a drag can change
+   * what the scene says (the drag's own last dispatch is already applied, and
+   * the cancel clears the roll's drag state), so a scene read before it would
+   * be describing a project state that no longer stands.
+   */
+  const mutate = (build: (scene: PianoRollBindingScene) => Command | null) => (): void => {
+    const gestureId = oneShotGestureKey(PIANO_ROLL_SURFACE_ID);
+    const command = build(deps.getScene());
+    if (command !== null) deps.dispatch(command, { gestureId });
   };
+
+  const transpose = (semitones: number) =>
+    mutate((scene) => transposeCommand(scene, semitones));
 
   return [
     {
@@ -112,10 +134,7 @@ export function createPianoRollBindings(deps: PianoRollBindingDeps): KeyBinding[
       id: "delete-selection",
       code: "Delete",
       description: "Delete selection",
-      handler: () => {
-        const command = deleteSelectionCommand(deps.getScene());
-        if (command !== null) deps.dispatch(command);
-      },
+      handler: mutate(deleteSelectionCommand),
     },
     {
       id: "transpose-octave-up",

@@ -105,6 +105,27 @@ export interface InteractionDeps {
   /** The ONE audition call site — SPEC §8's `previewNote(channelId, pitch)`. */
   previewNote: (channelId: ChannelId, pitch: number) => void;
   createNoteId: () => NoteId;
+  /**
+   * Announce a gesture to the app-wide single-active-gesture registry
+   * (`@/lib/gestureHold`'s `registerExternalGesture`), returning the
+   * unregister function.
+   *
+   * The roll is the one surface whose gesture is a *closure in this file* —
+   * note snapshots and all — rather than a hook session or a ref, so the
+   * registry could not see it and nothing outside could end it. A keyboard
+   * `Delete` mid-drag went straight to `dispatch` (see `bindings.ts`), the
+   * notes under the drag vanished, and the very next `pointermove` dispatched
+   * `updateNotes` for ids that no longer existed — `requireNote` threw out of
+   * the pointer handler. Registering makes that keystroke pre-empt the drag
+   * through the same path a knob press uses, which cancels it and drops the
+   * snapshots.
+   *
+   * Injected rather than imported so this module stays free of the store
+   * (see the file header); the host wires the real one. Absent, the roll
+   * simply keeps its pre-registry behaviour, which is what the unit tests
+   * drive.
+   */
+  registerGesture?: (end: () => void) => () => void;
 }
 
 /* ------------------------------------------------------------ constants -- */
@@ -323,8 +344,23 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     return set.length > 0 ? set : [note];
   };
 
+  /** Drops this gesture out of the app-wide registry, or `null` when unregistered. */
+  let unregisterGesture: (() => void) | null = null;
+
+  const leaveRegistry = (): void => {
+    const unregister = unregisterGesture;
+    if (unregister === null) return;
+    unregisterGesture = null;
+    unregister();
+  };
+
   const beginDrag = (next: Gesture): void => {
     gesture = next;
+    // Registered BEFORE the store write: registering pre-empts whatever else
+    // was open, and a pre-empted owner's `onCancel` may dispatch. Registering
+    // after would let that land inside this gesture's own coalesce window.
+    leaveRegistry();
+    unregisterGesture = deps.registerGesture?.(cancel) ?? null;
     deps.setDragKind(dragKindOf(next));
   };
 
@@ -340,6 +376,10 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   const endDrag = (): Gesture => {
     const finished = gesture;
     gesture = { kind: "idle" };
+    // Out of the registry first, for the same reason the gesture record is
+    // cleared first: `end`/`cancel` re-entering through a pre-emption must
+    // find nothing in flight.
+    leaveRegistry();
     deps.setDragKind(null);
     return finished;
   };

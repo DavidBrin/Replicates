@@ -377,5 +377,34 @@ one, per the memory rule that version constants are never changed unilaterally.
 
 ---
 
+## D18 — A paint stroke crossing rack rows commits per row; it is not one session
+
+**Decision.** The Channel Rack buffers a paint/erase stroke **per row**. A
+sweep that walks from one row into the next is two buffers under one press:
+each row's session is scoped to the `pointerId` and press token that opened
+it (`lib/gestureHold.ts`), the shared same-press exemption keeps the second
+row's `hold()` from pre-empting the first, and the one physical `pointerup`
+reaches both rows' window backstops, so **each row commits what it painted**
+(`ChannelRackRow.tsx`, "Crossing rows mid-stroke").
+
+**Rejected.** Lifting the stroke into `ChannelRack` as one session spanning
+every row, which is closer to what FL does and would make a cross-row sweep a
+single undo entry. It would also have to move each row's optimistic `preview`
+and its per-step idempotence bookkeeping up with it, for a gesture whose
+per-row commits are individually correct.
+
+**Also rejected:** the behaviour this replaced — the second row's hold
+pre-empting the first, whose `onCancel` *abandoned* its buffer. Every cell
+erased in the row the sweep started in silently came back on release. If a
+buffer cannot be committed it must be because the project moved under it
+(`projectRevision`), never because the pointer moved.
+
+**Cost.** One cross-row sweep is one undo entry *per row* rather than one
+entry overall — Ctrl+Z takes back the row you finished in, then the row you
+started in. Left-drag entering another row still starts nothing there (a
+stroke's on/off mode is decided from the cell it began on).
+
+---
+
 *Companion document: [`SPEC.md`](SPEC.md) is the contract; this file is why
 the contract says what it says where that isn't self-evident.*

@@ -18,8 +18,15 @@ export interface StepCellProps {
   step: number; // 0-based, 0..15
   on: boolean;
   isPlayhead: boolean;
-  onPointerDown: (button: number) => void;
-  onPointerEnter: (buttons: number) => void;
+  /**
+   * `pointerId` travels with every one of these, because the row's stroke is
+   * scoped to the press that opened it: its window backstop must ignore some
+   * OTHER pointer's release (a second finger, a stylus the app never saw),
+   * and the shared gesture registry uses the same id to tell "this stroke
+   * walked into the next row" from "a different gesture started".
+   */
+  onPointerDown: (button: number, pointerId: number) => void;
+  onPointerEnter: (buttons: number, pointerId: number) => void;
   /**
    * `buttons` is the live button mask at `contextmenu` time, and the row needs
    * it to tell a right-BUTTON press (mask has bit 2 — a sweep is starting, and
@@ -77,12 +84,17 @@ export function StepCell({
       data-playhead={isPlayhead}
       aria-pressed={on}
       aria-label={`Step ${step + 1}`}
-      onPointerDown={(event) => onPointerDown(event.button)}
+      onPointerDown={(event) => onPointerDown(event.button, event.pointerId)}
       onContextMenu={(event) => {
         event.preventDefault();
+        // No `pointerId` here on purpose: `contextmenu` is a MouseEvent and
+        // carries none. Guessing the mouse's 1 would be wrong for a pen or a
+        // touch long-press, and a stroke scoped to the WRONG pointer never
+        // sees its own release. The row uses the id of the pointer-down that
+        // preceded this instead — see `lastPointerId` in `ChannelRackRow`.
         onContextMenu(event.buttons);
       }}
-      onPointerEnter={(event) => onPointerEnter(event.buttons)}
+      onPointerEnter={(event) => onPointerEnter(event.buttons, event.pointerId)}
     />
   );
 }

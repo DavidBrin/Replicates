@@ -128,6 +128,24 @@ export class VoiceManager {
     this.#pools.clear();
   }
 
+  /**
+   * Ramp down every voice ringing on ONE channel, keeping the channel itself
+   * (and its choke-group membership) alive.
+   *
+   * The muting path: a playlist track going muted mid-playback stops the
+   * SCHEDULE, but a note already sounding has its whole envelope queued on the
+   * audio thread and rings on regardless — see `engine.ts`'s
+   * `releaseMutedTrackVoices`. `forgetChannel` is the wrong tool for that: it
+   * is for a channel that has been deleted, and it drops the group membership
+   * a still-existing channel needs.
+   */
+  releaseChannel(channelId: ChannelId, time: number, releaseSec: number = CHOKE_RELEASE_SEC): void {
+    const pool = this.#pools.get(channelId);
+    if (pool === undefined) return;
+    for (const voice of pool) voice.release(time, releaseSec);
+    this.#pools.delete(channelId);
+  }
+
   /** Forget a channel entirely — it was deleted from the project. */
   forgetChannel(channelId: ChannelId, time: number): void {
     const pool = this.#pools.get(channelId);

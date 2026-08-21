@@ -24,7 +24,7 @@ export function PatternPicker({ patterns, armedPatternId, onArm }: PatternPicker
           className="fl-playlist-picker__row"
           onClick={() => onArm(pattern.id)}
         >
-          <span className="fl-playlist-picker__swatch" style={{ background: pattern.color }} />
+          <span className="fl-playlist-picker__swatch" style={{ backgroundColor: pattern.color }} />
           <span className="fl-playlist-picker__name">{pattern.name}</span>
         </button>
       ))}

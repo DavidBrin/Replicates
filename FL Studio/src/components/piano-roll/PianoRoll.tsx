@@ -25,6 +25,7 @@ import { nextId } from "@/domain/ids";
 import { SNAP_LABELS, SNAP_UNITS, type SnapUnit } from "@/domain/tickMath";
 import type { Channel, Note } from "@/domain/types";
 import { previewNote, useIsPlaying } from "@/components/shell/wiring";
+import { registerExternalGesture } from "@/lib/gestureHold";
 import { useAppStore } from "@/lib/store";
 import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
 
@@ -259,6 +260,12 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
         // single place.
         previewNote: (channelId, pitch) => previewNote(channelId, pitch),
         createNoteId: () => nextId("note"),
+        // The roll's drag joins the app-wide single-active-gesture registry
+        // (`@/lib/gestureHold`): it pre-empts a knob/clip/paint gesture left
+        // open elsewhere, and — the half this was added for — a keyboard
+        // mutation (`bindings.ts`) pre-empts IT, cancelling the drag and its
+        // note snapshots before the notes underneath can be deleted.
+        registerGesture: (end) => registerExternalGesture(end),
       }),
     [buildScene],
   );

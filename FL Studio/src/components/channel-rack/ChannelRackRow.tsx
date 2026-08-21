@@ -61,6 +61,22 @@ interface PaintSession {
    */
   patternId: PatternId;
   /**
+   * The pointer whose press opened this stroke, or `null` for the keyboard's
+   * context-menu one-shot (which commits before it can matter).
+   *
+   * Two things read it. The window backstop below filters on it, because a
+   * window listener hears EVERY pointer in the document: a second finger
+   * lifting, a stylus the app never saw, the OS releasing a pointer
+   * elsewhere — each delivered a `pointerup` that committed this stroke from
+   * under the still-pressed button that owns it, so the rest of the sweep
+   * became a second undo entry (or, mid-drag, a half-painted commit). And the
+   * shared gesture registry (`@/lib/gestureHold`) takes it at `hold()` time,
+   * which is what lets a stroke walk from one row into the next without the
+   * rows tearing each other down — see {@link ChannelRackRow}'s note on
+   * crossing rows.
+   */
+  pointerId: number | null;
+  /**
    * The `projectRevision` this stroke was opened at.
    *
    * The `patternId` guard above catches only the case where the pattern itself
@@ -96,6 +112,32 @@ interface PaintSession {
  * LED, pan knob, volume knob, mixer-routing box, channel-name button + a
  * selection bar, then the 16-step grid. 45 px row pitch comes from
  * `channelRack.css`, not inline styles, so the token stays swappable.
+ *
+ * ## Crossing rows mid-stroke — the deliberate choice
+ *
+ * FL paints across channels in one continuous stroke; here each row owns its
+ * own buffer, because each row also paints an optimistic `preview` of its own
+ * cells. So a stroke that walks from one row into the next is **two buffers,
+ * one press**, and the rule is that the row being left **commits** what it
+ * painted — it is not abandoned, and it is not left half-open.
+ *
+ * That falls out of the press scoping rather than being bolted on: both rows
+ * hold their session under the SAME `pointerId` and press token, so the shared
+ * registry's same-press exemption (`@/lib/gestureHold`) does not let the
+ * second row's `hold()` pre-empt the first, and the one physical `pointerup`
+ * reaches both rows' window backstops and commits both buffers. Before this,
+ * the second row's hold pre-empted the first, whose `onCancel` threw the
+ * painted cells away — every cell of the row you started in was silently lost
+ * the moment the sweep crossed a row boundary.
+ *
+ * The price is two undo entries for one cross-row sweep (one command per row).
+ * A single lifted session would buy one entry at the cost of moving the
+ * preview and its per-row idempotence up into `ChannelRack`; not worth it for
+ * a gesture whose per-row commits are individually correct.
+ *
+ * Left-drag entering another row still starts nothing there (a stroke's
+ * on/off mode is decided from the cell it began on), which is unchanged and
+ * loses nothing.
  *
  * Paint-stroke mechanics: left-click-drag paints many cells to the same
  * on/off state, right-click(-drag) deletes; both buffer their commands
@@ -164,6 +206,18 @@ export function ChannelRackRow({
    * on painting cells under every later hover.
    */
   const windowListeners = useRef<(() => void) | null>(null);
+  /**
+   * The pointer of the last press on this row's step grid.
+   *
+   * `contextmenu` — how a right-button erase sweep announces itself — is a
+   * MouseEvent and has no `pointerId`; the `pointerdown` that produced it does,
+   * and always arrives first. `null` until one has, which is exactly the
+   * keyboard context-menu case (a one-shot that commits on the spot) and the
+   * only honest answer for a sweep whose pointer this row never saw: a stroke
+   * with no owner accepts any release rather than waiting for one that is not
+   * coming.
+   */
+  const lastPointerId = useRef<number | null>(null);
 
   function detachWindowListeners(): void {
     if (windowListeners.current === null) return;
@@ -209,7 +263,7 @@ export function ChannelRackRow({
   }
 
   /** Starts a fresh stroke unless one is already running with this mode. */
-  function ensurePaintSession(mode: "on" | "off"): void {
+  function ensurePaintSession(mode: "on" | "off", pointerId: number | null): void {
     if (
       painting.current &&
       painting.current.mode === mode &&
@@ -223,12 +277,25 @@ export function ChannelRackRow({
       commands: [],
       touched: new Map(),
       patternId: pattern.id,
+      pointerId,
       projectRevision,
     };
-    gesture.hold();
+    // The press that opened the stroke, handed to the shared registry: it
+    // scopes the pre-emption exemption to THIS press (`@/lib/gestureHold`),
+    // which is what keeps a stroke crossing into the next row from tearing
+    // this one's buffer down, while any genuinely new gesture still does.
+    gesture.hold(pointerId ?? undefined);
     if (windowListeners.current === null) {
-      const onUp = (): void => endPaint();
-      const onCancel = (): void => cancelPaint();
+      const owns = (event: PointerEvent): boolean => {
+        const owner = painting.current?.pointerId ?? null;
+        return owner === null || event.pointerId === owner;
+      };
+      const onUp = (event: PointerEvent): void => {
+        if (owns(event)) endPaint();
+      };
+      const onCancel = (event: PointerEvent): void => {
+        if (owns(event)) cancelPaint();
+      };
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
       windowListeners.current = () => {
@@ -238,8 +305,8 @@ export function ChannelRackRow({
     }
   }
 
-  function beginLeftPaint(step: number): void {
-    ensurePaintSession(isStepOn(pattern, channel.id, step) ? "off" : "on");
+  function beginLeftPaint(step: number, pointerId: number): void {
+    ensurePaintSession(isStepOn(pattern, channel.id, step) ? "off" : "on", pointerId);
     paintStep(step);
   }
 
@@ -255,8 +322,8 @@ export function ChannelRackRow({
    * grid disagreed with it until the next re-render, and autosave stayed held
    * off for the rest of the session. A one-shot has no gesture to wait for.
    */
-  function beginRightPaint(step: number, pointerHeld: boolean): void {
-    ensurePaintSession("off");
+  function beginRightPaint(step: number, pointerHeld: boolean, pointerId: number | null): void {
+    ensurePaintSession("off", pointerHeld ? pointerId : null);
     paintStep(step);
     if (!pointerHeld) endPaint();
   }
@@ -269,8 +336,21 @@ export function ChannelRackRow({
     detachWindowListeners();
   }
 
-  function endPaint(): void {
+  /**
+   * Commit the stroke. `pointerId`, where the caller has one, must be the
+   * pointer that opened it — a release by any other pointer is not this
+   * stroke's end (see {@link PaintSession.pointerId}).
+   */
+  function endPaint(pointerId?: number): void {
     const session = painting.current;
+    if (
+      session !== null &&
+      pointerId !== undefined &&
+      session.pointerId !== null &&
+      session.pointerId !== pointerId
+    ) {
+      return;
+    }
     const stale =
       session !== null &&
       (session.patternId !== pattern.id || session.projectRevision !== projectRevision);
@@ -302,12 +382,12 @@ export function ChannelRackRow({
       className="fl-rack-row"
       data-testid={`channel-row-${channel.id}`}
       data-selected={isSelected}
-      onPointerUp={endPaint}
+      onPointerUp={(event) => endPaint(event.pointerId)}
       onPointerLeave={(event) => {
         // Only stop painting once the mouse button has actually been let go
         // elsewhere; a plain hover-out mid-drag should keep painting the
         // cells the pointer re-enters (mirrors FL's rack).
-        if (event.buttons === 0) endPaint();
+        if (event.buttons === 0) endPaint(event.pointerId);
       }}
     >
       <button
@@ -472,24 +552,30 @@ export function ChannelRackRow({
             step={step}
             on={stepIsOn(step)}
             isPlayhead={playheadStep === step}
-            onPointerDown={(button) => {
+            onPointerDown={(button, pointerId) => {
+              // Recorded for EVERY button, because the right-button press
+              // that opens an erase sweep is announced by `contextmenu`,
+              // which carries no pointer id of its own.
+              lastPointerId.current = pointerId;
               // Left paints, right erases (via `onContextMenu`), and MIDDLE —
               // the pan/autoscroll button everywhere else in this app — does
               // nothing to the pattern. It used to fall through to
               // `beginLeftPaint`, so a middle press opened a stroke and
               // toggled the cell on release.
               if (button !== 0) return;
-              beginLeftPaint(step);
+              beginLeftPaint(step, pointerId);
             }}
             // `buttons` distinguishes a right-BUTTON press (bit 2 set — a
             // sweep, closed by the pointer-up that follows) from the
             // keyboard's ContextMenu / Shift+F10 (empty mask, no pointer-up
             // ever). See `beginRightPaint`.
-            onContextMenu={(buttons) => beginRightPaint(step, (buttons & 2) !== 0)}
+            onContextMenu={(buttons) =>
+              beginRightPaint(step, (buttons & 2) !== 0, lastPointerId.current)
+            }
             onAltWheel={onVelocityNudge ? (direction) => onVelocityNudge(step, direction) : undefined}
-            onPointerEnter={(buttons) => {
+            onPointerEnter={(buttons, pointerId) => {
               if (buttons & 2) {
-                beginRightPaint(step, true);
+                beginRightPaint(step, true, pointerId);
                 return;
               }
               if ((buttons & 1) === 0) return;

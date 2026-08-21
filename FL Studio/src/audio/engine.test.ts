@@ -571,3 +571,93 @@ describe("disposeEngine", () => {
     expect(tone.transport.cancelCalls).toBeGreaterThan(0);
   });
 });
+
+/* ---------------------------------------------------- muting mid-flight - */
+
+describe("muting a playlist track silences what is ALREADY sounding (round 11 #9)", () => {
+  /**
+   * A playlist track's mute is a compile-time fact — `compileSongMode` drops
+   * its clips — so a re-arm only stops FUTURE notes. Anything already
+   * sounding has its envelope queued on the audio thread and rang on to its
+   * natural end, which for a long note is the whole point of pressing mute.
+   *
+   * Channel mute has no such gap and deliberately gets no such code: a
+   * channel is a mixer strip whose gain `MixerGraph.sync` ramps to 0, which
+   * silences the ringing voices with it. The last case below pins that
+   * asymmetry so a future reader does not "fix" the other half.
+   */
+  function songProject(): Project {
+    return projectWith([{ ...step("a", 0), lengthTicks: TICKS_PER_STEP * 8 }], {
+      playbackMode: "song",
+      clips: { c1: { id: "c1", trackId: "trk-1", patternId: "pat-1", startTick: 0 } },
+    });
+  }
+
+  async function sounding() {
+    const { tone } = installTone();
+    const project = songProject();
+    syncProject(project);
+    await ensureStarted();
+    play();
+    tone.transport.scheduled[0]?.callback(1);
+    const source = tone.ctx.nodesOfKind("oscillator")[0] as unknown as {
+      stopTime: number | null;
+    };
+    expect(source.stopTime).not.toBeNull();
+    return { tone, project, source, naturalStop: source.stopTime as number };
+  }
+
+  it("releases the ringing voices of the muted track's channels", async () => {
+    const { project, source, naturalStop } = await sounding();
+
+    syncProject({
+      ...project,
+      playlistTracks: {
+        ...project.playlistTracks,
+        "trk-1": { ...project.playlistTracks["trk-1"]!, muted: true },
+      },
+    });
+
+    // Ramped down now, not left to finish: the stop was pulled in.
+    expect(source.stopTime).toBeLessThan(naturalStop);
+  });
+
+  it("leaves a voice alone when the muted track was not contributing it", async () => {
+    const { project, source, naturalStop } = await sounding();
+
+    syncProject({
+      ...project,
+      playlistTracks: {
+        ...project.playlistTracks,
+        "trk-2": { ...project.playlistTracks["trk-2"]!, muted: true },
+      },
+    });
+
+    expect(source.stopTime).toBe(naturalStop);
+  });
+
+  it("does nothing on UNmute", async () => {
+    const { project, source, naturalStop } = await sounding();
+    const muted = {
+      ...project,
+      playlistTracks: {
+        ...project.playlistTracks,
+        "trk-2": { ...project.playlistTracks["trk-2"]!, muted: true },
+      },
+    };
+    syncProject(muted);
+    syncProject(project);
+    expect(source.stopTime).toBe(naturalStop);
+  });
+
+  it("does not touch voices for a CHANNEL mute — the strip's gain ramp owns that", async () => {
+    const { project, source, naturalStop } = await sounding();
+
+    syncProject({
+      ...project,
+      channels: { ...project.channels, "ch-kick": { ...project.channels["ch-kick"]!, muted: true } },
+    });
+
+    expect(source.stopTime).toBe(naturalStop);
+  });
+});

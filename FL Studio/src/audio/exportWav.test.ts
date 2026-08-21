@@ -13,6 +13,8 @@ import { createDefaultProject } from "@/domain/defaultProject";
 import { compilePatternMode, compileSongMode } from "@/domain/compile";
 import { ticksToSeconds } from "@/domain/tickMath";
 import {
+  MAX_CLIP_START_TICK,
+  MIN_TEMPO,
   PATTERN_LENGTH_TICKS,
   TICKS_PER_BAR,
   TICKS_PER_STEP,
@@ -26,6 +28,7 @@ import {
   EXPORT_TAIL_SECONDS,
   exportProjectWav,
   renderLengthSeconds,
+  EXPORT_MAX_SECONDS,
   renderProject,
   wavFileName,
 } from "./exportWav";
@@ -258,5 +261,65 @@ describe("exportProjectWav", () => {
       renderLengthSeconds(compilePatternMode(project), project.tempo),
       2,
     );
+  });
+});
+
+describe("the export refuses an impossible allocation (round 11 #7)", () => {
+  /**
+   * Bars are ticks, so the tempo decides how much AUDIO the 1000-bar
+   * arrangement bound is. At 10 BPM it is ~6.7 hours — `new
+   * OfflineAudioContext(2, frames, 44100)` for ~8.5 GB of float PCM, which
+   * does not fail politely. The check is on the LENGTH, before the context is
+   * built, and it caps the export rather than the arrangement: writing a long
+   * slow song stays legal.
+   */
+  function longProject(tempo: number): Project {
+    return projectWith([step("a", 0)], {
+      tempo,
+      playbackMode: "song",
+      clips: {
+        c1: { id: "c1", trackId: "trk-1", patternId: "pat-1", startTick: 0 },
+        far: {
+          id: "far",
+          trackId: "trk-1",
+          patternId: "pat-1",
+          startTick: MAX_CLIP_START_TICK,
+        },
+      },
+    });
+  }
+
+  it("throws before allocating anything, naming the limit", async () => {
+    const { contexts, createOfflineContext } = recorder();
+    const project = longProject(MIN_TEMPO);
+    expect(renderLengthSeconds(compileSongMode(project), project.tempo)).toBeGreaterThan(
+      EXPORT_MAX_SECONDS,
+    );
+
+    await expect(renderProject(project, { createOfflineContext })).rejects.toThrow(
+      /too long to export/,
+    );
+    // The point of the whole exercise: no context, so no allocation.
+    expect(contexts).toHaveLength(0);
+  });
+
+  it("still renders an arrangement that fits, at a normal tempo", async () => {
+    const { contexts, createOfflineContext } = recorder();
+    // 1000 bars at 140 BPM is ~114 minutes — still over the ceiling; a length
+    // just under it is what must go through.
+    const project = projectWith([step("a", 0)], {
+      playbackMode: "song",
+      clips: {
+        c1: { id: "c1", trackId: "trk-1", patternId: "pat-1", startTick: 0 },
+        c2: { id: "c2", trackId: "trk-1", patternId: "pat-1", startTick: TICKS_PER_BAR * 100 },
+      },
+    });
+    expect(renderLengthSeconds(compileSongMode(project), project.tempo)).toBeLessThan(
+      EXPORT_MAX_SECONDS,
+    );
+
+    await renderProject(project, { createOfflineContext, sampleRate: 8000 });
+
+    expect(contexts).toHaveLength(1);
   });
 });

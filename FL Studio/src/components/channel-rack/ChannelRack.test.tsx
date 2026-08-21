@@ -82,8 +82,11 @@ describe("ChannelRack — step grid", () => {
     await user.click(cell);
     expect(cell).toHaveAttribute("data-on", "true");
 
+    // `userEvent`'s click above pressed pointer 1, so that is the pointer the
+    // sweep belongs to and the pointer whose release commits it — a stroke is
+    // scoped to its own press (`ChannelRackRow`'s `PaintSession.pointerId`).
     fireEvent.contextMenu(cell, { buttons: 2 });
-    fireEvent.pointerUp(cell);
+    fireEvent.pointerUp(cell, { pointerId: 1 });
 
     expect(cell).toHaveAttribute("data-on", "false");
     expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
@@ -162,12 +165,73 @@ describe("ChannelRack — step grid", () => {
     for (const cell of cells) await user.click(cell); // turn all three on first
 
     fireEvent.contextMenu(cells[0]!, { buttons: 2 });
-    fireEvent.pointerEnter(cells[1]!, { buttons: 2 });
-    fireEvent.pointerEnter(cells[2]!, { buttons: 2 });
-    fireEvent.pointerUp(cells[2]!);
+    fireEvent.pointerEnter(cells[1]!, { buttons: 2, pointerId: 1 });
+    fireEvent.pointerEnter(cells[2]!, { buttons: 2, pointerId: 1 });
+    fireEvent.pointerUp(cells[2]!, { pointerId: 1 });
 
     for (const cell of cells) expect(cell).toHaveAttribute("data-on", "false");
     expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+  });
+});
+
+describe("a paint stroke belongs to the press that opened it (round 11 #3)", () => {
+  function rowStep(channelId: string, step: number) {
+    return screen
+      .getByTestId(`channel-row-${channelId}`)
+      .querySelector(`[data-testid="step-${step}"]`) as HTMLElement;
+  }
+
+  function noteCount(): number {
+    return Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes).length;
+  }
+
+  it("ignores a release by SOME OTHER pointer, and commits on its own", () => {
+    /*
+     * The window backstop hears every pointer in the document — a second
+     * finger lifting, a stylus the app never saw. Unfiltered, that release
+     * committed the stroke from under the still-pressed button that owns it,
+     * so the rest of the sweep landed in a second undo entry.
+     */
+    render(<ChannelRack />);
+    const entriesBefore = useAppStore.getState().history.past.length;
+
+    fireEvent.pointerDown(rowStep("ch-kick", 0), { buttons: 1, pointerId: 1 });
+    fireEvent.pointerEnter(rowStep("ch-kick", 1), { buttons: 1, pointerId: 1 });
+
+    // A different pointer's release: not this stroke's end.
+    fireEvent.pointerUp(window, { pointerId: 7 });
+    expect(useAppStore.getState().history.past).toHaveLength(entriesBefore);
+    expect(noteCount()).toBe(0);
+
+    // The stroke is still live and still painting.
+    fireEvent.pointerEnter(rowStep("ch-kick", 2), { buttons: 1, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(noteCount()).toBe(3);
+    expect(useAppStore.getState().history.past).toHaveLength(entriesBefore + 1);
+  });
+
+  it("commits the row it leaves when an erase sweep crosses into the next row", async () => {
+    /*
+     * Round 11 #3's data loss. Each row buffers its own stroke, so entering
+     * the next row opens a second one — and that second `hold()` used to
+     * PRE-EMPT the first, whose `onCancel` threw the buffer away. Every cell
+     * erased in the row the sweep started in came back.
+     *
+     * The rule now is: one press, two buffers, both committed (see
+     * `ChannelRackRow`'s "Crossing rows mid-stroke").
+     */
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    await user.click(rowStep("ch-kick", 0));
+    await user.click(rowStep("ch-clap", 1));
+    expect(noteCount()).toBe(2);
+
+    fireEvent.contextMenu(rowStep("ch-kick", 0), { buttons: 2 });
+    fireEvent.pointerEnter(rowStep("ch-clap", 1), { buttons: 2, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(noteCount()).toBe(0);
   });
 });
 
@@ -1129,10 +1193,10 @@ describe("keyboard context-menu erase commits immediately (round 8, rule e)", ()
     const entriesBefore = useAppStore.getState().history.past.length;
 
     fireEvent.contextMenu(kickStep(8), { buttons: 2 });
-    fireEvent.pointerEnter(kickStep(9), { buttons: 2 });
+    fireEvent.pointerEnter(kickStep(9), { buttons: 2, pointerId: 1 });
     expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(2);
 
-    fireEvent.pointerUp(window);
+    fireEvent.pointerUp(window, { pointerId: 1 });
 
     expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
     expect(useAppStore.getState().history.past).toHaveLength(entriesBefore + 1);

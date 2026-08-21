@@ -12,7 +12,7 @@ export interface TrackHeaderProps {
 export function TrackHeader({ track, onToggleMute }: TrackHeaderProps) {
   return (
     <div className="fl-track-header" data-testid={`track-header-${track.id}`}>
-      <span className="fl-track-header__strip" style={{ background: track.color }} />
+      <span className="fl-track-header__strip" style={{ backgroundColor: track.color }} />
       <span className="fl-track-header__name" title={track.name}>
         {track.name}
       </span>

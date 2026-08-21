@@ -587,6 +587,57 @@ describe("useGestureSession — one mutating gesture at a time", () => {
     expect(cancelled).toEqual([]);
   });
 
+  it("serializes a SECOND pointer pressing the same control: seal, then a fresh session", () => {
+    /*
+     * Round 11 #4. A second finger landing on a control whose first finger is
+     * still down used to be handed the running session's id back: two
+     * pointers drove one gesture, the first release ended it under the
+     * second, and the second's edits went on extending an entry that had
+     * already been sealed. One gesture at a time means the first is closed —
+     * hold dropped, `onCancel` run — and the new press gets its own id.
+     */
+    const cancelled: string[] = [];
+    render(<Probe onCancel={() => cancelled.push("self")} />);
+    const probe = screen.getByTestId("probe");
+
+    fireEvent.pointerDown(probe, { pointerId: 1 });
+    fireEvent.pointerDown(probe, { pointerId: 2 });
+
+    expect(opened).toEqual(["probe#1", "probe#2"]);
+    expect(holds()).toEqual(["probe#2"]);
+    expect(cancelled).toEqual(["self"]);
+
+    // And the survivor is the SECOND press: its release is what ends it.
+    fireEvent.pointerUp(probe);
+    expect(holds()).toEqual([]);
+  });
+
+  it("scopes the same-pointer exemption to ONE press, so a leaked session cannot ride along", () => {
+    /*
+     * Round 11 #5. A mouse keeps `pointerId === 1` for life, so an exemption
+     * keyed on the id alone also exempted a session that leaked from an
+     * earlier press — it survived every later click of that mouse, kept its
+     * hold, and went on coalescing under whatever the user was really
+     * editing. The press token is what separates them: same id, different
+     * press, no exemption.
+     */
+    const cancelled: string[] = [];
+    const { first, second } = twoProbes(() => cancelled.push("a"));
+
+    // Press 1 opens `a` and leaks: the release never reaches its element
+    // (dragged off, a swallowed pointercancel), so the session stays open.
+    fireEvent.pointerDown(first, { pointerId: 1 });
+    expect(holds()).toEqual(["a#1"]);
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect(holds()).toEqual(["a#1"]);
+
+    // Press 2 — the same physical mouse, an unrelated control.
+    fireEvent.pointerDown(second, { pointerId: 1 });
+
+    expect(cancelled).toEqual(["a"]);
+    expect(holds()).toEqual(["b#2"]);
+  });
+
   it("leaves the registry empty once every gesture has ended", () => {
     // A stale registry entry would let a dead session be "pre-empted" — and
     // its `onCancel` re-run — long after it closed.

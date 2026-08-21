@@ -8,8 +8,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addNotes, type Command } from "@/domain/commands";
+import { registerExternalGesture, __resetGestureCounterForTests } from "@/lib/gestureHold";
 import { fixtureProject } from "@/domain/testKit";
-import { DEFAULT_VELOCITY, TICKS_PER_STEP, type Note, type Project } from "@/domain/types";
+import {
+  DEFAULT_VELOCITY,
+  TICKS_PER_BEAT,
+  TICKS_PER_STEP,
+  type Note,
+  type Project,
+} from "@/domain/types";
 import {
   __resetKeyboardRegistryForTests,
   dispatchKeyEvent,
@@ -17,14 +24,17 @@ import {
 } from "@/lib/keyboard";
 
 import {
+  createViewport,
   DEFAULT_VIEWPORT,
   gridWidth,
   KEYBOARD_WIDTH,
   MAX_ZOOM_X,
   MIN_ZOOM_X,
+  noteRect,
   xToTick,
   type RollViewport,
 } from "./geometry";
+import { createPianoRollController, type RollPointer } from "./interactions";
 import {
   PIANO_ROLL_SURFACE_ID,
   ZOOM_KEY_FACTOR,
@@ -274,5 +284,114 @@ describe("PgUp / PgDn zoom", () => {
     const h = harness([], []);
     expect(press("PageUp", { ctrlKey: true })).toBe(false);
     expect(h.setView).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------- keyboard vs. a live drag ---- */
+
+describe("a mutating keystroke pre-empts the drag in flight (round 11 #1)", () => {
+  /**
+   * The two halves of the roll wired to each other exactly as `PianoRoll.tsx`
+   * wires them: the controller registered with the app-wide gesture registry,
+   * the bindings dispatching through the shared one-shot path, and a dispatch
+   * that really APPLIES each command — which is what makes the bug reachable
+   * here. `Delete` mid-drag removed the notes while the controller went on
+   * holding snapshots of them, and the next `pointermove` built
+   * `updateNotes` for ids the project no longer had. `requireNote` throws in
+   * `apply`, so this harness reproduces the crash rather than describing it.
+   */
+  function liveHarness() {
+    const note = makeNote({ id: "n-drag", pitch: 60, positionTicks: TICKS_PER_BEAT });
+    let project = addNotes(PATTERN, [note]).apply(fixtureProject());
+    const view = createViewport({ width: 800, height: 500 });
+
+    const notesOf = (): Note[] =>
+      Object.values(project.patterns[PATTERN]!.notes).filter((n) => n.channelId === "ch-kick");
+
+    const dispatch = (command: Command): void => {
+      project = command.apply(project);
+    };
+
+    let selectedNoteIds: string[] = [];
+
+    const controller = createPianoRollController({
+      getScene: () => ({
+        view,
+        notes: notesOf(),
+        patternId: PATTERN,
+        channelId: "ch-kick",
+        snap: "quarterBeat",
+        tool: "draw",
+        selectedNoteIds,
+        lastLengthTicks: TICKS_PER_STEP,
+      }),
+      dispatch,
+      setSelection: (ids) => {
+        selectedNoteIds = ids;
+      },
+      setView: () => {},
+      setLastLength: () => {},
+      setDragKind: () => {},
+      setPreviewPitch: () => {},
+      previewNote: () => {},
+      createNoteId: () => "n-new",
+      registerGesture: (end) => registerExternalGesture(end),
+    });
+
+    const unregister = registerPianoRollBindings({
+      getScene: () => ({ patternId: PATTERN, notes: notesOf(), selectedNoteIds }),
+      dispatch,
+      setSelection: (ids) => {
+        selectedNoteIds = ids;
+      },
+      toggleSnap: () => {},
+      getView: () => view,
+      setView: () => {},
+    });
+
+    const at = (n: Note, dx = 0): RollPointer => {
+      const rect = noteRect(view, n);
+      return {
+        x: rect.x + rect.width / 2 + dx,
+        y: rect.y + rect.height / 2,
+        button: 0,
+        altKey: false,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+      };
+    };
+
+    return { controller, note, at, notesOf, unregister, project: () => project };
+  }
+
+  beforeEach(() => {
+    __resetGestureCounterForTests();
+  });
+
+  it("cancels the controller's drag, so the next pointermove cannot resurrect deleted notes", () => {
+    const h = liveHarness();
+
+    h.controller.pointerDown(h.at(h.note));
+    expect(h.controller.peekGesture()).toBe("move");
+
+    press("Delete");
+
+    expect(h.notesOf()).toHaveLength(0);
+    // The gesture — and with it the snapshots naming `n-drag` — is gone.
+    expect(h.controller.peekGesture()).toBe("idle");
+
+    // The crash: this used to dispatch `updateNotes` for a deleted id.
+    expect(() => h.controller.pointerMove(h.at(h.note, 40))).not.toThrow();
+    expect(h.notesOf()).toHaveLength(0);
+
+    h.unregister();
+  });
+
+  it("leaves an unrelated gesture-less press alone", () => {
+    const h = liveHarness();
+    press("Delete"); // nothing selected, nothing in flight
+    expect(h.notesOf()).toHaveLength(1);
+    h.unregister();
   });
 });
