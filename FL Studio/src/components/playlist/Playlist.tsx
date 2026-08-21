@@ -2,11 +2,12 @@
 
 import "./playlist.css";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import {
   addClip,
+  makeUnique,
   removeClip,
   updateClip,
   updatePlaylistTrack,
@@ -27,7 +28,9 @@ import { openPatternInPianoRoll } from "./bindings";
 import {
   HEADER_WIDTH_PX,
   LANE_HEIGHT_PX,
+  pxToTicks,
   RULER_HEIGHT_PX,
+  scrollLeftForZoom,
   snapPointerToBar,
   ticksToPx,
   totalVisibleBars,
@@ -147,21 +150,135 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     dispatch(removeClip(clipId));
   }
 
-  function handleDragCommit(clipId: string, deltaTicks: number) {
+  /** "Make unique" (SPEC.md D4): fork the pattern, repoint only this clip. */
+  function handleMakeUnique(clipId: string) {
+    dispatch(makeUnique(clipId, nextId("pattern")));
+  }
+
+  /**
+   * Shift+pointer-down on a clip (SPEC.md §4.4 "clone selection"): place a
+   * fresh clip at the source's current track/position, under the caller's
+   * per-gesture coalesce key so a follow-on drag folds the add + move into
+   * one undo entry. Returns the new clip's id for the gesture to drag.
+   */
+  function handleCloneStart(clipId: string, coalesceKey: string): string {
+    const source = useAppStore.getState().project.clips[clipId];
+    if (!source) return clipId;
+    const cloneId = nextId("clip");
+    dispatch(
+      addClip({
+        id: cloneId,
+        trackId: source.trackId,
+        patternId: source.patternId,
+        startTick: source.startTick,
+      }),
+      { coalesceKey },
+    );
+    selectClipUi(cloneId);
+    return cloneId;
+  }
+
+  /**
+   * Drag-to-move, cross-track aware (finding #3): `deltaTrackIndex` — the
+   * number of lanes the pointer crossed — retargets `trackId` by walking
+   * the current track order, clamped to the visible tracks so a clip can
+   * never be dropped off the top/bottom of the list. `coalesceKey` is
+   * minted fresh per gesture by `ClipView` (finding #7) so two separate
+   * drags of the same clip land as two separate undo steps, never one.
+   */
+  function handleDragCommit(
+    clipId: string,
+    deltaTicks: number,
+    deltaTrackIndex: number,
+    coalesceKey: string,
+  ) {
     const clip = useAppStore.getState().project.clips[clipId];
     if (!clip) return;
     const nextTick = Math.max(0, snapTicksFloor(clip.startTick + deltaTicks, "bar"));
-    if (nextTick === clip.startTick) return;
-    dispatch(updateClip(clipId, { startTick: nextTick }), { coalesceKey: `clip-move-${clipId}` });
-  }
-
-  function handleWheelZoom(event: React.WheelEvent<HTMLDivElement>) {
-    if (!event.ctrlKey) return;
-    event.preventDefault();
-    zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15);
+    const currentIndex = tracks.findIndex((track) => track.id === clip.trackId);
+    const rawIndex = (currentIndex === -1 ? 0 : currentIndex) + deltaTrackIndex;
+    const nextIndex = Math.min(tracks.length - 1, Math.max(0, rawIndex));
+    const nextTrackId = tracks[nextIndex]?.id ?? clip.trackId;
+    if (nextTick === clip.startTick && nextTrackId === clip.trackId) return;
+    dispatch(updateClip(clipId, { startTick: nextTick, trackId: nextTrackId }), { coalesceKey });
   }
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  // Read fresh inside the native wheel listener without re-registering it
+  // every zoom (the effect below only depends on `zoomBy`, a stable ref).
+  const zoomPxPerBarRef = useRef(zoomPxPerBar);
+  useEffect(() => {
+    zoomPxPerBarRef.current = zoomPxPerBar;
+  }, [zoomPxPerBar]);
+  const pendingZoomAnchor = useRef<{ anchorTicks: number; pointerOffsetPx: number } | null>(null);
+  const middlePan = useRef<{
+    startClientX: number;
+    startClientY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+
+  // React's onWheel is passive, so `preventDefault` there is a no-op and
+  // Ctrl+wheel would zoom the browser page instead of the playlist (SPEC.md
+  // §4.4 primitive #2) — same fix as the piano roll's native listener.
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (container === null) return;
+    const onWheel = (event: WheelEvent): void => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const pointerOffsetPx = event.clientX - rect.left;
+      const anchorTicks = pxToTicks(container.scrollLeft + pointerOffsetPx, zoomPxPerBarRef.current);
+      pendingZoomAnchor.current = { anchorTicks, pointerOffsetPx };
+      zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15);
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, [zoomBy]);
+
+  // Zoom-at-cursor compensation (finding #6): after `zoomPxPerBar` changes,
+  // re-derive `scrollLeft` from the anchor tick captured at wheel time so
+  // the tick under the pointer stays under the pointer. A layout effect so
+  // it lands before paint — no visible jump.
+  useLayoutEffect(() => {
+    const pending = pendingZoomAnchor.current;
+    const container = scrollRef.current;
+    if (pending === null || container === null) return;
+    pendingZoomAnchor.current = null;
+    container.scrollLeft = scrollLeftForZoom(pending.anchorTicks, pending.pointerOffsetPx, zoomPxPerBar);
+  }, [zoomPxPerBar]);
+
+  /** Middle-drag pans both axes (SPEC.md §4.4), matching the piano roll's feel. */
+  function handleMainPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    middlePan.current = {
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      scrollLeft: scrollRef.current?.scrollLeft ?? 0,
+      scrollTop: mainRef.current?.scrollTop ?? 0,
+    };
+  }
+
+  function handleMainPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const pan = middlePan.current;
+    if (pan === null) return;
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = pan.scrollLeft - (event.clientX - pan.startClientX);
+    }
+    if (mainRef.current) {
+      mainRef.current.scrollTop = pan.scrollTop - (event.clientY - pan.startClientY);
+    }
+  }
+
+  function handleMainPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (middlePan.current === null) return;
+    middlePan.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }
 
   return (
     <div className="fl-playlist">
@@ -183,7 +300,15 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
       </div>
       <div className="fl-playlist__body">
         <PatternPicker patterns={patterns} armedPatternId={armedPatternId} onArm={setPaintPattern} />
-        <div className="fl-playlist__main">
+        <div
+          className="fl-playlist__main"
+          data-testid="playlist-main"
+          ref={mainRef}
+          onPointerDown={handleMainPointerDown}
+          onPointerMove={handleMainPointerMove}
+          onPointerUp={handleMainPointerUp}
+          onPointerCancel={handleMainPointerUp}
+        >
           <div
             className="fl-playlist__headers"
             style={{ paddingTop: RULER_HEIGHT_PX, width: HEADER_WIDTH_PX }}
@@ -194,7 +319,7 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
               </div>
             ))}
           </div>
-          <div className="fl-playlist__scrollx" ref={scrollRef} onWheel={handleWheelZoom}>
+          <div className="fl-playlist__scrollx" data-testid="playlist-scrollx" ref={scrollRef}>
             <div
               className="fl-playlist__content"
               style={
@@ -240,7 +365,9 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
                           onSelect={handleSelectClip}
                           onOpen={handleOpenClip}
                           onDelete={handleDeleteClip}
+                          onMakeUnique={handleMakeUnique}
                           onDragCommit={handleDragCommit}
+                          onCloneStart={handleCloneStart}
                         />
                       );
                     })}

@@ -199,6 +199,56 @@ describe("ChannelRack — mute LED", () => {
     await user.click(led);
     expect(useAppStore.getState().project.channels["ch-kick"]!.muted).toBe(false);
   });
+
+  it("aria-pressed reflects the muted state, and the label flips Mute/Unmute", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const led = screen.getByTestId("mute-led-ch-kick");
+
+    expect(led).toHaveAttribute("aria-pressed", "false");
+    expect(led).toHaveAccessibleName("Mute Kick");
+
+    await user.click(led);
+
+    expect(led).toHaveAttribute("aria-pressed", "true");
+    expect(led).toHaveAccessibleName("Unmute Kick");
+  });
+});
+
+describe("ChannelRack — paint stroke released outside the row", () => {
+  it("still commits the stroke via a window-level pointerup backstop", () => {
+    render(<ChannelRack />);
+    const cells = [0, 1, 2].map((s) => kickStep(s));
+
+    fireEvent.pointerDown(cells[0]!, { buttons: 1 });
+    fireEvent.pointerEnter(cells[1]!, { buttons: 1 });
+    fireEvent.pointerEnter(cells[2]!, { buttons: 1 });
+
+    // The pointer left the row without a pointerup ever landing on it —
+    // released somewhere else on the page (or outside the window entirely).
+    fireEvent.pointerUp(window);
+
+    const notes = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes);
+    expect(notes).toHaveLength(3);
+  });
+
+  it("a stroke that commits normally does not leave a stray global listener double-firing", () => {
+    render(<ChannelRack />);
+    const cell = kickStep(0);
+    const before = useAppStore.getState().project;
+
+    fireEvent.pointerDown(cell, { buttons: 1 });
+    fireEvent.pointerUp(cell);
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(1);
+
+    // A later, unrelated pointerup anywhere on the page must not re-fire the
+    // (already-committed, already-cleared) stroke.
+    fireEvent.pointerUp(window);
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(1);
+
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project).toEqual(before);
+  });
 });
 
 describe("ChannelRack — knobs", () => {
@@ -291,6 +341,47 @@ describe("ChannelRack — channel selection / open piano roll", () => {
   });
 });
 
+describe("ChannelRack — rack swing coalescing", () => {
+  it("mints a fresh coalesce key per drag gesture, so two separate drags are two undo entries", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+    const before = useAppStore.getState().project;
+
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.2" } });
+    fireEvent.pointerUp(slider);
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.5" } });
+    fireEvent.pointerUp(slider);
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.5);
+
+    // One undo should only unwind the *second* drag, not both at once.
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project).toEqual(before);
+  });
+
+  it("folds multiple change events within one drag into a single undo entry", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+    const before = useAppStore.getState().project;
+
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "0.1" } });
+    fireEvent.change(slider, { target: { value: "0.3" } });
+    fireEvent.change(slider, { target: { value: "0.6" } });
+    fireEvent.pointerUp(slider);
+
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.6);
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project).toEqual(before);
+  });
+});
+
 describe("ChannelRack — mixer routing box", () => {
   it("cycles routedToMixerTrackId forward on click", async () => {
     const user = userEvent.setup();
@@ -300,5 +391,126 @@ describe("ChannelRack — mixer routing box", () => {
     await user.click(screen.getByTestId("routing-ch-kick"));
 
     expect(useAppStore.getState().project.channels["ch-kick"]!.routedToMixerTrackId).toBe("mix-1");
+  });
+});
+
+describe("ChannelRack — add channel", () => {
+  it("opens a voice-kind picker and appends a new channel via addChannel", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const before = useAppStore.getState().project.channelOrder.length;
+
+    await user.click(screen.getByTestId("channel-add-button"));
+    await user.click(screen.getByRole("menuitem", { name: "Snare" }));
+
+    const order = useAppStore.getState().project.channelOrder;
+    expect(order).toHaveLength(before + 1);
+    const added = useAppStore.getState().project.channels[order.at(-1)!]!;
+    expect(added).toMatchObject({ name: "Snare", voice: "snare" });
+  });
+
+  it("undoes an added channel as one entry", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const before = useAppStore.getState().project;
+
+    await user.click(screen.getByTestId("channel-add-button"));
+    await user.click(screen.getByRole("menuitem", { name: "Lead" }));
+    expect(useAppStore.getState().project).not.toEqual(before);
+
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project).toEqual(before);
+  });
+});
+
+describe("ChannelRack — channel context menu (rename/recolor/delete/reorder)", () => {
+  it("opens on right-click and renames the channel via updateChannel", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+
+    const input = screen.getByTestId("channel-rename-ch-kick");
+    await user.clear(input);
+    await user.type(input, "808 Kick{Enter}");
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.name).toBe("808 Kick");
+    expect(screen.getByTestId("channel-name-ch-kick")).toHaveTextContent("808 Kick");
+  });
+
+  it("Escape cancels a rename without dispatching", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByTestId("channel-rename-ch-kick");
+    await user.clear(input);
+    await user.type(input, "Nope{Escape}");
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.name).toBe("Kick");
+  });
+
+  it("recolors the channel through updateChannel", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const before = useAppStore.getState().project.channels["ch-kick"]!.color;
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Recolor" }));
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.color).not.toBe(before);
+  });
+
+  it("deletes the channel through removeChannel, cascading its notes, and undoes in one entry", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    await user.click(kickStep(0)); // give Kick a note so the cascade has something to restore
+    const before = useAppStore.getState().project;
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    expect(useAppStore.getState().project.channels["ch-kick"]).toBeUndefined();
+    expect(screen.queryByTestId("channel-row-ch-kick")).not.toBeInTheDocument();
+
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().project).toEqual(before);
+  });
+
+  it("moves the channel down and back up through moveChannel", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const originalOrder = useAppStore.getState().project.channelOrder;
+    expect(originalOrder[0]).toBe("ch-kick");
+    expect(originalOrder[1]).toBe("ch-clap");
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Move down" }));
+
+    const afterMoveDown = useAppStore.getState().project.channelOrder;
+    expect(afterMoveDown[0]).toBe("ch-clap");
+    expect(afterMoveDown[1]).toBe("ch-kick");
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
+
+    expect(useAppStore.getState().project.channelOrder).toEqual(originalOrder);
+  });
+
+  it("disables Move up for the first row and Move down for the last row", () => {
+    const { container } = render(<ChannelRack />);
+
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    // Close this row's menu before opening another — both stay mounted
+    // independently, so leaving it open would make "Move down" ambiguous.
+    fireEvent.click(container.querySelector(".fl-rack-menu__scrim")!);
+
+    const order = useAppStore.getState().project.channelOrder;
+    const lastChannelId = order.at(-1)!;
+    fireEvent.contextMenu(screen.getByTestId(`channel-name-${lastChannelId}`));
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toBeDisabled();
   });
 });

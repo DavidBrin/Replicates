@@ -67,6 +67,7 @@ import {
   canUndo as historyCanUndo,
   createHistory,
   dispatchCommand,
+  endGesture as historyEndGesture,
   redo as historyRedo,
   redoLabel as historyRedoLabel,
   undo as historyUndo,
@@ -107,6 +108,16 @@ export interface DomainSlice {
   redo: () => void;
 
   /**
+   * Close the coalescing gesture in flight, so the next `dispatch` starts a
+   * fresh undo entry even if it repeats the same `coalesceKey`.
+   *
+   * The escape hatch for gestures with no natural id; the preferred form is
+   * `dispatch(cmd, { coalesceKey, gestureId })` — see `domain/undo.ts`'s
+   * header for the canonical pattern.
+   */
+  endGesture: () => void;
+
+  /**
    * Navigation, **not** an edit: persisted domain state that bypasses the
    * command/undo stack entirely, so switching patterns never floods undo
    * (SPEC.md §5).
@@ -125,6 +136,96 @@ export interface DomainSlice {
   newProject: () => void;
   /** Read localStorage and adopt what is there; falls back to the default. */
   hydrateFromStorage: () => void;
+
+  /**
+   * Point every UI slice's project-referencing field back at something that
+   * exists (see {@link reconcileUiReferences}). Called automatically by
+   * {@link DomainSlice.loadProject}; the *undoable* import path in
+   * `shell/wiring.ts` calls it by hand, because that one replaces the project
+   * through `dispatch` and so never passes through `loadProject`.
+   */
+  reconcileUiToProject: () => void;
+}
+
+/* ------------------------------------------- ui ↔ project reconciliation */
+
+/**
+ * Every ephemeral field that names a domain entity, and what it must become
+ * when that entity is not in the project any more.
+ *
+ * This table lives here, in the composer, rather than in each surface's
+ * `uiState.ts` for the reason the file header gives: replacing the project
+ * wholesale is a *store-level* event, and no surface can be relied on to
+ * notice one. Before this existed, importing a JSON file left the playlist
+ * armed with a pattern id from the old project and the piano roll pointed at
+ * a channel that no longer existed — the next click on either threw.
+ *
+ * Each entry is guarded by a `typeof`/`in` check on the live state, so a slice
+ * is free to rename or drop a field without breaking this: an absent field is
+ * simply not reconciled. Only genuinely dangling values are rewritten, and the
+ * function returns `null` when nothing dangles, so a no-op costs no render.
+ */
+export function reconcileUiReferences(
+  state: AppState,
+  project: Project,
+): Partial<AppState> | null {
+  const patch: Record<string, unknown> = {};
+
+  const alive = (record: Record<string, unknown>, id: unknown): boolean =>
+    typeof id === "string" && Object.hasOwn(record, id);
+
+  // --- channel-rack ------------------------------------------------------
+  if (state.selectedChannelId !== null && !alive(project.channels, state.selectedChannelId)) {
+    patch.selectedChannelId = null;
+  }
+  if (
+    state.pianoRollRequestChannelId !== null &&
+    !alive(project.channels, state.pianoRollRequestChannelId)
+  ) {
+    patch.pianoRollRequestChannelId = null;
+  }
+
+  // --- mixer: never null, so it falls back to Master rather than clearing --
+  if (!alive(project.mixerTracks, state.selectedMixerTrackId)) {
+    patch.selectedMixerTrackId = MASTER_MIXER_TRACK_ID;
+  }
+
+  // --- playlist ----------------------------------------------------------
+  if (
+    state.playlistSelectedClipId !== null &&
+    !alive(project.clips, state.playlistSelectedClipId)
+  ) {
+    patch.playlistSelectedClipId = null;
+  }
+  if (
+    state.playlistPaintPatternId !== null &&
+    !alive(project.patterns, state.playlistPaintPatternId)
+  ) {
+    // `null` is this field's documented "follow the active pattern".
+    patch.playlistPaintPatternId = null;
+  }
+
+  // --- piano roll (one namespaced object, so patch it as a whole) ---------
+  const roll = state.pianoRoll;
+  if (roll !== undefined && roll !== null) {
+    const rollPatch: Record<string, unknown> = {};
+    if (roll.channelId !== null && !alive(project.channels, roll.channelId)) {
+      rollPatch.channelId = null;
+    }
+    const notes = project.patterns[project.activePatternId]?.notes ?? {};
+    const survivingNotes = roll.selectedNoteIds.filter((id) => alive(notes, id));
+    if (survivingNotes.length !== roll.selectedNoteIds.length) {
+      rollPatch.selectedNoteIds = survivingNotes;
+    }
+    // A drag cannot survive the project it was dragging.
+    if (roll.dragKind !== null) rollPatch.dragKind = null;
+    if (roll.previewPitch !== null) rollPatch.previewPitch = null;
+    if (Object.keys(rollPatch).length > 0) {
+      patch.pianoRoll = { ...roll, ...rollPatch };
+    }
+  }
+
+  return Object.keys(patch).length === 0 ? null : (patch as Partial<AppState>);
 }
 
 export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (set, get) => ({
@@ -146,6 +247,12 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     set(historyRedo(project, history));
   },
 
+  endGesture: () => {
+    const { history } = get();
+    const next = historyEndGesture(history);
+    if (next !== history) set({ history: next });
+  },
+
   setActivePatternId: (patternId) => {
     const { project } = get();
     if (project.patterns[patternId] === undefined) return;
@@ -162,6 +269,7 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
   loadProject: (project) => {
     reseedIds(project);
     set({ project, history: createHistory() });
+    get().reconcileUiToProject();
   },
 
   newProject: () => {
@@ -171,6 +279,12 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
   hydrateFromStorage: () => {
     const stored = loadPersistedProject();
     if (stored !== null) get().loadProject(stored);
+  },
+
+  reconcileUiToProject: () => {
+    const state = get();
+    const patch = reconcileUiReferences(state, state.project);
+    if (patch !== null) set(patch);
   },
 });
 
@@ -317,14 +431,25 @@ export function loadPersistedProject(): Project | null {
   }
 }
 
-/** Write the project under the versioned envelope, stamping `updatedAt`. */
-export function persistProject(project: Project): void {
+/**
+ * Write the project under the versioned envelope, stamping `updatedAt`.
+ *
+ * **Returns whether the write happened.** Swallowing the failure silently (as
+ * this did) is right for the debounced autosave — a full quota must never
+ * break playback — and wrong for the Save button, which otherwise reports
+ * success by saying nothing at all while the project is not on disk. The
+ * failure is reported, not thrown, so the autosave caller can keep ignoring it
+ * with no try/catch of its own.
+ */
+export function persistProject(project: Project): boolean {
   const store = storage();
-  if (store === null) return;
+  if (store === null) return false;
   try {
     store.setItem(STORAGE_KEY, serializeProject({ ...project, updatedAt: nowIso() }));
+    return true;
   } catch {
-    // Quota or private mode — a failed autosave must never break playback.
+    // Quota or private mode.
+    return false;
   }
 }
 
@@ -352,6 +477,8 @@ export function startAutosave(delayMs: number = AUTOSAVE_DELAY_MS): () => void {
       timer = null;
     }
     if (pending !== null) {
+      // Autosave stays quiet on failure by design (SPEC §2.2: writes must
+      // never interrupt); the explicit Save button is what surfaces it.
       persistProject(pending);
       pending = null;
     }

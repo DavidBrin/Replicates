@@ -189,6 +189,7 @@
    below rides on top of it, so one rule gives every channel FL's darkened,
    top-lit plate instead of a flat pastel web button. */
 .fl-rack-row__name {
+  width: 100%;
   height: 24px;
   padding: 0 8px;
   border: 1px solid rgba(0, 0, 0, 0.55);
@@ -219,6 +220,109 @@
     rgba(0, 0, 0, 0.2) 48%,
     rgba(0, 0, 0, 0.5) 100%
   );
+}
+
+/* ------------------------------------------------------- name + menu wrap */
+
+.fl-rack-row__name-wrap {
+  position: relative;
+  height: 24px;
+}
+
+.fl-rack-row__name-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--fl-accent-orange);
+  border-radius: 2px;
+  color: #f2f6f8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Shared FL "Channel Operations"-style popup menu (lane 1 §2.6): dark chrome
+   plate with a bevelled top edge, one row per action, no modal framework. */
+.fl-rack-menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.fl-rack-menu {
+  position: absolute;
+  top: 26px;
+  left: 0;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 3px;
+  border: 1px solid #1c2226;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #5a646a 0%, #454e53 100%);
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 var(--fl-bevel-light);
+}
+
+.fl-rack-menu button {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--fl-text-primary);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fl-rack-menu button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.fl-rack-menu button:disabled {
+  color: var(--fl-text-secondary);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.fl-rack-menu__delete {
+  color: #ffb0a8;
+}
+
+/* --------------------------------------------------------- add-channel + */
+
+.fl-channel-rack__add-row {
+  position: relative;
+  flex: none;
+  padding: 6px;
+}
+
+.fl-channel-rack__add {
+  width: 22px;
+  height: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #6a747a 0%, #454e53 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  color: var(--fl-text-primary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fl-channel-rack__add:hover {
+  background: linear-gradient(180deg, #78838a 0%, #4f595f 100%);
+}
+
+.fl-rack-menu--add {
+  top: 24px;
 }
 
 .fl-rack-row__selector {

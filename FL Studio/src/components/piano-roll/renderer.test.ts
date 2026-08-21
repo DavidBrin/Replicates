@@ -11,7 +11,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { TICKS_PER_BAR, TICKS_PER_BEAT, TICKS_PER_STEP, type Note } from "@/domain/types";
+import {
+  PATTERN_LENGTH_TICKS,
+  TICKS_PER_BAR,
+  TICKS_PER_BEAT,
+  TICKS_PER_STEP,
+  type Note,
+} from "@/domain/types";
 
 import {
   KEYBOARD_WIDTH,
@@ -20,6 +26,7 @@ import {
   gripRect,
   noteRect,
   pitchToY,
+  rowHeight,
   tickToX,
   velocityToY,
 } from "./geometry";
@@ -29,6 +36,7 @@ import {
   drawKeyboard,
   drawLanes,
   drawNotes,
+  drawOutOfPatternOverlay,
   drawPlayhead,
   drawVelocityLane,
   renderPianoRoll,
@@ -418,5 +426,51 @@ describe("full frame", () => {
     const first = rows[0];
     const second = rows[1];
     expect(Math.abs((second?.y ?? 0) - (first?.y ?? 0))).toBe(ROW_HEIGHT);
+  });
+
+  it("scales row spacing with vertical zoom", () => {
+    const surface = new RecordingSurface();
+    const view = createViewport({ width: 400, height: 300, zoomY: 2 });
+    drawLanes(surface, view, theme);
+    const rows = surface.fills.filter(
+      (fill) => fill.color === theme.laneWhite || fill.color === theme.laneBlack,
+    );
+    const first = rows[0];
+    const second = rows[1];
+    expect(Math.abs((second?.y ?? 0) - (first?.y ?? 0))).toBe(rowHeight(view));
+    expect(rowHeight(view)).toBe(ROW_HEIGHT * 2);
+  });
+});
+
+describe("out-of-pattern overlay", () => {
+  it("dims the grid past the pattern's end, and nothing before it", () => {
+    const surface = new RecordingSurface();
+    // Zoomed out enough that the 1-bar pattern's end is inside the canvas.
+    const view = createViewport({ width: 900, height: 300, zoomX: 1 });
+    drawOutOfPatternOverlay(surface, view, theme);
+
+    const patternEndX = tickToX(view, PATTERN_LENGTH_TICKS);
+    expect(surface.fills.some((fill) => fill.x >= Math.round(patternEndX))).toBe(true);
+    expect(surface.fills.every((fill) => fill.x >= Math.round(patternEndX))).toBe(true);
+  });
+
+  it("draws nothing when the pattern's end is off the right edge", () => {
+    const surface = new RecordingSurface();
+    // Zoomed in far enough that tick 384 is well past a 400 px canvas.
+    const view = createViewport({ width: 400, height: 300, zoomX: 4 });
+    drawOutOfPatternOverlay(surface, view, theme);
+    expect(surface.fills).toHaveLength(0);
+  });
+
+  it("is part of the full frame, painted before notes and ghost notes", () => {
+    const surface = new RecordingSurface();
+    const view = createViewport({ width: 900, height: 300 });
+    renderPianoRoll(surface, view, { notes: [note({ positionTicks: 0 })] });
+    const overlayIndex = surface.fills.findIndex(
+      (fill) => fill.x >= Math.round(tickToX(view, PATTERN_LENGTH_TICKS)),
+    );
+    const noteIndex = surface.fills.findIndex((fill) => fill.color === theme.noteBody);
+    expect(overlayIndex).toBeGreaterThanOrEqual(0);
+    expect(overlayIndex).toBeLessThan(noteIndex);
   });
 });

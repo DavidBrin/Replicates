@@ -1,8 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { TICKS_PER_BAR, type Pattern, type PatternClip } from "@/domain/types";
 import { ClipMiniature } from "./ClipMiniature";
-import { ticksToPx } from "./geometry";
+import { LANE_HEIGHT_PX, ticksToPx } from "./geometry";
 
 export interface ClipViewProps {
   clip: PatternClip;
@@ -13,19 +13,73 @@ export interface ClipViewProps {
   onSelect: (clipId: string) => void;
   /** Double-click: open the pattern in the Piano Roll (SPEC.md §1.1). */
   onOpen: (clip: PatternClip) => void;
-  /** Right-click: delete (SPEC.md §4.4's universal "right-click = delete"). */
+  /** Right-click on the clip BODY: delete (SPEC.md §4.4's universal "right-click = delete"). */
   onDelete: (clipId: string) => void;
-  /** Drag-to-move, committed once on pointer-up (SPEC.md §2.1 drag coalescing). */
-  onDragCommit: (clipId: string, deltaTicks: number) => void;
+  /** "Make unique" (SPEC.md D4 / lane 2 §8), from the header context menu. */
+  onMakeUnique: (clipId: string) => void;
+  /**
+   * Drag-to-move, committed once on pointer-up (SPEC.md §2.1 drag
+   * coalescing). `deltaTrackIndex` is how many lanes the pointer moved
+   * across (rounded, signed) so the caller can retarget the clip's track;
+   * `coalesceKey` is minted fresh per gesture (finding #7) so two separate
+   * drags of the same clip never merge into one undo entry.
+   */
+  onDragCommit: (
+    clipId: string,
+    deltaTicks: number,
+    deltaTrackIndex: number,
+    coalesceKey: string,
+  ) => void;
+  /**
+   * Shift+pointer-down (SPEC.md §4.4 "Shift+Left-click on item | clone
+   * selection"): clones this clip in place and returns the new clip's id,
+   * already dispatched under `coalesceKey` so a follow-on drag of the clone
+   * coalesces with its creation into one undo step. Omit to disable cloning
+   * (e.g. in a host that doesn't wire it).
+   */
+  onCloneStart?: (clipId: string, coalesceKey: string) => string;
 }
 
 const DRAG_THRESHOLD_PX = 3;
+
+let gestureCounter = 0;
+/** Fresh key per pointer-down→up gesture (finding #7 — never reused across gestures). */
+function nextCoalesceKey(): string {
+  gestureCounter += 1;
+  return `playlist-clip-move#${gestureCounter}`;
+}
+
+/** Test seam: deterministic coalesce keys across test files. */
+export function __resetClipGestureCounterForTests(): void {
+  gestureCounter = 0;
+}
+
+interface DragState {
+  startClientX: number;
+  startClientY: number;
+  dragging: boolean;
+  /** The clip actually being dragged — the source clip, or a shift-clone. */
+  activeClipId: string;
+  coalesceKey: string;
+}
 
 /**
  * One placed pattern clip (SPEC.md §4.3, lane 1 §4.2): a header strip
  * (pattern colour + name) over a live miniature of the pattern's notes.
  * Clips are always exactly one bar wide — `PATTERN_LENGTH_TICKS` is a fixed
  * constant (SPEC.md §2) — so there is no edge-resize handle here, only move.
+ *
+ * Right-click gesture split (SPEC.md's universal "right-click = delete"
+ * collides with D4's "'Make unique' on a clip's context menu" — both are
+ * normative for the same surface). Resolved here by splitting the clip's own
+ * two regions: right-click the **header strip** opens a small context menu
+ * (Make unique / Delete); right-click the **body** stays the universal
+ * one-shot delete. This keeps the FL-signature "right-click = delete"
+ * binding intact everywhere it doesn't need a menu, uses a region that
+ * already exists in the DOM (`.fl-clip__header` vs `.fl-clip__body`) rather
+ * than inventing a modifier key, and reserves the header — visually the
+ * clip's "title bar" — for the one action (fork the pattern) users need a
+ * menu, not a blind click, to reach safely.
  */
 export function ClipView({
   clip,
@@ -35,21 +89,35 @@ export function ClipView({
   onSelect,
   onOpen,
   onDelete,
+  onMakeUnique,
   onDragCommit,
+  onCloneStart,
 }: ClipViewProps) {
-  const dragState = useRef<{ startClientX: number; dragging: boolean } | null>(null);
+  const dragState = useRef<DragState | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     // jsdom (component tests) has no Pointer Events capture implementation.
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    dragState.current = { startClientX: event.clientX, dragging: false };
+    const coalesceKey = nextCoalesceKey();
+    const activeClipId =
+      event.shiftKey && onCloneStart ? onCloneStart(clip.id, coalesceKey) : clip.id;
+    dragState.current = {
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      dragging: false,
+      activeClipId,
+      coalesceKey,
+    };
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     if (drag === null) return;
-    if (Math.abs(event.clientX - drag.startClientX) > DRAG_THRESHOLD_PX) {
+    const dx = event.clientX - drag.startClientX;
+    const dy = event.clientY - drag.startClientY;
+    if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
       drag.dragging = true;
     }
   }
@@ -59,17 +127,24 @@ export function ClipView({
     dragState.current = null;
     if (drag === null) return;
     const deltaPx = event.clientX - drag.startClientX;
-    if (drag.dragging && Math.abs(deltaPx) > 0) {
+    const deltaYPx = event.clientY - drag.startClientY;
+    const deltaTrackIndex = Math.round(deltaYPx / LANE_HEIGHT_PX);
+    if (drag.dragging && (deltaPx !== 0 || deltaTrackIndex !== 0)) {
       const deltaTicks = (deltaPx / pxPerBar) * TICKS_PER_BAR; // snapped to a bar by the caller
-      onDragCommit(clip.id, deltaTicks);
+      onDragCommit(drag.activeClipId, deltaTicks, deltaTrackIndex, drag.coalesceKey);
     } else {
-      onSelect(clip.id);
+      onSelect(drag.activeClipId);
     }
   }
 
   function handleContextMenu(event: React.MouseEvent<HTMLDivElement>) {
     event.preventDefault();
-    onDelete(clip.id);
+    const target = event.target as HTMLElement;
+    if (target.closest(".fl-clip__header")) {
+      setContextMenu({ x: event.clientX, y: event.clientY });
+    } else {
+      onDelete(clip.id);
+    }
   }
 
   return (
@@ -97,6 +172,44 @@ export function ClipView({
       <div className="fl-clip__body">
         <ClipMiniature pattern={pattern} />
       </div>
+      {contextMenu && (
+        <>
+          <div
+            className="fl-clip__context-menu-backdrop"
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setContextMenu(null);
+            }}
+          />
+          <div
+            className="fl-clip__context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            data-testid={`clip-menu-${clip.id}`}
+          >
+            <button
+              type="button"
+              className="fl-clip__context-menu-item"
+              onClick={() => {
+                onMakeUnique(clip.id);
+                setContextMenu(null);
+              }}
+            >
+              Make unique
+            </button>
+            <button
+              type="button"
+              className="fl-clip__context-menu-item"
+              onClick={() => {
+                onDelete(clip.id);
+                setContextMenu(null);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

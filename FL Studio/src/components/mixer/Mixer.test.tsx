@@ -124,6 +124,20 @@ describe("Mixer — mute LED", () => {
     await user.click(led);
     expect(useAppStore.getState().project.mixerTracks["mix-1"]!.muted).toBe(false);
   });
+
+  it("reports the mute state to assistive tech: pressed === muted, and the label flips", async () => {
+    const user = userEvent.setup();
+    render(<Mixer />);
+    const led = screen.getByTestId("mixer-strip-mute-mix-1");
+
+    expect(led).toHaveAttribute("aria-pressed", "false");
+    expect(led).toHaveAccessibleName("Mute Insert 1");
+
+    await user.click(led);
+
+    expect(led).toHaveAttribute("aria-pressed", "true");
+    expect(led).toHaveAccessibleName("Unmute Insert 1");
+  });
 });
 
 describe("Mixer — strip selection", () => {

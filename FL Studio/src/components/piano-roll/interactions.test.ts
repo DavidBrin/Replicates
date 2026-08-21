@@ -14,6 +14,8 @@ import { addNotes, type Command } from "@/domain/commands";
 import { fixtureProject } from "@/domain/testKit";
 import {
   DEFAULT_VELOCITY,
+  PATTERN_LENGTH_TICKS,
+  TICKS_PER_BAR,
   TICKS_PER_BEAT,
   TICKS_PER_STEP,
   type Note,
@@ -221,21 +223,37 @@ describe("snap helpers", () => {
 /* ---------------------------------------------------------------- draw -- */
 
 describe("draw (left-click on empty grid)", () => {
-  it("adds one note of the last-used length at the snapped tick and clicked pitch", () => {
-    const h = harness({ lastLengthTicks: TICKS_PER_BEAT });
-    h.controller.pointerDown(at(TICKS_PER_STEP + 7, 64));
-    h.controller.pointerUp(at(TICKS_PER_STEP + 7, 64));
+  it("adds a note of the SNAP UNIT's length, ignoring lastLengthTicks (SPEC §4's Piano Roll table)", () => {
+    const h = harness({ snap: "beat", lastLengthTicks: TICKS_PER_STEP });
+    h.controller.pointerDown(at(TICKS_PER_BEAT + 7, 64));
+    h.controller.pointerUp(at(TICKS_PER_BEAT + 7, 64));
 
     const project = h.applied();
     const notes = Object.values(project.patterns[project.activePatternId]?.notes ?? {});
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({
       channelId: CHANNEL,
-      positionTicks: TICKS_PER_STEP,
+      positionTicks: TICKS_PER_BEAT,
       lengthTicks: TICKS_PER_BEAT,
       pitch: 64,
       velocity: DEFAULT_VELOCITY,
     });
+  });
+
+  it("draws a bar-long note when snap is Bar", () => {
+    const h = harness({ snap: "bar", lastLengthTicks: TICKS_PER_STEP });
+    h.controller.pointerDown(at(0, 60));
+    const project = h.applied();
+    const notes = Object.values(project.patterns[project.activePatternId]?.notes ?? {});
+    expect(notes[0]?.lengthTicks).toBe(TICKS_PER_BAR);
+  });
+
+  it("falls back to the last-resized length when snap is off", () => {
+    const h = harness({ snap: "off", lastLengthTicks: TICKS_PER_BEAT * 1.5 });
+    h.controller.pointerDown(at(0, 60));
+    const project = h.applied();
+    const notes = Object.values(project.patterns[project.activePatternId]?.notes ?? {});
+    expect(notes[0]?.lengthTicks).toBe(TICKS_PER_BEAT * 1.5);
   });
 
   it("floors to the snap cell the click fell in, never forward to the next one", () => {
@@ -264,7 +282,7 @@ describe("draw (left-click on empty grid)", () => {
   });
 
   it("never draws a zero-length note — a roll note always has duration", () => {
-    const h = harness({ lastLengthTicks: 0 });
+    const h = harness({ snap: "off", lastLengthTicks: 0 });
     h.controller.pointerDown(at(0, 60));
     const project = h.applied();
     const notes = Object.values(project.patterns[project.activePatternId]?.notes ?? {});
@@ -276,6 +294,29 @@ describe("draw (left-click on empty grid)", () => {
     h.controller.pointerDown(at(0, 60));
     expect(h.dispatch).not.toHaveBeenCalled();
     expect(h.setSelection).toHaveBeenCalledWith([]);
+  });
+
+  it("clicking past the pattern's end still lands inside it — a note may never exceed PATTERN_LENGTH_TICKS", () => {
+    const h = harness({ snap: "bar", lastLengthTicks: TICKS_PER_STEP });
+    // A click past the 1-bar pattern but still on the visible canvas; a
+    // bar-long note can only start at 0.
+    h.controller.pointerDown(at(PATTERN_LENGTH_TICKS + TICKS_PER_BAR, 60));
+    const project = h.applied();
+    const notes = Object.values(project.patterns[project.activePatternId]?.notes ?? {});
+    expect(notes[0]?.positionTicks).toBe(0);
+    expect((notes[0]?.positionTicks ?? 0) + (notes[0]?.lengthTicks ?? 0)).toBeLessThanOrEqual(
+      PATTERN_LENGTH_TICKS,
+    );
+  });
+
+  it("clamps a quarter-beat note drawn right at the pattern boundary to fit inside it", () => {
+    const h = harness({ snap: "quarterBeat" });
+    h.controller.pointerDown(at(PATTERN_LENGTH_TICKS - 1, 60));
+    const project = h.applied();
+    const notes = Object.values(project.patterns[project.activePatternId]?.notes ?? {});
+    expect((notes[0]?.positionTicks ?? 0) + (notes[0]?.lengthTicks ?? 0)).toBeLessThanOrEqual(
+      PATTERN_LENGTH_TICKS,
+    );
   });
 });
 
@@ -382,6 +423,31 @@ describe("move (drag the note body)", () => {
     ).toBe(0);
   });
 
+  it("never drags a note's end past the pattern's length", () => {
+    const h = harness({ notes: [note] });
+    const start = grabBody(h);
+    h.controller.pointerMove({ ...start, x: start.x + 50000 });
+    const project = h.applied();
+    const moved = project.patterns[project.activePatternId]?.notes[note.id];
+    expect((moved?.positionTicks ?? 0) + (moved?.lengthTicks ?? 0)).toBe(PATTERN_LENGTH_TICKS);
+  });
+
+  it("keeps relative offsets when a multi-note drag hits the pattern's end", () => {
+    const other = makeNote({ id: "n-2", positionTicks: TICKS_PER_BEAT * 3, pitch: 70 });
+    const h = harness({ notes: [note, other], selectedNoteIds: [note.id, other.id] });
+    const start = grabBody(h);
+    const originalGap = other.positionTicks - note.positionTicks;
+    h.controller.pointerMove({ ...start, x: start.x + 50000 });
+    const project = h.applied();
+    const notesById = project.patterns[project.activePatternId]?.notes;
+    const movedNote = notesById?.[note.id];
+    const movedOther = notesById?.[other.id];
+    expect((movedOther?.positionTicks ?? 0) + (movedOther?.lengthTicks ?? 0)).toBe(
+      PATTERN_LENGTH_TICKS,
+    );
+    expect((movedOther?.positionTicks ?? 0) - (movedNote?.positionTicks ?? 0)).toBe(originalGap);
+  });
+
   it("emits nothing while the pointer stays inside the same snap cell", () => {
     const h = harness({ notes: [note] });
     const start = grabBody(h);
@@ -429,6 +495,17 @@ describe("resize (drag the right-edge grip)", () => {
     expect(
       project.patterns[project.activePatternId]?.notes[note.id]?.lengthTicks,
     ).toBe(TICKS_PER_STEP);
+  });
+
+  it("never resizes a note's end past the pattern's length", () => {
+    const h = harness({ notes: [note] });
+    const start = grabGrip(h);
+    h.controller.pointerMove({ ...start, x: tickToX(VIEW, PATTERN_LENGTH_TICKS * 3) });
+    const project = h.applied();
+    const resized = project.patterns[project.activePatternId]?.notes[note.id];
+    expect((resized?.positionTicks ?? 0) + (resized?.lengthTicks ?? 0)).toBe(
+      PATTERN_LENGTH_TICKS,
+    );
   });
 
   it("remembers the new length as the next drawn note's length", () => {
@@ -542,6 +619,51 @@ describe("velocity", () => {
     ).toBeGreaterThan(note.velocity);
   });
 
+  it("coalesces a RAPID alt+wheel burst on one note into a single undo entry", () => {
+    const h = harness({ notes: [note] });
+    const rect = noteRect(VIEW, note);
+    const point = { x: rect.x + 3, y: rect.y + 3, button: 0, altKey: true, deltaX: 0 };
+    h.controller.wheel({ ...point, deltaY: -100 });
+    h.controller.wheel({ ...point, deltaY: -100 });
+    h.controller.wheel({ ...point, deltaY: -100 });
+    const keys = h.dispatch.mock.calls.map((call) => call[1]?.coalesceKey);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it("gives two SEPARATE alt+wheel sessions on the same note two undo entries", () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness({ notes: [note] });
+      const rect = noteRect(VIEW, note);
+      const point = { x: rect.x + 3, y: rect.y + 3, button: 0, altKey: true, deltaX: 0 };
+      h.controller.wheel({ ...point, deltaY: -100 });
+      vi.advanceTimersByTime(1000); // past WHEEL_GESTURE_GAP_MS — a new gesture
+      h.controller.wheel({ ...point, deltaY: -100 });
+      const keys = h.dispatch.mock.calls.map((call) => call[1]?.coalesceKey);
+      expect(new Set(keys).size).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives two DIFFERENT notes two undo entries even wheeled back to back", () => {
+    const other = makeNote({ id: "n-2", positionTicks: TICKS_PER_BEAT * 2, pitch: 70 });
+    const h = harness({ notes: [note, other] });
+    const rect = noteRect(VIEW, note);
+    const otherRect = noteRect(VIEW, other);
+    h.controller.wheel({ x: rect.x + 3, y: rect.y + 3, button: 0, altKey: true, deltaX: 0, deltaY: -100 });
+    h.controller.wheel({
+      x: otherRect.x + 3,
+      y: otherRect.y + 3,
+      button: 0,
+      altKey: true,
+      deltaX: 0,
+      deltaY: -100,
+    });
+    const keys = h.dispatch.mock.calls.map((call) => call[1]?.coalesceKey);
+    expect(new Set(keys).size).toBe(2);
+  });
+
   it("alt+wheel over empty grid changes nothing", () => {
     const h = harness({ notes: [note] });
     expect(
@@ -569,6 +691,25 @@ describe("zoom, pan and the preview keyboard", () => {
     expect(h.dispatch).not.toHaveBeenCalled();
     const patch = h.setView.mock.calls[0]?.[0] as { zoomX: number };
     expect(patch.zoomX).toBeGreaterThan(VIEW.zoomX);
+  });
+
+  it("ctrl+alt+wheel zooms VERTICALLY at the cursor instead, never editing notes", () => {
+    const h = harness({ notes: [makeNote()] });
+    expect(
+      h.controller.wheel({
+        x: 400,
+        y: 200,
+        button: 0,
+        ctrlKey: true,
+        altKey: true,
+        deltaX: 0,
+        deltaY: -100,
+      }),
+    ).toBe(true);
+    expect(h.dispatch).not.toHaveBeenCalled();
+    const patch = h.setView.mock.calls[0]?.[0] as { zoomX?: number; zoomY: number };
+    expect(patch.zoomY).toBeGreaterThan(VIEW.zoomY);
+    expect(patch.zoomX).toBeUndefined(); // the X axis is untouched
   });
 
   it("middle-drag pans both axes and edits nothing", () => {

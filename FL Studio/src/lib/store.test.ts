@@ -8,12 +8,13 @@ import { createDefaultProject } from "@/domain/defaultProject";
 import { nextId, resetIds } from "@/domain/ids";
 import { serializeProject } from "@/domain/serialization";
 import { createHistory } from "@/domain/undo";
-import { STORAGE_KEY, TICKS_PER_STEP, type Project } from "@/domain/types";
+import { MASTER_MIXER_TRACK_ID, STORAGE_KEY, TICKS_PER_STEP, type Project } from "@/domain/types";
 import {
   AUTOSAVE_DELAY_MS,
   exportProjectJson,
   loadPersistedProject,
   persistProject,
+  reconcileUiReferences,
   selectActivePattern,
   selectCanRedo,
   selectCanUndo,
@@ -276,5 +277,154 @@ describe("selectors", () => {
 
     useAppStore.getState().setPlaybackMode("song");
     expect(selectTimeline(useAppStore.getState()).mode).toBe("song");
+  });
+});
+
+/* ------------------------------------------------- persistence reporting -- */
+
+describe("persistProject reports whether the write happened", () => {
+  it("returns true on a successful write", () => {
+    expect(persistProject(createDefaultProject({ now: "2026-01-01T00:00:00.000Z" }))).toBe(true);
+    expect(window.localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+  });
+
+  it("returns false — and does not throw — when the quota is exhausted", () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+
+    const project = createDefaultProject({ now: "2026-01-01T00:00:00.000Z" });
+    expect(() => persistProject(project)).not.toThrow();
+    expect(persistProject(project)).toBe(false);
+
+    setItem.mockRestore();
+  });
+
+  it("keeps the autosave quiet on failure rather than letting it throw", () => {
+    vi.useFakeTimers();
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    const stop = startAutosave(10);
+
+    useAppStore.getState().dispatch(updateProject({ tempo: 155 }));
+    expect(() => vi.advanceTimersByTime(50)).not.toThrow();
+
+    stop();
+    setItem.mockRestore();
+    vi.useRealTimers();
+  });
+});
+
+/* --------------------------------------------- ui ↔ project reconciliation */
+
+describe("replacing the project re-points dangling UI references", () => {
+  /** Aim every UI slice at entities of the CURRENT project. */
+  function aimUiAtCurrentProject(): void {
+    const { project } = useAppStore.getState();
+    const channelId = project.channelOrder[0]!;
+    const patternId = project.patternOrder[0]!;
+    const mixerId = project.mixerTrackOrder.find((id) => id !== MASTER_MIXER_TRACK_ID)!;
+    useAppStore.setState({
+      selectedChannelId: channelId,
+      pianoRollRequestChannelId: channelId,
+      selectedMixerTrackId: mixerId,
+      playlistPaintPatternId: patternId,
+      playlistSelectedClipId: "clip-does-not-exist",
+      pianoRoll: {
+        ...useAppStore.getState().pianoRoll,
+        channelId,
+        selectedNoteIds: ["n-1", "n-2"],
+        dragKind: "move",
+        previewPitch: 60,
+      },
+    });
+  }
+
+  /** A project that shares NO ids with the default one. */
+  function foreignProject(): Project {
+    return {
+      id: "prj-foreign",
+      name: "Foreign",
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:00.000Z",
+      tempo: 120,
+      globalSwing: 0,
+      channels: {
+        "zch-1": {
+          id: "zch-1",
+          name: "Foreign kick",
+          color: "hsl(0, 0%, 50%)",
+          voice: "kick",
+          volume: 0.8,
+          pan: 0,
+          muted: false,
+          defaultStepPitch: 60,
+          routedToMixerTrackId: MASTER_MIXER_TRACK_ID,
+        },
+      },
+      channelOrder: ["zch-1"],
+      patterns: { "zpat-1": { id: "zpat-1", name: "Z", color: "hsl(0,0%,50%)", notes: {} } },
+      patternOrder: ["zpat-1"],
+      playlistTracks: {},
+      playlistTrackOrder: [],
+      clips: {},
+      mixerTracks: {
+        [MASTER_MIXER_TRACK_ID]: {
+          id: MASTER_MIXER_TRACK_ID,
+          name: "Master",
+          volume: 0.8,
+          pan: 0,
+          muted: false,
+        },
+      },
+      mixerTrackOrder: [MASTER_MIXER_TRACK_ID],
+      playbackMode: "pattern",
+      activePatternId: "zpat-1",
+    };
+  }
+
+  it("clears or re-defaults every field naming a vanished entity", () => {
+    aimUiAtCurrentProject();
+
+    useAppStore.getState().loadProject(foreignProject());
+
+    const state = useAppStore.getState();
+    expect(state.selectedChannelId).toBeNull();
+    expect(state.pianoRollRequestChannelId).toBeNull();
+    expect(state.playlistPaintPatternId).toBeNull();
+    expect(state.playlistSelectedClipId).toBeNull();
+    // The mixer's field is not nullable, so it falls back to Master.
+    expect(state.selectedMixerTrackId).toBe(MASTER_MIXER_TRACK_ID);
+    expect(state.pianoRoll.channelId).toBeNull();
+    expect(state.pianoRoll.selectedNoteIds).toEqual([]);
+    expect(state.pianoRoll.dragKind).toBeNull();
+    expect(state.pianoRoll.previewPitch).toBeNull();
+  });
+
+  it("leaves references that still resolve alone", () => {
+    aimUiAtCurrentProject();
+    const before = useAppStore.getState();
+    const channelId = before.selectedChannelId;
+    const mixerId = before.selectedMixerTrackId;
+    const patternId = before.playlistPaintPatternId;
+
+    // Same project object: nothing dangles.
+    expect(reconcileUiReferences(before, before.project)).not.toBeNull(); // the fake clip id does
+    useAppStore.getState().reconcileUiToProject();
+
+    const after = useAppStore.getState();
+    expect(after.selectedChannelId).toBe(channelId);
+    expect(after.selectedMixerTrackId).toBe(mixerId);
+    expect(after.playlistPaintPatternId).toBe(patternId);
+    expect(after.pianoRoll.channelId).toBe(channelId);
+    // …and the one genuinely dangling reference is the one that was cleared.
+    expect(after.playlistSelectedClipId).toBeNull();
+  });
+
+  it("costs nothing when there is nothing to reconcile", () => {
+    useAppStore.getState().newProject();
+    const state = useAppStore.getState();
+    expect(reconcileUiReferences(state, state.project)).toBeNull();
   });
 });

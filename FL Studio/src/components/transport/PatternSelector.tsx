@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import type { PatternSummary } from "@/components/shell/wiring";
 
 export interface PatternSelectorProps {
@@ -9,6 +11,15 @@ export interface PatternSelectorProps {
   onSelectPrev: () => void;
   onSelectNext: () => void;
   onAdd: () => void;
+  /**
+   * `F2` arrives at the shell but the field lives here (SPEC §4.4 "rename
+   * current pattern"). The parent flips this on; the input commits on
+   * Enter/blur and cancels on Escape, then calls {@link onRenameEnd} either
+   * way so the parent can put the flag back.
+   */
+  renaming?: boolean;
+  onRename?: (name: string) => void;
+  onRenameEnd?: () => void;
 }
 
 /**
@@ -23,9 +34,25 @@ export function PatternSelector({
   onSelectPrev,
   onSelectNext,
   onAdd,
+  renaming = false,
+  onRename,
+  onRenameEnd,
 }: PatternSelectorProps) {
   const active = patterns[activePatternId];
   const multiple = patternOrder.length > 1;
+  const [draft, setDraft] = useState(active?.name ?? "");
+  // The draft is seeded when the field OPENS, not on every render: re-seeding
+  // from `active.name` while typing would fight the user for the caret.
+  const wasRenaming = useRef(false);
+  useEffect(() => {
+    if (renaming && !wasRenaming.current) setDraft(active?.name ?? "");
+    wasRenaming.current = renaming;
+  }, [renaming, active?.name]);
+
+  function commit(): void {
+    onRename?.(draft);
+    onRenameEnd?.();
+  }
 
   return (
     <div className="fl-pattern-selector" data-testid="pattern-selector">
@@ -38,9 +65,29 @@ export function PatternSelector({
       >
         ◂
       </button>
-      <span className="fl-pattern-selector__name" title={active?.name}>
-        {active?.name ?? "—"}
-      </span>
+      {renaming ? (
+        <input
+          autoFocus
+          className="fl-pattern-selector__name fl-pattern-selector__rename"
+          aria-label="Pattern name"
+          data-testid="pattern-rename"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+            if (event.key === "Escape") onRenameEnd?.();
+          }}
+        />
+      ) : (
+        <span
+          className="fl-pattern-selector__name"
+          title={active?.name}
+          data-testid="pattern-name"
+        >
+          {active?.name ?? "—"}
+        </span>
+      )}
       <button
         type="button"
         className="fl-icon-button"

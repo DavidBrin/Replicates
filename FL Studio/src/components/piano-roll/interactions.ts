@@ -50,6 +50,7 @@ import {
   yToPitch,
   yToVelocity,
   zoomAtCursor,
+  zoomAtCursorY,
   type RollViewport,
 } from "./geometry";
 import type { RollDragKind, RollTool } from "./uiState";
@@ -105,6 +106,14 @@ export const VELOCITY_WHEEL_STEP = 0.05;
 export const ZOOM_WHEEL_FACTOR = 1.15;
 /** Plain-wheel scroll, in rows / px per notch. */
 export const WHEEL_SCROLL_PX = 60;
+/**
+ * Alt+wheel velocity nudges (SPEC §4.4) have no pointer-down/up to bound a
+ * gesture, unlike every drag. A run of wheel notches on the same note within
+ * this gap folds into one undo entry — like a drag; a pause past it, or
+ * switching notes, starts a new one, so two separate nudging sessions on the
+ * same note never silently merge into a single Ctrl+Z.
+ */
+export const WHEEL_GESTURE_GAP_MS = 500;
 
 /* ---------------------------------------------------------- hit-testing -- */
 
@@ -163,6 +172,17 @@ export function snapTick(tick: number, snap: SnapUnit, bypass: boolean): number 
 export function minLengthTicks(snap: SnapUnit, bypass: boolean): number {
   if (bypass || snap === "off") return 1;
   return SNAP_TICKS[snap];
+}
+
+/**
+ * Length of a freshly drawn note (SPEC §4's Piano Roll table: "Default length
+ * = current snap unit"). `off` has no unit to draw at, so it falls back to
+ * the last length a manual resize produced — the pre-existing "last used"
+ * behaviour (lane 1 §3.5), preserved only for the unsnapped case.
+ */
+export function defaultDrawLengthTicks(snap: SnapUnit, lastLengthTicks: number): number {
+  if (snap !== "off") return SNAP_TICKS[snap];
+  return Math.max(1, Math.round(lastLengthTicks) || TICKS_PER_STEP);
 }
 
 /* ------------------------------------------------------------- gesture -- */
@@ -230,6 +250,8 @@ export function __resetGestureCounterForTests(): void {
 
 export function createPianoRollController(deps: InteractionDeps): PianoRollController {
   let gesture: Gesture = { kind: "idle" };
+  // Bounds alt+wheel velocity nudges into gestures — see WHEEL_GESTURE_GAP_MS.
+  let velocityWheelGesture: { noteId: NoteId; key: string; lastAt: number } | null = null;
 
   const snapshot = (note: Note): NoteSnapshot => ({
     id: note.id,
@@ -392,14 +414,21 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     const { view } = scene;
     const bypass = input.altKey === true;
     const rawTick = xToTick(view, input.x);
-    const positionTicks = Math.max(
+    const rawPosition = Math.max(
       0,
       bypass || scene.snap === "off"
         ? Math.floor(rawTick)
         : snapTicksFloor(rawTick, scene.snap),
     );
     const pitch = clampPitch(yToPitch(view, input.y));
-    const lengthTicks = Math.max(1, Math.round(scene.lastLengthTicks) || TICKS_PER_STEP);
+    const lengthTicks = Math.min(
+      PATTERN_LENGTH_TICKS,
+      defaultDrawLengthTicks(scene.snap, scene.lastLengthTicks),
+    );
+    // A note may never extend past the pattern (SPEC §1.2 D-sub) — the grid
+    // renders a dead zone there (`renderer.ts`'s drawOutOfPatternOverlay) but
+    // nothing may actually be scheduled past it (`interactions.ts` ~1).
+    const positionTicks = Math.min(rawPosition, PATTERN_LENGTH_TICKS - lengthTicks);
     const note: Note = {
       id: deps.createNoteId(),
       channelId: scene.channelId,
@@ -506,13 +535,21 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       if (deltaTicks === active.lastDeltaTicks) return;
       active.lastDeltaTicks = deltaTicks;
 
+      // Every note in the set keeps its own end inside the pattern (SPEC
+      // §1.2 D-sub) — clamped per-note rather than by a shared delta cap so
+      // one note near the pattern boundary cannot mute the drag for the rest
+      // of the selection.
+      const clampedLength = (note: NoteSnapshot): number =>
+        Math.min(
+          Math.max(minLength, note.lengthTicks + deltaTicks),
+          Math.max(minLength, PATTERN_LENGTH_TICKS - note.positionTicks),
+        );
+
       const patches = active.notes.map((note) => ({
         id: note.id,
-        patch: {
-          lengthTicks: Math.max(minLength, note.lengthTicks + deltaTicks),
-        } satisfies NotePatch,
+        patch: { lengthTicks: clampedLength(note) } satisfies NotePatch,
       }));
-      active.finalLengthTicks = Math.max(minLength, primary.lengthTicks + deltaTicks);
+      active.finalLengthTicks = clampedLength(primary);
       deps.dispatch(updateNotes(scene.patternId, patches), { coalesceKey: active.coalesceKey });
       return;
     }
@@ -528,11 +565,17 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       ? 0
       : yToPitch(view, input.y) - yToPitch(view, active.originY);
 
-    // Keep the whole set inside the pattern and inside MIDI range.
+    // Keep the whole set inside the pattern and inside MIDI range. Both
+    // bounds are shared across the group (not clamped per-note) so a
+    // multi-note drag keeps its relative offsets intact right up to the
+    // edge, instead of one note hitting the wall while the rest keep moving.
     const minPosition = Math.min(...active.notes.map((note) => note.positionTicks));
+    const maxEndDelta = Math.min(
+      ...active.notes.map((note) => PATTERN_LENGTH_TICKS - note.positionTicks - note.lengthTicks),
+    );
     const maxPitch = Math.max(...active.notes.map((note) => note.pitch));
     const minPitch = Math.min(...active.notes.map((note) => note.pitch));
-    deltaTicks = Math.max(-minPosition, deltaTicks);
+    deltaTicks = Math.max(-minPosition, Math.min(maxEndDelta, deltaTicks));
     deltaPitch = Math.min(127 - maxPitch, Math.max(-minPitch, deltaPitch));
 
     if (deltaTicks === active.lastDeltaTicks && deltaPitch === active.lastDeltaPitch) return;
@@ -564,8 +607,19 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   const wheel = (input: RollWheel): boolean => {
     const scene = deps.getScene();
     const { view } = scene;
+    const ctrl = input.ctrlKey === true || input.metaKey === true;
 
-    if (input.ctrlKey === true || input.metaKey === true) {
+    // Vertical zoom-at-cursor has no documented FL wheel binding (research/01
+    // §3.6 only lists middle-drag) — Ctrl+Alt+wheel is this app's own choice,
+    // grouped under the same modifier family as Ctrl+wheel's horizontal zoom
+    // so the two read as one gesture with an axis toggle.
+    if (ctrl && input.altKey === true) {
+      const factor = input.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+      deps.setView(zoomAtCursorY(view, input.y, view.zoomY * factor));
+      return true;
+    }
+
+    if (ctrl) {
       const factor = input.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
       deps.setView(zoomAtCursor(view, input.x, view.zoomX * factor));
       return true;
@@ -575,11 +629,21 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const hit = hitTestNote(view, scene.notes, input.x, input.y);
       if (hit === null) return false;
       const delta = input.deltaY < 0 ? VELOCITY_WHEEL_STEP : -VELOCITY_WHEEL_STEP;
+      const now = Date.now();
+      if (
+        velocityWheelGesture === null ||
+        velocityWheelGesture.noteId !== hit.note.id ||
+        now - velocityWheelGesture.lastAt > WHEEL_GESTURE_GAP_MS
+      ) {
+        velocityWheelGesture = { noteId: hit.note.id, key: nextCoalesceKey(), lastAt: now };
+      } else {
+        velocityWheelGesture.lastAt = now;
+      }
       deps.dispatch(
         updateNotes(scene.patternId, [
           { id: hit.note.id, patch: { velocity: clamp01(hit.note.velocity + delta) } },
         ]),
-        { coalesceKey: `piano-roll:velocity:${hit.note.id}` },
+        { coalesceKey: velocityWheelGesture.key },
       );
       return true;
     }

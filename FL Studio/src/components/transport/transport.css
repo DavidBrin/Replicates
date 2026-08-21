@@ -331,3 +331,48 @@
   color: var(--fl-text-primary);
   background: linear-gradient(180deg, #6a747a 0%, #4a545a 52%, #3f484d 100%);
 }
+
+/* --------------------------------------------------------------- notices -- */
+
+/*
+ * The toolbar status line (SPEC §4.1). The toolbar is one fixed-height flex
+ * row, so the notice rides in it as a trailing item that takes no width until
+ * it has something to say — `visibility`/`max-width` rather than
+ * `display: none`, because a live region removed from the accessibility tree
+ * between renders is not reliably announced.
+ */
+.fl-toolbar__notice {
+  flex: 0 1 auto;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--fl-warning, #f0b429);
+  visibility: hidden;
+}
+
+.fl-toolbar__notice[data-visible="true"] {
+  max-width: 28ch;
+  padding: 0 8px;
+  visibility: visible;
+}
+
+/* An armed destructive button (New / Load "Sure?") reads as a warning. */
+.fl-text-button[data-armed="true"] {
+  color: var(--fl-warning, #f0b429);
+  border-color: currentColor;
+}
+
+/* Inline pattern rename (F2) — sized like the label it replaces. */
+.fl-pattern-selector__rename {
+  min-width: 0;
+  width: 9ch;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  color: inherit;
+  font: inherit;
+  padding: 0 2px;
+}

@@ -12,6 +12,17 @@
  *    entity field by field, so unknown junk is dropped, missing fields are
  *    caught, and a value that survives is genuinely a `Project`.
  *
+ * 3. **Prototype-safe record handling.** Untrusted JSON can carry a
+ *    `"__proto__"`, `"constructor"` or `"prototype"` key, and both halves of
+ *    the naive form are wrong: `records[id] !== undefined` answers *true* for
+ *    `"toString"` (inherited from `Object.prototype`, so a bogus id survives
+ *    order reconciliation and referential repair), and `records[id] = value`
+ *    for `"__proto__"` runs the inherited *setter* rather than defining a key,
+ *    polluting every object in the realm. Membership is therefore always
+ *    {@link owns} (`Object.hasOwn`), and every id read out of raw JSON is
+ *    filtered through {@link safeEntries}, which drops the three dangerous
+ *    keys outright — an entity may not be named `__proto__`.
+ *
  * Repair vs. reject, resolved: structural nonsense (not an object, no
  * patterns, unknown `schemaVersion`) returns `null` and the caller falls back
  * to the default project. *Referential* damage is repaired instead — orphan
@@ -55,6 +66,27 @@ type Unknown = Record<string, unknown>;
 
 function isObject(value: unknown): value is Unknown {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Keys that may not name an entity. `__proto__` is the pollution vector;
+ * `constructor` and `prototype` are here because they are the other two names
+ * whose presence on a record makes "does this id exist" ambiguous, and no
+ * legitimate minted id (`ch-1`, `pat-3`, `n-17`) is ever one of them.
+ */
+const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+
+/** `Object.entries`, minus the keys of {@link FORBIDDEN_KEYS}. */
+function safeEntries(record: Unknown): [string, unknown][] {
+  return Object.entries(record).filter(([key]) => !FORBIDDEN_KEYS.has(key));
+}
+
+/**
+ * Own-key membership. The whole file asks "is there a record under this id?",
+ * and `record[id] !== undefined` gets that wrong for every inherited member.
+ */
+function owns(record: object, id: string): boolean {
+  return Object.hasOwn(record, id);
 }
 
 function str(value: unknown, fallback: string): string {
@@ -119,7 +151,7 @@ function readPattern(id: string, raw: unknown, index: number): Pattern {
   const source = isObject(raw) ? raw : {};
   const notes: Record<string, Note> = {};
   if (isObject(source.notes)) {
-    for (const [noteId, rawNote] of Object.entries(source.notes)) {
+    for (const [noteId, rawNote] of safeEntries(source.notes)) {
       const note = readNote(noteId, rawNote);
       if (note !== null) notes[noteId] = note;
     }
@@ -169,7 +201,7 @@ function reconcileOrder(order: readonly string[], records: Record<string, unknow
   const seen = new Set<string>();
   const out: string[] = [];
   for (const id of order) {
-    if (records[id] !== undefined && !seen.has(id)) {
+    if (owns(records, id) && !seen.has(id)) {
       seen.add(id);
       out.push(id);
     }
@@ -194,31 +226,33 @@ export function readProject(raw: unknown): Project | null {
 
   const channelsRaw = isObject(raw.channels) ? raw.channels : {};
   const patternsRaw = isObject(raw.patterns) ? raw.patterns : {};
-  if (Object.keys(patternsRaw).length === 0) return null; // a project always has a pattern
+  // Counted AFTER the forbidden keys are dropped: `{"patterns":{"__proto__":{}}}`
+  // is not a project with a pattern in it.
+  if (safeEntries(patternsRaw).length === 0) return null; // a project always has a pattern
 
   const channels: Record<string, Channel> = {};
-  Object.entries(channelsRaw).forEach(([id, value], index) => {
+  safeEntries(channelsRaw).forEach(([id, value], index) => {
     channels[id] = readChannel(id, value, index);
   });
 
   const patterns: Record<string, Pattern> = {};
-  Object.entries(patternsRaw).forEach(([id, value], index) => {
+  safeEntries(patternsRaw).forEach(([id, value], index) => {
     patterns[id] = readPattern(id, value, index);
   });
 
   const playlistTracksRaw = isObject(raw.playlistTracks) ? raw.playlistTracks : {};
   const playlistTracks: Record<string, PlaylistTrack> = {};
-  Object.entries(playlistTracksRaw).forEach(([id, value], index) => {
+  safeEntries(playlistTracksRaw).forEach(([id, value], index) => {
     playlistTracks[id] = readPlaylistTrack(id, value, index);
   });
 
   const mixerTracksRaw = isObject(raw.mixerTracks) ? raw.mixerTracks : {};
   const mixerTracks: Record<string, MixerTrack> = {};
-  Object.entries(mixerTracksRaw).forEach(([id, value], index) => {
+  safeEntries(mixerTracksRaw).forEach(([id, value], index) => {
     mixerTracks[id] = readMixerTrack(id, value, index);
   });
   // Master is reserved and always present (lane 2 §9).
-  if (mixerTracks[MASTER_MIXER_TRACK_ID] === undefined) {
+  if (!owns(mixerTracks, MASTER_MIXER_TRACK_ID)) {
     mixerTracks[MASTER_MIXER_TRACK_ID] = {
       id: MASTER_MIXER_TRACK_ID,
       name: "Master",
@@ -232,22 +266,22 @@ export function readProject(raw: unknown): Project | null {
   // dead pattern or track, channels routed to a dead mixer strip.
   for (const pattern of Object.values(patterns)) {
     for (const [noteId, note] of Object.entries(pattern.notes)) {
-      if (channels[note.channelId] === undefined) delete pattern.notes[noteId];
+      if (!owns(channels, note.channelId)) delete pattern.notes[noteId];
     }
   }
   for (const channel of Object.values(channels)) {
-    if (mixerTracks[channel.routedToMixerTrackId] === undefined) {
+    if (!owns(mixerTracks, channel.routedToMixerTrackId)) {
       channel.routedToMixerTrackId = MASTER_MIXER_TRACK_ID;
     }
   }
 
   const clipsRaw = isObject(raw.clips) ? raw.clips : {};
   const clips: Record<string, PatternClip> = {};
-  for (const [id, value] of Object.entries(clipsRaw)) {
+  for (const [id, value] of safeEntries(clipsRaw)) {
     const clip = readClip(id, value);
     if (clip === null) continue;
-    if (patterns[clip.patternId] === undefined) continue;
-    if (playlistTracks[clip.trackId] === undefined) continue;
+    if (!owns(patterns, clip.patternId)) continue;
+    if (!owns(playlistTracks, clip.trackId)) continue;
     clips[id] = clip;
   }
 
@@ -273,7 +307,7 @@ export function readProject(raw: unknown): Project | null {
     mixerTracks,
     mixerTrackOrder: reconcileOrder(strArray(raw.mixerTrackOrder), mixerTracks),
     playbackMode: raw.playbackMode === "song" ? "song" : "pattern",
-    activePatternId: patterns[activeCandidate] !== undefined ? activeCandidate : firstPattern,
+    activePatternId: owns(patterns, activeCandidate) ? activeCandidate : firstPattern,
   };
 }
 
@@ -292,7 +326,7 @@ export function migrate(save: unknown): Project | null {
   if (!isObject(save)) return null;
   const version = save.schemaVersion;
   if (typeof version !== "number") return null;
-  const migration = MIGRATIONS[version];
+  const migration = Object.hasOwn(MIGRATIONS, version) ? MIGRATIONS[version] : undefined;
   if (migration === undefined) return null;
   return migration(save.project);
 }

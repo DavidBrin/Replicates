@@ -35,3 +35,19 @@ export function totalVisibleBars(furthestClipEndTicks: number): number {
   const clipBars = Math.ceil(furthestClipEndTicks / TICKS_PER_BAR);
   return Math.max(MIN_VISIBLE_BARS, clipBars + TRAILING_BARS);
 }
+
+/**
+ * Ctrl+wheel zoom-at-cursor (SPEC.md §4.4, same non-negotiable primitive as
+ * the piano roll's `zoomAtCursor`): the tick under the pointer must stay
+ * under the pointer. `anchorTicks` is the tick that was under the cursor
+ * *before* the zoom changed `pxPerBar`; `pointerOffsetPx` is the cursor's
+ * distance from the scroll container's left edge (viewport space, not
+ * content space). The result is the `scrollLeft` that keeps that tick fixed.
+ */
+export function scrollLeftForZoom(
+  anchorTicks: number,
+  pointerOffsetPx: number,
+  pxPerBar: number,
+): number {
+  return Math.max(0, ticksToPx(anchorTicks, pxPerBar) - pointerOffsetPx);
+}

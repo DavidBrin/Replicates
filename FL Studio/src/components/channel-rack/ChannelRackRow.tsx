@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Command } from "@/domain/commands/types";
 import { addNotes, composite, isStepOn, notesAtStep, removeNotes, stepNote } from "@/domain/commands";
@@ -25,6 +25,14 @@ export interface ChannelRackRowProps {
   /** The whole gesture — one click or a multi-cell drag — commits as one command (SPEC §2.1). */
   onCommitSteps: (command: Command) => void;
   onVelocityNudge?: (step: number, direction: 1 | -1) => void;
+  /** Channel Operations menu (lane 1 §2.6: right-click name → Rename/recolor, Delete). */
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onRecolor: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
 interface PaintSession {
@@ -63,9 +71,32 @@ export function ChannelRackRow({
   onCycleRouting,
   onCommitSteps,
   onVelocityNudge,
+  onRename,
+  onDelete,
+  onRecolor,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
 }: ChannelRackRowProps) {
   const painting = useRef<PaintSession | null>(null);
   const [preview, setPreview] = useState<Map<number, boolean> | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(channel.name);
+  // A stroke must still commit even if the pointer is released outside this
+  // row (dragged off the grid entirely before releasing) — `onPointerUp` on
+  // the row only fires for a release *inside* its bounds, so a window-level
+  // listener backstops it while a session is open.
+  const windowPointerUpListener = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (windowPointerUpListener.current) {
+        window.removeEventListener("pointerup", windowPointerUpListener.current);
+      }
+    };
+  }, []);
 
   function stepIsOn(step: number): boolean {
     const override = preview?.get(step);
@@ -102,6 +133,11 @@ export function ChannelRackRow({
   function ensurePaintSession(mode: "on" | "off"): void {
     if (painting.current && painting.current.mode === mode) return;
     painting.current = { mode, commands: [], touched: new Map() };
+    if (!windowPointerUpListener.current) {
+      const listener = () => endPaint();
+      windowPointerUpListener.current = listener;
+      window.addEventListener("pointerup", listener);
+    }
   }
 
   function beginLeftPaint(step: number): void {
@@ -118,6 +154,10 @@ export function ChannelRackRow({
     const session = painting.current;
     painting.current = null;
     setPreview(null);
+    if (windowPointerUpListener.current) {
+      window.removeEventListener("pointerup", windowPointerUpListener.current);
+      windowPointerUpListener.current = null;
+    }
     if (!session || session.commands.length === 0) return;
     onCommitSteps(session.commands.length === 1 ? session.commands[0]! : composite(session.commands));
   }
@@ -140,8 +180,8 @@ export function ChannelRackRow({
         className="fl-rack-row__led"
         data-testid={`mute-led-${channel.id}`}
         data-muted={channel.muted}
-        aria-pressed={!channel.muted}
-        aria-label={`Mute ${channel.name}`}
+        aria-pressed={channel.muted}
+        aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
         onClick={onToggleMute}
       />
 
@@ -175,18 +215,112 @@ export function ChannelRackRow({
         {routedTrack?.name === "Master" ? "M" : (routedTrack?.name.replace(/\D/g, "") ?? "---")}
       </button>
 
-      <button
-        type="button"
-        className="fl-rack-row__name"
-        data-testid={`channel-name-${channel.id}`}
-        style={{ backgroundColor: channel.color }}
-        onClick={() => {
-          onSelect();
-          onOpenPianoRoll();
-        }}
-      >
-        {channel.name}
-      </button>
+      <div className="fl-rack-row__name-wrap">
+        {renaming ? (
+          <input
+            type="text"
+            className="fl-rack-row__name-input"
+            data-testid={`channel-rename-${channel.id}`}
+            style={{ backgroundColor: channel.color }}
+            value={renameValue}
+            autoFocus
+            onChange={(event) => setRenameValue(event.target.value)}
+            onBlur={() => {
+              const trimmed = renameValue.trim();
+              if (trimmed.length > 0 && trimmed !== channel.name) onRename(trimmed);
+              setRenaming(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+              if (event.key === "Escape") {
+                setRenameValue(channel.name);
+                setRenaming(false);
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="fl-rack-row__name"
+            data-testid={`channel-name-${channel.id}`}
+            style={{ backgroundColor: channel.color }}
+            onClick={() => {
+              onSelect();
+              onOpenPianoRoll();
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onSelect();
+              setMenuOpen(true);
+            }}
+          >
+            {channel.name}
+          </button>
+        )}
+
+        {menuOpen && (
+          <>
+            {/* Click-outside catcher — plain overlay, no modal framework (SPEC §2.6 Channel Operations menu). */}
+            <div className="fl-rack-menu__scrim" onClick={() => setMenuOpen(false)} />
+            <div className="fl-rack-menu" role="menu" data-testid={`channel-menu-${channel.id}`}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setRenameValue(channel.name);
+                  setRenaming(true);
+                  setMenuOpen(false);
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onRecolor();
+                  setMenuOpen(false);
+                }}
+              >
+                Recolor
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!canMoveUp}
+                onClick={() => {
+                  onMoveUp();
+                  setMenuOpen(false);
+                }}
+              >
+                Move up
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!canMoveDown}
+                onClick={() => {
+                  onMoveDown();
+                  setMenuOpen(false);
+                }}
+              >
+                Move down
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="fl-rack-menu__delete"
+                onClick={() => {
+                  onDelete();
+                  setMenuOpen(false);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       <div
         className="fl-rack-row__selector"

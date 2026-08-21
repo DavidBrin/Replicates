@@ -35,6 +35,7 @@ import {
   DEFAULT_VIEWPORT,
   clampScroll,
   clampZoomX,
+  clampZoomY,
   type RollViewport,
 } from "./geometry";
 
@@ -132,8 +133,9 @@ export const createPianoRollUi: AppStateCreator<PianoRollUiSlice> = (set, get) =
     setPianoRollView: (viewPatch) => {
       const view = { ...getUi().pianoRoll.view, ...viewPatch };
       const zoomX = clampZoomX(view.zoomX);
-      const scroll = clampScroll({ ...view, zoomX }, view.scrollX, view.scrollY);
-      patch({ view: { ...view, zoomX, ...scroll } });
+      const zoomY = clampZoomY(view.zoomY);
+      const scroll = clampScroll({ ...view, zoomX, zoomY }, view.scrollX, view.scrollY);
+      patch({ view: { ...view, zoomX, zoomY, ...scroll } });
     },
 
     setPianoRollSelection: (noteIds) => patch({ selectedNoteIds: [...noteIds] }),

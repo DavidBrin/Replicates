@@ -32,8 +32,13 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import * as engine from "@/audio";
-import { addPattern as addPatternCommand, replaceProject, updateProject } from "@/domain/commands";
-import { nextId } from "@/domain/ids";
+import {
+  addPattern as addPatternCommand,
+  replaceProject,
+  updatePattern,
+  updateProject,
+} from "@/domain/commands";
+import { nextId, reseedIds } from "@/domain/ids";
 import { colorAt } from "@/domain/palette";
 import { deserializeProject } from "@/domain/serialization";
 import { clampTempo as clampTempoTicks } from "@/domain/tickMath";
@@ -47,6 +52,7 @@ import {
 } from "@/domain/types";
 import {
   exportProjectJson,
+  loadPersistedProject,
   persistProject,
   selectCanRedo,
   selectCanUndo,
@@ -90,6 +96,75 @@ function audioSupported(): boolean {
     (typeof window.AudioContext !== "undefined" ||
       typeof (window as { webkitAudioContext?: unknown }).webkitAudioContext !== "undefined")
   );
+}
+
+/* --------------------------------------------------------------- notices -- */
+
+/**
+ * The one non-blocking status line — SPEC §4.1's toolbar, not a dialog.
+ *
+ * Three things can fail where the user's only other feedback would be silence:
+ * audio boot (the browser refused the context, or Tone failed to load), the
+ * explicit Save (quota exhausted, or Safari private mode), and a JSON import
+ * of a file that is not a project. Each of those used to be a swallowed
+ * `catch` or an unhandled promise rejection, so the UI simply looked like it
+ * had worked.
+ *
+ * Kept to an external store rather than React state on purpose: the failures
+ * happen inside plain async functions that no component owns, and the message
+ * has to survive the transport bar re-rendering. `role="status"` on the
+ * rendering element (see `TransportBar`) is what makes it reach a screen
+ * reader without stealing focus. No dependency, no modal, no dismissal to
+ * click — it expires on its own.
+ */
+export const NOTICE_TIMEOUT_MS = 6_000;
+
+let notice: string | null = null;
+let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+const noticeListeners = new Set<() => void>();
+
+function emitNotice(): void {
+  for (const listener of noticeListeners) listener();
+}
+
+/** Show a transient message; `null` clears it. Also mirrored to the console. */
+export function setNotice(message: string | null): void {
+  if (noticeTimer !== null) {
+    clearTimeout(noticeTimer);
+    noticeTimer = null;
+  }
+  if (notice !== message) {
+    notice = message;
+    emitNotice();
+  }
+  if (message === null) return;
+  console.warn(`[fl-studio] ${message}`);
+  if (typeof setTimeout === "function") {
+    noticeTimer = setTimeout(() => {
+      noticeTimer = null;
+      notice = null;
+      emitNotice();
+    }, NOTICE_TIMEOUT_MS);
+  }
+}
+
+function subscribeNotice(listener: () => void): () => void {
+  noticeListeners.add(listener);
+  return () => {
+    noticeListeners.delete(listener);
+  };
+}
+
+const getNotice = (): string | null => notice;
+const getServerNotice = (): string | null => null;
+
+export function useNotice(): string | null {
+  return useSyncExternalStore(subscribeNotice, getNotice, getServerNotice);
+}
+
+/** The same read without a component — for the shell's non-React callers. */
+export function peekNotice(): string | null {
+  return notice;
 }
 
 /* ---------------------------------------------------- transport UI state -- */
@@ -144,6 +219,11 @@ const getServerTransportUi = (): TransportUi => STOPPED;
 
 export function useTransportUi(): TransportUi {
   return useSyncExternalStore(subscribeTransport, getTransportUi, getServerTransportUi);
+}
+
+/** The transport mirror without a component — the non-hook counterpart. */
+export function peekTransportUi(): TransportUi {
+  return transportUi;
 }
 
 /** Just the play flag — for surfaces that must not re-render on domain edits. */
@@ -203,19 +283,46 @@ export function clampTempo(
  * Tempo and swing are domain fields, so they move by command (SPEC §5) — and
  * both are dragged, so both carry a `coalesceKey`: one LCD drag or one swing
  * sweep is one Ctrl+Z (SPEC §2.1).
+ *
+ * The key alone is not enough. `"transport:tempo"` is fixed, so with nothing
+ * else to separate them *every* tempo change the user ever made folded into a
+ * single undo entry — nudge the LCD, come back after a dozen note edits, nudge
+ * it again, and one Ctrl+Z took both back… as long as no other command had
+ * landed in between, which made it look intermittent. `gestureId` is the fix
+ * (`domain/undo.ts`'s canonical pattern): the caller mints one per drag /
+ * per committed edit and passes it through, and two dispatches coalesce only
+ * when the key *and* the gesture match. Callers that pass nothing get one
+ * entry per change, which is the safe direction to be wrong in.
  */
-export function setTempo(bpm: number): void {
+export function setTempo(bpm: number, gestureId: string = nextGestureId()): void {
   const { project, dispatch } = useAppStore.getState();
   const tempo = clampTempoTicks(clampTempo(bpm));
   if (project.tempo === tempo) return;
-  dispatch(updateProject({ tempo }), { coalesceKey: "transport:tempo" });
+  dispatch(updateProject({ tempo }), { coalesceKey: "transport:tempo", gestureId });
 }
 
-export function setGlobalSwing(value: number): void {
+export function setGlobalSwing(value: number, gestureId: string = nextGestureId()): void {
   const { project, dispatch } = useAppStore.getState();
   const globalSwing = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
   if (project.globalSwing === globalSwing) return;
-  dispatch(updateProject({ globalSwing }), { coalesceKey: "transport:swing" });
+  dispatch(updateProject({ globalSwing }), { coalesceKey: "transport:swing", gestureId });
+}
+
+let gestureCounter = 0;
+
+/**
+ * Mint a gesture id. Monotonic rather than random so a test can read it, and
+ * per-module rather than per-control because it only has to be unique against
+ * the *previous* gesture on the same control.
+ */
+export function nextGestureId(prefix = "gesture"): string {
+  gestureCounter += 1;
+  return `${prefix}-${gestureCounter}`;
+}
+
+/** Seal the coalescing entry in flight — the store-level gesture boundary. */
+export function endGesture(): void {
+  useAppStore.getState().endGesture();
 }
 
 /**
@@ -287,16 +394,65 @@ export async function togglePlayStop(): Promise<void> {
   await startPlayback();
 }
 
+/**
+ * The play-intent epoch.
+ *
+ * `ensureStarted()` is a network-bound dynamic `import("tone")` plus an
+ * `AudioContext.resume()`, so there is a real window — hundreds of
+ * milliseconds on a cold load — between pressing Play and the engine
+ * existing. Stop pressed inside that window used to be *overtaken* by its own
+ * Play: `stopPlayback()` ran against an engine with nothing to stop, the
+ * awaited boot then resolved, and the next line called `engine.play()`
+ * unconditionally. The transport started, and the UI said Stopped.
+ *
+ * Every intent-changing call bumps this counter; the post-boot continuation
+ * refuses to act unless the epoch it captured is still the current one.
+ */
+let playIntent = 0;
+
 export async function startPlayback(): Promise<void> {
+  const intent = (playIntent += 1);
+  const before = transportUi;
   setTransportUi({ ...transportUi, isPlaying: true });
+  // No AudioContext (jsdom, SSR): the flag still mirrors the user's intent —
+  // documented at the top of this file — and there is nothing to boot.
   if (!audioSupported()) return;
-  await engine.ensureStarted();
-  engine.play();
+  try {
+    await engine.ensureStarted();
+    // Stop (or a second Play) landed while Tone was loading — the newer
+    // intent wins, and it has already written the UI state it wants.
+    if (intent !== playIntent) return;
+    engine.play();
+  } catch (error) {
+    if (intent !== playIntent) return;
+    // Roll the optimistic flag back, or the button reads "Stop" forever over
+    // an engine that never started. The rejection is consumed here rather
+    // than escaping as an unhandled promise rejection.
+    setTransportUi(before);
+    setNotice(
+      `Audio could not start: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export function stopPlayback(): void {
+  playIntent += 1;
   setTransportUi({ ...transportUi, isPlaying: false });
   if (audioSupported()) engine.stop();
+}
+
+/**
+ * `Ctrl+H` — panic (SPEC §4.4).
+ *
+ * FL's panic kills every hanging voice. The engine's frozen surface (§8) has
+ * no voice-kill of its own, and `src/audio` belongs to another slice, so this
+ * is `stop()`: the transport halts and the scheduler stops issuing new events.
+ * A preview note already in flight rings out its own envelope (≤ 0.35 s,
+ * `PREVIEW_DURATION_SEC`) rather than being cut. Documented rather than
+ * hidden — if the engine ever grows a true `panic()`, this is its one caller.
+ */
+export function panic(): void {
+  stopPlayback();
 }
 
 export function toggleMetronome(): void {
@@ -372,9 +528,40 @@ function safeFileName(name: string, extension: string): string {
   return `${base === "" ? "project" : base}.${extension}`;
 }
 
-/** Explicit save — the same localStorage envelope autosave writes (SPEC §2.2). */
-export function saveProject(): void {
-  persistProject(useAppStore.getState().project);
+/**
+ * Explicit save — the same localStorage envelope autosave writes (SPEC §2.2).
+ *
+ * Unlike the autosave, this one *reports*: a user who clicks Save and is told
+ * nothing has every reason to believe the project is on disk, and under a full
+ * quota or Safari private mode it is not.
+ */
+export function saveProject(): boolean {
+  const saved = persistProject(useAppStore.getState().project);
+  setNotice(saved ? null : "Could not save — browser storage is full or unavailable.");
+  return saved;
+}
+
+/**
+ * "New" and "Load saved" (SPEC §2.2). Both discard whatever is in the editor,
+ * which is why the toolbar arms them with a second click rather than a
+ * `window.confirm` — a native modal blocks the Playwright suite's main thread
+ * and has to be handled out of band, and this app has no dialog layer.
+ */
+export function newProject(): void {
+  useAppStore.getState().newProject();
+  setNotice(null);
+}
+
+/** Adopt the last saved project, or say so when there is nothing saved. */
+export function loadSavedProject(): boolean {
+  const stored = loadPersistedProject();
+  if (stored === null) {
+    setNotice("Nothing saved to load yet.");
+    return false;
+  }
+  useAppStore.getState().loadProject(stored);
+  setNotice(null);
+  return true;
 }
 
 export function exportJson(): void {
@@ -388,11 +575,98 @@ export function exportJson(): void {
 /**
  * JSON import is undoable, so it goes through `replaceProject` rather than
  * `loadProject` (SPEC §2.2) — a mis-clicked import is one Ctrl+Z away.
+ *
+ * Going around `loadProject` costs the two things `loadProject` does besides
+ * setting the project, and both have to be done here instead:
+ *
+ * 1. **`reseedIds`.** The id counter is a module-level monotonic integer
+ *    (`domain/ids.ts`), and an imported file is full of ids minted by *another*
+ *    session. Without the reseed the next `nextId("note")` hands back an id the
+ *    imported project already uses, and the new note overwrites an old one.
+ * 2. **UI reconciliation.** The playlist's armed paint pattern, the roll's
+ *    channel and note selection, the mixer's selected strip all name entities
+ *    of the project being thrown away; the next interaction with any of them
+ *    reads `undefined` and throws. `reconcileUiToProject` re-points or
+ *    re-defaults exactly the fields that no longer resolve.
  */
 export async function importJson(file: File): Promise<void> {
-  const imported = deserializeProject(await file.text());
-  if (imported === null) return;
-  useAppStore.getState().dispatch(replaceProject(imported));
+  let text: string;
+  try {
+    text = await file.text();
+  } catch {
+    setNotice("Could not read that file.");
+    return;
+  }
+  const imported = deserializeProject(text);
+  if (imported === null) {
+    setNotice("That file is not an FL Studio project export.");
+    return;
+  }
+  reseedIds(imported);
+  const store = useAppStore.getState();
+  store.dispatch(replaceProject(imported));
+  store.reconcileUiToProject();
+  setNotice(null);
+}
+
+/* --------------------------------------------------------- pattern actions */
+
+/**
+ * `F4` — jump to the next empty pattern, creating one if every pattern has
+ * notes (SPEC §4.4). FL's own F4 is "next empty pattern slot", so an existing
+ * empty one is reused rather than piling up duplicates.
+ */
+export function nextEmptyPattern(): void {
+  const { project } = useAppStore.getState();
+  const isEmpty = (id: string): boolean => {
+    const pattern = project.patterns[id];
+    return pattern !== undefined && Object.keys(pattern.notes).length === 0;
+  };
+  // Search forward from the current pattern and wrap, so repeated F4 walks
+  // the empty slots rather than parking on the first one.
+  const order = project.patternOrder;
+  const from = Math.max(0, order.indexOf(project.activePatternId));
+  for (let step = 1; step <= order.length; step += 1) {
+    const id = order[(from + step) % order.length];
+    if (id !== undefined && id !== project.activePatternId && isEmpty(id)) {
+      setActivePatternId(id);
+      return;
+    }
+  }
+  // Nowhere else to go: stay if we are already on an empty pattern, otherwise
+  // mint one (which selects it).
+  if (!isEmpty(project.activePatternId)) addPattern();
+}
+
+/** Rename the current pattern — the commit half of `F2`. Undoable (SPEC §2.1). */
+export function renameActivePattern(name: string): void {
+  const { project, dispatch } = useAppStore.getState();
+  const pattern = project.patterns[project.activePatternId];
+  const trimmed = name.trim();
+  if (pattern === undefined || trimmed === "" || trimmed === pattern.name) return;
+  dispatch(updatePattern(pattern.id, { name: trimmed }));
+}
+
+/**
+ * `F2` — "rename current pattern" (SPEC §4.4). The keystroke is global but the
+ * *field* belongs to the toolbar's pattern selector, and the shell cannot
+ * reach into it, so the two meet on this one-shot channel: `AppShell` requests,
+ * `TransportBar` subscribes and puts its name label into edit mode.
+ *
+ * An event rather than store state — "the user asked to rename, once" is not
+ * a value anything should be able to re-read a frame later.
+ */
+const renameListeners = new Set<() => void>();
+
+export function requestPatternRename(): void {
+  for (const listener of renameListeners) listener();
+}
+
+export function subscribePatternRename(listener: () => void): () => void {
+  renameListeners.add(listener);
+  return () => {
+    renameListeners.delete(listener);
+  };
 }
 
 export async function exportWav(): Promise<void> {
@@ -452,6 +726,27 @@ export interface E2eHook {
   playheadTicks: () => number;
   isPlaying: () => boolean;
   canUndo: () => boolean;
+  /**
+   * Peak sample magnitude, 0..1, off a mixer track's `AnalyserNode` tap —
+   * the same read `mixer/useMeter.ts` does per frame, and the only way a
+   * headless test can assert that a step actually made a *sound* rather than
+   * that a store field changed. `-1` when the engine has not booted (SPEC
+   * §3.1's gesture-gated boot), which is distinguishable from real silence.
+   */
+  meterLevel: (trackId?: string) => number;
+  /** Whether the engine is booted at all, so a test can wait for it. */
+  audioStarted: () => boolean;
+}
+
+function peakOf(analyser: AnalyserNode): number {
+  const buffer = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buffer);
+  let peak = 0;
+  for (let i = 0; i < buffer.length; i += 1) {
+    const abs = Math.abs(buffer[i] ?? 0);
+    if (abs > peak) peak = abs;
+  }
+  return Math.min(1, peak);
 }
 
 declare global {
@@ -479,6 +774,11 @@ export function installE2eHook(): () => void {
     playheadTicks: () => engine.getPlayheadTicks(),
     isPlaying: () => transportUi.isPlaying,
     canUndo: () => selectCanUndo(useAppStore.getState()),
+    meterLevel: (trackId) => {
+      const tap = trackId === undefined ? engine.getMeterTap() : engine.getMeterTap(trackId);
+      return tap === null ? -1 : peakOf(tap);
+    },
+    audioStarted: () => engine.isStarted(),
   };
   return () => {
     delete window.__flStudioE2E;
@@ -494,6 +794,8 @@ export function installE2eHook(): () => void {
  */
 export function __resetWiringForTests(): void {
   setTransportUi(STOPPED);
+  playIntent += 1;
+  setNotice(null);
   useAppStore.getState().newProject();
   // Autosave runs while a shell is mounted, so a previous test's edit would
   // otherwise be hydrated back in by the next mount.

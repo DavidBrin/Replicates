@@ -1,6 +1,22 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { APP_URL } from "./helpers";
+import {
+  APP_URL,
+  audioStarted,
+  meterLevel,
+  noteCount,
+  peakMeterOver,
+  stepCell,
+} from "./helpers";
+
+/**
+ * Generous, and deliberately so — a limiter, a 0.8 master fader and a
+ * measurement window that can straddle a decay tail all pull the number
+ * around. What must not happen is the two bands overlapping: a signal peak
+ * lands near 0.7 in practice, and a muted bus ramps to a true zero.
+ */
+const SIGNAL_FLOOR = 0.05;
+const SILENCE_CEILING = 0.005;
 
 /**
  * SPEC §7 e2e #6 — the Mixer.
@@ -102,4 +118,76 @@ test("a fader move is not undone by reloading — it was saved", async ({ page }
   await page.reload();
 
   await expect.poll(() => valueOf(fader(page, "Insert 2 volume"))).toBeCloseTo(lowered, 5);
+});
+
+/* ------------------------------------------------------ the audio path --- */
+
+/**
+ * Everything above asserts ARIA values and store state — which is to say it
+ * would still pass against a mixer wired to nothing at all. This test closes
+ * that gap: it reads the master strip's `AnalyserNode` tap through the
+ * `?e2e=1` hook and asserts that programming steps and pressing Play produces
+ * *signal*, and that muting the strip those steps route through takes it away.
+ *
+ * It runs headless under `--disable-audio-output` (see `playwright.config.ts`).
+ * That switch was verified — by instrumenting this exact read — to still clock
+ * the graph: Chromium's fake output stream pulls samples in software and the
+ * analyser sees a peak around 0.74 on a kick pattern. It is the real device
+ * that stalls across sequential pages, not the graph.
+ *
+ * Every channel in the default project routes to Master (SPEC §2.2's default),
+ * so "the channel's mixer track" IS the master strip here.
+ */
+test("a programmed beat reaches the master meter, and muting silences it", async ({ page }) => {
+  await page.goto(APP_URL);
+
+  // Eight kicks — dense enough that a sampling window cannot land entirely in
+  // the gaps between hits.
+  for (const step of [0, 2, 4, 6, 8, 10, 12, 14]) {
+    await stepCell(page, "ch-kick", step).click();
+  }
+  expect(await noteCount(page)).toBe(8);
+
+  // Before the first gesture there is no engine at all (SPEC §3.1), and the
+  // hook says so with -1 rather than pretending to be silence.
+  expect(await meterLevel(page)).toBe(-1);
+
+  await page.getByLabel("Play").click();
+  await expect(page.getByLabel("Stop")).toBeVisible();
+  await expect
+    .poll(() => audioStarted(page), { timeout: 20_000, message: "engine never booted" })
+    .toBe(true);
+
+  await expect
+    .poll(() => peakMeterOver(page, 60), {
+      timeout: 30_000,
+      message: "master meter never left silence",
+    })
+    .toBeGreaterThan(SIGNAL_FLOOR);
+
+  // Mute the strip the kick routes through. The tap is post-limiter, so this
+  // is the signal that actually leaves the bus.
+  const masterMute = page.getByTestId("mixer-strip-mute-master");
+  await masterMute.click();
+  await expect(masterMute).toHaveAttribute("data-muted", "true");
+
+  await expect
+    .poll(() => peakMeterOver(page, 60), {
+      timeout: 30_000,
+      message: "master meter never decayed after mute",
+    })
+    .toBeLessThan(SILENCE_CEILING);
+
+  // …and it comes back, so the assertion above is about the mute and not
+  // about the transport having quietly died mid-test.
+  await masterMute.click();
+  await expect(masterMute).toHaveAttribute("data-muted", "false");
+  await expect
+    .poll(() => peakMeterOver(page, 60), {
+      timeout: 30_000,
+      message: "master meter never recovered after unmute",
+    })
+    .toBeGreaterThan(SIGNAL_FLOOR);
+
+  await page.getByLabel("Stop").click();
 });

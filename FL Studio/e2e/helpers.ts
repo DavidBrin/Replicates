@@ -34,6 +34,41 @@ export async function playheadTicks(page: Page): Promise<number> {
   return page.evaluate(() => window.__flStudioE2E?.playheadTicks() ?? -1);
 }
 
+/**
+ * Peak sample magnitude off a mixer track's analyser tap, 0..1; `-1` before
+ * the engine boots. The one read in this suite that goes past the store and
+ * asks whether a step actually made a *sound*.
+ */
+export async function meterLevel(page: Page, trackId?: string): Promise<number> {
+  return page.evaluate(
+    (id) => window.__flStudioE2E?.meterLevel(id) ?? -1,
+    trackId,
+  );
+}
+
+/** Highest meter reading over `samples` animation frames — a peak, not a dip. */
+export async function peakMeterOver(
+  page: Page,
+  samples = 24,
+  trackId?: string,
+): Promise<number> {
+  return page.evaluate(
+    async ({ samples: count, id }) => {
+      let peak = -1;
+      for (let i = 0; i < count; i += 1) {
+        peak = Math.max(peak, window.__flStudioE2E?.meterLevel(id) ?? -1);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return peak;
+    },
+    { samples, id: trackId },
+  );
+}
+
+export async function audioStarted(page: Page): Promise<boolean> {
+  return page.evaluate(() => window.__flStudioE2E?.audioStarted() ?? false);
+}
+
 export async function playbackMode(page: Page): Promise<string> {
   return page.evaluate(() => window.__flStudioE2E?.getProject().playbackMode ?? "");
 }

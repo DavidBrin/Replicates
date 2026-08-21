@@ -2,11 +2,14 @@
 
 import "./channelRack.css";
 
+import { useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { notesAtStep, updateChannel, updateNotes, updateProject } from "@/domain/commands";
+import { addChannel, moveChannel, notesAtStep, removeChannel, updateChannel, updateNotes, updateProject } from "@/domain/commands";
 import type { Command } from "@/domain/commands/types";
-import type { ChannelId, Pattern } from "@/domain/types";
+import { nextId } from "@/domain/ids";
+import { colorAt, PALETTE } from "@/domain/palette";
+import { MASTER_MIXER_TRACK_ID, type Channel, type ChannelId, type Pattern, type VoiceKind } from "@/domain/types";
 import {
   selectActivePattern,
   selectChannels,
@@ -18,6 +21,20 @@ import { ChannelRackRow } from "./ChannelRackRow";
 import { usePlayheadStep } from "./uiState";
 
 const VELOCITY_STEP = 1 / 32;
+
+/** Human labels for the add-channel picker (mirrors `defaultProject`'s seed names). */
+const VOICE_LABELS: Record<VoiceKind, string> = {
+  kick: "Kick",
+  clap: "Clap",
+  hatClosed: "Closed hat",
+  hatOpen: "Open hat",
+  snare: "Snare",
+  bass: "Bass",
+  lead: "Lead",
+};
+
+const VOICE_ORDER: readonly VoiceKind[] = ["kick", "clap", "hatClosed", "hatOpen", "snare", "bass", "lead"];
+const MELODIC_DEFAULT_PITCH: Partial<Record<VoiceKind, number>> = { bass: 36, lead: 72 };
 
 export interface ChannelRackProps {
   /** Test/override seam, mirroring `TransportBar`'s callback-prop pattern. */
@@ -52,6 +69,17 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   const selectChannel = useAppStore((state) => state.selectChannel);
   const requestOpenPianoRoll = useAppStore((state) => state.requestOpenPianoRoll);
   const playheadStep = usePlayheadStep();
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+
+  // `coalesceKey` must be fresh per drag gesture, not a fixed string — a
+  // fixed key would fold every swing drag for the whole session into one
+  // undo entry (mirrors `Knob.tsx`'s per-gesture counter).
+  const swingGestureCounter = useRef(0);
+  const swingCoalesceKey = useRef<string | null>(null);
+  function mintSwingCoalesceKey(): string {
+    swingGestureCounter.current += 1;
+    return `rack-swing#${swingGestureCounter.current}`;
+  }
 
   if (!pattern) return null;
   // Nested function declarations below don't inherit the narrowing above
@@ -117,6 +145,46 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     );
   }
 
+  function handleAddChannel(voice: VoiceKind): void {
+    const channel: Channel = {
+      id: nextId("channel"),
+      name: VOICE_LABELS[voice],
+      color: colorAt(channels.length),
+      voice,
+      volume: 0.8,
+      pan: 0,
+      muted: false,
+      defaultStepPitch: MELODIC_DEFAULT_PITCH[voice] ?? 60,
+      routedToMixerTrackId: MASTER_MIXER_TRACK_ID,
+    };
+    dispatch(addChannel(channel));
+    setAddMenuOpen(false);
+  }
+
+  function handleRenameChannel(channelId: ChannelId, name: string): void {
+    dispatch(updateChannel(channelId, { name }));
+  }
+
+  function handleDeleteChannel(channelId: ChannelId): void {
+    dispatch(removeChannel(channelId));
+  }
+
+  function handleRecolorChannel(channelId: ChannelId): void {
+    const channel = project.channels[channelId];
+    if (!channel) return;
+    const currentIndex = PALETTE.indexOf(channel.color);
+    const nextIndex = (currentIndex + 1 + PALETTE.length) % PALETTE.length;
+    dispatch(updateChannel(channelId, { color: colorAt(nextIndex) }));
+  }
+
+  function handleMoveChannel(channelId: ChannelId, direction: 1 | -1): void {
+    const currentIndex = project.channelOrder.indexOf(channelId);
+    if (currentIndex < 0) return;
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= project.channelOrder.length) return;
+    dispatch(moveChannel(channelId, nextIndex));
+  }
+
   return (
     <div className="fl-channel-rack">
       <div className="fl-channel-rack__header">
@@ -129,9 +197,15 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             step={0.01}
             value={globalSwing}
             aria-label="Rack swing"
+            onPointerDown={() => {
+              swingCoalesceKey.current = mintSwingCoalesceKey();
+            }}
+            onPointerUp={() => {
+              swingCoalesceKey.current = null;
+            }}
             onChange={(event) =>
               dispatch(updateProject({ globalSwing: Number.parseFloat(event.target.value) }), {
-                coalesceKey: "rack-swing",
+                coalesceKey: swingCoalesceKey.current ?? mintSwingCoalesceKey(),
               })
             }
           />
@@ -142,7 +216,7 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
       </div>
 
       <div className="fl-channel-rack__rows">
-        {channels.map((channel) => (
+        {channels.map((channel, index) => (
           <ChannelRackRow
             key={channel.id}
             channel={channel}
@@ -157,8 +231,41 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             onCycleRouting={(direction) => handleCycleRouting(channel.id, direction)}
             onCommitSteps={handleCommitSteps}
             onVelocityNudge={(step, direction) => handleVelocityNudge(channel.id, step, direction)}
+            onRename={(name) => handleRenameChannel(channel.id, name)}
+            onDelete={() => handleDeleteChannel(channel.id)}
+            onRecolor={() => handleRecolorChannel(channel.id)}
+            onMoveUp={() => handleMoveChannel(channel.id, -1)}
+            onMoveDown={() => handleMoveChannel(channel.id, 1)}
+            canMoveUp={index > 0}
+            canMoveDown={index < channels.length - 1}
           />
         ))}
+      </div>
+
+      <div className="fl-channel-rack__add-row">
+        <button
+          type="button"
+          className="fl-channel-rack__add"
+          data-testid="channel-add-button"
+          aria-label="Add channel"
+          aria-haspopup="menu"
+          aria-expanded={addMenuOpen}
+          onClick={() => setAddMenuOpen((open) => !open)}
+        >
+          +
+        </button>
+        {addMenuOpen && (
+          <>
+            <div className="fl-rack-menu__scrim" onClick={() => setAddMenuOpen(false)} />
+            <div className="fl-rack-menu fl-rack-menu--add" role="menu" data-testid="channel-add-menu">
+              {VOICE_ORDER.map((voice) => (
+                <button type="button" role="menuitem" key={voice} onClick={() => handleAddChannel(voice)}>
+                  {VOICE_LABELS[voice]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

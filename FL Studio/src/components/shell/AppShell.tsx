@@ -18,7 +18,11 @@ import { useAppStore } from "@/lib/store";
 import {
   getPlayheadTick,
   installE2eHook,
+  nextEmptyPattern,
+  panic,
   redo,
+  requestPatternRename,
+  saveProject,
   selectAdjacentPattern,
   startShellRuntime,
   toggleMetronome,
@@ -146,6 +150,40 @@ export function AppShell({ attachGlobalListener = true }: AppShellProps) {
         code: "KeyY",
         ctrl: true,
         handler: () => redo(),
+      },
+      /*
+       * The rest of SPEC §4.4's global map. `Ctrl+S` and the F-keys are the
+       * ones §4.4 singles out as needing `preventDefault` "while the app has
+       * focus" — which is the registry's default, so they get it by saying
+       * nothing.
+       */
+      {
+        id: "save",
+        code: "KeyS",
+        ctrl: true,
+        description: "Save (SPEC §4.4)",
+        handler: () => {
+          saveProject();
+        },
+      },
+      {
+        id: "panic",
+        code: "KeyH",
+        ctrl: true,
+        description: "Panic — stop the transport and all scheduled voices",
+        handler: () => panic(),
+      },
+      {
+        id: "rename-pattern",
+        code: "F2",
+        description: "Rename the current pattern",
+        handler: () => requestPatternRename(),
+      },
+      {
+        id: "next-empty-pattern",
+        code: "F4",
+        description: "Next empty pattern",
+        handler: () => nextEmptyPattern(),
       },
       {
         id: "next-pattern",

@@ -16,7 +16,13 @@
  * If §4.2's WebGL escape hatch is ever taken, this interface is the seam.
  */
 
-import { TICKS_PER_BAR, TICKS_PER_BEAT, TICKS_PER_STEP, type Note } from "@/domain/types";
+import {
+  PATTERN_LENGTH_TICKS,
+  TICKS_PER_BAR,
+  TICKS_PER_BEAT,
+  TICKS_PER_STEP,
+  type Note,
+} from "@/domain/types";
 
 import {
   GRIP_WIDTH,
@@ -24,7 +30,6 @@ import {
   MAX_PITCH,
   MIN_PITCH,
   RULER_HEIGHT,
-  ROW_HEIGHT,
   clamp01,
   gridBottom,
   gridTop,
@@ -36,6 +41,7 @@ import {
   noteRect,
   pitchName,
   pitchToY,
+  rowHeight,
   tickToBarNumber,
   tickToX,
   velocityLaneTop,
@@ -174,7 +180,7 @@ export function drawLanes(surface: DrawSurface, view: RollViewport, theme: RollT
   for (let pitch = low; pitch <= high; pitch += 1) {
     const y = pitchToY(view, pitch);
     const clippedTop = Math.max(top, y);
-    const clippedBottom = Math.min(bottom, y + ROW_HEIGHT);
+    const clippedBottom = Math.min(bottom, y + rowHeight(view));
     if (clippedBottom <= clippedTop) continue;
     surface.fillStyle = isBlackKey(pitch) ? theme.laneBlack : theme.laneWhite;
     surface.fillRect(left, clippedTop, width, clippedBottom - clippedTop);
@@ -232,6 +238,30 @@ export function drawGridlines(surface: DrawSurface, view: RollViewport, theme: R
   paint(order.bar, theme.gridBar, 2);
 }
 
+/**
+ * Dims the grid past the pattern's end — v1 patterns are exactly one bar
+ * (`PATTERN_LENGTH_TICKS`, SPEC §1.2 D-sub) and nothing placed past it is ever
+ * scheduled (`interactions.ts`'s draw/move/resize now clamp there too, so this
+ * paints a region that is reachable only by panning/zooming out, never by a
+ * live note). A translucent wash over the chrome colour reads as "dead" without
+ * hiding the gridlines underneath, cheaper than shrinking the canvas itself.
+ */
+export function drawOutOfPatternOverlay(
+  surface: DrawSurface,
+  view: RollViewport,
+  theme: RollTheme,
+): void {
+  const left = Math.max(KEYBOARD_WIDTH, Math.round(tickToX(view, PATTERN_LENGTH_TICKS)));
+  if (left >= view.width) return;
+  const top = gridTop();
+  const bottom = gridBottom(view);
+  surface.save();
+  surface.globalAlpha = 0.45;
+  surface.fillStyle = theme.chrome;
+  surface.fillRect(left, top, view.width - left, bottom - top);
+  surface.restore();
+}
+
 export function drawRuler(surface: DrawSurface, view: RollViewport, theme: RollTheme): void {
   surface.fillStyle = theme.ruler;
   surface.fillRect(KEYBOARD_WIDTH, 0, gridWidth(view), RULER_HEIGHT);
@@ -280,7 +310,7 @@ export function drawKeyboard(
   for (let pitch = low; pitch <= high; pitch += 1) {
     const y = pitchToY(view, pitch);
     const clippedTop = Math.max(top, y);
-    const clippedBottom = Math.min(bottom, y + ROW_HEIGHT);
+    const clippedBottom = Math.min(bottom, y + rowHeight(view));
     if (clippedBottom <= clippedTop) continue;
     surface.fillStyle = pitch === previewPitch && !isBlackKey(pitch) ? theme.keyPressed : gradient;
     surface.fillRect(0, clippedTop, KEYBOARD_WIDTH - 1, clippedBottom - clippedTop);
@@ -290,7 +320,7 @@ export function drawKeyboard(
   surface.fillStyle = theme.keySeparator;
   for (let pitch = low; pitch <= high; pitch += 1) {
     if (isBlackKey(pitch) || isBlackKey(pitch - 1)) continue;
-    const clippedBottom = Math.min(bottom, pitchToY(view, pitch) + ROW_HEIGHT);
+    const clippedBottom = Math.min(bottom, pitchToY(view, pitch) + rowHeight(view));
     if (clippedBottom <= top) continue;
     surface.fillRect(0, clippedBottom - 1, KEYBOARD_WIDTH - 1, 1);
   }
@@ -299,7 +329,7 @@ export function drawKeyboard(
     if (!isBlackKey(pitch)) continue;
     const y = pitchToY(view, pitch);
     const clippedTop = Math.max(top, y + 1);
-    const clippedBottom = Math.min(bottom, y + ROW_HEIGHT - 1);
+    const clippedBottom = Math.min(bottom, y + rowHeight(view) - 1);
     if (clippedBottom <= clippedTop) continue;
     surface.fillStyle = pitch === previewPitch ? theme.keyPressed : theme.keyBlack;
     surface.fillRect(0, clippedTop, Math.round(KEYBOARD_WIDTH * 0.62), clippedBottom - clippedTop);
@@ -318,8 +348,8 @@ export function drawKeyboard(
   for (let pitch = low; pitch <= high; pitch += 1) {
     if (pitch % 12 !== 0) continue; // label the Cs only, as FL does
     const y = pitchToY(view, pitch);
-    if (y < top || y + ROW_HEIGHT > bottom) continue;
-    surface.fillText(pitchName(pitch), KEYBOARD_WIDTH - 26, y + ROW_HEIGHT / 2);
+    if (y < top || y + rowHeight(view) > bottom) continue;
+    surface.fillText(pitchName(pitch), KEYBOARD_WIDTH - 26, y + rowHeight(view) / 2);
   }
 }
 
@@ -476,6 +506,7 @@ export function renderPianoRoll(
   drawBackground(surface, view, theme);
   drawLanes(surface, view, theme);
   drawGridlines(surface, view, theme);
+  drawOutOfPatternOverlay(surface, view, theme);
   drawGhostNotes(surface, view, theme, scene.ghostNotes ?? []);
   drawNotes(surface, view, theme, scene.notes, selected);
   drawVelocityLane(surface, view, theme, scene.notes, selected);

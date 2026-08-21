@@ -7,6 +7,39 @@
  *
  * The stack lives **outside** the persisted `Project` — reloading a save
  * starts with an empty history, by design.
+ *
+ * ## Coalescing: the canonical pattern
+ *
+ * A `coalesceKey` alone identifies *the control*, not *the gesture*. Two
+ * separate drags of the same knob, or two separate BPM edits, share the key —
+ * so with nothing else to separate them they folded into one undo entry no
+ * matter how much time or how many other actions sat between them. (Only
+ * "some other command in between" broke the chain, because coalescing checks
+ * the top entry.)
+ *
+ * There are exactly two supported ways to say "this is a new gesture", and
+ * they compose freely:
+ *
+ * 1. **Preferred — pass a `gestureId`.** Mint one per gesture (pointer-down /
+ *    focus / first keystroke) and pass it with every dispatch of that gesture:
+ *
+ *    ```ts
+ *    const gestureId = `bpm:${Date.now()}`;              // on pointerdown
+ *    dispatch(updateProject({ tempo }), { coalesceKey: "transport:tempo", gestureId });
+ *    ```
+ *
+ *    Two dispatches coalesce only when **both** the key and the gesture id
+ *    match, so a stable key stays readable in the history while separate
+ *    gestures stay separate entries.
+ *
+ * 2. **Also valid — a unique `coalesceKey` per gesture** (`knob:ch-1:volume:7`).
+ *    Surfaces that already do this need no change: a key that is unique per
+ *    gesture can never match a previous gesture's entry.
+ *
+ * When neither is convenient — a gesture with no natural id, e.g. one that
+ * ends on blur — call {@link endGesture} (the store exposes it under the same
+ * name) at the boundary. It seals the top entry so the next dispatch cannot
+ * extend it, whatever key it carries.
  */
 
 import { composite, isComposite, type Command } from "./commands/types";
@@ -19,9 +52,16 @@ export interface HistoryEntry {
   inverse: Command;
   /**
    * Gesture identity for drag coalescing — e.g. `"knob:ch-1:volume"`. Two
-   * consecutive dispatches sharing a key fold into one undo entry.
+   * consecutive dispatches sharing a key **and** a {@link HistoryEntry.gestureId}
+   * fold into one undo entry.
    */
   coalesceKey?: string;
+  /**
+   * Which run of that control this entry belongs to. `undefined` means the
+   * caller identifies gestures by minting a unique `coalesceKey` instead —
+   * both are supported, see this module's header.
+   */
+  gestureId?: string;
 }
 
 export interface History {
@@ -36,6 +76,12 @@ export interface DispatchOptions {
    * move, or a clip drag becomes exactly one Ctrl+Z (SPEC.md §2.1).
    */
   coalesceKey?: string;
+  /**
+   * Gesture boundary. When supplied it must ALSO match the top entry's, so a
+   * fixed `coalesceKey` (`"transport:tempo"`) no longer welds yesterday's drag
+   * to today's. See this module's header for the canonical pattern.
+   */
+  gestureId?: string;
 }
 
 export interface HistoryResult {
@@ -75,8 +121,13 @@ export function dispatchCommand(
   const next = command.apply(project);
 
   const top = history.past[history.past.length - 1];
-  const { coalesceKey } = options;
-  if (coalesceKey !== undefined && top !== undefined && top.coalesceKey === coalesceKey) {
+  const { coalesceKey, gestureId } = options;
+  if (
+    coalesceKey !== undefined &&
+    top !== undefined &&
+    top.coalesceKey === coalesceKey &&
+    top.gestureId === gestureId
+  ) {
     // BOTH sides of the entry grow, and the inverse side grows in REVERSE.
     //
     // Keeping `top.inverse` verbatim (what this did before) is only correct
@@ -96,6 +147,7 @@ export function dispatchCommand(
       command: composite([...parts(top.command), command], top.command.label),
       inverse: composite([inverse, ...parts(top.inverse)], top.inverse.label),
       coalesceKey,
+      gestureId,
     };
     return {
       project: next,
@@ -103,9 +155,26 @@ export function dispatchCommand(
     };
   }
 
-  const past = [...history.past, { command, inverse, coalesceKey }];
+  const past = [...history.past, { command, inverse, coalesceKey, gestureId }];
   if (past.length > UNDO_STACK_LIMIT) past.splice(0, past.length - UNDO_STACK_LIMIT);
   return { project: next, history: { past, future: [] } };
+}
+
+/**
+ * Close the current gesture: seal the top entry so nothing can extend it.
+ *
+ * The escape hatch for callers whose gesture has no natural id — a blur, a
+ * debounce settling, a keyboard nudge run. Returns the same object when there
+ * is nothing to seal, so a store may `set()` it unconditionally without
+ * inventing a render.
+ */
+export function endGesture(history: History): History {
+  const top = history.past[history.past.length - 1];
+  if (top === undefined || (top.coalesceKey === undefined && top.gestureId === undefined)) {
+    return history;
+  }
+  const sealed: HistoryEntry = { command: top.command, inverse: top.inverse };
+  return { past: [...history.past.slice(0, -1), sealed], future: history.future };
 }
 
 /** One step back. A no-op (same objects) when there is nothing to undo. */

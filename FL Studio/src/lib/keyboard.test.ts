@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   __resetKeyboardRegistryForTests,
@@ -114,6 +114,131 @@ describe("keyboard registry", () => {
 
     detach();
     target.dispatchEvent(keydown({ code: "Space" }));
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* ------------------------------------------------- typing-target guard --- */
+
+describe("bindings do not fire while the user is typing", () => {
+  /*
+   * The listener is attached for real rather than calling `dispatchKeyEvent`
+   * directly. Dispatching on a detached element with nothing listening makes
+   * every "does not fire" assertion pass for the wrong reason — which is
+   * exactly what the first draft of this block did.
+   */
+  let detach: (() => void) | null = null;
+
+  beforeEach(() => {
+    detach = attachKeyboardListener(window);
+  });
+
+  afterEach(() => {
+    detach?.();
+    detach = null;
+  });
+
+  function fireFrom(target: Element, init: Partial<KeyboardEventInit> & { code: string }) {
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  function mount<T extends Element>(element: T): T {
+    document.body.appendChild(element);
+    return element;
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("skips a digit binding while a number input has focus (the BPM box)", () => {
+    const mute = vi.fn();
+    registerBindings("channel-rack", [{ id: "mute-1", code: "Digit1", handler: mute }]);
+    const input = mount(document.createElement("input"));
+    input.type = "number";
+
+    const event = fireFrom(input, { code: "Digit1" });
+
+    expect(mute).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it.each(["Space", "Backspace"])("skips %s while a text input has focus", (code) => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: code, code, handler }]);
+    const input = mount(document.createElement("input"));
+
+    fireFrom(input, { code });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("skips Ctrl+A while typing, so the input's own select-all still works", () => {
+    const selectAll = vi.fn();
+    registerBindings("piano-roll", [
+      { id: "select-all", code: "KeyA", ctrl: true, handler: selectAll },
+    ]);
+    const textarea = mount(document.createElement("textarea"));
+
+    const event = fireFrom(textarea, { code: "KeyA", ctrlKey: true });
+
+    expect(selectAll).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("skips inside a <select> and inside contenteditable", () => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: "play", code: "Space", handler }]);
+
+    fireFrom(mount(document.createElement("select")), { code: "Space" });
+    const editable = mount(document.createElement("div"));
+    editable.setAttribute("contenteditable", "true");
+    // jsdom does not implement `isContentEditable` off the attribute.
+    Object.defineProperty(editable, "isContentEditable", { value: true });
+    fireFrom(editable, { code: "Space" });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("still fires from a plain element, a button, and a checkbox", () => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: "play", code: "Space", handler }]);
+
+    fireFrom(mount(document.createElement("div")), { code: "Space" });
+    fireFrom(mount(document.createElement("button")), { code: "Space" });
+    const checkbox = mount(document.createElement("input"));
+    checkbox.type = "checkbox";
+    fireFrom(checkbox, { code: "Space" });
+
+    expect(handler).toHaveBeenCalledTimes(3);
+  });
+
+  it("fires a binding that opted in with worksInInputs", () => {
+    const escape = vi.fn();
+    registerBindings("shell:global", [
+      { id: "escape", code: "Escape", worksInInputs: true, handler: escape },
+    ]);
+
+    fireFrom(mount(document.createElement("input")), { code: "Escape" });
+
+    expect(escape).toHaveBeenCalledTimes(1);
+  });
+
+  it("guards the real window listener too, not just direct dispatch", () => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: "play", code: "Space", handler }]);
+    const input = mount(document.createElement("input"));
+
+    fireFrom(input, { code: "Space" });
+    expect(handler).not.toHaveBeenCalled();
+
+    fireFrom(mount(document.createElement("div")), { code: "Space" });
     expect(handler).toHaveBeenCalledTimes(1);
   });
 });

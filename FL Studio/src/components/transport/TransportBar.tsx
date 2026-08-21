@@ -2,24 +2,46 @@
 
 import "./transport.css";
 
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import { BpmLcd } from "./BpmLcd";
 import { PatternSelector } from "./PatternSelector";
 import {
   addPattern,
+  endGesture,
   exportJson,
   exportWav,
   importJson,
+  loadSavedProject,
+  newProject,
+  nextGestureId,
   redo,
+  renameActivePattern,
   saveProject,
   selectAdjacentPattern,
   setGlobalSwing,
   setTempo,
+  subscribePatternRename,
   toggleMetronome,
   togglePlaybackMode,
   togglePlayStop,
   undo,
+  useNotice,
   useWiringState,
 } from "@/components/shell/wiring";
+
+/**
+ * How long a destructive button stays armed before it forgets (SPEC §2.2's
+ * New / Load, which both discard unsaved work).
+ *
+ * Two clicks, not a `window.confirm`: a native modal blocks the whole main
+ * thread, has to be dismissed out of band by the Playwright suite, and this
+ * app deliberately has no dialog layer. Arming in place is FL-minimal and
+ * stays inside the toolbar.
+ */
+export const ARM_TIMEOUT_MS = 3_000;
+
+type ArmedAction = "new" | "load" | null;
 
 export interface TransportBarProps {
   onPlayStop?: () => void;
@@ -33,6 +55,8 @@ export interface TransportBarProps {
   onExportWav?: () => void;
   onExportJson?: () => void;
   onImportJson?: (file: File) => void;
+  onNewProject?: () => void;
+  onLoadProject?: () => void;
 }
 
 /**
@@ -54,8 +78,43 @@ export function TransportBar({
   onExportWav,
   onExportJson,
   onImportJson,
+  onNewProject,
+  onLoadProject,
 }: TransportBarProps) {
   const state = useWiringState();
+  const notice = useNotice();
+
+  /* ------------------------------------------------- destructive actions -- */
+
+  const [armed, setArmed] = useState<ArmedAction>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const disarm = useCallback(() => {
+    if (armTimer.current !== null) clearTimeout(armTimer.current);
+    armTimer.current = null;
+    setArmed(null);
+  }, []);
+
+  useEffect(() => disarm, [disarm]);
+
+  function arm(action: Exclude<ArmedAction, null>, run: () => void): void {
+    if (armed === action) {
+      disarm();
+      run();
+      return;
+    }
+    if (armTimer.current !== null) clearTimeout(armTimer.current);
+    setArmed(action);
+    armTimer.current = setTimeout(() => {
+      armTimer.current = null;
+      setArmed(null);
+    }, ARM_TIMEOUT_MS);
+  }
+
+  /* ------------------------------------------------------ F2: rename ----- */
+
+  const [renaming, setRenaming] = useState(false);
+  useEffect(() => subscribePatternRename(() => setRenaming(true)), []);
 
   function handlePlayStop() {
     if (onPlayStop) {
@@ -75,14 +134,53 @@ export function TransportBar({
     else toggleMetronome();
   }
 
+  /*
+   * One gesture id per drag / per committed edit (`domain/undo.ts`'s canonical
+   * pattern). The BPM LCD and the swing slider both report continuously, so a
+   * fixed `coalesceKey` alone would fold every tempo change the session ever
+   * made into a single undo entry. The id is minted on pointer-down / focus
+   * and dropped on pointer-up / blur, where `endGesture()` also seals the
+   * entry so a keyboard nudge that follows cannot rejoin it.
+   */
+  const tempoGesture = useRef<string | null>(null);
+  const swingGesture = useRef<string | null>(null);
+
+  function beginTempoGesture(): void {
+    tempoGesture.current ??= nextGestureId("tempo");
+  }
+
+  function endTempoGesture(): void {
+    if (tempoGesture.current === null) return;
+    tempoGesture.current = null;
+    endGesture();
+  }
+
+  function beginSwingGesture(): void {
+    swingGesture.current ??= nextGestureId("swing");
+  }
+
+  function endSwingGesture(): void {
+    if (swingGesture.current === null) return;
+    swingGesture.current = null;
+    endGesture();
+  }
+
   function handleTempoChange(bpm: number) {
-    if (onTempoChange) onTempoChange(bpm);
-    else setTempo(bpm);
+    if (onTempoChange) {
+      onTempoChange(bpm);
+      return;
+    }
+    // A change with no gesture open (the ▲/▼ spinner, a typed commit) is its
+    // own one-shot gesture — exactly one undo entry per click.
+    setTempo(bpm, tempoGesture.current ?? nextGestureId("tempo"));
   }
 
   function handleSwingChange(value: number) {
-    if (onSwingChange) onSwingChange(value);
-    else setGlobalSwing(value);
+    if (onSwingChange) {
+      onSwingChange(value);
+      return;
+    }
+    setGlobalSwing(value, swingGesture.current ?? nextGestureId("swing"));
   }
 
   function handleUndo() {
@@ -98,6 +196,20 @@ export function TransportBar({
   function handleSave() {
     if (onSave) onSave();
     else saveProject();
+  }
+
+  function handleNew() {
+    arm("new", () => {
+      if (onNewProject) onNewProject();
+      else newProject();
+    });
+  }
+
+  function handleLoad() {
+    arm("load", () => {
+      if (onLoadProject) onLoadProject();
+      else loadSavedProject();
+    });
   }
 
   function handleExportWav() {
@@ -160,7 +272,13 @@ export function TransportBar({
       <div className="fl-toolbar__divider" />
 
       <div className="fl-toolbar__group">
-        <BpmLcd value={state.tempo} onChange={handleTempoChange} />
+        <div
+          onPointerDownCapture={beginTempoGesture}
+          onPointerUpCapture={endTempoGesture}
+          onPointerCancelCapture={endTempoGesture}
+        >
+          <BpmLcd value={state.tempo} onChange={handleTempoChange} />
+        </div>
         <label className="fl-swing">
           Swing
           <input
@@ -170,6 +288,10 @@ export function TransportBar({
             step={0.01}
             value={state.globalSwing}
             aria-label="Global swing"
+            onPointerDown={beginSwingGesture}
+            onPointerUp={endSwingGesture}
+            onFocus={beginSwingGesture}
+            onBlur={endSwingGesture}
             onChange={(event) =>
               handleSwingChange(Number.parseFloat(event.target.value))
             }
@@ -187,6 +309,9 @@ export function TransportBar({
           onSelectPrev={() => selectAdjacentPattern(-1)}
           onSelectNext={() => selectAdjacentPattern(1)}
           onAdd={addPattern}
+          renaming={renaming}
+          onRename={renameActivePattern}
+          onRenameEnd={() => setRenaming(false)}
         />
       </div>
 
@@ -218,6 +343,34 @@ export function TransportBar({
       <div className="fl-toolbar__divider" />
 
       <div className="fl-toolbar__group" style={{ marginLeft: "auto" }}>
+        {/* New / Load discard unsaved work, so both arm before they fire —
+            the button becomes "Sure?" for one click. */}
+        <button
+          type="button"
+          className="fl-text-button"
+          data-testid="new-project"
+          data-armed={armed === "new"}
+          aria-label={armed === "new" ? "Confirm new project" : "New project"}
+          onClick={handleNew}
+          onBlur={() => {
+            if (armed === "new") disarm();
+          }}
+        >
+          {armed === "new" ? "Sure?" : "New"}
+        </button>
+        <button
+          type="button"
+          className="fl-text-button"
+          data-testid="load-project"
+          data-armed={armed === "load"}
+          aria-label={armed === "load" ? "Confirm load saved project" : "Load saved project"}
+          onClick={handleLoad}
+          onBlur={() => {
+            if (armed === "load") disarm();
+          }}
+        >
+          {armed === "load" ? "Sure?" : "Load"}
+        </button>
         <button type="button" className="fl-text-button" onClick={handleSave}>
           Save
         </button>
@@ -244,6 +397,23 @@ export function TransportBar({
             onChange={handleImportChange}
           />
         </label>
+      </div>
+
+      {/*
+        The status line (SPEC §4.1's toolbar). `role="status"` is an ARIA live
+        region, so a failed Save or a refused AudioContext is announced without
+        stealing focus and without a modal. Always rendered, so the region
+        exists before it has anything to say — a live region inserted at the
+        same moment as its text is not reliably announced.
+      */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="fl-toolbar__notice"
+        data-testid="toolbar-notice"
+        data-visible={notice !== null}
+      >
+        {notice ?? ""}
       </div>
     </div>
   );

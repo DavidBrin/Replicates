@@ -29,7 +29,7 @@ import {
   renderProject,
   wavFileName,
 } from "./exportWav";
-import { StubAudioBuffer, StubOfflineAudioContext } from "./testing/audioStub";
+import { StubAudioBuffer, StubGainNode, StubOfflineAudioContext } from "./testing/audioStub";
 
 function step(id: string, positionTicks: number, channelId = "ch-kick"): Note {
   return { id, channelId, positionTicks, lengthTicks: 0, pitch: 60, velocity: 0.9 };
@@ -120,6 +120,30 @@ describe("renderProject", () => {
     expect(ctx.nodesOfKind("compressor")).toHaveLength(1);
     expect(ctx.nodesOfKind("compressor")[0]!.outputs).toContain(ctx.destination);
     expect(ctx.nodesOfKind("analyser").length).toBeGreaterThan(0);
+  });
+
+  it("sets mixer strip levels at time ZERO, so a muted channel cannot leak into the file", async () => {
+    const { contexts, createOfflineContext } = recorder();
+    const base = projectWith([step("a", 0)]);
+    const project: Project = {
+      ...base,
+      channels: { ...base.channels, "ch-kick": { ...base.channels["ch-kick"]!, muted: true } },
+    };
+    await renderProject(project, { createOfflineContext, sampleRate: 8000 });
+
+    // A strip gain is exactly a gain node feeding a panner (channel, track and
+    // master alike); a voice's envelope gain feeds the strip gain, never a panner.
+    const stripGains = contexts[0]!.nodesOfKind("gain").filter((n) =>
+      n.outputs.some((out) => out.kind === "panner"),
+    ) as StubGainNode[];
+    expect(stripGains.length).toBeGreaterThan(0);
+    for (const strip of stripGains) {
+      // Nothing about a strip *changes* during a render, so nothing may glide:
+      // a 20ms ramp from the node default of 1 would be 20ms of the actual WAV.
+      expect(strip.gain.methods).not.toContain("linearRampToValueAtTime");
+      for (const call of strip.gain.callsTo("setValueAtTime")) expect(call.args[1]).toBe(0);
+    }
+    expect(stripGains.some((strip) => strip.gain.value === 0)).toBe(true);
   });
 
   it("uses the same voice code — a kick step builds its oscillator offline", async () => {

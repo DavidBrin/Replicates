@@ -65,8 +65,10 @@ export function MixerStrip({
         className="fl-mixer-strip__led"
         data-testid={`mixer-strip-mute-${track.id}`}
         data-muted={track.muted}
-        aria-pressed={!track.muted}
-        aria-label={`Mute ${track.name}`}
+        // The LED is a mute *toggle*, so pressed === muted — the inverse reads
+        // to a screen reader as "not pressed" on exactly the strip that is off.
+        aria-pressed={track.muted}
+        aria-label={`${track.muted ? "Unmute" : "Mute"} ${track.name}`}
         onClick={(event) => {
           event.stopPropagation();
           onToggleMute();

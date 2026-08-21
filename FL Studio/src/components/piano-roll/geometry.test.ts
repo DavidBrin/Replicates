@@ -16,9 +16,12 @@ import {
   GRIP_WIDTH,
   KEYBOARD_WIDTH,
   MAX_PITCH,
+  MAX_ZOOM_Y,
+  MIN_ZOOM_Y,
   ROW_HEIGHT,
   RULER_HEIGHT,
   clampScroll,
+  clampZoomY,
   createViewport,
   gridBottom,
   gridlineWeight,
@@ -30,6 +33,7 @@ import {
   pitchToY,
   rectContains,
   regionAt,
+  rowHeight,
   tickToBarNumber,
   tickToX,
   velocityToY,
@@ -39,6 +43,7 @@ import {
   yToPitch,
   yToVelocity,
   zoomAtCursor,
+  zoomAtCursorY,
 } from "./geometry";
 
 const note = (patch: Partial<Note> = {}): Note => ({
@@ -250,5 +255,36 @@ describe("scroll + zoom", () => {
     const view = createViewport();
     expect(zoomAtCursor(view, 300, 500).zoomX).toBeLessThanOrEqual(8);
     expect(zoomAtCursor(view, 300, 0.001).zoomX).toBeGreaterThanOrEqual(0.25);
+  });
+});
+
+describe("vertical zoom (row height)", () => {
+  it("scales row height with zoomY, 1x reproducing ROW_HEIGHT", () => {
+    expect(rowHeight(createViewport({ zoomY: 1 }))).toBe(ROW_HEIGHT);
+    expect(rowHeight(createViewport({ zoomY: 2 }))).toBe(ROW_HEIGHT * 2);
+  });
+
+  it("keeps the row under the cursor fixed while zooming vertically", () => {
+    const view = createViewport({ height: 400, zoomY: 1, scrollY: 200 });
+    const cursorY = 150;
+    const anchor = yToPitch(view, cursorY);
+    const next = zoomAtCursorY(view, cursorY, 2);
+    expect(yToPitch({ ...view, ...next }, cursorY)).toBe(anchor);
+  });
+
+  it("clamps vertical zoom to the supported range", () => {
+    const view = createViewport();
+    expect(zoomAtCursorY(view, 200, 100).zoomY).toBeLessThanOrEqual(MAX_ZOOM_Y);
+    expect(zoomAtCursorY(view, 200, 0.001).zoomY).toBeGreaterThanOrEqual(MIN_ZOOM_Y);
+    expect(clampZoomY(100)).toBe(MAX_ZOOM_Y);
+    expect(clampZoomY(0)).toBe(MIN_ZOOM_Y);
+  });
+
+  it("taller rows shrink the visible pitch range at a fixed canvas height", () => {
+    const base = createViewport({ scrollY: 0 });
+    const zoomed = createViewport({ scrollY: 0, zoomY: 2 });
+    const baseSpan = visiblePitchRange(base).high - visiblePitchRange(base).low;
+    const zoomedSpan = visiblePitchRange(zoomed).high - visiblePitchRange(zoomed).low;
+    expect(zoomedSpan).toBeLessThan(baseSpan);
   });
 });

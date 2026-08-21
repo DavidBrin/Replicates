@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { addNotes } from "./commands/patterns";
 import { addClip } from "./commands/playlist";
@@ -247,5 +247,153 @@ describe("corrupt and hostile input", () => {
   it("a default project survives the whole path unchanged", () => {
     const project = createDefaultProject({ now: "2026-08-20T10:00:00.000Z" });
     expect(deserializeProject(serializeProject(project))).toEqual(project);
+  });
+});
+
+/* ------------------------------------------------- crafted / hostile JSON */
+
+describe("prototype-bearing JSON cannot pollute or forge membership", () => {
+  /** Restore anything a failing test manages to plant, so it cannot cascade. */
+  afterEach(() => {
+    delete (Object.prototype as Record<string, unknown>).polluted;
+    delete (Object.prototype as Record<string, unknown>).id;
+  });
+
+  it("does not run the __proto__ setter while rebuilding records", () => {
+    /*
+     * Written as raw text, NOT via `JSON.stringify` of an object literal:
+     * `{ __proto__: x }` in source sets the literal's *prototype* and emits no
+     * key at all, so the stringified form would be a harmless payload and this
+     * test would pass against the very bug it exists for. `JSON.parse`, by
+     * contrast, defines `__proto__` as an own data property — which is the
+     * whole attack.
+     */
+    const hostile = `{
+      "schemaVersion": ${CURRENT_SCHEMA_VERSION},
+      "project": {
+        "id": "prj-1",
+        "name": "Hostile",
+        "channels": {
+          "ch-1": { "name": "Kick", "voice": "kick" },
+          "__proto__": { "polluted": true }
+        },
+        "channelOrder": ["ch-1"],
+        "patterns": {
+          "pat-1": { "name": "P", "notes": {} },
+          "__proto__": { "polluted": true }
+        },
+        "patternOrder": ["pat-1"],
+        "playlistTracks": { "__proto__": { "polluted": true } },
+        "clips": { "__proto__": { "polluted": true } },
+        "mixerTracks": { "__proto__": { "polluted": true } },
+        "activePatternId": "pat-1"
+      }
+    }`;
+    expect(Object.hasOwn(JSON.parse(hostile).project.channels, "__proto__")).toBe(true);
+
+    const project = deserializeProject(hostile);
+
+    expect(project).not.toBeNull();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false);
+
+    // The concrete damage a bare `records[id] = value` does: `JSON.parse`
+    // makes `__proto__` an OWN key, and assigning it runs the inherited
+    // setter, so the rebuilt record ends up *inheriting from the attacker's
+    // object* — every field on it then answers a membership probe.
+    for (const record of [
+      project!.channels,
+      project!.patterns,
+      project!.playlistTracks,
+      project!.clips,
+      project!.mixerTracks,
+    ]) {
+      expect(Object.getPrototypeOf(record)).toBe(Object.prototype);
+      expect((record as Record<string, unknown>).polluted).toBeUndefined();
+    }
+
+    // …and the forbidden key is simply not an entity.
+    expect(Object.keys(project!.channels)).toEqual(["ch-1"]);
+    expect(project!.channelOrder).toEqual(["ch-1"]);
+    expect(project!.patternOrder).toEqual(["pat-1"]);
+  });
+
+  it("treats an inherited key as absent, not as an existing entity", () => {
+    const hostile = JSON.stringify({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: {
+        id: "prj-1",
+        channels: { "ch-1": { name: "Kick", voice: "kick" } },
+        // `toString` exists on Object.prototype: a `record[id] !== undefined`
+        // membership test says yes to every one of these.
+        channelOrder: ["toString", "ch-1", "valueOf"],
+        patterns: { "pat-1": { name: "P", notes: { "n-1": { channelId: "toString" } } } },
+        patternOrder: ["hasOwnProperty", "pat-1"],
+        playlistTracks: { "trk-1": { name: "T" } },
+        playlistTrackOrder: ["trk-1"],
+        clips: {
+          "clip-1": { trackId: "trk-1", patternId: "constructor", startTick: 0 },
+          "clip-2": { trackId: "toString", patternId: "pat-1", startTick: 0 },
+          "clip-3": { trackId: "trk-1", patternId: "pat-1", startTick: 0 },
+        },
+        mixerTracks: {},
+        activePatternId: "toString",
+      },
+    });
+
+    const project = deserializeProject(hostile);
+
+    expect(project).not.toBeNull();
+    expect(project!.channelOrder).toEqual(["ch-1"]);
+    expect(project!.patternOrder).toEqual(["pat-1"]);
+    // A note whose channel is "toString" is an orphan and is dropped.
+    expect(Object.keys(project!.patterns["pat-1"]!.notes)).toEqual([]);
+    // Only the clip with two real referents survives.
+    expect(Object.keys(project!.clips)).toEqual(["clip-3"]);
+    // An `activePatternId` naming an inherited key is invalid, not valid.
+    expect(project!.activePatternId).toBe("pat-1");
+  });
+
+  it("rejects a save whose only 'pattern' is a forbidden key", () => {
+    const hostile = `{
+      "schemaVersion": ${CURRENT_SCHEMA_VERSION},
+      "project": {
+        "channels": {},
+        "patterns": { "__proto__": { "name": "not a pattern", "notes": {} } },
+        "mixerTracks": {}
+      }
+    }`;
+
+    expect(deserializeProject(hostile)).toBeNull();
+  });
+
+  it("drops a note or a channel routed through a forbidden key", () => {
+    const project = readProject(
+      JSON.parse(`{
+        "channels": {
+          "ch-1": { "name": "Kick", "voice": "kick", "routedToMixerTrackId": "toString" }
+        },
+        "channelOrder": ["ch-1"],
+        "patterns": {
+          "pat-1": {
+            "name": "P",
+            "notes": { "__proto__": { "channelId": "ch-1" }, "n-1": { "channelId": "ch-1" } }
+          }
+        },
+        "patternOrder": ["pat-1"],
+        "mixerTracks": {}
+      }`),
+    );
+
+    expect(project).not.toBeNull();
+    // An inherited mixer id is not a real strip, so the channel falls to Master.
+    expect(project!.channels["ch-1"]!.routedToMixerTrackId).toBe(MASTER_MIXER_TRACK_ID);
+    expect(Object.keys(project!.patterns["pat-1"]!.notes)).toEqual(["n-1"]);
+  });
+
+  it("will not run a migration off an inherited schemaVersion key", () => {
+    // `MIGRATIONS["constructor"]` is a function — a bare lookup would call it.
+    expect(migrate({ schemaVersion: 2, project: {} })).toBeNull();
+    expect(MIGRATIONS[1]).toBeTypeOf("function");
   });
 });

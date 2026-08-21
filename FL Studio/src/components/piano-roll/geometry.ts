@@ -45,6 +45,14 @@ export const PITCH_COUNT = MAX_PITCH - MIN_PITCH + 1;
 export const MIN_ZOOM_X = 0.25;
 export const MAX_ZOOM_X = 8;
 
+/**
+ * Vertical zoom range. Bounded tighter than X: past 3x a semitone row is
+ * mostly air, and below 0.5x labels stop fitting (lane 1 §3.2's ~21 px row is
+ * already the "square cell" reference point).
+ */
+export const MIN_ZOOM_Y = 0.5;
+export const MAX_ZOOM_Y = 3;
+
 /** Semitones that are black keys, `pitch % 12`. */
 const BLACK_KEY_CLASSES = new Set([1, 3, 6, 8, 10]);
 
@@ -77,6 +85,8 @@ export interface RollViewport {
   /** Canvas CSS height, ruler and velocity lane included. */
   height: number;
   zoomX: number;
+  /** Multiplies {@link ROW_HEIGHT} — the pitch axis's zoom (SPEC §4.4 "zoom both axes"). */
+  zoomY: number;
   scrollX: number;
   scrollY: number;
   /** 0 hides the lane entirely. */
@@ -95,6 +105,7 @@ export const DEFAULT_VIEWPORT: RollViewport = {
   width: 900,
   height: 520,
   zoomX: 1,
+  zoomY: 1,
   scrollX: 0,
   scrollY: DEFAULT_SCROLL_Y,
   velocityLaneHeight: VELOCITY_LANE_HEIGHT,
@@ -141,6 +152,11 @@ export function visibleTickRange(view: RollViewport): { start: number; end: numb
 
 /* ---------------------------------------------------------- y ↔ pitches -- */
 
+/** Semitone row height at the view's current vertical zoom. */
+export function rowHeight(view: RollViewport): number {
+  return ROW_HEIGHT * view.zoomY;
+}
+
 export function gridTop(): number {
   return RULER_HEIGHT;
 }
@@ -155,19 +171,19 @@ export function gridHeight(view: RollViewport): number {
   return gridBottom(view) - gridTop();
 }
 
-/** Total scrollable height of all 128 semitone rows. */
-export function contentHeight(): number {
-  return PITCH_COUNT * ROW_HEIGHT;
+/** Total scrollable height of all 128 semitone rows, at the view's vertical zoom. */
+export function contentHeight(view: RollViewport): number {
+  return PITCH_COUNT * rowHeight(view);
 }
 
 /** Y of the TOP edge of `pitch`'s row. Pitch increases upward, as on a keyboard. */
 export function pitchToY(view: RollViewport, pitch: number): number {
-  return gridTop() + (MAX_PITCH - pitch) * ROW_HEIGHT - view.scrollY;
+  return gridTop() + (MAX_PITCH - pitch) * rowHeight(view) - view.scrollY;
 }
 
 /** The pitch whose row contains `y`; may fall outside 0–127 when out of range. */
 export function yToPitch(view: RollViewport, y: number): number {
-  return MAX_PITCH - Math.floor((y - gridTop() + view.scrollY) / ROW_HEIGHT);
+  return MAX_PITCH - Math.floor((y - gridTop() + view.scrollY) / rowHeight(view));
 }
 
 /** Top and bottom (inclusive) pitch visible in the grid — the paint window. */
@@ -241,7 +257,7 @@ export function noteRect(view: RollViewport, note: Note): Rect {
   const lengthTicks = note.lengthTicks > 0 ? note.lengthTicks : TICKS_PER_STEP;
   const x = tickToX(view, note.positionTicks);
   const width = Math.max(MIN_NOTE_WIDTH, lengthTicks * pxPerTick(view));
-  return { x, y: pitchToY(view, note.pitch), width, height: ROW_HEIGHT - 1 };
+  return { x, y: pitchToY(view, note.pitch), width, height: rowHeight(view) - 1 };
 }
 
 /**
@@ -304,7 +320,7 @@ export function clampScroll(
   scrollY: number,
 ): { scrollX: number; scrollY: number } {
   const maxX = Math.max(0, PATTERN_LENGTH_TICKS * pxPerTick(view) - gridWidth(view) + STEP_WIDTH);
-  const maxY = Math.max(0, contentHeight() - gridHeight(view));
+  const maxY = Math.max(0, contentHeight(view) - gridHeight(view));
   return {
     scrollX: Math.min(maxX, Math.max(0, scrollX)),
     scrollY: Math.min(maxY, Math.max(0, scrollY)),
@@ -330,4 +346,27 @@ export function zoomAtCursor(
   const scrollX = anchorTick * BASE_PX_PER_TICK * zoomX - (cursorX - KEYBOARD_WIDTH);
   const clamped = clampScroll({ ...view, zoomX }, scrollX, view.scrollY);
   return { zoomX, scrollX: clamped.scrollX };
+}
+
+export function clampZoomY(zoomY: number): number {
+  return Math.min(MAX_ZOOM_Y, Math.max(MIN_ZOOM_Y, zoomY));
+}
+
+/**
+ * Vertical zoom-at-cursor, the pitch-axis twin of {@link zoomAtCursor} — the
+ * row under the pointer must stay under the pointer. No FL binding is
+ * documented for wheel-driven vertical zoom (research/01 §3.6 only lists
+ * middle-drag), so `interactions.ts`'s `wheel` picks Ctrl+Alt+wheel and
+ * documents that choice there; this function is just the geometry.
+ */
+export function zoomAtCursorY(
+  view: RollViewport,
+  cursorY: number,
+  nextZoomY: number,
+): { zoomY: number; scrollY: number } {
+  const zoomY = clampZoomY(nextZoomY);
+  const rowUnits = (cursorY - gridTop() + view.scrollY) / rowHeight(view);
+  const scrollY = rowUnits * ROW_HEIGHT * zoomY - (cursorY - gridTop());
+  const clamped = clampScroll({ ...view, zoomY }, view.scrollX, scrollY);
+  return { zoomY, scrollY: clamped.scrollY };
 }

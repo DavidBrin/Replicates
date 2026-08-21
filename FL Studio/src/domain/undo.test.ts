@@ -11,6 +11,7 @@ import {
   canUndo,
   createHistory,
   dispatchCommand,
+  endGesture,
   redo,
   redoLabel,
   undo,
@@ -247,5 +248,106 @@ describe("drag coalescing", () => {
       coalesceKey: key,
     });
     expect(state.history.past).toHaveLength(3);
+  });
+});
+
+/* ------------------------------------------------------ gesture boundaries */
+
+describe("coalescing separates gestures, not just keys", () => {
+  const project = fixtureProject();
+
+  function tempo(value: number) {
+    return updateProject({ tempo: value });
+  }
+
+  it("folds one gesture's dispatches into a single entry", () => {
+    let state = { project, history: createHistory() };
+    for (const bpm of [141, 142, 143]) {
+      state = dispatchCommand(state.project, state.history, tempo(bpm), {
+        coalesceKey: "transport:tempo",
+        gestureId: "drag-1",
+      });
+    }
+
+    expect(state.history.past).toHaveLength(1);
+    expect(state.project.tempo).toBe(143);
+    expect(undo(state.project, state.history).project.tempo).toBe(project.tempo);
+  });
+
+  it("does NOT fold two gestures that share a fixed coalesceKey", () => {
+    let state = dispatchCommand(project, createHistory(), tempo(150), {
+      coalesceKey: "transport:tempo",
+      gestureId: "drag-1",
+    });
+    state = dispatchCommand(state.project, state.history, tempo(160), {
+      coalesceKey: "transport:tempo",
+      gestureId: "drag-2",
+    });
+
+    expect(state.history.past).toHaveLength(2);
+
+    // One Ctrl+Z takes back only the second gesture.
+    const back = undo(state.project, state.history);
+    expect(back.project.tempo).toBe(150);
+    expect(undo(back.project, back.history).project.tempo).toBe(project.tempo);
+  });
+
+  it("keeps the interim convention working: a unique key per gesture", () => {
+    let state = dispatchCommand(project, createHistory(), tempo(150), {
+      coalesceKey: "transport:tempo:1",
+    });
+    state = dispatchCommand(state.project, state.history, tempo(151), {
+      coalesceKey: "transport:tempo:1",
+    });
+    state = dispatchCommand(state.project, state.history, tempo(160), {
+      coalesceKey: "transport:tempo:2",
+    });
+
+    expect(state.history.past).toHaveLength(2);
+    expect(undo(state.project, state.history).project.tempo).toBe(151);
+  });
+
+  it("a keyed dispatch never coalesces into an unkeyed entry, and vice versa", () => {
+    let state = dispatchCommand(project, createHistory(), tempo(150));
+    state = dispatchCommand(state.project, state.history, tempo(160), {
+      coalesceKey: "transport:tempo",
+    });
+    expect(state.history.past).toHaveLength(2);
+  });
+
+  it("endGesture() seals the top entry so the next dispatch starts a new one", () => {
+    let state = dispatchCommand(project, createHistory(), tempo(150), {
+      coalesceKey: "transport:tempo",
+    });
+    state = { project: state.project, history: endGesture(state.history) };
+    state = dispatchCommand(state.project, state.history, tempo(160), {
+      coalesceKey: "transport:tempo",
+    });
+
+    expect(state.history.past).toHaveLength(2);
+    expect(undo(state.project, state.history).project.tempo).toBe(150);
+  });
+
+  it("endGesture() is a no-op object-identity-wise when there is nothing to seal", () => {
+    const empty = createHistory();
+    expect(endGesture(empty)).toBe(empty);
+
+    const unkeyed = dispatchCommand(project, createHistory(), tempo(150)).history;
+    expect(endGesture(unkeyed)).toBe(unkeyed);
+  });
+
+  it("does not disturb the redo stack it seals over", () => {
+    let state = dispatchCommand(project, createHistory(), tempo(150), {
+      coalesceKey: "transport:tempo",
+    });
+    state = dispatchCommand(state.project, state.history, tempo(160), {
+      coalesceKey: "other",
+    });
+    const back = undo(state.project, state.history);
+    expect(back.history.future).toHaveLength(1);
+
+    const sealed = endGesture(back.history);
+    expect(sealed.future).toHaveLength(1);
+    expect(redo(back.project, sealed).project.tempo).toBe(160);
   });
 });
