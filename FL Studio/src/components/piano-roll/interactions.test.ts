@@ -697,6 +697,69 @@ describe("resize (drag the right-edge grip)", () => {
       expect(h.setLastLength).toHaveBeenLastCalledWith(TICKS_PER_STEP);
     });
 
+    /*
+     * Round 6 #1. The round trip above only restored the stored length when
+     * snap was FINER than the note: the origin end was snapped *before* the
+     * `minLength` floor applied, so with a coarser snap a zero-pixel drag
+     * still computed a non-zero delta — 24 ticks became a whole beat under
+     * beat snap and a whole BAR under bar snap, and the restoration above
+     * never fired because `deltaTicks` was never 0. Zero pointer displacement
+     * is zero delta at every snap setting, so the question is asked of the
+     * pointer, before snap gets a vote.
+     */
+    it.each(["beat", "bar"] as const)(
+      "restores the stored zero under %s snap, coarser than the note",
+      (snap) => {
+        const h = harness({ notes: [step], snap });
+        const start = grabStepGrip(h);
+        h.controller.pointerMove({ ...start, x: tickToX(VIEW, TICKS_PER_BAR) });
+        h.controller.pointerMove({ ...start });
+        h.controller.pointerUp(start);
+
+        const project = h.applied();
+        expect(project.patterns[project.activePatternId]?.notes[step.id]?.lengthTicks).toBe(0);
+      },
+    );
+
+    it.each(["beat", "bar"] as const)(
+      "dispatches nothing when the grip never moves under %s snap",
+      (snap) => {
+        const h = harness({ notes: [step], snap });
+        const start = grabStepGrip(h);
+        h.controller.pointerMove({ ...start });
+        h.controller.pointerUp(start);
+
+        expect(h.dispatch).not.toHaveBeenCalled();
+      },
+    );
+
+    it("leaves a SHORT ordinary note alone on a zero-pixel drag under bar snap", () => {
+      const note = makeNote({ id: "n-short", positionTicks: 0, lengthTicks: TICKS_PER_STEP });
+      const h = harness({ notes: [note], snap: "bar" });
+      const grip = gripRect(VIEW, note);
+      const start = { x: grip.x + 2, y: grip.y + 4, button: 0 };
+      h.controller.pointerDown(start);
+      h.controller.pointerMove({ ...start });
+      h.controller.pointerUp(start);
+
+      expect(h.dispatch).not.toHaveBeenCalled();
+      const project = h.applied();
+      expect(project.patterns[project.activePatternId]?.notes[note.id]?.lengthTicks).toBe(
+        TICKS_PER_STEP,
+      );
+    });
+
+    it("still grows to a whole bar when the grip really is dragged there", () => {
+      const h = harness({ notes: [step], snap: "bar" });
+      const start = grabStepGrip(h);
+      h.controller.pointerMove({ ...start, x: tickToX(VIEW, TICKS_PER_BAR) });
+
+      const project = h.applied();
+      expect(project.patterns[project.activePatternId]?.notes[step.id]?.lengthTicks).toBe(
+        TICKS_PER_BAR,
+      );
+    });
+
     it("leaves an ORDINARY note's length untouched by the same round trip", () => {
       const note = makeNote({ id: "n-real", positionTicks: 0, lengthTicks: TICKS_PER_BEAT });
       const h = harness({ notes: [note], snap: "quarterBeat" });

@@ -345,6 +345,8 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
       dispatch: (command, options) => useAppStore.getState().dispatch(command, options),
       setSelection: (ids) => getRollUi().setPianoRollSelection(ids),
       toggleSnap: () => getRollUi().togglePianoRollSnap(),
+      getView: () => getRollUi().pianoRoll.view,
+      setView: (patch) => getRollUi().setPianoRollView(patch),
     });
   }, [buildScene]);
 

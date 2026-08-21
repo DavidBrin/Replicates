@@ -15,13 +15,14 @@
  * | `Ctrl+↑` / `Ctrl+↓` | transpose the selection an octave |
  * | `Shift+↑` / `Shift+↓` | transpose the selection a semitone |
  * | `Backspace` | toggle snap off ⇄ last unit |
+ * | `PgUp` / `PgDn` | horizontal zoom in / out about the grid centre |
  */
 
 import { removeNotes, updateNotes, type Command } from "@/domain/commands";
 import type { Note, NoteId, PatternId } from "@/domain/types";
 import { registerBindings, type KeyBinding } from "@/lib/keyboard";
 
-import { clampPitch } from "./geometry";
+import { clampPitch, zoomAboutGridCenter, type RollViewport } from "./geometry";
 
 export const PIANO_ROLL_SURFACE_ID = "piano-roll";
 
@@ -37,7 +38,17 @@ export interface PianoRollBindingDeps {
   dispatch: (command: Command, options?: { coalesceKey?: string }) => void;
   setSelection: (noteIds: NoteId[]) => void;
   toggleSnap: () => void;
+  /** Current viewport — `PgUp`/`PgDn` zoom needs the geometry, not the notes. */
+  getView: () => RollViewport;
+  setView: (patch: { zoomX: number; scrollX: number }) => void;
 }
+
+/**
+ * One `PgUp`/`PgDn` press, as a multiplier on `zoomX`. Deliberately coarser
+ * than {@link ZOOM_WHEEL_FACTOR}'s 1.15: a wheel notch comes in bursts, a key
+ * press comes one at a time.
+ */
+export const ZOOM_KEY_FACTOR = 1.5;
 
 /**
  * Transpose by `semitones`, clamped so the *whole* selection stays in MIDI
@@ -133,6 +144,18 @@ export function createPianoRollBindings(deps: PianoRollBindingDeps): KeyBinding[
       shift: true,
       description: "Transpose selection down a semitone",
       handler: transpose(-1),
+    },
+    {
+      id: "zoom-in",
+      code: "PageUp",
+      description: "Zoom in (horizontal)",
+      handler: () => deps.setView(zoomAboutGridCenter(deps.getView(), ZOOM_KEY_FACTOR)),
+    },
+    {
+      id: "zoom-out",
+      code: "PageDown",
+      description: "Zoom out (horizontal)",
+      handler: () => deps.setView(zoomAboutGridCenter(deps.getView(), 1 / ZOOM_KEY_FACTOR)),
     },
     {
       id: "toggle-snap",

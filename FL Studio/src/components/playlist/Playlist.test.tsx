@@ -413,3 +413,160 @@ describe("the clip context menu must not leak events back into the clip (round 5
     expect(useAppStore.getState().project.activePatternId).toBe(activeBefore);
   });
 });
+
+/*
+ * Round 6 #4. SPEC.md §4.4: "Alt held | bypass snap for this gesture". The
+ * playlist honoured it nowhere — paint and clip drags always snapped to a bar.
+ */
+describe("Alt bypasses snap (round 6 #4)", () => {
+  it("paints a clip at the raw tick under the pointer when Alt is held", () => {
+    render(<Playlist />);
+    const lane = screen.getByTestId("lane-trk-1");
+
+    // 40px at 80px/bar is half a bar — snapped that is tick 0, raw it is 192.
+    fireEvent.click(lane, { clientX: 40, clientY: 10, altKey: true });
+
+    const clips = Object.values(useAppStore.getState().project.clips);
+    expect(clips).toHaveLength(1);
+    expect(clips[0]?.startTick).toBe(TICKS_PER_BAR / 2);
+  });
+
+  it("still snaps the same paint without Alt", () => {
+    render(<Playlist />);
+    fireEvent.click(screen.getByTestId("lane-trk-1"), { clientX: 40, clientY: 10 });
+
+    expect(Object.values(useAppStore.getState().project.clips)[0]?.startTick).toBe(0);
+  });
+
+  it("can still erase an Alt-placed clip from the lane it sits off-grid in", () => {
+    placeClip("clip-existing", { startTick: 100 }); // off every bar boundary
+    render(<Playlist />);
+
+    // 30px at 80px/bar is tick 144 — inside the clip's bar-wide extent, but
+    // not equal to the bar boundary a snapped lookup would have asked for.
+    fireEvent.contextMenu(screen.getByTestId("lane-trk-1"), { clientX: 30, clientY: 10 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]).toBeUndefined();
+  });
+
+  it("moves a clip by the exact dragged distance when Alt is held", () => {
+    placeClip("clip-existing", { startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    // 20px at 80px/bar = 96 ticks: a quarter bar, which snap would erase.
+    fireEvent.pointerDown(clip, { clientX: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 20, pointerId: 1, altKey: true });
+    fireEvent.pointerUp(clip, { clientX: 20, pointerId: 1, altKey: true });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(
+      TICKS_PER_BAR / 4,
+    );
+  });
+
+  it("snaps that same 20px move away to nothing without Alt", () => {
+    placeClip("clip-existing", { startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    fireEvent.pointerDown(clip, { clientX: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 20, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 20, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(0);
+  });
+});
+
+/*
+ * Round 6 #5. A clip MOVE floored to a bar, which made the gesture
+ * asymmetric: nudging four pixels left of a boundary crossed it and jumped
+ * the clip a whole bar back, while four pixels right did nothing at all.
+ * Nearest-bar puts the boundary where the user sees it — halfway.
+ */
+describe("clip moves snap to the NEAREST bar (round 6 #5)", () => {
+  it("does not fall a whole bar back on a small leftward nudge", () => {
+    placeClip("clip-existing", { startTick: TICKS_PER_BAR * 2 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    // 4px left at 80px/bar ≈ 19 ticks — far short of half a bar.
+    fireEvent.pointerDown(clip, { clientX: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 96, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 96, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(
+      TICKS_PER_BAR * 2,
+    );
+  });
+
+  it("treats a small rightward nudge exactly the same way", () => {
+    placeClip("clip-existing", { startTick: TICKS_PER_BAR * 2 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    fireEvent.pointerDown(clip, { clientX: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 104, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 104, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(
+      TICKS_PER_BAR * 2,
+    );
+  });
+
+  it("moves a whole bar once the drag passes the halfway point", () => {
+    placeClip("clip-existing", { startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    // 44px of 80 is past half a bar; flooring would have kept it at bar 0.
+    fireEvent.pointerDown(clip, { clientX: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 44, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 44, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR);
+  });
+});
+
+/*
+ * Round 6 #6. SPEC.md §4.4: "Right-click-drag | delete multiple". Only the
+ * one clip the button went down on died — deletion hung off `contextmenu`,
+ * which fires exactly once per press, so the pointer could sweep the whole
+ * arrangement with the right button held and nothing else happened.
+ */
+describe("right-drag erases a sweep of clips (round 6 #6)", () => {
+  function placeThree(): void {
+    for (const [index, id] of ["clip-a", "clip-b", "clip-c"].entries()) {
+      placeClip(id, { startTick: TICKS_PER_BAR * index });
+    }
+  }
+
+  it("deletes every clip the sweep crosses, not just the first", () => {
+    placeThree();
+    render(<Playlist />);
+
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2 });
+
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(0);
+  });
+
+  it("erases clips a sweep reaches even when it began on empty lane space", () => {
+    placeThree();
+    render(<Playlist />);
+
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2 });
+
+    expect(Object.keys(useAppStore.getState().project.clips)).toEqual(["clip-a", "clip-c"]);
+  });
+
+  it("leaves clips alone when the pointer merely hovers with no button held", () => {
+    placeThree();
+    render(<Playlist />);
+
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 0 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 1 }); // left-drag
+
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(3);
+  });
+});

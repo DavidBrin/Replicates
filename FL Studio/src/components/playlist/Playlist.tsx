@@ -12,9 +12,8 @@ import {
   updateClip,
   updatePlaylistTrack,
 } from "@/domain/commands";
-import { snapTicksFloor } from "@/domain/tickMath";
 import { nextId } from "@/domain/ids";
-import type { PatternClip, PatternId, PlaylistTrackId } from "@/domain/types";
+import { TICKS_PER_BAR, type PatternClip, type PatternId, type PlaylistTrackId } from "@/domain/types";
 import {
   selectActivePatternId,
   selectClips,
@@ -32,6 +31,7 @@ import {
   pxToTicks,
   RULER_HEIGHT_PX,
   scrollLeftForZoom,
+  snapMovedClipTick,
   snapPointerToBar,
   ticksToPx,
   totalVisibleBars,
@@ -112,7 +112,9 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     // handled by ClipView itself (select, not paint-over).
     if (event.target !== event.currentTarget) return;
     const lane = event.currentTarget.getBoundingClientRect();
-    const startTick = snapPointerToBar(event.clientX - lane.left, zoomPxPerBar);
+    // Alt bypasses snap for this gesture (SPEC.md §4.4) — the clip lands on
+    // the raw tick under the pointer instead of the bar boundary before it.
+    const startTick = snapPointerToBar(event.clientX - lane.left, zoomPxPerBar, event.altKey);
     const alreadyPlaced = (clipsByTrack.get(trackId) ?? []).some(
       (clip) => clip.startTick === startTick,
     );
@@ -131,8 +133,14 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     if (event.target !== event.currentTarget) return;
     event.preventDefault();
     const lane = event.currentTarget.getBoundingClientRect();
-    const tick = snapPointerToBar(event.clientX - lane.left, zoomPxPerBar);
-    const hit = (clipsByTrack.get(trackId) ?? []).find((clip) => clip.startTick === tick);
+    // Erasing hunts for the clip *under* the pointer, so it always asks the
+    // snapped (bar) question even when Alt is held — an Alt-placed clip sits
+    // off-grid and would otherwise be unerasable from the lane. The bar-wide
+    // window is the clip's own extent, not a snap decision.
+    const pointerTicks = pxToTicks(Math.max(0, event.clientX - lane.left), zoomPxPerBar);
+    const hit = (clipsByTrack.get(trackId) ?? []).find(
+      (clip) => pointerTicks >= clip.startTick && pointerTicks < clip.startTick + TICKS_PER_BAR,
+    );
     if (hit) dispatch(removeClip(hit.id));
   }
 
@@ -192,10 +200,11 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     deltaTicks: number,
     deltaTrackIndex: number,
     coalesceKey: string,
+    bypassSnap: boolean,
   ) {
     const clip = useAppStore.getState().project.clips[clipId];
     if (!clip) return;
-    const nextTick = Math.max(0, snapTicksFloor(clip.startTick + deltaTicks, "bar"));
+    const nextTick = snapMovedClipTick(clip.startTick + deltaTicks, bypassSnap);
     const currentIndex = tracks.findIndex((track) => track.id === clip.trackId);
     const rawIndex = (currentIndex === -1 ? 0 : currentIndex) + deltaTrackIndex;
     const nextIndex = Math.min(tracks.length - 1, Math.max(0, rawIndex));

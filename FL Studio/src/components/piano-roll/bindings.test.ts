@@ -17,7 +17,17 @@ import {
 } from "@/lib/keyboard";
 
 import {
+  DEFAULT_VIEWPORT,
+  gridWidth,
+  KEYBOARD_WIDTH,
+  MAX_ZOOM_X,
+  MIN_ZOOM_X,
+  xToTick,
+  type RollViewport,
+} from "./geometry";
+import {
   PIANO_ROLL_SURFACE_ID,
+  ZOOM_KEY_FACTOR,
   registerPianoRollBindings,
   transposeCommand,
 } from "./bindings";
@@ -41,11 +51,17 @@ function harness(notes: Note[], selectedNoteIds: string[]) {
   const dispatch = vi.fn((command: Command) => void commands.push(command));
   const setSelection = vi.fn();
   const toggleSnap = vi.fn();
+  let view: RollViewport = { ...DEFAULT_VIEWPORT, width: 800, height: 600 };
+  const setView = vi.fn((patch: { zoomX: number; scrollX: number }) => {
+    view = { ...view, ...patch };
+  });
   const unregister = registerPianoRollBindings({
     getScene: () => ({ patternId: PATTERN, notes, selectedNoteIds }),
     dispatch,
     setSelection,
     toggleSnap,
+    getView: () => view,
+    setView,
   });
 
   const applied = (): Project => {
@@ -54,7 +70,16 @@ function harness(notes: Note[], selectedNoteIds: string[]) {
     return project;
   };
 
-  return { dispatch, setSelection, toggleSnap, commands, applied, unregister };
+  return {
+    dispatch,
+    setSelection,
+    toggleSnap,
+    setView,
+    getView: () => view,
+    commands,
+    applied,
+    unregister,
+  };
 }
 
 function press(code: string, modifiers: Partial<KeyboardEvent> = {}): boolean {
@@ -180,5 +205,74 @@ describe("Backspace", () => {
     const h = harness([], []);
     expect(press("Backspace")).toBe(true);
     expect(h.toggleSnap).toHaveBeenCalledTimes(1);
+  });
+});
+
+/*
+ * Round 6 #10. SPEC §4.4's keyboard list ends with "`PgUp/PgDn` zoom" and
+ * nothing was bound to either key. Horizontal zoom, about the grid's centre —
+ * there is no cursor to anchor on, and anchoring at the left edge would walk
+ * the view rightwards with every press.
+ */
+describe("PgUp / PgDn zoom", () => {
+  it("zooms in about the grid centre on PgUp", () => {
+    const h = harness([], []);
+    const before = h.getView();
+
+    expect(press("PageUp")).toBe(true);
+
+    expect(h.setView).toHaveBeenCalledTimes(1);
+    expect(h.getView().zoomX).toBeCloseTo(before.zoomX * ZOOM_KEY_FACTOR, 6);
+  });
+
+  it("zooms out on PgDn", () => {
+    const h = harness([], []);
+    const before = h.getView();
+
+    expect(press("PageDown")).toBe(true);
+
+    expect(h.getView().zoomX).toBeCloseTo(before.zoomX / ZOOM_KEY_FACTOR, 6);
+  });
+
+  it("keeps the tick at the grid's centre under the grid's centre", () => {
+    const h = harness([], []);
+    // Zoom in far enough that the bar is wider than the grid — until then
+    // the whole pattern fits, `scrollX` is pinned at 0 by `clampScroll`, and
+    // no anchoring is possible (or wanted).
+    for (let i = 0; i < 4; i += 1) press("PageUp");
+
+    const before = h.getView();
+    const centreX = KEYBOARD_WIDTH + gridWidth(before) / 2;
+    const anchorTick = xToTick(before, centreX);
+
+    press("PageUp");
+
+    expect(xToTick(h.getView(), centreX)).toBeCloseTo(anchorTick, 6);
+  });
+
+  it("returns to where it started after a PgUp/PgDn round trip", () => {
+    const h = harness([], []);
+    const before = h.getView();
+
+    press("PageUp");
+    press("PageDown");
+
+    expect(h.getView().zoomX).toBeCloseTo(before.zoomX, 6);
+    expect(h.getView().scrollX).toBeCloseTo(before.scrollX, 6);
+  });
+
+  it("never zooms past the clamp, however many times it is pressed", () => {
+    const h = harness([], []);
+    for (let i = 0; i < 40; i += 1) press("PageUp");
+    expect(h.getView().zoomX).toBe(MAX_ZOOM_X);
+
+    for (let i = 0; i < 80; i += 1) press("PageDown");
+    expect(h.getView().zoomX).toBe(MIN_ZOOM_X);
+  });
+
+  it("does not fire with a modifier held — those are the browser's", () => {
+    const h = harness([], []);
+    expect(press("PageUp", { ctrlKey: true })).toBe(false);
+    expect(h.setView).not.toHaveBeenCalled();
   });
 });

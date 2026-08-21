@@ -348,6 +348,21 @@ export function zoomAtCursor(
   return { zoomX, scrollX: clamped.scrollX };
 }
 
+/**
+ * Keyboard zoom (SPEC §4.4's `PgUp/PgDn` zoom), expressed in the same terms as
+ * {@link zoomAtCursor} — there is no cursor to anchor on, so the anchor is the
+ * horizontal centre of the *grid* (the keyboard column is not part of it).
+ * Zooming about the centre is what keeps the music the user is looking at on
+ * screen; anchoring at the left edge would walk the view rightwards with every
+ * press.
+ */
+export function zoomAboutGridCenter(
+  view: RollViewport,
+  factor: number,
+): { zoomX: number; scrollX: number } {
+  return zoomAtCursor(view, KEYBOARD_WIDTH + gridWidth(view) / 2, view.zoomX * factor);
+}
+
 export function clampZoomY(zoomY: number): number {
   return Math.min(MAX_ZOOM_Y, Math.max(MIN_ZOOM_Y, zoomY));
 }

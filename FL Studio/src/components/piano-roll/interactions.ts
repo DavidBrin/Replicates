@@ -661,12 +661,22 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // dragging one cell right produced a one-step note and holding still
       // rewrote the marker into a 1-tick length.
       const primaryLength = effectiveLengthTicks(primary.lengthTicks);
-      const rawEnd = primary.positionTicks + primaryLength + pxToTicks(view, input.x - active.originX);
-      const snappedEnd = snapTick(rawEnd, scene.snap, bypass);
       const minLength = minLengthTicks(scene.snap, bypass);
-      const deltaTicks = Math.round(
-        Math.max(minLength, snappedEnd - primary.positionTicks) - primaryLength,
-      );
+      // "Did the pointer move?" is a question about the POINTER, and it has to
+      // be answered before snap gets a vote. Asking it of the snapped end
+      // instead made every note shorter than the snap cell impossible to leave
+      // alone: a 24-tick note under bar snap has its origin end (24) snapped to
+      // 0, then raised to `minLength`, so a drag out and straight back computed
+      // a delta of +360 and the "back where it started" restoration below never
+      // fired — the note silently became a whole bar long. Zero pointer
+      // displacement is zero delta at every snap setting.
+      const pointerDx = input.x - active.originX;
+      const rawEnd = primary.positionTicks + primaryLength + pxToTicks(view, pointerDx);
+      const snappedEnd = snapTick(rawEnd, scene.snap, bypass);
+      const deltaTicks =
+        pointerDx === 0
+          ? 0
+          : Math.round(Math.max(minLength, snappedEnd - primary.positionTicks) - primaryLength);
       if (deltaTicks === active.lastDeltaTicks) return;
       active.lastDeltaTicks = deltaTicks;
 

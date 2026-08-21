@@ -132,7 +132,24 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
    * one command — see `ChannelRackRow`'s doc comment for why that command is
    * built row-side instead of dispatched cell-by-cell with a `coalesceKey`.
    */
+  /**
+   * A paint stroke's buffered command lands here on pointer-up, and by then
+   * the pattern it was built against may be gone — `Ctrl+Z` undoing the
+   * pattern's creation while the button is still down is the reachable case,
+   * and the dispatch threw `CommandError` out of a pointer handler.
+   *
+   * The row dropping its own buffer the moment it is re-rendered with a
+   * different pattern is the mechanism that actually fires, and the one the
+   * tests pin (`ChannelRackRow.tsx`). This is belt and braces underneath it,
+   * deliberately asking the LIVE store rather than the rendered snapshot so it
+   * still holds for any future caller the row's re-render does not reach — a
+   * memoized row, or a commit driven from outside React. No test can
+   * distinguish it today: React always flushes the row's re-render before the
+   * release arrives, so the row's own check gets there first.
+   */
   function handleCommitSteps(command: Command): void {
+    const live = useAppStore.getState().project;
+    if (live.patterns[activePattern.id] === undefined) return;
     dispatch(command);
   }
 

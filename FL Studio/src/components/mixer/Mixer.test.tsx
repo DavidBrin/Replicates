@@ -77,6 +77,25 @@ describe("Mixer — fader", () => {
     expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
   });
 
+  /*
+   * Round 6 #9, the fader's half of the same hole the knob had: a cancelled
+   * pointer never delivers `pointerup`, and the drag state left behind made
+   * every later buttonless HOVER over the fader move the level.
+   */
+  it("stops dragging when the pointer is cancelled", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    fireEvent.pointerMove(fader, { clientY: 90 });
+    const afterMove = useAppStore.getState().project.mixerTracks["mix-1"]!.volume;
+    fireEvent.pointerCancel(fader, {});
+
+    fireEvent.pointerMove(fader, { clientY: 10 }); // a hover, no button held
+
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(afterMove);
+  });
+
   it("folds a whole fader drag into a single undo entry", () => {
     render(<Mixer />);
     const fader = screen.getByTestId("fader-Insert 1 volume");

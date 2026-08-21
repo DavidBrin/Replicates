@@ -5,7 +5,7 @@
  * `src/domain/tickMath.ts`'s bar/tick constants.
  */
 
-import { snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
+import { snapTicks, snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
 import { TICKS_PER_BAR } from "@/domain/types";
 
 export const LANE_HEIGHT_PX = 64;
@@ -25,10 +25,39 @@ export function pxToTicks(px: number, pxPerBar: number): number {
   return (px / pxPerBar) * TICKS_PER_BAR;
 }
 
-/** Snap a raw pointer x-offset (px, lane-relative) to a paintable tick — always a bar boundary, since every pattern is exactly one bar (SPEC.md §2). */
-export function snapPointerToBar(offsetXPx: number, pxPerBar: number): number {
+/**
+ * Snap a raw pointer x-offset (px, lane-relative) to a paintable tick — the
+ * bar boundary at or before the pointer, since every pattern is exactly one
+ * bar (SPEC.md §2). **Floor, not nearest**: painting places a clip in the cell
+ * the pointer is *inside*, and rounding would place it in the next cell along
+ * from the pointer's own half of the bar.
+ *
+ * `bypassSnap` is SPEC.md §4.4's "Alt held | bypass snap for this gesture":
+ * the raw tick under the pointer, rounded to a whole tick and never negative.
+ */
+export function snapPointerToBar(
+  offsetXPx: number,
+  pxPerBar: number,
+  bypassSnap = false,
+): number {
   const rawTicks = pxToTicks(Math.max(0, offsetXPx), pxPerBar);
+  if (bypassSnap) return Math.round(rawTicks);
   return snapTicksFloor(rawTicks, "bar" satisfies SnapUnit);
+}
+
+/**
+ * Where a *moved* clip lands (SPEC.md §4.4). Unlike painting, a move is
+ * nearest-bar: the clip is already a bar-wide object being nudged, so flooring
+ * made the gesture asymmetric — four pixels leftward crossed a bar boundary
+ * and jumped the clip a whole bar, while four pixels rightward did nothing.
+ * Rounding puts the boundary where the user sees it, halfway.
+ *
+ * `bypassSnap` is Alt: the clip keeps the exact tick offset it was dragged by.
+ */
+export function snapMovedClipTick(rawTicks: number, bypassSnap = false): number {
+  const clamped = Math.max(0, rawTicks);
+  if (bypassSnap) return Math.round(clamped);
+  return snapTicks(clamped, "bar" satisfies SnapUnit);
 }
 
 export function totalVisibleBars(furthestClipEndTicks: number): number {

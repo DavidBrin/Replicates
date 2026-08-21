@@ -29,6 +29,8 @@ export interface ClipViewProps {
     deltaTicks: number,
     deltaTrackIndex: number,
     coalesceKey: string,
+    /** Alt was held at release — SPEC.md §4.4 "Alt held | bypass snap for this gesture". */
+    bypassSnap: boolean,
   ) => void;
   /**
    * Shift+pointer-down (SPEC.md §4.4 "Shift+Left-click on item | clone
@@ -161,10 +163,34 @@ export function ClipView({
     const deltaTrackIndex = Math.round(deltaYPx / LANE_HEIGHT_PX);
     if (drag.dragging && (deltaPx !== 0 || deltaTrackIndex !== 0)) {
       const deltaTicks = (deltaPx / pxPerBar) * TICKS_PER_BAR; // snapped to a bar by the caller
-      onDragCommit(drag.activeClipId, deltaTicks, deltaTrackIndex, drag.coalesceKey);
+      onDragCommit(
+        drag.activeClipId,
+        deltaTicks,
+        deltaTrackIndex,
+        drag.coalesceKey,
+        event.altKey,
+      );
     } else {
       onSelect(drag.activeClipId);
     }
+  }
+
+  /**
+   * Right-drag deletes *multiple* clips (SPEC.md §4.4 "Right-click-drag |
+   * delete multiple"), the same sweep the channel rack's step cells and the
+   * piano roll's erase gesture already implement. Only the clip the button
+   * went down on used to die — the pointer could travel the whole arrangement
+   * with the right button held and nothing else happened, because deletion
+   * hung off `contextmenu`, which fires exactly once per press.
+   *
+   * A clip entered while the secondary button is down is a clip the sweep has
+   * reached. `buttons` (the live button mask, unlike `button`) is the only
+   * thing that has to be true: no shared gesture object, so a sweep that
+   * starts on empty lane space and crosses into clips erases them too.
+   */
+  function handlePointerEnter(event: React.PointerEvent<HTMLDivElement>) {
+    if ((event.buttons & 2) === 0) return;
+    onDelete(clip.id);
   }
 
   function handleContextMenu(event: React.MouseEvent<HTMLDivElement>) {
@@ -193,6 +219,7 @@ export function ClipView({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerEnter={handlePointerEnter}
       onDoubleClick={() => onOpen(clip)}
       onContextMenu={handleContextMenu}
     >

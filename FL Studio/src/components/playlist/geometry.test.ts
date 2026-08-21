@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { pxToTicks, scrollLeftForZoom, ticksToPx } from "./geometry";
+import { TICKS_PER_BAR } from "@/domain/types";
+
+import {
+  pxToTicks,
+  scrollLeftForZoom,
+  snapMovedClipTick,
+  snapPointerToBar,
+  ticksToPx,
+} from "./geometry";
 
 describe("scrollLeftForZoom", () => {
   it("keeps the tick under the pointer fixed across a zoom change", () => {
@@ -32,5 +40,51 @@ describe("scrollLeftForZoom", () => {
 
   it("never returns a negative scroll offset", () => {
     expect(scrollLeftForZoom(0, 500, 24)).toBe(0);
+  });
+});
+
+/*
+ * Round 6 #4/#5. Painting floors (the clip goes in the cell the pointer is
+ * inside); a MOVE rounds (the boundary sits halfway, so four pixels left and
+ * four pixels right behave alike); Alt bypasses snap in both (SPEC.md §4.4).
+ */
+describe("snapPointerToBar", () => {
+  it("floors to the bar the pointer is inside", () => {
+    expect(snapPointerToBar(79, 80)).toBe(0);
+    expect(snapPointerToBar(80, 80)).toBe(TICKS_PER_BAR);
+    expect(snapPointerToBar(159, 80)).toBe(TICKS_PER_BAR);
+  });
+
+  it("returns the raw tick under the pointer when snap is bypassed", () => {
+    expect(snapPointerToBar(40, 80, true)).toBe(TICKS_PER_BAR / 2);
+    expect(snapPointerToBar(79, 80, true)).toBe(Math.round((79 / 80) * TICKS_PER_BAR));
+  });
+
+  it("never returns a negative tick, bypassed or not", () => {
+    expect(snapPointerToBar(-500, 80)).toBe(0);
+    expect(snapPointerToBar(-500, 80, true)).toBe(0);
+  });
+});
+
+describe("snapMovedClipTick", () => {
+  it("rounds to the NEAREST bar, symmetrically about the boundary", () => {
+    const nudgeLeft = TICKS_PER_BAR - 20;
+    const nudgeRight = TICKS_PER_BAR + 20;
+    expect(snapMovedClipTick(nudgeLeft)).toBe(TICKS_PER_BAR);
+    expect(snapMovedClipTick(nudgeRight)).toBe(TICKS_PER_BAR);
+  });
+
+  it("crosses to the next bar only past the halfway point", () => {
+    expect(snapMovedClipTick(TICKS_PER_BAR / 2 - 1)).toBe(0);
+    expect(snapMovedClipTick(TICKS_PER_BAR / 2 + 1)).toBe(TICKS_PER_BAR);
+  });
+
+  it("keeps the exact tick when snap is bypassed", () => {
+    expect(snapMovedClipTick(TICKS_PER_BAR + 20, true)).toBe(TICKS_PER_BAR + 20);
+  });
+
+  it("never returns a negative tick", () => {
+    expect(snapMovedClipTick(-TICKS_PER_BAR)).toBe(0);
+    expect(snapMovedClipTick(-TICKS_PER_BAR, true)).toBe(0);
   });
 });

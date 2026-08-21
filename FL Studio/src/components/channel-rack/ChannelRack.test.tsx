@@ -1,3 +1,4 @@
+import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -5,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { createDefaultProject } from "@/domain/defaultProject";
 import { resetIds } from "@/domain/ids";
 import { createHistory } from "@/domain/undo";
-import type { Project } from "@/domain/types";
+import { TICKS_PER_STEP, type Project } from "@/domain/types";
 import { useAppStore } from "@/lib/store";
 import { ChannelRack } from "./ChannelRack";
 import { stepHueGroup } from "./StepCell";
@@ -215,6 +216,108 @@ describe("ChannelRack — mute LED", () => {
   });
 });
 
+/**
+ * Round 6 #2. A paint stroke buffers its commands and dispatches them on
+ * pointer-up, and the buffer names the pattern it was built against. The
+ * pattern can go away while the button is still down — `Ctrl+Z` undoing the
+ * pattern's creation is the reachable case — and the commit then dispatched
+ * `addNotes` against an id that no longer exists, throwing `CommandError` out
+ * of a pointer handler. A stroke whose pattern is gone is abandoned instead.
+ */
+describe("ChannelRack — a stroke whose pattern disappears mid-drag", () => {
+  function twoPatternProject(): Project {
+    const base = createDefaultProject({ now: "2026-01-01T00:00:00.000Z" });
+    const first = base.patterns[base.activePatternId]!;
+    const second = { ...first, id: "pat-2", name: "Pattern 2", notes: {} };
+    return {
+      ...base,
+      patterns: { ...base.patterns, "pat-2": second },
+      patternOrder: [...base.patternOrder, "pat-2"],
+      activePatternId: "pat-2",
+    };
+  }
+
+  /** Drop `pat-2` and fall back to `pat-1`, exactly as undoing its creation would. */
+  function destroyActivePattern(): void {
+    act(() => {
+      useAppStore.setState((state) => {
+        const patterns = { ...state.project.patterns };
+        delete patterns["pat-2"];
+        return {
+          project: {
+            ...state.project,
+            patterns,
+            patternOrder: state.project.patternOrder.filter((id) => id !== "pat-2"),
+            activePatternId: "pat-1",
+          },
+        };
+      });
+    });
+  }
+
+  it("dispatches nothing at all when the stroke is released", () => {
+    reset(twoPatternProject());
+    render(<ChannelRack />);
+    const cells = [0, 1, 2].map((s) => kickStep(s));
+
+    fireEvent.pointerDown(cells[0]!, { buttons: 1 });
+    fireEvent.pointerEnter(cells[1]!, { buttons: 1 });
+
+    destroyActivePattern();
+
+    // The dispatch is spied *after* the pattern dies, so the only call it can
+    // see is the commit. jsdom swallows an exception thrown inside an event
+    // listener, so "did it throw?" is not an assertion this can make — "did it
+    // dispatch a command naming a dead pattern?" is the same question asked
+    // where the answer is observable.
+    const real = useAppStore.getState().dispatch;
+    const dispatch = vi.fn(real);
+    act(() => {
+      useAppStore.setState({ dispatch });
+    });
+    try {
+      fireEvent.pointerUp(window);
+      expect(dispatch).not.toHaveBeenCalled();
+    } finally {
+      act(() => {
+        useAppStore.setState({ dispatch: real });
+      });
+    }
+    // …and nothing landed on the pattern that survived, either.
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+  });
+
+  it("leaves no optimistic preview painted over the pattern that replaced it", () => {
+    reset(twoPatternProject());
+    render(<ChannelRack />);
+    const cells = [0, 1, 2].map((s) => kickStep(s));
+
+    fireEvent.pointerDown(cells[0]!, { buttons: 1 });
+    fireEvent.pointerEnter(cells[1]!, { buttons: 1 });
+    expect(kickStep(0)).toHaveAttribute("data-on", "true");
+
+    destroyActivePattern();
+
+    for (const step of [0, 1, 2]) expect(kickStep(step)).toHaveAttribute("data-on", "false");
+  });
+
+  it("starts a clean stroke on the new pattern instead of extending the dead one", () => {
+    reset(twoPatternProject());
+    render(<ChannelRack />);
+
+    fireEvent.pointerDown(kickStep(0), { buttons: 1 });
+    destroyActivePattern();
+
+    // A fresh press on the surviving pattern behaves like any other stroke.
+    fireEvent.pointerDown(kickStep(5), { buttons: 1 });
+    fireEvent.pointerUp(kickStep(5));
+
+    const notes = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ channelId: "ch-kick", positionTicks: 5 * TICKS_PER_STEP });
+  });
+});
+
 describe("ChannelRack — paint stroke released outside the row", () => {
   it("still commits the stroke via a window-level pointerup backstop", () => {
     render(<ChannelRack />);
@@ -297,6 +400,86 @@ describe("ChannelRack — knobs", () => {
     fireEvent.pointerDown(volumeKnob, { altKey: true });
 
     expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(0.8);
+  });
+
+  /*
+   * Round 6 #7. SPEC §4.4: "Alt+click (or middle-click) knob | reset to
+   * default". Only Alt+click and double-click were wired.
+   */
+  it("middle-click resets a knob to its default value", () => {
+    render(<ChannelRack />);
+    const volumeKnob = screen.getByTestId("knob-Kick volume");
+
+    fireEvent.pointerDown(volumeKnob, { clientY: 100, button: 0 });
+    fireEvent.pointerMove(volumeKnob, { clientY: 60 });
+    fireEvent.pointerUp(volumeKnob, { clientY: 60 });
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).not.toBe(0.8);
+
+    fireEvent.pointerDown(volumeKnob, { button: 1 });
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(0.8);
+  });
+
+  it("does not start a drag from the middle button that reset it", () => {
+    render(<ChannelRack />);
+    const volumeKnob = screen.getByTestId("knob-Kick volume");
+
+    fireEvent.pointerDown(volumeKnob, { clientY: 100, button: 1 });
+    fireEvent.pointerMove(volumeKnob, { clientY: -500 });
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(0.8);
+  });
+
+  /*
+   * Round 6 #8. SPEC §4.4: "Ctrl-drag = fine". Read per MOVE, not per
+   * gesture, so the modifier can be taken and released mid-drag.
+   */
+  describe("Ctrl-drag is fine adjustment", () => {
+    function dragVolume(steps: { y: number; ctrlKey?: boolean }[]): number {
+      const knob = screen.getByTestId("knob-Kick volume");
+      fireEvent.pointerDown(knob, { clientY: 100, button: 0 });
+      for (const step of steps) {
+        fireEvent.pointerMove(knob, { clientY: step.y, ctrlKey: step.ctrlKey ?? false });
+      }
+      fireEvent.pointerUp(knob, { clientY: steps[steps.length - 1]!.y });
+      return useAppStore.getState().project.channels["ch-kick"]!.volume;
+    }
+
+    it("moves a tenth as far as the same drag without Ctrl", () => {
+      render(<ChannelRack />);
+      const coarse = dragVolume([{ y: 88 }]); // 12 px up over a 120 px travel
+      expect(coarse).toBeCloseTo(0.9, 5);
+
+      act(() => reset());
+      const fine = dragVolume([{ y: 88, ctrlKey: true }]);
+      expect(fine).toBeCloseTo(0.81, 5);
+    });
+
+    it("resumes coarse travel from where the fine pass left the knob", () => {
+      render(<ChannelRack />);
+      // 12 px fine (+0.01), then 12 px more coarse (+0.1) — NOT 24 px coarse
+      // from the start, which is what re-deriving from the origin would give.
+      const value = dragVolume([{ y: 88, ctrlKey: true }, { y: 76 }]);
+      expect(value).toBeCloseTo(0.91, 5);
+    });
+  });
+
+  /*
+   * Round 6 #9. A cancelled pointer never delivers `pointerup`; the drag left
+   * behind turned later buttonless hovers into value changes.
+   */
+  it("stops dragging a knob when the pointer is cancelled", () => {
+    render(<ChannelRack />);
+    const knob = screen.getByTestId("knob-Kick volume");
+
+    fireEvent.pointerDown(knob, { clientY: 100, button: 0 });
+    fireEvent.pointerMove(knob, { clientY: 94 });
+    const afterMove = useAppStore.getState().project.channels["ch-kick"]!.volume;
+    fireEvent.pointerCancel(knob, {});
+
+    fireEvent.pointerMove(knob, { clientY: 10 }); // a hover, no button held
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(afterMove);
   });
 
   it("folds a whole knob drag into a single undo entry", () => {

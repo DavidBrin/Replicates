@@ -74,6 +74,15 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
     dragState.current = null;
   }
 
+  /**
+   * A cancelled pointer never delivers `pointerup`, and the drag left open
+   * behind it made every later *hover* over the fader move the level with no
+   * button held — the same hole the knob had.
+   */
+  function handlePointerCancel(): void {
+    dragState.current = null;
+  }
+
   const percent = ((value - min) / (max - min)) * 100;
 
   return (
@@ -91,6 +100,7 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onDoubleClick={resetToDefault}
       onKeyDown={(event) => {
         const step = (max - min) / 100;

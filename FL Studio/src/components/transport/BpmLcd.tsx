@@ -4,6 +4,9 @@ import { useRef, useState } from "react";
 
 import { TEMPO_MAX, TEMPO_MIN, clampTempo } from "@/components/shell/wiring";
 
+/** Vertical travel below which a press is still a click, not a tempo drag. */
+const DRAG_SLOP_PX = 2;
+
 export interface BpmLcdProps {
   value: number;
   onChange: (bpm: number) => void;
@@ -26,9 +29,23 @@ export function BpmLcd({
 }: BpmLcdProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
-  const dragState = useRef<{ startY: number; startValue: number } | null>(
-    null,
-  );
+  const dragState = useRef<{
+    startY: number;
+    startValue: number;
+    /** Set by the first move that clears {@link DRAG_SLOP_PX} — a drag, not a click. */
+    moved: boolean;
+  } | null>(null);
+  /**
+   * A completed drag must not also open the text editor.
+   *
+   * `click` fires *after* `pointerup`, and pointer-up had already cleared
+   * `dragState`, so the click handler's "was I dragging?" test looked at
+   * `null` and answered no — every finished drag ended in the edit box, with
+   * the tempo it had just been dragged to sitting in a field the user has to
+   * dismiss. The verdict is latched at pointer-up instead and consumed by the
+   * click that follows.
+   */
+  const suppressNextClick = useRef(false);
 
   function beginEditing(): void {
     setDraft(String(value));
@@ -44,21 +61,35 @@ export function BpmLcd({
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (editing) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
-    dragState.current = { startY: event.clientY, startValue: value };
+    dragState.current = { startY: event.clientY, startValue: value, moved: false };
+    suppressNextClick.current = false;
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     if (!drag) return;
     const deltaY = drag.startY - event.clientY; // up = increase
+    if (Math.abs(deltaY) > DRAG_SLOP_PX) drag.moved = true;
     onChange(clampTempo(drag.startValue + deltaY, min, max));
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
-    if (dragState.current) {
+    const drag = dragState.current;
+    if (drag) {
       (event.target as Element).releasePointerCapture?.(event.pointerId);
+      suppressNextClick.current = drag.moved;
     }
     dragState.current = null;
+  }
+
+  /**
+   * A cancelled pointer (capture lost, a system gesture, the tab hidden) never
+   * delivers `pointerup`, and the drag state left behind turned every later
+   * *hover* over the LCD into a tempo change with no button held.
+   */
+  function handlePointerCancel() {
+    dragState.current = null;
+    suppressNextClick.current = false;
   }
 
   return (
@@ -73,6 +104,7 @@ export function BpmLcd({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
     >
       {editing ? (
         <input
@@ -96,6 +128,9 @@ export function BpmLcd({
             // A click that wasn't the start of a drag opens the editor,
             // matching FL's "left-click and hold while typing" idiom closely
             // enough for a single-click affordance in a mouse-driven UI.
+            const wasDrag = suppressNextClick.current;
+            suppressNextClick.current = false;
+            if (wasDrag) return;
             if (event.detail >= 1 && !dragState.current) beginEditing();
           }}
         >

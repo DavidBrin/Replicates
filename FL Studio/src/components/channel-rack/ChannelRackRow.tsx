@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Command } from "@/domain/commands/types";
 import { addNotes, composite, isStepOn, notesAtStep, removeNotes, stepNote } from "@/domain/commands";
 import { nextId } from "@/domain/ids";
-import type { Channel, MixerTrack, Pattern } from "@/domain/types";
+import type { Channel, MixerTrack, Pattern, PatternId } from "@/domain/types";
 import { Knob } from "./Knob";
 import { StepCell } from "./StepCell";
 
@@ -40,6 +40,16 @@ interface PaintSession {
   commands: Command[];
   /** Per-step override already decided during this stroke — what makes re-entry idempotent. */
   touched: Map<number, boolean>;
+  /**
+   * The pattern the stroke's buffered commands address. A stroke outlives any
+   * number of re-renders, and the pattern under it can be swapped or destroyed
+   * mid-drag — `Ctrl+Z` undoing the pattern's creation while the button is
+   * still down is the reachable case. Committing then dispatched `addNotes`
+   * against a pattern id that no longer exists and threw `CommandError` out of
+   * a pointer handler, so the stroke carries the id it was built for and is
+   * discarded the moment it stops matching.
+   */
+  patternId: PatternId;
 }
 
 /**
@@ -106,6 +116,9 @@ export function ChannelRackRow({
   function paintStep(step: number): void {
     const session = painting.current;
     if (!session) return;
+    // Nothing may be added to a stroke that no longer belongs to the pattern
+    // on screen; `cancelPaint` will drop it, and until then it must not grow.
+    if (session.patternId !== pattern.id) return;
     const currentlyOn = session.touched.get(step) ?? isStepOn(pattern, channel.id, step);
     const desiredOn = session.mode === "on";
     if (currentlyOn === desiredOn) return; // idempotent re-entry — nothing to do
@@ -131,8 +144,14 @@ export function ChannelRackRow({
 
   /** Starts a fresh stroke unless one is already running with this mode. */
   function ensurePaintSession(mode: "on" | "off"): void {
-    if (painting.current && painting.current.mode === mode) return;
-    painting.current = { mode, commands: [], touched: new Map() };
+    if (
+      painting.current &&
+      painting.current.mode === mode &&
+      painting.current.patternId === pattern.id
+    ) {
+      return;
+    }
+    painting.current = { mode, commands: [], touched: new Map(), patternId: pattern.id };
     if (!windowPointerUpListener.current) {
       const listener = () => endPaint();
       windowPointerUpListener.current = listener;
@@ -150,17 +169,37 @@ export function ChannelRackRow({
     paintStep(step);
   }
 
-  function endPaint(): void {
-    const session = painting.current;
+  /** Tear the stroke down without committing anything. */
+  function cancelPaint(): void {
     painting.current = null;
     setPreview(null);
     if (windowPointerUpListener.current) {
       window.removeEventListener("pointerup", windowPointerUpListener.current);
       windowPointerUpListener.current = null;
     }
+  }
+
+  function endPaint(): void {
+    const session = painting.current;
+    const stale = session !== null && session.patternId !== pattern.id;
+    cancelPaint();
     if (!session || session.commands.length === 0) return;
+    // The buffer names a pattern that is no longer the one this row edits —
+    // it was undone, deleted or switched away from mid-stroke. Dispatching it
+    // would throw out of the pointer handler; the stroke is simply abandoned.
+    if (stale) return;
     onCommitSteps(session.commands.length === 1 ? session.commands[0]! : composite(session.commands));
   }
+
+  // Belt and braces for the same hazard: the moment the row is handed a
+  // different pattern, any stroke in flight is dropped rather than left to be
+  // discovered at pointer-up (the preview would otherwise keep painting cells
+  // of the old pattern over the new one's grid).
+  useEffect(() => {
+    if (painting.current !== null && painting.current.patternId !== pattern.id) {
+      cancelPaint();
+    }
+  });
 
   return (
     <div
