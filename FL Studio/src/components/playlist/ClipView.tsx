@@ -77,7 +77,14 @@ export function ClipView({
       className="fl-clip"
       data-testid={`clip-${clip.id}`}
       data-selected={selected}
-      style={{ left: ticksToPx(clip.startTick, pxPerBar), width: pxPerBar, borderColor: pattern.color }}
+      // The pattern colour is the clip's ground; `.fl-clip__body` washes it
+      // down so the miniature stays readable (FL tints, it does not black out).
+      style={{
+        left: ticksToPx(clip.startTick, pxPerBar),
+        width: pxPerBar,
+        borderColor: pattern.color,
+        background: pattern.color,
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

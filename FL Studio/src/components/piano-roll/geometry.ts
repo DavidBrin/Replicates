@@ -30,7 +30,7 @@ export const BASE_PX_PER_TICK = STEP_WIDTH / TICKS_PER_STEP;
 /** Time-ruler strip above the grid (`#2A363F`). */
 export const RULER_HEIGHT = 22;
 /** Event-editor / velocity lane at the bottom (lane 1 §3.7). */
-export const VELOCITY_LANE_HEIGHT = 92;
+export const VELOCITY_LANE_HEIGHT = 64;
 /** The `····` splitter grip between grid and velocity lane. */
 export const SPLITTER_HEIGHT = 6;
 /** Darker right-edge resize grip — measured ~9 px (lane 1 §3.3). */
@@ -84,11 +84,12 @@ export interface RollViewport {
 }
 
 /**
- * Opening vertical scroll: puts C6 (MIDI 72) at the top of the grid, so middle
- * C sits mid-window exactly as the reference capture opens (`C6` above `C5`).
- * Without it the roll would open on MIDI 127 — an empty ceiling nobody plays.
+ * Opening vertical scroll: puts D6 (MIDI 74) at the top of the grid, so C6 sits
+ * a couple of rows below the ruler and middle C mid-window — the reference
+ * capture opens with `C6` clear of the top edge, not flush against it. Without
+ * it the roll would open on MIDI 127, an empty ceiling nobody plays.
  */
-export const DEFAULT_SCROLL_Y = (MAX_PITCH - 72) * ROW_HEIGHT;
+export const DEFAULT_SCROLL_Y = (MAX_PITCH - 74) * ROW_HEIGHT;
 
 export const DEFAULT_VIEWPORT: RollViewport = {
   width: 900,

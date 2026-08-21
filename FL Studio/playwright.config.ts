@@ -32,9 +32,25 @@ export default defineConfig({
      * gesture, which no headless run has. Copied verbatim from
      * `youtube/playwright.config.ts`; see `research/07-stack-deployment.md`
      * (Lane 7) §2 for why this carries over to a Web Audio project.
+     *
+     * `--disable-audio-output` keeps Chromium off the real CoreAudio device.
+     * Confirmed by direct instrumentation (not guessed): after a couple of
+     * earlier specs boot and tear down a real `AudioContext` — `beat-loop`
+     * presses Play/Space, nothing else in the suite touches audio — a later
+     * spec's context reports `state: "running"` but its `currentTime` is
+     * frozen at the first render quantum; `Tone.Transport.ticks` (driven by
+     * that clock) never leaves 0, so `playlist.spec.ts`'s song-mode playhead
+     * assertion times out. Waiting longer doesn't help (tried up to 60s) and
+     * neither does a stop/replay retry — the render thread itself has
+     * stopped pulling samples, which is real-device contention across
+     * sequential pages in one Chromium process, not a slow boot and not a
+     * product bug (the engine already resumes the context on every Play).
+     * This switch routes Web Audio through Chromium's fake output stream
+     * instead, which self-clocks in software and doesn't compete for the
+     * host's audio device.
      */
     launchOptions: {
-      args: ["--autoplay-policy=no-user-gesture-required"],
+      args: ["--autoplay-policy=no-user-gesture-required", "--disable-audio-output"],
     },
   },
   projects: [

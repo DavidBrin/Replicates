@@ -106,19 +106,19 @@ export interface RollTheme {
 }
 
 export const DEFAULT_ROLL_THEME: RollTheme = {
-  laneWhite: "#42545F",
-  laneBlack: "#394B56",
-  beatBand: "#32444F",
-  gridStep: "#394B56",
-  gridBeat: "#2E404B",
-  gridBeatFlank: "#3E4F5A",
-  gridBar: "#1A2C37",
+  laneWhite: "#465965",
+  laneBlack: "#35464F",
+  beatBand: "#2E404B",
+  gridStep: "#3D4F5A",
+  gridBeat: "#2B3C46",
+  gridBeatFlank: "#495C68",
+  gridBar: "#202F38",
   ruler: "#2A363F",
   rulerText: "#BDC2C6",
-  keyWhiteStart: "#D9DDE5",
+  keyWhiteStart: "#B6BEC7",
   keyWhiteEnd: "#FFFFFF",
-  keyBlack: "#494A4C",
-  keySeparator: "#2D3438",
+  keyBlack: "#2F3134",
+  keySeparator: "#97A0A6",
   keyLabel: "#3B4A55",
   keyPressed: "#BCF1C6",
   noteBody: "#BCF1C6",
@@ -262,7 +262,10 @@ export function drawKeyboard(
 ): void {
   const top = gridTop();
   const bottom = gridBottom(view);
-  surface.fillStyle = theme.keySeparator;
+  // Backdrop for the parts of the column the keys do not cover — the ruler
+  // corner and the strip beside the velocity lane. Chrome, not key colour:
+  // FL leaves those corners dark.
+  surface.fillStyle = theme.chrome;
   surface.fillRect(0, 0, KEYBOARD_WIDTH, view.height);
 
   const gradient = surface.createLinearGradient(0, 0, KEYBOARD_WIDTH, 0);
@@ -270,16 +273,25 @@ export function drawKeyboard(
   gradient.addColorStop(1, theme.keyWhiteEnd);
 
   const { low, high } = visiblePitchRange(view);
-  // White keys first — black keys overlay them, exactly like real keys.
+  // A real keyboard's white keys are CONTIGUOUS — the black key sits between
+  // them and only covers the front two thirds. Painting the white gradient per
+  // white-key row left the black rows' rear third bare, which read as a striped
+  // bar rather than a keyboard. So: one white pass per row, black overlaid.
   for (let pitch = low; pitch <= high; pitch += 1) {
-    if (isBlackKey(pitch)) continue;
     const y = pitchToY(view, pitch);
     const clippedTop = Math.max(top, y);
     const clippedBottom = Math.min(bottom, y + ROW_HEIGHT);
     if (clippedBottom <= clippedTop) continue;
-    surface.fillStyle = pitch === previewPitch ? theme.keyPressed : gradient;
+    surface.fillStyle = pitch === previewPitch && !isBlackKey(pitch) ? theme.keyPressed : gradient;
     surface.fillRect(0, clippedTop, KEYBOARD_WIDTH - 1, clippedBottom - clippedTop);
-    surface.fillStyle = theme.keySeparator;
+  }
+
+  // Separators only where two white keys actually meet (E|F and B|C).
+  surface.fillStyle = theme.keySeparator;
+  for (let pitch = low; pitch <= high; pitch += 1) {
+    if (isBlackKey(pitch) || isBlackKey(pitch - 1)) continue;
+    const clippedBottom = Math.min(bottom, pitchToY(view, pitch) + ROW_HEIGHT);
+    if (clippedBottom <= top) continue;
     surface.fillRect(0, clippedBottom - 1, KEYBOARD_WIDTH - 1, 1);
   }
 
@@ -291,7 +303,14 @@ export function drawKeyboard(
     if (clippedBottom <= clippedTop) continue;
     surface.fillStyle = pitch === previewPitch ? theme.keyPressed : theme.keyBlack;
     surface.fillRect(0, clippedTop, Math.round(KEYBOARD_WIDTH * 0.62), clippedBottom - clippedTop);
+    // The black key's own drop shadow, so it reads as sitting proud.
+    surface.fillStyle = theme.keySeparator;
+    surface.fillRect(0, clippedBottom, Math.round(KEYBOARD_WIDTH * 0.62), 1);
   }
+
+  // The grid's left edge — a hard dark rule, as in the capture.
+  surface.fillStyle = theme.gridBar;
+  surface.fillRect(KEYBOARD_WIDTH - 1, top, 1, bottom - top);
 
   surface.font = ROLL_FONT_SMALL;
   surface.textBaseline = "middle";
@@ -402,6 +421,18 @@ export function drawVelocityLane(
 
   surface.fillStyle = theme.velocityLane;
   surface.fillRect(KEYBOARD_WIDTH, top, gridWidth(view), view.velocityLaneHeight);
+
+  // The event editor carries the same bar rules as the grid above it, so a
+  // stem can be read against the bar it belongs to (lane 1 §3.7).
+  const ticks = visibleTickRange(view);
+  const firstBar = Math.floor(ticks.start / TICKS_PER_BAR) * TICKS_PER_BAR;
+  surface.fillStyle = theme.gridBar;
+  for (let tick = firstBar; tick <= ticks.end; tick += TICKS_PER_BAR) {
+    const barX = Math.round(tickToX(view, tick));
+    if (barX < KEYBOARD_WIDTH || barX > view.width) continue;
+    surface.fillRect(barX, top, 1, view.velocityLaneHeight);
+  }
+
   surface.fillStyle = theme.velocityBaseline;
   surface.fillRect(KEYBOARD_WIDTH, view.height - 4, gridWidth(view), 1);
 

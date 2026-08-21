@@ -15,10 +15,18 @@
 
 :root {
   /* Workspace / app chrome (lane 1 §6.1) */
-  --fl-workspace: #475056; /* desktop behind docked windows */
+  --fl-workspace: #3c454b; /* desktop behind docked windows */
   --fl-chrome: #4e585e; /* window title bars & tool bars */
-  --fl-chrome-alt: #535d62; /* inactive/alt title bar */
+  --fl-chrome-alt: #465056; /* inactive/alt title bar */
   --fl-deep-recess: #2d3438; /* inset wells (LCD surrounds, button wells) */
+
+  /* Bevel idiom — FL paints a light top edge and a dark bottom edge on every
+     raised control, and inverts it for recessed wells. One pair of tokens so
+     the whole UI shares one light direction. */
+  --fl-bevel-light: rgba(255, 255, 255, 0.13);
+  --fl-bevel-dark: rgba(0, 0, 0, 0.4);
+  --fl-raised: inset 0 1px 0 var(--fl-bevel-light), inset 0 -1px 0 var(--fl-bevel-dark);
+  --fl-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 -1px 0 var(--fl-bevel-light);
 
   /* Accents — the only saturated colours in the palette (lane 1 §6.1) */
   --fl-led-green: #a8e1b0;
@@ -37,7 +45,8 @@
   --fl-text-secondary: #bdc2c6;
 
   /* Structure */
-  --fl-border: #5e676c;
+  --fl-border: #333c42;
+  --fl-border-soft: #5e676c;
   --fl-radius-sm: 3px;
   --fl-radius-md: 5px;
 

@@ -7,28 +7,37 @@
   flex-direction: column;
   height: 100dvh;
   width: 100%;
-  background: var(--fl-workspace);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 0, 0, 0.18) 100%),
+    var(--fl-workspace);
 }
 
+/**
+ * FL's default dock, as the reference capture lays it out: Playlist and Mixer
+ * share the top band, and the Rack/Roll window runs the FULL width beneath
+ * them. `display: contents` on the column wrapper lets its two windows sit in
+ * different grid cells without moving them in the DOM.
+ */
 .fl-workspace {
   flex: 1 1 auto;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  /* The rack needs only ~7 rows of 45 px; giving it 54 % of the desktop left a
+     dead band under the last channel. The playlist takes the slack. */
+  grid-template-rows: minmax(0, 0.57fr) minmax(0, 0.43fr);
   min-height: 0;
-  gap: 6px;
-  padding: 6px;
+  gap: 3px;
+  padding: 3px;
 }
 
 .fl-workspace__column {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  gap: 6px;
+  display: contents;
 }
 
 .fl-workspace__rail {
-  flex: 0 0 300px;
+  grid-column: 2;
+  grid-row: 1;
+  width: 452px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -43,18 +52,24 @@
   border: 1px solid var(--fl-border);
   border-radius: var(--fl-radius-sm);
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 .fl-window--playlist {
-  flex: 1 1 55%;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .fl-window--rack-roll {
-  flex: 1 1 45%;
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
+/* The mixer is a console panel, not a column: it takes the height its strips
+   need and leaves the desktop below, the way a docked FL mixer does. */
 .fl-window--mixer {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  max-height: 100%;
 }
 
 .fl-window__titlebar {
@@ -62,12 +77,25 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 26px;
-  padding: 0 8px;
-  background: var(--fl-chrome);
+  height: 21px;
+  padding: 0 6px;
+  background: linear-gradient(180deg, #5b656b 0%, #4d575d 55%, #475157 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 var(--fl-bevel-light);
   color: var(--fl-text-primary);
   font-size: 11px;
   letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* The little speaker glyph FL stamps at the left of every window title. */
+.fl-window__titlebar::before {
+  content: "◁»";
+  flex: none;
+  font-size: 9px;
+  letter-spacing: -0.08em;
+  color: var(--fl-text-secondary);
+  opacity: 0.75;
 }
 
 .fl-window__title {
@@ -86,11 +114,11 @@
   border: none;
   background: transparent;
   color: var(--fl-text-secondary);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: var(--fl-radius-sm);
+  padding: 1px 6px;
+  border-radius: 2px;
   cursor: pointer;
 }
 

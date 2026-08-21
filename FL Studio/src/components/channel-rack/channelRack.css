@@ -19,59 +19,115 @@
 }
 
 :root {
-  --fl-rack-body: #727c81;
-  --fl-rack-gutter: #727c81;
-  --fl-rack-outline: #5e676c;
+  --fl-rack-body: #5b656b;
+  --fl-rack-gutter: #4a545a;
+  --fl-rack-grid-well: #4a545a;
+  --fl-rack-outline: #313a3f;
 
-  /* Cool group (steps 1-4, 9-12) */
-  --fl-step-cool-off-body: #6e7579;
-  --fl-step-cool-off-cap: #7d8388;
-  --fl-step-cool-off-foot: #454c50;
+  /* Cool group (steps 1-4, 9-12) — off cells are DARK and MUTED; the capture's
+     rack grid reads near-black next to the pale "on" cells. */
+  --fl-step-cool-off-body: #465057;
+  --fl-step-cool-off-cap: #5c666d;
+  --fl-step-cool-off-foot: #252b2f;
   --fl-step-cool-on-body: #d2e4ef;
-  --fl-step-cool-on-cap: #efffff;
-  --fl-step-cool-on-foot: #acbec9;
+  --fl-step-cool-on-cap: #ffffff;
+  --fl-step-cool-on-foot: #8fa6b4;
 
-  /* Warm group (steps 5-8, 13-16) */
-  --fl-step-warm-off-body: #806d6e;
-  --fl-step-warm-off-cap: #8d7b7c;
-  --fl-step-warm-off-foot: #4c494c;
+  /* Warm group (steps 5-8, 13-16) — same value as the cool group, hue only:
+     unlit warm must stay dark, not read as a lit red cell. */
+  --fl-step-warm-off-body: #55413f;
+  --fl-step-warm-off-cap: #6d5553;
+  --fl-step-warm-off-foot: #281e1f;
   --fl-step-warm-on-body: #ffced0;
-  --fl-step-warm-on-cap: #ffe9ec;
-  --fl-step-warm-on-foot: #acbec9;
+  --fl-step-warm-on-cap: #fff3f4;
+  --fl-step-warm-on-foot: #b78e91;
+
+  /* FL's cells are glossy: a bright wash over the top ~45 % that ends on a
+     hard edge, then a slight darkening to the foot. One shared overlay so
+     lit and unlit cells catch the light identically. */
+  --fl-step-gloss: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.26) 0%,
+    rgba(255, 255, 255, 0.1) 44%,
+    rgba(255, 255, 255, 0) 45%,
+    rgba(0, 0, 0, 0.06) 72%,
+    rgba(0, 0, 0, 0.16) 100%
+  );
 }
 
 .fl-channel-rack__header {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 32px;
+  height: 26px;
   padding: 0 8px;
   flex: none;
-  background: var(--fl-chrome);
-  border-bottom: 1px solid var(--fl-deep-recess);
+  background: linear-gradient(180deg, #566067 0%, #4b555b 100%);
+  box-shadow: inset 0 1px 0 var(--fl-bevel-light);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.45);
 }
 
 .fl-channel-rack__swing {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 5px;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: var(--fl-text-secondary);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
 }
 
+/* Same recessed rail + pale cap as the toolbar's swing slider (transport.css). */
 .fl-channel-rack__swing input[type="range"] {
-  accent-color: var(--fl-accent-orange-glow);
+  -webkit-appearance: none;
+  appearance: none;
+  width: 76px;
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  background: linear-gradient(180deg, #262e33 0%, #333d43 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
 }
 
+.fl-channel-rack__swing input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, #e6eaec 0%, #c6cdd1 45%, #98a1a6 52%, #8b9499 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.fl-channel-rack__swing input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, #e6eaec 0%, #c6cdd1 45%, #98a1a6 52%, #8b9499 100%);
+}
+
+/* FL shows the pattern length in the same pale readout plate as the tempo. */
 .fl-channel-rack__pattern-length {
-  min-width: 24px;
+  min-width: 26px;
   text-align: center;
-  padding: 2px 6px;
-  background: var(--fl-deep-recess);
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
+  padding: 1px 6px;
+  background: linear-gradient(
+    180deg,
+    #f4fbff 0%,
+    var(--fl-lcd-bg-start) 38%,
+    var(--fl-lcd-bg-end) 72%,
+    #cadeea 100%
+  );
+  border: 1px solid #121a1e;
+  border-radius: 3px;
+  color: var(--fl-lcd-text);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
+  font-weight: 700;
 }
 
 .fl-channel-rack__rows {
@@ -83,63 +139,95 @@
 
 .fl-rack-row {
   display: grid;
-  grid-template-columns: 18px 24px 24px 28px 120px 6px 1fr;
+  grid-template-columns: 14px 22px 22px 26px 128px 5px auto;
+  justify-content: start;
   align-items: center;
   gap: 4px;
   height: 45px; /* channel row pitch, lane 1 §2.3 */
   padding: 0 6px;
-  border-bottom: 1px solid var(--fl-rack-outline);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .fl-rack-row[data-selected="true"] {
-  background: rgba(168, 225, 176, 0.08);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .fl-rack-row__led {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  border: 1px solid var(--fl-rack-outline);
-  background: #3a4448;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  background: radial-gradient(circle at 35% 30%, #4a555a, #232a2d 75%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   cursor: pointer;
   padding: 0;
 }
 
+/* FL's channel LED is a small lit dome, not a lamp: the bloom is barely a
+   pixel or two beyond the bezel. */
 .fl-rack-row__led[data-muted="false"] {
-  background: var(--fl-led-green);
-  box-shadow: 0 0 4px var(--fl-led-green-highlight);
+  background: radial-gradient(circle at 35% 30%, var(--fl-led-green-highlight), #4e9a59 85%);
+  box-shadow:
+    0 0 3px rgba(168, 225, 176, 0.55),
+    inset 0 0 2px rgba(255, 255, 255, 0.45);
 }
 
 .fl-rack-row__routing {
-  height: 20px;
-  border-radius: var(--fl-radius-sm);
-  border: 1px solid var(--fl-rack-outline);
-  background: var(--fl-deep-recess);
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  background: #3d474d;
+  box-shadow: var(--fl-sunken);
   color: var(--fl-text-secondary);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
+/* The channel colour arrives inline as `background-color`; the gradient
+   below rides on top of it, so one rule gives every channel FL's darkened,
+   top-lit plate instead of a flat pastel web button. */
 .fl-rack-row__name {
-  height: 26px;
+  height: 24px;
   padding: 0 8px;
-  border: 1px solid var(--fl-rack-outline);
-  border-radius: var(--fl-radius-sm);
-  background: #4a545a;
-  color: var(--fl-text-primary);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  border-radius: 2px;
+  background-color: #4a545a;
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(0, 0, 0, 0.28) 48%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  color: #f2f6f8;
   font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   text-align: left;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.65);
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.fl-rack-row__name:hover {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(0, 0, 0, 0.2) 48%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+}
+
 .fl-rack-row__selector {
-  width: 6px;
-  align-self: stretch;
-  border-radius: 2px;
-  background: var(--fl-rack-outline);
+  width: 5px;
+  height: 26px;
+  align-self: center;
+  border-radius: 1px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  background: #3d474d;
   cursor: pointer;
 }
 
@@ -148,19 +236,38 @@
   box-shadow: 0 0 6px var(--fl-led-green-highlight);
 }
 
+/* The grid sits in a recessed well, and every group of four steps is pushed
+   apart by a wider gutter — the beat grouping is legible at a glance in the
+   capture, and was not here before. */
 .fl-rack-row__steps {
   display: flex;
   gap: 4px; /* gutter, lane 1 §2.3 */
+  padding: 4px 6px;
+  border-radius: 2px;
+  background: var(--fl-rack-grid-well);
+  box-shadow: var(--fl-sunken);
+}
+
+.fl-rack-row__steps .fl-step[data-step="4"],
+.fl-rack-row__steps .fl-step[data-step="8"],
+.fl-rack-row__steps .fl-step[data-step="12"] {
+  margin-left: 8px;
 }
 
 /* ----------------------------------------------------------------- knob */
 
+/* FL's knob: a dark ring, a slightly domed cap, and a light indicator line —
+   no coloured fill. */
 .fl-knob {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #6b7378, #33393c 70%);
-  border: 1px solid var(--fl-rack-outline);
+  background:
+    radial-gradient(circle at 38% 28%, #6f797f 0%, #4a5257 45%, #2b3236 100%);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.5);
   position: relative;
   cursor: ns-resize;
   touch-action: none;
@@ -180,9 +287,15 @@
   top: 2px;
   left: 50%;
   width: 2px;
-  height: 7px;
-  background: var(--fl-accent-orange);
+  height: 6px;
+  border-radius: 1px;
+  background: #e8eef1;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
   transform: translateX(-50%);
+}
+
+.fl-knob[data-off-default="true"] .fl-knob__indicator {
+  background: var(--fl-accent-orange);
 }
 
 /* ----------------------------------------------------------------- step */
@@ -191,47 +304,64 @@
   width: 20px; /* cell width, lane 1 §2.3 */
   height: 32px; /* cell height */
   padding: 0;
-  border: 1px solid var(--fl-rack-outline);
-  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: 2px; /* FL's cells are squarer than a web button */
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
   cursor: pointer;
   background: var(--fl-step-cool-off-body);
-  background-image: linear-gradient(
-    180deg,
-    var(--fl-step-cool-off-cap) 0%,
-    var(--fl-step-cool-off-body) 15%,
-    var(--fl-step-cool-off-foot) 100%
-  );
+  background-image:
+    var(--fl-step-gloss),
+    linear-gradient(
+      180deg,
+      var(--fl-step-cool-off-cap) 0%,
+      var(--fl-step-cool-off-body) 15%,
+      var(--fl-step-cool-off-foot) 100%
+    );
 }
 
 .fl-step[data-group="warm"] {
   background: var(--fl-step-warm-off-body);
-  background-image: linear-gradient(
-    180deg,
-    var(--fl-step-warm-off-cap) 0%,
-    var(--fl-step-warm-off-body) 15%,
-    var(--fl-step-warm-off-foot) 100%
-  );
+  background-image:
+    var(--fl-step-gloss),
+    linear-gradient(
+      180deg,
+      var(--fl-step-warm-off-cap) 0%,
+      var(--fl-step-warm-off-body) 15%,
+      var(--fl-step-warm-off-foot) 100%
+    );
 }
 
 .fl-step[data-group="cool"][data-on="true"] {
-  background-image: linear-gradient(
-    180deg,
-    var(--fl-step-cool-on-cap) 0%,
-    var(--fl-step-cool-on-body) 15%,
-    var(--fl-step-cool-on-foot) 100%
-  );
+  background-image:
+    var(--fl-step-gloss),
+    linear-gradient(
+      180deg,
+      var(--fl-step-cool-on-cap) 0%,
+      var(--fl-step-cool-on-body) 15%,
+      var(--fl-step-cool-on-foot) 100%
+    );
 }
 
 .fl-step[data-group="warm"][data-on="true"] {
-  background-image: linear-gradient(
-    180deg,
-    var(--fl-step-warm-on-cap) 0%,
-    var(--fl-step-warm-on-body) 15%,
-    var(--fl-step-warm-on-foot) 100%
-  );
+  background-image:
+    var(--fl-step-gloss),
+    linear-gradient(
+      180deg,
+      var(--fl-step-warm-on-cap) 0%,
+      var(--fl-step-warm-on-body) 15%,
+      var(--fl-step-warm-on-foot) 100%
+    );
 }
 
 .fl-step[data-playhead="true"] {
   outline: 2px solid var(--fl-accent-orange);
   outline-offset: 1px;
+}
+
+.fl-channel-rack__pattern-length {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.16);
 }

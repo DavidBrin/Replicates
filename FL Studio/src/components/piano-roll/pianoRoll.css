@@ -12,19 +12,19 @@
  */
 
 .fl-piano-roll {
-  --fl-roll-lane-white: #42545f;
-  --fl-roll-lane-black: #394b56;
-  --fl-roll-beat-band: #32444f;
-  --fl-roll-grid-step: #394b56;
-  --fl-roll-grid-beat: #2e404b;
-  --fl-roll-grid-beat-flank: #3e4f5a;
-  --fl-roll-grid-bar: #1a2c37;
+  --fl-roll-lane-white: #465965;
+  --fl-roll-lane-black: #35464f;
+  --fl-roll-beat-band: #2e404b;
+  --fl-roll-grid-step: #3d4f5a;
+  --fl-roll-grid-beat: #2b3c46;
+  --fl-roll-grid-beat-flank: #495c68;
+  --fl-roll-grid-bar: #202f38;
   --fl-roll-ruler: #2a363f;
   --fl-roll-ruler-text: #bdc2c6;
-  --fl-roll-key-white-start: #d9dde5;
+  --fl-roll-key-white-start: #b6bec7;
   --fl-roll-key-white-end: #ffffff;
-  --fl-roll-key-black: #494a4c;
-  --fl-roll-key-separator: #2d3438;
+  --fl-roll-key-black: #2f3134;
+  --fl-roll-key-separator: #97a0a6;
   --fl-roll-key-label: #3b4a55;
   --fl-roll-key-pressed: #bcf1c6;
   --fl-roll-note-body: #bcf1c6;
@@ -51,60 +51,84 @@
 
 /* --- header chrome: React's only painted territory (SPEC §4.2) ----------- */
 
+/* Same chrome idiom as the transport bar: a lit strip carrying raised,
+   bevelled controls, not a flat band with web buttons on it. */
 .fl-piano-roll__bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: none;
-  height: 30px;
-  padding: 0 8px;
-  background: var(--fl-chrome);
-  border-bottom: 1px solid var(--fl-deep-recess);
-  font-size: 12px;
-  letter-spacing: 0.02em;
+  height: 28px;
+  padding: 0 6px;
+  background: linear-gradient(180deg, #566066 0%, #4a545a 55%, #444d53 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 1px 0 var(--fl-bevel-light);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .fl-piano-roll__title {
   color: var(--fl-text-secondary);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
 }
 
 .fl-piano-roll__channel {
   color: var(--fl-led-green);
+  font-weight: 700;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
 }
 
 .fl-piano-roll__tools {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3f484e 0%, #394247 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .fl-piano-roll__tool {
-  min-width: 26px;
-  height: 20px;
+  min-width: 30px;
+  height: 17px;
   padding: 0 6px;
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
-  background: var(--fl-deep-recess);
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #5c666c 0%, #414a50 52%, #384146 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   color: var(--fl-text-secondary);
   font: inherit;
-  font-size: 11px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
 
 .fl-piano-roll__tool[aria-pressed="true"] {
-  background: var(--fl-chrome-alt);
+  background: linear-gradient(180deg, #2f373c 0%, #3b444a 100%);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
   color: var(--fl-accent-orange);
-  border-color: var(--fl-accent-orange-glow);
+  border-color: rgba(0, 0, 0, 0.7);
+  text-shadow: 0 0 6px var(--fl-accent-orange-glow);
 }
 
 .fl-piano-roll__snap,
 .fl-piano-roll__channel-select {
   height: 20px;
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
-  background: var(--fl-deep-recess);
+  padding: 0 4px;
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #5c666c 0%, #414a50 52%, #384146 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
   color: var(--fl-text-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
   /* Native popups render light without this, in BOTH engines. */
   color-scheme: dark;
 }

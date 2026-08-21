@@ -14,19 +14,21 @@
   --fl-meter-trough: #3b4d5f;
   --fl-fader-default: #c6cdd1;
   --fl-fader-off-default: #f0a020;
-  --fl-mixer-strip-bg: #4e585e;
-  --fl-mixer-strip-selected: #5c6a71;
+  --fl-mixer-strip-bg: #414f59;
+  --fl-mixer-strip-selected: #4f6473;
+  --fl-mixer-bg: #36434d;
 }
 
+/* Strips butt up against each other in FL — one continuous console panel
+   divided by hairlines, not a row of separately-bordered cards. */
 .fl-mixer {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  gap: 2px;
-  height: 100%;
-  padding: 8px;
+  gap: 0;
+  padding: 4px 4px 6px;
   overflow-x: auto;
-  background: var(--fl-workspace);
+  background: var(--fl-mixer-bg);
   font-family: var(--fl-font-condensed);
 }
 
@@ -34,64 +36,91 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 64px;
+  justify-content: flex-start;
+  gap: 5px;
+  width: 46px;
+  height: 258px;
   flex: none;
-  padding: 8px 4px;
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
-  background: var(--fl-mixer-strip-bg);
+  padding: 4px 3px 6px;
+  border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fl-mixer-strip-bg) 88%, white) 0%,
+    var(--fl-mixer-strip-bg) 18%,
+    color-mix(in srgb, var(--fl-mixer-strip-bg) 88%, black) 100%
+  );
   cursor: pointer;
 }
 
 .fl-mixer-strip[data-selected="true"] {
-  background: var(--fl-mixer-strip-selected);
-  border-color: var(--fl-led-green);
-  box-shadow: 0 0 6px rgba(168, 225, 176, 0.35);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fl-mixer-strip-selected) 85%, white) 0%,
+    var(--fl-mixer-strip-selected) 18%,
+    color-mix(in srgb, var(--fl-mixer-strip-selected) 88%, black) 100%
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .fl-mixer-strip[data-master="true"] {
-  border-color: var(--fl-accent-orange-glow);
+  border-right: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: inset -3px 0 5px -4px rgba(0, 0, 0, 0.8);
 }
 
 .fl-mixer-strip__name {
   width: 100%;
-  padding: 3px 2px;
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
-  background: var(--fl-deep-recess);
+  padding: 2px 1px;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #56636d 0%, #414e58 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   color: var(--fl-text-primary);
-  font-size: 10px;
+  font-size: 9px;
+  letter-spacing: 0.01em;
   text-align: center;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
 }
 
+.fl-mixer-strip[data-selected="true"] .fl-mixer-strip__name {
+  background: linear-gradient(180deg, #6f8ba6 0%, #4f6a86 100%);
+  color: #ffffff;
+}
+
 .fl-mixer-strip__led {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
-  border: 1px solid var(--fl-border);
-  background: #3a4448;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  background: radial-gradient(circle at 35% 30%, #4a555a, #232a2d 75%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   cursor: pointer;
   padding: 0;
 }
 
+/* Matched to the rack LED (channelRack.css): a lit dome, not a lamp. */
 .fl-mixer-strip__led[data-muted="false"] {
-  background: var(--fl-led-green);
-  box-shadow: 0 0 4px var(--fl-led-green-highlight);
+  background: radial-gradient(circle at 35% 30%, var(--fl-led-green-highlight), #4e9a59 85%);
+  box-shadow:
+    0 0 3px rgba(168, 225, 176, 0.55),
+    inset 0 0 2px rgba(255, 255, 255, 0.45);
 }
 
+/* A fixed throw, not "whatever height the rail happens to be" — an 800 px
+   fader is the single loudest way the replica read as a web page. */
 .fl-mixer-strip__body {
   display: flex;
   flex-direction: row;
   align-items: stretch;
   justify-content: center;
-  gap: 6px;
-  flex: 1;
-  min-height: 160px;
+  gap: 4px;
+  flex: none;
+  height: 170px;
 }
 
 /* --------------------------------------------------------------- fader */
@@ -100,33 +129,62 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  width: 24px;
+  width: 22px;
   cursor: ns-resize;
   touch-action: none;
 }
 
+/* FL's fader rail is a milled slot, not a hairline: dark walls with a lit
+   centre score, so the cap reads as riding IN something. */
 .fl-fader__track {
   position: relative;
-  width: 4px;
+  width: 7px;
   height: 100%;
   border-radius: 2px;
-  background: var(--fl-deep-recess);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  background: linear-gradient(
+    90deg,
+    #1d2429 0%,
+    #2c353b 40%,
+    #38434a 50%,
+    #2c353b 60%,
+    #1d2429 100%
+  );
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.75),
+    0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+/* Wide, short, pale cap with a centre score line (lane 1 §5.2). */
 .fl-fader__handle {
   position: absolute;
   left: 50%;
   width: 20px;
-  height: 10px;
+  height: 13px;
   border-radius: 2px;
-  background: var(--fl-fader-default);
-  border: 1px solid var(--fl-border);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  background:
+    linear-gradient(
+      180deg,
+      #e6eaec 0%,
+      var(--fl-fader-default) 42%,
+      #98a1a6 50%,
+      var(--fl-fader-default) 58%,
+      #8b9499 100%
+    );
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   transform: translate(-50%, 50%);
 }
 
 .fl-fader[data-off-default="true"] .fl-fader__handle {
-  background: var(--fl-fader-off-default);
-  box-shadow: 0 0 4px var(--fl-accent-orange-glow);
+  background: linear-gradient(
+    180deg,
+    #ffd79a 0%,
+    var(--fl-fader-off-default) 42%,
+    #b9761a 50%,
+    var(--fl-fader-off-default) 58%,
+    #a86a16 100%
+  );
 }
 
 /* --------------------------------------------------------------- meter */
@@ -135,13 +193,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  width: 16px;
+  gap: 3px;
+  width: 13px;
 }
 
 .fl-meter__clip {
-  width: 8px;
-  height: 8px;
+  flex: none;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--fl-deep-recess);
   border: 1px solid var(--fl-border);
@@ -155,17 +214,29 @@
 .fl-meter__bars {
   display: flex;
   flex-direction: row;
-  gap: 2px;
+  gap: 1px;
   flex: 1;
+  min-height: 0;
   width: 100%;
 }
 
+/* An idle FL meter still reads as a meter: a recessed slot with a lit rim,
+   not a flat rectangle the same value as the strip behind it. */
 .fl-meter__trough {
   position: relative;
   flex: 1;
   height: 100%;
   border-radius: 1px;
-  background: var(--fl-meter-trough);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--fl-meter-trough) 82%, black) 0%,
+    var(--fl-meter-trough) 55%,
+    color-mix(in srgb, var(--fl-meter-trough) 88%, black) 100%
+  );
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: flex-end;
   overflow: hidden;

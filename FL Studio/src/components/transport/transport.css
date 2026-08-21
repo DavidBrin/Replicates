@@ -1,134 +1,195 @@
 /**
  * Transport/toolbar surface tokens + layout (SPEC §4.3, §6).
  * Owned by this surface (slice C) — not part of the global sheet.
+ *
+ * The bar follows FL's toolbar idiom rather than a web toolbar's: controls
+ * are not floated on the strip, they sit in shallow recessed *plates* (lane 1
+ * §1.2), each plate holding one cluster of raised, bevelled controls. That is
+ * what makes FL's toolbar read dense at 40 px tall while ours read empty.
  */
 
 .fl-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 48px;
-  padding: 0 10px;
-  background: var(--fl-chrome);
-  border-bottom: 1px solid var(--fl-deep-recess);
+  gap: 5px;
+  height: 38px;
+  padding: 0 6px;
+  background: linear-gradient(180deg, #5e686e 0%, #4f595f 42%, #464f55 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.28);
+  border-bottom: 2px solid #262d31;
   font-family: var(--fl-font-condensed);
   color: var(--fl-text-primary);
   letter-spacing: 0.02em;
   flex: none;
 }
 
+/* One recessed plate per cluster. */
 .fl-toolbar__group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  height: 30px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #434c52 0%, #3d464c 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.4),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
+/* The plates themselves are the separation now; a rule between them only
+   added a second, competing seam. */
 .fl-toolbar__divider {
-  width: 1px;
-  align-self: stretch;
-  margin: 8px 0;
-  background: var(--fl-deep-recess);
+  display: none;
 }
 
 /* Play / Stop pill */
 .fl-transport-pill {
   display: flex;
-  border-radius: var(--fl-radius-md);
+  border-radius: 3px;
   overflow: hidden;
-  background: var(--fl-deep-recess);
-  border: 1px solid var(--fl-border);
+  background: #2b3338;
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.4);
 }
 
 .fl-transport-pill button {
-  width: 32px;
-  height: 28px;
+  width: 30px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: linear-gradient(180deg, #5c666c 0%, #414a50 52%, #384146 100%);
   border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   cursor: pointer;
-  color: var(--fl-text-primary);
+  color: #dbe3e7;
+  font-size: 11px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+
+.fl-transport-pill button:last-child {
+  border-right: none;
 }
 
 .fl-transport-pill button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, #6a747a 0%, #4a545a 52%, #3f484d 100%);
 }
 
 .fl-transport-pill button[data-active="true"] {
   color: var(--fl-accent-orange);
+  text-shadow: 0 0 6px var(--fl-accent-orange-glow);
 }
 
 /* Pattern / Song mode switch */
 .fl-mode-switch {
-  min-width: 68px;
-  height: 28px;
-  border-radius: var(--fl-radius-md);
-  border: 1px solid var(--fl-border);
-  background: var(--fl-deep-recess);
+  min-width: 42px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  background: linear-gradient(180deg, #5c666c 0%, #414a50 52%, #384146 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 1px rgba(0, 0, 0, 0.35);
   color: var(--fl-text-secondary);
   font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 9px;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
 
 .fl-mode-switch[data-mode="song"] {
-  background: var(--fl-accent-orange-glow);
+  background: linear-gradient(180deg, #ffc25a 0%, var(--fl-accent-orange-glow) 55%, #d96f00 100%);
   color: #2b1c00;
-  box-shadow: 0 0 8px var(--fl-accent-orange-glow);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 7px rgba(255, 138, 0, 0.65);
 }
 
-/* LCD idiom (lane 1 §1.3) — light-on-dark-chrome, inverted from the rest */
+/* LCD idiom (lane 1 §1.3) — FL's tempo plate is a pale, top-lit readout with
+   dark digits sunk into the chrome (see research/screenshots/
+   basics_interface_lcd.png), not a dark plate with glowing digits. */
 .fl-lcd {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 8px;
-  border-radius: var(--fl-radius-sm);
+  gap: 3px;
+  height: 24px;
+  padding: 0 4px 0 6px;
+  border-radius: 4px;
   background: linear-gradient(
     180deg,
-    var(--fl-lcd-bg-start),
-    var(--fl-lcd-bg-end)
+    #f4fbff 0%,
+    var(--fl-lcd-bg-start) 38%,
+    var(--fl-lcd-bg-end) 72%,
+    #cadeea 100%
   );
   color: var(--fl-lcd-text);
-  border: 1px solid var(--fl-deep-recess);
+  border: 1px solid #121a1e;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.09);
   cursor: ns-resize;
 }
 
+/* The digits themselves — the one place in the UI that is dark-on-light. */
+.fl-lcd > span:first-child,
 .fl-lcd input {
-  width: 56px;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.fl-lcd input {
+  width: 42px;
   background: transparent;
   border: none;
   outline: none;
   color: var(--fl-lcd-text);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  font-size: 14px;
   text-align: right;
 }
 
 .fl-lcd__spinner {
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 
 .fl-lcd__spinner button {
-  width: 12px;
-  height: 13px;
-  line-height: 0;
+  width: 11px;
+  height: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
-  color: var(--fl-lcd-text);
+  color: #4c6070;
   cursor: pointer;
-  font-size: 8px;
+  font-size: 7px;
+  line-height: 1;
+  padding: 0;
+}
+
+.fl-lcd__spinner button:hover {
+  color: var(--fl-lcd-text);
 }
 
 .fl-lcd__unit {
-  font-size: 10px;
-  opacity: 0.7;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.62;
 }
 
 /* Pattern selector */
@@ -136,72 +197,137 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 28px;
+  height: 22px;
 }
 
 .fl-pattern-selector__name {
-  min-width: 96px;
-  padding: 0 8px;
+  min-width: 92px;
+  padding: 0 7px;
   height: 100%;
   display: flex;
   align-items: center;
-  background: var(--fl-deep-recess);
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
-  color: var(--fl-text-primary);
-  font-size: 12px;
+  background: linear-gradient(
+    180deg,
+    #f4fbff 0%,
+    var(--fl-lcd-bg-start) 38%,
+    var(--fl-lcd-bg-end) 72%,
+    #cadeea 100%
+  );
+  border: 1px solid #121a1e;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.16);
+  border-radius: 3px;
+  color: var(--fl-lcd-text);
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fl-icon-button {
-  width: 22px;
-  height: 28px;
+  width: 20px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--fl-deep-recess);
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
+  background: linear-gradient(180deg, #5c666c 0%, #414a50 52%, #384146 100%);
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 1px rgba(0, 0, 0, 0.32);
+  border-radius: 3px;
   color: var(--fl-text-secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+  padding: 0;
 }
 
 .fl-icon-button:hover {
   color: var(--fl-text-primary);
+  background: linear-gradient(180deg, #6a747a 0%, #4a545a 52%, #3f484d 100%);
 }
 
 .fl-icon-button:disabled {
-  opacity: 0.4;
+  opacity: 0.38;
   cursor: default;
 }
 
-/* Swing slider */
+.fl-icon-button[data-active="true"] {
+  color: var(--fl-accent-orange);
+  text-shadow: 0 0 6px var(--fl-accent-orange-glow);
+}
+
+/* Swing slider — a short recessed rail with a pale cap, like FL's small
+   horizontal sliders, not a browser range control. */
 .fl-swing {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 5px;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: var(--fl-text-secondary);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
 }
 
 .fl-swing input[type="range"] {
-  accent-color: var(--fl-accent-orange-glow);
+  -webkit-appearance: none;
+  appearance: none;
+  width: 76px;
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  background: linear-gradient(180deg, #262e33 0%, #333d43 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
 }
 
-/* Generic small text button (save/export/import) */
+.fl-swing input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, #e6eaec 0%, #c6cdd1 45%, #98a1a6 52%, #8b9499 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.fl-swing input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, #e6eaec 0%, #c6cdd1 45%, #98a1a6 52%, #8b9499 100%);
+}
+
+/* Generic small text button (save/export/import) — chrome-sized, not
+   web-sized: FL's labelled toolbar buttons are ~20 px tall with 9 px caps. */
 .fl-text-button {
-  height: 28px;
-  padding: 0 10px;
-  background: var(--fl-deep-recess);
-  border: 1px solid var(--fl-border);
-  border-radius: var(--fl-radius-sm);
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  background: linear-gradient(180deg, #5c666c 0%, #414a50 52%, #384146 100%);
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 1px rgba(0, 0, 0, 0.32);
+  border-radius: 2px;
   color: var(--fl-text-secondary);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .fl-text-button:hover {
   color: var(--fl-text-primary);
+  background: linear-gradient(180deg, #6a747a 0%, #4a545a 52%, #3f484d 100%);
 }

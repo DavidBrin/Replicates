@@ -195,13 +195,28 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
             ))}
           </div>
           <div className="fl-playlist__scrollx" ref={scrollRef} onWheel={handleWheelZoom}>
-            <div className="fl-playlist__content" style={{ width: contentWidth }}>
+            <div
+              className="fl-playlist__content"
+              style={
+                { width: contentWidth, "--fl-lane-px": `${LANE_HEIGHT_PX}px` } as React.CSSProperties
+              }
+            >
               <TimelineRuler
                 totalBars={totalBars}
                 pxPerBar={zoomPxPerBar}
                 playheadTicks={playbackMode === "song" ? (playheadTicks ?? null) : null}
               />
-              <div className="fl-playlist__lanes" style={{ width: contentWidth }}>
+              <div
+                className="fl-playlist__lanes"
+                // The lane grid rules are CSS gradients; the zoom is React
+                // state, so the bar pitch crosses over as a custom property.
+                style={
+                  {
+                    width: contentWidth,
+                    "--fl-bar-px": `${zoomPxPerBar}px`,
+                  } as React.CSSProperties
+                }
+              >
                 {tracks.map((track, index) => (
                   <div
                     key={track.id}
