@@ -1,0 +1,159 @@
+/**
+ * The piano roll's keyboard bindings (SPEC §4.4, registered via §6's registry).
+ *
+ * `src/lib/keyboard.ts` is a registry that owns no bindings of its own — this
+ * surface registers its own under the `"piano-roll"` id and unregisters on
+ * unmount. The bindings take their state and effects through
+ * {@link PianoRollBindingDeps}, so they are driven synchronously in tests with
+ * a mocked dispatch and no store, no canvas and no React.
+ *
+ * | Combo | Effect |
+ * |---|---|
+ * | `Ctrl+A` | select every note of the target channel |
+ * | `Ctrl+D` | deselect all |
+ * | `Del` / `Backspace`+nothing-selected | delete the selection |
+ * | `Ctrl+↑` / `Ctrl+↓` | transpose the selection an octave |
+ * | `Shift+↑` / `Shift+↓` | transpose the selection a semitone |
+ * | `Backspace` | toggle snap off ⇄ last unit |
+ */
+
+import { removeNotes, updateNotes, type Command } from "@/domain/commands";
+import type { Note, NoteId, PatternId } from "@/domain/types";
+import { registerBindings, type KeyBinding } from "@/lib/keyboard";
+
+import { clampPitch } from "./geometry";
+
+export const PIANO_ROLL_SURFACE_ID = "piano-roll";
+
+export interface PianoRollBindingScene {
+  patternId: PatternId;
+  /** The target channel's notes — `Ctrl+A` selects exactly these. */
+  notes: readonly Note[];
+  selectedNoteIds: readonly NoteId[];
+}
+
+export interface PianoRollBindingDeps {
+  getScene: () => PianoRollBindingScene;
+  dispatch: (command: Command, options?: { coalesceKey?: string }) => void;
+  setSelection: (noteIds: NoteId[]) => void;
+  toggleSnap: () => void;
+}
+
+/**
+ * Transpose by `semitones`, clamped so the *whole* selection stays in MIDI
+ * range — a chord near the top of the keyboard must keep its shape rather than
+ * collapsing onto pitch 127.
+ */
+export function transposeCommand(
+  scene: PianoRollBindingScene,
+  semitones: number,
+): Command | null {
+  const selected = scene.notes.filter((note) => scene.selectedNoteIds.includes(note.id));
+  if (selected.length === 0) return null;
+  const highest = Math.max(...selected.map((note) => note.pitch));
+  const lowest = Math.min(...selected.map((note) => note.pitch));
+  const shift = Math.min(127 - highest, Math.max(-lowest, semitones));
+  if (shift === 0) return null;
+  return updateNotes(
+    scene.patternId,
+    selected.map((note) => ({ id: note.id, patch: { pitch: clampPitch(note.pitch + shift) } })),
+  );
+}
+
+export function deleteSelectionCommand(scene: PianoRollBindingScene): Command | null {
+  const ids = scene.notes
+    .filter((note) => scene.selectedNoteIds.includes(note.id))
+    .map((note) => note.id);
+  return ids.length === 0 ? null : removeNotes(scene.patternId, ids);
+}
+
+/**
+ * Builds the binding list. Exported separately from
+ * {@link registerPianoRollBindings} so a test can fire each handler without
+ * touching the global registry.
+ */
+export function createPianoRollBindings(deps: PianoRollBindingDeps): KeyBinding[] {
+  const transpose = (semitones: number) => (): void => {
+    const scene = deps.getScene();
+    const command = transposeCommand(scene, semitones);
+    if (command !== null) deps.dispatch(command);
+  };
+
+  return [
+    {
+      id: "select-all",
+      code: "KeyA",
+      ctrl: true,
+      description: "Select all notes",
+      handler: () => {
+        const scene = deps.getScene();
+        deps.setSelection(scene.notes.map((note) => note.id));
+      },
+    },
+    {
+      id: "deselect-all",
+      code: "KeyD",
+      ctrl: true,
+      description: "Deselect all",
+      handler: () => deps.setSelection([]),
+    },
+    {
+      id: "delete-selection",
+      code: "Delete",
+      description: "Delete selection",
+      handler: () => {
+        const command = deleteSelectionCommand(deps.getScene());
+        if (command !== null) deps.dispatch(command);
+      },
+    },
+    {
+      id: "transpose-octave-up",
+      code: "ArrowUp",
+      ctrl: true,
+      description: "Transpose selection up an octave",
+      handler: transpose(12),
+    },
+    {
+      id: "transpose-octave-down",
+      code: "ArrowDown",
+      ctrl: true,
+      description: "Transpose selection down an octave",
+      handler: transpose(-12),
+    },
+    {
+      id: "transpose-semitone-up",
+      code: "ArrowUp",
+      shift: true,
+      description: "Transpose selection up a semitone",
+      handler: transpose(1),
+    },
+    {
+      id: "transpose-semitone-down",
+      code: "ArrowDown",
+      shift: true,
+      description: "Transpose selection down a semitone",
+      handler: transpose(-1),
+    },
+    {
+      id: "toggle-snap",
+      code: "Backspace",
+      description: "Toggle snap",
+      handler: () => deps.toggleSnap(),
+    },
+  ];
+}
+
+/**
+ * Registers this surface's bindings and returns the unregister function —
+ * call it on unmount / when the roll loses focus.
+ *
+ * Integration note: nothing else needs to change. `src/lib/keyboard.ts` is a
+ * registry, and `AppShell` already attaches the single DOM listener; this
+ * module is called from `PianoRoll.tsx`'s mount effect.
+ */
+export function registerPianoRollBindings(
+  deps: PianoRollBindingDeps,
+  register: (surfaceId: string, bindings: KeyBinding[]) => () => void = registerBindings,
+): () => void {
+  return register(PIANO_ROLL_SURFACE_ID, createPianoRollBindings(deps));
+}

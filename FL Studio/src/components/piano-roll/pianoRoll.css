@@ -1,0 +1,133 @@
+/**
+ * Piano-roll surface tokens + chrome layout (SPEC §4.3, §6, §8).
+ *
+ * Owned by this surface — per-surface tokens never go in `src/lib/theme.css`.
+ * The canvas cannot read CSS custom properties by itself, so `PianoRoll.tsx`
+ * resolves the `--fl-roll-*` values below with `getComputedStyle` at mount and
+ * hands them to the painter as a `RollTheme`. That keeps FL's themeability
+ * (one sheet to re-skin) without hard-coding hexes in the painter, whose
+ * `DEFAULT_ROLL_THEME` is only the fallback.
+ *
+ * Values are the measured hexes of lane 1 §3.2–3.3.
+ */
+
+.fl-piano-roll {
+  --fl-roll-lane-white: #42545f;
+  --fl-roll-lane-black: #394b56;
+  --fl-roll-beat-band: #32444f;
+  --fl-roll-grid-step: #394b56;
+  --fl-roll-grid-beat: #2e404b;
+  --fl-roll-grid-beat-flank: #3e4f5a;
+  --fl-roll-grid-bar: #1a2c37;
+  --fl-roll-ruler: #2a363f;
+  --fl-roll-ruler-text: #bdc2c6;
+  --fl-roll-key-white-start: #d9dde5;
+  --fl-roll-key-white-end: #ffffff;
+  --fl-roll-key-black: #494a4c;
+  --fl-roll-key-separator: #2d3438;
+  --fl-roll-key-label: #3b4a55;
+  --fl-roll-key-pressed: #bcf1c6;
+  --fl-roll-note-body: #bcf1c6;
+  --fl-roll-note-top: #c6fbd0;
+  --fl-roll-note-shadow: #83ab89;
+  --fl-roll-note-grip: #4e8756;
+  --fl-roll-note-label: #1a2c37;
+  --fl-roll-note-selected: #ffd27c;
+  --fl-roll-ghost-note: #637580;
+  --fl-roll-velocity-lane: #2a363f;
+  --fl-roll-velocity-stem: #c7ffcf;
+  --fl-roll-velocity-stem-dim: #8fa3a8;
+  --fl-roll-velocity-baseline: #3e4f5a;
+  --fl-roll-playhead: #ffd27c;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--fl-chrome);
+  font-family: var(--fl-font-condensed);
+  color: var(--fl-text-primary);
+}
+
+/* --- header chrome: React's only painted territory (SPEC §4.2) ----------- */
+
+.fl-piano-roll__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--fl-chrome);
+  border-bottom: 1px solid var(--fl-deep-recess);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.fl-piano-roll__title {
+  color: var(--fl-text-secondary);
+}
+
+.fl-piano-roll__channel {
+  color: var(--fl-led-green);
+}
+
+.fl-piano-roll__tools {
+  display: flex;
+  gap: 4px;
+}
+
+.fl-piano-roll__tool {
+  min-width: 26px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  background: var(--fl-deep-recess);
+  color: var(--fl-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.fl-piano-roll__tool[aria-pressed="true"] {
+  background: var(--fl-chrome-alt);
+  color: var(--fl-accent-orange);
+  border-color: var(--fl-accent-orange-glow);
+}
+
+.fl-piano-roll__snap,
+.fl-piano-roll__channel-select {
+  height: 20px;
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  background: var(--fl-deep-recess);
+  color: var(--fl-text-primary);
+  font: inherit;
+  font-size: 11px;
+  /* Native popups render light without this, in BOTH engines. */
+  color-scheme: dark;
+}
+
+.fl-piano-roll__spacer {
+  flex: 1;
+}
+
+/* --- the canvas ---------------------------------------------------------- */
+
+.fl-piano-roll__surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--fl-roll-ruler);
+}
+
+.fl-piano-roll__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The roll owns right-click (delete) — no browser menu over the grid. */
+  touch-action: none;
+  cursor: cell;
+}

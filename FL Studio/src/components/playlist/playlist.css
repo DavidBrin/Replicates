@@ -1,0 +1,278 @@
+/**
+ * Playlist surface tokens + layout (SPEC.md §4.3, §6). Owned by this
+ * surface (slice F) — measured values from `research/01-visual-interaction-
+ * design.md` §4 and the global sheet's shared accents/text tokens.
+ */
+
+.fl-playlist {
+  --fl-playlist-ruler: #2b3840;
+  --fl-playlist-lane: #3a4c57;
+  --fl-playlist-lane-alt: #34434d;
+  --fl-playlist-header-bg: #32424b;
+  --fl-playlist-note-fill: #bcf1c6;
+  --fl-playlist-playhead: var(--fl-accent-orange-glow);
+
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--fl-playlist-lane);
+  color: var(--fl-text-primary);
+  font-family: var(--fl-font-condensed);
+}
+
+.fl-playlist__toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--fl-chrome);
+  border-bottom: 1px solid var(--fl-deep-recess);
+  flex: none;
+}
+
+.fl-playlist__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------- picker -- */
+
+.fl-playlist-picker {
+  display: flex;
+  flex-direction: column;
+  width: 140px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--fl-chrome-alt);
+  border-right: 1px solid var(--fl-deep-recess);
+}
+
+.fl-playlist-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--fl-deep-recess);
+  color: var(--fl-text-secondary);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fl-playlist-picker__row:hover {
+  color: var(--fl-text-primary);
+}
+
+.fl-playlist-picker__row[data-armed="true"] {
+  background: rgba(255, 210, 124, 0.14);
+  color: var(--fl-text-primary);
+  box-shadow: inset 3px 0 0 var(--fl-accent-orange);
+}
+
+.fl-playlist-picker__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.fl-playlist-picker__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- main -- */
+
+.fl-playlist__main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.fl-playlist__headers {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--fl-playlist-header-bg);
+  border-right: 1px solid var(--fl-deep-recess);
+}
+
+.fl-track-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 8px 0 4px;
+  border-bottom: 1px solid var(--fl-deep-recess);
+  overflow: hidden;
+}
+
+.fl-track-header__strip {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 2px;
+  flex: none;
+}
+
+.fl-track-header__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--fl-text-primary);
+}
+
+.fl-track-header__mute {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.fl-track-header__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fl-border);
+}
+
+.fl-track-header__mute[data-muted="true"] .fl-track-header__led {
+  background: var(--fl-led-green);
+  box-shadow: 0 0 4px var(--fl-led-green-highlight);
+}
+
+.fl-playlist__scrollx {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.fl-playlist__content {
+  position: relative;
+}
+
+/* -------------------------------------------------------------- ruler -- */
+
+.fl-playlist-ruler {
+  position: relative;
+  height: 24px;
+  background: var(--fl-playlist-ruler);
+  border-bottom: 1px solid var(--fl-deep-recess);
+}
+
+.fl-playlist-ruler__bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+  font-size: 10px;
+  color: var(--fl-text-secondary);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+}
+
+.fl-playlist-playhead__marker {
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--fl-playlist-playhead);
+  transform: translateX(-5px);
+}
+
+/* -------------------------------------------------------------- lanes -- */
+
+.fl-playlist__lanes {
+  display: flex;
+  flex-direction: column;
+}
+
+.fl-playlist-lane {
+  position: relative;
+  border-bottom: 1px solid var(--fl-deep-recess);
+  background: var(--fl-playlist-lane);
+  cursor: crosshair;
+}
+
+.fl-playlist-lane[data-shade="odd"] {
+  background: var(--fl-playlist-lane-alt);
+}
+
+.fl-playlist__playhead-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--fl-playlist-playhead);
+  box-shadow: 0 0 4px var(--fl-playlist-playhead);
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------- clip -- */
+
+.fl-clip {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid;
+  border-radius: var(--fl-radius-sm);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  user-select: none;
+}
+
+.fl-clip[data-selected="true"] {
+  outline: 2px solid var(--fl-accent-orange);
+  outline-offset: -1px;
+}
+
+.fl-clip__header {
+  flex: none;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 16px;
+  color: #16211a;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-clip__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.fl-clip__miniature {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fl-clip__miniature rect {
+  fill: var(--fl-playlist-note-fill);
+}

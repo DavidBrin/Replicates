@@ -1,0 +1,237 @@
+/**
+ * Channel Rack surface tokens + layout (SPEC §4.3, §6, §8: per-surface
+ * tokens live in the surface's own CSS file, never in `src/lib/theme.css`).
+ *
+ * Geometry is measured (lane 1 §2.3, HIGH on the ratios): step pitch 24 px,
+ * cell 20×32 px, 4 px gutter, 45 px channel row pitch. Step colours are the
+ * 4-step cool/warm hue alternation (lane 1 §2.4, HIGH) — the "on" state is a
+ * high-value tint of the same hue, not a different hue.
+ */
+
+.fl-channel-rack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--fl-rack-body);
+  color: var(--fl-text-primary);
+  font-family: var(--fl-font-condensed);
+  overflow: auto;
+}
+
+:root {
+  --fl-rack-body: #727c81;
+  --fl-rack-gutter: #727c81;
+  --fl-rack-outline: #5e676c;
+
+  /* Cool group (steps 1-4, 9-12) */
+  --fl-step-cool-off-body: #6e7579;
+  --fl-step-cool-off-cap: #7d8388;
+  --fl-step-cool-off-foot: #454c50;
+  --fl-step-cool-on-body: #d2e4ef;
+  --fl-step-cool-on-cap: #efffff;
+  --fl-step-cool-on-foot: #acbec9;
+
+  /* Warm group (steps 5-8, 13-16) */
+  --fl-step-warm-off-body: #806d6e;
+  --fl-step-warm-off-cap: #8d7b7c;
+  --fl-step-warm-off-foot: #4c494c;
+  --fl-step-warm-on-body: #ffced0;
+  --fl-step-warm-on-cap: #ffe9ec;
+  --fl-step-warm-on-foot: #acbec9;
+}
+
+.fl-channel-rack__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 32px;
+  padding: 0 8px;
+  flex: none;
+  background: var(--fl-chrome);
+  border-bottom: 1px solid var(--fl-deep-recess);
+}
+
+.fl-channel-rack__swing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fl-text-secondary);
+}
+
+.fl-channel-rack__swing input[type="range"] {
+  accent-color: var(--fl-accent-orange-glow);
+}
+
+.fl-channel-rack__pattern-length {
+  min-width: 24px;
+  text-align: center;
+  padding: 2px 6px;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.fl-channel-rack__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ------------------------------------------------------------------ row */
+
+.fl-rack-row {
+  display: grid;
+  grid-template-columns: 18px 24px 24px 28px 120px 6px 1fr;
+  align-items: center;
+  gap: 4px;
+  height: 45px; /* channel row pitch, lane 1 §2.3 */
+  padding: 0 6px;
+  border-bottom: 1px solid var(--fl-rack-outline);
+}
+
+.fl-rack-row[data-selected="true"] {
+  background: rgba(168, 225, 176, 0.08);
+}
+
+.fl-rack-row__led {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--fl-rack-outline);
+  background: #3a4448;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fl-rack-row__led[data-muted="false"] {
+  background: var(--fl-led-green);
+  box-shadow: 0 0 4px var(--fl-led-green-highlight);
+}
+
+.fl-rack-row__routing {
+  height: 20px;
+  border-radius: var(--fl-radius-sm);
+  border: 1px solid var(--fl-rack-outline);
+  background: var(--fl-deep-recess);
+  color: var(--fl-text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.fl-rack-row__name {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--fl-rack-outline);
+  border-radius: var(--fl-radius-sm);
+  background: #4a545a;
+  color: var(--fl-text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-rack-row__selector {
+  width: 6px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--fl-rack-outline);
+  cursor: pointer;
+}
+
+.fl-rack-row__selector[data-selected="true"] {
+  background: var(--fl-led-green);
+  box-shadow: 0 0 6px var(--fl-led-green-highlight);
+}
+
+.fl-rack-row__steps {
+  display: flex;
+  gap: 4px; /* gutter, lane 1 §2.3 */
+}
+
+/* ----------------------------------------------------------------- knob */
+
+.fl-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6b7378, #33393c 70%);
+  border: 1px solid var(--fl-rack-outline);
+  position: relative;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.fl-knob[data-off-default="true"] {
+  box-shadow: 0 0 4px var(--fl-accent-orange-glow);
+}
+
+.fl-knob__dial {
+  position: absolute;
+  inset: 0;
+}
+
+.fl-knob__indicator {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 2px;
+  height: 7px;
+  background: var(--fl-accent-orange);
+  transform: translateX(-50%);
+}
+
+/* ----------------------------------------------------------------- step */
+
+.fl-step {
+  width: 20px; /* cell width, lane 1 §2.3 */
+  height: 32px; /* cell height */
+  padding: 0;
+  border: 1px solid var(--fl-rack-outline);
+  border-radius: 3px;
+  cursor: pointer;
+  background: var(--fl-step-cool-off-body);
+  background-image: linear-gradient(
+    180deg,
+    var(--fl-step-cool-off-cap) 0%,
+    var(--fl-step-cool-off-body) 15%,
+    var(--fl-step-cool-off-foot) 100%
+  );
+}
+
+.fl-step[data-group="warm"] {
+  background: var(--fl-step-warm-off-body);
+  background-image: linear-gradient(
+    180deg,
+    var(--fl-step-warm-off-cap) 0%,
+    var(--fl-step-warm-off-body) 15%,
+    var(--fl-step-warm-off-foot) 100%
+  );
+}
+
+.fl-step[data-group="cool"][data-on="true"] {
+  background-image: linear-gradient(
+    180deg,
+    var(--fl-step-cool-on-cap) 0%,
+    var(--fl-step-cool-on-body) 15%,
+    var(--fl-step-cool-on-foot) 100%
+  );
+}
+
+.fl-step[data-group="warm"][data-on="true"] {
+  background-image: linear-gradient(
+    180deg,
+    var(--fl-step-warm-on-cap) 0%,
+    var(--fl-step-warm-on-body) 15%,
+    var(--fl-step-warm-on-foot) 100%
+  );
+}
+
+.fl-step[data-playhead="true"] {
+  outline: 2px solid var(--fl-accent-orange);
+  outline-offset: 1px;
+}
