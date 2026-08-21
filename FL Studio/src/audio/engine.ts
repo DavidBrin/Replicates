@@ -338,19 +338,37 @@ export function setMode(mode: PlaybackMode): void {
  * first gesture on a blocked context produced an unhandled rejection and a
  * roll that silently did nothing. Already-booted calls resolve immediately and
  * never reject — the sound itself is still synchronous.
+ *
+ * **A booted engine is not a running context.** Browsers suspend an
+ * AudioContext after a stretch of silence, and a `trigger` on a suspended
+ * context is scheduled against a frozen `currentTime` — no sound, no error, a
+ * promise that resolves. `ensureStarted()` is what resumes it (and is safe to
+ * call on every gesture, which is exactly why it exists), so the resume path
+ * is taken whenever the context is not running. A running one still fires
+ * synchronously: that is the contract every caller here relies on.
  */
 export function previewNote(
   channelId: ChannelId,
   pitch: number,
   durationSec: number = PREVIEW_DURATION_SEC,
 ): Promise<void> {
-  if (state === null || project === null) {
-    return ensureStarted().then(() => {
-      if (state !== null && project !== null) firePreview(channelId, pitch, durationSec);
-    });
+  if (state !== null && project !== null && isRunning(state.ctx)) {
+    firePreview(channelId, pitch, durationSec);
+    return Promise.resolve();
   }
-  firePreview(channelId, pitch, durationSec);
-  return Promise.resolve();
+  return ensureStarted().then(() => {
+    if (state !== null && project !== null) firePreview(channelId, pitch, durationSec);
+  });
+}
+
+/**
+ * Whether a context is live. A context that reports no `state` at all cannot
+ * be known to be suspended, so it counts as running and keeps the synchronous
+ * path; `resumeIfNeeded` would then be a no-op for it anyway.
+ */
+function isRunning(ctx: BaseAudioContext): boolean {
+  const { state: contextState } = ctx as BaseAudioContext & { state?: string };
+  return contextState === undefined || contextState === "running";
 }
 
 function firePreview(channelId: ChannelId, pitch: number, durationSec: number): void {

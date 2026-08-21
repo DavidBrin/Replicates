@@ -362,6 +362,65 @@ function foreignProject(): Project {
 }
 
 
+/**
+ * A different project that REUSES the given ids — the ordinary case, since
+ * every project mints ids from the same counter.
+ */
+function collidingProject(ids: { channel: string; pattern: string; mixer: string }): Project {
+  const foreign = foreignProject();
+  return {
+    ...foreign,
+    id: "prj-colliding",
+    channels: {
+      [ids.channel]: {
+        id: ids.channel,
+        name: "A stranger's channel",
+        color: "hsl(0, 0%, 50%)",
+        voice: "snare",
+        volume: 0.8,
+        pan: 0,
+        muted: false,
+        defaultStepPitch: 60,
+        routedToMixerTrackId: MASTER_MIXER_TRACK_ID,
+      },
+    },
+    channelOrder: [ids.channel],
+    patterns: {
+      [ids.pattern]: {
+        id: ids.pattern,
+        name: "Z",
+        color: "hsl(0,0%,50%)",
+        // Note ids collide too — they come from the same counter.
+        notes: {
+          "n-1": {
+            id: "n-1",
+            channelId: ids.channel,
+            positionTicks: 0,
+            lengthTicks: TICKS_PER_STEP,
+            pitch: 60,
+            velocity: 0.8,
+          },
+          "n-2": {
+            id: "n-2",
+            channelId: ids.channel,
+            positionTicks: TICKS_PER_STEP,
+            lengthTicks: TICKS_PER_STEP,
+            pitch: 62,
+            velocity: 0.8,
+          },
+        },
+      },
+    },
+    patternOrder: [ids.pattern],
+    activePatternId: ids.pattern,
+    mixerTracks: {
+      ...foreign.mixerTracks,
+      [ids.mixer]: { id: ids.mixer, name: "Stranger insert", volume: 0.8, pan: 0, muted: false },
+    },
+    mixerTrackOrder: [MASTER_MIXER_TRACK_ID, ids.mixer],
+  };
+}
+
 describe("replacing the project re-points dangling UI references", () => {
   /** Aim every UI slice at entities of the CURRENT project. */
   function aimUiAtCurrentProject(): void {
@@ -404,24 +463,85 @@ describe("replacing the project re-points dangling UI references", () => {
     expect(state.pianoRoll.previewPitch).toBeNull();
   });
 
-  it("leaves references that still resolve alone", () => {
+  it("leaves references that still resolve alone, for an in-project write", () => {
     aimUiAtCurrentProject();
     const before = useAppStore.getState();
-    const channelId = before.selectedChannelId;
+    const channelId = before.selectedChannelId!;
     const mixerId = before.selectedMixerTrackId;
     const patternId = before.playlistPaintPatternId;
 
-    // Same project object: nothing dangles.
-    expect(reconcileUiReferences(before, before.project)).not.toBeNull(); // the fake clip id does
-    useAppStore.getState().reconcileUiToProject();
+    // Same project, no replacement: only the genuinely dangling ids move — the
+    // fake clip and the fake note ids, and nothing else.
+    const patch = reconcileUiReferences(before, before.project);
+    expect(patch).not.toBeNull();
+    expect(Object.keys(patch!).sort()).toEqual(["pianoRoll", "playlistSelectedClipId"]);
+    expect(patch!.playlistSelectedClipId).toBeNull();
+    expect(patch!.pianoRoll?.selectedNoteIds).toEqual([]);
+    expect(patch!.pianoRoll?.channelId).toBe(channelId); // still resolves — untouched
+
+    // …and an ordinary command takes that same path.
+    useAppStore.getState().dispatch(updateChannel(channelId, { volume: 0.5 }));
 
     const after = useAppStore.getState();
     expect(after.selectedChannelId).toBe(channelId);
     expect(after.selectedMixerTrackId).toBe(mixerId);
     expect(after.playlistPaintPatternId).toBe(patternId);
     expect(after.pianoRoll.channelId).toBe(channelId);
-    // …and the one genuinely dangling reference is the one that was cleared.
     expect(after.playlistSelectedClipId).toBeNull();
+  });
+
+  /*
+   * Ids are minted from one `<prefix>-<counter>` sequence per *project*
+   * (`domain/ids.ts`), so a stranger's file is full of ids this session also
+   * uses. Reconciling a wholesale replacement by liveness alone therefore left
+   * every colliding reference in place, silently re-pointed at an entity the
+   * user never chose — the selection, the roll's target channel, the
+   * playlist's armed pattern.
+   */
+  it("clears colliding references on a wholesale replacement, not just dangling ones", () => {
+    aimUiAtCurrentProject();
+    const before = useAppStore.getState();
+    const collidingIds = {
+      channel: before.selectedChannelId!,
+      pattern: before.playlistPaintPatternId!,
+      mixer: before.selectedMixerTrackId,
+    };
+
+    useAppStore.getState().loadProject(collidingProject(collidingIds));
+
+    // Every id below still RESOLVES in the new project — and means nothing.
+    const state = useAppStore.getState();
+    expect(state.project.channels[collidingIds.channel]?.name).toBe("A stranger's channel");
+    expect(state.selectedChannelId).toBeNull();
+    expect(state.pianoRollRequestChannelId).toBeNull();
+    expect(state.pianoRoll.channelId).toBeNull();
+    expect(state.pianoRoll.selectedNoteIds).toEqual([]);
+    expect(state.playlistPaintPatternId).toBeNull();
+    expect(state.selectedMixerTrackId).toBe(MASTER_MIXER_TRACK_ID);
+  });
+
+  it("clears colliding references when an IMPORT is undone back to another project", () => {
+    aimUiAtCurrentProject();
+    const ids = {
+      channel: useAppStore.getState().selectedChannelId!,
+      pattern: useAppStore.getState().playlistPaintPatternId!,
+      mixer: useAppStore.getState().selectedMixerTrackId,
+    };
+
+    // Import (undoable, SPEC §2.2) then aim the UI at the imported entities…
+    useAppStore.getState().dispatch(replaceProject(collidingProject(ids)));
+    useAppStore.setState({
+      selectedChannelId: ids.channel,
+      pianoRoll: { ...useAppStore.getState().pianoRoll, channelId: ids.channel },
+    });
+
+    // …and undo it: the entity set is swapped back wholesale.
+    useAppStore.getState().undo();
+
+    const state = useAppStore.getState();
+    expect(state.project.channels[ids.channel]).toBeDefined(); // resolves…
+    expect(state.selectedChannelId).toBeNull(); // …and is cleared anyway
+    expect(state.pianoRoll.channelId).toBeNull();
   });
 
   it("costs nothing when there is nothing to reconcile", () => {

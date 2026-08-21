@@ -507,6 +507,74 @@ describe("prototype-bearing JSON cannot pollute or forge membership", () => {
     expect(Object.keys(project!.patterns["pat-1"]!.notes)).toEqual(["n-1"]);
   });
 
+  /*
+   * `""` is the UI's spelling of "no entity" — the piano roll's target channel
+   * is `ui.channelId ?? channelOrder[0] ?? ""` and its "is there a channel to
+   * write into" guard is `channelId !== ""`. A file that defines an entity
+   * actually keyed `""` would make that guard lie: a channel the roll lists,
+   * shows ghost notes for, and then refuses to draw into or audition. Ids are
+   * minted `<prefix>-<counter>` (`domain/ids.ts`), so `""` is never legitimate
+   * and is dropped here instead — absence gets one spelling.
+   */
+  it("drops entities keyed by the empty string, and whatever pointed at them", () => {
+    const project = readProject(
+      JSON.parse(`{
+        "channels": {
+          "": { "name": "Nameless", "voice": "kick" },
+          "ch-1": { "name": "Kick", "voice": "kick", "routedToMixerTrackId": "" }
+        },
+        "channelOrder": ["", "ch-1"],
+        "patterns": {
+          "": { "name": "Nameless", "notes": {} },
+          "pat-1": {
+            "name": "P",
+            "notes": {
+              "": { "channelId": "ch-1" },
+              "n-orphan": { "channelId": "" },
+              "n-1": { "channelId": "ch-1" }
+            }
+          }
+        },
+        "patternOrder": ["", "pat-1"],
+        "playlistTracks": { "": { "name": "T" }, "trk-1": { "name": "T" } },
+        "playlistTrackOrder": ["", "trk-1"],
+        "clips": {
+          "": { "trackId": "trk-1", "patternId": "pat-1", "startTick": 0 },
+          "clip-orphan": { "trackId": "", "patternId": "pat-1", "startTick": 0 },
+          "clip-1": { "trackId": "trk-1", "patternId": "pat-1", "startTick": 0 }
+        },
+        "mixerTracks": { "": { "name": "Nowhere" } },
+        "activePatternId": ""
+      }`),
+    );
+
+    expect(project).not.toBeNull();
+    expect(Object.keys(project!.channels)).toEqual(["ch-1"]);
+    expect(project!.channelOrder).toEqual(["ch-1"]);
+    expect(Object.keys(project!.patterns)).toEqual(["pat-1"]);
+    expect(project!.patternOrder).toEqual(["pat-1"]);
+    expect(Object.keys(project!.playlistTracks)).toEqual(["trk-1"]);
+    expect(Object.keys(project!.mixerTracks)).toEqual([MASTER_MIXER_TRACK_ID]);
+    // The note keyed "" is gone, and so is the one routed to the "" channel.
+    expect(Object.keys(project!.patterns["pat-1"]!.notes)).toEqual(["n-1"]);
+    // The clip keyed "" is gone, and so is the one on the "" track.
+    expect(Object.keys(project!.clips)).toEqual(["clip-1"]);
+    // "" is not a mixer strip either, so the routing falls back to Master.
+    expect(project!.channels["ch-1"]!.routedToMixerTrackId).toBe(MASTER_MIXER_TRACK_ID);
+    // …and an `activePatternId` of "" is invalid, not "the nameless pattern".
+    expect(project!.activePatternId).toBe("pat-1");
+  });
+
+  it("rejects a save whose only 'pattern' is keyed by the empty string", () => {
+    expect(
+      deserializeProject(
+        `{"schemaVersion": ${CURRENT_SCHEMA_VERSION},
+          "project": { "channels": {}, "patterns": { "": { "name": "X", "notes": {} } },
+          "mixerTracks": {} }}`,
+      ),
+    ).toBeNull();
+  });
+
   it("will not run a migration off an inherited schemaVersion key", () => {
     // `MIGRATIONS["constructor"]` is a function — a bare lookup would call it.
     expect(migrate({ schemaVersion: 2, project: {} })).toBeNull();

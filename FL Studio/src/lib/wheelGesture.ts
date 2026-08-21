@@ -24,8 +24,24 @@
  */
 export const WHEEL_GESTURE_GAP_MS = 500;
 
-/** What a caller passes so two gestures on *different* things never merge. */
-export type WheelGestureTarget = string;
+/**
+ * What a caller passes so two gestures on *different* things never merge.
+ *
+ * A target is usually *composite* — the roll's is (pattern, note), the rack's
+ * is (pattern, channel, step) — and both surfaces used to join their parts
+ * with `":"`. That join is not injective: an id is an arbitrary string (an
+ * imported project's ids are whatever the file says), so `("pat:1", "n-2")`
+ * and `("pat", "1:n-2")` produced the same target string and two nudges on
+ * genuinely different notes could fold into one undo entry. Pass the parts as
+ * a tuple and let {@link encodeTarget} do the joining — `JSON.stringify` over
+ * an array escapes every part, so distinct tuples give distinct keys.
+ */
+export type WheelGestureTarget = string | readonly (string | number)[];
+
+/** The one encoding of a target, injective for any part contents. */
+export function encodeTarget(target: WheelGestureTarget): string {
+  return JSON.stringify(typeof target === "string" ? [target] : [...target]);
+}
 
 export interface WheelGestureKeyring {
   /**
@@ -50,13 +66,14 @@ export function createWheelGestureKeyring(
   prefix: string,
   gapMs: number = WHEEL_GESTURE_GAP_MS,
 ): WheelGestureKeyring {
-  let active: { target: WheelGestureTarget; key: string; lastAt: number } | null = null;
+  let active: { target: string; key: string; lastAt: number } | null = null;
 
   return {
     keyFor(target, now = Date.now()) {
-      if (active === null || active.target !== target || now - active.lastAt > gapMs) {
+      const encoded = encodeTarget(target);
+      if (active === null || active.target !== encoded || now - active.lastAt > gapMs) {
         keyringCounter += 1;
-        active = { target, key: `${prefix}:${keyringCounter}`, lastAt: now };
+        active = { target: encoded, key: `${prefix}:${keyringCounter}`, lastAt: now };
       } else {
         active.lastAt = now;
       }

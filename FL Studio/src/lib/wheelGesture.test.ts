@@ -39,6 +39,32 @@ describe("wheel gesture keyring", () => {
     expect(ring.keyFor("note-1", 1_010)).not.toBe(first);
   });
 
+  /*
+   * A target is composite everywhere it is used — (pattern, note) in the roll,
+   * (pattern, channel, step) in the rack — and both surfaces used to join the
+   * parts with ":". Ids are arbitrary strings once a file is imported, so that
+   * join was not injective and two different targets shared one key.
+   */
+  it("keeps tuple targets apart when their parts contain the separator", () => {
+    const ring = createWheelGestureKeyring("test");
+    const first = ring.keyFor(["pat:1", "n-2"], 1_000);
+    expect(ring.keyFor(["pat", "1:n-2"], 1_001)).not.toBe(first);
+    // …and the same tuple is still the same gesture.
+    expect(ring.keyFor(["pat", "1:n-2"], 1_002)).toBe(ring.keyFor(["pat", "1:n-2"], 1_003));
+  });
+
+  it("distinguishes tuples of different arity that would flatten alike", () => {
+    const ring = createWheelGestureKeyring("test");
+    const first = ring.keyFor(["pat-1", "ch-1:3"], 1_000);
+    expect(ring.keyFor(["pat-1", "ch-1", 3], 1_001)).not.toBe(first);
+  });
+
+  it("encodes a number part distinctly from its string spelling", () => {
+    const ring = createWheelGestureKeyring("test");
+    const first = ring.keyFor(["pat-1", "ch-1", 3], 1_000);
+    expect(ring.keyFor(["pat-1", "ch-1", "3"], 1_001)).not.toBe(first);
+  });
+
   it("keeps two live keyrings from ever colliding", () => {
     const a = createWheelGestureKeyring("surface-a");
     const b = createWheelGestureKeyring("surface-b");

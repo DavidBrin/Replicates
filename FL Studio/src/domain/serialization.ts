@@ -21,7 +21,9 @@
  *    polluting every object in the realm. Membership is therefore always
  *    {@link owns} (`Object.hasOwn`), and every id read out of raw JSON is
  *    filtered through {@link safeEntries}, which drops the three dangerous
- *    keys outright — an entity may not be named `__proto__`.
+ *    keys outright — an entity may not be named `__proto__`. The same filter
+ *    drops the empty string, which the UI reserves as "no entity" (see
+ *    {@link safeEntries}).
  *
  * Repair vs. reject, resolved: structural nonsense (not an object, no
  * patterns, unknown `schemaVersion`) returns `null` and the caller falls back
@@ -77,9 +79,22 @@ function isObject(value: unknown): value is Unknown {
  */
 const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
-/** `Object.entries`, minus the keys of {@link FORBIDDEN_KEYS}. */
+/**
+ * `Object.entries`, minus the keys of {@link FORBIDDEN_KEYS} — and minus the
+ * empty string.
+ *
+ * `""` is never a legitimate id: every id is minted by `domain/ids.ts` as
+ * `<prefix>-<counter>`. It is, however, the value the UI uses for *absence* —
+ * the piano roll's target channel is `ui.channelId ?? channelOrder[0] ?? ""`,
+ * and its "is there a channel to write to at all" guard reads `channelId !==
+ * ""`. Letting a file define an entity actually keyed `""` would make that
+ * guard lie: a real channel the roll could show ghost notes for, could select
+ * in its dropdown, and would refuse to draw into or audition. Absence has one
+ * spelling, so an entity may not take it — such an entry is dropped here, and
+ * the referential repair below then drops whatever pointed at it.
+ */
 function safeEntries(record: Unknown): [string, unknown][] {
-  return Object.entries(record).filter(([key]) => !FORBIDDEN_KEYS.has(key));
+  return Object.entries(record).filter(([key]) => key !== "" && !FORBIDDEN_KEYS.has(key));
 }
 
 /**

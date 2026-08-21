@@ -276,6 +276,11 @@ export function __resetGestureCounterForTests(): void {
  * host's `ui.channelId ?? project.channelOrder[0] ?? ""`. Everything that
  * *reads* notes is fine with that (nothing matches an empty channel id);
  * everything that *creates* or auditions one is not.
+ *
+ * This is honest only because `""` cannot also *be* a channel: ids are minted
+ * `<prefix>-<counter>` (`domain/ids.ts`) and an imported project's `""`-keyed
+ * entities are dropped at deserialization (`domain/serialization.ts`'s
+ * `safeEntries`). The two halves are one rule — do not relax either alone.
  */
 function hasTargetChannel(scene: InteractionScene): boolean {
   return scene.channelId !== "";
@@ -293,11 +298,26 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     pitch: note.pitch,
   });
 
-  /** The notes a gesture on `note` acts on: the whole selection when it is in it. */
-  const gestureSet = (scene: InteractionScene, note: Note): Note[] => {
-    if (!scene.selectedNoteIds.includes(note.id)) return [note];
+  /**
+   * The notes a gesture on `note` acts on: the whole selection when it is in it.
+   *
+   * `selection` is passed in rather than read off the scene because the click
+   * that starts the drag may have *changed* the selection a line earlier, and
+   * `getScene()` is a snapshot taken before it — reading `scene.selectedNoteIds`
+   * here would be reading the selection as it was before the press. That was
+   * live damage while Ctrl+click fell through into the drag branches (it
+   * dragged the pre-click selection); with the toggle returning early the two
+   * readings happen to agree again, and this parameter is what keeps them from
+   * diverging the next time a branch above changes the selection.
+   */
+  const gestureSet = (
+    scene: InteractionScene,
+    selection: readonly NoteId[],
+    note: Note,
+  ): Note[] => {
+    if (!selection.includes(note.id)) return [note];
     const byId = new Map(scene.notes.map((candidate) => [candidate.id, candidate]));
-    const set = scene.selectedNoteIds
+    const set = selection
       .map((id) => byId.get(id))
       .filter((candidate): candidate is Note => candidate !== undefined);
     return set.length > 0 ? set : [note];
@@ -403,21 +423,40 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       return;
     }
 
-    const additive = input.ctrlKey === true;
-    if (scene.tool === "select" || additive) {
-      const next = additive
-        ? scene.selectedNoteIds.includes(hit.note.id)
-          ? scene.selectedNoteIds.filter((id) => id !== hit.note.id)
-          : [...scene.selectedNoteIds, hit.note.id]
-        : [hit.note.id];
+    /*
+     * Ctrl+click is a *selection* gesture, whatever the tool, and it starts
+     * nothing else.
+     *
+     * It used to fall through to the branches below whenever the tool was not
+     * `select`: Ctrl+Shift+click on a note added it to the selection and then
+     * immediately *cloned* the selection, and a plain Ctrl+click began a move
+     * whose note set came from the pre-click selection. Toggling membership
+     * and dragging are two different intents; the toggle wins, and the drag is
+     * the next press.
+     */
+    if (input.ctrlKey === true) {
+      const next = scene.selectedNoteIds.includes(hit.note.id)
+        ? scene.selectedNoteIds.filter((id) => id !== hit.note.id)
+        : [...scene.selectedNoteIds, hit.note.id];
       deps.setSelection([...next]);
-      if (scene.tool === "select") return;
-    } else if (!scene.selectedNoteIds.includes(hit.note.id)) {
+      return;
+    }
+
+    if (scene.tool === "select") {
+      deps.setSelection([hit.note.id]);
+      return;
+    }
+
+    // What the drag below acts on — the selection *after* this click, not the
+    // one `getScene()` snapshotted before it (see `gestureSet`).
+    let selection: readonly NoteId[] = scene.selectedNoteIds;
+    if (!selection.includes(hit.note.id)) {
+      selection = [hit.note.id];
       deps.setSelection([hit.note.id]);
     }
 
     if (hit.zone === "grip") {
-      const notes = gestureSet(scene, hit.note).map(snapshot);
+      const notes = gestureSet(scene, selection, hit.note).map(snapshot);
       beginDrag({
         kind: "resize",
         coalesceKey: nextCoalesceKey(),
@@ -425,13 +464,17 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         primaryId: hit.note.id,
         originX: input.x,
         lastDeltaTicks: 0,
-        finalLengthTicks: hit.note.lengthTicks,
+        // A step's stored `0` is a marker, not a length: the grip the user
+        // grabbed is drawn one cell to the right of the note's origin, so the
+        // resize has to start from the *effective* length or the very first
+        // move snaps the note back to a single tick.
+        finalLengthTicks: effectiveLengthTicks(hit.note.lengthTicks),
       });
       return;
     }
 
     // Shift+left-click clones the selection, then drags the clones (§4.4).
-    const source = gestureSet(scene, hit.note);
+    const source = gestureSet(scene, selection, hit.note);
     const coalesceKey = nextCoalesceKey();
     if (input.shiftKey === true) {
       const clones = source.map((note) => ({ ...note, id: deps.createNoteId() }));
@@ -589,11 +632,18 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     if (primary === undefined) return;
 
     if (active.kind === "resize") {
-      const rawEnd = primary.positionTicks + primary.lengthTicks + pxToTicks(view, input.x - active.originX);
+      // Every length in this branch is the *effective* one (`tickMath.ts`): a
+      // step stores `lengthTicks: 0` as a marker and is drawn — grip included
+      // — one whole cell wide. Anchoring at the stored zero put the resize's
+      // origin a cell to the left of the grip the user actually grabbed, so
+      // dragging one cell right produced a one-step note and holding still
+      // rewrote the marker into a 1-tick length.
+      const primaryLength = effectiveLengthTicks(primary.lengthTicks);
+      const rawEnd = primary.positionTicks + primaryLength + pxToTicks(view, input.x - active.originX);
       const snappedEnd = snapTick(rawEnd, scene.snap, bypass);
       const minLength = minLengthTicks(scene.snap, bypass);
       const deltaTicks = Math.round(
-        Math.max(minLength, snappedEnd - primary.positionTicks) - primary.lengthTicks,
+        Math.max(minLength, snappedEnd - primary.positionTicks) - primaryLength,
       );
       if (deltaTicks === active.lastDeltaTicks) return;
       active.lastDeltaTicks = deltaTicks;
@@ -613,7 +663,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // real floor, and it always fits because a note starts inside the bar.
       const clampedLength = (note: NoteSnapshot): number => {
         const available = PATTERN_LENGTH_TICKS - note.positionTicks;
-        const desired = Math.max(minLength, note.lengthTicks + deltaTicks);
+        const desired = Math.max(minLength, effectiveLengthTicks(note.lengthTicks) + deltaTicks);
         return Math.max(1, Math.min(desired, available));
       };
 
@@ -712,8 +762,9 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         // them: `makeUnique` preserves ids when it clones a pattern, so two
         // nudges on "the same" note in the source and the clone, inside
         // WHEEL_GESTURE_GAP_MS, coalesced into one undo entry spanning two
-        // patterns.
-        { coalesceKey: velocityWheel.keyFor(`${scene.patternId}:${hit.note.id}`) },
+        // patterns. The pair is passed as a tuple, never joined by hand — see
+        // `wheelGesture.ts`'s `encodeTarget`.
+        { coalesceKey: velocityWheel.keyFor([scene.patternId, hit.note.id]) },
       );
       return true;
     }

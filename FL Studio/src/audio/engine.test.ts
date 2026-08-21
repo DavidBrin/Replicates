@@ -418,6 +418,39 @@ describe("previewNote", () => {
     await expect(previewNote("ch-kick", 60)).resolves.toBeUndefined();
   });
 
+  /*
+   * Booted is not the same as running: a browser suspends the context after a
+   * stretch of silence, and a trigger scheduled on a suspended context is
+   * scheduled against a frozen clock — silence, no error, and a promise that
+   * resolved. `previewNote` used to take the synchronous path on *any* booted
+   * engine and never call `ensureStarted`, which is what resumes it.
+   */
+  it("resumes a suspended context before sounding, once booted", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+    await ensureStarted();
+    const resumesAfterBoot = tone.ctx.resumeCount;
+    tone.ctx.state = "suspended";
+
+    await previewNote("ch-bass", 43);
+
+    expect(tone.ctx.resumeCount).toBe(resumesAfterBoot + 1);
+    expect(tone.ctx.state).toBe("running");
+    expect(tone.ctx.nodesOfKind("oscillator").length).toBeGreaterThan(0);
+  });
+
+  it("still sounds synchronously while the context is running", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+    await ensureStarted();
+    const resumesAfterBoot = tone.ctx.resumeCount;
+
+    previewNote("ch-bass", 43); // not awaited: the sound is immediate
+
+    expect(tone.ctx.nodesOfKind("oscillator").length).toBeGreaterThan(0);
+    expect(tone.ctx.resumeCount).toBe(resumesAfterBoot);
+  });
+
   it("ignores an unknown channel", async () => {
     const { tone } = installTone();
     syncProject(projectWith([]));

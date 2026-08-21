@@ -263,6 +263,45 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
   );
 
   /**
+   * Push the controller's cursor onto the canvas.
+   *
+   * `cursorAt` is the roll's whole affordance vocabulary — `ew-resize` over a
+   * note's grip, `move` over its body, `ns-resize` on the velocity splitter,
+   * `grabbing` while panning, `pointer` on the keyboard — and until this
+   * existed it was computed, unit-tested, and thrown away, leaving the CSS
+   * `cell` everywhere. Guarded by the last value written rather than
+   * throttled by time: the comparison is a string compare, and skipping the
+   * assignment is what keeps the style attribute from being rewritten on
+   * every one of a drag's pointermoves.
+   *
+   * It is recomputed on pointer-*up* and pointer-cancel as well, not only on
+   * move: `cursorAt` answers `grabbing` for as long as a middle-drag pan is in
+   * flight, and with the guard above that value stuck — releasing the button
+   * left the roll wearing a grab cursor until the pointer happened to move
+   * again, which after a pan is exactly when the user has stopped moving it.
+   *
+   * Declared here, above the effects that use it, because a `const` referenced
+   * in a hook's dependency array is read during render.
+   */
+  const cursorRef = useRef<string | null>(null);
+  const applyCursor = useCallback((canvas: HTMLCanvasElement, cursor: string): void => {
+    if (cursorRef.current === cursor) return;
+    cursorRef.current = cursor;
+    canvas.style.cursor = cursor;
+  }, []);
+
+  /**
+   * Drop back to the stylesheet's cursor — for a cancellation relayed from the
+   * store, which carries no pointer position to recompute one from.
+   */
+  const resetCursor = useCallback((): void => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    cursorRef.current = null;
+    canvas.style.cursor = "";
+  }, []);
+
+  /**
    * Relay an externally-cancelled gesture into the controller.
    *
    * The store cancels gestures on every write the pointer did not make —
@@ -285,8 +324,11 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
         if (!wasActive || !nowIdle) return;
         if (controller.peekGesture() === "idle") return;
         controller.cancel();
+        // The gesture that owned the cursor is gone and no pointer event will
+        // announce it (that is what "external" means here).
+        resetCursor();
       }),
-    [controller],
+    [controller, resetCursor],
   );
 
   useEffect(() => {
@@ -304,25 +346,6 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
       toggleSnap: () => getRollUi().togglePianoRollSnap(),
     });
   }, [buildScene]);
-
-  /**
-   * Push the controller's cursor onto the canvas.
-   *
-   * `cursorAt` is the roll's whole affordance vocabulary — `ew-resize` over a
-   * note's grip, `move` over its body, `ns-resize` on the velocity splitter,
-   * `grabbing` while panning, `pointer` on the keyboard — and until this
-   * existed it was computed, unit-tested, and thrown away, leaving the CSS
-   * `cell` everywhere. Guarded by the last value written rather than
-   * throttled by time: the comparison is a string compare, and skipping the
-   * assignment is what keeps the style attribute from being rewritten on
-   * every one of a drag's pointermoves.
-   */
-  const cursorRef = useRef<string | null>(null);
-  const applyCursor = useCallback((canvas: HTMLCanvasElement, cursor: string): void => {
-    if (cursorRef.current === cursor) return;
-    cursorRef.current = cursor;
-    canvas.style.cursor = cursor;
-  }, []);
 
   const toPointer = useCallback((event: React.PointerEvent<HTMLCanvasElement>): RollPointer => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -431,9 +454,15 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
           }}
           onPointerUp={(event) => {
             event.currentTarget.releasePointerCapture?.(event.pointerId);
-            controller.pointerUp(toPointer(event));
+            const pointer = toPointer(event);
+            controller.pointerUp(pointer);
+            applyCursor(event.currentTarget, controller.cursorAt(pointer));
           }}
-          onPointerCancel={() => controller.cancel()}
+          onPointerCancel={(event) => {
+            const pointer = toPointer(event);
+            controller.cancel();
+            applyCursor(event.currentTarget, controller.cursorAt(pointer));
+          }}
           onContextMenu={(event) => event.preventDefault()}
         />
       </div>

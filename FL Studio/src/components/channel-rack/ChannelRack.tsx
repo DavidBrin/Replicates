@@ -158,7 +158,9 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
           patch: { velocity: Math.min(1, Math.max(0, note.velocity + direction * VELOCITY_STEP)) },
         })),
       ),
-      { coalesceKey: velocityWheel.keyFor(`${activePattern.id}:${channelId}:${step}`) },
+      // A tuple, not a hand-joined string: ids may contain the separator
+      // (`wheelGesture.ts`'s `encodeTarget`).
+      { coalesceKey: velocityWheel.keyFor([activePattern.id, channelId, step]) },
     );
   }
 

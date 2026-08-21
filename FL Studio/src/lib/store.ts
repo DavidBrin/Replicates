@@ -168,6 +168,27 @@ export interface ReconcileOptions {
   resetGestures?: boolean;
 
   /**
+   * This write swapped the whole entity set — a load, an import, or an
+   * undo/redo of one.
+   *
+   * Liveness is the wrong test for that. `Object.hasOwn(project.channels,
+   * selectedChannelId)` asks whether *an* entity answers to that id, not
+   * whether it is the one the field meant, and ids are not globally unique:
+   * every project mints them from the same `<prefix>-<counter>` sequence
+   * (`domain/ids.ts`), so an unrelated file's `ch-2` collides with this
+   * session's `ch-2` as a matter of course. Importing a stranger's project
+   * therefore left the rack selecting, the roll editing and the playlist
+   * painting *its* entities, silently re-pointed at whatever happened to
+   * share the number.
+   *
+   * So a wholesale replacement clears every project-scoped ephemeral field
+   * unconditionally: nothing the user chose in the old project has a meaning
+   * in the new one. In-project mutations keep the liveness test — deleting one
+   * channel must not drop the roll's selection.
+   */
+  wholesale?: boolean;
+
+  /**
    * The active pattern *before* this write, when the caller knows it.
    *
    * Selection is reconciled by note-id liveness, and that is not enough on a
@@ -208,39 +229,49 @@ export interface ReconcileOptions {
 export function reconcileUiReferences(
   state: AppState,
   project: Project,
-  { resetGestures = false, previousPatternId }: ReconcileOptions = {},
+  { resetGestures = false, wholesale = false, previousPatternId }: ReconcileOptions = {},
 ): Partial<AppState> | null {
   const patch: Record<string, unknown> = {};
 
   const alive = (record: Record<string, unknown>, id: unknown): boolean =>
     typeof id === "string" && Object.hasOwn(record, id);
+  /**
+   * Whether a field must be re-pointed. On a wholesale replacement every
+   * project-scoped id is stale by construction, colliding or not — see
+   * {@link ReconcileOptions.wholesale}.
+   */
+  const stale = (record: Record<string, unknown>, id: unknown): boolean =>
+    wholesale || !alive(record, id);
 
   // --- channel-rack ------------------------------------------------------
-  if (state.selectedChannelId !== null && !alive(project.channels, state.selectedChannelId)) {
+  if (state.selectedChannelId !== null && stale(project.channels, state.selectedChannelId)) {
     patch.selectedChannelId = null;
   }
   if (
     state.pianoRollRequestChannelId !== null &&
-    !alive(project.channels, state.pianoRollRequestChannelId)
+    stale(project.channels, state.pianoRollRequestChannelId)
   ) {
     patch.pianoRollRequestChannelId = null;
   }
 
   // --- mixer: never null, so it falls back to Master rather than clearing --
-  if (!alive(project.mixerTracks, state.selectedMixerTrackId)) {
+  if (
+    stale(project.mixerTracks, state.selectedMixerTrackId) &&
+    state.selectedMixerTrackId !== MASTER_MIXER_TRACK_ID
+  ) {
     patch.selectedMixerTrackId = MASTER_MIXER_TRACK_ID;
   }
 
   // --- playlist ----------------------------------------------------------
   if (
     state.playlistSelectedClipId !== null &&
-    !alive(project.clips, state.playlistSelectedClipId)
+    stale(project.clips, state.playlistSelectedClipId)
   ) {
     patch.playlistSelectedClipId = null;
   }
   if (
     state.playlistPaintPatternId !== null &&
-    !alive(project.patterns, state.playlistPaintPatternId)
+    stale(project.patterns, state.playlistPaintPatternId)
   ) {
     // `null` is this field's documented "follow the active pattern".
     patch.playlistPaintPatternId = null;
@@ -250,24 +281,25 @@ export function reconcileUiReferences(
   const roll = state.pianoRoll;
   if (roll !== undefined && roll !== null) {
     const rollPatch: Record<string, unknown> = {};
-    if (roll.channelId !== null && !alive(project.channels, roll.channelId)) {
+    if (roll.channelId !== null && stale(project.channels, roll.channelId)) {
       rollPatch.channelId = null;
     }
     const notes = project.patterns[project.activePatternId]?.notes ?? {};
-    // A pattern switch drops the whole selection; otherwise only ids whose
-    // notes are gone. Filtering by liveness alone is a no-op across a clone.
+    // A pattern switch — or a whole new project — drops the selection outright;
+    // otherwise only ids whose notes are gone. Filtering by liveness alone is a
+    // no-op across a clone, and across an import it is worse than a no-op: the
+    // surviving ids name a stranger's notes.
     const patternChanged =
       previousPatternId !== undefined && previousPatternId !== project.activePatternId;
-    const survivingNotes = patternChanged
-      ? []
-      : roll.selectedNoteIds.filter((id) => alive(notes, id));
+    const survivingNotes =
+      wholesale || patternChanged ? [] : roll.selectedNoteIds.filter((id) => alive(notes, id));
     if (survivingNotes.length !== roll.selectedNoteIds.length) {
       rollPatch.selectedNoteIds = survivingNotes;
     }
     // A drag cannot survive the project it was dragging — but only a
     // wholesale replacement counts as "the project it was dragging" going
     // away; a drag's own commands must not cancel the drag.
-    if (resetGestures) {
+    if (resetGestures || wholesale) {
       if (roll.dragKind !== null) rollPatch.dragKind = null;
       if (roll.previewPitch !== null) rollPatch.previewPitch = null;
     }
@@ -295,11 +327,23 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     options: ReconcileOptions = {},
   ): void => {
     // Captured before the write: the reconcile pass has to know whether this
-    // write navigated to a different pattern (see `previousPatternId`).
-    const previousPatternId = get().project.activePatternId;
+    // write navigated to a different pattern (see `previousPatternId`), and
+    // whether it swapped the project outright (see `wholesale`).
+    const previous = get().project;
+    const previousPatternId = previous.activePatternId;
+    // `replaceProject` — a JSON import, and the undo/redo of one — is the only
+    // command that changes the project's own id, which is what makes this a
+    // reliable "different project" test rather than a list of call sites to
+    // keep in sync.
+    const wholesale = options.wholesale === true || previous.id !== next.project.id;
     set(next);
     const state = get();
-    const patch = reconcileUiReferences(state, state.project, { ...options, previousPatternId });
+    const patch = reconcileUiReferences(state, state.project, {
+      ...options,
+      wholesale,
+      resetGestures: options.resetGestures === true || wholesale,
+      previousPatternId,
+    });
     if (patch !== null) set(patch);
   };
 
@@ -366,7 +410,10 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
 
     reconcileUiToProject: () => {
       const state = get();
-      const patch = reconcileUiReferences(state, state.project, { resetGestures: true });
+      const patch = reconcileUiReferences(state, state.project, {
+        resetGestures: true,
+        wholesale: true,
+      });
       if (patch !== null) set(patch);
     },
   };

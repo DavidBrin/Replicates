@@ -109,7 +109,11 @@ function harness(overrides: Partial<InteractionScene> = {}): Harness {
   let idCounter = 0;
 
   const controller = createPianoRollController({
-    getScene: () => scene,
+    // A *copy*, exactly like the host's `buildScene()`: each `getScene()` call
+    // is a snapshot, so a handler that reads the scene it took at entry cannot
+    // see a `setSelection` it made afterwards. Handing out the mutable object
+    // hid a real staleness bug (`gestureSet` read the pre-click selection).
+    getScene: () => ({ ...scene }),
     dispatch,
     setSelection,
     setView,
@@ -614,6 +618,54 @@ describe("resize (drag the right-edge grip)", () => {
     const keys = h.dispatch.mock.calls.map((call) => call[1]?.coalesceKey);
     expect(new Set(keys).size).toBe(1);
   });
+
+  /*
+   * A rack step stores `lengthTicks: 0` — a marker, not a length — and is
+   * painted one cell wide, grip included. The resize used to anchor at the
+   * stored zero, i.e. a whole cell LEFT of the grip the user grabbed: dragging
+   * to the next boundary produced a one-step note (no growth at all) and
+   * merely holding the grip still rewrote the marker into a 1-tick length.
+   */
+  describe("a step note (lengthTicks 0) resizes from the grip, not from tick 0", () => {
+    const step = makeNote({ id: "n-step", positionTicks: 0, lengthTicks: 0, pitch: 67 });
+
+    function grabStepGrip(h: Harness): RollPointer {
+      const grip = gripRect(VIEW, step);
+      const point = { x: grip.x + 2, y: grip.y + 4, button: 0 };
+      h.controller.pointerDown(point);
+      return point;
+    }
+
+    it("grows to TWO steps when dragged one step past the grip", () => {
+      const h = harness({ notes: [step], snap: "quarterBeat" });
+      const start = grabStepGrip(h);
+      h.controller.pointerMove({ ...start, x: tickToX(VIEW, TICKS_PER_STEP * 2) });
+
+      const project = h.applied();
+      expect(project.patterns[project.activePatternId]?.notes[step.id]?.lengthTicks).toBe(
+        TICKS_PER_STEP * 2,
+      );
+    });
+
+    it("dispatches nothing at all when the grip does not move", () => {
+      const h = harness({ notes: [step], snap: "quarterBeat" });
+      const start = grabStepGrip(h);
+      h.controller.pointerMove({ ...start });
+      h.controller.pointerUp(start);
+
+      expect(h.dispatch).not.toHaveBeenCalled();
+      // …so the marker is still a marker.
+      const project = h.applied();
+      expect(project.patterns[project.activePatternId]?.notes[step.id]?.lengthTicks).toBe(0);
+    });
+
+    it("remembers the step's effective length, not its stored zero", () => {
+      const h = harness({ notes: [step], snap: "quarterBeat" });
+      const start = grabStepGrip(h);
+      h.controller.pointerUp(start);
+      expect(h.setLastLength).toHaveBeenCalledWith(TICKS_PER_STEP);
+    });
+  });
 });
 
 /* -------------------------------------------------------------- delete -- */
@@ -772,6 +824,28 @@ describe("velocity", () => {
     expect(new Set(keys).size).toBe(2);
   });
 
+  /*
+   * …and the (pattern, note) pair is ENCODED, not joined with a separator.
+   * Ids are arbitrary strings in an imported file, so `${pattern}:${note}` was
+   * not injective: ("pat:1", "n-2") and ("pat", "1:n-2") produced one target,
+   * and two nudges on genuinely different notes folded into one undo entry.
+   */
+  it("keeps two different (pattern, note) pairs apart even when their ids contain colons", () => {
+    const colonNote = makeNote({ id: "1:n-2", positionTicks: 0, pitch: 67 });
+    const h = harness({ notes: [colonNote], patternId: "pat" });
+    const rect = noteRect(VIEW, colonNote);
+    const point = { x: rect.x + 3, y: rect.y + 3, button: 0, altKey: true, deltaX: 0 };
+    h.controller.wheel({ ...point, deltaY: -100 });
+
+    // The other pair that the naive join collapsed onto the same string.
+    h.scene.patternId = "pat:1";
+    h.scene.notes = [makeNote({ id: "n-2", positionTicks: 0, pitch: 67 })];
+    h.controller.wheel({ ...point, deltaY: -100 });
+
+    const keys = h.dispatch.mock.calls.map((call) => call[1]?.coalesceKey);
+    expect(new Set(keys).size).toBe(2);
+  });
+
   it("alt+wheel over empty grid changes nothing", () => {
     const h = harness({ notes: [note] });
     expect(
@@ -900,6 +974,93 @@ describe("shift+left-click clone", () => {
     expect(Object.keys(notes)).toHaveLength(2);
     expect(notes[note.id]).toMatchObject({ positionTicks: TICKS_PER_BEAT, pitch: 67 });
     expect(h.setSelection).toHaveBeenLastCalledWith(["new-1"]);
+  });
+
+  it("clones the selection the CLICK produced, not the one before it", () => {
+    // Shift-clicking an unselected note selects it first; the clone must be of
+    // that note, not of whatever was selected a moment earlier.
+    const clicked = makeNote({ id: "n-clicked", positionTicks: TICKS_PER_BEAT, pitch: 67 });
+    const other = makeNote({ id: "n-other", positionTicks: 0, pitch: 70 });
+    const h = harness({ notes: [clicked, other], selectedNoteIds: [other.id] });
+    const rect = noteRect(VIEW, clicked);
+    h.controller.pointerDown({ x: rect.x + 3, y: rect.y + 3, button: 0, shiftKey: true });
+
+    const project = h.applied();
+    const notes = project.patterns[project.activePatternId]?.notes ?? {};
+    expect(Object.keys(notes)).toHaveLength(3); // two originals + ONE clone
+    expect(notes["new-1"]).toMatchObject({ positionTicks: TICKS_PER_BEAT, pitch: 67 });
+  });
+});
+
+/* ------------------------------------------------------------ Ctrl-click -- */
+
+/*
+ * Ctrl+click is a selection gesture and nothing else, whatever the tool.
+ *
+ * It used to run the additive toggle and then FALL THROUGH to the branches
+ * below it whenever the tool was not `select`: Ctrl+Shift+click added the note
+ * to the selection and immediately cloned it, and a plain Ctrl+click began a
+ * move drag whose note set came from the pre-click selection.
+ */
+describe("Ctrl+click adds to the selection and starts nothing", () => {
+  const first = makeNote({ id: "n-1", positionTicks: 0, pitch: 67 });
+  const second = makeNote({ id: "n-2", positionTicks: TICKS_PER_BEAT, pitch: 70 });
+
+  function ctrlClick(h: Harness, note: Note, patch: Partial<RollPointer> = {}): void {
+    const rect = noteRect(VIEW, note);
+    h.controller.pointerDown({ x: rect.x + 3, y: rect.y + 3, button: 0, ctrlKey: true, ...patch });
+  }
+
+  it("adds a note to the selection with the DRAW tool, without dragging it", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id], tool: "draw" });
+    ctrlClick(h, second);
+
+    expect(h.setSelection).toHaveBeenCalledWith([first.id, second.id]);
+    expect(h.controller.peekGesture()).toBe("idle");
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("removes an already-selected note, with the draw tool too", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id, second.id] });
+    ctrlClick(h, first);
+    expect(h.setSelection).toHaveBeenCalledWith([second.id]);
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  it("does NOT clone when Shift is held too — the selection toggle wins", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id], tool: "draw" });
+    ctrlClick(h, second, { shiftKey: true });
+
+    expect(h.dispatch).not.toHaveBeenCalled(); // no addNotes: nothing was cloned
+    expect(h.setSelection).toHaveBeenCalledWith([first.id, second.id]);
+    expect(h.controller.peekGesture()).toBe("idle");
+    expect(Object.keys(h.applied().patterns[PATTERN]?.notes ?? {})).toHaveLength(2);
+  });
+
+  it("keeps behaving as before with the select tool", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id], tool: "select" });
+    ctrlClick(h, second);
+    expect(h.setSelection).toHaveBeenCalledWith([first.id, second.id]);
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  /*
+   * And the drag that follows the NEXT press acts on the selection the press
+   * itself produced: `gestureSet` used to read `getScene()`'s snapshot, taken
+   * before the click's own `setSelection`.
+   */
+  it("the following plain drag moves the whole Ctrl-built selection", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id], tool: "draw" });
+    ctrlClick(h, second);
+
+    const rect = noteRect(VIEW, second);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + tickToX(VIEW, TICKS_PER_BEAT) - KEYBOARD_WIDTH });
+
+    const notes = h.applied().patterns[PATTERN]?.notes ?? {};
+    expect(notes[first.id]?.positionTicks).toBe(TICKS_PER_BEAT);
+    expect(notes[second.id]?.positionTicks).toBe(TICKS_PER_BEAT * 2);
   });
 });
 

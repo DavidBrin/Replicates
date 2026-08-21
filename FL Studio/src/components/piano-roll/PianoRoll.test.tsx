@@ -122,6 +122,60 @@ describe("the canvas wears the cursor the controller computes", () => {
 
     expect(canvas.style.cursor).toBe("ew-resize");
   });
+
+  /*
+   * The cursor was pushed on pointer*move* only, and guarded by the last value
+   * written — so `grabbing`, which a middle-button pan installs, survived the
+   * release: the roll kept a grab cursor until the pointer happened to move
+   * again, and after a pan that is precisely when it has stopped.
+   */
+  it("drops 'grabbing' when a middle-drag pan is released", () => {
+    renderRoll();
+    const canvas = screen.getByTestId("piano-roll-canvas");
+    const point = { clientX: KEYBOARD_WIDTH + 200, clientY: 200 };
+
+    fireEvent.pointerMove(canvas, point);
+    fireEvent.pointerDown(canvas, { ...point, button: 1 });
+    fireEvent.pointerMove(canvas, { clientX: point.clientX + 40, clientY: 220 });
+    expect(canvas.style.cursor).toBe("grabbing");
+
+    fireEvent.pointerUp(canvas, { clientX: point.clientX + 40, clientY: 220, button: 1 });
+
+    expect(canvas.style.cursor).not.toBe("grabbing");
+    expect(canvas.style.cursor).toBe("cell"); // recomputed for where it ended
+  });
+
+  it("drops 'grabbing' when the browser cancels the pointer mid-pan", () => {
+    renderRoll();
+    const canvas = screen.getByTestId("piano-roll-canvas");
+    const point = { clientX: KEYBOARD_WIDTH + 200, clientY: 200 };
+
+    fireEvent.pointerDown(canvas, { ...point, button: 1 });
+    fireEvent.pointerMove(canvas, { clientX: point.clientX + 40, clientY: 220 });
+    expect(canvas.style.cursor).toBe("grabbing");
+
+    fireEvent.pointerCancel(canvas, { clientX: point.clientX + 40, clientY: 220 });
+
+    expect(canvas.style.cursor).not.toBe("grabbing");
+  });
+
+  it("drops 'grabbing' when the STORE cancels the pan (undo, pattern switch)", () => {
+    useAppStore.getState().dispatch(
+      addPattern({ id: "pat-other", name: "Other", color: "hsl(0,0%,50%)", notes: {} }),
+    );
+    renderRoll();
+    const canvas = screen.getByTestId("piano-roll-canvas");
+    const point = { clientX: KEYBOARD_WIDTH + 200, clientY: 200 };
+
+    fireEvent.pointerDown(canvas, { ...point, button: 1 });
+    fireEvent.pointerMove(canvas, { clientX: point.clientX + 40, clientY: 220 });
+    expect(canvas.style.cursor).toBe("grabbing");
+
+    // No pointer event announces this one — that is what "external" means.
+    useAppStore.getState().setActivePatternId("pat-other");
+
+    expect(canvas.style.cursor).not.toBe("grabbing");
+  });
 });
 
 /* ------------------------------------------------- externally-cancelled -- */
