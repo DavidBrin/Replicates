@@ -5,6 +5,7 @@ import "./transport.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useGestureSession } from "@/lib/gestureHold";
+import { handleRangeInputKeyDown } from "@/lib/keyboard";
 
 import { BpmLcd } from "./BpmLcd";
 import { PatternSelector } from "./PatternSelector";
@@ -285,6 +286,12 @@ export function TransportBar({
             step={0.01}
             value={state.globalSwing}
             aria-label="Global swing"
+            // A range slider is NOT text entry, so the global registry now runs
+            // from it (`@/lib/keyboard`) — `Ctrl+Z`/`Ctrl+S`/`Space` used to be
+            // dead for as long as this slider kept focus. The arrow/Home/End
+            // keys the slider itself acts on are stopped here instead, which
+            // is the narrow half of that trade.
+            onKeyDown={handleRangeInputKeyDown}
             onPointerDown={swingGesture.begin}
             {...swingGesture.terminators}
             onChange={(event) =>

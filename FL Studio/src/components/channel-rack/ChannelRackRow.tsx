@@ -130,8 +130,23 @@ export function ChannelRackRow({
   projectRevision = 0,
 }: ChannelRackRowProps) {
   const painting = useRef<PaintSession | null>(null);
-  // SPEC §2.2: a stroke holds off persistence until it commits.
-  const gesture = useGestureHold("rack-paint");
+  /**
+   * SPEC §2.2: a stroke holds off persistence until it commits.
+   *
+   * `onCancel` drops the buffered stroke whenever the session ends from the
+   * outside — unmount, the revision watcher, another gesture pre-empting this
+   * one. The stroke is ABANDONED rather than committed, which is this row's
+   * standing rule for a stroke it cannot trust (see `endPaint`'s staleness
+   * check): a buffer built against a project that has been replaced would
+   * dispatch note ids that no longer exist. `cancelPaint` calls `release()`
+   * in turn, and that re-entry is a no-op — the session clears its id before
+   * calling back (`@/lib/gestureHold`).
+   */
+  const gesture = useGestureHold("rack-paint", {
+    onCancel: () => {
+      if (painting.current !== null) cancelPaint();
+    },
+  });
   const [preview, setPreview] = useState<Map<number, boolean> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);

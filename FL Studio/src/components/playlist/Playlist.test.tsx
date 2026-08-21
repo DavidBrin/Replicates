@@ -780,6 +780,68 @@ describe("Playlist root drags — the gesture class (round 8)", () => {
     expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 
+  /*
+   * Round 10 #2. The backstop above released the HOLD but not the pan's own
+   * `middlePan` ref, which lives in this component — so the session was over
+   * and the lanes still scrolled under every later HOVER, with no button
+   * held. The ref now dies with the session (`@/lib/gestureHold`'s
+   * `onCancel`) rather than through a second reset each release path has to
+   * remember.
+   */
+  it.each([
+    ["pointerup", () => fireEvent.pointerUp(window, { pointerId: 2 })],
+    ["pointercancel", () => fireEvent.pointerCancel(window, { pointerId: 2 })],
+  ])("stops panning on a hover after the backstop's %s (round 10 #2)", (_name, terminate) => {
+    render(<Playlist />);
+    const scrollx = screen.getByTestId("playlist-scrollx");
+
+    fireEvent.pointerDown(main(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 2 });
+    fireEvent.pointerMove(main(), { clientX: 80, clientY: 100, pointerId: 2 });
+    expect(scrollx.scrollLeft).toBe(20);
+
+    terminate();
+
+    // A plain hover, no buttons down.
+    fireEvent.pointerMove(main(), { clientX: 10, clientY: 100, buttons: 0, pointerId: 2 });
+    expect(scrollx.scrollLeft).toBe(20);
+  });
+
+  it("abandons a clip drag whose project was replaced mid-gesture (round 10 #1)", () => {
+    placeClip("clip-existing", { trackId: "trk-1", startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    fireEvent.pointerDown(clip, { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 0, clientY: LANE_HEIGHT_PX, pointerId: 1 });
+
+    act(() => {
+      useAppStore.setState({ projectRevision: useAppStore.getState().projectRevision + 1 });
+    });
+    const before = useAppStore.getState().project.clips["clip-existing"];
+
+    // The release the user was always going to make. Committing it would
+    // write a move computed against a project that no longer exists.
+    fireEvent.pointerUp(clip, { clientX: 0, clientY: LANE_HEIGHT_PX, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]).toEqual(before);
+  });
+
+  it("stops panning when an undo replaces the project mid-pan (round 10 #1)", () => {
+    render(<Playlist />);
+    const scrollx = screen.getByTestId("playlist-scrollx");
+
+    fireEvent.pointerDown(main(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 2 });
+    fireEvent.pointerMove(main(), { clientX: 80, clientY: 100, pointerId: 2 });
+    expect(scrollx.scrollLeft).toBe(20);
+
+    act(() => {
+      useAppStore.setState({ projectRevision: useAppStore.getState().projectRevision + 1 });
+    });
+
+    fireEvent.pointerMove(main(), { clientX: 10, clientY: 100, pointerId: 2 });
+    expect(scrollx.scrollLeft).toBe(20);
+  });
+
   it("does not weld a sweep onto the previous MOUNT's sweep (rule c)", () => {
     placeClip("clip-a", { startTick: 0 });
     placeClip("clip-b", { startTick: TICKS_PER_BAR });

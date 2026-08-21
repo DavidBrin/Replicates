@@ -2,10 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   __resetKeyboardRegistryForTests,
+  CUSTOM_SLIDER_KEYS,
+  RANGE_INPUT_KEYS,
   attachKeyboardListener,
+  claimHandledKey,
   comboMatches,
   dispatchKeyEvent,
   getAllBindings,
+  handleRangeInputKeyDown,
   registerBindings,
 } from "./keyboard";
 
@@ -219,6 +223,65 @@ describe("bindings do not fire while the user is typing", () => {
     expect(handler).toHaveBeenCalledTimes(3);
   });
 
+  /*
+   * Round 10 #8. The guard protects TEXT, and a range slider holds none: it
+   * was treated as text entry, so every global shortcut died for as long as
+   * one had focus — adjust the swing slider and `Ctrl+Z`, `Ctrl+S` and
+   * `Space` were all silently gone, with nothing on screen to explain it.
+   */
+  describe("a range slider is not text entry (round 10 #8)", () => {
+    function range(): HTMLInputElement {
+      const input = mount(document.createElement("input"));
+      input.type = "range";
+      return input;
+    }
+
+    it.each([
+      ["undo", { code: "KeyZ", ctrlKey: true }],
+      ["save", { code: "KeyS", ctrlKey: true }],
+      ["play/stop", { code: "Space", ctrlKey: false }],
+    ])("runs the global %s binding from a focused slider", (_name, init) => {
+      const handler = vi.fn();
+      registerBindings("shell:global", [
+        { id: "b", code: init.code, ctrl: init.ctrlKey, handler },
+      ]);
+
+      fireFrom(range(), init);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("still guards a text input beside it", () => {
+      // The trade is narrow on purpose: a slider gains the shortcuts, a text
+      // box keeps its characters.
+      const handler = vi.fn();
+      registerBindings("shell:global", [{ id: "play", code: "Space", handler }]);
+
+      const text = mount(document.createElement("input"));
+      text.type = "text";
+      fireFrom(text, { code: "Space" });
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("does not reach the registry for a key the slider handles itself", () => {
+      // The narrow half: `handleRangeInputKeyDown` stops the arrow keys at
+      // the control, so letting the registry run from sliders cannot make
+      // ArrowUp both nudge the slider and transpose the piano roll.
+      const handler = vi.fn();
+      registerBindings("piano-roll", [{ id: "transpose", code: "ArrowUp", handler }]);
+      const slider = range();
+      slider.addEventListener("keydown", (event) => handleRangeInputKeyDown(event));
+
+      const event = fireFrom(slider, { code: "ArrowUp", key: "ArrowUp" });
+
+      expect(handler).not.toHaveBeenCalled();
+      // …and the slider's OWN behaviour survives: the browser default is how
+      // an arrow key moves a range input at all.
+      expect(event.defaultPrevented).toBe(false);
+    });
+  });
+
   it("fires a binding that opted in with worksInInputs", () => {
     const escape = vi.fn();
     registerBindings("shell:global", [
@@ -240,5 +303,64 @@ describe("bindings do not fire while the user is typing", () => {
 
     fireFrom(mount(document.createElement("div")), { code: "Space" });
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+});
+
+/*
+ * Round 10 #7. The registry listens on the WINDOW, above React's root
+ * container, so a key a control handles reaches it afterwards and fires a
+ * second, unrelated action: `Space` on a knob reset the knob AND started
+ * playback. No guard in this module can see a `role="slider"` div — it is not
+ * a form control — so the control claims the key at the source instead.
+ */
+describe("claimHandledKey", () => {
+  function event(key: string) {
+    return {
+      key,
+      stopped: false,
+      prevented: false,
+      stopPropagation() {
+        this.stopped = true;
+      },
+      preventDefault() {
+        this.prevented = true;
+      },
+    };
+  }
+
+  it("stops a handled key from propagating, and suppresses its default", () => {
+    const e = event(" ");
+    expect(claimHandledKey(e, CUSTOM_SLIDER_KEYS)).toBe(true);
+    expect(e.stopped).toBe(true);
+    expect(e.prevented).toBe(true);
+  });
+
+  it("leaves an unhandled key entirely alone", () => {
+    // A knob must not swallow Ctrl+Z just because it has focus.
+    const e = event("z");
+    expect(claimHandledKey(e, CUSTOM_SLIDER_KEYS)).toBe(false);
+    expect(e.stopped).toBe(false);
+    expect(e.prevented).toBe(false);
+  });
+
+  it("can claim WITHOUT suppressing the default — the native slider case", () => {
+    // A native range input IS its browser default; preventing it would stop
+    // the arrow keys moving the slider at all.
+    const e = event("ArrowUp");
+    expect(claimHandledKey(e, RANGE_INPUT_KEYS, { preventDefault: false })).toBe(true);
+    expect(e.stopped).toBe(true);
+    expect(e.prevented).toBe(false);
+  });
+
+  it("handleRangeInputKeyDown claims exactly the keys a range input acts on", () => {
+    for (const key of RANGE_INPUT_KEYS) {
+      const e = event(key);
+      handleRangeInputKeyDown(e);
+      expect(e.stopped, key).toBe(true);
+      expect(e.prevented, key).toBe(false);
+    }
+    const passthrough = event("z");
+    handleRangeInputKeyDown(passthrough);
+    expect(passthrough.stopped).toBe(false);
   });
 });

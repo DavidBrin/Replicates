@@ -9,6 +9,11 @@ import { resetIds } from "@/domain/ids";
 import { createHistory } from "@/domain/undo";
 import { TICKS_PER_STEP, type Project } from "@/domain/types";
 import { __resetGestureCounterForTests } from "@/lib/gestureHold";
+import {
+  __resetKeyboardRegistryForTests,
+  attachKeyboardListener,
+  registerBindings,
+} from "@/lib/keyboard";
 import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 import { ChannelRack } from "./ChannelRack";
 import { stepHueGroup } from "./StepCell";
@@ -1205,5 +1210,86 @@ describe("rack swing — the gesture class (round 8)", () => {
       useAppStore.getState().undo();
     });
     expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+  });
+});
+
+/*
+ * Round 10 #7/#8, end to end through the real window listener.
+ *
+ * The knob is a `role="slider"` DIV, so `@/lib/keyboard`'s text guard cannot
+ * see it at all: `Space` reset the knob AND toggled playback, and the arrows
+ * nudged it AND ran whatever global binding shared the key. The rack's swing
+ * slider had the mirror-image bug — it IS an input, so the guard treated it as
+ * text and killed every global shortcut while it had focus.
+ */
+describe("a control's own keys stop at the control (round 10 #7/#8)", () => {
+  let detach: (() => void) | null = null;
+
+  beforeEach(() => {
+    __resetKeyboardRegistryForTests();
+    detach = attachKeyboardListener(window);
+  });
+
+  afterEach(() => {
+    detach?.();
+    detach = null;
+    __resetKeyboardRegistryForTests();
+  });
+
+  it.each([
+    ["Space", " ", "Space"],
+    ["ArrowUp", "ArrowUp", "ArrowUp"],
+    ["ArrowDown", "ArrowDown", "ArrowDown"],
+  ])("does not let a knob's %s reach the global registry", (_name, key, code) => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: "global", code, handler }]);
+    render(<ChannelRack />);
+
+    fireEvent.keyDown(screen.getByTestId("knob-Kick volume"), { key, code });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("still lets a knob's UNhandled key through — Ctrl+Z is not the knob's", () => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: "undo", code: "KeyZ", ctrl: true, handler }]);
+    render(<ChannelRack />);
+
+    fireEvent.keyDown(screen.getByTestId("knob-Kick volume"), {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs a global shortcut from the focused swing slider", () => {
+    const handler = vi.fn();
+    registerBindings("shell:global", [{ id: "undo", code: "KeyZ", ctrl: true, handler }]);
+    render(<ChannelRack />);
+
+    fireEvent.keyDown(screen.getByLabelText("Rack swing"), {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the swing slider's OWN arrow keys away from the registry", () => {
+    const handler = vi.fn();
+    registerBindings("piano-roll", [{ id: "transpose", code: "ArrowUp", handler }]);
+    render(<ChannelRack />);
+
+    const event = fireEvent.keyDown(screen.getByLabelText("Rack swing"), {
+      key: "ArrowUp",
+      code: "ArrowUp",
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+    // The browser default is how an arrow key moves a range input at all.
+    expect(event).toBe(true);
   });
 });

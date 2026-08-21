@@ -23,6 +23,28 @@
  * hostile to its own UI: typing `140` into the BPM box would mute channels
  * 1, 4 and 10, `Space` would start playback instead of inserting a space, and
  * `Backspace` would toggle snap instead of deleting a digit.
+ *
+ * ## The guard protects TEXT, not focus
+ *
+ * The question {@link isTextEntryTarget} answers is "would swallowing this
+ * keystroke steal a character", and a control with no text to steal is not
+ * covered by it however input-shaped it is. That distinction is load-bearing
+ * in both directions:
+ *
+ * - A **range slider** is not text entry. Treating it as such made every
+ *   global shortcut die for as long as one had focus — adjust the swing
+ *   slider and `Ctrl+Z`, `Ctrl+S` and `Space` were all silently dead until
+ *   the user clicked elsewhere, with nothing on screen to explain why.
+ * - A control that handles a key **itself** stops that key at the source
+ *   instead, with {@link claimHandledKey}. The registry then never sees it,
+ *   which is the only version of this that works for a `role="slider"` div
+ *   (`Knob`, `Fader`) — no guard in this module can see those, because they
+ *   are not form controls at all, and `Space` on one was both resetting the
+ *   knob and toggling playback.
+ *
+ * The two halves are one policy: the *control* owns the keys it handles, the
+ * *registry* owns everything else, and the text guard only ever protects
+ * genuine text editing.
  */
 
 export interface KeyCombo {
@@ -104,6 +126,89 @@ export function comboMatches(event: KeyboardEvent, combo: KeyCombo): boolean {
  * `<select>` counts: its type-ahead and its arrow keys are its own, and the
  * digits that mute channels are exactly what a select uses to jump options.
  */
+/**
+ * `<input type=...>` values that hold no text to protect. Everything else —
+ * `text`, `number`, `search`, `email`, `password`, `date`, an unknown type
+ * (which the browser renders as `text`) — is text entry.
+ */
+const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
+  "button",
+  "submit",
+  "reset",
+  "checkbox",
+  "radio",
+  "range",
+]);
+
+/** Keys a native `<input type="range">` acts on itself. */
+export const RANGE_INPUT_KEYS: ReadonlySet<string> = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
+/**
+ * Keys a `role="slider"` widget of ours acts on itself (`Knob`, `Fader`):
+ * arrows nudge, `Enter`/`Space` reset to default.
+ */
+export const CUSTOM_SLIDER_KEYS: ReadonlySet<string> = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "Enter",
+  " ",
+]);
+
+/** The shape both a DOM `KeyboardEvent` and React's synthetic one satisfy. */
+interface ClaimableKeyEvent {
+  key: string;
+  stopPropagation: () => void;
+  preventDefault: () => void;
+}
+
+/**
+ * "This control handled the key; the global registry must not see it."
+ *
+ * `stopPropagation` is the operative half. The registry listens on the
+ * WINDOW, above React's root container, so a key a control handles reaches it
+ * afterwards and fires a second, unrelated action: `Space` on a knob reset the
+ * knob *and* started playback, and `ArrowUp` on a fader moved the fader *and*
+ * transposed the piano roll's selection.
+ *
+ * `preventDefault` is separate and opt-out (`{ preventDefault: false }`),
+ * because it means two different things here. A `role="slider"` div has no
+ * useful browser default and wants it suppressed (`Space` scrolls the page).
+ * A native `<input type="range">` IS its browser default — suppressing it
+ * would stop the arrow keys moving the slider at all, which is the behaviour
+ * being protected.
+ *
+ * Returns whether the key was claimed, so a caller can `if (…) return`.
+ */
+export function claimHandledKey(
+  event: ClaimableKeyEvent,
+  keys: ReadonlySet<string>,
+  options: { preventDefault?: boolean } = {},
+): boolean {
+  if (!keys.has(event.key)) return false;
+  event.stopPropagation();
+  if (options.preventDefault !== false) event.preventDefault();
+  return true;
+}
+
+/**
+ * `onKeyDown` for a native range slider: keep the keys it handles itself out
+ * of the global registry, keep its own browser behaviour. One exported
+ * handler rather than a rule each `<input type="range">` re-implements —
+ * there are two of them (transport swing, rack swing) and they must agree.
+ */
+export function handleRangeInputKeyDown(event: ClaimableKeyEvent): void {
+  claimHandledKey(event, RANGE_INPUT_KEYS, { preventDefault: false });
+}
+
 export function isTextEntryTarget(event: Event): boolean {
   const path =
     typeof event.composedPath === "function" ? event.composedPath() : [];
@@ -117,10 +222,17 @@ export function isTextEntryTarget(event: Event): boolean {
       // A checkbox/radio/button input has no text to steal, and Space on one
       // is the browser's own activation — but the app's Space is play/stop,
       // which is the more useful binding there, so only text-ish inputs win.
+      //
+      // `range` is on that list for the same reason and is the one that bit:
+      // a slider holds a number the arrow keys move, never a caret, so there
+      // is no character to steal — and calling it text entry killed EVERY
+      // global shortcut (`Ctrl+Z`, `Ctrl+S`, `Space`) for as long as the
+      // swing slider kept focus. The arrow keys the slider does use are
+      // stopped at the slider itself ({@link claimHandledKey}), which is
+      // narrow where this guard is total.
       if (tag !== "INPUT") return true;
       const type = String((element as Partial<HTMLInputElement>).type ?? "text").toLowerCase();
-      return type !== "button" && type !== "submit" && type !== "reset" &&
-        type !== "checkbox" && type !== "radio";
+      return !NON_TEXT_INPUT_TYPES.has(type);
     }
     if (element.isContentEditable === true) return true;
     // Stop at the document/window end of the path.

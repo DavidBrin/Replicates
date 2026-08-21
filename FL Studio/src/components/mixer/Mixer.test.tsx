@@ -1,3 +1,4 @@
+import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,6 +8,11 @@ import { resetIds } from "@/domain/ids";
 import { createHistory } from "@/domain/undo";
 import { MASTER_MIXER_TRACK_ID } from "@/domain/types";
 import type { Project } from "@/domain/types";
+import {
+  __resetKeyboardRegistryForTests,
+  attachKeyboardListener,
+  registerBindings,
+} from "@/lib/keyboard";
 import { useAppStore } from "@/lib/store";
 import { Mixer } from "./Mixer";
 
@@ -234,5 +240,66 @@ describe("Mixer — only the PRIMARY button drags a fader (round 7 #6)", () => {
     fireEvent.pointerUp(fader, { clientY: 60 });
 
     expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBeGreaterThan(0.8);
+  });
+});
+
+/*
+ * Round 10 #1. The session ends from OUTSIDE the fader — an undo/redo/import
+ * under the pointer, unmount, another gesture pre-empting this one — and the
+ * `dragState` ref left behind is invisible to all of it. Every later pointer
+ * MOVE (a hover, no button held) then dispatched the dead drag's `startValue`
+ * and coalesce key into the replacement project.
+ */
+describe("Mixer — a fader's drag dies with its session (round 10 #1)", () => {
+  it("stops tracking hovers after an undo replaces the project mid-drag", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+
+    fireEvent.pointerDown(fader, { clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(fader, { clientY: 80, pointerId: 1 });
+    const during = useAppStore.getState().project.mixerTracks["mix-1"]!.volume;
+    expect(during).not.toBe(0.8);
+
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    const afterUndo = useAppStore.getState().project.mixerTracks["mix-1"]!.volume;
+
+    // The button is still down as far as the DOM is concerned, but this
+    // gesture is over.
+    fireEvent.pointerMove(fader, { clientY: 20, pointerId: 1 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(afterUndo);
+  });
+
+  it("stops tracking hovers after another gesture pre-empts it", () => {
+    render(<Mixer />);
+    const first = screen.getByTestId("fader-Insert 1 volume");
+    const second = screen.getByTestId("fader-Insert 2 volume");
+
+    fireEvent.pointerDown(first, { clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(first, { clientY: 80, pointerId: 1 });
+    const parked = useAppStore.getState().project.mixerTracks["mix-1"]!.volume;
+
+    // A second pointer opens a gesture: the invariant ends the first one.
+    fireEvent.pointerDown(second, { clientY: 100, button: 0, pointerId: 2 });
+
+    fireEvent.pointerMove(first, { clientY: 20, pointerId: 1 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(parked);
+  });
+
+  it("does not let a fader's Space reach the global registry (round 10 #7)", () => {
+    const handler = vi.fn();
+    __resetKeyboardRegistryForTests();
+    const detach = attachKeyboardListener(window);
+    registerBindings("shell:global", [{ id: "play", code: "Space", handler }]);
+    render(<Mixer />);
+
+    fireEvent.keyDown(screen.getByTestId("fader-Insert 1 volume"), { key: " ", code: "Space" });
+
+    expect(handler).not.toHaveBeenCalled();
+    // …and the fader's own reset still ran.
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
+    detach();
+    __resetKeyboardRegistryForTests();
   });
 });

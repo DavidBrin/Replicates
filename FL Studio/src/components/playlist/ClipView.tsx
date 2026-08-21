@@ -129,13 +129,23 @@ export function ClipView({
    * entry. The clip runs its own commit on `pointerup`, so it overrides that
    * one terminator AFTER the spread and keeps the other two.
    */
-  const gesture = useGestureSession("playlist-clip-move");
+  const gesture = useGestureSession("playlist-clip-move", {
+    // The `dragState` ref goes with the session, whatever ends it. The
+    // terminators above cover the ends this clip hears about; `onCancel`
+    // covers the ones it does not — an undo/redo/import replacing the project
+    // mid-drag, unmount, another gesture pre-empting this one. Left set, the
+    // next pointermove committed a move computed from a clip id and a
+    // coalesce key that belong to a project that no longer exists.
+    onCancel: () => {
+      dragState.current = null;
+    },
+  });
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     // jsdom (component tests) has no Pointer Events capture implementation.
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    const coalesceKey = gesture.begin();
+    const coalesceKey = gesture.begin(event);
     const activeClipId =
       event.shiftKey && onCloneStart ? onCloneStart(clip.id, coalesceKey) : clip.id;
     dragState.current = {

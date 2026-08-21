@@ -296,6 +296,47 @@ describe("tempo edits are one undo entry per gesture", () => {
     act(() => useAppStore.getState().undo());
     expect(useAppStore.getState().project.tempo).toBe(141);
   });
+
+  /*
+   * One PRESS opens two sessions here: the wrapper around the LCD owns the
+   * tempo's undo identity (`tempoGesture`), the plate's own session owns the
+   * persistence hold (`bpm-lcd`). The single-active-mutating-gesture
+   * invariant must not read that as two gestures — pre-empting the wrapper
+   * would leave `keyFor()` minting a fresh id on every pointermove, i.e. one
+   * undo entry per pixel dragged (`@/lib/gestureHold`).
+   */
+  it("folds one LCD drag into one undo entry, both of its sessions notwithstanding", () => {
+    render(<TransportBar />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(lcd, { clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(lcd, { clientY: 90, pointerId: 1 });
+    fireEvent.pointerMove(lcd, { clientY: 80, pointerId: 1 });
+    fireEvent.pointerMove(lcd, { clientY: 70, pointerId: 1 });
+    fireEvent.pointerUp(lcd, { clientY: 70, pointerId: 1 });
+
+    expect(useAppStore.getState().project.tempo).toBe(170);
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+
+    // One Ctrl+Z takes the whole drag back.
+    act(() => useAppStore.getState().undo());
+    expect(useAppStore.getState().project.tempo).toBe(140);
+  });
+
+  it("does not weld a second LCD drag onto the first", () => {
+    render(<TransportBar />);
+    const lcd = screen.getByTestId("bpm-lcd");
+    const drag = (to: number) => {
+      fireEvent.pointerDown(lcd, { clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(lcd, { clientY: to, pointerId: 1 });
+      fireEvent.pointerUp(lcd, { clientY: to, pointerId: 1 });
+    };
+
+    drag(90);
+    drag(80);
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+  });
 });
 
 /* ------------------------------------------------- swing gesture class ---- */

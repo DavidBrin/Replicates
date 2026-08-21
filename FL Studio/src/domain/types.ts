@@ -49,6 +49,33 @@ export const DEFAULT_TEMPO = 140;
 /** Undo-stack cap (SPEC.md §2.1, engineering default). */
 export const UNDO_STACK_LIMIT = 200;
 
+/**
+ * Longest arrangement the app will hold, in bars.
+ *
+ * SPEC.md names no maximum song length, so this is an engineering decision
+ * documented here as the single source: **1000 bars** (over 28 minutes at
+ * 140 BPM, far past anything this scope is for). It exists because a clip
+ * position is a *number* in an untrusted save file, and every consumer of a
+ * clip position sizes something proportional to it: `TimelineRuler` builds
+ * `Array.from({ length: totalBars })` — which throws `RangeError: Invalid
+ * array length` for anything past 2^32 — and the WAV export allocates a
+ * buffer of `arrangementLengthTicks` worth of samples. A finite-but-enormous
+ * `startTick` (`1e308` survives `Number.isFinite`) therefore took the whole
+ * app down at *render* time, after the import had reported success.
+ *
+ * Enforced where untrusted data enters (`domain/serialization.ts`'s
+ * `readClip`, which drops a clip past the limit the same way an out-of-bar
+ * note is dropped) rather than at every consumer.
+ */
+export const MAX_ARRANGEMENT_BARS = 1000;
+
+/**
+ * The last tick a clip may START on: a clip is one bar long, so the final
+ * legal clip occupies bar {@link MAX_ARRANGEMENT_BARS} and no arrangement
+ * ever exceeds that.
+ */
+export const MAX_CLIP_START_TICK = (MAX_ARRANGEMENT_BARS - 1) * TICKS_PER_BAR;
+
 export interface Project {
   id: string;
   name: string;

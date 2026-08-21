@@ -378,18 +378,99 @@ describe("coalescing separates gestures, not just keys", () => {
       expect(endGesture(state.history, "A")).toBe(state.history);
     });
 
-    it("still seals an anonymous top entry — the knob/fader shape, which holds no id", () => {
-      // `useGestureHold` releases an id that never reaches history: the knob
-      // mints a unique `coalesceKey` per drag instead.
+    it("seals NOTHING when its gesture owns no entry — the anonymous top may be in flight", () => {
+      // A knob drag: it mints a unique `coalesceKey` per gesture and puts no
+      // id in history, so its entry is anonymous — and still OPEN.
       let state = dispatchCommand(project, createHistory(), tempo(150), {
         coalesceKey: "knob:volume:7",
       });
-      state = { ...state, history: endGesture(state.history, "knob#3") };
+
+      // A different, NAMED gesture ends having dispatched nothing. It owns no
+      // entry, so it seals none: the top is somebody else's.
+      expect(endGesture(state.history, "swing#3")).toBe(state.history);
+
+      // Proof it matters: the knob's drag continues as ONE entry. The old
+      // fallback sealed the anonymous top on the named gesture's behalf and
+      // cut this drag into two Ctrl+Z's.
       state = dispatchCommand(state.project, state.history, tempo(160), {
         coalesceKey: "knob:volume:7",
       });
+      expect(state.history.past).toHaveLength(1);
+    });
 
-      expect(state.history.past).toHaveLength(2);
+    /**
+     * The interleave, prevented rather than modelled (module header). Two
+     * gestures taking turns used to grow two entries at once — B's on top, A's
+     * buried and still extendable — so where the user's Ctrl+Z boundaries
+     * fell depended on which gesture ended first, and A's entry could keep
+     * absorbing edits for as long as A stayed open.
+     */
+    describe("a dispatch under a new gestureId seals the previous gesture (round 10 #5)", () => {
+      it("serializes A-B-A into three bounded entries", () => {
+        let state = dispatchCommand(project, createHistory(), tempo(150), dragA);
+        expect(state.history.past[0]!.gestureId).toBe("A");
+
+        // B starts. A's entry is sealed on the spot — A's own `endGesture`
+        // may never arrive.
+        state = dispatchCommand(state.project, state.history, tempo(160), dragB);
+        expect(state.history.past[0]!.gestureId).toBeUndefined();
+        expect(state.history.past[0]!.coalesceKey).toBeUndefined();
+        expect(state.history.past[1]!.gestureId).toBe("B");
+
+        // A resumes: B is sealed, and A cannot reach back into its own
+        // sealed entry — it opens a third.
+        state = dispatchCommand(state.project, state.history, tempo(170), dragA);
+        expect(state.history.past).toHaveLength(3);
+        expect(state.history.past[1]!.gestureId).toBeUndefined();
+        expect(state.history.past[2]!.gestureId).toBe("A");
+
+        // A's second run still coalesces with ITSELF — sealing is per switch,
+        // not per dispatch.
+        state = dispatchCommand(state.project, state.history, tempo(180), dragA);
+        expect(state.history.past).toHaveLength(3);
+      });
+
+      it("bounds the entries however long the two gestures take turns", () => {
+        let state = dispatchCommand(project, createHistory(), tempo(150), dragA);
+        for (let i = 0; i < 20; i += 1) {
+          state = dispatchCommand(state.project, state.history, tempo(151 + i), dragB);
+          state = dispatchCommand(state.project, state.history, tempo(171 + i), dragA);
+        }
+        // One entry per turn, and never an entry reopened beneath the top:
+        // exactly 41 switches' worth, not an unbounded pair of open entries.
+        expect(state.history.past).toHaveLength(41);
+        const open = state.history.past.filter((entry) => entry.gestureId !== undefined);
+        expect(open).toHaveLength(1);
+        expect(open[0]).toBe(state.history.past[state.history.past.length - 1]);
+      });
+
+      it("leaves the stack ALONE when nothing needs sealing", () => {
+        // The hot path: a coalescing drag must not copy the stack per move.
+        const state = dispatchCommand(project, createHistory(), tempo(150), dragA);
+        const next = dispatchCommand(state.project, state.history, tempo(151), dragA);
+        expect(next.history.past).toHaveLength(1);
+
+        // An ANONYMOUS dispatch claims to be no gesture, so it seals none —
+        // a knob drag in flight beside a swing drag keeps its entry.
+        const anon = dispatchCommand(next.project, next.history, tempo(152), {
+          coalesceKey: "knob:volume:7",
+        });
+        expect(anon.history.past[0]!.gestureId).toBe("A");
+      });
+    });
+
+    it("an ANONYMOUS end seals an anonymous top, but never a named one", () => {
+      // Anonymous top: sealed, because an anonymous caller can only be its
+      // owner (nothing else could have made it).
+      let state = dispatchCommand(project, createHistory(), tempo(150), {
+        coalesceKey: "knob:volume:7",
+      });
+      state = { ...state, history: endGesture(state.history) };
+      expect(state.history.past[0]!.coalesceKey).toBeUndefined();
+
+      // Named top: untouched. It belongs to that gesture.
+      const named = dispatchCommand(state.project, state.history, tempo(160), dragB);
+      expect(endGesture(named.history)).toBe(named.history);
     });
   });
 

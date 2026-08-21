@@ -23,23 +23,39 @@ function Probe({
   windowBackstop = false,
   editGapMs,
   now,
+  onCancel,
 }: {
   prefix?: string;
   windowBackstop?: boolean;
   editGapMs?: number;
   /** A clock the test drives, so an edit run's time bound is testable. */
   now?: () => number;
+  onCancel?: () => void;
 }) {
-  const gesture = useGestureSession(prefix, { windowBackstop, editGapMs });
+  const gesture = useGestureSession(prefix, { windowBackstop, editGapMs, onCancel });
   return (
     <div
       data-testid="probe"
       tabIndex={0}
-      onPointerDown={() => opened.push(gesture.begin())}
+      onPointerDown={(event) => opened.push(gesture.begin(event))}
       onDoubleClick={() => opened.push(gesture.keyFor())}
       // The keyboard-edit path every arrow-editable control uses.
       onKeyDown={() => opened.push(gesture.keyForEdit(now?.()))}
       {...gesture.terminators}
+    />
+  );
+}
+
+/** A session opened by FOCUS — no pointer to scope the backstop to. */
+function KeyboardOpenedProbe() {
+  const gesture = useGestureSession("keyboard", { windowBackstop: true });
+  return (
+    <div
+      data-testid="keyboard-probe"
+      tabIndex={0}
+      onFocus={() => void gesture.begin()}
+      onPointerUp={gesture.end}
+      onPointerCancel={gesture.end}
     />
   );
 }
@@ -150,11 +166,14 @@ describe("useGestureSession — ids come from a module counter (rule c)", () => 
       </>,
     );
     const [first, second] = screen.getAllByTestId("probe");
-    fireEvent.pointerDown(first!);
-    fireEvent.pointerDown(second!);
+    fireEvent.pointerDown(first!, { pointerId: 1 });
+    fireEvent.pointerDown(second!, { pointerId: 2 });
 
     expect(opened).toEqual(["a#1", "b#2"]);
-    expect(holds()).toEqual(["a#1", "b#2"]);
+    // …and only ONE of them is open: the single-active-mutating-gesture
+    // invariant. `b` starting ended `a`, so the ids are distinct AND the
+    // holds do not stack.
+    expect(holds()).toEqual(["b#2"]);
   });
 
   it("mints monotonically from the bare helper too", () => {
@@ -300,6 +319,41 @@ describe("useGestureSession — windowBackstop (rule f)", () => {
     expect(holds()).toEqual([]);
   });
 
+  /**
+   * Round 10 #3. The backstop listens on the WINDOW, which hears every
+   * pointer in the document — a second touch, a stylus the app never saw, the
+   * OS releasing one. Any of them ended the gesture from under the button
+   * still holding it, sealing the undo entry so the rest of one drag became a
+   * second Ctrl+Z.
+   */
+  describe("the backstop belongs to the pointer that opened the session", () => {
+    it("ignores another pointer's release", () => {
+      render(<Probe windowBackstop />);
+      fireEvent.pointerDown(screen.getByTestId("probe"), { pointerId: 7 });
+      expect(holds()).toEqual(["probe#1"]);
+
+      fireEvent.pointerUp(window, { pointerId: 9 });
+      expect(holds()).toEqual(["probe#1"]);
+      fireEvent.pointerCancel(window, { pointerId: 9 });
+      expect(holds()).toEqual(["probe#1"]);
+
+      // …and its OWN release still ends it.
+      fireEvent.pointerUp(window, { pointerId: 7 });
+      expect(holds()).toEqual([]);
+    });
+
+    it("ends on ANY release when the session was opened without a pointer", () => {
+      // A keyboard/focus open has no pointer to compare against, and a hold
+      // that nothing can close is the worse failure.
+      render(<KeyboardOpenedProbe />);
+      fireEvent.focus(screen.getByTestId("keyboard-probe"));
+      expect(holds()).toHaveLength(1);
+
+      fireEvent.pointerUp(window, { pointerId: 3 });
+      expect(holds()).toEqual([]);
+    });
+  });
+
   it("is opt-in: without it, a release off the element does NOT reach the session", () => {
     render(<Probe />);
     fireEvent.pointerDown(screen.getByTestId("probe"));
@@ -371,5 +425,179 @@ describe("useGestureSession — a session dies with its project (rule d)", () =>
     });
 
     expect(holds()).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------- owner state (round 10) -- */
+
+/**
+ * Round 10 #1/#2. A session ending is not always the owner's idea — the
+ * revision watcher, the window backstop, unmount and pre-emption all end it
+ * from outside — and the hold is only half the state a gesture holds. The
+ * other half is the owner's own `useRef`, and left set it made the next
+ * pointer MOVE (a hover, no button down) dispatch the dead gesture's values
+ * into the replacement project.
+ */
+describe("useGestureSession — onCancel clears the owner's state", () => {
+  it.each([
+    [
+      "a project replacement under the pointer",
+      () => {
+        act(() => {
+          useAppStore.setState({ projectRevision: useAppStore.getState().projectRevision + 1 });
+        });
+      },
+    ],
+    ["the element's own terminator", () => fireEvent.pointerUp(screen.getByTestId("probe"))],
+    ["a pointercancel", () => fireEvent.pointerCancel(screen.getByTestId("probe"))],
+    ["a blur", () => fireEvent.blur(screen.getByTestId("probe"))],
+    ["the window backstop", () => fireEvent.pointerUp(window, { pointerId: 4 })],
+  ])("fires on %s", (_name, terminate) => {
+    const cancelled: number[] = [];
+    render(<Probe windowBackstop onCancel={() => cancelled.push(1)} />);
+    fireEvent.pointerDown(screen.getByTestId("probe"), { pointerId: 4 });
+
+    terminate();
+
+    expect(cancelled).toHaveLength(1);
+    expect(holds()).toEqual([]);
+  });
+
+  it("fires on unmount", () => {
+    const cancelled: number[] = [];
+    const view = render(<Probe onCancel={() => cancelled.push(1)} />);
+    fireEvent.pointerDown(screen.getByTestId("probe"));
+
+    view.unmount();
+
+    expect(cancelled).toHaveLength(1);
+  });
+
+  it("does NOT fire when there was no open session to close", () => {
+    const cancelled: number[] = [];
+    render(<Probe onCancel={() => cancelled.push(1)} />);
+
+    // Terminators arrive defensively all the time (a surface releases on
+    // pointerup AND pointercancel); a cleanup that ran on each of them would
+    // clear state a LATER gesture had legitimately set.
+    fireEvent.pointerUp(screen.getByTestId("probe"));
+    fireEvent.blur(screen.getByTestId("probe"));
+    expect(cancelled).toEqual([]);
+
+    fireEvent.pointerDown(screen.getByTestId("probe"));
+    fireEvent.pointerUp(screen.getByTestId("probe"));
+    fireEvent.pointerUp(screen.getByTestId("probe"));
+    expect(cancelled).toHaveLength(1);
+  });
+
+  it("reads the LATEST callback without re-subscribing the session", () => {
+    // An inline arrow is a new function every render. If the session keyed
+    // anything off its identity, the effect that ends on unmount would tear
+    // down and re-run on every render — releasing the hold mid-drag.
+    const cancelled: string[] = [];
+    const view = render(<Probe onCancel={() => cancelled.push("first")} />);
+    fireEvent.pointerDown(screen.getByTestId("probe"));
+    view.rerender(<Probe onCancel={() => cancelled.push("second")} />);
+
+    expect(holds()).toEqual(["probe#1"]);
+    fireEvent.pointerUp(screen.getByTestId("probe"));
+    expect(cancelled).toEqual(["second"]);
+  });
+});
+
+/**
+ * The single-active-mutating-gesture invariant (module header). Multi-pointer
+ * simultaneous editing is out of scope; beginning a new mutating gesture ends
+ * the one in flight, which is what keeps the undo stack from ever holding two
+ * open entries.
+ */
+describe("useGestureSession — one mutating gesture at a time", () => {
+  function twoProbes(onCancel?: () => void) {
+    render(
+      <>
+        <Probe prefix="a" onCancel={onCancel} />
+        <Probe prefix="b" />
+      </>,
+    );
+    const [first, second] = screen.getAllByTestId("probe");
+    return { first: first!, second: second! };
+  }
+
+  it("ends the gesture in flight — and runs its owner's cleanup", () => {
+    const cancelled: string[] = [];
+    const { first, second } = twoProbes(() => cancelled.push("a"));
+
+    fireEvent.pointerDown(first, { pointerId: 1 });
+    expect(holds()).toEqual(["a#1"]);
+
+    fireEvent.pointerDown(second, { pointerId: 2 });
+
+    expect(holds()).toEqual(["b#2"]);
+    expect(cancelled).toEqual(["a"]);
+  });
+
+  it("a keyboard edit run pre-empts a drag", () => {
+    const cancelled: string[] = [];
+    const { first, second } = twoProbes(() => cancelled.push("a"));
+    fireEvent.pointerDown(first, { pointerId: 1 });
+
+    // `keyForEdit` — the arrow-key path on a focused control elsewhere.
+    fireEvent.keyDown(second);
+
+    expect(holds()).toEqual([]);
+    expect(cancelled).toEqual(["a"]);
+  });
+
+  it("a one-shot pre-empts a drag", () => {
+    const cancelled: string[] = [];
+    const { first, second } = twoProbes(() => cancelled.push("a"));
+    fireEvent.pointerDown(first, { pointerId: 1 });
+
+    fireEvent.doubleClick(second); // `keyFor`
+
+    expect(holds()).toEqual([]);
+    expect(cancelled).toEqual(["a"]);
+  });
+
+  it("does NOT pre-empt a session opened by the SAME pointer", () => {
+    // Nested surfaces on one press: `TransportBar` wraps `BpmLcd` in a
+    // session that owns the tempo's undo identity while the plate's own
+    // session owns the hold. Pre-empting there would make the outer session
+    // mint a fresh id per pointermove — one undo entry per pixel.
+    const cancelled: string[] = [];
+    const { first, second } = twoProbes(() => cancelled.push("a"));
+
+    fireEvent.pointerDown(first, { pointerId: 5 });
+    fireEvent.pointerDown(second, { pointerId: 5 });
+
+    expect(holds()).toEqual(["a#1", "b#2"]);
+    expect(cancelled).toEqual([]);
+  });
+
+  it("re-entrant begin on the SAME session is still a no-op", () => {
+    const cancelled: string[] = [];
+    render(<Probe onCancel={() => cancelled.push("self")} />);
+    const probe = screen.getByTestId("probe");
+
+    fireEvent.pointerDown(probe, { pointerId: 1 });
+    fireEvent.pointerDown(probe, { pointerId: 1 });
+
+    expect(opened).toEqual(["probe#1", "probe#1"]);
+    expect(holds()).toEqual(["probe#1"]);
+    expect(cancelled).toEqual([]);
+  });
+
+  it("leaves the registry empty once every gesture has ended", () => {
+    // A stale registry entry would let a dead session be "pre-empted" — and
+    // its `onCancel` re-run — long after it closed.
+    const cancelled: string[] = [];
+    const { first, second } = twoProbes(() => cancelled.push("a"));
+    fireEvent.pointerDown(first, { pointerId: 1 });
+    fireEvent.pointerUp(first);
+    expect(cancelled).toEqual(["a"]);
+
+    fireEvent.pointerDown(second, { pointerId: 2 });
+    expect(cancelled).toEqual(["a"]);
+    expect(holds()).toEqual(["b#2"]);
   });
 });

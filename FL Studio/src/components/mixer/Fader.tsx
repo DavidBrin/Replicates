@@ -2,7 +2,8 @@
 
 import { useRef } from "react";
 
-import { useGestureHold } from "@/lib/gestureHold";
+import { useGestureSession } from "@/lib/gestureHold";
+import { CUSTOM_SLIDER_KEYS, claimHandledKey } from "@/lib/keyboard";
 
 /**
  * The mixer's long-throw vertical level fader (SPEC §4.3 mixer tokens; lane
@@ -33,20 +34,29 @@ interface DragState {
   coalesceKey: string;
 }
 
-let gestureCounter = 0;
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
 export function Fader({ value, min, max, defaultValue, label, travelPx = 140, onChange }: FaderProps) {
   const dragState = useRef<DragState | null>(null);
-  // SPEC §2.2: no autosave lands while the fader is held (`@/lib/gestureHold`).
-  const gesture = useGestureHold("fader");
+  /**
+   * SPEC §2.2: no autosave lands while the fader is held
+   * (`@/lib/gestureHold`), and the session's id is this gesture's
+   * `coalesceKey` — the knob's contract exactly, including `onCancel`, which
+   * clears the drag when the session is ended from outside (an undo under the
+   * pointer, unmount, pre-emption). A `dragState` left set turned the next
+   * hover into a level change with no button held.
+   */
+  const gesture = useGestureSession("fader", {
+    onCancel: () => {
+      dragState.current = null;
+    },
+  });
 
+  /** A one-shot edit's key: the double-click reset, each arrow-key nudge. */
   function mintCoalesceKey(): string {
-    gestureCounter += 1;
-    return `fader:${label}:${gestureCounter}`;
+    return gesture.keyFor();
   }
 
   function resetToDefault(): void {
@@ -60,11 +70,10 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
     // then moved the level on plain hover. The knob already guards this way.
     if (event.button !== 0) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
-    gesture.hold();
     dragState.current = {
       startY: event.clientY,
       startValue: value,
-      coalesceKey: mintCoalesceKey(),
+      coalesceKey: gesture.begin(event),
     };
   }
 
@@ -82,7 +91,7 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
       (event.target as Element).releasePointerCapture?.(event.pointerId);
     }
     dragState.current = null;
-    gesture.release();
+    gesture.end();
   }
 
   /**
@@ -92,7 +101,7 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
    */
   function handlePointerCancel(): void {
     dragState.current = null;
-    gesture.release();
+    gesture.end();
   }
 
   const percent = ((value - min) / (max - min)) * 100;
@@ -114,7 +123,10 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onDoubleClick={resetToDefault}
+      // The keys this fader acts on stop here — the window-level registry
+      // used to see them too (`@/lib/keyboard`).
       onKeyDown={(event) => {
+        if (!claimHandledKey(event, CUSTOM_SLIDER_KEYS)) return;
         const step = (max - min) / 100;
         if (event.key === "ArrowUp") onChange(clamp(value + step, min, max), mintCoalesceKey());
         if (event.key === "ArrowDown") onChange(clamp(value - step, min, max), mintCoalesceKey());

@@ -47,8 +47,24 @@ export function BpmLcd({
    * click that follows.
    */
   const suppressNextClick = useRef(false);
-  // SPEC §2.2: no autosave lands while the LCD is being dragged.
-  const gesture = useGestureHold("bpm-lcd");
+  /**
+   * SPEC §2.2: no autosave lands while the LCD is being dragged.
+   *
+   * `onCancel` clears the drag whenever the session ends from outside this
+   * component — an undo/redo/import replacing the project under the pointer,
+   * unmount, another gesture pre-empting this one. A `dragState` left set
+   * made every later HOVER over the plate a tempo change with no button held,
+   * computed from a `startValue` the replacement project never had.
+   */
+  const gesture = useGestureHold("bpm-lcd", {
+    onCancel: () => {
+      // The DRAG only. `suppressNextClick` is a verdict about the click that
+      // has not happened yet, latched by `handlePointerUp` immediately before
+      // it releases the session — clearing it here threw that verdict away
+      // and every completed drag ended in the text editor again.
+      dragState.current = null;
+    },
+  });
 
   function beginEditing(): void {
     setDraft(String(value));
@@ -77,7 +93,11 @@ export function BpmLcd({
     if (event.button !== 0) return;
     if ((event.target as Element).closest?.(".fl-lcd__spinner")) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
-    gesture.hold();
+    // The pointer id scopes the session's terminators to THIS press
+    // (`@/lib/gestureHold`), and marks it as the same press that opened the
+    // tempo session wrapped around this plate, so the two do not pre-empt
+    // each other.
+    gesture.hold(event);
     dragState.current = { startY: event.clientY, startValue: value, moved: false };
     suppressNextClick.current = false;
   }

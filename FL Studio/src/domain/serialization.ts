@@ -39,6 +39,7 @@ import { clampTempo, clamp, effectiveLengthTicks } from "./tickMath";
 import {
   CURRENT_SCHEMA_VERSION,
   MASTER_MIXER_TRACK_ID,
+  MAX_CLIP_START_TICK,
   PATTERN_LENGTH_TICKS,
   VOICE_KINDS,
   type Channel,
@@ -220,14 +221,34 @@ function readPlaylistTrack(id: string, raw: unknown, index: number): PlaylistTra
   };
 }
 
+/**
+ * A clip past {@link MAX_CLIP_START_TICK} is **dropped**, not clamped.
+ *
+ * `Number.isFinite` is not a bound: `{"startTick": 1e308}` is a perfectly
+ * finite number, survived `Math.max(0, int(...))` untouched, and then took
+ * the app down at render — `TimelineRuler` sizes itself
+ * `Array.from({ length: totalBars })`, which throws `RangeError: Invalid
+ * array length`, and the WAV export allocates a sample buffer of the
+ * arrangement's length. The import reported success and the UI died on the
+ * next paint, which is the worst of the outcomes this file's header ranks.
+ *
+ * Dropped rather than clamped because clamping *invents* a position: a clip
+ * at bar 10^300 has no meaningful home at bar 1000, and stacking every such
+ * clip onto the last bar is a silent, unexplainable edit. This is the same
+ * rule {@link readNote} applies to a note at or past the bar — referential
+ * damage is repaired, out-of-range entities are dropped — and the referential
+ * repair below then removes anything that pointed at it.
+ */
 function readClip(id: string, raw: unknown): PatternClip | null {
   if (!isObject(raw)) return null;
   if (typeof raw.trackId !== "string" || typeof raw.patternId !== "string") return null;
+  const startTick = Math.max(0, int(raw.startTick, 0));
+  if (startTick > MAX_CLIP_START_TICK) return null;
   return {
     id,
     trackId: raw.trackId,
     patternId: raw.patternId,
-    startTick: Math.max(0, int(raw.startTick, 0)),
+    startTick,
   };
 }
 

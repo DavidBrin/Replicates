@@ -2,7 +2,8 @@
 
 import { useRef } from "react";
 
-import { useGestureHold } from "@/lib/gestureHold";
+import { useGestureSession } from "@/lib/gestureHold";
+import { CUSTOM_SLIDER_KEYS, claimHandledKey } from "@/lib/keyboard";
 
 /**
  * Shared pan/volume knob (SPEC §1.1 "Pan knob" / "Volume knob"; lane 1 §1.4,
@@ -49,8 +50,6 @@ interface DragState {
 /** Ctrl held during a knob drag: one pixel moves a tenth as far (SPEC §4.4). */
 export const FINE_DRAG_DIVISOR = 10;
 
-let gestureCounter = 0;
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -66,12 +65,29 @@ export function Knob({
   formatValue,
 }: KnobProps) {
   const dragState = useRef<DragState | null>(null);
-  // SPEC §2.2: no autosave lands while this knob is held (`@/lib/gestureHold`).
-  const gesture = useGestureHold("knob");
+  /**
+   * SPEC §2.2: no autosave lands while this knob is held
+   * (`@/lib/gestureHold`), and the session's id IS this gesture's
+   * `coalesceKey` — a knob makes one entry per gesture by minting a key
+   * unique to it (`domain/undo.ts`'s second supported pattern), and the
+   * session already mints exactly that, from a module counter no remount can
+   * rewind.
+   *
+   * `onCancel` is the half a private `useRef` cannot have: the session ends
+   * from the OUTSIDE too — an undo/redo/import under the pointer, unmount,
+   * another gesture pre-empting this one — and a `dragState` left set made
+   * the next pointer MOVE (a hover, no button down) push this dead drag's
+   * `startValue` and key into the replacement project.
+   */
+  const gesture = useGestureSession("knob", {
+    onCancel: () => {
+      dragState.current = null;
+    },
+  });
 
+  /** A one-shot edit's key: the reset, and each arrow-key nudge. */
   function mintCoalesceKey(): string {
-    gestureCounter += 1;
-    return `knob:${label}:${gestureCounter}`;
+    return gesture.keyFor();
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -86,11 +102,12 @@ export function Knob({
     }
     if (event.button !== 0) return;
     (event.target as Element).setPointerCapture?.(event.pointerId);
-    gesture.hold();
     dragState.current = {
       startY: event.clientY,
       startValue: value,
-      coalesceKey: mintCoalesceKey(),
+      // The pointer id goes with it: the session scopes its terminators to
+      // the pointer that opened it (`@/lib/gestureHold`).
+      coalesceKey: gesture.begin(event),
       lastY: event.clientY,
       accumulated: 0,
     };
@@ -113,7 +130,7 @@ export function Knob({
       (event.target as Element).releasePointerCapture?.(event.pointerId);
     }
     dragState.current = null;
-    gesture.release();
+    gesture.end();
   }
 
   /**
@@ -124,7 +141,7 @@ export function Knob({
    */
   function handlePointerCancel() {
     dragState.current = null;
-    gesture.release();
+    gesture.end();
   }
 
   function resetToDefault(): void {
@@ -156,7 +173,12 @@ export function Knob({
       onAuxClick={(event) => {
         if (event.button === 1) event.preventDefault();
       }}
+      // A key this knob acts on is this knob's; the global registry listens
+      // on the window and used to see it too, so `Space` reset the knob AND
+      // toggled playback, and the arrows nudged the knob AND transposed the
+      // piano roll's selection (`@/lib/keyboard`).
       onKeyDown={(event) => {
+        if (!claimHandledKey(event, CUSTOM_SLIDER_KEYS)) return;
         if (event.key === "ArrowUp") onChange(clamp(value + (max - min) / 100, min, max), mintCoalesceKey());
         if (event.key === "ArrowDown") onChange(clamp(value - (max - min) / 100, min, max), mintCoalesceKey());
         if (event.key === "Enter" || event.key === " ") resetToDefault();

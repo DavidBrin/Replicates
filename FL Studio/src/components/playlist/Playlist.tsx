@@ -283,7 +283,18 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
    * an exception is a rule nobody applies. The hold costs one entry in a
    * string array and buys the same unmount/cancel guarantees.
    */
-  const panGesture = useGestureSession("playlist-pan", { windowBackstop: true });
+  const panGesture = useGestureSession("playlist-pan", {
+    windowBackstop: true,
+    // The backstop is the reason this is not optional. It ends the SESSION
+    // from the window, and the pan's own `middlePan` ref lives here — a
+    // release that lands off the surface left it set, and the lanes then
+    // scrolled under every later hover with no button held. Owner state dies
+    // with the session (`@/lib/gestureHold`), not through a second reset the
+    // backstop path forgets to run.
+    onCancel: () => {
+      middlePan.current = null;
+    },
+  });
   const middlePan = useRef<{
     startClientX: number;
     startClientY: number;
@@ -332,11 +343,11 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     // registers the persistence hold the sweep needs: it dispatches a
     // `removeClip` per clip crossed, and a slow sweep would otherwise let the
     // autosave debounce expire mid-gesture (SPEC.md §2.2).
-    if (event.button === 2) eraseSweep.begin();
+    if (event.button === 2) eraseSweep.begin(event);
     if (event.button !== 1) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    panGesture.begin();
+    panGesture.begin(event);
     middlePan.current = {
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -361,10 +372,11 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     // the sweep's key live would weld the next unrelated delete onto the dead
     // sweep's entry, which is the same hole the rack's swing slider had.
     // Unmount closes them too — that half belongs to the hook.
+    const wasPanning = middlePan.current !== null;
+    // `end` runs each session's `onCancel`, which is what clears `middlePan`.
     eraseSweep.end();
     panGesture.end();
-    if (middlePan.current === null) return;
-    middlePan.current = null;
+    if (!wasPanning) return;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   }
 

@@ -38,8 +38,33 @@
  *
  * When neither is convenient — a gesture with no natural id, e.g. one that
  * ends on blur — call {@link endGesture} (the store exposes it under the same
- * name) at the boundary. It seals the top entry so the next dispatch cannot
- * extend it, whatever key it carries.
+ * name) at the boundary. It seals the entry that gesture owns so the next
+ * dispatch cannot extend it, whatever key it carries.
+ *
+ * ## The single-active-mutating-gesture invariant
+ *
+ * **At most one mutating gesture is open at a time, app-wide.** Beginning any
+ * new one — a pointer drag, a wheel-keyring run, a keyboard edit — first
+ * seals and ends whichever gesture was active (`@/lib/gestureHold`, which
+ * owns the module-level registry that enforces it). Multi-pointer
+ * simultaneous editing is out of scope: SPEC.md does not ask for it and no
+ * conventional DAW offers it.
+ *
+ * This module holds up the history half of that invariant, and it does so by
+ * *serializing* rather than by trusting the UI:
+ *
+ * - {@link dispatchCommand} seals every OTHER gesture's still-open entry the
+ *   moment a dispatch arrives under a different `gestureId`. A→B→A therefore
+ *   produces three bounded entries (A sealed at B's start, B sealed at A's
+ *   resumption, A's second run in a fresh entry) instead of an unbounded
+ *   interleave where each gesture keeps extending an entry buried under the
+ *   other's.
+ * - {@link endGesture} seals only what the ending gesture can *prove* it
+ *   owns — see {@link sealIndex}.
+ *
+ * Deliberately NOT built: per-gesture history segments. Concurrent gestures
+ * are serialized out of existence at the source, so the stack never needs to
+ * hold two open entries at once.
  */
 
 import { composite, isComposite, type Command } from "./commands/types";
@@ -131,8 +156,12 @@ export function dispatchCommand(
   const inverse = command.invert(project);
   const next = command.apply(project);
 
-  const top = history.past[history.past.length - 1];
   const { coalesceKey, gestureId } = options;
+  // The invariant, enforced in the stack rather than assumed of the UI: a
+  // dispatch under a gesture id seals every OTHER gesture's open entry, so at
+  // most one entry in the stack is ever extendable. See this module's header.
+  const past0 = sealOtherGestures(history.past, gestureId);
+  const top = past0[past0.length - 1];
   if (
     coalesceKey !== undefined &&
     top !== undefined &&
@@ -162,14 +191,49 @@ export function dispatchCommand(
     };
     return {
       project: next,
-      history: { past: [...history.past.slice(0, -1), merged], future: [] },
+      history: { past: [...past0.slice(0, -1), merged], future: [] },
       wholesale: entryIsWholesale(merged),
     };
   }
 
-  const past = [...history.past, { command, inverse, coalesceKey, gestureId }];
+  const past = [...past0, { command, inverse, coalesceKey, gestureId }];
   if (past.length > UNDO_STACK_LIMIT) past.splice(0, past.length - UNDO_STACK_LIMIT);
   return { project: next, history: { past, future: [] }, wholesale: command.wholesale === true };
+}
+
+/**
+ * Seal every entry belonging to a gesture other than `gestureId`.
+ *
+ * This is the seal-on-switch half of the single-active-mutating-gesture
+ * invariant (module header). Gesture B dispatching is proof that gesture A is
+ * no longer the one being edited, so A's entry is closed there and then —
+ * A's own `endGesture` may never arrive (a pointercancel the surface swallowed,
+ * a component torn down), and until it did, A's next dispatch could still
+ * extend an entry sitting *below* B's in the stack. That is the unbounded
+ * interleave: one gesture's undo entry growing under another's, with the
+ * user's Ctrl+Z boundaries decided by whichever ended first.
+ *
+ * Returns the SAME array when there is nothing to seal — the overwhelmingly
+ * common case, since only one gesture is normally open — so a coalescing drag
+ * does not copy the stack on every pointermove.
+ *
+ * An anonymous dispatch (no `gestureId` — the knob/fader shape, which mints a
+ * unique `coalesceKey` per gesture instead) seals nothing: it makes no claim
+ * to be a gesture, so it cannot be evidence that another one ended.
+ */
+function sealOtherGestures(
+  past: readonly HistoryEntry[],
+  gestureId: string | undefined,
+): readonly HistoryEntry[] {
+  if (gestureId === undefined) return past;
+  let copy: HistoryEntry[] | null = null;
+  for (let i = past.length - 1; i >= 0; i -= 1) {
+    const entry = past[i]!;
+    if (entry.gestureId === undefined || entry.gestureId === gestureId) continue;
+    copy ??= [...past];
+    copy[i] = { command: entry.command, inverse: entry.inverse };
+  }
+  return copy ?? past;
 }
 
 /**
@@ -184,11 +248,17 @@ export function dispatchCommand(
  * party's in turn. The entry carrying `gestureId` is found and sealed instead,
  * wherever it sits in the stack.
  *
- * Without a `gestureId` — the knob/fader shape, which mints a unique
- * `coalesceKey` per gesture and holds no id in history — the top entry is
- * still sealed, but ONLY when it carries no `gestureId` of its own. A top
- * entry that names a gesture belongs to that gesture, and an anonymous
- * caller has no claim on it.
+ * Sealing is strictly OWNERSHIP-PROVEN, in both directions:
+ *
+ * - A **named** gesture (`gestureId` given) seals only an entry carrying that
+ *   exact id. If it dispatched nothing — or its entry was already sealed by
+ *   the seal-on-switch in {@link dispatchCommand} — it seals NOTHING. It used
+ *   to fall back to the top entry whenever the top looked anonymous, which is
+ *   a claim it cannot support: the top may be an anonymous knob/fader gesture
+ *   still in flight, and cutting that in half turns the rest of one drag into
+ *   a second undo entry.
+ * - An **anonymous** end seals the top only when the top is itself anonymous.
+ *   A top entry that names a gesture belongs to that gesture.
  *
  * Returns the same object when there is nothing to seal, so a store may
  * `set()` it unconditionally without inventing a render.
@@ -212,12 +282,11 @@ function sealIndex(past: readonly HistoryEntry[], gestureId: string | undefined)
     for (let i = past.length - 1; i >= 0; i -= 1) {
       if (past[i]!.gestureId === gestureId) return i;
     }
-    // The gesture dispatched nothing, or its entry has already been sealed —
-    // and the top belongs to somebody else. Sealing it would cut another
-    // gesture's entry in half.
-    const top = past[past.length - 1];
-    if (top === undefined || top.gestureId !== undefined) return -1;
-    return top.coalesceKey === undefined ? -1 : past.length - 1;
+    // The gesture dispatched nothing, or its entry is already sealed. Either
+    // way it owns no entry, and every entry in the stack belongs to somebody
+    // else — an anonymous top most of all, since that is exactly the shape of
+    // a knob/fader gesture that may still be in flight.
+    return -1;
   }
   const top = past[past.length - 1];
   if (top === undefined) return -1;

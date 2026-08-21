@@ -59,6 +59,51 @@
  *    hold that nothing can ever clear, and autosave would be silent for the
  *    rest of the session. This is the leak the id-set in the store is shaped
  *    to survive, and the unmount effect is what stops it happening at all.
+ *
+ * ## The single-active-mutating-gesture invariant
+ *
+ * **At most one mutating gesture is open at a time, app-wide.** Beginning a
+ * new one — {@link GestureSession.begin} (pointer), {@link
+ * GestureSession.keyForEdit} (a wheel-keyring / keyboard edit run), {@link
+ * GestureSession.keyFor} (a one-shot) — first ENDS whichever gesture was
+ * active, sealing its undo entry and dropping its hold. {@link openGestures}
+ * below is the module-level registry that enforces it; it is module-level for
+ * the same reason the id counter is, since the gesture being pre-empted
+ * belongs to a *different component*.
+ *
+ * The one exception is two sessions opened by the SAME pointer — the tempo
+ * wrapper around the BPM plate — which are one gesture wearing two hats, not
+ * two gestures.
+ *
+ * Two consequences, both deliberate:
+ *
+ * - **Multi-pointer simultaneous editing is out of scope.** SPEC.md does not
+ *   ask for it and no conventional DAW offers it. A second pointer starting a
+ *   drag ends the first one rather than editing beside it.
+ * - **The undo stack never holds two open entries.** Interleaved dispatches
+ *   cannot extend an entry buried below the top, because there is no second
+ *   open gesture to extend one — see `domain/undo.ts`, which additionally
+ *   serializes in the dispatch path so the history is correct even if a
+ *   surface dispatches with a `gestureId` it did not take a session for.
+ *   History SEGMENTS are deliberately not built: the problem is prevented,
+ *   not modelled.
+ *
+ * ## Owner state dies with the session
+ *
+ * A session ending is not always the owner's idea. The revision watcher
+ * (rule (d)), the window backstop (rule (f)), unmount and pre-emption all end
+ * it from the outside, and the hold is only *half* the state a gesture holds:
+ * the other half is the owner's own `useRef` — `Knob`/`Fader`'s `dragState`,
+ * `ClipView`'s `dragState`, `Playlist`'s `middlePan`. Left set, that ref made
+ * the next pointermove — a plain HOVER, with no button held — dispatch the
+ * dead gesture's start value and coalesce key into the *replacement* project.
+ *
+ * So {@link GestureSessionOptions.onCancel} is part of the session contract,
+ * not an extra: an owner with per-gesture state registers it and clears that
+ * state there, and it fires on EVERY close (the owner's own `end()` included,
+ * where clearing an already-cleared ref is a no-op). A callback that fires on
+ * only *some* of the ways a gesture can end is the exact bug it exists to
+ * prevent.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -78,14 +123,84 @@ export function nextGestureId(prefix: string): string {
   return `${prefix}#${gestureCounter}`;
 }
 
+/** A session's stable identity in {@link openGestures}. */
+interface ActiveGesture {
+  end: () => void;
+  /** The pointer that opened it, or `null` for a keyboard/focus open. */
+  pointerId: number | null;
+}
+
+/**
+ * Every mutating session currently open, app-wide — the registry behind the
+ * single-active-mutating-gesture invariant (module header).
+ *
+ * Module-level so a gesture in one component can pre-empt one in another:
+ * that is the whole point, and a context or a store field would re-render
+ * every knob in the app on every pointer-down.
+ *
+ * A *set* rather than a single slot, because ONE press can legitimately open
+ * two sessions: `TransportBar` wraps `BpmLcd` in a session that owns the
+ * tempo's undo identity while the LCD plate's own session owns the hold, so
+ * the same `pointerId` opens both. They are one gesture and must end together
+ * rather than tear each other down — see {@link preemptOtherGestures}.
+ */
+const openGestures = new Set<ActiveGesture>();
+
+/**
+ * End every open gesture that is not `self` and not part of the same press.
+ *
+ * "Same press" is `pointerId` equality: a physical pointer cannot pre-empt
+ * itself, and nested surfaces sharing one press are one gesture (see
+ * {@link openGestures}). A keyboard/focus open — `pointerId === null` — makes
+ * no such claim and pre-empts everything, which is exactly the case the
+ * invariant exists for: a keyboard edit landing mid-drag.
+ *
+ * Each victim is removed from the registry BEFORE its `end` runs, so the
+ * re-entrant `end` that `onCancel` owners trigger (`ChannelRackRow`'s
+ * `cancelPaint` calls `release()`) cannot see it still open.
+ */
+function preemptOtherGestures(self: ActiveGesture, pointerId: number | null): void {
+  if (openGestures.size === 0) return;
+  for (const other of [...openGestures]) {
+    if (other === self) continue;
+    if (pointerId !== null && other.pointerId === pointerId) continue;
+    openGestures.delete(other);
+    other.end();
+  }
+}
+
 /** Test seam: deterministic ids across test files. */
 export function __resetGestureCounterForTests(): void {
   gestureCounter = 0;
+  openGestures.clear();
+}
+
+/**
+ * Where a pointer id can be read from.
+ *
+ * `begin` is wired straight onto elements as a handler in places
+ * (`onPointerDown={swing.begin}`), so it is handed a React synthetic event
+ * rather than a number and must cope with both — and with neither, for the
+ * keyboard/focus openers that have no pointer at all.
+ */
+export type PointerIdSource = number | { pointerId?: unknown } | null | undefined;
+
+function readPointerId(source: PointerIdSource): number | null {
+  if (typeof source === "number") return Number.isFinite(source) ? source : null;
+  if (source === null || source === undefined) return null;
+  const id = (source as { pointerId?: unknown }).pointerId;
+  return typeof id === "number" && Number.isFinite(id) ? id : null;
 }
 
 export interface GestureHold {
-  /** Open the hold (pointer-down). Idempotent while one is already open. */
-  hold: () => void;
+  /**
+   * Open the hold (pointer-down). Idempotent while one is already open.
+   *
+   * Pass the pointer event (or its `pointerId`) so the window backstop can
+   * tell this gesture's release from a stray second pointer's — see
+   * {@link GestureSessionOptions.windowBackstop}.
+   */
+  hold: (pointer?: PointerIdSource) => void;
   /** Close it (pointer-up / pointer-cancel). Idempotent when none is open. */
   release: () => void;
 }
@@ -102,7 +217,10 @@ export interface GestureHold {
 export function useGestureHold(prefix: string, options: GestureSessionOptions = {}): GestureHold {
   const session = useGestureSession(prefix, options);
   return useMemo(
-    () => ({ hold: () => void session.begin(), release: session.end }),
+    () => ({
+      hold: (pointer?: PointerIdSource) => void session.begin(pointer),
+      release: session.end,
+    }),
     [session],
   );
 }
@@ -112,8 +230,16 @@ export interface GestureSession extends GestureHold {
    * Open the session (pointer-down / focus) and return its id, which doubles
    * as the gesture's `coalesceKey`/`gestureId`. Re-entrant: a second call
    * with one already open returns the SAME id and takes no second hold.
+   *
+   * Opening ENDS whatever gesture was active elsewhere in the app — the
+   * single-active-mutating-gesture invariant, see this module's header.
+   *
+   * The argument is the opening pointer event, or its `pointerId`, or nothing
+   * for a keyboard/focus open. It is wired directly as a handler in places
+   * (`onPointerDown={swing.begin}`), so a synthetic event is a first-class
+   * argument here rather than an accident.
    */
-  begin: () => string;
+  begin: (pointer?: PointerIdSource) => string;
   /**
    * The open session's id, or — with nothing open — a **fresh** one-shot id
    * that takes no hold.
@@ -171,8 +297,32 @@ export interface GestureSessionOptions {
    * open (rule (f)). For a drag whose release may land outside the element
    * that opened it and which cannot take pointer capture — the playlist's
    * right-button erase sweep, where capture would break the context menu.
+   *
+   * The backstop is scoped to the pointer that OPENED the session, when
+   * {@link GestureSession.begin} was told which one that is. A window
+   * listener sees every pointer in the document: a touch elsewhere on the
+   * screen, a stylus hover ending, the OS releasing a pointer the app never
+   * saw — each delivers a `pointerup` that used to end this gesture from
+   * under the still-pressed button that owns it, sealing the undo entry
+   * mid-drag so the rest of the drag became a second Ctrl+Z. (The invariant
+   * makes a second *editing* pointer impossible; it says nothing about which
+   * pointer's release ENDS the one gesture that is open.) With no id
+   * recorded — a keyboard/focus open — any release still ends it, which is
+   * the only safe reading when the gesture has no pointer of its own.
    */
   windowBackstop?: boolean;
+  /**
+   * Clear the owner's per-gesture state. Called on EVERY close of an open
+   * session, whatever ended it: the owner's own `end()`/`release()`, a
+   * terminator, the window backstop, the revision watcher, unmount, or
+   * pre-emption by another gesture.
+   *
+   * Every surface holding a `useRef` of drag state must register this — see
+   * this module's "Owner state dies with the session". The callback is read
+   * through a ref, so an inline arrow is fine and does not re-subscribe
+   * anything.
+   */
+  onCancel?: () => void;
   /**
    * The silence that ends a KEYBOARD edit run in {@link
    * GestureSession.keyForEdit}. Defaults to the wheel gesture's gap, which is
@@ -189,7 +339,7 @@ export function useGestureSession(
   // Destructured, not held as an object: a call site passing an inline literal
   // hands a new object every render, and every callback below would change
   // identity with it.
-  const { windowBackstop = false, editGapMs } = options;
+  const { windowBackstop = false, editGapMs, onCancel } = options;
 
   const idRef = useRef<string | null>(null);
   /** The `projectRevision` the open session was opened at — rule (d). */
@@ -198,6 +348,17 @@ export function useGestureSession(
   const backstopRef = useRef<(() => void) | null>(null);
   /** Lazily built: only a surface that calls `keyForEdit` ever needs one. */
   const keyringRef = useRef<WheelGestureKeyring | null>(null);
+  /** The pointer that opened the session, or `null` for a keyboard/focus open. */
+  const pointerIdRef = useRef<number | null>(null);
+  /**
+   * The owner's cleanup, held through a ref so a caller may pass an inline
+   * arrow. Reading it out of `options` directly would change `end`'s identity
+   * on every render, and `end` is this hook's unmount cleanup — the effect
+   * would tear down and re-run each render, releasing the hold mid-drag.
+   */
+  const onCancelRef = useRef(onCancel);
+  /** This session's stable identity in the app-wide {@link openGestures} registry. */
+  const selfRef = useRef<ActiveGesture>({ end: () => {}, pointerId: null });
 
   const detachBackstop = useCallback((): void => {
     const detach = backstopRef.current;
@@ -213,14 +374,26 @@ export function useGestureSession(
     // slider within the gap after releasing it folds into the run BEFORE the
     // drag.
     keyringRef.current?.reset();
+    openGestures.delete(selfRef.current);
     const id = idRef.current;
     if (id === null) return;
+    // Cleared FIRST, so the owner's `onCancel` (and anything it dispatches)
+    // sees a closed session and a re-entrant `end` — `ChannelRackRow`'s
+    // `cancelPaint` calls `release()` — returns here instead of recursing.
     idRef.current = null;
+    pointerIdRef.current = null;
+    // The owner's state goes with the session: a `dragState`/`middlePan` ref
+    // left set makes the next pointermove edit the REPLACEMENT project with
+    // this dead gesture's values (module header, "Owner state dies with the
+    // session"). Before the store call, so nothing can observe the store
+    // change while the owner still believes it is dragging.
+    onCancelRef.current?.();
     // `endGesture(id)` does both halves: seals the coalescing undo entry this
     // gesture owns and drops the persistence hold. Releasing an id that is not
     // held is a no-op in the store, so a double release cannot go negative.
     useAppStore.getState().endGesture(id);
   }, [detachBackstop]);
+
 
   const attachBackstop = useCallback((): void => {
     if (backstopRef.current !== null) return;
@@ -228,7 +401,14 @@ export function useGestureSession(
     // BOTH, never just `pointerup`: a cancelled pointer (capture lost, a
     // system gesture, the tab hidden) delivers only `pointercancel`, and the
     // hold it leaves behind silences autosave for the rest of the session.
-    const onUp = (): void => end();
+    // Scoped to the pointer that opened the session (see `windowBackstop`):
+    // a window listener hears every pointer in the document, and another
+    // one's release is not this gesture's end.
+    const onUp = (event: PointerEvent): void => {
+      const owner = pointerIdRef.current;
+      if (owner !== null && event.pointerId !== owner) return;
+      end();
+    };
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     backstopRef.current = () => {
@@ -237,23 +417,44 @@ export function useGestureSession(
     };
   }, [end]);
 
-  const begin = useCallback((): string => {
+  const begin = useCallback(
+    (pointer?: PointerIdSource): string => {
+      const open = idRef.current;
+      if (open !== null) return open;
+      const pointerId = readPointerId(pointer);
+      // The invariant: one mutating gesture at a time, app-wide. Whatever was
+      // being edited is sealed and released before this one opens.
+      preemptOtherGestures(selfRef.current, pointerId);
+      const id = nextGestureId(prefix);
+      idRef.current = id;
+      pointerIdRef.current = pointerId;
+      selfRef.current.pointerId = pointerId;
+      revisionRef.current = useAppStore.getState().projectRevision;
+      openGestures.add(selfRef.current);
+      useAppStore.getState().beginGesture(id);
+      if (windowBackstop) attachBackstop();
+      return id;
+    },
+    [prefix, windowBackstop, attachBackstop],
+  );
+
+  const keyFor = useCallback((): string => {
     const open = idRef.current;
     if (open !== null) return open;
-    const id = nextGestureId(prefix);
-    idRef.current = id;
-    revisionRef.current = useAppStore.getState().projectRevision;
-    useAppStore.getState().beginGesture(id);
-    if (windowBackstop) attachBackstop();
-    return id;
-  }, [prefix, windowBackstop, attachBackstop]);
-
-  const keyFor = useCallback((): string => idRef.current ?? nextGestureId(prefix), [prefix]);
+    // A one-shot is a mutating gesture too — it just begins and ends inside
+    // one call — so it seals the gesture in flight exactly as `begin` does.
+    preemptOtherGestures(selfRef.current, null);
+    return nextGestureId(prefix);
+  }, [prefix]);
 
   const keyForEdit = useCallback(
     (now?: number): string => {
       const open = idRef.current;
       if (open !== null) return open;
+      // A keyboard/wheel edit run is a mutating gesture (module header), so
+      // it pre-empts too — the run itself is bounded by the keyring's gap
+      // rather than by a hold, which is why it takes no session of its own.
+      preemptOtherGestures(selfRef.current, null);
       keyringRef.current ??= createWheelGestureKeyring(prefix, editGapMs);
       // One keyring per session, so the target is the session itself; the
       // keyring's own counter keeps the key distinct from every gesture id
@@ -264,6 +465,26 @@ export function useGestureSession(
   );
 
   const peek = useCallback((): string | null => idRef.current, []);
+
+  /*
+   * The two latest-value refs, synced after every render rather than during
+   * it (a ref written in render is both a lint error and a real hazard under
+   * concurrent rendering — a render that is thrown away must not leave the
+   * registry pointing at it).
+   *
+   * No dependency array: both must track EVERY render. `onCancel` is
+   * typically an inline arrow, and `selfRef.end` is how a gesture in another
+   * component pre-empts this one, so a stale one would run the wrong
+   * cleanup — or none.
+   *
+   * After-render is early enough for both: nothing here is read during
+   * render, only from event handlers, effects and the store subscription,
+   * all of which run after the commit that set them.
+   */
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+    selfRef.current.end = end;
+  });
 
   /*
    * Rule (b)'s last terminator (unmount) and rule (d)'s watcher, in one
@@ -301,7 +522,7 @@ export function useGestureSession(
       keyForEdit,
       peek,
       end,
-      hold: () => void begin(),
+      hold: (pointer?: PointerIdSource) => void begin(pointer),
       release: end,
       terminators,
     }),

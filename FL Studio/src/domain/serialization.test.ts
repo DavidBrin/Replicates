@@ -14,11 +14,14 @@ import {
   toSaveFile,
 } from "./serialization";
 import { fixtureProject } from "./testKit";
-import { noteEndTicks } from "./tickMath";
+import { arrangementLengthTicks, noteEndTicks } from "./tickMath";
 import {
   CURRENT_SCHEMA_VERSION,
   MASTER_MIXER_TRACK_ID,
+  MAX_ARRANGEMENT_BARS,
+  MAX_CLIP_START_TICK,
   PATTERN_LENGTH_TICKS,
+  TICKS_PER_BAR,
   type Project,
 } from "./types";
 
@@ -255,6 +258,62 @@ describe("corrupt and hostile input", () => {
     const restored = deserializeProject(text)!;
     expect(restored).not.toBeNull();
     expect(restored.patterns["pat-1"]!.notes).toEqual({});
+  });
+
+  /*
+   * Round 10 #6. `Number.isFinite` is not a bound. A clip at `1e308` survived
+   * validation untouched and then took the app down at RENDER —
+   * `TimelineRuler` sizes itself `Array.from({ length: totalBars })`, which
+   * throws `RangeError: Invalid array length` — and blew up the WAV export's
+   * buffer allocation the same way. The import reported success first.
+   */
+  describe("a clip past the arrangement limit is dropped (round 10 #6)", () => {
+    function withClip(startTick: unknown): Project | null {
+      return readProject({
+        ...fixtureProject(),
+        clips: {
+          "clip-ok": { trackId: "trk-1", patternId: "pat-1", startTick: 0 },
+          "clip-far": { trackId: "trk-1", patternId: "pat-1", startTick },
+        },
+      });
+    }
+
+    it.each([
+      ["1e308", 1e308],
+      ["Number.MAX_SAFE_INTEGER", Number.MAX_SAFE_INTEGER],
+      ["one bar past the limit", MAX_CLIP_START_TICK + TICKS_PER_BAR],
+      ["one TICK past the limit", MAX_CLIP_START_TICK + 1],
+    ])("drops a clip at %s", (_name, startTick) => {
+      const restored = withClip(startTick);
+      expect(Object.keys(restored!.clips)).toEqual(["clip-ok"]);
+    });
+
+    it("keeps a clip exactly ON the limit", () => {
+      const restored = withClip(MAX_CLIP_START_TICK);
+      expect(restored!.clips["clip-far"]!.startTick).toBe(MAX_CLIP_START_TICK);
+    });
+
+    it("leaves the surviving arrangement renderable and exportable", () => {
+      // The property the limit exists for, stated as the consumers see it.
+      // `TimelineRuler` builds `Array.from({ length: bars })` from exactly
+      // this number (plus a few trailing bars) and the WAV export allocates a
+      // buffer proportional to it; `1e308` ticks threw `RangeError: Invalid
+      // array length` in the first and blew the buffer in the second.
+      const restored = withClip(1e308);
+      const bars = Math.ceil(arrangementLengthTicks(restored!) / TICKS_PER_BAR);
+      expect(bars).toBeLessThanOrEqual(MAX_ARRANGEMENT_BARS);
+      expect(() => Array.from({ length: bars })).not.toThrow();
+    });
+
+    it("drops the clip rather than stacking it on the last bar", () => {
+      // Clamping would invent a position: a clip at bar 10^300 has no
+      // meaningful home at bar 1000, and every such clip would pile onto the
+      // same bar as a silent, unexplainable edit.
+      const restored = withClip(1e308);
+      expect(
+        Object.values(restored!.clips).some((clip) => clip.startTick === MAX_CLIP_START_TICK),
+      ).toBe(false);
+    });
   });
 
   it("drops clips pointing at a missing pattern or track", () => {
