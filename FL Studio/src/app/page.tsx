@@ -1,7 +1,5 @@
+import { AppShell } from "@/components/shell/AppShell";
+
 export default function Home() {
-  return (
-    <main>
-      <h1>FL Studio</h1>
-    </main>
-  );
+  return <AppShell />;
 }

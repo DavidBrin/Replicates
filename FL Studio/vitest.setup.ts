@@ -65,6 +65,31 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   })) as unknown as typeof window.matchMedia;
 }
 
+/**
+ * Web Storage.
+ *
+ * Under vitest 4's jsdom environment the globals are copied onto `globalThis`,
+ * and `localStorage`/`sessionStorage` do not survive the copy — their getters
+ * are bound to the real jsdom `Window`, so `window.localStorage` reads back as
+ * `undefined` even though the document has a proper `http://localhost:3000`
+ * origin. Re-point the globals at jsdom's own `Storage` instances (rather than
+ * a hand-rolled object) so `vi.spyOn(Storage.prototype, ...)` still works.
+ */
+const jsdomWindow = (globalThis as { jsdom?: { window?: Window & typeof globalThis } }).jsdom
+  ?.window;
+for (const key of ["localStorage", "sessionStorage"] as const) {
+  // Always prefer jsdom's instance: Node 22 exposes its own `localStorage`
+  // global that is unavailable without `--localstorage-file`, and a `typeof`
+  // check alone would leave that broken one in place.
+  if (jsdomWindow?.[key] !== undefined) {
+    Object.defineProperty(globalThis, key, {
+      value: jsdomWindow[key],
+      configurable: true,
+      writable: true,
+    });
+  }
+}
+
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = class {
     observe() {}

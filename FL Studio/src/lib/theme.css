@@ -1,0 +1,49 @@
+/**
+ * Global design tokens — CSS custom properties (SPEC §4.3).
+ *
+ * GLOBAL TOKENS ONLY. These are the values shared across every surface: app
+ * chrome (window title bars, workspace background), the transport/toolbar,
+ * LEDs, the LCD idiom, and body text. Per-surface visuals — piano-roll lane
+ * shading, step-cell cool/warm hues, mixer meter colours, playlist lane
+ * background, etc. — are each surface slice's own `<surface>/…css` file,
+ * imported from that surface's own components (SPEC §6, §8). Do not add
+ * per-surface tokens here.
+ *
+ * Hex values are measured, not invented — see
+ * `research/01-visual-interaction-design.md` §6.1 for sourcing per token.
+ */
+
+:root {
+  /* Workspace / app chrome (lane 1 §6.1) */
+  --fl-workspace: #475056; /* desktop behind docked windows */
+  --fl-chrome: #4e585e; /* window title bars & tool bars */
+  --fl-chrome-alt: #535d62; /* inactive/alt title bar */
+  --fl-deep-recess: #2d3438; /* inset wells (LCD surrounds, button wells) */
+
+  /* Accents — the only saturated colours in the palette (lane 1 §6.1) */
+  --fl-led-green: #a8e1b0;
+  --fl-led-green-highlight: #b8f0bf;
+  --fl-accent-orange: #ffd27c; /* highlight */
+  --fl-accent-orange-glow: #ff8a00; /* glow / non-default value */
+  --fl-error-red: #c0392b;
+
+  /* LCD idiom — light-on-dark-chrome, inverted from the rest of the UI */
+  --fl-lcd-bg-start: #e6f7ff;
+  --fl-lcd-bg-end: #e1f1f9;
+  --fl-lcd-text: #1a2c37; /* dark navy digits */
+
+  /* Text (light-on-dark everywhere except the LCD) */
+  --fl-text-primary: #d8e1e6;
+  --fl-text-secondary: #bdc2c6;
+
+  /* Structure */
+  --fl-border: #5e676c;
+  --fl-radius-sm: 3px;
+  --fl-radius-md: 5px;
+
+  /* Typography (lane 1 §7) — condensed grotesque stand-ins, system fallback only;
+     no webfont fetch (no next/font/google in this repo). */
+  --fl-font-condensed:
+    "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", Arial,
+    sans-serif;
+}

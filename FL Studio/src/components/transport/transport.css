@@ -1,0 +1,207 @@
+/**
+ * Transport/toolbar surface tokens + layout (SPEC §4.3, §6).
+ * Owned by this surface (slice C) — not part of the global sheet.
+ */
+
+.fl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 10px;
+  background: var(--fl-chrome);
+  border-bottom: 1px solid var(--fl-deep-recess);
+  font-family: var(--fl-font-condensed);
+  color: var(--fl-text-primary);
+  letter-spacing: 0.02em;
+  flex: none;
+}
+
+.fl-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fl-toolbar__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 0;
+  background: var(--fl-deep-recess);
+}
+
+/* Play / Stop pill */
+.fl-transport-pill {
+  display: flex;
+  border-radius: var(--fl-radius-md);
+  overflow: hidden;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+}
+
+.fl-transport-pill button {
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--fl-text-primary);
+}
+
+.fl-transport-pill button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fl-transport-pill button[data-active="true"] {
+  color: var(--fl-accent-orange);
+}
+
+/* Pattern / Song mode switch */
+.fl-mode-switch {
+  min-width: 68px;
+  height: 28px;
+  border-radius: var(--fl-radius-md);
+  border: 1px solid var(--fl-border);
+  background: var(--fl-deep-recess);
+  color: var(--fl-text-secondary);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.fl-mode-switch[data-mode="song"] {
+  background: var(--fl-accent-orange-glow);
+  color: #2b1c00;
+  box-shadow: 0 0 8px var(--fl-accent-orange-glow);
+}
+
+/* LCD idiom (lane 1 §1.3) — light-on-dark-chrome, inverted from the rest */
+.fl-lcd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--fl-radius-sm);
+  background: linear-gradient(
+    180deg,
+    var(--fl-lcd-bg-start),
+    var(--fl-lcd-bg-end)
+  );
+  color: var(--fl-lcd-text);
+  border: 1px solid var(--fl-deep-recess);
+  cursor: ns-resize;
+}
+
+.fl-lcd input {
+  width: 56px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fl-lcd-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: right;
+}
+
+.fl-lcd__spinner {
+  display: flex;
+  flex-direction: column;
+}
+
+.fl-lcd__spinner button {
+  width: 12px;
+  height: 13px;
+  line-height: 0;
+  border: none;
+  background: transparent;
+  color: var(--fl-lcd-text);
+  cursor: pointer;
+  font-size: 8px;
+}
+
+.fl-lcd__unit {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Pattern selector */
+.fl-pattern-selector {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+
+.fl-pattern-selector__name {
+  min-width: 96px;
+  padding: 0 8px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  color: var(--fl-text-primary);
+  font-size: 12px;
+}
+
+.fl-icon-button {
+  width: 22px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  color: var(--fl-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.fl-icon-button:hover {
+  color: var(--fl-text-primary);
+}
+
+.fl-icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Swing slider */
+.fl-swing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fl-text-secondary);
+}
+
+.fl-swing input[type="range"] {
+  accent-color: var(--fl-accent-orange-glow);
+}
+
+/* Generic small text button (save/export/import) */
+.fl-text-button {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  color: var(--fl-text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.fl-text-button:hover {
+  color: var(--fl-text-primary);
+}

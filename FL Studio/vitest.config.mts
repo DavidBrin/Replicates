@@ -15,6 +15,10 @@ export default defineConfig({
   plugins: [tsconfigPaths(), react()],
   test: {
     environment: "jsdom",
+    // jsdom refuses `localStorage` on an opaque origin, which is what the
+    // default `about:blank` document is — without a real URL every
+    // persistence test dies on `window.localStorage` being undefined.
+    environmentOptions: { jsdom: { url: "http://localhost:3000" } },
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],

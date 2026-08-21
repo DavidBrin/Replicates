@@ -1,0 +1,118 @@
+/**
+ * Docked-window shell layout (SPEC §4.1). Owned by this surface (slice C).
+ */
+
+.fl-app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  background: var(--fl-workspace);
+}
+
+.fl-workspace {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  gap: 6px;
+  padding: 6px;
+}
+
+.fl-workspace__column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  gap: 6px;
+}
+
+.fl-workspace__rail {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Window chrome (lane 1 §1.1) */
+.fl-window {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  overflow: hidden;
+}
+
+.fl-window--playlist {
+  flex: 1 1 55%;
+}
+
+.fl-window--rack-roll {
+  flex: 1 1 45%;
+}
+
+.fl-window--mixer {
+  flex: 1 1 auto;
+}
+
+.fl-window__titlebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--fl-chrome);
+  color: var(--fl-text-primary);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.fl-window__title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-window__tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.fl-window__tab {
+  border: none;
+  background: transparent;
+  color: var(--fl-text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--fl-radius-sm);
+  cursor: pointer;
+}
+
+.fl-window__tab[data-active="true"] {
+  background: var(--fl-deep-recess);
+  color: var(--fl-accent-orange);
+}
+
+.fl-window__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.fl-window-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fl-text-secondary);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding: 16px;
+}

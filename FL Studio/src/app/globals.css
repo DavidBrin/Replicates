@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+@import "../lib/theme.css";
 
 /**
  * Scan the source tree, and only the source tree.
@@ -12,14 +13,26 @@
  */
 @source "../**/*.{ts,tsx}";
 
-:root {
-  /* Placeholder dark tokens — refine once the FL Studio UI is measured. */
-  --background: #2b3439;
-  --foreground: #e7ebed;
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Roboto, Arial, sans-serif;
+  background: var(--fl-workspace);
+  color: var(--fl-text-primary);
+  font-family: var(--fl-font-condensed);
+  overflow: hidden;
+}
+
+button,
+input {
+  font-family: inherit;
+  color: inherit;
 }
