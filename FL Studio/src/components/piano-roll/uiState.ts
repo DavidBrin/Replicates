@@ -19,19 +19,17 @@
  * `zoom`/`scroll`/`selection`. One object + prefixed setters keeps every
  * surface's registration collision-free.
  *
- * ## Until registration lands
+ * ## Where the store hooks live
  *
- * {@link useRollUi} reads the app store when the slice is registered there and
- * falls back to a standalone store with the *same* creator when it is not, so
- * the roll is fully functional before integration and needs no change after
- * it. Delete the fallback once `store.ts` spreads the creator.
+ * Registered. `store.ts` imports this file at module scope to spread the
+ * creator, so this file may only `import type` from it — the store-reading
+ * hooks (`useRollUi`, `getRollUi`) therefore live one door down in
+ * `rollUi.ts`, which nothing in `store.ts` imports.
  */
-
-import { create } from "zustand";
 
 import { SNAP_UNITS, type SnapUnit } from "@/domain/tickMath";
 import { TICKS_PER_STEP, type ChannelId, type NoteId } from "@/domain/types";
-import { useAppStore, type AppState, type AppStateCreator } from "@/lib/store";
+import type { AppState, AppStateCreator } from "@/lib/store";
 
 import {
   DEFAULT_VIEWPORT,
@@ -97,10 +95,9 @@ export type RollAppState = AppState & PianoRollUiSlice;
 export const createPianoRollUi: AppStateCreator<PianoRollUiSlice> = (set, get) => {
   /*
    * One documented cast, in one place. `AppStateCreator<T>` types `set`/`get`
-   * against `AppState`, which does not yet include this slice's own keys — so
-   * writing `pianoRoll` through the raw setter is an excess-property error
-   * until slice A widens `UiSlices`. Casting here (rather than declaring the
-   * creator against `AppState & PianoRollUiSlice`) keeps the exported type
+   * against `AppState` as seen from *inside* the creator, where this slice's
+   * own keys are the thing being produced. Casting here (rather than declaring
+   * the creator against `AppState & PianoRollUiSlice`) keeps the exported type
    * exactly the one `store.ts` documents.
    */
   const setUi = set as unknown as (
@@ -164,41 +161,3 @@ export const createPianoRollUi: AppStateCreator<PianoRollUiSlice> = (set, get) =
     setPianoRollPreviewPitch: (previewPitch) => patch({ previewPitch }),
   };
 };
-
-/* ------------------------------------------- store bridge (pre-wiring) -- */
-
-/**
- * The standalone fallback store, used only while `store.ts` has not spread
- * {@link createPianoRollUi} yet. It carries the UI slice alone; the roll's
- * domain reads and `dispatch` always go to the real app store.
- */
-const fallbackStore = create<PianoRollUiSlice>()((...args) =>
-  createPianoRollUi(...(args as unknown as Parameters<AppStateCreator<PianoRollUiSlice>>)),
-);
-
-/** True once slice A registers this slice in `src/lib/store.ts`. */
-export function isPianoRollUiRegistered(): boolean {
-  return "pianoRoll" in (useAppStore.getState() as Partial<PianoRollUiSlice>);
-}
-
-const registered = isPianoRollUiRegistered();
-
-/** The store holding this slice — the app store once registered, else the fallback. */
-export const rollUiStore = (registered
-  ? (useAppStore as unknown as typeof fallbackStore)
-  : fallbackStore) as typeof fallbackStore;
-
-/** React binding: `useRollUi((ui) => ui.pianoRoll.snap)`. */
-export function useRollUi<T>(selector: (slice: PianoRollUiSlice) => T): T {
-  return rollUiStore(selector);
-}
-
-/** Non-hook read, for the imperative canvas painter and the key bindings. */
-export function getRollUi(): PianoRollUiSlice {
-  return rollUiStore.getState();
-}
-
-/** Test-only: return the slice to its defaults between cases. */
-export function __resetPianoRollUiForTests(): void {
-  rollUiStore.setState({ pianoRoll: DEFAULT_PIANO_ROLL_UI });
-}

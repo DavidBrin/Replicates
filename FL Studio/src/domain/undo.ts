@@ -9,7 +9,7 @@
  * starts with an empty history, by design.
  */
 
-import { composite, type Command } from "./commands/types";
+import { composite, isComposite, type Command } from "./commands/types";
 import { UNDO_STACK_LIMIT, type Project } from "./types";
 
 export interface HistoryEntry {
@@ -55,6 +55,15 @@ export function canRedo(history: History): boolean {
   return history.future.length > 0;
 }
 
+/**
+ * A command's parts, so a coalesced entry stays one flat composite instead of
+ * a tree that deepens by one level per dispatch. Flattening is semantically
+ * free: a composite's `apply` is exactly its parts applied in order.
+ */
+function parts(command: Command): readonly Command[] {
+  return isComposite(command) ? command.commands : [command];
+}
+
 /** Apply `command` and record it, coalescing into the previous entry if asked. */
 export function dispatchCommand(
   project: Project,
@@ -68,11 +77,24 @@ export function dispatchCommand(
   const top = history.past[history.past.length - 1];
   const { coalesceKey } = options;
   if (coalesceKey !== undefined && top !== undefined && top.coalesceKey === coalesceKey) {
-    // The existing inverse already restores the state from before the gesture
-    // started, so it is kept verbatim; only the forward command grows.
+    // BOTH sides of the entry grow, and the inverse side grows in REVERSE.
+    //
+    // Keeping `top.inverse` verbatim (what this did before) is only correct
+    // when every coalesced command overwrites the SAME field, so that the
+    // first inverse's "put the old value back" subsumes the later ones — a
+    // knob drag. It silently loses work the moment a gesture touches
+    // different entities: four coalesced note-adds undid to three notes,
+    // because the entry's only inverse removed the first note.
+    //
+    // `inverse` was captured against `project`, i.e. the state just before
+    // `command` — so applying it first lands exactly on the state `top.inverse`
+    // was itself captured against. That is the general rule: fold inverses in
+    // the reverse of the order their commands were applied. For a same-field
+    // knob drag it still collapses (set back to v2, then back to v0 ≡ v0) and
+    // still yields exactly one entry.
     const merged: HistoryEntry = {
-      command: composite([top.command, command], top.command.label),
-      inverse: top.inverse,
+      command: composite([...parts(top.command), command], top.command.label),
+      inverse: composite([inverse, ...parts(top.inverse)], top.inverse.label),
       coalesceKey,
     };
     return {

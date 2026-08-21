@@ -7,18 +7,18 @@
  * click → opens Piano Roll for that channel", the FL-plugin substitute).
  * None of this is persisted domain state (SPEC §5's ephemeral-slice rule).
  *
- * Registration is slice A's job — see `src/lib/store.ts`'s doc comment:
- *
- * ```ts
- * import { createChannelRackUi, type ChannelRackUiSlice } from "@/components/channel-rack/uiState";
- * export type UiSlices = ChannelRackUiSlice & …;
- * // …
- * ...createChannelRackUi(...args),
- * ```
+ * Registered in `src/lib/store.ts` (one import + one spread, per that file's
+ * doc comment). Note the `import type` below: `store.ts` imports this module
+ * at module scope, so a runtime edge back into it would close a cycle whose
+ * second-evaluated end reads the other's `const` in its temporal dead zone.
  */
 
+import { useEffect, useState } from "react";
+
+import { getPlayheadTicks, getSnapshot, subscribe } from "@/audio";
+import { ticksToStep } from "@/domain/tickMath";
+import { STEPS_PER_BAR, type ChannelId } from "@/domain/types";
 import type { AppState, AppStateCreator } from "@/lib/store";
-import type { ChannelId } from "@/domain/types";
 
 export interface ChannelRackUiSlice {
   /** The row lens/focus — "when lit, the Channel is selected" (lane 1 §2.7). */
@@ -37,11 +37,9 @@ export interface ChannelRackUiSlice {
 }
 
 export const createChannelRackUi: AppStateCreator<ChannelRackUiSlice> = (set) => {
-  // `set` is typed against the full `AppState`, which does not yet include
-  // this slice's fields until integration adds `ChannelRackUiSlice` to
-  // `UiSlices` in `store.ts` (SPEC §5, §8). The cast is the seam that keeps
-  // this file typechecking *before* that registration, without weakening
-  // `ChannelRackUiSlice`'s own (fully-typed) public surface.
+  // `set` is typed against `AppState` as seen from inside the creator, where
+  // this slice's own keys are the thing being produced. One documented cast,
+  // in one place, keeps `ChannelRackUiSlice`'s public surface fully typed.
   const setSlice = (patch: Partial<ChannelRackUiSlice>): void =>
     set(patch as unknown as Partial<AppState>);
 
@@ -61,15 +59,56 @@ export const createChannelRackUi: AppStateCreator<ChannelRackUiSlice> = (set) =>
  * from a rAF loop reading the Transport, not from store subscriptions per
  * tick").
  *
- * TODO(wire): `src/audio/engine.ts` (slice B) has not landed yet — there is
- * no Transport to read. Once it exists, replace this hook's body with a
- * `requestAnimationFrame` loop that reads the engine's current tick, derives
- * the active step (`ticksToStep`), and returns it only while
- * `playbackMode === "pattern"` and the transport is running; otherwise
- * `null`. Keeping the seam in this one function is what lets
- * `ChannelRack.tsx` render a playhead highlight today without depending on
- * B's shape.
+ * Returns the 0-based step the transport is currently on while playing a
+ * *pattern*, and `null` otherwise — song mode has no rack playhead, since the
+ * rack shows one pattern and the arrangement is somewhere else entirely.
+ *
+ * Everything it needs is on the engine's frozen surface, so this hook reaches
+ * for no store: `getSnapshot()` carries `playing`/`mode` (the project is
+ * pushed into the engine, §3.2), and `getPlayheadTicks()` is the transport
+ * read. Only the *step index* enters React state, so a frame that lands on
+ * the same step re-renders nothing — 16 renders per bar, not 60 per second.
  */
 export function usePlayheadStep(): number | null {
-  return null;
+  const [step, setStep] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let frame: number | null = null;
+
+    const readFrame = (): void => {
+      const { playing, mode } = getSnapshot();
+      setStep(
+        playing && mode === "pattern"
+          ? ((ticksToStep(getPlayheadTicks()) % STEPS_PER_BAR) + STEPS_PER_BAR) % STEPS_PER_BAR
+          : null,
+      );
+      frame = window.requestAnimationFrame(readFrame);
+    };
+
+    const stopLoop = (): void => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = null;
+    };
+
+    // The loop exists only while the transport runs; a stopped engine costs
+    // one subscription and no frames.
+    const sync = (): void => {
+      const { playing } = getSnapshot();
+      if (playing && frame === null) frame = window.requestAnimationFrame(readFrame);
+      if (!playing) {
+        stopLoop();
+        setStep(null);
+      }
+    };
+
+    const unsubscribe = subscribe(sync);
+    sync();
+    return () => {
+      unsubscribe();
+      stopLoop();
+    };
+  }, []);
+
+  return step;
 }

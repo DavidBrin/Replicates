@@ -18,11 +18,11 @@ import type { PatternId } from "@/domain/types";
  * clip's pattern active — same non-undoable navigation as a single click —
  * and documents the follow-up.
  *
- * TODO(wire): once integration owns `AppShell.tsx`, double-click should also
- * flip the rack/roll tab to "roll" and focus the Piano Roll window (F7).
- * That switch lives in shell state this slice does not own, so it is left
- * as a callback hook (`onOpenPianoRoll`) on `<Playlist>` for the integrator
- * to pass in rather than reached into directly.
+ * The tab flip that completes the action (rack ⇄ roll, F7) lives in shell
+ * state this slice does not own, so `AppShell` passes `onOpenPianoRoll` into
+ * `<Playlist>` and that handler supersedes this one. This remains the
+ * fallback for a `<Playlist>` mounted without the shell — a test, or a
+ * future second host.
  */
 export function openPatternInPianoRoll(patternId: PatternId): void {
   useAppStore.getState().setActivePatternId(patternId);

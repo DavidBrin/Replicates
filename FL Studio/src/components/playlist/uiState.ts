@@ -9,16 +9,15 @@
  * is one import + one spread line in `src/lib/store.ts`, owned by slice A —
  * this file never edits that file (SPEC.md §8).
  *
- * The composer hasn't registered this slice yet (no other UI slice has
- * landed either — SPEC.md §8's sequencing note puts integration last), so
- * `usePlaylistUi` below is a small **standalone** store built from the exact
- * same creator, giving `Playlist.tsx` a working hook today. Once
- * `useAppStore` grows a `playlistZoomPxPerBar` etc. field, swapping
- * `usePlaylistUi` for `useAppStore` selectors is a mechanical follow-up
- * (TODO(wire), same shape as `components/shell/wiring.ts`'s stubs).
+ * Registered. `Playlist.tsx` reads these fields straight off `useAppStore`;
+ * the standalone pre-integration store that used to live here is gone, so
+ * there is exactly one store. Note the `import type` below: `store.ts`
+ * imports this file at module scope, and a runtime edge back would close a
+ * module cycle whose second-evaluated end reads the other's `const` in its
+ * temporal dead zone.
  */
 
-import { create, type StateCreator } from "zustand";
+import type { StateCreator } from "zustand";
 
 import type { AppStateCreator } from "@/lib/store";
 import type { ClipId, PatternId } from "@/domain/types";
@@ -53,9 +52,9 @@ export interface PlaylistUiSlice {
 }
 
 /**
- * Typed against the slice alone so field access typechecks without the
- * composer having registered it yet; exported (cast) as the documented
- * `AppStateCreator<PlaylistUiSlice>` contract below.
+ * Typed against the slice alone — every field this creator reads or writes is
+ * its own, so it needs no view of the rest of `AppState`; exported (cast) as
+ * the documented `AppStateCreator<PlaylistUiSlice>` contract below.
  */
 const createPlaylistUiImpl: StateCreator<PlaylistUiSlice, [], [], PlaylistUiSlice> = (
   set,
@@ -76,12 +75,10 @@ const createPlaylistUiImpl: StateCreator<PlaylistUiSlice, [], [], PlaylistUiSlic
 /** The registration-ready creator — SPEC.md §5's "one import + one spread line". */
 export const createPlaylistUi = createPlaylistUiImpl as unknown as AppStateCreator<PlaylistUiSlice>;
 
-/** Standalone store for pre-integration use by this surface's own components. */
-export const usePlaylistUi = create<PlaylistUiSlice>()(createPlaylistUiImpl);
-
-const INITIAL_PLAYLIST_UI_STATE = usePlaylistUi.getState();
-
-/** Test-only: reset the standalone store between tests. */
-export function __resetPlaylistUiForTests(): void {
-  usePlaylistUi.setState(INITIAL_PLAYLIST_UI_STATE, true);
-}
+/** The slice's boot values — what a test resets the composed store back to. */
+export const DEFAULT_PLAYLIST_UI = {
+  playlistZoomPxPerBar: DEFAULT_ZOOM_PX_PER_BAR,
+  playlistScrollX: 0,
+  playlistSelectedClipId: null,
+  playlistPaintPatternId: null,
+} as const;

@@ -7,12 +7,14 @@ import { PatternSelector } from "./PatternSelector";
 import {
   addPattern,
   exportJson,
+  exportWav,
   importJson,
   redo,
   saveProject,
   selectAdjacentPattern,
   setGlobalSwing,
   setTempo,
+  toggleMetronome,
   togglePlaybackMode,
   togglePlayStop,
   undo,
@@ -22,6 +24,7 @@ import {
 export interface TransportBarProps {
   onPlayStop?: () => void;
   onModeToggle?: () => void;
+  onMetronomeToggle?: () => void;
   onTempoChange?: (bpm: number) => void;
   onSwingChange?: (value: number) => void;
   onUndo?: () => void;
@@ -34,14 +37,15 @@ export interface TransportBarProps {
 
 /**
  * Toolbar / transport bar — SPEC §1.1 "Transport / toolbar" row and §4.1's
- * diagram top strip. Every callback prop overrides the default placeholder
- * wiring (`src/components/shell/wiring.ts`) so this component is testable
- * without the real store/engine, and swaps cleanly to real handlers once
- * slices A/B land.
+ * diagram top strip. The defaults now go straight to the real store and
+ * engine through `src/components/shell/wiring.ts`; the callback props remain
+ * as overrides, which is what lets this component be driven in a test without
+ * either of them.
  */
 export function TransportBar({
   onPlayStop,
   onModeToggle,
+  onMetronomeToggle,
   onTempoChange,
   onSwingChange,
   onUndo,
@@ -64,6 +68,11 @@ export function TransportBar({
   function handleModeToggle() {
     if (onModeToggle) onModeToggle();
     else togglePlaybackMode();
+  }
+
+  function handleMetronomeToggle() {
+    if (onMetronomeToggle) onMetronomeToggle();
+    else toggleMetronome();
   }
 
   function handleTempoChange(bpm: number) {
@@ -92,7 +101,8 @@ export function TransportBar({
   }
 
   function handleExportWav() {
-    onExportWav?.();
+    if (onExportWav) onExportWav();
+    else void exportWav();
   }
 
   function handleExportJson() {
@@ -129,6 +139,21 @@ export function TransportBar({
           onClick={handleModeToggle}
         >
           {state.playbackMode === "song" ? "SONG" : "PAT"}
+        </button>
+        {/* FL parks the metronome in the toolbar's recording panel beside the
+            transport controls (lane 1 §1.2 item 11); at this scope the
+            transport group is the same place, and it mirrors `Ctrl+M`
+            (lane 1 §9). */}
+        <button
+          type="button"
+          className="fl-icon-button"
+          data-testid="metronome-toggle"
+          aria-label="Metronome"
+          aria-pressed={state.metronomeEnabled}
+          data-active={state.metronomeEnabled}
+          onClick={handleMetronomeToggle}
+        >
+          ♩
         </button>
       </div>
 
@@ -168,14 +193,13 @@ export function TransportBar({
       <div className="fl-toolbar__divider" />
 
       <div className="fl-toolbar__group">
-        {/* TODO(wire): re-enable disabled={!state.canUndo/canRedo} once the
-            real command stack (SPEC §2.1) reports depth — the placeholder
-            wiring never sets either flag true, which would permanently
-            disable both buttons. */}
+        {/* The command stack reports real depth now (SPEC §2.1), so the
+            buttons grey out exactly when there is nothing to take back. */}
         <button
           type="button"
           className="fl-icon-button"
           aria-label="Undo"
+          disabled={!state.canUndo}
           onClick={handleUndo}
         >
           ↺
@@ -184,6 +208,7 @@ export function TransportBar({
           type="button"
           className="fl-icon-button"
           aria-label="Redo"
+          disabled={!state.canRedo}
           onClick={handleRedo}
         >
           ↻

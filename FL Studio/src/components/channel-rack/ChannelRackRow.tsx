@@ -43,12 +43,12 @@ interface PaintSession {
  * Paint-stroke mechanics: left-click-drag paints many cells to the same
  * on/off state, right-click(-drag) deletes; both buffer their commands
  * locally and commit exactly **one** command on pointer-up
- * (`onCommitSteps`) rather than dispatching per cell — `domain/undo.ts`'s
- * gesture-coalescing (`coalesceKey`) only re-derives a correct combined
- * inverse for commands that *overwrite the same field* (a knob drag); it is
- * not safe for a sequence of commands that each touch a *different* note,
- * so a multi-cell paint stroke has to arrive as a single pre-built
- * `composite(...)` instead of relying on that coalescing path.
+ * (`onCommitSteps`) rather than dispatching per cell. Coalescing by
+ * `coalesceKey` would now fold such a stroke correctly too — `domain/undo.ts`
+ * composes inverses in reverse order — but the stroke keeps its own buffer
+ * for a second reason: the row paints an optimistic `preview` of the cells
+ * under the cursor, so it already holds the stroke's decisions and there is
+ * nothing to gain from re-deriving them one dispatch at a time.
  */
 export function ChannelRackRow({
   channel,

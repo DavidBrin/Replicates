@@ -16,7 +16,7 @@ import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/lib/store";
 
 import { PianoRoll } from "./PianoRoll";
-import { __resetPianoRollUiForTests, getRollUi } from "./uiState";
+import { __resetPianoRollUiForTests, getRollUi } from "./rollUi";
 
 function renderRoll() {
   __resetPianoRollUiForTests();

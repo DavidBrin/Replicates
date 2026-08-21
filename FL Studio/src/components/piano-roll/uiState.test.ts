@@ -1,29 +1,20 @@
 /**
- * UI-slice tests — the slice is exercised through a store composed exactly the
- * way `src/lib/store.ts` will compose it once slice A registers it (domain
- * slice + this creator), so the registration itself is what is under test, not
- * a hand-rolled stand-in.
+ * UI-slice tests — run against the REAL composed store (`useAppStore`), which
+ * is where `src/lib/store.ts` now spreads this creator. Asserting through the
+ * genuine article rather than a hand-composed stand-in is what makes the
+ * *registration* part of what is under test: unregister the slice and these
+ * fail.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { create } from "zustand";
 
 import { TICKS_PER_BEAT, TICKS_PER_STEP } from "@/domain/types";
-import { createDomainSlice, type AppState } from "@/lib/store";
+import { useAppStore, type AppState } from "@/lib/store";
 
 import { DEFAULT_VIEWPORT, MAX_ZOOM_X, MIN_ZOOM_X } from "./geometry";
-import {
-  DEFAULT_PIANO_ROLL_UI,
-  createPianoRollUi,
-  type PianoRollUiSlice,
-  type RollAppState,
-} from "./uiState";
+import { DEFAULT_PIANO_ROLL_UI, type PianoRollUiSlice } from "./uiState";
 
-/** Exactly the composition `store.ts` performs — an import and a spread. */
-const useTestStore = create<RollAppState>()((...args) => ({
-  ...createDomainSlice(...(args as Parameters<typeof createDomainSlice>)),
-  ...createPianoRollUi(...(args as unknown as Parameters<typeof createPianoRollUi>)),
-}));
+const useTestStore = useAppStore;
 
 const initial = useTestStore.getState();
 

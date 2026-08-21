@@ -24,7 +24,7 @@ import "./pianoRoll.css";
 import { nextId } from "@/domain/ids";
 import { SNAP_LABELS, SNAP_UNITS, type SnapUnit } from "@/domain/tickMath";
 import type { Channel, Note } from "@/domain/types";
-import { engineStub, useWiringState } from "@/components/shell/wiring";
+import { previewNote, useIsPlaying } from "@/components/shell/wiring";
 import { useAppStore } from "@/lib/store";
 
 import { KEYBOARD_WIDTH } from "./geometry";
@@ -36,12 +36,8 @@ import {
   type DrawSurface,
   type RollTheme,
 } from "./renderer";
-import {
-  getRollUi,
-  rollUiStore,
-  useRollUi,
-  type RollTool,
-} from "./uiState";
+import { getRollUi, rollUiStore, useRollUi } from "./rollUi";
+import type { RollTool } from "./uiState";
 
 export interface PianoRollProps {
   className?: string;
@@ -114,7 +110,9 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
     playheadRef.current = getPlayheadTick;
   }, [getPlayheadTick]);
 
-  const { isPlaying } = useWiringState();
+  // Only the play flag, not the whole toolbar view: a note edit must not
+  // re-render this host (SPEC §4.2 — the canvas repaints, React does not).
+  const isPlaying = useIsPlaying();
 
   // Chrome-only reads. The paint path never re-renders React.
   const channels = useAppStore((state) => state.project.channelOrder);
@@ -255,9 +253,10 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
         setLastLength: (ticks) => getRollUi().setPianoRollLastLength(ticks),
         setDragKind: (kind) => getRollUi().setPianoRollDragKind(kind),
         setPreviewPitch: (pitch) => getRollUi().setPianoRollPreviewPitch(pitch),
-        // TODO(wire): the ONE audition call site — swap `engineStub` for
-        // `import * as engine from "@/audio/engine"` when slice B lands.
-        previewNote: (channelId, pitch) => engineStub.previewNote(channelId, pitch),
+        // The ONE audition call site (SPEC §8's `previewNote`), routed
+        // through the wiring layer so the audio-presence guard stays in a
+        // single place.
+        previewNote: (channelId, pitch) => previewNote(channelId, pitch),
         createNoteId: () => nextId("note"),
       }),
     [buildScene],

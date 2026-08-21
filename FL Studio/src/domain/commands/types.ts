@@ -33,15 +33,35 @@ export class CommandError extends Error {
 }
 
 /**
+ * A composite's parts, kept readable so a consumer can re-compose without
+ * nesting. `src/domain/undo.ts` uses this to keep a coalesced gesture's entry
+ * FLAT: a 500-move drag folds into one composite of 500 commands rather than a
+ * 500-deep tree of two-element composites (whose `apply` would recurse 500
+ * frames deep).
+ */
+export interface CompositeCommand extends Command {
+  readonly type: "composite";
+  readonly commands: readonly Command[];
+}
+
+export function isComposite(command: Command): command is CompositeCommand {
+  return (
+    command.type === "composite" &&
+    Array.isArray((command as Partial<CompositeCommand>).commands)
+  );
+}
+
+/**
  * One undoable entry made of several commands, applied in order.
  *
  * This is how cross-cutting atomicity is expressed: "Make unique" repoints a
  * clip *and* adds a pattern, and one Ctrl+Z has to take back both.
  */
-export function composite(commands: readonly Command[], label = "Multiple changes"): Command {
+export function composite(commands: readonly Command[], label = "Multiple changes"): CompositeCommand {
   return {
     type: "composite",
     label,
+    commands,
     apply(project) {
       return commands.reduce((acc, cmd) => cmd.apply(acc), project);
     },

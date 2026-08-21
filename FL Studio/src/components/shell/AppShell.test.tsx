@@ -57,6 +57,20 @@ describe("AppShell", () => {
     expect(screen.getByText("Channel rack")).toBeInTheDocument();
   });
 
+  it("opens the Piano Roll on that channel when a rack channel name is clicked", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    // The rack tab is showing; clicking a channel's name button is SPEC §1.1's
+    // "opens the Piano Roll for that channel" — a cross-surface action the
+    // shell owns, since the tab is shell state.
+    await user.click(screen.getByTestId("channel-name-ch-bass"));
+
+    expect(await screen.findByText("Piano roll - Untitled")).toBeInTheDocument();
+    expect(screen.queryByText("Channel rack")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Target channel" })).toHaveValue("ch-bass");
+  });
+
   it("Space toggles play/stop via the global binding", async () => {
     const user = userEvent.setup();
     render(<AppShell />);

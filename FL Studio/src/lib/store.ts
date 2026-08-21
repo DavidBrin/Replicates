@@ -46,6 +46,17 @@
 
 import { create, type StateCreator } from "zustand";
 
+import {
+  createChannelRackUi,
+  type ChannelRackUiSlice,
+} from "@/components/channel-rack/uiState";
+import { createMixerUi, type MixerUiSlice } from "@/components/mixer/uiState";
+import {
+  createPianoRollUi,
+  type PianoRollUiSlice,
+} from "@/components/piano-roll/uiState";
+import { createPlaylistUi, type PlaylistUiSlice } from "@/components/playlist/uiState";
+
 import { compileTimelineCached, type CompiledTimeline } from "@/domain/compile";
 import type { Command } from "@/domain/commands";
 import { createDefaultProject } from "@/domain/defaultProject";
@@ -166,12 +177,17 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
 /* ------------------------------------------------------------ ui slices */
 
 /**
- * The registered ephemeral UI slices.
+ * The registered ephemeral UI slices — one intersection member per surface.
  *
- * Starts as `object` (an empty intersection). Each surface that lands a
- * `uiState.ts` turns this into `PianoRollUiSlice & PlaylistUiSlice & …`.
+ * Every surface `uiState.ts` imported here must import from *this* file with
+ * `import type` only. A runtime edge back into `store.ts` would close an
+ * import cycle whose two ends are both evaluated at module scope (this file
+ * calls each creator inside `create()`), and whichever module the bundler
+ * reached second would read the other's `const` in its temporal dead zone.
+ * That is why the surfaces' store-reading hooks live beside their slices
+ * (e.g. `piano-roll/rollUi.ts`) rather than inside `uiState.ts`.
  */
-export type UiSlices = object;
+export type UiSlices = ChannelRackUiSlice & MixerUiSlice & PianoRollUiSlice & PlaylistUiSlice;
 
 export type AppState = DomainSlice & UiSlices;
 
@@ -181,8 +197,10 @@ export type AppStateCreator<TSlice> = StateCreator<AppState, [], [], TSlice>;
 export const useAppStore = create<AppState>()((...args) => ({
   ...createDomainSlice(...args),
   // --- registered UI slices (one line each) -------------------------------
-  // ...createPianoRollUi(...args),
-  // ...createPlaylistUi(...args),
+  ...createChannelRackUi(...args),
+  ...createMixerUi(...args),
+  ...createPianoRollUi(...args),
+  ...createPlaylistUi(...args),
 }));
 
 /**

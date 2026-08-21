@@ -1,6 +1,10 @@
+import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+import { updateProject } from "@/domain/commands";
+import { useAppStore } from "@/lib/store";
 
 import { TransportBar } from "./TransportBar";
 import { __resetWiringForTests } from "@/components/shell/wiring";
@@ -60,10 +64,26 @@ describe("TransportBar", () => {
     expect(onTempoChange).toHaveBeenCalledWith(141);
   });
 
-  it("fires onUndo / onRedo callbacks", async () => {
+  it("greys out undo/redo while the command stack is empty", () => {
+    render(<TransportBar />);
+    expect(screen.getByLabelText("Undo")).toBeDisabled();
+    expect(screen.getByLabelText("Redo")).toBeDisabled();
+  });
+
+  it("fires onUndo / onRedo callbacks once the stack has depth", async () => {
     const onUndo = vi.fn();
     const onRedo = vi.fn();
     const user = userEvent.setup();
+
+    // Two edits then one undo leaves BOTH directions available, which is what
+    // enables both buttons — they report the real stack now (SPEC §2.1).
+    act(() => {
+      const store = useAppStore.getState();
+      store.dispatch(updateProject({ tempo: 150 }));
+      store.dispatch(updateProject({ tempo: 160 }));
+      useAppStore.getState().undo();
+    });
+
     render(<TransportBar onUndo={onUndo} onRedo={onRedo} />);
 
     await user.click(screen.getByLabelText("Undo"));

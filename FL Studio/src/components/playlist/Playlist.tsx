@@ -35,17 +35,21 @@ import {
 import { PatternPicker } from "./PatternPicker";
 import { TimelineRuler } from "./TimelineRuler";
 import { TrackHeader } from "./TrackHeader";
-import { usePlaylistUi } from "./uiState";
 
 export interface PlaylistProps {
   /**
-   * Song-mode playhead position in ticks. `undefined` until slice B's
-   * engine + a rAF loop exist (SPEC.md §5: "Playback position for
-   * playheads comes from a rAF loop reading the Transport, not from store
-   * subscriptions"). TODO(wire): integration passes the live tick here.
+   * Song-mode playhead position in ticks, or `undefined` when the transport
+   * is stopped. The shell samples it on a rAF loop reading the engine's
+   * transport (SPEC.md §5: "playback position ... not from store
+   * subscriptions per tick") and passes it down.
    */
   playheadTicks?: number;
-  /** TODO(wire): overrides the default (`bindings.ts`) double-click action. */
+  /**
+   * Double-click a clip → open its pattern in the Piano Roll. The shell
+   * passes this in because flipping the rack/roll tab is shell state; with
+   * no handler the surface falls back to `bindings.ts`, which can only make
+   * the pattern active.
+   */
   onOpenPianoRoll?: (patternId: PatternId) => void;
 }
 
@@ -64,13 +68,15 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   const activePatternId = useAppStore(selectActivePatternId);
   const playbackMode = useAppStore(selectPlaybackMode);
 
-  const zoomPxPerBar = usePlaylistUi((s) => s.playlistZoomPxPerBar);
-  const setZoom = usePlaylistUi((s) => s.setPlaylistZoom);
-  const zoomBy = usePlaylistUi((s) => s.zoomPlaylistBy);
-  const selectedClipId = usePlaylistUi((s) => s.playlistSelectedClipId);
-  const selectClipUi = usePlaylistUi((s) => s.selectPlaylistClip);
-  const paintPatternId = usePlaylistUi((s) => s.playlistPaintPatternId);
-  const setPaintPattern = usePlaylistUi((s) => s.setPlaylistPaintPattern);
+  // The UI slice is registered in the one composed store (SPEC.md §5), so
+  // these are plain selectors off `useAppStore` — same fields, no second store.
+  const zoomPxPerBar = useAppStore((s) => s.playlistZoomPxPerBar);
+  const setZoom = useAppStore((s) => s.setPlaylistZoom);
+  const zoomBy = useAppStore((s) => s.zoomPlaylistBy);
+  const selectedClipId = useAppStore((s) => s.playlistSelectedClipId);
+  const selectClipUi = useAppStore((s) => s.selectPlaylistClip);
+  const paintPatternId = useAppStore((s) => s.playlistPaintPatternId);
+  const setPaintPattern = useAppStore((s) => s.setPlaylistPaintPattern);
 
   const armedPatternId = paintPatternId ?? activePatternId;
 

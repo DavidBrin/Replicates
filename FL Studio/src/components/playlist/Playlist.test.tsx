@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Playlist } from "./Playlist";
-import { __resetPlaylistUiForTests } from "./uiState";
+import { DEFAULT_PLAYLIST_UI } from "./uiState";
 import { addNotes } from "@/domain/commands";
 import { createHistory } from "@/domain/undo";
 import { createDefaultProject } from "@/domain/defaultProject";
@@ -11,17 +11,21 @@ import { nextId, resetIds } from "@/domain/ids";
 import { TICKS_PER_BAR } from "@/domain/types";
 import { useAppStore } from "@/lib/store";
 
+/**
+ * One store now holds both the domain and this surface's UI slice, so the
+ * per-test reset writes both through it (SPEC.md §5's composition).
+ */
 function resetStore() {
   useAppStore.setState({
     project: createDefaultProject({ now: "2026-01-01T00:00:00.000Z" }),
     history: createHistory(),
+    ...DEFAULT_PLAYLIST_UI,
   });
 }
 
 beforeEach(() => {
   resetIds(0);
   resetStore();
-  __resetPlaylistUiForTests();
 });
 
 afterEach(() => {

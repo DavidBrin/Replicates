@@ -2,7 +2,6 @@
 
 import "./channelRack.css";
 
-import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { notesAtStep, updateChannel, updateNotes, updateProject } from "@/domain/commands";
@@ -16,7 +15,6 @@ import {
   useAppStore,
 } from "@/lib/store";
 import { ChannelRackRow } from "./ChannelRackRow";
-import type { ChannelRackUiSlice } from "./uiState";
 import { usePlayheadStep } from "./uiState";
 
 const VELOCITY_STEP = 1 / 32;
@@ -32,13 +30,10 @@ export interface ChannelRackProps {
  * per-channel controls and the 16-step grid all read/write through
  * `store.dispatch` — no domain field is ever written directly (SPEC §5).
  *
- * `store.ts` (slice A, frozen) has no `ChannelRackUiSlice` registered yet —
- * that registration is integration's job once this component lands (SPEC
- * §8). Selection/open-roll state is therefore read from the store
- * *defensively* (`Partial<ChannelRackUiSlice>`) and falls back to local
- * component state when the slice isn't spread into the composer yet, so the
- * rack is fully interactive and testable today and needs no code change
- * once the slice is registered — the fallback branch simply stops firing.
+ * `ChannelRackUiSlice` is registered in the composer (SPEC §5, §8), so
+ * selection and the one-shot "open the roll for this channel" request are
+ * read and written straight through `useAppStore` — there is no local mirror
+ * of either. The shell consumes `pianoRollRequestChannelId` and clears it.
  */
 export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackProps = {}) {
   // `selectChannels`/`selectMixerTracks` build a fresh array each call
@@ -53,18 +48,9 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   const dispatch = useAppStore((state) => state.dispatch);
   const project = useAppStore((state) => state.project);
 
-  const [localSelected, setLocalSelected] = useState<ChannelId | null>(null);
-  const storeSelected = useAppStore(
-    (state) => (state as Partial<ChannelRackUiSlice>).selectedChannelId,
-  );
-  const storeSelectChannel = useAppStore(
-    (state) => (state as Partial<ChannelRackUiSlice>).selectChannel,
-  );
-  const storeRequestOpenPianoRoll = useAppStore(
-    (state) => (state as Partial<ChannelRackUiSlice>).requestOpenPianoRoll,
-  );
-
-  const selectedChannelId = storeSelected ?? localSelected;
+  const selectedChannelId = useAppStore((state) => state.selectedChannelId);
+  const selectChannel = useAppStore((state) => state.selectChannel);
+  const requestOpenPianoRoll = useAppStore((state) => state.requestOpenPianoRoll);
   const playheadStep = usePlayheadStep();
 
   if (!pattern) return null;
@@ -75,14 +61,12 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
 
   function handleSelect(channelId: ChannelId): void {
     onSelectChannel?.(channelId);
-    if (storeSelectChannel) storeSelectChannel(channelId);
-    else setLocalSelected(channelId);
+    selectChannel(channelId);
   }
 
   function handleOpenPianoRoll(channelId: ChannelId): void {
     onOpenPianoRoll?.(channelId);
-    if (storeRequestOpenPianoRoll) storeRequestOpenPianoRoll(channelId);
-    else setLocalSelected(channelId);
+    requestOpenPianoRoll(channelId);
   }
 
   function handleToggleMute(channelId: ChannelId): void {

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { updateChannel } from "./commands/channels";
-import { addNotes } from "./commands/patterns";
+import { addNotes, removeNotes } from "./commands/patterns";
 import { updateProject } from "./commands/project";
+import { isComposite } from "./commands/types";
 import { fixtureProject } from "./testKit";
 import { UNDO_STACK_LIMIT, type Note } from "./types";
 import {
@@ -123,6 +124,98 @@ describe("drag coalescing", () => {
     // …and redo replays the whole gesture, landing on the final value.
     const redone = redo(undone.project, undone.history);
     expect(redone.project.channels["ch-kick"]!.volume).toBe(0.42);
+  });
+
+  it("undoes a HETEROGENEOUS coalesced gesture completely, not just its first command", () => {
+    // The regression: four coalesced note-adds, each touching a DIFFERENT
+    // note, used to keep only the first command's inverse — one undo left
+    // three notes behind. Every gesture that draws/erases more than one
+    // entity under one coalesceKey (a rack paint stroke, a marquee move)
+    // depends on this.
+    const start = fixtureProject();
+    let state = { project: start, history: createHistory() as History };
+    const key = "roll-draw:pat-1";
+    for (const id of ["n1", "n2", "n3", "n4"]) {
+      state = dispatchCommand(state.project, state.history, addNotes("pat-1", [note(id)]), {
+        coalesceKey: key,
+      });
+    }
+
+    expect(Object.keys(state.project.patterns["pat-1"]!.notes)).toHaveLength(4);
+    expect(state.history.past).toHaveLength(1);
+
+    const undone = undo(state.project, state.history);
+    expect(Object.keys(undone.project.patterns["pat-1"]!.notes)).toHaveLength(0);
+    expect(undone.project).toEqual(start);
+
+    // …and it still redoes as one entry, restoring all four.
+    const redone = redo(undone.project, undone.history);
+    expect(Object.keys(redone.project.patterns["pat-1"]!.notes)).toHaveLength(4);
+    expect(redone.project).toEqual(state.project);
+  });
+
+  it("folds inverses in reverse order, not the order the commands ran", () => {
+    // Order-sensitive by construction: the gesture ADDS a note and then
+    // REMOVES it, so forward-order folding would re-remove a note that is
+    // already gone and then re-add it — ending with a note the gesture had
+    // deleted. Only reverse folding lands back on `start`.
+    const start = fixtureProject();
+    let state = { project: start, history: createHistory() as History };
+    const key = "roll-draw:pat-1";
+    state = dispatchCommand(state.project, state.history, addNotes("pat-1", [note("n1")]), {
+      coalesceKey: key,
+    });
+    state = dispatchCommand(state.project, state.history, removeNotes("pat-1", ["n1"]), {
+      coalesceKey: key,
+    });
+    expect(state.history.past).toHaveLength(1);
+    expect(Object.keys(state.project.patterns["pat-1"]!.notes)).toHaveLength(0);
+
+    const undone = undo(state.project, state.history);
+    expect(undone.project).toEqual(start);
+  });
+
+  it("keeps a same-field knob drag collapsed to ONE entry with an exact inverse", () => {
+    // The property the old shortcut got right, pinned so the fix cannot
+    // regress it: repeated writes to one field still make one undo entry, and
+    // undoing it lands on the value from before the gesture (not the
+    // second-to-last one).
+    const start = fixtureProject();
+    let state = { project: start, history: createHistory() as History };
+    const key = "knob:ch-kick:volume";
+    for (const volume of [0.9, 0.8, 0.7, 0.6, 0.5]) {
+      state = dispatchCommand(state.project, state.history, updateChannel("ch-kick", { volume }), {
+        coalesceKey: key,
+      });
+    }
+
+    expect(state.history.past).toHaveLength(1);
+    expect(state.history.future).toHaveLength(0);
+    const undone = undo(state.project, state.history);
+    expect(undone.project.channels["ch-kick"]!.volume).toBe(start.channels["ch-kick"]!.volume);
+    expect(undone.history.past).toHaveLength(0);
+  });
+
+  it("keeps the coalesced entry FLAT rather than nesting one level per dispatch", () => {
+    // A long drag emits hundreds of commands; a tree that deepens per dispatch
+    // recurses just as deep inside apply().
+    let state = { project: fixtureProject(), history: createHistory() as History };
+    for (let i = 0; i < 200; i += 1) {
+      state = dispatchCommand(
+        state.project,
+        state.history,
+        updateChannel("ch-kick", { volume: i / 200 }),
+        { coalesceKey: "knob:ch-kick:volume" },
+      );
+    }
+    const entry = state.history.past[0]!;
+    expect(isComposite(entry.command)).toBe(true);
+    expect(isComposite(entry.command) ? entry.command.commands : []).toHaveLength(200);
+    expect(isComposite(entry.inverse) ? entry.inverse.commands : []).toHaveLength(200);
+    // Every part is a leaf: no nested composites.
+    for (const part of isComposite(entry.command) ? entry.command.commands : []) {
+      expect(isComposite(part)).toBe(false);
+    }
   });
 
   it("starts a new entry when the gesture key changes", () => {

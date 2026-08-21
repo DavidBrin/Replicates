@@ -11,7 +11,7 @@ export interface ClipViewProps {
   selected: boolean;
   /** Left-click: select + make the clip's pattern active (SPEC.md §1.1). */
   onSelect: (clipId: string) => void;
-  /** Double-click: open the pattern in the Piano Roll (SPEC.md §1.1, TODO(wire)). */
+  /** Double-click: open the pattern in the Piano Roll (SPEC.md §1.1). */
   onOpen: (clip: PatternClip) => void;
   /** Right-click: delete (SPEC.md §4.4's universal "right-click = delete"). */
   onDelete: (clipId: string) => void;

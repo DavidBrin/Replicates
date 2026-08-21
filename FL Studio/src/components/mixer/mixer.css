@@ -1,0 +1,178 @@
+/**
+ * Mixer surface tokens + layout (SPEC §4.3, §6, §8: per-surface tokens live
+ * in the surface's own CSS file, never in `src/lib/theme.css`).
+ *
+ * Measured hexes (lane 1 §6.1 / SPEC §4.3 table): meter green `#AAFD43`,
+ * yellow `#FEFE3F`, trough `#3B4D5F`; fader default pale `#C6CDD1`,
+ * off-default orange `#F0A020`. Strips are vertical, side-by-side, scrolling
+ * horizontally (lane 1 §5.2).
+ */
+
+:root {
+  --fl-meter-green: #aafd43;
+  --fl-meter-yellow: #fefe3f;
+  --fl-meter-trough: #3b4d5f;
+  --fl-fader-default: #c6cdd1;
+  --fl-fader-off-default: #f0a020;
+  --fl-mixer-strip-bg: #4e585e;
+  --fl-mixer-strip-selected: #5c6a71;
+}
+
+.fl-mixer {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 2px;
+  height: 100%;
+  padding: 8px;
+  overflow-x: auto;
+  background: var(--fl-workspace);
+  font-family: var(--fl-font-condensed);
+}
+
+.fl-mixer-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 64px;
+  flex: none;
+  padding: 8px 4px;
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  background: var(--fl-mixer-strip-bg);
+  cursor: pointer;
+}
+
+.fl-mixer-strip[data-selected="true"] {
+  background: var(--fl-mixer-strip-selected);
+  border-color: var(--fl-led-green);
+  box-shadow: 0 0 6px rgba(168, 225, 176, 0.35);
+}
+
+.fl-mixer-strip[data-master="true"] {
+  border-color: var(--fl-accent-orange-glow);
+}
+
+.fl-mixer-strip__name {
+  width: 100%;
+  padding: 3px 2px;
+  border: 1px solid var(--fl-border);
+  border-radius: var(--fl-radius-sm);
+  background: var(--fl-deep-recess);
+  color: var(--fl-text-primary);
+  font-size: 10px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fl-mixer-strip__led {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--fl-border);
+  background: #3a4448;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fl-mixer-strip__led[data-muted="false"] {
+  background: var(--fl-led-green);
+  box-shadow: 0 0 4px var(--fl-led-green-highlight);
+}
+
+.fl-mixer-strip__body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-height: 160px;
+}
+
+/* --------------------------------------------------------------- fader */
+
+.fl-fader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 24px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.fl-fader__track {
+  position: relative;
+  width: 4px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--fl-deep-recess);
+}
+
+.fl-fader__handle {
+  position: absolute;
+  left: 50%;
+  width: 20px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--fl-fader-default);
+  border: 1px solid var(--fl-border);
+  transform: translate(-50%, 50%);
+}
+
+.fl-fader[data-off-default="true"] .fl-fader__handle {
+  background: var(--fl-fader-off-default);
+  box-shadow: 0 0 4px var(--fl-accent-orange-glow);
+}
+
+/* --------------------------------------------------------------- meter */
+
+.fl-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 16px;
+}
+
+.fl-meter__clip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fl-deep-recess);
+  border: 1px solid var(--fl-border);
+}
+
+.fl-meter__clip[data-clipped="true"] {
+  background: var(--fl-error-red);
+  box-shadow: 0 0 5px var(--fl-error-red);
+}
+
+.fl-meter__bars {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  flex: 1;
+  width: 100%;
+}
+
+.fl-meter__trough {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--fl-meter-trough);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.fl-meter__fill {
+  width: 100%;
+  background: var(--fl-meter-green);
+  transition: height 60ms linear;
+}
