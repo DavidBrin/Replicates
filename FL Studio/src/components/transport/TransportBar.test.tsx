@@ -1,10 +1,12 @@
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { updateProject } from "@/domain/commands";
-import { useAppStore } from "@/lib/store";
+import { createHistory } from "@/domain/undo";
+import { __resetGestureCounterForTests } from "@/lib/gestureHold";
+import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 
 import { ARM_TIMEOUT_MS, TransportBar } from "./TransportBar";
 import { __resetWiringForTests, requestPatternRename } from "@/components/shell/wiring";
@@ -293,5 +295,116 @@ describe("tempo edits are one undo entry per gesture", () => {
 
     act(() => useAppStore.getState().undo());
     expect(useAppStore.getState().project.tempo).toBe(141);
+  });
+});
+
+/* ------------------------------------------------- swing gesture class ---- */
+
+/**
+ * Round 8's class sweep, transport family. The swing slider had three of the
+ * five holes at once: no persistence hold (rule a), no `pointercancel`
+ * terminator (rule b), and — shared with the tempo LCD — ids from a source
+ * that a remount could rewind (rule c). All three now come from
+ * `useGestureSession` (`@/lib/gestureHold`).
+ */
+describe("TransportBar swing — the gesture class (round 8)", () => {
+  function reset(): void {
+    act(() => {
+      useAppStore.setState({
+        project: { ...useAppStore.getState().project, globalSwing: 0 },
+        history: createHistory(),
+        activeGestureIds: [],
+      });
+    });
+    __resetGestureCounterForTests();
+  }
+
+  function slider(): HTMLElement {
+    return screen.getByLabelText("Global swing");
+  }
+
+  function drag(values: number[]): void {
+    fireEvent.pointerDown(slider(), { button: 0, buttons: 1, pointerId: 1 });
+    for (const value of values) fireEvent.change(slider(), { target: { value: String(value) } });
+  }
+
+  beforeEach(reset);
+
+  it("registers a persistence hold for the whole drag (rule a)", () => {
+    render(<TransportBar />);
+
+    drag([0.3]);
+    // SPEC §2.2: an autosave flush coming due here must be deferred. Before
+    // the sweep this slider took no hold at all, so a slow drag wrote
+    // mid-gesture.
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(slider(), { pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("folds one drag into one undo entry", () => {
+    render(<TransportBar />);
+
+    drag([0.2, 0.4, 0.6]);
+    fireEvent.pointerUp(slider(), { pointerId: 1 });
+
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.6);
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+  });
+
+  it("releases the hold — and seals the entry — on pointercancel (rule b)", () => {
+    render(<TransportBar />);
+
+    drag([0.2]);
+    fireEvent.pointerCancel(slider(), { pointerId: 1 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+
+    // A later, unrelated change must not join the abandoned drag's entry.
+    fireEvent.change(slider(), { target: { value: "0.5" } });
+    fireEvent.blur(slider());
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+  });
+
+  it("releases the hold when the toolbar unmounts mid-drag (rule b)", () => {
+    const view = render(<TransportBar />);
+
+    drag([0.3]);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    view.unmount();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("does not weld a drag onto the previous MOUNT's drag (rule c)", () => {
+    const first = render(<TransportBar />);
+    drag([0.2]);
+    fireEvent.pointerUp(slider(), { pointerId: 1 });
+    first.unmount();
+
+    render(<TransportBar />);
+    drag([0.4]);
+    fireEvent.pointerUp(slider(), { pointerId: 1 });
+
+    // Two gestures, two entries — a component-local counter would have
+    // re-minted the first mount's id and folded them into one.
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+    act(() => useAppStore.getState().undo());
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+  });
+
+  it("gives a keyboard-only edit its own hold, released on blur (rules a, b)", () => {
+    render(<TransportBar />);
+
+    // No pointer at all: focus, then change. The edit takes the hold...
+    fireEvent.focus(slider());
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false); // ...focus alone does not
+    fireEvent.change(slider(), { target: { value: "0.25" } });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.blur(slider());
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 });

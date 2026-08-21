@@ -8,7 +8,8 @@ import { createDefaultProject } from "@/domain/defaultProject";
 import { resetIds } from "@/domain/ids";
 import { createHistory } from "@/domain/undo";
 import { TICKS_PER_STEP, type Project } from "@/domain/types";
-import { useAppStore } from "@/lib/store";
+import { __resetGestureCounterForTests } from "@/lib/gestureHold";
+import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 import { ChannelRack } from "./ChannelRack";
 import { stepHueGroup } from "./StepCell";
 
@@ -62,7 +63,7 @@ describe("ChannelRack — step grid", () => {
     render(<ChannelRack />);
     const cell = kickStep(5);
 
-    fireEvent.contextMenu(cell);
+    fireEvent.contextMenu(cell, { buttons: 2 });
     fireEvent.pointerUp(cell);
 
     expect(cell).toHaveAttribute("data-on", "false");
@@ -76,7 +77,7 @@ describe("ChannelRack — step grid", () => {
     await user.click(cell);
     expect(cell).toHaveAttribute("data-on", "true");
 
-    fireEvent.contextMenu(cell);
+    fireEvent.contextMenu(cell, { buttons: 2 });
     fireEvent.pointerUp(cell);
 
     expect(cell).toHaveAttribute("data-on", "false");
@@ -155,7 +156,7 @@ describe("ChannelRack — step grid", () => {
     const cells = [0, 1, 2].map((s) => kickStep(s));
     for (const cell of cells) await user.click(cell); // turn all three on first
 
-    fireEvent.contextMenu(cells[0]!);
+    fireEvent.contextMenu(cells[0]!, { buttons: 2 });
     fireEvent.pointerEnter(cells[1]!, { buttons: 2 });
     fireEvent.pointerEnter(cells[2]!, { buttons: 2 });
     fireEvent.pointerUp(cells[2]!);
@@ -838,7 +839,7 @@ describe("ChannelRack — undo lands mid-stroke (round 7 #1)", () => {
     await user.click(kickStep(1)); // entry 2 — note at step 1
 
     // A right-drag erase sweeping both lit cells, buffered, not yet committed.
-    fireEvent.contextMenu(kickStep(0));
+    fireEvent.contextMenu(kickStep(0), { buttons: 2 });
     fireEvent.pointerEnter(kickStep(1), { buttons: 2 });
 
     // Ctrl+Z with the button still down: entry 2's note is gone, and the
@@ -999,5 +1000,178 @@ describe("ChannelRack — a cancelled swing drag closes its coalesce key (round 
 
     useAppStore.getState().undo();
     expect(useAppStore.getState().project).toEqual(before);
+  });
+});
+
+/* ------------------------------------------- the gesture class (round 8) -- */
+
+/**
+ * Rack family. The paint stroke had the hold and a window `pointerup`
+ * backstop but no `pointercancel` one (rule b); the keyboard's context-menu
+ * request opened a pointer-sweep session nothing could ever commit (rule e);
+ * the buffered stroke watched undo/redo but not a WHOLESALE project
+ * replacement (rule d); and the swing slider's coalesce counter lived in a
+ * `useRef` a remount rewound (rule c).
+ */
+describe("ChannelRack paint stroke — the gesture class (round 8)", () => {
+  beforeEach(() => {
+    __resetGestureCounterForTests();
+    act(() => {
+      useAppStore.setState({ activeGestureIds: [] });
+    });
+  });
+
+  it("holds persistence for the stroke and drops it on pointerup (rule a)", () => {
+    render(<ChannelRack />);
+
+    fireEvent.pointerDown(kickStep(0), { buttons: 1, button: 0 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(window);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("cancels the stroke and drops the hold on a window pointercancel (rule b)", () => {
+    render(<ChannelRack />);
+
+    fireEvent.pointerDown(kickStep(0), { buttons: 1, button: 0 });
+    fireEvent.pointerEnter(kickStep(1), { buttons: 1 });
+    expect(kickStep(1)).toHaveAttribute("data-on", "true"); // optimistic preview
+
+    // A cancelled pointer never delivers a `pointerup`, so nothing else can
+    // close this stroke: the hold stayed open for the rest of the session and
+    // the preview went on painting under every later hover.
+    fireEvent.pointerCancel(window);
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    expect(kickStep(1)).toHaveAttribute("data-on", "false");
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+  });
+
+  it("drops the hold when the rack unmounts under the pointer (rule b)", () => {
+    const view = render(<ChannelRack />);
+
+    fireEvent.pointerDown(kickStep(0), { buttons: 1, button: 0 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    view.unmount();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("abandons a buffered stroke across a WHOLESALE project replacement (rule d)", () => {
+    render(<ChannelRack />);
+    fireEvent.pointerDown(kickStep(4), { buttons: 1, button: 0 });
+    fireEvent.pointerEnter(kickStep(5), { buttons: 1 });
+
+    // A load (or an import) mid-stroke swaps every entity at once — and
+    // because ids come from one shared counter the incoming project carries
+    // the SAME `pat-1`, so the stroke's `patternId` guard passes. Only the
+    // revision catches it.
+    act(() => {
+      useAppStore.getState().loadProject(createDefaultProject({ now: "2026-02-02T00:00:00.000Z" }));
+    });
+    fireEvent.pointerUp(window);
+
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+    expect(useAppStore.getState().history.past).toHaveLength(0);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+});
+
+/*
+ * Round 8, rule (e). `contextmenu` also arrives from the KEYBOARD — the
+ * ContextMenu key, or Shift+F10, on a focused step — with an empty button
+ * mask and no pointer-up ever to follow. It opened a sweep session all the
+ * same: a hold was taken, the erase was buffered, the cell went dark in the
+ * optimistic preview, and nothing committed any of it.
+ */
+describe("keyboard context-menu erase commits immediately (round 8, rule e)", () => {
+  beforeEach(() => {
+    act(() => {
+      useAppStore.setState({ activeGestureIds: [] });
+    });
+  });
+
+  it("removes the note without waiting for a pointer-up that never comes", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const cell = kickStep(6);
+    await user.click(cell);
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(1);
+
+    // No `buttons` — that is what makes it a keyboard request.
+    fireEvent.contextMenu(cell);
+
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+    expect(cell).toHaveAttribute("data-on", "false");
+  });
+
+  it("leaves no persistence hold behind", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    await user.click(kickStep(7));
+
+    fireEvent.contextMenu(kickStep(7));
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("still opens a sweep for a right-BUTTON press, committing once on release", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    for (const step of [8, 9]) await user.click(kickStep(step));
+    const entriesBefore = useAppStore.getState().history.past.length;
+
+    fireEvent.contextMenu(kickStep(8), { buttons: 2 });
+    fireEvent.pointerEnter(kickStep(9), { buttons: 2 });
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(2);
+
+    fireEvent.pointerUp(window);
+
+    expect(Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)).toHaveLength(0);
+    expect(useAppStore.getState().history.past).toHaveLength(entriesBefore + 1);
+  });
+});
+
+describe("rack swing — the gesture class (round 8)", () => {
+  beforeEach(() => {
+    __resetGestureCounterForTests();
+    act(() => {
+      useAppStore.setState({ activeGestureIds: [] });
+    });
+  });
+
+  it("holds persistence for the drag (rule a)", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+
+    fireEvent.pointerDown(slider, { button: 0, buttons: 1, pointerId: 1 });
+    fireEvent.change(slider, { target: { value: "0.3" } });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(slider, { pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("does not weld a drag onto the previous MOUNT's drag (rule c)", () => {
+    const first = render(<ChannelRack />);
+    const dragTo = (value: string) => {
+      const slider = screen.getByLabelText("Rack swing");
+      fireEvent.pointerDown(slider, { button: 0, buttons: 1, pointerId: 1 });
+      fireEvent.change(slider, { target: { value } });
+      fireEvent.pointerUp(slider, { pointerId: 1 });
+    };
+
+    dragTo("0.2");
+    first.unmount();
+    render(<ChannelRack />);
+    dragTo("0.6");
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
   });
 });

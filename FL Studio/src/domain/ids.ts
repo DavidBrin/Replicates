@@ -47,6 +47,21 @@ const SUFFIX = /-(\d+)$/;
 /**
  * Push the counter past every numeric id already present in `project`, so ids
  * minted after a load can never collide with ids minted before the save.
+ *
+ * A suffix only seeds the counter if the counter can still *count* from it.
+ * `Number.isFinite` was the test, and it says yes to `9007199254740992` — one
+ * past `Number.MAX_SAFE_INTEGER`, where `n + 1 === n`. A project carrying
+ * `n-9007199254740992` (a hand-edited file, a hostile import, another tool's
+ * id scheme) therefore pinned the counter at a value `nextId` could not move:
+ * the first mint returned the id that was already taken and `addNotes` threw
+ * `CommandError` out of the click handler, and every mint after it returned
+ * the same id again.
+ *
+ * `MAX_SAFE_INTEGER` itself is rejected for the same reason one short:
+ * incrementing it leaves the safe range. Unusable suffixes are skipped, not
+ * clamped — clamping down would seed the counter BELOW an id in the project
+ * and manufacture the collision it exists to prevent, and the ids in question
+ * are unreachable by counting anyway.
  */
 export function reseedIds(project: Project): void {
   let max = counter;
@@ -54,7 +69,9 @@ export function reseedIds(project: Project): void {
     const match = SUFFIX.exec(id);
     if (match === null) return;
     const n = Number(match[1]);
-    if (Number.isFinite(n) && n > max) max = n;
+    if (!Number.isSafeInteger(n)) return;
+    if (n >= Number.MAX_SAFE_INTEGER) return;
+    if (n > max) max = n;
   };
 
   consider(project.id);

@@ -20,7 +20,14 @@ export interface StepCellProps {
   isPlayhead: boolean;
   onPointerDown: (button: number) => void;
   onPointerEnter: (buttons: number) => void;
-  onContextMenu: () => void;
+  /**
+   * `buttons` is the live button mask at `contextmenu` time, and the row needs
+   * it to tell a right-BUTTON press (mask has bit 2 — a sweep is starting, and
+   * a `pointerup` will close it) from a KEYBOARD context-menu request (mask is
+   * empty: the ContextMenu key, or Shift+F10, on a focused cell). The keyboard
+   * one is a one-shot with no pointer-up coming; see `beginRightPaint`.
+   */
+  onContextMenu: (buttons: number) => void;
   onAltWheel?: (direction: 1 | -1) => void;
 }
 
@@ -73,7 +80,7 @@ export function StepCell({
       onPointerDown={(event) => onPointerDown(event.button)}
       onContextMenu={(event) => {
         event.preventDefault();
-        onContextMenu();
+        onContextMenu(event.buttons);
       }}
       onPointerEnter={(event) => onPointerEnter(event.buttons)}
     />

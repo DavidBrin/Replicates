@@ -14,6 +14,7 @@ import {
 } from "@/domain/commands";
 import { nextId } from "@/domain/ids";
 import { TICKS_PER_BAR, type PatternClip, type PatternId, type PlaylistTrackId } from "@/domain/types";
+import { useGestureSession } from "@/lib/gestureHold";
 import {
   selectActivePatternId,
   selectClips,
@@ -81,6 +82,8 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   const selectClipUi = useAppStore((s) => s.selectPlaylistClip);
   const paintPatternId = useAppStore((s) => s.playlistPaintPatternId);
   const setPaintPattern = useAppStore((s) => s.setPlaylistPaintPattern);
+  const scrollX = useAppStore((s) => s.playlistScrollX);
+  const setScrollX = useAppStore((s) => s.setPlaylistScrollX);
 
   const armedPatternId = paintPatternId ?? activePatternId;
 
@@ -122,22 +125,16 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
    * `ClipView` ignores non-primary presses without stopping them, so they
    * bubble here.
    */
-  const eraseGestureCounter = useRef(0);
-  const eraseGestureId = useRef<string | null>(null);
-  function mintEraseGestureId(): string {
-    eraseGestureCounter.current += 1;
-    return `playlist-erase#${eraseGestureCounter.current}`;
-  }
+  const eraseSweep = useGestureSession("playlist-erase");
   /**
    * With no sweep open — a bare context-menu delete, a menu item, a test
    * firing `contextmenu` directly — every call gets its OWN fresh id, so
-   * unrelated deletions can never fold into each other.
+   * unrelated deletions can never fold into each other. That is `keyFor`'s
+   * one-shot half; it takes no hold, because the delete has already happened
+   * by the time it returns and there is no pointer-up coming to close one.
    */
   function eraseOptions(): { coalesceKey: string; gestureId: string } {
-    return {
-      coalesceKey: "playlist:erase",
-      gestureId: eraseGestureId.current ?? mintEraseGestureId(),
-    };
+    return { coalesceKey: "playlist:erase", gestureId: eraseSweep.keyFor() };
   }
 
   function handleToggleMute(trackId: PlaylistTrackId, muted: boolean) {
@@ -266,6 +263,15 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     zoomPxPerBarRef.current = zoomPxPerBar;
   }, [zoomPxPerBar]);
   const pendingZoomAnchor = useRef<{ anchorTicks: number; pointerOffsetPx: number } | null>(null);
+  /**
+   * The middle-drag pan. It writes no domain state, but it is a pointer
+   * gesture on a surface that dispatches, it lives in a ref exactly like the
+   * ones that do, and the rule this file is meant to make unmissable is
+   * "every root-managed drag runs through the session helper" — a rule with
+   * an exception is a rule nobody applies. The hold costs one entry in a
+   * string array and buys the same unmount/cancel guarantees.
+   */
+  const panGesture = useGestureSession("playlist-pan");
   const middlePan = useRef<{
     startClientX: number;
     startClientY: number;
@@ -310,11 +316,15 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
 
   /** Middle-drag pans both axes (SPEC.md §4.4), matching the piano roll's feel. */
   function handleMainPointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    // Secondary press opens an erase sweep — see `eraseOptions`.
-    if (event.button === 2) eraseGestureId.current = mintEraseGestureId();
+    // Secondary press opens an erase sweep — see `eraseOptions`. `begin`
+    // registers the persistence hold the sweep needs: it dispatches a
+    // `removeClip` per clip crossed, and a slow sweep would otherwise let the
+    // autosave debounce expire mid-gesture (SPEC.md §2.2).
+    if (event.button === 2) eraseSweep.begin();
     if (event.button !== 1) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    panGesture.begin();
     middlePan.current = {
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -335,14 +345,36 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   }
 
   function handleMainPointerUp(event: React.PointerEvent<HTMLDivElement>) {
-    // The sweep closes on ANY release: a cancelled pointer that left the key
-    // live would weld the next unrelated delete onto the dead sweep's entry,
-    // which is the same hole the rack's swing slider had.
-    eraseGestureId.current = null;
+    // Both root gestures close on ANY release: a cancelled pointer that left
+    // the sweep's key live would weld the next unrelated delete onto the dead
+    // sweep's entry, which is the same hole the rack's swing slider had.
+    // Unmount closes them too — that half belongs to the hook.
+    eraseSweep.end();
+    panGesture.end();
     if (middlePan.current === null) return;
     middlePan.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   }
+
+  /**
+   * `playlistScrollX` is the slice's record of where the lanes are scrolled
+   * to. It was declared and never touched: nothing wrote it, nothing read it,
+   * so a remount (a tab flip, an F5-equivalent re-render of the shell) put the
+   * arrangement back at bar 1 while the store still claimed 0 either way.
+   *
+   * Written on every scroll — which covers the wheel, the middle-drag pan and
+   * the zoom-anchor compensation below, since all three move `scrollLeft` and
+   * therefore fire `scroll` — and replayed ONCE on mount, before paint.
+   */
+  const scrollRestored = useRef(false);
+  useLayoutEffect(() => {
+    if (scrollRestored.current) return;
+    scrollRestored.current = true;
+    const container = scrollRef.current;
+    if (container === null || scrollX === 0) return;
+    container.scrollLeft = scrollX;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only replay
+  }, []);
 
   return (
     <div className="fl-playlist">
@@ -383,7 +415,12 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
               </div>
             ))}
           </div>
-          <div className="fl-playlist__scrollx" data-testid="playlist-scrollx" ref={scrollRef}>
+          <div
+            className="fl-playlist__scrollx"
+            data-testid="playlist-scrollx"
+            ref={scrollRef}
+            onScroll={(event) => setScrollX(event.currentTarget.scrollLeft)}
+          >
             <div
               className="fl-playlist__content"
               style={

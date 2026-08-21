@@ -82,11 +82,27 @@ export function BpmLcd({
     suppressNextClick.current = false;
   }
 
+  /**
+   * Nothing changes until the pointer has cleared {@link DRAG_SLOP_PX}.
+   *
+   * The slop threshold latched `moved` — which correctly stopped a twitchy
+   * click from being swallowed as a drag — but the value change itself was
+   * dispatched on EVERY move, slop or no slop. So a click that wandered one
+   * pixel still edited the tempo: `moved` stayed false, the click opened the
+   * editor as intended, and the field came up holding a BPM the user never
+   * asked for, one off the project's real tempo, with an undo entry behind
+   * it. An intended click must leave the tempo exactly where it found it.
+   *
+   * Once the threshold is crossed the drag reports continuously from its
+   * ORIGINAL anchor, so the value still tracks total travel rather than
+   * jumping by the slop it spent getting there.
+   */
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     if (!drag) return;
     const deltaY = drag.startY - event.clientY; // up = increase
     if (Math.abs(deltaY) > DRAG_SLOP_PX) drag.moved = true;
+    if (!drag.moved) return;
     onChange(clampTempo(drag.startValue + deltaY, min, max));
   }
 

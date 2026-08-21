@@ -99,7 +99,10 @@ export interface DomainSlice {
   history: History;
 
   /**
-   * Bumped by every {@link DomainSlice.undo} / {@link DomainSlice.redo}.
+   * Bumped by every write a gesture in flight **cannot survive**: undo, redo,
+   * a wholesale replacement (`loadProject`, "new project", an import or the
+   * undo/redo of one), and the navigation setters — exactly the writes that
+   * carry `resetGestures` or `wholesale`.
    *
    * Surfaces that buffer a gesture's commands locally instead of dispatching
    * them one at a time (the Channel Rack's paint stroke) cannot be reached by
@@ -108,10 +111,20 @@ export interface DomainSlice {
    * revision is a stroke whose buffered commands were built against a project
    * that no longer exists, and it is dropped rather than dispatched.
    *
+   * It counted undo/redo ONLY, and that missed the harder half. Loading a
+   * saved project — or importing a stranger's file — mid-stroke swaps the
+   * whole entity set while the button is still down, and every id the buffer
+   * names now belongs to somebody else's project or to nothing at all: the
+   * stroke's `patternId` guard passes whenever the new project happens to
+   * carry the same `pat-N` (they are minted from one shared counter, so it
+   * usually does), and pointer-up dispatched `addNotes`/`removeNotes` into a
+   * pattern the user never touched. Bumping on the wholesale signal too is
+   * what closes it.
+   *
    * A counter rather than a boolean flag so a watcher can compare, not
    * subscribe-and-clear — two rows watching the same undo must both see it.
    */
-  historyRevision: number;
+  projectRevision: number;
 
   /**
    * The gestures currently in flight, by id (SPEC.md §2.2: persistence
@@ -406,6 +419,12 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     // about the write, not state, and zustand's `set` merges whatever it is
     // handed.
     set(next.history === undefined ? { project: next.project } : { project: next.project, history: next.history });
+    // One place, so a new caller cannot forget: any write that cancels
+    // gestures also invalidates every LOCALLY buffered one (see
+    // {@link DomainSlice.projectRevision}).
+    if (options.resetGestures === true || wholesale) {
+      set({ projectRevision: get().projectRevision + 1 });
+    }
     const state = get();
     const patch = reconcileUiReferences(state, state.project, {
       ...options,
@@ -419,7 +438,7 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
   return {
     project: adoptProject(createDefaultProject({ now: nowIso() })),
     history: createHistory(),
-    historyRevision: 0,
+    projectRevision: 0,
     activeGestureIds: [],
 
     dispatch: (command, options) => {
@@ -433,14 +452,12 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     // ids that no longer exist. Resetting the gesture is what stops that —
     // the host relays the cleared `dragKind` into the controller's `cancel()`.
     undo: () => {
-      const { project, history, historyRevision } = get();
-      set({ historyRevision: historyRevision + 1 });
+      const { project, history } = get();
       commit(historyUndo(project, history), { resetGestures: true });
     },
 
     redo: () => {
-      const { project, history, historyRevision } = get();
-      set({ historyRevision: historyRevision + 1 });
+      const { project, history } = get();
       commit(historyRedo(project, history), { resetGestures: true });
     },
 
@@ -483,7 +500,14 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     },
 
     loadProject: (project) => {
-      set({ project: adoptProject(project), history: createHistory() });
+      // The one project write that does NOT go through `commit` — it also
+      // clears history — so it bumps the revision itself. This is the
+      // wholesale case a buffered stroke must not survive.
+      set({
+        project: adoptProject(project),
+        history: createHistory(),
+        projectRevision: get().projectRevision + 1,
+      });
       get().reconcileUiToProject();
     },
 
@@ -611,8 +635,8 @@ export const selectNotesForChannel =
 export const selectTimeline = (state: AppState): CompiledTimeline =>
   compileTimelineCached(state.project);
 
-/** See {@link DomainSlice.historyRevision} — what a buffered stroke compares against. */
-export const selectHistoryRevision = (state: AppState): number => state.historyRevision;
+/** See {@link DomainSlice.projectRevision} — what a buffered stroke compares against. */
+export const selectProjectRevision = (state: AppState): number => state.projectRevision;
 
 /**
  * Is *any* gesture in flight anywhere (SPEC.md §2.2's "never mid-drag")?

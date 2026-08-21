@@ -35,12 +35,14 @@ export interface ChannelRackRowProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   /**
-   * `store.historyRevision` — bumped by every undo and redo. A stroke buffers
-   * its commands locally, so an undo landing mid-stroke can delete the very
-   * notes those buffered commands name; the stroke carries the revision it was
-   * opened at and is dropped the moment they differ. See {@link PaintSession}.
+   * `store.projectRevision` — bumped by every write a buffered stroke cannot
+   * survive: undo, redo, and a WHOLESALE project replacement (a load, "new
+   * project", an import). A stroke buffers its commands locally, so such a
+   * write can delete — or replace outright — the very notes those buffered
+   * commands name; the stroke carries the revision it was opened at and is
+   * dropped the moment they differ. See {@link PaintSession}.
    */
-  historyRevision?: number;
+  projectRevision?: number;
 }
 
 interface PaintSession {
@@ -59,7 +61,7 @@ interface PaintSession {
    */
   patternId: PatternId;
   /**
-   * The `historyRevision` this stroke was opened at.
+   * The `projectRevision` this stroke was opened at.
    *
    * The `patternId` guard above catches only the case where the pattern itself
    * went away. It does NOT catch the commoner one: `Ctrl+Z` mid-stroke undoing
@@ -70,7 +72,15 @@ interface PaintSession {
    * threw `CommandError` straight out of the pointer handler. (The mirror
    * hazard exists for redo.)
    *
-   * Cancelling on ANY undo/redo is the fix rather than filtering the buffer at
+   * The same hazard arrives by a second road, and the `patternId` guard is
+   * even less help there: loading a saved project or importing a file
+   * mid-stroke swaps every entity at once, and because ids come from one
+   * shared counter (`domain/ids.ts`) the incoming project usually carries the
+   * SAME `pat-N`. The guard passed, and pointer-up wrote the stroke into a
+   * stranger's pattern. `projectRevision` bumps on that write too, which is
+   * why this field watches a revision rather than a history counter.
+   *
+   * Cancelling on ANY such write is the fix rather than filtering the buffer at
    * commit time, because filtering leaves the stroke's optimistic `preview`
    * asserting cells the project no longer agrees with — and because it is the
    * same rule the rest of the app already follows: the store's `resetGestures`
@@ -78,7 +88,7 @@ interface PaintSession {
    * reason. The rack's stroke lives in a ref, where `resetGestures` cannot
    * reach it, so it watches the revision counter instead.
    */
-  historyRevision: number;
+  projectRevision: number;
 }
 
 /**
@@ -117,7 +127,7 @@ export function ChannelRackRow({
   onMoveDown,
   canMoveUp,
   canMoveDown,
-  historyRevision = 0,
+  projectRevision = 0,
 }: ChannelRackRowProps) {
   const painting = useRef<PaintSession | null>(null);
   // SPEC §2.2: a stroke holds off persistence until it commits.
@@ -126,19 +136,27 @@ export function ChannelRackRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(channel.name);
-  // A stroke must still commit even if the pointer is released outside this
-  // row (dragged off the grid entirely before releasing) — `onPointerUp` on
-  // the row only fires for a release *inside* its bounds, so a window-level
-  // listener backstops it while a session is open.
-  const windowPointerUpListener = useRef<(() => void) | null>(null);
+  /**
+   * A stroke must still end even if the pointer is released outside this row
+   * (dragged off the grid entirely before releasing) — `onPointerUp` on the
+   * row only fires for a release *inside* its bounds, so window-level
+   * listeners backstop it while a session is open.
+   *
+   * BOTH terminators, not just `pointerup`: a cancelled pointer (capture
+   * lost, a system gesture, the tab hidden) never delivers a `pointerup` at
+   * all, and the stroke it left behind kept its persistence hold — autosave
+   * silent for the rest of the session — while its optimistic `preview` went
+   * on painting cells under every later hover.
+   */
+  const windowListeners = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (windowPointerUpListener.current) {
-        window.removeEventListener("pointerup", windowPointerUpListener.current);
-      }
-    };
-  }, []);
+  function detachWindowListeners(): void {
+    if (windowListeners.current === null) return;
+    windowListeners.current();
+    windowListeners.current = null;
+  }
+
+  useEffect(() => detachWindowListeners, []);
 
   function stepIsOn(step: number): boolean {
     const override = preview?.get(step);
@@ -151,7 +169,7 @@ export function ChannelRackRow({
     // Nothing may be added to a stroke that no longer belongs to the pattern
     // on screen; `cancelPaint` will drop it, and until then it must not grow.
     if (session.patternId !== pattern.id) return;
-    if (session.historyRevision !== historyRevision) return;
+    if (session.projectRevision !== projectRevision) return;
     const currentlyOn = session.touched.get(step) ?? isStepOn(pattern, channel.id, step);
     const desiredOn = session.mode === "on";
     if (currentlyOn === desiredOn) return; // idempotent re-entry — nothing to do
@@ -181,7 +199,7 @@ export function ChannelRackRow({
       painting.current &&
       painting.current.mode === mode &&
       painting.current.patternId === pattern.id &&
-      painting.current.historyRevision === historyRevision
+      painting.current.projectRevision === projectRevision
     ) {
       return;
     }
@@ -190,13 +208,18 @@ export function ChannelRackRow({
       commands: [],
       touched: new Map(),
       patternId: pattern.id,
-      historyRevision,
+      projectRevision,
     };
     gesture.hold();
-    if (!windowPointerUpListener.current) {
-      const listener = () => endPaint();
-      windowPointerUpListener.current = listener;
-      window.addEventListener("pointerup", listener);
+    if (windowListeners.current === null) {
+      const onUp = (): void => endPaint();
+      const onCancel = (): void => cancelPaint();
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
+      windowListeners.current = () => {
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+      };
     }
   }
 
@@ -205,9 +228,22 @@ export function ChannelRackRow({
     paintStep(step);
   }
 
-  function beginRightPaint(step: number): void {
+  /**
+   * Right-click erase. `pointerHeld` is false for a KEYBOARD context-menu
+   * request (the ContextMenu key or Shift+F10 on a focused cell), and that
+   * case must commit on the spot.
+   *
+   * It used to open a sweep session like any other: a hold was taken, a
+   * `removeNotes` was buffered, the optimistic preview showed the cell dark —
+   * and nothing ever committed it, because the commit hangs off a pointer-up
+   * that a keyboard press never produces. The note stayed in the project, the
+   * grid disagreed with it until the next re-render, and autosave stayed held
+   * off for the rest of the session. A one-shot has no gesture to wait for.
+   */
+  function beginRightPaint(step: number, pointerHeld: boolean): void {
     ensurePaintSession("off");
     paintStep(step);
+    if (!pointerHeld) endPaint();
   }
 
   /** Tear the stroke down without committing anything. */
@@ -215,17 +251,14 @@ export function ChannelRackRow({
     painting.current = null;
     gesture.release();
     setPreview(null);
-    if (windowPointerUpListener.current) {
-      window.removeEventListener("pointerup", windowPointerUpListener.current);
-      windowPointerUpListener.current = null;
-    }
+    detachWindowListeners();
   }
 
   function endPaint(): void {
     const session = painting.current;
     const stale =
       session !== null &&
-      (session.patternId !== pattern.id || session.historyRevision !== historyRevision);
+      (session.patternId !== pattern.id || session.projectRevision !== projectRevision);
     cancelPaint();
     if (!session || session.commands.length === 0) return;
     // The buffer names a pattern that is no longer the one this row edits, or
@@ -243,7 +276,7 @@ export function ChannelRackRow({
     if (painting.current === null) return;
     if (
       painting.current.patternId !== pattern.id ||
-      painting.current.historyRevision !== historyRevision
+      painting.current.projectRevision !== projectRevision
     ) {
       cancelPaint();
     }
@@ -433,11 +466,15 @@ export function ChannelRackRow({
               if (button !== 0) return;
               beginLeftPaint(step);
             }}
-            onContextMenu={() => beginRightPaint(step)}
+            // `buttons` distinguishes a right-BUTTON press (bit 2 set — a
+            // sweep, closed by the pointer-up that follows) from the
+            // keyboard's ContextMenu / Shift+F10 (empty mask, no pointer-up
+            // ever). See `beginRightPaint`.
+            onContextMenu={(buttons) => beginRightPaint(step, (buttons & 2) !== 0)}
             onAltWheel={onVelocityNudge ? (direction) => onVelocityNudge(step, direction) : undefined}
             onPointerEnter={(buttons) => {
               if (buttons & 2) {
-                beginRightPaint(step);
+                beginRightPaint(step, true);
                 return;
               }
               if ((buttons & 1) === 0) return;

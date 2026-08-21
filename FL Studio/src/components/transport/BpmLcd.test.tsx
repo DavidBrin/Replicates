@@ -210,3 +210,55 @@ describe("BpmLcd — the spinner is not a tempo drag handle (round 7 #3)", () =>
     expect(onChange).toHaveBeenLastCalledWith(150);
   });
 });
+
+/*
+ * Round 8 #7. `moved` correctly stayed false below the slop threshold — so
+ * the press was still treated as a click — but `onChange` fired on every move
+ * regardless. An intended click that wandered a pixel therefore edited the
+ * tempo AND opened the editor on the edited value, with an undo entry behind
+ * a gesture the user meant as a click.
+ */
+describe("sub-slop jitter never changes the tempo (round 8 #7)", () => {
+  it("reports nothing for movement inside the slop threshold", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(screen.getByText("140"), { clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(lcd, { clientY: 99, pointerId: 1 });
+    fireEvent.pointerMove(lcd, { clientY: 101, pointerId: 1 });
+    fireEvent.pointerMove(lcd, { clientY: 98, pointerId: 1 }); // exactly the threshold
+    fireEvent.pointerUp(lcd, { clientY: 98, pointerId: 1 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still opens the editor after a jittered click", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(screen.getByText("140"), { clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(lcd, { clientY: 99, pointerId: 1 });
+    fireEvent.pointerUp(lcd, { clientY: 99, pointerId: 1 });
+    await user.click(screen.getByText("140"));
+
+    expect(screen.getByRole("textbox")).toHaveValue("140");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("reports from the ORIGINAL anchor once the threshold is crossed", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(screen.getByText("140"), { clientY: 100, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(lcd, { clientY: 99, pointerId: 1 }); // swallowed
+    fireEvent.pointerMove(lcd, { clientY: 90, pointerId: 1 });
+
+    // The full 10px of travel, not 10 minus the slop it spent getting there.
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(150);
+  });
+});

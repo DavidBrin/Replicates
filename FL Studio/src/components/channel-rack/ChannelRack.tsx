@@ -10,13 +10,13 @@ import type { Command } from "@/domain/commands/types";
 import { nextId } from "@/domain/ids";
 import { colorAt, PALETTE } from "@/domain/palette";
 import { MASTER_MIXER_TRACK_ID, type Channel, type ChannelId, type Pattern, type VoiceKind } from "@/domain/types";
-import { useGestureHold } from "@/lib/gestureHold";
+import { useGestureSession } from "@/lib/gestureHold";
 import { createWheelGestureKeyring, type WheelGestureKeyring } from "@/lib/wheelGesture";
 import {
   selectActivePattern,
   selectChannels,
   selectGlobalSwing,
-  selectHistoryRevision,
+  selectProjectRevision,
   selectMixerTracks,
   useAppStore,
 } from "@/lib/store";
@@ -65,9 +65,10 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   const pattern = useAppStore(selectActivePattern);
   const mixerTracks = useAppStore(useShallow(selectMixerTracks));
   const globalSwing = useAppStore(selectGlobalSwing);
-  // Every buffered paint stroke is dropped when this moves — see
-  // `ChannelRackRow`'s `PaintSession.historyRevision`.
-  const historyRevision = useAppStore(selectHistoryRevision);
+  // Every buffered paint stroke is dropped when this moves — undo, redo, or a
+  // wholesale project replacement. See `ChannelRackRow`'s
+  // `PaintSession.projectRevision`.
+  const projectRevision = useAppStore(selectProjectRevision);
   const dispatch = useAppStore((state) => state.dispatch);
   const project = useAppStore((state) => state.project);
 
@@ -82,29 +83,22 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   const velocityWheelRef = useRef<WheelGestureKeyring | null>(null);
   const velocityWheel = (velocityWheelRef.current ??= createWheelGestureKeyring("rack-velocity"));
 
-  // `coalesceKey` must be fresh per drag gesture, not a fixed string — a
-  // fixed key would fold every swing drag for the whole session into one
-  // undo entry (mirrors `Knob.tsx`'s per-gesture counter).
-  const swingGestureCounter = useRef(0);
-  const swingCoalesceKey = useRef<string | null>(null);
-  const swingGesture = useGestureHold("rack-swing");
-  function mintSwingCoalesceKey(): string {
-    swingGestureCounter.current += 1;
-    return `rack-swing#${swingGestureCounter.current}`;
-  }
   /**
-   * Every way a swing drag can end, in one place.
+   * The rack swing slider's gesture (`@/lib/gestureHold`), which owns three
+   * things at once: the persistence hold, the per-drag `coalesceKey`, and
+   * every terminator a drag can end on (pointerup, pointercancel, blur,
+   * unmount).
    *
-   * `pointerup` was the only one wired, and a *cancelled* pointer (capture
-   * lost, a system gesture, the tab hidden) never delivers one — so the dead
-   * drag's key stayed live in the ref and the next change of the slider,
-   * including a keyboard arrow minutes later, coalesced into the abandoned
-   * drag's undo entry. Blur closes the keyboard-only case for free.
+   * The key must be fresh per drag, not a fixed string — a fixed key folds
+   * every swing drag the session ever made into one undo entry. It must also
+   * come from a MODULE-level counter rather than the component-local `useRef`
+   * this used to keep: the rack remounts on a tab flip, the ref restarted at
+   * 1, and the second mount's first drag re-minted `rack-swing#1` and welded
+   * itself onto the first mount's undo entry. A keyboard arrow with no drag
+   * open takes a fresh one-shot key from `keyFor`, so it can never join the
+   * drag before it either.
    */
-  function endSwingGesture(): void {
-    swingCoalesceKey.current = null;
-    swingGesture.release();
-  }
+  const swing = useGestureSession("rack-swing");
 
   if (!pattern) return null;
   // Nested function declarations below don't inherit the narrowing above
@@ -252,16 +246,18 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             step={0.01}
             value={globalSwing}
             aria-label="Rack swing"
-            onPointerDown={() => {
-              swingCoalesceKey.current = mintSwingCoalesceKey();
-              swingGesture.hold();
-            }}
-            onPointerUp={endSwingGesture}
-            onPointerCancel={endSwingGesture}
-            onBlur={endSwingGesture}
+            onPointerDown={swing.begin}
+            {...swing.terminators}
+            // `begin`, not `keyFor`: the session is opened by the EDIT, not by
+            // focus. A keyboard-only edit (arrow keys on a focused slider)
+            // therefore takes the persistence hold too and folds its whole
+            // run into one undo entry, while a slider that merely holds focus
+            // and is never touched holds nothing — `onFocus={begin}` would
+            // silence autosave for as long as the control stayed focused.
+            // `terminators` closes it on blur, pointer-cancel or unmount.
             onChange={(event) =>
               dispatch(updateProject({ globalSwing: Number.parseFloat(event.target.value) }), {
-                coalesceKey: swingCoalesceKey.current ?? mintSwingCoalesceKey(),
+                coalesceKey: swing.begin(),
               })
             }
           />
@@ -292,7 +288,7 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             onRecolor={() => handleRecolorChannel(channel.id)}
             onMoveUp={() => handleMoveChannel(channel.id, -1)}
             onMoveDown={() => handleMoveChannel(channel.id, 1)}
-            historyRevision={historyRevision}
+            projectRevision={projectRevision}
             canMoveUp={index > 0}
             canMoveDown={index < channels.length - 1}
           />

@@ -332,6 +332,27 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
     [controller, resetCursor],
   );
 
+  /**
+   * Unmounting mid-drag releases the gesture (`@/lib/gestureHold`'s rule (b),
+   * for the ONE surface whose drag is store state instead of a ref).
+   *
+   * Every ref-driven surface releases its hold in `useGestureHold`'s unmount
+   * effect; the roll had no equivalent, because its hold IS `pianoRoll.dragKind`
+   * and nothing cleared it. Flipping away from the roll tab with the button
+   * still down — which is exactly what dragging a note off the surface and
+   * releasing outside it can do — therefore left `dragKind` set forever, and
+   * `selectHasActiveGesture` stayed true, so the debounced autosave deferred
+   * every write for the rest of the session (SPEC §2.2). The controller is
+   * cancelled too, not just the flag: it owns the gesture's note snapshots.
+   */
+  useEffect(
+    () => () => {
+      if (controller.peekGesture() === "idle") return;
+      controller.cancel();
+    },
+    [controller],
+  );
+
   useEffect(() => {
     return registerPianoRollBindings({
       getScene: () => {

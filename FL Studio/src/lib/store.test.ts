@@ -25,7 +25,7 @@ import {
   selectNotesForChannel,
   selectPatterns,
   selectHasActiveGesture,
-  selectHistoryRevision,
+  selectProjectRevision,
   selectPlaybackMode,
   selectPlaylistTracks,
   selectTempo,
@@ -987,15 +987,49 @@ describe("autosave never fires mid-gesture (SPEC §2.2)", () => {
 });
 
 /* Round 7 #1's mechanism — see `ChannelRackRow`'s `PaintSession`. */
-describe("historyRevision", () => {
-  it("advances on every undo and every redo, and on nothing else", () => {
-    const start = selectHistoryRevision(useAppStore.getState());
+describe("projectRevision", () => {
+  it("advances on every undo and every redo, but not on an ordinary dispatch", () => {
+    const start = selectProjectRevision(useAppStore.getState());
     useAppStore.getState().dispatch(updateProject({ tempo: 128 }));
-    expect(selectHistoryRevision(useAppStore.getState())).toBe(start);
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start);
 
     useAppStore.getState().undo();
-    expect(selectHistoryRevision(useAppStore.getState())).toBe(start + 1);
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start + 1);
     useAppStore.getState().redo();
-    expect(selectHistoryRevision(useAppStore.getState())).toBe(start + 2);
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start + 2);
+  });
+
+  /*
+   * Round 8, rule (d). It counted undo/redo only, and that missed the harder
+   * half: a load or an import swaps the whole entity set while a buffered
+   * stroke is still open, and because ids come from one shared counter the
+   * incoming project usually carries the same `pat-N` — so the stroke's
+   * `patternId` guard passes and pointer-up writes it into a stranger's
+   * pattern.
+   */
+  it("advances on loadProject — the wholesale replacement a stroke cannot survive", () => {
+    const start = selectProjectRevision(useAppStore.getState());
+
+    useAppStore.getState().loadProject(createDefaultProject({ now: "2026-03-03T00:00:00.000Z" }));
+
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start + 1);
+  });
+
+  it("advances on newProject", () => {
+    const start = selectProjectRevision(useAppStore.getState());
+    useAppStore.getState().newProject();
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start + 1);
+  });
+
+  it("advances on an undoable IMPORT, which reaches the store as a command", () => {
+    const start = selectProjectRevision(useAppStore.getState());
+    const incoming = createDefaultProject({ now: "2026-03-03T00:00:00.000Z" });
+
+    useAppStore.getState().dispatch(replaceProject(incoming));
+
+    // ...and on the undo of one, which puts the previous entity set back.
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start + 1);
+    useAppStore.getState().undo();
+    expect(selectProjectRevision(useAppStore.getState())).toBe(start + 2);
   });
 });

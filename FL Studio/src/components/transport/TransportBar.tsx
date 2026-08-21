@@ -4,17 +4,17 @@ import "./transport.css";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useGestureSession } from "@/lib/gestureHold";
+
 import { BpmLcd } from "./BpmLcd";
 import { PatternSelector } from "./PatternSelector";
 import {
   addPattern,
-  endGesture,
   exportJson,
   exportWav,
   importJson,
   loadSavedProject,
   newProject,
-  nextGestureId,
   redo,
   renameActivePattern,
   saveProject,
@@ -138,32 +138,19 @@ export function TransportBar({
    * One gesture id per drag / per committed edit (`domain/undo.ts`'s canonical
    * pattern). The BPM LCD and the swing slider both report continuously, so a
    * fixed `coalesceKey` alone would fold every tempo change the session ever
-   * made into a single undo entry. The id is minted on pointer-down / focus
-   * and dropped on pointer-up / blur, where `endGesture()` also seals the
-   * entry so a keyboard nudge that follows cannot rejoin it.
+   * made into a single undo entry.
+   *
+   * Both now run through `useGestureSession` (`@/lib/gestureHold`), which is
+   * the shared answer to three separate holes this pair had between them:
+   * the swing slider took no persistence HOLD at all, so a slow drag let the
+   * autosave debounce expire with the button down (SPEC §2.2); it wired
+   * `pointerup` but not `pointercancel`, so a cancelled drag left its id live
+   * and welded the next unrelated tempo/swing edit onto the dead gesture's
+   * undo entry; and neither released on unmount. The hook owns all of it,
+   * plus a module-scoped id counter that a remount cannot rewind.
    */
-  const tempoGesture = useRef<string | null>(null);
-  const swingGesture = useRef<string | null>(null);
-
-  function beginTempoGesture(): void {
-    tempoGesture.current ??= nextGestureId("tempo");
-  }
-
-  function endTempoGesture(): void {
-    if (tempoGesture.current === null) return;
-    tempoGesture.current = null;
-    endGesture();
-  }
-
-  function beginSwingGesture(): void {
-    swingGesture.current ??= nextGestureId("swing");
-  }
-
-  function endSwingGesture(): void {
-    if (swingGesture.current === null) return;
-    swingGesture.current = null;
-    endGesture();
-  }
+  const tempoGesture = useGestureSession("tempo");
+  const swingGesture = useGestureSession("swing");
 
   function handleTempoChange(bpm: number) {
     if (onTempoChange) {
@@ -171,8 +158,9 @@ export function TransportBar({
       return;
     }
     // A change with no gesture open (the ▲/▼ spinner, a typed commit) is its
-    // own one-shot gesture — exactly one undo entry per click.
-    setTempo(bpm, tempoGesture.current ?? nextGestureId("tempo"));
+    // own one-shot gesture — exactly one undo entry per click, and no hold
+    // left waiting for a pointer-up that is not coming.
+    setTempo(bpm, tempoGesture.keyFor());
   }
 
   function handleSwingChange(value: number) {
@@ -180,7 +168,11 @@ export function TransportBar({
       onSwingChange(value);
       return;
     }
-    setGlobalSwing(value, swingGesture.current ?? nextGestureId("swing"));
+    // `begin`, not `keyFor`: the slider is keyboard-reachable, so the EDIT
+    // opens the session (and takes the hold) whether or not a pointer did.
+    // Focus alone must not — a focused, untouched slider would otherwise
+    // silence autosave until it blurred.
+    setGlobalSwing(value, swingGesture.begin());
   }
 
   function handleUndo() {
@@ -273,9 +265,9 @@ export function TransportBar({
 
       <div className="fl-toolbar__group">
         <div
-          onPointerDownCapture={beginTempoGesture}
-          onPointerUpCapture={endTempoGesture}
-          onPointerCancelCapture={endTempoGesture}
+          onPointerDownCapture={tempoGesture.begin}
+          onPointerUpCapture={tempoGesture.end}
+          onPointerCancelCapture={tempoGesture.end}
         >
           <BpmLcd value={state.tempo} onChange={handleTempoChange} />
         </div>
@@ -288,10 +280,8 @@ export function TransportBar({
             step={0.01}
             value={state.globalSwing}
             aria-label="Global swing"
-            onPointerDown={beginSwingGesture}
-            onPointerUp={endSwingGesture}
-            onFocus={beginSwingGesture}
-            onBlur={endSwingGesture}
+            onPointerDown={swingGesture.begin}
+            {...swingGesture.terminators}
             onChange={(event) =>
               handleSwingChange(Number.parseFloat(event.target.value))
             }

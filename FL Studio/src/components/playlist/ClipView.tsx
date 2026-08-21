@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 
 import { TICKS_PER_BAR, type Pattern, type PatternClip } from "@/domain/types";
-import { useGestureHold } from "@/lib/gestureHold";
+import { useGestureSession } from "@/lib/gestureHold";
 import { ClipMiniature } from "./ClipMiniature";
 import { LANE_HEIGHT_PX, ticksToPx } from "./geometry";
 
@@ -44,18 +44,6 @@ export interface ClipViewProps {
 }
 
 const DRAG_THRESHOLD_PX = 3;
-
-let gestureCounter = 0;
-/** Fresh key per pointer-down→up gesture (finding #7 — never reused across gestures). */
-function nextCoalesceKey(): string {
-  gestureCounter += 1;
-  return `playlist-clip-move#${gestureCounter}`;
-}
-
-/** Test seam: deterministic coalesce keys across test files. */
-export function __resetClipGestureCounterForTests(): void {
-  gestureCounter = 0;
-}
 
 /**
  * Every handler the clip itself listens for, neutralised — spread onto the
@@ -128,16 +116,26 @@ export function ClipView({
 }: ClipViewProps) {
   const dragState = useRef<DragState | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  // SPEC §2.2: a shift-clone dispatches at pointer-DOWN, so a slow drag can
-  // otherwise let the autosave debounce expire with the button still held.
-  const gesture = useGestureHold("playlist-clip");
+  /**
+   * The drag's session (`@/lib/gestureHold`): the persistence hold — SPEC §2.2,
+   * a shift-clone dispatches at pointer-DOWN, so a slow drag can otherwise let
+   * the autosave debounce expire with the button still held — the per-gesture
+   * `coalesceKey`, and the terminators.
+   *
+   * `pointercancel` is the one that was missing. A cancelled pointer never
+   * delivers `pointerup`, so the hold stayed open and autosave was silent for
+   * the rest of the session; and because the key stayed live, the next
+   * unrelated drag of the same clip folded into the abandoned drag's undo
+   * entry. The clip runs its own commit on `pointerup`, so it overrides that
+   * one terminator AFTER the spread and keeps the other two.
+   */
+  const gesture = useGestureSession("playlist-clip-move");
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     // jsdom (component tests) has no Pointer Events capture implementation.
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    gesture.hold();
-    const coalesceKey = nextCoalesceKey();
+    const coalesceKey = gesture.begin();
     const activeClipId =
       event.shiftKey && onCloneStart ? onCloneStart(clip.id, coalesceKey) : clip.id;
     dragState.current = {
@@ -163,7 +161,7 @@ export function ClipView({
     const drag = dragState.current;
     dragState.current = null;
     if (drag === null) {
-      gesture.release();
+      gesture.end();
       return;
     }
     const deltaPx = event.clientX - drag.startClientX;
@@ -181,10 +179,21 @@ export function ClipView({
     } else {
       onSelect(drag.activeClipId);
     }
-    // AFTER the commit, never before: `release` also seals the top undo entry,
+    // AFTER the commit, never before: `end` also seals the top undo entry,
     // and sealing first would stop a shift-clone's `addClip` (dispatched at
     // pointer-down under the same key) from folding into the move it started.
-    gesture.release();
+    gesture.end();
+  }
+
+  /**
+   * A cancelled pointer (capture lost, a system gesture, the tab hidden)
+   * delivers no `pointerup`. The half-finished move is abandoned — committing
+   * a drag the user did not finish is worse than dropping it — but the hold
+   * and the coalescing entry must close either way.
+   */
+  function handlePointerCancel() {
+    dragState.current = null;
+    gesture.end();
   }
 
   /**
@@ -230,7 +239,9 @@ export function ClipView({
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      {...gesture.terminators}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onPointerEnter={handlePointerEnter}
       onDoubleClick={() => onOpen(clip)}
       onContextMenu={handleContextMenu}

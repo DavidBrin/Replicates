@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Playlist } from "./Playlist";
-import { __resetClipGestureCounterForTests } from "./ClipView";
 import { LANE_HEIGHT_PX } from "./geometry";
 import { DEFAULT_PLAYLIST_UI } from "./uiState";
 import { addNotes } from "@/domain/commands";
@@ -11,7 +10,8 @@ import { createHistory } from "@/domain/undo";
 import { createDefaultProject } from "@/domain/defaultProject";
 import { nextId, resetIds } from "@/domain/ids";
 import { TICKS_PER_BAR } from "@/domain/types";
-import { useAppStore } from "@/lib/store";
+import { __resetGestureCounterForTests } from "@/lib/gestureHold";
+import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 
 /**
  * One store now holds both the domain and this surface's UI slice, so the
@@ -28,7 +28,7 @@ function resetStore() {
 beforeEach(() => {
   resetIds(0);
   resetStore();
-  __resetClipGestureCounterForTests();
+  __resetGestureCounterForTests();
 });
 
 afterEach(() => {
@@ -678,5 +678,205 @@ describe("a half-bar drag moves the same distance both ways (round 7 #5)", () =>
     expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(
       TICKS_PER_BAR * 3,
     );
+  });
+});
+
+/* ------------------------------------------- the gesture class (round 8) -- */
+
+/**
+ * The playlist's two ROOT-managed drags — the right-button erase sweep and the
+ * middle-button pan — kept their state in refs the store could not see, so
+ * neither took a persistence hold, neither released on unmount, and the
+ * sweep's id came from a component-local `useRef` that a remount rewound.
+ * All three now come from `useGestureSession` (`@/lib/gestureHold`).
+ */
+describe("Playlist root drags — the gesture class (round 8)", () => {
+  function main(): HTMLElement {
+    return screen.getByTestId("playlist-main");
+  }
+
+  it("registers a persistence hold for the whole erase sweep (rule a)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    placeClip("clip-b", { startTick: TICKS_PER_BAR });
+    render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    // SPEC.md §2.2: the sweep dispatches a `removeClip` per clip crossed, so a
+    // slow sweep must not let the autosave debounce expire mid-gesture.
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(main(), { pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("registers — and releases — a hold for the middle-drag pan (rule a)", () => {
+    render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 1, buttons: 4, clientX: 100, clientY: 100, pointerId: 2 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(main(), { pointerId: 2 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("releases the sweep's hold on pointercancel (rule b)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    fireEvent.pointerCancel(main(), { pointerId: 1 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("releases the sweep's hold when the surface unmounts mid-sweep (rule b)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    const view = render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    view.unmount();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("does not weld a sweep onto the previous MOUNT's sweep (rule c)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    placeClip("clip-b", { startTick: TICKS_PER_BAR });
+    const first = render(<Playlist />);
+
+    fireEvent.pointerDown(main(), { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+    fireEvent.pointerUp(main(), { pointerId: 1 });
+    first.unmount();
+
+    // The remount an F5-equivalent re-render performs. The old counter lived
+    // in a `useRef`, so this sweep re-minted `playlist-erase#1` and folded
+    // itself onto the first sweep's entry — one Ctrl+Z took back both.
+    render(<Playlist />);
+    fireEvent.pointerDown(main(), { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-b"));
+    fireEvent.pointerUp(main(), { pointerId: 1 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    expect(Object.keys(useAppStore.getState().project.clips)).toEqual(["clip-b"]);
+  });
+});
+
+describe("ClipView drag — the gesture class (round 8)", () => {
+  it("registers a hold for the primary drag and releases it on pointerup", () => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-a");
+
+    fireEvent.pointerDown(clip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerMove(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("releases the hold on pointercancel, which never delivers a pointerup (rule b)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-a");
+
+    fireEvent.pointerDown(clip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+    fireEvent.pointerCancel(clip, { pointerId: 1 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    // A cancelled drag is abandoned, not committed.
+    expect(useAppStore.getState().project.clips["clip-a"]?.startTick).toBe(0);
+
+    // And the abandoned drag is really GONE: a stray pointer-up afterwards
+    // (the cancel delivered no `pointerup`, so one can still arrive from the
+    // hover that follows) must not commit the move it was holding.
+    fireEvent.pointerMove(clip, { clientX: 180, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 180, clientY: 0, pointerId: 1 });
+    expect(useAppStore.getState().project.clips["clip-a"]?.startTick).toBe(0);
+    expect(useAppStore.getState().history.past).toHaveLength(0);
+  });
+
+  it("releases the hold when the clip unmounts under the pointer (rule b)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    const view = render(<Playlist />);
+
+    fireEvent.pointerDown(screen.getByTestId("clip-clip-a"), {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+      pointerId: 1,
+    });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    view.unmount();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("does not weld a drag onto the previous MOUNT's drag (rule c)", () => {
+    placeClip("clip-a", { startTick: 0 });
+    const first = render(<Playlist />);
+    fireEvent.pointerDown(screen.getByTestId("clip-clip-a"), { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(screen.getByTestId("clip-clip-a"), { clientX: 90, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(screen.getByTestId("clip-clip-a"), { clientX: 90, clientY: 0, pointerId: 1 });
+    first.unmount();
+
+    render(<Playlist />);
+    fireEvent.pointerDown(screen.getByTestId("clip-clip-a"), { button: 0, clientX: 90, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(screen.getByTestId("clip-clip-a"), { clientX: 180, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(screen.getByTestId("clip-clip-a"), { clientX: 180, clientY: 0, pointerId: 1 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+  });
+});
+
+/*
+ * Round 8 #9. `playlistScrollX` was declared on the slice and wired to
+ * nothing: no writer, no reader, so a remount put the arrangement back at
+ * bar 1 while the store still said 0 either way.
+ */
+describe("playlist scroll position survives a remount (round 8 #9)", () => {
+  it("writes the scroller's position into the UI slice", () => {
+    render(<Playlist />);
+    const scroller = screen.getByTestId("playlist-scrollx");
+
+    scroller.scrollLeft = 240;
+    fireEvent.scroll(scroller);
+
+    expect(useAppStore.getState().playlistScrollX).toBe(240);
+  });
+
+  it("restores it on the next mount", () => {
+    const first = render(<Playlist />);
+    const scroller = screen.getByTestId("playlist-scrollx");
+    scroller.scrollLeft = 240;
+    fireEvent.scroll(scroller);
+    first.unmount();
+
+    render(<Playlist />);
+
+    expect(screen.getByTestId("playlist-scrollx").scrollLeft).toBe(240);
+  });
+
+  it("records the position a middle-drag pan scrolled to", () => {
+    render(<Playlist />);
+    const main = screen.getByTestId("playlist-main");
+
+    fireEvent.pointerDown(main, { button: 1, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(main, { clientX: 40, clientY: 100, pointerId: 1 });
+    fireEvent.scroll(screen.getByTestId("playlist-scrollx"));
+    fireEvent.pointerUp(main, { pointerId: 1 });
+
+    expect(useAppStore.getState().playlistScrollX).toBe(60);
   });
 });

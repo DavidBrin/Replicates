@@ -17,7 +17,7 @@ import { addNotes, addPattern } from "@/domain/commands/patterns";
 import { createDefaultProject } from "@/domain/defaultProject";
 import { createHistory } from "@/domain/undo";
 import { TICKS_PER_STEP, type Note } from "@/domain/types";
-import { useAppStore } from "@/lib/store";
+import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 
 import { DEFAULT_VIEWPORT, KEYBOARD_WIDTH, noteRect } from "./geometry";
 import { PianoRoll } from "./PianoRoll";
@@ -222,5 +222,40 @@ describe("navigating patterns mid-drag cancels the gesture in flight", () => {
     expect(project.patterns["pat-clone"]?.notes[note.id]?.positionTicks).toBe(
       note.positionTicks,
     );
+  });
+});
+
+/*
+ * Round 8's class sweep, roll family (`@/lib/gestureHold`'s rule (b)). Every
+ * ref-driven surface releases its hold when it unmounts; the roll's hold IS
+ * `pianoRoll.dragKind`, and nothing cleared it. Flipping away from the roll
+ * tab with the button down left `selectHasActiveGesture` true forever, so the
+ * debounced autosave deferred every write for the rest of the session.
+ */
+describe("unmounting mid-drag releases the roll's gesture (round 8)", () => {
+  it("clears dragKind — and the store-wide gesture flag — on unmount", () => {
+    const { note } = seedNote();
+    const view = renderRoll();
+    const canvas = screen.getByTestId("piano-roll-canvas");
+    const rect = noteRect(DEFAULT_VIEWPORT, note);
+
+    fireEvent.pointerDown(canvas, {
+      clientX: rect.x + 4,
+      clientY: rect.y + rect.height / 2,
+      button: 0,
+    });
+    expect(getRollUi().pianoRoll.dragKind).toBe("move");
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    view.unmount();
+
+    expect(getRollUi().pianoRoll.dragKind).toBeNull();
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("costs nothing when the roll unmounts idle", () => {
+    const view = renderRoll();
+    view.unmount();
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 });

@@ -60,3 +60,51 @@ describe("reseedIds", () => {
     expect(project.patterns["pat-1"]!.notes[nextId("note")]).toBeUndefined();
   });
 });
+
+/*
+ * Round 8 #8. `Number.isFinite` accepts `9007199254740992` — one past
+ * `MAX_SAFE_INTEGER`, where `n + 1 === n`. Seeding the counter there pinned it:
+ * the first mint returned an id the project already held, the command threw
+ * `CommandError` out of the handler, and every mint after it returned the same
+ * id again.
+ */
+describe("reseedIds — only countable suffixes seed the counter (round 8 #8)", () => {
+  function withNote(noteId: string) {
+    return addNotes("pat-1", [
+      { id: noteId, channelId: "ch-kick", positionTicks: 0, lengthTicks: 0, pitch: 60, velocity: 1 },
+    ]).apply(fixtureProject());
+  }
+
+  it("skips a suffix past MAX_SAFE_INTEGER rather than pinning the counter", () => {
+    resetIds(0);
+    reseedIds(withNote("n-9007199254740992"));
+
+    // Skipped, so the counter still counts — and the ids it mints are new.
+    const first = nextId("note");
+    const second = nextId("note");
+    expect(first).not.toBe(second);
+    expect(peekIdCounter()).toBeLessThan(Number.MAX_SAFE_INTEGER);
+  });
+
+  it("rejects MAX_SAFE_INTEGER itself — a seed with no headroom to increment", () => {
+    resetIds(0);
+    reseedIds(withNote(`n-${Number.MAX_SAFE_INTEGER}`));
+
+    expect(peekIdCounter()).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    expect(Number.isSafeInteger(Number(nextId("note").slice(2)))).toBe(true);
+  });
+
+  it("skips rather than CLAMPS: an unusable suffix never lowers the counter", () => {
+    resetIds(4_000);
+    reseedIds(withNote("n-9007199254740993"));
+
+    expect(peekIdCounter()).toBe(4_000);
+  });
+
+  it("still seeds from a large but safe suffix", () => {
+    resetIds(0);
+    reseedIds(withNote("n-9007199254740990"));
+
+    expect(nextId("note")).toBe("n-9007199254740991");
+  });
+});
