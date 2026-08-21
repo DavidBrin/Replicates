@@ -330,19 +330,27 @@ export function setMode(mode: PlaybackMode): void {
 /**
  * Sound one note immediately — the piano roll's keyboard column and the rack's
  * row preview (§1.1). Synchronous by contract; gates boot like Play does.
+ *
+ * **Returns the boot promise so the caller can report a failed boot**, the
+ * same shape `startPlayback` already has around `ensureStarted()`. The
+ * returned promise rejects when Tone fails to load or the context refuses to
+ * resume; before this it was fired with `void` and no `.catch`, so the very
+ * first gesture on a blocked context produced an unhandled rejection and a
+ * roll that silently did nothing. Already-booted calls resolve immediately and
+ * never reject — the sound itself is still synchronous.
  */
 export function previewNote(
   channelId: ChannelId,
   pitch: number,
   durationSec: number = PREVIEW_DURATION_SEC,
-): void {
+): Promise<void> {
   if (state === null || project === null) {
-    void ensureStarted().then(() => {
+    return ensureStarted().then(() => {
       if (state !== null && project !== null) firePreview(channelId, pitch, durationSec);
     });
-    return;
   }
   firePreview(channelId, pitch, durationSec);
+  return Promise.resolve();
 }
 
 function firePreview(channelId: ChannelId, pitch: number, durationSec: number): void {

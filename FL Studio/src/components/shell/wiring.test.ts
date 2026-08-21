@@ -17,7 +17,7 @@ vi.mock("@/audio", () => ({
   stop: vi.fn(),
   setMode: vi.fn(),
   setMetronomeEnabled: vi.fn(),
-  previewNote: vi.fn(),
+  previewNote: vi.fn(async () => {}),
   syncProject: vi.fn(),
   exportWav: vi.fn(),
   getMeterTap: vi.fn(() => null),
@@ -38,6 +38,7 @@ import {
   __resetWiringForTests,
   exportWav,
   importJson,
+  previewNote,
   loadSavedProject,
   nextEmptyPattern,
   panic,
@@ -310,6 +311,51 @@ describe("WAV export failures reach the user", () => {
 
     expect(engine.exportWav).not.toHaveBeenCalled();
     expect(getNotice()).toMatch(/not supported/i);
+  });
+});
+
+describe("a successful WAV export clears a stale failure", () => {
+  it("does not leave 'export failed' standing beside a file that downloaded", async () => {
+    vi.mocked(engine.exportWav).mockRejectedValueOnce(new Error("render failed"));
+    await exportWav();
+    expect(getNotice()).toMatch(/wav export failed/i);
+
+    vi.mocked(engine.exportWav).mockResolvedValueOnce({
+      blob: new Blob(["riff"]),
+      fileName: "project.wav",
+    } as never);
+    await exportWav();
+
+    expect(getNotice()).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------- preview ------ */
+
+describe("a preview that boots audio reports a failed boot", () => {
+  it("routes the rejection into the notice instead of leaving it unhandled", async () => {
+    vi.mocked(engine.previewNote).mockRejectedValueOnce(new Error("no AudioContext"));
+
+    previewNote("ch-kick", 60);
+    await vi.waitFor(() => expect(getNotice()).toMatch(/audio could not start/i));
+
+    expect(getNotice()).toContain("no AudioContext");
+  });
+
+  it("says nothing when the preview succeeds", async () => {
+    previewNote("ch-kick", 60);
+    await Promise.resolve();
+
+    expect(engine.previewNote).toHaveBeenCalledWith("ch-kick", 60, undefined);
+    expect(getNotice()).toBeNull();
+  });
+
+  it("does not touch the engine with no audio support", () => {
+    delete (window as { AudioContext?: unknown }).AudioContext;
+
+    previewNote("ch-kick", 60);
+
+    expect(engine.previewNote).not.toHaveBeenCalled();
   });
 });
 

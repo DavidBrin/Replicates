@@ -143,8 +143,9 @@ export interface DomainSlice {
    * flight — the wholesale-replacement form.
    *
    * Called automatically by {@link DomainSlice.loadProject}. Every other
-   * project write ({@link DomainSlice.dispatch}, undo/redo, the navigation
-   * setters) reconciles on its own, without the gesture reset.
+   * project write reconciles on its own: {@link DomainSlice.dispatch} without
+   * the gesture reset (a drag's own commands must not cancel the drag),
+   * undo/redo and the navigation setters *with* it.
    */
   reconcileUiToProject: () => void;
 }
@@ -154,12 +155,29 @@ export interface ReconcileOptions {
   /**
    * Also clear the piano roll's in-flight drag and held preview key.
    *
-   * Only true for a *wholesale* replacement (`loadProject`, an undoable
-   * import): a drag cannot survive the project it was dragging. It must stay
-   * false for the per-command pass, because a drag dispatches continuously
-   * and would otherwise cancel itself on its own first move.
+   * True for a *wholesale* replacement (`loadProject`, an undoable import)
+   * and for every write the user did not make with the pointer they are
+   * holding — pattern navigation, undo and redo. A drag cannot survive the
+   * project it was dragging, and it cannot survive an undo that deleted the
+   * notes it is dragging either.
+   *
+   * It must stay false for the ordinary per-command pass, because a drag
+   * dispatches continuously and would otherwise cancel itself on its own
+   * first move.
    */
   resetGestures?: boolean;
+
+  /**
+   * The active pattern *before* this write, when the caller knows it.
+   *
+   * Selection is reconciled by note-id liveness, and that is not enough on a
+   * pattern switch: `makeUnique` clones a pattern with its note ids intact,
+   * so every selected id is alive in the destination too and the old
+   * selection survives the navigation — a subsequent keyboard edit then hits
+   * notes of the clone the user never selected. A changed active pattern
+   * clears the roll's selection outright.
+   */
+  previousPatternId?: PatternId;
 }
 
 /* ------------------------------------------- ui ↔ project reconciliation */
@@ -190,7 +208,7 @@ export interface ReconcileOptions {
 export function reconcileUiReferences(
   state: AppState,
   project: Project,
-  { resetGestures = false }: ReconcileOptions = {},
+  { resetGestures = false, previousPatternId }: ReconcileOptions = {},
 ): Partial<AppState> | null {
   const patch: Record<string, unknown> = {};
 
@@ -236,7 +254,13 @@ export function reconcileUiReferences(
       rollPatch.channelId = null;
     }
     const notes = project.patterns[project.activePatternId]?.notes ?? {};
-    const survivingNotes = roll.selectedNoteIds.filter((id) => alive(notes, id));
+    // A pattern switch drops the whole selection; otherwise only ids whose
+    // notes are gone. Filtering by liveness alone is a no-op across a clone.
+    const patternChanged =
+      previousPatternId !== undefined && previousPatternId !== project.activePatternId;
+    const survivingNotes = patternChanged
+      ? []
+      : roll.selectedNoteIds.filter((id) => alive(notes, id));
     if (survivingNotes.length !== roll.selectedNoteIds.length) {
       rollPatch.selectedNoteIds = survivingNotes;
     }
@@ -266,10 +290,16 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
    * site is what makes that true by construction: a new command, or a new
    * caller, cannot forget.
    */
-  const commit = (next: { project: Project; history?: History }): void => {
+  const commit = (
+    next: { project: Project; history?: History },
+    options: ReconcileOptions = {},
+  ): void => {
+    // Captured before the write: the reconcile pass has to know whether this
+    // write navigated to a different pattern (see `previousPatternId`).
+    const previousPatternId = get().project.activePatternId;
     set(next);
     const state = get();
-    const patch = reconcileUiReferences(state, state.project);
+    const patch = reconcileUiReferences(state, state.project, { ...options, previousPatternId });
     if (patch !== null) set(patch);
   };
 
@@ -282,14 +312,19 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
       commit(dispatchCommand(project, history, command, options));
     },
 
+    // Undo/redo are not the gesture's own writes, even mid-drag: a Ctrl+Z
+    // between two pointermoves can delete the very notes the drag holds
+    // snapshots of, and the next move would dispatch `updateNotes` against
+    // ids that no longer exist. Resetting the gesture is what stops that —
+    // the host relays the cleared `dragKind` into the controller's `cancel()`.
     undo: () => {
       const { project, history } = get();
-      commit(historyUndo(project, history));
+      commit(historyUndo(project, history), { resetGestures: true });
     },
 
     redo: () => {
       const { project, history } = get();
-      commit(historyRedo(project, history));
+      commit(historyRedo(project, history), { resetGestures: true });
     },
 
     endGesture: () => {
@@ -302,15 +337,16 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
       const { project } = get();
       if (project.patterns[patternId] === undefined) return;
       if (project.activePatternId === patternId) return;
-      // Reconciled like any other project write: the roll's selection names
-      // notes of the pattern being navigated away from.
-      commit({ project: { ...project, activePatternId: patternId } });
+      // Navigation cancels the gesture in flight. A drag that began in the
+      // pattern being left holds note snapshots from it, and Numpad +/- is
+      // reachable with the pointer still down.
+      commit({ project: { ...project, activePatternId: patternId } }, { resetGestures: true });
     },
 
     setPlaybackMode: (mode) => {
       const { project } = get();
       if (project.playbackMode === mode) return;
-      commit({ project: { ...project, playbackMode: mode } });
+      commit({ project: { ...project, playbackMode: mode } }, { resetGestures: true });
     },
 
     loadProject: (project) => {

@@ -482,10 +482,20 @@ export function toggleMetronome(): void {
  * The one audition seam (SPEC §8's `previewNote`) — the piano roll's keyboard
  * column and any rack row preview call through here so the audio-presence
  * guard lives in a single place.
+ *
+ * Void-returning, because a click on a piano key is not something to await.
+ * The boot failure it can hide is therefore routed here, into the same notice
+ * `startPlayback` uses: a preview is very often the *first* gesture of a
+ * session, so it is as likely as Play to be the thing that discovers the
+ * browser will not give this page an audio context.
  */
 export function previewNote(channelId: string, pitch: number, durationSec?: number): void {
   if (!audioSupported()) return;
-  engine.previewNote(channelId, pitch, durationSec);
+  void engine.previewNote(channelId, pitch, durationSec).catch((error: unknown) => {
+    setNotice(
+      `Audio could not start: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
 }
 
 /* ------------------------------------------------------------- playhead -- */
@@ -705,6 +715,10 @@ export async function exportWav(): Promise<void> {
   try {
     const rendered = await engine.exportWav();
     downloadBlob(rendered.blob, rendered.fileName);
+    // Success clears, exactly as Save/Load/Import do. A stale "WAV export
+    // failed" left standing beside a file that just downloaded is a worse
+    // report than no report: the notice is a status line, not a log.
+    setNotice(null);
   } catch (error) {
     setNotice(
       `WAV export failed: ${error instanceof Error ? error.message : String(error)}`,

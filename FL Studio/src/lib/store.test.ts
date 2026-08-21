@@ -557,4 +557,85 @@ describe("every project write reconciles, not just a wholesale replacement", () 
 
     expect(useAppStore.getState().pianoRoll.selectedNoteIds).toEqual([]);
   });
+
+  it("cancels an in-flight gesture when navigation switches pattern", () => {
+    useAppStore.getState().dispatch(
+      addPattern({ id: "pat-nav", name: "Nav", color: "hsl(0,0%,50%)", notes: {} }),
+    );
+    useAppStore.setState({
+      pianoRoll: { ...useAppStore.getState().pianoRoll, dragKind: "move", previewPitch: 64 },
+    });
+
+    useAppStore.getState().setActivePatternId("pat-nav");
+
+    expect(useAppStore.getState().pianoRoll.dragKind).toBeNull();
+    expect(useAppStore.getState().pianoRoll.previewPitch).toBeNull();
+  });
+
+  it("cancels an in-flight gesture on undo and on redo", () => {
+    const armDrag = (): void => {
+      useAppStore.setState({
+        pianoRoll: { ...useAppStore.getState().pianoRoll, dragKind: "move", previewPitch: 64 },
+      });
+    };
+
+    useAppStore.getState().dispatch(updateProject({ tempo: 128 }));
+    armDrag();
+    useAppStore.getState().undo();
+    expect(useAppStore.getState().pianoRoll.dragKind).toBeNull();
+    expect(useAppStore.getState().pianoRoll.previewPitch).toBeNull();
+
+    armDrag();
+    useAppStore.getState().redo();
+    expect(useAppStore.getState().pianoRoll.dragKind).toBeNull();
+    expect(useAppStore.getState().pianoRoll.previewPitch).toBeNull();
+  });
+
+  it("cancels an in-flight gesture when the playback mode flips", () => {
+    useAppStore.setState({
+      pianoRoll: { ...useAppStore.getState().pianoRoll, dragKind: "move", previewPitch: 64 },
+    });
+
+    useAppStore.getState().setPlaybackMode("song");
+
+    expect(useAppStore.getState().pianoRoll.dragKind).toBeNull();
+    expect(useAppStore.getState().pianoRoll.previewPitch).toBeNull();
+  });
+
+  /*
+   * The clone case, which liveness-filtering alone cannot see: `makeUnique`
+   * copies a pattern's notes WITH their ids, so every selected id is alive in
+   * the destination and the old selection survived the switch. The next
+   * keyboard edit then moved notes of a clone the user never selected.
+   */
+  it("clears the selection switching to a clone that kept the same note ids", () => {
+    const { project } = useAppStore.getState();
+    const noteId = "n-shared";
+    const note = {
+      id: noteId,
+      channelId: project.channelOrder[0]!,
+      positionTicks: 0,
+      lengthTicks: TICKS_PER_STEP,
+      pitch: 60,
+      velocity: 0.8,
+    };
+    useAppStore.getState().dispatch(addNotes(project.activePatternId, [note]));
+    // The clone: same note id, different pattern — exactly makeUnique's output.
+    useAppStore.getState().dispatch(
+      addPattern({
+        id: "pat-clone",
+        name: "Pattern 1 (unique)",
+        color: "hsl(0,0%,50%)",
+        notes: { [noteId]: { ...note } },
+      }),
+    );
+    useAppStore.setState({
+      pianoRoll: { ...useAppStore.getState().pianoRoll, selectedNoteIds: [noteId] },
+    });
+
+    useAppStore.getState().setActivePatternId("pat-clone");
+
+    expect(useAppStore.getState().project.patterns["pat-clone"]?.notes[noteId]).toBeDefined();
+    expect(useAppStore.getState().pianoRoll.selectedNoteIds).toEqual([]);
+  });
 });

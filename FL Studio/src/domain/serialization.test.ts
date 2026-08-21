@@ -14,6 +14,7 @@ import {
   toSaveFile,
 } from "./serialization";
 import { fixtureProject } from "./testKit";
+import { noteEndTicks } from "./tickMath";
 import {
   CURRENT_SCHEMA_VERSION,
   MASTER_MIXER_TRACK_ID,
@@ -188,6 +189,47 @@ describe("corrupt and hostile input", () => {
     for (const note of Object.values(notes)) {
       expect(note.positionTicks).toBeLessThan(PATTERN_LENGTH_TICKS);
       expect(note.positionTicks + note.lengthTicks).toBeLessThanOrEqual(PATTERN_LENGTH_TICKS);
+    }
+  });
+
+  /*
+   * A step's stored length is 0, but it is not zero ticks wide: the scheduler
+   * blips it for a whole cell (TICKS_PER_STEP). Judging an imported step
+   * against its literal 0 admitted one at tick 361 — "inside the bar" by the
+   * raw arithmetic, sounding past it, and worse: the piano roll's move clamp
+   * measures the SAME note by its effective length, so the first drag on it
+   * computed a negative maximum delta. The two must agree, and they now share
+   * `effectiveLengthTicks`.
+   */
+  it("drops an imported step whose EFFECTIVE length crosses the bar", () => {
+    const project = fixtureProject();
+    const restored = readProject({
+      ...project,
+      patterns: {
+        "pat-1": {
+          ...project.patterns["pat-1"],
+          notes: {
+            // 361 + 24 = 385: one tick past the bar.
+            crossing: { channelId: "ch-kick", positionTicks: 361, lengthTicks: 0, pitch: 60, velocity: 0.8 },
+            // The last LEGAL step position: 360 + 24 = 384, ending on the line.
+            lastCell: { channelId: "ch-kick", positionTicks: 360, lengthTicks: 0, pitch: 62, velocity: 0.8 },
+            // A sized note there has a length to shorten, so it is kept.
+            sized: { channelId: "ch-kick", positionTicks: 361, lengthTicks: 900, pitch: 64, velocity: 0.8 },
+          },
+        },
+      },
+      patternOrder: ["pat-1"],
+      activePatternId: "pat-1",
+    })!;
+
+    const notes = restored.patterns["pat-1"]!.notes;
+    expect(Object.keys(notes).sort()).toEqual(["lastCell", "sized"]);
+    expect(notes.sized!.lengthTicks).toBe(PATTERN_LENGTH_TICKS - 361);
+    // The invariant, stated the way the roll's clamp states it.
+    for (const note of Object.values(notes)) {
+      expect(noteEndTicks(note.positionTicks, note.lengthTicks)).toBeLessThanOrEqual(
+        PATTERN_LENGTH_TICKS,
+      );
     }
   });
 

@@ -33,7 +33,7 @@
  * failure.
  */
 
-import { clampTempo, clamp } from "./tickMath";
+import { clampTempo, clamp, effectiveLengthTicks } from "./tickMath";
 import {
   CURRENT_SCHEMA_VERSION,
   MASTER_MIXER_TRACK_ID,
@@ -149,7 +149,16 @@ function readChannel(id: string, raw: unknown, index: number): Channel {
  * "referential damage is repaired" rule the file header states), and one that
  * merely overruns is shortened to end exactly at the bar.
  *
- * Steps (`lengthTicks: 0`) keep their zero — it is a marker, not a length.
+ * Steps (`lengthTicks: 0`) keep their zero — it is a marker, not a length —
+ * and are judged by their **effective** extent, `effectiveLengthTicks` in
+ * `tickMath.ts`, the same rule the piano roll's move clamp uses. A stored 0 is
+ * not zero ticks wide: the scheduler blips a step for a whole cell. Measuring
+ * an imported step against its literal 0 let one land at tick 361, inside the
+ * bar by the raw arithmetic but sounding past it — and the roll's first drag
+ * on it then computed a *negative* maximum move delta, pinning the note to a
+ * position it could never leave. There is no shortening a step (its length is
+ * a marker), so a step that does not fit is dropped, exactly as a note at or
+ * past the bar is. Every legal step position (`step * 24`, at most 360) fits.
  */
 function readNote(id: string, raw: unknown): Note | null {
   if (!isObject(raw)) return null;
@@ -157,11 +166,13 @@ function readNote(id: string, raw: unknown): Note | null {
   const positionTicks = Math.max(0, int(raw.positionTicks, 0));
   if (positionTicks >= PATTERN_LENGTH_TICKS) return null;
   const lengthTicks = Math.max(0, int(raw.lengthTicks, 0));
+  const available = PATTERN_LENGTH_TICKS - positionTicks;
+  if (lengthTicks === 0 && effectiveLengthTicks(0) > available) return null;
   return {
     id,
     channelId: raw.channelId,
     positionTicks,
-    lengthTicks: Math.min(lengthTicks, PATTERN_LENGTH_TICKS - positionTicks),
+    lengthTicks: Math.min(lengthTicks, available),
     pitch: clamp(int(raw.pitch, 60), 0, 127),
     velocity: clamp(num(raw.velocity, 100 / 127), 0, 1),
   };

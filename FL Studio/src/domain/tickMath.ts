@@ -49,6 +49,27 @@ export function ticksToStep(ticks: number): number {
   return Math.floor(ticks / TICKS_PER_STEP);
 }
 
+/**
+ * The ticks a note actually occupies — the stored length, except for a step.
+ *
+ * `lengthTicks: 0` means "a step" (SPEC §2's `Note`), and a step is not a
+ * zero-width event: the scheduler gives it a one-cell blip
+ * (`audio/scheduler.ts`'s `STEP_BLIP_TICKS`) and the rack draws it as a whole
+ * cell. Every bound that asks "where does this note end" wants this, which is
+ * why it lives *here* rather than beside one of them: the piano roll's move
+ * clamp and the save file's import validation disagreeing about a step's
+ * extent is exactly how an imported step at tick 361 reached the editor and
+ * then produced a negative maximum move delta on the first drag.
+ */
+export function effectiveLengthTicks(lengthTicks: number): number {
+  return lengthTicks > 0 ? lengthTicks : TICKS_PER_STEP;
+}
+
+/** First tick after a note stops sounding — position plus its effective length. */
+export function noteEndTicks(positionTicks: number, lengthTicks: number): number {
+  return positionTicks + effectiveLengthTicks(lengthTicks);
+}
+
 /** True when `ticks` sits exactly on a 16th-note step boundary. */
 export function isStepAligned(ticks: number): boolean {
   return Number.isInteger(ticks) && ticks % TICKS_PER_STEP === 0;

@@ -24,7 +24,14 @@ import {
   type Command,
   type NotePatch,
 } from "@/domain/commands";
-import { SNAP_TICKS, snapTicks, snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
+import {
+  effectiveLengthTicks,
+  noteEndTicks,
+  SNAP_TICKS,
+  snapTicks,
+  snapTicksFloor,
+  type SnapUnit,
+} from "@/domain/tickMath";
 import { createWheelGestureKeyring, WHEEL_GESTURE_GAP_MS } from "@/lib/wheelGesture";
 import {
   DEFAULT_VELOCITY,
@@ -177,19 +184,16 @@ export function minLengthTicks(snap: SnapUnit, bypass: boolean): number {
 }
 
 /**
- * The ticks a note actually occupies — the stored length, except for a step.
+ * The ticks a note actually occupies, and where it ends.
  *
- * `lengthTicks: 0` means "a step" (SPEC §2's `Note`), and a step is not a
- * zero-width event: the scheduler gives it a one-cell blip
- * (`scheduler.ts`'s `STEP_BLIP_TICKS`) and the rack draws it as a whole cell.
- * Clamping a *move* against the stored 0 therefore let a step in the final
- * cell slide to tick 384 — legal by the raw arithmetic, and silently dropped
- * at playback, because the scheduler skips anything at or past the loop
- * length. Every bound that asks "where does this note end" wants this.
+ * Both live in `@/domain/tickMath` and are re-exported here because this file
+ * is where the rule was first needed and where its tests name it. There is
+ * exactly one definition: clamping a *move* against a step's stored 0 let a
+ * step in the final cell slide to tick 384, and validating an *import* against
+ * the same 0 let a step land at 361 — the two ends of one rule, so they may
+ * not be written twice.
  */
-export function effectiveLengthTicks(lengthTicks: number): number {
-  return lengthTicks > 0 ? lengthTicks : TICKS_PER_STEP;
-}
+export { effectiveLengthTicks, noteEndTicks };
 
 /**
  * Length of a freshly drawn note (SPEC §4's Piano Roll table: "Default length
@@ -265,6 +269,18 @@ export function __resetGestureCounterForTests(): void {
   gestureCounter = 0;
 }
 
+/**
+ * Whether the roll has a channel to write to at all.
+ *
+ * `InteractionScene.channelId` is `""` when the project has no channels — the
+ * host's `ui.channelId ?? project.channelOrder[0] ?? ""`. Everything that
+ * *reads* notes is fine with that (nothing matches an empty channel id);
+ * everything that *creates* or auditions one is not.
+ */
+function hasTargetChannel(scene: InteractionScene): boolean {
+  return scene.channelId !== "";
+}
+
 export function createPianoRollController(deps: InteractionDeps): PianoRollController {
   let gesture: Gesture = { kind: "idle" };
   // Bounds alt+wheel velocity nudges into gestures — see WHEEL_GESTURE_GAP_MS.
@@ -292,9 +308,20 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     deps.setDragKind(dragKindOf(next));
   };
 
-  const endDrag = (): void => {
+  /**
+   * Close whatever is in flight and tell the host — **gesture first**.
+   *
+   * The order matters because `setDragKind`/`setPreviewPitch` write the store
+   * synchronously, and the host relays an externally-cleared `dragKind` back
+   * into {@link PianoRollController.cancel} (see `PianoRoll.tsx`). Notifying
+   * before clearing would re-enter this function with the gesture still set.
+   * Returns what was in flight, so callers can act on it after the reset.
+   */
+  const endDrag = (): Gesture => {
+    const finished = gesture;
     gesture = { kind: "idle" };
     deps.setDragKind(null);
+    return finished;
   };
 
   /**
@@ -306,8 +333,8 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
    * `previewPitch` set, so the key stayed lit until the next audition.
    */
   const cancel = (): void => {
-    if (gesture.kind === "preview") deps.setPreviewPitch?.(null);
-    endDrag();
+    const finished = endDrag();
+    if (finished.kind === "preview") deps.setPreviewPitch?.(null);
   };
 
   /* --------------------------------------------------------- pointer down */
@@ -329,6 +356,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     }
 
     if (region === "keyboard") {
+      if (!hasTargetChannel(scene)) return;
       const pitch = clampPitch(yToPitch(view, input.y));
       deps.previewNote(scene.channelId, pitch);
       deps.setPreviewPitch?.(pitch);
@@ -441,6 +469,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   /* ---------------------------------------------------------- draw a note */
 
   const drawNote = (scene: InteractionScene, input: RollPointer): void => {
+    // No channel to draw *into*. The host reports the empty rack as an empty
+    // target (`channelId: ""`), and `addNotes` rejects a note naming a channel
+    // that does not exist — so a click on an empty project threw a
+    // `CommandError` out of a pointer handler instead of doing nothing.
+    if (!hasTargetChannel(scene)) return;
     const { view } = scene;
     const bypass = input.altKey === true;
     const rawTick = xToTick(view, input.x);
@@ -611,7 +644,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     const minPosition = Math.min(...active.notes.map((note) => note.positionTicks));
     const maxEndDelta = Math.min(
       ...active.notes.map(
-        (note) => PATTERN_LENGTH_TICKS - note.positionTicks - effectiveLengthTicks(note.lengthTicks),
+        (note) => PATTERN_LENGTH_TICKS - noteEndTicks(note.positionTicks, note.lengthTicks),
       ),
     );
     const maxPitch = Math.max(...active.notes.map((note) => note.pitch));
@@ -638,9 +671,9 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   /* ----------------------------------------------------------- pointer up */
 
   const pointerUp = (_input: RollPointer): void => {
-    if (gesture.kind === "resize") deps.setLastLength(gesture.finalLengthTicks);
-    if (gesture.kind === "preview") deps.setPreviewPitch?.(null);
-    endDrag();
+    const finished = endDrag();
+    if (finished.kind === "resize") deps.setLastLength(finished.finalLengthTicks);
+    if (finished.kind === "preview") deps.setPreviewPitch?.(null);
   };
 
   /* ----------------------------------------------------------------- wheel */
@@ -674,7 +707,13 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         updateNotes(scene.patternId, [
           { id: hit.note.id, patch: { velocity: clamp01(hit.note.velocity + delta) } },
         ]),
-        { coalesceKey: velocityWheel.keyFor(hit.note.id) },
+        // Keyed by pattern AND note, exactly as the rack keys by pattern +
+        // channel + step. A note id is unique within a pattern, not across
+        // them: `makeUnique` preserves ids when it clones a pattern, so two
+        // nudges on "the same" note in the source and the clone, inside
+        // WHEEL_GESTURE_GAP_MS, coalesced into one undo entry spanning two
+        // patterns.
+        { coalesceKey: velocityWheel.keyFor(`${scene.patternId}:${hit.note.id}`) },
       );
       return true;
     }

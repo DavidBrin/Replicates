@@ -754,6 +754,24 @@ describe("velocity", () => {
     expect(new Set(keys).size).toBe(2);
   });
 
+  /*
+   * The coalesce target is (pattern, note), not just note. `makeUnique` clones
+   * a pattern keeping every note id, so "the same note" in the source and in
+   * the clone are two different notes — and a nudge on each, inside the wheel
+   * gap, folded into ONE undo entry spanning two patterns.
+   */
+  it("gives the SAME note id in two patterns two undo entries", () => {
+    const h = harness({ notes: [note] });
+    const rect = noteRect(VIEW, note);
+    const point = { x: rect.x + 3, y: rect.y + 3, button: 0, altKey: true, deltaX: 0 };
+    h.controller.wheel({ ...point, deltaY: -100 });
+    h.scene.patternId = "pat-clone";
+    h.controller.wheel({ ...point, deltaY: -100 });
+
+    const keys = h.dispatch.mock.calls.map((call) => call[1]?.coalesceKey);
+    expect(new Set(keys).size).toBe(2);
+  });
+
   it("alt+wheel over empty grid changes nothing", () => {
     const h = harness({ notes: [note] });
     expect(
@@ -882,5 +900,41 @@ describe("shift+left-click clone", () => {
     expect(Object.keys(notes)).toHaveLength(2);
     expect(notes[note.id]).toMatchObject({ positionTicks: TICKS_PER_BEAT, pitch: 67 });
     expect(h.setSelection).toHaveBeenLastCalledWith(["new-1"]);
+  });
+});
+
+/* ---------------------------------------------------- a rack with nothing -- */
+
+/*
+ * A project with no channels at all — every channel deleted, or a crafted
+ * import. The host has no channel to name, so it reports `channelId: ""`, and
+ * `addNotes` rejects a note whose channel does not exist: a click on the grid
+ * threw a `CommandError` out of a React pointer handler.
+ */
+describe("no channel to draw into", () => {
+  it("draws nothing, dispatches nothing, starts no drag", () => {
+    const h = harness({ channelId: "" });
+
+    h.controller.pointerDown(at(TICKS_PER_BEAT, 64));
+
+    expect(h.dispatch).not.toHaveBeenCalled();
+    expect(h.setSelection).not.toHaveBeenCalled();
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  it("auditions nothing from the keyboard column", () => {
+    const h = harness({ channelId: "" });
+
+    h.controller.pointerDown({ x: KEYBOARD_WIDTH / 2, y: 200, button: 0 });
+
+    expect(h.previewNote).not.toHaveBeenCalled();
+    expect(h.setPreviewPitch).not.toHaveBeenCalled();
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  it("still draws once a channel exists", () => {
+    const h = harness();
+    h.controller.pointerDown(at(TICKS_PER_BEAT, 64));
+    expect(h.dispatch).toHaveBeenCalled();
   });
 });

@@ -262,6 +262,33 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
     [buildScene],
   );
 
+  /**
+   * Relay an externally-cancelled gesture into the controller.
+   *
+   * The store cancels gestures on every write the pointer did not make —
+   * undo/redo and pattern navigation (`reconcileUiReferences`'s
+   * `resetGestures`) — but all it can reach is the *UI* record of one:
+   * `dragKind` and `previewPitch`. The gesture itself, with its note
+   * snapshots, is a closure inside the controller that no store may import
+   * (SPEC §6's layering). This host owns both, so it carries the signal
+   * across: without it, a Ctrl+Z mid-drag left the machine dragging notes the
+   * undo had just deleted, and the next pointermove dispatched `updateNotes`
+   * against ids that no longer existed.
+   */
+  useEffect(
+    () =>
+      rollUiStore.subscribe((state, previous) => {
+        const was = previous.pianoRoll;
+        const now = state.pianoRoll;
+        const wasActive = was.dragKind !== null || was.previewPitch !== null;
+        const nowIdle = now.dragKind === null && now.previewPitch === null;
+        if (!wasActive || !nowIdle) return;
+        if (controller.peekGesture() === "idle") return;
+        controller.cancel();
+      }),
+    [controller],
+  );
+
   useEffect(() => {
     return registerPianoRollBindings({
       getScene: () => {
@@ -277,6 +304,25 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
       toggleSnap: () => getRollUi().togglePianoRollSnap(),
     });
   }, [buildScene]);
+
+  /**
+   * Push the controller's cursor onto the canvas.
+   *
+   * `cursorAt` is the roll's whole affordance vocabulary — `ew-resize` over a
+   * note's grip, `move` over its body, `ns-resize` on the velocity splitter,
+   * `grabbing` while panning, `pointer` on the keyboard — and until this
+   * existed it was computed, unit-tested, and thrown away, leaving the CSS
+   * `cell` everywhere. Guarded by the last value written rather than
+   * throttled by time: the comparison is a string compare, and skipping the
+   * assignment is what keeps the style attribute from being rewritten on
+   * every one of a drag's pointermoves.
+   */
+  const cursorRef = useRef<string | null>(null);
+  const applyCursor = useCallback((canvas: HTMLCanvasElement, cursor: string): void => {
+    if (cursorRef.current === cursor) return;
+    cursorRef.current = cursor;
+    canvas.style.cursor = cursor;
+  }, []);
 
   const toPointer = useCallback((event: React.PointerEvent<HTMLCanvasElement>): RollPointer => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -378,7 +424,11 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
             event.currentTarget.setPointerCapture?.(event.pointerId);
             controller.pointerDown(toPointer(event));
           }}
-          onPointerMove={(event) => controller.pointerMove(toPointer(event))}
+          onPointerMove={(event) => {
+            const pointer = toPointer(event);
+            controller.pointerMove(pointer);
+            applyCursor(event.currentTarget, controller.cursorAt(pointer));
+          }}
           onPointerUp={(event) => {
             event.currentTarget.releasePointerCapture?.(event.pointerId);
             controller.pointerUp(toPointer(event));

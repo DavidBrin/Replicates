@@ -395,6 +395,29 @@ describe("previewNote", () => {
     await vi.waitFor(() => expect(tone.ctx.nodesOfKind("oscillator").length).toBe(1));
   });
 
+  /*
+   * A preview is very often the FIRST gesture of a session, so it is as likely
+   * as Play to be what discovers that the browser will not hand this page an
+   * audio context. It used to fire the boot with a bare `void … .then(…)`: the
+   * failure escaped as an unhandled rejection and the roll said nothing.
+   */
+  it("returns the boot promise so a failed first gesture can be reported", async () => {
+    __setToneLoaderForTests(async () => {
+      throw new Error("Tone refused to load");
+    });
+    syncProject(projectWith([]));
+
+    await expect(previewNote("ch-kick", 60)).rejects.toThrow(/refused to load/);
+  });
+
+  it("returns a resolved promise once booted, and never rejects", async () => {
+    installTone();
+    syncProject(projectWith([]));
+    await ensureStarted();
+
+    await expect(previewNote("ch-kick", 60)).resolves.toBeUndefined();
+  });
+
   it("ignores an unknown channel", async () => {
     const { tone } = installTone();
     syncProject(projectWith([]));
