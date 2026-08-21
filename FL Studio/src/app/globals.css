@@ -1,0 +1,25 @@
+@import "tailwindcss" source(none);
+
+/**
+ * Scan the source tree, and only the source tree.
+ *
+ * Tailwind v4 finds content by walking up from this stylesheet. That walk
+ * would reach `research/` — reference material, not source, and not
+ * necessarily class-name-safe — so the scan is disabled and pointed back at
+ * exactly the files that can contain a class name. Same fix as the sibling
+ * `youtube` project's `globals.css` (see `research/07-stack-deployment.md`
+ * §0 / `Wikipedia/research/01-repo-conventions.md`).
+ */
+@source "../**/*.{ts,tsx}";
+
+:root {
+  /* Placeholder dark tokens — refine once the FL Studio UI is measured. */
+  --background: #2b3439;
+  --foreground: #e7ebed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Roboto, Arial, sans-serif;
+}
