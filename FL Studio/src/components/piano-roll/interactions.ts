@@ -403,8 +403,20 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
 
     const hit = hitTestNote(view, scene.notes, input.x, input.y);
 
+    /*
+     * Ctrl+left-click on a note is a pure *selection* toggle whatever the tool
+     * is (see the branch further down), and that has to be decided **before**
+     * the erase branch, not after it. With the delete tool active the erase
+     * branch matched first, so the one gesture the user has for "add this note
+     * to the selection" deleted it instead — the note was gone before the
+     * toggle could run, and there is no way to build a selection with that
+     * tool held. Right-click delete stays unconditional: it is not a modifier
+     * gesture and §4.4 makes it universal.
+     */
+    const ctrlSelect = input.button === 0 && input.ctrlKey === true && hit !== null;
+
     // Right-click deletes — everywhere, and dragging keeps deleting (§4.4).
-    if (input.button === 2 || scene.tool === "delete") {
+    if (input.button === 2 || (scene.tool === "delete" && !ctrlSelect)) {
       const coalesceKey = nextCoalesceKey();
       const erased = new Set<NoteId>();
       beginDrag({ kind: "erase", coalesceKey, erased });
@@ -480,7 +492,17 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const clones = source.map((note) => ({ ...note, id: deps.createNoteId() }));
       deps.dispatch(addNotes(scene.patternId, clones), { coalesceKey });
       deps.setSelection(clones.map((clone) => clone.id));
-      const primary = clones.find((clone) => clone.pitch === hit.note.pitch) ?? clones[0];
+      // The primary is the clone *of the note under the pointer*, because the
+      // whole drag snaps against the primary's position. `clones` is
+      // index-aligned with `source`, so the source's index names it exactly.
+      //
+      // Matching by pitch instead (what this did) is not injective: two
+      // selected notes on the same row — a chord voice repeated later in the
+      // bar is the ordinary case — made the *first* of them primary whichever
+      // one was grabbed, and the drag then snapped to a baseline the user
+      // never touched, offsetting the whole clone set by the gap between them.
+      const primaryIndex = source.findIndex((note) => note.id === hit.note.id);
+      const primary = primaryIndex >= 0 ? clones[primaryIndex] : clones[0];
       beginDrag({
         kind: "move",
         coalesceKey,
@@ -662,6 +684,15 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // what a resize *aims* for, never a licence to overrun; one tick is the
       // real floor, and it always fits because a note starts inside the bar.
       const clampedLength = (note: NoteSnapshot): number => {
+        // Back where it started is not a resize. Every other length in this
+        // branch is the *effective* one, and that substitution is exactly what
+        // a step must not be committed with: dragging the grip out and back to
+        // the origin left `deltaTicks` at 0 but stored
+        // `effectiveLengthTicks(0)` — 24 — silently promoting the rack's
+        // `lengthTicks: 0` step marker into an ordinary note that the rack can
+        // no longer round-trip. Restore the STORED length verbatim; for a real
+        // note stored and effective are the same value, so nothing else moves.
+        if (deltaTicks === 0) return note.lengthTicks;
         const available = PATTERN_LENGTH_TICKS - note.positionTicks;
         const desired = Math.max(minLength, effectiveLengthTicks(note.lengthTicks) + deltaTicks);
         return Math.max(1, Math.min(desired, available));
@@ -671,7 +702,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         id: note.id,
         patch: { lengthTicks: clampedLength(note) } satisfies NotePatch,
       }));
-      active.finalLengthTicks = clampedLength(primary);
+      // `setLastLength` seeds the next drawn note, and a 0 there would mean
+      // "one tick" to `defaultDrawLengthTicks`, not "one step" — so the
+      // remembered length is the effective one even when the stored one is a
+      // marker.
+      active.finalLengthTicks = effectiveLengthTicks(clampedLength(primary));
       deps.dispatch(updateNotes(scene.patternId, patches), { coalesceKey: active.coalesceKey });
       return;
     }

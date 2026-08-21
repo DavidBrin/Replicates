@@ -317,3 +317,99 @@ describe("per-gesture coalesce keys (finding #7)", () => {
     expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(2 * TICKS_PER_BAR);
   });
 });
+
+describe("the clip context menu must not leak events back into the clip (round 5 #4)", () => {
+  /** Open the header menu on a placed clip and return the clip element. */
+  function openMenu(clipId = "clip-existing"): HTMLElement {
+    resetIds(5);
+    placeClip(clipId);
+    render(<Playlist />);
+    const clip = screen.getByTestId(`clip-${clipId}`);
+    fireEvent.contextMenu(clip.querySelector(".fl-clip__header") as HTMLElement);
+    expect(screen.getByTestId(`clip-menu-${clipId}`)).toBeInTheDocument();
+    return clip;
+  }
+
+  function backdrop(clip: HTMLElement): HTMLElement {
+    return clip.querySelector(".fl-clip__context-menu-backdrop") as HTMLElement;
+  }
+
+  it("right-clicking the backdrop dismisses the menu WITHOUT deleting the clip", () => {
+    const clip = openMenu();
+
+    // The backdrop lives inside `.fl-clip`, so this event bubbles into the
+    // clip's own contextmenu handler — which deletes, because the target is
+    // not the header. `preventDefault` alone never stopped that.
+    fireEvent.contextMenu(backdrop(clip));
+
+    expect(useAppStore.getState().project.clips["clip-existing"]).toBeDefined();
+    expect(screen.queryByTestId("clip-menu-clip-existing")).not.toBeInTheDocument();
+  });
+
+  it("right-clicking a menu ITEM does not delete the clip either", () => {
+    openMenu();
+
+    fireEvent.contextMenu(screen.getByText("Make unique"));
+
+    expect(useAppStore.getState().project.clips["clip-existing"]).toBeDefined();
+  });
+
+  it("click-dismissing the backdrop does not select the clip through the drag handlers", () => {
+    const clip = openMenu();
+    useAppStore.setState({ playlistSelectedClipId: null });
+
+    fireEvent.pointerDown(backdrop(clip), { button: 0, pointerId: 9, clientX: 5, clientY: 5 });
+    fireEvent.pointerUp(backdrop(clip), { button: 0, pointerId: 9, clientX: 5, clientY: 5 });
+    fireEvent.click(backdrop(clip));
+
+    expect(useAppStore.getState().playlistSelectedClipId).toBeNull();
+    expect(screen.queryByTestId("clip-menu-clip-existing")).not.toBeInTheDocument();
+  });
+
+  it("SHIFT+clicking a menu item runs the item without cloning the clip", () => {
+    openMenu();
+    const clipsBefore = Object.keys(useAppStore.getState().project.clips).length;
+
+    const item = screen.getByText("Make unique");
+    fireEvent.pointerDown(item, { button: 0, pointerId: 7, shiftKey: true, clientX: 5, clientY: 5 });
+    fireEvent.pointerUp(item, { button: 0, pointerId: 7, shiftKey: true, clientX: 5, clientY: 5 });
+    fireEvent.click(item, { shiftKey: true });
+
+    // Shift+pointer-down on a clip clones it; the menu must not be a clip.
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(clipsBefore);
+    expect(useAppStore.getState().project.clips["clip-existing"]?.patternId).not.toBe("pat-1");
+  });
+
+  it("double-clicking the menu does not open the clip's pattern in the piano roll", () => {
+    resetIds(5);
+    // A clip on a pattern that is NOT the active one, so "open it" is visible.
+    act(() => {
+      useAppStore.setState((state) => ({
+        project: {
+          ...state.project,
+          patterns: {
+            ...state.project.patterns,
+            "pat-other": { id: "pat-other", name: "Other", color: "#888", notes: {} },
+          },
+          patternOrder: [...state.project.patternOrder, "pat-other"],
+          clips: {
+            "clip-other": {
+              id: "clip-other",
+              trackId: "trk-1",
+              patternId: "pat-other",
+              startTick: 0,
+            },
+          },
+        },
+      }));
+    });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-other");
+    fireEvent.contextMenu(clip.querySelector(".fl-clip__header") as HTMLElement);
+    const activeBefore = useAppStore.getState().project.activePatternId;
+
+    fireEvent.doubleClick(backdrop(clip));
+
+    expect(useAppStore.getState().project.activePatternId).toBe(activeBefore);
+  });
+});

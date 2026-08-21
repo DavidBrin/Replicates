@@ -87,6 +87,17 @@ export interface DispatchOptions {
 export interface HistoryResult {
   project: Project;
   history: History;
+  /**
+   * The write that produced this result swapped the whole entity set — see
+   * {@link Command.wholesale}. Reported here rather than left for the store to
+   * infer, so undo and redo of an import are as wholesale as the import.
+   */
+  wholesale: boolean;
+}
+
+/** True when a history entry's forward or inverse command is wholesale. */
+function entryIsWholesale(entry: HistoryEntry): boolean {
+  return entry.command.wholesale === true || entry.inverse.wholesale === true;
 }
 
 export function createHistory(): History {
@@ -152,12 +163,13 @@ export function dispatchCommand(
     return {
       project: next,
       history: { past: [...history.past.slice(0, -1), merged], future: [] },
+      wholesale: entryIsWholesale(merged),
     };
   }
 
   const past = [...history.past, { command, inverse, coalesceKey, gestureId }];
   if (past.length > UNDO_STACK_LIMIT) past.splice(0, past.length - UNDO_STACK_LIMIT);
-  return { project: next, history: { past, future: [] } };
+  return { project: next, history: { past, future: [] }, wholesale: command.wholesale === true };
 }
 
 /**
@@ -180,20 +192,22 @@ export function endGesture(history: History): History {
 /** One step back. A no-op (same objects) when there is nothing to undo. */
 export function undo(project: Project, history: History): HistoryResult {
   const entry = history.past[history.past.length - 1];
-  if (entry === undefined) return { project, history };
+  if (entry === undefined) return { project, history, wholesale: false };
   return {
     project: entry.inverse.apply(project),
     history: { past: history.past.slice(0, -1), future: [entry, ...history.future] },
+    wholesale: entryIsWholesale(entry),
   };
 }
 
 /** One step forward. A no-op when there is nothing to redo. */
 export function redo(project: Project, history: History): HistoryResult {
   const entry = history.future[0];
-  if (entry === undefined) return { project, history };
+  if (entry === undefined) return { project, history, wholesale: false };
   return {
     project: entry.command.apply(project),
     history: { past: [...history.past, entry], future: history.future.slice(1) },
+    wholesale: entryIsWholesale(entry),
   };
 }
 

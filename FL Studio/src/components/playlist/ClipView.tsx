@@ -54,6 +54,36 @@ export function __resetClipGestureCounterForTests(): void {
   gestureCounter = 0;
 }
 
+/**
+ * Every handler the clip itself listens for, neutralised — spread onto the
+ * context menu and its backdrop.
+ *
+ * Both live *inside* the `.fl-clip` element (they are positioned relative to
+ * it), so every event they receive bubbles into the clip's own handlers unless
+ * it is stopped. `preventDefault` is not enough and was the whole bug:
+ * right-clicking the backdrop to dismiss the menu ran the clip's
+ * `onContextMenu`, which sees a target outside `.fl-clip__header` and
+ * therefore **deleted the clip** — from a gesture whose entire intent was
+ * "never mind". The click-dismiss paths leaked the same way through the
+ * pointer handlers: a pointer-down on the backdrop or on a menu item opened a
+ * clip drag (selecting the clip on release), and with Shift held it went
+ * through `onCloneStart` and cloned the clip before the menu item ever ran.
+ *
+ * Stopping propagation at the overlay is the fix that covers all of them at
+ * once, rather than teaching the clip's handlers to recognise their own menu.
+ */
+const menuOverlayProps = {
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation(),
+  onPointerMove: (event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation(),
+  onPointerUp: (event: React.PointerEvent<HTMLDivElement>) => event.stopPropagation(),
+  onClick: (event: React.MouseEvent<HTMLDivElement>) => event.stopPropagation(),
+  onDoubleClick: (event: React.MouseEvent<HTMLDivElement>) => event.stopPropagation(),
+  onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  },
+} as const;
+
 interface DragState {
   startClientX: number;
   startClientY: number;
@@ -176,9 +206,14 @@ export function ClipView({
         <>
           <div
             className="fl-clip__context-menu-backdrop"
-            onClick={() => setContextMenu(null)}
+            {...menuOverlayProps}
+            onClick={(event) => {
+              event.stopPropagation();
+              setContextMenu(null);
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               setContextMenu(null);
             }}
           />
@@ -186,6 +221,7 @@ export function ClipView({
             className="fl-clip__context-menu"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             data-testid={`clip-menu-${clip.id}`}
+            {...menuOverlayProps}
           >
             <button
               type="button"

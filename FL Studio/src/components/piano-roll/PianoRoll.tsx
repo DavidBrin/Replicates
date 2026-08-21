@@ -26,6 +26,7 @@ import { SNAP_LABELS, SNAP_UNITS, type SnapUnit } from "@/domain/tickMath";
 import type { Channel, Note } from "@/domain/types";
 import { previewNote, useIsPlaying } from "@/components/shell/wiring";
 import { useAppStore } from "@/lib/store";
+import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
 
 import { KEYBOARD_WIDTH } from "./geometry";
 import { createPianoRollController, type RollPointer } from "./interactions";
@@ -362,27 +363,29 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
 
   // React's onWheel is passive, so `preventDefault` there is a no-op and
   // Ctrl+wheel would zoom the page instead of the roll (§4.4 primitive #2).
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas === null) return;
-    const onWheel = (event: WheelEvent): void => {
-      const rect = canvas.getBoundingClientRect();
-      const handled = controller.wheel({
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-        button: 0,
-        altKey: event.altKey,
-        shiftKey: event.shiftKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        deltaX: event.deltaX,
-        deltaY: event.deltaY,
-      });
-      if (handled) event.preventDefault();
-    };
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheel);
-  }, [controller]);
+  useNonPassiveWheel(
+    canvasRef,
+    useCallback(
+      (event: WheelEvent) => {
+        const canvas = canvasRef.current;
+        if (canvas === null) return;
+        const rect = canvas.getBoundingClientRect();
+        const handled = controller.wheel({
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+          button: 0,
+          altKey: event.altKey,
+          shiftKey: event.shiftKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+        });
+        if (handled) event.preventDefault();
+      },
+      [controller],
+    ),
+  );
 
   /* ------------------------------------------------------------ chrome -- */
 

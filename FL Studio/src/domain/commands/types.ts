@@ -20,6 +20,23 @@ export interface Command {
   readonly type: string;
   /** Human-readable label for an undo-history UI. */
   readonly label: string;
+  /**
+   * This command swaps the **whole entity set** rather than editing inside the
+   * current one — a JSON import, and every undo/redo of one.
+   *
+   * The store re-points its ephemeral UI references differently for such a
+   * write (`lib/store.ts`'s `ReconcileOptions.wholesale`): liveness is the
+   * wrong test, because ids are only unique *within* a project and an
+   * unrelated file's `ch-2` resolves perfectly against this session's `ch-2`.
+   *
+   * It is declared **here, on the command**, because the alternative — the
+   * store inferring it from `project.id` changing — is not sound. Re-importing
+   * an export of the project you are already in (the common case: save, edit,
+   * re-import) keeps the id, so the inference said "in-project edit" and the
+   * roll, rack and playlist kept pointing at colliding ids from the project
+   * that just went away. A command knows what it is; the store must not guess.
+   */
+  readonly wholesale?: boolean;
   apply(project: Project): Project;
   invert(before: Project): Command;
 }
@@ -62,6 +79,9 @@ export function composite(commands: readonly Command[], label = "Multiple change
     type: "composite",
     label,
     commands,
+    // A composite is wholesale when any part is: folding a `replaceProject`
+    // into a coalesced gesture must not launder away what it does.
+    wholesale: commands.some((command) => command.wholesale === true),
     apply(project) {
       return commands.reduce((acc, cmd) => cmd.apply(acc), project);
     },

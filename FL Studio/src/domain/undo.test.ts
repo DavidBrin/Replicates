@@ -319,7 +319,7 @@ describe("coalescing separates gestures, not just keys", () => {
     let state = dispatchCommand(project, createHistory(), tempo(150), {
       coalesceKey: "transport:tempo",
     });
-    state = { project: state.project, history: endGesture(state.history) };
+    state = { ...state, history: endGesture(state.history) };
     state = dispatchCommand(state.project, state.history, tempo(160), {
       coalesceKey: "transport:tempo",
     });

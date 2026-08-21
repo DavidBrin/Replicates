@@ -2,7 +2,7 @@
 
 import "./playlist.css";
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -23,6 +23,7 @@ import {
   selectPlaylistTracks,
   useAppStore,
 } from "@/lib/store";
+import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
 import { ClipView } from "./ClipView";
 import { openPatternInPianoRoll } from "./bindings";
 import {
@@ -222,21 +223,25 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   // React's onWheel is passive, so `preventDefault` there is a no-op and
   // Ctrl+wheel would zoom the browser page instead of the playlist (SPEC.md
   // §4.4 primitive #2) — same fix as the piano roll's native listener.
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (container === null) return;
-    const onWheel = (event: WheelEvent): void => {
-      if (!event.ctrlKey) return;
-      event.preventDefault();
-      const rect = container.getBoundingClientRect();
-      const pointerOffsetPx = event.clientX - rect.left;
-      const anchorTicks = pxToTicks(container.scrollLeft + pointerOffsetPx, zoomPxPerBarRef.current);
-      pendingZoomAnchor.current = { anchorTicks, pointerOffsetPx };
-      zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15);
-    };
-    container.addEventListener("wheel", onWheel, { passive: false });
-    return () => container.removeEventListener("wheel", onWheel);
-  }, [zoomBy]);
+  useNonPassiveWheel(
+    scrollRef,
+    useCallback(
+      (event: WheelEvent) => {
+        const container = scrollRef.current;
+        if (container === null || !event.ctrlKey) return;
+        event.preventDefault();
+        const rect = container.getBoundingClientRect();
+        const pointerOffsetPx = event.clientX - rect.left;
+        const anchorTicks = pxToTicks(
+          container.scrollLeft + pointerOffsetPx,
+          zoomPxPerBarRef.current,
+        );
+        pendingZoomAnchor.current = { anchorTicks, pointerOffsetPx };
+        zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15);
+      },
+      [zoomBy],
+    ),
+  );
 
   // Zoom-at-cursor compensation (finding #6): after `zoomPxPerBar` changes,
   // re-derive `scrollLeft` from the anchor tick captured at wheel time so

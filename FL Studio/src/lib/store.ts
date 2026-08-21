@@ -311,6 +311,28 @@ export function reconcileUiReferences(
   return Object.keys(patch).length === 0 ? null : (patch as Partial<AppState>);
 }
 
+/**
+ * The one gate every project takes on its way to becoming store state — the
+ * boot default, a hydrated save, and "new project" alike.
+ *
+ * It exists so the id reseed cannot be forgotten on one path. It *was*
+ * forgotten on exactly one: `loadProject` reseeded, but the slice's initial
+ * value did not, and the default project's ids are fixed literals
+ * (`defaultProject.ts` — `pat-1`, `trk-2`, `mix-8`) rather than minted ones.
+ * A first visit therefore started with the counter at 0, and the first "Add
+ * pattern" minted `pat-1` — already taken — so `addPattern` threw a
+ * `CommandError` out of the click handler. Only a *second* project (a load, an
+ * import) ever ran the reseed, which is why the crash needed an empty
+ * localStorage to reproduce.
+ *
+ * `reseedIds` only ever moves the counter forward, so passing an already-seeded
+ * project through here again is free.
+ */
+function adoptProject(project: Project): Project {
+  reseedIds(project);
+  return project;
+}
+
 export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (set, get) => {
   /**
    * The ONE way a project write reaches the store.
@@ -323,7 +345,7 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
    * caller, cannot forget.
    */
   const commit = (
-    next: { project: Project; history?: History },
+    next: { project: Project; history?: History; wholesale?: boolean },
     options: ReconcileOptions = {},
   ): void => {
     // Captured before the write: the reconcile pass has to know whether this
@@ -331,12 +353,23 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     // whether it swapped the project outright (see `wholesale`).
     const previous = get().project;
     const previousPatternId = previous.activePatternId;
-    // `replaceProject` — a JSON import, and the undo/redo of one — is the only
-    // command that changes the project's own id, which is what makes this a
-    // reliable "different project" test rather than a list of call sites to
-    // keep in sync.
-    const wholesale = options.wholesale === true || previous.id !== next.project.id;
-    set(next);
+    // A wholesale write DECLARES itself: `replaceProject` carries
+    // `wholesale: true` and `domain/undo.ts` reports it back for the undo and
+    // the redo of one (see `Command.wholesale`).
+    //
+    // It used to be *inferred* from `previous.id !== next.project.id`, and
+    // that inference is unsound in the commonest import there is: exporting
+    // this project and re-importing the file keeps the id (the re-import is
+    // deliberately idempotent), so undo/redo of it read as an in-project edit
+    // and every colliding ephemeral id was silently retargeted at a stranger's
+    // entity. The id comparison stays only as a backstop for a write that
+    // reaches `commit` without going through a command at all.
+    const wholesale =
+      options.wholesale === true || next.wholesale === true || previous.id !== next.project.id;
+    // Only the two domain fields reach the store — `wholesale` is a report
+    // about the write, not state, and zustand's `set` merges whatever it is
+    // handed.
+    set(next.history === undefined ? { project: next.project } : { project: next.project, history: next.history });
     const state = get();
     const patch = reconcileUiReferences(state, state.project, {
       ...options,
@@ -348,7 +381,7 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
   };
 
   return {
-    project: createDefaultProject({ now: nowIso() }),
+    project: adoptProject(createDefaultProject({ now: nowIso() })),
     history: createHistory(),
 
     dispatch: (command, options) => {
@@ -394,8 +427,7 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     },
 
     loadProject: (project) => {
-      reseedIds(project);
-      set({ project, history: createHistory() });
+      set({ project: adoptProject(project), history: createHistory() });
       get().reconcileUiToProject();
     },
 

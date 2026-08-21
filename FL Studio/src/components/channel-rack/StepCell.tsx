@@ -10,6 +10,10 @@
  * (SPEC §2.1 drag coalescing — "commit one command on pointer-up") and just
  * tells this cell what to render and what raw gesture events to forward.
  */
+import { useCallback, useRef } from "react";
+
+import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
+
 export interface StepCellProps {
   step: number; // 0-based, 0..15
   on: boolean;
@@ -35,8 +39,28 @@ export function StepCell({
   onContextMenu,
   onAltWheel,
 }: StepCellProps) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Alt+wheel must SUPPRESS the scroll it rides on; React's own `onWheel` is
+  // passive, so `preventDefault` there did nothing and the rack scrolled a
+  // notch under the pointer on every velocity nudge — the cell the user was
+  // nudging walked out from under the cursor. Same native listener the roll
+  // and the playlist use for their Ctrl+wheel zoom.
+  useNonPassiveWheel(
+    buttonRef,
+    useCallback(
+      (event: WheelEvent) => {
+        if (!event.altKey || !onAltWheel) return;
+        event.preventDefault();
+        onAltWheel(event.deltaY < 0 ? 1 : -1);
+      },
+      [onAltWheel],
+    ),
+  );
+
   return (
     <button
+      ref={buttonRef}
       type="button"
       className="fl-step"
       data-testid={`step-${step}`}
@@ -52,11 +76,6 @@ export function StepCell({
         onContextMenu();
       }}
       onPointerEnter={(event) => onPointerEnter(event.buttons)}
-      onWheel={(event) => {
-        if (!event.altKey || !onAltWheel) return;
-        event.preventDefault();
-        onAltWheel(event.deltaY < 0 ? 1 : -1);
-      }}
     />
   );
 }

@@ -41,11 +41,17 @@ export function updateProject(patch: ProjectPatch): Command {
  * Wholesale replacement — JSON import (D3), which SPEC.md §2.2 requires to be
  * undoable. `createdAt` comes from the imported file; `id` too, so a
  * re-import of the same file is idempotent.
+ *
+ * `wholesale: true` is the *declaration* the store reconciles against, and the
+ * inverse carries it as well — undoing an import swaps the entity set back
+ * just as thoroughly as the import did. Keeping the id (idempotent re-import)
+ * is exactly why the store may not infer this from `project.id` changing.
  */
 export function replaceProject(project: Project): Command {
   return {
     type: "replaceProject",
     label: "Load project",
+    wholesale: true,
     apply() {
       return project;
     },

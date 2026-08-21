@@ -600,4 +600,25 @@ describe("ChannelRack — alt+wheel velocity nudges", () => {
 
     expect(useAppStore.getState().history.past).toHaveLength(before + 2);
   });
+
+  it("PREVENTS the default scroll, so the rack does not move under the nudge (round 5 #5)", async () => {
+    render(<ChannelRack />);
+    const cell = await litKickStep();
+
+    // `fireEvent` returns false when the event was cancelled. React attaches
+    // `wheel` PASSIVELY, so an `onWheel` prop's `preventDefault()` is ignored
+    // and this returns true — the rack scrolled a notch on every nudge, and
+    // the cell being nudged walked out from under the pointer. Only a native
+    // `{ passive: false }` listener can cancel it.
+    expect(fireEvent.wheel(cell, { altKey: true, deltaY: -100 })).toBe(false);
+  });
+
+  it("leaves a plain (unmodified) wheel alone, so the rack still scrolls", async () => {
+    render(<ChannelRack />);
+    const cell = await litKickStep();
+    const velocityBefore = velocityOfStepZero();
+
+    expect(fireEvent.wheel(cell, { deltaY: -100 })).toBe(true);
+    expect(velocityOfStepZero()).toBe(velocityBefore);
+  });
 });

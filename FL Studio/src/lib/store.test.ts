@@ -759,3 +759,111 @@ describe("every project write reconciles, not just a wholesale replacement", () 
     expect(useAppStore.getState().pianoRoll.selectedNoteIds).toEqual([]);
   });
 });
+
+describe("a FIRST visit seeds the id counter from the default project (round 5 #1)", () => {
+  /**
+   * The store singleton is built at module scope, so the only way to observe
+   * what a fresh boot does is to build a fresh module graph. `vi.resetModules`
+   * gives the re-imported store its own `domain/ids` counter too, which is
+   * exactly the "counter at 0, no save in localStorage" state a first visit is.
+   */
+  async function bootFreshStore() {
+    vi.resetModules();
+    const [store, ids, wiring] = await Promise.all([
+      import("./store"),
+      import("@/domain/ids"),
+      import("@/components/shell/wiring"),
+    ]);
+    return { store, ids, wiring };
+  }
+
+  it("mints a pattern id past the default project's own literals", async () => {
+    const { store, ids } = await bootFreshStore();
+
+    // The default project's ids are fixed literals (`pat-1` … `mix-8`), not
+    // minted ones, so nothing advances the counter unless the boot reseeds.
+    expect(ids.peekIdCounter()).toBeGreaterThanOrEqual(8);
+    expect(store.useAppStore.getState().project.patterns["pat-1"]).toBeDefined();
+    expect(ids.nextId("pattern")).not.toBe("pat-1");
+  });
+
+  it("Add Pattern on a first visit does not throw a colliding-id CommandError", async () => {
+    const { store, wiring } = await bootFreshStore();
+    const before = Object.keys(store.useAppStore.getState().project.patterns).length;
+
+    expect(() => wiring.addPattern()).not.toThrow();
+
+    expect(Object.keys(store.useAppStore.getState().project.patterns)).toHaveLength(before + 1);
+  });
+});
+
+describe("wholesale is DECLARED by the command, not inferred from the id (round 5 #2)", () => {
+  /** Two different projects that deliberately share an id — a re-imported export. */
+  function sameIdPair() {
+    const a = createDefaultProject({ id: "prj-shared", name: "Mine" });
+    const b = createDefaultProject({ id: "prj-shared", name: "Theirs" });
+    // Give `b` a channel set that COLLIDES by id but is a different project.
+    return { a, b };
+  }
+
+  function armUiAt(project: Project): void {
+    useAppStore.setState({
+      project,
+      history: createHistory(),
+      selectedChannelId: "ch-kick",
+      selectedMixerTrackId: "mix-3",
+      playlistPaintPatternId: "pat-1",
+    });
+  }
+
+  it("clears colliding references when an import that KEPT the id is undone", () => {
+    const { a, b } = sameIdPair();
+    armUiAt(a);
+    useAppStore.getState().dispatch(replaceProject(b));
+    // Re-arm: the import itself already cleared them; the undo is what used to
+    // slip through, because `previous.id === next.project.id` said "same
+    // project, just an edit".
+    useAppStore.setState({ selectedChannelId: "ch-kick", playlistPaintPatternId: "pat-1" });
+
+    useAppStore.getState().undo();
+
+    expect(useAppStore.getState().project.name).toBe("Mine");
+    expect(useAppStore.getState().selectedChannelId).toBeNull();
+    expect(useAppStore.getState().playlistPaintPatternId).toBeNull();
+    expect(useAppStore.getState().selectedMixerTrackId).toBe(MASTER_MIXER_TRACK_ID);
+  });
+
+  it("clears them on the REDO back into the same-id import as well", () => {
+    const { a, b } = sameIdPair();
+    armUiAt(a);
+    useAppStore.getState().dispatch(replaceProject(b));
+    useAppStore.getState().undo();
+    useAppStore.setState({ selectedChannelId: "ch-kick", playlistPaintPatternId: "pat-1" });
+
+    useAppStore.getState().redo();
+
+    expect(useAppStore.getState().project.name).toBe("Theirs");
+    expect(useAppStore.getState().selectedChannelId).toBeNull();
+    expect(useAppStore.getState().playlistPaintPatternId).toBeNull();
+  });
+
+  it("still treats an ORDINARY in-project edit as non-wholesale", () => {
+    const { a } = sameIdPair();
+    armUiAt(a);
+    useAppStore.getState().dispatch(updateProject({ tempo: 128 }));
+
+    // Nothing vanished, so nothing is re-pointed.
+    expect(useAppStore.getState().selectedChannelId).toBe("ch-kick");
+    expect(useAppStore.getState().playlistPaintPatternId).toBe("pat-1");
+
+    useAppStore.getState().undo();
+
+    expect(useAppStore.getState().selectedChannelId).toBe("ch-kick");
+    expect(useAppStore.getState().playlistPaintPatternId).toBe("pat-1");
+  });
+
+  it("does not leak the `wholesale` report into store state", () => {
+    useAppStore.getState().dispatch(updateProject({ tempo: 131 }));
+    expect("wholesale" in useAppStore.getState()).toBe(false);
+  });
+});

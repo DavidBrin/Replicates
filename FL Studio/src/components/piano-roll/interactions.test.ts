@@ -665,6 +665,53 @@ describe("resize (drag the right-edge grip)", () => {
       h.controller.pointerUp(start);
       expect(h.setLastLength).toHaveBeenCalledWith(TICKS_PER_STEP);
     });
+
+    /*
+     * Round 5 #6. "Dispatched nothing" above only holds when the grip never
+     * moved at all: `lastDeltaTicks` starts at 0, so the first move is
+     * short-circuited. Drag the grip AWAY and back and the delta returns to 0
+     * through a non-zero value, so the short-circuit no longer fires — and the
+     * write that then landed stored `effectiveLengthTicks(0)`, silently
+     * promoting the marker to a 24-tick note. A resize that ends where it
+     * began must put the STORED length back.
+     */
+    it("restores the stored ZERO when the grip is dragged away and back", () => {
+      const h = harness({ notes: [step], snap: "quarterBeat" });
+      const start = grabStepGrip(h);
+      h.controller.pointerMove({ ...start, x: tickToX(VIEW, TICKS_PER_STEP * 4) });
+      h.controller.pointerMove({ ...start });
+      h.controller.pointerUp(start);
+
+      const project = h.applied();
+      expect(project.patterns[project.activePatternId]?.notes[step.id]?.lengthTicks).toBe(0);
+    });
+
+    it("still remembers ONE STEP as the draw length after that round trip", () => {
+      const h = harness({ notes: [step], snap: "quarterBeat" });
+      const start = grabStepGrip(h);
+      h.controller.pointerMove({ ...start, x: tickToX(VIEW, TICKS_PER_STEP * 4) });
+      h.controller.pointerMove({ ...start });
+      h.controller.pointerUp(start);
+
+      // A remembered 0 would mean "one TICK" to `defaultDrawLengthTicks`.
+      expect(h.setLastLength).toHaveBeenLastCalledWith(TICKS_PER_STEP);
+    });
+
+    it("leaves an ORDINARY note's length untouched by the same round trip", () => {
+      const note = makeNote({ id: "n-real", positionTicks: 0, lengthTicks: TICKS_PER_BEAT });
+      const h = harness({ notes: [note], snap: "quarterBeat" });
+      const grip = gripRect(VIEW, note);
+      const start = { x: grip.x + 2, y: grip.y + 4, button: 0 };
+      h.controller.pointerDown(start);
+      h.controller.pointerMove({ ...start, x: tickToX(VIEW, TICKS_PER_BEAT * 3) });
+      h.controller.pointerMove({ ...start });
+      h.controller.pointerUp(start);
+
+      const project = h.applied();
+      expect(project.patterns[project.activePatternId]?.notes[note.id]?.lengthTicks).toBe(
+        TICKS_PER_BEAT,
+      );
+    });
   });
 });
 
@@ -990,6 +1037,49 @@ describe("shift+left-click clone", () => {
     expect(Object.keys(notes)).toHaveLength(3); // two originals + ONE clone
     expect(notes["new-1"]).toMatchObject({ positionTicks: TICKS_PER_BEAT, pitch: 67 });
   });
+
+  /*
+   * Round 5 #7. The whole clone drag snaps against ONE primary clone, and the
+   * primary used to be picked by matching `clone.pitch === hit.note.pitch` —
+   * not injective. Two selected notes on the same row (an ordinary repeated
+   * voice) made the FIRST of them primary whichever one was grabbed, so the
+   * drag measured from a baseline the user never touched and the whole clone
+   * set landed offset by the gap between the two.
+   */
+  it("anchors the drag on the clone of the note actually GRABBED, not the first at that pitch", () => {
+    // Same pitch, and the LATE one sits OFF the snap grid — so which clone is
+    // primary decides where the whole set lands, not just which id leads.
+    const early = makeNote({ id: "n-early", positionTicks: 0, pitch: 67 });
+    const late = makeNote({ id: "n-late", positionTicks: 101, pitch: 67 }); // 101 % 24 = 5
+    const h = harness({
+      notes: [early, late],
+      selectedNoteIds: [early.id, late.id],
+      snap: "quarterBeat",
+    });
+
+    // Grab the LATE one; `early` shares its pitch and comes first in the set.
+    const rect = noteRect(VIEW, late);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0, shiftKey: true };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({
+      ...start,
+      x: start.x + tickToX(VIEW, TICKS_PER_STEP) - KEYBOARD_WIDTH,
+    });
+
+    const notes = h.applied().patterns[PATTERN]?.notes ?? {};
+    // `new-1` clones `early`, `new-2` clones `late` (index-aligned with `source`).
+    //
+    // Snapping is measured from the PRIMARY: 101 + 24 = 125 snaps to 120, so
+    // the grabbed note's clone lands ON the grid and the other rides along at
+    // the same +19. Anchoring on `early` instead snapped 0 + 24 to 24 and put
+    // the grabbed note's clone at 125 — off the grid the user was snapping to.
+    expect(notes["new-2"]?.positionTicks).toBe(120);
+    expect(notes["new-2"]!.positionTicks % TICKS_PER_STEP).toBe(0);
+    expect(notes["new-1"]?.positionTicks).toBe(19);
+    // The originals never moved.
+    expect(notes[early.id]?.positionTicks).toBe(0);
+    expect(notes[late.id]?.positionTicks).toBe(101);
+  });
 });
 
 /* ------------------------------------------------------------ Ctrl-click -- */
@@ -1042,6 +1132,50 @@ describe("Ctrl+click adds to the selection and starts nothing", () => {
     ctrlClick(h, second);
     expect(h.setSelection).toHaveBeenCalledWith([first.id, second.id]);
     expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  /*
+   * Round 5 #3. The erase branch is matched BEFORE this one, and it used to
+   * fire on `scene.tool === "delete"` alone — so with the delete tool active
+   * the only gesture the app has for "add this to the selection" deleted the
+   * note instead. Ctrl outranks a tool; the right-click delete below does not
+   * change, because it is not a modifier gesture.
+   */
+  it("SELECTS rather than erases with the DELETE tool active", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id], tool: "delete" });
+    ctrlClick(h, second);
+
+    expect(h.setSelection).toHaveBeenCalledWith([first.id, second.id]);
+    expect(h.controller.peekGesture()).toBe("idle");
+    expect(h.dispatch).not.toHaveBeenCalled();
+    expect(Object.keys(h.applied().patterns[PATTERN]?.notes ?? {})).toHaveLength(2);
+  });
+
+  it("de-selects rather than erases with the DELETE tool active", () => {
+    const h = harness({ notes: [first, second], selectedNoteIds: [first.id, second.id], tool: "delete" });
+    ctrlClick(h, first);
+
+    expect(h.setSelection).toHaveBeenCalledWith([second.id]);
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does NOT rescue a RIGHT-click from deletion — that binding is unconditional", () => {
+    const h = harness({ notes: [first, second], tool: "delete" });
+    const rect = noteRect(VIEW, first);
+    h.controller.pointerDown({ x: rect.x + 3, y: rect.y + 3, button: 2, ctrlKey: true });
+
+    const project = h.applied();
+    expect(project.patterns[project.activePatternId]?.notes[first.id]).toBeUndefined();
+  });
+
+  it("still starts an erase SWEEP on Ctrl+click over EMPTY grid with the delete tool", () => {
+    // No note to select, so the delete tool keeps the grid it owns: the sweep
+    // must still arm, or a Ctrl-held drag across notes would erase nothing.
+    const h = harness({ notes: [first, second], tool: "delete" });
+    h.controller.pointerDown(at(TICKS_PER_BEAT * 3, 60, { ctrlKey: true }));
+
+    expect(h.controller.peekGesture()).toBe("erase");
+    expect(h.dispatch).not.toHaveBeenCalled(); // nothing under the pointer yet
   });
 
   /*
