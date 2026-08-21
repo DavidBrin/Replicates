@@ -25,6 +25,7 @@ import {
   type NotePatch,
 } from "@/domain/commands";
 import { SNAP_TICKS, snapTicks, snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
+import { createWheelGestureKeyring, WHEEL_GESTURE_GAP_MS } from "@/lib/wheelGesture";
 import {
   DEFAULT_VELOCITY,
   PATTERN_LENGTH_TICKS,
@@ -108,12 +109,13 @@ export const ZOOM_WHEEL_FACTOR = 1.15;
 export const WHEEL_SCROLL_PX = 60;
 /**
  * Alt+wheel velocity nudges (SPEC §4.4) have no pointer-down/up to bound a
- * gesture, unlike every drag. A run of wheel notches on the same note within
- * this gap folds into one undo entry — like a drag; a pause past it, or
- * switching notes, starts a new one, so two separate nudging sessions on the
- * same note never silently merge into a single Ctrl+Z.
+ * gesture, unlike every drag — so they are bounded by target + time instead.
+ *
+ * The rule and its implementation live in `@/lib/wheelGesture`, because the
+ * channel rack's Alt+wheel step nudges need exactly the same bound; this
+ * re-export is here so the roll's own tests and docs keep naming it.
  */
-export const WHEEL_GESTURE_GAP_MS = 500;
+export { WHEEL_GESTURE_GAP_MS };
 
 /* ---------------------------------------------------------- hit-testing -- */
 
@@ -172,6 +174,21 @@ export function snapTick(tick: number, snap: SnapUnit, bypass: boolean): number 
 export function minLengthTicks(snap: SnapUnit, bypass: boolean): number {
   if (bypass || snap === "off") return 1;
   return SNAP_TICKS[snap];
+}
+
+/**
+ * The ticks a note actually occupies — the stored length, except for a step.
+ *
+ * `lengthTicks: 0` means "a step" (SPEC §2's `Note`), and a step is not a
+ * zero-width event: the scheduler gives it a one-cell blip
+ * (`scheduler.ts`'s `STEP_BLIP_TICKS`) and the rack draws it as a whole cell.
+ * Clamping a *move* against the stored 0 therefore let a step in the final
+ * cell slide to tick 384 — legal by the raw arithmetic, and silently dropped
+ * at playback, because the scheduler skips anything at or past the loop
+ * length. Every bound that asks "where does this note end" wants this.
+ */
+export function effectiveLengthTicks(lengthTicks: number): number {
+  return lengthTicks > 0 ? lengthTicks : TICKS_PER_STEP;
 }
 
 /**
@@ -251,7 +268,7 @@ export function __resetGestureCounterForTests(): void {
 export function createPianoRollController(deps: InteractionDeps): PianoRollController {
   let gesture: Gesture = { kind: "idle" };
   // Bounds alt+wheel velocity nudges into gestures — see WHEEL_GESTURE_GAP_MS.
-  let velocityWheelGesture: { noteId: NoteId; key: string; lastAt: number } | null = null;
+  const velocityWheel = createWheelGestureKeyring("piano-roll-velocity");
 
   const snapshot = (note: Note): NoteSnapshot => ({
     id: note.id,
@@ -278,6 +295,19 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   const endDrag = (): void => {
     gesture = { kind: "idle" };
     deps.setDragKind(null);
+  };
+
+  /**
+   * Abandon whatever is in flight — the host's `pointercancel`.
+   *
+   * It has to undo everything a pointer-*up* would have released, not just
+   * the gesture record: a `pointercancel` during a keyboard audition (the
+   * browser stealing the pointer for a scroll or a gesture) left
+   * `previewPitch` set, so the key stayed lit until the next audition.
+   */
+  const cancel = (): void => {
+    if (gesture.kind === "preview") deps.setPreviewPitch?.(null);
+    endDrag();
   };
 
   /* --------------------------------------------------------- pointer down */
@@ -539,11 +569,20 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // §1.2 D-sub) — clamped per-note rather than by a shared delta cap so
       // one note near the pattern boundary cannot mute the drag for the rest
       // of the selection.
-      const clampedLength = (note: NoteSnapshot): number =>
-        Math.min(
-          Math.max(minLength, note.lengthTicks + deltaTicks),
-          Math.max(minLength, PATTERN_LENGTH_TICKS - note.positionTicks),
-        );
+      //
+      // The pattern bound WINS. Nesting the snap minimum inside the clamp
+      // (`min(desired, max(minLength, available))`) let a note near the bar
+      // end grow past it whenever snap made `available < minLength`: at
+      // position 383 with a quarter-beat snap the "minimum" of 24 ticks was
+      // longer than the 1 tick left, and the note ended at 407 — outside the
+      // pattern, where nothing is ever scheduled. `minLength` is a floor on
+      // what a resize *aims* for, never a licence to overrun; one tick is the
+      // real floor, and it always fits because a note starts inside the bar.
+      const clampedLength = (note: NoteSnapshot): number => {
+        const available = PATTERN_LENGTH_TICKS - note.positionTicks;
+        const desired = Math.max(minLength, note.lengthTicks + deltaTicks);
+        return Math.max(1, Math.min(desired, available));
+      };
 
       const patches = active.notes.map((note) => ({
         id: note.id,
@@ -571,7 +610,9 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     // edge, instead of one note hitting the wall while the rest keep moving.
     const minPosition = Math.min(...active.notes.map((note) => note.positionTicks));
     const maxEndDelta = Math.min(
-      ...active.notes.map((note) => PATTERN_LENGTH_TICKS - note.positionTicks - note.lengthTicks),
+      ...active.notes.map(
+        (note) => PATTERN_LENGTH_TICKS - note.positionTicks - effectiveLengthTicks(note.lengthTicks),
+      ),
     );
     const maxPitch = Math.max(...active.notes.map((note) => note.pitch));
     const minPitch = Math.min(...active.notes.map((note) => note.pitch));
@@ -629,21 +670,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const hit = hitTestNote(view, scene.notes, input.x, input.y);
       if (hit === null) return false;
       const delta = input.deltaY < 0 ? VELOCITY_WHEEL_STEP : -VELOCITY_WHEEL_STEP;
-      const now = Date.now();
-      if (
-        velocityWheelGesture === null ||
-        velocityWheelGesture.noteId !== hit.note.id ||
-        now - velocityWheelGesture.lastAt > WHEEL_GESTURE_GAP_MS
-      ) {
-        velocityWheelGesture = { noteId: hit.note.id, key: nextCoalesceKey(), lastAt: now };
-      } else {
-        velocityWheelGesture.lastAt = now;
-      }
       deps.dispatch(
         updateNotes(scene.patternId, [
           { id: hit.note.id, patch: { velocity: clamp01(hit.note.velocity + delta) } },
         ]),
-        { coalesceKey: velocityWheelGesture.key },
+        { coalesceKey: velocityWheel.keyFor(hit.note.id) },
       );
       return true;
     }
@@ -681,7 +712,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     pointerUp,
     wheel,
     cursorAt,
-    cancel: endDrag,
+    cancel,
     peekGesture: () => gesture.kind,
   };
 }

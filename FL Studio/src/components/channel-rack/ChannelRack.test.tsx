@@ -514,3 +514,90 @@ describe("ChannelRack — channel context menu (rename/recolor/delete/reorder)",
     expect(screen.getByRole("menuitem", { name: "Move down" })).toBeDisabled();
   });
 });
+
+/* ---------------------------------------------- alt+wheel step velocity --- */
+
+describe("ChannelRack — alt+wheel velocity nudges", () => {
+  /** Light step 0 of the kick so there is a note to nudge. */
+  async function litKickStep(): Promise<HTMLElement> {
+    const user = userEvent.setup();
+    const cell = kickStep(0);
+    await user.click(cell);
+    return cell;
+  }
+
+  function velocityOfStepZero(): number {
+    const notes = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes);
+    return notes.find((note) => note.channelId === "ch-kick" && note.positionTicks === 0)!.velocity;
+  }
+
+  it("folds a rapid burst on one step into a single undo entry", async () => {
+    render(<ChannelRack />);
+    const cell = await litKickStep();
+    const entriesAfterClick = useAppStore.getState().history.past.length;
+
+    fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+    fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+    fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(entriesAfterClick + 1);
+  });
+
+  it("gives two SEPARATE nudging sessions on the same step two undo entries", () => {
+    vi.useFakeTimers();
+    try {
+      render(<ChannelRack />);
+      // `userEvent` needs real timers, so light the step through the store.
+      const cell = kickStep(0);
+      fireEvent.pointerDown(cell, { button: 0 });
+      fireEvent.pointerUp(cell, { button: 0 });
+      const before = useAppStore.getState().history.past.length;
+
+      fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+      // A minute of other work, then back to the same cell: the fixed key
+      // this used to pass would have merged both sessions into one Ctrl+Z.
+      vi.advanceTimersByTime(60_000);
+      fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+
+      expect(useAppStore.getState().history.past).toHaveLength(before + 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("undoes only the LAST session, leaving the first session's nudge in place", () => {
+    vi.useFakeTimers();
+    try {
+      render(<ChannelRack />);
+      const cell = kickStep(0);
+      fireEvent.pointerDown(cell, { button: 0 });
+      fireEvent.pointerUp(cell, { button: 0 });
+
+      fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+      const afterFirst = velocityOfStepZero();
+      vi.advanceTimersByTime(60_000);
+      fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+      expect(velocityOfStepZero()).toBeGreaterThan(afterFirst);
+
+      useAppStore.getState().undo();
+
+      expect(velocityOfStepZero()).toBeCloseTo(afterFirst, 10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps two different steps on separate entries", async () => {
+    render(<ChannelRack />);
+    const user = userEvent.setup();
+    const first = await litKickStep();
+    const second = kickStep(1);
+    await user.click(second);
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.wheel(first, { altKey: true, deltaY: -100 });
+    fireEvent.wheel(second, { altKey: true, deltaY: -100 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(before + 2);
+  });
+});

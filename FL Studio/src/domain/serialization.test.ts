@@ -14,7 +14,12 @@ import {
   toSaveFile,
 } from "./serialization";
 import { fixtureProject } from "./testKit";
-import { CURRENT_SCHEMA_VERSION, MASTER_MIXER_TRACK_ID, type Project } from "./types";
+import {
+  CURRENT_SCHEMA_VERSION,
+  MASTER_MIXER_TRACK_ID,
+  PATTERN_LENGTH_TICKS,
+  type Project,
+} from "./types";
 
 /** A project with notes, a clip, a choke group and a non-default routing. */
 function richProject(): Project {
@@ -139,6 +144,75 @@ describe("corrupt and hostile input", () => {
     const restored = readProject(damaged)!;
     expect(restored).not.toBeNull();
     expect(Object.keys(restored.patterns["pat-1"]!.notes)).toEqual(["n1"]);
+  });
+
+  it("drops imported notes at or past the pattern's end, and clamps overruns", () => {
+    // Crafted JSON, exactly as a hand-edited or foreign export would arrive:
+    // one note beyond the bar, one exactly ON the bar line, one that starts
+    // inside but runs past it, and one honest note.
+    const project = fixtureProject();
+    const restored = readProject({
+      ...project,
+      patterns: {
+        "pat-1": {
+          ...project.patterns["pat-1"],
+          notes: {
+            beyond: { channelId: "ch-kick", positionTicks: 5000, lengthTicks: 24, pitch: 60, velocity: 0.8 },
+            onTheLine: {
+              channelId: "ch-kick",
+              positionTicks: PATTERN_LENGTH_TICKS,
+              lengthTicks: 24,
+              pitch: 60,
+              velocity: 0.8,
+            },
+            overrun: {
+              channelId: "ch-kick",
+              positionTicks: PATTERN_LENGTH_TICKS - 24,
+              lengthTicks: 900,
+              pitch: 62,
+              velocity: 0.8,
+            },
+            fine: { channelId: "ch-kick", positionTicks: 48, lengthTicks: 24, pitch: 64, velocity: 0.8 },
+            step: { channelId: "ch-kick", positionTicks: 360, lengthTicks: 0, pitch: 65, velocity: 0.8 },
+          },
+        },
+      },
+      patternOrder: ["pat-1"],
+      activePatternId: "pat-1",
+    })!;
+
+    const notes = restored.patterns["pat-1"]!.notes;
+    expect(Object.keys(notes).sort()).toEqual(["fine", "overrun", "step"]);
+    expect(notes.overrun!.lengthTicks).toBe(24); // clamped to end exactly on the bar
+    expect(notes.step!.lengthTicks).toBe(0); // a step's 0 is a marker, not a length
+    for (const note of Object.values(notes)) {
+      expect(note.positionTicks).toBeLessThan(PATTERN_LENGTH_TICKS);
+      expect(note.positionTicks + note.lengthTicks).toBeLessThanOrEqual(PATTERN_LENGTH_TICKS);
+    }
+  });
+
+  it("survives the same damage through the real serialize → deserialize path", () => {
+    const project = fixtureProject();
+    const text = JSON.stringify({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      project: {
+        ...project,
+        patterns: {
+          "pat-1": {
+            ...project.patterns["pat-1"],
+            notes: {
+              far: { channelId: "ch-kick", positionTicks: 4096, lengthTicks: 48, pitch: 60, velocity: 1 },
+            },
+          },
+        },
+        patternOrder: ["pat-1"],
+        activePatternId: "pat-1",
+      },
+    });
+
+    const restored = deserializeProject(text)!;
+    expect(restored).not.toBeNull();
+    expect(restored.patterns["pat-1"]!.notes).toEqual({});
   });
 
   it("drops clips pointing at a missing pattern or track", () => {

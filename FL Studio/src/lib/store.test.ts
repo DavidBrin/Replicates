@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { updateChannel } from "@/domain/commands/channels";
+import { removeChannel, updateChannel } from "@/domain/commands/channels";
 import { addNotes, stepToggleCommand } from "@/domain/commands/patterns";
 import { addPattern } from "@/domain/commands/patterns";
 import { replaceProject, updateProject } from "@/domain/commands/project";
@@ -318,6 +318,50 @@ describe("persistProject reports whether the write happened", () => {
 
 /* --------------------------------------------- ui ↔ project reconciliation */
 
+/** A project that shares NO ids with the default one. */
+function foreignProject(): Project {
+  return {
+    id: "prj-foreign",
+    name: "Foreign",
+    createdAt: "2020-01-01T00:00:00.000Z",
+    updatedAt: "2020-01-01T00:00:00.000Z",
+    tempo: 120,
+    globalSwing: 0,
+    channels: {
+      "zch-1": {
+        id: "zch-1",
+        name: "Foreign kick",
+        color: "hsl(0, 0%, 50%)",
+        voice: "kick",
+        volume: 0.8,
+        pan: 0,
+        muted: false,
+        defaultStepPitch: 60,
+        routedToMixerTrackId: MASTER_MIXER_TRACK_ID,
+      },
+    },
+    channelOrder: ["zch-1"],
+    patterns: { "zpat-1": { id: "zpat-1", name: "Z", color: "hsl(0,0%,50%)", notes: {} } },
+    patternOrder: ["zpat-1"],
+    playlistTracks: {},
+    playlistTrackOrder: [],
+    clips: {},
+    mixerTracks: {
+      [MASTER_MIXER_TRACK_ID]: {
+        id: MASTER_MIXER_TRACK_ID,
+        name: "Master",
+        volume: 0.8,
+        pan: 0,
+        muted: false,
+      },
+    },
+    mixerTrackOrder: [MASTER_MIXER_TRACK_ID],
+    playbackMode: "pattern",
+    activePatternId: "zpat-1",
+  };
+}
+
+
 describe("replacing the project re-points dangling UI references", () => {
   /** Aim every UI slice at entities of the CURRENT project. */
   function aimUiAtCurrentProject(): void {
@@ -341,48 +385,6 @@ describe("replacing the project re-points dangling UI references", () => {
     });
   }
 
-  /** A project that shares NO ids with the default one. */
-  function foreignProject(): Project {
-    return {
-      id: "prj-foreign",
-      name: "Foreign",
-      createdAt: "2020-01-01T00:00:00.000Z",
-      updatedAt: "2020-01-01T00:00:00.000Z",
-      tempo: 120,
-      globalSwing: 0,
-      channels: {
-        "zch-1": {
-          id: "zch-1",
-          name: "Foreign kick",
-          color: "hsl(0, 0%, 50%)",
-          voice: "kick",
-          volume: 0.8,
-          pan: 0,
-          muted: false,
-          defaultStepPitch: 60,
-          routedToMixerTrackId: MASTER_MIXER_TRACK_ID,
-        },
-      },
-      channelOrder: ["zch-1"],
-      patterns: { "zpat-1": { id: "zpat-1", name: "Z", color: "hsl(0,0%,50%)", notes: {} } },
-      patternOrder: ["zpat-1"],
-      playlistTracks: {},
-      playlistTrackOrder: [],
-      clips: {},
-      mixerTracks: {
-        [MASTER_MIXER_TRACK_ID]: {
-          id: MASTER_MIXER_TRACK_ID,
-          name: "Master",
-          volume: 0.8,
-          pan: 0,
-          muted: false,
-        },
-      },
-      mixerTrackOrder: [MASTER_MIXER_TRACK_ID],
-      playbackMode: "pattern",
-      activePatternId: "zpat-1",
-    };
-  }
 
   it("clears or re-defaults every field naming a vanished entity", () => {
     aimUiAtCurrentProject();
@@ -426,5 +428,133 @@ describe("replacing the project re-points dangling UI references", () => {
     useAppStore.getState().newProject();
     const state = useAppStore.getState();
     expect(reconcileUiReferences(state, state.project)).toBeNull();
+  });
+});
+
+/* ------------------------------- reconciliation runs after EVERY write ---- */
+
+describe("every project write reconciles, not just a wholesale replacement", () => {
+  it("drops the roll's channel when THAT channel is deleted (rack delete button)", () => {
+    const channelId = useAppStore.getState().project.channelOrder[0]!;
+    useAppStore.setState({
+      selectedChannelId: channelId,
+      pianoRoll: { ...useAppStore.getState().pianoRoll, channelId },
+    });
+
+    // Exactly what `ChannelRack`'s delete button dispatches.
+    useAppStore.getState().dispatch(removeChannel(channelId));
+
+    const state = useAppStore.getState();
+    expect(state.pianoRoll.channelId).toBeNull();
+    expect(state.selectedChannelId).toBeNull();
+    // …and the roll's next draw therefore names a channel that exists.
+    expect(() =>
+      state.dispatch(
+        addNotes(state.project.activePatternId, [
+          {
+            id: "n-after-delete",
+            channelId: state.project.channelOrder[0]!,
+            positionTicks: 0,
+            lengthTicks: TICKS_PER_STEP,
+            pitch: 60,
+            velocity: 0.8,
+          },
+        ]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("restores the reference when that delete is UNDONE", () => {
+    const channelId = useAppStore.getState().project.channelOrder[0]!;
+    useAppStore.setState({ pianoRoll: { ...useAppStore.getState().pianoRoll, channelId } });
+
+    useAppStore.getState().dispatch(removeChannel(channelId));
+    useAppStore.getState().undo();
+
+    // The channel is back, so nothing dangles — the roll simply falls back to
+    // the first channel until the user picks one again.
+    expect(useAppStore.getState().project.channels[channelId]).toBeDefined();
+    expect(useAppStore.getState().pianoRoll.channelId).toBeNull();
+  });
+
+  it("reconciles UNDO of an imported replaceProject (the whole entity set swaps back)", () => {
+    const foreign = foreignProject();
+    // Import: undoable, so it goes through dispatch — the roll then points at
+    // a channel of the IMPORTED project.
+    useAppStore.getState().dispatch(replaceProject(foreign));
+    useAppStore.setState({
+      selectedChannelId: "zch-1",
+      pianoRoll: { ...useAppStore.getState().pianoRoll, channelId: "zch-1" },
+    });
+
+    useAppStore.getState().undo();
+
+    const state = useAppStore.getState();
+    expect(state.project.channels["zch-1"]).toBeUndefined();
+    expect(state.pianoRoll.channelId).toBeNull();
+    expect(state.selectedChannelId).toBeNull();
+  });
+
+  it("reconciles REDO back into the imported project", () => {
+    const original = useAppStore.getState().project;
+    const channelId = original.channelOrder[0]!;
+    useAppStore.getState().dispatch(replaceProject(foreignProject()));
+    useAppStore.getState().undo();
+    useAppStore.setState({
+      selectedChannelId: channelId,
+      pianoRoll: { ...useAppStore.getState().pianoRoll, channelId },
+    });
+
+    useAppStore.getState().redo();
+
+    const state = useAppStore.getState();
+    expect(state.project.name).toBe("Foreign");
+    expect(state.pianoRoll.channelId).toBeNull();
+    expect(state.selectedChannelId).toBeNull();
+  });
+
+  it("does NOT cancel the drag a dispatch belongs to", () => {
+    const channelId = useAppStore.getState().project.channelOrder[0]!;
+    useAppStore.setState({
+      pianoRoll: {
+        ...useAppStore.getState().pianoRoll,
+        channelId,
+        dragKind: "move",
+        previewPitch: 64,
+      },
+    });
+
+    // A drag dispatches continuously; the gesture must survive its own edits.
+    useAppStore.getState().dispatch(updateProject({ tempo: 131 }));
+
+    expect(useAppStore.getState().pianoRoll.dragKind).toBe("move");
+    expect(useAppStore.getState().pianoRoll.previewPitch).toBe(64);
+  });
+
+  it("clears a note selection left behind by switching pattern", () => {
+    const { project } = useAppStore.getState();
+    const noteId = "n-sel";
+    useAppStore.getState().dispatch(
+      addNotes(project.activePatternId, [
+        {
+          id: noteId,
+          channelId: project.channelOrder[0]!,
+          positionTicks: 0,
+          lengthTicks: TICKS_PER_STEP,
+          pitch: 60,
+          velocity: 0.8,
+        },
+      ]),
+    );
+    useAppStore.setState({
+      pianoRoll: { ...useAppStore.getState().pianoRoll, selectedNoteIds: [noteId] },
+    });
+    useAppStore.getState().dispatch(
+      addPattern({ id: "pat-other", name: "Other", color: "hsl(0,0%,50%)", notes: {} }),
+    );
+
+    useAppStore.getState().setActivePatternId("pat-other");
+
+    expect(useAppStore.getState().pianoRoll.selectedNoteIds).toEqual([]);
   });
 });

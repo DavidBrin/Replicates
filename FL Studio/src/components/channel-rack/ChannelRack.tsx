@@ -10,6 +10,7 @@ import type { Command } from "@/domain/commands/types";
 import { nextId } from "@/domain/ids";
 import { colorAt, PALETTE } from "@/domain/palette";
 import { MASTER_MIXER_TRACK_ID, type Channel, type ChannelId, type Pattern, type VoiceKind } from "@/domain/types";
+import { createWheelGestureKeyring, type WheelGestureKeyring } from "@/lib/wheelGesture";
 import {
   selectActivePattern,
   selectChannels,
@@ -71,6 +72,11 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   const playheadStep = usePlayheadStep();
   const [addMenuOpen, setAddMenuOpen] = useState(false);
 
+  // The Alt+wheel step-velocity keyring — one per mounted rack, built lazily
+  // so a re-render does not allocate another. See `handleVelocityNudge`.
+  const velocityWheelRef = useRef<WheelGestureKeyring | null>(null);
+  const velocityWheel = (velocityWheelRef.current ??= createWheelGestureKeyring("rack-velocity"));
+
   // `coalesceKey` must be fresh per drag gesture, not a fixed string — a
   // fixed key would fold every swing drag for the whole session into one
   // undo entry (mirrors `Knob.tsx`'s per-gesture counter).
@@ -130,6 +136,17 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     dispatch(command);
   }
 
+  /**
+   * Alt+wheel over a step nudges its velocity — and, like the piano roll's
+   * identical gesture, it has no pointer-up to close the undo entry.
+   *
+   * The key used to be the fixed `velocity:<channel>:<step>`, which never
+   * closes: nudging one cell, editing elsewhere for a minute, then nudging
+   * the same cell again folded both sessions into a single Ctrl+Z. The
+   * shared keyring bounds them the way the roll does — same cell within
+   * WHEEL_GESTURE_GAP_MS is one entry, a pause or a different cell is a new
+   * one (`@/lib/wheelGesture`).
+   */
   function handleVelocityNudge(channelId: ChannelId, step: number, direction: 1 | -1): void {
     const existing = notesAtStep(activePattern, channelId, step);
     if (existing.length === 0) return;
@@ -141,7 +158,7 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
           patch: { velocity: Math.min(1, Math.max(0, note.velocity + direction * VELOCITY_STEP)) },
         })),
       ),
-      { coalesceKey: `velocity:${channelId}:${step}` },
+      { coalesceKey: velocityWheel.keyFor(`${activePattern.id}:${channelId}:${step}`) },
     );
   }
 

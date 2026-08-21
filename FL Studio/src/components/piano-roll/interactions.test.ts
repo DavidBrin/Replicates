@@ -71,6 +71,7 @@ interface Harness {
   setView: ReturnType<typeof vi.fn>;
   setLastLength: ReturnType<typeof vi.fn>;
   setDragKind: ReturnType<typeof vi.fn>;
+  setPreviewPitch: ReturnType<typeof vi.fn>;
   previewNote: ReturnType<typeof vi.fn>;
   scene: InteractionScene;
   /** The last command dispatched, with its coalesce key. */
@@ -103,6 +104,7 @@ function harness(overrides: Partial<InteractionScene> = {}): Harness {
   const setView = vi.fn();
   const setLastLength = vi.fn();
   const setDragKind = vi.fn();
+  const setPreviewPitch = vi.fn();
   const previewNote = vi.fn();
   let idCounter = 0;
 
@@ -113,6 +115,7 @@ function harness(overrides: Partial<InteractionScene> = {}): Harness {
     setView,
     setLastLength,
     setDragKind,
+    setPreviewPitch,
     previewNote,
     createNoteId: () => {
       idCounter += 1;
@@ -127,6 +130,7 @@ function harness(overrides: Partial<InteractionScene> = {}): Harness {
     setView,
     setLastLength,
     setDragKind,
+    setPreviewPitch,
     previewNote,
     scene,
     last: () => {
@@ -448,6 +452,42 @@ describe("move (drag the note body)", () => {
     expect((movedOther?.positionTicks ?? 0) - (movedNote?.positionTicks ?? 0)).toBe(originalGap);
   });
 
+  it("keeps a zero-length STEP inside the pattern, not on its end tick", () => {
+    // A rack step is `lengthTicks: 0` (SPEC §2's Note), and the last cell of
+    // the bar starts at 360. Clamping against the stored 0 let it slide to
+    // 384 — inside the arithmetic, outside the loop, and never scheduled.
+    const step = makeNote({ id: "n-step", positionTicks: PATTERN_LENGTH_TICKS - TICKS_PER_STEP, lengthTicks: 0 });
+    const h = harness({ notes: [step] });
+    const rect = noteRect(VIEW, step);
+    const start = { x: rect.x + 2, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 50000 });
+
+    const project = h.applied();
+    const moved = project.patterns[project.activePatternId]?.notes[step.id];
+    expect(moved?.lengthTicks).toBe(0);
+    expect(moved?.positionTicks).toBe(PATTERN_LENGTH_TICKS - TICKS_PER_STEP);
+    expect(moved?.positionTicks).toBeLessThan(PATTERN_LENGTH_TICKS);
+  });
+
+  it("still lets a step move RIGHT while a whole cell remains", () => {
+    const step = makeNote({
+      id: "n-step",
+      positionTicks: PATTERN_LENGTH_TICKS - TICKS_PER_STEP * 2,
+      lengthTicks: 0,
+    });
+    const h = harness({ notes: [step] });
+    const rect = noteRect(VIEW, step);
+    const start = { x: rect.x + 2, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 50000 });
+
+    const project = h.applied();
+    expect(
+      project.patterns[project.activePatternId]?.notes[step.id]?.positionTicks,
+    ).toBe(PATTERN_LENGTH_TICKS - TICKS_PER_STEP);
+  });
+
   it("emits nothing while the pointer stays inside the same snap cell", () => {
     const h = harness({ notes: [note] });
     const start = grabBody(h);
@@ -506,6 +546,56 @@ describe("resize (drag the right-edge grip)", () => {
     expect((resized?.positionTicks ?? 0) + (resized?.lengthTicks ?? 0)).toBe(
       PATTERN_LENGTH_TICKS,
     );
+  });
+
+  it("cannot overrun the bar even when the snap minimum is longer than what is left", () => {
+    // 1 tick of room at position 383, with a 24-tick snap minimum: nesting
+    // the minimum inside the clamp produced a 24-tick note ending at 407.
+    const tail = makeNote({ id: "n-tail", positionTicks: PATTERN_LENGTH_TICKS - 1, lengthTicks: 1 });
+    const h = harness({ notes: [tail], snap: "quarterBeat" });
+    const grip = gripRect(VIEW, tail);
+    const start = { x: grip.x + 1, y: grip.y + 4, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 500 });
+
+    const project = h.applied();
+    const resized = project.patterns[project.activePatternId]?.notes[tail.id];
+    expect(resized?.positionTicks).toBe(PATTERN_LENGTH_TICKS - 1);
+    expect(resized?.lengthTicks).toBe(1); // all the room there is
+    expect((resized?.positionTicks ?? 0) + (resized?.lengthTicks ?? 0)).toBeLessThanOrEqual(
+      PATTERN_LENGTH_TICKS,
+    );
+  });
+
+  it("keeps every note of a multi-note resize inside the bar, each by its own room", () => {
+    const early = makeNote({ id: "n-early", positionTicks: 0, lengthTicks: TICKS_PER_STEP });
+    const tail = makeNote({
+      id: "n-tail",
+      positionTicks: PATTERN_LENGTH_TICKS - 6,
+      lengthTicks: 2,
+      pitch: 70,
+    });
+    const h = harness({
+      notes: [early, tail],
+      selectedNoteIds: [early.id, tail.id],
+      snap: "quarterBeat",
+    });
+    const grip = gripRect(VIEW, early);
+    const start = { x: grip.x + 1, y: grip.y + 4, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 500 });
+
+    const project = h.applied();
+    const notes = project.patterns[project.activePatternId]?.notes;
+    for (const id of [early.id, tail.id]) {
+      const resized = notes?.[id];
+      expect((resized?.positionTicks ?? 0) + (resized?.lengthTicks ?? 0)).toBeLessThanOrEqual(
+        PATTERN_LENGTH_TICKS,
+      );
+      expect(resized?.lengthTicks).toBeGreaterThanOrEqual(1);
+    }
+    // The one with room still grew — a boundary note may not mute the drag.
+    expect(notes?.[early.id]?.lengthTicks).toBeGreaterThan(early.lengthTicks);
   });
 
   it("remembers the new length as the next drawn note's length", () => {
@@ -753,6 +843,20 @@ describe("zoom, pan and the preview keyboard", () => {
     expect(h.controller.cursorAt({ x: rect.x + 2, y: rect.y + 3, button: 0 })).toBe("move");
     expect(h.controller.cursorAt({ x: grip.x + 1, y: grip.y + 3, button: 0 })).toBe("ew-resize");
     expect(h.controller.cursorAt({ x: 600, y: 200, button: 0 })).toBe("cell");
+  });
+
+  it("cancel during a keyboard audition releases the held key", () => {
+    const h = harness();
+    const point = { x: 20, y: pitchToY(VIEW, 65) + 4, button: 0 };
+    h.controller.pointerDown(point);
+    expect(h.setPreviewPitch).toHaveBeenLastCalledWith(65);
+
+    // The browser steals the pointer (a scroll, a gesture) — there is no
+    // pointerup, so nothing else will ever clear the highlight.
+    h.controller.cancel();
+
+    expect(h.setPreviewPitch).toHaveBeenLastCalledWith(null);
+    expect(h.controller.peekGesture()).toBe("idle");
   });
 
   it("cancel drops the gesture without dispatching", () => {

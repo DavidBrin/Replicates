@@ -335,9 +335,22 @@ export function togglePlaybackMode(): void {
   setMode(project.playbackMode === "pattern" ? "song" : "pattern");
 }
 
+/**
+ * Order matters, and it is the engine FIRST.
+ *
+ * `setPlaybackMode` writes the project, and the store subscription in
+ * {@link startEngineSync} pushes that project into the engine *synchronously*
+ * — so writing the store first left `engine.setMode` looking at a project
+ * whose `playbackMode` was already the requested one. Its "nothing changed"
+ * guard then early-returned, and a mode flip made mid-playback never released
+ * the sounding voices or restarted the transport at zero: the old pattern's
+ * notes rang on over the new source. Calling the engine first lets it see the
+ * real transition; the store write that follows syncs an already-matching
+ * mode and re-arms nothing.
+ */
 export function setMode(mode: PlaybackMode): void {
-  useAppStore.getState().setPlaybackMode(mode);
   if (audioSupported()) engine.setMode(mode);
+  useAppStore.getState().setPlaybackMode(mode);
 }
 
 /** Navigation, not an edit (SPEC §5) — no undo entry. */
@@ -412,7 +425,11 @@ let playIntent = 0;
 
 export async function startPlayback(): Promise<void> {
   const intent = (playIntent += 1);
-  const before = transportUi;
+  // Only the flag this function set is remembered. Capturing the whole
+  // snapshot and restoring it wholesale also reverted anything else the user
+  // changed inside the boot window — toggling the metronome while Tone was
+  // still loading, then a failed boot, silently un-toggled it.
+  const isPlayingBefore = transportUi.isPlaying;
   setTransportUi({ ...transportUi, isPlaying: true });
   // No AudioContext (jsdom, SSR): the flag still mirrors the user's intent —
   // documented at the top of this file — and there is nothing to boot.
@@ -425,10 +442,10 @@ export async function startPlayback(): Promise<void> {
     engine.play();
   } catch (error) {
     if (intent !== playIntent) return;
-    // Roll the optimistic flag back, or the button reads "Stop" forever over
-    // an engine that never started. The rejection is consumed here rather
-    // than escaping as an unhandled promise rejection.
-    setTransportUi(before);
+    // Roll the optimistic flag back — against the CURRENT state, so a
+    // metronome toggle made during the boot survives. The rejection is
+    // consumed here rather than escaping as an unhandled promise rejection.
+    setTransportUi({ ...transportUi, isPlaying: isPlayingBefore });
     setNotice(
       `Audio could not start: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -669,10 +686,30 @@ export function subscribePatternRename(listener: () => void): () => void {
   };
 }
 
+/**
+ * WAV export (SPEC §3.5, D2). Every way this can fail ends in the notice
+ * channel rather than in an unhandled rejection.
+ *
+ * There are two, and neither is exotic: an environment with no
+ * `OfflineAudioContext` (the exporter's factory throws by name — see
+ * `audio/exportWav.ts`), and a render that rejects — `startRendering()`
+ * refusing a zero-length or over-long buffer, or the encoder running out of
+ * memory. Both used to escape as a rejected promise off a click handler, so
+ * the button did nothing, said nothing, and left a console trace nobody sees.
+ */
 export async function exportWav(): Promise<void> {
-  if (!audioSupported()) return;
-  const rendered = await engine.exportWav();
-  downloadBlob(rendered.blob, rendered.fileName);
+  if (!audioSupported()) {
+    setNotice("WAV export is not supported in this browser.");
+    return;
+  }
+  try {
+    const rendered = await engine.exportWav();
+    downloadBlob(rendered.blob, rendered.fileName);
+  } catch (error) {
+    setNotice(
+      `WAV export failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /* ------------------------------------------------------- runtime wiring -- */

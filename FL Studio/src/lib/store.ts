@@ -139,12 +139,27 @@ export interface DomainSlice {
 
   /**
    * Point every UI slice's project-referencing field back at something that
-   * exists (see {@link reconcileUiReferences}). Called automatically by
-   * {@link DomainSlice.loadProject}; the *undoable* import path in
-   * `shell/wiring.ts` calls it by hand, because that one replaces the project
-   * through `dispatch` and so never passes through `loadProject`.
+   * exists (see {@link reconcileUiReferences}), *and* cancel any gesture in
+   * flight — the wholesale-replacement form.
+   *
+   * Called automatically by {@link DomainSlice.loadProject}. Every other
+   * project write ({@link DomainSlice.dispatch}, undo/redo, the navigation
+   * setters) reconciles on its own, without the gesture reset.
    */
   reconcileUiToProject: () => void;
+}
+
+/** Options for {@link reconcileUiReferences}. */
+export interface ReconcileOptions {
+  /**
+   * Also clear the piano roll's in-flight drag and held preview key.
+   *
+   * Only true for a *wholesale* replacement (`loadProject`, an undoable
+   * import): a drag cannot survive the project it was dragging. It must stay
+   * false for the per-command pass, because a drag dispatches continuously
+   * and would otherwise cancel itself on its own first move.
+   */
+  resetGestures?: boolean;
 }
 
 /* ------------------------------------------- ui ↔ project reconciliation */
@@ -154,11 +169,18 @@ export interface DomainSlice {
  * when that entity is not in the project any more.
  *
  * This table lives here, in the composer, rather than in each surface's
- * `uiState.ts` for the reason the file header gives: replacing the project
- * wholesale is a *store-level* event, and no surface can be relied on to
- * notice one. Before this existed, importing a JSON file left the playlist
- * armed with a pattern id from the old project and the piano roll pointed at
- * a channel that no longer existed — the next click on either threw.
+ * `uiState.ts` for the reason the file header gives: an entity disappearing
+ * is a *store-level* event, and no surface can be relied on to notice one.
+ * Before this existed, importing a JSON file left the playlist armed with a
+ * pattern id from the old project and the piano roll pointed at a channel
+ * that no longer existed — the next click on either threw.
+ *
+ * **Import is not the only way an entity disappears.** Deleting the channel
+ * the roll is editing, or undoing/redoing the import that replaced the whole
+ * entity set, dangles exactly the same fields — so this runs after *every*
+ * project write (`dispatch`, `undo`, `redo`, the navigation setters), not
+ * just at import. It is an id-validation pass over a handful of fields: a few
+ * `Object.hasOwn` lookups plus one filter over the roll's selection.
  *
  * Each entry is guarded by a `typeof`/`in` check on the live state, so a slice
  * is free to rename or drop a field without breaking this: an absent field is
@@ -168,6 +190,7 @@ export interface DomainSlice {
 export function reconcileUiReferences(
   state: AppState,
   project: Project,
+  { resetGestures = false }: ReconcileOptions = {},
 ): Partial<AppState> | null {
   const patch: Record<string, unknown> = {};
 
@@ -217,9 +240,13 @@ export function reconcileUiReferences(
     if (survivingNotes.length !== roll.selectedNoteIds.length) {
       rollPatch.selectedNoteIds = survivingNotes;
     }
-    // A drag cannot survive the project it was dragging.
-    if (roll.dragKind !== null) rollPatch.dragKind = null;
-    if (roll.previewPitch !== null) rollPatch.previewPitch = null;
+    // A drag cannot survive the project it was dragging — but only a
+    // wholesale replacement counts as "the project it was dragging" going
+    // away; a drag's own commands must not cancel the drag.
+    if (resetGestures) {
+      if (roll.dragKind !== null) rollPatch.dragKind = null;
+      if (roll.previewPitch !== null) rollPatch.previewPitch = null;
+    }
     if (Object.keys(rollPatch).length > 0) {
       patch.pianoRoll = { ...roll, ...rollPatch };
     }
@@ -228,65 +255,86 @@ export function reconcileUiReferences(
   return Object.keys(patch).length === 0 ? null : (patch as Partial<AppState>);
 }
 
-export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (set, get) => ({
-  project: createDefaultProject({ now: nowIso() }),
-  history: createHistory(),
-
-  dispatch: (command, options) => {
-    const { project, history } = get();
-    set(dispatchCommand(project, history, command, options));
-  },
-
-  undo: () => {
-    const { project, history } = get();
-    set(historyUndo(project, history));
-  },
-
-  redo: () => {
-    const { project, history } = get();
-    set(historyRedo(project, history));
-  },
-
-  endGesture: () => {
-    const { history } = get();
-    const next = historyEndGesture(history);
-    if (next !== history) set({ history: next });
-  },
-
-  setActivePatternId: (patternId) => {
-    const { project } = get();
-    if (project.patterns[patternId] === undefined) return;
-    if (project.activePatternId === patternId) return;
-    set({ project: { ...project, activePatternId: patternId } });
-  },
-
-  setPlaybackMode: (mode) => {
-    const { project } = get();
-    if (project.playbackMode === mode) return;
-    set({ project: { ...project, playbackMode: mode } });
-  },
-
-  loadProject: (project) => {
-    reseedIds(project);
-    set({ project, history: createHistory() });
-    get().reconcileUiToProject();
-  },
-
-  newProject: () => {
-    get().loadProject(createDefaultProject({ now: nowIso() }));
-  },
-
-  hydrateFromStorage: () => {
-    const stored = loadPersistedProject();
-    if (stored !== null) get().loadProject(stored);
-  },
-
-  reconcileUiToProject: () => {
+export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (set, get) => {
+  /**
+   * The ONE way a project write reaches the store.
+   *
+   * Every write is followed by {@link reconcileUiReferences}, because every
+   * write can delete the entity some ephemeral field names — `removeChannel`
+   * while the roll is open on it, an undo of an imported `replaceProject`
+   * that swaps the whole entity set. Doing it here rather than at each call
+   * site is what makes that true by construction: a new command, or a new
+   * caller, cannot forget.
+   */
+  const commit = (next: { project: Project; history?: History }): void => {
+    set(next);
     const state = get();
     const patch = reconcileUiReferences(state, state.project);
     if (patch !== null) set(patch);
-  },
-});
+  };
+
+  return {
+    project: createDefaultProject({ now: nowIso() }),
+    history: createHistory(),
+
+    dispatch: (command, options) => {
+      const { project, history } = get();
+      commit(dispatchCommand(project, history, command, options));
+    },
+
+    undo: () => {
+      const { project, history } = get();
+      commit(historyUndo(project, history));
+    },
+
+    redo: () => {
+      const { project, history } = get();
+      commit(historyRedo(project, history));
+    },
+
+    endGesture: () => {
+      const { history } = get();
+      const next = historyEndGesture(history);
+      if (next !== history) set({ history: next });
+    },
+
+    setActivePatternId: (patternId) => {
+      const { project } = get();
+      if (project.patterns[patternId] === undefined) return;
+      if (project.activePatternId === patternId) return;
+      // Reconciled like any other project write: the roll's selection names
+      // notes of the pattern being navigated away from.
+      commit({ project: { ...project, activePatternId: patternId } });
+    },
+
+    setPlaybackMode: (mode) => {
+      const { project } = get();
+      if (project.playbackMode === mode) return;
+      commit({ project: { ...project, playbackMode: mode } });
+    },
+
+    loadProject: (project) => {
+      reseedIds(project);
+      set({ project, history: createHistory() });
+      get().reconcileUiToProject();
+    },
+
+    newProject: () => {
+      get().loadProject(createDefaultProject({ now: nowIso() }));
+    },
+
+    hydrateFromStorage: () => {
+      const stored = loadPersistedProject();
+      if (stored !== null) get().loadProject(stored);
+    },
+
+    reconcileUiToProject: () => {
+      const state = get();
+      const patch = reconcileUiReferences(state, state.project, { resetGestures: true });
+      if (patch !== null) set(patch);
+    },
+  };
+};
 
 /* ------------------------------------------------------------ ui slices */
 

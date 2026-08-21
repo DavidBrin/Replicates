@@ -136,16 +136,45 @@ export function useMeter(trackId: MixerTrackId): MeterLevels {
       frame = requestAnimationFrame(tick);
     }
 
-    /** Cheap watch for sound the transport never announced (a key preview). */
-    function watch(): void {
-      if (disposed) return;
-      if (readPeak() > SILENCE_EPSILON) goActive();
+    /** Fold one sampled peak into the ballistic level and show it. */
+    function render(peak: number): void {
+      left = Math.max(peak, left);
+      right = Math.max(peak, right);
+      publish(left, right);
     }
 
-    function goActive(): void {
-      if (disposed || frame !== 0) return;
+    /**
+     * Cheap watch for sound the transport never announced (a key preview).
+     *
+     * The sample it takes is RENDERED, not thrown away. A preview is ~40 ms
+     * (`PREVIEW_DURATION_SEC` at its tail) against a 250 ms poll, so the one
+     * read that catches it is usually the only read that ever will: promoting
+     * to a frame loop and letting the first frame re-read the tap put the
+     * needle up 16 ms after the sound had already decayed to nothing, and the
+     * meter never moved. Any non-zero sample is worth showing and worth
+     * waking the loop for — the loop parks itself again after
+     * {@link IDLE_SILENCE_MS} of silence.
+     */
+    function watch(): void {
+      if (disposed) return;
+      const peak = readPeak();
+      if (peak > 0) goActive(peak);
+    }
+
+    /**
+     * Enter the frame loop, showing `seed` (or a fresh sample) immediately
+     * rather than waiting a frame for the first reading.
+     */
+    function goActive(seed?: number): void {
+      if (disposed) return;
+      if (frame !== 0) {
+        // Already looping: still show the sample rather than drop it.
+        if (seed !== undefined) render(seed);
+        return;
+      }
       stopTimers();
       lastSound = Date.now();
+      render(seed ?? readPeak());
       frame = requestAnimationFrame(tick);
     }
 

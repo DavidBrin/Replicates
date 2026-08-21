@@ -23,6 +23,20 @@ function tapReading(peak: () => number): AnalyserNode {
   } as unknown as AnalyserNode;
 }
 
+/**
+ * A tap that reads hot exactly ONCE — a preview shorter than the gap between
+ * two reads. Anything that samples, throws the sample away and reads again
+ * sees silence, which is precisely the defect these tests guard.
+ */
+function tapReadingOnce(peak: number): { tap: AnalyserNode; reads: () => number } {
+  let reads = 0;
+  const tap = tapReading(() => {
+    reads += 1;
+    return reads === 1 ? peak : 0;
+  });
+  return { tap, reads: () => reads };
+}
+
 let frames: FrameRequestCallback[] = [];
 let listeners: ((snapshot: EngineSnapshot) => void)[] = [];
 
@@ -160,6 +174,56 @@ describe("useMeter — idle suspension", () => {
     });
     // …and the meter promotes itself to a real frame loop.
     expect(frames).toHaveLength(1);
+  });
+
+  it("SHOWS a short preview it caught, instead of discarding the sample", () => {
+    mockEngine(true, false);
+    // A ~40 ms key preview against a 250 ms watcher: ONE read sees it, and
+    // that read is the only one that ever will. Promoting to rAF and
+    // re-reading the tap (what this did) showed nothing at all.
+    const { tap } = tapReadingOnce(0.4);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tap);
+
+    const { getByTestId } = render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    expect(getByTestId("probe").textContent).toBe("0,0");
+
+    act(() => {
+      vi.advanceTimersByTime(IDLE_POLL_MS);
+    });
+
+    const [left, right] = getByTestId("probe").textContent!.split(",").map(Number);
+    expect(left).toBeCloseTo(0.4, 5);
+    expect(right).toBeCloseTo(0.4, 5);
+    expect(frames).toHaveLength(1); // …and it is now on the frame loop
+  });
+
+  it("decays that one-shot preview from where it was seen, not from zero", () => {
+    mockEngine(true, false);
+    const { tap } = tapReadingOnce(0.4);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tap);
+
+    const { getByTestId } = render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    act(() => {
+      vi.advanceTimersByTime(IDLE_POLL_MS);
+    });
+    flushFrame();
+
+    const decayed = Number(getByTestId("probe").textContent!.split(",")[0]);
+    expect(decayed).toBeLessThan(0.4);
+    expect(decayed).toBeGreaterThan(0); // a glide down from what was seen
+  });
+
+  it("stays parked when the watcher reads true silence", () => {
+    mockEngine(true, false);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tapReading(() => 0));
+
+    const { getByTestId } = render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    act(() => {
+      vi.advanceTimersByTime(IDLE_POLL_MS * 4);
+    });
+
+    expect(frames).toHaveLength(0);
+    expect(getByTestId("probe").textContent).toBe("0,0");
   });
 
   it("parks the frame loop after sustained silence with the transport stopped", () => {

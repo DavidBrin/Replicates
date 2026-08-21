@@ -36,6 +36,7 @@ import { useAppStore } from "@/lib/store";
 
 import {
   __resetWiringForTests,
+  exportWav,
   importJson,
   loadSavedProject,
   nextEmptyPattern,
@@ -47,6 +48,7 @@ import {
   setTempo,
   startPlayback,
   stopPlayback,
+  toggleMetronome,
 } from "./wiring";
 
 function fileOf(text: string): File {
@@ -147,6 +149,26 @@ describe("play intent survives the Tone boot window", () => {
 
     // Stop's own UI write stands, and no notice shouts over a deliberate stop.
     expect(getNotice()).toBeNull();
+  });
+
+  it("keeps a metronome toggle made DURING the boot when the boot then fails", async () => {
+    let rejectBoot: (error: Error) => void = () => {};
+    vi.mocked(engine.ensureStarted).mockImplementation(
+      () => new Promise<void>((_, reject) => { rejectBoot = reject; }),
+    );
+
+    const starting = startPlayback();
+    // The user reaches for the metronome while Tone is still loading.
+    toggleMetronome();
+    expect(peekTransportUi().metronomeEnabled).toBe(true);
+
+    rejectBoot(new Error("no AudioContext"));
+    await starting;
+
+    // Only the optimistic PLAY flag is rolled back. Restoring the whole
+    // captured snapshot (what this did) silently un-toggled the metronome.
+    expect(peekTransportUi().isPlaying).toBe(false);
+    expect(peekTransportUi().metronomeEnabled).toBe(true);
   });
 
   it("panic stops the transport (SPEC §4.4 Ctrl+H)", async () => {
@@ -256,6 +278,38 @@ describe("JSON import", () => {
   it("reports a file that is not a project instead of failing silently", async () => {
     await importJson(fileOf("{\"nope\":true}"));
     expect(getNotice()).toMatch(/not an FL Studio project/i);
+  });
+});
+
+/* --------------------------------------------------------- WAV export ---- */
+
+describe("WAV export failures reach the user", () => {
+  it("reports a render that rejects instead of leaving an unhandled rejection", async () => {
+    vi.mocked(engine.exportWav).mockRejectedValue(new Error("render failed"));
+
+    await expect(exportWav()).resolves.toBeUndefined();
+
+    expect(getNotice()).toMatch(/wav export failed/i);
+    expect(getNotice()).toContain("render failed");
+  });
+
+  it("reports an environment with no OfflineAudioContext", async () => {
+    vi.mocked(engine.exportWav).mockRejectedValue(
+      new Error("OfflineAudioContext is unavailable in this environment"),
+    );
+
+    await exportWav();
+
+    expect(getNotice()).toMatch(/OfflineAudioContext/);
+  });
+
+  it("says so when there is no audio support at all, rather than nothing", async () => {
+    delete (window as { AudioContext?: unknown }).AudioContext;
+
+    await exportWav();
+
+    expect(engine.exportWav).not.toHaveBeenCalled();
+    expect(getNotice()).toMatch(/not supported/i);
   });
 });
 

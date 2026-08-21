@@ -37,6 +37,7 @@ import { clampTempo, clamp } from "./tickMath";
 import {
   CURRENT_SCHEMA_VERSION,
   MASTER_MIXER_TRACK_ID,
+  PATTERN_LENGTH_TICKS,
   VOICE_KINDS,
   type Channel,
   type MixerTrack,
@@ -134,14 +135,33 @@ function readChannel(id: string, raw: unknown, index: number): Channel {
   return channel;
 }
 
+/**
+ * Position and length are clamped **jointly**, against the one-bar pattern.
+ *
+ * Clamping each at `>= 0` alone (what this did) let an imported note sit at
+ * `positionTicks: 5000`, or start at 360 and run 900 ticks long. Nothing
+ * downstream rejects that — the editor's own clamps only apply to edits the
+ * user makes — so the note survived validation, rendered outside the grid,
+ * and never sounded: the scheduler skips every event at or past the loop
+ * length (`audio/scheduler.ts`). A note that cannot be seen or heard, in a
+ * file that claims to have loaded cleanly, is the worst of the three
+ * outcomes; a note at or past the bar is therefore *dropped* (the same
+ * "referential damage is repaired" rule the file header states), and one that
+ * merely overruns is shortened to end exactly at the bar.
+ *
+ * Steps (`lengthTicks: 0`) keep their zero — it is a marker, not a length.
+ */
 function readNote(id: string, raw: unknown): Note | null {
   if (!isObject(raw)) return null;
   if (typeof raw.channelId !== "string") return null;
+  const positionTicks = Math.max(0, int(raw.positionTicks, 0));
+  if (positionTicks >= PATTERN_LENGTH_TICKS) return null;
+  const lengthTicks = Math.max(0, int(raw.lengthTicks, 0));
   return {
     id,
     channelId: raw.channelId,
-    positionTicks: Math.max(0, int(raw.positionTicks, 0)),
-    lengthTicks: Math.max(0, int(raw.lengthTicks, 0)),
+    positionTicks,
+    lengthTicks: Math.min(lengthTicks, PATTERN_LENGTH_TICKS - positionTicks),
     pitch: clamp(int(raw.pitch, 60), 0, 127),
     velocity: clamp(num(raw.velocity, 100 / 127), 0, 1),
   };
