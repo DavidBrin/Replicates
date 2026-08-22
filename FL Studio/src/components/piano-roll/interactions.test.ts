@@ -1725,3 +1725,97 @@ describe("a zoom mid-drag rebases the origin instead of jumping the note", () =>
     expect(h.setView).toHaveBeenLastCalledWith(expect.objectContaining({ scrollX: 110 }));
   });
 });
+
+/*
+ * Round 18 #1. The rebase reconstructed the anchor from `lastDeltaTicks` — the
+ * SNAPPED, CLAMPED result — so the rounding snap had just applied was written
+ * back into the origin as if the pointer had travelled it. Every zoom notch
+ * ratcheted the drag forward by up to half a snap cell and made the boundary
+ * it had crossed unreachable from the other side: the note could go on, but it
+ * could never come back.
+ *
+ * The numbers are codex's: a 13-tick nudge under a 24-tick grid, which snaps
+ * FORWARD to 24. Rebased from 24, moving five ticks back computes 19 and snaps
+ * to 24 again; rebased from the pointer's true 13, it computes 8 and snaps
+ * home to 0.
+ */
+describe("a zoom mid-drag rebases from RAW pointer travel, not the snapped delta", () => {
+  const QUARTER_BEAT = TICKS_PER_BEAT / 4; // 24 ticks — the grid codex used
+  const NUDGE = 13; // over half a cell, so it snaps forward
+  const BACK = 5; // and back under it, so it must snap home
+
+  function zoom(h: Harness, patch: Partial<RollViewport>) {
+    h.scene.view = createViewport({ ...h.scene.view, ...patch });
+  }
+
+  it("lets a snapped-forward MOVE snap back to where it started", () => {
+    const note = makeNote({ positionTicks: TICKS_PER_BEAT, lengthTicks: TICKS_PER_BEAT });
+    const h = harness({ notes: [note], selectedNoteIds: [note.id], snap: "quarterBeat" });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    // 13 raw ticks of travel, stored as a snapped +24.
+    const anchorX = start.x + pxPerTick(VIEW) * NUDGE;
+    h.controller.pointerMove({ ...start, x: anchorX });
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(
+      TICKS_PER_BEAT + QUARTER_BEAT,
+    );
+
+    // Zoom with the button still down, then walk five ticks back — the pointer
+    // is now 8 raw ticks from the press, which snaps to the note's own start.
+    zoom(h, { zoomX: VIEW.zoomX / 2 });
+    const zoomed = h.scene.view;
+    h.controller.pointerMove({ ...start, x: anchorX - pxPerTick(zoomed) * BACK });
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(TICKS_PER_BEAT);
+  });
+
+  it("lets a snapped-forward RESIZE snap back to the length it started at", () => {
+    const note = makeNote({ positionTicks: 0, lengthTicks: TICKS_PER_BEAT });
+    const h = harness({ notes: [note], selectedNoteIds: [note.id], snap: "quarterBeat" });
+    const grip = gripRect(VIEW, note);
+    const start = { x: grip.x + 2, y: grip.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    const anchorX = start.x + pxPerTick(VIEW) * NUDGE;
+    h.controller.pointerMove({ ...start, x: anchorX });
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.lengthTicks).toBe(
+      TICKS_PER_BEAT + QUARTER_BEAT,
+    );
+
+    zoom(h, { zoomX: VIEW.zoomX / 2 });
+    const zoomed = h.scene.view;
+    h.controller.pointerMove({ ...start, x: anchorX - pxPerTick(zoomed) * BACK });
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.lengthTicks).toBe(TICKS_PER_BEAT);
+  });
+
+  it("rebases from travel the CLAMP swallowed, not from the clamped delta", () => {
+    // Dragged hard into the pattern's right wall: `lastDeltaTicks` stops at the
+    // wall while the pointer keeps going, so an origin rebuilt from it lands
+    // wherever the pointer happens to be and the note walks back off the wall
+    // one zoom notch at a time.
+    const note = makeNote({ positionTicks: 0, lengthTicks: TICKS_PER_BEAT });
+    const h = harness({ notes: [note], selectedNoteIds: [note.id], snap: "quarterBeat" });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    // Two whole patterns' worth of travel — the clamp pins the note at the
+    // last legal tick, PATTERN_LENGTH_TICKS - lengthTicks.
+    const overshoot = PATTERN_LENGTH_TICKS * 2;
+    const anchorX = start.x + pxPerTick(VIEW) * overshoot;
+    h.controller.pointerMove({ ...start, x: anchorX });
+    const wall = PATTERN_LENGTH_TICKS - TICKS_PER_BEAT;
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(wall);
+
+    // Zoom, then move one beat back. The pointer is still far past the wall,
+    // so the note may not move at all.
+    zoom(h, { zoomX: VIEW.zoomX / 2 });
+    const zoomed = h.scene.view;
+    h.controller.pointerMove({ ...start, x: anchorX - pxPerTick(zoomed) * TICKS_PER_BEAT });
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(wall);
+  });
+});

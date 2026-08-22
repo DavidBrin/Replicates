@@ -106,6 +106,19 @@ const menuOverlayProps = {
 interface DragState {
   startClientX: number;
   startClientY: number;
+  /**
+   * The press position in RAW screen pixels, never rebased — the anchor the
+   * click-vs-drag slop test measures against.
+   *
+   * {@link DragState.startClientX} cannot serve: {@link rebaseForZoom} moves
+   * it to preserve a displacement in BARS, so the pixel gap it reports is
+   * multiplied by the zoom ratio. A 2px jitter held under the 3px slop at
+   * 80px/bar reads as 8px the moment the user zooms to 320 — the drag latches
+   * on motion the user never made and the release commits a move instead of
+   * the click-select it was. Slop is a question about the hand, not about the
+   * timeline, so it is asked in the units the hand moved in.
+   */
+  slopClientX: number;
   dragging: boolean;
   /** The clip actually being dragged — the source clip, or a shift-clone. */
   activeClipId: string;
@@ -222,6 +235,7 @@ export function ClipView({
     dragState.current = {
       startClientX: event.clientX,
       startClientY: event.clientY,
+      slopClientX: event.clientX,
       dragging: false,
       activeClipId,
       coalesceKey,
@@ -243,7 +257,11 @@ export function ClipView({
     // the zoom happened.
     rebaseForZoom(drag, pxPerBar);
     drag.lastClientX = event.clientX;
-    const dx = event.clientX - drag.startClientX;
+    // `slopClientX`, not the rebased `startClientX`: the threshold is screen
+    // travel, and a rebase rewrites the X anchor in bar-preserving units. The Y
+    // anchor is never rebased — lane height is a constant, not a zoom — so it
+    // is already raw.
+    const dx = event.clientX - drag.slopClientX;
     const dy = event.clientY - drag.startClientY;
     if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
       drag.dragging = true;

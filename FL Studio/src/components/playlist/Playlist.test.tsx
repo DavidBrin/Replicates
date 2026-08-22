@@ -1466,4 +1466,50 @@ describe("a playlist zoom mid-drag does not move the clip (round 17 #5)", () => 
 
     expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR);
   });
+
+  /*
+   * Round 18 #2. The rebase preserves a displacement in BARS, so it multiplies
+   * the pixel gap from the anchor by the zoom ratio — and the 3px click-vs-drag
+   * slop test was reading that same rebased anchor. Zooming from 80px/bar to
+   * 320 turned a 2px hand tremor into an 8px "drag", latching `dragging` on
+   * motion nobody made and swallowing the click-select the press was.
+   */
+  it("does not turn a sub-slop tremor into a drag when the zoom scales it up", () => {
+    placeClip("clip-existing", { trackId: "trk-1", startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    // 2px of tremor at 80px/bar — inside the 3px slop, so still a click.
+    fireEvent.pointerDown(clip, { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 2, clientY: 0, pointerId: 1 });
+
+    // Zoom all the way in (80 → 320) and deliver one more move from the SAME
+    // pixel: the hand has not moved, so the slop verdict may not change.
+    zoomBy(4);
+    expect(useAppStore.getState().playlistZoomPxPerBar).toBe(320);
+    fireEvent.pointerMove(clip, { clientX: 2, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 2, clientY: 0, pointerId: 1 });
+
+    // The release is a click: it selects. Latch the drag and this branch never
+    // runs, and the user's click on the clip does nothing at all.
+    expect(useAppStore.getState().playlistSelectedClipId).toBe("clip-existing");
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(0);
+  });
+
+  it("still arms the drag on real travel after a zoom", () => {
+    placeClip("clip-existing", { trackId: "trk-1", startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    fireEvent.pointerDown(clip, { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: 2, clientY: 0, pointerId: 1 });
+    zoomBy(4);
+    // A real bar of travel at the new scale, which is well past the slop —
+    // pinning the slop anchor must not pin the drag shut.
+    const oneBar = useAppStore.getState().playlistZoomPxPerBar;
+    fireEvent.pointerMove(clip, { clientX: 2 + oneBar, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 2 + oneBar, clientY: 0, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR);
+  });
 });

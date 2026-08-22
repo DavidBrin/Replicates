@@ -305,6 +305,20 @@ type Gesture =
       originX: number;
       originY: number;
       lastDeltaTicks: number;
+      /**
+       * The pointer's UNSNAPPED, UNCLAMPED travel from the origin, in ticks —
+       * what {@link rebaseForScaleChange} re-anchors on.
+       *
+       * `lastDeltaTicks` is the wrong quantity for that: it is the result
+       * *after* snap and the pattern bounds, so rebasing from it writes the
+       * rounding back into the origin and the drag can no longer fall back
+       * across the boundary it just crossed. Thirteen raw ticks stored as a
+       * snapped 24, rebased, then moved five ticks back computes 19 and snaps
+       * to 24 again — the note sticks to the cell it reached, at every zoom
+       * notch, forever. Raw travel is the only anchor a snap boundary stays
+       * true against.
+       */
+      rawDeltaTicks: number;
       lastDeltaPitch: number;
       /**
        * This drag is dragging CLONES that Shift+click just made — so Shift is
@@ -326,6 +340,8 @@ type Gesture =
       primaryId: NoteId;
       originX: number;
       lastDeltaTicks: number;
+      /** Raw pointer travel from the origin in ticks — see the move variant. */
+      rawDeltaTicks: number;
       finalLengthTicks: number;
       /**
        * The length this drag has each note at, seeded with the length it found
@@ -685,6 +701,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
           primaryId: hit.note.id,
           originX: input.x,
           lastDeltaTicks: 0,
+          rawDeltaTicks: 0,
           // A step's stored `0` is a marker, not a length: the grip the user
           // grabbed is drawn one cell to the right of the note's origin, so
           // the resize has to start from the *effective* length or the very
@@ -726,6 +743,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
           originX: input.x,
           originY: input.y,
           lastDeltaTicks: 0,
+          rawDeltaTicks: 0,
           lastDeltaPitch: 0,
           cloned: true,
         },
@@ -744,6 +762,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         originX: input.x,
         originY: input.y,
         lastDeltaTicks: 0,
+        rawDeltaTicks: 0,
         lastDeltaPitch: 0,
         cloned: false,
       },
@@ -800,6 +819,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         originX: input.x,
         originY: input.y,
         lastDeltaTicks: 0,
+        rawDeltaTicks: 0,
         lastDeltaPitch: 0,
         cloned: false,
       },
@@ -896,9 +916,13 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     }
 
     if (gesture.kind === "move" || gesture.kind === "resize") {
-      // `lastDeltaTicks` is what the drag has actually written; put the origin
-      // where the current pointer position converts back into exactly it.
-      gesture.originX = anchor.x - gesture.lastDeltaTicks * pxPerTick(view);
+      // `rawDeltaTicks` is the pointer's TRUE travel, not the snapped and
+      // clamped delta the drag wrote from it; put the origin where the anchor
+      // converts back into exactly that travel, so the drag stays the same
+      // distance from every snap boundary it has not crossed yet. Rebasing
+      // from `lastDeltaTicks` bakes the rounding into the origin instead, and
+      // the note can never come back across a boundary it just passed.
+      gesture.originX = anchor.x - gesture.rawDeltaTicks * pxPerTick(view);
     }
 
     if (gesture.kind === "move") {
@@ -983,7 +1007,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // fired — the note silently became a whole bar long. Zero pointer
       // displacement is zero delta at every snap setting.
       const pointerDx = input.x - active.originX;
-      const rawEnd = primary.positionTicks + primaryLength + pxToTicks(view, pointerDx);
+      // Recorded before any snap, clamp or early return below: a zoom that
+      // lands after a move the drag chose not to act on still has to rebase
+      // against where the pointer really is.
+      active.rawDeltaTicks = pxToTicks(view, pointerDx);
+      const rawEnd = primary.positionTicks + primaryLength + active.rawDeltaTicks;
       const snappedEnd = snapTick(rawEnd, scene.snap, bypass);
       const deltaTicks =
         pointerDx === 0
@@ -1061,7 +1089,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     const lockTime = input.ctrlKey === true;
     const lockPitch = input.shiftKey === true && !active.cloned;
 
-    const rawTicks = primary.positionTicks + pxToTicks(view, input.x - active.originX);
+    // Raw pointer travel, kept whatever the branches below decide — Ctrl's
+    // time lock included, since releasing Ctrl must resume from where the
+    // pointer actually is and not from where the lock froze the note.
+    active.rawDeltaTicks = pxToTicks(view, input.x - active.originX);
+    const rawTicks = primary.positionTicks + active.rawDeltaTicks;
     const snappedPosition = snapTick(rawTicks, scene.snap, bypass);
     let deltaTicks = lockTime ? 0 : Math.round(snappedPosition - primary.positionTicks);
     let deltaPitch = lockPitch
