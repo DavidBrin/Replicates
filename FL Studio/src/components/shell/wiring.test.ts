@@ -47,6 +47,7 @@ import {
   saveProject,
   setNotice,
   setTempo,
+  startEngineSync,
   startPlayback,
   stopPlayback,
   toggleMetronome,
@@ -420,5 +421,83 @@ describe("transport tempo gestures", () => {
     setTempo(150);
     setTempo(151);
     expect(useAppStore.getState().history.past).toHaveLength(2);
+  });
+});
+
+/* ---------------------------------------------------- the wholesale seam -- */
+
+/*
+ * Round 14 #1. `src/audio` may not import the store, and a REPLACEMENT is not
+ * distinguishable from an EDIT by looking at the two projects: the ids come
+ * from one shared counter and a re-import keeps the exported project's own id.
+ * So the store's wholesale counter is what crosses this seam, and it has to
+ * arrive in the SAME notification as the project it describes — the subscriber
+ * that wakes on a changed `project` reads the epoch right there, and a counter
+ * bumped in a later `set` is invisible to it.
+ */
+describe("startEngineSync carries the wholesale signal", () => {
+  function lastSync(): { project: Project; wholesale: boolean } {
+    const calls = vi.mocked(engine.syncProject).mock.calls;
+    const [project, options] = calls[calls.length - 1] as [Project, { wholesale?: boolean }?];
+    return { project, wholesale: options?.wholesale === true };
+  }
+
+  it("reports an ordinary edit as NOT wholesale", () => {
+    const stop = startEngineSync();
+    const { project, dispatch } = useAppStore.getState();
+
+    dispatch(addNotes(project.activePatternId, [noteOn(project.channelOrder[0]!)]));
+
+    expect(lastSync().wholesale).toBe(false);
+    stop();
+  });
+
+  it("reports an undo as NOT wholesale — a Ctrl+Z must not restart playback", () => {
+    const stop = startEngineSync();
+    const { project, dispatch } = useAppStore.getState();
+    dispatch(addNotes(project.activePatternId, [noteOn(project.channelOrder[0]!)]));
+
+    useAppStore.getState().undo();
+
+    expect(lastSync().wholesale).toBe(false);
+    stop();
+  });
+
+  it("reports a loaded project as wholesale", () => {
+    const stop = startEngineSync();
+
+    useAppStore.getState().newProject();
+
+    expect(lastSync().wholesale).toBe(true);
+    stop();
+  });
+
+  it("reports an IMPORT as wholesale, and its undo too", async () => {
+    const stop = startEngineSync();
+
+    await importJson(
+      fileOf(
+        serializeProject({ ...useAppStore.getState().project, id: "prj-900", name: "Imported" }),
+      ),
+    );
+    expect(lastSync()).toMatchObject({ wholesale: true });
+
+    // The undo of an import swaps the entity set back — the same invalidation
+    // in the other direction (`domain/undo.ts` reports `Command.wholesale`).
+    useAppStore.getState().undo();
+    expect(lastSync().wholesale).toBe(true);
+
+    stop();
+  });
+
+  it("does not sync at all when the project object did not change", () => {
+    const stop = startEngineSync();
+    const before = vi.mocked(engine.syncProject).mock.calls.length;
+
+    useAppStore.getState().beginGesture("g-1");
+    useAppStore.getState().endGesture("g-1");
+
+    expect(vi.mocked(engine.syncProject).mock.calls.length).toBe(before);
+    stop();
   });
 });

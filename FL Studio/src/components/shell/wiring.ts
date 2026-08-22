@@ -50,7 +50,7 @@ import {
   type PlaybackMode as DomainPlaybackMode,
   type Project,
 } from "@/domain/types";
-import { oneShotGestureKey } from "@/lib/gestureHold";
+import { commitGestureKey, oneShotGestureKey } from "@/lib/gestureHold";
 import {
   exportProjectJson,
   loadPersistedProject,
@@ -701,12 +701,21 @@ export function renameActivePattern(name: string): void {
   const pattern = project.patterns[project.activePatternId];
   const trimmed = name.trim();
   if (pattern === undefined || trimmed === "" || trimmed === pattern.name) return;
-  // Keyboard-reachable (`F2`), so it takes the shared one-shot key rather than
-  // dispatching bare — `addPattern` above and `channel-rack/bindings.ts` have
-  // the same rule, and it is the registry half that matters: the rename must
-  // seal whatever drag is open, not land inside its undo entry.
+  /*
+   * A BLUR COMMIT, so it takes the non-pre-empting key rather than the
+   * ordinary one-shot (`@/lib/gestureHold`'s `commitGestureKey`). The rename
+   * field commits when focus leaves it, and `blur` arrives after the
+   * `pointerdown` that took the focus — pre-empting there ended the gesture
+   * that press had just opened, so clicking a knob (or starting a clip drag)
+   * to leave the rename box left a control that would not move.
+   *
+   * It still takes an id rather than dispatching bare: the rename needs an
+   * undo entry of its own instead of folding into whatever the fresh gesture
+   * is about to build. The unchanged case returns above and dispatches
+   * nothing at all.
+   */
   dispatch(updatePattern(pattern.id, { name: trimmed }), {
-    gestureId: oneShotGestureKey("pattern-rename"),
+    gestureId: commitGestureKey("pattern-rename"),
   });
 }
 
@@ -768,12 +777,29 @@ export async function exportWav(): Promise<void> {
  * Push the project into the engine and keep pushing it (SPEC §3.2/§5's store
  * seam). `syncProject` is cheap and idempotent, and the engine decides on its
  * own whether the change warrants re-arming the transport.
+ *
+ * The one decision the engine cannot make for itself is whether a sync was an
+ * EDIT or a REPLACEMENT (File → New, a load, an import, the undo/redo of one)
+ * — `src/audio` may not import the store, and the projects are
+ * indistinguishable by value: the ids are minted from a shared counter, and a
+ * re-import keeps the exported project's own id. So the store's wholesale
+ * counter is carried across the seam here (`store.projectEpoch`), and the
+ * engine gives a replacement the full release/re-arm/restart it gives a mode
+ * flip. Without it a replacement that kept the same mode only re-armed: the
+ * transport ran on at the old project's tick and the old project's voices rang
+ * into the new one through the channel ids it re-uses.
  */
 export function startEngineSync(): () => void {
-  engine.syncProject(useAppStore.getState().project);
+  const initial = useAppStore.getState();
+  // The engine has no project at all yet, so the first push is never a
+  // replacement — there is nothing to release and nothing playing to restart.
+  let lastEpoch = initial.projectEpoch;
+  engine.syncProject(initial.project);
   return useAppStore.subscribe((state, previous) => {
     if (state.project === previous.project) return;
-    engine.syncProject(state.project);
+    const wholesale = state.projectEpoch !== lastEpoch;
+    lastEpoch = state.projectEpoch;
+    engine.syncProject(state.project, { wholesale });
   });
 }
 

@@ -71,9 +71,27 @@ export function BpmLcd({
     setEditing(true);
   }
 
+  /**
+   * Close the editor, reporting the typed value — and **only** if it is
+   * actually a different tempo.
+   *
+   * The unchanged case is the common one: open the plate, look at the number,
+   * click away. It used to dispatch anyway, which cost an undo entry that
+   * undoes nothing and a persistence write with no change in it — but the
+   * expensive part was what the dispatch dragged behind it. This commit runs
+   * on `blur`, and `blur` is delivered AFTER the `pointerdown` that moved the
+   * focus: by then the press has already opened its own gesture somewhere
+   * else, and handing the commit a pre-empting key ENDED that gesture on its
+   * first frame (see `@/lib/gestureHold`'s `commitGestureKey`). Clicking a
+   * knob to grab it while the tempo box happened to be focused therefore left
+   * a knob that would not turn. Not dispatching at all is the strictest form
+   * of not interfering; the non-pre-empting key (`TransportBar`) covers the
+   * case where the value really did change.
+   */
   function commit(raw: string): void {
     const parsed = Number.parseFloat(raw);
-    onChange(clampTempo(Number.isFinite(parsed) ? parsed : value, min, max));
+    const next = clampTempo(Number.isFinite(parsed) ? parsed : value, min, max);
+    if (next !== value) onChange(next);
     setEditing(false);
   }
 

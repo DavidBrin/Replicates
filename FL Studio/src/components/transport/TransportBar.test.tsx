@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { updateProject } from "@/domain/commands";
 import { createHistory } from "@/domain/undo";
-import { __resetGestureCounterForTests } from "@/lib/gestureHold";
+import { __resetGestureCounterForTests, registerExternalGesture } from "@/lib/gestureHold";
 import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 
 import { ARM_TIMEOUT_MS, TransportBar } from "./TransportBar";
@@ -478,5 +478,103 @@ describe("TransportBar swing — the gesture class (round 8)", () => {
     expect(useAppStore.getState().history.past).toHaveLength(2);
     act(() => useAppStore.getState().undo());
     expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.2);
+  });
+});
+
+/* -------------------------------------------- blur commits do not pre-empt */
+
+/*
+ * Round 14 #2. Every mutating gesture pre-empts the one in flight
+ * (`@/lib/gestureHold`'s invariant) — except a BLUR COMMIT, which is the tail
+ * of an editing session that has already ended.
+ *
+ * The event order is the browser's and cannot be worked around at the call
+ * site: pressing a knob while the tempo box is focused delivers `pointerdown`
+ * FIRST — the knob's session is open and registered — and `blur` only after.
+ * A pre-empting commit therefore reached the registry one step too late and
+ * ended the gesture the press had just opened, wiping its drag state under a
+ * button the user was still holding. `registerExternalGesture` stands in for
+ * that knob here: it is the same registry entry a `useGestureSession` makes.
+ */
+describe("a field's blur commit does not kill the gesture that caused the blur", () => {
+  beforeEach(() => {
+    __resetGestureCounterForTests();
+    act(() => {
+      useAppStore.setState({ history: createHistory() });
+    });
+  });
+
+  function pressSomethingElse(): { end: ReturnType<typeof vi.fn>; unregister: () => void } {
+    const end = vi.fn();
+    const unregister = registerExternalGesture(end, { pointerId: 7 });
+    return { end, unregister };
+  }
+
+  it("keeps the fresh gesture alive across a tempo commit that changed the value", () => {
+    render(<TransportBar />);
+    fireEvent.click(screen.getByText("140"), { detail: 1 });
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "150" } });
+
+    // The browser's order: the new press registers, THEN the field blurs.
+    const { end, unregister } = pressSomethingElse();
+    fireEvent.blur(input);
+
+    expect(end).not.toHaveBeenCalled();
+    expect(useAppStore.getState().project.tempo).toBe(150);
+    unregister();
+  });
+
+  it("keeps it alive across a pattern-rename commit too", () => {
+    render(<TransportBar />);
+    act(() => requestPatternRename());
+    const field = screen.getByTestId("pattern-rename");
+    fireEvent.change(field, { target: { value: "Verse" } });
+
+    const { end, unregister } = pressSomethingElse();
+    fireEvent.blur(field);
+
+    expect(end).not.toHaveBeenCalled();
+    const state = useAppStore.getState();
+    expect(state.project.patterns[state.project.activePatternId]!.name).toBe("Verse");
+    unregister();
+  });
+
+  /*
+   * The other half of the fix, and the one that makes the common case free: a
+   * commit with nothing to say dispatches nothing at all, so it cannot reach
+   * the registry however it is keyed.
+   */
+  it("dispatches nothing when the blurred field's value is unchanged", () => {
+    render(<TransportBar />);
+    const before = useAppStore.getState().history.past.length;
+    fireEvent.click(screen.getByText("140"), { detail: 1 });
+
+    const { end, unregister } = pressSomethingElse();
+    fireEvent.blur(screen.getByRole("textbox"));
+
+    expect(end).not.toHaveBeenCalled();
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+    unregister();
+  });
+
+  /*
+   * The exemption is for the COMMIT, not for the surface. A real spinner click
+   * is a press, and a press still ends whatever gesture was open — through
+   * `begin` on the wrapper, before the click handler runs at all — so the
+   * invariant is untouched everywhere a pointer is actually involved.
+   */
+  it("still pre-empts when the tempo is changed by a real PRESS", () => {
+    render(<TransportBar />);
+    const { end, unregister } = pressSomethingElse();
+    const spinner = screen.getByLabelText("Increase tempo");
+
+    fireEvent.pointerDown(spinner, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(spinner, { button: 0, pointerId: 1 });
+    fireEvent.click(spinner);
+
+    expect(end).toHaveBeenCalled();
+    expect(useAppStore.getState().project.tempo).toBe(141);
+    unregister();
   });
 });

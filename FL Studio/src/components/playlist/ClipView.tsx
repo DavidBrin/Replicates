@@ -14,8 +14,19 @@ export interface ClipViewProps {
   onSelect: (clipId: string) => void;
   /** Double-click: open the pattern in the Piano Roll (SPEC.md §1.1). */
   onOpen: (clip: PatternClip) => void;
-  /** Right-click on the clip BODY: delete (SPEC.md §4.4's universal "right-click = delete"). */
-  onDelete: (clipId: string) => void;
+  /**
+   * Right-click on the clip BODY: delete (SPEC.md §4.4's universal
+   * "right-click = delete").
+   *
+   * The second argument is present only when the delete came from an erase
+   * SWEEP crossing this clip — `pointerenter` with the secondary button held.
+   * The host uses it to open one owned session for a sweep whose pointer-down
+   * happened somewhere else entirely (`Playlist`'s `beginSweepIfEntering`); it
+   * cannot recognise that sweep any other way, because the only event it sees
+   * from it is the one delivered here. A single right-click, a menu item or a
+   * test firing `contextmenu` passes nothing and stays a one-shot.
+   */
+  onDelete: (clipId: string, sweepEvent?: React.PointerEvent<HTMLDivElement>) => void;
   /** "Make unique" (SPEC.md D4 / lane 2 §8), from the header context menu. */
   onMakeUnique: (clipId: string) => void;
   /**
@@ -276,7 +287,10 @@ export function ClipView({
   function handlePointerEnter(event: React.PointerEvent<HTMLDivElement>) {
     if ((event.buttons & 2) === 0) return;
     if (ownsEraseSweep !== undefined && !ownsEraseSweep(event)) return;
-    onDelete(clip.id);
+    // The event goes with it: this is the sweep's only appearance on the
+    // host's side when the press that started it landed off-surface, and the
+    // host needs the pointer id to scope the session it opens for it.
+    onDelete(clip.id, event);
   }
 
   function handleContextMenu(event: React.MouseEvent<HTMLDivElement>) {

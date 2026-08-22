@@ -82,7 +82,15 @@
  * the same reason the id counter is, since the gesture being pre-empted
  * belongs to a *different component*.
  *
- * The one exception is two sessions opened by the same PRESS — the tempo
+ * A **blur commit** is the one edit that is deliberately outside the
+ * invariant: {@link GestureSession.keyForCommit} / {@link commitGestureKey}
+ * take an id without pre-empting anything. `blur` is delivered AFTER the
+ * `pointerdown` that caused it, so a pre-empting commit reaches the registry
+ * one step too late and kills the gesture that press has just opened. The
+ * commit is the tail of an editing session that already ended, so there is
+ * nothing for it to be serialized against.
+ *
+ * The other exception is two sessions opened by the same PRESS — the tempo
  * wrapper around the BPM plate, a rack paint stroke that walks from one row
  * into the next — which are one gesture wearing two hats, not two gestures.
  * "Same press" is the pointer id *and* the press token minted for that
@@ -304,6 +312,35 @@ export function oneShotGestureKey(prefix: string): string {
 }
 
 /**
+ * A one-shot id for a **blur commit** — the same as {@link oneShotGestureKey}
+ * except that it pre-empts NOTHING.
+ *
+ * A text field that commits on blur (the BPM plate's type-in, the pattern and
+ * channel rename boxes) dispatches at the moment focus leaves it, and the
+ * commonest way focus leaves a field is that the user pressed something else.
+ * The browser's order there is fixed and is the whole problem: `pointerdown`
+ * on the new target fires FIRST, so the drag it starts is already registered
+ * when `blur` arrives a moment later. A pre-empting one-shot then ended it —
+ * a knob press, a clip drag or a rack stroke died on its first frame, its
+ * `onCancel` wiping the drag state under a button the user is still holding,
+ * and the drag became a hover that does nothing.
+ *
+ * The reason it is safe to skip the invariant here is not that the commit is
+ * unimportant, it is that the commit is **not a new gesture**: it is the tail
+ * of an editing session that ended before the new one began. There is nothing
+ * to serialize against, because the thing it belongs to is already over. What
+ * it still needs is an id of its own, so the committed value gets its own undo
+ * entry instead of folding into whatever the fresh gesture is about to build.
+ *
+ * A commit that changes NOTHING should not come here at all — the caller
+ * skips the dispatch entirely, which is the other half of the same fix (see
+ * `BpmLcd`'s `commit`, `ChannelRackRow`'s rename blur).
+ */
+export function commitGestureKey(prefix: string): string {
+  return nextGestureId(prefix);
+}
+
+/**
  * The registry half of a one-shot, without minting an id: END every open
  * gesture, app-wide.
  *
@@ -485,6 +522,17 @@ export interface GestureSession extends GestureHold {
    * behind waiting for a pointer-up that is not coming.
    */
   keyFor: () => string;
+  /**
+   * The key for a **blur/Enter commit** of an editing session that has already
+   * ended: the open session's id if a drag is somehow still running, otherwise
+   * a fresh id that pre-empts nothing.
+   *
+   * {@link keyFor}'s pre-emption is wrong here and only here — see
+   * {@link commitGestureKey} for why, and for the ordering (`pointerdown`
+   * before `blur`) that makes a pre-empting commit kill the gesture the user
+   * has only just started.
+   */
+  keyForCommit: () => string;
   /**
    * The key for an EDIT that may come from the pointer or from the keyboard.
    *
@@ -724,6 +772,14 @@ export function useGestureSession(
     return nextGestureId(prefix);
   }, [prefix]);
 
+  const keyForCommit = useCallback((): string => {
+    const open = idRef.current;
+    if (open !== null) return open;
+    // No `preemptOtherGestures`: this is the tail of an editing session that
+    // has already ended, not a new gesture — see {@link commitGestureKey}.
+    return nextGestureId(prefix);
+  }, [prefix]);
+
   const keyForEdit = useCallback(
     (now?: number): string => {
       const open = idRef.current;
@@ -840,6 +896,7 @@ export function useGestureSession(
     () => ({
       begin,
       keyFor,
+      keyForCommit,
       keyForEdit,
       peek,
       end,
@@ -849,6 +906,6 @@ export function useGestureSession(
       release: end,
       terminators,
     }),
-    [begin, keyFor, keyForEdit, peek, end, ownsEvent, isOwner, terminators],
+    [begin, keyFor, keyForCommit, keyForEdit, peek, end, ownsEvent, isOwner, terminators],
   );
 }

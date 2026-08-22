@@ -830,3 +830,149 @@ describe("a mode change through syncProject gets setMode's reset (round 13)", ()
     expect(source.stopTime).toBe(naturalStop);
   });
 });
+
+/* --------------------------------------------------------------- round 14 -- */
+
+/*
+ * Round 14 #1. Round 13 taught this seam what a MODE change means; the thing
+ * that actually invalidates the transport is the REPLACEMENT, and a
+ * replacement usually keeps the mode — File → New from pattern mode, loading a
+ * project that was also in song mode, importing a stranger's file, undoing an
+ * import. Those took the plain `needsRearm` path: the transport was re-pointed
+ * at the new timeline while it ran on at the OLD project's tick, and the old
+ * project's voices rang into the replacement through the channel ids it
+ * re-uses.
+ */
+describe("a WHOLESALE replacement gets the same reset, mode change or not (round 14)", () => {
+  function patternProject(): Project {
+    return projectWith([{ ...step("a", 0), lengthTicks: TICKS_PER_STEP * 8 }], {
+      playbackMode: "pattern",
+      clips: { c1: { id: "c1", trackId: "trk-1", patternId: "pat-1", startTick: 0 } },
+    });
+  }
+
+  async function playingWithAVoice() {
+    const { tone } = installTone();
+    const project = patternProject();
+    syncProject(project);
+    await ensureStarted();
+    play();
+    tone.transport.scheduled[0]?.callback(1);
+    const source = tone.ctx.nodesOfKind("oscillator")[0] as unknown as {
+      stopTime: number | null;
+    };
+    expect(source.stopTime).not.toBeNull();
+    return { tone, project, source, naturalStop: source.stopTime as number };
+  }
+
+  /** The replacement: a different project object, in the SAME playback mode. */
+  function replacementProject(): Project {
+    return projectWith([step("z", TICKS_PER_STEP * 2)], {
+      id: "prj-loaded",
+      playbackMode: "pattern",
+      clips: {},
+    });
+  }
+
+  it("releases the voices the outgoing project was sounding", async () => {
+    const { source, naturalStop } = await playingWithAVoice();
+
+    syncProject(replacementProject(), { wholesale: true });
+
+    expect(source.stopTime).toBeLessThan(naturalStop);
+  });
+
+  it("restarts the transport from the top of the new project", async () => {
+    const { tone } = await playingWithAVoice();
+    const starts = tone.transport.startCalls;
+    tone.transport.ticks = 4_321; // the replaced project's playhead, mid-bar
+
+    syncProject(replacementProject(), { wholesale: true });
+
+    expect(tone.transport.startCalls).toBe(starts + 1);
+    expect(tone.transport.ticks).toBe(0);
+    expect(isPlaying()).toBe(true);
+  });
+
+  it("re-arms with the new project's schedule", async () => {
+    const { tone } = await playingWithAVoice();
+
+    syncProject(replacementProject(), { wholesale: true });
+
+    expect(tone.transport.scheduled).toHaveLength(1);
+    expect(tone.transport.scheduled[0]?.time).toBe(`${TICKS_PER_STEP * 2}i`);
+  });
+
+  it("stays stopped when it was stopped, and still releases and re-arms", async () => {
+    const { tone } = installTone();
+    syncProject(patternProject());
+    await ensureStarted();
+    const starts = tone.transport.startCalls;
+
+    syncProject(replacementProject(), { wholesale: true });
+
+    expect(isPlaying()).toBe(false);
+    expect(tone.transport.startCalls).toBe(starts);
+  });
+
+  /*
+   * The mutation guard for the fix: the same replacement WITHOUT the store's
+   * signal must not restart anything. A `wholesale` that is ignored — or one
+   * the seam hands over on every sync — would pass the tests above and fail
+   * this one, which is what "regardless of mode change" must not be allowed to
+   * become.
+   */
+  it("leaves an ordinary EDIT alone — no release, no restart", async () => {
+    const { tone, project, source, naturalStop } = await playingWithAVoice();
+    const starts = tone.transport.startCalls;
+    tone.transport.ticks = 4_321;
+
+    // A note edit: the schedule changes, nothing was replaced.
+    syncProject(
+      projectWith([step("a", 0), step("b", TICKS_PER_STEP)], {
+        playbackMode: "pattern",
+        clips: project.clips,
+      }),
+    );
+
+    expect(tone.transport.startCalls).toBe(starts);
+    expect(tone.transport.ticks).toBe(4_321);
+    expect(source.stopTime).toBe(naturalStop);
+  });
+});
+
+/*
+ * Round 14 #6. `previewNote` is synchronous by contract, so a call made before
+ * Tone is loaded queues itself behind `ensureStarted()`. That boot is a
+ * dynamic import plus a context resume — long enough for File → New, a load or
+ * an import to land — and the channel id it captured is no defence, because
+ * the ids are minted from one shared counter and the replacement almost always
+ * carries the same one. The continuation auditioned whatever the NEW project
+ * kept at that id.
+ */
+describe("a preview queued behind boot belongs to the project that asked for it", () => {
+  it("drops the preview when the project was replaced during boot", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+
+    const pending = previewNote("ch-bass", 43);
+    // The replacement lands while Tone is still loading.
+    syncProject(projectWith([], { id: "prj-loaded" }), { wholesale: true });
+    await pending;
+
+    expect(tone.ctx.nodesOfKind("oscillator")).toHaveLength(0);
+    expect(getSnapshot().previewRevision).toBe(0);
+  });
+
+  it("still fires when the project was only EDITED during boot", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+
+    const pending = previewNote("ch-bass", 43);
+    syncProject(projectWith([step("a", 0)]));
+    await pending;
+
+    expect(tone.ctx.nodesOfKind("oscillator").length).toBeGreaterThan(0);
+    expect(getSnapshot().previewRevision).toBe(1);
+  });
+});

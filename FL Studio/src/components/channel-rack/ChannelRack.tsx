@@ -10,7 +10,7 @@ import type { Command } from "@/domain/commands/types";
 import { nextId } from "@/domain/ids";
 import { colorAt, PALETTE } from "@/domain/palette";
 import { MASTER_MIXER_TRACK_ID, type Channel, type ChannelId, type Pattern, type VoiceKind } from "@/domain/types";
-import { oneShotGestureKey, useGestureSession, wheelEditKey } from "@/lib/gestureHold";
+import { commitGestureKey, oneShotGestureKey, useGestureSession, wheelEditKey } from "@/lib/gestureHold";
 import { handleRangeInputKeyDown } from "@/lib/keyboard";
 import { createWheelGestureKeyring, type WheelGestureKeyring } from "@/lib/wheelGesture";
 import {
@@ -236,8 +236,20 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     setAddMenuOpen(false);
   }
 
+  /**
+   * A BLUR COMMIT (`ChannelRackRow`'s rename box commits when focus leaves
+   * it), so it takes the non-pre-empting key — `blur` is delivered after the
+   * `pointerdown` that moved the focus, and a pre-empting one-shot ended the
+   * gesture that press had just opened. See `@/lib/gestureHold`'s
+   * `commitGestureKey`.
+   *
+   * The no-op rename dispatches nothing: the row already refuses a blank or
+   * unchanged name, and this repeats the check so the property survives a
+   * second caller.
+   */
   function handleRenameChannel(channelId: ChannelId, name: string): void {
-    dispatch(updateChannel(channelId, { name }), { gestureId: oneShotGestureKey("rack-rename") });
+    if (project.channels[channelId]?.name === name) return;
+    dispatch(updateChannel(channelId, { name }), { gestureId: commitGestureKey("rack-rename") });
   }
 
   function handleDeleteChannel(channelId: ChannelId): void {

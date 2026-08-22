@@ -4,8 +4,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import {
   __resetGestureCounterForTests,
+  commitGestureKey,
   nextGestureId,
+  oneShotGestureKey,
   preemptOpenGestures,
+  registerExternalGesture,
   useGestureHold,
   useGestureSession,
   wheelEditKey,
@@ -45,6 +48,18 @@ function Probe({
       // The keyboard-edit path every arrow-editable control uses.
       onKeyDown={() => opened.push(gesture.keyForEdit(now?.()))}
       {...gesture.terminators}
+    />
+  );
+}
+
+/** A control whose editor commits on blur — `keyForCommit`'s only caller shape. */
+function CommitProbe() {
+  const gesture = useGestureSession("commit-probe");
+  return (
+    <input
+      data-testid="commit-probe"
+      onPointerDown={(event) => opened.push(gesture.begin(event))}
+      onBlur={() => opened.push(gesture.keyForCommit())}
     />
   );
 }
@@ -947,5 +962,72 @@ describe("preemptOpenGestures / wheelEditKey", () => {
     expect(second).toBe(first);
     // A different target is a different entry.
     expect(wheelEditKey(keyring, ["pat-1", "note-2"], 1_150)).not.toBe(first);
+  });
+});
+
+/*
+ * Round 14 #2. The blur-commit exemption to the single-active-mutating-gesture
+ * invariant, and its EXACT width: a commit key takes an id without
+ * pre-empting, and every other way of taking an id still pre-empts. The
+ * ordering that forces it is the browser's — `pointerdown` on the new target,
+ * then `blur` on the old one — so by the time a commit runs, the gesture it
+ * would end is the one the user is holding.
+ */
+describe("commit keys do not pre-empt (round 14)", () => {
+  function externalGesture(): { end: () => void; ended: () => boolean } {
+    let ended = false;
+    registerExternalGesture(() => { ended = true; }, { pointerId: 9 });
+    return { end: () => {}, ended: () => ended };
+  }
+
+  it("commitGestureKey leaves the open gesture alone, and still mints a fresh id", () => {
+    const gesture = externalGesture();
+
+    const first = commitGestureKey("rename");
+    const second = commitGestureKey("rename");
+
+    expect(gesture.ended()).toBe(false);
+    expect(first).not.toBe(second);
+  });
+
+  it("oneShotGestureKey — the ordinary form — still ends it", () => {
+    const gesture = externalGesture();
+
+    oneShotGestureKey("menu-item");
+
+    expect(gesture.ended()).toBe(true);
+  });
+
+  it("keyForCommit leaves a gesture registered AFTER the edit began alive", () => {
+    render(<CommitProbe />);
+    const field = screen.getByTestId("commit-probe");
+    // The browser's order: the new press registers first...
+    const gesture = externalGesture();
+    // ...and only then does the field commit.
+    fireEvent.blur(field);
+
+    expect(gesture.ended()).toBe(false);
+    expect(opened).toEqual(["commit-probe#1"]);
+    // No hold either — there is no pointer-up coming for a commit (rule e).
+    expect(holds()).toEqual([]);
+  });
+
+  it("keyForCommit still returns the OPEN session's id when a drag is running", () => {
+    render(<CommitProbe />);
+    const field = screen.getByTestId("commit-probe");
+
+    fireEvent.pointerDown(field, { pointerId: 1 });
+    fireEvent.blur(field);
+
+    expect(opened).toEqual(["commit-probe#1", "commit-probe#1"]);
+  });
+
+  it("keyFor — the pre-empting sibling — is unchanged", () => {
+    render(<Probe />);
+    const gesture = externalGesture();
+
+    fireEvent.doubleClick(screen.getByTestId("probe"));
+
+    expect(gesture.ended()).toBe(true);
   });
 });

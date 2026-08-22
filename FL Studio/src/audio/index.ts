@@ -30,5 +30,6 @@ export {
   PREVIEW_DURATION_SEC,
 } from "./engine";
 
+export type { SyncOptions } from "./engine";
 export type { EngineSnapshot, ScheduledEvent } from "./types";
 export type { ExportedWav, ExportOptions } from "./exportWav";

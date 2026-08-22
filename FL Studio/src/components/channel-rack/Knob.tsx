@@ -54,6 +54,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * How close two control values have to be before an edit is a NO-OP.
+ *
+ * The values here are floats — a pan of `0`, a volume of `0.8`, whatever a
+ * drag left behind — so the comparison cannot be `===`: a knob dragged away
+ * and back lands on `0.7999999999999999`, which is the default to every
+ * meaning the user has for the word. An absolute epsilon is right rather than
+ * a relative one because the whole range is `[min, max]` with the widest span
+ * in this app being 2 (pan's `-1..1`), so there is no scale for it to lose.
+ */
+const NO_OP_EPSILON = 1e-9;
+
+function isNoOp(next: number, current: number): boolean {
+  return Math.abs(next - current) <= NO_OP_EPSILON;
+}
+
 export function Knob({
   value,
   min,
@@ -155,8 +171,37 @@ export function Knob({
     gesture.end();
   }
 
+  /**
+   * Alt+click / middle-click / double-click / Enter / Space — "reset to
+   * default" (SPEC §4.4).
+   *
+   * A knob that is ALREADY at its default dispatches nothing. It used to
+   * dispatch anyway, and the result was an undo entry that undoes nothing —
+   * one `Ctrl+Z` spent putting a value back where it already was, with the
+   * edit the user actually wanted to take back still one press further down —
+   * plus a store write and the autosave it schedules. Every channel starts at
+   * pan `0` / volume `0.8`, so "reset a control that is already default" is
+   * not an exotic case: it is what a double-click on an untouched knob does.
+   */
   function resetToDefault(): void {
-    onChange(defaultValue, mintCoalesceKey());
+    changeValue(defaultValue);
+  }
+
+  /**
+   * The single dispatch point for every ONE-SHOT edit — the reset and the
+   * arrow nudges — with the no-op check in it, so a new one-shot cannot be
+   * added without it. An arrow key held at either end of the range is the same
+   * no-op as the already-default reset: the value is clamped and unchanged,
+   * and each repeat used to file its own history entry.
+   *
+   * The drag path is deliberately NOT routed through here. Its dispatches all
+   * share one `coalesceKey` and fold into a single undo entry, so a repeated
+   * value there costs nothing a user can see, and it holds the session that
+   * defers autosave anyway.
+   */
+  function changeValue(next: number): void {
+    if (isNoOp(next, value)) return;
+    onChange(next, mintCoalesceKey());
   }
 
   const percent = ((value - min) / (max - min)) * 100;
@@ -190,8 +235,8 @@ export function Knob({
       // piano roll's selection (`@/lib/keyboard`).
       onKeyDown={(event) => {
         if (!claimHandledKey(event, CUSTOM_SLIDER_KEYS)) return;
-        if (event.key === "ArrowUp") onChange(clamp(value + (max - min) / 100, min, max), mintCoalesceKey());
-        if (event.key === "ArrowDown") onChange(clamp(value - (max - min) / 100, min, max), mintCoalesceKey());
+        if (event.key === "ArrowUp") changeValue(clamp(value + (max - min) / 100, min, max));
+        if (event.key === "ArrowDown") changeValue(clamp(value - (max - min) / 100, min, max));
         if (event.key === "Enter" || event.key === " ") resetToDefault();
       }}
     >

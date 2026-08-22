@@ -490,7 +490,23 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       return;
     }
 
+    /*
+     * The keyboard column and the splitter are LEFT-button gestures, and both
+     * used to run before the primary-button guard further down.
+     *
+     * §4.4 gives left-click "draw/add/activate" and right-click "delete
+     * (content areas); context menu (chrome/non-content)" — auditioning a note
+     * and dragging the velocity lane's divider are neither. Right-clicking the
+     * key column played the note (and lit the key, and held a `preview`
+     * gesture open until a `pointerup` that a context menu may never deliver);
+     * right-clicking the splitter started a lane resize that then tracked the
+     * pointer with no button held. The velocity lane's own branch below has
+     * always checked `button !== 0`; these two are that same check, moved to
+     * where each branch is decided rather than left to a guard they jump over.
+     * Button 1 is still the pan, handled above.
+     */
     if (region === "keyboard") {
+      if (input.button !== 0) return;
       if (!hasTargetChannel(scene)) return;
       const pitch = clampPitch(yToPitch(view, input.y));
       deps.previewNote(scene.channelId, pitch);
@@ -500,6 +516,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     }
 
     if (region === "splitter") {
+      if (input.button !== 0) return;
       beginDrag(
         { kind: "lane-resize", originY: input.y, laneHeight: view.velocityLaneHeight },
         input.pointerId ?? null,

@@ -77,6 +77,18 @@ let bootPromise: Promise<void> | null = null;
 let project: Project | null = null;
 let playing = false;
 let metronomeEnabled = false;
+/**
+ * How many times the project has been swapped WHOLESALE (see
+ * {@link SyncOptions.wholesale}).
+ *
+ * A counter rather than a flag because the thing that reads it is an
+ * asynchronous continuation comparing "the project I was called for" against
+ * "the project there is now" — {@link previewNote} queued behind boot. Ids are
+ * no help there: `Project.id` survives a re-import of the same file, and a
+ * channel id is minted from a shared counter, so `ch-3` exists in almost every
+ * project this app will ever load.
+ */
+let projectEpoch = 0;
 /** {@link EngineSnapshot.previewRevision} — one per preview voice fired. */
 let previewRevision = 0;
 /** Replayed once boot lands — see the class comment on synchronous callers. */
@@ -181,14 +193,37 @@ async function resumeIfNeeded(ctx: BaseAudioContext): Promise<void> {
 
 /* ------------------------------------------------------- store seam ----- */
 
+/** What the store can tell the engine ABOUT a sync, beyond the project itself. */
+export interface SyncOptions {
+  /**
+   * This sync REPLACED the project rather than editing it — File → New, a
+   * load, a JSON import, or the undo/redo of one.
+   *
+   * The engine cannot infer this and must not try. `Project.id` survives a
+   * re-import of the file it was exported from (the round trip is
+   * deliberately idempotent), the entity ids are minted from one shared
+   * counter so a replacement usually re-uses `ch-3`/`pat-1`, and a
+   * replacement that happens to keep the same mode and the same compiled
+   * inputs is indistinguishable by value from no change at all. Only the
+   * store knows, so the store says — the same signal `store.ts`'s `commit`
+   * already computes for its own reconcile pass.
+   */
+  wholesale?: boolean;
+}
+
 /**
  * Push the current project in (the §5 store seam).
  *
  * Cheap and idempotent: gains and pans are ramped every call, but the
  * transport is re-armed only when the schedule actually changed.
  */
-export function syncProject(next: Project): void {
+export function syncProject(next: Project, options: SyncOptions = {}): void {
   const previous = project;
+  const wholesale = options.wholesale === true;
+  // Bumped BEFORE the early returns: a preview queued behind boot has to be
+  // dropped by a replacement that lands while the engine has no state at all,
+  // which is exactly when the queue is longest.
+  if (wholesale) projectEpoch += 1;
   project = next;
 
   if (state === null) {
@@ -208,7 +243,7 @@ export function syncProject(next: Project): void {
   state.transport.bpm.value = next.tempo;
   /*
    * A mode flip that arrives through the PROJECT gets `setMode`'s treatment,
-   * not a bare re-arm.
+   * not a bare re-arm — and so does a project REPLACEMENT, whatever its mode.
    *
    * `setMode` is only one of the two doors `playbackMode` comes through. The
    * other is project REPLACEMENT — undo/redo of a change made either side of
@@ -222,9 +257,22 @@ export function syncProject(next: Project): void {
    * happened to be instead of at its own bar 1. The same flip typed as `L`
    * released and restarted, so the two doors disagreed about what a mode
    * change means; they share one implementation now.
+   *
+   * Keying that on the MODE was the residual half of the same bug. The
+   * replacement is what invalidates the sounding voices and the playhead, and
+   * a replacement usually does NOT change the mode: File → New from pattern
+   * mode, loading a saved project that was also in song mode, importing a
+   * stranger's file, undoing an import. Those took the `needsRearm` path, so
+   * the transport was re-pointed at the new project's timeline while it went
+   * on running at the OLD project's tick, and every voice the old project had
+   * in flight rang on — through the pooled channel ids the replacement
+   * re-uses (`ch-3` is in almost every project), so the note that kept
+   * sounding was attributed to a channel belonging to somebody else's song.
+   * The signal cannot be inferred here (see {@link SyncOptions.wholesale});
+   * the store hands it over and both transitions share one implementation.
    */
   const modeChanged = previous !== null && previous.playbackMode !== next.playbackMode;
-  if (modeChanged) restartForModeChange();
+  if (wholesale || modeChanged) restartForSourceSwap();
   else if (needsRearm(next)) rearm();
   releaseMutedTrackVoices(previous, next);
 }
@@ -399,29 +447,31 @@ export function stop(): void {
 export function setMode(mode: PlaybackMode): void {
   if (project === null || project.playbackMode === mode) return;
   project = { ...project, playbackMode: mode };
-  restartForModeChange();
+  restartForSourceSwap();
 }
 
 /**
- * What a playback-mode change does to a live transport, wherever it came from.
+ * What swapping the transport's SOURCE does to a live transport, wherever the
+ * swap came from — a mode flip, or a wholesale project replacement.
  *
  * Three steps and all three matter. **Release**: the sounding voices belong to
  * the source that is being swapped out, and a voice's envelope lives on the
  * audio thread — re-arming the transport does not silence a note already
- * queued, so without this the old mode's notes ring over the new one's.
+ * queued, so without this the old source's notes ring over the new one's.
  * **Re-arm**: point the transport at the other source. **Restart**: the new
  * source is a different timeline, so resuming at the old one's tick starts it
  * mid-phrase; `play` stops, zeroes and starts, which is the "from the top of
- * the new source" the mode flip promises.
+ * the new source" both transitions promise.
  *
  * Stopped stays stopped — the release and the re-arm still run, so a preview
  * still ringing is cut and the next `play` finds the right source armed.
  *
- * Shared by {@link setMode} and {@link syncProject} deliberately: they are two
- * doors onto one transition, and the version of this that lived only in
- * `setMode` left every project-replacement flip half-applied.
+ * Shared by {@link setMode} and {@link syncProject} deliberately: they are the
+ * doors onto one transition, and the versions of this that lived only in
+ * `setMode` (and then only in `syncProject`'s mode branch) left every other
+ * door half-applied.
  */
-function restartForModeChange(): void {
+function restartForSourceSwap(): void {
   if (state === null) return;
   const wasPlaying = playing;
   state.voices.releaseAll(state.ctx.currentTime);
@@ -450,6 +500,17 @@ function restartForModeChange(): void {
  * call on every gesture, which is exactly why it exists), so the resume path
  * is taken whenever the context is not running. A running one still fires
  * synchronously: that is the contract every caller here relies on.
+ *
+ * **A deferred preview belongs to the project it was asked for.** The boot it
+ * waits on takes a dynamic import and a context resume, which is long enough
+ * for File → New, a load or an import to land — and `channelId` is no defence,
+ * because the ids are minted from one shared counter and the replacement
+ * almost always carries the same `ch-3`. The continuation therefore
+ * auditioned a stranger's channel: the click was on a row that no longer
+ * exists, and the sound was whatever the new project happens to keep at that
+ * id. The epoch captured here is re-read on the other side of the await, and a
+ * preview whose project was swapped out meanwhile is DROPPED rather than
+ * re-targeted — the note the user asked to hear has nothing left to play it.
  */
 export function previewNote(
   channelId: ChannelId,
@@ -460,7 +521,9 @@ export function previewNote(
     firePreview(channelId, pitch, durationSec);
     return Promise.resolve();
   }
+  const epoch = projectEpoch;
   return ensureStarted().then(() => {
+    if (epoch !== projectEpoch) return;
     if (state !== null && project !== null) firePreview(channelId, pitch, durationSec);
   });
 }
@@ -595,6 +658,7 @@ export function disposeEngine(): void {
   armed = null;
   playRequested = false;
   previewRevision = 0;
+  projectEpoch = 0;
   listeners.clear();
 }
 

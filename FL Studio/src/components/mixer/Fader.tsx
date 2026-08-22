@@ -38,6 +38,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * How close two levels have to be before an edit is a NO-OP — the knob's
+ * epsilon, restated rather than imported (`channel-rack/Knob.tsx`): a mixer
+ * strip reaching across into a channel-rack module for a constant would be the
+ * first cross-surface import in the tree, and this is two lines.
+ *
+ * Not `===`, because these are floats: a fader dragged away and back lands on
+ * `0.7999999999999999`, which is unity to every meaning the user has for the
+ * word.
+ */
+const NO_OP_EPSILON = 1e-9;
+
+function isNoOp(next: number, current: number): boolean {
+  return Math.abs(next - current) <= NO_OP_EPSILON;
+}
+
 export function Fader({ value, min, max, defaultValue, label, travelPx = 140, onChange }: FaderProps) {
   const dragState = useRef<DragState | null>(null);
   /**
@@ -59,8 +75,27 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
     return gesture.keyFor();
   }
 
+  /**
+   * Double-click / Enter / Space — reset to unity. A fader ALREADY at unity
+   * dispatches nothing: the knob's rule (`channel-rack/Knob.tsx`), for the
+   * same reason. Every strip starts at the default volume, so double-clicking
+   * an untouched fader used to buy a `Ctrl+Z` that undoes nothing and a
+   * persistence write with no change in it.
+   */
   function resetToDefault(): void {
-    onChange(defaultValue, mintCoalesceKey());
+    changeValue(defaultValue);
+  }
+
+  /**
+   * The one-shot dispatch point — reset and arrow nudges — carrying the no-op
+   * check. An arrow held at the top or bottom of the throw is clamped to the
+   * value it already has, and each repeat used to file its own undo entry.
+   * The drag path stays direct: its moves share one coalesce key and one
+   * entry, and they hold the session that defers autosave.
+   */
+  function changeValue(next: number): void {
+    if (isNoOp(next, value)) return;
+    onChange(next, mintCoalesceKey());
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>): void {
@@ -136,8 +171,8 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
       onKeyDown={(event) => {
         if (!claimHandledKey(event, CUSTOM_SLIDER_KEYS)) return;
         const step = (max - min) / 100;
-        if (event.key === "ArrowUp") onChange(clamp(value + step, min, max), mintCoalesceKey());
-        if (event.key === "ArrowDown") onChange(clamp(value - step, min, max), mintCoalesceKey());
+        if (event.key === "ArrowUp") changeValue(clamp(value + step, min, max));
+        if (event.key === "ArrowDown") changeValue(clamp(value - step, min, max));
         if (event.key === "Enter" || event.key === " ") resetToDefault();
       }}
     >

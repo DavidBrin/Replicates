@@ -158,10 +158,20 @@ export function TransportBar({
       onTempoChange(bpm);
       return;
     }
-    // A change with no gesture open (the ▲/▼ spinner, a typed commit) is its
-    // own one-shot gesture — exactly one undo entry per click, and no hold
-    // left waiting for a pointer-up that is not coming.
-    setTempo(bpm, tempoGesture.keyFor());
+    /*
+     * A change with no gesture open (the ▲/▼ spinner, a typed commit) is its
+     * own one-shot gesture — exactly one undo entry per click, and no hold
+     * left waiting for a pointer-up that is not coming.
+     *
+     * `keyForCommit`, not `keyFor`, because one of the ways this handler is
+     * reached is the LCD's blur commit, which the browser delivers after the
+     * `pointerdown` that took the focus away: a pre-empting key ended the drag
+     * that press had just opened (`@/lib/gestureHold`). Nothing is lost by not
+     * pre-empting here — a drag of this plate holds the session open and gets
+     * its id, and the spinner's own press already pre-empted through
+     * `begin` on the wrapper below.
+     */
+    setTempo(bpm, tempoGesture.keyForCommit());
   }
 
   function handleSwingChange(value: number) {

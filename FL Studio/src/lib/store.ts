@@ -127,6 +127,27 @@ export interface DomainSlice {
   projectRevision: number;
 
   /**
+   * Bumped by a WHOLESALE replacement and by nothing else: `loadProject`,
+   * "new project", a JSON import, and the undo/redo of an import.
+   *
+   * The narrow half of {@link DomainSlice.projectRevision}, which also counts
+   * every undo, redo and navigation setter. That wider signal is right for a
+   * buffered gesture — an ordinary undo can delete the very notes a stroke
+   * holds — but it is wrong for the one consumer that has to distinguish
+   * "this project was EDITED" from "this project was REPLACED": the audio
+   * engine. A replacement invalidates the sounding voices and the transport
+   * position (the pooled channel ids are re-used, so the old project's notes
+   * ring on attributed to the new project's channels), while an undo of a note
+   * edit must re-arm the transport and nothing more — restarting playback from
+   * bar 1 on every Ctrl+Z is not a fix, it is a different bug.
+   *
+   * A counter rather than a flag for the same reason as `projectRevision`: the
+   * reader compares it against what it last saw, so two consumers cannot
+   * consume it from under each other.
+   */
+  projectEpoch: number;
+
+  /**
    * The gestures currently in flight, by id (SPEC.md §2.2: persistence
    * "never fires mid-drag").
    *
@@ -415,21 +436,37 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     // reaches `commit` without going through a command at all.
     const wholesale =
       options.wholesale === true || next.wholesale === true || previous.id !== next.project.id;
-    // Only the two domain fields reach the store — `wholesale` is a report
-    // about the write, not state, and zustand's `set` merges whatever it is
-    // handed.
-    set(next.history === undefined ? { project: next.project } : { project: next.project, history: next.history });
-    // One place, so a new caller cannot forget: any write that cancels
-    // gestures also invalidates every LOCALLY buffered one (see
-    // {@link DomainSlice.projectRevision}).
-    if (options.resetGestures === true || wholesale) {
-      set({ projectRevision: get().projectRevision + 1 });
-    }
+    const resetGestures = options.resetGestures === true || wholesale;
+    /*
+     * ONE `set`, carrying the project and both counters together.
+     *
+     * `wholesale` itself is a report about the write, not state — but the
+     * counters derived from it are, and they have to land in the SAME
+     * notification as the project they describe. Every subscriber runs
+     * synchronously on each `set`, so a counter bumped in a later one is
+     * invisible to the subscriber that reacted to the project change: the
+     * engine seam (`startEngineSync`) wakes on a changed `project` and reads
+     * the epoch right there, and with the bumps split across three `set`
+     * calls it read the PRE-bump epoch every time and concluded that an
+     * import was an ordinary edit. The second notification
+     * carries the new epoch but the same project object, so it is filtered out
+     * as "nothing changed" — the signal was not late, it was lost.
+     *
+     * `projectRevision` — any write a gesture in flight cannot survive (see
+     * {@link DomainSlice.projectRevision}) — and `projectEpoch` — replacements
+     * only (see {@link DomainSlice.projectEpoch}) — are both minted here, in
+     * one place, so a new caller cannot forget either.
+     */
+    const write: Partial<AppState> = { project: next.project };
+    if (next.history !== undefined) write.history = next.history;
+    if (resetGestures) write.projectRevision = get().projectRevision + 1;
+    if (wholesale) write.projectEpoch = get().projectEpoch + 1;
+    set(write);
     const state = get();
     const patch = reconcileUiReferences(state, state.project, {
       ...options,
       wholesale,
-      resetGestures: options.resetGestures === true || wholesale,
+      resetGestures,
       previousPatternId,
     });
     if (patch !== null) set(patch);
@@ -439,6 +476,7 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     project: adoptProject(createDefaultProject({ now: nowIso() })),
     history: createHistory(),
     projectRevision: 0,
+    projectEpoch: 0,
     activeGestureIds: [],
 
     dispatch: (command, options) => {
@@ -509,6 +547,9 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
         project: adoptProject(project),
         history: createHistory(),
         projectRevision: get().projectRevision + 1,
+        // `loadProject` IS the wholesale case, so it carries both counters —
+        // see {@link DomainSlice.projectEpoch}.
+        projectEpoch: get().projectEpoch + 1,
       });
       get().reconcileUiToProject();
     },

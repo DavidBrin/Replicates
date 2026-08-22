@@ -347,3 +347,49 @@ describe("Mixer — the mute LED goes through the gesture registry (round 12)", 
     expect(useAppStore.getState().project.mixerTracks["mix-2"]!.muted).toBe(true);
   });
 });
+
+/*
+ * Round 14 #4, the fader's half of the knob's rule: resetting a control that
+ * is already at its default costs an undo entry that undoes nothing and a
+ * persistence write with no change in it. Every strip starts at unity, so
+ * double-clicking an untouched fader is the ordinary case.
+ */
+describe("a no-op fader edit dispatches nothing (round 14)", () => {
+  it("records nothing when a fader already at unity is reset", () => {
+    render(<Mixer />);
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.doubleClick(screen.getByTestId("fader-Insert 1 volume"));
+
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+  });
+
+  it("records nothing for an arrow key held at the top of the throw", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    fireEvent.pointerMove(fader, { clientY: -10_000 });
+    fireEvent.pointerUp(fader, { clientY: -10_000 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(1);
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.keyDown(fader, { key: "ArrowUp" });
+    fireEvent.keyDown(fader, { key: "ArrowUp" });
+
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+  });
+
+  it("still resets a fader that is OFF unity", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    fireEvent.pointerMove(fader, { clientY: 60 });
+    fireEvent.pointerUp(fader, { clientY: 60 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).not.toBe(0.8);
+
+    fireEvent.doubleClick(fader);
+
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
+  });
+});

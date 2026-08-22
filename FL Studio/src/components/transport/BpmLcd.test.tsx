@@ -283,3 +283,78 @@ describe("a tempo drag belongs to ONE pointer (round 12)", () => {
     expect(onChange).toHaveBeenLastCalledWith(160);
   });
 });
+
+/*
+ * Round 14 #2. The type-in editor commits on `blur`, and the commonest way a
+ * field is blurred is that the user pressed something else — a knob, a clip, a
+ * step. `pointerdown` on that something else fires FIRST, so by the time this
+ * commit runs there is a fresh gesture registered that it must not disturb.
+ * The strictest form of not disturbing it is not dispatching at all, which is
+ * exactly right for the case that costs nothing: the value did not change.
+ */
+describe("a blur commit that changes nothing reports nothing (round 14)", () => {
+  function openEditor(): HTMLElement {
+    fireEvent.click(screen.getByText("140"), { detail: 1 });
+    return screen.getByRole("textbox");
+  }
+
+  it("says nothing when the field is blurred with the value untouched", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+
+    fireEvent.blur(openEditor());
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("says nothing when the typed value CLAMPS back to the current one", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={TEMPO_MAX} onChange={onChange} />);
+
+    const input = openEditorAt(String(TEMPO_MAX));
+    fireEvent.change(input, { target: { value: "9999" } });
+    fireEvent.blur(input);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("says nothing when the typed value is not a number at all", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+
+    const input = openEditor();
+    fireEvent.change(input, { target: { value: "abc" } });
+    fireEvent.blur(input);
+
+    // The fallback IS the current value, so there is nothing to report.
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still reports a value that really did change", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+
+    const input = openEditor();
+    fireEvent.change(input, { target: { value: "150" } });
+    fireEvent.blur(input);
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(150);
+  });
+
+  it("still reports an unchanged-looking Enter commit that was really a change", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+
+    const input = openEditor();
+    fireEvent.change(input, { target: { value: "141" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(141);
+  });
+
+  function openEditorAt(label: string): HTMLElement {
+    fireEvent.click(screen.getByText(label), { detail: 1 });
+    return screen.getByRole("textbox");
+  }
+});

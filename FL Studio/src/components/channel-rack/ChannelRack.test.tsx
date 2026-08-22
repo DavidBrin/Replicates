@@ -8,7 +8,7 @@ import { createDefaultProject } from "@/domain/defaultProject";
 import { resetIds } from "@/domain/ids";
 import { createHistory } from "@/domain/undo";
 import { TICKS_PER_STEP, type Project } from "@/domain/types";
-import { __resetGestureCounterForTests } from "@/lib/gestureHold";
+import { __resetGestureCounterForTests, registerExternalGesture } from "@/lib/gestureHold";
 import {
   __resetKeyboardRegistryForTests,
   attachKeyboardListener,
@@ -1527,5 +1527,112 @@ describe("the rack's click mutations pre-empt an open drag (round 12)", () => {
     // Two notches on the same cell inside the gap are still ONE undo entry —
     // the keyring's bound, which routing through the registry must not break.
     expect(useAppStore.getState().history.past).toHaveLength(entriesBefore + 1);
+  });
+});
+
+/*
+ * Round 14 #2, rack half. The rename box commits on blur, and `blur` is
+ * delivered AFTER the `pointerdown` that moved the focus — so a pre-empting
+ * commit ended the gesture that press had just opened. Clicking a knob to
+ * leave the rename box left a knob that would not turn.
+ */
+describe("the channel rename's blur commit does not kill the new gesture", () => {
+  async function openRename(): Promise<HTMLElement> {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-kick"));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    return screen.getByTestId("channel-rename-ch-kick");
+  }
+
+  function pressSomethingElse(): () => boolean {
+    let ended = false;
+    registerExternalGesture(() => { ended = true; }, { pointerId: 7 });
+    return () => ended;
+  }
+
+  it("commits the new name without ending the gesture the press opened", async () => {
+    const input = await openRename();
+    fireEvent.change(input, { target: { value: "808 Kick" } });
+
+    // The browser's order: the press registers, then the field blurs.
+    const ended = pressSomethingElse();
+    fireEvent.blur(input);
+
+    expect(ended()).toBe(false);
+    expect(useAppStore.getState().project.channels["ch-kick"]!.name).toBe("808 Kick");
+  });
+
+  it("dispatches nothing at all when the name was not changed", async () => {
+    const input = await openRename();
+    const before = useAppStore.getState().history.past.length;
+
+    const ended = pressSomethingElse();
+    fireEvent.blur(input);
+
+    expect(ended()).toBe(false);
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+  });
+});
+
+/*
+ * Round 14 #4. "Reset to default" on a control that is ALREADY at its default
+ * dispatched anyway: a history entry that undoes nothing (so one Ctrl+Z is
+ * spent putting a value back where it already was, with the edit the user
+ * meant to take back one press further down) and a store write with no change
+ * in it for the autosave to persist. Every channel starts at pan 0 / volume
+ * 0.8, so this is what double-clicking an untouched knob does.
+ */
+describe("a no-op knob edit dispatches nothing (round 14)", () => {
+  it.each([
+    ["double-click", (knob: HTMLElement) => fireEvent.doubleClick(knob)],
+    ["alt+click", (knob: HTMLElement) => fireEvent.pointerDown(knob, { altKey: true })],
+    ["middle-click", (knob: HTMLElement) => fireEvent.pointerDown(knob, { button: 1 })],
+  ])("records nothing when %s resets a knob already at its default", (_name, reset_) => {
+    render(<ChannelRack />);
+    const before = useAppStore.getState().history.past.length;
+
+    reset_(screen.getByTestId("knob-Kick pan"));
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.pan).toBe(0);
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+  });
+
+  it("records nothing for an arrow key held at the end of the range", () => {
+    render(<ChannelRack />);
+    const knob = screen.getByTestId("knob-Kick volume");
+    // Drive it to the top first, in its own gesture.
+    fireEvent.pointerDown(knob, { clientY: 100, button: 0 });
+    fireEvent.pointerMove(knob, { clientY: -10_000 });
+    fireEvent.pointerUp(knob, { clientY: -10_000 });
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(1);
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.keyDown(knob, { key: "ArrowUp" });
+    fireEvent.keyDown(knob, { key: "ArrowUp" });
+
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+  });
+
+  it("still resets a knob that is OFF its default", () => {
+    render(<ChannelRack />);
+    const knob = screen.getByTestId("knob-Kick pan");
+    fireEvent.pointerDown(knob, { clientY: 100, button: 0 });
+    fireEvent.pointerMove(knob, { clientY: 60 });
+    fireEvent.pointerUp(knob, { clientY: 60 });
+    expect(useAppStore.getState().project.channels["ch-kick"]!.pan).not.toBe(0);
+
+    fireEvent.doubleClick(knob);
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.pan).toBe(0);
+  });
+
+  it("still nudges a knob that has room to move", () => {
+    render(<ChannelRack />);
+    const knob = screen.getByTestId("knob-Kick volume");
+
+    fireEvent.keyDown(knob, { key: "ArrowUp" });
+
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBeCloseTo(0.81, 5);
   });
 });

@@ -168,6 +168,32 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   }
 
   /**
+   * Open the sweep's session on the FIRST clip a sweep reaches, if the
+   * pointer-down that started it never reached this surface.
+   *
+   * `handleMainPointerDown` opens the session for a sweep that begins on the
+   * playlist. A sweep that begins OUTSIDE it — the button goes down on the
+   * rack, the mixer, the toolbar, or the gap beside the lanes, and the pointer
+   * then travels across the arrangement with the secondary button held — sends
+   * this surface no `pointerdown` at all, so there was no session and each
+   * crossed clip took `keyFor`'s fresh one-shot id: N clips, N undo entries
+   * (the sweep the coalescing exists to make one Ctrl+Z), and no persistence
+   * hold, so the autosave debounce could expire in the middle of the sweep and
+   * write a half-erased arrangement (SPEC.md §2.2).
+   *
+   * Opened lazily, from the erase path itself, and only when nothing is open:
+   * the sweep is only observable here through the clips it crosses. The
+   * session's `windowBackstop` (see its declaration) is what closes it — the
+   * release will not land on this surface either, which is the same reason the
+   * backstop is wired at all — and `handleMainPointerUp` still closes it for a
+   * release that does come back inside.
+   */
+  function beginSweepIfEntering(event: React.PointerEvent<HTMLDivElement>): void {
+    if (eraseSweep.peek() !== null) return;
+    eraseSweep.begin(event);
+  }
+
+  /**
    * Which pointer the open sweep belongs to, answered for a clip
    * (`ClipView`'s `ownsEraseSweep`) — rule (g) of `@/lib/gestureHold`, reached
    * across a component boundary because the session lives here and the
@@ -259,7 +285,17 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     else openPatternInPianoRoll(clip.patternId);
   }
 
-  function handleDeleteClip(clipId: string) {
+  /**
+   * A clip erased by the sweep or by a single right-click.
+   *
+   * `sweepEvent` is present only on the sweep's path (`ClipView`'s
+   * `pointerenter` with the secondary button held); it is what lets a sweep
+   * that entered from off-surface own ONE session for the whole run — see
+   * {@link beginSweepIfEntering}. A context-menu delete passes nothing and
+   * keeps its own one-shot id.
+   */
+  function handleDeleteClip(clipId: string, sweepEvent?: React.PointerEvent<HTMLDivElement>) {
+    if (sweepEvent !== undefined) beginSweepIfEntering(sweepEvent);
     dispatch(removeClip(clipId), eraseOptions());
   }
 

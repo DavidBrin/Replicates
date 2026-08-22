@@ -1439,3 +1439,76 @@ describe("the velocity lane can be re-opened after a full collapse", () => {
     expect(patch.velocityLaneHeight).toBeGreaterThan(0);
   });
 });
+
+/*
+ * Round 14 #5. The keyboard column and the splitter were decided BEFORE the
+ * primary-button guard the grid branches share, so both ran for any button
+ * §4.4 does not give them. Right-clicking the key column played the note and
+ * left a `preview` gesture open waiting for a `pointerup` a context menu may
+ * never deliver; right-clicking the splitter started a lane resize that then
+ * tracked the pointer with no button held. §4.4: left-click is
+ * "draw/add/activate", right-click is "delete (content areas); context menu"
+ * — neither branch is either of those.
+ */
+describe("the keyboard column and the splitter are PRIMARY-button only (round 14)", () => {
+  const keyboardPoint = { x: 20, y: pitchToY(VIEW, 65) + 4 };
+
+  it("does not audition on a secondary press in the keyboard column", () => {
+    const h = harness();
+
+    h.controller.pointerDown({ ...keyboardPoint, button: 2, pointerId: 1 });
+
+    expect(h.previewNote).not.toHaveBeenCalled();
+    expect(h.setPreviewPitch).not.toHaveBeenCalled();
+    expect(h.controller.peekGesture()).toBe("idle");
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("leaves no key lit and no gesture open after that secondary press moves", () => {
+    const h = harness();
+    h.controller.pointerDown({ ...keyboardPoint, button: 2, pointerId: 1 });
+
+    h.controller.pointerMove({ x: 20, y: pitchToY(VIEW, 72) + 4, button: 2, pointerId: 1 });
+
+    expect(h.previewNote).not.toHaveBeenCalled();
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  it("still auditions on a primary press", () => {
+    const h = harness();
+
+    h.controller.pointerDown({ ...keyboardPoint, button: 0, pointerId: 1 });
+
+    expect(h.previewNote).toHaveBeenCalledWith(CHANNEL, 65);
+    expect(h.controller.peekGesture()).toBe("preview");
+  });
+
+  it("does not start a lane resize from a secondary press on the splitter", () => {
+    const collapsed = { ...VIEW, velocityLaneHeight: 0 };
+    const h = harness({ view: collapsed, notes: [] });
+
+    h.controller.pointerDown({ x: 400, y: collapsed.height - 1, button: 2, pointerId: 1 });
+
+    expect(h.controller.peekGesture()).toBe("idle");
+    // …and a later move must not drag the lane open either.
+    h.controller.pointerMove({ x: 400, y: collapsed.height - 90, button: 2, pointerId: 1 });
+    expect(h.setView).not.toHaveBeenCalled();
+  });
+
+  it("still starts a lane resize from a primary press on the splitter", () => {
+    const collapsed = { ...VIEW, velocityLaneHeight: 0 };
+    const h = harness({ view: collapsed, notes: [] });
+
+    h.controller.pointerDown({ x: 400, y: collapsed.height - 1, button: 0, pointerId: 1 });
+
+    expect(h.controller.peekGesture()).toBe("lane-resize");
+  });
+
+  /* The middle button is still the pan, decided before either branch. */
+  it("keeps the middle button's pan in both regions", () => {
+    const h = harness();
+    h.controller.pointerDown({ ...keyboardPoint, button: 1, pointerId: 1 });
+    expect(h.controller.peekGesture()).toBe("pan");
+    expect(h.previewNote).not.toHaveBeenCalled();
+  });
+});

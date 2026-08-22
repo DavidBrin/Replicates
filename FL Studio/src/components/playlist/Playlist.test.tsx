@@ -1297,3 +1297,105 @@ describe("the lanes reach a full TRAILING_BARS past the last clip (round 13)", (
     );
   });
 });
+
+/*
+ * Round 14 #3. A sweep that STARTS on the playlist opens its session at the
+ * root's `pointerdown`. A sweep that starts anywhere else — the rack, the
+ * mixer, the toolbar, the margin beside the lanes — and then crosses into the
+ * arrangement with the secondary button held sends this surface no
+ * `pointerdown` at all. There was no session, so every crossed clip took a
+ * fresh one-shot id: N clips, N undo entries, and no persistence hold, so the
+ * autosave debounce could expire mid-sweep and write a half-erased
+ * arrangement (SPEC.md §2.2).
+ */
+describe("a sweep that entered from OUTSIDE the playlist still owns one session", () => {
+  function placeThree(): void {
+    for (const [index, id] of ["clip-a", "clip-b", "clip-c"].entries()) {
+      placeClip(id, { startTick: TICKS_PER_BAR * index });
+    }
+  }
+
+  /** The sweep as the browser delivers it: no root pointer-down, just enters. */
+  function sweepInFromOutside(): void {
+    for (const id of ["clip-a", "clip-b", "clip-c"]) {
+      fireEvent.pointerEnter(screen.getByTestId(`clip-${id}`), { buttons: 2, pointerId: 7 });
+    }
+  }
+
+  it("erases the whole sweep as ONE undo entry", () => {
+    placeThree();
+    render(<Playlist />);
+
+    sweepInFromOutside();
+
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(0);
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+  });
+
+  it("puts every swept clip back on a single undo", () => {
+    placeThree();
+    render(<Playlist />);
+
+    sweepInFromOutside();
+    act(() => {
+      useAppStore.getState().undo();
+    });
+
+    expect(Object.keys(useAppStore.getState().project.clips).sort()).toEqual([
+      "clip-a",
+      "clip-b",
+      "clip-c",
+    ]);
+  });
+
+  it("holds persistence off for the sweep, so no autosave lands mid-sweep", () => {
+    placeThree();
+    render(<Playlist />);
+
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 7 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+  });
+
+  /*
+   * The release lands wherever the sweep ends — off this surface as often as
+   * not, which is why the session wires the window backstop. That backstop is
+   * the one that has to close a session this component never saw open.
+   */
+  it("releases the hold on the window backstop, not only on a release inside", () => {
+    placeThree();
+    render(<Playlist />);
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 7 });
+
+    fireEvent.pointerUp(window, { pointerId: 7 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("does not weld the NEXT sweep onto the one that already ended", () => {
+    placeThree();
+    render(<Playlist />);
+
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 7 });
+    fireEvent.pointerUp(window, { pointerId: 7 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2, pointerId: 7 });
+    fireEvent.pointerUp(window, { pointerId: 7 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(2);
+  });
+
+  /*
+   * The scope guard: a lazily opened session must not turn a SINGLE
+   * right-click — which is a context-menu delete, not a sweep — into a
+   * gesture that holds persistence off until some later release.
+   */
+  it("leaves a bare context-menu delete a one-shot, holding nothing", () => {
+    placeThree();
+    render(<Playlist />);
+
+    fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+  });
+});
