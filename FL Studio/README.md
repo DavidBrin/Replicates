@@ -67,8 +67,8 @@ PORT=4000 pnpm dev           # or anywhere else
 
 | Command | What it does |
 |---|---|
-| `pnpm test` | 579 unit tests across 33 files (vitest, jsdom) |
-| `pnpm test:e2e` | 14 Playwright end-to-end tests |
+| `pnpm test` | 1,256 unit tests across 39 files (vitest, jsdom) |
+| `pnpm test:e2e` | 15 Playwright end-to-end tests across 6 spec files |
 | `pnpm test:e2e:ui` | The same, with the inspector |
 | `pnpm verify` | `tsc --noEmit` + eslint + the unit suite |
 | `pnpm build` | Production build |
@@ -219,8 +219,10 @@ Reference semantics have to be *visibly* true or they read as a bug rather than
 a feature, so it is a first-class e2e scenario, not an implementation detail:
 any code path that snapshots note data at paint time — a plausible miniature
 cache, say — silently reintroduces copy-on-place and the test catches it.
-**Make unique** is the one explicit fork: clone the pattern, repoint that single
-clip, one undoable command ([D11](design-decisions.md)).
+**Make unique** is the one explicit fork, and it lives on the clip *header's*
+context menu — right-clicking a clip's body is the universal erase gesture, so
+the menu could not sit there: clone the pattern, repoint that single clip, one
+undoable command ([D11](design-decisions.md)).
 
 **Undo covers everything**, via command objects with `apply`/`invert`, and a
 drag gesture coalesces into one history entry. That coalescing carried the
@@ -270,7 +272,7 @@ renders, and encodes 16-bit PCM by hand ([D12](design-decisions.md)).
 
 ## How it was built
 
-**Seven research lanes, in parallel**, ~4,400 lines in
+**Seven research lanes, in parallel**, ~3,300 lines in
 [`research/`](research), before a line of application code: visual and
 interaction design, the data model, audio-engine architecture, sound sourcing
 and licensing, comparable prior art, the UX scope boundary, and stack fit. Every
@@ -296,14 +298,29 @@ store — the store pushes to it, calling `syncProject(project)` and re-arming t
 transport only when the compiled schedule actually changed, so a fader tweak
 does not glitch playback ([D13](design-decisions.md)).
 
+**Then twenty rounds of codex review, run to a clean pass.** Most of what they
+found lived in one subsystem — pointer gestures and the undo entries they open —
+and it did not yield to fixing the reported case, because the next round simply
+found the same shape somewhere else. It closed to class-level sweeps instead:
+**one mutating gesture at a time app-wide** rather than per-surface guards
+([D19](design-decisions.md)), **pointer ownership consulted on every event** so a
+stray second pointer cannot drive or seal a drag it does not own, **sessions
+scoped to a press token** rather than to a pointer id that a mouse keeps for
+life, **pending editor commits flushed before a new gesture's first dispatch**
+instead of waiting for `blur` to arrive too late ([D20](design-decisions.md)),
+and **structural no-ops dropped at dispatch** so a gesture that changed nothing
+leaves no undo entry behind ([D21](design-decisions.md)). The unit suite roughly
+doubled over those rounds, which is the honest measure of how much of this was
+invisible to the first one.
+
 ---
 
 ## Code index
 
 ```
 SPEC.md                        the contract all seven slices built against
-design-decisions.md            17 decisions, each with its rejected alternative
-research/                      seven lanes, ~4,400 lines
+design-decisions.md            22 decisions, each with its rejected alternative
+research/                      seven lanes, ~3,300 lines
   00-research-brief.md           what each lane had to establish
   01-visual-interaction-design.md  measured geometry, colour tokens, gesture vocabulary
   02-data-model.md               entities derived from observed behaviour
@@ -322,11 +339,31 @@ research/                      seven lanes, ~4,400 lines
 | `src/components/` | `shell/` · `transport/` · `channel-rack/` · `piano-roll/` (renderer, geometry, interactions) · `playlist/` · `mixer/` |
 | `e2e/` | the beat loop, piano roll, playlist, mixer, persistence, smoke |
 
+**The rack is editable, not a fixed roster.** `+` adds a channel from the seven
+voices, and right-clicking a channel's name opens FL's Channel Operations menu —
+Rename, Recolor, Move up, Move down, Delete. Rename is an inline box that commits
+on `Enter` or blur and refuses a blank or unchanged name rather than pushing an
+undo entry for nothing. The transport carries the project-level pair beside Save
+and the two exports: **New** and **Load**, both two-click armed, because either
+one throws away whatever is on screen.
+
 **Keyboard:** `Space` plays and stops from any window · `L` toggles Pattern and
-Song mode, which changes what the whole app means · `Ctrl+Z` / `Ctrl+Shift+Z`
-undo and redo · `F5`/`F6`/`F7` focus Playlist, Rack and Roll. And the three FL
+Song mode, which changes what the whole app means · `Ctrl+Z` / `Ctrl+Shift+Z` /
+`Ctrl+Y` undo and redo · `Ctrl+S` saves · `Ctrl+H` panics, stopping the transport
+and every scheduled voice · `Ctrl+M` toggles the metronome, which the toolbar also
+carries as a button · `F2` renames the current pattern, `F4` jumps to the next
+empty one, `Numpad +/-` steps between them · `F5` and `F9` show and hide the
+Playlist and the Mixer, `F6`/`F7` flip the bottom panel between Rack and Roll ·
+`PgUp`/`PgDn` zoom the piano roll about the grid centre. And the three FL
 primitives, everywhere they apply: **right-click deletes**, middle-drag pans on
 both axes, `Ctrl+wheel` zooms at the cursor.
+
+None of those fire while you are typing: the registry skips every binding whose
+`worksInInputs` is not explicitly set when the event came from a text field, or
+`140` in the BPM box would mute channels 1, 4 and 10. The guard protects *text*,
+not focus — a range slider has no character to steal, and treating it as text
+entry silently killed `Ctrl+Z`, `Ctrl+S` and `Space` for as long as the swing
+slider held focus.
 
 ---
 
@@ -362,9 +399,9 @@ by construction rather than by diligence. The layout is measured rather than
 approximated — pixel run-length scans of Image-Line's own manual captures gave
 the 24px step pitch, the cool/warm four-step hue alternation and the piano
 roll's three gridline weights. Next.js · Tone.js as the clock with hand-built
-native voices · a Canvas-2D piano roll painted by a pure function · 579 unit
-tests · 14 Playwright e2e. Built from seven parallel research lanes, then seven
-parallel build slices.
+native voices · a Canvas-2D piano roll painted by a pure function · 1,256 unit
+tests · 15 Playwright e2e. Built from seven parallel research lanes, then seven
+parallel build slices, then twenty rounds of codex review run to a clean pass.
 
 ---
 

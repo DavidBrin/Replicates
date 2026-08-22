@@ -406,5 +406,112 @@ stroke's on/off mode is decided from the cell it began on).
 
 ---
 
+## D19 — One mutating gesture at a time, app-wide; history segments are not built
+
+**Decision.** At most one mutating pointer gesture is open across the whole
+app. Beginning a new one — `GestureSession.begin`, `keyForEdit`, `keyFor` —
+first *ends* whichever gesture was active, sealing its undo entry and dropping
+its autosave hold, enforced by a module-level registry of open gestures
+(`lib/gestureHold.ts`, `openGestures`). `domain/undo.ts` serializes again in
+the dispatch path, so the history is still correct if a surface dispatches with
+a `gestureId` it never took a session for.
+
+**Rejected.** Letting several gestures be open at once and modelling the undo
+stack as *segments* — an entry per live `gestureId`, so interleaved dispatches
+extend whichever entry they belong to rather than only the top one. That is the
+general solution, and it is a second timeline data structure to keep coherent
+with undo, redo, coalescing and the stack cap, in service of a case no
+conventional DAW offers. The problem is prevented instead of modelled.
+
+**Cost.** Multi-pointer simultaneous editing is out of scope: a second pointer
+starting a drag ends the first one rather than editing beside it. Two sessions
+opened by the *same press* (the tempo wrapper around the BPM plate, a rack
+stroke walking into the next row) need an explicit exemption, and it is keyed
+on the pointer id **and** a press token — a mouse keeps pointer id 1 for life,
+so an id-only exemption would also exempt a session leaked five clicks ago.
+
+---
+
+## D20 — A blur commit flushes before the next gesture's first dispatch, rather than pre-empting it
+
+**Decision.** Blur commits (`keyForCommit` / `commitGestureKey` — the channel
+rename box, the BPM field, the pattern rename) are exempt from D19: they take
+an id without pre-empting anything. Instead, every gesture entry point
+**flushes the open editors first**, through `flushPendingCommits` and the
+`usePendingCommit` hook each editor registers its existing commit path with.
+
+**Rejected.** Making the commit itself pre-empting, like every other gesture.
+`blur` is delivered *after* the `pointerdown` that caused it, so the commit
+reaches the registry one step too late: it kills the gesture that press has
+just opened. Also rejected: leaving the ordering to `blur` alone — a
+pointer-down that mutates immediately (a drawn note, a velocity stem, a
+shift-clone, a painted clip) has already dispatched by then, so the commit
+stacked *on top* of it, inverting the undo order and cutting the new drag's
+coalescing dead.
+
+**Cost.** Two mechanisms where there could be one, and a registration each
+editor has to make. The commit is the tail of an editing session that already
+ended, so there is nothing for it to be serialized *against* — only something
+for it to land *before*.
+
+---
+
+## D21 — `Command.empty` is a structural flag dropped at dispatch; value equality belongs to the call site
+
+**Decision.** Every command constructor declares `empty: true` when its own
+payload is structurally empty — no note patches, no ids, `{}` as a patch — and
+`dispatchCommand` drops such a command before it reaches history
+(`domain/commands/types.ts`, `isEmptyCommand`). A composite is empty when all
+its parts are. The test is O(1) and reads the flag; it never compares patch
+values against the project.
+
+**Rejected.** Diffing the command's payload against the project at dispatch
+time. That is a per-field comparison over a set whose size is the caller's
+business, and `dispatch` sits on the pointermove path where a note drag calls
+it sixty times a second. So **value equality is the call site's job**, done
+where the values being overwritten are already in hand and the set is bounded:
+the resize drag's `lastLengths` in `piano-roll/interactions.ts`, the rack's
+velocity nudge and routing cycle, the roll's `applyVelocity`.
+
+**Cost.** The responsibility is split across two layers, and a call site that
+forgets its own equality check produces an undo entry that undoes nothing
+unless its payload also happens to be structurally empty. The structural guard
+is the last line of defence, not the whole defence — which is why it is
+documented as such at both ends.
+
+---
+
+## D22 — A 1000-bar arrangement bound at the import boundary, and a separate 600-second export ceiling
+
+**Decision.** `MAX_ARRANGEMENT_BARS = 1000` (`domain/types.ts`), enforced where
+untrusted data enters — `readClip` in `domain/serialization.ts` drops an
+out-of-range clip exactly as it drops an out-of-bar note. Separately,
+`EXPORT_MAX_SECONDS = 600` (`audio/exportWav.ts`) refuses a render longer than
+ten minutes, naming the number so the user can shorten the arrangement or raise
+the tempo.
+
+**Rejected.** Trusting the file, and clamping at each consumer instead. A clip
+position is a *number* in a save file, and every consumer sizes something
+proportional to it: `TimelineRuler` builds `Array.from({ length: totalBars })`,
+which throws `RangeError: Invalid array length` past 2^32, and the WAV export
+allocates a buffer of `arrangementLengthTicks` worth of samples. A
+finite-but-enormous `startTick` (`1e308` passes `Number.isFinite`) took the app
+down at *render* time, after the import had already reported success.
+
+**Also rejected:** deriving the export ceiling from the bar bound. Bars are
+measured in ticks, so the *tempo* decides how much audio 1000 bars is — at the
+minimum 10 BPM it is about 6.7 hours, ~8.5 GB of float PCM allocated up front,
+plus a second buffer for the encoder. The ceiling is deliberately the
+**export's**, not the arrangement's: a long, slow arrangement stays a legal
+project to write, play and save; it is only rendering the whole of it to one
+in-memory WAV that has no answer.
+
+**Cost.** Two constants rather than one derived from the other, and a legal
+project that cannot be exported in a single pass. Ten minutes is ~106 MB of
+float PCM plus ~53 MB of 16-bit output, which every browser handles, and it is
+longer than any track this app is for.
+
+---
+
 *Companion document: [`SPEC.md`](SPEC.md) is the contract; this file is why
 the contract says what it says where that isn't self-evident.*
