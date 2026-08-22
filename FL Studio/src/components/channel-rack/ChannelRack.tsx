@@ -106,7 +106,13 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
    * open takes a fresh one-shot key from `keyFor`, so it can never join the
    * drag before it either.
    */
-  const swing = useGestureSession("rack-swing");
+  /**
+   * `windowBackstop`: `TransportBar`'s swing slider, same control, same
+   * reason — a native range takes implicit pointer capture only for a PRIMARY
+   * drag, so any release the filter below lets through still has to be able
+   * to find this session from the window.
+   */
+  const swing = useGestureSession("rack-swing", { windowBackstop: true });
 
   if (!pattern) return null;
   // Nested function declarations below don't inherit the narrowing above
@@ -319,7 +325,14 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             // keys the slider itself acts on are stopped here instead, which
             // is the narrow half of that trade.
             onKeyDown={handleRangeInputKeyDown}
-            onPointerDown={swing.begin}
+            // Primary only — see `TransportBar`'s copy of this slider for the
+            // measured behaviour. Right and middle presses start no native
+            // drag and take no capture, so the hold this used to open had no
+            // release coming back to it.
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              swing.begin(event);
+            }}
             {...swing.terminators}
             // `keyForEdit`: a drag's edits carry the open session's id (the
             // pointer-down took the hold), a keyboard edit carries a

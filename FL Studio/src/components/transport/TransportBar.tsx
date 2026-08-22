@@ -150,8 +150,24 @@ export function TransportBar({
    * undo entry; and neither released on unmount. The hook owns all of it,
    * plus a module-scoped id counter that a remount cannot rewind.
    */
-  const tempoGesture = useGestureSession("tempo");
-  const swingGesture = useGestureSession("swing");
+  /**
+   * `windowBackstop`, because this session is opened by a capture-phase
+   * handler on a plate whose pressable parts do NOT all take pointer capture.
+   *
+   * `BpmLcd`'s drag calls `setPointerCapture` on its own target, so a drag
+   * that starts on the value face retargets its `pointerup` back inside this
+   * wrapper however far off the plate it ends — that path was covered. The
+   * other two presses this handler hears are not: the ▲/▼ spinner buttons and
+   * the type-in field take no capture (measured in Chromium and WebKit — a
+   * press on either, released 500px away, delivers this wrapper nothing but
+   * the `pointerdown`), and `BpmLcd` deliberately ignores both, so no inner
+   * gesture takes capture on their behalf either. Pressing ▲ and drifting off
+   * the plate before letting go therefore left `tempo` open with no
+   * terminator coming: autosave deferred for the rest of the session, and the
+   * next unrelated tempo edit welded onto the abandoned gesture's undo entry.
+   */
+  const tempoGesture = useGestureSession("tempo", { windowBackstop: true });
+  const swingGesture = useGestureSession("swing", { windowBackstop: true });
 
   function handleTempoChange(bpm: number) {
     if (onTempoChange) {
@@ -281,7 +297,17 @@ export function TransportBar({
 
       <div className="fl-toolbar__group">
         <div
-          onPointerDownCapture={tempoGesture.begin}
+          // Primary presses only. A right- or middle-press anywhere on the
+          // plate opened this session even though nothing downstream acts on
+          // one — `BpmLcd` returns on `event.button !== 0` without taking
+          // capture — and the release lands wherever the context menu or the
+          // autoscroll puck leaves the pointer. The backstop above would now
+          // catch it, but a gesture nothing is going to use should not be
+          // opened at all: its id pre-empts whatever session IS open.
+          onPointerDownCapture={(event) => {
+            if (event.button !== 0) return;
+            tempoGesture.begin(event);
+          }}
           // Ownership, not "any release" (`@/lib/gestureHold` rule (g)): a
           // stray pointer lifting over the plate used to seal the tempo
           // gesture with the dragging button still down, so the rest of the
@@ -310,7 +336,22 @@ export function TransportBar({
             // keys the slider itself acts on are stopped here instead, which
             // is the narrow half of that trade.
             onKeyDown={handleRangeInputKeyDown}
-            onPointerDown={swingGesture.begin}
+            // Primary only, and for a reason measured rather than assumed. A
+            // native range takes implicit pointer capture for a PRIMARY drag
+            // (Chromium fires `gotpointercapture`; WebKit retargets without
+            // one), so that release comes back to this input however far off
+            // it lands and `terminators` closes the session. It starts no drag
+            // and takes no capture for the right or middle button: the press
+            // opened a hold, the range fired no `change`, and the release —
+            // over the context menu, or wherever the middle button's
+            // autoscroll puck ends — reached this element never. The backstop
+            // above covers the engines that probe could not reach; the filter
+            // is what stops a session being opened for a gesture the control
+            // does not have.
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              swingGesture.begin(event);
+            }}
             {...swingGesture.terminators}
             onChange={(event) =>
               handleSwingChange(Number.parseFloat(event.target.value))

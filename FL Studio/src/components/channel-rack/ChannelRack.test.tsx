@@ -1726,3 +1726,70 @@ describe("a clamped rack edit that changes nothing dispatches nothing (round 15)
     expect(useAppStore.getState().history.past).toHaveLength(before + 1);
   });
 });
+
+/* ------------------------------- a swing press with no drag behind it ----- */
+
+/*
+ * Round 19 #3, rack half — `TransportBar`'s swing slider carries the same
+ * describe. A native range starts a drag, and takes the implicit pointer
+ * capture that makes an off-element release still reach it, for the PRIMARY
+ * button only. Right and middle presses did none of that and still opened a
+ * hold here: nothing changed the value, nothing came back to close it, and the
+ * release landed over the context menu or wherever the middle button's
+ * autoscroll puck ended.
+ */
+describe("ChannelRack swing — a non-primary press opens nothing (round 19)", () => {
+  beforeEach(() => {
+    useAppStore.setState({ activeGestureIds: [] });
+    __resetGestureCounterForTests();
+  });
+
+  it.each([
+    ["right", 2, 2],
+    ["middle", 1, 4],
+  ])("takes no hold for a %s press", (_name, button, buttons) => {
+    render(<ChannelRack />);
+    const ended = vi.fn();
+    const unregister = registerExternalGesture(ended, { pointerId: 7 });
+
+    fireEvent.pointerDown(screen.getByLabelText("Rack swing"), { button, buttons, pointerId: 1 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    // And it does not pre-empt the gesture that IS running — a press this
+    // control cannot act on must not end somebody else's drag.
+    expect(ended).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  /*
+   * See `TransportBar`'s copy: Chromium and WebKit both hand a native range
+   * implicit pointer capture for a primary drag, so the release finds its way
+   * back to the element there. jsdom does not, which makes this the engine
+   * that does not — and the window backstop is what closes the session in it.
+   */
+  it("closes a primary drag whose release lands off the slider", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+
+    fireEvent.pointerDown(slider, { button: 0, buttons: 1, pointerId: 4 });
+    fireEvent.change(slider, { target: { value: "0.3" } });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(document.body, { pointerId: 4 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("still takes — and releases — a hold for a primary drag", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+
+    fireEvent.pointerDown(slider, { button: 0, buttons: 1, pointerId: 1 });
+    fireEvent.change(slider, { target: { value: "0.3" } });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(slider, { pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.3);
+  });
+});

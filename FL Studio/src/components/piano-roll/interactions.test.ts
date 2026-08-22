@@ -1819,3 +1819,64 @@ describe("a zoom mid-drag rebases from RAW pointer travel, not the snapped delta
     expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(wall);
   });
 });
+
+/*
+ * Round 19 #1. The horizontal axis rebased from RAW pointer travel (round 18
+ * #1 above); the PITCH axis still rebased from `lastDeltaPitch`, which is the
+ * delta AFTER the MIDI 0/127 clamp and after Shift's pitch lock has zeroed it.
+ * Both discard travel the pointer really made, and a zoom wrote the loss into
+ * the origin permanently: a set held against the ceiling came off it on the
+ * first row of reversal instead of waiting out the overshoot, and a
+ * pitch-locked drag lost every row it had travelled, so releasing Shift no
+ * longer caught the notes up to the pointer.
+ */
+describe("a zoom mid-drag rebases the PITCH from raw travel too", () => {
+  function zoom(h: Harness, patch: Partial<RollViewport>) {
+    h.scene.view = createViewport({ ...h.scene.view, ...patch });
+  }
+
+  it("keeps a set pinned at MIDI 127 until the pointer gives the overshoot back", () => {
+    // Sixty rows of headroom, eighty rows of travel: twenty rows of overshoot
+    // the clamp swallows and `lastDeltaPitch` cannot remember. (The note sits
+    // at an ordinary pitch and the POINTER goes off the top of the grid —
+    // starting it near the ceiling would only put it out of the viewport, and
+    // the press would miss it.)
+    const note = makeNote({ positionTicks: 0, pitch: 67, lengthTicks: TICKS_PER_BEAT });
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    const anchorY = start.y - rowHeight(VIEW) * 80;
+    h.controller.pointerMove({ ...start, y: anchorY });
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.pitch).toBe(127);
+
+    // Zoom with the button still down, then walk five rows back DOWN. The
+    // pointer is still miles above the ceiling, so the note may not move.
+    zoom(h, { zoomY: VIEW.zoomY * 2 });
+    const zoomed = h.scene.view;
+    h.controller.pointerMove({ ...start, y: anchorY + rowHeight(zoomed) * 5 });
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.pitch).toBe(127);
+  });
+
+  it("catches up to the pointer when Shift is released after a zoom", () => {
+    const note = makeNote({ positionTicks: 0, pitch: 67, lengthTicks: TICKS_PER_BEAT });
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    // Four rows up with the pitch LOCKED: the note stays put, but the pointer
+    // has still travelled four rows and releasing Shift owes them back.
+    const anchorY = start.y - rowHeight(VIEW) * 4;
+    h.controller.pointerMove({ ...start, y: anchorY, shiftKey: true });
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.pitch).toBe(67);
+
+    // Zoom while still locked, then let Shift go without moving the pointer.
+    zoom(h, { zoomY: VIEW.zoomY * 2 });
+    h.controller.pointerMove({ ...start, y: anchorY });
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.pitch).toBe(71);
+  });
+});

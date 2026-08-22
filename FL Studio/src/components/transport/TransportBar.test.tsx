@@ -578,3 +578,133 @@ describe("a field's blur commit does not kill the gesture that caused the blur",
     unregister();
   });
 });
+
+/* -------------------------------------- presses that open nothing (r19) --- */
+
+/*
+ * Round 19 #2/#3. Both toolbar controls opened a persistence hold from a press
+ * that nothing downstream was ever going to act on, and neither could hear the
+ * release.
+ *
+ * The tempo plate's `onPointerDownCapture` fires for every press anywhere
+ * inside it, including the ▲/▼ spinner and the type-in field — and neither of
+ * those takes pointer capture (`BpmLcd` deliberately ignores them, and a
+ * `<button>`/`<input>` does not capture on its own), so a press that drifts off
+ * the plate before letting go delivered the wrapper's `onPointerUpCapture`
+ * nothing at all. The swing slider is the same shape one step further out: a
+ * native range takes implicit capture for a PRIMARY drag only, so its
+ * `terminators` cover that release however far away it lands and cover nothing
+ * at all for the right or middle button, which start no drag on it.
+ */
+describe("toolbar presses that cannot be released (round 19)", () => {
+  function reset(): void {
+    act(() => {
+      useAppStore.setState({
+        project: { ...useAppStore.getState().project, globalSwing: 0 },
+        history: createHistory(),
+        activeGestureIds: [],
+      });
+    });
+    __resetGestureCounterForTests();
+  }
+
+  const held = (): boolean => selectHasActiveGesture(useAppStore.getState());
+
+  beforeEach(reset);
+
+  it("closes a spinner-opened tempo hold from the window when the release lands off the plate", () => {
+    render(<TransportBar />);
+
+    // The wrapper opens `tempo` for this press; the spinner takes no capture.
+    fireEvent.pointerDown(screen.getByLabelText("Increase tempo"), { button: 0, pointerId: 1 });
+    expect(held()).toBe(true);
+
+    // Released 500px away: the plate hears nothing, the window backstop does.
+    fireEvent.pointerUp(document.body, { pointerId: 1 });
+
+    expect(held()).toBe(false);
+  });
+
+  it("closes a tempo hold opened by a press into the type-in field the same way", () => {
+    render(<TransportBar />);
+    fireEvent.click(screen.getByText("140"), { detail: 1 });
+    const input = screen.getByRole("textbox");
+
+    // A press into an open editor still opens the wrapper's session by design
+    // (it is how the caret is placed without committing) — and a text-selection
+    // drag that ends outside the plate takes no capture either.
+    fireEvent.pointerDown(input, { button: 0, pointerId: 3 });
+    expect(held()).toBe(true);
+
+    fireEvent.pointerUp(document.body, { pointerId: 3 });
+
+    expect(held()).toBe(false);
+  });
+
+  it("opens NO tempo gesture for a non-primary press on the plate", () => {
+    render(<TransportBar />);
+    const external = vi.fn();
+    const unregister = registerExternalGesture(external, { pointerId: 7 });
+
+    fireEvent.pointerDown(screen.getByTestId("bpm-lcd"), { button: 2, buttons: 2, pointerId: 1 });
+
+    // Nothing held, and — the stricter half — nothing pre-empted: a right-press
+    // that opens a session ENDS whatever gesture was running elsewhere, which
+    // is a real edit lost for a button no tempo control acts on.
+    expect(held()).toBe(false);
+    expect(external).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  it.each([
+    ["right", 2, 2],
+    ["middle", 1, 4],
+  ])("opens NO swing gesture for a %s press on the slider", (_name, button, buttons) => {
+    render(<TransportBar />);
+    const external = vi.fn();
+    const unregister = registerExternalGesture(external, { pointerId: 7 });
+
+    fireEvent.pointerDown(screen.getByLabelText("Global swing"), { button, buttons, pointerId: 1 });
+
+    expect(held()).toBe(false);
+    expect(external).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  /*
+   * The backstop's own case, and the reason the primary filter alone is not
+   * the whole fix. Chromium and WebKit both give a native range implicit
+   * pointer capture for a primary drag, so the release comes home by itself
+   * there; that is measured, not assumed, and it is measured on two engines
+   * out of the three this could ship to. jsdom takes no implicit capture at
+   * all, which makes this test the engine that does not — release off the
+   * slider and only the window hears it.
+   */
+  it("closes a primary swing drag whose release lands off the slider", () => {
+    render(<TransportBar />);
+    const slider = screen.getByLabelText("Global swing");
+
+    fireEvent.pointerDown(slider, { button: 0, buttons: 1, pointerId: 4 });
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    expect(held()).toBe(true);
+
+    fireEvent.pointerUp(document.body, { pointerId: 4 });
+
+    expect(held()).toBe(false);
+  });
+
+  it("still opens — and still closes — a PRIMARY swing drag", () => {
+    render(<TransportBar />);
+    const slider = screen.getByLabelText("Global swing");
+
+    fireEvent.pointerDown(slider, { button: 0, buttons: 1, pointerId: 1 });
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    expect(held()).toBe(true);
+
+    fireEvent.pointerUp(slider, { pointerId: 1 });
+
+    expect(held()).toBe(false);
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.4);
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+  });
+});

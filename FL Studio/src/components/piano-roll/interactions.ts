@@ -321,6 +321,22 @@ type Gesture =
       rawDeltaTicks: number;
       lastDeltaPitch: number;
       /**
+       * The pitch axis's {@link rawDeltaTicks}: the pointer's travel in rows
+       * from the origin, before the pitch lock zeroes it and before the MIDI
+       * bounds clamp it.
+       *
+       * `lastDeltaPitch` is the wrong anchor for the same reason
+       * `lastDeltaTicks` is. It is 0 for as long as Shift holds the pitch, so
+       * a zoom under a pitch-locked drag rebased the origin onto the pointer's
+       * current row and every row the drag had travelled was gone — releasing
+       * Shift no longer caught the notes up to the pointer, it left them where
+       * the lock froze them. And it saturates at MIDI 0/127, so a set dragged
+       * ten rows past the ceiling and then rebased had the overshoot thrown
+       * away: one row back down the drag came off the boundary immediately,
+       * when the pointer still had ten rows of travel to give back first.
+       */
+      rawDeltaPitch: number;
+      /**
        * This drag is dragging CLONES that Shift+click just made — so Shift is
        * still down through the whole gesture and must not also mean "lock
        * pitch" (see `pointerMove`'s `lockPitch`).
@@ -745,6 +761,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
           lastDeltaTicks: 0,
           rawDeltaTicks: 0,
           lastDeltaPitch: 0,
+          rawDeltaPitch: 0,
           cloned: true,
         },
         input.pointerId ?? null,
@@ -764,6 +781,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         lastDeltaTicks: 0,
         rawDeltaTicks: 0,
         lastDeltaPitch: 0,
+        rawDeltaPitch: 0,
         cloned: false,
       },
       input.pointerId ?? null,
@@ -821,6 +839,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         lastDeltaTicks: 0,
         rawDeltaTicks: 0,
         lastDeltaPitch: 0,
+        rawDeltaPitch: 0,
         cloned: false,
       },
       input.pointerId ?? null,
@@ -926,11 +945,14 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     }
 
     if (gesture.kind === "move") {
-      // The pitch axis is the same argument one dimension over. Anchoring at
-      // the row's MIDDLE, not its top edge, because `yToPitch` floors: the top
-      // edge is the boundary between two rows and a float hair either side of
-      // it lands in the wrong one.
-      const anchorPitch = yToPitch(view, anchor.y) - gesture.lastDeltaPitch;
+      // The pitch axis is the same argument one dimension over, off the same
+      // RAW travel: `lastDeltaPitch` is zeroed by the Shift lock and saturated
+      // at MIDI 0/127, and either one baked into the origin loses travel the
+      // pointer really made (see `rawDeltaPitch`). Anchoring at the row's
+      // MIDDLE, not its top edge, because `yToPitch` floors: the top edge is
+      // the boundary between two rows and a float hair either side of it lands
+      // in the wrong one.
+      const anchorPitch = yToPitch(view, anchor.y) - gesture.rawDeltaPitch;
       gesture.originY = pitchToY(view, anchorPitch) + rowHeight(view) / 2;
     }
   };
@@ -1096,9 +1118,12 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     const rawTicks = primary.positionTicks + active.rawDeltaTicks;
     const snappedPosition = snapTick(rawTicks, scene.snap, bypass);
     let deltaTicks = lockTime ? 0 : Math.round(snappedPosition - primary.positionTicks);
-    let deltaPitch = lockPitch
-      ? 0
-      : yToPitch(view, input.y) - yToPitch(view, active.originY);
+    // Raw pitch travel, kept whatever the branches below decide — the Shift
+    // pitch lock included, for the same reason Ctrl's time lock does not
+    // touch `rawDeltaTicks`: releasing Shift must resume from the row the
+    // pointer is actually over, not from the row the lock froze.
+    active.rawDeltaPitch = yToPitch(view, input.y) - yToPitch(view, active.originY);
+    let deltaPitch = lockPitch ? 0 : active.rawDeltaPitch;
 
     // Keep the whole set inside the pattern and inside MIDI range. Both
     // bounds are shared across the group (not clamped per-note) so a
