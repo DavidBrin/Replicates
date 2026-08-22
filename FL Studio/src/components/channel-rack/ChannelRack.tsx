@@ -160,7 +160,12 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     const currentIndex = order.indexOf(channel.routedToMixerTrackId);
     const nextIndex = (currentIndex + direction + order.length) % order.length;
     const nextTrackId = order[nextIndex];
-    if (nextTrackId) {
+    // A cycle through a single track lands back on the track the channel is
+    // already routed to. Dispatching that filed an undo entry that undoes
+    // nothing, and `oneShotGestureKey` in the options below PRE-EMPTS — so a
+    // click that changed no routing sealed whatever drag was open elsewhere.
+    // Nothing changed means nothing dispatched and nothing pre-empted.
+    if (nextTrackId && nextTrackId !== channel.routedToMixerTrackId) {
       dispatch(updateChannel(channelId, { routedToMixerTrackId: nextTrackId }), {
         gestureId: oneShotGestureKey("rack-routing"),
       });

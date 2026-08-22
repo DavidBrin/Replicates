@@ -210,6 +210,72 @@ describe("transpose", () => {
   });
 });
 
+/*
+ * Round 16 #2. `mutate()` used to mint the one-shot BEFORE calling `build()`,
+ * so a keystroke that turns out to write nothing still pre-empted: it ended
+ * whatever drag was open app-wide and flushed any pending editor commit on its
+ * way to dispatching nothing at all. Both no-op shapes are reachable with one
+ * finger — `Delete` with the selection empty, `Ctrl+↑` with the selection
+ * already on 127.
+ */
+describe("a keystroke that writes nothing pre-empts nothing (round 16 #2)", () => {
+  function openGesture(): string[] {
+    const ended: string[] = [];
+    registerExternalGesture(() => ended.push("drag"));
+    return ended;
+  }
+
+  beforeEach(() => {
+    __resetGestureCounterForTests();
+  });
+
+  it("leaves the open gesture alone on Delete with an empty selection", () => {
+    const h = harness([makeNote()], []);
+    const ended = openGesture();
+
+    press("Delete");
+
+    expect(ended).toEqual([]);
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("leaves the open gesture alone on a transpose at the MIDI ceiling", () => {
+    const h = harness([makeNote({ pitch: 127 })], ["n-1"]);
+    const ended = openGesture();
+
+    press("ArrowUp", { ctrlKey: true });
+
+    expect(ended).toEqual([]);
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("STILL pre-empts when the keystroke does write — the round 11 rule stands", () => {
+    const h = harness([makeNote({ pitch: 60 })], ["n-1"]);
+    const ended = openGesture();
+
+    press("ArrowUp", { ctrlKey: true });
+
+    expect(ended).toEqual(["drag"]);
+    expect(h.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("pre-empts before it builds the command it dispatches", () => {
+    // The round 15 ordering, still in force: the dispatched command is built
+    // AFTER the pre-emption, so it describes the project as the cancelled
+    // gesture left it. The probe that decides whether to pre-empt at all is a
+    // separate, earlier build — this asserts the sequence, not just the ends.
+    const notes = [makeNote({ id: "a", pitch: 60 })];
+    const order: string[] = [];
+    const h = harness(notes, ["a"]);
+    registerExternalGesture(() => order.push("preempt"));
+    h.dispatch.mockImplementation(() => void order.push("dispatch"));
+
+    press("ArrowUp", { shiftKey: true });
+
+    expect(order).toEqual(["preempt", "dispatch"]);
+  });
+});
+
 describe("Backspace", () => {
   it("toggles snap", () => {
     const h = harness([], []);

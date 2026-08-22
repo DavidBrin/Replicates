@@ -18,7 +18,7 @@
  * | `PgUp` / `PgDn` | horizontal zoom in / out about the grid centre |
  */
 
-import { removeNotes, updateNotes, type Command } from "@/domain/commands";
+import { isEmptyCommand, removeNotes, updateNotes, type Command } from "@/domain/commands";
 import type { Note, NoteId, PatternId } from "@/domain/types";
 import { oneShotGestureKey } from "@/lib/gestureHold";
 import { registerBindings, type KeyBinding } from "@/lib/keyboard";
@@ -98,15 +98,32 @@ export function createPianoRollBindings(deps: PianoRollBindingDeps): KeyBinding[
    * handler. The roll's drag is registered with the same registry (see
    * `interactions.ts`'s `registerGesture`), so pre-empting it here cancels it.
    *
-   * The command is built AFTER the pre-emption: cancelling a drag can change
-   * what the scene says (the drag's own last dispatch is already applied, and
-   * the cancel clears the roll's drag state), so a scene read before it would
-   * be describing a project state that no longer stands.
+   * The dispatched command is built AFTER the pre-emption: cancelling a drag
+   * can change what the scene says (the drag's own last dispatch is already
+   * applied, and the cancel clears the roll's drag state), so a scene read
+   * before it would be describing a project state that no longer stands.
+   *
+   * But the PROBE comes first, and it is not the same thing as the build.
+   * Pre-empting is itself an effect — it ends a drag somebody is still holding
+   * and flushes an open editor's commit — and a keystroke that writes nothing
+   * has no right to it. `Delete` with an empty selection and a transpose with
+   * the selection already against the MIDI ceiling both build `null`, and both
+   * used to kill a live drag on the way to doing nothing at all. So: build
+   * against the current scene to ask "is there an edit here?", pre-empt only
+   * if there is, then build AGAIN against the post-pre-emption scene and
+   * dispatch that. Both builds are pure functions of a scene, so the probe
+   * costs a filter over the target channel's notes and nothing else.
+   *
+   * The second build can still come back empty — the pre-emption may have
+   * removed the very notes the probe saw — and that answer is honoured too.
    */
   const mutate = (build: (scene: PianoRollBindingScene) => Command | null) => (): void => {
+    const writes = (command: Command | null): command is Command =>
+      command !== null && !isEmptyCommand(command);
+    if (!writes(build(deps.getScene()))) return;
     const gestureId = oneShotGestureKey(PIANO_ROLL_SURFACE_ID);
     const command = build(deps.getScene());
-    if (command !== null) deps.dispatch(command, { gestureId });
+    if (writes(command)) deps.dispatch(command, { gestureId });
   };
 
   const transpose = (semitones: number) =>

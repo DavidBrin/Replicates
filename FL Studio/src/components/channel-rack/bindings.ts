@@ -86,6 +86,24 @@ export function registerChannelRackBindings(
        * and hands back the id this dispatch travels under; it takes no hold
        * of its own, because a keypress has no pointer-up coming (rule (e)).
        */
+      /*
+       * The lookup happens BEFORE the one-shot, because pre-empting is an
+       * effect in its own right: it ends whatever drag is open app-wide and
+       * flushes any open editor's commit. `8` in a seven-channel project maps
+       * to no channel and mutes nothing — and it used to kill a knob drag the
+       * user was still holding on its way to returning empty-handed. A key
+       * that writes nothing pre-empts nothing.
+       *
+       * The state is then read AGAIN after the one-shot and the second read is
+       * the one dispatched: the pre-emption commits a pending rename and can
+       * end a gesture that was mid-write, so the channel's `muted` may not be
+       * what the probe saw. (Both reads are guarded — a channel can be gone by
+       * the second.)
+       */
+      const probe = appStore.getState().project;
+      const probeId = probe.channelOrder[index];
+      if (!probeId || !probe.channels[probeId]) return;
+
       const gestureId = oneShotGestureKey(`${SURFACE_ID}-mute`);
       const { project, dispatch } = appStore.getState();
       const channelId = project.channelOrder[index];

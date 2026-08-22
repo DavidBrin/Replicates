@@ -751,6 +751,30 @@ describe("ChannelRack — mixer routing box", () => {
 
     expect(useAppStore.getState().project.channels["ch-kick"]!.routedToMixerTrackId).toBe("mix-1");
   });
+
+  /*
+   * Round 16 #4. With one mixer track the cycle wraps onto the track the
+   * channel is already routed to, and the click dispatched it anyway: an undo
+   * entry that undoes nothing, filed under a one-shot that had already sealed
+   * whatever drag was open elsewhere.
+   */
+  it("dispatches nothing — and pre-empts nothing — with a single mixer track", async () => {
+    __resetGestureCounterForTests();
+    const base = createDefaultProject({ now: "2026-01-01T00:00:00.000Z" });
+    const master = base.mixerTracks["master"]!;
+    reset({ ...base, mixerTracks: { master } });
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const before = useAppStore.getState().project;
+    const ended: string[] = [];
+    registerExternalGesture(() => ended.push("drag"));
+
+    await user.click(screen.getByTestId("routing-ch-kick"));
+
+    expect(useAppStore.getState().project).toBe(before);
+    expect(useAppStore.getState().history.past).toHaveLength(0);
+    expect(ended).toEqual([]);
+  });
 });
 
 describe("ChannelRack — add channel", () => {

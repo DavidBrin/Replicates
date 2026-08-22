@@ -37,6 +37,13 @@ export interface Command {
    * that just went away. A command knows what it is; the store must not guess.
    */
   readonly wholesale?: boolean;
+  /**
+   * This command writes NOTHING — its payload is structurally empty (no
+   * patches, no ids, an all-empty patch object). Declared by the constructor,
+   * because only the constructor can answer it in O(1); see
+   * {@link isEmptyCommand} for what the dispatcher does with it.
+   */
+  readonly empty?: boolean;
   apply(project: Project): Project;
   invert(before: Project): Command;
 }
@@ -79,6 +86,10 @@ export function composite(commands: readonly Command[], label = "Multiple change
     type: "composite",
     label,
     commands,
+    // Empty when there is nothing in it that writes — `composite([])` included.
+    // Computed here rather than walked at dispatch time so the check stays O(1)
+    // for the 500-command composite a coalesced drag builds.
+    empty: commands.every((command) => command.empty === true),
     // A composite is wholesale when any part is: folding a `replaceProject`
     // into a coalesced gesture must not launder away what it does.
     wholesale: commands.some((command) => command.wholesale === true),
@@ -106,9 +117,31 @@ export function noop(label = "No change"): Command {
   return {
     type: "noop",
     label,
+    empty: true,
     apply: (project) => project,
     invert: () => noop(label),
   };
+}
+
+/**
+ * "This command cannot write anything" — the dispatcher's last line of defence
+ * against an undo entry that undoes nothing (`domain/undo.ts`'s
+ * `dispatchCommand`, which drops such a command before history).
+ *
+ * The test is **structural and O(1)**: it reads {@link Command.empty}, a flag
+ * each constructor sets when its own payload is empty (no note patches, no
+ * ids, `{}` as a patch). It deliberately does NOT compare patch values against
+ * the project — that is a per-field diff over a set whose size is the caller's
+ * business, and `dispatch` is on the pointermove path where a note drag calls
+ * it sixty times a second. Value equality is the CALL SITE's job, done where
+ * the values it would overwrite are already in hand and the set is bounded:
+ * see `piano-roll/interactions.ts` (the resize drag's `lastLengths`),
+ * `ChannelRack`'s velocity nudge and routing cycle, and the roll's
+ * `applyVelocity`. This guard catches what those miss — and every future call
+ * site that forgets.
+ */
+export function isEmptyCommand(command: Command): boolean {
+  return command.empty === true;
 }
 
 /* ------------------------------------------------------- record helpers -- */

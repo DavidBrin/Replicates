@@ -142,6 +142,9 @@ export function updatePlaylistTrack(id: PlaylistTrackId, patch: TrackPatch): Com
   return {
     type: "updatePlaylistTrack",
     label: "Change track",
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: Object.keys(patch).length === 0,
     apply(project) {
       const track = requireTrack(project, id);
       return { ...project, playlistTracks: setIn(project.playlistTracks, id, { ...track, ...patch }) };
@@ -211,6 +214,9 @@ export function updateClip(id: ClipId, patch: ClipPatch): Command {
   return {
     type: "updateClip",
     label: "Move clip",
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: Object.keys(patch).length === 0,
     apply(project) {
       const clip = requireClip(project, id);
       const next = { ...clip, ...patch };

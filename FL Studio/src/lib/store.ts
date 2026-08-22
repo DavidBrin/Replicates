@@ -58,7 +58,7 @@ import {
 import { createPlaylistUi, type PlaylistUiSlice } from "@/components/playlist/uiState";
 
 import { compileTimelineCached, type CompiledTimeline } from "@/domain/compile";
-import type { Command } from "@/domain/commands";
+import { isEmptyCommand, type Command } from "@/domain/commands";
 import { createDefaultProject } from "@/domain/defaultProject";
 import { reseedIds } from "@/domain/ids";
 import { deserializeProject, serializeProject } from "@/domain/serialization";
@@ -480,6 +480,12 @@ export const createDomainSlice: StateCreator<AppState, [], [], DomainSlice> = (s
     activeGestureIds: [],
 
     dispatch: (command, options) => {
+      // The twin of `dispatchCommand`'s own drop, one layer up. That one is the
+      // guarantee (it is where history is decided); this one is the saving:
+      // committing an empty command's unchanged result would still `set`, wake
+      // every subscriber, re-run `reconcileUiReferences` and re-arm autosave
+      // for a write that never happened.
+      if (isEmptyCommand(command)) return;
       const { project, history } = get();
       commit(dispatchCommand(project, history, command, options));
     },

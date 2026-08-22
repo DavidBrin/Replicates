@@ -24,6 +24,9 @@ export function updateProject(patch: ProjectPatch): Command {
   return {
     type: "updateProject",
     label: "Change project settings",
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: Object.keys(patch).length === 0,
     apply(project) {
       const next = { ...project, ...patch };
       if (patch.tempo !== undefined) next.tempo = clampTempo(patch.tempo);

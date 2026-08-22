@@ -133,6 +133,9 @@ export function updatePattern(id: PatternId, patch: PatternPatch): Command {
   return {
     type: "updatePattern",
     label: "Change pattern",
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: Object.keys(patch).length === 0,
     apply(project) {
       const pattern = requirePattern(project, id);
       return withPattern(project, { ...pattern, ...patch });
@@ -151,6 +154,9 @@ export function addNotes(patternId: PatternId, notes: readonly Note[]): Command 
   return {
     type: "addNotes",
     label: notes.length === 1 ? "Add note" : `Add ${notes.length} notes`,
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: notes.length === 0,
     apply(project) {
       const pattern = requirePattern(project, patternId);
       const next: Record<NoteId, Note> = { ...pattern.notes };
@@ -176,6 +182,9 @@ export function removeNotes(patternId: PatternId, noteIds: readonly NoteId[]): C
   return {
     type: "removeNotes",
     label: noteIds.length === 1 ? "Delete note" : `Delete ${noteIds.length} notes`,
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: noteIds.length === 0,
     apply(project) {
       const pattern = requirePattern(project, patternId);
       for (const id of noteIds) requireNote(pattern, id);
@@ -202,6 +211,9 @@ export function updateNotes(
   return {
     type: "updateNotes",
     label: patches.length === 1 ? "Edit note" : `Edit ${patches.length} notes`,
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: patches.every(({ patch }) => Object.keys(patch).length === 0),
     apply(project) {
       const pattern = requirePattern(project, patternId);
       const next: Record<NoteId, Note> = { ...pattern.notes };

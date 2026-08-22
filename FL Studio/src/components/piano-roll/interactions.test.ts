@@ -607,6 +607,64 @@ describe("resize (drag the right-edge grip)", () => {
     expect(notes?.[early.id]?.lengthTicks).toBeGreaterThan(early.lengthTicks);
   });
 
+  /*
+   * Round 16 #1. `deltaTicks` moving is not proof that a LENGTH moved: with
+   * every selected note already flush against the pattern's end the clamp
+   * hands back the length each note already has, so dragging further right
+   * dispatched patches identical to the project — an undo entry that undoes
+   * nothing, one per pointermove.
+   */
+  it("dispatches nothing when every selected note is already flush with the pattern end", () => {
+    const full = makeNote({ positionTicks: 0, lengthTicks: PATTERN_LENGTH_TICKS });
+    const h = harness({ notes: [full] });
+    const grip = gripRect(VIEW, full);
+    const start = { x: grip.x + 1, y: grip.y + 4, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 200 });
+    h.controller.pointerMove({ ...start, x: start.x + 400 });
+
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("still remembers the length for the next drawn note across a no-op resize", () => {
+    // The bail is about the WRITE, not about the gesture: the drag happened,
+    // and the length it settled on still seeds the next drawn note.
+    const full = makeNote({ positionTicks: 0, lengthTicks: PATTERN_LENGTH_TICKS });
+    const h = harness({ notes: [full] });
+    const grip = gripRect(VIEW, full);
+    const start = { x: grip.x + 1, y: grip.y + 4, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 200 });
+    h.controller.pointerUp(start);
+
+    expect(h.setLastLength).toHaveBeenCalledWith(PATTERN_LENGTH_TICKS);
+  });
+
+  it("still dispatches for the notes that DO have room beside one that does not", () => {
+    const early = makeNote({ id: "n-early", positionTicks: 0, lengthTicks: TICKS_PER_STEP });
+    const full = makeNote({
+      id: "n-full",
+      positionTicks: PATTERN_LENGTH_TICKS - 2,
+      lengthTicks: 2,
+      pitch: 70,
+    });
+    const h = harness({
+      notes: [early, full],
+      selectedNoteIds: [early.id, full.id],
+      snap: "quarterBeat",
+    });
+    const grip = gripRect(VIEW, early);
+    const start = { x: grip.x + 1, y: grip.y + 4, button: 0 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 300 });
+
+    expect(h.dispatch).toHaveBeenCalled();
+    const project = h.applied();
+    const notes = project.patterns[project.activePatternId]?.notes;
+    expect(notes?.[early.id]?.lengthTicks).toBeGreaterThan(early.lengthTicks);
+    expect(notes?.[full.id]?.lengthTicks).toBe(2);
+  });
+
   it("remembers the new length as the next drawn note's length", () => {
     const h = harness({ notes: [note] });
     const start = grabGrip(h);

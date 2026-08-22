@@ -67,7 +67,7 @@
  * hold two open entries at once.
  */
 
-import { composite, isComposite, type Command } from "./commands/types";
+import { composite, isComposite, isEmptyCommand, type Command } from "./commands/types";
 import { UNDO_STACK_LIMIT, type Project } from "./types";
 
 export interface HistoryEntry {
@@ -153,6 +153,28 @@ export function dispatchCommand(
   command: Command,
   options: DispatchOptions = {},
 ): HistoryResult {
+  /*
+   * A command that writes NOTHING never reaches the stack.
+   *
+   * The recurring bug this closes is one shape with many faces: an action
+   * whose target set turns out to be empty (a `Delete` with no selection, a
+   * resize where every note is already against the pattern's end, a transpose
+   * at the MIDI ceiling) still built a command and still dispatched it, so
+   * `Ctrl+Z` had an entry that restored what was already there — and, since a
+   * dispatch under a `gestureId` SEALS every other gesture's entry
+   * (`sealOtherGestures`), an edit that never happened bounded somebody else's
+   * drag.
+   *
+   * It is dropped whole: no seal, no coalesce, and no clearing of `future`, so
+   * a no-op keystroke cannot cost the user a pending redo either.
+   *
+   * The test is the structural {@link isEmptyCommand} — an O(1) flag read, not
+   * a diff — because this sits on the pointermove path. Comparing patch values
+   * against the project is the call site's job, where the current values are
+   * already in hand; see that function's doc for the division of labour.
+   */
+  if (isEmptyCommand(command)) return { project, history, wholesale: false };
+
   const inverse = command.invert(project);
   const next = command.apply(project);
 

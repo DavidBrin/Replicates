@@ -13,7 +13,7 @@
  * project, with no mocked dispatch anywhere.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addNotes, updateChannel } from "@/domain/commands";
 import { createDefaultProject } from "@/domain/defaultProject";
@@ -24,9 +24,12 @@ import {
   __resetGestureCounterForTests as __resetSharedGestureRegistry,
   commitGestureKey,
   flushPendingCommits,
+  registerExternalGesture,
   registerPendingCommit,
 } from "@/lib/gestureHold";
+import { __resetKeyboardRegistryForTests, dispatchKeyEvent } from "@/lib/keyboard";
 import { useAppStore } from "@/lib/store";
+import { registerChannelRackBindings } from "@/components/channel-rack/bindings";
 
 import { createViewport, noteRect, pitchToY, tickToX, velocityToY, type RollViewport } from "./geometry";
 import {
@@ -343,5 +346,87 @@ describe("a velocity edit that changes nothing dispatches nothing", () => {
 
     expect(velocityOf("n-a")).toBeGreaterThan(0.5);
     expect(preemptGestures).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Round 16, the class test.
+ *
+ * Four findings, one shape: an action that produces no actual edit must not
+ * dispatch, must not flush editors, and — the half that bites hardest — must
+ * not pre-empt. Pre-emption ends whatever gesture is open ANYWHERE in the app,
+ * so a keystroke that mutes nothing used to kill a drag the user still had a
+ * finger on, and the drag became a hover that does nothing.
+ *
+ * Driven across two surfaces on purpose: the drag belongs to the piano roll,
+ * the dead keystroke to the channel rack, and the only thing joining them is
+ * the shared registry — which is exactly where the bug lived.
+ */
+describe("a no-op action leaves the drag in flight alone (round 16)", () => {
+  let unregisterRack: (() => void) | null = null;
+
+  beforeEach(() => {
+    __resetKeyboardRegistryForTests();
+    unregisterRack = registerChannelRackBindings();
+  });
+
+  afterEach(() => {
+    unregisterRack?.();
+    unregisterRack = null;
+    __resetKeyboardRegistryForTests();
+  });
+
+  function draggingController() {
+    useAppStore.getState().dispatch(addNotes(PATTERN, [seedNote("n-a", 0)]));
+    const controller = controllerFor(["n-a"], {
+      registerGesture: (end) => registerExternalGesture(end),
+    });
+    controller.pointerDown(at(0, PITCH));
+    expect(controller.peekGesture()).toBe("move");
+    return controller;
+  }
+
+  /** `Digit9` maps to the ninth channel, and the default project has fewer. */
+  function pressDeadDigit(): void {
+    dispatchKeyEvent(new KeyboardEvent("keydown", { code: "Digit9" }));
+  }
+
+  it("keeps the drag ACTIVE and the history untouched", () => {
+    const controller = draggingController();
+    const before = useAppStore.getState();
+    const entries = before.history.past.length;
+
+    pressDeadDigit();
+
+    expect(controller.peekGesture()).toBe("move");
+    expect(useAppStore.getState().project).toBe(before.project);
+    expect(useAppStore.getState().history.past).toHaveLength(entries);
+  });
+
+  it("lets the drag finish as ONE undo entry, as though the key had never landed", () => {
+    const controller = draggingController();
+    const entries = useAppStore.getState().history.past.length;
+
+    controller.pointerMove(at(TICKS_PER_STEP, PITCH));
+    pressDeadDigit();
+    controller.pointerMove(at(TICKS_PER_STEP * 2, PITCH));
+    controller.pointerUp(at(TICKS_PER_STEP * 2, PITCH));
+
+    expect(useAppStore.getState().history.past).toHaveLength(entries + 1);
+    const moved = useAppStore.getState().project.patterns[PATTERN]!.notes["n-a"]!;
+    expect(moved.positionTicks).toBe(TICKS_PER_STEP * 2);
+
+    useAppStore.getState().undo();
+    expect(
+      useAppStore.getState().project.patterns[PATTERN]!.notes["n-a"]!.positionTicks,
+    ).toBe(0);
+  });
+
+  it("a key that DOES write still ends the drag — the invariant is not weakened", () => {
+    const controller = draggingController();
+
+    dispatchKeyEvent(new KeyboardEvent("keydown", { code: "Digit1" }));
+
+    expect(controller.peekGesture()).toBe("idle");
   });
 });

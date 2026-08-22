@@ -8,6 +8,7 @@
 export {
   CommandError,
   composite,
+  isEmptyCommand,
   noop,
   type Command,
 } from "./types";

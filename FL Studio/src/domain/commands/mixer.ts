@@ -24,6 +24,9 @@ export function updateMixerTrack(id: MixerTrackId, patch: MixerPatch): Command {
   return {
     type: "updateMixerTrack",
     label: "Change mixer track",
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: Object.keys(patch).length === 0,
     apply(project) {
       const track = requireMixerTrack(project, id);
       return { ...project, mixerTracks: setIn(project.mixerTracks, id, { ...track, ...patch }) };

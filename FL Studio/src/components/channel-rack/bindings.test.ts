@@ -91,4 +91,32 @@ describe("mute digits", () => {
     press("Digit9");
     expect(useAppStore.getState().project).toBe(before);
   });
+
+  /*
+   * Round 16 #3. The lookup used to happen AFTER the one-shot, so a digit that
+   * maps to no channel — `8` in a seven-channel project — pre-empted first and
+   * discovered it had nothing to mute second. The pre-emption is not free: it
+   * ends whatever drag is open app-wide and flushes any pending editor commit.
+   * A key that writes nothing must leave both alone.
+   */
+  it("pre-empts NOTHING when the digit maps to no channel (round 16 #3)", () => {
+    const ended: string[] = [];
+    registerExternalGesture(() => ended.push("drag"));
+    const before = useAppStore.getState().project;
+
+    press("Digit9");
+
+    expect(ended).toEqual([]);
+    expect(useAppStore.getState().project).toBe(before);
+    expect(useAppStore.getState().history.past).toHaveLength(0);
+  });
+
+  it("still pre-empts when the digit DOES map to a channel", () => {
+    const ended: string[] = [];
+    registerExternalGesture(() => ended.push("drag"));
+
+    press("Digit1");
+
+    expect(ended).toEqual(["drag"]);
+  });
 });

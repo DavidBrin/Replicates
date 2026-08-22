@@ -90,6 +90,25 @@ describe("dispatch and undo", () => {
     useAppStore.getState().undo();
     expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(0.8);
   });
+
+  /*
+   * Round 16, the class, at the store's own layer. `domain/undo.ts` already
+   * refuses to file an empty command, so the history half holds either way —
+   * what this pins is that the store does not even NOTIFY for one. Every
+   * subscriber runs synchronously on `set`, so a committed no-op woke the
+   * engine sync, re-ran the UI reconcile and re-armed autosave for a write
+   * that never happened.
+   */
+  it("does not notify a single subscriber for a command that writes nothing", () => {
+    const seen = vi.fn();
+    const unsubscribe = useAppStore.subscribe(seen);
+
+    useAppStore.getState().dispatch(updateChannel("ch-kick", {}));
+
+    expect(seen).not.toHaveBeenCalled();
+    expect(useAppStore.getState().history.past).toHaveLength(0);
+    unsubscribe();
+  });
 });
 
 describe("the non-undoable navigation rule (SPEC.md §5)", () => {

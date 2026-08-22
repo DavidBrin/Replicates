@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { updateChannel } from "./commands/channels";
-import { addNotes, removeNotes } from "./commands/patterns";
+import { addNotes, removeNotes, updateNotes } from "./commands/patterns";
 import { updateProject } from "./commands/project";
-import { isComposite } from "./commands/types";
+import { composite, isComposite, noop } from "./commands/types";
 import { fixtureProject } from "./testKit";
 import { UNDO_STACK_LIMIT, type Note } from "./types";
 import {
@@ -101,6 +101,83 @@ describe("history basics", () => {
       state = dispatchCommand(state.project, state.history, updateProject({ tempo: 100 + (i % 50) }));
     }
     expect(state.history.past).toHaveLength(UNDO_STACK_LIMIT);
+  });
+});
+
+/*
+ * Round 16, the class. Four separate findings — a resize with no room, a
+ * `Delete` with no selection, a digit that maps to no channel, a routing cycle
+ * of length one — were all the same bug: an action that writes nothing still
+ * went through dispatch. The call sites each stop building such a command now,
+ * and this is the floor underneath them: whatever gets through, an empty
+ * command never becomes an undo entry.
+ */
+describe("a command that writes nothing never reaches the stack", () => {
+  const empties = [
+    ["updateNotes with no patches", updateNotes(fixtureProject().activePatternId, [])],
+    ["updateChannel with an empty patch", updateChannel("ch-kick", {})],
+    ["updateProject with an empty patch", updateProject({})],
+    ["removeNotes with no ids", removeNotes(fixtureProject().activePatternId, [])],
+    ["addNotes with no notes", addNotes(fixtureProject().activePatternId, [])],
+    ["a composite of nothing", composite([])],
+    ["a composite of empties", composite([updateChannel("ch-kick", {}), noop()])],
+  ] as const;
+
+  it.each(empties)("drops %s — same project, same history", (_label, command) => {
+    const project = fixtureProject();
+    const history = createHistory();
+
+    const result = dispatchCommand(project, history, command, { gestureId: "g-1" });
+
+    expect(result.project).toBe(project);
+    expect(result.history).toBe(history);
+    expect(result.wholesale).toBe(false);
+  });
+
+  it("does not clear a pending REDO — a no-op keystroke costs the user nothing", () => {
+    const project = fixtureProject();
+    const seeded = dispatchCommand(project, createHistory(), addNotes(project.activePatternId, [note("n-1")]));
+    const undone = undo(seeded.project, seeded.history);
+    expect(canRedo(undone.history)).toBe(true);
+
+    const after = dispatchCommand(undone.project, undone.history, updateChannel("ch-kick", {}));
+
+    expect(canRedo(after.history)).toBe(true);
+    expect(after.history).toBe(undone.history);
+  });
+
+  it("SEALS nothing: an empty dispatch is not evidence that a gesture ended", () => {
+    const project = fixtureProject();
+    const open = dispatchCommand(project, createHistory(), updateChannel("ch-kick", { muted: true }), {
+      coalesceKey: "rack:mute",
+      gestureId: "g-drag",
+    });
+
+    // The empty command arrives under a DIFFERENT gesture id — the shape that
+    // seals every other gesture's entry when it writes.
+    const between = dispatchCommand(open.project, open.history, updateNotes(project.activePatternId, []), {
+      gestureId: "g-other",
+    });
+    // ...so the original gesture's entry is still open and still coalescing.
+    const resumed = dispatchCommand(
+      between.project,
+      between.history,
+      updateChannel("ch-kick", { muted: false }),
+      { coalesceKey: "rack:mute", gestureId: "g-drag" },
+    );
+
+    expect(resumed.history.past).toHaveLength(1);
+  });
+
+  it("still dispatches a command whose patch is non-empty but whose VALUE matches", () => {
+    // The dispatcher's guard is deliberately structural — value equality is
+    // the call site's job, where the current values are already in hand.
+    const project = fixtureProject();
+    const muted = project.channels["ch-kick"]!.muted;
+
+    const result = dispatchCommand(project, createHistory(), updateChannel("ch-kick", { muted }));
+
+    expect(result.history.past).toHaveLength(1);
   });
 });
 

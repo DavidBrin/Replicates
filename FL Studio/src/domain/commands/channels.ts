@@ -145,6 +145,9 @@ export function updateChannel(id: ChannelId, patch: ChannelPatch): Command {
   return {
     type: "updateChannel",
     label: "Change channel",
+    // Nothing to write when the payload is empty — the dispatcher drops such
+    // a command before it reaches history (`types.ts`'s `isEmptyCommand`).
+    empty: Object.keys(patch).length === 0,
     apply(project) {
       const channel = requireChannel(project, id);
       return {

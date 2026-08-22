@@ -314,6 +314,13 @@ type Gesture =
       originX: number;
       lastDeltaTicks: number;
       finalLengthTicks: number;
+      /**
+       * The length this drag has each note at, seeded with the length it found
+       * them at — the baseline a commit is compared against so a resize that
+       * writes nothing dispatches nothing. See the resize branch of
+       * `pointerMove`.
+       */
+      lastLengths: Map<NoteId, number>;
     }
   | { kind: "erase"; coalesceKey: string; erased: Set<NoteId> }
   | { kind: "pan"; originX: number; originY: number; scrollX: number; scrollY: number }
@@ -643,6 +650,9 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
           // the resize has to start from the *effective* length or the very
           // first move snaps the note back to a single tick.
           finalLengthTicks: effectiveLengthTicks(hit.note.lengthTicks),
+          // STORED lengths, marker zeros and all: what is in the project is
+          // what a commit has to differ from to be worth dispatching.
+          lastLengths: new Map(notes.map((note) => [note.id, note.lengthTicks])),
         },
         input.pointerId ?? null,
       );
@@ -906,9 +916,33 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // `setLastLength` seeds the next drawn note, and a 0 there would mean
       // "one tick" to `defaultDrawLengthTicks`, not "one step" — so the
       // remembered length is the effective one even when the stored one is a
-      // marker.
+      // marker. Computed BEFORE the no-op bail below: the drag is still a drag
+      // when it writes nothing, and the length it settled on is still the one
+      // the next drawn note should inherit.
       active.finalLengthTicks = effectiveLengthTicks(clampedLength(primary));
-      deps.dispatch(updateNotes(scene.patternId, patches), { coalesceKey: active.coalesceKey });
+      /*
+       * A resize that changes no LENGTH is not a resize.
+       *
+       * `deltaTicks` moving is not proof that one did: with every selected note
+       * already flush against `PATTERN_LENGTH_TICKS` the per-note clamp — which
+       * lands AFTER the delta comparison above — hands back the length each
+       * note already has, so dragging further right dispatched patches
+       * identical to the project and filed an undo entry that undoes nothing.
+       *
+       * Compared against what THIS DRAG last wrote (seeded from the pointer-down
+       * snapshots), not against `scene.notes` and not against the snapshots
+       * alone. Both of those are wrong in a way the other case proves: the scene
+       * may be a render behind mid-drag, and the snapshots are precisely what a
+       * drag out and back must be allowed to write again — restoring a step's
+       * stored `0` after growing it is a real edit, and comparing with the
+       * snapshot would swallow it.
+       */
+      const changed = patches.filter(
+        ({ id, patch }) => patch.lengthTicks !== active.lastLengths.get(id),
+      );
+      if (changed.length === 0) return;
+      for (const { id, patch } of changed) active.lastLengths.set(id, patch.lengthTicks);
+      deps.dispatch(updateNotes(scene.patternId, changed), { coalesceKey: active.coalesceKey });
       return;
     }
 
@@ -950,6 +984,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         pitch: note.pitch + deltaPitch,
       } satisfies NotePatch,
     }));
+    // No no-op guard needed here, unlike the resize branch below: BOTH deltas
+    // are clamped *before* they are compared with the last pair, so a pointer
+    // that moves while the set is against a bound produces the same deltas and
+    // returns above. The resize's clamp is per-note and lands after its own
+    // comparison, which is exactly why that branch needs one.
     deps.dispatch(updateNotes(scene.patternId, patches), { coalesceKey: active.coalesceKey });
     if (pitchChanged) deps.previewNote(scene.channelId, primary.pitch + deltaPitch);
   };
