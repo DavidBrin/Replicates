@@ -9,7 +9,7 @@ import { addNotes } from "@/domain/commands";
 import { createHistory } from "@/domain/undo";
 import { createDefaultProject } from "@/domain/defaultProject";
 import { nextId, resetIds } from "@/domain/ids";
-import { TICKS_PER_BAR } from "@/domain/types";
+import { MAX_CLIP_START_TICK, TICKS_PER_BAR } from "@/domain/types";
 import { __resetGestureCounterForTests } from "@/lib/gestureHold";
 import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 
@@ -976,5 +976,212 @@ describe("playlist scroll position survives a remount (round 8 #9)", () => {
     fireEvent.pointerUp(main, { pointerId: 1 });
 
     expect(useAppStore.getState().playlistScrollX).toBe(60);
+  });
+});
+
+/* --------------------------------------------- the arrangement's last bar -- */
+
+/**
+ * Round 12 #4. `totalVisibleBars` draws `TRAILING_BARS` of empty lane past the
+ * furthest clip so there is always somewhere to paint — and with a clip near
+ * the limit, those trailing bars were drawn PAST it. Painting or dragging into
+ * them dispatched a `startTick` that `addClip`/`updateClip` reject, so a
+ * `CommandError` came out of a pointer handler: the click died, and in the drag
+ * case it unwound past `gesture.end()`, stranding the hold for the rest of the
+ * session.
+ */
+describe("clips cannot be placed past MAX_CLIP_START_TICK (round 12)", () => {
+  it("clamps a paint far past the last bar instead of throwing", () => {
+    render(<Playlist />);
+    const lane = screen.getByTestId("lane-trk-1");
+
+    // Far beyond the arrangement: 1,200 bars at the default 80px/bar.
+    expect(() =>
+      fireEvent.click(lane, { clientX: 1_200 * 80 + 5, clientY: 10 }),
+    ).not.toThrow();
+
+    const clips = Object.values(useAppStore.getState().project.clips);
+    expect(clips).toHaveLength(1);
+    expect(clips[0]!.startTick).toBe(MAX_CLIP_START_TICK);
+  });
+
+  it("clamps a DRAG past the last bar to the last bar, rather than throwing", () => {
+    // One bar short of the limit, dragged five bars right: clamped, the clip
+    // lands ON the last legal bar. Unclamped, `updateClip` rejects the tick
+    // and the clip does not move at all.
+    placeClip("clip-a", { startTick: MAX_CLIP_START_TICK - TICKS_PER_BAR });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-a");
+
+    const errors: string[] = [];
+    const onError = (event: ErrorEvent): void => {
+      errors.push(event.message);
+      event.preventDefault();
+    };
+    window.addEventListener("error", onError);
+    try {
+      fireEvent.pointerDown(clip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(clip, { clientX: 400, clientY: 0, pointerId: 1 });
+      fireEvent.pointerUp(clip, { clientX: 400, clientY: 0, pointerId: 1 });
+    } finally {
+      window.removeEventListener("error", onError);
+    }
+
+    expect(errors).toEqual([]);
+    expect(useAppStore.getState().project.clips["clip-a"]!.startTick).toBe(MAX_CLIP_START_TICK);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("ends the gesture even when the commit itself throws", () => {
+    /*
+     * The property, stated without leaning on the clamp above: a command that
+     * rejects its arguments unwinds through `ClipView`'s pointer-up, and
+     * `gesture.end()` — the call that drops the hold and seals the undo entry
+     * — must still run.
+     */
+    placeClip("clip-a", { startTick: 0 });
+    // Installed BEFORE the render: the surface reads `dispatch` off the store
+    // once, at render time.
+    const dispatch = useAppStore.getState().dispatch;
+    act(() => {
+      useAppStore.setState({
+        dispatch: (command, options) => {
+          if (command.label === "Move clip") throw new Error("boom");
+          dispatch(command, options);
+        },
+      });
+    });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-a");
+
+    // React re-throws a handler's error asynchronously, so the escape is
+    // caught here rather than asserted around `fireEvent`.
+    const errors: string[] = [];
+    const onError = (event: ErrorEvent): void => {
+      errors.push(event.message);
+      event.preventDefault();
+    };
+    window.addEventListener("error", onError);
+    try {
+      fireEvent.pointerDown(clip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+      fireEvent.pointerUp(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+    } finally {
+      window.removeEventListener("error", onError);
+    }
+
+    act(() => {
+      useAppStore.setState({ dispatch });
+    });
+
+    // The commit really did throw...
+    expect(errors.join(" ")).toContain("boom");
+    // ...and the gesture ended anyway. Drop the `finally` in `ClipView` and
+    // this is `true` — a hold nothing can ever release.
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+});
+
+/* -------------------------------------------- root drags own their pointer -- */
+
+describe("the playlist's root drags belong to ONE pointer (round 12)", () => {
+  it("ignores pan moves and releases from another pointer", () => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+    const main = screen.getByTestId("playlist-main");
+    const scrollx = screen.getByTestId("playlist-scrollx");
+
+    fireEvent.pointerDown(main, { button: 1, clientX: 100, clientY: 100, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    // A stranger's move must not scroll the lanes...
+    fireEvent.pointerMove(main, { clientX: 40, clientY: 100, pointerId: 9 });
+    expect(scrollx.scrollLeft).toBe(0);
+
+    // ...and a stranger's release must not end the pan.
+    fireEvent.pointerUp(main, { clientX: 40, clientY: 100, pointerId: 9 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(main, { clientX: 40, clientY: 100, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("keeps an erase sweep open across another pointer's release", () => {
+    placeClip("clip-a", { startTick: 0 });
+    placeClip("clip-b", { startTick: TICKS_PER_BAR });
+    render(<Playlist />);
+    const main = screen.getByTestId("playlist-main");
+
+    fireEvent.pointerDown(main, { button: 2, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 1 });
+    fireEvent.pointerUp(main, { clientX: 0, clientY: 0, pointerId: 9 }); // a stranger
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2, pointerId: 1 });
+    fireEvent.pointerUp(main, { clientX: 0, clientY: 0, pointerId: 1 });
+
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(0);
+    // Both deletions in ONE undo entry: the stranger's release did not seal
+    // the sweep halfway through.
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+  });
+});
+
+describe("a clip drag belongs to ONE pointer (round 12)", () => {
+  it("ignores a stranger's move and release, and still commits its own", () => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-a");
+
+    fireEvent.pointerDown(clip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    // A stranger's move must not arm the drag threshold...
+    fireEvent.pointerMove(clip, { clientX: 200, clientY: 0, pointerId: 9 });
+    // ...and its release must not commit or abandon the drag.
+    fireEvent.pointerUp(clip, { clientX: 200, clientY: 0, pointerId: 9 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+    expect(useAppStore.getState().project.clips["clip-a"]!.startTick).toBe(0);
+
+    // The owner never moved, so ITS release is a click, not a move — the
+    // stranger's travel is not this drag's. (Let the stranger arm `dragging`
+    // and this release commits a 2.5-bar move nobody made.)
+    fireEvent.pointerUp(clip, { clientX: 200, clientY: 0, pointerId: 1 });
+    expect(useAppStore.getState().project.clips["clip-a"]!.startTick).toBe(0);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+
+    // And a real drag by the owner still commits.
+    fireEvent.pointerDown(clip, { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: 90, clientY: 0, pointerId: 1 });
+    expect(useAppStore.getState().project.clips["clip-a"]!.startTick).toBe(TICKS_PER_BAR);
+  });
+});
+
+describe("the playlist's click mutations go through the registry (round 12)", () => {
+  /*
+   * A bare `dispatch` is invisible to the gesture registry, so a click landed
+   * with another surface's drag still open: the hold stayed taken and the open
+   * gesture's undo entry went on growing around an edit it never made.
+   */
+  it.each([
+    [
+      "painting a clip",
+      () => fireEvent.click(screen.getByTestId("lane-trk-2"), { clientX: 0, clientY: 10 }),
+    ],
+    [
+      "muting a track",
+      () => fireEvent.click(screen.getAllByRole("button", { name: /^Mute /i })[0]!),
+    ],
+  ])("%s pre-empts an open drag", (_name, act_) => {
+    placeClip("clip-a", { startTick: 0 });
+    render(<Playlist />);
+    fireEvent.pointerDown(screen.getByTestId("clip-clip-a"), {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+      pointerId: 1,
+    });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    act_();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
   });
 });

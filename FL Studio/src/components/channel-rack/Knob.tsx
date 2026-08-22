@@ -116,6 +116,11 @@ export function Knob({
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     if (!drag) return;
+    // Only the pointer that opened the drag drives it (`@/lib/gestureHold`
+    // rule (g)). A second finger landing on the knob used to move the value
+    // by ITS distance from the owner's `startY`, which is a jump to wherever
+    // that finger happened to be.
+    if (!gesture.ownsEvent(event)) return;
     const deltaY = drag.lastY - event.clientY; // up = increase
     const range = max - min;
     const sensitivity = event.ctrlKey ? 1 / FINE_DRAG_DIVISOR : 1;
@@ -126,6 +131,11 @@ export function Knob({
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    // A release by a pointer that does not own the drag is not this drag's
+    // end: ending here would seal the undo entry with the owner's button
+    // still down, and every later move of the real drag would land in a
+    // second entry.
+    if (dragState.current && !gesture.ownsEvent(event)) return;
     if (dragState.current) {
       (event.target as Element).releasePointerCapture?.(event.pointerId);
     }
@@ -139,7 +149,8 @@ export function Knob({
    * button held — the pointer-move handler only ever asked whether a drag
    * existed, never whether one was still under a pressed button.
    */
-  function handlePointerCancel() {
+  function handlePointerCancel(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragState.current && !gesture.ownsEvent(event)) return;
     dragState.current = null;
     gesture.end();
   }

@@ -6,6 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { updateMixerTrack } from "@/domain/commands";
 import type { MixerTrackId } from "@/domain/types";
+import { oneShotGestureKey } from "@/lib/gestureHold";
 import { selectMixerTracks, useAppStore } from "@/lib/store";
 import { MixerStrip } from "./MixerStrip";
 
@@ -31,8 +32,17 @@ export function Mixer() {
     selectMixerTrack(trackId);
   }
 
+  /**
+   * A click, not a drag — so it takes a one-shot gesture key
+   * (`@/lib/gestureHold`) instead of dispatching bare. A bare dispatch is
+   * invisible to the registry: the mute landed while a fader or knob drag was
+   * still open somewhere, and that drag stayed open across it, holding off
+   * autosave and folding this edit's neighbours into its own undo entry.
+   */
   function handleToggleMute(trackId: MixerTrackId, muted: boolean): void {
-    dispatch(updateMixerTrack(trackId, { muted: !muted }));
+    dispatch(updateMixerTrack(trackId, { muted: !muted }), {
+      gestureId: oneShotGestureKey("mixer-mute"),
+    });
   }
 
   function handleVolumeChange(trackId: MixerTrackId, value: number, coalesceKey: string): void {

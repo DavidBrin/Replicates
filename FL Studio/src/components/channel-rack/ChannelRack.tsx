@@ -10,7 +10,7 @@ import type { Command } from "@/domain/commands/types";
 import { nextId } from "@/domain/ids";
 import { colorAt, PALETTE } from "@/domain/palette";
 import { MASTER_MIXER_TRACK_ID, type Channel, type ChannelId, type Pattern, type VoiceKind } from "@/domain/types";
-import { useGestureSession } from "@/lib/gestureHold";
+import { oneShotGestureKey, useGestureSession, wheelEditKey } from "@/lib/gestureHold";
 import { handleRangeInputKeyDown } from "@/lib/keyboard";
 import { createWheelGestureKeyring, type WheelGestureKeyring } from "@/lib/wheelGesture";
 import {
@@ -117,10 +117,25 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     requestOpenPianoRoll(channelId);
   }
 
+  /**
+   * Every mutation below is a CLICK — one press, committed on the spot, with
+   * no drag to bound it — so each takes a one-shot gesture key
+   * (`@/lib/gestureHold`'s `oneShotGestureKey`) rather than dispatching bare.
+   *
+   * A bare dispatch is invisible to the gesture registry, and that is the bug:
+   * the click lands while some other surface still has a gesture open (a knob
+   * held with the other hand, a paint stroke whose release was swallowed, a
+   * clip drag), and that gesture stays open across it — still holding off
+   * autosave, still extending its own undo entry with an edit it never made.
+   * The one-shot seals it first, then names this edit's own entry. It takes no
+   * hold of its own: there is no pointer-up coming.
+   */
   function handleToggleMute(channelId: ChannelId): void {
     const channel = project.channels[channelId];
     if (!channel) return;
-    dispatch(updateChannel(channelId, { muted: !channel.muted }));
+    dispatch(updateChannel(channelId, { muted: !channel.muted }), {
+      gestureId: oneShotGestureKey("rack-mute"),
+    });
   }
 
   function handleKnobChange(
@@ -138,7 +153,11 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     const currentIndex = order.indexOf(channel.routedToMixerTrackId);
     const nextIndex = (currentIndex + direction + order.length) % order.length;
     const nextTrackId = order[nextIndex];
-    if (nextTrackId) dispatch(updateChannel(channelId, { routedToMixerTrackId: nextTrackId }));
+    if (nextTrackId) {
+      dispatch(updateChannel(channelId, { routedToMixerTrackId: nextTrackId }), {
+        gestureId: oneShotGestureKey("rack-routing"),
+      });
+    }
   }
 
   /**
@@ -189,9 +208,15 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
           patch: { velocity: Math.min(1, Math.max(0, note.velocity + direction * VELOCITY_STEP)) },
         })),
       ),
-      // A tuple, not a hand-joined string: ids may contain the separator
-      // (`wheelGesture.ts`'s `encodeTarget`).
-      { coalesceKey: velocityWheel.keyFor([activePattern.id, channelId, step]) },
+      // `wheelEditKey`, not the keyring alone: a wheel edit is a mutating
+      // gesture, so it seals whatever drag is open elsewhere in the app before
+      // it lands (`@/lib/gestureHold`). Nudging a step's velocity while a knob
+      // or a clip was still held used to leave that drag open across the edit,
+      // extending its undo entry with a change it never made. The KEY is still
+      // the keyring's — that is what bounds a run of notches into one entry —
+      // and the target is a tuple, not a hand-joined string, since ids may
+      // contain the separator (`wheelGesture.ts`'s `encodeTarget`).
+      { coalesceKey: wheelEditKey(velocityWheel, [activePattern.id, channelId, step]) },
     );
   }
 
@@ -207,16 +232,16 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
       defaultStepPitch: MELODIC_DEFAULT_PITCH[voice] ?? 60,
       routedToMixerTrackId: MASTER_MIXER_TRACK_ID,
     };
-    dispatch(addChannel(channel));
+    dispatch(addChannel(channel), { gestureId: oneShotGestureKey("rack-add-channel") });
     setAddMenuOpen(false);
   }
 
   function handleRenameChannel(channelId: ChannelId, name: string): void {
-    dispatch(updateChannel(channelId, { name }));
+    dispatch(updateChannel(channelId, { name }), { gestureId: oneShotGestureKey("rack-rename") });
   }
 
   function handleDeleteChannel(channelId: ChannelId): void {
-    dispatch(removeChannel(channelId));
+    dispatch(removeChannel(channelId), { gestureId: oneShotGestureKey("rack-delete") });
   }
 
   function handleRecolorChannel(channelId: ChannelId): void {
@@ -224,7 +249,9 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     if (!channel) return;
     const currentIndex = PALETTE.indexOf(channel.color);
     const nextIndex = (currentIndex + 1 + PALETTE.length) % PALETTE.length;
-    dispatch(updateChannel(channelId, { color: colorAt(nextIndex) }));
+    dispatch(updateChannel(channelId, { color: colorAt(nextIndex) }), {
+      gestureId: oneShotGestureKey("rack-recolor"),
+    });
   }
 
   function handleMoveChannel(channelId: ChannelId, direction: 1 | -1): void {
@@ -232,7 +259,7 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
     if (currentIndex < 0) return;
     const nextIndex = currentIndex + direction;
     if (nextIndex < 0 || nextIndex >= project.channelOrder.length) return;
-    dispatch(moveChannel(channelId, nextIndex));
+    dispatch(moveChannel(channelId, nextIndex), { gestureId: oneShotGestureKey("rack-move") });
   }
 
   return (

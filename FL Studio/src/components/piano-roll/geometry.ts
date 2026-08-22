@@ -161,9 +161,20 @@ export function gridTop(): number {
   return RULER_HEIGHT;
 }
 
-/** Bottom of the note grid — where the splitter/velocity lane begins. */
+/**
+ * Bottom of the note grid — where the splitter/velocity lane begins.
+ *
+ * The splitter strip is reserved **even when the lane is fully collapsed**,
+ * and that is what makes the collapse reversible. Dragging the splitter to the
+ * bottom sets `velocityLaneHeight` to 0; with the strip conditional on a
+ * non-zero lane, the grid then ran to `view.height`, `regionAt` answered
+ * "outside" for every pixel below it, and there was no longer anywhere on the
+ * canvas that a press could open a `lane-resize` gesture — the velocity lane
+ * could be closed but never re-opened, for the lifetime of the roll. Six
+ * pixels of always-grabbable strip is the whole fix.
+ */
 export function gridBottom(view: RollViewport): number {
-  const lane = view.velocityLaneHeight > 0 ? view.velocityLaneHeight + SPLITTER_HEIGHT : 0;
+  const lane = view.velocityLaneHeight > 0 ? view.velocityLaneHeight + SPLITTER_HEIGHT : SPLITTER_HEIGHT;
   return Math.max(gridTop(), view.height - lane);
 }
 

@@ -262,3 +262,24 @@ describe("sub-slop jitter never changes the tempo (round 8 #7)", () => {
     expect(onChange).toHaveBeenLastCalledWith(150);
   });
 });
+
+describe("a tempo drag belongs to ONE pointer (round 12)", () => {
+  it("ignores a stranger's move and its release", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const lcd = screen.getByTestId("bpm-lcd");
+
+    fireEvent.pointerDown(lcd, { clientY: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(lcd, { clientY: 90, pointerId: 1 });
+    expect(onChange).toHaveBeenLastCalledWith(150);
+
+    // A second pointer, 60px further up: not this drag's travel.
+    fireEvent.pointerMove(lcd, { clientY: 30, pointerId: 9 });
+    expect(onChange).toHaveBeenLastCalledWith(150);
+
+    // Nor this drag's release — the owner is still dragging.
+    fireEvent.pointerUp(lcd, { clientY: 30, pointerId: 9 });
+    fireEvent.pointerMove(lcd, { clientY: 80, pointerId: 1 });
+    expect(onChange).toHaveBeenLastCalledWith(160);
+  });
+});

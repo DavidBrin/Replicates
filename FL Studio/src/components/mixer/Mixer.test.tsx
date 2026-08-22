@@ -13,7 +13,7 @@ import {
   attachKeyboardListener,
   registerBindings,
 } from "@/lib/keyboard";
-import { useAppStore } from "@/lib/store";
+import { selectHasActiveGesture, useAppStore } from "@/lib/store";
 import { Mixer } from "./Mixer";
 
 /**
@@ -301,5 +301,49 @@ describe("Mixer — a fader's drag dies with its session (round 10 #1)", () => {
     expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
     detach();
     __resetKeyboardRegistryForTests();
+  });
+});
+
+describe("Mixer — a fader drag belongs to ONE pointer (round 12)", () => {
+  it("ignores a stranger's move and release", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+
+    fireEvent.pointerDown(fader, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(fader, { clientY: 90, pointerId: 1 });
+    const owned = useAppStore.getState().project.mixerTracks["mix-1"]!.volume;
+    // Deliberately short of the clamp, so a stranger's far-up move would be
+    // visible if it were processed.
+    expect(owned).toBeGreaterThan(0.8);
+    expect(owned).toBeLessThan(1);
+
+    // A second pointer, far up the track: neither its move nor its release
+    // is this drag's.
+    fireEvent.pointerMove(fader, { clientY: -10_000, pointerId: 9 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(owned);
+
+    fireEvent.pointerUp(fader, { clientY: -10_000, pointerId: 9 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerUp(fader, { clientY: 90, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(owned);
+  });
+});
+
+describe("Mixer — the mute LED goes through the gesture registry (round 12)", () => {
+  it("pre-empts a fader drag left open elsewhere", () => {
+    render(<Mixer />);
+    fireEvent.pointerDown(screen.getByTestId("fader-Insert 1 volume"), {
+      clientY: 100,
+      pointerId: 1,
+    });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.click(screen.getByTestId("mixer-strip-mute-mix-2"));
+
+    // A bare dispatch leaves the drag — and its hold — open across the click.
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    expect(useAppStore.getState().project.mixerTracks["mix-2"]!.muted).toBe(true);
   });
 });

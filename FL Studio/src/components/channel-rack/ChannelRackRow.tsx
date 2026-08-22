@@ -232,9 +232,22 @@ export function ChannelRackRow({
     return override ?? isStepOn(pattern, channel.id, step);
   }
 
-  function paintStep(step: number): void {
+  /**
+   * `pointerId`, where the caller has one, must be the pointer that OWNS the
+   * stroke: a second pointer sweeping across this row with a button down used
+   * to paint its cells into the owner's buffer, which then committed cells
+   * nobody's press had decided (`@/lib/gestureHold` rule (g)).
+   */
+  function paintStep(step: number, pointerId?: number): void {
     const session = painting.current;
     if (!session) return;
+    if (
+      pointerId !== undefined &&
+      session.pointerId !== null &&
+      session.pointerId !== pointerId
+    ) {
+      return;
+    }
     // Nothing may be added to a stroke that no longer belongs to the pattern
     // on screen; `cancelPaint` will drop it, and until then it must not grow.
     if (session.patternId !== pattern.id) return;
@@ -262,16 +275,36 @@ export function ChannelRackRow({
     setPreview(new Map(session.touched));
   }
 
-  /** Starts a fresh stroke unless one is already running with this mode. */
+  /**
+   * Starts a fresh stroke unless one is already running with this mode — for
+   * this pattern, this project revision, and **this pointer**.
+   *
+   * The pointer is part of the identity, not an attribute of the buffer. Two
+   * strokes of the same mode from two different presses are two gestures: a
+   * second finger sweeping "off" across a row whose first finger was already
+   * erasing used to be handed the running stroke, so both pointers filled one
+   * buffer, the first release committed it, and everything the second pointer
+   * painted after that landed in a stroke that had already ended.
+   */
   function ensurePaintSession(mode: "on" | "off", pointerId: number | null): void {
+    const running = painting.current;
     if (
-      painting.current &&
-      painting.current.mode === mode &&
-      painting.current.patternId === pattern.id &&
-      painting.current.projectRevision === projectRevision
+      running &&
+      running.mode === mode &&
+      running.patternId === pattern.id &&
+      running.projectRevision === projectRevision &&
+      running.pointerId === pointerId
     ) {
       return;
     }
+    // The old stroke is torn down BEFORE the new one is installed, and that
+    // order is the whole fix. `gesture.hold()` below pre-empts the session a
+    // *different* press left open, and pre-emption runs this row's own
+    // `onCancel` — which calls `cancelPaint`, which nulls `painting.current`.
+    // Installing first therefore had the outgoing stroke's teardown delete the
+    // INCOMING one: the new press held a session with no buffer behind it, so
+    // its cells painted nothing and its release committed nothing.
+    if (running !== null) cancelPaint();
     painting.current = {
       mode,
       commands: [],
@@ -296,18 +329,22 @@ export function ChannelRackRow({
       const onCancel = (event: PointerEvent): void => {
         if (owns(event)) cancelPaint();
       };
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onCancel);
+      // CAPTURE phase, like the shared backstop in `@/lib/gestureHold`: an
+      // overlay calling `stopPropagation` on the release (every menu in this
+      // app does) stops a bubble-phase window listener from ever hearing it,
+      // and the stroke stayed open with its hold taken.
+      window.addEventListener("pointerup", onUp, true);
+      window.addEventListener("pointercancel", onCancel, true);
       windowListeners.current = () => {
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onCancel);
+        window.removeEventListener("pointerup", onUp, true);
+        window.removeEventListener("pointercancel", onCancel, true);
       };
     }
   }
 
   function beginLeftPaint(step: number, pointerId: number): void {
     ensurePaintSession(isStepOn(pattern, channel.id, step) ? "off" : "on", pointerId);
-    paintStep(step);
+    paintStep(step, pointerId);
   }
 
   /**
@@ -324,7 +361,7 @@ export function ChannelRackRow({
    */
   function beginRightPaint(step: number, pointerHeld: boolean, pointerId: number | null): void {
     ensurePaintSession("off", pointerHeld ? pointerId : null);
-    paintStep(step);
+    paintStep(step, pointerHeld ? (pointerId ?? undefined) : undefined);
     if (!pointerHeld) endPaint();
   }
 
@@ -579,7 +616,7 @@ export function ChannelRackRow({
                 return;
               }
               if ((buttons & 1) === 0) return;
-              paintStep(step);
+              paintStep(step, pointerId);
             }}
           />
         ))}

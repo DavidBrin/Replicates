@@ -6,7 +6,7 @@
  */
 
 import { SNAP_TICKS, snapTicks, snapTicksFloor, type SnapUnit } from "@/domain/tickMath";
-import { TICKS_PER_BAR } from "@/domain/types";
+import { MAX_ARRANGEMENT_BARS, MAX_CLIP_START_TICK, TICKS_PER_BAR } from "@/domain/types";
 
 export const LANE_HEIGHT_PX = 64;
 export const HEADER_WIDTH_PX = 168;
@@ -83,9 +83,40 @@ export function snapMovedClipTick(
   return snapTicks(clamped, "bar" satisfies SnapUnit);
 }
 
+/**
+ * How many bars the lanes render: the furthest clip plus room to paint after
+ * it — but never past {@link MAX_ARRANGEMENT_BARS}, which is where a clip
+ * stops being placeable.
+ *
+ * The cap is not cosmetic. `TRAILING_BARS` of empty lane are drawn past the
+ * last clip precisely so there is somewhere to paint, and with a clip near the
+ * limit those trailing bars were drawn *past the limit*: painting or dragging
+ * into them dispatched a `startTick` the command rejects, and `CommandError`
+ * came out of a pointer handler. A surface must not offer a target that its
+ * own domain refuses — so the lanes stop where the arrangement does.
+ */
 export function totalVisibleBars(furthestClipEndTicks: number): number {
   const clipBars = Math.ceil(furthestClipEndTicks / TICKS_PER_BAR);
-  return Math.max(MIN_VISIBLE_BARS, clipBars + TRAILING_BARS);
+  return Math.min(
+    MAX_ARRANGEMENT_BARS,
+    Math.max(MIN_VISIBLE_BARS, clipBars + TRAILING_BARS),
+  );
+}
+
+/**
+ * The last legal start tick, applied to a tick the pointer produced.
+ *
+ * Belt to {@link totalVisibleBars}' braces, and the one that actually has to
+ * hold: a lane's width is a rendering decision, while `addClip`/`updateClip`
+ * reject anything past {@link MAX_CLIP_START_TICK} outright (see
+ * `domain/commands/playlist.ts`). Alt-drag bypasses snap, a fast drag can
+ * overshoot the content box, and a `CommandError` thrown from inside a pointer
+ * handler skips the gesture's own `end()` — so every tick that reaches a
+ * dispatch passes through here first.
+ */
+export function clampClipStartTick(startTick: number): number {
+  if (!Number.isFinite(startTick)) return 0;
+  return Math.min(MAX_CLIP_START_TICK, Math.max(0, Math.round(startTick)));
 }
 
 /**

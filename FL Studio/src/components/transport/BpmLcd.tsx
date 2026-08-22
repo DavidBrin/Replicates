@@ -120,6 +120,10 @@ export function BpmLcd({
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     if (!drag) return;
+    // The drag belongs to the pointer that opened it (`@/lib/gestureHold`
+    // rule (g)); a second pointer's y against this drag's anchor is a tempo
+    // jump the user never asked for.
+    if (!gesture.ownsEvent(event)) return;
     const deltaY = drag.startY - event.clientY; // up = increase
     if (Math.abs(deltaY) > DRAG_SLOP_PX) drag.moved = true;
     if (!drag.moved) return;
@@ -128,6 +132,9 @@ export function BpmLcd({
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
+    // Not this drag's release: it must not latch the click verdict or seal
+    // the tempo gesture while the owning button is still down.
+    if (drag && !gesture.ownsEvent(event)) return;
     if (drag) {
       (event.target as Element).releasePointerCapture?.(event.pointerId);
       suppressNextClick.current = drag.moved;
@@ -141,7 +148,8 @@ export function BpmLcd({
    * delivers `pointerup`, and the drag state left behind turned every later
    * *hover* over the LCD into a tempo change with no button held.
    */
-  function handlePointerCancel() {
+  function handlePointerCancel(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragState.current && !gesture.ownsEvent(event)) return;
     dragState.current = null;
     suppressNextClick.current = false;
     gesture.release();

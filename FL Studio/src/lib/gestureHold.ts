@@ -45,7 +45,14 @@
  *    swallowing the context menu. Pass `{ windowBackstop: true }` and the hook
  *    listens on the window for BOTH `pointerup` and `pointercancel` while a
  *    session is open (the shared form of the backstop `ChannelRackRow` wires
- *    by hand for its buffered stroke).
+ *    by hand for its buffered stroke). Both listen in the CAPTURE phase, so
+ *    an overlay's `stopPropagation` cannot swallow the release that ends the
+ *    gesture.
+ * g. **A drag machine consults pointer OWNERSHIP on every event.** The session
+ *    records the pointer that opened it and hands the answer out as
+ *    {@link GestureHold.ownsEvent}/{@link GestureHold.isOwner}: move/up/cancel
+ *    handlers ignore events from any other pointer, rather than letting a
+ *    stray one drive — or seal — a gesture it does not own.
  *
  * Three properties of the hold itself, and they are why this is stateful:
  *
@@ -115,7 +122,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useAppStore } from "@/lib/store";
-import { createWheelGestureKeyring, type WheelGestureKeyring } from "@/lib/wheelGesture";
+import {
+  createWheelGestureKeyring,
+  type WheelGestureKeyring,
+  type WheelGestureTarget,
+} from "@/lib/wheelGesture";
 
 /**
  * Module-level, deliberately — see rule (c) above. A component-local counter
@@ -286,8 +297,46 @@ function preemptOtherGestures(
  * across the keystroke.
  */
 export function oneShotGestureKey(prefix: string): string {
-  preemptOtherGestures(null, null, null);
+  preemptOpenGestures();
   return nextGestureId(prefix);
+}
+
+/**
+ * The registry half of a one-shot, without minting an id: END every open
+ * gesture, app-wide.
+ *
+ * For a mutating edit that already owns its `coalesceKey` and must NOT be
+ * given a fresh one — a wheel run, whose key is minted by a
+ * {@link WheelGestureKeyring} and is what folds a run of notches into one undo
+ * entry. Such a run used to dispatch straight past the registry: a knob drag,
+ * a clip drag or a rack paint stroke left open by another pointer stayed open
+ * across it, went on extending its own undo entry, and (for the buffered
+ * stroke) committed cells decided before the wheel edits landed.
+ *
+ * Prefer {@link oneShotGestureKey} wherever the caller can take a fresh id —
+ * this exists for the keyring case, which cannot.
+ */
+export function preemptOpenGestures(): void {
+  preemptOtherGestures(null, null, null);
+}
+
+/**
+ * A wheel run's `coalesceKey`, taken from `keyring` — through the registry.
+ *
+ * {@link oneShotGestureKey}'s rule (a one-shot pre-empts) applied to the one
+ * edit shape that cannot use a fresh id per event: Alt+wheel velocity nudges,
+ * whose whole undo bound is "same target, no gap longer than
+ * `WHEEL_GESTURE_GAP_MS`" (`@/lib/wheelGesture`). The key is the keyring's;
+ * the pre-emption is this function's, and it is why a wheel edit can no longer
+ * land inside a drag that some other pointer still has open.
+ */
+export function wheelEditKey(
+  keyring: WheelGestureKeyring,
+  target: WheelGestureTarget,
+  now?: number,
+): string {
+  preemptOpenGestures();
+  return keyring.keyFor(target, now);
 }
 
 /**
@@ -352,6 +401,39 @@ export interface GestureHold {
   hold: (pointer?: PointerIdSource) => void;
   /** Close it (pointer-up / pointer-cancel). Idempotent when none is open. */
   release: () => void;
+  /**
+   * Does this event belong to the gesture that is open? — pointer OWNERSHIP,
+   * the property every drag state machine in this app must consult.
+   *
+   * A drag surface hears every pointer that reaches its element, not only the
+   * one that opened the drag. A second finger, a stylus, a mouse the user
+   * grabs mid-touch-drag: each delivers `pointermove`/`pointerup` that the
+   * handlers used to process as if the OWNER had sent them. The damage is the
+   * same everywhere it happened — the foreign pointer's coordinates drove the
+   * owner's `startValue`/`startY` snapshot (a knob jumped to wherever the
+   * second finger was), and the foreign pointer's release SEALED the owner's
+   * undo entry while its button was still down, so the rest of the drag became
+   * a second Ctrl+Z.
+   *
+   * The rule this encodes:
+   *
+   * - **Nothing open** — `false`. There is no gesture for the event to belong
+   *   to. Call sites test their own drag-state ref first, so this answer is
+   *   only reached defensively.
+   * - **Open with no pointer** (a keyboard/focus open, or a surface that
+   *   opened without passing one) — `true` for anything. A gesture with no
+   *   pointer of its own cannot claim a release is somebody else's.
+   * - **An argument with no pointer id** (a `blur`, a synthetic event in a
+   *   test) — `true`, for the same reason read from the other side.
+   * - Otherwise, id equality.
+   *
+   * Ownership is scoped to the OPEN session, and `begin` re-scopes it: a new
+   * press seals the old session before installing the new one, so the answer
+   * always describes the gesture actually in flight.
+   */
+  ownsEvent: (pointer?: PointerIdSource) => boolean;
+  /** {@link GestureHold.ownsEvent} for a caller holding a bare id. */
+  isOwner: (pointerId: number | null) => boolean;
 }
 
 /**
@@ -369,6 +451,8 @@ export function useGestureHold(prefix: string, options: GestureSessionOptions = 
     () => ({
       hold: (pointer?: PointerIdSource) => void session.begin(pointer),
       release: session.end,
+      ownsEvent: session.ownsEvent,
+      isOwner: session.isOwner,
     }),
     [session],
   );
@@ -561,11 +645,22 @@ export function useGestureSession(
       if (owner !== null && event.pointerId !== owner) return;
       end();
     };
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
+    // CAPTURE phase, and that is not a detail: a backstop is only a backstop
+    // if nothing between the target and the window can swallow it. React
+    // attaches its own listeners at the tree's root container, so any handler
+    // calling `stopPropagation` — every overlay in this app does, to keep menu
+    // clicks out of the surface beneath (`ClipView`'s `menuOverlayProps`) —
+    // stops the native event dead before it ever reaches a bubble-phase
+    // window listener. Releasing over such an overlay therefore left the
+    // session open: the hold survived, autosave stayed deferred for the rest
+    // of the session, and the sweep's undo entry went on swallowing the next
+    // unrelated edit. The capture pass runs BEFORE the target, so it cannot be
+    // cancelled by anything the page does with the event afterwards.
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onUp, true);
     backstopRef.current = () => {
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onUp, true);
     };
   }, [end]);
 
@@ -638,6 +733,19 @@ export function useGestureSession(
 
   const peek = useCallback((): string | null => idRef.current, []);
 
+  /** Pointer ownership — see {@link GestureHold.ownsEvent} for the rule. */
+  const isOwner = useCallback((pointerId: number | null): boolean => {
+    if (idRef.current === null) return false;
+    const owner = pointerIdRef.current;
+    if (owner === null || pointerId === null) return true;
+    return owner === pointerId;
+  }, []);
+
+  const ownsEvent = useCallback(
+    (pointer?: PointerIdSource): boolean => isOwner(readPointerId(pointer)),
+    [isOwner],
+  );
+
   /*
    * The two latest-value refs, synced after every render rather than during
    * it (a ref written in render is both a lint error and a real hazard under
@@ -694,10 +802,12 @@ export function useGestureSession(
       keyForEdit,
       peek,
       end,
+      ownsEvent,
+      isOwner,
       hold: (pointer?: PointerIdSource) => void begin(pointer),
       release: end,
       terminators,
     }),
-    [begin, keyFor, keyForEdit, peek, end, terminators],
+    [begin, keyFor, keyForEdit, peek, end, ownsEvent, isOwner, terminators],
   );
 }

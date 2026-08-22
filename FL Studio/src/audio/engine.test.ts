@@ -650,6 +650,31 @@ describe("muting a playlist track silences what is ALREADY sounding (round 11 #9
     expect(source.stopTime).toBe(naturalStop);
   });
 
+  it("releases when the SAME write mutes the track and removes its clips (round 12)", async () => {
+    /*
+     * The affected channels were resolved from the INCOMING project, which is
+     * the one that is not sounding. A single command can mute a track and
+     * change its contents at once — deleting the clip on a track you have
+     * just muted, an undo that restores a mute alongside an earlier edit, an
+     * import — and by then the incoming project holds no clip on that track
+     * at all, so the scan found nothing and released nothing. The voices went
+     * on ringing under a track the user had just silenced.
+     */
+    const { project, source, naturalStop } = await sounding();
+
+    syncProject({
+      ...project,
+      // Muted AND emptied in one atomic write.
+      clips: {},
+      playlistTracks: {
+        ...project.playlistTracks,
+        "trk-1": { ...project.playlistTracks["trk-1"]!, muted: true },
+      },
+    });
+
+    expect(source.stopTime).toBeLessThan(naturalStop);
+  });
+
   it("does not touch voices for a CHANNEL mute — the strip's gain ramp owns that", async () => {
     const { project, source, naturalStop } = await sounding();
 

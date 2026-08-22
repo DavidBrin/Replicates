@@ -80,6 +80,10 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>): void {
     const drag = dragState.current;
     if (!drag) return;
+    // Only the pointer that opened the drag drives it (`@/lib/gestureHold`
+    // rule (g)) — a second pointer's coordinates against this drag's
+    // `startY` is a jump, not a move.
+    if (!gesture.ownsEvent(event)) return;
     const deltaY = drag.startY - event.clientY; // up = increase, matches a physical fader
     const range = max - min;
     const next = clamp(drag.startValue + (deltaY / travelPx) * range, min, max);
@@ -87,6 +91,9 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>): void {
+    // A foreign pointer's release is not this drag's end — sealing here would
+    // close the undo entry with the owning button still down.
+    if (dragState.current && !gesture.ownsEvent(event)) return;
     if (dragState.current) {
       (event.target as Element).releasePointerCapture?.(event.pointerId);
     }
@@ -99,7 +106,8 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
    * behind it made every later *hover* over the fader move the level with no
    * button held — the same hole the knob had.
    */
-  function handlePointerCancel(): void {
+  function handlePointerCancel(event: React.PointerEvent<HTMLDivElement>): void {
+    if (dragState.current && !gesture.ownsEvent(event)) return;
     dragState.current = null;
     gesture.end();
   }

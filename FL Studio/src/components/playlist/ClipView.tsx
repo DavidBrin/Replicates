@@ -160,6 +160,10 @@ export function ClipView({
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
     if (drag === null) return;
+    // Only the pointer that opened the drag moves it (`@/lib/gestureHold`
+    // rule (g)); a second pointer's travel from this drag's anchor is not
+    // this clip's displacement.
+    if (!gesture.ownsEvent(event)) return;
     const dx = event.clientX - drag.startClientX;
     const dy = event.clientY - drag.startClientY;
     if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
@@ -169,6 +173,10 @@ export function ClipView({
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
     const drag = dragState.current;
+    // A foreign pointer's release must not commit — or abandon — a drag it
+    // does not own: the owning button is still down, and the move it would
+    // commit is measured to wherever that other pointer happens to be.
+    if (drag !== null && !gesture.ownsEvent(event)) return;
     dragState.current = null;
     if (drag === null) {
       gesture.end();
@@ -177,22 +185,39 @@ export function ClipView({
     const deltaPx = event.clientX - drag.startClientX;
     const deltaYPx = event.clientY - drag.startClientY;
     const deltaTrackIndex = Math.round(deltaYPx / LANE_HEIGHT_PX);
-    if (drag.dragging && (deltaPx !== 0 || deltaTrackIndex !== 0)) {
-      const deltaTicks = (deltaPx / pxPerBar) * TICKS_PER_BAR; // snapped to a bar by the caller
-      onDragCommit(
-        drag.activeClipId,
-        deltaTicks,
-        deltaTrackIndex,
-        drag.coalesceKey,
-        event.altKey,
-      );
-    } else {
-      onSelect(drag.activeClipId);
+    /*
+     * `finally`, because the commit can THROW.
+     *
+     * A command validates its own arguments and rejects the invalid ones with
+     * a `CommandError` (`domain/commands/playlist.ts`), and that throw unwinds
+     * straight through this handler — past `gesture.end()`, which is the one
+     * call that drops the persistence hold and seals the undo entry. The
+     * gesture was then open forever: autosave deferred for the rest of the
+     * session, and the next unrelated edit folded into the dead drag's entry.
+     * The known thrower is a start tick past the arrangement's last bar and it
+     * is clamped upstream now (`Playlist`'s `handleDragCommit`), but "the
+     * gesture ends even if the commit fails" is the property, not "this
+     * particular commit no longer fails".
+     */
+    try {
+      if (drag.dragging && (deltaPx !== 0 || deltaTrackIndex !== 0)) {
+        const deltaTicks = (deltaPx / pxPerBar) * TICKS_PER_BAR; // snapped to a bar by the caller
+        onDragCommit(
+          drag.activeClipId,
+          deltaTicks,
+          deltaTrackIndex,
+          drag.coalesceKey,
+          event.altKey,
+        );
+      } else {
+        onSelect(drag.activeClipId);
+      }
+    } finally {
+      // AFTER the commit, never before: `end` also seals the top undo entry,
+      // and sealing first would stop a shift-clone's `addClip` (dispatched at
+      // pointer-down under the same key) from folding into the move it started.
+      gesture.end();
     }
-    // AFTER the commit, never before: `end` also seals the top undo entry,
-    // and sealing first would stop a shift-clone's `addClip` (dispatched at
-    // pointer-down under the same key) from folding into the move it started.
-    gesture.end();
   }
 
   /**
@@ -201,7 +226,8 @@ export function ClipView({
    * a drag the user did not finish is worse than dropping it — but the hold
    * and the coalescing entry must close either way.
    */
-  function handlePointerCancel() {
+  function handlePointerCancel(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragState.current !== null && !gesture.ownsEvent(event)) return;
     dragState.current = null;
     gesture.end();
   }

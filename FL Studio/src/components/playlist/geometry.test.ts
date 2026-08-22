@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { TICKS_PER_BAR } from "@/domain/types";
+import { MAX_ARRANGEMENT_BARS, MAX_CLIP_START_TICK, TICKS_PER_BAR } from "@/domain/types";
 
 import {
+  clampClipStartTick,
+  MIN_VISIBLE_BARS,
   pxToTicks,
   scrollLeftForZoom,
   snapMovedClipTick,
   snapPointerToBar,
   ticksToPx,
+  totalVisibleBars,
+  TRAILING_BARS,
 } from "./geometry";
 
 describe("scrollLeftForZoom", () => {
@@ -135,5 +139,39 @@ describe("snapMovedClipTick — the exact half-bar tie is direction-aware", () =
 
   it("leaves Alt (bypassSnap) alone — the tie policy is a SNAP rule", () => {
     expect(snapMovedClipTick(TICKS_PER_BAR + half, true, -1)).toBe(TICKS_PER_BAR + half);
+  });
+});
+
+
+/**
+ * Round 12 #4. The trailing bars exist so there is always somewhere to paint —
+ * and near the limit they were drawn past the last bar a clip may occupy, so
+ * the surface offered a target its own commands reject with a `CommandError`.
+ */
+describe("the lanes stop where the arrangement does", () => {
+  it("keeps the trailing bars while there is room for them", () => {
+    const bars = totalVisibleBars(20 * TICKS_PER_BAR);
+    expect(bars).toBe(20 + TRAILING_BARS);
+    expect(bars).toBeGreaterThanOrEqual(MIN_VISIBLE_BARS);
+  });
+
+  it("never renders past MAX_ARRANGEMENT_BARS, however far the last clip sits", () => {
+    expect(totalVisibleBars(MAX_CLIP_START_TICK)).toBe(MAX_ARRANGEMENT_BARS);
+    expect(totalVisibleBars(MAX_CLIP_START_TICK * 10)).toBe(MAX_ARRANGEMENT_BARS);
+  });
+});
+
+describe("clampClipStartTick", () => {
+  it("passes a legal tick through untouched", () => {
+    expect(clampClipStartTick(5 * TICKS_PER_BAR)).toBe(5 * TICKS_PER_BAR);
+    expect(clampClipStartTick(MAX_CLIP_START_TICK)).toBe(MAX_CLIP_START_TICK);
+  });
+
+  it("clamps both ends, and rounds to a whole tick", () => {
+    expect(clampClipStartTick(MAX_CLIP_START_TICK + 1)).toBe(MAX_CLIP_START_TICK);
+    expect(clampClipStartTick(-40)).toBe(0);
+    expect(clampClipStartTick(12.4)).toBe(12);
+    // `Number.isFinite` lets `NaN` through every other guard in this file.
+    expect(clampClipStartTick(Number.NaN)).toBe(0);
   });
 });

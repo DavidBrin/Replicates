@@ -39,6 +39,7 @@ import {
   hitTestVelocityStem,
   minLengthTicks,
   snapTick,
+  type InteractionDeps,
   type InteractionScene,
   type RollPointer,
 } from "./interactions";
@@ -81,7 +82,10 @@ interface Harness {
   applied: () => Project;
 }
 
-function harness(overrides: Partial<InteractionScene> = {}): Harness {
+function harness(
+  overrides: Partial<InteractionScene> = {},
+  extraDeps: Partial<InteractionDeps> = {},
+): Harness {
   const scene: InteractionScene = {
     view: VIEW,
     notes: [],
@@ -125,6 +129,7 @@ function harness(overrides: Partial<InteractionScene> = {}): Harness {
       idCounter += 1;
       return `new-${idCounter}`;
     },
+    ...extraDeps,
   });
 
   return {
@@ -1294,5 +1299,143 @@ describe("no channel to draw into", () => {
     const h = harness();
     h.controller.pointerDown(at(TICKS_PER_BEAT, 64));
     expect(h.dispatch).toHaveBeenCalled();
+  });
+});
+
+/* --------------------------------------------------- pointer ownership -- */
+
+/**
+ * Round 12's class fix, at the surface that dropped the id entirely: a
+ * `RollPointer` carried no `pointerId`, so the machine could not tell the
+ * pointer that opened a drag from any other, and the registry could not tell
+ * the drag was a pointer gesture at all.
+ */
+describe("a roll drag belongs to the pointer that opened it", () => {
+  it("ignores moves from another pointer", () => {
+    const note = makeNote();
+    const h = harness({ notes: [note], tool: "draw" });
+
+    h.controller.pointerDown(at(0, 67, { pointerId: 1 }));
+    const beforeStranger = h.dispatch.mock.calls.length;
+
+    h.controller.pointerMove(at(TICKS_PER_BEAT * 3, 72, { pointerId: 2 }));
+
+    expect(h.dispatch.mock.calls.length).toBe(beforeStranger);
+    expect(h.controller.peekGesture()).toBe("move");
+  });
+
+  it("ignores a release from another pointer — the drag stays in flight", () => {
+    const note = makeNote();
+    const h = harness({ notes: [note], tool: "draw" });
+
+    h.controller.pointerDown(at(0, 67, { pointerId: 1 }));
+    h.controller.pointerUp(at(0, 67, { pointerId: 2 }));
+    expect(h.controller.peekGesture()).toBe("move");
+
+    // The owner's move still lands, which is the half a "just end it" fix
+    // gets wrong: the gesture must be alive, not merely un-ended.
+    h.controller.pointerMove(at(TICKS_PER_BEAT, 67, { pointerId: 1 }));
+    expect(h.last().command.label).toBe("Edit note");
+
+    h.controller.pointerUp(at(TICKS_PER_BEAT, 67, { pointerId: 1 }));
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  it("ignores a pointercancel from another pointer", () => {
+    const h = harness({ notes: [makeNote()], tool: "draw" });
+    h.controller.pointerDown(at(0, 67, { pointerId: 1 }));
+
+    h.controller.cancel(at(0, 67, { pointerId: 2 }));
+    expect(h.controller.peekGesture()).toBe("move");
+
+    // An EXTERNAL cancel (no pointer at all — unmount, undo, pre-emption)
+    // is unconditional.
+    h.controller.cancel();
+    expect(h.controller.peekGesture()).toBe("idle");
+  });
+
+  it("registers the drag under its pointer id, so the registry can pre-empt it", () => {
+    /*
+     * Registered with `null`, a roll drag claimed no press: `gestureHold`'s
+     * same-press exemption then treated EVERY later pointer-down as its
+     * nesting partner, so nothing could ever pre-empt it — a knob drag
+     * started under a live roll drag left two gestures open at once.
+     */
+    const registerGesture = vi.fn(
+      (_end: () => void, _options?: { pointerId?: number | null }) => () => {},
+    );
+    const h = harness({ notes: [makeNote()], tool: "draw" }, { registerGesture });
+
+    h.controller.pointerDown(at(0, 67, { pointerId: 4 }));
+
+    expect(registerGesture).toHaveBeenCalledTimes(1);
+    expect(registerGesture.mock.calls[0]![1]).toEqual({ pointerId: 4 });
+  });
+
+  it("seals the gesture in flight BEFORE installing a new pointer's", () => {
+    const h = harness({ notes: [makeNote()], tool: "draw" });
+
+    h.controller.pointerDown(at(0, 67, { pointerId: 1 }));
+    h.controller.pointerDown(at(TICKS_PER_BEAT * 2, 60, { pointerId: 2 }));
+
+    // The new press owns the roll now: its moves drive, the old pointer's
+    // do not.
+    expect(h.controller.peekGesture()).toBe("move");
+    const before = h.dispatch.mock.calls.length;
+    h.controller.pointerMove(at(TICKS_PER_BEAT * 3, 60, { pointerId: 1 }));
+    expect(h.dispatch.mock.calls.length).toBe(before);
+    h.controller.pointerMove(at(TICKS_PER_BEAT * 3, 60, { pointerId: 2 }));
+    expect(h.dispatch.mock.calls.length).toBeGreaterThan(before);
+  });
+});
+
+describe("Alt+wheel velocity nudges go through the gesture registry", () => {
+  it("pre-empts whatever drag is open before dispatching", () => {
+    /*
+     * Round 12 #2. A wheel run's key comes from a keyring, so it cannot take a
+     * one-shot id per notch without losing the coalescing that makes the run
+     * one Ctrl+Z — and it therefore dispatched past the registry entirely,
+     * leaving another pointer's drag open across the edit.
+     */
+    const preemptGestures = vi.fn();
+    const note = makeNote();
+    const h = harness({ notes: [note] }, { preemptGestures });
+
+    h.controller.wheel({ ...at(0, 67), altKey: true, deltaX: 0, deltaY: -1 });
+
+    expect(preemptGestures).toHaveBeenCalledTimes(1);
+    expect(h.last().command.label).toBe("Edit note");
+  });
+
+  it("does NOT pre-empt for zoom or scroll — they write no domain state", () => {
+    const preemptGestures = vi.fn();
+    const h = harness({ notes: [makeNote()] }, { preemptGestures });
+
+    h.controller.wheel({ ...at(0, 67), ctrlKey: true, deltaX: 0, deltaY: -1 });
+    h.controller.wheel({ ...at(0, 67), deltaX: 0, deltaY: 3 });
+
+    expect(preemptGestures).not.toHaveBeenCalled();
+  });
+});
+
+describe("the velocity lane can be re-opened after a full collapse", () => {
+  /*
+   * Round 12 #6. The splitter strip was drawn only when the lane had height,
+   * so dragging the lane shut removed the only region a `lane-resize` gesture
+   * can start from: `regionAt` answered "outside" everywhere below the grid
+   * and the lane could never be opened again.
+   */
+  it("still starts a lane-resize with the lane collapsed to zero", () => {
+    const collapsed = { ...VIEW, velocityLaneHeight: 0 };
+    const h = harness({ view: collapsed, notes: [] });
+
+    // The strip the collapse leaves behind: the last pixels of the canvas.
+    h.controller.pointerDown({ x: 400, y: collapsed.height - 1, button: 0, pointerId: 1 });
+    expect(h.controller.peekGesture()).toBe("lane-resize");
+
+    // And dragging it back up restores a usable lane.
+    h.controller.pointerMove({ x: 400, y: collapsed.height - 90, button: 0, pointerId: 1 });
+    const patch = h.setView.mock.calls.at(-1)![0] as { velocityLaneHeight: number };
+    expect(patch.velocityLaneHeight).toBeGreaterThan(0);
   });
 });

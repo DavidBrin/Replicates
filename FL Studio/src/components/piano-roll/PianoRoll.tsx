@@ -25,7 +25,7 @@ import { nextId } from "@/domain/ids";
 import { SNAP_LABELS, SNAP_UNITS, type SnapUnit } from "@/domain/tickMath";
 import type { Channel, Note } from "@/domain/types";
 import { previewNote, useIsPlaying } from "@/components/shell/wiring";
-import { registerExternalGesture } from "@/lib/gestureHold";
+import { preemptOpenGestures, registerExternalGesture } from "@/lib/gestureHold";
 import { useAppStore } from "@/lib/store";
 import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
 
@@ -265,7 +265,16 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
         // open elsewhere, and — the half this was added for — a keyboard
         // mutation (`bindings.ts`) pre-empts IT, cancelling the drag and its
         // note snapshots before the notes underneath can be deleted.
-        registerGesture: (end) => registerExternalGesture(end),
+        // With the drag's pointer id: registered without one, the roll's
+        // gesture claimed no press, and the registry's same-press exemption
+        // then refused to pre-empt it for ANY pointer-down — a knob drag
+        // started under a live roll drag left two gestures open at once.
+        registerGesture: (end, options) => registerExternalGesture(end, options),
+        // A wheel edit is a mutating gesture with no pointer-up to bound it
+        // (`@/lib/gestureHold`): it must still seal whatever drag another
+        // pointer has open, which is what this does at the one wheel branch
+        // that dispatches.
+        preemptGestures: preemptOpenGestures,
       }),
     [buildScene],
   );
@@ -384,6 +393,10 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
       button: event.button,
+      // Which pointer sent this: the machine filters move/up on it and the
+      // gesture registry scopes pre-emption to it (`interactions.ts`'s
+      // `RollPointer.pointerId`).
+      pointerId: event.pointerId,
       altKey: event.altKey,
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
@@ -493,7 +506,9 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
           }}
           onPointerCancel={(event) => {
             const pointer = toPointer(event);
-            controller.cancel();
+            // Scoped to the pointer: another pointer's cancellation is not
+            // this drag's end (`interactions.ts`'s `cancel`).
+            controller.cancel(pointer);
             applyCursor(event.currentTarget, controller.cursorAt(pointer));
           }}
           onContextMenu={(event) => event.preventDefault()}

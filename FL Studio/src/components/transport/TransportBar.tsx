@@ -272,8 +272,16 @@ export function TransportBar({
       <div className="fl-toolbar__group">
         <div
           onPointerDownCapture={tempoGesture.begin}
-          onPointerUpCapture={tempoGesture.end}
-          onPointerCancelCapture={tempoGesture.end}
+          // Ownership, not "any release" (`@/lib/gestureHold` rule (g)): a
+          // stray pointer lifting over the plate used to seal the tempo
+          // gesture with the dragging button still down, so the rest of the
+          // drag landed in a second undo entry.
+          onPointerUpCapture={(event) => {
+            if (tempoGesture.ownsEvent(event)) tempoGesture.end();
+          }}
+          onPointerCancelCapture={(event) => {
+            if (tempoGesture.ownsEvent(event)) tempoGesture.end();
+          }}
         >
           <BpmLcd value={state.tempo} onChange={handleTempoChange} />
         </div>

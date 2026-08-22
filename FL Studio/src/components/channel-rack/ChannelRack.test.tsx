@@ -235,6 +235,75 @@ describe("a paint stroke belongs to the press that opened it (round 11 #3)", () 
   });
 });
 
+describe("a paint stroke belongs to ONE pointer (round 12)", () => {
+  function rowStep(channelId: string, step: number) {
+    return screen
+      .getByTestId(`channel-row-${channelId}`)
+      .querySelector(`[data-testid="step-${step}"]`) as HTMLElement;
+  }
+
+  function noteCount(): number {
+    return Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes).length;
+  }
+
+  it("does not let a SECOND pointer paint into the first one's stroke", () => {
+    /*
+     * The stroke was reused whenever its MODE matched, whoever was pressing:
+     * a second finger sweeping the same row filled the owner's buffer, the
+     * owner's release committed it, and everything the second pointer painted
+     * afterwards belonged to a stroke that had already ended.
+     */
+    render(<ChannelRack />);
+
+    fireEvent.pointerDown(rowStep("ch-kick", 0), { buttons: 1, pointerId: 1 });
+    // A different pointer, same "on" mode: a different gesture.
+    fireEvent.pointerEnter(rowStep("ch-kick", 5), { buttons: 1, pointerId: 2 });
+
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    // Only the owner's cell. With the pointer left out of the session's
+    // identity this is 2 — the intruder's cell rides along.
+    expect(noteCount()).toBe(1);
+    expect(
+      Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes).map(
+        (note) => note.positionTicks,
+      ),
+    ).toEqual([0]);
+  });
+
+  it("a new pointer taking the row over still paints (the onCancel ordering bug)", () => {
+    /*
+     * Round 12's class fix, at the surface that showed it. Pointer 1's stroke
+     * leaks (its release never arrives). Pointer 2 then presses the same row:
+     * the row installed its new `PaintSession` FIRST and then called `hold()`,
+     * whose pre-emption of pointer 1's session ran this row's `onCancel` —
+     * `cancelPaint`, which nulls `painting.current`. It nulled the session
+     * that had just been installed, so pointer 2's stroke painted nothing and
+     * committed nothing: the row went dead under a live press.
+     */
+    render(<ChannelRack />);
+
+    // Press 1 leaks: no release ever reaches the row or the window.
+    fireEvent.pointerDown(rowStep("ch-kick", 0), { buttons: 1, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    // Press 2 — a different pointer on the SAME row, which is what makes the
+    // row tear the old stroke down and install a new one.
+    fireEvent.pointerDown(rowStep("ch-kick", 5), { buttons: 1, pointerId: 2 });
+    fireEvent.pointerEnter(rowStep("ch-kick", 6), { buttons: 1, pointerId: 2 });
+    fireEvent.pointerUp(window, { pointerId: 2 });
+
+    const positions = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes)
+      .filter((note) => note.channelId === "ch-kick")
+      .map((note) => note.positionTicks)
+      .sort((a, b) => a - b);
+    // Pointer 2's two cells — and NOT pointer 1's, whose buffer went with its
+    // pre-empted session.
+    expect(positions).toEqual([5 * TICKS_PER_STEP, 6 * TICKS_PER_STEP]);
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+});
+
 describe("ChannelRack — cool/warm hue alternation (lane 1 §2.4)", () => {
   it("groups steps 1-4 and 9-12 (0-based 0-3, 8-11) as cool", () => {
     for (const step of [0, 1, 2, 3, 8, 9, 10, 11]) {
@@ -422,6 +491,42 @@ describe("ChannelRack — paint stroke released outside the row", () => {
 
     useAppStore.getState().undo();
     expect(useAppStore.getState().project).toEqual(before);
+  });
+});
+
+describe("a knob drag belongs to ONE pointer (round 12)", () => {
+  it("ignores a move and a release from a pointer that does not own the drag", () => {
+    /*
+     * The drag machine only ever asked "is a drag open?", never "is this the
+     * pointer that opened it?". A second finger's move drove the value from
+     * the OWNER's anchor — a jump to wherever that finger was — and its
+     * release sealed the undo entry with the owning button still down, so the
+     * rest of the drag landed in a second Ctrl+Z.
+     */
+    render(<ChannelRack />);
+    const knob = screen.getByTestId("knob-Kick volume");
+    const entriesBefore = useAppStore.getState().history.past.length;
+
+    fireEvent.pointerDown(knob, { clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(knob, { clientY: 40, pointerId: 1 });
+    const afterOwner = useAppStore.getState().project.channels["ch-kick"]!.volume;
+    expect(afterOwner).toBeGreaterThan(0.8);
+
+    // A stranger's move: no effect at all.
+    fireEvent.pointerMove(knob, { clientY: 10_000, pointerId: 9 });
+    expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBe(afterOwner);
+
+    // A stranger's release: the drag is still open and still coalescing.
+    fireEvent.pointerUp(knob, { clientY: 10_000, pointerId: 9 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+
+    fireEvent.pointerMove(knob, { clientY: 20, pointerId: 1 });
+    fireEvent.pointerUp(knob, { clientY: 20, pointerId: 1 });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    // ONE undo entry for the whole drag — the stranger's release did not
+    // split it in two.
+    expect(useAppStore.getState().history.past).toHaveLength(entriesBefore + 1);
   });
 });
 
@@ -1355,5 +1460,72 @@ describe("a control's own keys stop at the control (round 10 #7/#8)", () => {
     expect(handler).not.toHaveBeenCalled();
     // The browser default is how an arrow key moves a range input at all.
     expect(event).toBe(true);
+  });
+});
+
+/* ---------------------------------- click mutations join the registry (12) -- */
+
+/**
+ * Round 12 #3. A bare `dispatch` is invisible to the gesture registry, so
+ * every one of these clicks landed with another surface's drag still open: the
+ * hold stayed taken (autosave deferred) and the open gesture's undo entry went
+ * on growing across an edit it never made.
+ */
+describe("the rack's click mutations pre-empt an open drag (round 12)", () => {
+  function openKnobDrag(): void {
+    fireEvent.pointerDown(screen.getByTestId("knob-Kick volume"), { clientY: 100, pointerId: 1 });
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(true);
+  }
+
+  it.each([
+    ["mute", () => fireEvent.click(screen.getByTestId("mute-led-ch-clap"))],
+    ["routing", () => fireEvent.click(screen.getByTestId("routing-ch-clap"))],
+  ])("%s", (_name, click) => {
+    render(<ChannelRack />);
+    openKnobDrag();
+
+    click();
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("recolor / delete, from the channel menu", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    fireEvent.contextMenu(screen.getByTestId("channel-name-ch-clap"));
+    openKnobDrag();
+
+    await user.click(screen.getByRole("menuitem", { name: "Recolor" }));
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+
+  it("an Alt+wheel velocity nudge pre-empts too — and still coalesces its run", () => {
+    /*
+     * Round 12 #2. The nudge's key comes from a keyring (target + gap), so it
+     * cannot take a fresh one-shot id per notch — and it therefore dispatched
+     * past the registry entirely.
+     */
+    render(<ChannelRack />);
+    // A note to nudge: a paint stroke, committed on the release.
+    fireEvent.pointerDown(kickStep(0), { buttons: 1, pointerId: 3 });
+    fireEvent.pointerUp(kickStep(0), { pointerId: 3 });
+    const entriesBefore = useAppStore.getState().history.past.length;
+    expect(entriesBefore).toBe(1);
+    openKnobDrag();
+
+    act(() => {
+      kickStep(0).dispatchEvent(
+        new WheelEvent("wheel", { deltaY: -1, altKey: true, bubbles: true, cancelable: true }),
+      );
+      kickStep(0).dispatchEvent(
+        new WheelEvent("wheel", { deltaY: -1, altKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+    // Two notches on the same cell inside the gap are still ONE undo entry —
+    // the keyring's bound, which routing through the registry must not break.
+    expect(useAppStore.getState().history.past).toHaveLength(entriesBefore + 1);
   });
 });

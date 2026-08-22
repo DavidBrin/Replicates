@@ -14,7 +14,7 @@ import {
 } from "@/domain/commands";
 import { nextId } from "@/domain/ids";
 import { TICKS_PER_BAR, type PatternClip, type PatternId, type PlaylistTrackId } from "@/domain/types";
-import { useGestureSession } from "@/lib/gestureHold";
+import { oneShotGestureKey, useGestureSession } from "@/lib/gestureHold";
 import {
   selectActivePatternId,
   selectClips,
@@ -27,6 +27,7 @@ import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
 import { ClipView } from "./ClipView";
 import { openPatternInPianoRoll } from "./bindings";
 import {
+  clampClipStartTick,
   HEADER_WIDTH_PX,
   LANE_HEIGHT_PX,
   pxToTicks,
@@ -149,8 +150,18 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     return { coalesceKey: "playlist:erase", gestureId: eraseSweep.keyFor() };
   }
 
+  /**
+   * The click mutations on this surface — track mute, lane paint, "make
+   * unique" — take a one-shot gesture key (`@/lib/gestureHold`) exactly as the
+   * erase paths take `eraseSweep.keyFor()`. A bare dispatch bypasses the
+   * registry, so it left whatever gesture another surface still had open
+   * running across it: the hold stayed taken and the open gesture's undo entry
+   * went on growing around an edit it never made.
+   */
   function handleToggleMute(trackId: PlaylistTrackId, muted: boolean) {
-    dispatch(updatePlaylistTrack(trackId, { muted: !muted }));
+    dispatch(updatePlaylistTrack(trackId, { muted: !muted }), {
+      gestureId: oneShotGestureKey("playlist-track-mute"),
+    });
   }
 
   function handleLanePaint(trackId: PlaylistTrackId, event: React.MouseEvent<HTMLDivElement>) {
@@ -160,7 +171,15 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     const lane = event.currentTarget.getBoundingClientRect();
     // Alt bypasses snap for this gesture (SPEC.md §4.4) — the clip lands on
     // the raw tick under the pointer instead of the bar boundary before it.
-    const startTick = snapPointerToBar(event.clientX - lane.left, zoomPxPerBar, event.altKey);
+    // Clamped before anything else looks at it: `addClip` REJECTS a tick past
+    // `MAX_CLIP_START_TICK` with a `CommandError`, and this handler is a click
+    // handler — the throw came straight out of React's event dispatch. The
+    // lanes no longer draw past the limit (`totalVisibleBars`), so this is the
+    // guard for the ways a pointer can still land past it: an Alt-bypass tick
+    // rounded up, a stale layout, a zoom change mid-click.
+    const startTick = clampClipStartTick(
+      snapPointerToBar(event.clientX - lane.left, zoomPxPerBar, event.altKey),
+    );
     const alreadyPlaced = (clipsByTrack.get(trackId) ?? []).some(
       (clip) => clip.startTick === startTick,
     );
@@ -172,6 +191,10 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
         patternId: armedPatternId,
         startTick,
       }),
+      // A one-shot: the paint commits on the spot, so it seals whatever
+      // gesture is open elsewhere and takes an entry of its own rather than
+      // landing inside one (`@/lib/gestureHold`).
+      { gestureId: oneShotGestureKey("playlist-paint") },
     );
   }
 
@@ -207,7 +230,9 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
 
   /** "Make unique" (SPEC.md D4): fork the pattern, repoint only this clip. */
   function handleMakeUnique(clipId: string) {
-    dispatch(makeUnique(clipId, nextId("pattern")));
+    dispatch(makeUnique(clipId, nextId("pattern")), {
+      gestureId: oneShotGestureKey("playlist-make-unique"),
+    });
   }
 
   /**
@@ -253,10 +278,12 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     // The sign of the drag is what breaks an exact half-bar tie (see
     // `snapMovedClipTick`) — without it, dragging left by half a bar and
     // dragging right by half a bar do not mirror each other.
-    const nextTick = snapMovedClipTick(
-      clip.startTick + deltaTicks,
-      bypassSnap,
-      Math.sign(deltaTicks),
+    // The same bound as painting, for the same reason: a drag that ends past
+    // the last legal bar used to dispatch a tick `updateClip` rejects, and the
+    // `CommandError` unwound through `ClipView`'s pointer-up — skipping the
+    // `gesture.end()` that closes the hold and seals the undo entry.
+    const nextTick = clampClipStartTick(
+      snapMovedClipTick(clip.startTick + deltaTicks, bypassSnap, Math.sign(deltaTicks)),
     );
     const currentIndex = tracks.findIndex((track) => track.id === clip.trackId);
     const rawIndex = (currentIndex === -1 ? 0 : currentIndex) + deltaTrackIndex;
@@ -359,6 +386,10 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
   function handleMainPointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const pan = middlePan.current;
     if (pan === null) return;
+    // Only the pointer that opened the pan scrolls the lanes
+    // (`@/lib/gestureHold` rule (g)) — a second pointer moving anywhere on
+    // the surface used to yank the arrangement to its own offset.
+    if (!panGesture.ownsEvent(event)) return;
     if (scrollRef.current) {
       scrollRef.current.scrollLeft = pan.scrollLeft - (event.clientX - pan.startClientX);
     }
@@ -372,10 +403,16 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     // the sweep's key live would weld the next unrelated delete onto the dead
     // sweep's entry, which is the same hole the rack's swing slider had.
     // Unmount closes them too — that half belongs to the hook.
-    const wasPanning = middlePan.current !== null;
+    // Each session ends only on ITS OWN pointer's release (`@/lib/gestureHold`
+    // rule (g)). A stray pointer lifting over the playlist used to seal the
+    // erase sweep mid-sweep — the rest of the swept clips then became a
+    // second undo entry — and to end the pan under the still-held middle
+    // button.
+    const ownsPan = panGesture.ownsEvent(event);
+    const wasPanning = middlePan.current !== null && ownsPan;
     // `end` runs each session's `onCancel`, which is what clears `middlePan`.
-    eraseSweep.end();
-    panGesture.end();
+    if (eraseSweep.ownsEvent(event)) eraseSweep.end();
+    if (ownsPan) panGesture.end();
     if (!wasPanning) return;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   }

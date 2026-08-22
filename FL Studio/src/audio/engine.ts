@@ -246,10 +246,18 @@ function releaseMutedTrackVoices(previous: Project | null, next: Project): void 
   }
   if (nowMuted.size === 0) return;
 
+  // Resolved against the PREVIOUS project, which is the one that was
+  // sounding. A single command may mute a track and change its contents at
+  // once — "delete the clip on a track you just muted", an undo that restores
+  // a mute alongside an earlier edit, an import — and by the time this runs,
+  // `next` no longer contains the clips whose voices are still ringing.
+  // Scanning `next` therefore found nothing to release on exactly the
+  // transitions that need releasing most, and the notes played on to their
+  // own ends under a track the user had just silenced.
   const channels = new Set<string>();
-  for (const clip of Object.values(next.clips)) {
+  for (const clip of Object.values(previous.clips)) {
     if (!nowMuted.has(clip.trackId)) continue;
-    const pattern = next.patterns[clip.patternId];
+    const pattern = previous.patterns[clip.patternId];
     if (pattern === undefined) continue;
     for (const note of Object.values(pattern.notes)) channels.add(note.channelId);
   }

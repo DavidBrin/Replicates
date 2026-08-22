@@ -656,7 +656,12 @@ export async function importJson(file: File): Promise<void> {
   }
   reseedIds(imported);
   const store = useAppStore.getState();
-  store.dispatch(replaceProject(imported));
+  // Through the registry, like every other one-shot mutation: an import is
+  // the most violent write in the app, and a gesture still open across it
+  // would hold a snapshot of entities that no longer exist. The session's own
+  // revision watcher would cancel it a moment later, but only AFTER the write
+  // — sealing first is the same order every other mutation uses.
+  store.dispatch(replaceProject(imported), { gestureId: oneShotGestureKey("import") });
   store.reconcileUiToProject();
   setNotice(null);
 }
@@ -696,7 +701,13 @@ export function renameActivePattern(name: string): void {
   const pattern = project.patterns[project.activePatternId];
   const trimmed = name.trim();
   if (pattern === undefined || trimmed === "" || trimmed === pattern.name) return;
-  dispatch(updatePattern(pattern.id, { name: trimmed }));
+  // Keyboard-reachable (`F2`), so it takes the shared one-shot key rather than
+  // dispatching bare — `addPattern` above and `channel-rack/bindings.ts` have
+  // the same rule, and it is the registry half that matters: the rename must
+  // seal whatever drag is open, not land inside its undo entry.
+  dispatch(updatePattern(pattern.id, { name: trimmed }), {
+    gestureId: oneShotGestureKey("pattern-rename"),
+  });
 }
 
 /**

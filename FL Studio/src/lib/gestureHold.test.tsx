@@ -5,9 +5,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import {
   __resetGestureCounterForTests,
   nextGestureId,
+  preemptOpenGestures,
   useGestureHold,
   useGestureSession,
+  wheelEditKey,
 } from "./gestureHold";
+import { createWheelGestureKeyring } from "./wheelGesture";
 import { selectHasActiveGesture, useAppStore } from "./store";
 
 /**
@@ -650,5 +653,185 @@ describe("useGestureSession — one mutating gesture at a time", () => {
     fireEvent.pointerDown(second, { pointerId: 2 });
     expect(cancelled).toEqual(["a"]);
     expect(holds()).toEqual(["b#2"]);
+  });
+});
+
+/* ------------------------------------------------ pointer ownership (g) -- */
+
+/**
+ * Round 12's class fix. The session already knew which pointer opened it; it
+ * did not TELL anyone, so every drag machine processed events from pointers
+ * that did not own the gesture.
+ */
+describe("useGestureSession — pointer ownership (rule g)", () => {
+  function OwnerProbe() {
+    const gesture = useGestureSession("owner");
+    return (
+      <div
+        data-testid="owner-probe"
+        onPointerDown={(event) => void gesture.begin(event)}
+        onPointerMove={(event) => opened.push(`move:${gesture.ownsEvent(event)}`)}
+        onPointerUp={() => opened.push(`open:${gesture.peek() !== null}`)}
+      />
+    );
+  }
+
+  it("answers TRUE for the opening pointer and FALSE for any other", () => {
+    render(<OwnerProbe />);
+    const probe = screen.getByTestId("owner-probe");
+
+    fireEvent.pointerDown(probe, { pointerId: 7 });
+    fireEvent.pointerMove(probe, { pointerId: 7 });
+    fireEvent.pointerMove(probe, { pointerId: 8 });
+
+    expect(opened).toEqual(["move:true", "move:false"]);
+  });
+
+  it("answers FALSE when nothing is open — there is no gesture to own", () => {
+    render(<OwnerProbe />);
+    fireEvent.pointerMove(screen.getByTestId("owner-probe"), { pointerId: 7 });
+
+    expect(opened).toEqual(["move:false"]);
+  });
+
+  it("abstains — TRUE — when the session has no pointer of its own", () => {
+    // A keyboard/focus open cannot claim an event belongs to somebody else.
+    function KeyboardOwner() {
+      const gesture = useGestureSession("kb-owner");
+      return (
+        <div
+          data-testid="kb-owner"
+          tabIndex={0}
+          onFocus={() => void gesture.begin()}
+          onPointerMove={(event) => opened.push(`move:${gesture.ownsEvent(event)}`)}
+        />
+      );
+    }
+    render(<KeyboardOwner />);
+    const probe = screen.getByTestId("kb-owner");
+    fireEvent.focus(probe);
+    fireEvent.pointerMove(probe, { pointerId: 4 });
+
+    expect(opened).toEqual(["move:true"]);
+  });
+
+  it("re-scopes to the new press when a second pointer takes the control over", () => {
+    render(<OwnerProbe />);
+    const probe = screen.getByTestId("owner-probe");
+
+    fireEvent.pointerDown(probe, { pointerId: 1 });
+    fireEvent.pointerDown(probe, { pointerId: 2 });
+    fireEvent.pointerMove(probe, { pointerId: 1 });
+    fireEvent.pointerMove(probe, { pointerId: 2 });
+
+    expect(opened).toEqual(["move:false", "move:true"]);
+  });
+
+  it("isOwner reads the same rule from a bare id", () => {
+    function Bare() {
+      const gesture = useGestureSession("bare");
+      return (
+        <div
+          data-testid="bare"
+          onPointerDown={(event) => void gesture.begin(event)}
+          // The three answers, read through the bare-id entry point.
+          onPointerUp={() =>
+            opened.push(
+              `${gesture.isOwner(3)}/${gesture.isOwner(9)}/${gesture.isOwner(null)}`,
+            )
+          }
+        />
+      );
+    }
+    render(<Bare />);
+    const bare = screen.getByTestId("bare");
+    fireEvent.pointerDown(bare, { pointerId: 3 });
+    fireEvent.pointerUp(bare, { pointerId: 3 });
+
+    // Owner, stranger, and the abstention when the caller has no id.
+    expect(opened).toEqual(["true/false/true"]);
+  });
+});
+
+/* ------------------------------ the backstop listens in the CAPTURE phase -- */
+
+describe("useGestureSession — the window backstop cannot be swallowed", () => {
+  /**
+   * Round 12 #1. React attaches its listeners at the tree's root container, so
+   * an overlay calling `stopPropagation` on `pointerup` — every menu in this
+   * app does — stopped the native event before a BUBBLE-phase window listener
+   * could hear it. The release ended nothing: the hold survived, autosave was
+   * deferred for the rest of the session, and the sweep's undo entry went on
+   * swallowing later edits.
+   */
+  function OverlayProbe() {
+    const gesture = useGestureSession("overlay", { windowBackstop: true });
+    return (
+      <div data-testid="overlay-root" onPointerDown={(event) => void gesture.begin(event)}>
+        <div
+          data-testid="overlay"
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+        />
+      </div>
+    );
+  }
+
+  it.each([
+    ["pointerup", (element: Element) => fireEvent.pointerUp(element, { pointerId: 1 })],
+    ["pointercancel", (element: Element) => fireEvent.pointerCancel(element, { pointerId: 1 })],
+  ])("releases on a %s an overlay stopped from propagating", (_name, terminate) => {
+    render(<OverlayProbe />);
+    fireEvent.pointerDown(screen.getByTestId("overlay-root"), { pointerId: 1 });
+    expect(holds()).toHaveLength(1);
+
+    terminate(screen.getByTestId("overlay"));
+
+    // The mutation this pins: drop the `true` from `addEventListener` in
+    // `attachBackstop` and the hold is still open here.
+    expect(holds()).toEqual([]);
+  });
+});
+
+/* ---------------------------------------------- registry-aware wheel keys -- */
+
+describe("preemptOpenGestures / wheelEditKey", () => {
+  /**
+   * Round 12 #2. A wheel run's key comes from a keyring (target + time gap) and
+   * cannot be a fresh one-shot id per notch without losing the coalescing that
+   * makes the run one Ctrl+Z — so the edits went straight to `dispatch`, past
+   * the registry, and left another pointer's drag open across them.
+   */
+  it("preemptOpenGestures ends the gesture in flight", () => {
+    const cancelled: string[] = [];
+    render(<Probe onCancel={() => cancelled.push("drag")} />);
+    fireEvent.pointerDown(screen.getByTestId("probe"), { pointerId: 1 });
+    expect(holds()).toHaveLength(1);
+
+    act(() => preemptOpenGestures());
+
+    expect(holds()).toEqual([]);
+    expect(cancelled).toEqual(["drag"]);
+  });
+
+  it("wheelEditKey pre-empts AND keeps the keyring's run key", () => {
+    const cancelled: string[] = [];
+    render(<Probe onCancel={() => cancelled.push("drag")} />);
+    fireEvent.pointerDown(screen.getByTestId("probe"), { pointerId: 1 });
+
+    const keyring = createWheelGestureKeyring("velocity", 500);
+    let first = "";
+    let second = "";
+    act(() => {
+      first = wheelEditKey(keyring, ["pat-1", "note-1"], 1_000);
+      second = wheelEditKey(keyring, ["pat-1", "note-1"], 1_100);
+    });
+
+    expect(holds()).toEqual([]);
+    expect(cancelled).toEqual(["drag"]);
+    // Same target, inside the gap: still ONE undo entry.
+    expect(second).toBe(first);
+    // A different target is a different entry.
+    expect(wheelEditKey(keyring, ["pat-1", "note-2"], 1_150)).not.toBe(first);
   });
 });

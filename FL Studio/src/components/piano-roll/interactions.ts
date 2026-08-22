@@ -71,6 +71,25 @@ export interface RollPointer {
   y: number;
   /** DOM `MouseEvent.button`: 0 left, 1 middle, 2 right. */
   button: number;
+  /**
+   * DOM `PointerEvent.pointerId` — which pointer sent this, and therefore
+   * whether it owns the gesture in flight (`@/lib/gestureHold` rule (g)).
+   *
+   * Two things read it, and the roll used to DROP it, so neither could. The
+   * machine ignores move/up from a pointer that does not own the drag (a
+   * second finger used to drag the owner's note snapshots to its own
+   * position, and its release ended the owner's gesture mid-drag). And the
+   * app-wide registry needs it to know a roll drag is a POINTER gesture:
+   * registered with `null`, the drag claimed no press of its own, so the
+   * same-press exemption treated every later pointer-down as its own nesting
+   * partner and nothing could ever pre-empt it — a knob drag started under a
+   * live roll drag left both open at once.
+   *
+   * Optional because the unit tests (and the wheel path, which has no
+   * pointer) drive the machine with plain records; absent, ownership is not
+   * asserted and the pre-registry behaviour stands.
+   */
+  pointerId?: number | null;
   altKey?: boolean;
   shiftKey?: boolean;
   ctrlKey?: boolean;
@@ -125,7 +144,22 @@ export interface InteractionDeps {
    * simply keeps its pre-registry behaviour, which is what the unit tests
    * drive.
    */
-  registerGesture?: (end: () => void) => () => void;
+  registerGesture?: (end: () => void, options?: { pointerId?: number | null }) => () => void;
+  /**
+   * End every gesture open elsewhere in the app — `@/lib/gestureHold`'s
+   * `preemptOpenGestures`, injected for the same layering reason
+   * {@link InteractionDeps.registerGesture} is.
+   *
+   * Alt+wheel velocity nudges are a MUTATING gesture with no pointer-down to
+   * announce them and no pointer-up to close them: their undo bound is the
+   * keyring's target+gap, so they cannot take a fresh one-shot id per notch
+   * without losing the coalescing that makes a run one Ctrl+Z. They went
+   * straight to `dispatch`, past the registry — so a knob drag, a clip drag or
+   * a rack paint stroke another pointer still had open stayed open across the
+   * edit and went on extending its own undo entry. Pre-emption is the half
+   * they were missing; the key stays the keyring's.
+   */
+  preemptGestures?: () => void;
 }
 
 /* ------------------------------------------------------------ constants -- */
@@ -273,7 +307,13 @@ export interface PianoRollController {
   wheel: (input: RollWheel) => boolean;
   /** CSS cursor for a hover position, used by the host only. */
   cursorAt: (input: RollPointer) => string;
-  cancel: () => void;
+  /**
+   * Abandon the gesture in flight. Pass the pointer event for a
+   * `pointercancel` — a cancel from a pointer that does not own the gesture
+   * is ignored — and nothing for an external cancel (unmount, undo/redo,
+   * registry pre-emption), which is unconditional.
+   */
+  cancel: (input?: RollPointer) => void;
   /** Test seam: the gesture currently in flight. */
   peekGesture: () => Gesture["kind"];
 }
@@ -346,6 +386,23 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
 
   /** Drops this gesture out of the app-wide registry, or `null` when unregistered. */
   let unregisterGesture: (() => void) | null = null;
+  /**
+   * The pointer that opened the gesture in flight, or `null` when it was
+   * opened without one (a test record, a wheel).
+   */
+  let gesturePointerId: number | null = null;
+
+  /**
+   * Whether `input` belongs to the gesture in flight — pointer ownership
+   * (`@/lib/gestureHold` rule (g)). Both `null`/absent cases abstain: a
+   * gesture opened without a pointer cannot claim an event is somebody
+   * else's, and an event with no id cannot be shown to be foreign.
+   */
+  const ownsPointer = (input: RollPointer): boolean => {
+    if (gesturePointerId === null) return true;
+    const id = input.pointerId;
+    return id === undefined || id === null || id === gesturePointerId;
+  };
 
   const leaveRegistry = (): void => {
     const unregister = unregisterGesture;
@@ -354,13 +411,16 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     unregister();
   };
 
-  const beginDrag = (next: Gesture): void => {
+  const beginDrag = (next: Gesture, pointerId: number | null = null): void => {
     gesture = next;
+    gesturePointerId = pointerId;
     // Registered BEFORE the store write: registering pre-empts whatever else
     // was open, and a pre-empted owner's `onCancel` may dispatch. Registering
     // after would let that land inside this gesture's own coalesce window.
     leaveRegistry();
-    unregisterGesture = deps.registerGesture?.(cancel) ?? null;
+    // With the pointer id, so the registry can tell this press from the next
+    // one — see {@link RollPointer.pointerId}.
+    unregisterGesture = deps.registerGesture?.(cancel, { pointerId }) ?? null;
     deps.setDragKind(dragKindOf(next));
   };
 
@@ -376,6 +436,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   const endDrag = (): Gesture => {
     const finished = gesture;
     gesture = { kind: "idle" };
+    gesturePointerId = null;
     // Out of the registry first, for the same reason the gesture record is
     // cleared first: `end`/`cancel` re-entering through a pre-emption must
     // find nothing in flight.
@@ -392,7 +453,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
    * browser stealing the pointer for a scroll or a gesture) left
    * `previewPitch` set, so the key stayed lit until the next audition.
    */
-  const cancel = (): void => {
+  const cancel = (input?: RollPointer): void => {
+    // With a pointer (the host's `pointercancel`), only the OWNER may cancel;
+    // without one (unmount, the store's reconcile, registry pre-emption) the
+    // cancel is unconditional — that caller is not a pointer at all.
+    if (input !== undefined && gesture.kind !== "idle" && !ownsPointer(input)) return;
     const finished = endDrag();
     if (finished.kind === "preview") deps.setPreviewPitch?.(null);
   };
@@ -400,18 +465,28 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   /* --------------------------------------------------------- pointer down */
 
   const pointerDown = (input: RollPointer): void => {
+    // A press by a pointer that does not own the gesture in flight is a NEW
+    // gesture: the old one is sealed here, before anything installs the new
+    // one. Doing it the other way round (letting the registry's pre-emption
+    // run the teardown *after* the new gesture was recorded) had the outgoing
+    // gesture's `cancel` clear the incoming one — the drag that had just
+    // started was thrown away by the one it replaced.
+    if (gesture.kind !== "idle" && !ownsPointer(input)) cancel();
     const scene = deps.getScene();
     const { view } = scene;
     const region = regionAt(view, input.x, input.y);
 
     if (input.button === 1) {
-      beginDrag({
-        kind: "pan",
-        originX: input.x,
-        originY: input.y,
-        scrollX: view.scrollX,
-        scrollY: view.scrollY,
-      });
+      beginDrag(
+        {
+          kind: "pan",
+          originX: input.x,
+          originY: input.y,
+          scrollX: view.scrollX,
+          scrollY: view.scrollY,
+        },
+        input.pointerId ?? null,
+      );
       return;
     }
 
@@ -420,12 +495,15 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const pitch = clampPitch(yToPitch(view, input.y));
       deps.previewNote(scene.channelId, pitch);
       deps.setPreviewPitch?.(pitch);
-      beginDrag({ kind: "preview" });
+      beginDrag({ kind: "preview" }, input.pointerId ?? null);
       return;
     }
 
     if (region === "splitter") {
-      beginDrag({ kind: "lane-resize", originY: input.y, laneHeight: view.velocityLaneHeight });
+      beginDrag(
+        { kind: "lane-resize", originY: input.y, laneHeight: view.velocityLaneHeight },
+        input.pointerId ?? null,
+      );
       return;
     }
 
@@ -434,7 +512,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const note = hitTestVelocityStem(view, scene.notes, input.x);
       if (note === null) return;
       const coalesceKey = nextCoalesceKey();
-      beginDrag({ kind: "velocity", coalesceKey, noteId: note.id });
+      beginDrag({ kind: "velocity", coalesceKey, noteId: note.id }, input.pointerId ?? null);
       applyVelocity(scene, note.id, yToVelocity(view, input.y), coalesceKey);
       return;
     }
@@ -459,7 +537,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     if (input.button === 2 || (scene.tool === "delete" && !ctrlSelect)) {
       const coalesceKey = nextCoalesceKey();
       const erased = new Set<NoteId>();
-      beginDrag({ kind: "erase", coalesceKey, erased });
+      beginDrag({ kind: "erase", coalesceKey, erased }, input.pointerId ?? null);
       if (hit !== null) eraseNote(scene, hit.note.id, erased, coalesceKey);
       return;
     }
@@ -509,19 +587,22 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
 
     if (hit.zone === "grip") {
       const notes = gestureSet(scene, selection, hit.note).map(snapshot);
-      beginDrag({
-        kind: "resize",
-        coalesceKey: nextCoalesceKey(),
-        notes,
-        primaryId: hit.note.id,
-        originX: input.x,
-        lastDeltaTicks: 0,
-        // A step's stored `0` is a marker, not a length: the grip the user
-        // grabbed is drawn one cell to the right of the note's origin, so the
-        // resize has to start from the *effective* length or the very first
-        // move snaps the note back to a single tick.
-        finalLengthTicks: effectiveLengthTicks(hit.note.lengthTicks),
-      });
+      beginDrag(
+        {
+          kind: "resize",
+          coalesceKey: nextCoalesceKey(),
+          notes,
+          primaryId: hit.note.id,
+          originX: input.x,
+          lastDeltaTicks: 0,
+          // A step's stored `0` is a marker, not a length: the grip the user
+          // grabbed is drawn one cell to the right of the note's origin, so
+          // the resize has to start from the *effective* length or the very
+          // first move snaps the note back to a single tick.
+          finalLengthTicks: effectiveLengthTicks(hit.note.lengthTicks),
+        },
+        input.pointerId ?? null,
+      );
       return;
     }
 
@@ -543,32 +624,38 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       // never touched, offsetting the whole clone set by the gap between them.
       const primaryIndex = source.findIndex((note) => note.id === hit.note.id);
       const primary = primaryIndex >= 0 ? clones[primaryIndex] : clones[0];
-      beginDrag({
-        kind: "move",
-        coalesceKey,
-        notes: clones.map(snapshot),
-        primaryId: primary?.id ?? hit.note.id,
-        originX: input.x,
-        originY: input.y,
-        lastDeltaTicks: 0,
-        lastDeltaPitch: 0,
-        created: true,
-      });
+      beginDrag(
+        {
+          kind: "move",
+          coalesceKey,
+          notes: clones.map(snapshot),
+          primaryId: primary?.id ?? hit.note.id,
+          originX: input.x,
+          originY: input.y,
+          lastDeltaTicks: 0,
+          lastDeltaPitch: 0,
+          created: true,
+        },
+        input.pointerId ?? null,
+      );
       return;
     }
 
     deps.previewNote(scene.channelId, hit.note.pitch);
-    beginDrag({
-      kind: "move",
-      coalesceKey,
-      notes: source.map(snapshot),
-      primaryId: hit.note.id,
-      originX: input.x,
-      originY: input.y,
-      lastDeltaTicks: 0,
-      lastDeltaPitch: 0,
-      created: false,
-    });
+    beginDrag(
+      {
+        kind: "move",
+        coalesceKey,
+        notes: source.map(snapshot),
+        primaryId: hit.note.id,
+        originX: input.x,
+        originY: input.y,
+        lastDeltaTicks: 0,
+        lastDeltaPitch: 0,
+        created: false,
+      },
+      input.pointerId ?? null,
+    );
   };
 
   /* ---------------------------------------------------------- draw a note */
@@ -611,17 +698,20 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     deps.setSelection([note.id]);
     deps.previewNote(scene.channelId, pitch);
     // A fresh click may drag to reposition before release (lane 1 §3.5).
-    beginDrag({
-      kind: "move",
-      coalesceKey,
-      notes: [snapshot(note)],
-      primaryId: note.id,
-      originX: input.x,
-      originY: input.y,
-      lastDeltaTicks: 0,
-      lastDeltaPitch: 0,
-      created: true,
-    });
+    beginDrag(
+      {
+        kind: "move",
+        coalesceKey,
+        notes: [snapshot(note)],
+        primaryId: note.id,
+        originX: input.x,
+        originY: input.y,
+        lastDeltaTicks: 0,
+        lastDeltaPitch: 0,
+        created: true,
+      },
+      input.pointerId ?? null,
+    );
   };
 
   const eraseNote = (
@@ -652,6 +742,9 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
 
   const pointerMove = (input: RollPointer): void => {
     if (gesture.kind === "idle" || gesture.kind === "preview") return;
+    // Only the pointer that opened the drag drives it — a second pointer's
+    // coordinates against this drag's origin are not this drag's travel.
+    if (!ownsPointer(input)) return;
     const scene = deps.getScene();
     const { view } = scene;
 
@@ -805,7 +898,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
 
   /* ----------------------------------------------------------- pointer up */
 
-  const pointerUp = (_input: RollPointer): void => {
+  const pointerUp = (input: RollPointer): void => {
+    // Another pointer lifting is not this gesture's release: ending here
+    // would seal the undo entry and drop the note snapshots with the owning
+    // button still down.
+    if (gesture.kind !== "idle" && !ownsPointer(input)) return;
     const finished = endDrag();
     if (finished.kind === "resize") deps.setLastLength(finished.finalLengthTicks);
     if (finished.kind === "preview") deps.setPreviewPitch?.(null);
@@ -838,6 +935,10 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const hit = hitTestNote(view, scene.notes, input.x, input.y);
       if (hit === null) return false;
       const delta = input.deltaY < 0 ? VELOCITY_WHEEL_STEP : -VELOCITY_WHEEL_STEP;
+      // Through the registry first — see `InteractionDeps.preemptGestures`.
+      // Only here: zoom and scroll below write no domain state, so they are
+      // not gestures and must not seal anybody's.
+      deps.preemptGestures?.();
       deps.dispatch(
         updateNotes(scene.patternId, [
           { id: hit.note.id, patch: { velocity: clamp01(hit.note.velocity + delta) } },
