@@ -52,7 +52,9 @@
  *    records the pointer that opened it and hands the answer out as
  *    {@link GestureHold.ownsEvent}/{@link GestureHold.isOwner}: move/up/cancel
  *    handlers ignore events from any other pointer, rather than letting a
- *    stray one drive — or seal — a gesture it does not own.
+ *    stray one drive — or seal — a gesture it does not own. The shared
+ *    {@link GestureSession.terminators} apply the same filter themselves, so
+ *    a surface that wires nothing but the spread is covered by construction.
  *
  * Three properties of the hold itself, and they are why this is stateful:
  *
@@ -516,10 +518,18 @@ export interface GestureSession extends GestureHold {
    * A surface that must run code of its own on pointer-up (a commit) still
    * spreads this and overrides `onPointerUp` after the spread — the other two
    * terminators stay wired, which is the half that keeps getting forgotten.
+   *
+   * The two POINTER terminators are scoped to the owning pointer (rule (g)),
+   * exactly as the window backstop is. A surface that spreads these and
+   * nothing else used to end its session on ANY pointer's release: a second
+   * finger lifting over a dragged knob sealed the owner's undo entry with the
+   * owner's button still down, so the rest of the drag became a second
+   * Ctrl+Z. `onBlur` carries no pointer id and therefore always ends — a
+   * focus leaving the control is nobody else's event.
    */
   terminators: {
-    onPointerUp: () => void;
-    onPointerCancel: () => void;
+    onPointerUp: (event?: PointerIdSource) => void;
+    onPointerCancel: (event?: PointerIdSource) => void;
     onBlur: () => void;
   };
 }
@@ -790,9 +800,40 @@ export function useGestureSession(
     };
   }, [end]);
 
+  /*
+   * The shared terminators, scoped to the OWNING pointer — rule (g), the same
+   * rule the window backstop already obeyed.
+   *
+   * The backstop filtered by `pointerId` because a window listener obviously
+   * hears every pointer in the document; these did not, on the assumption
+   * that an element only hears its own. It does not. A second finger, a
+   * stylus, or a mouse grabbed mid-touch-drag delivers `pointerup` to
+   * whatever element it is over, and a range control being dragged is
+   * usually the element under the second pointer too. That release ran `end`
+   * unconditionally: the owner's hold dropped and its undo entry sealed with
+   * the owner's button still down, so every remaining dispatch of the drag
+   * landed in a fresh entry — the drag became two Ctrl+Zs, and autosave was
+   * free to flush mid-gesture.
+   *
+   * `onBlur` stays unconditional: a `FocusEvent` carries no `pointerId`, so
+   * `ownsEvent` answers `true` for it anyway (the "argument with no pointer
+   * id" arm), and focus leaving the control is never another pointer's doing.
+   */
+  const endIfOwned = useCallback(
+    (event?: PointerIdSource): void => {
+      // With NOTHING open, `end` keeps running: it is documented as a no-op
+      // for the hold, but it also resets the keyring, and a release after a
+      // keyboard edit run must still close that run. Only an OPEN session can
+      // be owned by somebody else, and only that case is filtered.
+      if (idRef.current !== null && !ownsEvent(event)) return;
+      end();
+    },
+    [ownsEvent, end],
+  );
+
   const terminators = useMemo(
-    () => ({ onPointerUp: end, onPointerCancel: end, onBlur: end }),
-    [end],
+    () => ({ onPointerUp: endIfOwned, onPointerCancel: endIfOwned, onBlur: end }),
+    [endIfOwned, end],
   );
 
   return useMemo(

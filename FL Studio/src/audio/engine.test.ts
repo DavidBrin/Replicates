@@ -387,6 +387,50 @@ describe("previewNote", () => {
     expect(short.stopTime).toBeGreaterThan(1.5);
   });
 
+  /*
+   * Round 13 #4. A preview is the one way this engine makes sound without
+   * touching transport state, so a subscriber watching `playing` was blind to
+   * it — including the mixer meters, whose whole job is to show that something
+   * is audible. The snapshot carries a revision that counts them.
+   */
+  it("announces every preview on the snapshot channel", async () => {
+    installTone();
+    syncProject(projectWith([]));
+    await ensureStarted();
+    const seen: number[] = [];
+    const unsubscribe = subscribe((snapshot) => seen.push(snapshot.previewRevision));
+
+    await previewNote("ch-bass", 43);
+    await previewNote("ch-bass", 45);
+
+    // Two previews, two distinct revisions — a flag could not tell the second
+    // from the first.
+    expect(seen).toEqual([1, 2]);
+    expect(getSnapshot().previewRevision).toBe(2);
+    unsubscribe();
+  });
+
+  it("leaves the transport fields alone while announcing", async () => {
+    installTone();
+    syncProject(projectWith([]));
+    await ensureStarted();
+
+    await previewNote("ch-bass", 43);
+
+    expect(getSnapshot()).toMatchObject({ started: true, playing: false });
+  });
+
+  it("announces a preview that had to boot the engine first", async () => {
+    installTone();
+    syncProject(projectWith([]));
+    const seen: number[] = [];
+    subscribe((snapshot) => seen.push(snapshot.previewRevision));
+
+    await previewNote("ch-kick", 60);
+
+    expect(seen.at(-1)).toBe(1);
+  });
+
   it("gates the boot when a key press is the first gesture", async () => {
     const { tone } = installTone();
     syncProject(projectWith([]));
@@ -514,6 +558,7 @@ describe("meter taps and snapshots", () => {
       playing: false,
       mode: "pattern",
       metronomeEnabled: false,
+      previewRevision: 0,
     });
   });
 });
@@ -683,6 +728,105 @@ describe("muting a playlist track silences what is ALREADY sounding (round 11 #9
       channels: { ...project.channels, "ch-kick": { ...project.channels["ch-kick"]!, muted: true } },
     });
 
+    expect(source.stopTime).toBe(naturalStop);
+  });
+});
+
+/* --------------------------------------------------------------- round 13 -- */
+
+/*
+ * Round 13 #3. `playbackMode` reaches the engine through TWO doors: `setMode`
+ * (the `L` key) and project REPLACEMENT — undo/redo across a flip, load,
+ * import, File → New — which arrives as a plain `syncProject`. Only the first
+ * released the sounding voices and restarted the transport; the second saw a
+ * changed `ArmedInputs.mode`, re-armed, and left everything else alone. The
+ * old source's notes rang over the new one and the playhead kept running from
+ * wherever it was.
+ */
+describe("a mode change through syncProject gets setMode's reset (round 13)", () => {
+  function patternProject(): Project {
+    return projectWith([{ ...step("a", 0), lengthTicks: TICKS_PER_STEP * 8 }], {
+      playbackMode: "pattern",
+      clips: { c1: { id: "c1", trackId: "trk-1", patternId: "pat-1", startTick: 0 } },
+    });
+  }
+
+  async function playingWithAVoice() {
+    const { tone } = installTone();
+    const project = patternProject();
+    syncProject(project);
+    await ensureStarted();
+    play();
+    tone.transport.scheduled[0]?.callback(1);
+    const source = tone.ctx.nodesOfKind("oscillator")[0] as unknown as {
+      stopTime: number | null;
+    };
+    expect(source.stopTime).not.toBeNull();
+    return { tone, project, source, naturalStop: source.stopTime as number };
+  }
+
+  it("releases the voices the outgoing mode was sounding", async () => {
+    const { project, source, naturalStop } = await playingWithAVoice();
+
+    syncProject({ ...project, playbackMode: "song" });
+
+    expect(source.stopTime).toBeLessThan(naturalStop);
+  });
+
+  it("restarts the transport from the top of the new source", async () => {
+    const { tone, project } = await playingWithAVoice();
+    const starts = tone.transport.startCalls;
+    tone.transport.ticks = 4_321; // the old source's playhead, mid-bar
+
+    syncProject({ ...project, playbackMode: "song" });
+
+    expect(tone.transport.startCalls).toBe(starts + 1);
+    expect(tone.transport.ticks).toBe(0);
+    expect(isPlaying()).toBe(true);
+  });
+
+  it("still re-arms the transport with the new source", async () => {
+    const { tone, project } = await playingWithAVoice();
+
+    // Pattern mode schedules the pattern once; song mode schedules the clip.
+    syncProject({
+      ...project,
+      playbackMode: "song",
+      clips: {
+        c1: { id: "c1", trackId: "trk-1", patternId: "pat-1", startTick: 0 },
+        c2: { id: "c2", trackId: "trk-1", patternId: "pat-1", startTick: 384 },
+      },
+    });
+
+    expect(tone.transport.scheduled).toHaveLength(2);
+    expect(getSnapshot().mode).toBe("song");
+  });
+
+  it("stays stopped when it was stopped, and still releases and re-arms", async () => {
+    const { tone } = installTone();
+    const project = patternProject();
+    syncProject(project);
+    await ensureStarted();
+    const starts = tone.transport.startCalls;
+
+    syncProject({ ...project, playbackMode: "song" });
+
+    expect(isPlaying()).toBe(false);
+    expect(tone.transport.startCalls).toBe(starts);
+    expect(getSnapshot().mode).toBe("song");
+  });
+
+  it("leaves a same-mode sync alone — no release, no restart", async () => {
+    const { tone, project, source, naturalStop } = await playingWithAVoice();
+    const starts = tone.transport.startCalls;
+
+    // A note edit: the schedule changes, the mode does not.
+    syncProject(projectWith([step("a", 0), step("b", TICKS_PER_STEP)], {
+      playbackMode: "pattern",
+      clips: project.clips,
+    }));
+
+    expect(tone.transport.startCalls).toBe(starts);
     expect(source.stopTime).toBe(naturalStop);
   });
 });

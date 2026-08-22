@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Playlist } from "./Playlist";
-import { LANE_HEIGHT_PX } from "./geometry";
-import { DEFAULT_PLAYLIST_UI } from "./uiState";
+import { LANE_HEIGHT_PX, MIN_VISIBLE_BARS, TRAILING_BARS } from "./geometry";
+import { DEFAULT_PLAYLIST_UI, DEFAULT_ZOOM_PX_PER_BAR } from "./uiState";
 import { addNotes } from "@/domain/commands";
 import { createHistory } from "@/domain/undo";
 import { createDefaultProject } from "@/domain/defaultProject";
@@ -587,8 +587,10 @@ describe("an erase sweep is ONE undo entry (round 7 #2)", () => {
 
     fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 7 });
     fireEvent.contextMenu(screen.getByTestId("clip-clip-a"));
-    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2 });
-    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2 });
+    // The SWEEP's own pointer id on every enter, as a browser sends it: the
+    // erase path is scoped to the pointer that opened the sweep (round 13 #2).
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2, pointerId: 7 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2, pointerId: 7 });
     fireEvent.pointerUp(main, { pointerId: 7 });
   }
 
@@ -1183,5 +1185,115 @@ describe("the playlist's click mutations go through the registry (round 12)", ()
     act_();
 
     expect(selectHasActiveGesture(useAppStore.getState())).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------- round 13 -- */
+
+/*
+ * Round 13 #2. `ClipView`'s pointer-enter erase tested only `event.buttons`,
+ * which is a property of whichever pointer sent the event — not of the sweep.
+ * A second pointer holding its own secondary button erased under the OWNER's
+ * gesture id, so a clip the sweep never crossed folded into the sweep's single
+ * undo entry.
+ */
+describe("an erase sweep erases for its OWN pointer only (round 13)", () => {
+  function placeThreeAndRender(): HTMLElement {
+    placeClip("clip-a", { startTick: 0 });
+    placeClip("clip-b", { startTick: TICKS_PER_BAR });
+    placeClip("clip-c", { startTick: TICKS_PER_BAR * 2 });
+    render(<Playlist />);
+    return screen.getByTestId("playlist-main");
+  }
+
+  it("ignores a foreign pointer entering a clip mid-sweep", () => {
+    const main = placeThreeAndRender();
+
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 1 });
+    // A second pointer with its own secondary button held — a touch beside the
+    // mouse, a stylus barrel button — wandering across a clip the sweep never
+    // reached.
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2, pointerId: 9 });
+    fireEvent.pointerUp(main, { pointerId: 1 });
+
+    expect(Object.keys(useAppStore.getState().project.clips).sort()).toEqual([
+      "clip-b",
+      "clip-c",
+    ]);
+  });
+
+  it("does not fold a stranger's delete into the sweep's undo entry", () => {
+    const main = placeThreeAndRender();
+
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 1 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 1 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2, pointerId: 9 });
+    fireEvent.pointerUp(main, { pointerId: 1 });
+
+    // One entry, holding ONE clip. Let the stranger through and the entry
+    // holds two, so this single undo is putting back a clip the user's sweep
+    // never crossed — which is why the surviving-clip assertion belongs here
+    // rather than only in the test above.
+    expect(useAppStore.getState().history.past).toHaveLength(1);
+    expect(useAppStore.getState().project.clips["clip-c"]).toBeDefined();
+    act(() => {
+      useAppStore.getState().undo();
+    });
+    expect(Object.keys(useAppStore.getState().project.clips).sort()).toEqual([
+      "clip-a",
+      "clip-b",
+      "clip-c",
+    ]);
+  });
+
+  it("still erases for the sweep's own pointer, and for a sweep it never saw open", () => {
+    const main = placeThreeAndRender();
+
+    // Owned: every clip the sweep's pointer crosses dies.
+    fireEvent.pointerDown(main, { button: 2, buttons: 2, pointerId: 3 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-a"), { buttons: 2, pointerId: 3 });
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-b"), { buttons: 2, pointerId: 3 });
+    fireEvent.pointerUp(main, { pointerId: 3 });
+    expect(Object.keys(useAppStore.getState().project.clips)).toEqual(["clip-c"]);
+
+    // No sweep open at all — a right-drag that began outside the playlist and
+    // crossed in. There is no owner to be a stranger to, so it still erases.
+    fireEvent.pointerEnter(screen.getByTestId("clip-clip-c"), { buttons: 2, pointerId: 5 });
+    expect(Object.keys(useAppStore.getState().project.clips)).toHaveLength(0);
+  });
+});
+
+/*
+ * Round 13 #5. The furthest-extent reduction fed `totalVisibleBars` the last
+ * clip's START tick, and that function rounds ticks UP to a bar before adding
+ * the trailing headroom — so a clip occupying bar 21 counted as 20 bars of
+ * content and the surface drew one bar less headroom than it promises.
+ */
+describe("the lanes reach a full TRAILING_BARS past the last clip (round 13)", () => {
+  it("measures the arrangement to the clip's END, not its start", () => {
+    placeClip("clip-a", { startTick: TICKS_PER_BAR * 20 }); // occupies bar 21
+    render(<Playlist />);
+
+    // 21 bars of content + TRAILING_BARS of room to paint, at 80px/bar.
+    const expected = (21 + TRAILING_BARS) * DEFAULT_ZOOM_PX_PER_BAR;
+    expect(screen.getByTestId("lane-trk-1").style.width).toBe(`${expected}px`);
+  });
+
+  it("leaves the last clip's own bar paintable-past, not flush with the edge", () => {
+    placeClip("clip-a", { startTick: TICKS_PER_BAR * 20 });
+    render(<Playlist />);
+
+    const lastPaintableBar = Number.parseInt(screen.getByTestId("lane-trk-1").style.width, 10) /
+      DEFAULT_ZOOM_PX_PER_BAR;
+    // Bars 22..28 are the eight empty ones past the clip's own bar 21.
+    expect(lastPaintableBar - 21).toBe(TRAILING_BARS);
+  });
+
+  it("keeps the empty-arrangement floor untouched", () => {
+    render(<Playlist />);
+    expect(screen.getByTestId("lane-trk-1").style.width).toBe(
+      `${MIN_VISIBLE_BARS * DEFAULT_ZOOM_PX_PER_BAR}px`,
+    );
   });
 });

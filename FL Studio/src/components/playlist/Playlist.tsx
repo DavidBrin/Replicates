@@ -98,8 +98,25 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
     return map;
   }, [tracks, clips]);
 
+  /**
+   * The arrangement's furthest EXTENT, which is a clip's end — not its start.
+   *
+   * `totalVisibleBars` takes ticks and rounds up to a bar before adding the
+   * trailing headroom, so feeding it the last clip's `startTick` rounded a
+   * clip that starts at bar 8 down to "8 bars of content" when it occupies
+   * the ninth. The surface was one bar short of its declared headroom for the
+   * whole life of the file: with `TRAILING_BARS` empty bars promised past the
+   * last clip, the user got `TRAILING_BARS - 1`, and the clip at the very end
+   * sat flush against the last drawn bar with nowhere to drag it. Clips are
+   * exactly one bar wide (`PATTERN_LENGTH_TICKS`, SPEC.md §2 — there is no
+   * resize handle on a `ClipView` for that reason), so the end is the start
+   * plus a bar.
+   */
   const totalBars = useMemo(() => {
-    const furthestEnd = clips.reduce((max, clip) => Math.max(max, clip.startTick), 0);
+    const furthestEnd = clips.reduce(
+      (max, clip) => Math.max(max, clip.startTick + TICKS_PER_BAR),
+      0,
+    );
     return totalVisibleBars(furthestEnd);
   }, [clips]);
 
@@ -148,6 +165,24 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
    */
   function eraseOptions(): { coalesceKey: string; gestureId: string } {
     return { coalesceKey: "playlist:erase", gestureId: eraseSweep.keyFor() };
+  }
+
+  /**
+   * Which pointer the open sweep belongs to, answered for a clip
+   * (`ClipView`'s `ownsEraseSweep`) — rule (g) of `@/lib/gestureHold`, reached
+   * across a component boundary because the session lives here and the
+   * pointer-enter that erases happens down there.
+   *
+   * With NO sweep open the answer is `true`, and that is not a loophole: a
+   * right-drag that begins outside the playlist and crosses into it opens no
+   * session here, and it is still the one and only pointer erasing. The case
+   * being rejected is the specific one — a sweep IS running and this event
+   * comes from a different pointer, whose delete would be filed under the
+   * owner's gesture id by `eraseOptions` above.
+   */
+  function ownsEraseSweep(event: React.PointerEvent<HTMLDivElement>): boolean {
+    if (eraseSweep.peek() === null) return true;
+    return eraseSweep.ownsEvent(event);
   }
 
   /**
@@ -530,6 +565,7 @@ export function Playlist({ playheadTicks, onOpenPianoRoll }: PlaylistProps) {
                           onMakeUnique={handleMakeUnique}
                           onDragCommit={handleDragCommit}
                           onCloneStart={handleCloneStart}
+                          ownsEraseSweep={ownsEraseSweep}
                         />
                       );
                     })}

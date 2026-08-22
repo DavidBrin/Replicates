@@ -451,8 +451,18 @@ describe("useGestureSession — onCancel clears the owner's state", () => {
         });
       },
     ],
-    ["the element's own terminator", () => fireEvent.pointerUp(screen.getByTestId("probe"))],
-    ["a pointercancel", () => fireEvent.pointerCancel(screen.getByTestId("probe"))],
+    // The opening pointer's own id on the release, as a browser always sends
+    // it: the terminators are scoped to the owner (rule (g)), and a fixture
+    // that omitted the id was firing a *foreign* pointer's release (jsdom
+    // defaults `pointerId` to 0) at a session opened by pointer 4.
+    [
+      "the element's own terminator",
+      () => fireEvent.pointerUp(screen.getByTestId("probe"), { pointerId: 4 }),
+    ],
+    [
+      "a pointercancel",
+      () => fireEvent.pointerCancel(screen.getByTestId("probe"), { pointerId: 4 }),
+    ],
     ["a blur", () => fireEvent.blur(screen.getByTestId("probe"))],
     ["the window backstop", () => fireEvent.pointerUp(window, { pointerId: 4 })],
   ])("fires on %s", (_name, terminate) => {
@@ -610,8 +620,9 @@ describe("useGestureSession — one mutating gesture at a time", () => {
     expect(holds()).toEqual(["probe#2"]);
     expect(cancelled).toEqual(["self"]);
 
-    // And the survivor is the SECOND press: its release is what ends it.
-    fireEvent.pointerUp(probe);
+    // And the survivor is the SECOND press: its release — its OWN pointer's,
+    // rule (g) — is what ends it.
+    fireEvent.pointerUp(probe, { pointerId: 2 });
     expect(holds()).toEqual([]);
   });
 
@@ -647,7 +658,7 @@ describe("useGestureSession — one mutating gesture at a time", () => {
     const cancelled: string[] = [];
     const { first, second } = twoProbes(() => cancelled.push("a"));
     fireEvent.pointerDown(first, { pointerId: 1 });
-    fireEvent.pointerUp(first);
+    fireEvent.pointerUp(first, { pointerId: 1 });
     expect(cancelled).toEqual(["a"]);
 
     fireEvent.pointerDown(second, { pointerId: 2 });
@@ -750,6 +761,109 @@ describe("useGestureSession — pointer ownership (rule g)", () => {
 
     // Owner, stranger, and the abstention when the caller has no id.
     expect(opened).toEqual(["true/false/true"]);
+  });
+
+  /*
+   * Round 13 #1. The window backstop filtered by pointer id; the SHARED
+   * terminators — the ones every surface spreads — did not, so a second
+   * pointer releasing over a control that was mid-drag ended the owner's
+   * session from under its still-pressed button.
+   */
+  describe("the shared terminators belong to the owning pointer too", () => {
+    it.each([
+      ["pointerUp", (el: HTMLElement, pointerId: number) => fireEvent.pointerUp(el, { pointerId })],
+      [
+        "pointerCancel",
+        (el: HTMLElement, pointerId: number) => fireEvent.pointerCancel(el, { pointerId }),
+      ],
+    ])("ignores a FOREIGN pointer's %s", (_name, terminate) => {
+      render(<Probe />);
+      const probe = screen.getByTestId("probe");
+      fireEvent.pointerDown(probe, { pointerId: 1 });
+      expect(holds()).toEqual(["probe#1"]);
+
+      terminate(probe, 2);
+
+      // Still held: the owner's button is still down.
+      expect(holds()).toEqual(["probe#1"]);
+    });
+
+    it.each([
+      ["pointerUp", (el: HTMLElement, pointerId: number) => fireEvent.pointerUp(el, { pointerId })],
+      [
+        "pointerCancel",
+        (el: HTMLElement, pointerId: number) => fireEvent.pointerCancel(el, { pointerId }),
+      ],
+    ])("still ends on the OWNER's %s", (_name, terminate) => {
+      render(<Probe />);
+      const probe = screen.getByTestId("probe");
+      fireEvent.pointerDown(probe, { pointerId: 1 });
+
+      terminate(probe, 1);
+
+      expect(holds()).toEqual([]);
+    });
+
+    it("does not run the owner's onCancel for a foreign release", () => {
+      const cancels: number[] = [];
+      render(<Probe onCancel={() => cancels.push(1)} />);
+      const probe = screen.getByTestId("probe");
+      fireEvent.pointerDown(probe, { pointerId: 1 });
+
+      fireEvent.pointerUp(probe, { pointerId: 2 });
+
+      // The owner's drag-state ref must survive a stranger's release.
+      expect(cancels).toEqual([]);
+      fireEvent.pointerUp(probe, { pointerId: 1 });
+      expect(cancels).toEqual([1]);
+    });
+
+    it("still ends on blur, which carries no pointer id at all", () => {
+      render(<Probe />);
+      const probe = screen.getByTestId("probe");
+      fireEvent.pointerDown(probe, { pointerId: 1 });
+
+      fireEvent.blur(probe);
+
+      expect(holds()).toEqual([]);
+    });
+
+    it("abstains — ends — when the session was opened with no pointer", () => {
+      // A keyboard/focus open cannot claim a release is somebody else's.
+      function FocusOpened() {
+        const gesture = useGestureSession("focus-open");
+        return (
+          <div
+            data-testid="focus-open"
+            tabIndex={0}
+            onFocus={() => void gesture.begin()}
+            {...gesture.terminators}
+          />
+        );
+      }
+      render(<FocusOpened />);
+      const probe = screen.getByTestId("focus-open");
+      fireEvent.focus(probe);
+      expect(holds()).toHaveLength(1);
+
+      fireEvent.pointerUp(probe, { pointerId: 9 });
+
+      expect(holds()).toEqual([]);
+    });
+
+    it("keeps closing a keyboard edit RUN, which holds no session to own", () => {
+      // `end` is a no-op for the hold when nothing is open, but it also resets
+      // the keyring — a release after an arrow-key run must still seal it, so
+      // the ownership filter must not swallow the call.
+      render(<Probe editGapMs={1000} now={() => 0} />);
+      const probe = screen.getByTestId("probe");
+      fireEvent.keyDown(probe, { key: "ArrowUp" });
+      fireEvent.pointerUp(probe, { pointerId: 5 });
+      fireEvent.keyDown(probe, { key: "ArrowUp" });
+
+      // Two runs, not one folded run, despite no time passing.
+      expect(opened[0]).not.toEqual(opened[1]);
+    });
   });
 });
 

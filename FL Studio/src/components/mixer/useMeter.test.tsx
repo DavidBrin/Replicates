@@ -40,8 +40,11 @@ function tapReadingOnce(peak: number): { tap: AnalyserNode; reads: () => number 
 let frames: FrameRequestCallback[] = [];
 let listeners: ((snapshot: EngineSnapshot) => void)[] = [];
 
+/** The engine's preview counter, so a test can announce one (round 13 #4). */
+let previewRevision = 0;
+
 function snapshot(started: boolean, playing: boolean): EngineSnapshot {
-  return { started, playing, mode: "pattern", metronomeEnabled: false };
+  return { started, playing, mode: "pattern", metronomeEnabled: false, previewRevision };
 }
 
 /** Point the engine seam at a fake transport state. */
@@ -59,6 +62,17 @@ function flushFrame(): void {
   });
 }
 
+/**
+ * Fire a preview the way the engine does: bump the revision, then emit — the
+ * voice is already triggered by the time a listener runs.
+ */
+function emitPreview(): void {
+  previewRevision += 1;
+  act(() => {
+    for (const listener of [...listeners]) listener(snapshot(true, false));
+  });
+}
+
 function emit(started: boolean, playing: boolean): void {
   vi.spyOn(audio, "isPlaying").mockImplementation(() => playing);
   act(() => {
@@ -70,6 +84,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   frames = [];
   listeners = [];
+  previewRevision = 0;
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
     frames.push(callback);
     return frames.length;
@@ -271,5 +286,110 @@ describe("useMeter — idle suspension", () => {
     // A frame that was already queued when we unmounted must be inert.
     expect(() => flushFrame()).not.toThrow();
     expect(frames).toHaveLength(0);
+  });
+});
+
+/*
+ * Round 13 #4. With the transport stopped the meter sat on a 250 ms poll,
+ * and a preview voice lasts 40–180 ms: it could start and finish entirely
+ * between two reads, so the needle never moved for the gesture the user had
+ * just made. The engine announces previews on its snapshot channel now, and
+ * the meter switches to the frame loop on the announcement rather than
+ * hoping to catch the sound with a poll.
+ */
+describe("useMeter — a preview wakes the meter directly (round 13)", () => {
+  /** A tap that reads silent for the first N reads, then hot — a voice ramping in. */
+  function tapHotAfter(reads: number, peak: number): AnalyserNode {
+    let seen = 0;
+    return tapReading(() => {
+      seen += 1;
+      return seen > reads ? peak : 0;
+    });
+  }
+
+  it("promotes to the frame loop on the announcement, not on the next poll", () => {
+    mockEngine(true, false);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tapReading(() => 0.5));
+
+    render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    expect(frames).toHaveLength(0); // idle: a poll, no frames
+
+    emitPreview();
+
+    // No timer advanced at all — the wake came from the event.
+    expect(frames).toHaveLength(1);
+  });
+
+  it("shows a preview shorter than the poll interval", () => {
+    mockEngine(true, false);
+    // Hot for exactly one read, and that read only ever happens because the
+    // preview announced itself: a 250 ms poll would sample long after the
+    // 40 ms voice had gone.
+    const { tap } = tapReadingOnce(0.6);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tap);
+
+    const { getByTestId } = render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    emitPreview();
+
+    const [left, right] = getByTestId("probe").textContent!.split(",").map(Number);
+    expect(left).toBeCloseTo(0.6, 5);
+    expect(right).toBeCloseTo(0.6, 5);
+  });
+
+  it("catches a voice that has not ramped up yet, because it is now on rAF", () => {
+    mockEngine(true, false);
+    // Silent at the announcement — the trigger is scheduled a hair ahead of
+    // `currentTime` — and hot a frame later. The poll would next look 250 ms
+    // on, by which time a short preview is over.
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tapHotAfter(1, 0.7));
+
+    const { getByTestId } = render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    emitPreview();
+    expect(getByTestId("probe").textContent).toBe("0,0");
+
+    flushFrame();
+
+    expect(Number(getByTestId("probe").textContent!.split(",")[0])).toBeCloseTo(0.7, 5);
+  });
+
+  it("does not wake a meter whose engine has not started", () => {
+    mockEngine(false, false);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tapReading(() => 0.5));
+
+    render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    previewRevision += 1;
+    act(() => {
+      for (const listener of [...listeners]) listener(snapshot(false, false));
+    });
+
+    expect(frames).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not read a MOUNT as a preview, however many have been played", () => {
+    previewRevision = 12; // previews earlier in the session
+    mockEngine(true, false);
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tapReading(() => 0.5));
+
+    render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+
+    expect(frames).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(1); // parked on the idle poll, as it should be
+  });
+
+  it("keeps the idle poll as the backstop for level with no announcement", () => {
+    // A voice still ringing after the transport stopped: nothing announces it,
+    // and the watcher is what has to notice.
+    mockEngine(true, false);
+    let peak = 0;
+    vi.spyOn(audio, "getMeterTap").mockReturnValue(tapReading(() => peak));
+
+    render(<Probe trackId={MASTER_MIXER_TRACK_ID} />);
+    peak = 0.3;
+    act(() => {
+      vi.advanceTimersByTime(IDLE_POLL_MS);
+    });
+
+    expect(frames).toHaveLength(1);
   });
 });

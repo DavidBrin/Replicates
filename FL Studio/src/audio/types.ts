@@ -79,6 +79,20 @@ export interface EngineSnapshot {
   playing: boolean;
   mode: "pattern" | "song";
   metronomeEnabled: boolean;
+  /**
+   * Bumped once per preview note fired (`previewNote`), and never otherwise.
+   *
+   * Sound that the transport never announces is invisible in every other
+   * field here: a piano-roll key or a rack row preview leaves `playing`
+   * false, so a subscriber watching transport state alone cannot know
+   * anything is audible. The mixer's meters (`useMeter`) park on a slow poll
+   * while the transport is stopped, and a preview is short enough to start
+   * and finish between two polls — the needle never moved for the gesture the
+   * user just made. A revision rather than a boolean because the interesting
+   * event is "another one happened", which a flag cannot express for two
+   * previews in a row.
+   */
+  previewRevision: number;
 }
 
 export type { ChannelId, MixerTrackId, VoiceKind };

@@ -41,6 +41,23 @@ export interface ClipViewProps {
    * (e.g. in a host that doesn't wire it).
    */
   onCloneStart?: (clipId: string, coalesceKey: string) => string;
+  /**
+   * Does this pointer belong to the right-drag erase sweep that is running?
+   *
+   * The sweep's session lives on the playlist root (it may START on empty
+   * lane space), so a clip cannot ask it directly — the host passes the
+   * question down. `false` means a sweep is open and this is somebody ELSE's
+   * pointer: a second pointer with its own secondary button held, entering
+   * the clip while the sweep's owner is mid-drag elsewhere. Deleting for it
+   * would fold a clip the sweep never crossed into the sweep's coalescing
+   * undo entry, under a gesture key that is not this pointer's.
+   *
+   * Omitted — a host with no sweep of its own, a component test firing
+   * `pointerenter` directly — every entering pointer with the button down
+   * erases, which is the pre-sweep behaviour and the only safe reading when
+   * there is no owner to compare against.
+   */
+  ownsEraseSweep?: (event: React.PointerEvent<HTMLDivElement>) => boolean;
 }
 
 const DRAG_THRESHOLD_PX = 3;
@@ -113,6 +130,7 @@ export function ClipView({
   onMakeUnique,
   onDragCommit,
   onCloneStart,
+  ownsEraseSweep,
 }: ClipViewProps) {
   const dragState = useRef<DragState | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -241,12 +259,23 @@ export function ClipView({
    * hung off `contextmenu`, which fires exactly once per press.
    *
    * A clip entered while the secondary button is down is a clip the sweep has
-   * reached. `buttons` (the live button mask, unlike `button`) is the only
-   * thing that has to be true: no shared gesture object, so a sweep that
-   * starts on empty lane space and crosses into clips erases them too.
+   * reached. `buttons` (the live button mask, unlike `button`) is what says
+   * the button is still held, so a sweep that starts on empty lane space and
+   * crosses into clips erases them too.
+   *
+   * `buttons` alone is not enough, though, and that was the hole: it is a
+   * property of whichever pointer sent the event, not of the sweep. A second
+   * pointer holding its own secondary button — a touch beside the mouse, a
+   * stylus barrel button — entering this clip while the real sweep is being
+   * dragged elsewhere deleted it, and `Playlist`'s `eraseOptions` handed that
+   * delete the OPEN sweep's gesture id: a clip the owner never crossed folded
+   * into the owner's single undo entry, so one Ctrl+Z put back a clip the user
+   * had not asked to lose alongside the ones they had. Ownership is asked of
+   * the sweep itself (`@/lib/gestureHold` rule (g)) through the host.
    */
   function handlePointerEnter(event: React.PointerEvent<HTMLDivElement>) {
     if ((event.buttons & 2) === 0) return;
+    if (ownsEraseSweep !== undefined && !ownsEraseSweep(event)) return;
     onDelete(clip.id);
   }
 

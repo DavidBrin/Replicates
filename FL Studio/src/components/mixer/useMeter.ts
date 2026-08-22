@@ -23,10 +23,13 @@
  * - **Off** — the engine has not started. No timer of any kind. The engine's
  *   own {@link subscribe} wakes us; polling for a boot we would be told about
  *   is exactly the waste this exists to remove.
- * - **Idle** — started but not playing. A slow {@link IDLE_POLL_MS} interval
- *   watches the tap for a level, because sound can arrive *without* a
- *   transport-state change: a piano-roll key preview emits no snapshot. It
- *   promotes itself to active the moment the tap is non-zero.
+ * - **Idle** — started but not playing. The engine announces every preview
+ *   (`EngineSnapshot.previewRevision`), so the frame loop is woken by the
+ *   sound itself rather than discovered by polling. A slow
+ *   {@link IDLE_POLL_MS} interval stays as the backstop for level that
+ *   arrives with no announcement at all — a note still ringing when the
+ *   transport stopped, a decaying tail — and promotes itself the moment the
+ *   tap reads non-zero.
  * - **Active** — a real rAF loop with the ballistic falloff, entered on play
  *   or on a level appearing, and left again only after
  *   {@link IDLE_SILENCE_MS} of *sustained* silence with the transport stopped
@@ -144,16 +147,23 @@ export function useMeter(trackId: MixerTrackId): MeterLevels {
     }
 
     /**
-     * Cheap watch for sound the transport never announced (a key preview).
+     * Backstop watch for level the engine never announced.
      *
-     * The sample it takes is RENDERED, not thrown away. A preview is ~40 ms
-     * (`PREVIEW_DURATION_SEC` at its tail) against a 250 ms poll, so the one
-     * read that catches it is usually the only read that ever will: promoting
-     * to a frame loop and letting the first frame re-read the tap put the
-     * needle up 16 ms after the sound had already decayed to nothing, and the
-     * meter never moved. Any non-zero sample is worth showing and worth
-     * waking the loop for — the loop parks itself again after
-     * {@link IDLE_SILENCE_MS} of silence.
+     * It used to be the ONLY watch, and that is what it could not do: a
+     * preview lasts 40–180 ms (`PREVIEW_DURATION_SEC` through the longest
+     * voice tail) against a 250 ms poll, so a preview could start and finish
+     * entirely between two reads and the needle never moved for it at all.
+     * Previews now wake the loop directly through the engine's snapshot
+     * channel (see the subscription below), and this interval covers what no
+     * event can: a voice still ringing when the transport stopped, a release
+     * tail outliving the loop's own park, a tap that gains level for a reason
+     * this hook has no notion of.
+     *
+     * The sample it takes is RENDERED, not thrown away. Promoting to a frame
+     * loop and letting the first frame re-read the tap put the needle up
+     * 16 ms after a short sound had already decayed to nothing. Any non-zero
+     * sample is worth showing and worth waking the loop for — the loop parks
+     * itself again after {@link IDLE_SILENCE_MS} of silence.
      */
     function watch(): void {
       if (disposed) return;
@@ -207,7 +217,33 @@ export function useMeter(trackId: MixerTrackId): MeterLevels {
 
     const snapshot = getSnapshot();
     applyEngineState(snapshot.started, snapshot.playing);
-    const unsubscribe = subscribe((next) => applyEngineState(next.started, next.playing));
+    /**
+     * The last preview this hook has already reacted to. Seeded from the
+     * snapshot rather than 0, so mounting a strip after previews have been
+     * played does not read as "a preview just happened".
+     */
+    let seenPreview = snapshot.previewRevision;
+
+    const unsubscribe = subscribe((next) => {
+      /*
+       * A preview is sound with no transport state behind it, so it is the
+       * one wake-up `applyEngineState` cannot derive: `started` is already
+       * true and `playing` is still false, which is exactly the Idle state
+       * the hook is sitting in. Handled first and by promoting straight to
+       * the frame loop — the voice is already triggered by the time this
+       * runs, so `goActive` samples the tap on the spot and the ballistic
+       * falloff carries the peak on screen for as long as it takes to see,
+       * however short the sound itself was.
+       */
+      if (next.previewRevision !== seenPreview) {
+        seenPreview = next.previewRevision;
+        if (next.started) {
+          goActive();
+          return;
+        }
+      }
+      applyEngineState(next.started, next.playing);
+    });
 
     return () => {
       disposed = true;

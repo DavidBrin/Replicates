@@ -77,6 +77,8 @@ let bootPromise: Promise<void> | null = null;
 let project: Project | null = null;
 let playing = false;
 let metronomeEnabled = false;
+/** {@link EngineSnapshot.previewRevision} — one per preview voice fired. */
+let previewRevision = 0;
 /** Replayed once boot lands — see the class comment on synchronous callers. */
 let playRequested = false;
 /** Tone is loaded and the context is live, but there was no project to wire. */
@@ -204,7 +206,26 @@ export function syncProject(next: Project): void {
 
   state.graph.sync(next);
   state.transport.bpm.value = next.tempo;
-  if (needsRearm(next)) rearm();
+  /*
+   * A mode flip that arrives through the PROJECT gets `setMode`'s treatment,
+   * not a bare re-arm.
+   *
+   * `setMode` is only one of the two doors `playbackMode` comes through. The
+   * other is project REPLACEMENT — undo/redo of a change made either side of
+   * a flip, a load, an import, File → New — where the store swaps in a whole
+   * project whose mode differs and this seam is the only thing the engine
+   * hears about it. `needsRearm` noticed (mode is in `ArmedInputs`), so the
+   * transport was re-armed with the new source, and that is where it stopped:
+   * the voices from the OLD source were never released, so a pattern's notes
+   * rang on over the arrangement that replaced them, and the transport was
+   * never re-started, so the new source began wherever the old one's playhead
+   * happened to be instead of at its own bar 1. The same flip typed as `L`
+   * released and restarted, so the two doors disagreed about what a mode
+   * change means; they share one implementation now.
+   */
+  const modeChanged = previous !== null && previous.playbackMode !== next.playbackMode;
+  if (modeChanged) restartForModeChange();
+  else if (needsRearm(next)) rearm();
   releaseMutedTrackVoices(previous, next);
 }
 
@@ -378,6 +399,29 @@ export function stop(): void {
 export function setMode(mode: PlaybackMode): void {
   if (project === null || project.playbackMode === mode) return;
   project = { ...project, playbackMode: mode };
+  restartForModeChange();
+}
+
+/**
+ * What a playback-mode change does to a live transport, wherever it came from.
+ *
+ * Three steps and all three matter. **Release**: the sounding voices belong to
+ * the source that is being swapped out, and a voice's envelope lives on the
+ * audio thread — re-arming the transport does not silence a note already
+ * queued, so without this the old mode's notes ring over the new one's.
+ * **Re-arm**: point the transport at the other source. **Restart**: the new
+ * source is a different timeline, so resuming at the old one's tick starts it
+ * mid-phrase; `play` stops, zeroes and starts, which is the "from the top of
+ * the new source" the mode flip promises.
+ *
+ * Stopped stays stopped — the release and the re-arm still run, so a preview
+ * still ringing is cut and the next `play` finds the right source armed.
+ *
+ * Shared by {@link setMode} and {@link syncProject} deliberately: they are two
+ * doors onto one transition, and the version of this that lived only in
+ * `setMode` left every project-replacement flip half-applied.
+ */
+function restartForModeChange(): void {
   if (state === null) return;
   const wasPlaying = playing;
   state.voices.releaseAll(state.ctx.currentTime);
@@ -449,6 +493,17 @@ function firePreview(channelId: ChannelId, pitch: number, durationSec: number): 
     velocity: 1,
     durationSec,
   });
+  /*
+   * Announce it. A preview is the one way this engine makes sound without
+   * touching transport state, so every subscriber watching `playing` was
+   * blind to it — including the meters, whose whole job is to show that
+   * something is audible.
+   *
+   * The bump goes AFTER the trigger, so a listener that reacts by reading the
+   * meter tap synchronously reads a tap the voice is already feeding.
+   */
+  previewRevision += 1;
+  emit();
 }
 
 /* ------------------------------------------------------------- meters --- */
@@ -504,6 +559,7 @@ export function getSnapshot(): EngineSnapshot {
     playing,
     mode: project?.playbackMode ?? "pattern",
     metronomeEnabled,
+    previewRevision,
   };
 }
 
@@ -538,6 +594,7 @@ export function disposeEngine(): void {
   metronomeEnabled = false;
   armed = null;
   playRequested = false;
+  previewRevision = 0;
   listeners.clear();
 }
 
