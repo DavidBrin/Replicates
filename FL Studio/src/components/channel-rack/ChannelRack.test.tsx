@@ -1636,3 +1636,69 @@ describe("a no-op knob edit dispatches nothing (round 14)", () => {
     expect(useAppStore.getState().project.channels["ch-kick"]!.volume).toBeCloseTo(0.81, 5);
   });
 });
+
+/*
+ * Round 15 #3. Both of the rack's clamped continuous paths dispatched even
+ * when the value they produced was the value already stored — an undo entry
+ * that undoes nothing. The velocity nudge is the worse of the two, because its
+ * key comes from `wheelEditKey`, which PRE-EMPTS: a notch at the ceiling
+ * sealed a knob or clip drag somebody was still holding, for an edit that
+ * never happened.
+ */
+describe("a clamped rack edit that changes nothing dispatches nothing (round 15)", () => {
+  function kickNoteVelocity(): number {
+    const notes = Object.values(useAppStore.getState().project.patterns["pat-1"]!.notes);
+    return notes.find((note) => note.channelId === "ch-kick" && note.positionTicks === 0)!.velocity;
+  }
+
+  it("files no entry — and pre-empts nothing — for an alt+wheel notch at the ceiling", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const cell = kickStep(0);
+    await user.click(cell);
+
+    // Walk the note up to 1 (the step is 1/32, so 32 notches clear it).
+    for (let i = 0; i < 40; i += 1) fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+    expect(kickNoteVelocity()).toBe(1);
+
+    const before = useAppStore.getState().history.past.length;
+    let ended = false;
+    registerExternalGesture(() => {
+      ended = true;
+    });
+
+    fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+
+    expect(kickNoteVelocity()).toBe(1);
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+    expect(ended).toBe(false);
+  });
+
+  it("still nudges — and still pre-empts — below the ceiling", async () => {
+    const user = userEvent.setup();
+    render(<ChannelRack />);
+    const cell = kickStep(0);
+    await user.click(cell);
+    const before = kickNoteVelocity();
+    let ended = false;
+    registerExternalGesture(() => {
+      ended = true;
+    });
+
+    fireEvent.wheel(cell, { altKey: true, deltaY: -100 });
+
+    expect(kickNoteVelocity()).toBeGreaterThan(before);
+    expect(ended).toBe(true);
+  });
+
+  it("still records a swing change that is real", () => {
+    render(<ChannelRack />);
+    const slider = screen.getByLabelText("Rack swing");
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.change(slider, { target: { value: "0.3" } });
+
+    expect(useAppStore.getState().project.globalSwing).toBeCloseTo(0.3);
+    expect(useAppStore.getState().history.past).toHaveLength(before + 1);
+  });
+});

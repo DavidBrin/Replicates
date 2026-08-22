@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { TEMPO_MAX, TEMPO_MIN, clampTempo } from "@/components/shell/wiring";
-import { useGestureHold } from "@/lib/gestureHold";
+import { useGestureHold, usePendingCommit } from "@/lib/gestureHold";
 
 /** Vertical travel below which a press is still a click, not a tempo drag. */
 const DRAG_SLOP_PX = 2;
@@ -47,6 +47,7 @@ export function BpmLcd({
    * click that follows.
    */
   const suppressNextClick = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   /**
    * SPEC §2.2: no autosave lands while the LCD is being dragged.
    *
@@ -65,6 +66,24 @@ export function BpmLcd({
       dragState.current = null;
     },
   });
+
+  /**
+   * The single dispatch point — the drag, the spinner and the typed commit.
+   *
+   * Every one of them is CLAMPED to `[min, max]`, so every one of them can
+   * produce the tempo the plate already shows: a drag held past 522, the ▲
+   * button at the ceiling, a typed 900. Dispatching that cost an undo entry
+   * that undoes nothing — one `Ctrl+Z` spent putting the tempo back where it
+   * already was, with the edit the user meant to take back one press further
+   * down — plus a store write and the autosave it schedules.
+   *
+   * `clampTempo` rounds, so the comparison is exact rather than epsilon'd:
+   * both sides are integers.
+   */
+  function report(next: number): void {
+    if (next === value) return;
+    onChange(next);
+  }
 
   function beginEditing(): void {
     setDraft(String(value));
@@ -90,10 +109,25 @@ export function BpmLcd({
    */
   function commit(raw: string): void {
     const parsed = Number.parseFloat(raw);
-    const next = clampTempo(Number.isFinite(parsed) ? parsed : value, min, max);
-    if (next !== value) onChange(next);
+    report(clampTempo(Number.isFinite(parsed) ? parsed : value, min, max));
     setEditing(false);
   }
+
+  /*
+   * Commit BEFORE the gesture that dismissed this field dispatches, rather
+   * than after it on `blur`. A pointer-down that mutates immediately — a
+   * drawn note, a velocity stem, a shift-clone — used to file its command
+   * first, so the tempo commit stacked on top: one Ctrl+Z took back the tempo
+   * the user had finished with, and the drag could no longer coalesce
+   * (`@/lib/gestureHold`). The commit is idempotent — it re-reads `value` and
+   * dispatches nothing when the number is unchanged — so the `blur` that
+   * follows is free.
+   *
+   * The element goes with it because `TransportBar` wraps this whole plate in
+   * `onPointerDownCapture={tempoGesture.begin}`: without it, clicking into
+   * the field to move the caret would commit and close it mid-edit.
+   */
+  usePendingCommit(editing, () => commit(draft), inputRef);
 
   /**
    * The `▲`/`▼` spinner lives INSIDE the LCD plate, so its pointer events
@@ -145,7 +179,11 @@ export function BpmLcd({
     const deltaY = drag.startY - event.clientY; // up = increase
     if (Math.abs(deltaY) > DRAG_SLOP_PX) drag.moved = true;
     if (!drag.moved) return;
-    onChange(clampTempo(drag.startValue + deltaY, min, max));
+    // Through `report`: a drag held past either end repeats one clamped
+    // tempo, and the first of those repeats opens an empty undo entry.
+    // `startValue`/`startY` are untouched, so the value still tracks total
+    // travel once the pointer comes back inside the range.
+    report(clampTempo(drag.startValue + deltaY, min, max));
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
@@ -190,6 +228,7 @@ export function BpmLcd({
       {editing ? (
         <input
           autoFocus
+          ref={inputRef}
           value={draft}
           inputMode="decimal"
           onChange={(event) => setDraft(event.target.value)}
@@ -223,14 +262,14 @@ export function BpmLcd({
         <button
           type="button"
           aria-label="Increase tempo"
-          onClick={() => onChange(clampTempo(value + 1, min, max))}
+          onClick={() => report(clampTempo(value + 1, min, max))}
         >
           ▲
         </button>
         <button
           type="button"
           aria-label="Decrease tempo"
-          onClick={() => onChange(clampTempo(value - 1, min, max))}
+          onClick={() => report(clampTempo(value - 1, min, max))}
         >
           ▼
         </button>

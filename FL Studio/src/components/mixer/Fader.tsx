@@ -90,8 +90,9 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
    * The one-shot dispatch point — reset and arrow nudges — carrying the no-op
    * check. An arrow held at the top or bottom of the throw is clamped to the
    * value it already has, and each repeat used to file its own undo entry.
-   * The drag path stays direct: its moves share one coalesce key and one
-   * entry, and they hold the session that defers autosave.
+   * The drag path stays direct — it reuses the session's key rather than
+   * minting one — but carries the same {@link isNoOp} check for the same
+   * reason.
    */
   function changeValue(next: number): void {
     if (isNoOp(next, value)) return;
@@ -122,6 +123,12 @@ export function Fader({ value, min, max, defaultValue, label, travelPx = 140, on
     const deltaY = drag.startY - event.clientY; // up = increase, matches a physical fader
     const range = max - min;
     const next = clamp(drag.startValue + (deltaY / travelPx) * range, min, max);
+    // Past the top or bottom of the throw the clamp repeats the level the
+    // fader already has, and each repeat dispatched — the first filing an
+    // undo entry that undoes nothing, the rest costing a store write and an
+    // autosave schedule apiece. `startValue`/`startY` are untouched, so the
+    // level still tracks total travel once the pointer comes back in range.
+    if (isNoOp(next, value)) return;
     onChange(next, drag.coalesceKey);
   }
 

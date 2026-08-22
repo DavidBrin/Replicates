@@ -160,12 +160,34 @@ export interface InteractionDeps {
    * they were missing; the key stays the keyring's.
    */
   preemptGestures?: () => void;
+  /**
+   * Commit any open text editor NOW — `@/lib/gestureHold`'s
+   * `flushPendingCommits`, injected for the same layering reason
+   * {@link InteractionDeps.registerGesture} is.
+   *
+   * {@link InteractionDeps.registerGesture} covers most of this surface,
+   * because registering flushes too — but the DRAW path dispatches its
+   * `addNotes` *before* it calls `beginDrag`, so by the time the registry saw
+   * the gesture the note was already in the stack. A press here is a
+   * dismissal of whatever editor had focus (`blur` is delivered after it), and
+   * that editor's commit belongs UNDERNEATH the note, not on top of it: on
+   * top it inverted the undo order and stopped the drag coalescing, since
+   * coalescing only ever extends the stack's top entry.
+   */
+  flushEditors?: () => void;
 }
 
 /* ------------------------------------------------------------ constants -- */
 
 export const VELOCITY_HIT_SLOP = 6;
 export const VELOCITY_WHEEL_STEP = 0.05;
+/**
+ * How close two velocities have to be before an edit is a NO-OP — the knob's
+ * and fader's epsilon, for the same float reason (`channel-rack/Knob.tsx`).
+ * Velocity's whole range is `[0, 1]`, so an absolute epsilon has no scale to
+ * lose.
+ */
+export const VELOCITY_NO_OP_EPSILON = 1e-9;
 export const ZOOM_WHEEL_FACTOR = 1.15;
 /** Plain-wheel scroll, in rows / px per notch. */
 export const WHEEL_SCROLL_PX = 60;
@@ -465,6 +487,10 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   /* --------------------------------------------------------- pointer down */
 
   const pointerDown = (input: RollPointer): void => {
+    // Before ANY branch below dispatches — see `InteractionDeps.flushEditors`.
+    // The draw path in particular dispatches its note before `beginDrag`, so
+    // the registration that would otherwise flush arrives one command late.
+    deps.flushEditors?.();
     // A press by a pointer that does not own the gesture in flight is a NEW
     // gesture: the old one is sealed here, before anything installs the new
     // one. Doing it the other way round (letting the registry's pre-emption
@@ -743,16 +769,31 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     deps.setSelection(scene.selectedNoteIds.filter((id) => id !== noteId));
   };
 
+  /**
+   * Write a note's velocity — **only** when it is actually a different one.
+   *
+   * Both callers are CLAMPED (`clamp01`), so both repeat: a stem dragged above
+   * the lane's top or below its floor reports 1 or 0 on every move, and
+   * Alt+wheel at either end nudges past a bound that is already reached. Each
+   * of those dispatched — the first one filing an undo entry that undoes
+   * nothing, the rest costing a store write and an autosave schedule apiece.
+   *
+   * Epsilon rather than `===` for the same reason `Knob`/`Fader` use one:
+   * these are floats, and a stem dragged away and back lands on
+   * `0.7999999999999999`, which is the velocity it already had.
+   */
   const applyVelocity = (
     scene: InteractionScene,
     noteId: NoteId,
     velocity: number,
     coalesceKey: string,
   ): void => {
-    deps.dispatch(
-      updateNotes(scene.patternId, [{ id: noteId, patch: { velocity: clamp01(velocity) } }]),
-      { coalesceKey },
-    );
+    const next = clamp01(velocity);
+    const current = scene.notes.find((note) => note.id === noteId)?.velocity;
+    if (current !== undefined && Math.abs(next - current) <= VELOCITY_NO_OP_EPSILON) return;
+    deps.dispatch(updateNotes(scene.patternId, [{ id: noteId, patch: { velocity: next } }]), {
+      coalesceKey,
+    });
   };
 
   /* --------------------------------------------------------- pointer move */
@@ -952,14 +993,18 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
       const hit = hitTestNote(view, scene.notes, input.x, input.y);
       if (hit === null) return false;
       const delta = input.deltaY < 0 ? VELOCITY_WHEEL_STEP : -VELOCITY_WHEEL_STEP;
+      // A notch past a bound is a NO-OP, and it must not even pre-empt: the
+      // clamp returns the velocity the note already has, so dispatching filed
+      // an undo entry that undoes nothing and sealed whatever gesture was
+      // open elsewhere for an edit that never happened.
+      const nudged = clamp01(hit.note.velocity + delta);
+      if (Math.abs(nudged - hit.note.velocity) <= VELOCITY_NO_OP_EPSILON) return true;
       // Through the registry first — see `InteractionDeps.preemptGestures`.
       // Only here: zoom and scroll below write no domain state, so they are
       // not gestures and must not seal anybody's.
       deps.preemptGestures?.();
       deps.dispatch(
-        updateNotes(scene.patternId, [
-          { id: hit.note.id, patch: { velocity: clamp01(hit.note.velocity + delta) } },
-        ]),
+        updateNotes(scene.patternId, [{ id: hit.note.id, patch: { velocity: nudged } }]),
         // Keyed by pattern AND note, exactly as the rack keys by pattern +
         // channel + step. A note id is unique within a pattern, not across
         // them: `makeUnique` preserves ids when it clones a pattern, so two

@@ -143,6 +143,15 @@ export function Knob({
     drag.lastY = event.clientY;
     drag.accumulated += (deltaY / travelPx) * range * sensitivity;
     const next = clamp(drag.startValue + drag.accumulated, min, max);
+    // The clamp is what makes this necessary. Dragging PAST a bound produces
+    // move after move whose clamped value is the value the knob already has,
+    // and each of them dispatched: the first one filed an undo entry that
+    // undoes nothing (a `Ctrl+Z` spent putting a value back where it already
+    // was), and every one after it was a store write and an autosave schedule
+    // for no change. `drag.accumulated` is unaffected — it is the pointer's
+    // travel, not the knob's — so releasing the bound resumes exactly where
+    // it left off.
+    if (isNoOp(next, value)) return;
     onChange(next, drag.coalesceKey);
   }
 
@@ -194,10 +203,10 @@ export function Knob({
    * no-op as the already-default reset: the value is clamped and unchanged,
    * and each repeat used to file its own history entry.
    *
-   * The drag path is deliberately NOT routed through here. Its dispatches all
-   * share one `coalesceKey` and fold into a single undo entry, so a repeated
-   * value there costs nothing a user can see, and it holds the session that
-   * defers autosave anyway.
+   * The drag path is not routed through here — it mints no key per edit, it
+   * reuses the session's — but it carries the same {@link isNoOp} check, for
+   * the same reason: a drag held past a bound repeats one clamped value, and
+   * the FIRST of those repeats opens an undo entry that undoes nothing.
    */
   function changeValue(next: number): void {
     if (isNoOp(next, value)) return;

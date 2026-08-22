@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Command } from "@/domain/commands/types";
 import { addNotes, composite, isStepOn, notesAtStep, removeNotes, stepNote } from "@/domain/commands";
 import { nextId } from "@/domain/ids";
-import { useGestureHold } from "@/lib/gestureHold";
+import { useGestureHold, usePendingCommit } from "@/lib/gestureHold";
 import type { Channel, MixerTrack, Pattern, PatternId } from "@/domain/types";
 import { Knob } from "./Knob";
 import { StepCell } from "./StepCell";
@@ -193,6 +193,31 @@ export function ChannelRackRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(channel.name);
+  const renameRef = useRef<HTMLInputElement | null>(null);
+
+  /**
+   * The rename box's one commit path — `blur`, `Enter` (which blurs), and the
+   * shared flush that runs when a gesture elsewhere dismisses this field.
+   *
+   * It re-reads `channel.name` every time and dispatches nothing when the
+   * name is unchanged, which is what makes it idempotent: the flush commits
+   * first, and the `blur` the browser delivers a moment later finds nothing
+   * left to do.
+   */
+  function commitRename(): void {
+    const trimmed = renameValue.trim();
+    if (trimmed.length > 0 && trimmed !== channel.name) onRename(trimmed);
+    setRenaming(false);
+  }
+
+  /*
+   * A pointer-down that MUTATES immediately — drawing a note, a shift-clone,
+   * a painted clip — dispatches before `blur` is delivered, so this rename
+   * used to be stacked ON TOP of it: one Ctrl+Z took the rename back and left
+   * the note, and the drag that followed could no longer coalesce. Registering
+   * here lets the gesture flush the commit first (`@/lib/gestureHold`).
+   */
+  usePendingCommit(renaming, commitRename, renameRef);
   /**
    * A stroke must still end even if the pointer is released outside this row
    * (dragged off the grid entirely before releasing) — `onPointerUp` on the
@@ -476,12 +501,9 @@ export function ChannelRackRow({
             style={{ backgroundColor: channel.color }}
             value={renameValue}
             autoFocus
+            ref={renameRef}
             onChange={(event) => setRenameValue(event.target.value)}
-            onBlur={() => {
-              const trimmed = renameValue.trim();
-              if (trimmed.length > 0 && trimmed !== channel.name) onRename(trimmed);
-              setRenaming(false);
-            }}
+            onBlur={commitRename}
             onKeyDown={(event) => {
               if (event.key === "Enter") (event.target as HTMLInputElement).blur();
               if (event.key === "Escape") {

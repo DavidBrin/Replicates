@@ -90,6 +90,15 @@
  * commit is the tail of an editing session that already ended, so there is
  * nothing for it to be serialized against.
  *
+ * What the commit does still need is to land in the right ORDER, and waiting
+ * for `blur` cannot give it that: a pointer-down that mutates immediately (a
+ * drawn note, a velocity stem, a shift-clone, a painted clip) has already
+ * dispatched by then, so the commit stacked on top of it — inverting the undo
+ * order and cutting the new drag's coalescing dead. Every entry point below
+ * therefore FLUSHES the open editors first: see {@link flushPendingCommits}
+ * and {@link usePendingCommit}, the hook each editor registers its existing
+ * commit path with.
+ *
  * The other exception is two sessions opened by the same PRESS — the tempo
  * wrapper around the BPM plate, a rack paint stroke that walks from one row
  * into the next — which are one gesture wearing two hats, not two gestures.
@@ -129,7 +138,7 @@
  * prevent.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 
 import { useAppStore } from "@/lib/store";
 import {
@@ -241,6 +250,124 @@ function isSamePress(
   return aPointerId === bPointerId && aPressToken === bPressToken;
 }
 
+/* ------------------------------------------------ pending editor commits -- */
+
+/**
+ * An open text editor that commits when it is dismissed — the BPM plate's
+ * type-in, the channel and pattern rename boxes.
+ *
+ * Why the registry exists: `blur` is delivered AFTER the `pointerdown` that
+ * moved the focus, and a great many pointer-downs in this app MUTATE
+ * immediately — drawing a note, dragging a velocity stem, a shift-clone,
+ * painting a clip. The blur commit therefore landed *after* the new gesture's
+ * first dispatch, and both halves of that were wrong:
+ *
+ * - **History order was inverted.** The user renamed first and drew second,
+ *   but the stack read `[note, rename]`, so one `Ctrl+Z` took back the rename
+ *   they had finished with and left the note they had just made.
+ * - **The new gesture stopped coalescing.** Coalescing only ever extends the
+ *   TOP entry (`domain/undo.ts`), and the rename commit had just been pushed
+ *   on top of the note. Every later move of that drag filed an entry of its
+ *   own, so a two-second note drag became a run of Ctrl+Zs.
+ *
+ * So the commit is pulled FORWARD instead of being left to arrive late: every
+ * gesture entry point below flushes this registry before it mints an id or
+ * dispatches anything, which puts the commit exactly where the user put it —
+ * underneath the gesture that dismissed the editor.
+ *
+ * The editors already know how to commit; this only decides *when*. A commit
+ * that runs here is idempotent by construction — each one re-reads the live
+ * value and dispatches nothing when it matches — so the `blur` that follows a
+ * moment later is a no-op rather than a second entry.
+ */
+interface PendingCommit {
+  commit: () => void;
+  /**
+   * The editor's own element, read lazily.
+   *
+   * A press INSIDE the editor is not a dismissal: `TransportBar` wires
+   * `onPointerDownCapture={tempoGesture.begin}` around the whole BPM plate,
+   * so clicking into the type-in field to move the caret reaches `begin` too.
+   * Flushing there would commit and close the field mid-edit. When the flush
+   * is handed the event that triggered it, an editor containing the target is
+   * skipped.
+   */
+  element: () => Element | null;
+}
+
+const pendingCommits = new Set<PendingCommit>();
+
+/**
+ * Register an open editor's commit. Returns the unregister function; call it
+ * when the editor closes (see {@link usePendingCommit}, which is the shape
+ * every caller in this app uses).
+ */
+export function registerPendingCommit(
+  commit: () => void,
+  element: () => Element | null = () => null,
+): () => void {
+  const entry: PendingCommit = { commit, element };
+  pendingCommits.add(entry);
+  return () => {
+    pendingCommits.delete(entry);
+  };
+}
+
+/**
+ * Commit every open editor NOW — before the caller's gesture dispatches
+ * anything.
+ *
+ * `within` is the event (or pointer id) that triggered the flush, when there
+ * is one: an editor whose element contains that event's target is left alone,
+ * because a press inside the editor is not a dismissal of it.
+ *
+ * Each entry is removed BEFORE its commit runs, so a commit that re-enters
+ * (its dispatch causes a render that unregisters, or the commit itself calls
+ * a gesture entry point) cannot run twice or recurse.
+ */
+export function flushPendingCommits(within?: PointerIdSource): void {
+  if (pendingCommits.size === 0) return;
+  const target = readEventTarget(within);
+  for (const entry of [...pendingCommits]) {
+    if (target !== null) {
+      const element = entry.element();
+      if (element !== null && element.contains(target)) continue;
+    }
+    if (!pendingCommits.delete(entry)) continue;
+    entry.commit();
+  }
+}
+
+/**
+ * Keep an open editor's commit in {@link flushPendingCommits} for as long as
+ * `active` is true.
+ *
+ * `commit` and `element` are read through refs, so an inline arrow and a
+ * plain input ref are both fine and neither re-registers anything.
+ */
+export function usePendingCommit(
+  active: boolean,
+  commit: () => void,
+  element?: RefObject<Element | null>,
+): void {
+  const commitRef = useRef(commit);
+  const elementRef = useRef(element);
+  // After render, never during it: a render that is thrown away must not
+  // leave the registry pointing at it (the same rule the session's own
+  // latest-value refs follow).
+  useEffect(() => {
+    commitRef.current = commit;
+    elementRef.current = element;
+  });
+  useEffect(() => {
+    if (!active) return undefined;
+    return registerPendingCommit(
+      () => commitRef.current(),
+      () => elementRef.current?.current ?? null,
+    );
+  }, [active]);
+}
+
 /**
  * Every mutating session currently open, app-wide — the registry behind the
  * single-active-mutating-gesture invariant (module header).
@@ -307,6 +434,8 @@ function preemptOtherGestures(
  * across the keystroke.
  */
 export function oneShotGestureKey(prefix: string): string {
+  // `preemptOpenGestures` flushes the pending editor commits too, so the
+  // one-shot's entry lands ABOVE the commit of whatever editor it dismissed.
   preemptOpenGestures();
   return nextGestureId(prefix);
 }
@@ -356,6 +485,11 @@ export function commitGestureKey(prefix: string): string {
  * this exists for the keyring case, which cannot.
  */
 export function preemptOpenGestures(): void {
+  // The dismissed editor's commit belongs UNDER the edit that is about to
+  // land, not on top of it — see {@link flushPendingCommits}. No event to
+  // scope by: this entry point is reached from wheel runs and keyboard
+  // bindings, neither of which can be a press inside the editor.
+  flushPendingCommits();
   preemptOtherGestures(null, null, null);
 }
 
@@ -396,6 +530,10 @@ export function registerExternalGesture(
   options: { pointerId?: number | null } = {},
 ): () => void {
   const pointerId = options.pointerId ?? null;
+  // Before the registration, for the same reason `begin` flushes before it
+  // opens: whatever this controller is about to dispatch must sit ABOVE the
+  // commit of the editor its press dismissed.
+  flushPendingCommits(pointerId);
   const entry: ActiveGesture = { end, pointerId, pressToken: pressTokenFor(pointerId) };
   preemptOtherGestures(entry, pointerId, entry.pressToken);
   openGestures.add(entry);
@@ -408,6 +546,7 @@ export function registerExternalGesture(
 export function __resetGestureCounterForTests(): void {
   gestureCounter = 0;
   openGestures.clear();
+  pendingCommits.clear();
   livePresses.clear();
   pressCounter = 0;
 }
@@ -427,6 +566,18 @@ function readPointerId(source: PointerIdSource): number | null {
   if (source === null || source === undefined) return null;
   const id = (source as { pointerId?: unknown }).pointerId;
   return typeof id === "number" && Number.isFinite(id) ? id : null;
+}
+
+/**
+ * The DOM node an opening event landed on, when the caller passed an event
+ * rather than a bare id — see {@link PendingCommit.element} for the one thing
+ * it is used for.
+ */
+function readEventTarget(source: PointerIdSource): Node | null {
+  if (source === null || source === undefined || typeof source === "number") return null;
+  const target = (source as { target?: unknown }).target;
+  if (target === null || typeof target !== "object") return null;
+  return typeof (target as Node).nodeType === "number" ? (target as Node) : null;
 }
 
 export interface GestureHold {
@@ -724,6 +875,20 @@ export function useGestureSession(
 
   const begin = useCallback(
     (pointer?: PointerIdSource): string => {
+      /*
+       * FIRST, before this gesture takes an id or dispatches anything: a
+       * focused editor's commit belongs UNDERNEATH the gesture that dismissed
+       * it (see {@link flushPendingCommits}). `blur` arrives after this
+       * `pointerdown`, so left to itself the commit lands on top of a gesture
+       * that has already drawn a note or cloned a clip — inverting the undo
+       * order the user saw, and cutting the drag's coalescing dead because
+       * coalescing only extends the TOP entry.
+       *
+       * Scoped by the opening event: a press INSIDE the editor is not a
+       * dismissal, and this is reached from a capture-phase handler wrapped
+       * around one (`TransportBar`'s tempo plate).
+       */
+      flushPendingCommits(pointer);
       const pointerId = readPointerId(pointer);
       const pressToken = pressTokenFor(pointerId);
       const open = idRef.current;
@@ -767,7 +932,9 @@ export function useGestureSession(
     const open = idRef.current;
     if (open !== null) return open;
     // A one-shot is a mutating gesture too — it just begins and ends inside
-    // one call — so it seals the gesture in flight exactly as `begin` does.
+    // one call — so it seals the gesture in flight exactly as `begin` does,
+    // and it flushes the pending editor commits for the same reason.
+    flushPendingCommits();
     preemptOtherGestures(selfRef.current, null, null);
     return nextGestureId(prefix);
   }, [prefix]);
@@ -785,8 +952,10 @@ export function useGestureSession(
       const open = idRef.current;
       if (open !== null) return open;
       // A keyboard/wheel edit run is a mutating gesture (module header), so
-      // it pre-empts too — the run itself is bounded by the keyring's gap
-      // rather than by a hold, which is why it takes no session of its own.
+      // it pre-empts — and flushes — too. The run itself is bounded by the
+      // keyring's gap rather than by a hold, which is why it takes no session
+      // of its own.
+      flushPendingCommits();
       preemptOtherGestures(selfRef.current, null, null);
       keyringRef.current ??= createWheelGestureKeyring(prefix, editGapMs);
       // One keyring per session, so the target is the session itself; the

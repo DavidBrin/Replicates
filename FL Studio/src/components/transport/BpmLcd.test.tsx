@@ -52,11 +52,24 @@ describe("BpmLcd", () => {
   it("respects custom min/max props, clamping at the custom max", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<BpmLcd value={160} onChange={onChange} min={80} max={160} />);
+    const { rerender } = render(
+      <BpmLcd value={159} onChange={onChange} min={80} max={160} />,
+    );
 
     await user.click(screen.getByLabelText("Increase tempo"));
-
     expect(onChange).toHaveBeenLastCalledWith(160);
+
+    /*
+     * Round 15 #3. The step is CLAMPED, so at the ceiling it produces the
+     * tempo the plate already shows — and dispatching that bought an undo
+     * entry that undoes nothing, one `Ctrl+Z` spent putting the tempo back
+     * where it already was. Every clamped path in this component (drag,
+     * spinner, typed commit) now reports only a real change.
+     */
+    rerender(<BpmLcd value={160} onChange={onChange} min={80} max={160} />);
+    onChange.mockClear();
+    await user.click(screen.getByLabelText("Increase tempo"));
+    expect(onChange).not.toHaveBeenCalled();
   });
   /*
    * Round 6 #3. `click` fires after `pointerup`, and pointer-up had already
@@ -357,4 +370,65 @@ describe("a blur commit that changes nothing reports nothing (round 14)", () => 
     fireEvent.click(screen.getByText(label), { detail: 1 });
     return screen.getByRole("textbox");
   }
+});
+
+/*
+ * Round 15 #3. Every path in this component is CLAMPED, so every one of them
+ * can report the tempo the plate already shows — a drag held past the ceiling
+ * repeats 522 on each move, the ▲ button at the ceiling produces 522 again.
+ * Each of those was dispatched, and the first bought an undo entry that undoes
+ * nothing: one `Ctrl+Z` spent putting the tempo back where it already was,
+ * with the edit the user meant to take back one press further down.
+ */
+describe("BpmLcd — a clamped no-op reports nothing (round 15)", () => {
+  function drag(element: HTMLElement, fromY: number, toY: number): void {
+    fireEvent.pointerDown(element, { clientY: fromY, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(element, { clientY: toY, pointerId: 1 });
+  }
+
+  it("says nothing for a drag that never leaves the ceiling", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={TEMPO_MAX} onChange={onChange} />);
+    const plate = screen.getByText(String(TEMPO_MAX));
+
+    // Straight up from a tempo already at the maximum, twice over.
+    drag(plate, 100, 40);
+    fireEvent.pointerMove(plate, { clientY: -200, pointerId: 1 });
+    fireEvent.pointerUp(plate, { clientY: -200, pointerId: 1 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("says nothing for a drag that never leaves the FLOOR", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={TEMPO_MIN} onChange={onChange} />);
+    const plate = screen.getByText(String(TEMPO_MIN));
+
+    drag(plate, 100, 400);
+    fireEvent.pointerUp(plate, { clientY: 400, pointerId: 1 });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still reports every step of a drag that does move", () => {
+    const onChange = vi.fn();
+    render(<BpmLcd value={140} onChange={onChange} />);
+    const plate = screen.getByText("140");
+
+    drag(plate, 100, 60);
+    fireEvent.pointerUp(plate, { clientY: 60, pointerId: 1 });
+
+    expect(onChange).toHaveBeenLastCalledWith(180);
+  });
+
+  it("says nothing when a typed commit lands on the tempo already set", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<BpmLcd value={140} onChange={onChange} />);
+
+    await user.click(screen.getByText("140"));
+    await user.type(screen.getByRole("textbox"), "{Enter}");
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, useRef } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
@@ -9,8 +9,11 @@ import {
   oneShotGestureKey,
   preemptOpenGestures,
   registerExternalGesture,
+  flushPendingCommits,
+  registerPendingCommit,
   useGestureHold,
   useGestureSession,
+  usePendingCommit,
   wheelEditKey,
 } from "./gestureHold";
 import { createWheelGestureKeyring } from "./wheelGesture";
@@ -1029,5 +1032,165 @@ describe("commit keys do not pre-empt (round 14)", () => {
     fireEvent.doubleClick(screen.getByTestId("probe"));
 
     expect(gesture.ended()).toBe(true);
+  });
+});
+
+/* -------------------------------------------- pending editor commits (r15) */
+
+/**
+ * Round 15 #1. `blur` is delivered AFTER the `pointerdown` that moved the
+ * focus, and a great many pointer-downs in this app MUTATE immediately — a
+ * drawn note, a dragged velocity stem, a shift-clone, a painted clip. The
+ * dismissed editor's commit therefore landed on TOP of the new gesture's first
+ * command: the undo order read backwards (one Ctrl+Z took back the rename the
+ * user had finished with and left the note they had just made), and the drag
+ * stopped coalescing, because coalescing only ever extends the stack's top
+ * entry (`domain/undo.ts`).
+ *
+ * The fix is ordering, not suppression: every gesture entry point flushes the
+ * open editors before it mints an id or dispatches anything.
+ */
+
+/** What ran, in order — the whole point of this block. */
+const order: string[] = [];
+
+function EditorProbe({ open }: { open: boolean }) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  usePendingCommit(open, () => order.push("commit"), ref);
+  return open ? <input data-testid="editor" ref={ref} /> : null;
+}
+
+/** A surface that dispatches on pointer-DOWN, the shape that exposed the bug. */
+function MutatingProbe() {
+  const gesture = useGestureSession("mutating");
+  return (
+    <div
+      data-testid="mutating"
+      onPointerDown={(event) => {
+        gesture.begin(event);
+        order.push("gesture");
+      }}
+      onDoubleClick={() => {
+        gesture.keyFor();
+        order.push("one-shot");
+      }}
+      {...gesture.terminators}
+    />
+  );
+}
+
+/**
+ * `TransportBar`'s shape: a capture-phase `begin` wrapped AROUND the editor,
+ * so a press inside the field reaches the gesture machinery too.
+ */
+function WrappedEditorProbe() {
+  const gesture = useGestureSession("wrapper");
+  return (
+    <div data-testid="wrapper" onPointerDownCapture={gesture.begin}>
+      <EditorProbe open />
+    </div>
+  );
+}
+
+describe("pending editor commits flush BEFORE the gesture that dismissed them", () => {
+  beforeEach(() => {
+    order.length = 0;
+  });
+
+  it("commits the editor first, then the gesture's own dispatch", () => {
+    render(
+      <>
+        <EditorProbe open />
+        <MutatingProbe />
+      </>,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("mutating"), { pointerId: 1 });
+
+    expect(order).toEqual(["commit", "gesture"]);
+  });
+
+  it("commits exactly ONCE — the blur that follows finds nothing pending", () => {
+    render(
+      <>
+        <EditorProbe open />
+        <MutatingProbe />
+      </>,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("mutating"), { pointerId: 1 });
+    // The browser's real order: the press flushed, and `blur` arrives after.
+    flushPendingCommits();
+
+    expect(order).toEqual(["commit", "gesture"]);
+  });
+
+  it("flushes for a keyboard/menu ONE-SHOT too", () => {
+    render(
+      <>
+        <EditorProbe open />
+        <MutatingProbe />
+      </>,
+    );
+
+    fireEvent.doubleClick(screen.getByTestId("mutating"));
+
+    expect(order).toEqual(["commit", "one-shot"]);
+  });
+
+  it.each([
+    ["oneShotGestureKey", () => void oneShotGestureKey("one-shot")],
+    ["preemptOpenGestures", () => preemptOpenGestures()],
+    ["wheelEditKey", () => void wheelEditKey(createWheelGestureKeyring("wheel"), "target")],
+    ["registerExternalGesture", () => void registerExternalGesture(() => {}, { pointerId: 7 })],
+  ])("%s flushes as well — every mutating entry point does", (_name, enter) => {
+    render(<EditorProbe open />);
+
+    act(enter);
+
+    expect(order).toEqual(["commit"]);
+  });
+
+  it("leaves an editor alone when the press lands INSIDE it", () => {
+    // Clicking into the BPM type-in to move the caret reaches
+    // `tempoGesture.begin` through the wrapper's capture handler. Committing
+    // there would close the field mid-edit.
+    render(<WrappedEditorProbe />);
+
+    fireEvent.pointerDown(screen.getByTestId("editor"), { pointerId: 1 });
+
+    expect(order).toEqual([]);
+  });
+
+  it("still flushes that same editor for a press OUTSIDE it", () => {
+    render(
+      <>
+        <WrappedEditorProbe />
+        <MutatingProbe />
+      </>,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("mutating"), { pointerId: 1 });
+
+    expect(order).toEqual(["commit", "gesture"]);
+  });
+
+  it("unregisters when the editor closes", () => {
+    const { rerender } = render(<EditorProbe open />);
+    rerender(<EditorProbe open={false} />);
+
+    act(() => flushPendingCommits());
+
+    expect(order).toEqual([]);
+  });
+
+  it("registerPendingCommit's unregister is idempotent, and a flush runs each entry once", () => {
+    const unregister = registerPendingCommit(() => order.push("bare"));
+
+    act(() => flushPendingCommits());
+    act(() => flushPendingCommits());
+    unregister();
+
+    expect(order).toEqual(["bare"]);
   });
 });

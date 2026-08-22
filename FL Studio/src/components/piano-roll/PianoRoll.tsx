@@ -25,7 +25,7 @@ import { nextId } from "@/domain/ids";
 import { SNAP_LABELS, SNAP_UNITS, type SnapUnit } from "@/domain/tickMath";
 import type { Channel, Note } from "@/domain/types";
 import { previewNote, useIsPlaying } from "@/components/shell/wiring";
-import { preemptOpenGestures, registerExternalGesture } from "@/lib/gestureHold";
+import { flushPendingCommits, preemptOpenGestures, registerExternalGesture } from "@/lib/gestureHold";
 import { useAppStore } from "@/lib/store";
 import { useNonPassiveWheel } from "@/lib/useNonPassiveWheel";
 
@@ -275,6 +275,10 @@ export function PianoRoll({ className, getPlayheadTick }: PianoRollProps) {
         // pointer has open, which is what this does at the one wheel branch
         // that dispatches.
         preemptGestures: preemptOpenGestures,
+        // A press on the roll dismisses whatever text editor had focus, and
+        // that editor's commit belongs BELOW whatever this press draws — see
+        // `InteractionDeps.flushEditors`.
+        flushEditors: flushPendingCommits,
       }),
     [buildScene],
   );

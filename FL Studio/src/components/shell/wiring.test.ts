@@ -29,6 +29,7 @@ vi.mock("@/audio", () => ({
 
 import * as engine from "@/audio";
 import { addNotes } from "@/domain/commands/patterns";
+import { updateProject } from "@/domain/commands/project";
 import { nextId, peekIdCounter, resetIds } from "@/domain/ids";
 import { serializeProject } from "@/domain/serialization";
 import { TICKS_PER_STEP, type Project } from "@/domain/types";
@@ -40,6 +41,7 @@ import {
   importJson,
   previewNote,
   loadSavedProject,
+  newProject,
   nextEmptyPattern,
   panic,
   peekNotice as getNotice,
@@ -280,6 +282,115 @@ describe("JSON import", () => {
   it("reports a file that is not a project instead of failing silently", async () => {
     await importJson(fileOf("{\"nope\":true}"));
     expect(getNotice()).toMatch(/not an FL Studio project/i);
+  });
+
+  /*
+   * Round 15 #2. `importJson` awaits `file.text()`, and the user can outrun
+   * that await: pick a second file, press New, press Load saved. Reads do not
+   * resolve in the order they were started, so the OLDER import could resolve
+   * LAST and replace the project the newer action had already installed.
+   *
+   * Both orderings are driven here, because only one of them fails without the
+   * generation check — a suite that drove the natural order alone would pass
+   * against the bug.
+   */
+  describe("an OVERTAKEN import never lands", () => {
+    /** A file whose read resolves only when the test says so. */
+    function deferredFile(text: string) {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return {
+        file: { text: async () => { await gate; return text; } } as unknown as File,
+        release,
+      };
+    }
+
+    function named(name: string): Project {
+      return { ...importable(), name };
+    }
+
+    it("the newer import wins when the OLDER one resolves last", async () => {
+      const first = deferredFile(serializeProject(named("First")));
+      const second = deferredFile(serializeProject(named("Second")));
+
+      const firstImport = importJson(first.file);
+      const secondImport = importJson(second.file);
+
+      // Reversed: the second file was smaller and its read came back first.
+      second.release();
+      await secondImport;
+      expect(useAppStore.getState().project.name).toBe("Second");
+
+      first.release();
+      await firstImport;
+
+      // The stale read must not clobber the project the user is looking at.
+      expect(useAppStore.getState().project.name).toBe("Second");
+    });
+
+    it("the newer import wins in the NATURAL order too", async () => {
+      const first = deferredFile(serializeProject(named("First")));
+      const second = deferredFile(serializeProject(named("Second")));
+
+      const firstImport = importJson(first.file);
+      const secondImport = importJson(second.file);
+
+      first.release();
+      await firstImport;
+      second.release();
+      await secondImport;
+
+      expect(useAppStore.getState().project.name).toBe("Second");
+    });
+
+    it("New, pressed while a read is pending, survives the import that lands after it", async () => {
+      const pending = deferredFile(serializeProject(named("Imported")));
+      const importing = importJson(pending.file);
+
+      newProject();
+      const fresh = useAppStore.getState().project.name;
+
+      pending.release();
+      await importing;
+
+      expect(useAppStore.getState().project.name).toBe(fresh);
+      expect(useAppStore.getState().project.name).not.toBe("Imported");
+    });
+
+    it("Load saved, pressed while a read is pending, survives it too", async () => {
+      useAppStore.getState().dispatch(updateProject({ name: "Saved" }));
+      saveProject();
+      newProject();
+
+      const pending = deferredFile(serializeProject(named("Imported")));
+      const importing = importJson(pending.file);
+
+      expect(loadSavedProject()).toBe(true);
+      expect(useAppStore.getState().project.name).toBe("Saved");
+
+      pending.release();
+      await importing;
+
+      expect(useAppStore.getState().project.name).toBe("Saved");
+    });
+
+    it("a stale read's FAILURE does not steal the newer action's notice line", async () => {
+      const failing = {
+        text: async () => {
+          await Promise.resolve();
+          throw new Error("unreadable");
+        },
+      } as unknown as File;
+
+      const failingImport = importJson(failing);
+      newProject();
+      setNotice("Something newer");
+      await failingImport;
+
+      expect(getNotice()).toBe("Something newer");
+    });
   });
 });
 

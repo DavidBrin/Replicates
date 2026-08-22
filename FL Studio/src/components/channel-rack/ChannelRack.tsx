@@ -25,6 +25,13 @@ import { ChannelRackRow } from "./ChannelRackRow";
 import { usePlayheadStep } from "./uiState";
 
 const VELOCITY_STEP = 1 / 32;
+/**
+ * How close two velocities have to be before a nudge is a NO-OP — `Knob`'s
+ * epsilon, restated rather than imported for the reason `mixer/Fader.tsx`
+ * gives: these are floats, and a value the clamp has already pinned to 0 or 1
+ * must not file an undo entry that undoes nothing.
+ */
+const VELOCITY_NO_OP_EPSILON = 1e-9;
 
 /** Human labels for the add-channel picker (mirrors `defaultProject`'s seed names). */
 const VOICE_LABELS: Record<VoiceKind, string> = {
@@ -200,13 +207,28 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
   function handleVelocityNudge(channelId: ChannelId, step: number, direction: 1 | -1): void {
     const existing = notesAtStep(activePattern, channelId, step);
     if (existing.length === 0) return;
+    /*
+     * The nudge is CLAMPED, so at either end of the range it produces the
+     * velocity the note already has. Dispatching that filed an undo entry
+     * that undoes nothing — and, worse, `wheelEditKey` below PRE-EMPTS, so a
+     * notch at the ceiling sealed a knob or clip drag somebody was still
+     * holding for an edit that never happened. Nothing changed means nothing
+     * dispatched and nothing pre-empted.
+     *
+     * Epsilon rather than `===`: velocities are floats (`Knob`'s rule).
+     */
+    const patches = existing
+      .map((note) => ({
+        id: note.id,
+        velocity: Math.min(1, Math.max(0, note.velocity + direction * VELOCITY_STEP)),
+        current: note.velocity,
+      }))
+      .filter((patch) => Math.abs(patch.velocity - patch.current) > VELOCITY_NO_OP_EPSILON);
+    if (patches.length === 0) return;
     dispatch(
       updateNotes(
         activePattern.id,
-        existing.map((note) => ({
-          id: note.id,
-          patch: { velocity: Math.min(1, Math.max(0, note.velocity + direction * VELOCITY_STEP)) },
-        })),
+        patches.map(({ id, velocity }) => ({ id, patch: { velocity } })),
       ),
       // `wheelEditKey`, not the keyring alone: a wheel edit is a mutating
       // gesture, so it seals whatever drag is open elsewhere in the app before
@@ -301,6 +323,16 @@ export function ChannelRack({ onSelectChannel, onOpenPianoRoll }: ChannelRackPro
             // `blur` — nudge the slider, leave it focused, and autosave was
             // deferred for the rest of the session. `terminators` still closes
             // the pointer drag on blur, pointer-cancel or unmount.
+            /*
+             * No no-op guard here, unlike every other clamped continuous path
+             * in this app (round 15 #3's sweep) — a NATIVE range input cannot
+             * produce one. It fires no `change` for a value it already holds,
+             * so a drag pinned at 0 or 1 is silent at the DOM level rather
+             * than at ours, and it coerces an invalid value to a valid one
+             * rather than handing over `NaN`. The paths that DO need the
+             * guard are the ones that compute their own value from pointer
+             * travel: `Knob`, `Fader`, `BpmLcd`, the velocity nudges.
+             */
             onChange={(event) =>
               dispatch(updateProject({ globalSwing: Number.parseFloat(event.target.value) }), {
                 coalesceKey: swing.keyForEdit(),

@@ -581,6 +581,26 @@ function safeFileName(name: string, extension: string): string {
 }
 
 /**
+ * Which project the editor is on — the counter that stops an OVERTAKEN async
+ * import from landing.
+ *
+ * `importJson` awaits `file.text()`, and that await is long enough for the
+ * user to do anything at all inside it: pick a second file, press New, press
+ * Load saved. Reads do not resolve in the order they were started (a large
+ * file read while a small one is queued behind it resolves second), so the
+ * OLDER import could resolve last and replace the project the newer action had
+ * already installed — the file the user chose second silently losing to the
+ * one they chose first, and New/Load being undone by an import they had
+ * already moved on from.
+ *
+ * Every DESTRUCTIVE action bumps this (an import starting, New, Load), and
+ * `importJson`'s continuation refuses to write unless the epoch it captured is
+ * still current. Exactly `playIntent`'s rule (see `startPlayback`), applied to
+ * the other await in this file that a user can outrun.
+ */
+let replaceIntent = 0;
+
+/**
  * Explicit save — the same localStorage envelope autosave writes (SPEC §2.2).
  *
  * Unlike the autosave, this one *reports*: a user who clicks Save and is told
@@ -600,6 +620,7 @@ export function saveProject(): boolean {
  * and has to be handled out of band, and this app has no dialog layer.
  */
 export function newProject(): void {
+  replaceIntent += 1;
   useAppStore.getState().newProject();
   setNotice(null);
 }
@@ -611,6 +632,7 @@ export function loadSavedProject(): boolean {
     setNotice("Nothing saved to load yet.");
     return false;
   }
+  replaceIntent += 1;
   useAppStore.getState().loadProject(stored);
   setNotice(null);
   return true;
@@ -642,13 +664,24 @@ export function exportJson(): void {
  *    re-defaults exactly the fields that no longer resolve.
  */
 export async function importJson(file: File): Promise<void> {
+  // Claimed BEFORE the await: this import is now the newest destructive
+  // action, and any import still reading behind it is stale (see
+  // `replaceIntent`).
+  const intent = (replaceIntent += 1);
   let text: string;
   try {
     text = await file.text();
   } catch {
+    // A stale read's FAILURE is not the current project's problem either:
+    // reporting it would replace the notice the newer action left behind.
+    if (intent !== replaceIntent) return;
     setNotice("Could not read that file.");
     return;
   }
+  // Overtaken while reading — by a second import, by New, or by Load saved.
+  // The newer action has already installed the project the user is looking
+  // at, and this one must not write over it (nor claim the notice line).
+  if (intent !== replaceIntent) return;
   const imported = deserializeProject(text);
   if (imported === null) {
     setNotice("That file is not an FL Studio project export.");
@@ -908,6 +941,7 @@ export function installE2eHook(): () => void {
 export function __resetWiringForTests(): void {
   setTransportUi(STOPPED);
   playIntent += 1;
+  replaceIntent += 1;
   setNotice(null);
   useAppStore.getState().newProject();
   // Autosave runs while a shell is mounted, so a previous test's edit would

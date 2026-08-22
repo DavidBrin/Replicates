@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { PatternSummary } from "@/components/shell/wiring";
+import { usePendingCommit } from "@/lib/gestureHold";
 
 export interface PatternSelectorProps {
   activePatternId: string;
@@ -44,6 +45,7 @@ export function PatternSelector({
   // The draft is seeded when the field OPENS, not on every render: re-seeding
   // from `active.name` while typing would fight the user for the caret.
   const wasRenaming = useRef(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (renaming && !wasRenaming.current) setDraft(active?.name ?? "");
     wasRenaming.current = renaming;
@@ -53,6 +55,16 @@ export function PatternSelector({
     onRename?.(draft);
     onRenameEnd?.();
   }
+
+  /*
+   * A gesture that mutates on pointer-DOWN (drawing a note, a shift-clone, a
+   * painted clip) dispatches before `blur` is delivered, so this rename used
+   * to be filed on top of it — undo order inverted, and the drag that started
+   * the dismissal unable to coalesce. The flush pulls the commit forward to
+   * where the user put it (`@/lib/gestureHold`). `renameActivePattern` is a
+   * no-op for an unchanged name, so the `blur` that follows adds nothing.
+   */
+  usePendingCommit(renaming, commit, inputRef);
 
   return (
     <div className="fl-pattern-selector" data-testid="pattern-selector">
@@ -71,6 +83,7 @@ export function PatternSelector({
           className="fl-pattern-selector__name fl-pattern-selector__rename"
           aria-label="Pattern name"
           data-testid="pattern-rename"
+          ref={inputRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}

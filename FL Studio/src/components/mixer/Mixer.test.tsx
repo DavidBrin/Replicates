@@ -393,3 +393,79 @@ describe("a no-op fader edit dispatches nothing (round 14)", () => {
     expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
   });
 });
+
+/*
+ * Round 15 #3. The one-shot paths (reset, arrow keys) already refused a no-op;
+ * the DRAG path did not, and the drag is where the bound is easiest to hit —
+ * a fader pushed to the top and held there reports 1 on every move. The first
+ * of those repeats opened an undo entry that undoes nothing, and every one
+ * after it was a store write and an autosave schedule for no change.
+ */
+describe("a fader DRAG past its bound dispatches nothing (round 15)", () => {
+  it("files no undo entry for a press-and-drag entirely past the top", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+    // Up to the ceiling and released, so the fader is now AT the bound.
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    fireEvent.pointerMove(fader, { clientY: -10_000 });
+    fireEvent.pointerUp(fader, { clientY: -10_000 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(1);
+    const before = useAppStore.getState().history.past.length;
+
+    // A second drag that never leaves the clamped region.
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    fireEvent.pointerMove(fader, { clientY: 0 });
+    fireEvent.pointerMove(fader, { clientY: -50 });
+    fireEvent.pointerUp(fader, { clientY: -50 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(1);
+  });
+
+  it("still tracks total travel once the pointer comes back in range", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    // Far past the top — suppressed — and then back down to a real level.
+    fireEvent.pointerMove(fader, { clientY: -10_000 });
+    fireEvent.pointerMove(fader, { clientY: 100 });
+    fireEvent.pointerUp(fader, { clientY: 100 });
+
+    // The anchor was never disturbed by the suppressed moves.
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(0.8);
+  });
+
+  it("keeps a drag that DOES move to exactly one undo entry", () => {
+    render(<Mixer />);
+    const fader = screen.getByTestId("fader-Insert 1 volume");
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.pointerDown(fader, { clientY: 100 });
+    fireEvent.pointerMove(fader, { clientY: 80 });
+    fireEvent.pointerMove(fader, { clientY: -10_000 });
+    fireEvent.pointerMove(fader, { clientY: -10_000 });
+    fireEvent.pointerUp(fader, { clientY: -10_000 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(before + 1);
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.volume).toBe(1);
+  });
+});
+
+describe("a pan KNOB drag past its bound dispatches nothing (round 15)", () => {
+  it("files no undo entry for a drag that stays in the clamped region", () => {
+    render(<Mixer />);
+    const knob = screen.getByTestId("knob-Insert 1 pan");
+    fireEvent.pointerDown(knob, { clientY: 100 });
+    fireEvent.pointerMove(knob, { clientY: -10_000 });
+    fireEvent.pointerUp(knob, { clientY: -10_000 });
+    expect(useAppStore.getState().project.mixerTracks["mix-1"]!.pan).toBe(1);
+    const before = useAppStore.getState().history.past.length;
+
+    fireEvent.pointerDown(knob, { clientY: 100 });
+    fireEvent.pointerMove(knob, { clientY: 0 });
+    fireEvent.pointerMove(knob, { clientY: -80 });
+    fireEvent.pointerUp(knob, { clientY: -80 });
+
+    expect(useAppStore.getState().history.past).toHaveLength(before);
+  });
+});
