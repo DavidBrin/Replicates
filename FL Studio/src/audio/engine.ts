@@ -91,6 +91,19 @@ let metronomeEnabled = false;
 let projectEpoch = 0;
 /** {@link EngineSnapshot.previewRevision} — one per preview voice fired. */
 let previewRevision = 0;
+/**
+ * The generation a deferred preview belongs to — see {@link previewNote}.
+ *
+ * Separate from {@link projectEpoch} because it answers a different question.
+ * The epoch asks "is this still the same PROJECT?"; this asks "does the user
+ * still want to hear it?" — and every "stop making noise" gesture answers no
+ * without touching the project at all. `stop()` (and therefore `Ctrl+H`'s
+ * panic, which is `stop()`) and a mode flip all release every sounding voice
+ * synchronously; a preview queued behind a cold-context boot is not sounding
+ * yet, so it survived them all and fired its note *after* the user had asked
+ * for silence — the one sound in the app that a panic could not stop.
+ */
+let previewGeneration = 0;
 /** Replayed once boot lands — see the class comment on synchronous callers. */
 let playRequested = false;
 /** Tone is loaded and the context is live, but there was no project to wire. */
@@ -223,7 +236,10 @@ export function syncProject(next: Project, options: SyncOptions = {}): void {
   // Bumped BEFORE the early returns: a preview queued behind boot has to be
   // dropped by a replacement that lands while the engine has no state at all,
   // which is exactly when the queue is longest.
-  if (wholesale) projectEpoch += 1;
+  if (wholesale) {
+    projectEpoch += 1;
+    invalidateDeferredPreviews();
+  }
   project = next;
 
   if (state === null) {
@@ -240,6 +256,7 @@ export function syncProject(next: Project, options: SyncOptions = {}): void {
   }
 
   state.graph.sync(next);
+  forgetRemovedChannels(previous, next);
   state.transport.bpm.value = next.tempo;
   /*
    * A mode flip that arrives through the PROJECT gets `setMode`'s treatment,
@@ -275,6 +292,45 @@ export function syncProject(next: Project, options: SyncOptions = {}): void {
   if (wholesale || modeChanged) restartForSourceSwap();
   else if (needsRearm(next)) rearm();
   releaseMutedTrackVoices(previous, next);
+}
+
+/**
+ * A deleted channel is forgotten by the VOICE pool too, not only by the graph.
+ *
+ * `MixerGraph.sync` already notices a channel that vanished from the project
+ * and retires its strip — a ramp down and a disconnect. The pool kept its
+ * entry: the ringing voices went on holding the retired strip's input node,
+ * the channel stayed a member of whatever choke group it was registered in,
+ * and — because ids are minted from one shared counter and freely re-used —
+ * the *next* channel to be handed that id inherited the lot. Adding a channel
+ * back after deleting one found a pool already at its steal limit, feeding a
+ * node that is no longer connected to anything, so the new channel's first
+ * notes stole voices from a dead one and came out silent.
+ *
+ * The voices are released with the standard choke ramp before the pool entry
+ * goes (that is `forgetChannel`'s contract), which is the same shape the strip
+ * retirement uses on the other side of the same deletion — a deleted channel
+ * fades, it does not click.
+ *
+ * Runs on every sync, wholesale included: a replacement deletes every channel
+ * the old project had, and `restartForSourceSwap`'s `releaseAll` silences them
+ * but deliberately leaves the pools' *group* bookkeeping alone.
+ */
+function forgetRemovedChannels(previous: Project | null, next: Project): void {
+  if (state === null || previous === null) return;
+  const time = state.ctx.currentTime;
+  for (const channelId of Object.keys(previous.channels)) {
+    if (next.channels[channelId] !== undefined) continue;
+    state.voices.forgetChannel(channelId, time);
+  }
+}
+
+/**
+ * Drop every preview that is still waiting on boot — see
+ * {@link previewGeneration}.
+ */
+function invalidateDeferredPreviews(): void {
+  previewGeneration += 1;
 }
 
 /**
@@ -429,6 +485,10 @@ export function play(): void {
 
 export function stop(): void {
   playRequested = false;
+  // Before the early return: "stop" has to reach a preview queued behind a
+  // boot that has not produced an engine yet, which is exactly the window
+  // where `state` is still null.
+  invalidateDeferredPreviews();
   if (state === null) return;
   state.transport.stop();
   state.transport.ticks = 0;
@@ -447,6 +507,9 @@ export function stop(): void {
 export function setMode(mode: PlaybackMode): void {
   if (project === null || project.playbackMode === mode) return;
   project = { ...project, playbackMode: mode };
+  // Not inside `restartForSourceSwap`: that helper bails when there is no
+  // engine yet, and the boot queue is longest precisely then.
+  invalidateDeferredPreviews();
   restartForSourceSwap();
 }
 
@@ -511,6 +574,14 @@ function restartForSourceSwap(): void {
  * id. The epoch captured here is re-read on the other side of the await, and a
  * preview whose project was swapped out meanwhile is DROPPED rather than
  * re-targeted — the note the user asked to hear has nothing left to play it.
+ *
+ * **And a deferred preview belongs to the INTENT it was asked for.** The
+ * project surviving is not the same as the user still wanting the sound: a
+ * `stop`, a `Ctrl+H` panic (which is `stop`) or a mode flip in that same
+ * window releases every sounding voice and moves no epoch at all, so the
+ * queued preview fired afterwards — a note starting *because* the user pressed
+ * the key that exists to make notes stop. {@link previewGeneration} is the
+ * second gate, and it is the one those three move.
  */
 export function previewNote(
   channelId: ChannelId,
@@ -522,8 +593,10 @@ export function previewNote(
     return Promise.resolve();
   }
   const epoch = projectEpoch;
+  const generation = previewGeneration;
   return ensureStarted().then(() => {
     if (epoch !== projectEpoch) return;
+    if (generation !== previewGeneration) return;
     if (state !== null && project !== null) firePreview(channelId, pitch, durationSec);
   });
 }
@@ -659,6 +732,7 @@ export function disposeEngine(): void {
   playRequested = false;
   previewRevision = 0;
   projectEpoch = 0;
+  previewGeneration = 0;
   listeners.clear();
 }
 

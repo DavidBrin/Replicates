@@ -28,6 +28,8 @@ import {
   gripRect,
   noteRect,
   pitchToY,
+  pxPerTick,
+  rowHeight,
   tickToX,
   velocityToY,
   type RollViewport,
@@ -1568,5 +1570,158 @@ describe("the keyboard column and the splitter are PRIMARY-button only (round 14
     h.controller.pointerDown({ ...keyboardPoint, button: 1, pointerId: 1 });
     expect(h.controller.peekGesture()).toBe("pan");
     expect(h.previewNote).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------- Shift during a draw -- */
+
+/*
+ * Round 17 #2. Shift+click CLONES, and Shift stays held through the drag that
+ * follows — so the clone drag has to spend the modifier and cannot also read
+ * it as "lock pitch". That exemption was keyed on a flag meaning "born from
+ * this gesture", which is also true of an ordinary freshly-DRAWN note; its
+ * press held no Shift, so pressing Shift while positioning it is a plain pitch
+ * lock, and the user got nothing for it.
+ */
+describe("Shift's pitch lock is spent by the CLONE, not by every fresh note", () => {
+  it("locks pitch when Shift is pressed while positioning a freshly drawn note", () => {
+    const h = harness({ tool: "draw" });
+    const start = at(TICKS_PER_BEAT, 60);
+    h.controller.pointerDown(start); // no Shift: this is a draw, not a clone
+    h.controller.pointerMove({ ...start, x: start.x + 60, y: start.y - 21 * 4, shiftKey: true });
+
+    const project = h.applied();
+    const drawn = project.patterns[project.activePatternId]?.notes["new-1"];
+    expect(drawn?.pitch).toBe(60); // pitch LOCKED by Shift
+    expect(drawn?.positionTicks).toBeGreaterThan(TICKS_PER_BEAT); // time still free
+  });
+
+  it("still ignores Shift while dragging the clones Shift itself created", () => {
+    const note = makeNote({ positionTicks: TICKS_PER_BEAT, pitch: 67 });
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0, shiftKey: true };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: start.x + 60, y: start.y - 21 * 4 });
+
+    const clone = h.applied().patterns[PATTERN]?.notes["new-1"];
+    expect(clone?.pitch).toBe(71); // pitch FREE — Shift is the clone's modifier
+  });
+});
+
+/* ------------------------------------------------------- zoom mid-drag -- */
+
+/*
+ * Round 17 #4. A drag stores a screen-space origin and converts the TOTAL
+ * pixel displacement from it on every move. Zoom mid-drag — `PgUp`/`PgDn`,
+ * which is a global key binding that cannot see a held pointer, or a wheel
+ * notch, which is delivered to the element under the cursor button-down or not
+ * — changed the px-per-tick without changing the origin, so the next
+ * `pointermove` re-read the same pixels at the new scale and the note jumped
+ * by the whole ratio.
+ */
+describe("a zoom mid-drag rebases the origin instead of jumping the note", () => {
+  const note = makeNote({ positionTicks: 0, pitch: 67, lengthTicks: TICKS_PER_BEAT });
+
+  /** The scene's viewport is swapped exactly as `setView` would swap it. */
+  function zoom(h: Harness, patch: Partial<RollViewport>) {
+    h.scene.view = createViewport({ ...h.scene.view, ...patch });
+  }
+
+  it("keeps a horizontal move where the pointer left it", () => {
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    // Drag two beats right at the original zoom.
+    const twoBeats = pxPerTick(VIEW) * TICKS_PER_BEAT * 2;
+    const moved = { ...start, x: start.x + twoBeats };
+    h.controller.pointerMove(moved);
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(TICKS_PER_BEAT * 2);
+
+    // Now zoom out to half scale with the button still down, and deliver one
+    // more move at the SAME pixel — the pointer has not gone anywhere.
+    zoom(h, { zoomX: VIEW.zoomX / 2 });
+    h.controller.pointerMove(moved);
+
+    // Unrebased, the same pixel distance reads as four beats at half zoom.
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(TICKS_PER_BEAT * 2);
+  });
+
+  it("goes on tracking the pointer in the NEW units after the rebase", () => {
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    // One beat only: far enough from the pattern's end that the group clamp
+    // cannot land on the right answer for the wrong reason.
+    const oneBeat = pxPerTick(VIEW) * TICKS_PER_BEAT;
+    h.controller.pointerMove({ ...start, x: start.x + oneBeat });
+
+    // Zoom, then ONE move that already carries travel — the ordinary case, and
+    // the one that pins the rebase's anchor. Anchoring on the incoming event
+    // instead of on where the pointer was when the zoom landed folds this
+    // move's own travel in at the old rate and reports one beat, not two.
+    zoom(h, { zoomX: VIEW.zoomX / 2 });
+    const zoomed = h.scene.view;
+    h.controller.pointerMove({
+      ...start,
+      x: start.x + oneBeat + pxPerTick(zoomed) * TICKS_PER_BEAT,
+    });
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.positionTicks).toBe(TICKS_PER_BEAT * 2);
+  });
+
+  it("keeps the pitch a vertical drag reached across a zoomY change", () => {
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const rect = noteRect(VIEW, note);
+    const start = { x: rect.x + 3, y: rect.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    const moved = { ...start, y: start.y - rowHeight(VIEW) * 4 };
+    h.controller.pointerMove(moved);
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.pitch).toBe(71);
+
+    zoom(h, { zoomY: VIEW.zoomY * 2 });
+    h.controller.pointerMove(moved);
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.pitch).toBe(71);
+  });
+
+  it("keeps the length a resize reached across a zoom", () => {
+    const h = harness({ notes: [note], selectedNoteIds: [note.id] });
+    const grip = gripRect(VIEW, note);
+    const start = { x: grip.x + 2, y: grip.y + 3, button: 0 };
+    h.controller.pointerDown(start);
+
+    const moved = { ...start, x: start.x + pxPerTick(VIEW) * TICKS_PER_BEAT * 2 };
+    h.controller.pointerMove(moved);
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.lengthTicks).toBe(TICKS_PER_BEAT * 3);
+
+    zoom(h, { zoomX: VIEW.zoomX / 2 });
+    h.controller.pointerMove(moved);
+
+    expect(h.applied().patterns[PATTERN]?.notes[note.id]?.lengthTicks).toBe(TICKS_PER_BEAT * 3);
+  });
+
+  it("re-anchors a pan against the scroll the zoom left behind", () => {
+    // A narrow grid, so there is content to scroll past: `clampScroll` pins
+    // scrollX at 0 whenever the whole pattern already fits on screen.
+    const narrow = createViewport({ width: 200, height: 500 });
+    const h = harness({ notes: [note], view: narrow });
+    const start = { x: 150, y: 200, button: 1 };
+    h.controller.pointerDown(start);
+    h.controller.pointerMove({ ...start, x: 130 });
+    expect(h.setView).toHaveBeenLastCalledWith(expect.objectContaining({ scrollX: 20 }));
+
+    // The zoom moves scrollX itself; the pan must continue from there, not
+    // re-apply its whole travel on top of the new scroll.
+    h.scene.view = createViewport({ ...narrow, zoomX: narrow.zoomX * 2, scrollX: 100 });
+    h.controller.pointerMove({ ...start, x: 130 });
+    expect(h.setView).toHaveBeenLastCalledWith(expect.objectContaining({ scrollX: 100 }));
+
+    h.controller.pointerMove({ ...start, x: 120 });
+    expect(h.setView).toHaveBeenLastCalledWith(expect.objectContaining({ scrollX: 110 }));
   });
 });

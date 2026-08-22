@@ -1399,3 +1399,71 @@ describe("a sweep that entered from OUTSIDE the playlist still owns one session"
     expect(useAppStore.getState().history.past).toHaveLength(1);
   });
 });
+
+/*
+ * Round 17 #5. `pxPerBar` is a prop, and the release converted the drag's
+ * total pixel displacement with whatever value was current at that moment —
+ * while `startClientX` was captured at whatever value was current at the
+ * press. Zoom mid-drag (Ctrl+wheel over the lanes, or a toolbar zoom button
+ * under a second pointer) and the clip landed off by the whole zoom ratio.
+ */
+describe("a playlist zoom mid-drag does not move the clip (round 17 #5)", () => {
+  function zoomBy(factor: number) {
+    act(() => {
+      useAppStore.getState().zoomPlaylistBy(factor);
+    });
+  }
+
+  it("commits the displacement the user actually dragged, not the same pixels re-read", () => {
+    placeClip("clip-existing", { trackId: "trk-1", startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    // A bar and a bit at the default 80px/bar — unambiguously one bar.
+    const oneBarish = DEFAULT_ZOOM_PX_PER_BAR + 10;
+    fireEvent.pointerDown(clip, { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: oneBarish, clientY: 0, pointerId: 1 });
+
+    // Halve the zoom with the button still held, then release without moving.
+    zoomBy(0.5);
+    fireEvent.pointerUp(clip, { clientX: oneBarish, clientY: 0, pointerId: 1 });
+
+    // At 40px/bar the same 90px reads as 2.25 bars, which snaps to two.
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR);
+  });
+
+  it("goes on tracking the pointer in the NEW units after the zoom", () => {
+    placeClip("clip-existing", { trackId: "trk-1", startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    const oneBar = DEFAULT_ZOOM_PX_PER_BAR;
+    fireEvent.pointerDown(clip, { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: oneBar, clientY: 0, pointerId: 1 });
+    zoomBy(0.5);
+
+    // Three more bars of travel, which are now only half as many pixels each.
+    // Three, not one: at one bar a scale FROZEN at pointer-down happens to
+    // round to the same answer, and freezing is the other half of this bug —
+    // it would keep converting the rest of the drag in units the user can no
+    // longer see, so the clip would stop following the pointer.
+    const half = useAppStore.getState().playlistZoomPxPerBar;
+    const end = oneBar + half * 3;
+    fireEvent.pointerMove(clip, { clientX: end, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: end, clientY: 0, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR * 4);
+  });
+
+  it("leaves an unzoomed drag exactly as it was", () => {
+    placeClip("clip-existing", { trackId: "trk-1", startTick: 0 });
+    render(<Playlist />);
+    const clip = screen.getByTestId("clip-clip-existing");
+
+    fireEvent.pointerDown(clip, { clientX: 0, clientY: 0, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(clip, { clientX: DEFAULT_ZOOM_PX_PER_BAR, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(clip, { clientX: DEFAULT_ZOOM_PX_PER_BAR, clientY: 0, pointerId: 1 });
+
+    expect(useAppStore.getState().project.clips["clip-existing"]?.startTick).toBe(TICKS_PER_BAR);
+  });
+});

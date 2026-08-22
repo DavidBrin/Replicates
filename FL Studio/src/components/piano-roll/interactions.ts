@@ -49,9 +49,12 @@ import {
   clampScroll,
   gripRect,
   noteRect,
+  pitchToY,
+  pxPerTick,
   pxToTicks,
   rectContains,
   regionAt,
+  rowHeight,
   tickToX,
   velocityToY,
   xToTick,
@@ -303,8 +306,18 @@ type Gesture =
       originY: number;
       lastDeltaTicks: number;
       lastDeltaPitch: number;
-      /** A note born from this same gesture: pointer-up must not shrink it. */
-      created: boolean;
+      /**
+       * This drag is dragging CLONES that Shift+click just made — so Shift is
+       * still down through the whole gesture and must not also mean "lock
+       * pitch" (see `pointerMove`'s `lockPitch`).
+       *
+       * Narrower than "born from this gesture", which is what this flag used
+       * to say and is the wrong rule: a freshly *drawn* note is also born from
+       * its gesture, but its press held no Shift, so pressing Shift while
+       * positioning it is an ordinary pitch lock and the user gets nothing
+       * back for it. Only the clone has a modifier to disambiguate.
+       */
+      cloned: boolean;
     }
   | {
       kind: "resize";
@@ -420,6 +433,23 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
    * opened without one (a test record, a wheel).
    */
   let gesturePointerId: number | null = null;
+  /**
+   * The viewport scale the gesture in flight measured its origin in — `null`
+   * when nothing is in flight. See {@link rebaseForScaleChange}.
+   */
+  let dragScale: { zoomX: number; zoomY: number } | null = null;
+  /**
+   * Where the gesture's pointer was last SEEN — the anchor a rebase measures
+   * from.
+   *
+   * A zoom is not a pointer event, so the drag only learns about one on its
+   * next `pointermove`, and by then `input` carries the old anchor *plus*
+   * travel that happened at the new scale. Rebasing against `input` folds that
+   * travel in at the wrong rate; rebasing against the last position the drag
+   * actually measured is exact, because that is by definition the last place
+   * the old scale was still true.
+   */
+  let lastPointer: { x: number; y: number } | null = null;
 
   /**
    * Whether `input` belongs to the gesture in flight — pointer ownership
@@ -443,6 +473,11 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
   const beginDrag = (next: Gesture, pointerId: number | null = null): void => {
     gesture = next;
     gesturePointerId = pointerId;
+    // Read fresh rather than taken from the caller's `scene`: a couple of
+    // callers dispatch before they get here, and the one thing that matters is
+    // that this is the scale the origin recorded above was measured in.
+    const { zoomX, zoomY } = deps.getScene().view;
+    dragScale = { zoomX, zoomY };
     // Registered BEFORE the store write: registering pre-empts whatever else
     // was open, and a pre-empted owner's `onCancel` may dispatch. Registering
     // after would let that land inside this gesture's own coalesce window.
@@ -466,6 +501,8 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     const finished = gesture;
     gesture = { kind: "idle" };
     gesturePointerId = null;
+    dragScale = null;
+    lastPointer = null;
     // Out of the registry first, for the same reason the gesture record is
     // cleared first: `end`/`cancel` re-entering through a pre-emption must
     // find nothing in flight.
@@ -505,6 +542,9 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     // gesture's `cancel` clear the incoming one — the drag that had just
     // started was thrown away by the one it replaced.
     if (gesture.kind !== "idle" && !ownsPointer(input)) cancel();
+    // Whatever branch below opens a gesture, this press is where its pointer
+    // started; `beginDrag` records the scale to match.
+    lastPointer = { x: input.x, y: input.y };
     const scene = deps.getScene();
     const { view } = scene;
     const region = regionAt(view, input.x, input.y);
@@ -687,7 +727,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
           originY: input.y,
           lastDeltaTicks: 0,
           lastDeltaPitch: 0,
-          created: true,
+          cloned: true,
         },
         input.pointerId ?? null,
       );
@@ -705,7 +745,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         originY: input.y,
         lastDeltaTicks: 0,
         lastDeltaPitch: 0,
-        created: false,
+        cloned: false,
       },
       input.pointerId ?? null,
     );
@@ -761,7 +801,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
         originY: input.y,
         lastDeltaTicks: 0,
         lastDeltaPitch: 0,
-        created: true,
+        cloned: false,
       },
       input.pointerId ?? null,
     );
@@ -806,6 +846,71 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     });
   };
 
+  /* ------------------------------------------------------- scale rebasing */
+
+  /**
+   * Re-anchor the gesture in flight after the viewport's SCALE changed under
+   * it, so the travel it has accumulated survives the change.
+   *
+   * A drag stores a screen-space origin and converts the *total* pixel
+   * displacement from it on every move (rule 2 in the file header: absolute,
+   * never incremental). That conversion is scale-dependent, so a zoom mid-drag
+   * re-read the same pixel distance at a different px-per-tick and the note
+   * jumped by the ratio on the very next `pointermove` — halve the zoom and a
+   * note dragged four bars snapped back to two, with nothing but a wheel notch
+   * between them.
+   *
+   * Zoom mid-drag is reachable from more than one door and neither is
+   * excluded: `PgUp`/`PgDn` (`bindings.ts`) is a global key binding that knows
+   * nothing about a held pointer, and `wheel` below is delivered to the
+   * element under the cursor whether or not that cursor's button is down — a
+   * mouse can wheel and drag at once, and the zoom branches deliberately do
+   * NOT pre-empt gestures (only the velocity nudge does, because only it
+   * writes domain state). Rather than enumerate the doors, the drag checks the
+   * scale it is being asked to measure in, which covers every door there will
+   * ever be.
+   *
+   * REBASE rather than cancel: the accumulated delta is recoverable exactly,
+   * so there is no reason to make the user start the drag again. The origin is
+   * recomputed to whatever, at the NEW scale, reproduces the delta the drag
+   * last committed, measured from {@link lastPointer} — the last place the old
+   * scale was still true, and therefore where the pointer was when the zoom
+   * landed. That makes the rebase exact rather than an approximation.
+   */
+  const rebaseForScaleChange = (view: RollViewport): void => {
+    const scale = dragScale;
+    const anchor = lastPointer;
+    if (scale === null || anchor === null) return;
+    if (scale.zoomX === view.zoomX && scale.zoomY === view.zoomY) return;
+    dragScale = { zoomX: view.zoomX, zoomY: view.zoomY };
+
+    if (gesture.kind === "pan") {
+      // A pan has no accumulated *domain* delta to preserve — it writes the
+      // scroll straight out — so its rebase is simply "start measuring from
+      // here", against the scroll the zoom just left behind.
+      gesture.originX = anchor.x;
+      gesture.originY = anchor.y;
+      gesture.scrollX = view.scrollX;
+      gesture.scrollY = view.scrollY;
+      return;
+    }
+
+    if (gesture.kind === "move" || gesture.kind === "resize") {
+      // `lastDeltaTicks` is what the drag has actually written; put the origin
+      // where the current pointer position converts back into exactly it.
+      gesture.originX = anchor.x - gesture.lastDeltaTicks * pxPerTick(view);
+    }
+
+    if (gesture.kind === "move") {
+      // The pitch axis is the same argument one dimension over. Anchoring at
+      // the row's MIDDLE, not its top edge, because `yToPitch` floors: the top
+      // edge is the boundary between two rows and a float hair either side of
+      // it lands in the wrong one.
+      const anchorPitch = yToPitch(view, anchor.y) - gesture.lastDeltaPitch;
+      gesture.originY = pitchToY(view, anchorPitch) + rowHeight(view) / 2;
+    }
+  };
+
   /* --------------------------------------------------------- pointer move */
 
   const pointerMove = (input: RollPointer): void => {
@@ -815,6 +920,12 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
     if (!ownsPointer(input)) return;
     const scene = deps.getScene();
     const { view } = scene;
+    // Before ANY conversion below reads `view` — every branch that follows
+    // measures against an origin, and a stale origin is measured in the wrong
+    // units — and before `lastPointer` moves on, since the rebase is anchored
+    // on where the pointer was when the scale changed.
+    rebaseForScaleChange(view);
+    lastPointer = { x: input.x, y: input.y };
 
     if (gesture.kind === "pan") {
       const scroll = clampScroll(
@@ -948,7 +1059,7 @@ export function createPianoRollController(deps: InteractionDeps): PianoRollContr
 
     // move
     const lockTime = input.ctrlKey === true;
-    const lockPitch = input.shiftKey === true && !active.created;
+    const lockPitch = input.shiftKey === true && !active.cloned;
 
     const rawTicks = primary.positionTicks + pxToTicks(view, input.x - active.originX);
     const snappedPosition = snapTick(rawTicks, scene.snap, bypass);

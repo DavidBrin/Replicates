@@ -110,6 +110,48 @@ interface DragState {
   /** The clip actually being dragged — the source clip, or a shift-clone. */
   activeClipId: string;
   coalesceKey: string;
+  /**
+   * Where this pointer was last SEEN, and therefore where it was when a zoom
+   * landed: a zoom is not a pointer event, so the drag hears about it on the
+   * next move — by which time `event.clientX` is the old anchor *plus* travel
+   * the old scale never measured, and rebasing against it would fold that
+   * travel in at the wrong rate.
+   */
+  lastClientX: number;
+  /**
+   * The horizontal scale {@link DragState.startClientX} was captured in, and
+   * therefore the only scale the displacement measured from it may be
+   * converted with.
+   *
+   * The playlist can zoom mid-drag — Ctrl+wheel over the lanes, or the
+   * toolbar's zoom buttons under a second pointer — and `pxPerBar` is a prop,
+   * so the release read the NEW one against an anchor taken at the old one.
+   * The clip landed short or long by the whole zoom ratio: zoom out by half
+   * with the button still held and a four-bar drag committed as eight.
+   *
+   * Kept in step by {@link rebaseForZoom} rather than frozen at pointer-down:
+   * freezing would preserve the accumulated displacement but then keep
+   * converting the REST of the drag in units the user can no longer see, so
+   * the clip would stop tracking the pointer for as long as the button is
+   * held. Rebasing does both — the same choice the piano roll's
+   * `rebaseForScaleChange` makes, for the same reason.
+   */
+  pxPerBar: number;
+}
+
+/**
+ * Re-anchor a drag whose scale changed under it, preserving the displacement
+ * it has accumulated so far.
+ *
+ * The pointer has not moved since the zoom (a zoom delivers no pointer
+ * motion), so `clientX` is the true anchor: the bars travelled so far are
+ * measured at the OLD scale and written back as pixels at the NEW one.
+ */
+function rebaseForZoom(drag: DragState, pxPerBar: number): void {
+  if (drag.pxPerBar === pxPerBar) return;
+  const bars = (drag.lastClientX - drag.startClientX) / drag.pxPerBar;
+  drag.startClientX = drag.lastClientX - bars * pxPerBar;
+  drag.pxPerBar = pxPerBar;
 }
 
 /**
@@ -183,6 +225,8 @@ export function ClipView({
       dragging: false,
       activeClipId,
       coalesceKey,
+      lastClientX: event.clientX,
+      pxPerBar,
     };
   }
 
@@ -193,6 +237,12 @@ export function ClipView({
     // rule (g)); a second pointer's travel from this drag's anchor is not
     // this clip's displacement.
     if (!gesture.ownsEvent(event)) return;
+    // Before the threshold below reads the anchor — a zoom must not be
+    // mistaken for travel, in either direction — and before `lastClientX`
+    // moves on, since the rebase is anchored on where the pointer was when
+    // the zoom happened.
+    rebaseForZoom(drag, pxPerBar);
+    drag.lastClientX = event.clientX;
     const dx = event.clientX - drag.startClientX;
     const dy = event.clientY - drag.startClientY;
     if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
@@ -211,6 +261,10 @@ export function ClipView({
       gesture.end();
       return;
     }
+    // A zoom can land between the last move and the release, so the anchor is
+    // brought up to date here too rather than only on the way through.
+    rebaseForZoom(drag, pxPerBar);
+    drag.lastClientX = event.clientX;
     const deltaPx = event.clientX - drag.startClientX;
     const deltaYPx = event.clientY - drag.startClientY;
     const deltaTrackIndex = Math.round(deltaYPx / LANE_HEIGHT_PX);
@@ -230,7 +284,9 @@ export function ClipView({
      */
     try {
       if (drag.dragging && (deltaPx !== 0 || deltaTrackIndex !== 0)) {
-        const deltaTicks = (deltaPx / pxPerBar) * TICKS_PER_BAR; // snapped to a bar by the caller
+        // `drag.pxPerBar`, not the prop: they are the same value after the
+        // rebase above, and naming the drag's own scale is what keeps them so.
+        const deltaTicks = (deltaPx / drag.pxPerBar) * TICKS_PER_BAR; // snapped to a bar by the caller
         onDragCommit(
           drag.activeClipId,
           deltaTicks,

@@ -976,3 +976,123 @@ describe("a preview queued behind boot belongs to the project that asked for it"
     expect(getSnapshot().previewRevision).toBe(1);
   });
 });
+
+/*
+ * Round 17 #3. The epoch above answers "is this still the same PROJECT?".
+ * It does NOT answer "does the user still want to hear it": `stop`, `Ctrl+H`'s
+ * panic (which IS `stop` — see `wiring.ts`) and a mode flip release every
+ * sounding voice and move no epoch at all, so a preview queued behind a cold
+ * boot survived all three and started a note *after* the gesture whose entire
+ * purpose is to make notes stop.
+ */
+describe("a preview queued behind boot belongs to the INTENT that asked for it", () => {
+  it("drops the preview when stop() lands during boot — the panic path", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+
+    const pending = previewNote("ch-bass", 43);
+    stop(); // Ctrl+H reaches the engine as exactly this call
+    await pending;
+
+    expect(tone.ctx.nodesOfKind("oscillator")).toHaveLength(0);
+    expect(getSnapshot().previewRevision).toBe(0);
+  });
+
+  it("drops the preview when the mode flips during boot", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+
+    const pending = previewNote("ch-bass", 43);
+    setMode("song");
+    await pending;
+
+    expect(tone.ctx.nodesOfKind("oscillator")).toHaveLength(0);
+    expect(getSnapshot().previewRevision).toBe(0);
+  });
+
+  it("still fires when nothing asked for silence", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+
+    const pending = previewNote("ch-bass", 43);
+    setMetronomeEnabled(true); // busy, but not a stop
+    await pending;
+
+    expect(tone.ctx.nodesOfKind("oscillator").length).toBeGreaterThan(0);
+    expect(getSnapshot().previewRevision).toBe(1);
+  });
+
+  it("a stop BEFORE the preview does not drop it — the generation is captured, not compared to zero", async () => {
+    const { tone } = installTone();
+    syncProject(projectWith([]));
+
+    stop();
+    const pending = previewNote("ch-bass", 43);
+    await pending;
+
+    expect(tone.ctx.nodesOfKind("oscillator").length).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * Round 17 #1. `MixerGraph.sync` retires a deleted channel's strip; the VOICE
+ * pool kept its entry, so the ringing voices went on holding a node that is
+ * being disconnected, and the next channel handed that id (they are minted
+ * from one shared counter and re-used constantly) inherited them.
+ */
+describe("deleting a channel forgets its voices, not only its strip (round 17 #1)", () => {
+  function withoutChannel(project: Project, channelId: string): Project {
+    const channels = { ...project.channels };
+    delete channels[channelId];
+    return {
+      ...project,
+      channels,
+      channelOrder: project.channelOrder.filter((id) => id !== channelId),
+    };
+  }
+
+  async function ringing() {
+    const { tone } = installTone();
+    const project = projectWith([]);
+    syncProject(project);
+    await ensureStarted();
+    previewNote("ch-bass", 43, 5); // long enough to still be sounding
+    const source = tone.ctx.nodesOfKind("oscillator")[0] as unknown as {
+      stopTime: number | null;
+    };
+    expect(source.stopTime).not.toBeNull();
+    return { tone, project, source, naturalStop: source.stopTime as number };
+  }
+
+  it("releases the deleted channel's ringing voices, with the standard ramp", async () => {
+    const { project, source, naturalStop } = await ringing();
+
+    syncProject(withoutChannel(project, "ch-bass"));
+
+    // Pulled in, not left to ring out under a strip that is being retired.
+    expect(source.stopTime).toBeLessThan(naturalStop);
+  });
+
+  it("leaves a channel that SURVIVED the edit alone", async () => {
+    const { project, source, naturalStop } = await ringing();
+
+    syncProject(withoutChannel(project, "ch-lead"));
+
+    expect(source.stopTime).toBe(naturalStop);
+  });
+
+  it("releases before the id is handed back, so a re-created channel inherits nothing", async () => {
+    const { project, source, naturalStop } = await ringing();
+
+    syncProject(withoutChannel(project, "ch-bass"));
+    const stopAtDeletion = source.stopTime;
+    // The id comes straight back — an undo of the delete, File → New, a load.
+    syncProject(project);
+
+    // The old voice was already released and dropped from the pool at the
+    // DELETION, not left there for the re-created channel to find: its stop
+    // time is fixed at the moment the channel went away.
+    expect(stopAtDeletion).toBeLessThan(naturalStop);
+    expect(source.stopTime).toBe(stopAtDeletion);
+  });
+});
