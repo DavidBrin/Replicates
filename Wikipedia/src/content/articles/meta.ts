@@ -83,6 +83,86 @@ export const dollarPixelsMeta: ArticleMeta = {
   lastEdited: "18 August 2026",
 };
 
+export const verilogMeta: ArticleMeta = {
+  slug: projectSlug("Verilog"),
+  title: "Verilog",
+  shortDescription: "An interactive demo of an 8-state Viterbi decoder and an RTL module shelf",
+  categories: ["Interactive demos", "Digital design", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const nocturnalMeta: ArticleMeta = {
+  slug: projectSlug("Nocturnal Neuro"),
+  title: "Nocturnal Neuro",
+  shortDescription: "An EEG wearable demo covering a PCB rework, a recorded brainwave, and a venture canvas",
+  categories: ["Interactive demos", "Neurotechnology", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const signalsMeta: ArticleMeta = {
+  slug: projectSlug("Signals and Systems Lab"),
+  title: "Signals and Systems Lab",
+  shortDescription: "Five ECE 101 signal-processing labs running in the browser",
+  categories: ["Interactive demos", "Signal processing", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const quantumMeta: ArticleMeta = {
+  slug: projectSlug("Quantum Playground"),
+  title: "Quantum Playground",
+  shortDescription: "A browser state-vector simulator of algorithms from a DTU quantum information course",
+  categories: ["Interactive demos", "Quantum computing", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const hardhackMeta: ArticleMeta = {
+  slug: projectSlug("HardHack 2026"),
+  title: "HardHack 2026",
+  shortDescription: "A browser simulation of a hardware-hackathon break-in detector",
+  categories: ["Interactive demos", "Embedded systems", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const esp32Meta: ArticleMeta = {
+  slug: projectSlug("ESP32 Thermal TinyML"),
+  title: "ESP32 Thermal TinyML",
+  shortDescription: "A TinyML pipeline from an 8 by 8 thermal camera to an INT8 model on an ESP32",
+  categories: ["Interactive demos", "Machine learning", "Embedded systems", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const organoidsMeta: ArticleMeta = {
+  slug: projectSlug("Organoids on Psychedelics"),
+  title: "Organoids on Psychedelics",
+  shortDescription: "A chaptered demo of cortical-organoid electrophysiology under psychedelic compounds",
+  categories: ["Interactive demos", "Neuroscience", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const spikesMeta: ArticleMeta = {
+  slug: projectSlug("Anatomy of a Spike"),
+  title: "Anatomy of a Spike",
+  shortDescription: "A live fit of primate action potentials on public patch-clamp data",
+  categories: ["Interactive demos", "Neuroscience", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const visionMeta: ArticleMeta = {
+  slug: projectSlug("Computer Vision"),
+  title: "Computer Vision",
+  shortDescription: "Classical computer-vision coursework running live in the browser",
+  categories: ["Interactive demos", "Computer vision", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const arxivMeta: ArticleMeta = {
+  slug: projectSlug("arXiv Semantic Graph"),
+  title: "arXiv Semantic Graph",
+  shortDescription: "A semantic graph of arXiv abstracts with a live similarity threshold",
+  categories: ["Interactive demos", "Information retrieval", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
 /** Every registered article's metadata, in registry order. */
 export const articleMetas: ArticleMeta[] = [
   davidsInternetMeta,
@@ -93,4 +173,14 @@ export const articleMetas: ArticleMeta[] = [
   fakePhoneMeta,
   betMeta,
   dollarPixelsMeta,
+  verilogMeta,
+  nocturnalMeta,
+  signalsMeta,
+  quantumMeta,
+  hardhackMeta,
+  esp32Meta,
+  organoidsMeta,
+  spikesMeta,
+  visionMeta,
+  arxivMeta,
 ];

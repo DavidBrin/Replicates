@@ -39,6 +39,16 @@ const ARTICLE_SENTINELS: Record<string, string> = {
   "notion.tsx": "seven-day eviction policy",
   "super-smash.tsx": "The game simulation runs in Q12",
   "youtube.tsx": "3,086 leave-one-out fingerprint pairs",
+  "verilog.tsx": "eight add-compare-select units race down the trellis",
+  "nocturnal.tsx": "four-layer Ganglion rework with 140 footprints",
+  "signals.tsx": "echo poles walk toward the unit circle",
+  "quantum.tsx": "Grover reflects every amplitude about the mean",
+  "hardhack.tsx": "three consecutive readings under twelve centimetres",
+  "esp32.tsx": "model whose kernels match TensorFlow Lite integer arithmetic",
+  "organoids.tsx": "FOOOF draws the aperiodic fit then the peaks",
+  "spikes.tsx": "two skewed Gaussians reach r-squared of 0.999",
+  "vision.tsx": "a draggable light relights the recovered face",
+  "arxiv.tsx": "modularity peaked at tau 0.19 and the team shipped 0.27",
 };
 
 describe("sentinels are present in their own article", () => {

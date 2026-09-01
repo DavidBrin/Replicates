@@ -1,18 +1,18 @@
 import type { ProjectInfo } from "@/lib/registry";
 
 /**
- * The seven sibling replicas as encyclopedia subjects. Facts are sourced
- * exclusively from `research/02-project-dossiers.md` (extracted from each
- * project's own README) — nothing here is invented.
+ * Encyclopedia subjects: the seven sibling replicas, plus the interactive
+ * demos hosted on David's Internet. Replica facts come from
+ * `research/02-project-dossiers.md`. Demo facts come from each demo's
+ * `content/<slug>/site.ts` and README in the David-Internet repo.
  *
- * `liveUrl` is `null` for every project below: as of this writing nothing in
- * the repo is deployed (research/02-project-dossiers.md, "Root repo": "No
- * live URLs exist yet for any project"). This is the ONE field to edit to
- * make a project's "Website" infobox row and external links go live — set it
- * to the deployed URL and the stub red link becomes a normal blue external
- * link (DECISIONS D3). See the README's "add your live project link" guide
- * for the step-by-step.
+ * Replica `liveUrl` values are still null. Demo `liveUrl` values point at the
+ * live pages on david-internet.vercel.app. That is the ONE field to edit to
+ * make a "Website" infobox row go live for a replica (DECISIONS D3).
  */
+
+export const DAVID_INTERNET_URL = "https://david-internet.vercel.app";
+
 export const projects: ProjectInfo[] = [
   {
     name: "Linear",
@@ -149,5 +149,144 @@ export const projects: ProjectInfo[] = [
       "dollar-pixels/docs/screenshots/directory.png",
       "dollar-pixels/docs/screenshots/landing.png",
     ],
+  },
+  {
+    name: "Verilog",
+    slug: "Verilog",
+    tagline: "an 8-state Viterbi decoder you can watch think",
+    replicaOf: { name: "ECE 111 at UC San Diego", url: "https://www.ece.ucsd.edu/" },
+    folder: "verilog",
+    stack: ["SystemVerilog", "Icarus Verilog", "TypeScript", "Canvas"],
+    testStats: "Icarus Verilog benches plus a TypeScript model checked cycle by cycle against the RTL",
+    builtWith: "ECE 111 coursework ported into a browser demo",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/verilog`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Nocturnal Neuro",
+    slug: "Nocturnal_Neuro",
+    tagline: "from board to brainwave",
+    replicaOf: {
+      name: "the OpenBCI Ganglion",
+      url: "https://docs.openbci.com/Ganglion/GanglionLanding/",
+    },
+    folder: "nocturnal",
+    stack: ["KiCad 8", "MNE", "neurodsp", "TypeScript", "Canvas"],
+    testStats: "DSP pipeline run live on a recorded 20-channel EEG",
+    builtWith: "A KiCad rework of open hardware, plus a recorded EEG and Basement launch canvases",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/nocturnal`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Signals and Systems Lab",
+    slug: "Signals_and_Systems_Lab",
+    tagline: "five ECE 101 labs, live in the browser",
+    replicaOf: { name: "ECE 101 at UC San Diego", url: "https://www.ece.ucsd.edu/" },
+    folder: "signals",
+    stack: ["MATLAB", "TypeScript", "Web Audio", "Canvas"],
+    testStats: "TypeScript ports tested against SciPy fixtures for all five labs",
+    builtWith: "ECE 101 MATLAB Live Scripts ported to TypeScript",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/signals`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Quantum Playground",
+    slug: "Quantum_Playground",
+    tagline: "the algorithms from DTU, running where you can see them",
+    replicaOf: {
+      name: "DTU course 10384, Quantum Information",
+      url: "https://kurser.dtu.dk/course/10384",
+    },
+    folder: "quantum",
+    stack: ["TypeScript", "three.js", "NumPy fixtures"],
+    testStats: "State-vector simulator tested against NumPy fixtures from the course solutions",
+    builtWith: "A from-scratch TypeScript simulator of the DTU Quantum Information arc",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/quantum`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "HardHack 2026",
+    slug: "HardHack_2026",
+    tagline: "a break-in detector from sensor to phone",
+    replicaOf: { name: "HardHack at UC San Diego", url: "https://ieee.ucsd.edu/" },
+    folder: "hardhack",
+    stack: ["Arduino", "ESP32-S3", "MQTT", "SwiftUI", "TypeScript"],
+    testStats: "Firmware state machine ported line for line, with table tests for the confirmation logic",
+    builtWith: "A four-person HardHack 2026 team project, simulated in the browser",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/hardhack`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "ESP32 Thermal TinyML",
+    slug: "ESP32_Thermal_TinyML",
+    tagline: "from 64 pixels of heat to a 6,672-byte model",
+    replicaOf: { name: "ECE 140 at UC San Diego", url: "https://www.ece.ucsd.edu/" },
+    folder: "esp32",
+    stack: ["ESP32-S3", "TensorFlow/Keras", "TFLite Micro", "TypeScript"],
+    testStats: "Feature pipeline and INT8 kernels tested against Python and the TFLite interpreter",
+    builtWith: "ECE 140 hardware-track labs turned into a live TinyML pipeline",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/esp32`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Organoids on Psychedelics",
+    slug: "Organoids_on_Psychedelics",
+    tagline: "a year of organoid electrophysiology, replayed as chapters",
+    replicaOf: { name: "Voytek Lab at UC San Diego", url: "https://voyteklab.com/" },
+    folder: "organoids",
+    stack: ["MATLAB", "Python", "FOOOF / specparam", "TypeScript"],
+    testStats: "FOOOF port fixture-tested; interactive panels use labeled synthetic data",
+    builtWith: "Voytek Lab analysis code, presented as a five-chapter demo",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/organoids`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Anatomy of a Spike",
+    slug: "Anatomy_of_a_Spike",
+    tagline: "a primate action potential fitted live on public data",
+    replicaOf: { name: "Voytek Lab at UC San Diego", url: "https://voyteklab.com/" },
+    folder: "spikes",
+    stack: ["Python", "spikeparam", "DANDI", "TypeScript"],
+    testStats: "TypeScript fits verified against the Python spikeparam pipeline",
+    builtWith: "Voytek Lab spike parameterization, run on DANDI:001776",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/spikes`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Computer Vision",
+    slug: "Computer_Vision",
+    tagline: "classical vision, live: relight a face, click an epipolar line",
+    replicaOf: { name: "CSE 152A at UC San Diego", url: "https://cseweb.ucsd.edu/" },
+    folder: "vision",
+    stack: ["Python", "NumPy", "OpenCV", "PyTorch", "TypeScript"],
+    testStats: "Live math fixture-tested against the original NumPy solutions",
+    builtWith: "CSE 152A coursework ported to a browser stage",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/vision`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "arXiv Semantic Graph",
+    slug: "ArXiv_Semantic_Graph",
+    tagline: "148k abstracts, one threshold, a graph you can drag",
+    replicaOf: {
+      name: "DTU course 02807, Computational Tools for Data Science",
+      url: "https://kurser.dtu.dk/course/02807",
+    },
+    folder: "arxiv",
+    stack: ["Python", "TensorFlow Hub", "NetworkX", "TypeScript"],
+    testStats: "Louvain and from-scratch algorithms run live on a 2,500-paper subsample",
+    builtWith: "DTU Group 36 project, replayed on a stratified subsample",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/arxiv`,
+    screenshots: [],
+    kind: "demo",
   },
 ];

@@ -3,12 +3,12 @@ import { KNOWN_TITLES, PROJECT_LINKS } from "./support";
 
 /**
  * SPEC.md §5: the sidebar's "Main page" and "Random article" are the two
- * functional main-menu links; the Projects wikitable on the home article is
- * the other route into every project article.
+ * functional main-menu links; the Replicas and Interactive demos wikitables
+ * on the home article are the other route into every project article.
  */
 test.describe("navigation", () => {
   for (const { linkText, title } of PROJECT_LINKS) {
-    test(`Projects table link "${linkText}" opens its article`, async ({ page }) => {
+    test(`homepage table link "${linkText}" opens its article`, async ({ page }) => {
       await page.goto("/");
       await page
         .locator("table.wikitable")
@@ -18,11 +18,12 @@ test.describe("navigation", () => {
     });
   }
 
-  test("sidebar Main page link returns home", async ({ page }) => {
-    await page.goto("/wiki/Linear_(replica)");
+  test("sidebar David's Internet link points at the search engine", async ({ page }) => {
+    await page.goto("/");
     await page.getByRole("button", { name: "Main menu" }).click();
-    await page.getByRole("link", { name: "Main page" }).click();
-    await expect(page.locator("h1#firstHeading")).toHaveText("David's Internet");
+    await expect(
+      page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: "David's Internet" }),
+    ).toHaveAttribute("href", "https://david-internet.vercel.app");
   });
 
   test("sidebar Random article lands on a registered article", async ({ page }) => {

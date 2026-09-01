@@ -80,10 +80,10 @@ export const notion: ArticleModule = {
 
       <Section heading="Architecture">
         <P>
-          The color palette was pulled directly from Notion&apos;s shipped
+          The color palette was taken from Notion&apos;s shipped
           CSS custom properties, including its warm-grey background{" "}
-          <code>#f9f8f7</code> — one reason, according to the project&apos;s
-          own account, that Notion &ldquo;reads as paper.&rdquo;<Ref n={1} />{" "}
+          <code>#f9f8f7</code>. The project cites this as one reason that
+          Notion &ldquo;reads as paper.&rdquo;<Ref n={1} />{" "}
           Database rows are implemented as pages, mirroring Notion&apos;s own
           data model. The text editor is a custom <code>contentEditable</code>{" "}
           implementation rather than ProseMirror, chosen to avoid a lossy
@@ -96,8 +96,8 @@ export const notion: ArticleModule = {
 
       <Section heading="Development">
         <P>
-          The replica was built by parallel research agents, followed by a
-          single-threaded foundation pass, then four parallel surface agents.
+          The replica was built by parallel research agents, then a
+          single-threaded foundation pass and four parallel surface agents.
           It carries {project.testStats}. Unlike its siblings in the
           portfolio, the project has no <code>SPEC.md</code> or{" "}
           <code>DECISIONS.md</code> and no screenshots directory.

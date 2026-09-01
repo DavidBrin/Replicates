@@ -3,8 +3,9 @@ import { projects } from "@/content/projects";
 import { articles } from "@/content/articles";
 
 describe("projects.ts <-> articles registry", () => {
-  it("registers exactly seven projects", () => {
-    expect(projects).toHaveLength(7);
+  it("registers seven replicas and ten interactive demos", () => {
+    expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(7);
+    expect(projects.filter((p) => p.kind === "demo")).toHaveLength(10);
   });
 
   it("has a registered article for every project", () => {
@@ -23,7 +24,18 @@ describe("projects.ts <-> articles registry", () => {
   // in the repo is deployed yet (research/02-project-dossiers.md, "Root
   // repo"). The day a project's `liveUrl` goes from `null` to a real
   // deployment URL, add that project's slug here — and only here.
-  const EXPECTED_LIVE: string[] = [];
+  const EXPECTED_LIVE: string[] = [
+    "Verilog",
+    "Nocturnal_Neuro",
+    "Signals_and_Systems_Lab",
+    "Quantum_Playground",
+    "HardHack_2026",
+    "ESP32_Thermal_TinyML",
+    "Organoids_on_Psychedelics",
+    "Anatomy_of_a_Spike",
+    "Computer_Vision",
+    "ArXiv_Semantic_Graph",
+  ];
 
   it("has a non-null liveUrl iff the project is listed in EXPECTED_LIVE (src/content/__tests__/projects.test.ts)", () => {
     for (const project of projects) {

@@ -68,6 +68,6 @@ test.describe("article anatomy", () => {
   });
 
   test("footer shows the last-edited line", async ({ page }) => {
-    await expect(page.locator("footer")).toContainText("This page was last edited on 18 August 2026.");
+    await expect(page.locator("footer")).toContainText("This page was last edited on 1 September 2026.");
   });
 });

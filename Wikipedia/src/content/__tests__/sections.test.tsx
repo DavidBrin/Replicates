@@ -16,6 +16,16 @@ import { superSmash, sections as superSmashSections } from "@/content/articles/s
 import { fakePhone, sections as fakePhoneSections } from "@/content/articles/fake-phone";
 import { bet, sections as betSections } from "@/content/articles/bet";
 import { dollarPixels, sections as dollarPixelsSections } from "@/content/articles/dollar-pixels";
+import { verilog, sections as verilogSections } from "@/content/articles/verilog";
+import { nocturnal, sections as nocturnalSections } from "@/content/articles/nocturnal";
+import { signals, sections as signalsSections } from "@/content/articles/signals";
+import { quantum, sections as quantumSections } from "@/content/articles/quantum";
+import { hardhack, sections as hardhackSections } from "@/content/articles/hardhack";
+import { esp32, sections as esp32Sections } from "@/content/articles/esp32";
+import { organoids, sections as organoidsSections } from "@/content/articles/organoids";
+import { spikes, sections as spikesSections } from "@/content/articles/spikes";
+import { vision, sections as visionSections } from "@/content/articles/vision";
+import { arxiv, sections as arxivSections } from "@/content/articles/arxiv";
 import type { ArticleModule } from "@/lib/registry";
 
 const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: string; heading: string }> }> = [
@@ -27,6 +37,16 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Fake Phone", module: fakePhone, sections: fakePhoneSections },
   { name: "Bet (app)", module: bet, sections: betSections },
   { name: "Dollar Pixels", module: dollarPixels, sections: dollarPixelsSections },
+  { name: "Verilog", module: verilog, sections: verilogSections },
+  { name: "Nocturnal Neuro", module: nocturnal, sections: nocturnalSections },
+  { name: "Signals and Systems Lab", module: signals, sections: signalsSections },
+  { name: "Quantum Playground", module: quantum, sections: quantumSections },
+  { name: "HardHack 2026", module: hardhack, sections: hardhackSections },
+  { name: "ESP32 Thermal TinyML", module: esp32, sections: esp32Sections },
+  { name: "Organoids on Psychedelics", module: organoids, sections: organoidsSections },
+  { name: "Anatomy of a Spike", module: spikes, sections: spikesSections },
+  { name: "Computer Vision", module: vision, sections: visionSections },
+  { name: "arXiv Semantic Graph", module: arxiv, sections: arxivSections },
 ];
 
 describe("article sections lists match rendered <Section> headings", () => {

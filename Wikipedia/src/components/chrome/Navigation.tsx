@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { randomSlug } from "@/lib/registry";
 
 /**
- * The main-menu sidebar panel: "Main page" and "Random article" are the two
- * functional sidebar links per SPEC §5. The Contribute group (Help, Community
+ * The main-menu sidebar panel: "Main page", a live link back to David's
+ * Internet, and "Random article". The Contribute group (Help, Community
  * portal, Recent changes, Upload file, ...) had no honest behavior in a
  * static replica, so per DECISIONS D5 (superseded 2026-08-18) it is removed
  * outright rather than greyed.
@@ -25,6 +25,14 @@ export function Navigation() {
             <Link href="/" className="block rounded-[2px] px-2 py-1 hover:bg-[color:var(--subtle-bg)]">
               Main page
             </Link>
+          </li>
+          <li>
+            <a
+              href="https://david-internet.vercel.app"
+              className="block rounded-[2px] px-2 py-1 hover:bg-[color:var(--subtle-bg)]"
+            >
+              David&apos;s Internet
+            </a>
           </li>
           <li>
             <button

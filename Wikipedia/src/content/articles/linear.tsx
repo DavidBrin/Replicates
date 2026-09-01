@@ -81,18 +81,18 @@ export const linear: ArticleModule = {
       <Section heading="Overview">
         <P>
           The replica covers issue tracking, project management and team
-          membership across four permission levels. Its visual details were
-          measured from the running Linear product rather than its marketing
-          site: the interface chrome uses a background of <code>#09090a</code>{" "}
-          around a <code>#121213</code> pane, colors read directly off the
-          live application.
+        membership across four permission levels. The interface was measured
+        from the running Linear product rather than its marketing site. Its
+        chrome uses a <code>#09090a</code> background around a{" "}
+        <code>#121213</code> pane, with colors taken from the live
+        application.
         </P>
       </Section>
 
       <Section heading="Architecture">
         <P>
           The status-glyph progress wedge is drawn at radius 1.94 rather than
-          2 — a deliberate 3% shortfall reproduced from the measured product.
+          2, a 3% shortfall observed in the measured product.
           Issue ordering uses fractional-index string comparison instead of
           Linear&apos;s own floating-point <code>sortOrder</code> field, since
           floats run out of double-precision headroom after roughly 50 inserts
@@ -108,8 +108,8 @@ export const linear: ArticleModule = {
         <P>
           The replica is built on Next.js 16 with PGlite for local
           development and Neon in production. It carries {project.testStats}{" "}
-          according to the project&apos;s own <code>README.md</code>,
-          though the root repository&apos;s README states a stale figure of
+          according to its <code>README.md</code>, while the root
+          repository&apos;s README gives the older figure of
           1,314 unit tests and 9 e2e tests.<Ref n={1} /> It was built across{" "}
           {project.builtWith.toLowerCase()}.
         </P>
@@ -117,8 +117,8 @@ export const linear: ArticleModule = {
 
       <Section heading="Reception">
         <P>
-          According to the project&apos;s decision log, three rounds of
-          automated code review found 18, 20 and 7 issues respectively,
+          The project&apos;s decision log records three automated code reviews
+          that found 18, 20 and 7 issues respectively,
           including a CSS <code>url()</code> injection vulnerability reachable
           through label names, an invite endpoint that leaked a user&apos;s
           email address, and unthrottled scrypt-hashing endpoints.<Ref n={2} />
