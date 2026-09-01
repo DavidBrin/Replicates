@@ -29,9 +29,12 @@ export const davidsInternet: ArticleModule = {
   body: (
     <>
       <Hatnote>
-        This article is about the portfolio index. The search engine project
-        of the same name has not been built yet — see{" "}
-        <B>Background</B> below.
+        This article is about the portfolio index. For the search engine
+        itself, see the live site at{" "}
+        <ExternalLink href="https://david-internet.vercel.app">
+          david-internet.vercel.app
+        </ExternalLink>
+        .
       </Hatnote>
 
       <Infobox
@@ -42,14 +45,18 @@ export const davidsInternet: ArticleModule = {
           { label: "Repository", value: <code>Replicates</code> },
           {
             label: "Website",
-            value: <ExternalLink href={null}>not yet deployed</ExternalLink>,
+            value: (
+              <ExternalLink href="https://david-internet.vercel.app">
+                david-internet.vercel.app
+              </ExternalLink>
+            ),
           },
         ]}
       />
 
       <P>
-        <B>David&apos;s Internet</B> is a planned search engine intended to
-        run over a portfolio of software replicas built by David — working
+        <B>David&apos;s Internet</B> is a search engine that runs over a
+        portfolio of software replicas built by David — working
         rebuilds of established products such as Linear, Notion and YouTube,
         each developed inside its own self-contained folder of the{" "}
         <code>Replicates</code> repository. This encyclopedia is the
@@ -58,9 +65,12 @@ export const davidsInternet: ArticleModule = {
       </P>
 
       <P>
-        As of this writing the search engine itself has not been built; the
-        seven replicas listed below, and the encyclopedia describing them,
-        are the extent of the portfolio.
+        The search engine went live in September 2026 at{" "}
+        <ExternalLink href="https://david-internet.vercel.app">
+          david-internet.vercel.app
+        </ExternalLink>
+        ; the seven replicas listed below, and the encyclopedia describing
+        them, make up the portfolio it indexes.
       </P>
 
       <Section heading="Background">
@@ -71,11 +81,11 @@ export const davidsInternet: ArticleModule = {
           prompts.&rdquo;<Ref n={1} /> Each project folder is self-contained,
           carrying its own <code>README.md</code>, <code>SPEC.md</code>,{" "}
           <code>DECISIONS.md</code> and <code>research/</code> directory, and
-          each is developed independently of its siblings. No project in the
-          portfolio has a live deployment yet, which is why every external
-          &ldquo;Website&rdquo; link in this encyclopedia, including the one
-          in this article&apos;s own infobox, renders as a stub until a URL
-          is filled in.
+          each is developed independently of its siblings. The search engine
+          became the portfolio&apos;s first live deployment in September
+          2026; none of the seven replicas is deployed yet, which is why
+          their &ldquo;Website&rdquo; links in this encyclopedia render as
+          stubs until a URL is filled in.
         </P>
       </Section>
 

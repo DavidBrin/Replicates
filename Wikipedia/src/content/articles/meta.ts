@@ -22,9 +22,9 @@ function projectSlug(name: string): string {
 export const davidsInternetMeta: ArticleMeta = {
   slug: "Davids_Internet",
   title: "David's Internet",
-  shortDescription: "A planned search engine over a portfolio of software replicas",
+  shortDescription: "A search engine over a portfolio of software replicas",
   categories: ["Portfolio indexes", "Software replicas", "2026 establishments"],
-  lastEdited: "18 August 2026",
+  lastEdited: "1 September 2026",
 };
 
 export const linearMeta: ArticleMeta = {
