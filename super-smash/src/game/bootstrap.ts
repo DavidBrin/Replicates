@@ -15,12 +15,17 @@
  */
 
 import { FIGHTERS, getFighter as lookupFighter } from "@/fighters";
-import { STAGES, resolveStage } from "@/stages";
+import { STAGES, allStageForms, getStage, resolveStage, stageForm } from "@/stages";
 import { registerFighters, registerStages } from "@/engine/simulate";
-import { allStageForms } from "@/stages";
 import type { FighterDef, StageDef } from "@/engine/types";
 import { CONFIG_ARROWS, CONFIG_WASD, CONFIG_LOCAL_P2, type Scheme } from "@/input/schemes";
-import type { Bindings, SchemeId } from "@/lib/matchConfig";
+import {
+  RANDOM_FIGHTER,
+  RANDOM_STAGE,
+  type Bindings,
+  type SchemeId,
+  type StageForm,
+} from "@/lib/matchConfig";
 
 let registered = false;
 
@@ -49,6 +54,46 @@ export function getStageOrThrow(id: string): StageDef {
   const stage = resolveStage(id);
   if (!stage) throw new Error(`Unknown stage "${id}"`);
   return stage;
+}
+
+/**
+ * Deterministic index in `[0, length)` from a seed and a salt.
+ *
+ * Same mixer the `?` fighter pick has always used: two peers that share a
+ * seed must resolve Random to the same roster entry, and a replay of that
+ * seed must produce the same match. `Math.random` cannot do either.
+ */
+function mixIndex(seed: number, salt: number, length: number): number {
+  return Math.abs(Math.imul(seed ^ salt, 0x9e3779b1)) % length;
+}
+
+/**
+ * Resolve a `?` pick to a real fighter.
+ *
+ * `null` is treated as Random too: a match that starts with an empty panel
+ * should still be a match, not an unknown-fighter crash.
+ */
+export function resolveFighterId(fighterId: string | null, seed: number, port: number): string {
+  if (fighterId && fighterId !== RANDOM_FIGHTER) return fighterId;
+  return FIGHTERS[mixIndex(seed, port + 1, FIGHTERS.length)].id;
+}
+
+/**
+ * The stage the match will actually load.
+ *
+ * The menus store Random as the token `RANDOM_STAGE` and keep the form
+ * beside it, because the form toggle cycles independently of which tile is
+ * highlighted. `GameState.stageId` is one string, so both are resolved here:
+ * the token becomes one of the six legal stages (seeded, like fighters),
+ * then the selected form is applied through the stage module's own
+ * transform rather than by restating the suffix convention.
+ */
+export function resolveMatchStage(stageId: string, form: StageForm, seed: number): StageDef {
+  const baseId =
+    stageId === RANDOM_STAGE ? STAGES[mixIndex(seed, 0x51a9e, STAGES.length)].id : stageId;
+  const base = getStage(baseId);
+  if (!base) throw new Error(`Unknown stage "${stageId}"`);
+  return stageForm(base, form);
 }
 
 /** The menus' scheme vocabulary, translated to the input layer's. */

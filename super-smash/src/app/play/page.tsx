@@ -16,14 +16,11 @@ import { useRouter } from "next/navigation";
 import type { MatchOutcome } from "@/engine/types";
 import { toFloat } from "@/engine/fixed";
 import { createMatchRunner, type MatchRunner, type PlayerSlot as RunnerSlot } from "@/game/matchRunner";
-import { bootstrapEngine, getFighterOrThrow, getStageOrThrow, schemeForMenuId } from "@/game/bootstrap";
-import { FIGHTERS } from "@/fighters";
+import { bootstrapEngine, getFighterOrThrow, resolveFighterId, resolveMatchStage, schemeForMenuId } from "@/game/bootstrap";
 import { createKeyboardInput, type KeyboardInput } from "@/input/keyboard";
 import { AudioEngine } from "@/audio";
 import { conflictFreeSelection } from "@/input/schemes";
 import {
-  RANDOM_FIGHTER,
-  stageIdForForm,
   useMatchConfig,
   type PlayerResultStat,
   type PlayerSlot,
@@ -66,23 +63,10 @@ function createTracker(count: number): StatTracker {
   };
 }
 
-/**
- * Resolve a `?` pick to a real fighter.
- *
- * Seeded from the match seed rather than `Math.random`, because two peers in a
- * netplay match must resolve the same Random to the same fighter — and because
- * a replay of the same seed should produce the same match.
- */
-function resolveRandom(fighterId: string | null, seed: number, port: number): string {
-  if (fighterId && fighterId !== RANDOM_FIGHTER) return fighterId;
-  const mixed = Math.abs(Math.imul(seed ^ (port + 1), 0x9e3779b1)) % FIGHTERS.length;
-  return FIGHTERS[mixed].id;
-}
-
 function toRunnerSlots(players: readonly PlayerSlot[], seed: number): RunnerSlot[] {
   return players.map((p) => ({
     selection: {
-      defId: resolveRandom(p.fighterId, seed, p.port),
+      defId: resolveFighterId(p.fighterId, seed, p.port),
       costume: p.costume,
     },
     cpuLevel: p.kind === "cpu" ? p.cpuLevel : null,
@@ -123,15 +107,18 @@ export default function PlayPage() {
 
     try {
       bootstrapEngine();
-      // The menus keep the stage and its form apart, because the stage-select
-      // toggle cycles independently of which stage is highlighted. `GameState`
-      // has room for exactly one string, so they are composed here — and by the
-      // store's own helper rather than by restating the suffix convention, so a
-      // change to how forms are named cannot silently desync the two.
-      const stage = getStageOrThrow(stageIdForForm(stageId, stageForm));
       // A fixed seed per mount rather than a random one: the whole simulation is
       // reproducible from it, which is what makes a desync report actionable.
       const seed = 0x5eed1e55;
+      // Random is a menu token, not a stage. Resolve it — and fold in the form —
+      // before the engine ever sees the id, or it throws `Unknown stage "random"`.
+      // The extra entropy is only for the pick: the engine then runs on a real
+      // stage id, so this does not live inside `step()`.
+      const stage = resolveMatchStage(
+        stageId,
+        stageForm,
+        (seed ^ ((Math.random() * 0x7fffffff) | 0)) | 0,
+      );
       const slots = toRunnerSlots(players, seed);
 
       const humans = players.filter((p) => p.kind === "human");
@@ -246,6 +233,9 @@ export default function PlayPage() {
       (window as unknown as { __smashDebug?: unknown }).__smashDebug = {
         get frame() {
           return live.frame;
+        },
+        get stageId() {
+          return live.state.stageId;
         },
         // Hand-cranking the loop, for looking at a single frame.
         //
