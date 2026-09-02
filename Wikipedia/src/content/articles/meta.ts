@@ -78,7 +78,7 @@ export const betMeta: ArticleMeta = {
 export const dollarPixelsMeta: ArticleMeta = {
   slug: projectSlug("Dollar Pixels"),
   title: "Dollar Pixels",
-  shortDescription: "A rebuild of the Million Dollar Homepage",
+  shortDescription: "A rebuild of the Million Dollar Homepage and its Art-Wall flagship grid",
   categories: ["Software replicas", "Advertising websites"],
   lastEdited: "18 August 2026",
 };

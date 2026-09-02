@@ -135,7 +135,7 @@ export const projects: ProjectInfo[] = [
   {
     name: "Dollar Pixels",
     slug: "Dollar_Pixels",
-    tagline: "$1 buys nine pixels",
+    tagline: "$1 buys nine pixels on the Art-Wall",
     replicaOf: { name: "The Million Dollar Homepage", url: "http://www.milliondollarhomepage.com" },
     folder: "dollar-pixels",
     stack: ["Next.js", "canvas renderer with O(1) hit-testing", "Stripe (one env var away)"],

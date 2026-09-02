@@ -70,7 +70,9 @@ export const dollarPixels: ArticleModule = {
         developed in the <code>dollar-pixels</code> folder of the{" "}
         <code>Replicates</code> repository. It sells 3×3-pixel blocks for $1
         each on a 1200×1200 grid of 160,000 blocks. The grid is 1200 rather
-        than 1000 pixels wide because 1000 is not evenly divisible by 3.
+        than 1000 pixels wide because 1000 is not evenly divisible by 3. Its
+        flagship page, <B>The Art-Wall</B> (also called <B>The Wall</B>), is the
+        main pixel canvas where early tenants bought coloured blocks.
       </P>
 
       <P>
@@ -90,7 +92,9 @@ export const dollarPixels: ArticleModule = {
           value that pays its creator a share of the price of every block
           sold on it. The site defaults to play money, with Stripe payments
           reachable by setting a single environment variable through the same{" "}
-          <code>settle()</code> code path.
+          <code>settle()</code> code path. The Art-Wall sits on a photographed
+          chalkboard background rather than the flat grey of the original
+          design tokens.
         </P>
       </Section>
 

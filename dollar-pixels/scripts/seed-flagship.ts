@@ -19,7 +19,7 @@ import { blocksIn, eachBlock, gridForSize, type BlockRect } from "../src/domain/
 const SEED_USER_ID = "usr_seed";
 const SEED_PAGE_ID = "pag_wall";
 const SEED_EPOCH = "2026-01-01T00:00:00.000Z";
-const SEED_CLAIMS = 675;
+const SEED_CLAIMS = 600;
 const FLAGSHIP_SLUG = "the-wall";
 
 const TENANTS: readonly { caption: string; colour: string }[] = [
