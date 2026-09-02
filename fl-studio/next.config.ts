@@ -21,9 +21,9 @@ const nextConfig: NextConfig = {
   // land on a sibling project's one — this package is a subdirectory of a
   // larger multi-project repo, not its own git root. `fileURLToPath`, not
   // `URL.pathname`: this repository lives under a directory with a space in
-  // its name (`Personal Projects`), and the containing `FL Studio` folder
-  // has one too — `.pathname` hands back a percent-encoded path that
-  // resolves to nothing.
+  // its name (`Personal Projects`), and `.pathname` hands back a
+  // percent-encoded path that resolves to nothing. The package folder itself
+  // is `fl-studio` (no space) so Vercel serverless function names stay valid.
   turbopack: {
     root: fileURLToPath(new URL(".", import.meta.url)),
   },

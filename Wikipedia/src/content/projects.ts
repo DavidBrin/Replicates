@@ -6,9 +6,11 @@ import type { ProjectInfo } from "@/lib/registry";
  * `research/02-project-dossiers.md`. Demo facts come from each demo's
  * `content/<slug>/site.ts` and README in the David-Internet repo.
  *
- * Replica `liveUrl` values are still null. Demo `liveUrl` values point at the
- * live pages on david-internet.vercel.app. That is the ONE field to edit to
- * make a "Website" infobox row go live for a replica (DECISIONS D3).
+ * Replica `liveUrl` values are the production Vercel aliases. Linear, YouTube,
+ * and Dollar Pixels stay null until their databases (and YouTube's blob store)
+ * are attached. Demo `liveUrl` values point at david-internet.vercel.app.
+ * That is the ONE field to edit to make a "Website" infobox row go live
+ * (DECISIONS D3).
  */
 
 export const DAVID_INTERNET_URL = "https://david-internet.vercel.app";
@@ -23,7 +25,7 @@ export const projects: ProjectInfo[] = [
     stack: ["Next.js 16", "PGlite (local)", "Neon (production)"],
     testStats: "1,559 unit tests, 23 e2e",
     builtWith: "Six research lanes, seven build slices",
-    liveUrl: null,
+    liveUrl: "https://linear-david.vercel.app",
     screenshots: [
       "Linear/docs/screenshots/issue-list.png",
       "Linear/docs/screenshots/issue-detail.png",
@@ -44,7 +46,7 @@ export const projects: ProjectInfo[] = [
     stack: ["Next.js", "IndexedDB (no backend)", "four StorageAdapter implementations"],
     testStats: "147 tests",
     builtWith: "Parallel research agents; single-threaded foundation; then 4 parallel surface agents",
-    liveUrl: null,
+    liveUrl: "https://notion-david.vercel.app",
     screenshots: [],
   },
   {
@@ -81,7 +83,7 @@ export const projects: ProjectInfo[] = [
     ],
     testStats: "1,285 unit/property tests, 7 e2e",
     builtWith: "Eight research lanes, frozen engine contract, six build slices",
-    liveUrl: null,
+    liveUrl: "https://smash-david.vercel.app",
     screenshots: [
       "super-smash/docs/screenshots/title.png",
       "super-smash/docs/screenshots/main-menu.png",
@@ -105,7 +107,7 @@ export const projects: ProjectInfo[] = [
     stack: ["Next.js", "installable PWA"],
     testStats: "363 unit tests, 89 e2e",
     builtWith: "Six research lanes, six build slices",
-    liveUrl: null,
+    liveUrl: "https://fake-phone-david.vercel.app",
     screenshots: [
       "fake-phone/docs/screenshots/home.png",
       "fake-phone/docs/screenshots/home-full.png",
@@ -127,7 +129,7 @@ export const projects: ProjectInfo[] = [
     stack: ["Next.js", "Hanson's LMSR pricing engine", "fast-check property-based tests", "in-memory store"],
     testStats: "~664 unit/property/route tests",
     builtWith: "A 14-task plan: implementer + independent reviewer + fix loop per task",
-    liveUrl: null,
+    liveUrl: "https://bet-david.vercel.app",
     screenshots: [],
   },
   {
@@ -286,6 +288,86 @@ export const projects: ProjectInfo[] = [
     testStats: "Louvain and from-scratch algorithms run live on a 2,500-paper subsample",
     builtWith: "DTU Group 36 project, replayed on a stratified subsample",
     liveUrl: `${DAVID_INTERNET_URL}/demos/arxiv`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Cross-Teaching Segmentation",
+    slug: "Cross-Teaching_Segmentation",
+    tagline: "a U-Net and a ViT swap pseudo-labels",
+    replicaOf: {
+      name: "DTU course 02456, Deep Learning",
+      url: "https://kurser.dtu.dk/course/02456",
+    },
+    folder: "crossteach",
+    stack: ["PyTorch", "segmentation-models-pytorch", "timm", "TypeScript", "Canvas"],
+    testStats: "Predictions, confidence maps, and attention rollouts generated from four shipped checkpoints",
+    builtWith: "DTU 02456 Group 9 project, plus a 2026 Oxford-IIIT Pet redesign",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/crossteach`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "P300 Speller",
+    slug: "P300_Speller",
+    tagline: "spell letters with an evoked potential",
+    replicaOf: {
+      name: "BCI Competition III dataset II",
+      url: "https://www.bbci.de/competition/iii/",
+    },
+    folder: "p300",
+    stack: ["Python", "Keras", "NumPy", "SciPy", "TypeScript", "Canvas"],
+    testStats: "Row and column decoding logic ported to TypeScript and fixture-tested",
+    builtWith: "Triton Neurotech ML team study of the open-source p300-speller codebase",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/p300`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "SQL Playground",
+    slug: "SQL_Playground",
+    tagline: "five course databases live in the browser",
+    replicaOf: {
+      name: "DTU Databases course",
+      url: "https://kurser.dtu.dk/",
+    },
+    folder: "sql",
+    stack: ["SQL (MariaDB)", "SQLite", "sql.js (WASM)", "TypeScript"],
+    testStats: "Every query preset fixture-tested against Python sqlite3",
+    builtWith: "DTU Databases weekly answer sheets and schemas, translated to SQLite",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/sql`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Early 3D Modeling",
+    slug: "Early_3D_Modeling",
+    tagline: "Inventor CAD stories and VEX programs running in a 2D sim",
+    replicaOf: {
+      name: "Autodesk Inventor and VEXcode VR",
+      url: "https://www.autodesk.com/products/inventor/overview",
+    },
+    folder: "modeling",
+    stack: ["Autodesk Inventor", "VEXcode VR", "TypeScript", "Canvas"],
+    testStats: "Six original VEX programs execute in a TypeScript drivetrain and pen port",
+    builtWith: "High-school Inventor archives and VEXcode VR programs from about 2020 to 2021",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/modeling`,
+    screenshots: [],
+    kind: "demo",
+  },
+  {
+    name: "Early Code",
+    slug: "Early_Code",
+    tagline: "the first C++ final, URL handlers, and Aho-Corasick from scratch",
+    replicaOf: {
+      name: "UC San Diego CSE 12, CSE 15L, and CSE 100",
+      url: "https://cse.ucsd.edu/",
+    },
+    folder: "earlycode",
+    stack: ["C++", "Java", "JUnit", "Python", "TypeScript"],
+    testStats: "Five live widgets fixture-tested against Python references",
+    builtWith: "Coursework from 2021 to 2024, presented as a timeline of running programs",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/earlycode`,
     screenshots: [],
     kind: "demo",
   },

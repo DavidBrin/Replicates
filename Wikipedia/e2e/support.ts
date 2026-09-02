@@ -24,6 +24,11 @@ export const KNOWN_TITLES = [
   "Anatomy of a Spike",
   "Computer Vision",
   "arXiv Semantic Graph",
+  "Cross-Teaching Segmentation",
+  "P300 Speller",
+  "SQL Playground",
+  "Early 3D Modeling",
+  "Early Code",
 ] as const;
 
 export const PROJECT_LINKS: Array<{ linkText: string; title: string }> = [
@@ -44,4 +49,9 @@ export const PROJECT_LINKS: Array<{ linkText: string; title: string }> = [
   { linkText: "Anatomy of a Spike", title: "Anatomy of a Spike" },
   { linkText: "Computer Vision", title: "Computer Vision" },
   { linkText: "arXiv Semantic Graph", title: "arXiv Semantic Graph" },
+  { linkText: "Cross-Teaching Segmentation", title: "Cross-Teaching Segmentation" },
+  { linkText: "P300 Speller", title: "P300 Speller" },
+  { linkText: "SQL Playground", title: "SQL Playground" },
+  { linkText: "Early 3D Modeling", title: "Early 3D Modeling" },
+  { linkText: "Early Code", title: "Early Code" },
 ];

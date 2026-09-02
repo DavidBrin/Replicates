@@ -66,8 +66,8 @@ export const davidsInternet: ArticleModule = {
       <P>
         The search engine went live in September 2026 at{" "}
         <ExternalLink href={DAVID_INTERNET_URL}>david-internet.vercel.app</ExternalLink>
-        . Results look like a Google SERP. A hit either opens the live project
-        or, until a replica is deployed, this encyclopedia.
+        . Results look like a Google SERP. A hit opens the live project when
+        one exists, or this encyclopedia when it does not.
       </P>
 
       <Section heading="Background">
@@ -77,10 +77,11 @@ export const davidsInternet: ArticleModule = {
           carries its own{" "}
           <code>README.md</code>, <code>SPEC.md</code>, <code>DECISIONS.md</code>{" "}
           and <code>research/</code> directory. The search engine was the
-          first live deployment, in September 2026. None of the seven replicas
-          is deployed yet, so their Website links here are red stubs until a
-          URL is filled in. The interactive demos already run on the search
-          site, so their Website links are live.
+          first live deployment, in September 2026. Five replicas are live
+          (Linear, Notion, Super Smash, Fake Phone, and Bet). YouTube still
+          needs object storage, and Dollar Pixels still needs its schema
+          applied, so their Website links stay red stubs. The interactive demos
+          already run on the search site, so their Website links are live.
         </P>
       </Section>
 
@@ -116,10 +117,11 @@ export const davidsInternet: ArticleModule = {
 
       <Section heading="Interactive demos">
         <P>
-          Ten demos run inside David&apos;s Internet rather than on their own
+          Fifteen demos run inside David&apos;s Internet rather than on their own
           domains. They cover digital design, signals, TinyML, a hardware
           hackathon, EEG hardware, two Voytek Lab analyses, computer vision,
-          and a semantic graph of arXiv abstracts.
+          a semantic graph of arXiv abstracts, cross-teaching segmentation,
+          a P300 speller, SQL labs, early CAD, and first programs.
         </P>
         <WikiTable>
           <thead>

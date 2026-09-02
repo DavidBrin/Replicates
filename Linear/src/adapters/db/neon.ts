@@ -62,10 +62,7 @@ export class NeonDatabase implements SqlDatabase {
   async #open(): Promise<NeonPool> {
     if (this.#pool) return this.#pool;
     this.#opening ??= (async () => {
-      const specifier = "@neondatabase/serverless";
-      const neon = (await import(
-        /* webpackIgnore: true */ specifier
-      )) as unknown as NeonModule;
+      const neon = (await import("@neondatabase/serverless")) as unknown as NeonModule;
 
       // Single statements go over HTTP, which costs one round trip instead of
       // a WebSocket handshake. `connect()` still upgrades to a socket, which

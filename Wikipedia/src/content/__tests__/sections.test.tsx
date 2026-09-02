@@ -26,6 +26,11 @@ import { organoids, sections as organoidsSections } from "@/content/articles/org
 import { spikes, sections as spikesSections } from "@/content/articles/spikes";
 import { vision, sections as visionSections } from "@/content/articles/vision";
 import { arxiv, sections as arxivSections } from "@/content/articles/arxiv";
+import { crossteach, sections as crossteachSections } from "@/content/articles/crossteach";
+import { p300, sections as p300Sections } from "@/content/articles/p300";
+import { sql, sections as sqlSections } from "@/content/articles/sql";
+import { modeling, sections as modelingSections } from "@/content/articles/modeling";
+import { earlycode, sections as earlycodeSections } from "@/content/articles/earlycode";
 import type { ArticleModule } from "@/lib/registry";
 
 const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: string; heading: string }> }> = [
@@ -47,6 +52,11 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Anatomy of a Spike", module: spikes, sections: spikesSections },
   { name: "Computer Vision", module: vision, sections: visionSections },
   { name: "arXiv Semantic Graph", module: arxiv, sections: arxivSections },
+  { name: "Cross-Teaching Segmentation", module: crossteach, sections: crossteachSections },
+  { name: "P300 Speller", module: p300, sections: p300Sections },
+  { name: "SQL Playground", module: sql, sections: sqlSections },
+  { name: "Early 3D Modeling", module: modeling, sections: modelingSections },
+  { name: "Early Code", module: earlycode, sections: earlycodeSections },
 ];
 
 describe("article sections lists match rendered <Section> headings", () => {

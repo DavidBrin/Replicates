@@ -7,7 +7,7 @@ and research notes.
 
 ---
 
-## [FL Studio](FL%20Studio) — the beat, not the DAW
+## [FL Studio](fl-studio) — the beat, not the DAW
 
 > **program it, arrange it, hear it, save it**
 
@@ -18,7 +18,7 @@ what it is, built properly.
 
 | Channel Rack | Piano Roll | Playlist |
 |---|---|---|
-| <img src="FL%20Studio/docs/screenshots/channel-rack.png" width="240" alt="Channel Rack: seven instrument rows, each with a mute LED, pan and volume knobs, and a 16-step grid whose cells alternate cool and warm every four steps"> | <img src="FL%20Studio/docs/screenshots/piano-roll.png" width="240" alt="Piano Roll: a keyboard column, two-dimensional row and column shading, green notes with a darker right-edge grip, and the velocity stem lane below"> | <img src="FL%20Studio/docs/screenshots/playlist.png" width="240" alt="Playlist: two tracks of pattern clips, each clip a header strip above a live miniature of the notes inside it"> |
+| <img src="fl-studio/docs/screenshots/channel-rack.png" width="240" alt="Channel Rack: seven instrument rows, each with a mute LED, pan and volume knobs, and a 16-step grid whose cells alternate cool and warm every four steps"> | <img src="fl-studio/docs/screenshots/piano-roll.png" width="240" alt="Piano Roll: a keyboard column, two-dimensional row and column shading, green notes with a darker right-edge grip, and the velocity stem lane below"> | <img src="fl-studio/docs/screenshots/playlist.png" width="240" alt="Playlist: two tracks of pattern clips, each clip a header strip above a live miniature of the notes inside it"> |
 
 The bet is one sentence: **the step grid and the piano roll edit the same
 list.** FL has no separate `Step` entity and neither does this — a rack step is
@@ -37,8 +37,8 @@ Next.js · Tone.js as the clock with hand-built native voices · 1,256 unit test
 15 Playwright e2e. Built from seven parallel research lanes, then seven parallel
 build slices, then twenty rounds of codex review run to a clean pass.
 
-**[Read the README →](FL%20Studio/README.md)** ·
-[Spec](FL%20Studio/SPEC.md) · [Decisions](FL%20Studio/design-decisions.md) · [Research](FL%20Studio/research)
+**[Read the README →](fl-studio/README.md)** ·
+[Spec](fl-studio/SPEC.md) · [Decisions](fl-studio/design-decisions.md) · [Research](fl-studio/research)
 
 ---
 

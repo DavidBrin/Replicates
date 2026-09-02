@@ -20,8 +20,13 @@ const nextConfig: NextConfig = {
   // sockets; neither survives being traced and re-bundled. Both are also
   // imported through variable specifiers so no bundler follows them, but
   // marking them external keeps the server build honest if that indirection is
-  // ever simplified away.
+  // ever simplified away. Neon must still land in the serverless function:
+  // `webpackIgnore` on a variable specifier hid it from file tracing, which
+  // is why production 500'd with "Cannot find package '@neondatabase/serverless'".
   serverExternalPackages: ["@electric-sql/pglite", "@neondatabase/serverless"],
+  outputFileTracingIncludes: {
+    "/*": ["./node_modules/@neondatabase/serverless/**/*"],
+  },
 
   // Pin Turbopack's inferred workspace root to this package. Without it,
   // Turbopack walks up from cwd looking for the "highest" lockfile and can land
