@@ -163,6 +163,46 @@ export const arxivMeta: ArticleMeta = {
   lastEdited: "1 September 2026",
 };
 
+export const crossteachMeta: ArticleMeta = {
+  slug: projectSlug("Cross-Teaching Segmentation"),
+  title: "Cross-Teaching Segmentation",
+  shortDescription: "A semi-supervised segmentation demo where a U-Net and a Vision Transformer teach each other",
+  categories: ["Interactive demos", "Machine learning", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const p300Meta: ArticleMeta = {
+  slug: projectSlug("P300 Speller"),
+  title: "P300 Speller",
+  shortDescription: "A live simulation of a P300 brain-computer-interface speller and the CNN family that decodes it",
+  categories: ["Interactive demos", "Neurotechnology", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const sqlMeta: ArticleMeta = {
+  slug: projectSlug("SQL Playground"),
+  title: "SQL Playground",
+  shortDescription: "Six course databases running client-side, with the weekly answer queries as presets",
+  categories: ["Interactive demos", "Databases", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const modelingMeta: ArticleMeta = {
+  slug: projectSlug("Early 3D Modeling"),
+  title: "Early 3D Modeling",
+  shortDescription: "An Autodesk Inventor gallery and a VEX robot simulator from high-school coursework",
+  categories: ["Interactive demos", "Computer-aided design", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
+export const earlycodeMeta: ArticleMeta = {
+  slug: projectSlug("Early Code"),
+  title: "Early Code",
+  shortDescription: "A timeline of first programs, from a C++ final to a from-scratch Aho-Corasick automaton",
+  categories: ["Interactive demos", "Programming education", "2026 establishments"],
+  lastEdited: "1 September 2026",
+};
+
 /** Every registered article's metadata, in registry order. */
 export const articleMetas: ArticleMeta[] = [
   davidsInternetMeta,
@@ -183,4 +223,9 @@ export const articleMetas: ArticleMeta[] = [
   spikesMeta,
   visionMeta,
   arxivMeta,
+  crossteachMeta,
+  p300Meta,
+  sqlMeta,
+  modelingMeta,
+  earlycodeMeta,
 ];

@@ -17,6 +17,11 @@ import { organoids } from "./organoids";
 import { spikes } from "./spikes";
 import { vision } from "./vision";
 import { arxiv } from "./arxiv";
+import { crossteach } from "./crossteach";
+import { p300 } from "./p300";
+import { sql } from "./sql";
+import { modeling } from "./modeling";
+import { earlycode } from "./earlycode";
 
 // `Sandbox` (./sandbox.tsx) proved the registry -> primitives pipeline and
 // stays on disk, unregistered, as a reference for future article authoring.
@@ -39,4 +44,9 @@ export const articles: ArticleRegistry = {
   [spikes.meta.slug]: spikes,
   [vision.meta.slug]: vision,
   [arxiv.meta.slug]: arxiv,
+  [crossteach.meta.slug]: crossteach,
+  [p300.meta.slug]: p300,
+  [sql.meta.slug]: sql,
+  [modeling.meta.slug]: modeling,
+  [earlycode.meta.slug]: earlycode,
 };
