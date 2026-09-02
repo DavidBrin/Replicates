@@ -42,9 +42,11 @@ export interface ProjectInfo {
   stack: string[];
   testStats: string;
   builtWith: string;
-  /** null until a project is actually deployed — renders as a red stub link. */
+  /** null until a project is actually deployed; renders as a red stub link. */
   liveUrl: string | null;
   screenshots: string[];
+  /** Replicas of existing products vs interactive demos hosted on David's Internet. */
+  kind?: "replica" | "demo";
 }
 
 /** The static article map. Content agent fills this in via `src/content/articles/index.ts`. */

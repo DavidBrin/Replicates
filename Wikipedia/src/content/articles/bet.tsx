@@ -66,15 +66,13 @@ export const bet: ArticleModule = {
 
       <P>
         Unauthorized reads of a market return a 404 status rather than a 403,
-        on the reasoning that a 403 response would itself confirm the
-        market&apos;s existence.
+        because a 403 response would confirm the market&apos;s existence.
       </P>
 
       <Section heading="Overview">
         <P>
-          The project documents its own gaps candidly: its store is
-          in-memory and resets on a cold start, and it has no password
-          authentication.
+          The store is in-memory and resets on a cold start. The application
+          has no password authentication.
         </P>
       </Section>
 
@@ -82,9 +80,9 @@ export const bet: ArticleModule = {
         <P>
           Markets are priced with Robin Hanson&apos;s logarithmic market
           scoring rule (LMSR),<Ref n={1} /> expressed as{" "}
-          <code>C(q) = b·ln Σ exp(qᵢ/b)</code>, rather than an order book —
-          the project&apos;s own reasoning being that &ldquo;a CLOB with six
-          friends is an empty book.&rdquo; Three pricing engines sit behind a
+          <code>C(q) = b·ln Σ exp(qᵢ/b)</code>, rather than an order book.
+          The project describes the rationale as: &ldquo;a CLOB with six
+          friends is an empty book.&rdquo; Three pricing engines use a
           single shared interface: LMSR, fixed odds, and parimutuel.
         </P>
       </Section>

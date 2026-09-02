@@ -69,14 +69,14 @@ export const dollarPixels: ArticleModule = {
         <ExternalLink href={project.replicaOf.url}>the 2005 Million Dollar Homepage</ExternalLink>,
         developed in the <code>dollar-pixels</code> folder of the{" "}
         <code>Replicates</code> repository. It sells 3×3-pixel blocks for $1
-        each on a 1200×1200 grid of 160,000 blocks — 1200 rather than 1000,
-        since 1000 is not evenly divisible by 3.
+        each on a 1200×1200 grid of 160,000 blocks. The grid is 1200 rather
+        than 1000 pixels wide because 1000 is not evenly divisible by 3.
       </P>
 
       <P>
         Blocks deliberately carry no outbound links, a departure from the
-        original: according to the project&apos;s own account, a 2017 study
-        found 547 of the original Million Dollar Homepage&apos;s links dead,
+        original. A 2017 study found 547 of the original Million Dollar
+        Homepage&apos;s links dead,
         representing roughly $342,000 of spend pointing at nothing, and a
         surviving mirror of the page has since rewritten a further 1,164
         links to point at archive snapshots.<Ref n={1} />
@@ -84,8 +84,8 @@ export const dollarPixels: ArticleModule = {
 
       <Section heading="Overview">
         <P>
-          The replica adds capabilities the original never offered: buying a
-          page of one&apos;s own, either an Unlisted page for $10 that
+          The replica permits users to buy a page. An Unlisted page costs $10
+          and
           includes 69 free blocks, or a Premium page priced at half face
           value that pays its creator a share of the price of every block
           sold on it. The site defaults to play money, with Stripe payments
@@ -112,8 +112,8 @@ export const dollarPixels: ArticleModule = {
         <P>
           Independent review of the project found five distinct bugs in its
           money-handling paths where, in each case, two halves of a
-          transaction were individually correct but combined incorrectly —
-          for example, a payment webhook marking an event as processed
+          transaction were individually correct but combined incorrectly. For
+          example, a payment webhook marked an event as processed
           before the corresponding purchase had actually been settled.
         </P>
       </Section>

@@ -22,6 +22,12 @@ export function Footer({ lastEdited }: { lastEdited?: string }) {
         </li>
       </ul>
       <nav aria-label="Footer" className="mt-6 flex flex-wrap gap-x-5 gap-y-1 leading-[24px]">
+        <a
+          href="https://david-internet.vercel.app"
+          className="text-[color:var(--link)] hover:underline"
+        >
+          David&apos;s Internet
+        </a>
         {[
           "Privacy policy",
           "About Wikipedia",

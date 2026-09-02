@@ -18,10 +18,13 @@ describe("copied infobox screenshots exist on disk", () => {
     expect(existsSync(path), `missing public/images/${project.slug}.png`).toBe(true);
   });
 
-  it("Notion and Bet have no screenshots (none exist in the dossiers)", () => {
+  it("Notion, Bet, and interactive demos have no infobox screenshots", () => {
     const notion = projects.find((p) => p.slug === "Notion_(replica)")!;
     const bet = projects.find((p) => p.slug === "Bet_(app)")!;
     expect(notion.screenshots).toEqual([]);
     expect(bet.screenshots).toEqual([]);
+    for (const demo of projects.filter((p) => p.kind === "demo")) {
+      expect(demo.screenshots, demo.name).toEqual([]);
+    }
   });
 });

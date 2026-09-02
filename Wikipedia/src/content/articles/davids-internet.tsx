@@ -1,5 +1,5 @@
 import type { ArticleModule } from "@/lib/registry";
-import { projects } from "@/content/projects";
+import { DAVID_INTERNET_URL, projects } from "@/content/projects";
 import { davidsInternetMeta } from "@/content/articles/meta";
 import {
   B,
@@ -15,10 +15,14 @@ import {
   WikiTable,
 } from "@/components/wiki";
 
+const replicas = projects.filter((p) => p.kind !== "demo");
+const demos = projects.filter((p) => p.kind === "demo");
+
 /** Section ids/headings this module renders, for the chrome agent's TOC. */
 export const sections: Array<{ id: string; heading: string }> = [
   { id: "Background", heading: "Background" },
-  { id: "Projects", heading: "Projects" },
+  { id: "Replicas", heading: "Replicas" },
+  { id: "Interactive_demos", heading: "Interactive demos" },
   { id: "Methodology", heading: "Methodology" },
   { id: "See_also", heading: "See also" },
   { id: "References", heading: "References" },
@@ -30,71 +34,61 @@ export const davidsInternet: ArticleModule = {
     <>
       <Hatnote>
         This article is about the portfolio index. For the search engine
-        itself, see the live site at{" "}
-        <ExternalLink href="https://david-internet.vercel.app">
-          david-internet.vercel.app
-        </ExternalLink>
-        .
+        itself, see{" "}
+        <ExternalLink href={DAVID_INTERNET_URL}>David&apos;s Internet</ExternalLink>.
       </Hatnote>
 
       <Infobox
         title="David's Internet"
         rows={[
-          { label: "Type", value: "Portfolio index" },
-          { label: "No. of projects", value: String(projects.length) },
+          { label: "Type", value: "Portfolio search engine" },
+          { label: "Replicas", value: String(replicas.length) },
+          { label: "Interactive demos", value: String(demos.length) },
           { label: "Repository", value: <code>Replicates</code> },
           {
             label: "Website",
             value: (
-              <ExternalLink href="https://david-internet.vercel.app">
-                david-internet.vercel.app
-              </ExternalLink>
+              <ExternalLink href={DAVID_INTERNET_URL}>david-internet.vercel.app</ExternalLink>
             ),
           },
         ]}
       />
 
       <P>
-        <B>David&apos;s Internet</B> is a search engine that runs over a
-        portfolio of software replicas built by David — working
-        rebuilds of established products such as Linear, Notion and YouTube,
-        each developed inside its own self-contained folder of the{" "}
-        <code>Replicates</code> repository. This encyclopedia is the
-        project&apos;s channel guide: a Wikipedia-style reference in which
-        every replica has its own article, cross-linked from this index.
+        <B>David&apos;s Internet</B> is a search engine over software David
+        built: working replicas of products such as Linear, Notion and YouTube,
+        each in its own folder of the <code>Replicates</code> repository, and
+        interactive demos of coursework and lab work hosted on the search
+        site itself. This encyclopedia is the channel guide. Every replica
+        and every shipped demo has an article, linked from the tables below.
       </P>
 
       <P>
         The search engine went live in September 2026 at{" "}
-        <ExternalLink href="https://david-internet.vercel.app">
-          david-internet.vercel.app
-        </ExternalLink>
-        ; the seven replicas listed below, and the encyclopedia describing
-        them, make up the portfolio it indexes.
+        <ExternalLink href={DAVID_INTERNET_URL}>david-internet.vercel.app</ExternalLink>
+        . Results look like a Google SERP. A hit either opens the live project
+        or, until a replica is deployed, this encyclopedia.
       </P>
 
       <Section heading="Background">
         <P>
-          The <code>Replicates</code> repository frames its own purpose as
-          &ldquo;exploring agentic software development through building
-          established software products from scratch in just a few
-          prompts.&rdquo;<Ref n={1} /> Each project folder is self-contained,
-          carrying its own <code>README.md</code>, <code>SPEC.md</code>,{" "}
-          <code>DECISIONS.md</code> and <code>research/</code> directory, and
-          each is developed independently of its siblings. The search engine
-          became the portfolio&apos;s first live deployment in September
-          2026; none of the seven replicas is deployed yet, which is why
-          their &ldquo;Website&rdquo; links in this encyclopedia render as
-          stubs until a URL is filled in.
+          The <code>Replicates</code> repository holds from-scratch copies of
+          established software products.<Ref n={1} /> Each replica folder
+          carries its own{" "}
+          <code>README.md</code>, <code>SPEC.md</code>, <code>DECISIONS.md</code>{" "}
+          and <code>research/</code> directory. The search engine was the
+          first live deployment, in September 2026. None of the seven replicas
+          is deployed yet, so their Website links here are red stubs until a
+          URL is filled in. The interactive demos already run on the search
+          site, so their Website links are live.
         </P>
       </Section>
 
-      <Section heading="Projects">
+      <Section heading="Replicas">
         <P>
-          Seven projects make up the portfolio at the time of writing, spanning
-          an issue tracker, a workspace tool, a video platform, a fighting
-          game, a personal-safety app, a prediction market and a pixel-grid
-          homepage.
+          Seven replicas make up that half of the portfolio: an issue tracker,
+          a workspace tool, a video platform, a fighting game, a personal-safety
+          app, a prediction market, and a pixel-grid homepage.
         </P>
         <WikiTable>
           <thead>
@@ -106,7 +100,7 @@ export const davidsInternet: ArticleModule = {
             </tr>
           </thead>
           <tbody>
-            {projects.map((project) => (
+            {replicas.map((project) => (
               <tr key={project.slug}>
                 <td>
                   <WikiLink to={project.slug}>{project.name}</WikiLink>
@@ -120,26 +114,51 @@ export const davidsInternet: ArticleModule = {
         </WikiTable>
       </Section>
 
+      <Section heading="Interactive demos">
+        <P>
+          Ten demos run inside David&apos;s Internet rather than on their own
+          domains. They cover digital design, signals, TinyML, a hardware
+          hackathon, EEG hardware, two Voytek Lab analyses, computer vision,
+          and a semantic graph of arXiv abstracts.
+        </P>
+        <WikiTable>
+          <thead>
+            <tr>
+              <th>Demo</th>
+              <th>Origin</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {demos.map((project) => (
+              <tr key={project.slug}>
+                <td>
+                  <WikiLink to={project.slug}>{project.name}</WikiLink>
+                </td>
+                <td>{project.replicaOf.name}</td>
+                <td>{project.tagline}</td>
+              </tr>
+            ))}
+          </tbody>
+        </WikiTable>
+      </Section>
+
       <Section heading="Methodology">
         <P>
-          Every project in the portfolio is built through the same broad
-          pattern: a set of parallel &ldquo;research lanes&rdquo; gather
-          facts about the real product before any code is written, followed
-          by a sequence of &ldquo;build slices&rdquo; that implement it in
-          stages. The lane and slice counts vary by project&apos;s scope —
-          the YouTube replica used nine research lanes and twelve build
+          Each replica starts with parallel research lanes that gather facts
+          about the real product, then a sequence of build slices that
+          implement it. Lane and slice counts follow the project&apos;s scope.
+          The YouTube replica used nine research lanes and twelve build
           slices, the Dollar Pixels replica used five of each, and Bet used a
           14-task plan with an implementer, an independent reviewer, and a
           fix loop per task instead of the lane/slice split.
         </P>
         <P>
-          A second recurring pattern is independent review after
-          implementation: several projects record multiple rounds of
-          automated code review that surfaced concrete defects — the Linear
-          replica&apos;s three review rounds found 18, 20 and 7 issues
-          respectively, including a CSS <code>url()</code> injection
-          vulnerability, and the YouTube replica&apos;s five review rounds
-          found roughly 72 findings in total.
+          Independent review after implementation is the other recurring
+          pattern. The Linear replica&apos;s three review rounds found 18, 20
+          and 7 issues, including a CSS <code>url()</code> injection
+          vulnerability. The YouTube replica&apos;s five review rounds found
+          roughly 72 findings in total.
         </P>
       </Section>
 
@@ -152,7 +171,10 @@ export const davidsInternet: ArticleModule = {
             <WikiLink to="YouTube_(replica)">YouTube (replica)</WikiLink>
           </li>
           <li>
-            <WikiLink to="Dollar_Pixels">Dollar Pixels</WikiLink>
+            <WikiLink to="ESP32_Thermal_TinyML">ESP32 Thermal TinyML</WikiLink>
+          </li>
+          <li>
+            <WikiLink to="Anatomy_of_a_Spike">Anatomy of a Spike</WikiLink>
           </li>
         </ul>
       </Section>

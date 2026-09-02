@@ -75,18 +75,17 @@ export const youtube: ArticleModule = {
       </P>
 
       <P>
-        Its central architectural bet is that the uploader&apos;s own browser
-        encodes the entire rendition ladder using the <code>VideoEncoder</code>{" "}
-        API before upload, so no transcode queue, worker pool or backlog
-        exists on the server.
+        The uploader&apos;s browser encodes the full rendition ladder with the{" "}
+        <code>VideoEncoder</code> API before upload. Consequently, the server
+        has no transcode queue, worker pool or encoding backlog.
       </P>
 
       <Section heading="Overview">
         <P>
           The replica includes a hand-written MP4 demuxer, fragmented MP4
           muxer, HLS packager, and a Media Source Extensions player with its
-          own adaptive bitrate logic — built without ffmpeg.wasm,
-          mp4box.js or hls.js. Every seed video in the replica is synthetic,
+          own adaptive bitrate logic, without ffmpeg.wasm, mp4box.js or
+          hls.js. Every seed video in the replica is synthetic,
           generated through the same real WebCodecs encoding path used for
           uploads. Its interface draws 37 icon glyphs from geometry rather
           than imported assets.
@@ -99,7 +98,7 @@ export const youtube: ArticleModule = {
           fingerprinting algorithm,<Ref n={1} /> with a matching threshold
           derived empirically from 3,086 leave-one-out fingerprint pairs,
           yielding an estimated false-positive rate of roughly 250 in
-          2.5 × 10⁵ pairs. The recommender follows the approach described by
+          2.5 × 10⁵ pairs. The recommender uses the approach described by
           Davidson et al.<Ref n={2} /> Visual details were measured from the
           real site: the brand red is <code>#f03</code>, the home grid
           renders at 3 × 533px at a 1920px viewport width, and the
@@ -119,11 +118,9 @@ export const youtube: ArticleModule = {
 
       <Section heading="Reception">
         <P>
-          According to the project&apos;s own account, a recurring bug class —
-          client-reference leakage across the React Server Components boundary
-          — occurred five times during development and was invisible to the
-          project&apos;s 2,227 unit tests; it was ultimately caught by a
-          purpose-built, AST-based static check rather than by testing.
+          Client-reference leakage across the React Server Components boundary
+          occurred five times during development. The project&apos;s 2,227
+          unit tests did not detect it; an AST-based static check did.
         </P>
       </Section>
 
