@@ -135,7 +135,7 @@ export const projects: ProjectInfo[] = [
   {
     name: "Dollar Pixels",
     slug: "Dollar_Pixels",
-    tagline: "$1 buys nine pixels on the Art-Wall",
+    tagline: "$1 buys nine pixels",
     replicaOf: { name: "The Million Dollar Homepage", url: "http://www.milliondollarhomepage.com" },
     folder: "dollar-pixels",
     stack: ["Next.js", "canvas renderer with O(1) hit-testing", "Stripe (one env var away)"],
@@ -169,6 +169,18 @@ export const projects: ProjectInfo[] = [
       "fl-studio/docs/screenshots/playlist.png",
       "fl-studio/docs/screenshots/mixer.png",
     ],
+  },
+  {
+    name: "Art Wall",
+    slug: "Art_Wall",
+    tagline: "a public chalkboard you can actually draw on",
+    replicaOf: { name: "r/place", url: "https://www.reddit.com/r/place/" },
+    folder: "ArtWall",
+    stack: ["Next.js", "canvas drawing", "Neon Postgres"],
+    testStats: "route and validation tests",
+    builtWith: "A standalone public canvas, later reattached to Neon after the original database vanished",
+    liveUrl: "https://art-wall-pi.vercel.app",
+    screenshots: [],
   },
   {
     name: "Verilog",

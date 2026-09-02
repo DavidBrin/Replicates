@@ -8,6 +8,7 @@ import { fakePhone } from "./fake-phone";
 import { bet } from "./bet";
 import { dollarPixels } from "./dollar-pixels";
 import { flStudio } from "./fl-studio";
+import { artWall } from "./art-wall";
 import { verilog } from "./verilog";
 import { nocturnal } from "./nocturnal";
 import { signals } from "./signals";
@@ -36,6 +37,7 @@ export const articles: ArticleRegistry = {
   [bet.meta.slug]: bet,
   [dollarPixels.meta.slug]: dollarPixels,
   [flStudio.meta.slug]: flStudio,
+  [artWall.meta.slug]: artWall,
   [verilog.meta.slug]: verilog,
   [nocturnal.meta.slug]: nocturnal,
   [signals.meta.slug]: signals,

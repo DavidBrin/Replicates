@@ -79,17 +79,19 @@ export const davidsInternet: ArticleModule = {
           and <code>research/</code> directory. The search engine was the
           first live deployment, in September 2026. Seven replicas are live
           (Linear, Notion, Super Smash, Fake Phone, Bet, FL Studio, and Dollar
-          Pixels). YouTube still needs object storage, so its Website link
-          stays a red stub. The interactive demos already run on the search
-          site, so their Website links are live.
+          Pixels). Art Wall is a separate live app, not a replica. YouTube still
+          needs object storage, so its Website link stays a red stub. The
+          interactive demos already run on the search site, so their Website
+          links are live.
         </P>
       </Section>
 
       <Section heading="Replicas">
         <P>
-          Eight replicas make up that half of the portfolio: an issue tracker,
+          Nine projects make up that half of the portfolio: an issue tracker,
           a workspace tool, a video platform, a fighting game, a personal-safety
-          app, a prediction market, a pixel-grid homepage, and a browser DAW.
+          app, a prediction market, a pixel-grid homepage, a browser DAW, and a
+          public drawing wall.
         </P>
         <WikiTable>
           <thead>
@@ -166,6 +168,9 @@ export const davidsInternet: ArticleModule = {
 
       <Section heading="See also">
         <ul className="list-disc pl-6">
+          <li>
+            <WikiLink to="Art_Wall">Art Wall</WikiLink>
+          </li>
           <li>
             <WikiLink to="Linear_(replica)">Linear (replica)</WikiLink>
           </li>

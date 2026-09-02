@@ -78,7 +78,7 @@ export const betMeta: ArticleMeta = {
 export const dollarPixelsMeta: ArticleMeta = {
   slug: projectSlug("Dollar Pixels"),
   title: "Dollar Pixels",
-  shortDescription: "A rebuild of the Million Dollar Homepage and its Art-Wall flagship grid",
+  shortDescription: "A rebuild of the Million Dollar Homepage",
   categories: ["Software replicas", "Advertising websites"],
   lastEdited: "18 August 2026",
 };
@@ -89,6 +89,14 @@ export const flStudioMeta: ArticleMeta = {
   shortDescription: "A browser rebuild of FL Studio's Channel Rack, Piano Roll, Playlist, and Mixer",
   categories: ["Software replicas", "Digital audio workstations", "Browser applications"],
   lastEdited: "1 September 2026",
+};
+
+export const artWallMeta: ArticleMeta = {
+  slug: projectSlug("Art Wall"),
+  title: "Art Wall",
+  shortDescription: "A public collaborative drawing wall with a photographed chalkboard",
+  categories: ["Web applications", "Collaborative software"],
+  lastEdited: "2 September 2026",
 };
 
 export const verilogMeta: ArticleMeta = {
@@ -222,6 +230,7 @@ export const articleMetas: ArticleMeta[] = [
   betMeta,
   dollarPixelsMeta,
   flStudioMeta,
+  artWallMeta,
   verilogMeta,
   nocturnalMeta,
   signalsMeta,

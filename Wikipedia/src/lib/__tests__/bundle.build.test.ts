@@ -55,6 +55,7 @@ const ARTICLE_SENTINELS: Record<string, string> = {
   "modeling.tsx": "VEXcode VR programs execute against a ported drivetrain",
   "earlycode.tsx": "Aho-Corasick automaton grows its trie",
   "fl-studio.tsx": "Channel Rack step is a Note of length zero",
+  "art-wall.tsx": "hostname stopped resolving",
 };
 
 describe("sentinels are present in their own article", () => {
