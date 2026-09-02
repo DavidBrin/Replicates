@@ -77,11 +77,11 @@ export const davidsInternet: ArticleModule = {
           carries its own{" "}
           <code>README.md</code>, <code>SPEC.md</code>, <code>DECISIONS.md</code>{" "}
           and <code>research/</code> directory. The search engine was the
-          first live deployment, in September 2026. Six replicas are live
-          (Linear, Notion, Super Smash, Fake Phone, Bet, and FL Studio). YouTube
-          still needs object storage, and Dollar Pixels still needs its schema
-          applied, so their Website links stay red stubs. The interactive demos
-          already run on the search site, so their Website links are live.
+          first live deployment, in September 2026. Seven replicas are live
+          (Linear, Notion, Super Smash, Fake Phone, Bet, FL Studio, and Dollar
+          Pixels). YouTube still needs object storage, so its Website link
+          stays a red stub. The interactive demos already run on the search
+          site, so their Website links are live.
         </P>
       </Section>
 

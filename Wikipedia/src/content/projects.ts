@@ -7,7 +7,7 @@ import type { ProjectInfo } from "@/lib/registry";
  * `content/<slug>/site.ts` and README in the David-Internet repo.
  *
  * Replica `liveUrl` values are the production Vercel aliases. YouTube still
- * needs object storage, and Dollar Pixels still needs its schema applied.
+ * needs object storage.
  * Demo `liveUrl` values point at david-internet.vercel.app.
  * That is the ONE field to edit to make a "Website" infobox row go live
  * (DECISIONS D3).
@@ -141,7 +141,7 @@ export const projects: ProjectInfo[] = [
     stack: ["Next.js", "canvas renderer with O(1) hit-testing", "Stripe (one env var away)"],
     testStats: "414 unit/property tests, 30 e2e",
     builtWith: "Five research lanes, five build slices",
-    liveUrl: null,
+    liveUrl: "https://dollar-pixels-david.vercel.app",
     screenshots: [
       "dollar-pixels/docs/screenshots/the-wall.png",
       "dollar-pixels/docs/screenshots/selecting.png",

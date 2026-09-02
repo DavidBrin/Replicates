@@ -30,10 +30,10 @@ const SEED_EPOCH = "2026-01-01T00:00:00.000Z";
  * Tuned by looking at it. At 260 the grid was about a tenth sold and read as an
  * empty checkerboard with confetti on it — which is not what the thing being
  * replicated looked like, and not what a visitor needs to see to understand
- * that blocks are bought in clusters. Around a third sold is where it starts
- * reading as a wall.
+ * that blocks are bought in clusters. 675 claims (three quarters of the first
+ * seed) leaves the wall occupied without crowding the remaining space.
  */
-const SEED_CLAIMS = 900;
+const SEED_CLAIMS = 675;
 
 /** Invented tenants. Generic trades, no real names. */
 const TENANTS: readonly { caption: string; colour: string }[] = [
@@ -138,6 +138,9 @@ export interface SeedDeps {
  */
 export async function seedFlagship(deps: SeedDeps): Promise<Page> {
   const existing = await deps.store.getPageBySlug(FLAGSHIP_SLUG);
+  // A previous bulk seed, or an interrupted runtime seed that still created
+  // the page, must not start another 675 reserve-then-claim round trips on
+  // a serverless WebSocket. Those hold the connection open until Neon drops it.
   if (existing) return existing;
 
   const seedUser: User = {
@@ -162,6 +165,13 @@ export async function seedFlagship(deps: SeedDeps): Promise<Page> {
     createdAt: SEED_EPOCH,
   };
   const created = await deps.store.createPage(page);
+
+  // Postgres gets its claims from `scripts/seed-flagship.ts` (HTTP bulk
+  // insert). Doing the 675-claim loop here on Neon holds a WebSocket open
+  // until the driver drops it, which is what failed the first production seed.
+  if ((process.env.STORE_DRIVER ?? "").trim().toLowerCase() === "postgres") {
+    return created;
+  }
 
   const dims = gridForSize(created.size);
   const planned = planClaims(dims, SEED_CLAIMS);

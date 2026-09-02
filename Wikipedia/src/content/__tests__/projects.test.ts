@@ -30,6 +30,7 @@ describe("projects.ts <-> articles registry", () => {
     "Super_Smash_(replica)",
     "Fake_Phone",
     "Bet_(app)",
+    "Dollar_Pixels",
     "FL_Studio_(replica)",
     "Verilog",
     "Nocturnal_Neuro",
