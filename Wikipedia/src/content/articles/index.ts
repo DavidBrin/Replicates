@@ -7,6 +7,7 @@ import { superSmash } from "./super-smash";
 import { fakePhone } from "./fake-phone";
 import { bet } from "./bet";
 import { dollarPixels } from "./dollar-pixels";
+import { flStudio } from "./fl-studio";
 import { verilog } from "./verilog";
 import { nocturnal } from "./nocturnal";
 import { signals } from "./signals";
@@ -34,6 +35,7 @@ export const articles: ArticleRegistry = {
   [fakePhone.meta.slug]: fakePhone,
   [bet.meta.slug]: bet,
   [dollarPixels.meta.slug]: dollarPixels,
+  [flStudio.meta.slug]: flStudio,
   [verilog.meta.slug]: verilog,
   [nocturnal.meta.slug]: nocturnal,
   [signals.meta.slug]: signals,

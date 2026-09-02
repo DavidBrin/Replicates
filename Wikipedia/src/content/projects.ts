@@ -1,14 +1,14 @@
 import type { ProjectInfo } from "@/lib/registry";
 
 /**
- * Encyclopedia subjects: the seven sibling replicas, plus the interactive
+ * Encyclopedia subjects: the eight sibling replicas, plus the interactive
  * demos hosted on David's Internet. Replica facts come from
  * `research/02-project-dossiers.md`. Demo facts come from each demo's
  * `content/<slug>/site.ts` and README in the David-Internet repo.
  *
- * Replica `liveUrl` values are the production Vercel aliases. Linear, YouTube,
- * and Dollar Pixels stay null until their databases (and YouTube's blob store)
- * are attached. Demo `liveUrl` values point at david-internet.vercel.app.
+ * Replica `liveUrl` values are the production Vercel aliases. YouTube still
+ * needs object storage, and Dollar Pixels still needs its schema applied.
+ * Demo `liveUrl` values point at david-internet.vercel.app.
  * That is the ONE field to edit to make a "Website" infobox row go live
  * (DECISIONS D3).
  */
@@ -150,6 +150,24 @@ export const projects: ProjectInfo[] = [
       "dollar-pixels/docs/screenshots/new-page.png",
       "dollar-pixels/docs/screenshots/directory.png",
       "dollar-pixels/docs/screenshots/landing.png",
+    ],
+  },
+  {
+    name: "FL Studio",
+    slug: "FL_Studio_(replica)",
+    tagline: "the beat, not the DAW",
+    replicaOf: { name: "FL Studio", url: "https://www.image-line.com/fl-studio/" },
+    folder: "fl-studio",
+    stack: ["Next.js 16", "React 19", "Tone.js", "Zustand", "Web Audio"],
+    testStats: "1,256 unit tests, 15 e2e",
+    builtWith: "Seven research lanes, seven build slices, twenty Codex review rounds",
+    liveUrl: "https://fl-studio-david.vercel.app",
+    screenshots: [
+      "fl-studio/docs/screenshots/app.png",
+      "fl-studio/docs/screenshots/channel-rack.png",
+      "fl-studio/docs/screenshots/piano-roll.png",
+      "fl-studio/docs/screenshots/playlist.png",
+      "fl-studio/docs/screenshots/mixer.png",
     ],
   },
   {

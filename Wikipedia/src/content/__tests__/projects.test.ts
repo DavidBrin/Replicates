@@ -3,8 +3,8 @@ import { projects } from "@/content/projects";
 import { articles } from "@/content/articles";
 
 describe("projects.ts <-> articles registry", () => {
-  it("registers seven replicas and fifteen interactive demos", () => {
-    expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(7);
+  it("registers eight replicas and fifteen interactive demos", () => {
+    expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(8);
     expect(projects.filter((p) => p.kind === "demo")).toHaveLength(15);
   });
 
@@ -30,6 +30,7 @@ describe("projects.ts <-> articles registry", () => {
     "Super_Smash_(replica)",
     "Fake_Phone",
     "Bet_(app)",
+    "FL_Studio_(replica)",
     "Verilog",
     "Nocturnal_Neuro",
     "Signals_and_Systems_Lab",

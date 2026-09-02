@@ -77,9 +77,9 @@ export const davidsInternet: ArticleModule = {
           carries its own{" "}
           <code>README.md</code>, <code>SPEC.md</code>, <code>DECISIONS.md</code>{" "}
           and <code>research/</code> directory. The search engine was the
-          first live deployment, in September 2026. Five replicas are live
-          (Linear, Notion, Super Smash, Fake Phone, and Bet). YouTube still
-          needs object storage, and Dollar Pixels still needs its schema
+          first live deployment, in September 2026. Six replicas are live
+          (Linear, Notion, Super Smash, Fake Phone, Bet, and FL Studio). YouTube
+          still needs object storage, and Dollar Pixels still needs its schema
           applied, so their Website links stay red stubs. The interactive demos
           already run on the search site, so their Website links are live.
         </P>
@@ -87,9 +87,9 @@ export const davidsInternet: ArticleModule = {
 
       <Section heading="Replicas">
         <P>
-          Seven replicas make up that half of the portfolio: an issue tracker,
+          Eight replicas make up that half of the portfolio: an issue tracker,
           a workspace tool, a video platform, a fighting game, a personal-safety
-          app, a prediction market, and a pixel-grid homepage.
+          app, a prediction market, a pixel-grid homepage, and a browser DAW.
         </P>
         <WikiTable>
           <thead>

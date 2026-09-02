@@ -16,6 +16,7 @@ import { superSmash, sections as superSmashSections } from "@/content/articles/s
 import { fakePhone, sections as fakePhoneSections } from "@/content/articles/fake-phone";
 import { bet, sections as betSections } from "@/content/articles/bet";
 import { dollarPixels, sections as dollarPixelsSections } from "@/content/articles/dollar-pixels";
+import { flStudio, sections as flStudioSections } from "@/content/articles/fl-studio";
 import { verilog, sections as verilogSections } from "@/content/articles/verilog";
 import { nocturnal, sections as nocturnalSections } from "@/content/articles/nocturnal";
 import { signals, sections as signalsSections } from "@/content/articles/signals";
@@ -42,6 +43,7 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Fake Phone", module: fakePhone, sections: fakePhoneSections },
   { name: "Bet (app)", module: bet, sections: betSections },
   { name: "Dollar Pixels", module: dollarPixels, sections: dollarPixelsSections },
+  { name: "FL Studio (replica)", module: flStudio, sections: flStudioSections },
   { name: "Verilog", module: verilog, sections: verilogSections },
   { name: "Nocturnal Neuro", module: nocturnal, sections: nocturnalSections },
   { name: "Signals and Systems Lab", module: signals, sections: signalsSections },

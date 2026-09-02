@@ -83,6 +83,14 @@ export const dollarPixelsMeta: ArticleMeta = {
   lastEdited: "18 August 2026",
 };
 
+export const flStudioMeta: ArticleMeta = {
+  slug: projectSlug("FL Studio"),
+  title: "FL Studio (replica)",
+  shortDescription: "A browser rebuild of FL Studio's Channel Rack, Piano Roll, Playlist, and Mixer",
+  categories: ["Software replicas", "Digital audio workstations", "Browser applications"],
+  lastEdited: "1 September 2026",
+};
+
 export const verilogMeta: ArticleMeta = {
   slug: projectSlug("Verilog"),
   title: "Verilog",
@@ -213,6 +221,7 @@ export const articleMetas: ArticleMeta[] = [
   fakePhoneMeta,
   betMeta,
   dollarPixelsMeta,
+  flStudioMeta,
   verilogMeta,
   nocturnalMeta,
   signalsMeta,
