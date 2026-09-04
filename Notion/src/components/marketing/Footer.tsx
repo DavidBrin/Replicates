@@ -1,10 +1,16 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { brand, routes } from "@/config/app.config";
 import { Container } from "./Marketing";
-import { CaretDown, Globe, NotionMark, SocialIcon } from "./icons";
+import { CaretDown, Check, Globe, NotionMark, SocialIcon } from "./icons";
 import { FOOTER_COLUMNS } from "./copy";
 
 const SOCIALS = ["X", "LinkedIn", "Instagram", "GitHub"];
+
+/** Only one locale ships today, so the menu has exactly one row. */
+const LANGUAGES = ["English (US)"];
 
 /**
  * Site footer: four link columns, a language selector, socials and the legal
@@ -13,6 +19,7 @@ const SOCIALS = ["X", "LinkedIn", "Instagram", "GitHub"];
  */
 export function Footer() {
   const year = 2026;
+  const [langOpen, setLangOpen] = useState(false);
 
   return (
     <footer
@@ -54,17 +61,47 @@ export function Footer() {
           className="mt-12 flex flex-col gap-4 pt-6 md:flex-row md:items-center md:justify-between"
           style={{ borderTop: "1px solid var(--mkt-border-base)" }}
         >
-          <div className="flex flex-wrap items-center gap-4">
+          <div
+            className="relative flex flex-wrap items-center gap-4"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setLangOpen(false);
+              }
+            }}
+          >
             <button
               type="button"
               className="mkt-nav__link"
               style={{ fontSize: 14, lineHeight: "20px", padding: "4px 8px" }}
               aria-label="Change language — currently English (US)"
+              aria-haspopup="listbox"
+              aria-expanded={langOpen}
+              onClick={() => setLangOpen((open) => !open)}
             >
               <Globe />
               English (US)
               <CaretDown size={10} />
             </button>
+            {langOpen && (
+              <ul
+                role="listbox"
+                aria-label="Language"
+                className="mkt-lang-menu"
+              >
+                {LANGUAGES.map((language) => (
+                  <li key={language} role="option" aria-selected="true">
+                    <button
+                      type="button"
+                      className="mkt-lang-menu__item"
+                      onClick={() => setLangOpen(false)}
+                    >
+                      <Check size={12} />
+                      {language}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <span className="mkt-small flex items-center gap-2">
               <Link href={routes.home} className="mkt-footer-link">
                 Cookie settings

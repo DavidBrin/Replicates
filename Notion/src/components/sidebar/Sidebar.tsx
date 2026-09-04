@@ -220,7 +220,15 @@ export function Sidebar() {
 
         {/* Pinned footer */}
         <div className="shrink-0 px-2 pb-2" ref={trashAnchor}>
-          <SidebarRow icon={<LayoutTemplate size={16} strokeWidth={1.9} />} label="Templates" />
+          {/* Neither surface exists yet in this clone — the marketing
+              footer's own "Templates"/"Help center" links point at
+              `routes.home` for the same reason, so the sidebar rows follow
+              that same placeholder convention rather than doing nothing. */}
+          <SidebarRow
+            icon={<LayoutTemplate size={16} strokeWidth={1.9} />}
+            label="Templates"
+            href={routes.home}
+          />
           <SidebarRow
             icon={<Trash2 size={16} strokeWidth={1.9} />}
             label="Trash"
@@ -229,6 +237,7 @@ export function Sidebar() {
           <SidebarRow
             icon={<CircleQuestionMark size={16} strokeWidth={1.9} />}
             label="Help"
+            href={routes.home}
           />
           <button
             type="button"

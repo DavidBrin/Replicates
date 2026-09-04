@@ -11,8 +11,10 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Maximize2, Trash2, X } from "lucide-react";
 import { getPropertyHandler } from "@/lib/model/property-types";
+import { routes } from "@/config/app.config";
 import type { Database, Id } from "@/lib/model/types";
 import { IconButton } from "@/components/primitives/Button";
 import { BlockList } from "@/components/editor/BlockList";
@@ -39,6 +41,7 @@ export function RowPeek({
 }) {
   const row = useRow(rowId ?? undefined);
   const { renamePage, deleteRow } = useDatabaseActions();
+  const router = useRouter();
 
   /** A portal needs a DOM target, which does not exist during the server pass. */
   const mounted = useMounted();
@@ -94,7 +97,14 @@ export function RowPeek({
           <IconButton label="Close" size={26} onClick={onClose}>
             <X size={16} />
           </IconButton>
-          <IconButton label="Open as full page" size={26} onClick={onClose}>
+          <IconButton
+            label="Open as full page"
+            size={26}
+            onClick={() => {
+              router.push(routes.page(row.id));
+              onClose();
+            }}
+          >
             <Maximize2 size={14} />
           </IconButton>
           <span className="flex-1" />

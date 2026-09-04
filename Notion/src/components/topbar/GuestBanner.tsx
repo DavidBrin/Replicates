@@ -8,7 +8,9 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { X } from "lucide-react";
+import { routes } from "@/config/app.config";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
 
 export function GuestBanner() {
@@ -25,8 +27,11 @@ export function GuestBanner() {
       <span className="truncate" style={{ color: "var(--tex-sec)" }}>
         You&rsquo;re a guest in {workspaceName}. Get full access to Notion in your own workspace.
       </span>
-      <button
-        type="button"
+      {/* "Your own workspace" is exactly what the pricing page sells, and it's
+          the only signup surface this clone has, so that is where the upsell
+          sends a guest. */}
+      <Link
+        href={routes.pricing}
         className="shrink-0 rounded-[4px] px-2 py-[3px] text-[13px] font-medium transition-shadow duration-100 outline-hidden"
         style={{
           background: "var(--bac-pri)",
@@ -35,7 +40,7 @@ export function GuestBanner() {
         }}
       >
         Set up workspace
-      </button>
+      </Link>
       <button
         type="button"
         aria-label="Dismiss"

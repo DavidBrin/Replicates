@@ -24,9 +24,10 @@ export const metadata: Metadata = {
  * The marketing landing page.
  *
  * Intentionally a *server* component: the only JavaScript that reaches the
- * browser is the four genuinely interactive leaves (nav, hero pill + sticker
- * parallax, feature tabs, testimonial rotation). Everything else — the
- * mockups, the marquees, the footer — renders to static HTML.
+ * browser is the handful of genuinely interactive leaves (nav, hero pill +
+ * sticker parallax, feature tabs, testimonial rotation, the footer's language
+ * menu). Everything else — the mockups, the marquees — renders to static
+ * HTML.
  */
 export default function HomePage() {
   return (
