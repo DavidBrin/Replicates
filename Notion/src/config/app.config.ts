@@ -98,6 +98,15 @@ export const features = {
   commandPalette: env("NEXT_PUBLIC_ENABLE_COMMAND_PALETTE", "true") === "true",
 } as const;
 
+/** The simulated, non-persistent demo login. */
+export const demoAuth = {
+  /** Master switch — off restores today's behaviour exactly. */
+  enabled: env("NEXT_PUBLIC_ENABLE_DEMO_LOGIN", "true") === "true",
+  /** Where "contact David" points. Set this before shipping. */
+  contactHref: env("NEXT_PUBLIC_DEMO_CONTACT_HREF", routes.home),
+  maxNameLength: 32,
+} as const;
+
 /**
  * Which storage backend to use.
  * `indexeddb` — the zero-configuration default, so a bare `vercel deploy`
@@ -134,6 +143,7 @@ export const appConfig = {
   features,
   storage,
   keyboard,
+  demoAuth,
 } as const;
 
 export type AppConfig = typeof appConfig;

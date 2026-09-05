@@ -10,10 +10,11 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { keyboard, layout } from "@/config/app.config";
+import { demoAuth, keyboard, layout } from "@/config/app.config";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { CommandPalette } from "@/components/search/CommandPalette";
 import { useTheme } from "@/lib/theme/theme-provider";
+import { useDemoAuthStore } from "@/lib/auth/demo-auth-store";
 
 interface ShellContextValue {
   sidebarCollapsed: boolean;
@@ -46,6 +47,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   // key map stays in `app.config` and cannot drift between components.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (demoAuth.enabled && !useDemoAuthStore.getState().gateResolved) return;
       const modifier = event.metaKey || event.ctrlKey;
       if (!modifier) return;
       const key = event.key.toLowerCase();

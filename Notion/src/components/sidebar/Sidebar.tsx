@@ -24,6 +24,7 @@ import {
   House,
   Inbox,
   LayoutTemplate,
+  LogOut,
   PanelLeftOpen,
   Plus,
   RotateCcw,
@@ -35,6 +36,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useShell } from "@/components/app-shell/WorkspaceShell";
+import { Avatar } from "@/components/primitives/Avatar";
 import { Popover } from "@/components/primitives/Popover";
 import { MenuItem, MenuList, MenuSeparator } from "@/components/primitives/Menu";
 import { MembersSettings } from "@/components/sharing/MembersSettings";
@@ -42,6 +44,8 @@ import { layout, routes, timing } from "@/config/app.config";
 import { cn } from "@/lib/utils/cn";
 import type { SidebarSection, SidebarSectionKind } from "@/lib/model/types";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
+import { useDemoIdentity, useIsDemoSignedIn } from "@/lib/auth/use-demo-identity";
+import { useDemoAuthStore } from "@/lib/auth/demo-auth-store";
 import {
   exportWorkspaceFile,
   importWorkspaceFile,
@@ -290,7 +294,8 @@ function WorkspaceSwitcher({
   onNewPage: () => void;
 }) {
   const workspace = useWorkspaceStore((s) => s.workspace);
-  const currentUser = useWorkspaceStore((s) => s.users[s.currentUserId]);
+  const { user: currentUser } = useDemoIdentity();
+  const isDemoSignedIn = useIsDemoSignedIn();
 
   const anchor = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -352,9 +357,20 @@ function WorkspaceSwitcher({
 
       <Popover open={open} onOpenChange={setOpen} anchor={anchor} align="start" width={272}>
         <div className="px-3 py-2">
-          <p className="truncate text-xs" style={{ color: "var(--tex-ter)" }}>
-            {currentUser?.email}
-          </p>
+          <div className="flex items-center gap-2">
+            <Avatar user={currentUser} size={22} />
+            <span className="min-w-0 flex-1">
+              <span
+                className="block truncate text-[13px] font-medium"
+                style={{ color: "var(--tex-pri)" }}
+              >
+                {currentUser?.name}
+              </span>
+              <span className="block truncate text-[11px]" style={{ color: "var(--tex-ter)" }}>
+                {isDemoSignedIn ? "Demo session · nothing is saved" : currentUser?.email}
+              </span>
+            </span>
+          </div>
           <div className="mt-2 flex items-center gap-2">
             <span
               className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[4px] text-[13px] leading-none"
@@ -433,6 +449,23 @@ function WorkspaceSwitcher({
             Reset demo workspace
           </MenuItem>
         </MenuList>
+
+        {isDemoSignedIn ? (
+          <>
+            <MenuSeparator />
+            <MenuList>
+              <MenuItem
+                icon={<LogOut size={14} />}
+                onSelect={() => {
+                  useDemoAuthStore.getState().signOut();
+                  setOpen(false);
+                }}
+              >
+                Log out
+              </MenuItem>
+            </MenuList>
+          </>
+        ) : null}
       </Popover>
 
       <input

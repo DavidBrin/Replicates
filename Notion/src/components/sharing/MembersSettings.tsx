@@ -19,6 +19,7 @@ import { Button } from "@/components/primitives/Button";
 import { Pill } from "@/components/primitives/Pill";
 import { MEMBER_ROLES, type MemberRole } from "@/lib/model/types";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
+import { useDemoUsers } from "@/lib/auth/use-demo-identity";
 import { ROLE_LABELS, RoleSelect } from "./SharePopover";
 
 export interface MembersSettingsProps {
@@ -45,7 +46,8 @@ function MembersDialog({
   autoFocusInvite?: boolean;
 }) {
   const workspace = useWorkspaceStore((s) => s.workspace);
-  const users = useWorkspaceStore((s) => s.users);
+  const users = useDemoUsers();
+  const currentUserId = useWorkspaceStore((s) => s.currentUserId);
   const inviteMember = useWorkspaceStore((s) => s.inviteMember);
   const setMemberRole = useWorkspaceStore((s) => s.setMemberRole);
   const removeMember = useWorkspaceStore((s) => s.removeMember);
@@ -182,6 +184,7 @@ function MembersDialog({
                         {user?.name ?? "Unknown"}
                       </span>
                       {isOwner ? <Pill size="sm">Owner</Pill> : null}
+                      {member.userId === currentUserId ? <Pill size="sm">You</Pill> : null}
                       {member.invitePending ? (
                         <Pill size="sm" color="yellow">
                           Pending
