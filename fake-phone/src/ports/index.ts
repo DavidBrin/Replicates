@@ -124,7 +124,7 @@ export interface CameraSource {
   flip(): Promise<MediaStream>;
 }
 
-/* ---------------------------------------------------- haptics & wake lock -- */
+/* ---------------------------------------- haptics, wake lock & fullscreen -- */
 
 export interface Haptics {
   /** No-op on iOS Safari, which has never shipped `navigator.vibrate`. */
@@ -138,4 +138,19 @@ export interface WakeLock {
   /** Never throws; a denied wake lock just means the screen may dim. */
   request(): Promise<void>;
   release(): void;
+}
+
+export interface Fullscreen {
+  isSupported(): boolean;
+  /**
+   * Called from inside a real user gesture, BEFORE any `await`.
+   *
+   * `requestFullscreen` consumes transient activation the same way `getUserMedia`
+   * does (research/web-platform-constraints.md §1, §7). A promise callback is
+   * too late — the URL bar stays up and the live overlay reads as a web page.
+   * Never throws: a denied or unsupported request just leaves the chrome there.
+   */
+  request(): Promise<void>;
+  /** Never throws. Safe to call when the document is not fullscreen. */
+  exit(): void;
 }

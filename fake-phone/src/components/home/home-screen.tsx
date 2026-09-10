@@ -35,7 +35,7 @@ import { PrimaryButton } from "@/components/ui";
 
 export function HomeScreen(): React.ReactElement {
   const router = useRouter();
-  const { ringtone } = useContainer();
+  const { ringtone, fullscreen } = useContainer();
 
   /**
    * This tap is the *scheduling* gesture, and it is the only reliable moment of
@@ -51,14 +51,25 @@ export function HomeScreen(): React.ReactElement {
    * and is idempotent, and the container is a module-level singleton, so the
    * unlocked element survives the navigation to `/`.
    *
-   * "Go live" deliberately does not do this. The live surface plays no audio at
-   * all — it is a camera, a badge and a comment stream — so there is nothing
-   * there for an unlock to buy, and taking playback rights a screen does not
-   * use is a side effect without a reason.
+   * "Go live" does not unlock audio. The live surface plays none — it is a
+   * camera, a badge and a comment stream — so there is nothing there for an
+   * unlock to buy.
    */
   const startCall = () => {
     void ringtone.unlock();
     router.push("/");
+  };
+
+  /**
+   * Fullscreen has to start in this tap. Client-side navigation keeps the
+   * document, so `/live` can already be chrome-less; waiting until the camera
+   * starts would leave the URL bar up over the broadcast UI. iOS may still
+   * refuse element fullscreen (research/web-platform-constraints.md §7); the
+   * adapter swallows that and the stream still runs.
+   */
+  const goLive = () => {
+    void fullscreen.request();
+    router.push("/live");
   };
 
   return (
@@ -112,7 +123,7 @@ export function HomeScreen(): React.ReactElement {
 
         <PrimaryButton
           variant="secondary"
-          onClick={() => router.push("/live")}
+          onClick={goLive}
           testId="go-live"
           className="mt-2"
         >

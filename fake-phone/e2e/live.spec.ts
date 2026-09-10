@@ -40,6 +40,12 @@ test.describe("live stream mode", () => {
     await expect
       .poll(async () => video.evaluate((el: HTMLVideoElement) => el.videoWidth), { timeout: 10_000 })
       .toBeGreaterThan(0);
+
+    // The URL bar is the tell that this is a web page. Chromium honours
+    // requestFullscreen from this tap; WebKit on iPhone historically does not,
+    // and we skip rather than fail the project whose job is the iOS viewport.
+    const fullscreen = await page.evaluate(() => Boolean(document.fullscreenElement));
+    expect(fullscreen).toBe(true);
   });
 
   test("comments appear over the stream", async ({ page }, testInfo) => {

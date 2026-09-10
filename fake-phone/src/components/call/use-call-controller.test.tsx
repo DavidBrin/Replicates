@@ -90,6 +90,7 @@ function fakeContainer(voiceFor: (tier: VoiceTier) => VoiceProvider): Container 
     },
     haptics: { isSupported: () => false, buzz: () => {}, cancel: () => {} },
     wakeLock: { isSupported: () => false, request: async () => {}, release: () => {} },
+    fullscreen: { isSupported: () => false, request: async () => {}, exit: () => {} },
     voiceFor,
   };
 }

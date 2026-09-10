@@ -150,6 +150,16 @@
   overflow: hidden;
 }
 
+/* Document fullscreen (live mode). Keep the page black behind the overlay so
+ * a letterboxed engine does not flash the brand ground colour as a "this is
+ * a website" frame around the stream. */
+:fullscreen,
+:-webkit-full-screen {
+  background: #000;
+  height: 100%;
+  width: 100%;
+}
+
 /* Safe-area helpers. Paired with `viewport-fit=cover` in the layout's viewport
  * meta — without that meta these insets all resolve to 0. */
 .pad-safe-top {
