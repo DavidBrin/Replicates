@@ -26,6 +26,7 @@ import type { AuthProvider } from "@/ports/auth";
 import type { Actor } from "@/domain/authz";
 import type { User } from "@/domain/entities";
 import { throwApp } from "@/lib/http";
+import { nanoid } from "nanoid";
 
 export interface Container {
   readonly store: DataStore;
@@ -43,28 +44,28 @@ class SystemClock implements Clock {
 /**
  * Deterministic, per-process sequential `IdGen` (`next("usr")` -> `"usr_1"`,
  * `"usr_2"`, ...) — the same shape as `seed.test.ts`'s `sequentialIdGen`
- * fixture, promoted to production use. This used to be a real `nanoid()`
- * generator; that was intentional at the time ("ids aren't meant to be
- * predictable in production"), but it silently broke sign-in on Vercel:
- * with no real database (`needsDatabase: false`), each serverless/Fluid
- * Compute instance builds and seeds its OWN in-memory store the first time
- * it's hit (`getContainer()`'s `globalThis` memoization is only a
- * same-process guarantee — see that function's doc comment). Random ids
- * meant every instance assigned `dev` a different id, so `/signin`
- * (rendered by instance A) would `POST /api/session` with an id instance B
- * had never seen, coming back `404 not_found` — reproduced live on
- * bet-david.vercel.app.
+ * fixture, promoted to production use for the **in-memory** path. This used
+ * to be a real `nanoid()` generator; that was intentional at the time ("ids
+ * aren't meant to be predictable in production"), but it silently broke
+ * sign-in on Vercel: with no real database, each serverless/Fluid Compute
+ * instance builds and seeds its OWN in-memory store the first time it's hit
+ * (`getContainer()`'s `globalThis` memoization is only a same-process
+ * guarantee — see that function's doc comment). Random ids meant every
+ * instance assigned `dev` a different id, so `/signin` (rendered by instance
+ * A) would `POST /api/session` with an id instance B had never seen, coming
+ * back `404 not_found` — reproduced live on bet-david.vercel.app.
  *
  * Sequential ids fix this because seeding is fully deterministic (see
  * `seed.ts`'s doc comment: fixed insertion order, no ambient randomness
  * besides the seeded PRNG consumed in a fixed order) — every instance
  * calls `next(prefix)` in the identical sequence, so every instance's
  * `dev` ends up as `usr_1` and every other seeded id matches across
- * instances too. Runtime-created entities (a market opened after sign-in,
- * a new trade) still only exist in whichever single instance handled that
- * request — this app has no cross-instance persistence regardless of id
- * scheme, an accepted gap for a play-money demo — but the ids that must
- * be stable across instances (every seeded user, above all `dev`) now are.
+ * instances too.
+ *
+ * **Do not use this with a persistent `DATABASE_URL` store.** Counters start
+ * at 1 on every cold start; after the first seed those ids already exist in
+ * Postgres, so the next create collides. The Postgres path uses
+ * {@link NanoidIdGen} instead.
  */
 class SequentialIdGen implements IdGen {
   private readonly counters = new Map<string, number>();
@@ -73,6 +74,17 @@ class SequentialIdGen implements IdGen {
     const n = (this.counters.get(prefix) ?? 0) + 1;
     this.counters.set(prefix, n);
     return `${prefix}_${n}`;
+  }
+}
+
+/**
+ * Collision-resistant ids for the Postgres path. Seeded rows still get
+ * whatever ids this produces on first boot; subsequent cold starts skip seed
+ * and must never restart a sequential counter at `_1`.
+ */
+class NanoidIdGen implements IdGen {
+  next(prefix: string): string {
+    return `${prefix}_${nanoid(12)}`;
   }
 }
 
@@ -103,6 +115,10 @@ class SequentialIdGen implements IdGen {
  * the promise itself (assigned synchronously, before any `await`) closes
  * that window: every caller after the first `getContainer()` invocation
  * awaits the SAME promise, seeded exactly once.
+ *
+ * If `buildContainer()` rejects (e.g. two instances raced an empty Neon
+ * seed and one hit a unique violation), the memo is cleared so the next
+ * request can retry rather than poisoning the instance until recycle.
  */
 const GLOBAL_CONTAINER_KEY = Symbol.for("bet.container.v1");
 
@@ -114,19 +130,71 @@ function globalSlot(): GlobalWithContainer {
   return globalThis as GlobalWithContainer;
 }
 
+function usesPostgres(): boolean {
+  return Boolean(process.env.DATABASE_URL?.trim());
+}
+
+async function createStore(): Promise<DataStore> {
+  if (!usesPostgres()) {
+    return createMemoryDataStore();
+  }
+  // Dynamic import so the default (memory-only) path never evaluates
+  // drizzle / PGlite / Neon at module load — those packages are only needed
+  // when an operator opts into persistence via DATABASE_URL.
+  const { createPostgresDataStore } = await import("@/adapters/postgres");
+  return createPostgresDataStore(process.env.DATABASE_URL!.trim());
+}
+
+/**
+ * Seeds when the store has no users. Across serverless instances two boots
+ * can both observe empty and race; the loser may throw on duplicate PK.
+ * Treat "users appeared while we were seeding" as success so the instance
+ * does not stick on a rejected container promise.
+ */
+async function seedIfEmpty(
+  store: DataStore,
+  clock: Clock,
+  idGen: IdGen,
+): Promise<void> {
+  const existing = await store.users.list();
+  if (existing.length > 0) return;
+  try {
+    await seedDataStore(store, clock, idGen);
+  } catch (error) {
+    const after = await store.users.list();
+    if (after.length > 0) return;
+    throw error;
+  }
+}
+
 async function buildContainer(): Promise<Container> {
   const clock = new SystemClock();
-  const idGen = new SequentialIdGen();
   const auth = new DemoSessionAuthProvider();
-  const store = createMemoryDataStore();
-  await seedDataStore(store, clock, idGen);
+  const store = await createStore();
+  const postgres = usesPostgres();
+
+  let idGen: IdGen;
+  if (postgres) {
+    // First boot: sequential seed so demo fixtures stay readable (`usr_1`,
+    // …). Every later cold start skips seed — counters would reset and
+    // collide — so runtime allocation uses nanoid.
+    await seedIfEmpty(store, clock, new SequentialIdGen());
+    idGen = new NanoidIdGen();
+  } else {
+    idGen = new SequentialIdGen();
+    await seedIfEmpty(store, clock, idGen);
+  }
+
   return { store, clock, idGen, auth };
 }
 
 export function getContainer(): Promise<Container> {
   const slot = globalSlot();
   if (!slot[GLOBAL_CONTAINER_KEY]) {
-    slot[GLOBAL_CONTAINER_KEY] = buildContainer();
+    slot[GLOBAL_CONTAINER_KEY] = buildContainer().catch((error) => {
+      delete slot[GLOBAL_CONTAINER_KEY];
+      throw error;
+    });
   }
   return slot[GLOBAL_CONTAINER_KEY];
 }

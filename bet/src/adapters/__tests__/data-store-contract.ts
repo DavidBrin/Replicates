@@ -1,7 +1,8 @@
 /**
  * Shared `DataStore` contract suite. Call `runDataStoreContract(name,
- * makeStore)` once per adapter — currently just the in-memory one, but any
- * future adapter (e.g. a real DB) plugs into the exact same suite.
+ * makeStore)` once per adapter — currently the in-memory one and the
+ * Postgres/PGlite one. `makeStore` may be sync or async (the suite awaits
+ * it); each invocation must return an empty store.
  *
  * Not itself a `*.test.ts` file (vitest's `include` glob won't pick it up),
  * by design — `memory.test.ts` is the thing that actually invokes it.
@@ -187,12 +188,25 @@ function makePricePoint(overrides: Partial<PricePoint> = {}): PricePoint {
 // The suite
 // ---------------------------------------------------------------------------
 
-export function runDataStoreContract(name: string, makeStore: () => DataStore): void {
+export function runDataStoreContract(
+  name: string,
+  makeStore: () => DataStore | Promise<DataStore>,
+  options: {
+    /**
+     * Skip the "bare write to an untouched table during an in-flight
+     * transact" case. That scenario needs a second DB connection (the
+     * in-flight interactive transaction holds the only PGlite connection);
+     * Neon-with-Pool supports it, in-memory supports it, single-connection
+     * PGlite deadlocks.
+     */
+    skipBareWriteDuringTransact?: boolean;
+  } = {},
+): void {
   describe(`DataStore contract: ${name}`, () => {
     // -- absent reads -------------------------------------------------------
 
     it("absent reads return undefined, never throw", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       await expect(store.users.findById(brand("missing"))).resolves.toBeUndefined();
       await expect(store.users.findByHandle("nobody")).resolves.toBeUndefined();
       await expect(store.groups.findById(brand("missing"))).resolves.toBeUndefined();
@@ -219,7 +233,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- basic CRUD round-trips ----------------------------------------------
 
     it("insert then findById round-trips a user", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = makeUser({ handle: "davidb" });
       const inserted = await store.users.insert(user);
       expect(inserted).toEqual(user);
@@ -232,7 +246,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("update patches only the given fields", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = await store.users.insert(makeUser({ balance: credits(1000) }));
       const updated = await store.users.update(user.id, { balance: credits(1500) });
       expect(updated.balance).toBe(1500);
@@ -240,7 +254,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("searchByHandlePrefix is case-insensitive and capped", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       await store.users.insert(makeUser({ handle: "alice1" }));
       await store.users.insert(makeUser({ handle: "alice2" }));
       await store.users.insert(makeUser({ handle: "bob" }));
@@ -255,7 +269,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- mutation-by-reference (structural cloning) --------------------------
 
     it("mutating a returned entity does not corrupt the store (structural cloning on read)", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const inserted = await store.users.insert(makeUser({ handle: "clonecheck" }));
 
       const fetched = await store.users.findById(inserted.id);
@@ -270,7 +284,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("mutating an object before insert does not affect the stored copy", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = makeUser({ handle: "preinsert" });
       await store.users.insert(user);
       user.handle = "MUTATED-AFTER-INSERT";
@@ -280,7 +294,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("mutating an array/nested-object field on a returned market does not corrupt the store", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const market = await store.markets.insert(makeMarket());
 
       const fetched = await store.markets.findById(market.id);
@@ -296,7 +310,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- friendship: ordered pair --------------------------------------------
 
     it("friendships are stored as an ordered pair, regardless of insertion order", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const a = brand<"UserId">("user_zzz");
       const b = brand<"UserId">("user_aaa");
       // b < a lexicographically; insert with the "wrong" order and expect
@@ -316,7 +330,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("removeFriendship works regardless of argument order", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const a = brand<"UserId">("user_1");
       const b = brand<"UserId">("user_2");
       await store.friends.insertFriendship({ userAId: a, userBId: b, createdAt: new Date() });
@@ -329,7 +343,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- friend requests ------------------------------------------------------
 
     it("friend request lifecycle: create, find pending, update status", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const from = brand<"UserId">(uid("user"));
       const to = brand<"UserId">(uid("user"));
       const request = await store.friends.createRequest(makeFriendRequest({ fromId: from, toId: to }));
@@ -352,7 +366,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- groups -----------------------------------------------------------------
 
     it("group membership: add/remove/listByMember", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const owner = brand<"UserId">(uid("user"));
       const member = brand<"UserId">(uid("user"));
       const group = await store.groups.insert(makeGroup({ ownerId: owner, memberIds: [owner] }));
@@ -372,7 +386,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- markets ------------------------------------------------------------
 
     it("markets: listByGroup, listByCreator, listPublic", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const group = await store.groups.insert(makeGroup());
       const creator = brand<"UserId">(uid("user"));
       const groupMarket = await store.markets.insert(
@@ -393,7 +407,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- positions / trades ---------------------------------------------------
 
     it("positions: find by (market, outcome, user) triple, list by market/user", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const marketId = brand<"MarketId">(uid("market"));
       const outcomeId = brand<"OutcomeId">(uid("outcome"));
       const userId = brand<"UserId">(uid("user"));
@@ -410,7 +424,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("trades: insert and list by market/user", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const marketId = brand<"MarketId">(uid("market"));
       const userId = brand<"UserId">(uid("user"));
       const trade = await store.trades.insert(makeTrade({ marketId, userId }));
@@ -422,7 +436,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- price history --------------------------------------------------------
 
     it("price history: append then listByMarket in chronological order", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const marketId = brand<"MarketId">(uid("market"));
       const p1 = await store.priceHistory.append(
         makePricePoint({ marketId, at: new Date("2026-01-01T00:00:00Z") }),
@@ -446,7 +460,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- invites ----------------------------------------------------------------
 
     it("invites: findByTokenHash, listByInvitee/Inviter, update", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const inviter = brand<"UserId">(uid("user"));
       const invitee = brand<"UserId">(uid("user"));
       const invite = await store.invites.insert(
@@ -464,7 +478,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- notifications ------------------------------------------------------
 
     it("notifications: listByUser unreadOnly, markRead, markAllRead", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const userId = brand<"UserId">(uid("user"));
       const n1 = await store.notifications.insert(makeNotification({ userId }));
       const n2 = await store.notifications.insert(makeNotification({ userId }));
@@ -483,7 +497,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- messages: keyset pagination ------------------------------------------
 
     it("message keyset pagination is stable and non-overlapping across pages", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const roomId = brand<"GroupId">(uid("room"));
       const total = 25;
       const inserted: Message[] = [];
@@ -525,7 +539,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("message pagination pages remain stable and non-overlapping when new messages arrive mid-pagination", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const roomId = brand<"GroupId">(uid("room"));
       for (let i = 0; i < 5; i++) {
         await store.messages.insert(
@@ -558,7 +572,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("keyset pagination tie-breaks messages sharing an identical `at` by id, correctly across a page boundary", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const roomId = brand<"GroupId">(uid("room"));
       const sameInstant = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
       const total = 6;
@@ -602,7 +616,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("message insert is idempotent on (roomId, authorId, clientId)", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const roomId = brand<"GroupId">(uid("room"));
       const authorId = brand<"UserId">(uid("user"));
       const first = await store.messages.insert(
@@ -628,7 +642,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     // -- transact -------------------------------------------------------------
 
     it("transact commits all writes atomically on success", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = await store.users.insert(makeUser({ balance: credits(100) }));
       let insertedGroupId: Group["id"] | undefined;
 
@@ -646,7 +660,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("transact rolls back completely on throw — nothing partial is visible", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = await store.users.insert(makeUser({ balance: credits(100) }));
       const groupBefore = await store.groups.insert(makeGroup());
 
@@ -664,8 +678,14 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
       expect(fetchedGroup?.name).toBe(groupBefore.name);
     });
 
-    it("a bare write to an UNTOUCHED table survives a concurrent transact's commit (per-key diff, not whole-map replace)", async () => {
-      const store = makeStore();
+    const bareWriteDuringTransact = options.skipBareWriteDuringTransact
+      ? it.skip
+      : it;
+
+    bareWriteDuringTransact(
+      "a bare write to an UNTOUCHED table survives a concurrent transact's commit (per-key diff, not whole-map replace)",
+      async () => {
+      const store = await Promise.resolve(makeStore());
       // Table A: users — this is what the in-flight transact reads and
       // writes. Table B: groups — the transact never touches this at all.
       const userA = await store.users.insert(makeUser({ balance: credits(100) }));
@@ -714,7 +734,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("nested transact reuses the outer transaction rather than double-staging", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = await store.users.insert(makeUser({ balance: credits(100) }));
 
       await store.transact(async (tx) => {
@@ -734,7 +754,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("a throw inside a nested transact rolls back the ENTIRE outer transaction too", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = await store.users.insert(makeUser({ balance: credits(100) }));
 
       await expect(
@@ -752,7 +772,7 @@ export function runDataStoreContract(name: string, makeStore: () => DataStore): 
     });
 
     it("concurrent-ish balance updates inside separate transacts don't interleave (no lost update)", async () => {
-      const store = makeStore();
+      const store = await Promise.resolve(makeStore());
       const user = await store.users.insert(makeUser({ balance: credits(100) }));
 
       // Each transaction reads, yields (simulating async work / another

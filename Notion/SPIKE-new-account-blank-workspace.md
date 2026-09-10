@@ -132,9 +132,9 @@ known workspace ids by name and lets a visitor flip between "Pufferfish
 ### Option C — Real accounts on the existing server seam (not now)
 
 The app already has a designed upgrade path for this: `RestStorageAdapter`
-(`src/lib/storage/rest-adapter.ts`) plus the three stub functions in
+(`src/lib/storage/rest-adapter.ts`) plus Neon persistence in
 `src/app/api/workspace/persistence.ts`, switched on with
-`NEXT_PUBLIC_STORAGE_DRIVER=rest`. A real version of "new account" would put
+`DATABASE_URL` and `NEXT_PUBLIC_STORAGE_DRIVER=rest`. A real version of "new account" would put
 identity (even something as light as an email + magic link, or just a
 generated shareable token) behind that seam, backed by a database, so a
 workspace survives across browsers and devices instead of living in one

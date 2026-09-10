@@ -11,10 +11,14 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@neondatabase/serverless": "^1.1.0",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
     "jose": "^6.2.8",
     "lucide-react": "^1.30.0",
     "nanoid": "^6.0.1",
@@ -22,6 +26,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
+    "ws": "^8.21.3",
     "zod": "^4.1.13",
     "zustand": "^5.0.14"
   },
@@ -34,8 +39,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.10",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "fast-check": "^4.3.0",
