@@ -16,7 +16,6 @@
  * (below) already follows this rule.
  */
 
-import { nanoid } from "nanoid";
 import { createMemoryDataStore } from "@/adapters/memory";
 import { seedDataStore } from "@/adapters/memory/seed";
 import { DemoSessionAuthProvider, SESSION_COOKIE_NAME } from "@/adapters/auth/demo-session";
@@ -41,9 +40,39 @@ class SystemClock implements Clock {
   }
 }
 
-class NanoIdGen implements IdGen {
+/**
+ * Deterministic, per-process sequential `IdGen` (`next("usr")` -> `"usr_1"`,
+ * `"usr_2"`, ...) — the same shape as `seed.test.ts`'s `sequentialIdGen`
+ * fixture, promoted to production use. This used to be a real `nanoid()`
+ * generator; that was intentional at the time ("ids aren't meant to be
+ * predictable in production"), but it silently broke sign-in on Vercel:
+ * with no real database (`needsDatabase: false`), each serverless/Fluid
+ * Compute instance builds and seeds its OWN in-memory store the first time
+ * it's hit (`getContainer()`'s `globalThis` memoization is only a
+ * same-process guarantee — see that function's doc comment). Random ids
+ * meant every instance assigned `dev` a different id, so `/signin`
+ * (rendered by instance A) would `POST /api/session` with an id instance B
+ * had never seen, coming back `404 not_found` — reproduced live on
+ * bet-david.vercel.app.
+ *
+ * Sequential ids fix this because seeding is fully deterministic (see
+ * `seed.ts`'s doc comment: fixed insertion order, no ambient randomness
+ * besides the seeded PRNG consumed in a fixed order) — every instance
+ * calls `next(prefix)` in the identical sequence, so every instance's
+ * `dev` ends up as `usr_1` and every other seeded id matches across
+ * instances too. Runtime-created entities (a market opened after sign-in,
+ * a new trade) still only exist in whichever single instance handled that
+ * request — this app has no cross-instance persistence regardless of id
+ * scheme, an accepted gap for a play-money demo — but the ids that must
+ * be stable across instances (every seeded user, above all `dev`) now are.
+ */
+class SequentialIdGen implements IdGen {
+  private readonly counters = new Map<string, number>();
+
   next(prefix: string): string {
-    return `${prefix}_${nanoid()}`;
+    const n = (this.counters.get(prefix) ?? 0) + 1;
+    this.counters.set(prefix, n);
+    return `${prefix}_${n}`;
   }
 }
 
@@ -87,7 +116,7 @@ function globalSlot(): GlobalWithContainer {
 
 async function buildContainer(): Promise<Container> {
   const clock = new SystemClock();
-  const idGen = new NanoIdGen();
+  const idGen = new SequentialIdGen();
   const auth = new DemoSessionAuthProvider();
   const store = createMemoryDataStore();
   await seedDataStore(store, clock, idGen);

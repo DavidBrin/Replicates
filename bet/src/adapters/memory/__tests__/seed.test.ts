@@ -3,12 +3,13 @@
  * LMSR bounded loss, and "every market has a message + a price point."
  *
  * Uses its own deterministic `Clock`/`IdGen` fixtures rather than the real
- * `SystemClock`/`NanoIdGen` from `src/lib/container.ts` — `container.ts`'s
- * `NanoIdGen` calls real `nanoid()`, which is intentionally random (ids
- * aren't meant to be predictable in production), so determinism can only
- * be asserted by fixing both time and id generation ourselves, exactly as
+ * `SystemClock`/`SequentialIdGen` from `src/lib/container.ts`, so this test
+ * doesn't depend on that module's construction details — determinism is
+ * asserted by fixing both time and id generation ourselves, exactly as
  * `seed.ts`'s own doc comment describes ("given the same `now` and the
- * same... `IdGen`").
+ * same... `IdGen`"). (`container.ts`'s own `SequentialIdGen` is likewise
+ * deterministic now, for an unrelated production reason — see its doc
+ * comment.)
  */
 import { describe, expect, it } from "vitest";
 import { createMemoryDataStore } from "@/adapters/memory";
