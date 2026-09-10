@@ -3,3 +3,5 @@
 
 # Stray capture artefacts from the animation tooling.
 super-smash/anim-*.png
+.vercel
+.env*
