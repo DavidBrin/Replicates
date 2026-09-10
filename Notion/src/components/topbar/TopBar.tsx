@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils/cn";
 import type { Id, Page } from "@/lib/model/types";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
 import { exportWorkspaceFile, importWorkspaceFile } from "@/lib/store/hydration";
+import { useDemoUsers } from "@/lib/auth/use-demo-identity";
 import { GuestBanner } from "./GuestBanner";
 import { Switch } from "./Switch";
 
@@ -72,7 +73,7 @@ export function TopBar({ pageId }: { pageId: string }) {
   // The whole page map: the breadcrumb walks ancestors, so it genuinely does
   // depend on more than one page. The reference is stable between writes.
   const pages = useWorkspaceStore((s) => s.pages);
-  const users = useWorkspaceStore((s) => s.users);
+  const users = useDemoUsers();
   const workspaceMembers = useWorkspaceStore((s) => s.workspace.members);
   const renamePage = useWorkspaceStore((s) => s.renamePage);
   const duplicatePage = useWorkspaceStore((s) => s.duplicatePage);

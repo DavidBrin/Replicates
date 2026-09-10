@@ -6,6 +6,9 @@ import { WorkspaceProviders } from "./providers";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
 import { getStorageAdapter, resetStorageAdapter } from "@/lib/storage";
 import { createDemoSnapshot } from "@/lib/seed/demo-workspace";
+import { useDemoAuthStore } from "@/lib/auth/demo-auth-store";
+import { demoAuth } from "@/config/app.config";
+import { demoLoginCopy } from "@/components/auth/copy";
 
 /**
  * Regression coverage for the defect that made the whole app render nothing.
@@ -27,6 +30,7 @@ beforeEach(async () => {
   resetStorageAdapter(null);
   await clearStorage();
   useWorkspaceStore.setState({ ...createDemoSnapshot(), hydrated: false });
+  useDemoAuthStore.setState({ demoName: null, gateResolved: false });
 });
 
 describe("WorkspaceProviders", () => {
@@ -113,5 +117,58 @@ describe("WorkspaceProviders", () => {
     );
 
     expect(await screen.findByText("workspace content")).toBeInTheDocument();
+  });
+});
+
+describe("DemoAuthGate", () => {
+  it("renders the login dialog by default when demoAuth is enabled and unresolved", async () => {
+    render(
+      <StrictMode>
+        <WorkspaceProviders>
+          <div>workspace content</div>
+        </WorkspaceProviders>
+      </StrictMode>,
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(demoLoginCopy.title)).toBeInTheDocument();
+  });
+
+  it("disappears once the store's skip() resolves the gate", async () => {
+    render(
+      <StrictMode>
+        <WorkspaceProviders>
+          <div>workspace content</div>
+        </WorkspaceProviders>
+      </StrictMode>,
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    useDemoAuthStore.getState().skip();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("never renders when demoAuth.enabled is false", async () => {
+    const original = demoAuth.enabled;
+    (demoAuth as { enabled: boolean }).enabled = false;
+
+    try {
+      render(
+        <StrictMode>
+          <WorkspaceProviders>
+            <div>workspace content</div>
+          </WorkspaceProviders>
+        </StrictMode>,
+      );
+
+      await screen.findByText("workspace content");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } finally {
+      (demoAuth as { enabled: boolean }).enabled = original;
+    }
   });
 });

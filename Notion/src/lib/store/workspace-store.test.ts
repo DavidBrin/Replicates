@@ -391,6 +391,9 @@ describe("snapshot export", () => {
     const snapshot = store().exportSnapshot();
     expect(snapshot).not.toHaveProperty("hydrated");
     expect(snapshot).not.toHaveProperty("insertBlock");
+    // Persistence guard for the ephemeral demo-login feature: this must keep
+    // failing if anyone ever adds a `demoName`/identity field into
+    // `WorkspaceState` — the demo name must never reach this snapshot.
     expect(Object.keys(snapshot).sort()).toEqual(
       [
         "blocks",

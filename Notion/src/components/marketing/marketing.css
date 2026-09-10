@@ -377,6 +377,39 @@
   color: var(--mkt-text-muted);
 }
 
+/* -- footer language menu ------------------------------------------------ */
+
+.mkt-lang-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--mkt-border-base);
+  border-radius: 6px;
+  box-shadow: var(--shadow-200);
+  padding: 4px;
+  z-index: 1;
+}
+
+.mkt-lang-menu__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--mkt-text-normal);
+  text-align: left;
+}
+
+.mkt-lang-menu__item:hover {
+  background: var(--mkt-bg-hover);
+}
+
 /* -- mobile disclosure --------------------------------------------------- */
 
 .mkt-nav__mobile {

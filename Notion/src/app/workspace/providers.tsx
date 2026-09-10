@@ -11,6 +11,7 @@
 import type { ReactNode } from "react";
 import { ThemeProvider } from "@/lib/theme/theme-provider";
 import { useWorkspacePersistence } from "@/lib/store/hydration";
+import { DemoAuthGate } from "@/components/auth/DemoAuthGate";
 
 function HydrationGate({ children }: { children: ReactNode }) {
   const { hydrated } = useWorkspacePersistence();
@@ -40,6 +41,7 @@ export function WorkspaceProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <HydrationGate>{children}</HydrationGate>
+      <DemoAuthGate />
     </ThemeProvider>
   );
 }
