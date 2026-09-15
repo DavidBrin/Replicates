@@ -203,6 +203,14 @@ export const earlycodeMeta: ArticleMeta = {
   lastEdited: "1 September 2026",
 };
 
+export const agentMemoryMeta: ArticleMeta = {
+  slug: projectSlug("Agent Memory Timeline"),
+  title: "Agent Memory Timeline",
+  shortDescription: "A deterministic trace of a governed temporal memory prototype for AI agents",
+  categories: ["Interactive demos", "Artificial intelligence", "2026 establishments"],
+  lastEdited: "15 September 2026",
+};
+
 /** Every registered article's metadata, in registry order. */
 export const articleMetas: ArticleMeta[] = [
   davidsInternetMeta,
@@ -228,4 +236,5 @@ export const articleMetas: ArticleMeta[] = [
   sqlMeta,
   modelingMeta,
   earlycodeMeta,
+  agentMemoryMeta,
 ];

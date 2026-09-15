@@ -3,9 +3,9 @@ import { projects } from "@/content/projects";
 import { articles } from "@/content/articles";
 
 describe("projects.ts <-> articles registry", () => {
-  it("registers seven replicas and fifteen interactive demos", () => {
+  it("registers seven replicas and sixteen interactive demos", () => {
     expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(7);
-    expect(projects.filter((p) => p.kind === "demo")).toHaveLength(15);
+    expect(projects.filter((p) => p.kind === "demo")).toHaveLength(16);
   });
 
   it("has a registered article for every project", () => {

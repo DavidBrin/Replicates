@@ -22,6 +22,7 @@ import { p300 } from "./p300";
 import { sql } from "./sql";
 import { modeling } from "./modeling";
 import { earlycode } from "./earlycode";
+import { agentMemory } from "./agent-memory";
 
 // `Sandbox` (./sandbox.tsx) proved the registry -> primitives pipeline and
 // stays on disk, unregistered, as a reference for future article authoring.
@@ -49,4 +50,5 @@ export const articles: ArticleRegistry = {
   [sql.meta.slug]: sql,
   [modeling.meta.slug]: modeling,
   [earlycode.meta.slug]: earlycode,
+  [agentMemory.meta.slug]: agentMemory,
 };

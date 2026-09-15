@@ -26,6 +26,7 @@ import { organoids, sections as organoidsSections } from "@/content/articles/org
 import { spikes, sections as spikesSections } from "@/content/articles/spikes";
 import { vision, sections as visionSections } from "@/content/articles/vision";
 import { arxiv, sections as arxivSections } from "@/content/articles/arxiv";
+import { agentMemory, sections as agentMemorySections } from "@/content/articles/agent-memory";
 import type { ArticleModule } from "@/lib/registry";
 
 const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: string; heading: string }> }> = [
@@ -47,6 +48,7 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Anatomy of a Spike", module: spikes, sections: spikesSections },
   { name: "Computer Vision", module: vision, sections: visionSections },
   { name: "arXiv Semantic Graph", module: arxiv, sections: arxivSections },
+  { name: "Agent Memory Timeline", module: agentMemory, sections: agentMemorySections },
 ];
 
 describe("article sections lists match rendered <Section> headings", () => {
