@@ -40,6 +40,7 @@ describe("projects.ts <-> articles registry", () => {
     "SQL_Playground",
     "Early_3D_Modeling",
     "Early_Code",
+    "Agent_Memory",
   ];
 
   it("has a non-null liveUrl iff the project is listed in EXPECTED_LIVE (src/content/__tests__/projects.test.ts)", () => {

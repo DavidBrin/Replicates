@@ -48,7 +48,7 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Anatomy of a Spike", module: spikes, sections: spikesSections },
   { name: "Computer Vision", module: vision, sections: visionSections },
   { name: "arXiv Semantic Graph", module: arxiv, sections: arxivSections },
-  { name: "Agent Memory Timeline", module: agentMemory, sections: agentMemorySections },
+  { name: "Agent Memory", module: agentMemory, sections: agentMemorySections },
 ];
 
 describe("article sections lists match rendered <Section> headings", () => {

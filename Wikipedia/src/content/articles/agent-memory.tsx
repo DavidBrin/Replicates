@@ -35,7 +35,7 @@ export const agentMemory: ArticleModule = {
       </Hatnote>
 
       <Infobox
-        title="Agent Memory Timeline"
+        title="Agent Memory"
         rows={[
           { label: "Type", value: "Interactive research demo" },
           { label: "Status", value: "Active research; deterministic prototype replay" },
@@ -56,7 +56,7 @@ export const agentMemory: ArticleModule = {
       />
 
       <P>
-        <B>Agent Memory Timeline</B> is an interactive explanation of David&apos;s Memory OS v0 experiment for AI agents. It replays a deterministic Python scenario as a static browser trace: every observation enters an append-only log, a write gate explains whether it becomes governed memory, and recorded retrieval packets show their citations or abstention.<Ref n={1} />
+        <B>Agent Memory</B> is an interactive explanation of David&apos;s Memory OS v0 experiment for AI agents. It replays a deterministic Python scenario as a static browser trace: every observation enters an append-only log, a write gate explains whether it becomes governed memory, and recorded retrieval packets show their citations or abstention.<Ref n={1} />
       </P>
 
       <Section heading="Overview">

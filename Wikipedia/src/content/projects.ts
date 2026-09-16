@@ -370,7 +370,7 @@ export const projects: ProjectInfo[] = [
     kind: "demo",
   },
   {
-    name: "Agent Memory Timeline",
+    name: "Agent Memory",
     slug: "Agent_Memory",
     tagline: "a governed memory trace, from evidence to cited context",
     replicaOf: {
@@ -380,8 +380,8 @@ export const projects: ProjectInfo[] = [
     folder: "Agent_Memory",
     stack: ["Python", "TypeScript", "React", "SVG", "JSON"],
     testStats: "A deterministic Memory OS v0 trace verified by Python and TypeScript tests",
-    builtWith: "An auditable scenario exported from Memory OS v0 into a static interactive timeline",
-    liveUrl: null,
+    builtWith: "An auditable scenario exported from Memory OS v0 into a static interactive walkthrough",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/agent-memory`,
     screenshots: [],
     kind: "demo",
   },

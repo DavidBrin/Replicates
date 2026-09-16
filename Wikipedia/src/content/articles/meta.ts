@@ -204,11 +204,11 @@ export const earlycodeMeta: ArticleMeta = {
 };
 
 export const agentMemoryMeta: ArticleMeta = {
-  slug: projectSlug("Agent Memory Timeline"),
-  title: "Agent Memory Timeline",
+  slug: projectSlug("Agent Memory"),
+  title: "Agent Memory",
   shortDescription: "A deterministic trace of a governed temporal memory prototype for AI agents",
   categories: ["Interactive demos", "Artificial intelligence", "2026 establishments"],
-  lastEdited: "15 September 2026",
+  lastEdited: "16 September 2026",
 };
 
 /** Every registered article's metadata, in registry order. */
