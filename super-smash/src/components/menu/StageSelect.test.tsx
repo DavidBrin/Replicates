@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
-import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
+import { RANDOM_STAGE, resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { StageSelect } from "./StageSelect";
 
 async function renderStages() {
@@ -56,6 +56,20 @@ describe("StageSelect", () => {
 
     expect(useMatchConfig.getState().stageId).toBe("smashville");
     expect(screen.getByRole("heading", { name: /smashville/i })).toBeInTheDocument();
+  });
+
+  /**
+   * Random is a token, not a stage. The match start is what turns it into one
+   * of the six — storing a real id here would make the tile look unselected
+   * after the player had just pressed it.
+   */
+  it("stores Random as a token rather than a stage id", async () => {
+    await renderStages();
+
+    fireEvent.click(screen.getByRole("button", { name: "Random" }));
+
+    expect(useMatchConfig.getState().stageId).toBe(RANDOM_STAGE);
+    expect(screen.getByRole("heading", { name: "Random" })).toBeInTheDocument();
   });
 
   /** Ω is flat by definition — a stage with soft platforms must lose them. */

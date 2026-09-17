@@ -14,6 +14,7 @@
 
 import { createRingtonePlayer } from "@/adapters/audio/element-ringtone";
 import {
+  DocumentFullscreen,
   LocalSettingsStore,
   MemorySettingsStore,
   NavigatorHaptics,
@@ -27,6 +28,7 @@ import type { VoiceTier } from "@/domain/settings";
 import type {
   CameraSource,
   Clock,
+  Fullscreen,
   Haptics,
   RingtonePlayer,
   SettingsStore,
@@ -43,6 +45,7 @@ export interface Container {
   readonly camera: CameraSource;
   readonly haptics: Haptics;
   readonly wakeLock: WakeLock;
+  readonly fullscreen: Fullscreen;
   /**
    * Resolves a voice provider for the requested tier.
    *
@@ -67,6 +70,7 @@ export function createBrowserContainer(): Container {
     camera: createCameraSource(),
     haptics: new NavigatorHaptics(),
     wakeLock: new ScreenWakeLock(),
+    fullscreen: new DocumentFullscreen(),
     voiceFor: (tier) =>
       createVoiceProvider(tier, {
         speech,
@@ -118,6 +122,7 @@ export function createServerContainer(): Container {
     },
     haptics: { isSupported: () => false, buzz: () => {}, cancel: () => {} },
     wakeLock: { isSupported: () => false, request: async () => {}, release: () => {} },
+    fullscreen: { isSupported: () => false, request: async () => {}, exit: () => {} },
     voiceFor: (tier) => createVoiceProvider(tier, { speech: noopSpeech, clock }),
   };
 }

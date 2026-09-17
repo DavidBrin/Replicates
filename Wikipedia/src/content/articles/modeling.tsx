@@ -54,80 +54,58 @@ export const modeling: ArticleModule = {
       />
 
       <P>
-        <B>Early 3D Modeling</B> is an interactive demonstration of
-        David&apos;s earliest engineering work, from high-school coursework
-        around 2020 and 2021. It pairs a gallery of Autodesk Inventor renders
-        with a VEXcode VR robot simulator written in TypeScript for the
-        page.<Ref n={1} />
+        <B>Early 3D Modeling</B> is an interactive demonstration of David&apos;s
+        earliest engineering work from about 2020 to 2021: Autodesk Inventor
+        CAD projects told as feature stories, and VEXcode VR robot programs
+        running in a live 2D simulator.<Ref n={1} />
       </P>
 
       <P>
-        The gallery groups eighteen renders into seven projects, among them a
-        Rube Goldberg machine assembly, a glider with its manufacturing
-        drawing, two gear chains, and a box-crusher design. Multi-render
-        projects play as build-up cross-fades, a gear pair turns at its true
-        ratio, and each card carries a feature story inferred from the
-        archived part files, which the page discloses. One archived
-        screenshot, saved as &ldquo;Wing simulator&rdquo;, is NASA
-        Glenn&apos;s FoilSim JS rather than an Inventor render, and appears
-        separately with that attribution.
+        The Inventor gallery groups renders of a Goldberg machine, a glider
+        with its manufacturing drawing, gear chains, the Space Crush box
+        crusher, and a peg toy. Feature stories are inferred from the part
+        files; gears turn in the build-up animations.
       </P>
 
       <Section heading="Overview">
         <P>
-          The two halves of the page match the two halves of the archive:
-          static CAD output presented as an annotated gallery, and robot
-          programs that still run. Original VEXcode screenshots appear beside
-          the simulation for comparison, and the drawing files render as
-          blueprint-styled cards.
+          Seven CAD groups and thirty archived part and assembly files sit
+          beside three manufacturing drawings. No 3D exports exist in the
+          archive, so the page shows the original renders rather than a
+          reconstructed mesh viewer.
         </P>
       </Section>
 
       <Section heading="VEX simulator">
         <P>
-          Six original 2020 programs execute against a TypeScript port of the
-          VEXcode VR drivetrain, pen and sensor API: a wall maze solved by
-          eye sensors, a perimeter octagon drawn pen-down, a dance routine, a
-          random drive, and two Python programs. The block or code listing
-          highlights in step with the robot, pen trails draw on the canvas,
-          and an arrow-key mode lets the visitor drive. The playgrounds are
-          top-down approximations drawn for the page, and no VEX assets were
-          copied. The perimeter program&apos;s file did not survive; its
-          listing was rebuilt from a screenshot and is labeled as
-          reconstructed.
+          Original VEXcode VR programs execute against a ported drivetrain,
+          pen, and sensor API written in TypeScript for this page. Wall Maze,
+          a perimeter octagon, a dance, a random drive, and the Python Art
+          Canvas all run with the current block highlighted as the robot
+          moves. A drive-it-yourself mode is included. No VEX assets were
+          copied.
         </P>
       </Section>
 
       <Section heading="Development">
         <P>
-          No STL or GLB exports of the Inventor models exist, so the page has
-          no 3D viewer and animates render sequences instead. At build time
-          the Blockly XML of the block programs is parsed into listings, the
-          Python sources are extracted, and the six programs are traced
-          headless to pin their listings in a fixture. {project.testStats}.
+          {project.testStats}. Seventeen VEX programs were archived; six were
+          ported onto the page.
         </P>
       </Section>
 
       <Section heading="See also">
         <ul className="list-disc pl-6">
-          <li>
-            <WikiLink to="Early_Code">Early Code</WikiLink>
-          </li>
-          <li>
-            <WikiLink to="Verilog">Verilog</WikiLink>
-          </li>
-          <li>
-            <WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink>
-          </li>
+          <li><WikiLink to="Early_Code">Early Code</WikiLink></li>
+          <li><WikiLink to="HardHack_2026">HardHack 2026</WikiLink></li>
+          <li><WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink></li>
         </ul>
       </Section>
 
       <Section heading="References">
         <References
           refs={[
-            <span key="1">
-              <code>content/modeling/README.md</code>, David&apos;s Internet.
-            </span>,
+            <span key="1"><code>content/modeling/README.md</code>, David&apos;s Internet.</span>,
           ]}
         />
       </Section>

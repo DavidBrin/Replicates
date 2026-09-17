@@ -57,8 +57,12 @@ This is *required* in production. Sessions are signed with it, and the app delib
 shipping with a known signing key would let anyone forge a session. Without it, sign-in
 returns a 500. Locally you need nothing: the dev fallback applies and warns once.
 
-No database, no other services. **Read the persistence caveat in
+No database is required for the default demo path. **Read the persistence caveat in
 [Known gaps](#known-gaps) before treating a deployment as durable.**
+
+**Optional — real persistence:** set `DATABASE_URL` to a Neon `postgres://…` connection
+string (or locally `file:./.data/local.pglite`). The app switches to the Drizzle Postgres
+`DataStore`, applies schema on open, and seeds only when empty.
 
 ---
 
@@ -187,9 +191,12 @@ Honest list. Nothing here is hidden behind a happy path.
   which is what makes `pnpm install && pnpm run dev` and one-click Vercel deploys work.
   **On Vercel this means state is per-serverless-instance and resets on cold start** —
   writes can appear to vanish between requests hitting different instances. Correct for a
-  demo, fatal for production. A `DataStore` port exists precisely so a Postgres adapter is
-  one file; **that adapter is not implemented.** The recommended real path (Drizzle +
-  PGlite locally, Neon in production) is written up in `research/stack.md`.
+  demo, fatal for production.
+- **Postgres is opt-in via `DATABASE_URL`.** Set a Neon `postgres://…` URL (or a local
+  `file:./.data/local.pglite` / `memory://` PGlite URL) and the composition root switches
+  to the Drizzle `DataStore` in `src/adapters/postgres/`. Schema is applied on open
+  (`ddl.ts`); seed runs only when the database has no users. Contract tests run the same
+  suite against in-memory PGlite in CI.
 
 **Auth**
 - **There are no passwords.** Sign-in is "pick a demo user", and anyone can sign in as

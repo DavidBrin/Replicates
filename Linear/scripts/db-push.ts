@@ -126,7 +126,12 @@ async function applyToNeon(connectionString: string): Promise<void> {
   if (typeof globalThis.WebSocket === "undefined") {
     // Node has had a global WebSocket since 22, so this is a fallback for a
     // build image running something older rather than the expected path.
-    const ws = (await import("ws")) as unknown as { default: unknown };
+    // Specifier is a variable so `tsc` does not look for a `ws` package
+    // that this project does not declare (same pattern as adapters/db/neon.ts).
+    const wsSpecifier = "ws";
+    const ws = (await import(/* webpackIgnore: true */ wsSpecifier)) as {
+      default: unknown;
+    };
     neon.neonConfig.webSocketConstructor = ws.default;
   }
 

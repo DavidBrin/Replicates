@@ -310,7 +310,7 @@ That is the whole procedure. No environment variables, no database, no `vercel.j
 
 It works because every route is either static or a client component reading from browser storage, so the deployment uses approximately zero function invocations — comfortably inside the Hobby tier. `output: "export"` is deliberately *not* used, because it would remove the Route Handler that the server-persistence upgrade path depends on.
 
-To move to a real database later: provision one, implement the three functions in `src/app/api/workspace/persistence.ts`, then set `DATABASE_URL` and `NEXT_PUBLIC_STORAGE_DRIVER=rest`. No component changes.
+To move to a real database: provision Neon (or any Postgres), set `DATABASE_URL` and `NEXT_PUBLIC_STORAGE_DRIVER=rest`, and redeploy. `src/app/api/workspace/persistence.ts` stores one JSONB snapshot per deployment (table created on first use; see `scripts/schema.sql`). No component changes. The route is unauthenticated by default (demo / single-tenant); set matching `WORKSPACE_PERSISTENCE_SECRET` and `NEXT_PUBLIC_WORKSPACE_PERSISTENCE_SECRET` if the deploy is publicly reachable.
 
 See `.env.example` for every available override.
 

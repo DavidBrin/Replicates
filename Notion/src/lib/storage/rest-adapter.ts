@@ -6,10 +6,20 @@
  * behind a REST endpoint — Postgres, Supabase, KV, anything — without touching
  * a single component. The endpoint must accept GET/PUT/DELETE of the whole
  * snapshot at the configured URL.
+ *
+ * If the server sets `WORKSPACE_PERSISTENCE_SECRET`, set
+ * `NEXT_PUBLIC_WORKSPACE_PERSISTENCE_SECRET` to the same value so these
+ * requests include `x-workspace-secret`.
  */
 
 import { StorageAdapter, StorageError } from "./adapter";
 import type { WorkspaceSnapshot } from "../model/types";
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const secret = process.env.NEXT_PUBLIC_WORKSPACE_PERSISTENCE_SECRET?.trim();
+  if (!secret) return extra;
+  return { ...extra, "x-workspace-secret": secret };
+}
 
 export class RestStorageAdapter extends StorageAdapter {
   readonly name = "rest";
@@ -29,7 +39,7 @@ export class RestStorageAdapter extends StorageAdapter {
   async load(): Promise<WorkspaceSnapshot | null> {
     const response = await this.fetchImpl(this.baseUrl, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: authHeaders({ Accept: "application/json" }),
       cache: "no-store",
     });
 
@@ -46,7 +56,7 @@ export class RestStorageAdapter extends StorageAdapter {
   async save(snapshot: WorkspaceSnapshot): Promise<void> {
     const response = await this.fetchImpl(this.baseUrl, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(snapshot),
     });
 
@@ -56,7 +66,10 @@ export class RestStorageAdapter extends StorageAdapter {
   }
 
   async clear(): Promise<void> {
-    const response = await this.fetchImpl(this.baseUrl, { method: "DELETE" });
+    const response = await this.fetchImpl(this.baseUrl, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
     if (!response.ok && response.status !== 404) {
       throw new StorageError(`Could not clear workspace (HTTP ${response.status})`);
     }

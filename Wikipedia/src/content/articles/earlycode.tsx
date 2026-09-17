@@ -54,78 +54,56 @@ export const earlycode: ArticleModule = {
       />
 
       <P>
-        <B>Early Code</B> is an interactive demonstration of David&apos;s
-        earliest programs, written between 2021 and 2024, arranged as a
-        timeline with one live widget per era. Every widget is a disclosed
-        TypeScript port of the original code, fixture-tested at build against
-        pure-Python references.<Ref n={1} />
+        <B>Early Code</B> is an interactive timeline of David&apos;s earliest
+        programs from 2021 to 2024, each with a live widget.<Ref n={1} /> It
+        covers a C++ final, CSE 12 data structures, CSE 15L URL handlers, a
+        planted JUnit bug, and a from-scratch string matcher.
       </P>
 
       <P>
-        The timeline opens with a 2021 C++ final that re-runs over its actual
-        input files in a fake terminal, quirks preserved: the original
-        swallows the header line, reads out-of-range numbers without
-        tallying them, and reports a most frequent value of zero when nothing
-        tallies. It closes at a PyTorch tutorial notebook that is referenced
-        but not re-run, because its dataset was never archived.
+        The C++ final re-runs over its original numbers files in a fake
+        terminal, preserving the original program&apos;s quirks. MyArrayList animates inserts, shifts, and
+        capacity doubling. A mini browser replays chat and doc-search handlers
+        request by request.
       </P>
 
       <Section heading="Overview">
         <P>
-          Between those endpoints sit the UCSD years. A CSE 12 panel animates
-          the appends, shifts and capacity doubling of David&apos;s
-          ArrayList, and plays rock-paper-scissors against the original
-          winner logic. A CSE 15L panel replays the chat and doc-search URL
-          handlers request by request on a mini browser, with the handler
-          branch highlighting as each request arrives, and reproduces the
-          JUnit lab&apos;s planted merge bug: one test passes, one times out
-          at 500 ms, and a one-line fix turns it green.
+          Five live widgets are TypeScript ports, labeled as such. Course-provided
+          server code is credited as such. The page ends at
+          CardClassifier.ipynb, a PyTorch tutorial referenced but not re-run
+          because its dataset is not archived.
         </P>
       </Section>
 
       <Section heading="Aho-Corasick">
         <P>
-          The final panel is an Aho-Corasick automaton implemented from
-          scratch for the page. The trie grows node by node, failure links
-          attach in breadth-first order, and a cursor walks the visitor&apos;s
-          text emitting match tuples. Over the film-title patterns from
-          David&apos;s CSE 100 notebook the automaton has 106 nodes, the same
-          count the notebook obtained from the pyahocorasick library; the
-          notebook itself only counted nodes, so the build, matching and
-          animation are new work, and the page says so.
+          The page&apos;s main widget is a from-scratch implementation: the{" "}
+          Aho-Corasick automaton grows its trie and failure links live
+          and matches Fast &amp; Furious titles from a CSE 100 notebook, with
+          the same 106 nodes the pyahocorasick library reported.
         </P>
       </Section>
 
       <Section heading="Development">
         <P>
-          The course-provided server scaffold is credited to the CSE 15L
-          staff; David wrote the handlers. The doc-search corpus is a
-          synthetic 30-document stand-in for a corpus that is not shipped,
-          and the archived Java is gathered at build with the student ID and
-          email scrubbed. {project.testStats}.
+          {project.testStats}. The JUnit lab&apos;s planted merge bug fails by
+          timeout and then applies a one-line fix on the page.
         </P>
       </Section>
 
       <Section heading="See also">
         <ul className="list-disc pl-6">
-          <li>
-            <WikiLink to="Early_3D_Modeling">Early 3D Modeling</WikiLink>
-          </li>
-          <li>
-            <WikiLink to="Computer_Vision">Computer Vision</WikiLink>
-          </li>
-          <li>
-            <WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink>
-          </li>
+          <li><WikiLink to="Early_3D_Modeling">Early 3D Modeling</WikiLink></li>
+          <li><WikiLink to="Verilog">Verilog</WikiLink></li>
+          <li><WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink></li>
         </ul>
       </Section>
 
       <Section heading="References">
         <References
           refs={[
-            <span key="1">
-              <code>content/earlycode/README.md</code>, David&apos;s Internet.
-            </span>,
+            <span key="1"><code>content/earlycode/README.md</code>, David&apos;s Internet.</span>,
           ]}
         />
       </Section>

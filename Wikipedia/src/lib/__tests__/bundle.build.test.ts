@@ -49,6 +49,13 @@ const ARTICLE_SENTINELS: Record<string, string> = {
   "spikes.tsx": "two skewed Gaussians reach r-squared of 0.999",
   "vision.tsx": "a draggable light relights the recovered face",
   "arxiv.tsx": "modularity peaked at tau 0.19 and the team shipped 0.27",
+  "crossteach.tsx": "pseudo-labels cross the resolution gap",
+  "p300.tsx": "100 milliseconds on and 75 milliseconds off",
+  "sql.tsx": "sql.js runs SQLite compiled to WebAssembly",
+  "modeling.tsx": "VEXcode VR programs execute against a ported drivetrain",
+  "earlycode.tsx": "Aho-Corasick automaton grows its trie",
+  "fl-studio.tsx": "Channel Rack step is a Note of length zero",
+  "art-wall.tsx": "hostname stopped resolving",
 };
 
 describe("sentinels are present in their own article", () => {

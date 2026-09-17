@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
   // Don't emit AGENTS.md / CLAUDE.md into the deliverable.
   agentRules: false,
 
+  // Neon's driver is imported dynamically so the memory/sqlite paths never
+  // load it. That also hid it from file tracing on Linear until the package
+  // was marked external and included in the serverless bundle explicitly.
+  serverExternalPackages: ["@neondatabase/serverless"],
+  outputFileTracingIncludes: {
+    "/*": ["./node_modules/@neondatabase/serverless/**/*"],
+  },
+
   // Pin Turbopack's inferred workspace root to this package. Without it,
   // Turbopack walks up from cwd looking for the "highest" lockfile and can
   // land on a sibling project's one — this package is a subdirectory of a

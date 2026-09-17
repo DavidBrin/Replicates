@@ -133,27 +133,27 @@ property tests fast and the engine reusable.
 
 ---
 
-## D8 — In-memory DataStore by default, Postgres adapter as an opt-in port
+## D8 — In-memory DataStore by default, Postgres adapter behind `DATABASE_URL`
 
 **Decision.** `DataStore` is a port. The default adapter is in-memory, seeded at boot,
-requiring zero configuration. A Postgres adapter is scaffolded behind `DATABASE_URL` but
-is **not** implemented in v1 — it's listed in Known Gaps.
+requiring zero configuration. When `DATABASE_URL` is set, `src/lib/container.ts`
+dynamically loads the Drizzle adapter in `src/adapters/postgres/` (PGlite for
+`file:`/`memory://`, Neon for `postgres://`).
 
 **Why.** The requirement is "deployable on Vercel and locally" with a one-shot demo. A
 zero-config in-memory store means `npm install && npm run dev` works instantly and
 `vercel deploy` works with no database provisioning at all. Prisma+SQLite would break on
-Vercel (ephemeral, read-only filesystem); provisioning Neon would add a required setup
-step to a demo.
+Vercel (ephemeral, read-only filesystem); requiring Neon would add a setup step to a demo.
 
 **The honest caveat, stated in the README rather than hidden:** in-memory state on Vercel
 is **per-serverless-instance and resets on cold start**. Writes may appear to vanish
 between requests hitting different instances. This is correct-by-design for a demo and
-fatal for production — hence the port, so the swap is one file.
+fatal for production — hence the port. Opt into Neon (or local PGlite) with `DATABASE_URL`
+when you need cross-instance persistence.
 
 **Rejected.** Prisma with dual providers (the `datasource.provider` is a fixed literal;
 dual-dialect requires schema duplication). Drizzle+PGlite locally / Neon in prod is the
-recommended *real* path and is what the Postgres adapter should implement — documented in
-Known Gaps rather than half-built.
+implemented opt-in path.
 
 ---
 

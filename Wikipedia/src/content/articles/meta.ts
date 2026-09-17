@@ -83,6 +83,22 @@ export const dollarPixelsMeta: ArticleMeta = {
   lastEdited: "18 August 2026",
 };
 
+export const flStudioMeta: ArticleMeta = {
+  slug: projectSlug("FL Studio"),
+  title: "FL Studio (replica)",
+  shortDescription: "A browser rebuild of FL Studio's Channel Rack, Piano Roll, Playlist, and Mixer",
+  categories: ["Software replicas", "Digital audio workstations", "Browser applications"],
+  lastEdited: "1 September 2026",
+};
+
+export const artWallMeta: ArticleMeta = {
+  slug: projectSlug("Art Wall"),
+  title: "Art Wall",
+  shortDescription: "A public collaborative drawing wall with a photographed chalkboard",
+  categories: ["Web applications", "Collaborative software"],
+  lastEdited: "2 September 2026",
+};
+
 export const verilogMeta: ArticleMeta = {
   slug: projectSlug("Verilog"),
   title: "Verilog",
@@ -166,7 +182,7 @@ export const arxivMeta: ArticleMeta = {
 export const crossteachMeta: ArticleMeta = {
   slug: projectSlug("Cross-Teaching Segmentation"),
   title: "Cross-Teaching Segmentation",
-  shortDescription: "A semi-supervised segmentation demo where a U-Net and a Vision Transformer teach each other",
+  shortDescription: "A U-Net and a Vision Transformer swapping pseudo-labels on unlabeled images",
   categories: ["Interactive demos", "Machine learning", "2026 establishments"],
   lastEdited: "1 September 2026",
 };
@@ -174,7 +190,7 @@ export const crossteachMeta: ArticleMeta = {
 export const p300Meta: ArticleMeta = {
   slug: projectSlug("P300 Speller"),
   title: "P300 Speller",
-  shortDescription: "A live simulation of a P300 brain-computer-interface speller and the CNN family that decodes it",
+  shortDescription: "A brain-computer-interface speller driven by an evoked potential",
   categories: ["Interactive demos", "Neurotechnology", "2026 establishments"],
   lastEdited: "1 September 2026",
 };
@@ -182,7 +198,7 @@ export const p300Meta: ArticleMeta = {
 export const sqlMeta: ArticleMeta = {
   slug: projectSlug("SQL Playground"),
   title: "SQL Playground",
-  shortDescription: "Six course databases running client-side, with the weekly answer queries as presets",
+  shortDescription: "Five course databases running in the browser through SQLite in WebAssembly",
   categories: ["Interactive demos", "Databases", "2026 establishments"],
   lastEdited: "1 September 2026",
 };
@@ -190,7 +206,7 @@ export const sqlMeta: ArticleMeta = {
 export const modelingMeta: ArticleMeta = {
   slug: projectSlug("Early 3D Modeling"),
   title: "Early 3D Modeling",
-  shortDescription: "An Autodesk Inventor gallery and a VEX robot simulator from high-school coursework",
+  shortDescription: "High-school Inventor CAD stories and VEXcode VR programs in a live 2D sim",
   categories: ["Interactive demos", "Computer-aided design", "2026 establishments"],
   lastEdited: "1 September 2026",
 };
@@ -198,7 +214,7 @@ export const modelingMeta: ArticleMeta = {
 export const earlycodeMeta: ArticleMeta = {
   slug: projectSlug("Early Code"),
   title: "Early Code",
-  shortDescription: "A timeline of first programs, from a C++ final to a from-scratch Aho-Corasick automaton",
+  shortDescription: "A timeline of first programs, from a C++ final to Aho-Corasick from scratch",
   categories: ["Interactive demos", "Programming education", "2026 establishments"],
   lastEdited: "1 September 2026",
 };
@@ -221,6 +237,8 @@ export const articleMetas: ArticleMeta[] = [
   fakePhoneMeta,
   betMeta,
   dollarPixelsMeta,
+  flStudioMeta,
+  artWallMeta,
   verilogMeta,
   nocturnalMeta,
   signalsMeta,

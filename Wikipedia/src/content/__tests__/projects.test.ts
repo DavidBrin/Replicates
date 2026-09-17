@@ -3,8 +3,8 @@ import { projects } from "@/content/projects";
 import { articles } from "@/content/articles";
 
 describe("projects.ts <-> articles registry", () => {
-  it("registers seven replicas and sixteen interactive demos", () => {
-    expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(7);
+  it("registers nine portfolio apps and sixteen interactive demos", () => {
+    expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(9);
     expect(projects.filter((p) => p.kind === "demo")).toHaveLength(16);
   });
 
@@ -25,6 +25,14 @@ describe("projects.ts <-> articles registry", () => {
   // repo"). The day a project's `liveUrl` goes from `null` to a real
   // deployment URL, add that project's slug here — and only here.
   const EXPECTED_LIVE: string[] = [
+    "Linear_(replica)",
+    "Notion_(replica)",
+    "Super_Smash_(replica)",
+    "Fake_Phone",
+    "Bet_(app)",
+    "Dollar_Pixels",
+    "FL_Studio_(replica)",
+    "Art_Wall",
     "Verilog",
     "Nocturnal_Neuro",
     "Signals_and_Systems_Lab",

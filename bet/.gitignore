@@ -13,3 +13,6 @@ blob-report/
 .env*.local
 .DS_Store
 .vercel
+.env*
+.data/
+drizzle/

@@ -52,7 +52,10 @@ export class TestSettingsStore implements SettingsStore {
  * or opens a camera, so a stub that does nothing is more honest than a mock
  * with expectations nobody checks.
  */
-export function createTestContainer(settings: SettingsStore): Container {
+export function createTestContainer(
+  settings: SettingsStore,
+  extras: Partial<Container> = {},
+): Container {
   return {
     clock: { now: () => 0 },
     settings,
@@ -81,6 +84,7 @@ export function createTestContainer(settings: SettingsStore): Container {
     },
     haptics: { isSupported: () => false, buzz: () => {}, cancel: () => {} },
     wakeLock: { isSupported: () => false, request: async () => {}, release: () => {} },
+    fullscreen: { isSupported: () => false, request: async () => {}, exit: () => {} },
     voiceFor: () => ({
       id: "silent",
       isAvailable: () => true,
@@ -89,6 +93,7 @@ export function createTestContainer(settings: SettingsStore): Container {
         stop: () => {},
       }),
     }),
+    ...extras,
   };
 }
 
@@ -98,9 +103,13 @@ export interface SettingsHarness extends RenderResult {
 }
 
 /** Renders `ui` inside the real provider stack over a seeded in-memory store. */
-export function renderWithSettings(ui: ReactElement, seed: unknown = null): SettingsHarness {
+export function renderWithSettings(
+  ui: ReactElement,
+  seed: unknown = null,
+  extras: Partial<Container> = {},
+): SettingsHarness {
   const store = new TestSettingsStore(seed);
-  const container = createTestContainer(store);
+  const container = createTestContainer(store, extras);
   const user = userEvent.setup();
 
   const result = render(

@@ -46,23 +46,42 @@ function stubCamera(
   };
 }
 
-function testContainer(camera: CameraSource, settings: Settings = defaultSettings): Container {
+function testContainer(
+  camera: CameraSource,
+  settings: Settings = defaultSettings,
+  extras: Partial<Container> = {},
+): Container {
   const base = createServerContainer();
   return {
     ...base,
     camera,
     settings: { load: () => settings, save: () => {}, clear: () => {} },
+    ...extras,
   };
 }
 
-function renderLive(camera: CameraSource, settings?: Settings) {
+function renderLive(
+  camera: CameraSource,
+  settings?: Settings,
+  extras?: Partial<Container>,
+) {
   return render(
-    <ContainerProvider container={testContainer(camera, settings)}>
+    <ContainerProvider container={testContainer(camera, settings, extras)}>
       <SettingsProvider>
         <LiveScreen />
       </SettingsProvider>
     </ContainerProvider>,
   );
+}
+
+function stubFullscreen() {
+  const request = vi.fn(async () => {});
+  const exit = vi.fn();
+  return {
+    isSupported: () => true,
+    request,
+    exit,
+  };
 }
 
 beforeEach(() => {
@@ -203,6 +222,48 @@ describe("LiveScreen", () => {
     // No avatar configured: the monogram, through the same shared helper the
     // call screen uses.
     expect(screen.getByTestId("live-avatar")).toHaveTextContent("R");
+  });
+
+  it("asks for fullscreen from the same tap that starts the camera", async () => {
+    const camera = stubCamera();
+    const fullscreen = stubFullscreen();
+    renderLive(camera, undefined, { fullscreen });
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+
+    // The gesture is spent by the time `getUserMedia` settles, so this has to
+    // have been requested before we wait for the stream.
+    expect(fullscreen.request).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => expect(screen.getByTestId("live-badge")).toBeInTheDocument());
+  });
+
+  it("drops fullscreen when leaving so the address bar comes back", async () => {
+    const camera = stubCamera();
+    const fullscreen = stubFullscreen();
+    renderLive(camera, undefined, { fullscreen });
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+    await waitFor(() => expect(screen.getByTestId("live-close")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("live-close"));
+    expect(fullscreen.exit).toHaveBeenCalled();
+    expect(routerMock.push).toHaveBeenCalledWith("/home");
+  });
+
+  it("drops fullscreen if the camera is blocked, so site settings are reachable", async () => {
+    const denied = Object.assign(new Error("blocked"), {
+      name: "NotAllowedError",
+    });
+    const camera = stubCamera({ start: () => Promise.reject(denied) });
+    const fullscreen = stubFullscreen();
+    renderLive(camera, undefined, { fullscreen });
+
+    fireEvent.click(screen.getByTestId("camera-start"));
+
+    await waitFor(() => expect(screen.getByText("The camera is blocked")).toBeInTheDocument());
+    expect(fullscreen.request).toHaveBeenCalled();
+    expect(fullscreen.exit).toHaveBeenCalled();
   });
 
   it("uses the configured avatar image when there is one", async () => {

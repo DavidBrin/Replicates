@@ -157,6 +157,15 @@ describe("comment scheduling", () => {
     }
   });
 
+  it("keeps the fan reactions and drops the pickup-logistics lines", () => {
+    expect(LIVE_COMMENT_MESSAGES).toContain("OMG I LOVEE YOUUU");
+    expect(LIVE_COMMENT_MESSAGES).toContain("wowowow so coool");
+    expect(LIVE_COMMENT_MESSAGES).toContain("your my idol ♡");
+    expect(LIVE_COMMENT_MESSAGES).toContain("I want to be you");
+    expect(LIVE_COMMENT_MESSAGES).not.toContain("on my way now");
+    expect(LIVE_COMMENT_MESSAGES).not.toContain("sound is fine on my end");
+  });
+
   it("mixes in join notices as a distinct kind", () => {
     const state = run(createLiveSession(config, 33), 10 * 60_000);
     expect(state.comments.some((c) => c.kind === "system")).toBe(true);

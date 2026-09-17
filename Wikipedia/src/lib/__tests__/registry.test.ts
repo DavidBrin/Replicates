@@ -118,6 +118,11 @@ describe("searchTitles", () => {
     expect(searchTitles("LINEAR").map((m) => m.title)).toContain("Linear (replica)");
   });
 
+  it("finds the FL Studio replica", () => {
+    expect(searchTitles("fl studio").map((m) => m.title)).toContain("FL Studio (replica)");
+    expect(searchTitles("FL").map((m) => m.title)).toContain("FL Studio (replica)");
+  });
+
   it("ranks a prefix match ahead of a substring match", () => {
     // "avid" is a substring of "David's Internet" (not a prefix), so it
     // should still be found via the substring branch.

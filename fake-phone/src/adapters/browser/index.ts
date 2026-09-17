@@ -9,7 +9,7 @@
  */
 
 import { parseSettings, type Settings } from "@/domain/settings";
-import type { Clock, Haptics, SettingsStore, WakeLock } from "@/ports";
+import type { Clock, Fullscreen, Haptics, SettingsStore, WakeLock } from "@/ports";
 
 export class SystemClock implements Clock {
   now(): number {
@@ -165,5 +165,135 @@ export class ScreenWakeLock implements WakeLock {
     void sentinel?.release().catch(() => {
       /* already released */
     });
+  }
+}
+
+/**
+ * Document fullscreen — hide the browser chrome over a live stream.
+ *
+ * This is best-effort and must never be confused with putting the `<video>`
+ * itself into fullscreen. iOS takes a non-`playsinline` video into the native
+ * player, which would replace the broadcast overlay with Apple's chrome and
+ * kill the illusion (research/web-platform-constraints.md §5). We fullscreen
+ * the *document* instead, with `navigationUI: "hide"`, so Android/desktop lose
+ * the URL bar and iOS no-ops until the engine allows element fullscreen.
+ *
+ * Enter is kicked off synchronously from `request()` so it still sits inside
+ * the tap's transient activation. Exit is allowed to be racy: a camera
+ * permission sheet can reject the stream after fullscreen has already been
+ * asked for, and we still have to land back on a page whose address bar is
+ * reachable (the primer's "denied" copy tells the user to open site settings).
+ */
+export class DocumentFullscreen implements Fullscreen {
+  private generation = 0;
+
+  isSupported(): boolean {
+    if (typeof document === "undefined") return false;
+    const doc = document as FullscreenDocument;
+    if (document.fullscreenEnabled || doc.webkitFullscreenEnabled) return true;
+    return pickRequest(document.documentElement) !== null;
+  }
+
+  async request(): Promise<void> {
+    if (!this.isSupported()) return;
+    const generation = (this.generation += 1);
+    try {
+      await this.enterNow();
+    } catch {
+      return;
+    }
+    if (generation !== this.generation) {
+      await this.leaveNow();
+    }
+  }
+
+  exit(): void {
+    this.generation += 1;
+    void this.leaveNow();
+  }
+
+  private enterNow(): Promise<void> {
+    if (currentFullscreenElement()) return Promise.resolve();
+    const request = pickRequest(document.documentElement);
+    if (!request) return Promise.resolve();
+    try {
+      return Promise.resolve(request({ navigationUI: "hide" })).catch(() =>
+        enterWithoutOptions(request),
+      );
+    } catch {
+      return enterWithoutOptions(request);
+    }
+  }
+
+  private leaveNow(): Promise<void> {
+    if (!currentFullscreenElement()) return Promise.resolve();
+    const exit = pickExit();
+    if (!exit) return Promise.resolve();
+    try {
+      return Promise.resolve(exit()).catch(() => {
+        /* already left, or the engine refused */
+      });
+    } catch {
+      return Promise.resolve();
+    }
+  }
+}
+
+type FullscreenDocument = Document & {
+  webkitFullscreenEnabled?: boolean;
+  webkitExitFullscreen?: () => Promise<void>;
+  webkitExitFullScreen?: () => Promise<void>;
+  webkitFullscreenElement?: Element | null;
+};
+
+type FullscreenDomElement = Element & {
+  webkitRequestFullscreen?: (options?: FullscreenOptions) => Promise<void>;
+  webkitRequestFullScreen?: (options?: FullscreenOptions) => Promise<void>;
+};
+
+type FullscreenRequest = (options?: FullscreenOptions) => Promise<void>;
+
+function pickRequest(element: Element): FullscreenRequest | null {
+  const node = element as FullscreenDomElement;
+  if (typeof node.requestFullscreen === "function") {
+    return (options) => (options ? node.requestFullscreen(options) : node.requestFullscreen());
+  }
+  if (typeof node.webkitRequestFullscreen === "function") {
+    return (options) =>
+      options ? node.webkitRequestFullscreen!(options) : node.webkitRequestFullscreen!();
+  }
+  if (typeof node.webkitRequestFullScreen === "function") {
+    return (options) =>
+      options ? node.webkitRequestFullScreen!(options) : node.webkitRequestFullScreen!();
+  }
+  return null;
+}
+
+function pickExit(): (() => Promise<void>) | null {
+  const doc = document as FullscreenDocument;
+  if (typeof document.exitFullscreen === "function") {
+    return () => document.exitFullscreen();
+  }
+  if (typeof doc.webkitExitFullscreen === "function") {
+    return () => doc.webkitExitFullscreen!();
+  }
+  if (typeof doc.webkitExitFullScreen === "function") {
+    return () => doc.webkitExitFullScreen!();
+  }
+  return null;
+}
+
+function currentFullscreenElement(): Element | null {
+  const doc = document as FullscreenDocument;
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+}
+
+function enterWithoutOptions(request: FullscreenRequest): Promise<void> {
+  try {
+    return Promise.resolve(request()).catch(() => {
+      /* denied, already in fullscreen, or the engine has no element fullscreen */
+    });
+  } catch {
+    return Promise.resolve();
   }
 }

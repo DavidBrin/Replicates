@@ -38,7 +38,7 @@ export interface LiveCameraController {
 }
 
 export function useLiveCamera(): LiveCameraController {
-  const { camera } = useContainer();
+  const { camera, fullscreen } = useContainer();
 
   const [phase, setPhase] = useState<LiveCameraPhase>("idle");
   const [failure, setFailure] = useState<CameraFailureCode | null>(null);
@@ -67,21 +67,29 @@ export function useLiveCamera(): LiveCameraController {
     // while the permission sheet was up). Reporting it would put an error on
     // screen for something the user did on purpose.
     if (code === "aborted") return;
+    // Drop fullscreen so the address bar is back — the denied-camera copy
+    // tells the user to open site settings next to it, which they cannot do
+    // if we are still hiding the browser.
+    fullscreen.exit();
     setStream(null);
     setFailure(code);
     setPhase("error");
-  }, []);
+  }, [fullscreen]);
 
   const start = useCallback(() => {
     setPhase("starting");
     setNotice(null);
+    // Fullscreen first, still inside the tap. `getUserMedia` below will often
+    // await a permission sheet, and by the time that promise settles the
+    // gesture is gone — too late to hide the URL bar.
+    void fullscreen.request();
     // Not awaited: the click handler must return immediately so the gesture is
     // not held open, and the promise's outcome is state, not control flow.
     camera
       .start("user")
       .then((next) => applyStream(next, "user"))
       .catch(fail);
-  }, [applyStream, camera, fail]);
+  }, [applyStream, camera, fail, fullscreen]);
 
   const flip = useCallback(() => {
     const previous = facing;
@@ -126,9 +134,10 @@ export function useLiveCamera(): LiveCameraController {
 
   const stop = useCallback(() => {
     camera.stop();
+    fullscreen.exit();
     setStream(null);
     setPhase("idle");
-  }, [camera]);
+  }, [camera, fullscreen]);
 
   useEffect(() => {
     if (!notice) return;
@@ -157,6 +166,7 @@ export function useLiveCamera(): LiveCameraController {
 
     const release = () => {
       camera.stop();
+      fullscreen.exit();
       setStream(null);
     };
 
@@ -194,8 +204,9 @@ export function useLiveCamera(): LiveCameraController {
       // screen leaves the phone's camera indicator lit with nothing on screen
       // explaining why — the worst bug this app could ship.
       camera.stop();
+      fullscreen.exit();
     };
-  }, [camera]);
+  }, [camera, fullscreen]);
 
   return {
     phase,

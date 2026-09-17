@@ -37,25 +37,14 @@ anything else.
 ## Deploy on Vercel
 
 Zero config. Import the repo in Vercel and set the project **Root Directory** to
-`FL Studio`. That is the entire setup: no environment variables, no database, no
+`fl-studio`. That is the entire setup: no environment variables, no database, no
 API routes, no server actions. The app is client-side from the first frame, so
 every route prerenders as static content and the CDN serves the rest.
 
-**The space in the folder name.** Half of that risk is already retired: the
-local half — `next.config.ts` pins `turbopack.root` through
-`fileURLToPath(new URL(".", import.meta.url))` and every config resolves paths
-the same way, never `URL.pathname`, which hands back a percent-encoded path that
-resolves to nothing under a directory with a space in it. `pnpm build`, the unit
-suite and the Playwright suite all run green under this path.
-
-What research lane 7 flagged and could **not** verify is Vercel's own
-root-directory handling of a space — it is stored as a plain path string and
-ought to be fine, but no sibling project in this repo has a space in its project
-folder, so this is the first one to actually test it
-([`research/07-stack-deployment.md`](research/07-stack-deployment.md) §5, marked
-**LOW**: "confirm at actual deploy time, not spec time"). Try it as-is first. If
-Vercel chokes on it, the fallback is a rename or a symlink to a space-free
-directory — nothing in the build depends on the folder's name.
+The package folder is `fl-studio` with no space. Vercel names serverless
+functions from that path, and a space in the name fails the deploy. Local
+Turbopack still needs `fileURLToPath` because the parent `Personal Projects`
+directory has a space.
 
 ## Test locally
 

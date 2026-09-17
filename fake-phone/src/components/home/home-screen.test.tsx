@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithSettings } from "@/components/settings/settings-test-harness";
 
@@ -35,6 +35,20 @@ describe("HomeScreen", () => {
 
     await user.click(screen.getByTestId("go-live"));
 
+    expect(routerMock.push).toHaveBeenCalledWith("/live");
+  });
+
+  it("asks for fullscreen from the Go live tap so the browser chrome can hide", async () => {
+    const fullscreen = {
+      isSupported: () => true,
+      request: vi.fn(async () => {}),
+      exit: vi.fn(),
+    };
+    const { user } = renderWithSettings(<HomeScreen />, null, { fullscreen });
+
+    await user.click(screen.getByTestId("go-live"));
+
+    expect(fullscreen.request).toHaveBeenCalledTimes(1);
     expect(routerMock.push).toHaveBeenCalledWith("/live");
   });
 

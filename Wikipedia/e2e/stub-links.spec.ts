@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test";
  */
 test.describe("stub links", () => {
   test("a project's Website red-link carries the red-link styling class", async ({ page }) => {
-    await page.goto("/wiki/Linear_(replica)");
+    await page.goto("/wiki/YouTube_(replica)");
 
     const infobox = page.locator("table.infobox");
     const websiteRow = infobox.locator("tr", { has: page.getByRole("rowheader", { name: "Website" }) });
@@ -22,7 +22,7 @@ test.describe("stub links", () => {
   test("navigating a Website stub lands on the page-does-not-exist screen, which links home", async ({
     page,
   }) => {
-    await page.goto("/wiki/Linear_(replica)");
+    await page.goto("/wiki/YouTube_(replica)");
 
     const infobox = page.locator("table.infobox");
     const websiteRow = infobox.locator("tr", { has: page.getByRole("rowheader", { name: "Website" }) });
