@@ -195,11 +195,11 @@ export const messages = pgTable(
     index("messages_room_keyset_idx").on(t.roomId, t.at.desc(), t.id.desc()),
     index("messages_client_id_idx").on(t.roomId, t.clientId),
     /** Backstop for the idempotent-send check `MessageRepo.insert` does in
-     * application code. `nullsNotDistinct` is what makes it cover system
-     * messages, whose `author_id` is null. */
+     * application code. Coalescing `author_id` to '' makes the unique index
+     * treat null authors as equal, so it also covers system messages, whose
+     * `author_id` is null (drizzle's `uniqueIndex` has no NULLS NOT DISTINCT). */
     uniqueIndex("messages_client_id_key")
-      .on(t.roomId, t.authorId, t.clientId)
-      .nullsNotDistinct()
+      .on(t.roomId, sql`coalesce(${t.authorId}, '')`, t.clientId)
       .where(sql`${t.clientId} is not null`),
   ],
 );
