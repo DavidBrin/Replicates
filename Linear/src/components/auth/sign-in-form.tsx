@@ -12,6 +12,17 @@ import { AuthMessage, Field } from "./auth-shell";
 /**
  * Email and password.
  *
+ * ## ARCHIVED — kept for reference, mounted nowhere
+ *
+ * `/signin` no longer renders this. The deployment is a portfolio demo, so the
+ * only way in is to pick one of the seeded accounts, and that is now the whole
+ * sign-in screen (`demo-sign-in.tsx`); open sign-up is gone (`/signup` redirects
+ * to `/signin`). This component and its tests are retained deliberately — the
+ * constant-time refusal and the "both fields invalid together, never one alone"
+ * behaviour are the interesting part, and this is where real email/password
+ * sign-in would return if the demo ever became a product. Its one-click demo
+ * panel lives on, extracted into `demo-sign-in.tsx`.
+ *
  * ## The refusal is the server's, verbatim
  *
  * `/api/auth/signin` answers every failure — no such address, wrong password,

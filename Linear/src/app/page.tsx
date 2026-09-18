@@ -10,7 +10,6 @@ import {
   PermissionsSection,
 } from "@/components/marketing/keyboard-section";
 import {
-  GlassButton,
   InvertedButton,
   MarketingFooter,
   MarketingHeader,
@@ -103,9 +102,6 @@ export default async function MarketingPage({
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link href="/signin" data-testid="cta-signin">
                 <InvertedButton size="lg">Sign in to the demo</InvertedButton>
-              </Link>
-              <Link href="/signup" data-testid="cta-signup">
-                <GlassButton size="lg">Create an account</GlassButton>
               </Link>
             </div>
           </div>

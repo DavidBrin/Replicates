@@ -61,14 +61,13 @@ export function MarketingHeader({ signedInHref }: { signedInHref: string | null 
 
         <div className="ml-auto flex items-center gap-2">
           {signedInHref === null ? (
-            <>
-              <Link href="/signin" className="hidden sm:block">
-                <GlassButton>Sign in</GlassButton>
-              </Link>
-              <Link href="/signup">
-                <InvertedButton size="sm">Get started</InvertedButton>
-              </Link>
-            </>
+            // One CTA, not two: open sign-up is gone (this is a demo), so
+            // "Sign in" — pick a seeded account — is the only door in. It stays
+            // the glass (secondary) shape; the hero and the closing section
+            // carry the primary inverted "Sign in to the demo".
+            <Link href="/signin" data-testid="header-signin">
+              <GlassButton>Sign in</GlassButton>
+            </Link>
           ) : (
             <Link href={signedInHref} data-testid="open-app">
               <InvertedButton size="sm">Open app</InvertedButton>

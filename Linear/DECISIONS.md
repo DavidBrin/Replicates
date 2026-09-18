@@ -477,3 +477,22 @@ They are the best reference material in the project and the one thing that must
 not be pushed, because this repository is public. They are gitignored; the
 design tokens and geometry measured from them live on in
 `research/01-visual-design.md`, which was the durable part anyway.
+
+### D28 — Sign-in is demo-account selection; open sign-up was removed
+
+This is a portfolio deployment, so `/signin` is a chooser of the four seeded
+accounts — one click each, no field to type into — and the open create-account
+page is gone (`/signup` redirects to `/signin`).
+
+The removed page was a genuine dead-end. It created an account with no
+membership, and there is deliberately no "create a workspace" flow — D11: the
+only channel onto a workspace is an invitation — so a self-serve sign-up landed
+on a marketing page it could not leave. Keeping it also made "sign in" ambiguous
+(type a password, or pick a demo account?) for a product whose whole subject is
+the four permission levels those seeded accounts embody.
+
+What was kept, so this is reversible: the typable `SignInForm` is archived in the
+tree rather than deleted, and the `/api/auth/signup` route and `SignUpForm`
+remain — `/invite/[token]` still creates an account and joins a workspace in one
+step, which is the one sign-up that was never a dead-end. Restoring open sign-up
+is a page and a `redirects()` line away if the demo ever becomes a product.

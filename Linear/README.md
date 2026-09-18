@@ -24,8 +24,11 @@ more than one hop of.
 pnpm install && pnpm run dev     # http://localhost:3000 — no database to set up
 ```
 
-Sign in as `owner@demo.test` / `demo1234`. Also `admin@`, `member@`, `guest@` —
-each sees a different application, which is the point.
+On `/signin`, click a seeded account to sign in — `owner@demo.test`, or
+`admin@`, `member@`, `guest@` (all on `demo1234`, filled for you). Each sees a
+different application, which is the point. There is no typable sign-in form and
+no open sign-up: this is a demo, and the only other way onto a workspace is an
+invitation (`/invite/[token]`).
 
 ---
 

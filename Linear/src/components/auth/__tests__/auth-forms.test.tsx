@@ -10,12 +10,14 @@ import { routerMock } from "../../../../vitest.setup";
 /**
  * The three auth forms.
  *
- * Two things are being protected here, and only one of them is visual.
+ * `SignInForm` is now archived — `/signin` mounts the demo-account chooser
+ * (`demo-sign-in.tsx`) instead, and `e2e/fixtures.ts` clicks its `demo-signin-*`
+ * buttons. These tests are kept regardless: the component is retained for
+ * reference (see its own header), and the behaviour below is where real
+ * email/password sign-in would resume if the demo ever became a product.
+ * `SignUpForm` and `AcceptInvite` are still mounted — by `/invite/[token]`.
  *
- * **The test-id contract.** `e2e/fixtures.ts` signs every spec in the suite in
- * through `signin-email`, `signin-password` and `signin-submit`. Renaming one is
- * a breaking change to a file this slice does not own, so the ids are asserted
- * by name rather than reached through a label or a role.
+ * Two things are being protected here, and only one of them is visual.
  *
  * **The refusal.** `/api/auth/signin` answers every failure identically so it
  * cannot be used to ask whether an address has an account here. That property
@@ -52,7 +54,7 @@ afterEach(() => {
 /* ================================================================ sign in = */
 
 describe("SignInForm", () => {
-  it("exposes the ids the e2e sign-in helper depends on", () => {
+  it("still exposes its field and submit ids", () => {
     render(<SignInForm />);
     expect(screen.getByTestId("signin-email")).toBeInTheDocument();
     expect(screen.getByTestId("signin-password")).toBeInTheDocument();

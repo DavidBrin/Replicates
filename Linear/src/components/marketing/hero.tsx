@@ -4,7 +4,7 @@ import { Shortcut } from "@/components/ui/kbd";
 import { cn } from "@/lib/cn";
 
 import { AppPreview } from "./app-preview";
-import { GlassButton, InvertedButton } from "./marketing-chrome";
+import { InvertedButton } from "./marketing-chrome";
 
 /**
  * The hero.
@@ -83,11 +83,8 @@ export function Hero() {
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/signup" data-testid="hero-signup">
-            <InvertedButton size="lg">Start free</InvertedButton>
-          </Link>
           <Link href="/signin" data-testid="hero-signin">
-            <GlassButton size="lg">Sign in to the demo</GlassButton>
+            <InvertedButton size="lg">Sign in to the demo</InvertedButton>
           </Link>
         </div>
 

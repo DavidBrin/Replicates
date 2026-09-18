@@ -8,6 +8,17 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
+  // The open sign-up page is gone: this is a portfolio demo, and a self-serve
+  // account had no workspace to land in and no UI to make one, so it only ever
+  // bounced back to the marketing page. Anyone still holding a `/signup` link —
+  // an old bookmark, or the marketing CTAs before this change — lands on the
+  // demo sign-in instead of a 404. Real membership still arrives through an
+  // invitation at `/invite/[token]`, which is untouched. `permanent: false`
+  // (307) leaves the door open to restoring real sign-up later.
+  async redirects() {
+    return [{ source: "/signup", destination: "/signin", permanent: false }];
+  },
+
   // The dev badge floats over the bottom-left corner, which is where the
   // sidebar's workspace switcher and the "new issue" affordance live. It gets
   // in the way of both the app and its screenshots.

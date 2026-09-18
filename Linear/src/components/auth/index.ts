@@ -8,9 +8,12 @@ export {
   Mark,
   type AuthShellProps,
 } from "./auth-shell";
+// The demo-account chooser is what `/signin` mounts. The typable `SignInForm`
+// below is archived — kept for reference, mounted nowhere. See `demo-sign-in.tsx`.
 export {
-  SignInForm,
+  DemoSignIn,
   type DemoAccount,
-  type SignInFormProps,
-} from "./sign-in-form";
+  type DemoSignInProps,
+} from "./demo-sign-in";
+export { SignInForm, type SignInFormProps } from "./sign-in-form";
 export { SignUpForm, type SignUpFormProps } from "./sign-up-form";

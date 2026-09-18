@@ -3,11 +3,17 @@ import { expect, type Page } from "@playwright/test";
 /**
  * Shared helpers for the e2e suite.
  *
- * Signing in goes through the real form rather than through a forged cookie.
- * A helper that mints a session directly is faster and tests less: every one
- * of these specs depends on the session cookie being set the way the
- * application sets it — `httpOnly`, `sameSite=lax` — and a shortcut that skips
- * that is a shortcut around the thing most likely to break in a deployment.
+ * Signing in goes through the real UI rather than through a forged cookie. A
+ * helper that mints a session directly is faster and tests less: every one of
+ * these specs depends on the session cookie being set the way the application
+ * sets it — `httpOnly`, `sameSite=lax` — and a shortcut that skips that is a
+ * shortcut around the thing most likely to break in a deployment.
+ *
+ * `/signin` is now a demo-account chooser (the typable email/password form is
+ * archived — see `src/components/auth/demo-sign-in.tsx`), so this clicks the
+ * seeded account's one-click button. Every account uses the same seeded
+ * password, filled by the button, so the session is set exactly as it is for a
+ * real visitor.
  */
 
 /** The seeded demo password. See `src/lib/seed.ts`. */
@@ -16,15 +22,17 @@ export const DEMO_PASSWORD = "demo1234";
 /** The seeded workspace's URL key. */
 export const WORKSPACE = "demo";
 
-export async function signIn(
-  page: Page,
-  email: string,
-  password: string = DEMO_PASSWORD,
-): Promise<void> {
+/**
+ * Sign in as a seeded demo account by clicking its button.
+ *
+ * `email` is one of the four seeded addresses (`owner@`, `admin@`, `member@`,
+ * `guest@demo.test`); the local-part is the button's id suffix
+ * (`demo-signin-owner`, …), which is how the chooser labels them.
+ */
+export async function signIn(page: Page, email: string): Promise<void> {
+  const label = email.split("@")[0];
   await page.goto("/signin");
-  await page.getByTestId("signin-email").fill(email);
-  await page.getByTestId("signin-password").fill(password);
-  await page.getByTestId("signin-submit").click();
+  await page.getByTestId(`demo-signin-${label}`).click();
 
   // Landing on the app shell is the signal that the session took. Asserting on
   // it here means a broken sign-in fails in the helper, naming the cause,

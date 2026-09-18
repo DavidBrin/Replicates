@@ -261,8 +261,8 @@ survive unmount, so it is used for leaf interactions only.
 
 | Route | Contents |
 |---|---|
-| `/` | Marketing page — hero, feature grid, sign-in / sign-up |
-| `/signin`, `/signup` | Email + password |
+| `/` | Marketing page — hero, feature grid, sign-in |
+| `/signin` | Pick a seeded demo account (one click each; `/signup` redirects here) |
 | `/invite/[token]` | Accept an invitation, signing up if needed |
 | `/[workspace]/my-issues` | Assigned / Created / Subscribed tabs |
 | `/[workspace]/inbox` | Notifications |
