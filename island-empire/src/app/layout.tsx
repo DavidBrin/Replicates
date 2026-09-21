@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Press_Start_2P } from "next/font/google";
+import { Pixelify_Sans } from "next/font/google";
 
 import "./globals.css";
 
 /**
- * Press Start 2P is the closest free face to the game's chunky all-caps pixel
- * font. `next/font/google` downloads it at build time and serves it from this
- * origin, so there is no runtime request to Google Fonts.
+ * Pixelify Sans is the closest free face to the game's chunky, rounded pixel
+ * font (SPEC §8). `next/font/google` downloads it at build time and serves it
+ * from this origin, so there is no runtime request to Google Fonts.
  */
-const pixel = Press_Start_2P({
-  weight: "400",
+const pixel = Pixelify_Sans({
+  weight: ["400", "700"],
   subsets: ["latin"],
   variable: "--font-pixel",
   display: "swap",

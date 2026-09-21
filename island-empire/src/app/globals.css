@@ -22,7 +22,7 @@ body {
   padding: 0;
   background: var(--ie-sky);
   color: white;
-  font-family: var(--font-pixel, "Press Start 2P", ui-monospace, monospace);
+  font-family: var(--font-pixel, "Pixelify Sans", ui-monospace, monospace);
   -webkit-font-smoothing: none;
   overscroll-behavior: none;
 }
