@@ -197,10 +197,26 @@ export function myUnits(s: DebugState, owner: number): DebugTile[] {
   return s.tiles.filter((t) => t.owner === owner && t.unit !== null);
 }
 
+function manhattan(a: Coord, b: Coord): number {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function enemyCities(s: DebugState, me: number): Coord[] {
+  return Object.values(s.provinces)
+    .filter((p) => p.owner !== me)
+    .map((p) => p.city);
+}
+
+const UPKEEP: Record<number, number> = { 1: 2, 2: 5, 3: 12, 4: 30 };
+
 /**
- * One greedy human turn through `applyForTest`: every ready unit attacks
- * the enemy city if it can, else captures the best tile in reach; then a
- * buy-merge onto a knight when affordable. Returns whether anything happened.
+ * One scripted human turn through `applyForTest`: every ready unit marches
+ * on the nearest enemy city (taking it when it can), then the province
+ * merge-buys a knight up to level 2 — enough to beat a city — and adds a
+ * second knight only while income still covers upkeep. It is deliberately
+ * conservative: the first version of this script merged to level 3, went
+ * bankrupt twice and lost level 01 to the Easy AI. Returns whether anything
+ * happened.
  */
 export async function playGreedyTurn(page: Page, me = 0): Promise<boolean> {
   let acted = false;
@@ -210,15 +226,15 @@ export async function playGreedyTurn(page: Page, me = 0): Promise<boolean> {
     const ready = myUnits(s, me).find((t) => t.unit?.readyToMove);
     if (!ready) break;
     const zone = await moveZone(page, { x: ready.x, y: ready.y });
+    const cities = enemyCities(s, me);
+    const nearestCity = (c: Coord) => Math.min(...cities.map((k) => manhattan(c, k)), 99);
     const foreign = zone.filter((c) => tileAt(s, c)?.owner !== me);
     const rank = (c: Coord) => {
       const t = tileAt(s, c);
-      if (!t) return -1;
-      if (t.building === "city") return 5;
-      if (t.building === "chest") return 4;
-      if (t.owner !== null) return 3;
-      if (t.building === "farm" || t.building === "mine") return 3;
-      return 1;
+      if (!t) return -99;
+      if (t.building === "city") return 100;
+      if (t.building === "chest") return 50;
+      return 20 - nearestCity(c) + (t.owner !== null ? 3 : 0);
     };
     foreign.sort((a, b) => rank(b) - rank(a));
     let moved = false;
@@ -231,18 +247,28 @@ export async function playGreedyTurn(page: Page, me = 0): Promise<boolean> {
     }
     if (!moved) break;
   }
-  // spend: merge-buy a knight onto our strongest knight when the zone allows it
   const s = await readState(page);
-  if (!s.outcome) {
-    const zone = await buildZone(page, "knight1");
-    const units = myUnits(s, me).sort((a, b) => (b.unit?.level ?? 0) - (a.unit?.level ?? 0));
-    const onto = units.find((u) => zone.some((c) => c.x === u.x && c.y === u.y));
-    if (onto && (await tryApply(page, { type: "BUY", item: "knight1", at: { x: onto.x, y: onto.y } }))) acted = true;
-    else {
-      // otherwise put a new knight on a capturable tile
-      const capturable = zone.find((c) => tileAt(s, c)?.owner !== me);
-      if (capturable && (await tryApply(page, { type: "BUY", item: "knight1", at: capturable }))) acted = true;
-    }
+  if (s.outcome) return acted;
+  const income = s.tiles.filter((t) => t.owner === me).length;
+  const units = myUnits(s, me).sort((a, b) => (b.unit?.level ?? 0) - (a.unit?.level ?? 0));
+  const upkeep = units.reduce((n, t) => n + (UPKEEP[t.unit?.level ?? 1] ?? 0), 0);
+  const zone = await buildZone(page, "knight1");
+  const strongest = units[0];
+  if (
+    strongest &&
+    (strongest.unit?.level ?? 0) < 2 &&
+    zone.some((c) => c.x === strongest.x && c.y === strongest.y) &&
+    income - (upkeep - 2 + 5) >= 0 &&
+    (await tryApply(page, { type: "BUY", item: "knight1", at: { x: strongest.x, y: strongest.y } }))
+  ) {
+    return true;
+  }
+  if (units.length < 2 && income - (upkeep + 2) >= 0) {
+    const cities = enemyCities(s, me);
+    const capturable = zone
+      .filter((c) => tileAt(s, c)?.owner !== me)
+      .sort((a, b) => Math.min(...cities.map((k) => manhattan(a, k))) - Math.min(...cities.map((k) => manhattan(b, k))));
+    if (capturable[0] && (await tryApply(page, { type: "BUY", item: "knight1", at: capturable[0] }))) acted = true;
   }
   return acted;
 }

@@ -307,3 +307,11 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 
 **Why.** The feasibility review called the community-pool machinery disproportionate for a project with no accounts and a handful of maps at launch. Dropping the server-side record removes one table and one route from the heaviest slice (S4) while keeping the visible feature — three rotating maps, medals per difficulty, a countdown — exactly as the store screenshot shows it.
 
+---
+
+## D39 — The Easy AI recruits at most one knight per province per turn
+
+**Decision.** In `buyKnights`, an Easy province stops after its first successful knight purchase each turn; Normal and Hard keep buying while solvent.
+
+**Why.** A simulation of a Normal AI driving the human seat beats Easy on every level 01–11, so the levels are winnable by competent play — but a scripted first-time player (two knights, march on the city) lost levels 02–11 because Easy fielded a knight for every spare 10 gold and out-expanded it. The tutorial island exists to teach; Easy should let a learner make one economic mistake and recover. Slyther Droid's review that even the original's Easy "feels tough" is noted, and Normal keeps that feel.
+

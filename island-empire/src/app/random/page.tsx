@@ -91,8 +91,11 @@ export default function RandomMapSetupPage() {
   }
 
   function handlePlay() {
-    let map = preview.map;
-    if (!map) {
+    // Always generate from the current options: the preview is debounced, so
+    // right after a seat-count or seed change it can still describe the
+    // previous configuration (a map with four players for a two-seat game).
+    let map: MapDefinition | null = null;
+    {
       try {
         map = generateRandomMap({ size, biome, seats: toGeneratorSeats(seats) }, seed);
       } catch (error) {

@@ -182,7 +182,13 @@ export function attachInput(canvas: HTMLCanvasElement, handlers: InputHandlers):
   };
   const down = (e: PointerEvent) => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
-    canvas.setPointerCapture?.(e.pointerId);
+    // Synthetic pointer events (tests, some assistive tech) carry ids the
+    // browser has no active pointer for, and capture then throws NotFoundError.
+    try {
+      canvas.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* not a real pointer — nothing to capture */
+    }
     const p = local(e);
     emit(tracker.down(e.pointerId, p.x, p.y));
     e.preventDefault();
@@ -194,7 +200,11 @@ export function attachInput(canvas: HTMLCanvasElement, handlers: InputHandlers):
   const up = (e: PointerEvent) => {
     const p = local(e);
     emit(tracker.up(e.pointerId, p.x, p.y));
-    canvas.releasePointerCapture?.(e.pointerId);
+    try {
+      canvas.releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* see setPointerCapture above */
+    }
   };
   const cancel = (e: PointerEvent) => tracker.cancel(e.pointerId);
   const wheel = (e: WheelEvent) => {

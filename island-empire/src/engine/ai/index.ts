@@ -411,6 +411,10 @@ function buyKnights(ctx: Ctx, id: string): string | null {
       const pid = commitIfSolvent(ctx, { type: "BUY", item: knightItem(level), at: target }, target, level + 1);
       if (pid === null) break;
       id = pid;
+      // Easy recruits one knight per province per turn (D39): the tutorial
+      // levels are meant to be learnable, and an Easy AI that fields a knight
+      // for every spare 10 gold out-expands a first-time player.
+      if (ctx.difficulty === "easy") return id;
     }
     const p = provinceById(ctx.s, id);
     if (p === null) return null;

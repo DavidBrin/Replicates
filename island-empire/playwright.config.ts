@@ -32,7 +32,7 @@ export default defineConfig({
      * assertion is first through a page. `next build` pays it once, up front,
      * and the suite then tests the artifact that actually deploys.
      */
-    command: `pnpm run build && pnpm run start -- --port ${PORT}`,
+    command: `pnpm run build && pnpm exec next start --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 600_000,
@@ -44,6 +44,9 @@ export default defineConfig({
       // `next start` is NODE_ENV=production and config() refuses PGlite there
       // — rightly, for serverless. This is one process on a real filesystem.
       E2E_ALLOW_PGLITE_PRODUCTION_BUILD: "true",
+      // Inlined at build time: installs `window.__islandDebug` on every play
+      // route, including the ones reached by navigation without `?debug=1`.
+      NEXT_PUBLIC_ISLAND_DEBUG: "1",
     },
   },
 });

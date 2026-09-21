@@ -68,6 +68,9 @@ test.describe("random map setup and play", () => {
   test("seed 42 vs one Normal AI runs 20 turns with no thrown error or stuck state", async ({
     page,
   }) => {
+    // Twenty rounds against a Normal AI take ~3 s each once its provinces
+    // grow, so the default 30 s budget is not enough for the flow itself.
+    test.setTimeout(180_000);
     const pageErrors: Error[] = [];
     page.on("pageerror", (error) => pageErrors.push(error));
 
@@ -92,13 +95,24 @@ test.describe("random map setup and play", () => {
     for (let turn = 1; turn <= 20; turn++) {
       if (state.outcome) break;
 
-      await page.getByTestId("next-day").click();
+      await page.getByTestId("next-day-button").click();
 
+      // Wait for the AI seat(s) to finish and the human turn to come back —
+      // or for the game to end. A passive human can lose to a Normal AI
+      // inside 20 turns; that is the rules working, not a stuck state.
       await expect
-        .poll(async () => {
-          state = await page.evaluate(() => (window as unknown as { __islandDebug: IslandDebug }).__islandDebug.state());
-          return state != null;
-        }, { message: `state() still readable after Next Day #${turn}` })
+        .poll(
+          async () => {
+            const snapshot = await page.evaluate(() => {
+              const d = (window as unknown as { __islandDebug: IslandDebug & { ui(): { aiPlaying: boolean } } }).__islandDebug;
+              const s = d.state();
+              return { s, aiPlaying: d.ui().aiPlaying };
+            });
+            state = snapshot.s;
+            return state.outcome !== null || (!snapshot.aiPlaying && state.players[state.activePlayerIndex]?.kind === "human");
+          },
+          { message: `human turn back (or game over) after Next Day #${turn}`, timeout: 20_000 },
+        )
         .toBe(true);
 
       expect(pageErrors, `no thrown error through Next Day #${turn}`).toHaveLength(0);
@@ -123,7 +137,13 @@ test.describe("hot-seat hand-off", () => {
 
     await waitForDebugHandle(page);
 
-    await page.getByTestId("next-day").click();
+    // Hot-seat hides the board behind the hand-off overlay from the very
+    // first turn, so the first player must take the device before playing.
+    await expect(page.getByTestId("handoff-overlay")).toBeVisible();
+    await page.getByTestId("handoff-continue").click();
+    await expect(page.getByTestId("handoff-overlay")).toHaveCount(0);
+
+    await page.getByTestId("next-day-button").click();
 
     await expect(page.getByTestId("handoff-overlay")).toBeVisible();
     await expect(page.getByTestId("handoff-continue")).toBeVisible();

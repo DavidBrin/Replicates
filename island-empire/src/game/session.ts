@@ -33,6 +33,18 @@ import type { SessionConfig } from "./sessionConfig";
  */
 
 export const AI_STEP_MS = 300;
+/** An AI turn never takes longer than this to replay, however many actions it has. */
+export const AI_TURN_BUDGET_MS = 4000;
+export const AI_STEP_MIN_MS = 40;
+
+/**
+ * Per-action replay delay for one AI turn: 300 ms while the turn is short
+ * enough to follow action by action, compressed towards 40 ms as the action
+ * list grows so a rich late-game AI (60+ actions) still finishes in ~4 s.
+ */
+export function aiStepMs(actionCount: number): number {
+  return Math.max(AI_STEP_MIN_MS, Math.min(AI_STEP_MS, Math.floor(AI_TURN_BUDGET_MS / Math.max(1, actionCount))));
+}
 
 export interface SessionUiState {
   /** Bumps on every `GameState` change so React re-reads `session.state`. */
@@ -532,6 +544,7 @@ export function createSession(options: SessionOptions): Session {
       actions = [{ type: "END_TURN" }];
     }
     if (actions[actions.length - 1]?.type !== "END_TURN") actions = [...actions, { type: "END_TURN" }];
+    const stepMs = aiStepMs(actions.length);
     let i = 0;
     const step = () => {
       if (destroyed || state.outcome) {
@@ -549,7 +562,7 @@ export function createSession(options: SessionOptions): Session {
         if (action.type === "END_TURN") return;
         // an AI action the engine rejects is skipped; the turn still ends
         if (!actions.slice(i).some((a) => a.type === "END_TURN")) actions.push({ type: "END_TURN" });
-        later(step, AI_STEP_MS);
+        later(step, stepMs);
         return;
       }
       state = r.state;
@@ -567,9 +580,9 @@ export function createSession(options: SessionOptions): Session {
         finish(state.outcome.winner);
         return;
       }
-      later(step, AI_STEP_MS);
+      later(step, stepMs);
     };
-    later(step, AI_STEP_MS);
+    later(step, stepMs);
   }
 
   function finish(winner: number): void {

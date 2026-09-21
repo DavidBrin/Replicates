@@ -118,6 +118,8 @@ test.describe("campaign level 01", () => {
     }
     const final = await readState(page);
     expect(final.outcome).toEqual({ winner: 0 });
+    // the `victory` tutorial bubble ("THE ISLAND IS OURS!") shows before the modal
+    await dismissTutorial(page);
     await expect(page.locator(SEL.endModal)).toBeVisible();
     await expect(page.locator(SEL.endModal)).toHaveAttribute("data-outcome", "victory");
     await expect(page.locator('[data-testid="end-stars"]')).toBeVisible();
