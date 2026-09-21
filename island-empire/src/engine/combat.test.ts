@@ -103,9 +103,14 @@ describe("attack (SPEC §3.2 strict-greater, §3.4)", () => {
     expect(tile(chest.state, 4, 4)).toMatchObject({ owner: 0, building: null, provinceId: "p0-1-1" });
     expect(provinceOf(chest.state, 1, 1).gold).toBe(10);
 
-    const wall = stateFrom({ terrain, owners, objects: ["........", ".C.4.C..", "....W...", "........", "........", "........"] });
+    // Walls are player purchases, so a map may only author them on owned land (codex round 3).
+    const wall = stateFrom({
+      terrain,
+      owners: ["........", ".000111.", ".000111.", ".000111.", "........", "........"],
+      objects: ["........", ".C.4.C..", "....W...", "........", "........", "........"],
+    });
     const r = apply(wall, move(at(3, 1), at(4, 2)));
-    expect(r.events).toContainEqual({ type: "buildingDestroyed", at: at(4, 2), building: "woodwall", owner: null });
+    expect(r.events).toContainEqual({ type: "buildingDestroyed", at: at(4, 2), building: "woodwall", owner: 1 });
     expect(tile(r.state, 4, 2).building).toBeNull();
   });
 

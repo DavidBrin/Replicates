@@ -74,9 +74,12 @@ export function createInitialState(map: MapDefinition, seed: number, options: In
     const slot = map.players[player.index];
     if (slot === undefined) continue;
     let gold = slot.startGold;
-    if (player.kind === "ai") {
+    // Only a campaign map carries a difficulty table; generated and custom
+    // maps keep their authored gold (10 per province — D15), whatever the
+    // AI tier (codex round 3).
+    if (player.kind === "ai" && map.difficulty !== null) {
       const difficulty = options.difficulty ?? player.aiDifficulty ?? "normal";
-      const multiplier = map.difficulty?.[difficulty]?.aiStartGoldMultiplier ?? RULES.aiStartGoldMultiplier[difficulty];
+      const multiplier = map.difficulty[difficulty]?.aiStartGoldMultiplier ?? RULES.aiStartGoldMultiplier[difficulty];
       gold = Math.round(gold * multiplier);
     }
     const provinces = provincesOf(core, player.index).sort(

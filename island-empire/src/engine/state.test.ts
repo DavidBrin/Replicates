@@ -28,7 +28,7 @@ describe("createInitialState (SPEC §3.5, §3.8, D14)", () => {
 
   it("scales AI seats' gold by the map's difficulty table, rounded to nearest", () => {
     const table = { easy: { aiStartGoldMultiplier: 0.5 }, normal: { aiStartGoldMultiplier: 1 }, hard: { aiStartGoldMultiplier: 1.5 } };
-    const map = asciiMap(padSpec({ ...spec, difficulty: table }));
+    const map = { ...asciiMap(padSpec(spec)), difficulty: table };
     const easy = createInitialState(map, 1, { difficulty: "easy" });
     expect(provinceOf(easy, 1, 1).gold).toBe(13); // human: never scaled
     expect(provinceOf(easy, 7, 1).gold).toBe(7); // 6.5 → 7
@@ -41,16 +41,17 @@ describe("createInitialState (SPEC §3.5, §3.8, D14)", () => {
     expect(provinceOf(own, 1, 3).gold).toBe(13); // green defaults to normal
     expect(own.players[1]?.aiDifficulty).toBe("hard");
     expect(own.players[2]?.aiDifficulty).toBe("normal");
-    // No table on the map → the default RULES multipliers apply.
+    // No table on the map (generated / custom) → authored gold is kept whatever the tier (codex round 3).
     const bare = createInitialState(asciiMap(padSpec(spec)), 1, { difficulty: "easy" });
-    expect(provinceOf(bare, 1, 3).gold).toBe(7);
+    expect(provinceOf(bare, 1, 3).gold).toBe(13);
   });
 
   it("applies the seats override for kind and difficulty", () => {
     const map = asciiMap(padSpec(spec));
     const s = createInitialState(map, 1, { seats: [{ kind: "ai", aiDifficulty: "easy" }, { kind: "human" }, { kind: "ai", aiDifficulty: "hard" }] });
     expect(s.players.map((p) => [p.kind, p.aiDifficulty])).toEqual([["ai", "easy"], ["human", null], ["ai", "hard"]]);
-    expect(provinceOf(s, 1, 1).gold).toBe(7); // now an easy AI: 13 × 0.5 → 6.5 → 7
+    // A map without a difficulty table (generated / custom) never scales AI gold (codex round 3).
+    expect(provinceOf(s, 1, 1).gold).toBe(13);
     expect(provinceOf(s, 7, 1).gold).toBe(13); // now human
   });
 

@@ -127,6 +127,9 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
     if (t.building !== null && !ownable) err(`${at(x, y)} has a building on ${t.terrain}`);
     if (t.building !== null && isFieldOrGrave(t.terrain)) err(`${at(x, y)} has a building on a ${t.terrain}`);
     if (t.building === "city" && t.owner === null) err(`${at(x, y)} has a city on unowned land`);
+    if ((t.building === "farm" || t.building === "woodwall" || t.building === "stoneTower") && t.owner === null) {
+      err(`${at(x, y)} has a ${t.building} on unowned land — only mines and chests may be neutral`);
+    }
     if (t.unit !== null) {
       if (typeof t.unit !== "object" || ![1, 2, 3, 4].includes(t.unit.level)) err(`${at(x, y)} unit level must be 1..4`);
       if (!ownable) err(`${at(x, y)} has a unit on ${t.terrain}`);
@@ -135,6 +138,7 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
     }
     if (t.decoration !== null && !DECORATIONS.includes(t.decoration)) err(`${at(x, y)} has unknown decoration`);
     if (typeof t.road !== "boolean") err(`${at(x, y)} road must be boolean`);
+    else if (t.road && !ownable) err(`${at(x, y)} has a road on ${t.terrain}`);
     if (t.graveAge !== undefined) {
       if (t.terrain !== "grave") err(`${at(x, y)} has graveAge but is not a grave`);
       else if (t.graveAge !== 0 && t.graveAge !== 1) err(`${at(x, y)} graveAge must be 0 or 1`);

@@ -40,7 +40,7 @@ export function SpeechBubble() {
     style = { left, top, transform: "translate(-50%, -100%)" };
     tail = { left: `calc(50% + ${Math.max(-100, Math.min(100, p.x - left))}px)` };
   } else {
-    style = { left: "50%", bottom: HUD_HEIGHT + 16, transform: "translateX(-50%)" };
+    style = { left: "50%", bottom: `calc(${HUD_HEIGHT + 16}px + env(safe-area-inset-bottom, 0px))`, transform: "translateX(-50%)" };
   }
   return (
     <div

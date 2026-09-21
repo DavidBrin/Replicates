@@ -26,7 +26,7 @@ export function InfoCard() {
       data-testid="info-card"
       role="status"
       className="pointer-events-none absolute left-1/2 z-10 flex -translate-x-1/2 items-stretch"
-      style={{ bottom: HUD_HEIGHT + 8, maxWidth: "calc(100vw - 96px)" }}
+      style={{ bottom: `calc(${HUD_HEIGHT + 8}px + env(safe-area-inset-bottom, 0px))`, maxWidth: "calc(100vw - 96px)" }}
     >
       <div
         className="flex items-center justify-center"

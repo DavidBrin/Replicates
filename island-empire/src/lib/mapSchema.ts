@@ -106,8 +106,9 @@ export const TileDefinitionSchema = z.object({
 export const PlayerSlotDefinitionSchema = z.object({
   index: int.min(0).max(MAX_PLAYERS - 1),
   colour: z.enum(PLAYER_COLOUR_NAMES),
-  kind: z.enum(["human", "ai", "empty"]),
+  kind: z.enum(["human", "ai"]),
   startGold: int.min(0).max(100_000),
+  aiDifficulty: z.enum(["easy", "normal", "hard"]).optional(),
 });
 
 export const TutorialStepSchema = z.object({
@@ -134,6 +135,7 @@ const MapBodySchema = z.object({
   biome: z.enum(BIOMES),
   tiles: z.array(TileDefinitionSchema).max(MAP_MAX_SIZE * MAP_MAX_SIZE),
   players: z.array(PlayerSlotDefinitionSchema).min(MIN_PLAYERS).max(MAX_PLAYERS),
+  startGoldPerProvince: z.boolean().optional(),
   tutorial: z.array(TutorialStepSchema).max(200),
   difficulty: DifficultyTableSchema.nullable(),
 });

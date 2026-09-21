@@ -19,7 +19,7 @@ export function BackButton() {
       onClick={() => session.deselect()}
       className="absolute left-2 z-10 flex items-center justify-center text-3xl"
       style={{
-        bottom: HUD_HEIGHT + 8,
+        bottom: `calc(${HUD_HEIGHT + 8}px + env(safe-area-inset-bottom, 0px))`,
         width: 56,
         height: 56,
         background: UI.cardCream,

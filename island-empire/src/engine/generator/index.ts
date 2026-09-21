@@ -75,6 +75,14 @@ function tryGenerate(options: GeneratorOptions, width: number, height: number, s
 
   if (!createLand(b, size, last)) return null;
   scatterObstacles(b);
+  // SPEC §11 / D16: at least a quarter of the board must still be ownable
+  // AFTER obstacles. The pre-obstacle 34 % floor makes this rare but not
+  // impossible (seed 999995, small, grass: 35/144), so a shortfall is one more
+  // reason to retry with the next derived seed.
+  if (!last) {
+    const ownable = b.terrain.filter((terrain) => isOwnable(terrain)).length;
+    if (ownable < 0.25 * width * height) return null;
+  }
   addBridges(b);
   assignOwners(b, seats);
   balance(b, seats);

@@ -76,7 +76,7 @@ export default function ChallengesPage() {
       difficulty,
       seed,
     });
-    router.push(`/play/custom/${encodeURIComponent(map.id)}?challenge=${encodeURIComponent(current.weekKey)}`);
+    router.push(`/play/custom/${encodeURIComponent(map.id)}?challenge=${encodeURIComponent(current.weekKey)}&difficulty=${difficulty}`);
   };
 
   return (
