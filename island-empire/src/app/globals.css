@@ -1,0 +1,33 @@
+@import "tailwindcss" source(none);
+
+/*
+ * Scan the source tree, and only the source tree. Tailwind v4's automatic
+ * content walk would otherwise read `research/screenshots/*.png` and extract
+ * "class names" from compressed bytes — a lesson the Linear replica learned
+ * as a 500 on every route.
+ */
+@source "../**/*.{ts,tsx}";
+
+:root {
+  --ie-sky: #3aa8f0;
+  --ie-hud-blue: #3d4fc4;
+  --ie-card-yellow: #f6d83c;
+  --ie-button-green: #4caf50;
+  --ie-ink: #111111;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ie-sky);
+  color: white;
+  font-family: var(--font-pixel, "Press Start 2P", ui-monospace, monospace);
+  -webkit-font-smoothing: none;
+  overscroll-behavior: none;
+}
+
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
