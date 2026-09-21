@@ -51,7 +51,7 @@ Next.js 16 · canvas renderer with code-drawn pixel art · a pure engine with an
 enforced layering rule · **434 unit and property tests** · 25 e2e tests across
 desktop and mobile Chrome · PostgreSQL only for sharing custom maps (WASM
 locally, Neon deployed). Built from six parallel research lanes, then five
-parallel build slices, then a codex review run to a clean pass.
+parallel build slices, then eight rounds of codex review (41 findings, every one fixed or reconciled in `DECISIONS.md`; a ninth round was blocked by the Codex workspace running out of credits, so the loop did not end on an explicit clean verdict).
 
 ## Index
 

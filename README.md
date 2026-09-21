@@ -39,7 +39,8 @@ asset.
 Next.js 16 · canvas renderer with code-drawn pixel art · **434 unit and property
 tests** · 25 e2e across desktop and mobile Chrome · Postgres only for sharing
 custom maps (WASM locally, Neon deployed). Built from six parallel research
-lanes, then five parallel build slices, then a codex review run to a clean pass.
+lanes, then five parallel build slices, then eight rounds of codex review
+(41 findings fixed or reconciled; a ninth round was blocked by Codex credits).
 
 **[Read the README →](island-empire/README.md)** ·
 [Spec](island-empire/SPEC.md) · [Decisions](island-empire/DECISIONS.md) · [Research](island-empire/research)

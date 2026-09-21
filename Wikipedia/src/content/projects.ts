@@ -178,7 +178,7 @@ export const projects: ProjectInfo[] = [
     folder: "island-empire",
     stack: ["Next.js 16", "canvas renderer with code-drawn pixel art", "PGlite (local) / Neon (production)"],
     testStats: "434 unit and property tests, 25 e2e",
-    builtWith: "Six research lanes, five build slices, one codex review run to clean",
+    builtWith: "Six research lanes, five build slices, eight codex review rounds",
     liveUrl: "https://island-empire-david.vercel.app",
     screenshots: [
       "island-empire/docs/screenshots/overworld.png",
