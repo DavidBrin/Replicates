@@ -38,7 +38,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={pixel.variable}>
       <body className="min-h-dvh antialiased">
-        <div id="ie-shell" className="relative flex min-h-dvh flex-col">
+        <div
+          id="ie-shell"
+          className="relative flex min-h-dvh flex-col"
+          // Normal-flow screens start below the notch; the in-game screen is
+          // position: fixed and handles its own insets.
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        >
           {children}
         </div>
       </body>

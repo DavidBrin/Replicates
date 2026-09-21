@@ -146,6 +146,10 @@ function paintOne(tile: TileDefinition, tool: Tool, activeOwner: number, playerC
       const next: TileDefinition = { ...tile, terrain: tool.terrain };
       delete next.graveAge;
       if (tool.terrain === "grave") next.graveAge = 0;
+      // Fields and graves cannot carry a building (validateMap), so painting
+      // one over a city/farm/wall removes the building rather than leaving an
+      // unsaveable draft (codex round 5).
+      if (tool.terrain === "grassField" || tool.terrain === "grave") next.building = null;
       if (!isOwnable(tool.terrain)) {
         next.owner = null;
         next.building = null;

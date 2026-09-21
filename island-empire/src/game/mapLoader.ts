@@ -18,13 +18,15 @@ interface LevelsModule {
 }
 
 export async function loadCampaignLevel(levelId: string): Promise<{ map: MapDefinition; demo: boolean }> {
-  try {
-    const mod = (await import("@/content/levels")) as LevelsModule;
-    if (mod.loadLevel) return { map: await mod.loadLevel(levelId), demo: false };
-  } catch {
-    /* content loader not present yet — fall through */
+  // `/play/campaign/demo` keeps the built-in demo board for development and
+  // screenshots; every other id must be a real level. An unknown id is an
+  // error the play page shows, never a silent demo (codex round 5).
+  if (levelId === "demo") return { map: DEMO_MAP, demo: true };
+  const mod = (await import("@/content/levels")) as LevelsModule;
+  if (!mod.loadLevel || (mod.LEVEL_IDS && !mod.LEVEL_IDS.includes(levelId))) {
+    throw new Error(`Level "${levelId}" does not exist`);
   }
-  return { map: DEMO_MAP, demo: true };
+  return { map: await mod.loadLevel(levelId), demo: false };
 }
 
 export async function loadCustomMap(mapId: string): Promise<MapDefinition> {
