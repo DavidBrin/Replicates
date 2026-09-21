@@ -159,15 +159,16 @@ export function provincesOf(state: GameStateCore, owner: number): Province[] {
 
 /**
  * True when a farm / wall / tower / knight may be placed on this own tile.
- * Buildings need an empty tile of buildable terrain; a knight1 may also be
- * placed onto an own field / grave (clearing it) or onto an own mine / chest
- * (collecting the chest), since units may stand on those (D35).
+ * Buildings need an empty tile of buildable terrain; a knight of any level
+ * (D41) needs an empty own tile too — a field or grave counts as empty and is
+ * cleared by the placement. Mines and chests are never purchase targets: a
+ * chest is collected by stepping onto it (D40), a mine by standing on it.
  */
 export function isBuildableOwnTile(t: RuntimeTile, item: BuyItem): boolean {
-  if (t.unit !== null || t.provinceId === null) return false;
-  if (item === "farm") return t.building === null && isBaseTerrain(t.terrain);
-  if (item === "woodwall" || item === "stoneTower") return t.building === null && (isBaseTerrain(t.terrain) || t.terrain === "bridge");
-  return isOwnable(t.terrain) && !blocksUnit(t.building);
+  if (t.unit !== null || t.provinceId === null || t.building !== null) return false;
+  if (item === "farm") return isBaseTerrain(t.terrain);
+  if (item === "woodwall" || item === "stoneTower") return isBaseTerrain(t.terrain) || t.terrain === "bridge";
+  return isOwnable(t.terrain);
 }
 
 /**
@@ -216,7 +217,6 @@ export function legalBuildZone(state: GameStateCore, item: BuyItem): TileCoord[]
         if (canMerge(t.unit.level, level)) out.push({ x: t.x, y: t.y });
         continue;
       }
-      if (level !== null && level > 1) continue; // only knight1 builds peacefully
       if (isBuildableOwnTile(t, item)) out.push({ x: t.x, y: t.y });
       continue;
     }

@@ -22,9 +22,14 @@ describe("BUY (SPEC §3.4, §3.5, D10, D11)", () => {
     expect(r.events).toEqual([{ type: "bought", item: "knight1", at: at(2, 2), cost: 10, provinceId: "p0-1-1" }]);
   });
 
-  it("only a level-1 knight may be placed on an empty own tile", () => {
-    const s = stateFrom(board);
-    expect(apply(s, buy("knight2", at(2, 2))).error).toBe("only a level-1 knight can be placed on an empty tile");
+  it("any knight level may be placed directly on an empty own tile at 10 gold per level (D41)", () => {
+    const s = stateFrom({ ...board, startGold: 40 });
+    expect(legalBuildZone(s, "knight2")).toContainEqual(at(2, 2));
+    const r = apply(s, buy("knight2", at(2, 2)));
+    expect(r.error).toBeUndefined();
+    expect(tile(r.state, 2, 2)).toMatchObject({ unit: { level: 2, readyToMove: true } });
+    expect(provinceOf(r.state, 1, 1).gold).toBe(20);
+    expect(apply(s, buy("knight4", at(2, 2))).error).toBeUndefined();
   });
 
   it("rejects unaffordable, occupied and foreign placements with clear errors", () => {
@@ -78,7 +83,7 @@ describe("BUY (SPEC §3.4, §3.5, D10, D11)", () => {
     expect(k1).not.toContain("5,2"); // red, covered by the red city
     expect(k1).not.toContain("1,1");
     const k2 = sorted(legalBuildZone(s, "knight2"));
-    expect(k2).not.toContain("2,2"); // no peaceful L2
+    expect(k2).toContain("2,2"); // peaceful L2 placement (D41)
     expect(k2).toContain("2,1"); // merge → L3
     expect(k2).toContain("4,1"); // attack-buy
     const k4 = legalBuildZone(s, "knight4");

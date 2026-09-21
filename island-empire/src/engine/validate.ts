@@ -100,6 +100,9 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
     seenColour.add(p.colour);
     if (p.kind !== "human" && p.kind !== "ai") err(`players[${i}].kind must be "human" or "ai" — "empty" is only a setup-screen placeholder`);
     if (!isInt(p.startGold) || p.startGold < 0) err(`players[${i}].startGold must be a non-negative integer`);
+    if (p.aiDifficulty !== undefined && !["easy", "normal", "hard"].includes(p.aiDifficulty)) {
+      err(`players[${i}].aiDifficulty must be easy, normal or hard`);
+    }
   });
   const validPlayer = (owner: number) => isInt(owner) && owner >= 0 && owner < players.length;
 

@@ -46,7 +46,12 @@ export function GameCanvas({ bottomInset }: { bottomInset: number }) {
     const onGesture = (g: Gesture) => {
       switch (g.type) {
         case "tap": {
-          if (session.store.getState().tutorialStep) session.dismissTutorial();
+          if (session.store.getState().tutorialStep) {
+            // The tap that closes a tutorial bubble is consumed: it must not
+            // also select, move or capture underneath (codex round 8).
+            session.dismissTutorial();
+            break;
+          }
           const tile = screenToTile(session.camera, g.x, g.y);
           if (tile) session.tapTile(tile);
           else session.deselect();

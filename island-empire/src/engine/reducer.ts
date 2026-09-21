@@ -172,19 +172,18 @@ function applyBuy(state: GameState, action: Extract<Action, { type: "BUY" }>): A
       return { state: closeDraft(d, [...state.history, action], state.turnStart), events: d.events };
     }
 
-    if (level !== null && level > 1) return reject(state, "only a level-1 knight can be placed on an empty tile");
+    // D41: any knight level may be placed directly on an empty own tile.
     if (!isBuildableOwnTile(t, item)) return reject(state, "tile is not free to build on");
     setProvince(d, province.id, { gold: province.gold - cost });
     d.events.push({ type: "bought", item, at, cost, provinceId: province.id });
     if (level !== null) {
       const clears = isFieldOrGrave(t.terrain);
       setTile(d, idx, {
-        unit: { level: 1, readyToMove: !clears },
+        unit: { level, readyToMove: !clears },
         terrain: clears ? BASE_TERRAIN[d.biome] : t.terrain,
         graveAge: 0,
       });
       if (clears) d.events.push({ type: "fieldCleared", at });
-      if (t.building === "chest") collectChest(d, idx);
     } else {
       setTile(d, idx, { building: item as "woodwall" | "stoneTower" | "farm" });
     }

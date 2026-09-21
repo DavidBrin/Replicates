@@ -36,18 +36,14 @@ describe("chests and mines are enterable (SPEC §3.4, D35)", () => {
     expect(legalMoveZone(r.state, at(3, 3))).toContainEqual(at(2, 3));
   });
 
-  it("a knight1 may be bought onto an own chest (collecting it) or an own mine", () => {
+  it("an own chest or mine is never a purchase target — units reach them by moving (D40, D41)", () => {
     const s = stateFrom(board);
-    expect(legalBuildZone(s, "knight1")).toContainEqual(at(3, 2));
-    expect(legalBuildZone(s, "knight1")).toContainEqual(at(3, 3));
+    expect(legalBuildZone(s, "knight1")).not.toContainEqual(at(3, 2));
+    expect(legalBuildZone(s, "knight1")).not.toContainEqual(at(3, 3));
     expect(legalBuildZone(s, "farm")).not.toContainEqual(at(3, 2));
     expect(legalBuildZone(s, "woodwall")).not.toContainEqual(at(3, 3));
-    const r = apply(s, buy("knight1", at(3, 2)));
-    expect(r.error).toBeUndefined();
-    expect(tile(r.state, 3, 2)).toMatchObject({ building: null, unit: { level: 1, readyToMove: true } });
-    expect(provinceOf(r.state, 1, 1).gold).toBe(10); // −10 +10
-    expect(r.events).toContainEqual({ type: "chestCollected", at: at(3, 2), amount: 10 });
-    expect(tile(apply(s, buy("knight1", at(3, 3))).state, 3, 3)).toMatchObject({ building: "mine", unit: { level: 1 } });
+    expect(apply(s, buy("knight1", at(3, 2))).error).toBe("tile is not free to build on");
+    expect(apply(s, buy("knight1", at(3, 3))).error).toBe("tile is not free to build on");
   });
 
   it("a foreign chest / mine is captured by moving or buying onto it", () => {
