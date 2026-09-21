@@ -129,14 +129,14 @@ export function indexOf(map: Pick<MapDefinition, "width">, x: number, y: number)
 export function paintTile(map: MapDefinition, index: number, tool: Tool, activeOwner: number): MapDefinition {
   const current = map.tiles[index];
   if (!current) return map;
-  const next = paintOne(current, tool, activeOwner, map.players.length);
+  const next = paintOne(current, tool, activeOwner, map.players.length, map.biome);
   if (next === current) return map;
   const tiles = map.tiles.slice();
   tiles[index] = next;
   return { ...map, tiles };
 }
 
-function paintOne(tile: TileDefinition, tool: Tool, activeOwner: number, playerCount: number): TileDefinition {
+function paintOne(tile: TileDefinition, tool: Tool, activeOwner: number, playerCount: number, biome: MapDefinition["biome"]): TileDefinition {
   const ownerFor = (t: TileDefinition): number =>
     t.owner ?? Math.min(Math.max(0, activeOwner), playerCount - 1);
 
@@ -182,7 +182,14 @@ function paintOne(tile: TileDefinition, tool: Tool, activeOwner: number, playerC
     case "building": {
       if (!isOwnable(tile.terrain)) return tile;
       if (tile.building === tool.building && tile.unit === null) return tile;
+      // A building cannot stand on a field or grave (validateMap); placing one
+      // there restores the biome's plain ground first (codex round 6).
+      const onFieldOrGrave = tile.terrain === "grassField" || tile.terrain === "grave";
       const next: TileDefinition = { ...tile, building: tool.building, unit: null };
+      if (onFieldOrGrave) {
+        next.terrain = BIOME_BASE[biome];
+        delete next.graveAge;
+      }
       if (OWNED_BUILDINGS.has(tool.building)) next.owner = ownerFor(tile);
       return next;
     }

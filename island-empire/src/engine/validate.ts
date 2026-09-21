@@ -87,6 +87,10 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
   const seenIndex = new Set<number>();
   const seenColour = new Set<string>();
   players.forEach((p, i) => {
+    if (p === null || typeof p !== "object") {
+      err(`players[${i}] must be an object`);
+      return;
+    }
     if (!isInt(p.index) || p.index < 0 || p.index > MAX_PLAYERS - 1) err(`players[${i}].index must be 0..7`);
     else if (p.index !== i) err(`players[${i}].index must equal its position (${i})`);
     if (seenIndex.has(p.index)) err(`players[${i}].index ${p.index} is duplicated`);
@@ -205,6 +209,10 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
   const tutorial = Array.isArray(map.tutorial) ? map.tutorial : [];
   if (!Array.isArray(map.tutorial)) err("tutorial must be an array");
   tutorial.forEach((step, i) => {
+    if (step === null || typeof step !== "object") {
+      err(`tutorial[${i}] must be an object`);
+      return;
+    }
     if (!TUTORIAL_TRIGGER_IDS.includes(step.triggerId)) err(`tutorial[${i}].triggerId ${String(step.triggerId)} is not a known trigger`);
     if (typeof step.text !== "string" || step.text.length === 0) err(`tutorial[${i}].text must be a non-empty string`);
     if (step.highlightTile !== undefined) {

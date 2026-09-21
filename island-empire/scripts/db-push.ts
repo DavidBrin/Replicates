@@ -74,7 +74,9 @@ function resolveTarget(): Target {
   if (driver === "neon" && !url) {
     throw new Error("DB_DRIVER=neon requires DATABASE_URL");
   }
-  if (driver === "pglite" && process.env["NODE_ENV"] === "production") {
+  const serverless = ["VERCEL", "AWS_LAMBDA_FUNCTION_NAME", "AWS_EXECUTION_ENV", "NETLIFY", "RENDER", "FLY_APP_NAME", "K_SERVICE", "FUNCTION_TARGET", "FUNCTIONS_WORKER_RUNTIME", "CF_PAGES"].some((name) => Boolean(process.env[name]?.trim()));
+  const e2eFence = process.env["E2E_ALLOW_PGLITE_PRODUCTION_BUILD"]?.trim() === "true" && !serverless;
+  if (driver === "pglite" && process.env["NODE_ENV"] === "production" && !e2eFence) {
     throw new Error(
       "DB_DRIVER=pglite cannot be used in production: its storage does not " +
         "survive a serverless invocation. Set DATABASE_URL.",
@@ -99,6 +101,12 @@ async function applyToPglite(dataDir: string): Promise<void> {
   const { PGlite } = (await import("@electric-sql/pglite")) as unknown as {
     PGlite: new (dataDir?: string) => PgliteLike;
   };
+  if (dataDir !== ":memory:") {
+    // A fresh checkout has no `.data/`; PGlite does not create parents itself.
+    const { mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(dataDir), { recursive: true });
+  }
   const db = dataDir === ":memory:" ? new PGlite() : new PGlite(dataDir);
   try {
     await db.exec(SCHEMA_SQL);
