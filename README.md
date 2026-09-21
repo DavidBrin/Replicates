@@ -7,6 +7,45 @@ and research notes.
 
 ---
 
+## [Island Empire](island-empire) — the Slay-like, on a square grid
+
+> **every tile pays one gold a day; every knight eats it**
+
+A rebuild of [Island Empire](https://play.google.com/store/apps/details?id=com.hbrz.wodan),
+HBRZ-Developer's mobile territory game descended from Slay and Antiyoy. A
+twelve-level campaign with the original's tutorials, random maps against the
+AI, hot-seat for eight, weekly challenges and a map editor whose maps are
+shareable by link.
+
+| Overworld | A level | Map editor |
+|---|---|---|
+| <img src="island-empire/docs/screenshots/overworld.png" width="240" alt="Campaign overworld: three islands joined by bridges, a dirt path with twelve numbered nodes and an avatar on the next one"> | <img src="island-empire/docs/screenshots/match.png" width="240" alt="A level in play: square grass tiles with bead borders, a selected knight lighting its move zone, red shield badges on the enemy tiles and the blue HUD bar"> | <img src="island-empire/docs/screenshots/editor.png" width="240" alt="Map editor: a painted grid beside a toolbox of terrain, owner and object brushes with a live validation panel"> |
+
+The developer publishes no rulebook, so **every rule was read off the game's
+screenshots and walkthrough videos** — and they contradicted every text source.
+Reviews and the Slay genealogy say hex; the frames show a **square grid with
+4-neighbour adjacency**, shield badges that never sit on a diagonal, and walls
+that protect only their own tile while a city protects the four around it.
+Knight level 1 costs `10` and eats `2` a day, level 2 costs `20` and eats `5`,
+a farm costs `12` and pays `5`: all from unit cards. The numbers no card ever
+showed are extrapolations and are labelled as such.
+
+The engine is a pure function — `apply(state, action)` — with a test that fails
+the build on any import of React, the DOM or `Math.random`; the AI, the map
+generator and undo (a replay of the turn from a snapshot) live inside it. Every
+sprite is drawn from code onto a 32-pixel canvas; nothing in the folder is an
+asset.
+
+Next.js 16 · canvas renderer with code-drawn pixel art · **434 unit and property
+tests** · 25 e2e across desktop and mobile Chrome · Postgres only for sharing
+custom maps (WASM locally, Neon deployed). Built from six parallel research
+lanes, then five parallel build slices, then a codex review run to a clean pass.
+
+**[Read the README →](island-empire/README.md)** ·
+[Spec](island-empire/SPEC.md) · [Decisions](island-empire/DECISIONS.md) · [Research](island-empire/research)
+
+---
+
 ## [FL Studio](fl-studio) — the beat, not the DAW
 
 > **program it, arrange it, hear it, save it**

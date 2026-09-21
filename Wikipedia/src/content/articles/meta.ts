@@ -91,6 +91,14 @@ export const flStudioMeta: ArticleMeta = {
   lastEdited: "1 September 2026",
 };
 
+export const islandEmpireMeta: ArticleMeta = {
+  slug: projectSlug("Island Empire"),
+  title: "Island Empire (replica)",
+  shortDescription: "A browser rebuild of the mobile territory game Island Empire",
+  categories: ["Software replicas", "Turn-based strategy video games"],
+  lastEdited: "21 September 2026",
+};
+
 export const artWallMeta: ArticleMeta = {
   slug: projectSlug("Art Wall"),
   title: "Art Wall",
@@ -239,6 +247,7 @@ export const articleMetas: ArticleMeta[] = [
   dollarPixelsMeta,
   flStudioMeta,
   artWallMeta,
+  islandEmpireMeta,
   verilogMeta,
   nocturnalMeta,
   signalsMeta,
