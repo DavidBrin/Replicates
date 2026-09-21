@@ -58,7 +58,7 @@ parallel build slices, then eight rounds of codex review (41 findings, every one
 | Path | What it is |
 |---|---|
 | [`SPEC.md`](SPEC.md) | The contract the code was built against: rules with every number, architecture, screens, visual design, tests, slices |
-| [`DECISIONS.md`](DECISIONS.md) | D1–D39, each with its reasoning and the evidence file it rests on |
+| [`DECISIONS.md`](DECISIONS.md) | D1–D41, each with its reasoning and the evidence file it rests on |
 | [`research/06-research-brief.md`](research/06-research-brief.md) | The consolidated, screenshot-verified brief — read this before touching a rule |
 | [`research/`](research) | Six lanes (repo conventions, rules, modes, UX, genealogy, visual design), store screenshots, walkthrough contact sheets and crops |
 | `src/engine/` | Rules, provinces, move zones, AI, generator, serialisation, validation — pure TypeScript |
