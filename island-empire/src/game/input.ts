@@ -108,6 +108,14 @@ export class GestureTracker {
     if (this.pointers.size === 0) {
       this.dragging = false;
       this.tapCancelled = false;
+    } else if (this.pointers.size === 1) {
+      // Same as `up()`: the surviving finger continues as a drag from where it
+      // is, so a cancelled pinch finger cannot pan by the stale displacement.
+      const rest = [...this.pointers.values()][0]!;
+      rest.startX = rest.x;
+      rest.startY = rest.y;
+      this.dragging = true;
+      this.tapCancelled = true;
     }
   }
 

@@ -201,7 +201,7 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
     if (cities.length === 1) cityProvinceOf.set(owner, (cityProvinceOf.get(owner) ?? 0) + 1);
   }
   players.forEach((p) => {
-    if (!validPlayer(p.index)) return;
+    if (p === null || typeof p !== "object" || !validPlayer(p.index)) return;
     if ((cityProvinceOf.get(p.index) ?? 0) === 0) err(`player ${p.index} has no city on a province of at least 2 tiles`);
   });
 
@@ -217,7 +217,8 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
     if (typeof step.text !== "string" || step.text.length === 0) err(`tutorial[${i}].text must be a non-empty string`);
     if (step.highlightTile !== undefined) {
       const h = step.highlightTile;
-      if (!isInt(h.x) || !isInt(h.y) || h.x < 0 || h.y < 0 || h.x >= width || h.y >= height) err(`tutorial[${i}].highlightTile is out of bounds`);
+      if (h === null || typeof h !== "object") err(`tutorial[${i}].highlightTile must be a tile coordinate`);
+      else if (!isInt(h.x) || !isInt(h.y) || h.x < 0 || h.y < 0 || h.x >= width || h.y >= height) err(`tutorial[${i}].highlightTile is out of bounds`);
     }
   });
 

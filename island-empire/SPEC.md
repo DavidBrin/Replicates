@@ -113,7 +113,7 @@ Adapted from Antiyoy's `FieldManager` (genealogy §2.7), 4-adjacency instead of 
 - **A move to an empty owned tile does not end the unit's turn** — it stays `readyToMove` and may be issued another MOVE/ATTACK from its new position (budget 4 again, computed fresh), any number of times per turn. This reproduces Slay's "free repositioning" while keeping Antiyoy's bounded per-move flood.
 - **An ATTACK (capture) or a CLEAR (moving onto an owned grass field/grave) ends the unit's turn** (`readyToMove = false`).
 - **Merge**: moving a friendly unit onto another friendly unit sums their levels (max 4) and ends the merged unit's turn **unless both source units were still `readyToMove`**, in which case the merged unit stays ready.
-- **Buy** (see §3.6 for the exact card set): places a new unit/building. A new knight placed onto an adjacent **capturable** tile (rather than an empty owned tile) performs the capture immediately as part of the purchase (Antiyoy's `buildUnitByAttack`) — a freshly bought unit may act the same turn it is bought.
+- **Buy** (see §3.5 for the exact card set): places a new unit/building. A new knight of **any level** placed onto an adjacent **capturable** tile it can beat (rather than an empty owned tile) performs the capture immediately as part of the purchase (Antiyoy's `buildUnitByAttack`; the original's shop sells every level directly, `play-05.png`) — a freshly bought unit may act the same turn it is bought. The human shop exposes the Level 1 card for placement and reaches higher levels through merge-buy at the identical total cost; the AI buys higher levels directly (D41).
 - **Killed unit** (lost an attack, or was the defender of a successful enemy capture): vanishes with no grave. **Only bankruptcy produces graves.**
 - **Captured buildings**: a farm, woodwall or stone tower on a captured tile is **destroyed** (`buildingDestroyed` event; the tile reverts to plain terrain under the capturer). A **chest** is collected (+10 to the capturer's province, `chestCollected`) and removed. A **city** is destroyed (§3.3). A **mine survives** capture and pays its +8 to whoever owns it — mines are map-authored contested objectives (D35).
 - **BUY-merge readiness** (§3.5): the bought unit counts as ready, so the merged unit stays `readyToMove` iff the selected unit was still ready; merging onto a unit that already acted this turn yields a spent unit.
@@ -346,8 +346,9 @@ type Action =
   // own grass field/grave -> clear (ends turn); own unit -> merge (§3.4);
   // enemy/neutral tile -> attack if strength > defence, else rejected (ends turn on success)
   | { type: "BUY"; item: "knight1" | "knight2" | "knight3" | "knight4" | "woodwall" | "stoneTower" | "farm"; at: TileCoord }
-  // knight1 on an empty own tile = peaceful build; knight1 on an adjacent capturable tile = attack-buy;
-  // knight1-4 on a tile holding the player's own selected unit = merge-buy (§3.5); woodwall/stoneTower/farm
+  // knightN on an empty own tile = peaceful build; knightN on an adjacent capturable tile the new
+  // knight can beat = attack-buy (any level, cost 10·N — the original's shop sells every level directly,
+  // D41); knightN on a tile holding the buyer's own unit = merge-buy (§3.5); woodwall/stoneTower/farm
   // are legal only on an empty tile the buyer already owns
   | { type: "UNDO" }
   | { type: "END_TURN" };

@@ -323,3 +323,11 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 
 **Why.** The codex review asked for graves on bridges and mines and for chests to pay only on capture. A grave is a terrain (`Terrain = "grave"`) and a bridge is a terrain too, so a grave on a bridge would need a second state dimension on every tile for a corner case the walkthroughs never show; a mine keeps its building, and a tile cannot hold a building and a grave. Own-land chests exist only when a level author places one there; letting the owner walk onto it is the obvious reading of "+10 once" and avoids a chest that can never be collected. Both are exceptions to a rule, stated in SPEC §3.2, not new mechanisms.
 
+---
+
+## D41 — The engine sells every knight level for direct placement, including attack-buys; the human shop exposes Level 1
+
+**Decision.** `BUY knightN` is legal for N = 1..4 on an empty own tile or on an adjacent capturable tile the new knight can beat, at 10·N gold. The nothing-selected shop shows the Level 1 card; higher levels are reached by merge-buy onto a selected knight. The AI uses direct higher-level buys.
+
+**Why.** Codex round 7 asked to restrict attack-buys to Level 1 because the shop only shows that card. But the original game's store screenshot (`play-05.png`) sells Level 1 and Level 4 cards side by side, and Antiyoy's `buildUnitByAttack` accepts any strength — direct purchase is the genre's rule, not a loophole. There is no economic asymmetry: a human who wants a Level 2 knight on a defended tile buys a Level 1 next to it and merge-buys another onto it (10 + 10, both ready), exactly what the AI pays for its direct Level 2. Keeping the rule in the engine keeps the AI strong and the engine faithful; keeping the shop at one placement card keeps the HUD identical to the walkthrough frames.
+
