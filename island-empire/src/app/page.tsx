@@ -1,7 +1,5 @@
+import { TitleMenu } from "@/components/menu/TitleMenu";
+
 export default function Home() {
-  return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-2xl">Island Empire</h1>
-    </main>
-  );
+  return <TitleMenu />;
 }

@@ -83,6 +83,12 @@ export interface PlayerSlotDefinition {
   /** `"empty"` is only valid before a game starts (random / hot-seat setup). */
   kind: "human" | "ai" | "empty";
   startGold: number;
+  /**
+   * Optional (engine addition): the AI tier this seat plays at when `kind`
+   * is "ai" and the runner passes no seats override to `createInitialState`.
+   * The generator fills it from `GeneratorOptions.seats`.
+   */
+  aiDifficulty?: Difficulty;
 }
 
 /**
@@ -143,6 +149,13 @@ export interface MapDefinition {
   tutorial: TutorialStep[];
   /** null for non-campaign maps */
   difficulty: Record<Difficulty, DifficultyTuning> | null;
+  /**
+   * Optional (engine addition). When true, EVERY province of a player starts
+   * with that player's `startGold` (random maps: 10 each, D15). When absent or
+   * false, only the player's first province (lowest (y, x) city) receives
+   * `startGold` and any further provinces start at 0.
+   */
+  startGoldPerProvince?: boolean;
 }
 
 /** What `/api/maps` lists (SPEC §6). */

@@ -8,18 +8,78 @@
  */
 @source "../**/*.{ts,tsx}";
 
+/*
+ * Design tokens — the palette measured from the store screenshots (SPEC §8).
+ * Every colour a menu, dialog, HUD or canvas painter needs is a variable here
+ * so slices agree on the exact value without importing each other.
+ */
 :root {
-  --ie-sky: #3aa8f0;
+  /* ground */
+  --ie-grass: #b0d848;
+  --ie-grass-grid: #8dad3a;
+  --ie-grass-fleck: #586c24;
+  --ie-field: #99d333;
+  --ie-sand: #f4bf73;
+  --ie-sand-grid: #c39a5c;
+  --ie-snow: #f2f2f2;
+  --ie-snow-grid: #c2c2c2;
+  /* water and shore */
+  --ie-water: #2898f0;
+  --ie-water-shade: #1453bb;
+  --ie-ice: #d5effe;
+  --ie-beach: #f0ce70;
+  /* wood */
+  --ie-wood-dark: #804a1d;
+  --ie-wood: #a1632d;
+  --ie-wood-light: #c08a4f;
+  --ie-wood-deep: #7d4f1f;
+  --ie-wood-plank: #a28444;
+  /* nature */
+  --ie-pine: #209058;
+  --ie-pine-shadow: #1f5847;
+  --ie-pine-light: #60c05f;
+  --ie-trunk: #502820;
+  --ie-mountain: #a86061;
+  --ie-mountain-light: #bf806f;
+  --ie-mountain-dark: #784049;
+  --ie-stone-light: #afb9d2;
+  --ie-stone: #838a9c;
+  --ie-stone-dark: #4d525e;
+  /* ui */
+  --ie-gold: #fed942;
+  --ie-gold-rim: #d7a800;
+  --ie-ink: #1a1010;
+  --ie-sky: #2898f0;
   --ie-hud-blue: #3d4fc4;
+  --ie-hud-red: #c6293b;
+  --ie-green: #228f00;
+  --ie-green-light: #2fae0a;
+  --ie-red: #df2607;
   --ie-card-yellow: #f6d83c;
-  --ie-button-green: #4caf50;
-  --ie-ink: #111111;
+  --ie-card-cream: #f1e2b2;
+  --ie-khaki: #e3c798;
+  --ie-strength: #fbc856;
+  --ie-grey: #595959;
+  /* players, seat order */
+  --ie-p-blue: #337df8;
+  --ie-p-red: #c6293b;
+  --ie-p-green: #52c73f;
+  --ie-p-yellow: #f2c531;
+  --ie-p-purple: #8e44ad;
+  --ie-p-pink: #de26d3;
+  --ie-p-orange: #f07c2a;
+  --ie-p-grey: #595959;
+  /* type */
+  --ie-text-outline: -2px -2px 0 var(--ie-ink), 2px -2px 0 var(--ie-ink), -2px 2px 0 var(--ie-ink),
+    2px 2px 0 var(--ie-ink), 0 -2px 0 var(--ie-ink), 0 2px 0 var(--ie-ink), -2px 0 0 var(--ie-ink),
+    2px 0 0 var(--ie-ink);
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
+  min-height: 100dvh;
   background: var(--ie-sky);
   color: white;
   font-family: var(--font-pixel, "Pixelify Sans", ui-monospace, monospace);
@@ -27,7 +87,225 @@ body {
   overscroll-behavior: none;
 }
 
-canvas {
+canvas,
+.ie-pixelated {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+@layer components {
+  /* White pixel caps with the warm-black outline used everywhere on screen. */
+  .ie-outline {
+    color: #fff;
+    text-shadow: var(--ie-text-outline);
+    letter-spacing: 0.02em;
+  }
+
+  .ie-caps {
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  /* ------------------------------------------------------------ buttons -- */
+  .ie-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem 1.1rem;
+    border: 3px solid var(--ie-ink);
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow:
+      inset 0 3px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -5px 0 rgba(0, 0, 0, 0.22),
+      0 4px 0 var(--ie-ink);
+    transition:
+      transform 60ms ease-out,
+      box-shadow 60ms ease-out,
+      filter 120ms;
+  }
+  .ie-btn:hover:not(:disabled):not([aria-disabled="true"]) {
+    filter: brightness(1.06);
+  }
+  .ie-btn:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: translateY(4px);
+    box-shadow:
+      inset 0 3px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -5px 0 rgba(0, 0, 0, 0.22),
+      0 0 0 var(--ie-ink);
+  }
+  .ie-btn:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+  }
+  .ie-btn:disabled,
+  .ie-btn[aria-disabled="true"] {
+    cursor: not-allowed;
+    filter: saturate(0.2) brightness(0.85);
+  }
+  .ie-btn--yellow {
+    background: var(--ie-card-yellow);
+    color: var(--ie-ink);
+    text-shadow: none;
+  }
+  .ie-btn--green {
+    background: var(--ie-green);
+  }
+  .ie-btn--blue {
+    background: var(--ie-p-blue);
+  }
+  .ie-btn--red {
+    background: var(--ie-red);
+  }
+  .ie-btn--wood {
+    background: var(--ie-wood-light);
+    border-color: var(--ie-ink);
+  }
+  .ie-btn--neutral {
+    background: var(--ie-stone-dark);
+  }
+  .ie-btn--cream {
+    background: var(--ie-card-cream);
+    color: var(--ie-ink);
+    text-shadow: none;
+  }
+  .ie-btn--sm {
+    min-height: 36px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  .ie-btn--lg {
+    min-height: 56px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1.25rem;
+  }
+  .ie-btn--block {
+    display: flex;
+    width: 100%;
+  }
+
+  /* -------------------------------------------------------- wood panel -- */
+  .ie-panel {
+    position: relative;
+    border: 4px solid var(--ie-wood-dark);
+    outline: 3px solid var(--ie-ink);
+    border-radius: 10px;
+    background-color: var(--ie-wood);
+    background-image: repeating-linear-gradient(
+      180deg,
+      transparent 0 22px,
+      rgba(0, 0, 0, 0.12) 22px 24px
+    );
+    box-shadow:
+      inset 0 3px 0 rgba(255, 255, 255, 0.12),
+      0 8px 0 rgba(0, 0, 0, 0.25);
+  }
+  .ie-panel__footer {
+    margin: 0 -4px -4px;
+    padding: 0.5rem 1rem;
+    border-radius: 0 0 8px 8px;
+    background: var(--ie-wood-dark);
+    text-align: center;
+  }
+
+  /* ---------------------------------------------------- cream / dialog -- */
+  .ie-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(26, 16, 16, 0.55);
+  }
+  .ie-dialog {
+    width: 100%;
+    max-width: 420px;
+    border: 4px solid var(--ie-khaki);
+    outline: 3px solid var(--ie-ink);
+    border-radius: 10px;
+    background: var(--ie-strength);
+    color: var(--ie-ink);
+    box-shadow: 0 10px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  /* -------------------------------------------------------- speech bubble -- */
+  .ie-bubble {
+    position: relative;
+    display: inline-block;
+    padding: 0.4rem 0.7rem;
+    border: 3px solid var(--ie-ink);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ie-ink);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+  }
+  .ie-bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -12px;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-top: 12px solid var(--ie-ink);
+  }
+
+  /* -------------------------------------------------------- sky scene -- */
+  .ie-sky {
+    background-color: var(--ie-sky);
+    background-image:
+      radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.14) 0 9%, transparent 9.5%),
+      radial-gradient(circle at 78% 30%, rgba(255, 255, 255, 0.12) 0 12%, transparent 12.5%),
+      linear-gradient(180deg, #56b6f6 0%, var(--ie-sky) 55%, #1f7fd4 100%);
+  }
+
+  /* idle bob for sprites still "ready to move" */
+  @keyframes ie-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+  .ie-bob {
+    animation: ie-bob 1s steps(2, end) infinite;
+  }
+  @keyframes ie-pop {
+    0% {
+      transform: scale(0);
+    }
+    70% {
+      transform: scale(1.25);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .ie-pop {
+    animation: ie-pop 150ms ease-out both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ie-bob,
+    .ie-pop {
+      animation: none;
+    }
+  }
 }

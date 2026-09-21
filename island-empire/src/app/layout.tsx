@@ -16,9 +16,10 @@ const pixel = Pixelify_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Island Empire",
+  title: { default: "Island Empire", template: "%s · Island Empire" },
   description:
     "A browser rebuild of Island Empire — turn-based territory strategy on a square grid.",
+  applicationName: "Island Empire",
 };
 
 export const viewport: Viewport = {
@@ -26,13 +27,23 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#3aa8f0",
+  viewportFit: "cover",
+  themeColor: "#2898f0",
 };
 
+/**
+ * The shell is deliberately bare: every screen paints its own full-height
+ * scene (sky, overworld, board), so the layout only provides the font
+ * variable and a safe-area-aware root the screens can fill.
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={pixel.variable}>
-      <body>{children}</body>
+      <body className="min-h-dvh antialiased">
+        <div id="ie-shell" className="relative flex min-h-dvh flex-col">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
