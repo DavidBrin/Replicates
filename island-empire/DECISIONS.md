@@ -331,3 +331,11 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 
 **Why.** Codex round 7 asked to restrict attack-buys to Level 1 because the shop only shows that card. But the original game's store screenshot (`play-05.png`) sells Level 1 and Level 4 cards side by side, and Antiyoy's `buildUnitByAttack` accepts any strength — direct purchase is the genre's rule, not a loophole. There is no economic asymmetry: a human who wants a Level 2 knight on a defended tile buys a Level 1 next to it and merge-buys another onto it (10 + 10, both ready), exactly what the AI pays for its direct Level 2. Keeping the rule in the engine keeps the AI strong and the engine faithful; keeping the shop at one placement card keeps the HUD identical to the walkthrough frames.
 
+---
+
+## D42 — An own city is traversable but never a destination
+
+**Decision.** In the move-zone flood fill an own city tile is expanded like an empty tile (it costs one step) but is not added to any destination set; farms, walls and towers still block, and a mine can be stood on but not passed through.
+
+**Why.** David's ruling after playing the shipped build: with cities blocking, a knight in a one-tile pass behind its own city was stuck — the walkthrough frames show units routing past cities freely, and the original never shows a city as an obstacle to its owner. Letting the unit stop on the city would need a "unit and city on one tile" state the renderer and rules do not have, so the city becomes a corridor only.
+
