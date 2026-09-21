@@ -187,8 +187,9 @@ export default function HotSeatSetupPage() {
               key={i}
               index={i}
               colour={PLAYER_COLOURS[i] as PlayerColour}
-              kind={seat.kind}
-              onKindChange={(kind) => handleKindChange(i, kind)}
+              kind={i < 2 ? "human" : seat.kind}
+              lockKind={i < 2}
+              onKindChange={(kind) => (i < 2 ? undefined : handleKindChange(i, kind))}
               aiDifficulty={seat.aiDifficulty}
               onDifficultyChange={(aiDifficulty) => updateSeat(i, { aiDifficulty })}
               name={seat.name}

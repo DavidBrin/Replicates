@@ -50,7 +50,16 @@ export function PlayPage({ config, title, onQuit, onNextLevel }: PlayPageProps) 
         const search = window.location.search;
         const fresh = /[?&]fresh=1/.test(search) || nonce > 0;
         const saved = fresh ? null : loadSaved(key);
-        if (fresh) storeSaved(key, null);
+        if (fresh) {
+          storeSaved(key, null);
+          // Consume the one-shot flag so a reload of this page resumes the
+          // game that is about to be autosaved rather than restarting it.
+          if (typeof window !== "undefined" && /[?&]fresh=1/.test(window.location.search)) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("fresh");
+            window.history.replaceState(window.history.state, "", url.toString());
+          }
+        }
         const s = createSession({
           map,
           config,

@@ -126,7 +126,7 @@ export function GameCanvas({ bottomInset }: { bottomInset: number }) {
       data-testid="board"
       aria-label="Board"
       className="absolute left-0 top-0 w-full touch-none select-none"
-      style={{ height: `calc(100% - ${bottomInset}px)` }}
+      style={{ height: `calc(100% - ${bottomInset}px - env(safe-area-inset-bottom, 0px))` }}
     />
   );
 }

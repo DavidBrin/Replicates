@@ -27,16 +27,20 @@ function fnv(s: string): string {
  */
 export function sourceKey(config: SessionConfig): string {
   const { source } = config;
-  const seats = fnv(JSON.stringify(config.seats.map((s) => [s.index, s.kind, s.aiDifficulty])));
   switch (source.kind) {
+    // Authored maps fix their own seat kinds, so map + difficulty identifies
+    // the game; a reload's deep-link config (no stored seats) must produce the
+    // same key as the intro's, or nothing would ever resume.
     case "campaign":
-      return `campaign:${source.levelId}:${config.difficulty}:${seats}`;
+      return `campaign:${source.levelId}:${config.difficulty}`;
     case "custom":
-      return `custom:${source.mapId}:${config.difficulty}:${seats}`;
+      return `custom:${source.mapId}:${config.difficulty}`;
     case "challenge":
-      return `challenge:${source.weekKey}:${source.mapId}:${config.difficulty}:${seats}`;
-    case "generated":
+      return `challenge:${source.weekKey}:${source.mapId}:${config.difficulty}`;
+    case "generated": {
+      const seats = fnv(JSON.stringify(config.seats.map((s) => [s.index, s.kind, s.aiDifficulty])));
       return `generated:${source.seed}:${fnv(JSON.stringify(source.map))}:${config.difficulty}:${seats}`;
+    }
   }
 }
 

@@ -63,7 +63,7 @@ describe("LevelIntro", () => {
       difficulty: "hard",
       seed: 4242,
     });
-    expect(routerMock.push).toHaveBeenCalledWith("/play/campaign/02");
+    expect(routerMock.push).toHaveBeenCalledWith(expect.stringMatching(/^\/play\/campaign\/02\?difficulty=(easy|normal|hard)&fresh=1$/));
   });
 
   it("a locked level cannot be started", async () => {

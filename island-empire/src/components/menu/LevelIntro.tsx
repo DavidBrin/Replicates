@@ -71,7 +71,10 @@ export function LevelIntro({ levelId, readProgress = readLocalProgress, seed }: 
       difficulty,
       seed: seed ?? newSeed(),
     });
-    router.push(`/play/campaign/${levelId}`);
+    // `fresh=1` discards any autosave of this level+difficulty (a Start is a new
+    // game — codex round 2); the play page strips it from the URL afterwards so
+    // a reload resumes instead of restarting. `difficulty` survives a reload.
+    router.push(`/play/campaign/${levelId}?difficulty=${difficulty}&fresh=1`);
   };
 
   return (

@@ -39,7 +39,7 @@ choice live in [`DECISIONS.md`](DECISIONS.md).
 
 - **Campaign**: one island of **12 hand-made levels** (5 tutorial + 7 puzzle), each playable on Easy/Normal/Hard, an overworld with both a walking avatar **and** direct tap-to-jump to any unlocked node, stars per level per difficulty.
 - **Random maps** vs. 1–7 AI opponents (2–8 total seats), with a size/player/seed setup screen.
-- **Hot-seat local multiplayer**, up to 8 players, pass-and-play hand-off screen.
+- **Hot-seat local multiplayer**, up to 8 players (at least two human, the rest optionally AI), pass-and-play hand-off screen.
 - **Weekly challenges**: three maps chosen **deterministically by ISO week** from a shared pool of seeded + community maps, medals per difficulty beaten.
 - **Map editor**: paint terrain/biome, place cities/units/buildings/decorations, set owners, validate, save, play, and share by URL (`/play/custom/[mapId]`).
 - Settings (one-click-move toggle, sound/music toggles), undo, pause.
@@ -109,7 +109,7 @@ Adapted from Antiyoy's `FieldManager` (genealogy §2.7), 4-adjacency instead of 
 
 ### 3.4 Movement, attack, merge, build
 
-- A **MOVE/ATTACK** targets a destination reachable by a **breadth-first flood fill of budget 4** through the unit's own province (4-adjacency); the final step of that flood may additionally reach one adjacent enemy/neutral/field/grave tile the unit could legally interact with. The unit may **not** pass through forest, mountain, water (except a bridge), enemy tiles, or its own buildings/units (except to merge onto a friendly unit).
+- A **MOVE/ATTACK** targets a destination reachable by a **breadth-first flood fill of budget 4** through the unit's own province (4-adjacency). The budget counts every step, and the **last** of the four may be the step onto an adjacent enemy/neutral/field/grave tile the unit can legally interact with — so a capture is at most four tiles from the unit, never a fifth step beyond four own tiles (Antiyoy `UNIT_MOVE_LIMIT`; codex round 2 asked for the alternative reading and this is the deliberate one). The unit may **not** pass through forest, mountain, water (except a bridge), enemy tiles, or its own buildings/units (except to merge onto a friendly unit).
 - **A move to an empty owned tile does not end the unit's turn** — it stays `readyToMove` and may be issued another MOVE/ATTACK from its new position (budget 4 again, computed fresh), any number of times per turn. This reproduces Slay's "free repositioning" while keeping Antiyoy's bounded per-move flood.
 - **An ATTACK (capture) or a CLEAR (moving onto an owned grass field/grave) ends the unit's turn** (`readyToMove = false`).
 - **Merge**: moving a friendly unit onto another friendly unit sums their levels (max 4) and ends the merged unit's turn **unless both source units were still `readyToMove`**, in which case the merged unit stays ready.
@@ -438,7 +438,7 @@ create index maps_created_at_idx on maps (created_at desc);
 | `/play/custom/[mapId]` | Same in-game screen, sourced from `/api/maps/[id]` — used by editor "Play" and the custom-map share flow | S2 (screen) + S4 (data fetch) |
 | `/play/session` | Same in-game screen, sourced from the client `sessionConfig` store — used by random and hot-seat, whose maps are generated/configured just-in-time and not persisted | S2 |
 | `/random` | Random map setup: size (S/M/L), 2–8 seats each human/AI, difficulty, seed | S5 |
-| `/hotseat` | Hot-seat setup: 2–8 human seats, colours, then a "Player X's turn" hand-off screen at every turn boundary | S5 |
+| `/hotseat` | Hot-seat setup: 2–8 seats of which **at least the first two are human** (locked); further seats may be AI; colours; then a "Player X's turn" hand-off screen at every human-to-human turn boundary | S5 |
 | `/challenges` | Weekly challenges list: 3 wood-panel cards (creator, ID, thumbnail, 3 medal dots, countdown, Play) | S4 |
 | `/editor` | Map editor: terrain/biome brush, place city/unit/building/decoration, set owner, player count, name, validate, save | S4 |
 | `/maps/[id]` | Custom map share page: preview, author, "Play" | S4 |

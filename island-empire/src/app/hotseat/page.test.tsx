@@ -72,11 +72,14 @@ describe("HotSeatSetupPage", () => {
     const user = userEvent.setup();
     render(<HotSeatSetupPage />);
 
-    await user.click(screen.getByTestId("seat-2-kind"));
+    // Seats 1 and 2 are always human in hot-seat (SPEC §7); a third seat may be AI.
+    expect(screen.getByTestId("seat-2-kind")).toBeDisabled();
+    await user.click(screen.getByTestId("seat-count-increase"));
+    await user.click(screen.getByTestId("seat-3-kind"));
 
-    expect(screen.queryByTestId("seat-2-name")).not.toBeInTheDocument();
-    expect(screen.getByTestId("seat-2-difficulty")).toBeInTheDocument();
-    expect(screen.getByTestId("seat-2-kind")).toHaveTextContent("AI");
+    expect(screen.queryByTestId("seat-3-name")).not.toBeInTheDocument();
+    expect(screen.getByTestId("seat-3-difficulty")).toBeInTheDocument();
+    expect(screen.getByTestId("seat-3-kind")).toHaveTextContent("AI");
   });
 
   it("adding a seat past the default 2 gives it a fresh colour name", async () => {
