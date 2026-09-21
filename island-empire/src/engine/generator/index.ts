@@ -79,7 +79,7 @@ function tryGenerate(options: GeneratorOptions, width: number, height: number, s
   // AFTER obstacles. The pre-obstacle 34 % floor makes this rare but not
   // impossible (seed 999995, small, grass: 35/144), so a shortfall is one more
   // reason to retry with the next derived seed.
-  if (!last) {
+  {
     const ownable = b.terrain.filter((terrain) => isOwnable(terrain)).length;
     if (ownable < 0.25 * width * height) return null;
   }

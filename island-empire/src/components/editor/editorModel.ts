@@ -152,11 +152,11 @@ function paintOne(tile: TileDefinition, tool: Tool, activeOwner: number, playerC
         next.unit = null;
       }
       if (!DECORATABLE.has(tool.terrain)) next.decoration = null;
-      if (tool.terrain === "water") next.road = false;
+      if (!isOwnable(tool.terrain)) next.road = false;
       return next;
     }
     case "road": {
-      if (tile.terrain === "water") return tile;
+      if (!isOwnable(tile.terrain)) return tile;
       return { ...tile, road: !tile.road };
     }
     case "decoration": {

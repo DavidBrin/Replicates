@@ -110,7 +110,7 @@ test.describe("weekly challenges", () => {
     const mapId = await first.getAttribute("data-map-id");
     await first.getByTestId("difficulty-easy").click();
     await first.getByTestId("challenge-play").click();
-    await page.waitForURL(new RegExp(`/play/custom/${encodeURIComponent(mapId!)}\\?challenge=\\d{4}-W\\d{2}$`));
+    await page.waitForURL(new RegExp(`/play/custom/${encodeURIComponent(mapId!)}\\?challenge=\\d{4}-W\\d{2}&difficulty=easy$`));
   });
 });
 

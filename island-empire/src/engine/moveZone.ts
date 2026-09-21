@@ -72,6 +72,9 @@ export function computeMoveZone(state: GameStateCore, from: TileCoord): MoveZone
         continue;
       }
       zone.reachable.push(at);
+      // A mine is a building: a unit may stand on it but never pass through
+      // it (SPEC §3.4 — no moving through own buildings), so it is terminal.
+      if (t.building === "mine") continue;
       queue.push({ index: n, budget: budget - 1 });
     }
   }

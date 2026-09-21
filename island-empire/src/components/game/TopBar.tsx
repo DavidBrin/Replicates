@@ -15,14 +15,14 @@ export function TopBar({ title }: { title: string }) {
         data-testid="settings-button"
         aria-label="Settings"
         onClick={() => session.setModal("settings")}
-        className="absolute left-2 top-2 z-10 flex items-center justify-center text-2xl"
-        style={{ width: TOUCH_MIN + 4, height: TOUCH_MIN + 4, background: STONE.mid, border: `3px solid ${OUTLINE}`, borderRadius: 8, color: STONE.dark }}
+        className="absolute left-2 z-10 flex items-center justify-center text-2xl"
+        style={{ top: "calc(8px + env(safe-area-inset-top, 0px))", width: TOUCH_MIN + 4, height: TOUCH_MIN + 4, background: STONE.mid, border: `3px solid ${OUTLINE}`, borderRadius: 8, color: STONE.dark }}
       >
         <span aria-hidden style={{ color: OUTLINE }}>
           ⚙
         </span>
       </button>
-      <div className="absolute right-2 top-2 z-10 flex flex-col items-end gap-1">
+      <div className="absolute right-2 z-10 flex flex-col items-end gap-1" style={{ top: "calc(8px + env(safe-area-inset-top, 0px))" }}>
         <div data-testid="level-label" className="text-lg" style={pixelText}>
           {title}
         </div>
