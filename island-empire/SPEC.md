@@ -73,7 +73,7 @@ Online/networked multiplayer, IAP, ads, unlockable-skin economy, King/"Superiori
 | Owned plain tile | — | — | +1 | — | — |
 | Farm | 12 + 2 × (farms already in the province) | 0 | +5 (replaces the tile's +1; net +4) | 0 | none |
 | Mine | not buyable — map-authored only | 0 | +8 | 0 | none |
-| Chest | not buyable — map-authored only | — | **+10 once**, on capture | — | — |
+| Chest | not buyable — map-authored only | — | **+10 once**, when captured — or, for a chest authored inside a player's own land, when one of their units steps onto it (D40) | — | — |
 | Knight L1 | 10 | 2 | — | 1 | self + 4 same-province neighbours |
 | Knight L2 | 20 | 5 | — | 2 | self + 4 same-province neighbours |
 | Knight L3 | 30 | 12 | — | 3 | self + 4 same-province neighbours |
@@ -84,7 +84,7 @@ Online/networked multiplayer, IAP, ads, unlockable-skin economy, King/"Superiori
 
 - **Defence number of a tile** = max over `{self, and every same-province 4-neighbour}` of `{unit strength, building strength, 0}`.
 - **Attack succeeds iff attacker strength > target tile's defence number** (strict). No randomness anywhere in combat.
-- **Bankruptcy**: at the start of a province's turn, if `gold + income − upkeep < 0`, every unit in that province dies and leaves a grave on its tile; buildings survive; gold floors at 0.
+- **Bankruptcy**: at the start of a province's turn, if `gold + income − upkeep < 0`, every unit in that province dies and leaves a grave on its tile; buildings survive; gold floors at 0. A unit standing on a bridge or on a mine dies without a grave — a grave is a terrain and cannot replace a bridge, and a mine keeps its building (D40).
 - **Starvation**: independently of bankruptcy, a unit with zero same-owner 4-neighbours at its owner's turn-start dies with no grave.
 - **Random-map starting gold**: every province starts at **10 gold**.
 - **Campaign starting gold**: authored per level in its `MapDefinition` (`players[].startGold`), small values (1–13), scaled by AI difficulty — see §3.5.

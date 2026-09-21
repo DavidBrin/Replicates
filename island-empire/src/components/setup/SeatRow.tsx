@@ -17,6 +17,8 @@ export interface SeatRowProps {
   onNameChange?: (name: string) => void;
   /** Show the editable name field instead of a static colour label. */
   showName?: boolean;
+  /** Seat 0 of a random game is always the human player; the kind toggle is shown but locked. */
+  lockKind?: boolean;
 }
 
 const DIFFICULTIES: Difficulty[] = ["easy", "normal", "hard"];
@@ -27,6 +29,7 @@ export function SeatRow({
   colour,
   kind,
   onKindChange,
+  lockKind = false,
   aiDifficulty,
   onDifficultyChange,
   name,
@@ -63,7 +66,9 @@ export function SeatRow({
         data-testid={`seat-${seatNumber}-kind`}
         aria-label={`Seat ${seatNumber} kind`}
         onClick={() => onKindChange(kind === "human" ? "ai" : "human")}
-        className="min-h-11 min-w-11 rounded border-2 border-[#1A1010] px-3 text-xs font-bold uppercase text-white"
+        disabled={lockKind}
+        title={lockKind ? "Seat 1 is always you" : undefined}
+        className="min-h-11 min-w-11 rounded border-2 border-[#1A1010] px-3 text-xs font-bold uppercase text-white disabled:opacity-80"
         style={{ backgroundColor: kind === "human" ? "#228F00" : "#3D4FC4" }}
       >
         {kind === "human" ? "Human" : "AI"}

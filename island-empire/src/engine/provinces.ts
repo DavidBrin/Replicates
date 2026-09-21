@@ -58,11 +58,16 @@ export function floodSameOwner(
  * seed so replays are exact.
  */
 export function placeCapital(d: Draft, fragment: readonly number[]): number {
-  const free = fragment.filter((i) => {
+  // Three tiers (SPEC §3.3 step 1): an empty plain tile, then an empty field
+  // or grave (the city replaces it), and only then a tile that already holds
+  // something — so a replacement capital never overwrites a mine while any
+  // empty tile exists.
+  const empty = fragment.filter((i) => {
     const t = tileAt(d, i);
-    return t.building === null && t.unit === null && !isFieldOrGrave(t.terrain);
+    return t.building === null && t.unit === null;
   });
-  const pool = free.length > 0 ? free : fragment;
+  const plain = empty.filter((i) => !isFieldOrGrave(tileAt(d, i).terrain));
+  const pool = plain.length > 0 ? plain : empty.length > 0 ? empty : fragment;
   const r = pick(d.seed, pool);
   d.seed = r.seed;
   return r.value as number;

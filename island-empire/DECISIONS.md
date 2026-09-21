@@ -315,3 +315,11 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 
 **Why.** A simulation of a Normal AI driving the human seat beats Easy on every level 01–11, so the levels are winnable by competent play — but a scripted first-time player (two knights, march on the city) lost levels 02–11 because Easy fielded a knight for every spare 10 gold and out-expanded it. The tutorial island exists to teach; Easy should let a learner make one economic mistake and recover. Slyther Droid's review that even the original's Easy "feels tough" is noted, and Normal keeps that feel.
 
+---
+
+## D40 — Two bankruptcy and chest edge cases are resolved by the data model, not by new state
+
+**Decision.** A bankrupt unit on a bridge or a mine dies without leaving a grave. A chest authored on a player's own land is collected when one of their units steps onto it; a chest on foreign or neutral land is collected on capture.
+
+**Why.** The codex review asked for graves on bridges and mines and for chests to pay only on capture. A grave is a terrain (`Terrain = "grave"`) and a bridge is a terrain too, so a grave on a bridge would need a second state dimension on every tile for a corner case the walkthroughs never show; a mine keeps its building, and a tile cannot hold a building and a grave. Own-land chests exist only when a level author places one there; letting the owner walk onto it is the obvious reading of "+10 once" and avoids a chest that can never be collected. Both are exceptions to a rule, stated in SPEC §3.2, not new mechanisms.
+

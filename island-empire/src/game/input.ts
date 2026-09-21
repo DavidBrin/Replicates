@@ -214,7 +214,13 @@ export function attachInput(canvas: HTMLCanvasElement, handlers: InputHandlers):
   };
   const key = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+    // Shortcuts belong to the board: never steal Enter/Z/arrows from a focused
+    // button, select, link or editable element (a keyboard user tabbing across
+    // the shop cards must not end the turn by pressing Enter on a card).
+    if (target && target !== document.body) {
+      const tag = target.tagName;
+      if (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(tag) || target.isContentEditable) return;
+    }
     const cmd = classifyKey(e.key, e.code);
     if (!cmd) return;
     handlers.onKey(cmd);

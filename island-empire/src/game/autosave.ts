@@ -1,5 +1,5 @@
 import type { SavedSession } from "./session";
-import type { MapSource } from "./sessionConfig";
+import type { SessionConfig } from "./sessionConfig";
 
 /**
  * Autosave: one slot per map source in localStorage, resumed on reload
@@ -9,16 +9,34 @@ import type { MapSource } from "./sessionConfig";
 
 const PREFIX = "island-empire:session:v1:";
 
-export function sourceKey(source: MapSource): string {
+/** FNV-1a over a string — small, stable, good enough to tell two configs apart. */
+function fnv(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/**
+ * The autosave slot for a session. It is keyed by everything that shapes the
+ * initial `GameState` — the map, the difficulty and every seat's kind — so
+ * the same level on another difficulty, or a regenerated map with a different
+ * biome or seat setup, never resumes an incompatible save.
+ */
+export function sourceKey(config: SessionConfig): string {
+  const { source } = config;
+  const seats = fnv(JSON.stringify(config.seats.map((s) => [s.index, s.kind, s.aiDifficulty])));
   switch (source.kind) {
     case "campaign":
-      return `campaign:${source.levelId}`;
+      return `campaign:${source.levelId}:${config.difficulty}:${seats}`;
     case "custom":
-      return `custom:${source.mapId}`;
+      return `custom:${source.mapId}:${config.difficulty}:${seats}`;
     case "challenge":
-      return `challenge:${source.weekKey}:${source.mapId}`;
+      return `challenge:${source.weekKey}:${source.mapId}:${config.difficulty}:${seats}`;
     case "generated":
-      return `generated:${source.seed}:${source.map.width}x${source.map.height}`;
+      return `generated:${source.seed}:${fnv(JSON.stringify(source.map))}:${config.difficulty}:${seats}`;
   }
 }
 

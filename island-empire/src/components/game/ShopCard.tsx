@@ -42,7 +42,8 @@ export function ShopCardButton({
       data-state={card.state}
       aria-label={`${card.label}, ${card.price} gold, ${card.strip}`}
       aria-disabled={disabled}
-      onClick={onTap}
+      disabled={disabled}
+      onClick={disabled ? undefined : onTap}
       className="flex shrink-0 flex-col items-stretch overflow-hidden text-center"
       style={{
         width: 64,

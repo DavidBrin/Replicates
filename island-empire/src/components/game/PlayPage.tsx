@@ -30,7 +30,7 @@ export interface PlayPageProps {
  */
 export function PlayPage({ config, title, onQuit, onNextLevel }: PlayPageProps) {
   const [nonce, setNonce] = useState(0);
-  const key = useMemo(() => sourceKey(config.source), [config.source]);
+  const key = useMemo(() => sourceKey(config), [config]);
   // Results are tagged with the generation that produced them, so a stale
   // session from a previous config reads as "loading" without a synchronous
   // reset inside the effect.

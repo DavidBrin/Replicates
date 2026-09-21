@@ -41,7 +41,9 @@ export function HudBar() {
       aria-label="Game controls"
       className="fixed inset-x-0 bottom-0 z-20 flex items-center gap-2 px-2"
       style={{
-        height: HUD_HEIGHT,
+        // Keep the controls above the iPhone home indicator (viewportFit: cover).
+        height: `calc(${HUD_HEIGHT}px + env(safe-area-inset-bottom, 0px))`,
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
         backgroundColor: base,
         backgroundImage: `linear-gradient(45deg, ${accent} 25%, transparent 25%, transparent 75%, ${accent} 75%), linear-gradient(45deg, ${accent} 25%, transparent 25%, transparent 75%, ${accent} 75%)`,
         backgroundSize: "12px 12px",

@@ -39,7 +39,10 @@ describe("validateMap (SPEC §4, §6)", () => {
       owners: [".......", ".00.11.", ".00..1.", ".......", ".......", "......."],
       objects: [".......", ".C.....", ".......", ".......", ".......", "......."],
     });
-    expect(validateMap(noCity).errors).toEqual(["player 1 has no city on a province of at least 2 tiles"]);
+    const errors = validateMap(noCity).errors;
+    expect(errors).toContain("player 1 has no city on a province of at least 2 tiles");
+    expect(errors.join()).toMatch(/province of player 1 at \(4,1\) has no city/);
+    expect(errors).toHaveLength(2);
     const loneCity = asciiMap({
       terrain: ["~~~~~~~", "~.....~", "~.....~", "~.....~", "~~~~~~~", "~~~~~~~"],
       owners: [".......", ".00..1.", ".00....", ".......", ".......", "......."],

@@ -94,7 +94,7 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
     if (!PLAYER_COLOURS.includes(p.colour)) err(`players[${i}].colour is not a player colour`);
     if (seenColour.has(p.colour)) err(`players[${i}].colour ${p.colour} is duplicated`);
     seenColour.add(p.colour);
-    if (p.kind !== "human" && p.kind !== "ai" && p.kind !== "empty") err(`players[${i}].kind is invalid`);
+    if (p.kind !== "human" && p.kind !== "ai") err(`players[${i}].kind must be "human" or "ai" — "empty" is only a setup-screen placeholder`);
     if (!isInt(p.startGold) || p.startGold < 0) err(`players[${i}].startGold must be a non-negative integer`);
   });
   const validPlayer = (owner: number) => isInt(owner) && owner >= 0 && owner < players.length;
@@ -189,6 +189,7 @@ export function validateMap(map: MapDefinition): { valid: boolean; errors: strin
       continue;
     }
     if (cities.length > 1) err(`${label} has ${cities.length} cities`);
+    if (cities.length === 0) err(`${label} has no city — every province of at least 2 tiles needs exactly one`);
     if (cities.length === 1) cityProvinceOf.set(owner, (cityProvinceOf.get(owner) ?? 0) + 1);
   }
   players.forEach((p) => {

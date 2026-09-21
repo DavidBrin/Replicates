@@ -176,8 +176,9 @@ export default function RandomMapSetupPage() {
               key={i}
               index={i}
               colour={PLAYER_COLOURS[i] as PlayerColour}
-              kind={seat.kind}
-              onKindChange={(kind) => updateSeat(i, { kind })}
+              kind={i === 0 ? "human" : seat.kind}
+              lockKind={i === 0}
+              onKindChange={(kind) => (i === 0 ? undefined : updateSeat(i, { kind }))}
               aiDifficulty={seat.aiDifficulty}
               onDifficultyChange={(aiDifficulty) => updateSeat(i, { aiDifficulty })}
             />

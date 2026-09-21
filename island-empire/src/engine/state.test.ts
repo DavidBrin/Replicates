@@ -81,22 +81,32 @@ describe("createInitialState (SPEC §3.5, §3.8, D14)", () => {
     }
   });
 
-  it("places a city in a city-less second province and clears buildings from lone tiles", () => {
+  it("rejects a city-less second province and treats a lone tile as no province", () => {
+    // Every province of ≥2 tiles must be authored with exactly one city
+    // (SPEC §3.3, codex round 1): the engine never invents a capital at start.
+    expect(() =>
+      stateFrom({
+        ...spec,
+        owners: ["..........", ".00.00.11.", ".00.00.11.", ".22...0...", "..........", ".........."],
+        objects: ["..........", ".C1....C1.", "..........", ".C1.......", "..........", ".........."],
+      }),
+    ).toThrow(/has no city/);
     const s = stateFrom({
       ...spec,
       owners: ["..........", ".00.00.11.", ".00.00.11.", ".22...0...", "..........", ".........."],
-      objects: ["..........", ".C1....C1.", "..........", ".C1.......", "..........", ".........."],
+      objects: ["..........", ".C1.C..C1.", "..........", ".C1.......", "..........", ".........."],
     });
     const second = provinceOf(s, 4, 1);
-    expect(tile(s, second.city.x, second.city.y).building).toBe("city");
+    expect(second.city).toEqual({ x: 4, y: 1 });
     expect(tile(s, 6, 3).provinceId).toBeNull();
   });
 
-  it("throws on an invalid map or an empty seat without override", () => {
+  it("throws on an invalid map or an empty seat, and lets a session override seat kinds", () => {
     const map = asciiMap(padSpec(spec));
     expect(() => createInitialState({ ...map, width: 3 }, 1)).toThrow(/invalid map/);
+    // "empty" is a setup-screen placeholder, never a playable map (codex round 1).
     const empty = { ...map, players: map.players.map((p, i) => (i === 1 ? { ...p, kind: "empty" as const } : p)) };
-    expect(() => createInitialState(empty, 1)).toThrow(/seat 1 is empty/);
-    expect(createInitialState(empty, 1, { seats: [{ kind: "human" }, { kind: "ai" }, { kind: "ai" }] }).players[1]?.kind).toBe("ai");
+    expect(() => createInitialState(empty, 1)).toThrow(/invalid map/);
+    expect(createInitialState(map, 1, { seats: [{ kind: "human" }, { kind: "human" }, { kind: "ai" }] }).players[1]?.kind).toBe("human");
   });
 });
