@@ -2,7 +2,7 @@
 
 Consolidated from lanes 00–05 plus direct inspection of 10 official store screenshots and ~200 frames captured from three YouTube walkthroughs (campaign levels 1–10 from 2021, levels 18 and 24 from 2022). Where lanes disagree with the screenshots, the screenshots win. Every number is tagged **[confirmed]** (seen on screen or in store copy), **[inferred]** (derived from the Slay/Antiyoy genealogy or extrapolated) or **[decision]** (chosen for the replica; recorded in DECISIONS.md).
 
-Written 2026-09-21. Evidence files: `research/screenshots/store/play-03..10.png`, `research/screenshots/video/wt-*.jpg` (levels 1–10), `research/screenshots/video/l24/f-*.jpg` (level 24), `research/screenshots/video/crop-*.png` (enlarged HUD/strength-chart/shield crops), `research/screenshots/video/l18-infocards.jpg`.
+Written 2026-09-21. Evidence files: `research/screenshots/store/play-03..10.png`; `research/screenshots/video/sheet-a*.jpg` and `sheet-b*.jpg` (contact sheets of the level 1–10 walkthrough, frame times in the labels), `wt-1005..1500.jpg` (levels 8–10 single frames), `l24-sheet-*.jpg` and `l24-hud-strips-*.jpg` (level 24), `l18-infocards.jpg` (level 18 info cards), `crop-*.png` (enlarged HUD, strength chart and shield-badge crops). Raw per-frame captures were pruned after analysis; `wt-NNNN` references below name the frame time in seconds on the sheets.
 
 ---
 
