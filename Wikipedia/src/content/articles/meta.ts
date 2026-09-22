@@ -235,6 +235,14 @@ export const agentMemoryMeta: ArticleMeta = {
   lastEdited: "16 September 2026",
 };
 
+export const deltaCloudMeta: ArticleMeta = {
+  slug: projectSlug("Delta Cloud"),
+  title: "Delta Cloud",
+  shortDescription: "An interactive map of the AWS infrastructure behind the Katalyxt platform",
+  categories: ["Interactive demos", "Cloud computing", "2026 establishments"],
+  lastEdited: "21 September 2026",
+};
+
 /** Every registered article's metadata, in registry order. */
 export const articleMetas: ArticleMeta[] = [
   davidsInternetMeta,
@@ -264,4 +272,5 @@ export const articleMetas: ArticleMeta[] = [
   modelingMeta,
   earlycodeMeta,
   agentMemoryMeta,
+  deltaCloudMeta,
 ];

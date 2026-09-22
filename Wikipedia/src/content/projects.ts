@@ -436,4 +436,20 @@ export const projects: ProjectInfo[] = [
     screenshots: [],
     kind: "demo",
   },
+  {
+    name: "Delta Cloud",
+    slug: "Delta_Cloud",
+    tagline: "the AWS platform behind Katalyxt, drawn from its Terraform",
+    replicaOf: {
+      name: "Katalyxt AI",
+      url: "https://katalyxt.ai",
+    },
+    folder: "delta-cloud",
+    stack: ["Terraform", "AWS", "TypeScript", "React", "SVG"],
+    testStats: "A geometry-checked map model: every arrow joins two boxes, no boxes overlap, no names leak",
+    builtWith: "A whiteboard-resolution reading of a private Terraform repository, redrawn as a clickable map",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/delta-cloud`,
+    screenshots: [],
+    kind: "demo",
+  },
 ];
