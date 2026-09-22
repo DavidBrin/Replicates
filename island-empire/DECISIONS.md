@@ -333,9 +333,9 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 
 ---
 
-## D42 — An own city is traversable but never a destination
+## D42 — Own cities and farms are traversable but never destinations
 
-**Decision.** In the move-zone flood fill an own city tile is expanded like an empty tile (it costs one step) but is not added to any destination set; farms, walls and towers still block, and a mine can be stood on but not passed through.
+**Decision.** In the move-zone flood fill an own city or farm tile is expanded like an empty tile (it costs one step) but is not added to any destination set; walls and towers still block, and a mine can be stood on but not passed through.
 
-**Why.** David's ruling after playing the shipped build: with cities blocking, a knight in a one-tile pass behind its own city was stuck — the walkthrough frames show units routing past cities freely, and the original never shows a city as an obstacle to its owner. Letting the unit stop on the city would need a "unit and city on one tile" state the renderer and rules do not have, so the city becomes a corridor only.
+**Why.** David's ruling after playing the shipped build: with cities blocking, a knight in a one-tile pass behind its own city was stuck — the walkthrough frames show units routing past cities freely, and the original never shows a city as an obstacle to its owner. Letting the unit stop on the city would need a "unit and city on one tile" state the renderer and rules do not have, so the city becomes a corridor only. Farms followed on the same ruling: a province ringed by its own farms otherwise walls its knights in.
 

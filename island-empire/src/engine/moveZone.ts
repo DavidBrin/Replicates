@@ -6,7 +6,7 @@
  * beat, an own grass field / grave to clear, an own chest to collect, or an
  * own unit to merge with.
  *
- * Own walls, towers and farms (see `blocksUnit`), water, forest,
+ * Own walls and towers (see `blocksUnit`), water, forest,
  * mountain and foreign tiles are never flooded through.
  */
 import { blocksUnit, inBounds, isFieldOrGrave, isOwnable, neighbourIndices, tileIndex } from "./grid";
@@ -62,10 +62,10 @@ export function computeMoveZone(state: GameStateCore, from: TileCoord): MoveZone
         if (canMerge(level, t.unit.level)) zone.mergeable.push(at);
         continue;
       }
-      if (t.building === "city") {
-        // D42: an own city is a corridor, not a destination — knights walk
-        // through it (it costs a step like any tile) but cannot stop on it,
-        // so a city in a one-tile pass never strands the army behind it.
+      if (t.building === "city" || t.building === "farm") {
+        // D42: an own city or farm is a corridor, not a destination — knights
+        // walk through it (it costs a step like any tile) but cannot stop on
+        // it, so a city or farm in a one-tile pass never strands the army.
         queue.push({ index: n, budget: budget - 1 });
         continue;
       }

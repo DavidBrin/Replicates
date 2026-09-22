@@ -8,7 +8,7 @@ import { at, stateFrom } from "./testing/fixtures";
  * pass can reach the tiles east of the city, but the city itself is never a
  * destination and the pass still costs steps.
  */
-describe("movement through own cities (D42)", () => {
+describe("movement through own cities and farms (D42)", () => {
   const board = {
     terrain: ["~~~~~~~~~", "~^^^^^^^~", "~.......~", "~^^^^^^.~", "~.......~", "~~~~~~~~~"],
     owners: [".........", ".........", ".0000000.", ".........", "......11.", "........."],
@@ -26,6 +26,15 @@ describe("movement through own cities (D42)", () => {
     expect(reachable).toContain("5,2"); // 4 steps: the budget's last tile
     expect(reachable).not.toContain("6,2"); // 5 steps: out of budget
     expect(legalMoveZone(s, at(1, 2)).map((c) => `${c.x},${c.y}`)).not.toContain("3,2");
+  });
+
+  it("passes through an own farm the same way", () => {
+    const s = stateFrom({ ...board, objects: [".........", ".........", ".1.F.C...", ".........", "......C1.", "........."] });
+    const reachable = computeMoveZone(s, at(1, 2)).reachable.map((c) => `${c.x},${c.y}`);
+    expect(reachable).not.toContain("3,2"); // the farm
+    expect(reachable).toContain("4,2"); // beyond the farm
+    expect(reachable).not.toContain("5,2"); // the city beyond it is not a destination either
+    expect(reachable).not.toContain("6,2"); // five steps: out of budget
   });
 
   it("still blocks on an own wall in the same pass", () => {
