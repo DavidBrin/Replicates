@@ -3,9 +3,9 @@ import { projects } from "@/content/projects";
 import { articles } from "@/content/articles";
 
 describe("projects.ts <-> articles registry", () => {
-  it("registers nine portfolio apps and sixteen interactive demos", () => {
+  it("registers nine portfolio apps and seventeen interactive demos", () => {
     expect(projects.filter((p) => p.kind !== "demo")).toHaveLength(9);
-    expect(projects.filter((p) => p.kind === "demo")).toHaveLength(16);
+    expect(projects.filter((p) => p.kind === "demo")).toHaveLength(17);
   });
 
   it("has a registered article for every project", () => {
@@ -49,6 +49,7 @@ describe("projects.ts <-> articles registry", () => {
     "Early_3D_Modeling",
     "Early_Code",
     "Agent_Memory",
+    "Autonomous_Car",
   ];
 
   it("has a non-null liveUrl iff the project is listed in EXPECTED_LIVE (src/content/__tests__/projects.test.ts)", () => {

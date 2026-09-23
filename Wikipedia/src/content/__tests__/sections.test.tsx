@@ -34,6 +34,7 @@ import { sql, sections as sqlSections } from "@/content/articles/sql";
 import { modeling, sections as modelingSections } from "@/content/articles/modeling";
 import { earlycode, sections as earlycodeSections } from "@/content/articles/earlycode";
 import { agentMemory, sections as agentMemorySections } from "@/content/articles/agent-memory";
+import { autonomousCar, sections as autonomousCarSections } from "@/content/articles/autonomous-car";
 import type { ArticleModule } from "@/lib/registry";
 
 const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: string; heading: string }> }> = [
@@ -63,6 +64,7 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Early 3D Modeling", module: modeling, sections: modelingSections },
   { name: "Early Code", module: earlycode, sections: earlycodeSections },
   { name: "Agent Memory", module: agentMemory, sections: agentMemorySections },
+  { name: "Autonomous Car", module: autonomousCar, sections: autonomousCarSections },
 ];
 
 describe("article sections lists match rendered <Section> headings", () => {

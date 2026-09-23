@@ -119,11 +119,12 @@ export const davidsInternet: ArticleModule = {
 
       <Section heading="Interactive demos">
         <P>
-          Fifteen demos run inside David&apos;s Internet rather than on their own
+          Seventeen demos run inside David&apos;s Internet rather than on their own
           domains. They cover digital design, signals, TinyML, a hardware
           hackathon, EEG hardware, two Voytek Lab analyses, computer vision,
           a semantic graph of arXiv abstracts, cross-teaching segmentation,
-          a P300 speller, SQL labs, early CAD, and first programs.
+          a P300 speller, SQL labs, early CAD, first programs, an agent
+          memory trace, and a ROS 2 robocar.
         </P>
         <WikiTable>
           <thead>

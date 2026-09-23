@@ -30,6 +30,7 @@ export const KNOWN_TITLES = [
   "SQL Playground",
   "Early 3D Modeling",
   "Early Code",
+  "Autonomous Car",
 ] as const;
 
 export const PROJECT_LINKS: Array<{ linkText: string; title: string }> = [
@@ -56,4 +57,5 @@ export const PROJECT_LINKS: Array<{ linkText: string; title: string }> = [
   { linkText: "SQL Playground", title: "SQL Playground" },
   { linkText: "Early 3D Modeling", title: "Early 3D Modeling" },
   { linkText: "Early Code", title: "Early Code" },
+  { linkText: "Autonomous Car", title: "Autonomous Car" },
 ];
