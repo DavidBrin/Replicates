@@ -65,10 +65,11 @@ export const autonomousCar: ArticleModule = {
 
       <P>
         David wrote all of the car&apos;s software. The rest of Team 3 built the
-        hardware, including the 3D-printed parts. The demo runs David&apos;s
-        original nodes on a simulated lot and concentrates on three parts of
-        the stack: computer vision, the ROS 2 message pipeline, and the
-        steering controller.
+        hardware, including the 3D-printed parts. The demo runs TypeScript
+        ports of David&apos;s nodes, checked against the Python originals, on
+        a simulated lot. It concentrates on three parts of the stack:
+        computer vision, the ROS 2 message pipeline, and the steering
+        controller.
       </P>
 
       <Section heading="Overview">
