@@ -251,6 +251,14 @@ export const leadersMeta: ArticleMeta = {
   lastEdited: "2 October 2026",
 };
 
+export const autonomousCarMeta: ArticleMeta = {
+  slug: projectSlug("Autonomous Car"),
+  title: "Autonomous Car",
+  shortDescription: "A ROS 2 robocar's lane vision, node graph and controller, running on a simulated lot",
+  categories: ["Interactive demos", "Robotics", "2026 establishments"],
+  lastEdited: "23 September 2026",
+};
+
 /** Every registered article's metadata, in registry order. */
 export const articleMetas: ArticleMeta[] = [
   davidsInternetMeta,
@@ -282,4 +290,5 @@ export const articleMetas: ArticleMeta[] = [
   agentMemoryMeta,
   deltaCloudMeta,
   leadersMeta,
+  autonomousCarMeta,
 ];

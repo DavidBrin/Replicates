@@ -478,4 +478,20 @@ export const projects: ProjectInfo[] = [
     screenshots: [],
     kind: "demo",
   },
+  {
+    name: "Autonomous Car",
+    slug: "Autonomous_Car",
+    tagline: "a ROS 2 robocar that follows tape and scoops up garbage",
+    replicaOf: {
+      name: "ECE/MAE 148 Team 3 at UC San Diego",
+      url: "https://github.com/UCSD-Silberman-Classes-and-Projects/148-spring-2025-final-project-team-3",
+    },
+    folder: "autonomous-car",
+    stack: ["Python", "ROS 2", "OpenCV", "Roboflow", "TypeScript", "Canvas"],
+    testStats: "Original ROS 2 nodes run at build time as fixtures for the TypeScript ports",
+    builtWith: "The Team 3 final project's nodes, driving a simulated parking lot",
+    liveUrl: `${DAVID_INTERNET_URL}/demos/autonomous-car`,
+    screenshots: [],
+    kind: "demo",
+  },
 ];

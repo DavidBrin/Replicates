@@ -28,6 +28,7 @@ import { earlycode } from "./earlycode";
 import { agentMemory } from "./agent-memory";
 import { deltaCloud } from "./delta-cloud";
 import { leaders } from "./leaders";
+import { autonomousCar } from "./autonomous-car";
 
 // `Sandbox` (./sandbox.tsx) proved the registry -> primitives pipeline and
 // stays on disk, unregistered, as a reference for future article authoring.
@@ -61,4 +62,5 @@ export const articles: ArticleRegistry = {
   [agentMemory.meta.slug]: agentMemory,
   [deltaCloud.meta.slug]: deltaCloud,
   [leaders.meta.slug]: leaders,
+  [autonomousCar.meta.slug]: autonomousCar,
 };

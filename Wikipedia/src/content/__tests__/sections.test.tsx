@@ -35,6 +35,7 @@ import { modeling, sections as modelingSections } from "@/content/articles/model
 import { earlycode, sections as earlycodeSections } from "@/content/articles/earlycode";
 import { agentMemory, sections as agentMemorySections } from "@/content/articles/agent-memory";
 import { deltaCloud, sections as deltaCloudSections } from "@/content/articles/delta-cloud";
+import { autonomousCar, sections as autonomousCarSections } from "@/content/articles/autonomous-car";
 import type { ArticleModule } from "@/lib/registry";
 
 const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: string; heading: string }> }> = [
@@ -65,6 +66,7 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Early Code", module: earlycode, sections: earlycodeSections },
   { name: "Agent Memory", module: agentMemory, sections: agentMemorySections },
   { name: "Delta Cloud", module: deltaCloud, sections: deltaCloudSections },
+  { name: "Autonomous Car", module: autonomousCar, sections: autonomousCarSections },
 ];
 
 describe("article sections lists match rendered <Section> headings", () => {
