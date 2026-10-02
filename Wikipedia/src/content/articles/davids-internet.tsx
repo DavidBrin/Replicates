@@ -79,7 +79,7 @@ export const davidsInternet: ArticleModule = {
           and <code>research/</code> directory. The search engine was the
           first live deployment, in September 2026. Seven replicas are live
           (Linear, Notion, Super Smash, Fake Phone, Bet, FL Studio, and Dollar
-          Pixels). Art Wall is a separate live app, not a replica. YouTube still
+          Pixels). Art Wall and Leaders are separate live apps, not replicas. YouTube still
           needs object storage, so its Website link stays a red stub. The
           interactive demos already run on the search site, so their Website
           links are live.
@@ -170,6 +170,9 @@ export const davidsInternet: ArticleModule = {
         <ul className="list-disc pl-6">
           <li>
             <WikiLink to="Art_Wall">Art Wall</WikiLink>
+          </li>
+          <li>
+            <WikiLink to="Leaders_(game)">Leaders (game)</WikiLink>
           </li>
           <li>
             <WikiLink to="Linear_(replica)">Linear (replica)</WikiLink>

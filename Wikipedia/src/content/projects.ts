@@ -202,6 +202,32 @@ export const projects: ProjectInfo[] = [
     screenshots: [],
   },
   {
+    name: "Leaders",
+    slug: "Leaders_(game)",
+    tagline: "Civilization from the ground, where orders travel by courier",
+    replicaOf: { name: "Sid Meier's Civilization V", url: "https://civilization.2k.com/civ-v/" },
+    folder: "Leaders",
+    stack: [
+      "React 19",
+      "Vite",
+      "Three.js",
+      "TypeScript",
+      "Cloudflare Workers",
+      "D1 (SQLite)",
+      "Drizzle",
+      "zod",
+    ],
+    testStats: "158 unit tests, 5 Playwright browser scenarios",
+    builtWith:
+      "A near-single prompt to OpenAI Codex on GPT-6.1 Sol, then a controls, onboarding and deployment pass",
+    liveUrl: "https://leaders.leaders-game.workers.dev",
+    screenshots: [
+      "Leaders/docs/screenshots/capital-first-round.png",
+      "Leaders/docs/screenshots/developed-empire.png",
+      "Leaders/docs/screenshots/phone-portrait.png",
+    ],
+  },
+  {
     name: "Verilog",
     slug: "Verilog",
     tagline: "an 8-state Viterbi decoder you can watch think",

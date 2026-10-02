@@ -243,6 +243,14 @@ export const deltaCloudMeta: ArticleMeta = {
   lastEdited: "21 September 2026",
 };
 
+export const leadersMeta: ArticleMeta = {
+  slug: projectSlug("Leaders"),
+  title: "Leaders (game)",
+  shortDescription: "A turn-based civilization game played from behind its leader, where orders travel by courier",
+  categories: ["Browser games", "Turn-based strategy video games", "2026 video games"],
+  lastEdited: "2 October 2026",
+};
+
 /** Every registered article's metadata, in registry order. */
 export const articleMetas: ArticleMeta[] = [
   davidsInternetMeta,
@@ -273,4 +281,5 @@ export const articleMetas: ArticleMeta[] = [
   earlycodeMeta,
   agentMemoryMeta,
   deltaCloudMeta,
+  leadersMeta,
 ];
