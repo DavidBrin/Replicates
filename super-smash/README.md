@@ -248,11 +248,11 @@ Vercel detects this with zero configuration — point the project root at `super
 Every route prerenders as static content; there is no backend, no database and no
 environment variable you have to set.
 
-| Variable | Why |
-|---|---|
-| `NEXT_PUBLIC_SIGNAL_STRATEGY` | Which public network Trystero uses to introduce two peers. Defaults to BitTorrent trackers. Only carries the handshake. |
-| `NEXT_PUBLIC_ROOM_PREFIX` | Namespaces room codes, so two builds do not share matches. |
-| `NEXT_PUBLIC_INPUT_DELAY` | Frames held back before prediction. Default 2. |
+There are no environment variables. Trystero introduces the two peers over the
+Nostr network (its default; only the handshake travels that way), rooms are
+namespaced by the `appId` constant in `src/net/adapters/webrtc.ts`, and the
+input delay starts at 2 frames and adapts between 1 and 8 from the measured
+round trip (`src/net/rollback.ts`).
 
 ---
 
