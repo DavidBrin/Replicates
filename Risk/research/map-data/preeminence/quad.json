@@ -1,0 +1,261 @@
+{
+ "$schema_version": "1.0",
+ "slug": "quad",
+ "name": "Quad",
+ "confidence": "HIGH - small test board",
+ "territory_count": 20,
+ "continent_count": 4,
+ "undirected_edge_count": 26,
+ "integrity": {
+  "asymmetric_edges": [],
+  "dangling_refs": []
+ },
+ "continents": [
+  {
+   "id": "a",
+   "name": "A",
+   "bonus": null,
+   "territories": [
+    "a1",
+    "a2",
+    "a3",
+    "a4"
+   ]
+  },
+  {
+   "id": "b",
+   "name": "B",
+   "bonus": null,
+   "territories": [
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6"
+   ]
+  },
+  {
+   "id": "c",
+   "name": "C",
+   "bonus": null,
+   "territories": [
+    "c1",
+    "c2",
+    "c3",
+    "c4"
+   ]
+  },
+  {
+   "id": "d",
+   "name": "D",
+   "bonus": null,
+   "territories": [
+    "d1",
+    "d2",
+    "d3",
+    "d4",
+    "d5",
+    "d6"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "a1",
+   "name": "A1",
+   "continent": "a",
+   "adjacent": [
+    "a2",
+    "a4",
+    "b1",
+    "d1"
+   ]
+  },
+  {
+   "id": "a2",
+   "name": "A2",
+   "continent": "a",
+   "adjacent": [
+    "a1",
+    "a3"
+   ]
+  },
+  {
+   "id": "a3",
+   "name": "A3",
+   "continent": "a",
+   "adjacent": [
+    "a2",
+    "a4"
+   ]
+  },
+  {
+   "id": "a4",
+   "name": "A4",
+   "continent": "a",
+   "adjacent": [
+    "a1",
+    "a3"
+   ]
+  },
+  {
+   "id": "b1",
+   "name": "B1",
+   "continent": "b",
+   "adjacent": [
+    "a1",
+    "b2",
+    "b4",
+    "b6",
+    "c1"
+   ]
+  },
+  {
+   "id": "b2",
+   "name": "B2",
+   "continent": "b",
+   "adjacent": [
+    "b1",
+    "b3"
+   ]
+  },
+  {
+   "id": "b3",
+   "name": "B3",
+   "continent": "b",
+   "adjacent": [
+    "b2",
+    "b4"
+   ]
+  },
+  {
+   "id": "b4",
+   "name": "B4",
+   "continent": "b",
+   "adjacent": [
+    "b1",
+    "b3",
+    "b5"
+   ]
+  },
+  {
+   "id": "b5",
+   "name": "B5",
+   "continent": "b",
+   "adjacent": [
+    "b4",
+    "b6"
+   ]
+  },
+  {
+   "id": "b6",
+   "name": "B6",
+   "continent": "b",
+   "adjacent": [
+    "b1",
+    "b5"
+   ]
+  },
+  {
+   "id": "c1",
+   "name": "C1",
+   "continent": "c",
+   "adjacent": [
+    "b1",
+    "c2",
+    "c4",
+    "d1"
+   ]
+  },
+  {
+   "id": "c2",
+   "name": "C2",
+   "continent": "c",
+   "adjacent": [
+    "c1",
+    "c3"
+   ]
+  },
+  {
+   "id": "c3",
+   "name": "C3",
+   "continent": "c",
+   "adjacent": [
+    "c2",
+    "c4"
+   ]
+  },
+  {
+   "id": "c4",
+   "name": "C4",
+   "continent": "c",
+   "adjacent": [
+    "c1",
+    "c3"
+   ]
+  },
+  {
+   "id": "d1",
+   "name": "D1",
+   "continent": "d",
+   "adjacent": [
+    "a1",
+    "c1",
+    "d2",
+    "d4",
+    "d6"
+   ]
+  },
+  {
+   "id": "d2",
+   "name": "D2",
+   "continent": "d",
+   "adjacent": [
+    "d1",
+    "d3"
+   ]
+  },
+  {
+   "id": "d3",
+   "name": "D3",
+   "continent": "d",
+   "adjacent": [
+    "d2",
+    "d4"
+   ]
+  },
+  {
+   "id": "d4",
+   "name": "D4",
+   "continent": "d",
+   "adjacent": [
+    "d1",
+    "d3",
+    "d5"
+   ]
+  },
+  {
+   "id": "d5",
+   "name": "D5",
+   "continent": "d",
+   "adjacent": [
+    "d4",
+    "d6"
+   ]
+  },
+  {
+   "id": "d6",
+   "name": "D6",
+   "continent": "d",
+   "adjacent": [
+    "d1",
+    "d5"
+   ]
+  }
+ ],
+ "geometry": null,
+ "note": "Graph only - Preeminence ships NO coordinates or geometry, and no bonus values.",
+ "source": "https://github.com/DouglasOrr/Preeminence  maps/quad.json",
+ "license": "MIT - see LICENSE in this folder"
+}

@@ -1,0 +1,679 @@
+{
+ "$schema_version": "1.0",
+ "slug": "classic-world",
+ "name": "Classic / World (42) - Conquest-Tracker",
+ "confidence": "HIGH for the adjacency graph (it is the canonical Hasbro graph; correct on all 5 edges the three sources disputed). LOW for geometry: shapes are 6 crude hand-drawn CONTINENT blobs plus per-territory x/y label points - NO per-territory outlines.",
+ "territory_count": 42,
+ "continent_count": 6,
+ "undirected_edge_count": 83,
+ "continents": [
+  {
+   "id": "north_america",
+   "name": "North America",
+   "bonus": 5,
+   "color": "#60a5fa",
+   "labelX": 235,
+   "labelY": 42,
+   "continent_blob_path": "M35,92 C90,52 190,45 270,62 L420,45 L478,120 L455,220 L405,268 L390,372 L315,430 L225,395 L138,405 L65,330 L88,235 L42,175 Z",
+   "territories": [
+    "alaska",
+    "alberta",
+    "central_america",
+    "eastern_us",
+    "greenland",
+    "northwest_territory",
+    "ontario",
+    "quebec",
+    "western_us"
+   ]
+  },
+  {
+   "id": "south_america",
+   "name": "South America",
+   "bonus": 2,
+   "color": "#34d399",
+   "labelX": 430,
+   "labelY": 450,
+   "continent_blob_path": "M340,410 L470,398 L575,474 L550,590 L480,735 L405,682 L382,570 L325,490 Z",
+   "territories": [
+    "argentina",
+    "brazil",
+    "peru",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "europe",
+   "name": "Europe",
+   "bonus": 5,
+   "color": "#a78bfa",
+   "labelX": 650,
+   "labelY": 55,
+   "continent_blob_path": "M505,88 L635,52 L805,83 L842,175 L805,275 L835,355 L710,397 L585,365 L535,292 L555,205 L492,152 Z",
+   "territories": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "africa",
+   "name": "Africa",
+   "bonus": 3,
+   "color": "#f59e0b",
+   "labelX": 690,
+   "labelY": 405,
+   "continent_blob_path": "M565,385 L735,352 L850,420 L888,520 L827,690 L700,738 L615,650 L570,535 L530,455 Z",
+   "territories": [
+    "congo",
+    "east_africa",
+    "egypt",
+    "madagascar",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "asia",
+   "name": "Asia",
+   "bonus": 7,
+   "color": "#f87171",
+   "labelX": 1035,
+   "labelY": 42,
+   "continent_blob_path": "M790,82 L955,45 L1150,55 L1280,105 L1260,235 L1300,330 L1210,430 L1125,468 L1060,540 L930,520 L850,445 L805,350 L825,245 L770,165 Z",
+   "territories": [
+    "afghanistan",
+    "china",
+    "india",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "middle_east",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "australia",
+   "name": "Australia",
+   "bonus": 2,
+   "color": "#22d3ee",
+   "labelX": 1135,
+   "labelY": 560,
+   "continent_blob_path": "M1010,545 L1115,520 L1218,545 L1285,625 L1260,725 L1130,742 L1040,700 L985,625 Z",
+   "territories": [
+    "eastern_australia",
+    "indonesia",
+    "new_guinea",
+    "western_australia"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "alaska",
+   "name": "Alaska",
+   "continent": "north_america",
+   "x": 78,
+   "y": 150,
+   "adjacent": [
+    "alberta",
+    "kamchatka",
+    "northwest_territory"
+   ]
+  },
+  {
+   "id": "northwest_territory",
+   "name": "NW Territory",
+   "continent": "north_america",
+   "x": 205,
+   "y": 105,
+   "adjacent": [
+    "alaska",
+    "alberta",
+    "greenland",
+    "ontario"
+   ]
+  },
+  {
+   "id": "greenland",
+   "name": "Greenland",
+   "continent": "north_america",
+   "x": 405,
+   "y": 98,
+   "adjacent": [
+    "iceland",
+    "northwest_territory",
+    "ontario",
+    "quebec"
+   ]
+  },
+  {
+   "id": "alberta",
+   "name": "Alberta",
+   "continent": "north_america",
+   "x": 190,
+   "y": 220,
+   "adjacent": [
+    "alaska",
+    "northwest_territory",
+    "ontario",
+    "western_us"
+   ]
+  },
+  {
+   "id": "ontario",
+   "name": "Ontario",
+   "continent": "north_america",
+   "x": 300,
+   "y": 190,
+   "adjacent": [
+    "alberta",
+    "eastern_us",
+    "greenland",
+    "northwest_territory",
+    "quebec",
+    "western_us"
+   ]
+  },
+  {
+   "id": "quebec",
+   "name": "Quebec",
+   "continent": "north_america",
+   "x": 415,
+   "y": 205,
+   "adjacent": [
+    "eastern_us",
+    "greenland",
+    "ontario"
+   ]
+  },
+  {
+   "id": "western_us",
+   "name": "Western US",
+   "continent": "north_america",
+   "x": 205,
+   "y": 315,
+   "adjacent": [
+    "alberta",
+    "central_america",
+    "eastern_us",
+    "ontario"
+   ]
+  },
+  {
+   "id": "eastern_us",
+   "name": "Eastern US",
+   "continent": "north_america",
+   "x": 355,
+   "y": 310,
+   "adjacent": [
+    "central_america",
+    "ontario",
+    "quebec",
+    "western_us"
+   ]
+  },
+  {
+   "id": "central_america",
+   "name": "Central America",
+   "continent": "north_america",
+   "x": 300,
+   "y": 405,
+   "adjacent": [
+    "eastern_us",
+    "venezuela",
+    "western_us"
+   ]
+  },
+  {
+   "id": "venezuela",
+   "name": "Venezuela",
+   "continent": "south_america",
+   "x": 382,
+   "y": 485,
+   "adjacent": [
+    "brazil",
+    "central_america",
+    "peru"
+   ]
+  },
+  {
+   "id": "peru",
+   "name": "Peru",
+   "continent": "south_america",
+   "x": 385,
+   "y": 585,
+   "adjacent": [
+    "argentina",
+    "brazil",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "brazil",
+   "name": "Brazil",
+   "continent": "south_america",
+   "x": 510,
+   "y": 545,
+   "adjacent": [
+    "argentina",
+    "north_africa",
+    "peru",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "argentina",
+   "name": "Argentina",
+   "continent": "south_america",
+   "x": 445,
+   "y": 690,
+   "adjacent": [
+    "brazil",
+    "peru"
+   ]
+  },
+  {
+   "id": "iceland",
+   "name": "Iceland",
+   "continent": "europe",
+   "x": 535,
+   "y": 115,
+   "adjacent": [
+    "great_britain",
+    "greenland",
+    "scandinavia"
+   ]
+  },
+  {
+   "id": "great_britain",
+   "name": "Great Britain",
+   "continent": "europe",
+   "x": 560,
+   "y": 225,
+   "adjacent": [
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "scandinavia",
+   "name": "Scandinavia",
+   "continent": "europe",
+   "x": 660,
+   "y": 130,
+   "adjacent": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "northern_europe",
+   "name": "N. Europe",
+   "continent": "europe",
+   "x": 680,
+   "y": 235,
+   "adjacent": [
+    "great_britain",
+    "scandinavia",
+    "southern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "western_europe",
+   "name": "W. Europe",
+   "continent": "europe",
+   "x": 585,
+   "y": 330,
+   "adjacent": [
+    "great_britain",
+    "north_africa",
+    "northern_europe",
+    "southern_europe"
+   ]
+  },
+  {
+   "id": "southern_europe",
+   "name": "S. Europe",
+   "continent": "europe",
+   "x": 720,
+   "y": 340,
+   "adjacent": [
+    "egypt",
+    "middle_east",
+    "north_africa",
+    "northern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "ukraine",
+   "name": "Ukraine",
+   "continent": "europe",
+   "x": 795,
+   "y": 210,
+   "adjacent": [
+    "afghanistan",
+    "middle_east",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "ural"
+   ]
+  },
+  {
+   "id": "north_africa",
+   "name": "N. Africa",
+   "continent": "africa",
+   "x": 625,
+   "y": 455,
+   "adjacent": [
+    "brazil",
+    "congo",
+    "east_africa",
+    "egypt",
+    "southern_europe",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "egypt",
+   "name": "Egypt",
+   "continent": "africa",
+   "x": 750,
+   "y": 430,
+   "adjacent": [
+    "east_africa",
+    "middle_east",
+    "north_africa",
+    "southern_europe"
+   ]
+  },
+  {
+   "id": "east_africa",
+   "name": "E. Africa",
+   "continent": "africa",
+   "x": 805,
+   "y": 535,
+   "adjacent": [
+    "congo",
+    "egypt",
+    "madagascar",
+    "middle_east",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "congo",
+   "name": "Congo",
+   "continent": "africa",
+   "x": 685,
+   "y": 565,
+   "adjacent": [
+    "east_africa",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "south_africa",
+   "name": "S. Africa",
+   "continent": "africa",
+   "x": 720,
+   "y": 680,
+   "adjacent": [
+    "congo",
+    "east_africa",
+    "madagascar"
+   ]
+  },
+  {
+   "id": "madagascar",
+   "name": "Madagascar",
+   "continent": "africa",
+   "x": 855,
+   "y": 660,
+   "adjacent": [
+    "east_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "ural",
+   "name": "Ural",
+   "continent": "asia",
+   "x": 900,
+   "y": 175,
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "siberia",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "siberia",
+   "name": "Siberia",
+   "continent": "asia",
+   "x": 1000,
+   "y": 105,
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "mongolia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "yakutsk",
+   "name": "Yakutsk",
+   "continent": "asia",
+   "x": 1115,
+   "y": 92,
+   "adjacent": [
+    "irkutsk",
+    "kamchatka",
+    "siberia"
+   ]
+  },
+  {
+   "id": "kamchatka",
+   "name": "Kamchatka",
+   "continent": "asia",
+   "x": 1240,
+   "y": 145,
+   "adjacent": [
+    "alaska",
+    "irkutsk",
+    "japan",
+    "mongolia",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "irkutsk",
+   "name": "Irkutsk",
+   "continent": "asia",
+   "x": 1090,
+   "y": 205,
+   "adjacent": [
+    "kamchatka",
+    "mongolia",
+    "siberia",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "mongolia",
+   "name": "Mongolia",
+   "continent": "asia",
+   "x": 1095,
+   "y": 305,
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "siberia"
+   ]
+  },
+  {
+   "id": "japan",
+   "name": "Japan",
+   "continent": "asia",
+   "x": 1245,
+   "y": 330,
+   "adjacent": [
+    "kamchatka",
+    "mongolia"
+   ]
+  },
+  {
+   "id": "afghanistan",
+   "name": "Afghanistan",
+   "continent": "asia",
+   "x": 880,
+   "y": 315,
+   "adjacent": [
+    "china",
+    "india",
+    "middle_east",
+    "ukraine",
+    "ural"
+   ]
+  },
+  {
+   "id": "china",
+   "name": "China",
+   "continent": "asia",
+   "x": 1010,
+   "y": 385,
+   "adjacent": [
+    "afghanistan",
+    "india",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural"
+   ]
+  },
+  {
+   "id": "middle_east",
+   "name": "Middle East",
+   "continent": "asia",
+   "x": 835,
+   "y": 405,
+   "adjacent": [
+    "afghanistan",
+    "east_africa",
+    "egypt",
+    "india",
+    "southern_europe",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "india",
+   "name": "India",
+   "continent": "asia",
+   "x": 930,
+   "y": 490,
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "middle_east",
+    "siam"
+   ]
+  },
+  {
+   "id": "siam",
+   "name": "Siam",
+   "continent": "asia",
+   "x": 1055,
+   "y": 495,
+   "adjacent": [
+    "china",
+    "india",
+    "indonesia"
+   ]
+  },
+  {
+   "id": "indonesia",
+   "name": "Indonesia",
+   "continent": "australia",
+   "x": 1025,
+   "y": 600,
+   "adjacent": [
+    "new_guinea",
+    "siam",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "new_guinea",
+   "name": "New Guinea",
+   "continent": "australia",
+   "x": 1175,
+   "y": 580,
+   "adjacent": [
+    "eastern_australia",
+    "indonesia",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "western_australia",
+   "name": "W. Australia",
+   "continent": "australia",
+   "x": 1080,
+   "y": 700,
+   "adjacent": [
+    "eastern_australia",
+    "indonesia",
+    "new_guinea"
+   ]
+  },
+  {
+   "id": "eastern_australia",
+   "name": "E. Australia",
+   "continent": "australia",
+   "x": 1230,
+   "y": 690,
+   "adjacent": [
+    "new_guinea",
+    "western_australia"
+   ]
+  }
+ ],
+ "sea_bridges": [
+  "alaska:kamchatka",
+  "brazil:north_africa",
+  "east_africa:middle_east",
+  "egypt:southern_europe",
+  "greenland:iceland",
+  "indonesia:siam"
+ ],
+ "geometry": {
+  "style": "per-CONTINENT SVG blob path + per-territory (x,y) label coordinate. Useful for troop-marker placement and as a schematic fallback, not for real territory outlines.",
+  "viewBox_hint": "approx 1320 x 790"
+ },
+ "source": "https://github.com/Zach-Hayton/Conquest-Tracker src/map-data.js",
+ "license": "MIT - see LICENSE in this folder"
+}

@@ -1,0 +1,72 @@
+{
+ "$schema_version": "1.0",
+ "slug": "tiny4",
+ "name": "Tiny4",
+ "confidence": "HIGH - toy board",
+ "territory_count": 4,
+ "continent_count": 1,
+ "undirected_edge_count": 6,
+ "integrity": {
+  "asymmetric_edges": [],
+  "dangling_refs": []
+ },
+ "continents": [
+  {
+   "id": "all",
+   "name": "All",
+   "bonus": null,
+   "territories": [
+    "a",
+    "b",
+    "c",
+    "d"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "a",
+   "name": "A",
+   "continent": "all",
+   "adjacent": [
+    "b",
+    "c",
+    "d"
+   ]
+  },
+  {
+   "id": "b",
+   "name": "B",
+   "continent": "all",
+   "adjacent": [
+    "a",
+    "c",
+    "d"
+   ]
+  },
+  {
+   "id": "c",
+   "name": "C",
+   "continent": "all",
+   "adjacent": [
+    "a",
+    "b",
+    "d"
+   ]
+  },
+  {
+   "id": "d",
+   "name": "D",
+   "continent": "all",
+   "adjacent": [
+    "a",
+    "b",
+    "c"
+   ]
+  }
+ ],
+ "geometry": null,
+ "note": "Graph only - Preeminence ships NO coordinates or geometry, and no bonus values.",
+ "source": "https://github.com/DouglasOrr/Preeminence  maps/tiny4.json",
+ "license": "MIT - see LICENSE in this folder"
+}

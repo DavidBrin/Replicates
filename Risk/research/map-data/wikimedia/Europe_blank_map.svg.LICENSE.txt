@@ -1,0 +1,18 @@
+FILE: Europe_blank_map.svg
+COMMONS PAGE: https://commons.wikimedia.org/wiki/File:Europe_blank_map.svg
+DIRECT URL: https://upload.wikimedia.org/wikipedia/commons/8/8f/Europe_blank_map.svg
+AUTHOR: Radoslaw Botev. Credit: "own work based on a PD map from Demis".
+LICENCE: PUBLIC DOMAIN. Commons extmetadata: License = pd, UsageTerms = "Public domain".
+  Permission (verbatim): "This image is in the public domain because it came from the site
+  https://www.demis.nl/products/web-map-server/examples/ and was released by the copyright
+  holder. Permission is granted to copy, distribute and/or modify this map since it is based
+  on free of copyright images from: www.demis.nl."
+ATTRIBUTION: not required.
+VERDICT: SAFE TO REUSE, including commercially.
+DESCRIPTION: "Blank political SVG map of Europe". Regional blank map -- good base for a
+  Europe-only / Castle-Risk-style board.
+
+TECHNICAL CAVEAT: only 4 <path> elements and generic Inkscape ids (path2448 ...). There are
+  NO per-country ids/classes, so you cannot select or hit-test individual countries without
+  splitting the paths yourself. Use BlankMap-World.svg (ISO-coded ids) or Natural Earth
+  geometry if you need per-territory addressability.

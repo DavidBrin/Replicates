@@ -1,0 +1,20 @@
+FILE: world-atlas-countries-110m.json  (TopoJSON)
+SOURCE: https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json
+REPO: https://github.com/topojson/world-atlas   (npm: world-atlas@2.0.2)
+LICENCE OF THE PACKAGING: ISC  (SPDX: ISC) -- npm "license": "ISC"
+LICENCE FILE: https://github.com/topojson/world-atlas/blob/master/LICENSE
+QUOTE (verbatim):
+  "Copyright 2013-2019 Michael Bostock
+   Permission to use, copy, modify, and/or distribute this software for any purpose
+   with or without fee is hereby granted, provided that the above copyright notice
+   and this permission notice appear in all copies."
+UNDERLYING DATA LICENCE: PUBLIC DOMAIN -- this repo is "a convenient redistribution of
+  Natural Earth's vector data, version 4.1.0 as TopoJSON" (README).
+ATTRIBUTION: ISC requires the copyright + permission notice to travel with COPIES of the
+  file itself. Shipping this LICENSE note (or the upstream LICENSE text) alongside the
+  .json satisfies it. No notice is needed in your rendered UI.
+VERDICT: SAFE TO REUSE, including commercially. Permissive, non-copyleft.
+CONTENT: objects = {countries: 177, land: 1}. Quantized, unprojected, spherical lon/lat.
+  country.id = ISO 3166-1 numeric ("528"); country.properties.name = e.g. "Netherlands".
+SIBLINGS (same licence): countries-50m.json, countries-10m.json,
+  land-110m.json, land-50m.json, land-10m.json

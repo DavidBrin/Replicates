@@ -1,0 +1,691 @@
+{
+ "$schema_version": "1.0",
+ "slug": "classic-world",
+ "name": "Classic / World (42 territories)",
+ "confidence": "HIGHEST - verified against SEVEN independent open-source adjacency lists, ALL SEVEN of which match this graph EXACTLY (42 territories, 83 undirected edges, 0 edge differences each), plus Wikipedia and the RGD fandom wiki for the continent bonuses. Two further sources (TotalRisk, risk-neighborhood) disagreed and were overruled; their specific errors are in 'adjudications'.",
+ "territory_count": 42,
+ "continent_count": 6,
+ "undirected_edge_count": 83,
+ "continents": [
+  {
+   "id": "north_america",
+   "name": "North America",
+   "bonus": 5,
+   "territories": [
+    "alaska",
+    "alberta",
+    "central_america",
+    "eastern_us",
+    "greenland",
+    "northwest_territory",
+    "ontario",
+    "quebec",
+    "western_us"
+   ]
+  },
+  {
+   "id": "south_america",
+   "name": "South America",
+   "bonus": 2,
+   "territories": [
+    "argentina",
+    "brazil",
+    "peru",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "europe",
+   "name": "Europe",
+   "bonus": 5,
+   "territories": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "africa",
+   "name": "Africa",
+   "bonus": 3,
+   "territories": [
+    "congo",
+    "east_africa",
+    "egypt",
+    "madagascar",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "asia",
+   "name": "Asia",
+   "bonus": 7,
+   "territories": [
+    "afghanistan",
+    "china",
+    "india",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "middle_east",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "australia",
+   "name": "Australia",
+   "bonus": 2,
+   "territories": [
+    "eastern_australia",
+    "indonesia",
+    "new_guinea",
+    "western_australia"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "afghanistan",
+   "name": "Afghanistan",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "india",
+    "middle_east",
+    "ukraine",
+    "ural"
+   ]
+  },
+  {
+   "id": "alaska",
+   "name": "Alaska",
+   "continent": "north_america",
+   "adjacent": [
+    "alberta",
+    "kamchatka",
+    "northwest_territory"
+   ]
+  },
+  {
+   "id": "alberta",
+   "name": "Alberta",
+   "continent": "north_america",
+   "adjacent": [
+    "alaska",
+    "northwest_territory",
+    "ontario",
+    "western_us"
+   ]
+  },
+  {
+   "id": "argentina",
+   "name": "Argentina",
+   "continent": "south_america",
+   "adjacent": [
+    "brazil",
+    "peru"
+   ]
+  },
+  {
+   "id": "brazil",
+   "name": "Brazil",
+   "continent": "south_america",
+   "adjacent": [
+    "argentina",
+    "north_africa",
+    "peru",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "central_america",
+   "name": "Central America",
+   "continent": "north_america",
+   "adjacent": [
+    "eastern_us",
+    "venezuela",
+    "western_us"
+   ]
+  },
+  {
+   "id": "china",
+   "name": "China",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "india",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural"
+   ]
+  },
+  {
+   "id": "congo",
+   "name": "Congo",
+   "continent": "africa",
+   "adjacent": [
+    "east_africa",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "east_africa",
+   "name": "East Africa",
+   "continent": "africa",
+   "adjacent": [
+    "congo",
+    "egypt",
+    "madagascar",
+    "middle_east",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "eastern_australia",
+   "name": "Eastern Australia",
+   "continent": "australia",
+   "adjacent": [
+    "new_guinea",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "eastern_us",
+   "name": "Eastern United States",
+   "continent": "north_america",
+   "adjacent": [
+    "central_america",
+    "ontario",
+    "quebec",
+    "western_us"
+   ]
+  },
+  {
+   "id": "egypt",
+   "name": "Egypt",
+   "continent": "africa",
+   "adjacent": [
+    "east_africa",
+    "middle_east",
+    "north_africa",
+    "southern_europe"
+   ]
+  },
+  {
+   "id": "great_britain",
+   "name": "Great Britain",
+   "continent": "europe",
+   "adjacent": [
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "greenland",
+   "name": "Greenland",
+   "continent": "north_america",
+   "adjacent": [
+    "iceland",
+    "northwest_territory",
+    "ontario",
+    "quebec"
+   ]
+  },
+  {
+   "id": "iceland",
+   "name": "Iceland",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "greenland",
+    "scandinavia"
+   ]
+  },
+  {
+   "id": "india",
+   "name": "India",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "middle_east",
+    "siam"
+   ]
+  },
+  {
+   "id": "indonesia",
+   "name": "Indonesia",
+   "continent": "australia",
+   "adjacent": [
+    "new_guinea",
+    "siam",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "irkutsk",
+   "name": "Irkutsk",
+   "continent": "asia",
+   "adjacent": [
+    "kamchatka",
+    "mongolia",
+    "siberia",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "japan",
+   "name": "Japan",
+   "continent": "asia",
+   "adjacent": [
+    "kamchatka",
+    "mongolia"
+   ]
+  },
+  {
+   "id": "kamchatka",
+   "name": "Kamchatka",
+   "continent": "asia",
+   "adjacent": [
+    "alaska",
+    "irkutsk",
+    "japan",
+    "mongolia",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "madagascar",
+   "name": "Madagascar",
+   "continent": "africa",
+   "adjacent": [
+    "east_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "middle_east",
+   "name": "Middle East",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "east_africa",
+    "egypt",
+    "india",
+    "southern_europe",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "mongolia",
+   "name": "Mongolia",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "siberia"
+   ]
+  },
+  {
+   "id": "new_guinea",
+   "name": "New Guinea",
+   "continent": "australia",
+   "adjacent": [
+    "eastern_australia",
+    "indonesia",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "north_africa",
+   "name": "North Africa",
+   "continent": "africa",
+   "adjacent": [
+    "brazil",
+    "congo",
+    "east_africa",
+    "egypt",
+    "southern_europe",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "northern_europe",
+   "name": "Northern Europe",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "scandinavia",
+    "southern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "northwest_territory",
+   "name": "Northwest Territory",
+   "continent": "north_america",
+   "adjacent": [
+    "alaska",
+    "alberta",
+    "greenland",
+    "ontario"
+   ]
+  },
+  {
+   "id": "ontario",
+   "name": "Ontario",
+   "continent": "north_america",
+   "adjacent": [
+    "alberta",
+    "eastern_us",
+    "greenland",
+    "northwest_territory",
+    "quebec",
+    "western_us"
+   ]
+  },
+  {
+   "id": "peru",
+   "name": "Peru",
+   "continent": "south_america",
+   "adjacent": [
+    "argentina",
+    "brazil",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "quebec",
+   "name": "Quebec",
+   "continent": "north_america",
+   "adjacent": [
+    "eastern_us",
+    "greenland",
+    "ontario"
+   ]
+  },
+  {
+   "id": "scandinavia",
+   "name": "Scandinavia",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "siam",
+   "name": "Siam",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "india",
+    "indonesia"
+   ]
+  },
+  {
+   "id": "siberia",
+   "name": "Siberia",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "mongolia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "south_africa",
+   "name": "South Africa",
+   "continent": "africa",
+   "adjacent": [
+    "congo",
+    "east_africa",
+    "madagascar"
+   ]
+  },
+  {
+   "id": "southern_europe",
+   "name": "Southern Europe",
+   "continent": "europe",
+   "adjacent": [
+    "egypt",
+    "middle_east",
+    "north_africa",
+    "northern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "ukraine",
+   "name": "Ukraine",
+   "continent": "europe",
+   "adjacent": [
+    "afghanistan",
+    "middle_east",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "ural"
+   ]
+  },
+  {
+   "id": "ural",
+   "name": "Ural",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "siberia",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "venezuela",
+   "name": "Venezuela",
+   "continent": "south_america",
+   "adjacent": [
+    "brazil",
+    "central_america",
+    "peru"
+   ]
+  },
+  {
+   "id": "western_australia",
+   "name": "Western Australia",
+   "continent": "australia",
+   "adjacent": [
+    "eastern_australia",
+    "indonesia",
+    "new_guinea"
+   ]
+  },
+  {
+   "id": "western_europe",
+   "name": "Western Europe",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "north_africa",
+    "northern_europe",
+    "southern_europe"
+   ]
+  },
+  {
+   "id": "western_us",
+   "name": "Western United States",
+   "continent": "north_america",
+   "adjacent": [
+    "alberta",
+    "central_america",
+    "eastern_us",
+    "ontario"
+   ]
+  },
+  {
+   "id": "yakutsk",
+   "name": "Yakutsk",
+   "continent": "asia",
+   "adjacent": [
+    "irkutsk",
+    "kamchatka",
+    "siberia"
+   ]
+  }
+ ],
+ "sea_links": [
+  {
+   "from": "alaska",
+   "to": "kamchatka"
+  },
+  {
+   "from": "brazil",
+   "to": "north_africa"
+  },
+  {
+   "from": "central_america",
+   "to": "venezuela"
+  },
+  {
+   "from": "east_africa",
+   "to": "middle_east"
+  },
+  {
+   "from": "egypt",
+   "to": "southern_europe"
+  },
+  {
+   "from": "greenland",
+   "to": "iceland"
+  },
+  {
+   "from": "indonesia",
+   "to": "siam"
+  },
+  {
+   "from": "north_africa",
+   "to": "southern_europe"
+  },
+  {
+   "from": "north_africa",
+   "to": "western_europe"
+  }
+ ],
+ "geometry": {
+  "options": [
+   {
+    "svg": "../totalrisk/worldMap.svg",
+    "license": "Unlicense (public domain)",
+    "style": "one <path id=\"Territory Name\"> per territory in <g id=\"Continent\">, 1024x643 viewBox",
+    "verified": "42/42"
+   },
+   {
+    "svg": "../risk-codelab/board.svg",
+    "license": "Apache-2.0",
+    "style": "one <path id=\"snake_case_name\"> per territory, 800x540 viewBox",
+    "verified": "42/42 (3 id spelling variants)"
+   }
+  ]
+ },
+ "sources": [
+  "https://github.com/arjanfrans/conquete (MIT) lib/maps/classic.js - EXACT",
+  "https://github.com/Zach-Hayton/Conquest-Tracker (MIT) src/map-data.js - EXACT",
+  "https://github.com/DouglasOrr/Preeminence (MIT) maps/classic.json - EXACT",
+  "https://github.com/gfceccon/risk (CC0) world.json - EXACT",
+  "https://github.com/AndreasThinks/ai-at-risk (MIT) src/data/territories.json - EXACT",
+  "https://github.com/dartlangfr/risk-codelab (Apache-2.0) map.dart + board.svg - EXACT",
+  "https://github.com/hcekne/risk-game (Apache-2.0) risk_game/game_constants.py - EXACT",
+  "https://github.com/sonesson89/TotalRisk (Unlicense) - 2 errors, overruled",
+  "https://github.com/brunoscopelliti/risk-neighborhood (MIT) - 3 errors, overruled",
+  "https://en.wikipedia.org/wiki/Risk_(game)",
+  "https://risk-global-domination.fandom.com/wiki/Classic_Map"
+ ],
+ "adjudications": [
+  {
+   "edge": "afghanistan-india",
+   "verdict": "PRESENT",
+   "note": "Conquest-Tracker + TotalRisk agree; risk-neighborhood omits it (bug)"
+  },
+  {
+   "edge": "china-middle_east",
+   "verdict": "ABSENT",
+   "note": "risk-neighborhood wrongly adds it; not on the Hasbro board"
+  },
+  {
+   "edge": "east_africa-middle_east",
+   "verdict": "PRESENT",
+   "note": "Conquest-Tracker + TotalRisk + Wikipedia confirm; risk-neighborhood omits it"
+  },
+  {
+   "edge": "new_guinea-western_australia",
+   "verdict": "PRESENT",
+   "note": "Conquest-Tracker + risk-neighborhood agree; TotalRisk omits it (bug)"
+  },
+  {
+   "edge": "northwest_territory-quebec",
+   "verdict": "ABSENT",
+   "note": "TotalRisk wrongly adds it; NW Territory touches Alaska/Alberta/Ontario/Greenland only"
+  }
+ ],
+ "verification": {
+  "sources_compared": 9,
+  "exact_agreement_count": 7,
+  "exact_agreement": [
+   "arjanfrans/conquete (MIT)",
+   "Zach-Hayton/Conquest-Tracker (MIT)",
+   "DouglasOrr/Preeminence (MIT)",
+   "gfceccon/risk (CC0-1.0)",
+   "AndreasThinks/ai-at-risk (MIT)",
+   "dartlangfr/risk-codelab (Apache-2.0)",
+   "hcekne/risk-game (Apache-2.0)"
+  ],
+  "disagreed_and_overruled": {
+   "sonesson89/TotalRisk (Unlicense)": [
+    "spurious northwest_territory-quebec",
+    "missing new_guinea-western_australia"
+   ],
+   "brunoscopelliti/risk-neighborhood (MIT)": [
+    "missing afghanistan-india",
+    "missing east_africa-middle_east",
+    "spurious china-middle_east"
+   ]
+  },
+  "name_aliases_needed": {
+   "Preeminence": {
+    "Kazakhstan": "Afghanistan",
+    "Papua New Guinea": "New Guinea",
+    "Scandanavia": "Scandinavia"
+   },
+   "risk-codelab": {
+    "yakursk": "yakutsk",
+    "eastern_united_states": "eastern_us",
+    "western_united_states": "western_us"
+   }
+  },
+  "corroborating_prose": [
+   "https://en.wikipedia.org/wiki/Risk_(game)",
+   "https://risk-global-domination.fandom.com/wiki/Classic_Map"
+  ]
+ }
+}

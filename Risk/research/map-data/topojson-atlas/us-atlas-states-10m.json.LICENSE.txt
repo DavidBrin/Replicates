@@ -1,0 +1,20 @@
+FILE: us-atlas-states-10m.json  (TopoJSON)
+SOURCE: https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json
+REPO: https://github.com/topojson/us-atlas   (npm: us-atlas@3.0.1)
+LICENCE OF THE PACKAGING: ISC (SPDX: ISC) -- npm "license": "ISC"
+LICENCE FILE: https://github.com/topojson/us-atlas/blob/master/LICENSE
+QUOTE (verbatim):
+  "Copyright 2013-2019 Michael Bostock
+   Permission to use, copy, modify, and/or distribute this software for any purpose
+   with or without fee is hereby granted, provided that the above copyright notice
+   and this permission notice appear in all copies."
+UNDERLYING DATA LICENCE: US Census Bureau cartographic boundary shapefiles, 2017 edition.
+  Works of the US federal government are not subject to US copyright (17 U.S.C. 105)
+  = effectively PUBLIC DOMAIN in the US.
+ATTRIBUTION: ISC notice must accompany copies of the file; nothing needed in the UI.
+VERDICT: SAFE TO REUSE, including commercially.
+CONTENT: objects = {states: 56, nation: 1}. Unprojected lon/lat. state.id = 2-digit FIPS,
+  state.properties.name = e.g. "California".
+SIBLINGS (same licence): counties-10m.json, nation-10m.json, and the pre-projected
+  *-albers-10m.json variants (d3.geoAlbersUsa().scale(1300).translate([487.5,305]),
+  fitted to a 975x610 viewport).

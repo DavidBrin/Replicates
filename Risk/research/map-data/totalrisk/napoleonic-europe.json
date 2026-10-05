@@ -1,0 +1,834 @@
+{
+ "$schema_version": "1.0",
+ "slug": "napoleonic-europe",
+ "name": "Napoleonic Europe (59 territories)",
+ "confidence": "MEDIUM-HIGH - adjacency fully symmetric, no dangling refs. Not an SMG map (SMG's Napoleon content is the 'Napoleon's Battles' pack); a TotalRisk original, but a complete, usable 59-territory Europe map with per-territory SVG.",
+ "territory_count": 59,
+ "continent_count": 11,
+ "undirected_edge_count": 127,
+ "continents": [
+  {
+   "id": "united_kingdom",
+   "name": "United Kingdom",
+   "bonus": 1,
+   "color": "#b40606",
+   "territories": [
+    "ireland",
+    "scotland",
+    "northern_england",
+    "southern_england"
+   ]
+  },
+  {
+   "id": "french_empire",
+   "name": "French Empire",
+   "bonus": 3,
+   "color": "#5dbde6",
+   "territories": [
+    "brittany_normandy",
+    "nord_picardy",
+    "le_de_france",
+    "burgundy_lorraine",
+    "aquitaine",
+    "languedoc"
+   ]
+  },
+  {
+   "id": "iberian_peninsula",
+   "name": "Iberian Peninsula",
+   "bonus": 1,
+   "color": "#c6c12f",
+   "territories": [
+    "aragon_castile",
+    "andalusia",
+    "galicia_le_n",
+    "portugal"
+   ]
+  },
+  {
+   "id": "africa",
+   "name": "Africa",
+   "bonus": 1,
+   "color": "#ffc59a",
+   "territories": [
+    "north_africa",
+    "sardinia",
+    "corsica"
+   ]
+  },
+  {
+   "id": "italian_protectorates",
+   "name": "Italian Protectorates",
+   "bonus": 1,
+   "color": "#29aa4e",
+   "territories": [
+    "lombardy_piedmont_tuscany",
+    "venetia",
+    "the_papal_states",
+    "the_two_sicilies"
+   ]
+  },
+  {
+   "id": "rhine_and_helvetic_confederations",
+   "name": "Rhine and Helvetic Confederations",
+   "bonus": 4,
+   "color": "#483ca5",
+   "territories": [
+    "belgium",
+    "holland",
+    "hanover",
+    "westphalia_wurttemb_rg",
+    "switzerland",
+    "bavaria",
+    "saxony"
+   ]
+  },
+  {
+   "id": "kingdom_of_prussia",
+   "name": "Kingdom of Prussia",
+   "bonus": 3,
+   "color": "#dac827",
+   "territories": [
+    "brandenburg",
+    "pomerania",
+    "silesia",
+    "warsaw",
+    "east_prussia"
+   ]
+  },
+  {
+   "id": "austrian_empire",
+   "name": "Austrian Empire",
+   "bonus": 5,
+   "color": "#bababa",
+   "territories": [
+    "tyrol",
+    "the_illyrian_provinces",
+    "austria",
+    "hungary",
+    "transylvania",
+    "galich",
+    "bohemia_moravia"
+   ]
+  },
+  {
+   "id": "ottoman_empire",
+   "name": "Ottoman Empire",
+   "bonus": 1,
+   "color": "#906f68",
+   "territories": [
+    "bosnia",
+    "albania",
+    "greece",
+    "bulgaria",
+    "wallachia",
+    "moldava",
+    "anatolia",
+    "serbia"
+   ]
+  },
+  {
+   "id": "russian_empire",
+   "name": "Russian Empire",
+   "bonus": 2,
+   "color": "#db82f3",
+   "territories": [
+    "lithuania",
+    "crimea",
+    "poland",
+    "livonia",
+    "karelia",
+    "russia",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "kingdoms_of_scandinavia",
+   "name": "Kingdoms of Scandinavia",
+   "bonus": 2,
+   "color": "#ff6e34",
+   "territories": [
+    "norway",
+    "sweden",
+    "denmark",
+    "finland"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "ireland",
+   "name": "Ireland",
+   "continent": "united_kingdom",
+   "adjacent": [
+    "northern_england",
+    "scotland"
+   ]
+  },
+  {
+   "id": "scotland",
+   "name": "Scotland",
+   "continent": "united_kingdom",
+   "adjacent": [
+    "ireland",
+    "northern_england"
+   ]
+  },
+  {
+   "id": "northern_england",
+   "name": "Northern England",
+   "continent": "united_kingdom",
+   "adjacent": [
+    "ireland",
+    "norway",
+    "scotland",
+    "southern_england"
+   ]
+  },
+  {
+   "id": "southern_england",
+   "name": "Southern England",
+   "continent": "united_kingdom",
+   "adjacent": [
+    "brittany_normandy",
+    "nord_picardy",
+    "northern_england"
+   ]
+  },
+  {
+   "id": "brittany_normandy",
+   "name": "Brittany & Normandy",
+   "continent": "french_empire",
+   "adjacent": [
+    "aquitaine",
+    "le_de_france",
+    "nord_picardy",
+    "southern_england"
+   ]
+  },
+  {
+   "id": "nord_picardy",
+   "name": "Nord & Picardy",
+   "continent": "french_empire",
+   "adjacent": [
+    "belgium",
+    "brittany_normandy",
+    "burgundy_lorraine",
+    "le_de_france",
+    "southern_england"
+   ]
+  },
+  {
+   "id": "le_de_france",
+   "name": "\u00cele-de-France",
+   "continent": "french_empire",
+   "adjacent": [
+    "aquitaine",
+    "brittany_normandy",
+    "burgundy_lorraine",
+    "languedoc",
+    "nord_picardy"
+   ]
+  },
+  {
+   "id": "burgundy_lorraine",
+   "name": "Burgundy & Lorraine",
+   "continent": "french_empire",
+   "adjacent": [
+    "belgium",
+    "languedoc",
+    "le_de_france",
+    "lombardy_piedmont_tuscany",
+    "nord_picardy",
+    "switzerland",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "aquitaine",
+   "name": "Aquitaine",
+   "continent": "french_empire",
+   "adjacent": [
+    "aragon_castile",
+    "brittany_normandy",
+    "languedoc",
+    "le_de_france"
+   ]
+  },
+  {
+   "id": "languedoc",
+   "name": "Languedoc",
+   "continent": "french_empire",
+   "adjacent": [
+    "aquitaine",
+    "aragon_castile",
+    "burgundy_lorraine",
+    "corsica",
+    "le_de_france",
+    "lombardy_piedmont_tuscany"
+   ]
+  },
+  {
+   "id": "aragon_castile",
+   "name": "Aragon & Castile",
+   "continent": "iberian_peninsula",
+   "adjacent": [
+    "andalusia",
+    "aquitaine",
+    "galicia_le_n",
+    "languedoc"
+   ]
+  },
+  {
+   "id": "andalusia",
+   "name": "Andalusia",
+   "continent": "iberian_peninsula",
+   "adjacent": [
+    "aragon_castile",
+    "galicia_le_n",
+    "north_africa",
+    "portugal"
+   ]
+  },
+  {
+   "id": "galicia_le_n",
+   "name": "Galicia & Le\u00f3n",
+   "continent": "iberian_peninsula",
+   "adjacent": [
+    "andalusia",
+    "aragon_castile",
+    "portugal"
+   ]
+  },
+  {
+   "id": "portugal",
+   "name": "Portugal",
+   "continent": "iberian_peninsula",
+   "adjacent": [
+    "andalusia",
+    "galicia_le_n"
+   ]
+  },
+  {
+   "id": "north_africa",
+   "name": "North Africa",
+   "continent": "africa",
+   "adjacent": [
+    "andalusia",
+    "sardinia"
+   ]
+  },
+  {
+   "id": "sardinia",
+   "name": "Sardinia",
+   "continent": "africa",
+   "adjacent": [
+    "corsica",
+    "north_africa"
+   ]
+  },
+  {
+   "id": "corsica",
+   "name": "Corsica",
+   "continent": "africa",
+   "adjacent": [
+    "languedoc",
+    "lombardy_piedmont_tuscany",
+    "sardinia"
+   ]
+  },
+  {
+   "id": "lombardy_piedmont_tuscany",
+   "name": "Lombardy, Piedmont & Tuscany",
+   "continent": "italian_protectorates",
+   "adjacent": [
+    "burgundy_lorraine",
+    "corsica",
+    "languedoc",
+    "switzerland",
+    "the_papal_states",
+    "venetia"
+   ]
+  },
+  {
+   "id": "venetia",
+   "name": "Venetia",
+   "continent": "italian_protectorates",
+   "adjacent": [
+    "lombardy_piedmont_tuscany",
+    "switzerland",
+    "the_illyrian_provinces",
+    "the_papal_states",
+    "tyrol"
+   ]
+  },
+  {
+   "id": "the_papal_states",
+   "name": "The Papal States",
+   "continent": "italian_protectorates",
+   "adjacent": [
+    "lombardy_piedmont_tuscany",
+    "the_two_sicilies",
+    "venetia"
+   ]
+  },
+  {
+   "id": "the_two_sicilies",
+   "name": "The Two Sicilies",
+   "continent": "italian_protectorates",
+   "adjacent": [
+    "greece",
+    "the_papal_states"
+   ]
+  },
+  {
+   "id": "belgium",
+   "name": "Belgium",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "burgundy_lorraine",
+    "holland",
+    "nord_picardy",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "holland",
+   "name": "Holland",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "belgium",
+    "hanover",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "hanover",
+   "name": "Hanover",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "brandenburg",
+    "denmark",
+    "holland",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "westphalia_wurttemb_rg",
+   "name": "Westphalia & Wurttemb\u00fcrg",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "bavaria",
+    "belgium",
+    "brandenburg",
+    "burgundy_lorraine",
+    "hanover",
+    "holland",
+    "saxony",
+    "switzerland"
+   ]
+  },
+  {
+   "id": "switzerland",
+   "name": "Switzerland",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "bavaria",
+    "burgundy_lorraine",
+    "lombardy_piedmont_tuscany",
+    "tyrol",
+    "venetia",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "bavaria",
+   "name": "Bavaria",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "austria",
+    "bohemia_moravia",
+    "saxony",
+    "switzerland",
+    "tyrol",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "saxony",
+   "name": "Saxony",
+   "continent": "rhine_and_helvetic_confederations",
+   "adjacent": [
+    "bavaria",
+    "bohemia_moravia",
+    "brandenburg",
+    "pomerania",
+    "silesia",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "brandenburg",
+   "name": "Brandenburg",
+   "continent": "kingdom_of_prussia",
+   "adjacent": [
+    "denmark",
+    "hanover",
+    "pomerania",
+    "saxony",
+    "westphalia_wurttemb_rg"
+   ]
+  },
+  {
+   "id": "pomerania",
+   "name": "Pomerania",
+   "continent": "kingdom_of_prussia",
+   "adjacent": [
+    "brandenburg",
+    "east_prussia",
+    "saxony",
+    "silesia",
+    "warsaw"
+   ]
+  },
+  {
+   "id": "silesia",
+   "name": "Silesia",
+   "continent": "kingdom_of_prussia",
+   "adjacent": [
+    "bohemia_moravia",
+    "galich",
+    "pomerania",
+    "saxony",
+    "warsaw"
+   ]
+  },
+  {
+   "id": "warsaw",
+   "name": "Warsaw",
+   "continent": "kingdom_of_prussia",
+   "adjacent": [
+    "east_prussia",
+    "galich",
+    "pomerania",
+    "silesia"
+   ]
+  },
+  {
+   "id": "east_prussia",
+   "name": "East Prussia",
+   "continent": "kingdom_of_prussia",
+   "adjacent": [
+    "galich",
+    "lithuania",
+    "pomerania",
+    "warsaw"
+   ]
+  },
+  {
+   "id": "tyrol",
+   "name": "Tyrol",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "austria",
+    "bavaria",
+    "switzerland",
+    "the_illyrian_provinces",
+    "venetia"
+   ]
+  },
+  {
+   "id": "the_illyrian_provinces",
+   "name": "The Illyrian Provinces",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "albania",
+    "austria",
+    "bosnia",
+    "hungary",
+    "tyrol",
+    "venetia"
+   ]
+  },
+  {
+   "id": "austria",
+   "name": "Austria",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "bavaria",
+    "bohemia_moravia",
+    "hungary",
+    "the_illyrian_provinces",
+    "tyrol"
+   ]
+  },
+  {
+   "id": "hungary",
+   "name": "Hungary",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "austria",
+    "bohemia_moravia",
+    "bosnia",
+    "galich",
+    "serbia",
+    "the_illyrian_provinces",
+    "transylvania"
+   ]
+  },
+  {
+   "id": "transylvania",
+   "name": "Transylvania",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "galich",
+    "hungary",
+    "moldava",
+    "serbia",
+    "wallachia"
+   ]
+  },
+  {
+   "id": "galich",
+   "name": "Galich",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "bohemia_moravia",
+    "crimea",
+    "east_prussia",
+    "hungary",
+    "lithuania",
+    "moldava",
+    "silesia",
+    "transylvania",
+    "warsaw"
+   ]
+  },
+  {
+   "id": "bohemia_moravia",
+   "name": "Bohemia & Moravia",
+   "continent": "austrian_empire",
+   "adjacent": [
+    "austria",
+    "bavaria",
+    "galich",
+    "hungary",
+    "saxony",
+    "silesia"
+   ]
+  },
+  {
+   "id": "bosnia",
+   "name": "Bosnia",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "albania",
+    "hungary",
+    "serbia",
+    "the_illyrian_provinces"
+   ]
+  },
+  {
+   "id": "albania",
+   "name": "Albania",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "bosnia",
+    "greece",
+    "serbia",
+    "the_illyrian_provinces"
+   ]
+  },
+  {
+   "id": "greece",
+   "name": "Greece",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "albania",
+    "bulgaria",
+    "serbia",
+    "the_two_sicilies"
+   ]
+  },
+  {
+   "id": "bulgaria",
+   "name": "Bulgaria",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "anatolia",
+    "greece",
+    "moldava",
+    "serbia",
+    "wallachia"
+   ]
+  },
+  {
+   "id": "wallachia",
+   "name": "Wallachia",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "bulgaria",
+    "moldava",
+    "serbia",
+    "transylvania"
+   ]
+  },
+  {
+   "id": "moldava",
+   "name": "Moldava",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "bulgaria",
+    "crimea",
+    "galich",
+    "transylvania",
+    "wallachia"
+   ]
+  },
+  {
+   "id": "anatolia",
+   "name": "Anatolia",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "bulgaria"
+   ]
+  },
+  {
+   "id": "serbia",
+   "name": "Serbia",
+   "continent": "ottoman_empire",
+   "adjacent": [
+    "albania",
+    "bosnia",
+    "bulgaria",
+    "greece",
+    "hungary",
+    "transylvania",
+    "wallachia"
+   ]
+  },
+  {
+   "id": "lithuania",
+   "name": "Lithuania",
+   "continent": "russian_empire",
+   "adjacent": [
+    "crimea",
+    "east_prussia",
+    "galich",
+    "livonia",
+    "poland"
+   ]
+  },
+  {
+   "id": "crimea",
+   "name": "Crimea",
+   "continent": "russian_empire",
+   "adjacent": [
+    "galich",
+    "lithuania",
+    "moldava",
+    "poland",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "poland",
+   "name": "Poland",
+   "continent": "russian_empire",
+   "adjacent": [
+    "crimea",
+    "karelia",
+    "lithuania",
+    "livonia",
+    "russia",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "livonia",
+   "name": "Livonia",
+   "continent": "russian_empire",
+   "adjacent": [
+    "karelia",
+    "lithuania",
+    "poland"
+   ]
+  },
+  {
+   "id": "karelia",
+   "name": "Karelia",
+   "continent": "russian_empire",
+   "adjacent": [
+    "finland",
+    "livonia",
+    "poland",
+    "russia"
+   ]
+  },
+  {
+   "id": "russia",
+   "name": "Russia",
+   "continent": "russian_empire",
+   "adjacent": [
+    "karelia",
+    "poland",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "ukraine",
+   "name": "Ukraine",
+   "continent": "russian_empire",
+   "adjacent": [
+    "crimea",
+    "poland",
+    "russia"
+   ]
+  },
+  {
+   "id": "norway",
+   "name": "Norway",
+   "continent": "kingdoms_of_scandinavia",
+   "adjacent": [
+    "northern_england",
+    "sweden"
+   ]
+  },
+  {
+   "id": "sweden",
+   "name": "Sweden",
+   "continent": "kingdoms_of_scandinavia",
+   "adjacent": [
+    "denmark",
+    "finland",
+    "norway"
+   ]
+  },
+  {
+   "id": "denmark",
+   "name": "Denmark",
+   "continent": "kingdoms_of_scandinavia",
+   "adjacent": [
+    "brandenburg",
+    "hanover",
+    "sweden"
+   ]
+  },
+  {
+   "id": "finland",
+   "name": "Finland",
+   "continent": "kingdoms_of_scandinavia",
+   "adjacent": [
+    "karelia",
+    "sweden"
+   ]
+  }
+ ],
+ "geometry": {
+  "svg": "napoleonMap.svg",
+  "style": "exactly one <path id=\"Exact Territory Name\" d=\"...\"/> per territory (verified: all territories matched), grouped inside <g id=\"Continent Name\">. Attribute order is d= before id=. Names containing '&' appear HTML-escaped as '&amp;' in the id. Also contains a <g id=\"Seas\"> decorative group and label/army-circle elements.",
+  "verified": "59/59 territories have a geometry path"
+ },
+ "source": "https://github.com/sonesson89/TotalRisk  file: js/map/maps/.../napoleonic-europe",
+ "license": "Unlicense (public domain) - see LICENSE in this folder"
+}

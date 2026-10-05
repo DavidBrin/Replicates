@@ -1,0 +1,17 @@
+Source: RISK: Global Domination Wiki (Fandom) - https://risk-global-domination.fandom.com/wiki/Category:Maps
+Scraped 2026-10-05 via the MediaWiki action API (action=query&prop=revisions&rvprop=content).
+
+LICENCE: Fandom community content is licensed CC BY-SA 3.0
+  https://creativecommons.org/licenses/by-sa/3.0/
+  https://www.fandom.com/licensing
+
+WHAT THIS MEANS FOR US
+- The numeric facts in all-maps.json (territory counts, continent counts, bonus values,
+  blizzard/portal counts, map-pack names, size buckets) are facts about a published game.
+  Facts are not copyrightable, so using them as reference data carries no licence burden.
+- The free-text 'description' field IS wiki prose. If any of it is reproduced in a shipped
+  product, attribute the RGD Fandom wiki and apply CC BY-SA 3.0, or rewrite it.
+  Recommendation: treat 'description' as research-only and do not ship it verbatim.
+- Map NAMES and the game's trade dress belong to SMG Studio / Hasbro. Do not reuse the
+  names of paid DLC maps, map-pack names, or any SMG/Hasbro artwork in a public clone.
+  Use these only to understand scope and to choose your OWN map names and geometry.

@@ -1,0 +1,14 @@
+FILE: BlankMap-Eurasia.svg
+COMMONS PAGE: https://commons.wikimedia.org/wiki/File:BlankMap-Eurasia.svg
+DIRECT URL: https://upload.wikimedia.org/wikipedia/commons/7/7e/BlankMap-Eurasia.svg
+AUTHOR: User:Harbin.  Credit: "cropped from File:BlankMap-World-v2.svg"
+LICENCE: PUBLIC DOMAIN (Commons extmetadata: License = pd, UsageTerms = "Public domain")
+ATTRIBUTION: not required.
+VERDICT: SAFE TO REUSE per its Commons tag, with one caveat below.
+CAVEAT: the credit line points at BlankMap-World-v2.svg, whose raster sibling
+  File:BlankMap-World-v2.png is tagged CC BY-SA 3.0 (uploader User:Roke). The PD tag on this
+  crop may therefore be inconsistent with its parent. If you want zero ambiguity for a
+  Europe+Asia backdrop, prefer BlankMap-World.svg (unambiguously PD, explicit irrevocable
+  PD release on the file page) or generate the crop yourself from Natural Earth.
+TECHNICAL CAVEAT: a single <path> for the whole landmass -- no per-country ids or classes.
+  Backdrop only; not addressable geometry.

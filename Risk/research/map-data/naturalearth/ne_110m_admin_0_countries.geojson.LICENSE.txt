@@ -1,0 +1,19 @@
+FILE: ne_110m_admin_0_countries.geojson
+SOURCE: https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson
+UPSTREAM PROJECT: Natural Earth (naturalearthdata.com), repo github.com/nvkelso/natural-earth-vector
+LICENCE: PUBLIC DOMAIN (no SPDX identifier; closest equivalent CC0-1.0 / "Unlicense"-grade freedom)
+LICENCE FILE: https://github.com/nvkelso/natural-earth-vector/blob/master/LICENSE.md
+TERMS PAGE: https://www.naturalearthdata.com/about/terms-of-use/
+QUOTE (LICENSE.md, verbatim):
+  "# Everything here is public domain."
+  "All versions of Natural Earth raster + vector map data found on this website are in
+   the public domain. You may use the maps in any manner, including modifying the content
+   and design, electronic dissemination, and offset printing. The primary authors, Tom
+   Patterson and Nathaniel Vaughn Kelso, and all other contributors renounce all financial
+   claim to the maps and invites you to use them for personal, educational, and commercial
+   purposes."
+  "No permission is needed to use Natural Earth. Crediting the authors is unnecessary."
+ATTRIBUTION: NOT required. Optional courtesy credit: "Made with Natural Earth."
+VERDICT: SAFE TO REUSE, including commercially. No copyleft, no attribution obligation.
+CONTENT: 177 country polygons, WGS84 lon/lat, 1:110m. Properties include ADMIN, ADM0_A3,
+  ISO_A2/A3, CONTINENT, REGION_UN, SUBREGION -- useful for grouping into Risk continents.

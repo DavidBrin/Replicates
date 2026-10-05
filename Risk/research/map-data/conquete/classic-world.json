@@ -1,0 +1,352 @@
+{
+ "$schema_version": "1.0",
+ "slug": "classic-world",
+ "name": "Classic / World (42) - conquete",
+ "confidence": "HIGH - exact match to map-data/canonical/classic-world.json (0 edge differences, identical bonuses). Graph only, no geometry.",
+ "territory_count": 42,
+ "continent_count": 6,
+ "undirected_edge_count": 83,
+ "adjacency": {
+  "south_africa": [
+   "congo",
+   "east_africa",
+   "madagascar"
+  ],
+  "congo": [
+   "east_africa",
+   "north_africa",
+   "south_africa"
+  ],
+  "east_africa": [
+   "congo",
+   "egypt",
+   "madagascar",
+   "middle_east",
+   "north_africa",
+   "south_africa"
+  ],
+  "egypt": [
+   "east_africa",
+   "middle_east",
+   "north_africa",
+   "southern_europe"
+  ],
+  "madagascar": [
+   "east_africa",
+   "south_africa"
+  ],
+  "north_africa": [
+   "brazil",
+   "congo",
+   "east_africa",
+   "egypt",
+   "southern_europe",
+   "western_europe"
+  ],
+  "afghanistan": [
+   "china",
+   "india",
+   "middle_east",
+   "ukraine",
+   "ural"
+  ],
+  "china": [
+   "afghanistan",
+   "india",
+   "mongolia",
+   "siam",
+   "siberia",
+   "ural"
+  ],
+  "india": [
+   "afghanistan",
+   "china",
+   "middle_east",
+   "siam"
+  ],
+  "irkutsk": [
+   "kamchatka",
+   "mongolia",
+   "siberia",
+   "yakutsk"
+  ],
+  "japan": [
+   "kamchatka",
+   "mongolia"
+  ],
+  "kamchatka": [
+   "alaska",
+   "irkutsk",
+   "japan",
+   "mongolia",
+   "yakutsk"
+  ],
+  "middle_east": [
+   "afghanistan",
+   "east_africa",
+   "egypt",
+   "india",
+   "southern_europe",
+   "ukraine"
+  ],
+  "mongolia": [
+   "china",
+   "irkutsk",
+   "japan",
+   "kamchatka",
+   "siberia"
+  ],
+  "siam": [
+   "china",
+   "india",
+   "indonesia"
+  ],
+  "siberia": [
+   "china",
+   "irkutsk",
+   "mongolia",
+   "ural",
+   "yakutsk"
+  ],
+  "eastern_australia": [
+   "new_guinea",
+   "western_australia"
+  ],
+  "indonesia": [
+   "new_guinea",
+   "siam",
+   "western_australia"
+  ],
+  "new_guinea": [
+   "eastern_australia",
+   "indonesia",
+   "western_australia"
+  ],
+  "western_australia": [
+   "eastern_australia",
+   "indonesia",
+   "new_guinea"
+  ],
+  "great_britain": [
+   "iceland",
+   "northern_europe",
+   "scandinavia",
+   "western_europe"
+  ],
+  "iceland": [
+   "great_britain",
+   "greenland",
+   "scandinavia"
+  ],
+  "northern_europe": [
+   "great_britain",
+   "scandinavia",
+   "southern_europe",
+   "ukraine",
+   "western_europe"
+  ],
+  "scandinavia": [
+   "great_britain",
+   "iceland",
+   "northern_europe",
+   "ukraine"
+  ],
+  "southern_europe": [
+   "egypt",
+   "middle_east",
+   "north_africa",
+   "northern_europe",
+   "ukraine",
+   "western_europe"
+  ],
+  "ukraine": [
+   "afghanistan",
+   "middle_east",
+   "northern_europe",
+   "scandinavia",
+   "southern_europe",
+   "ural"
+  ],
+  "western_europe": [
+   "great_britain",
+   "north_africa",
+   "northern_europe",
+   "southern_europe"
+  ],
+  "alaska": [
+   "alberta",
+   "kamchatka",
+   "northwest_territory"
+  ],
+  "alberta": [
+   "alaska",
+   "northwest_territory",
+   "ontario",
+   "western_united_states"
+  ],
+  "central_america": [
+   "eastern_united_states",
+   "venezuela",
+   "western_united_states"
+  ],
+  "eastern_united_states": [
+   "central_america",
+   "ontario",
+   "quebec",
+   "western_united_states"
+  ],
+  "greenland": [
+   "iceland",
+   "northwest_territory",
+   "ontario",
+   "quebec"
+  ],
+  "northwest_territory": [
+   "alaska",
+   "alberta",
+   "greenland",
+   "ontario"
+  ],
+  "ontario": [
+   "alberta",
+   "eastern_united_states",
+   "greenland",
+   "northwest_territory",
+   "quebec",
+   "western_united_states"
+  ],
+  "quebec": [
+   "eastern_united_states",
+   "greenland",
+   "ontario"
+  ],
+  "western_united_states": [
+   "alberta",
+   "central_america",
+   "eastern_united_states",
+   "ontario"
+  ],
+  "argentina": [
+   "brazil",
+   "peru"
+  ],
+  "brazil": [
+   "argentina",
+   "north_africa",
+   "peru",
+   "venezuela"
+  ],
+  "peru": [
+   "argentina",
+   "brazil",
+   "venezuela"
+  ],
+  "venezuela": [
+   "brazil",
+   "central_america",
+   "peru"
+  ],
+  "ural": [
+   "afghanistan",
+   "china",
+   "siberia",
+   "ukraine"
+  ],
+  "yakutsk": [
+   "irkutsk",
+   "kamchatka",
+   "siberia"
+  ]
+ },
+ "continent_of": {
+  "south_africa": "africa",
+  "congo": "africa",
+  "east_africa": "africa",
+  "egypt": "africa",
+  "madagascar": "africa",
+  "north_africa": "africa",
+  "afghanistan": "asia",
+  "china": "asia",
+  "india": "asia",
+  "irkutsk": "asia",
+  "japan": "asia",
+  "kamchatka": "asia",
+  "middle_east": "asia",
+  "mongolia": "asia",
+  "siam": "asia",
+  "siberia": "asia",
+  "eastern_australia": "australia",
+  "indonesia": "australia",
+  "new_guinea": "australia",
+  "western_australia": "australia",
+  "great_britain": "europe",
+  "iceland": "europe",
+  "northern_europe": "europe",
+  "scandinavia": "europe",
+  "southern_europe": "europe",
+  "ukraine": "europe",
+  "western_europe": "europe",
+  "alaska": "north_america",
+  "alberta": "north_america",
+  "central_america": "north_america",
+  "eastern_united_states": "north_america",
+  "greenland": "north_america",
+  "northwest_territory": "north_america",
+  "ontario": "north_america",
+  "quebec": "north_america",
+  "western_united_states": "north_america",
+  "argentina": "south_america",
+  "brazil": "south_america",
+  "peru": "south_america",
+  "venezuela": "south_america",
+  "ural": "asia",
+  "yakutsk": "asia"
+ },
+ "display_names": {
+  "south_africa": "South Africa",
+  "congo": "Congo",
+  "east_africa": "East Africa",
+  "egypt": "Egypt",
+  "madagascar": "Madagascar",
+  "north_africa": "North Africa",
+  "afghanistan": "Afghanistan",
+  "china": "China",
+  "india": "India",
+  "irkutsk": "Irkutsk",
+  "japan": "Japan",
+  "kamchatka": "Kamchatka",
+  "middle_east": "Middle East",
+  "mongolia": "Mongolia",
+  "siam": "Siam",
+  "siberia": "Siberia",
+  "eastern_australia": "Eastern Australia",
+  "indonesia": "Indonesia",
+  "new_guinea": "New Guinea",
+  "western_australia": "Western Australia",
+  "great_britain": "Great Britain",
+  "iceland": "Iceland",
+  "northern_europe": "Northern Europe",
+  "scandinavia": "Scandinavia",
+  "southern_europe": "Southern Europe",
+  "ukraine": "Ukraine",
+  "western_europe": "Western Europe",
+  "alaska": "Alaska",
+  "alberta": "Alberta",
+  "central_america": "Central America",
+  "eastern_united_states": "Eastern United States",
+  "greenland": "Greenland",
+  "northwest_territory": "Northwest Territory",
+  "ontario": "Ontario",
+  "quebec": "Quebec",
+  "western_united_states": "Western United States",
+  "argentina": "Argentina",
+  "brazil": "Brazil",
+  "peru": "Peru",
+  "venezuela": "Venezuela",
+  "ural": "Ural",
+  "yakutsk": "Yakutsk"
+ },
+ "geometry": null,
+ "source": "https://github.com/arjanfrans/conquete lib/maps/classic.js",
+ "license": "MIT - see LICENSE in this folder"
+}

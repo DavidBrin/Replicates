@@ -1,0 +1,267 @@
+{
+ "$schema_version": "1.0",
+ "slug": "classic-world",
+ "name": "Classic / World (42) - risk-neighborhood",
+ "confidence": "MEDIUM - graph only, no geometry, and it contains THREE verified errors: missing afghanistan-india, missing east_africa-middle_east, and a spurious china-middle_east. Also renames Australia to Oceania and has a typo 'new-guniea'. Kept only as the third corroborating source for the cross-check; DO NOT ship this graph.",
+ "territory_count": 42,
+ "errors": [
+  "missing afghanistan-india",
+  "missing east-africa-middle-east",
+  "spurious china-middle-east",
+  "typo: new-guniea",
+  "eastern-oceania/western-oceania naming"
+ ],
+ "adjacency_raw": {
+  "congo": [
+   "east-africa",
+   "north-africa",
+   "south-africa"
+  ],
+  "egypt": [
+   "east-africa",
+   "middle-east",
+   "north-africa",
+   "southern-europe"
+  ],
+  "east-africa": [
+   "congo",
+   "egypt",
+   "madagascar",
+   "north-africa",
+   "south-africa"
+  ],
+  "madagascar": [
+   "east-africa",
+   "south-africa"
+  ],
+  "north-africa": [
+   "brazil",
+   "congo",
+   "east-africa",
+   "egypt",
+   "southern-europe",
+   "western-europe"
+  ],
+  "south-africa": [
+   "congo",
+   "east-africa",
+   "madagascar"
+  ],
+  "afghanistan": [
+   "china",
+   "middle-east",
+   "ukraine",
+   "ural"
+  ],
+  "china": [
+   "afghanistan",
+   "india",
+   "middle-east",
+   "mongolia",
+   "siam",
+   "siberia",
+   "ural"
+  ],
+  "india": [
+   "china",
+   "middle-east",
+   "siam"
+  ],
+  "irkutsk": [
+   "kamchatka",
+   "mongolia",
+   "siberia",
+   "yakutsk"
+  ],
+  "japan": [
+   "kamchatka",
+   "mongolia"
+  ],
+  "kamchatka": [
+   "alaska",
+   "irkutsk",
+   "japan",
+   "mongolia",
+   "yakutsk"
+  ],
+  "middle-east": [
+   "afghanistan",
+   "china",
+   "egypt",
+   "india",
+   "southern-europe",
+   "ukraine"
+  ],
+  "mongolia": [
+   "china",
+   "irkutsk",
+   "japan",
+   "kamchatka",
+   "siberia"
+  ],
+  "siam": [
+   "china",
+   "india",
+   "indonesia"
+  ],
+  "siberia": [
+   "china",
+   "irkutsk",
+   "mongolia",
+   "ural",
+   "yakutsk"
+  ],
+  "ural": [
+   "afghanistan",
+   "china",
+   "siberia",
+   "ukraine"
+  ],
+  "yakutsk": [
+   "irkutsk",
+   "kamchatka",
+   "siberia"
+  ],
+  "great-britain": [
+   "iceland",
+   "northern-europe",
+   "scandinavia",
+   "western-europe"
+  ],
+  "iceland": [
+   "great-britain",
+   "greenland",
+   "scandinavia"
+  ],
+  "northern-europe": [
+   "great-britain",
+   "scandinavia",
+   "southern-europe",
+   "ukraine",
+   "western-europe"
+  ],
+  "scandinavia": [
+   "great-britain",
+   "iceland",
+   "northern-europe",
+   "ukraine"
+  ],
+  "southern-europe": [
+   "egypt",
+   "middle-east",
+   "north-africa",
+   "northern-europe",
+   "ukraine",
+   "western-europe"
+  ],
+  "ukraine": [
+   "afghanistan",
+   "middle-east",
+   "northern-europe",
+   "scandinavia",
+   "southern-europe",
+   "ural"
+  ],
+  "western-europe": [
+   "great-britain",
+   "north-africa",
+   "northern-europe",
+   "southern-europe"
+  ],
+  "alaska": [
+   "alberta",
+   "kamchatka",
+   "northwest-territory"
+  ],
+  "alberta": [
+   "alaska",
+   "northwest-territory",
+   "ontario",
+   "western-united-states"
+  ],
+  "central-america": [
+   "eastern-united-states",
+   "venezuela",
+   "western-united-states"
+  ],
+  "eastern-united-states": [
+   "central-america",
+   "ontario",
+   "quebec",
+   "western-united-states"
+  ],
+  "greenland": [
+   "iceland",
+   "northwest-territory",
+   "ontario",
+   "quebec"
+  ],
+  "northwest-territory": [
+   "alaska",
+   "alberta",
+   "greenland",
+   "ontario"
+  ],
+  "ontario": [
+   "alberta",
+   "eastern-united-states",
+   "greenland",
+   "northwest-territory",
+   "quebec",
+   "western-united-states"
+  ],
+  "quebec": [
+   "eastern-united-states",
+   "greenland",
+   "ontario"
+  ],
+  "western-united-states": [
+   "alberta",
+   "central-america",
+   "eastern-united-states",
+   "ontario"
+  ],
+  "eastern-oceania": [
+   "new-guniea",
+   "western-oceania"
+  ],
+  "indonesia": [
+   "new-guniea",
+   "siam",
+   "western-oceania"
+  ],
+  "new-guniea": [
+   "eastern-oceania",
+   "indonesia",
+   "western-oceania"
+  ],
+  "western-oceania": [
+   "eastern-oceania",
+   "indonesia",
+   "new-guniea"
+  ],
+  "argentina": [
+   "brazil",
+   "peru"
+  ],
+  "brazil": [
+   "argentina",
+   "north-africa",
+   "peru",
+   "venezuela"
+  ],
+  "peru": [
+   "argentina",
+   "brazil",
+   "venezuela"
+  ],
+  "venezuela": [
+   "brazil",
+   "central-america",
+   "peru"
+  ]
+ },
+ "geometry": null,
+ "source": "https://github.com/brunoscopelliti/risk-neighborhood index.js",
+ "license": "MIT - see LICENSE in this folder"
+}
