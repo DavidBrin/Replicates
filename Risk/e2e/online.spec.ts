@@ -7,11 +7,12 @@ import {
   SEL,
   actingSeat,
   dismissOverlays,
+  draftOnce,
   api,
   apiJson,
   onlineDebug,
-
   postAction,
+  pressPrimary,
   readSeq,
   readState,
   setPollInterval,
@@ -70,18 +71,11 @@ async function openChat(page: Page): Promise<void> {
   const drawer = page.locator(SEL.chatDrawer);
   if (await drawer.isVisible().catch(() => false)) return;
 
-  // **At phone width the Chat button cannot be tapped.** The action bar's pip
-  // row is laid out in the 1600×900 design space and, scaled to 412 px, it
-  // overlaps the bottom-left stack — Playwright reports `phase-pip-attack`
-  // intercepting the pointer. That is a real layout collision, reported
-  // rather than hidden; the dispatched click is here so the rest of the
-  // online spec can still prove the *protocol* on `mobile-chrome`.
-  const button = page.locator(SEL.emoteButton);
-  try {
-    await button.click({ timeout: 5_000 });
-  } catch {
-    await button.dispatchEvent("click");
-  }
+  // A plain click, at every viewport. The action bar's read-only column —
+  // prompt, phase label, timer and pip row — takes no pointer events, and at
+  // phone width the bottom-left stack lifts itself clear of the bar's band
+  // altogether (§8.9), so nothing sits over the Chat button.
+  await page.locator(SEL.emoteButton).click(CLICK);
   await drawer.waitFor({ timeout: 15_000 });
 }
 
@@ -252,24 +246,25 @@ test("T10.4 — lobby, a turn each, chat both ways, a timeout to a bot and a rec
     // down from the authority (D69).
     await expect(pageA.locator(SEL.turnTimer)).toBeVisible();
 
-    /* ---- a turn each ---------------------------------------------------- */
+    /* ---- a turn each, through the HUD ---------------------------------- */
     //
-    // **These two turns are appended through `POST /api/games/:id/actions`,
-    // not tapped out on the board**, and that narrowing is recorded as D88.
-    // The HUD is already proved to carry a whole game by T10.2 (solo, menu to
-    // victory) and T10.3 (Pass & Play); what *this* spec is for is the
-    // protocol — two cookie jars, contiguous `seq`, idempotent retries, the
-    // `notYourTurn` fence, chat, the turn timer and the takeover. Board taps
-    // on `/play/online/[gameId]` currently do not reach the session after the
-    // lobby hands the players over: the `pointerdown`/`pointerup` pair does
-    // arrive at `#stage` at a point the browser's own hit test resolves to
-    // the right territory, every `canAct()` precondition holds (it is the
-    // viewer's turn, the pill reads `End Draft Phase`, nothing is hidden and
-    // no dialog is open) and the HUD stays live — yet nothing is selected.
-    // Insisting on taps here would block all of the above on that one bug, so
-    // it is written up in the hand-off rather than worked around in silence.
+    // **Both turns are played on the board and the action bar** — a draft
+    // tapped out on a territory and resolved through the count slider, then
+    // the primary pill through `End Draft Phase`, `End Attack Phase` and
+    // `End Turn`. Only the three *refusals* go through the HTTP route,
+    // because a refusal has no gesture: there is no control anywhere in the
+    // HUD that offers the wrong seat a move or lets a client roll its own
+    // dice, which is the point of asserting them.
     //
-    // The requests go through each context's **own** `request`, which shares
+    // **Nothing in a turn polls.** The lazy tick runs inside whichever poll
+    // arrives next (D13) and the append path deliberately does not tick, so
+    // a client that stays quiet can take as long as it likes to act — and
+    // with `RISK_TURN_SECONDS=3` a single stray poll halfway through a
+    // hand-played turn would auto-skip the seat out from under it. The
+    // interval is re-pinned after every `bringToFront`, because raising a tab
+    // is what the background cadence keys off.
+    //
+    // The refusals go through each context's **own** `request`, which shares
     // that context's cookie jar — so they are that seat's requests, carrying
     // that seat's `risk_sid`, exactly as its browser would send them.
 
@@ -282,19 +277,6 @@ test("T10.4 — lobby, a turn each, chat both ways, a timeout to a bot and a rec
       const other = seat === first ? second : first;
       const before = await readState(actor);
       expect(actingSeat(before), `seat ${seat} is up`).toBe(seat);
-
-      if (before.troopsToPlace > 0) {
-        const territory = before.territories.findIndex((t) => t.owner === seat);
-        const body = { type: "DRAFT", seat, territory, count: before.troopsToPlace };
-        const drafted = await postAction(actor.request, gameId, `t${index}-draft`, body);
-        expect(drafted.status, `DRAFT for seat ${seat}`).toBe(200);
-
-        // A retry with the same `clientActionId` is indistinguishable from a
-        // slow success: one row, and the same `seq` back (D15).
-        const retry = await postAction(actor.request, gameId, `t${index}-draft`, body);
-        expect(retry.status, "a duplicate clientActionId is 200, not 409").toBe(200);
-        expect(retry.body!.actions[0]!.seq).toBe(drafted.body!.actions[0]!.seq);
-      }
 
       // The other seat may not move while this one is up.
       const wrongSeat = await postAction(pageOf(other).request, gameId, `t${index}-intruder`, {
@@ -316,26 +298,65 @@ test("T10.4 — lobby, a turn each, chat both ways, a timeout to a bot and a rec
       });
       expect(cheat.status, "a client-rolled ATTACK is 422 illegalAction").toBe(422);
 
-      // draft → attack → fortify → end. `END_PHASE` is refused out of fortify
-      // (R67), so the last step has to be `END_TURN` and the loop stops at the
-      // first refusal rather than assuming a fixed phase count.
-      for (const step of ["END_PHASE", "END_PHASE", "END_TURN"]) {
-        const posted = await postAction(
-          actor.request,
-          gameId,
-          `t${index}-${step}-${index}-${step.length}-${Math.random().toString(36).slice(2)}`,
-          { type: step, seat },
-        );
-        if (posted.status !== 200) break;
+      // Raise this window and re-pin both loops: a tab that is not frontmost
+      // drops to the 15 s hidden cadence (D11), and that poll would tick.
+      await actor.bringToFront();
+      await pinPolling(pageA);
+      await pinPolling(pageB);
+      await dismissOverlays(actor);
+
+      // The draft, on the board: a tap on an owned territory opens the count
+      // slider at the whole undrafted pool, and `a` + Confirm places it.
+      if (before.troopsToPlace > 0) {
+        await draftOnce(actor);
+        await expect(actor.locator(SEL.primary), "the pill unlocks once the pool is empty")
+          .toBeEnabled({ timeout: 15_000 });
+      }
+
+      // draft → attack → fortify → end, one press of the primary pill each.
+      // `End Turn` raises the amber confirmation, which `pressPrimary` takes.
+      for (const phase of ["draft", "attack", "fortify"] as const) {
+        if ((await actor.locator(SEL.gameScreen).getAttribute("data-phase")) !== phase) break;
+        await pressPrimary(actor);
       }
 
       await sync(pageA, pageB);
+      await expect
+        .poll(async () => actingSeat(await readState(actor)), {
+          timeout: 30_000,
+          message: `seat ${seat} never finished its turn through the HUD`,
+        })
+        .not.toBe(seat);
     }
 
     const afterTurns = await readState(pageA);
     expect(afterTurns.turn, "two turns were played").toBeGreaterThanOrEqual(2);
     expect(await readSeq(pageA), "and both windows are still level").toBe(await readSeq(pageB));
     expect((await readState(pageB)).territories).toEqual(afterTurns.territories);
+
+    /* ---- the idempotent retry (D15) ------------------------------------ */
+    //
+    // A retry with the same `clientActionId` is indistinguishable from a slow
+    // success: one row, and the same `seq` back. There is no gesture for this
+    // — the HUD cannot be made to send the same action twice on purpose — so
+    // it is asserted at the wire, on the seat that is up now, after both
+    // hand-played turns are already banked.
+    const upNext = actingSeat(afterTurns);
+    const retried = pageOf(upNext);
+    if (afterTurns.troopsToPlace > 0) {
+      const body = {
+        type: "DRAFT",
+        seat: upNext,
+        territory: afterTurns.territories.findIndex((t) => t.owner === upNext),
+        count: afterTurns.troopsToPlace,
+      };
+      const once = await postAction(retried.request, gameId, "retry-probe", body);
+      expect(once.status, `DRAFT for seat ${upNext}`).toBe(200);
+      const twice = await postAction(retried.request, gameId, "retry-probe", body);
+      expect(twice.status, "a duplicate clientActionId is 200, not 409").toBe(200);
+      expect(twice.body!.actions[0]!.seq).toBe(once.body!.actions[0]!.seq);
+      await sync(pageA, pageB);
+    }
 
     /* ---- chat, both ways ----------------------------------------------- */
 

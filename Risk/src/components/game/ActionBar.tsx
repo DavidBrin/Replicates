@@ -49,15 +49,27 @@ export function ActionBar(props: ActionBarProps) {
       // own controls are interactive. Without this the bottom-left stack —
       // Stats, Cards and Emote — sits underneath an invisible sheet.
       className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-center gap-4 pb-3"
-      style={{ height: "16%", minHeight: 120, zIndex: "var(--z-hud)" }}
+      // `--action-bar-h` is a token because the bottom-left icon stack has to
+      // lift itself clear of this band at phone width (§8.9, globals.css).
+      style={{ height: "var(--action-bar-h)", zIndex: "var(--z-hud)" }}
     >
       <Avatar colour={props.colour} name={props.seatName} size={92} laurel={props.you} bot={props.bot} />
 
-      <div className="pointer-events-auto flex flex-col items-center gap-2">
+      {/*
+        * The column itself takes no pointer events — only the pill does.
+        *
+        * The prompt, the phase label, the timer bar and the pip row are all
+        * read-only chrome, and the column is **taller than the band it is
+        * anchored in**: at 412 px a two-line prompt pushed its top up over
+        * the bottom-left Stats / Cards / Chat stack, and `phase-pip-attack`
+        * (or the prompt itself) intercepted every tap aimed at Chat. Marking
+        * the column interactive was the bug; the pill carries the affordance.
+        */}
+      <div className="pointer-events-none flex flex-col items-center gap-2">
         <p
           data-testid="action-prompt"
           className="on-board-text text-center"
-          style={{ fontSize: 20, letterSpacing: ".02em" }}
+          style={{ fontSize: "var(--prompt-size)", letterSpacing: ".02em" }}
         >
           {props.prompt}
         </p>
@@ -65,7 +77,7 @@ export function ActionBar(props: ActionBarProps) {
         <p
           data-testid="phase-label"
           className="on-board-text uppercase"
-          style={{ fontSize: 28, letterSpacing: "3px" }}
+          style={{ fontSize: "var(--phase-label-size)", letterSpacing: "3px" }}
         >
           {props.phaseLabel}
         </p>
@@ -79,14 +91,14 @@ export function ActionBar(props: ActionBarProps) {
         ) : null}
 
         {/* Three pips: a progress bar, not tabs. */}
-        <div data-testid="phase-pips" className="flex" style={{ gap: 12 }}>
+        <div data-testid="phase-pips" className="flex" style={{ gap: "var(--pip-gap)" }}>
           {PIP_PHASES.map((phase, i) => (
             <span
               key={phase}
               data-testid={`phase-pip-${phase}`}
               data-filled={i <= index && index >= 0 ? "true" : "false"}
               style={{
-                width: 92, height: 12, borderRadius: 6,
+                width: "var(--pip-w)", height: 12, borderRadius: 6,
                 background: i <= index && index >= 0 ? "#FFFFFF" : "#6B7378",
                 transition: "background 220ms ease-out",
               }}
@@ -94,13 +106,15 @@ export function ActionBar(props: ActionBarProps) {
           ))}
         </div>
 
-        <Pill
-          variant={props.primaryDisabled ? "disabled" : "primary"}
-          label={props.primaryLabel}
-          onClick={props.onPrimary}
-          testId="primary-action"
-          disabled={props.primaryDisabled}
-        />
+        <div className="pointer-events-auto">
+          <Pill
+            variant={props.primaryDisabled ? "disabled" : "primary"}
+            label={props.primaryLabel}
+            onClick={props.onPrimary}
+            testId="primary-action"
+            disabled={props.primaryDisabled}
+          />
+        </div>
       </div>
 
       <IconButton

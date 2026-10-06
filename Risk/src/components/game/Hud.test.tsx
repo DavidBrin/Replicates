@@ -1,4 +1,7 @@
 /** The HUD: roster, action bar, chrome and the turn timer (SPEC §7.1). */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
@@ -102,12 +105,31 @@ describe("the action bar", () => {
   });
 
   it("measures the pips at 92×12 with a 12 px gap", () => {
+    // The width and the gap are read from `--pip-w` / `--pip-gap` rather than
+    // written here, because phone width shrinks them (SPEC §8.9) and one
+    // layout with a token beats two layouts with literals. §7.1's measured
+    // numbers are still pinned — as the tokens' reference-layout values.
     render(<ActionBar {...base} />);
     const pip = screen.getByTestId("phase-pip-draft");
-    expect(pip.style.width).toBe("92px");
+    expect(pip.style.width).toBe("var(--pip-w)");
     expect(pip.style.height).toBe("12px");
     expect(pip.style.borderRadius).toBe("6px");
-    expect(screen.getByTestId("phase-pips").style.gap).toBe("12px");
+    expect(screen.getByTestId("phase-pips").style.gap).toBe("var(--pip-gap)");
+
+    const css = readFileSync(join(process.cwd(), "src", "app", "globals.css"), "utf8");
+    expect(css, "§7.1's 92 px pip is the token's default").toContain("--pip-w: 92px;");
+    expect(css, "§7.1's 12 px gap is the token's default").toContain("--pip-gap: 12px;");
+  });
+
+  it("leaves the bar's read-only column transparent to the pointer", () => {
+    // The prompt, the phase label, the timer and the pip row are chrome, and
+    // the column is taller than the band it is anchored in: at 412 px an
+    // interactive column reached up over the bottom-left Stats / Cards / Chat
+    // stack and swallowed every tap aimed at Chat (SPEC §8.9).
+    render(<ActionBar {...base} />);
+    const column = screen.getByTestId("phase-pips").parentElement!;
+    expect(column.className).toContain("pointer-events-none");
+    expect(screen.getByTestId("primary-action").closest(".pointer-events-auto")).not.toBeNull();
   });
 
   it("fires the primary action", () => {
@@ -215,6 +237,17 @@ describe("the HUD chrome", () => {
     render(<BottomLeftStack cardCount={1} tradeAvailable={false} unreadChat={0}
       onStats={() => {}} onCards={() => {}} onChat={() => {}} />);
     expect(screen.getByTestId("cards-chip").style.transform).toBe("rotate(-8deg)");
+  });
+
+  it("goes horizontal and lifts clear of the action bar at phone width", () => {
+    // SPEC §8.9 — "< 820 px … the icon stack goes horizontal", and portrait's
+    // "one row immediately above it". Without the lift the bar's own column
+    // sat over this stack at 412 px and the pip row ate every tap on Chat.
+    render(<BottomLeftStack cardCount={0} tradeAvailable={false} unreadChat={0}
+      onStats={() => {}} onCards={() => {}} onChat={() => {}} />);
+    const stack = screen.getByTestId("bottom-left-stack");
+    expect(stack.className).toContain("max-[480px]:flex-row");
+    expect(stack.className).toContain("max-[480px]:bottom-[calc(var(--action-bar-h)+8px)]");
   });
 
   it("badges unread chat", () => {

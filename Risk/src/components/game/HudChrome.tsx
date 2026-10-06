@@ -86,18 +86,33 @@ export interface BottomLeftStackProps {
   readonly onChat: () => void;
 }
 
-/** Stats tray, the −8° cards chip with its red badge, and the emote button. */
+/**
+ * Stats tray, the −8° cards chip with its red badge, and the emote button.
+ *
+ * **At phone width the stack goes horizontal and lifts clear of the action
+ * bar** (SPEC §8.9: "< 820 px … the icon stack goes horizontal"; portrait:
+ * "the icon stack becomes one row immediately above it"). It has to: the
+ * bar's own `pointer-events-auto` column is taller than the band it is
+ * anchored in, so at 412 px it reached up over this stack and the pip row
+ * intercepted every tap aimed at Chat. `--action-bar-h` is the bar's height,
+ * so the clearance is exact rather than guessed — and both resolve their
+ * percentage against the same containing block, the game screen's `main`.
+ */
 export function BottomLeftStack(props: BottomLeftStackProps) {
   return (
     <div
       data-testid="bottom-left-stack"
-      className="pointer-events-auto absolute bottom-[4%] left-[2%] flex flex-col items-start gap-3"
+      className={clsx(
+        "pointer-events-auto absolute bottom-[4%] left-[2%] flex flex-col items-start gap-3",
+        "max-[480px]:bottom-[calc(var(--action-bar-h)+8px)] max-[480px]:flex-row",
+        "max-[480px]:items-end max-[480px]:gap-2",
+      )}
       style={{ zIndex: "var(--z-hud)" }}
     >
       <IconButton chassis="tray" icon="bar-chart" size={90} label="Stats" onClick={props.onStats}
         testId="stats-button" />
 
-      <div className="flex items-end gap-3">
+      <div className="flex items-end gap-3 max-[480px]:gap-2">
         <button
           type="button"
           data-testid="cards-chip"
