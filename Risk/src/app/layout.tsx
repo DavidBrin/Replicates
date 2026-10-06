@@ -28,6 +28,9 @@ export const metadata: Metadata = {
   description:
     "A browser replica of RISK: Global Domination — solo against bots, pass-and-play, and casual online games.",
   applicationName: "Risk",
+  // `public/favicon.svg` — our own code-drawn die face; without it every page
+  // load asks for `/favicon.ico` and takes a 404.
+  icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }] },
 };
 
 export const viewport: Viewport = {

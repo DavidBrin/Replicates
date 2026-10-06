@@ -12,13 +12,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { GameConfig, MapDef } from "@/engine/types";
+import { createIdentityAdapter } from "@/adapters/localStorage/identity";
 import { createProgressAdapter } from "@/adapters/localStorage/progress";
 import { createSettingsAdapter } from "@/adapters/localStorage/settings";
 import { newId } from "@/adapters/localStorage/store";
 import { autosaveFor } from "@/game/autosave";
 import { playEngine, playMapDef, playOdds, playRandomMap } from "@/game/pending";
 import { createSession, type Session } from "@/game/session";
-import { toGameConfig, useSessionConfig, type GameMode } from "@/game/sessionConfig";
+import { toGameConfig, useSessionConfig, withIdentityName, type GameMode } from "@/game/sessionConfig";
 
 import GameScreen from "./GameScreen";
 
@@ -39,8 +40,13 @@ export function PlayPage({ mode }: PlayPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   const source = store.source;
-  const seats = store.seats;
   const rules = store.rules;
+  // The viewer's seat carries the name the identity sheet claimed, so the
+  // roster, the `Get Ready` plate and the avatar initial all read it (§7).
+  // `readCached` touches `localStorage`, so it is read in the effect's scope,
+  // never during render — but memoising the adapter keeps it stable.
+  const identity = useMemo(() => createIdentityAdapter(), []);
+  const seats = store.seats;
 
   // The route and the store must agree: landing on `/play/solo` with a
   // pass-and-play configuration means the setup flow was abandoned halfway.
@@ -71,7 +77,8 @@ export function PlayPage({ mode }: PlayPageProps) {
           ? playRandomMap(source.options, source.seed)
           : await playMapDef(source.slug);
         if (cancelled) return;
-        const config = toGameConfig({ ...store, seats, rules }, map.slug, newId());
+        const named = withIdentityName(seats, identity.readCached()?.displayName);
+        const config = toGameConfig({ ...store, seats: named, rules }, map.slug, newId());
         const { resume, save } = autosaveFor(config);
         session = createSession({
           map,

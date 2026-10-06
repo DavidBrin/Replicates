@@ -1,10 +1,18 @@
 "use client";
 
 /**
- * One `/new/map` tile (SPEC §7): a ~8:7 tile carrying the map's name at the
- * top (40 px, 4 px dark outline, ~9 % of the tile height), the board itself
- * on a translucent blue glass tray tilted ~30° back and ~6° yawed over a soft
- * elliptical contact shadow, and a 26 px tagline at ~85–95 %.
+ * One `/new/map` tile (SPEC §7, research/04 §5.3): the map's name at the top
+ * (4 px dark outline), the board itself on a translucent blue glass tray
+ * tilted ~30° back and ~6° yawed over a soft elliptical contact shadow, and
+ * the stat line beneath.
+ *
+ * The three rows are **flex rows, not fixed percentages of an 8:7 box**: a
+ * name set at 40 px does not fit inside 9 % of a 190 px grid cell, so the box
+ * let the glass tray ride up over the name and clip it, and both strings were
+ * truncated with an ellipsis. Now the **tray** carries the aspect, the name
+ * reserves two lines' worth of room (so every tray in a row is the same size)
+ * and wraps rather than truncating, and the stat line sits under it in
+ * `--text-muted`. **No string on this tile is ever abbreviated.**
  *
  * **No locked tiles — every map is free** (§7).
  *
@@ -26,7 +34,7 @@ export interface MapTileProps {
   readonly slug: string;
   /** Shown until the `MapDef` resolves and supplies the real name. */
   readonly fallbackName?: string;
-  /** The 26 px line at ~85–95 %; defaults to the map's own shape. */
+  /** The stat line under the tray; defaults to the map's own shape. */
   readonly tagline?: string;
   readonly selected?: boolean;
   /** Omitted, the tile is inert — the `/new/rules` hero. */
@@ -120,8 +128,10 @@ export function MapTile({
   const failed = settled !== null && settled.def === null;
 
   const name = def?.name ?? fallbackName ?? slug;
+  // §1: "Continent" is RGD's word on Classic; **region** is the generic one
+  // the catalogue uses — and it keeps the line on one row at tile width.
   const line = tagline
-    ?? (def ? `${def.territories.length} territories · ${def.continents.length} continents` : "Loading map…");
+    ?? (def ? `${def.territories.length} territories · ${def.continents.length} regions` : "Loading map…");
   // A real <button> when the tile is pickable, an inert <div> for the
   // `/new/rules` hero. The cast keeps one JSX block instead of two copies.
   const Chassis = (onSelect ? "button" : "div") as "button";
@@ -135,12 +145,13 @@ export function MapTile({
       aria-pressed={onSelect ? selected : undefined}
       onClick={onSelect}
       className={clsx(
-        "relative flex w-full flex-col items-center justify-between overflow-visible p-2 outline-none",
+        "relative flex w-full flex-col items-center gap-1 overflow-visible p-2 outline-none",
         onSelect && "cursor-pointer focus-visible:ring-4 focus-visible:ring-white/70",
         className,
       )}
       style={{
-        aspectRatio: "8 / 7",
+        // The tile is name + tray + tagline tall; it is the **tray** that
+        // carries the aspect, so a two-line name never eats the board.
         minHeight: 44,
         borderRadius: "var(--r-menu)",
         border: `2px solid ${selected ? "var(--go)" : "transparent"}`,
@@ -149,13 +160,20 @@ export function MapTile({
     >
       <span
         data-testid="map-tile-name"
-        className="on-board-text block w-full truncate text-center"
-        style={{ height: "9%", fontSize: "clamp(18px, 2.6vw, 40px)", lineHeight: 1 }}
+        className="on-board-text flex w-full shrink-0 items-center justify-center text-center"
+        // Two lines' worth of room whether the name needs it or not, so every
+        // tray in a row ends up the same size.
+        style={{ fontSize: "clamp(14px, 1.7vw, 40px)", lineHeight: 1.08, minHeight: "2.16em" }}
       >
         {name}
       </span>
 
-      <span className="relative flex h-[72%] w-full items-center justify-center">
+      {/* The tray's slot owns the aspect; the tray itself is absolute inside
+          it, so a board's own viewBox ratio can never size the tile. */}
+      <span
+        className="relative block w-full shrink-0"
+        style={{ aspectRatio: "8 / 4.5" }}
+      >
         {/* the soft elliptical contact shadow */}
         <span
           aria-hidden
@@ -164,7 +182,7 @@ export function MapTile({
         />
         <span
           data-testid="map-tile-tray"
-          className="relative flex h-full w-full items-center justify-center rounded-[10px]"
+          className="absolute inset-0 flex items-center justify-center rounded-[10px]"
           style={{
             background: "linear-gradient(rgba(60,160,205,.34), rgba(20,80,110,.42))",
             border: "1px solid rgba(190,236,255,.35)",
@@ -192,8 +210,13 @@ export function MapTile({
 
       <span
         data-testid="map-tile-tagline"
-        className="block w-full truncate text-center font-body"
-        style={{ fontSize: "clamp(12px, 1.6vw, 26px)", color: SETUP_TOKENS.readoutValue }}
+        className="flex w-full shrink-0 items-center justify-center text-center font-body"
+        style={{
+          fontSize: "clamp(11px, 1.05vw, 26px)", lineHeight: 1.2, minHeight: "1.2em",
+          color: "var(--text-muted)",
+          // The ray burst is at its brightest right behind the middle tiles.
+          textShadow: "0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.6)",
+        }}
       >
         {line}
       </span>
