@@ -536,19 +536,32 @@ function advanceClaim(d: Draft, map: MapDef): void {
 /**
  * R9/R8 — the claim phase is over. Under Manual Placement no capital could be
  * drawn at setup, because no seat had a territory yet; each seat's capital is
- * therefore its **lowest-index owned territory**, which is deterministic and
- * needs no RNG inside `apply` (R88). **[S1 SPEC call]**
+ * therefore **its most-garrisoned owned territory, ties broken by the lowest
+ * index**.
+ *
+ * Deterministic, so `apply` still takes no RNG (R88), and it reads as the
+ * choice a player made rather than an accident of territory numbering: the
+ * stack a seat spent its claim armies building up *is* the thing it wants
+ * fortified by R36's defence die. The lowest index alone handed the capital to
+ * whichever tile happened to sort first, which on a real map is a corner nobody
+ * reinforced. **[S1 SPEC call]**
  */
 function finishClaim(d: Draft, map: MapDef): void {
   if (d.rules.capitals) {
     for (const row of d.seats) {
       if (row.capital !== null) continue;
-      const owned: TerritoryId[] = [];
+      let best: TerritoryId | null = null;
+      let bestTroops = -1;
       for (let i = 0; i < d.territories.length; i++) {
         const cell = d.territories[i] as TerritoryState;
-        if (!cell.blizzard && cell.owner === row.seat) owned.push(i);
+        if (cell.blizzard || cell.owner !== row.seat) continue;
+        // Strictly greater, scanning upwards: the first of a tie keeps it.
+        if (cell.troops > bestTroops) {
+          best = i as TerritoryId;
+          bestTroops = cell.troops;
+        }
       }
-      if (owned.length > 0) setSeat(d, row.seat, { capital: owned[0] as TerritoryId });
+      if (best !== null) setSeat(d, row.seat, { capital: best });
     }
   }
   d.currentIndex = 0;

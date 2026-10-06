@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildState, card, territoryCard } from "./__fixtures__/states";
+import type { Card } from "./types";
 import { classicWorld, mini, tiny4 } from "./__fixtures__/maps";
 import {
   cardById,
@@ -226,6 +227,65 @@ describe("the three card-timing branches", () => {
     const state = buildState(mini, { phase: "attack", hands: { 0: fiveCards } });
     expect(mustTradeDown(state, 0)).toBe(false);
     expect(mustTradeNow(state, 0)).toBe(false);
+  });
+
+  /*
+   * R26's floor is FOUR, and a trade removes exactly three cards, so the walk
+   * down from an 8-card inheritance is 8 -> 5 -> 2: five is not a stopping
+   * point. `hand.length >= 6` alone let the hand out at five, and
+   * `mustTradeAtTurnStart` declines once a set has been traded this turn, so
+   * nothing forced the second trade and the seat played on holding five.
+   */
+  describe("R26 — the trade-down does not stop until the hand is four or fewer", () => {
+    const eight = [inf(1), inf(2), inf(3), cav(4), cav(5), cav(6), art(7), art(8)];
+    const five = eight.slice(0, 5);
+
+    /** Mid-trade-down: the first forced trade has bounced play back to draft (R27). */
+    const midTradeDown = (hand: readonly Card[]) => buildState(mini, {
+      phase: "draft",
+      resumePhase: "attack",
+      setsTradedThisTurn: 1,
+      hands: { 0: hand },
+      troopsToPlace: 4,
+    });
+
+    it("still forces at five, mid-trade-down", () => {
+      const state = midTradeDown(five);
+      expect(five).toHaveLength(5);
+      expect(mustTradeDown(state, 0)).toBe(true);
+      expect(mustTradeNow(state, 0)).toBe(true);
+    });
+
+    it("stops at four, three and two", () => {
+      for (const n of [4, 3, 2]) {
+        const state = midTradeDown(eight.slice(0, n));
+        expect(mustTradeDown(state, 0)).toBe(false);
+        expect(mustTradeNow(state, 0)).toBe(false);
+      }
+    });
+
+    it("8 -> 5 -> 2: the whole walk is forced until the floor", () => {
+      let hand: readonly Card[] = eight;
+      const sizes: number[] = [hand.length];
+      for (let step = 0; step < 4; step++) {
+        const state = step === 0
+          ? buildState(mini, { phase: "attack", hands: { 0: hand } })   // the inheritance itself
+          : midTradeDown(hand);
+        if (!mustTradeDown(state, 0)) break;
+        const traded = cardSets(hand)[0] as readonly string[];
+        hand = hand.filter((c) => !traded.includes(c.id));
+        sizes.push(hand.length);
+      }
+      expect(sizes).toEqual([8, 5, 2]);
+      expect(hand.length).toBeLessThanOrEqual(4);
+    });
+
+    it("a hand of five that is NOT mid-trade-down still waits for the next turn (R26)", () => {
+      // `resumePhase === null`: this five arrived by inheritance, not by trading down.
+      const state = buildState(mini, { phase: "attack", hands: { 0: five } });
+      expect(mustTradeDown(state, 0)).toBe(false);
+      expect(mustTradeNow(state, 0)).toBe(false);
+    });
   });
 
   it("R26 — one trade from six reaches three, which is why it stops there", () => {

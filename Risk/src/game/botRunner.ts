@@ -146,6 +146,22 @@ export function createBotDriver(options: BotDriverOptions): BotDriver {
     }
 
     if (state.phase === "claim") {
+      /*
+       * R6 — the bot runner asks the engine whose army this step owes, exactly as the tap path
+       * does. In the 2-seat variant every pair of a seat's own armies is followed by one neutral
+       * army, and `validate` refuses the seat's own claim until it is placed; a runner that only
+       * ever sends its own claim hangs the setup after the first pair, with the bot re-submitting
+       * a refused action for ever.
+       */
+      const owed = engine.claimOwed(state, seat);
+      if (owed === "none") return;
+      if (owed === "neutral") {
+        const target = neutralClaimTarget(engine, state);
+        if (target !== null) {
+          queue.push({ kind: "action", action: { type: "CLAIM", seat, territory: target, forNeutral: true } });
+        }
+        return;
+      }
       const target = claimTarget(state, seat);
       if (target !== null) queue.push({ kind: "action", action: { type: "CLAIM", seat, territory: target } });
       return;
@@ -191,6 +207,22 @@ function bonusTerritoryFor(
     if (card?.territory != null && state.territories[card.territory]?.owner === seat) return card.territory;
   }
   return null;
+}
+
+/**
+ * R6's neutral army: the neutral's own weakest holding, or an unclaimed tile while any remain.
+ *
+ * Reinforcing the neutral's thinnest stack is the honest play — it is the choice that costs the
+ * acting seat least — and it is deterministic, which keeps the claim phase replayable (R88).
+ */
+function neutralClaimTarget(engine: EngineApi, state: GameState): TerritoryId | null {
+  const zone = engine.legalNeutralClaimTargets(state);
+  if (zone.length === 0) return null;
+  const unclaimed = zone.filter((t) => (state.territories[t]?.owner ?? -1) < 0
+    && (state.territories[t]?.troops ?? 0) === 0);
+  if (unclaimed.length > 0) return unclaimed[0] as TerritoryId;
+  return [...zone].sort((a, b) =>
+    (state.territories[a]?.troops ?? 0) - (state.territories[b]?.troops ?? 0) || a - b)[0] as TerritoryId;
 }
 
 /** Claim phase: an unowned non-blizzard tile while any remain, else our own biggest border. */

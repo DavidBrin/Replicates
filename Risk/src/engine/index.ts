@@ -20,7 +20,15 @@ export { pcg32, rngFor } from "./prng";
 
 export { apply, createInitialState } from "./reducer";
 export { validate } from "./validate";
-export { legalActions, legalAttackTargets, legalDraftTargets, legalFortifyMoves } from "./legalActions";
+export {
+  claimOwed,
+  legalActions,
+  legalAttackTargets,
+  legalDraftTargets,
+  legalFortifyMoves,
+  legalNeutralClaimTargets,
+  legalOwnClaimTargets,
+} from "./legalActions";
 
 // ---- selectors the UI and the bots share ----
 export { continentsHeldBy } from "./continents";

@@ -285,7 +285,17 @@ describe("the turn timer (§5.6)", () => {
     expect(report.ticked).toBe(true);
 
     const rows = await log(game.gameId);
-    expect(rows.map((row) => row.type)).toEqual(["GAME_STARTED", "AUTO_DEPLOY", "END_TURN"]);
+    // The timed-out seat walks its turn's phases rather than jumping to
+    // `END_TURN`: §5.6's table is "`END_PHASE` / `END_TURN`", and `END_TURN`
+    // out of `draft` or `attack` would skip `fortify`, which is the one phase
+    // the R20 card award is allowed to land in. One tick still ends the turn.
+    expect(rows.map((row) => row.type)).toEqual([
+      "GAME_STARTED",
+      "AUTO_DEPLOY",
+      "END_PHASE",
+      "END_PHASE",
+      "END_TURN",
+    ]);
     expect(rows[1]?.actor).toBe("server");
 
     const seat = await harness.db.query<{ missed_turns: number }>(
@@ -293,6 +303,64 @@ describe("the turn timer (§5.6)", () => {
       [game.gameId],
     );
     expect(Number(seat[0]?.missed_turns)).toBe(1);
+  });
+
+  /**
+   * R20 survives a timeout (§5.6, §5.7).
+   *
+   * The card award is pinned to `fortify` — `owedServerAction` offers it only
+   * there, and `validate` refuses a `CARD_DRAWN` in any other phase — because
+   * `END_TURN` out of `fortify` is the end of the turn (R67). `END_TURN` is
+   * *also* legal out of `attack`, though, so a timeout that reached for it
+   * first marched the seat straight past `fortify` and the card a conquest had
+   * already earned was never dealt. Ending the **phase** first walks the same
+   * turn through `fortify`, where the award lands.
+   */
+  it("awards the conquest card when the attack phase is the one that times out", async () => {
+    const game = await twoPlayerGame();
+    // Seat 0's turn: draft out, into attack, and take t3 off seat 1. The fake
+    // reducer's blitz costs the defender one troop a time and the deal starts
+    // everybody at three, so three attacks conquer it.
+    await submit(game.a, game.gameId, {
+      clientActionId: actionId("draft"),
+      kind: "action",
+      action: { type: "DRAFT", seat: 0, territory: 0, count: 3 },
+    });
+    await submit(game.a, game.gameId, {
+      clientActionId: actionId("to-attack"),
+      kind: "action",
+      action: { type: "END_PHASE", seat: 0 },
+    });
+    for (const n of [1, 2, 3]) {
+      const response = await submit(game.a, game.gameId, {
+        clientActionId: actionId(`attack-${String(n)}`),
+        kind: "intent",
+        intent: { from: 2, to: 3, mode: "blitz" },
+      });
+      expect(response.status, `attack ${String(n)}`).toBe(200);
+    }
+    const conquest = await log(game.gameId);
+    expect(conquest.filter((row) => row.type === "ATTACK")).toHaveLength(3);
+    // Nothing is owed yet: the award belongs to `fortify`, and the seat is
+    // still in `attack`.
+    expect(conquest.some((row) => row.type === "CARD_DRAWN")).toBe(false);
+
+    // …and now they run out of time, mid-attack.
+    await expire(game.gameId);
+    await seen(game.gameId, 0, "1 second");
+    await seen(game.gameId, 1, "1 second");
+    await runLazyTick(game.gameId);
+
+    const rows = await log(game.gameId);
+    expect(rows.slice(conquest.length).map((row) => row.type)).toEqual([
+      // attack → fortify, the award, then the only legal exit from fortify.
+      "END_PHASE",
+      "CARD_DRAWN",
+      "END_TURN",
+    ]);
+    const card = rows.find((row) => row.type === "CARD_DRAWN");
+    expect(card?.actor).toBe("server");
+    expect(card?.payload).toMatchObject({ seat: 0 });
   });
 
   it("hands the seat to a bot with reason 'timeout' once two turns are missed", async () => {

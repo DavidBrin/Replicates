@@ -9,6 +9,7 @@
  * off the right edge.
  */
 import clsx from "clsx";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
 import type { PlayerColour, Seat, Standing } from "@/engine/types";
 import { playerVar } from "@/render/palette";
@@ -38,6 +39,15 @@ export interface RosterCapsuleProps {
   /** Row height in px; the capsule radius is half of it. */
   readonly height: number;
   readonly balloon?: string | null;
+  /**
+   * Alliances only (R80): tapping the capsule opens the alliance popover, which the caller renders
+   * as `children`. Absent in every other game, so the capsule stays a read-only row.
+   */
+  readonly onTap?: () => void;
+  /** A proposal is in the air with this seat — the badge the capsule carries. */
+  readonly allianceBadge?: "proposed" | "allied" | null;
+  /** The popover, rendered inside the capsule so it positions against it. */
+  readonly children?: ReactNode;
 }
 
 /** Under fog both counts read `???` (§7.1). */
@@ -45,7 +55,9 @@ function count(value: number | null): string {
   return value === null ? "???" : String(value);
 }
 
-export function RosterCapsule({ row, height, balloon }: RosterCapsuleProps) {
+export function RosterCapsule({
+  row, height, balloon, onTap, allianceBadge = null, children,
+}: RosterCapsuleProps) {
   const eliminated = row.standing === "eliminated" || row.standing === "resigned";
   const avatarSize = Math.round(height * 0.79);
   const face = playerVar(row.colour);
@@ -53,6 +65,18 @@ export function RosterCapsule({ row, height, balloon }: RosterCapsuleProps) {
   return (
     <div
       data-testid={`roster-row-${row.seat}`}
+      {...(onTap
+        ? {
+          role: "button" as const,
+          tabIndex: 0,
+          onClick: onTap,
+          onKeyDown: (e: ReactKeyboardEvent) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            onTap();
+          },
+        }
+        : {})}
       // The capsule is all glyphs and numerals; the seat's name is the only
       // thing that makes the row readable to anything but an eye.
       aria-label={row.name}
@@ -76,6 +100,29 @@ export function RosterCapsule({ row, height, balloon }: RosterCapsuleProps) {
         color: row.active ? `var(--p-${row.colour}-on)` : "var(--text)",
       }}
     >
+      {/* The alliance popover, if the caller opened one. Positioned against this capsule. */}
+      {children}
+
+      {/* R80 — a pending offer or a live alliance, as a small glyph on the capsule's left edge. */}
+      {allianceBadge ? (
+        <span
+          data-testid={`roster-alliance-${row.seat}`}
+          data-alliance={allianceBadge}
+          aria-label={allianceBadge === "allied" ? "Allied" : "Alliance proposed"}
+          className="absolute -left-1 top-1 flex items-center justify-center rounded-full font-bold"
+          style={{
+            width: Math.round(height * 0.26),
+            height: Math.round(height * 0.26),
+            background: allianceBadge === "allied" ? "var(--ok)" : "var(--gold)",
+            color: "var(--text-on-paper)",
+            fontSize: Math.round(height * 0.17),
+            boxShadow: "var(--sh-chip)",
+          }}
+        >
+          {allianceBadge === "allied" ? "✓" : "!"}
+        </span>
+      ) : null}
+
       {/* Chat balloons pop out to the LEFT of the capsule (§7.3). */}
       {balloon ? (
         <div

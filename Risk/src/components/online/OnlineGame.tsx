@@ -255,19 +255,24 @@ export default function OnlineGame({ gameId }: OnlineGameProps) {
           built.start();
 
           // Catch the session up on everything that arrived while the map was
-          // loading, in the same order `accept` publishes a live body in:
-          // an authoritative snapshot replaces the confirmed state and the
-          // actions fold on top of it, while a **masked** view goes last,
-          // because its actions are animation at the head seq and folding them
-          // after it would skip every one (§5.5). `ingest` ignores anything at
-          // or below what it has already folded, so a body the port also
-          // delivered through the subscription is harmless.
+          // loading, in exactly the order `accept` publishes a live body in: an
+          // authoritative snapshot replaces the confirmed state and the actions
+          // fold on top of it, while a **masked** view's actions are never
+          // folded at all — they are animation at the head seq, they do not
+          // apply to a masked state, and a refused fold is read as a desync
+          // (§5.5, F36). So they ride the snapshot as `ingestSnapshot`'s third
+          // argument, which replays them for their events only. `ingest`
+          // ignores anything at or below what it has already folded, so a body
+          // the port also delivered through the subscription is harmless.
           for (const body of buffered.current) {
             const rows = foldableActions(body.actions);
             const masked = body.snapshot !== undefined && isMaskedView(body.snapshot);
-            if (masked && rows.length > 0) built.ingest(rows);
             if (body.snapshot !== undefined) {
-              built.ingestSnapshot(body.snapshot, body.snapshotSeq ?? body.seq);
+              built.ingestSnapshot(
+                body.snapshot,
+                body.snapshotSeq ?? body.seq,
+                masked && rows.length > 0 ? rows : undefined,
+              );
             }
             if (!masked && rows.length > 0) built.ingest(rows);
           }

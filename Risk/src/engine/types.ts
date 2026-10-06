@@ -73,6 +73,19 @@ export interface DiceAugment {
   readonly favourDefenderOnDraw: boolean;    // true in every in-scope mode; false = ties to attacker
 }
 
+/**
+ * One terminal state of a battle the Attack Limiter stopped with **both sides alive** (R48).
+ *
+ * `unresolved` is the total of these; the breakdown is what lets the resolver name the actual
+ * losses instead of guessing, so it is part of the published contract rather than S2's private
+ * business (F46). Declared here, re-exported by `@/engine/odds`, so there is one shape.
+ */
+export interface StoppedOutcome {
+  readonly attackerLosses: number;
+  readonly defenderLosses: number;
+  readonly p: number;
+}
+
 /** Terminal-state distribution of one whole battle (R40, R48). */
 export interface OutcomeDist {
   readonly a: number;                        // A, excluding the garrison
@@ -84,6 +97,15 @@ export interface OutcomeDist {
   /** P(the Attack Limiter stopped the battle with both sides alive). 0 without `stopUntil`. */
   readonly unresolved: number;
   readonly winChance: number;
+  /**
+   * The per-pair breakdown of `unresolved`, sorted by `attackerLosses` then `defenderLosses`.
+   *
+   * **The stopped mass lives here and nowhere else**: `attackLoss` and `defendLoss` describe
+   * resolved battles only, so without this tail the two arrays sum to `1 − unresolved` and a
+   * sampling walk over them alone would silently drop the limiter's draws (F46). Optional
+   * because a distribution with no limiter has nothing to break down.
+   */
+  readonly stopped?: readonly StoppedOutcome[];
 }
 
 /** The MINIMAL structural contract the resolver calls through. S2's `createOdds` returns something

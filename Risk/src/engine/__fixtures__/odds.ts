@@ -6,7 +6,7 @@
  * the test wrote itself. That is what makes the inverse-CDF walk testable at
  * all: with a known distribution, a known `u` has exactly one right answer.
  */
-import type { DiceAugment, DiceMode, OddsTables, OutcomeDist } from "../types";
+import type { DiceAugment, DiceMode, OddsTables, OutcomeDist, StoppedOutcome } from "../types";
 
 /**
  * A whole-battle distribution built from two sparse maps.
@@ -26,6 +26,12 @@ export function makeDist(
     readonly conquerLosing?: Readonly<Record<number, number>>;
     readonly holdLosing?: Readonly<Record<number, number>>;
     readonly unresolved?: number;
+    /**
+     * The Attack Limiter's stopped outcomes (R48). This mass lives **only** here — it is never
+     * folded into `holdLosing` — so `unresolved` defaults to its total and the two published
+     * arrays legitimately sum to less than 1.
+     */
+    readonly stopped?: readonly StoppedOutcome[];
   },
 ): OutcomeDist {
   const attackLoss = new Float64Array(a + 1);
@@ -48,7 +54,17 @@ export function makeDist(
   }
   attackLoss[a] = lose;
   defendLoss[d] = win;
-  return { a, d, attackLoss, defendLoss, unresolved: spec.unresolved ?? 0, winChance: win };
+  const stopped = spec.stopped;
+  const stoppedTotal = (stopped ?? []).reduce((acc, s) => acc + s.p, 0);
+  return {
+    a,
+    d,
+    attackLoss,
+    defendLoss,
+    unresolved: spec.unresolved ?? stoppedTotal,
+    winChance: win,
+    ...(stopped === undefined ? {} : { stopped }),
+  };
 }
 
 /** "The attacker always conquers without a scratch" — the simplest table. */

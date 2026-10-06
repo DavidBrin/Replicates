@@ -152,16 +152,43 @@ export function mustTradeAtTurnStart(state: GameState, seat: Seat): boolean {
   return hand.length >= 5 && hasSet(hand);
 }
 
+/** R26's floor: the forced trade-down stops as soon as the hand reaches 4, 3 or 2. */
+export const TRADE_DOWN_FLOOR = 4;
+
 /**
- * R26 — inheritance forces an immediate trade-down. A seizure that lifts the
- * hand to six or more must be traded down to four or fewer in the same turn,
- * one set at a time. Six cards reach three in one trade, so this is "while the
- * hand is at six or more".
+ * True while a forced R26 trade-down is **already under way** this turn.
+ *
+ * R26 fires on an inheritance to ≥6 and does not stop until the hand is ≤4, but one trade removes
+ * exactly three cards: from 6 you reach 3 and from 7 you reach 4, yet **from 8 you reach 5**, which
+ * is still above the floor and must be traded again. A plain `hand.length >= 6` therefore lets a
+ * hand of 5 out of the trade-down, and because `mustTradeAtTurnStart` also declines (a set has
+ * already been traded this turn) nothing forces the second trade at all.
+ *
+ * A hand of 5 reached by *inheritance alone* is a different thing: R26 says explicitly that an
+ * inheritance leaving you under 6 waits for your next turn. The two are told apart by the R27
+ * bounce: a seizure arrives on a capture, so a trade-down always starts in `attack` and the first
+ * forced trade bounces the phase back to `draft` with `resumePhase` set (F41). `resumePhase !== null`
+ * **plus** a set already traded this turn is therefore exactly "mid-trade-down", and it needs no new
+ * `GameState` field — which would change `hashState` for every game ever played.
+ */
+function tradeDownInProgress(state: GameState): boolean {
+  return state.resumePhase !== null && state.setsTradedThisTurn > 0;
+}
+
+/**
+ * R26 — inheritance forces an immediate trade-down. A seizure that lifts the hand to six or more
+ * must be traded down to **four or fewer** in the same turn, one set at a time, stopping as soon as
+ * the hand reaches 4, 3 or 2.
+ *
+ * So two branches: the inheritance itself (≥6), and the trade-down it started, which keeps forcing
+ * while the hand is still above the floor — see `tradeDownInProgress` for why 5 needs both.
  */
 export function mustTradeDown(state: GameState, seat: Seat): boolean {
   if (state.turnOrder[state.currentIndex] !== seat) return false;
   const hand = handOf(state, seat);
-  return hand.length >= 6 && hasSet(hand);
+  if (!hasSet(hand)) return false;
+  if (hand.length >= 6) return true;
+  return hand.length > TRADE_DOWN_FLOOR && tradeDownInProgress(state);
 }
 
 /**

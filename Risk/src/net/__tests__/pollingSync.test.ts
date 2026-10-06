@@ -704,6 +704,217 @@ describe("submitting", () => {
   });
 });
 
+describe("resync", () => {
+  it("resets the cursor, polls cold, and resolves once the snapshot has been delivered", async () => {
+    const seen: number[] = [];
+    const { calls, fetchImpl } = recorder((call) => {
+      const since = Number(new URL(call.url, "http://x").searchParams.get("since"));
+      return since === 0
+        ? jsonResponse(syncBody({ seq: 12, snapshot: state(), snapshotSeq: 12 }))
+        : new Response(null, { status: 204 });
+    });
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 9,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onSnapshot((_snapshot, at) => seen.push(at));
+    await settle();
+    expect(seen).toEqual([]);
+
+    await port.resync();
+
+    const cold = calls.find((call) => call.url.includes("since=0"));
+    expect(cold).toBeDefined();
+    expect(cold?.headers["if-none-match"]).toBeUndefined();
+    expect(seen).toEqual([12]);
+    expect(port.seq).toBe(12);
+    port.close();
+  });
+
+  it("refuses a delta while a snapshot is owed and reports desynced", async () => {
+    const statuses: SyncStatus[] = [];
+    const folded: number[] = [];
+    const { fetchImpl } = recorder(() =>
+      jsonResponse(syncBody({ seq: 11, actions: [action(10), action(11)] })),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 9,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+      autoStart: false,
+    });
+    port.onStatus((status) => statuses.push(status));
+    port.onActions((rows) => folded.push(...rows.map((row) => row.seq)));
+
+    await port.resync();
+
+    expect(folded).toEqual([]);
+    // The FINAL status, not merely a status somewhere in the sequence: the
+    // poll used to raise `"desynced"` inside `accept` and then report
+    // `"idle"` on the way out, which left the screen looking healthy while
+    // the client was refusing every delta it was sent.
+    expect(statuses.at(-1)).toBe("desynced");
+    expect(statuses).toContain("desynced");
+    port.close();
+  });
+});
+
+/**
+ * Several microtask drains. One `settle()` covers a single awaited fetch; a
+ * chain that crosses `accept` → a listener → `resync()` → a second request →
+ * `accept` again needs more, and counting them exactly would assert the
+ * implementation's await depth rather than its behaviour.
+ */
+async function flush(rounds = 8): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) await settle();
+}
+
+/** A promise a test resolves by hand, to hold one response open. */
+function deferred(): { readonly promise: Promise<void>; release(): void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((settled) => {
+    resolve = settled;
+  });
+  return { promise, release: () => resolve() };
+}
+
+describe("a resync raised from inside the poll that caused it", () => {
+  /**
+   * The production path, and the only one.
+   *
+   * The session's `ingest` runs **synchronously** out of `accept`'s emit, so
+   * the desync it finds is raised while the poll that delivered the offending
+   * row is still in flight. `loop.pollNow()` coalesces onto an in-flight poll
+   * by design — two polls folding the same actions is worse than one late one
+   * — so a `resync` built on it joined the very poll it had just rejected,
+   * resolved, and never asked the authority for anything: `seq` sat at 0,
+   * `awaitingSnapshot` stayed set, and the board froze until some later
+   * scheduled tick happened to come round.
+   */
+  it("issues the cold read rather than coalescing onto it", async () => {
+    const { calls, fetchImpl } = recorder((call) => {
+      const since = Number(new URL(call.url, "http://x").searchParams.get("since"));
+      return since === 0
+        ? jsonResponse(syncBody({ seq: 12, snapshot: state(), snapshotSeq: 12 }))
+        : jsonResponse(syncBody({ seq: 11, actions: [action(10), action(11)] }));
+    });
+    const statuses: SyncStatus[] = [];
+    const snapshots: number[] = [];
+    let asked: Promise<void> | null = null;
+
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 9,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onStatus((status) => statuses.push(status));
+    port.onSnapshot((_snapshot, at) => snapshots.push(at));
+    port.onActions(() => {
+      asked ??= port.resync();
+    });
+
+    await flush();
+    if (asked) await asked;
+    await flush();
+
+    // Two requests, the second of them cold — not one request answered twice.
+    expect(calls.map((call) => new URL(call.url, "http://x").searchParams.get("since"))).toEqual([
+      "9",
+      "0",
+    ]);
+    expect(snapshots).toEqual([12]);
+    expect(port.seq).toBe(12);
+    // The snapshot landed, so the client is in sync again.
+    expect(statuses.at(-1)).toBe("idle");
+    port.close();
+  });
+});
+
+describe("a POST that answers while a snapshot is owed", () => {
+  /**
+   * `send` / `resign` used to take the answer's `seq` unconditionally.
+   *
+   * A POST already in flight when the session asks for a resync answers with
+   * the authority's **head**, so taking it walked the cursor from the 0
+   * `resync()` had just reset it to straight back to where the broken fold
+   * was. The cold read then went out as a delta request, `accept` refused it
+   * for want of the snapshot it was still owed, and every poll after it did
+   * the same — for the rest of the game.
+   */
+  it("neither folds its rows nor walks the cursor back to the head", async () => {
+    const seen: { url: string; method: string; ifNoneMatch: string | undefined }[] = [];
+    const firstPoll = deferred();
+
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      seen.push({ url, method, ifNoneMatch: headers["If-None-Match"] });
+      if (method === "POST") {
+        // The authority's answer to the move: the head, far ahead of the
+        // cursor `resync()` has just reset.
+        return jsonResponse({ seq: 42, actions: [action(41), action(42)] });
+      }
+      if (url.includes("since=0")) {
+        return jsonResponse(syncBody({ seq: 12, snapshot: state(), snapshotSeq: 12 }));
+      }
+      // The poll that is already in flight when the resync is asked for, held
+      // open so the POST can answer inside that window.
+      await firstPoll.promise;
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const statuses: SyncStatus[] = [];
+    const folded: number[] = [];
+    const snapshots: number[] = [];
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 9,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onStatus((status) => statuses.push(status));
+    port.onActions((rows) => folded.push(...rows.map((row) => row.seq)));
+    port.onSnapshot((_snapshot, at) => snapshots.push(at));
+    await flush();
+
+    const resyncing = port.resync();
+    const posted = port.submit({ type: "END_TURN", seat: 0 }, "cid-end-turn-0001");
+    await expect(posted).resolves.toHaveLength(2);
+
+    firstPoll.release();
+    await resyncing;
+    await flush();
+
+    // The POST's rows were dropped rather than emitted: they are no more
+    // foldable than the delta would have been, and the snapshot replaces the
+    // state wholesale anyway.
+    expect(folded).toEqual([]);
+    // The cold read really was cold, and carried no revived ETag either.
+    const cold = seen.find((call) => call.method === "GET" && call.url.includes("since=0"));
+    expect(cold).toBeDefined();
+    expect(cold?.ifNoneMatch).toBeUndefined();
+    expect(seen.some((call) => call.url.includes("since=42"))).toBe(false);
+    // And the client came back, rather than refusing deltas for ever.
+    expect(snapshots).toEqual([12]);
+    expect(port.seq).toBe(12);
+    expect(statuses.at(-1)).toBe("idle");
+    port.close();
+  });
+});
+
 describe("the hard failures", () => {
   it("stops and reports offline on a 401, 403 or 404", async () => {
     for (const status of [401, 403, 404]) {
@@ -769,7 +980,7 @@ function wireRow(at: number, payload: unknown): LoggedAction {
 }
 
 describe("fog view mode", () => {
-  it("emits the animation actions BEFORE the masked snapshot", async () => {
+  it("hands the animation actions to onSnapshot, never to onActions", async () => {
     const order: string[] = [];
     const { fetchImpl } = recorder(() => jsonResponse(fogBody(9, [action(8), action(9)])));
     const port = createPollingSync({
@@ -780,13 +991,18 @@ describe("fog view mode", () => {
       schedule: time.schedule,
       visibility: visibility(),
     });
-    port.onSnapshot((_snapshot, at) => order.push(`snapshot:${at}`));
+    port.onSnapshot((_snapshot, at, animate) =>
+      order.push(`snapshot:${at}+animate:${(animate ?? []).map((row) => row.seq).join(",")}`),
+    );
     port.onActions((rows) => order.push(`actions:${rows.map((row) => row.seq).join(",")}`));
     await settle();
 
-    // The other order set the session's `folded` cursor to 9 first, so both
-    // rows were then skipped as already folded and nothing animated at all.
-    expect(order).toEqual(["actions:8,9", "snapshot:9"]);
+    // `onActions` IS the fold path. These rows do not apply to a masked state
+    // — `viewFor` blanked everything the viewer cannot see — so routing them
+    // through it had the session refuse them and call the refusal a desync, on
+    // every poll of every fog game. They ride the snapshot as its `animate`
+    // argument, which replays their events and folds nothing.
+    expect(order).toEqual(["snapshot:9+animate:8,9"]);
     port.close();
   });
 
@@ -824,6 +1040,7 @@ describe("fog view mode", () => {
       ),
     );
     const batches: number[][] = [];
+    const folds: number[][] = [];
     const port = createPollingSync({
       gameId: "g_1",
       since: 7,
@@ -832,12 +1049,16 @@ describe("fog view mode", () => {
       schedule: time.schedule,
       visibility: visibility(),
     });
-    port.onActions((rows) => batches.push(rows.map((row) => row.seq)));
+    port.onSnapshot((_snapshot, _at, animate) => {
+      if (animate) batches.push(animate.map((row) => row.seq));
+    });
+    port.onActions((rows) => folds.push(rows.map((row) => row.seq)));
     await settle();
 
     // Neither shape is foldable: one is not an `Action` at all, the other has
-    // no card to put in a hand.
+    // no card to put in a hand. What survives is animation, not a delta.
     expect(batches).toEqual([[10]]);
+    expect(folds).toEqual([]);
     // The cursor still moved past them, so they are never asked for again.
     expect(port.seq).toBe(10);
     port.close();
@@ -848,6 +1069,7 @@ describe("fog view mode", () => {
       jsonResponse(fogBody(8, [wireRow(8, { type: "HIDDEN", seat: 1 })])),
     );
     const actions = vi.fn();
+    const animated: (readonly LoggedAction[] | undefined)[] = [];
     const port = createPollingSync({
       gameId: "g_1",
       since: 7,
@@ -857,8 +1079,11 @@ describe("fog view mode", () => {
       visibility: visibility(),
     });
     port.onActions(actions);
+    port.onSnapshot((_snapshot, _at, animate) => animated.push(animate));
     await settle();
     expect(actions).not.toHaveBeenCalled();
+    // Not an empty batch either: `animate` is simply absent.
+    expect(animated).toEqual([undefined]);
     port.close();
   });
 });

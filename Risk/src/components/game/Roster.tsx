@@ -9,6 +9,7 @@
  * horizontal strip (§8 Responsive) by passing `orientation="horizontal"`.
  */
 import clsx from "clsx";
+import type { ReactNode } from "react";
 
 import { RosterCapsule, type RosterRow } from "./RosterCapsule";
 
@@ -18,9 +19,27 @@ export interface RosterProps {
   readonly orientation?: "vertical" | "horizontal";
   /** Row height in px; defaults to the measured 96. */
   readonly rowHeight?: number;
+  /**
+   * Alliances only (R80): what tapping a capsule does, per seat. `undefined` — the default and
+   * every non-alliance game — leaves the row inert, exactly as it was.
+   */
+  readonly onTapSeat?: (seat: number) => void;
+  /** The alliance badge a capsule carries, per seat. */
+  readonly allianceBadges?: Readonly<Record<number, "proposed" | "allied" | null>>;
+  /** The popover for one seat, rendered inside that capsule. */
+  readonly popoverFor?: (seat: number) => ReactNode;
 }
 
-export function Roster({ rows, balloons = {}, orientation = "vertical", rowHeight = 96 }: RosterProps) {
+export function Roster({
+  rows, balloons = {}, orientation = "vertical", rowHeight = 96,
+  onTapSeat, allianceBadges = {}, popoverFor,
+}: RosterProps) {
+  const extras = (seat: number) => ({
+    ...(onTapSeat ? { onTap: () => onTapSeat(seat) } : {}),
+    allianceBadge: allianceBadges[seat] ?? null,
+    children: popoverFor?.(seat) ?? null,
+  });
+
   if (orientation === "horizontal") {
     return (
       <div
@@ -35,6 +54,7 @@ export function Roster({ rows, balloons = {}, orientation = "vertical", rowHeigh
             row={row}
             height={Math.min(rowHeight, 64)}
             balloon={balloons[row.seat] ?? null}
+            {...extras(row.seat)}
           />
         ))}
       </div>
@@ -58,7 +78,13 @@ export function Roster({ rows, balloons = {}, orientation = "vertical", rowHeigh
       }}
     >
       {rows.map((row) => (
-        <RosterCapsule key={row.seat} row={row} height={rowHeight} balloon={balloons[row.seat] ?? null} />
+        <RosterCapsule
+          key={row.seat}
+          row={row}
+          height={rowHeight}
+          balloon={balloons[row.seat] ?? null}
+          {...extras(row.seat)}
+        />
       ))}
     </div>
   );

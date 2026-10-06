@@ -122,6 +122,8 @@ export interface StateSpec {
   readonly territoryBonusLeft?: number;
   readonly armiesToClaim?: Readonly<Record<number, number>>;
   readonly kinds?: Readonly<Record<number, SeatState["kind"]>>;
+  /** R27's bounce marker: set when a forced mid-Attack trade-down sent play back to draft. */
+  readonly resumePhase?: Phase | null;
 }
 
 /** A legal `GameState` over `map`, described compactly. */
@@ -168,7 +170,7 @@ export function buildState(map: MapDef, spec: StateSpec = {}): GameState {
     conqueredThisTurn: spec.conqueredThisTurn ?? false,
     fortifyUsed: spec.fortifyUsed ?? false,
     pendingMoveIn: null,
-    resumePhase: null,
+    resumePhase: spec.resumePhase ?? null,
     portals: spec.portals ?? [],
     discard: spec.discard ?? [],
     outcome: null,

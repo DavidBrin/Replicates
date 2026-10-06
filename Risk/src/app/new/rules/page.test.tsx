@@ -110,6 +110,49 @@ describe("/new/rules (Modes and Modifiers)", () => {
     });
   });
 
+  /*
+   * R8/R72 — the Capitals win condition is "hold every capital", and the Capitals MODIFIER is what
+   * puts capitals on the board at all. Either one without the other starts a game nobody can win,
+   * so the two controls are coupled.
+   */
+  it("turns the Capitals modifier ON when the Capitals win condition is chosen", () => {
+    render(<RulesPage />);
+    fireEvent.click(screen.getByTestId("rules-modifiers"));
+    expect(sessionConfigStore.getState().rules.capitals).toBe(false);
+    fireEvent.click(screen.getByTestId("rules-win-capitals"));
+    const rules = sessionConfigStore.getState().rules;
+    expect(rules.winCondition).toBe("capitals");
+    expect(rules.capitals).toBe(true);
+    // The modifier tile reads back as on, so the two views agree.
+    fireEvent.click(screen.getByTestId("modifiers-close"));
+    expect(screen.getByTestId("modifier-capitals")).toHaveAttribute("data-on", "true");
+  });
+
+  it("reverts the win condition to world when the Capitals modifier is switched off", () => {
+    render(<RulesPage />);
+    fireEvent.click(screen.getByTestId("rules-modifiers"));
+    fireEvent.click(screen.getByTestId("rules-win-capitals"));
+    fireEvent.click(screen.getByTestId("modifiers-close"));
+    expect(sessionConfigStore.getState().rules.winCondition).toBe("capitals");
+
+    fireEvent.click(screen.getByTestId("modifier-capitals"));
+    const rules = sessionConfigStore.getState().rules;
+    expect(rules.capitals).toBe(false);
+    expect(rules.winCondition).toBe("world");
+    expect(screen.getByTestId("rules-mode-plate")).toHaveTextContent("World Domination");
+  });
+
+  it("leaves the other win conditions alone when the modifier is switched off", () => {
+    render(<RulesPage />);
+    fireEvent.click(screen.getByTestId("modifier-capitals"));
+    fireEvent.click(screen.getByTestId("modifier-percentage-domination"));
+    expect(sessionConfigStore.getState().rules.capitals).toBe(true);
+    fireEvent.click(screen.getByTestId("modifier-capitals"));
+    const rules = sessionConfigStore.getState().rules;
+    expect(rules.capitals).toBe(false);
+    expect(rules.winCondition).toBe("percentage");
+  });
+
   it("keeps the turn timer online-only", () => {
     render(<RulesPage />);
     fireEvent.click(screen.getByTestId("rules-modifiers"));
