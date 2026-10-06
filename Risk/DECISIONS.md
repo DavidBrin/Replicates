@@ -805,14 +805,13 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 
 ---
 
-## D81 — Under Manual Placement a capital is the seat's lowest-index non-blizzard owned territory
+## D81 — Under Manual Placement a capital is the seat's owned territory with the most troops, ties to the lowest index
 
-**Decision.** With Capitals on and Manual Placement on, each seat's capital is assigned when the claim phase finishes, and it is the **lowest-index territory that seat owns**, skipping blizzards. A seat that owns nothing keeps `capital: null`. Under Auto Placement the resolver has already drawn one (D78 ④) and this is a no-op. **[SPEC]** — the original's Manual Placement capital rule was not sourced.
+**Decision.** With Capitals on and Manual Placement on, each seat's capital is assigned when the claim phase finishes, and it is the **owned, non-blizzard territory holding the most troops**, ties broken by the lowest territory index. A seat that owns nothing keeps `capital: null`. (Superseded the original "lowest-index owned territory" rule during the first code review.)
 
-**Why.** Under Auto Placement the capital can be drawn from a seeded stream because the deal and the capital happen in the same resolver call. Under Manual Placement the board is built by a sequence of player `CLAIM` actions, so there is no resolver call left to draw from, and inventing one would mean threading an RNG into the reducer — which D2 forbids outright. A deterministic rule over the finished board needs no randomness at all; "lowest index" is the only such rule that is both total and obviously fair to state.
+**Why.** Under Auto Placement the capital can be drawn from a seeded stream because the deal and the capital happen in the same resolver call. Under Manual Placement the board is built by a sequence of player `CLAIM` actions, so there is no resolver call at the moment the claim phase ends, and `apply` may not draw from a PRNG (R88, D2). The rule therefore has to be a pure function of the claimed board. "Most troops" is the choice a player would make — the territory they reinforced is the one they meant to hold — and it removes the exploit the lowest-index rule invited, where whoever claimed a low-index tile knew every opponent's capital in advance. Evidence: `research/07-research-brief.md` §2.1 (R8/R9), SPEC R9.
 
-**Consequence.** A Manual Placement capital is predictable, which is a small strategic difference from the auto-dealt game and is worth knowing before anyone reads a bias into it. The blizzard skip matters: a frozen tile has no owner, so it can never be a capital, and the check is written as "owned and not frozen" rather than relying on ownership alone.
-
+**Consequence.** A Manual Placement capital is still predictable from the board, which is a small strategic difference from the auto-dealt game and is worth knowing before anyone reads a bias into it. The blizzard skip matters: a frozen tile has no owner, so it can never be a capital.
 ---
 
 ## D82 — `CARD_DRAWN` is legal only in the fortify phase, and the pin lives in `validate` rather than in the reducer branch

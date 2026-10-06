@@ -53,15 +53,19 @@ both, plus forty-nine as the fewest attackers for an 80% Blitz against fifty, an
 `toBe`, because `Math.pow` appears twice in the pipeline and is not bit-identical
 across JavaScript engines (D88).
 
-**Every board is generated from public-domain geodata, because no legitimate RISK
-geometry exists.** The Wikimedia "Risk board" SVGs carry CC BY-SA tags despite being
-traced from a retail Hasbro board the uploader never had rights to, and SMG's own
-artwork is theirs. So the three real-world boards are built from Natural Earth by a
-committed pipeline, nine regional boards come out of a seeded Voronoi generator, and
-every territory's shape is twelve to thirty vertices of plain SVG path data with a
-`polylabel` anchor inside it. Nothing in this repository is an asset: the dice, the
-cards, the suit silhouettes, the emoji and the laurel wreath are all geometry, colour
-and type (D38, D1).
+**No legitimate RISK geometry exists, so every board here is either public domain or
+generated.** The Wikimedia "Risk board" SVGs carry CC BY-SA tags despite being traced
+from a retail Hasbro board the uploader never had rights to, and SMG's own artwork is
+theirs. So the three ready-made boards (Classic World, World Extended, Napoleonic
+Europe) come from a public-domain fan project's per-territory SVG paths, the nine
+regional boards (Europe, the USA by state, Asia, Africa, the Americas, Australia and
+New Zealand, the Middle East, a simple world) are generated from Natural Earth and
+world-atlas data by a committed pipeline that dissolves countries into territories and
+derives adjacency from shared borders, and a seeded Voronoi generator produces random
+boards on demand. Every territory's shape is plain SVG path data under a per-ring
+vertex budget, with a `polylabel` anchor inside it. Nothing in this repository is an
+asset: the dice, the cards, the suit silhouettes, the emoji and the laurel wreath are
+all geometry, colour and type (D38, D1).
 
 Next.js 16 · a pure engine with an enforced layering rule · exact O(A·D) battle odds
 to 128 troops and a fitted logistic beyond · **1,712 unit and property tests** ·
@@ -92,7 +96,7 @@ then 7 parallel build slices.
 
 ```bash
 pnpm install
-pnpm run dev          # http://localhost:3000 — no database needed for solo or hot-seat
+pnpm run dev          # http://localhost:3300 — no database needed for solo or hot-seat
 pnpm run verify       # typecheck + lint + 1,712 unit tests
 pnpm run test:e2e     # production build + Playwright on port 3300 (~5 min)
 ```
