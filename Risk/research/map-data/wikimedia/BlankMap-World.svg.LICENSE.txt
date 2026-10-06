@@ -1,0 +1,20 @@
+FILE: BlankMap-World.svg
+COMMONS PAGE: https://commons.wikimedia.org/wiki/File:BlankMap-World.svg
+DIRECT URL: https://upload.wikimedia.org/wikipedia/commons/4/4d/BlankMap-World.svg
+AUTHOR: User:Canuckguy and many others (Wikimedia Commons)
+LICENCE: PUBLIC DOMAIN (Commons extmetadata: License = "pd", UsageTerms = "Public domain",
+  attribution_required = false, link_required = false)
+  The file page states: "When you upload a new version of this file, you irrevocably agree
+  to release your modified version to the public domain."
+ATTRIBUTION: NOT required (courtesy credit to Wikimedia Commons is polite).
+VERDICT: SAFE TO REUSE, including commercially.
+FORMAT: SVG, 1101801 bytes, hand-editable plain text (NOT Inkscape-mangled).
+CONTENT: ~2213 <path> elements, ~2528 unique id attributes. Per-country ids are lowercase
+  ISO 3166-1 alpha-2 (id="fr", id="br", id="au"; "xx_" suffixed ids are the small-island
+  circle markers / secondary shapes). CSS classes carry both the country code and semantic
+  classes (e.g. class="antxx landxx coastxx aq", class="circlexx ad"), so you can restyle
+  or select whole countries by class/id with no re-projection work.
+CAVEAT: contains coding for disputed territories (xk Kosovo, xa Abkhazia, eh W. Sahara,
+  Crimea, etc.), some hidden by default -- decide explicitly how your map treats them.
+PROJECTION: equirectangular-style blank world map; it is a drawn map, not geodata, so you
+  cannot reproject it. For reprojectable geometry use the Natural Earth / TopoJSON files.

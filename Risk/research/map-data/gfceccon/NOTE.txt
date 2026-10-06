@@ -1,0 +1,5 @@
+gfceccon/risk world.json - CC0-1.0 (public domain dedication).
+Adjacency is an EXACT match to map-data/canonical/classic-world.json (42 territories, 83 edges, 0 differences).
+Graph only, no geometry.
+Source: https://github.com/gfceccon/risk
+CC0 means no attribution is required - the cleanest-licensed classic graph available.

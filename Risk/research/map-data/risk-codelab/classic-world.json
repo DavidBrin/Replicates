@@ -1,0 +1,19 @@
+{
+ "$schema_version": "1.0",
+ "slug": "classic-world",
+ "name": "Classic / World (42) - risk-codelab",
+ "confidence": "HIGH - adjacency is an EXACT match to map-data/canonical/classic-world.json (42T, 83 edges, 0 differences). Geometry verified: all 42 territories have a <path> in board.svg.",
+ "territory_count": 42,
+ "undirected_edge_count": 83,
+ "geometry": {
+  "svg": "board.svg",
+  "style": "per-territory <path id=\"snake_case_name\">, 800x540 viewBox, 102 paths total (incl. background and decoration). Inkscape-authored with gradients/filters.",
+  "id_variants_vs_canonical": {
+   "eastern_us": "eastern_united_states",
+   "western_us": "western_united_states",
+   "yakutsk": "yakursk (typo in source)"
+  }
+ },
+ "source": "https://github.com/dartlangfr/risk-codelab  samples/s3_game/web/img/board.svg + samples/*/lib/src/map.dart",
+ "license": "Apache-2.0 - see LICENSE in this folder"
+}

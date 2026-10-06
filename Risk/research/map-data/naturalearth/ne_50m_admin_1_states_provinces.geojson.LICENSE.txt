@@ -1,0 +1,12 @@
+FILE: ne_50m_admin_1_states_provinces.geojson
+SOURCE: https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson
+ZIP MIRROR: https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_1_states_provinces.zip
+LICENCE: PUBLIC DOMAIN -- see ne_110m_admin_0_countries.geojson.LICENSE.txt for the verbatim
+  Natural Earth terms (LICENSE.md: "Everything here is public domain.")
+ATTRIBUTION: NOT required.
+VERDICT: SAFE TO REUSE, including commercially.
+CONTENT: 294 admin-1 subdivisions at 1:50m, but ONLY for 9 large countries:
+  Russia 85, USA 51, India 36, Indonesia 33, China 31, Brazil 27, Canada 13,
+  Australia 9, South Africa 9. Properties: name, admin, iso_3166_2, type_en, region.
+  For full worldwide admin-1 coverage use the 10m file instead:
+  https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip

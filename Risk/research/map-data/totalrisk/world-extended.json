@@ -1,0 +1,632 @@
+{
+ "$schema_version": "1.0",
+ "slug": "world-extended",
+ "name": "World Extended (47 territories, adds Hawaii etc.)",
+ "confidence": "MEDIUM - internally consistent except one asymmetric edge Kamchatka->Hawaii (fixed here by adding the reciprocal). Not an SMG map; a TotalRisk original. Geometry is complete per-territory SVG.",
+ "territory_count": 47,
+ "continent_count": 6,
+ "undirected_edge_count": 94,
+ "continents": [
+  {
+   "id": "africa",
+   "name": "Africa",
+   "bonus": 3,
+   "color": "#564848",
+   "territories": [
+    "north_africa",
+    "egypt",
+    "east_africa",
+    "congo",
+    "south_africa",
+    "madagascar"
+   ]
+  },
+  {
+   "id": "south_america",
+   "name": "South America",
+   "bonus": 2,
+   "color": "#dd4444",
+   "territories": [
+    "falkland_isles",
+    "venezuela",
+    "brazil",
+    "peru",
+    "argentina"
+   ]
+  },
+  {
+   "id": "europe",
+   "name": "Europe",
+   "bonus": 5,
+   "color": "#4acd61",
+   "territories": [
+    "svalbard",
+    "iceland",
+    "great_britain",
+    "scandinavia",
+    "western_europe",
+    "northern_europe",
+    "southern_europe",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "north_america",
+   "name": "North America",
+   "bonus": 5,
+   "color": "#4770ea",
+   "territories": [
+    "hawaii",
+    "greenland",
+    "northwest_territory",
+    "alaska",
+    "alberta",
+    "ontario",
+    "quebec",
+    "western_united_states",
+    "eastern_united_states",
+    "central_america"
+   ]
+  },
+  {
+   "id": "asia",
+   "name": "Asia",
+   "bonus": 7,
+   "color": "#eaea67",
+   "territories": [
+    "afghanistan",
+    "china",
+    "india",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "middle_east",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "australia",
+   "name": "Australia",
+   "bonus": 2,
+   "color": "#a55eec",
+   "territories": [
+    "philippines",
+    "new_zeeland",
+    "eastern_australia",
+    "indonesia",
+    "new_guinea",
+    "western_australia"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "north_africa",
+   "name": "North Africa",
+   "continent": "africa",
+   "adjacent": [
+    "brazil",
+    "congo",
+    "east_africa",
+    "egypt",
+    "southern_europe",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "egypt",
+   "name": "Egypt",
+   "continent": "africa",
+   "adjacent": [
+    "east_africa",
+    "middle_east",
+    "north_africa",
+    "southern_europe"
+   ]
+  },
+  {
+   "id": "east_africa",
+   "name": "East Africa",
+   "continent": "africa",
+   "adjacent": [
+    "congo",
+    "egypt",
+    "madagascar",
+    "middle_east",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "congo",
+   "name": "Congo",
+   "continent": "africa",
+   "adjacent": [
+    "east_africa",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "south_africa",
+   "name": "South Africa",
+   "continent": "africa",
+   "adjacent": [
+    "congo",
+    "east_africa",
+    "falkland_isles",
+    "madagascar"
+   ]
+  },
+  {
+   "id": "madagascar",
+   "name": "Madagascar",
+   "continent": "africa",
+   "adjacent": [
+    "east_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "falkland_isles",
+   "name": "Falkland Isles",
+   "continent": "south_america",
+   "adjacent": [
+    "argentina",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "venezuela",
+   "name": "Venezuela",
+   "continent": "south_america",
+   "adjacent": [
+    "brazil",
+    "central_america",
+    "peru"
+   ]
+  },
+  {
+   "id": "brazil",
+   "name": "Brazil",
+   "continent": "south_america",
+   "adjacent": [
+    "argentina",
+    "north_africa",
+    "peru",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "peru",
+   "name": "Peru",
+   "continent": "south_america",
+   "adjacent": [
+    "argentina",
+    "brazil",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "argentina",
+   "name": "Argentina",
+   "continent": "south_america",
+   "adjacent": [
+    "brazil",
+    "falkland_isles",
+    "new_zeeland",
+    "peru"
+   ]
+  },
+  {
+   "id": "svalbard",
+   "name": "Svalbard",
+   "continent": "europe",
+   "adjacent": [
+    "greenland",
+    "scandinavia"
+   ]
+  },
+  {
+   "id": "iceland",
+   "name": "Iceland",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "greenland",
+    "scandinavia"
+   ]
+  },
+  {
+   "id": "great_britain",
+   "name": "Great Britain",
+   "continent": "europe",
+   "adjacent": [
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "scandinavia",
+   "name": "Scandinavia",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "svalbard",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "western_europe",
+   "name": "Western Europe",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "north_africa",
+    "northern_europe",
+    "southern_europe"
+   ]
+  },
+  {
+   "id": "northern_europe",
+   "name": "Northern Europe",
+   "continent": "europe",
+   "adjacent": [
+    "great_britain",
+    "scandinavia",
+    "southern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "southern_europe",
+   "name": "Southern Europe",
+   "continent": "europe",
+   "adjacent": [
+    "egypt",
+    "middle_east",
+    "north_africa",
+    "northern_europe",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "ukraine",
+   "name": "Ukraine",
+   "continent": "europe",
+   "adjacent": [
+    "afghanistan",
+    "middle_east",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "ural"
+   ]
+  },
+  {
+   "id": "hawaii",
+   "name": "Hawaii",
+   "continent": "north_america",
+   "adjacent": [
+    "japan",
+    "kamchatka",
+    "western_united_states"
+   ]
+  },
+  {
+   "id": "greenland",
+   "name": "Greenland",
+   "continent": "north_america",
+   "adjacent": [
+    "iceland",
+    "northwest_territory",
+    "ontario",
+    "quebec",
+    "svalbard"
+   ]
+  },
+  {
+   "id": "northwest_territory",
+   "name": "Northwest Territory",
+   "continent": "north_america",
+   "adjacent": [
+    "alaska",
+    "alberta",
+    "greenland",
+    "ontario",
+    "quebec"
+   ]
+  },
+  {
+   "id": "alaska",
+   "name": "Alaska",
+   "continent": "north_america",
+   "adjacent": [
+    "alberta",
+    "kamchatka",
+    "northwest_territory"
+   ]
+  },
+  {
+   "id": "alberta",
+   "name": "Alberta",
+   "continent": "north_america",
+   "adjacent": [
+    "alaska",
+    "northwest_territory",
+    "ontario",
+    "western_united_states"
+   ]
+  },
+  {
+   "id": "ontario",
+   "name": "Ontario",
+   "continent": "north_america",
+   "adjacent": [
+    "alberta",
+    "eastern_united_states",
+    "greenland",
+    "northwest_territory",
+    "quebec",
+    "western_united_states"
+   ]
+  },
+  {
+   "id": "quebec",
+   "name": "Quebec",
+   "continent": "north_america",
+   "adjacent": [
+    "eastern_united_states",
+    "greenland",
+    "northwest_territory",
+    "ontario"
+   ]
+  },
+  {
+   "id": "western_united_states",
+   "name": "Western United States",
+   "continent": "north_america",
+   "adjacent": [
+    "alberta",
+    "central_america",
+    "eastern_united_states",
+    "hawaii",
+    "ontario"
+   ]
+  },
+  {
+   "id": "eastern_united_states",
+   "name": "Eastern United States",
+   "continent": "north_america",
+   "adjacent": [
+    "central_america",
+    "ontario",
+    "quebec",
+    "western_united_states"
+   ]
+  },
+  {
+   "id": "central_america",
+   "name": "Central America",
+   "continent": "north_america",
+   "adjacent": [
+    "eastern_united_states",
+    "venezuela",
+    "western_united_states"
+   ]
+  },
+  {
+   "id": "afghanistan",
+   "name": "Afghanistan",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "india",
+    "middle_east",
+    "ukraine",
+    "ural"
+   ]
+  },
+  {
+   "id": "china",
+   "name": "China",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "india",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural"
+   ]
+  },
+  {
+   "id": "india",
+   "name": "India",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "middle_east",
+    "siam"
+   ]
+  },
+  {
+   "id": "irkutsk",
+   "name": "Irkutsk",
+   "continent": "asia",
+   "adjacent": [
+    "kamchatka",
+    "mongolia",
+    "siberia",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "japan",
+   "name": "Japan",
+   "continent": "asia",
+   "adjacent": [
+    "hawaii",
+    "kamchatka",
+    "mongolia",
+    "philippines"
+   ]
+  },
+  {
+   "id": "kamchatka",
+   "name": "Kamchatka",
+   "continent": "asia",
+   "adjacent": [
+    "alaska",
+    "hawaii",
+    "irkutsk",
+    "japan",
+    "mongolia",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "middle_east",
+   "name": "Middle East",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "east_africa",
+    "egypt",
+    "india",
+    "southern_europe",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "mongolia",
+   "name": "Mongolia",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "siberia"
+   ]
+  },
+  {
+   "id": "siam",
+   "name": "Siam",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "india",
+    "indonesia"
+   ]
+  },
+  {
+   "id": "siberia",
+   "name": "Siberia",
+   "continent": "asia",
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "mongolia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "ural",
+   "name": "Ural",
+   "continent": "asia",
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "siberia",
+    "ukraine"
+   ]
+  },
+  {
+   "id": "yakutsk",
+   "name": "Yakutsk",
+   "continent": "asia",
+   "adjacent": [
+    "irkutsk",
+    "kamchatka",
+    "siberia"
+   ]
+  },
+  {
+   "id": "philippines",
+   "name": "Philippines",
+   "continent": "australia",
+   "adjacent": [
+    "indonesia",
+    "japan"
+   ]
+  },
+  {
+   "id": "new_zeeland",
+   "name": "New Zeeland",
+   "continent": "australia",
+   "adjacent": [
+    "argentina",
+    "eastern_australia"
+   ]
+  },
+  {
+   "id": "eastern_australia",
+   "name": "Eastern Australia",
+   "continent": "australia",
+   "adjacent": [
+    "new_guinea",
+    "new_zeeland",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "indonesia",
+   "name": "Indonesia",
+   "continent": "australia",
+   "adjacent": [
+    "new_guinea",
+    "philippines",
+    "siam",
+    "western_australia"
+   ]
+  },
+  {
+   "id": "new_guinea",
+   "name": "New Guinea",
+   "continent": "australia",
+   "adjacent": [
+    "eastern_australia",
+    "indonesia"
+   ]
+  },
+  {
+   "id": "western_australia",
+   "name": "Western Australia",
+   "continent": "australia",
+   "adjacent": [
+    "eastern_australia",
+    "indonesia"
+   ]
+  }
+ ],
+ "geometry": {
+  "svg": "worldMapExtended.svg",
+  "style": "exactly one <path id=\"Exact Territory Name\" d=\"...\"/> per territory (verified: all territories matched), grouped inside <g id=\"Continent Name\">. Attribute order is d= before id=. Names containing '&' appear HTML-escaped as '&amp;' in the id. Also contains a <g id=\"Seas\"> decorative group and label/army-circle elements.",
+  "verified": "47/47 territories have a geometry path"
+ },
+ "source": "https://github.com/sonesson89/TotalRisk  file: js/map/maps/.../world-extended",
+ "license": "Unlicense (public domain) - see LICENSE in this folder"
+}

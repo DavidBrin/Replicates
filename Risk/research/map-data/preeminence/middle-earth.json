@@ -1,0 +1,489 @@
+{
+ "$schema_version": "1.0",
+ "slug": "middle_earth",
+ "name": "Middle Earth",
+ "confidence": "MEDIUM-HIGH - internally consistent and fully symmetric; a fan-made Tolkien board, not an SMG map. WARNING: Tolkien place-names are Tolkien Estate IP - rename before shipping.",
+ "territory_count": 38,
+ "continent_count": 8,
+ "undirected_edge_count": 54,
+ "integrity": {
+  "asymmetric_edges": [],
+  "dangling_refs": []
+ },
+ "continents": [
+  {
+   "id": "beleriand",
+   "name": "Beleriand",
+   "bonus": null,
+   "territories": [
+    "forlond",
+    "grey_havens",
+    "harlond",
+    "north_blue_mountains",
+    "south_blue_mountains"
+   ]
+  },
+  {
+   "id": "eriador",
+   "name": "Eriador",
+   "bonus": null,
+   "territories": [
+    "angmar_of_old",
+    "bree",
+    "dunland",
+    "enedwaith",
+    "eregion",
+    "evendim",
+    "minhiriath",
+    "rivendell",
+    "the_shire"
+   ]
+  },
+  {
+   "id": "gondor",
+   "name": "Gondor",
+   "bonus": null,
+   "territories": [
+    "anfalas",
+    "belfalas",
+    "ithilien",
+    "minas_tirith",
+    "north_gondor"
+   ]
+  },
+  {
+   "id": "harad",
+   "name": "Harad",
+   "bonus": null,
+   "territories": [
+    "harondor",
+    "near_harad"
+   ]
+  },
+  {
+   "id": "misty_mountains",
+   "name": "Misty Mountains",
+   "bonus": null,
+   "territories": [
+    "gundabad",
+    "isengard",
+    "moria"
+   ]
+  },
+  {
+   "id": "mordor",
+   "name": "Mordor",
+   "bonus": null,
+   "territories": [
+    "ash_mountains",
+    "gorgoroth",
+    "mountains_of_shadow",
+    "nurn"
+   ]
+  },
+  {
+   "id": "rhovanion",
+   "name": "Rhovanion",
+   "bonus": null,
+   "territories": [
+    "grey_mountains",
+    "iron_hills",
+    "lorien",
+    "north_mirkwood",
+    "south_mirkwood",
+    "the_brown_lands"
+   ]
+  },
+  {
+   "id": "rohan",
+   "name": "Rohan",
+   "bonus": null,
+   "territories": [
+    "east_rohan",
+    "fangorn",
+    "helm_s_deep",
+    "west_rohan"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "forlond",
+   "name": "Forlond",
+   "continent": "beleriand",
+   "adjacent": [
+    "grey_havens"
+   ]
+  },
+  {
+   "id": "grey_havens",
+   "name": "Grey Havens",
+   "continent": "beleriand",
+   "adjacent": [
+    "forlond",
+    "harlond",
+    "north_blue_mountains",
+    "south_blue_mountains",
+    "the_shire"
+   ]
+  },
+  {
+   "id": "harlond",
+   "name": "Harlond",
+   "continent": "beleriand",
+   "adjacent": [
+    "grey_havens"
+   ]
+  },
+  {
+   "id": "north_blue_mountains",
+   "name": "North Blue Mountains",
+   "continent": "beleriand",
+   "adjacent": [
+    "grey_havens"
+   ]
+  },
+  {
+   "id": "south_blue_mountains",
+   "name": "South Blue Mountains",
+   "continent": "beleriand",
+   "adjacent": [
+    "grey_havens"
+   ]
+  },
+  {
+   "id": "evendim",
+   "name": "Evendim",
+   "continent": "eriador",
+   "adjacent": [
+    "angmar_of_old",
+    "bree",
+    "the_shire"
+   ]
+  },
+  {
+   "id": "angmar_of_old",
+   "name": "Angmar of Old",
+   "continent": "eriador",
+   "adjacent": [
+    "evendim",
+    "rivendell"
+   ]
+  },
+  {
+   "id": "the_shire",
+   "name": "The Shire",
+   "continent": "eriador",
+   "adjacent": [
+    "bree",
+    "evendim",
+    "grey_havens",
+    "minhiriath"
+   ]
+  },
+  {
+   "id": "bree",
+   "name": "Bree",
+   "continent": "eriador",
+   "adjacent": [
+    "evendim",
+    "minhiriath",
+    "rivendell",
+    "the_shire"
+   ]
+  },
+  {
+   "id": "rivendell",
+   "name": "Rivendell",
+   "continent": "eriador",
+   "adjacent": [
+    "angmar_of_old",
+    "bree",
+    "eregion"
+   ]
+  },
+  {
+   "id": "minhiriath",
+   "name": "Minhiriath",
+   "continent": "eriador",
+   "adjacent": [
+    "bree",
+    "enedwaith",
+    "eregion",
+    "the_shire"
+   ]
+  },
+  {
+   "id": "eregion",
+   "name": "Eregion",
+   "continent": "eriador",
+   "adjacent": [
+    "dunland",
+    "minhiriath",
+    "moria",
+    "rivendell"
+   ]
+  },
+  {
+   "id": "dunland",
+   "name": "Dunland",
+   "continent": "eriador",
+   "adjacent": [
+    "enedwaith",
+    "eregion"
+   ]
+  },
+  {
+   "id": "enedwaith",
+   "name": "Enedwaith",
+   "continent": "eriador",
+   "adjacent": [
+    "anfalas",
+    "dunland",
+    "isengard",
+    "minhiriath"
+   ]
+  },
+  {
+   "id": "gundabad",
+   "name": "Gundabad",
+   "continent": "misty_mountains",
+   "adjacent": [
+    "moria"
+   ]
+  },
+  {
+   "id": "moria",
+   "name": "Moria",
+   "continent": "misty_mountains",
+   "adjacent": [
+    "eregion",
+    "gundabad",
+    "isengard",
+    "lorien"
+   ]
+  },
+  {
+   "id": "isengard",
+   "name": "Isengard",
+   "continent": "misty_mountains",
+   "adjacent": [
+    "enedwaith",
+    "moria",
+    "west_rohan"
+   ]
+  },
+  {
+   "id": "grey_mountains",
+   "name": "Grey Mountains",
+   "continent": "rhovanion",
+   "adjacent": [
+    "iron_hills",
+    "north_mirkwood"
+   ]
+  },
+  {
+   "id": "north_mirkwood",
+   "name": "North Mirkwood",
+   "continent": "rhovanion",
+   "adjacent": [
+    "grey_mountains",
+    "iron_hills",
+    "south_mirkwood"
+   ]
+  },
+  {
+   "id": "iron_hills",
+   "name": "Iron Hills",
+   "continent": "rhovanion",
+   "adjacent": [
+    "grey_mountains",
+    "north_mirkwood",
+    "south_mirkwood"
+   ]
+  },
+  {
+   "id": "south_mirkwood",
+   "name": "South Mirkwood",
+   "continent": "rhovanion",
+   "adjacent": [
+    "iron_hills",
+    "lorien",
+    "north_mirkwood",
+    "the_brown_lands"
+   ]
+  },
+  {
+   "id": "the_brown_lands",
+   "name": "The Brown Lands",
+   "continent": "rhovanion",
+   "adjacent": [
+    "east_rohan",
+    "lorien",
+    "south_mirkwood"
+   ]
+  },
+  {
+   "id": "lorien",
+   "name": "Lorien",
+   "continent": "rhovanion",
+   "adjacent": [
+    "fangorn",
+    "moria",
+    "south_mirkwood",
+    "the_brown_lands"
+   ]
+  },
+  {
+   "id": "fangorn",
+   "name": "Fangorn",
+   "continent": "rohan",
+   "adjacent": [
+    "east_rohan",
+    "lorien",
+    "west_rohan"
+   ]
+  },
+  {
+   "id": "west_rohan",
+   "name": "West Rohan",
+   "continent": "rohan",
+   "adjacent": [
+    "east_rohan",
+    "fangorn",
+    "helm_s_deep",
+    "isengard"
+   ]
+  },
+  {
+   "id": "helm_s_deep",
+   "name": "Helm's Deep",
+   "continent": "rohan",
+   "adjacent": [
+    "west_rohan"
+   ]
+  },
+  {
+   "id": "east_rohan",
+   "name": "East Rohan",
+   "continent": "rohan",
+   "adjacent": [
+    "fangorn",
+    "minas_tirith",
+    "the_brown_lands",
+    "west_rohan"
+   ]
+  },
+  {
+   "id": "north_gondor",
+   "name": "North Gondor",
+   "continent": "gondor",
+   "adjacent": [
+    "anfalas",
+    "belfalas",
+    "ithilien",
+    "minas_tirith"
+   ]
+  },
+  {
+   "id": "anfalas",
+   "name": "Anfalas",
+   "continent": "gondor",
+   "adjacent": [
+    "belfalas",
+    "enedwaith",
+    "north_gondor"
+   ]
+  },
+  {
+   "id": "belfalas",
+   "name": "Belfalas",
+   "continent": "gondor",
+   "adjacent": [
+    "anfalas",
+    "harondor",
+    "ithilien",
+    "north_gondor"
+   ]
+  },
+  {
+   "id": "ithilien",
+   "name": "Ithilien",
+   "continent": "gondor",
+   "adjacent": [
+    "belfalas",
+    "harondor",
+    "minas_tirith",
+    "north_gondor"
+   ]
+  },
+  {
+   "id": "minas_tirith",
+   "name": "Minas Tirith",
+   "continent": "gondor",
+   "adjacent": [
+    "east_rohan",
+    "gorgoroth",
+    "ithilien",
+    "north_gondor"
+   ]
+  },
+  {
+   "id": "ash_mountains",
+   "name": "Ash Mountains",
+   "continent": "mordor",
+   "adjacent": [
+    "gorgoroth"
+   ]
+  },
+  {
+   "id": "gorgoroth",
+   "name": "Gorgoroth",
+   "continent": "mordor",
+   "adjacent": [
+    "ash_mountains",
+    "minas_tirith",
+    "nurn"
+   ]
+  },
+  {
+   "id": "nurn",
+   "name": "Nurn",
+   "continent": "mordor",
+   "adjacent": [
+    "gorgoroth",
+    "mountains_of_shadow"
+   ]
+  },
+  {
+   "id": "mountains_of_shadow",
+   "name": "Mountains of Shadow",
+   "continent": "mordor",
+   "adjacent": [
+    "nurn"
+   ]
+  },
+  {
+   "id": "harondor",
+   "name": "Harondor",
+   "continent": "harad",
+   "adjacent": [
+    "belfalas",
+    "ithilien",
+    "near_harad"
+   ]
+  },
+  {
+   "id": "near_harad",
+   "name": "Near Harad",
+   "continent": "harad",
+   "adjacent": [
+    "harondor"
+   ]
+  }
+ ],
+ "geometry": null,
+ "note": "Graph only - Preeminence ships NO coordinates or geometry, and no bonus values.",
+ "source": "https://github.com/DouglasOrr/Preeminence  maps/middle_earth.json",
+ "license": "MIT - see LICENSE in this folder"
+}

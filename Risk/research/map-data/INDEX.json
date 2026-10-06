@@ -1,0 +1,102 @@
+{
+ "generated": "2026-10-05",
+ "about": "Map data for a browser RISK: Global Domination replica. One folder per upstream source; each carries its own LICENSE or licence note.",
+ "start_here": "canonical/classic-world.json - the verified classic 42-territory graph (7 independent sources agree exactly).",
+ "playable_maps_with_geometry": [
+  {
+   "map": "Classic world",
+   "territories": 42,
+   "graph": "canonical/classic-world.json",
+   "geometry": "totalrisk/worldMap.svg OR risk-codelab/board.svg",
+   "licence": "Unlicense / Apache-2.0",
+   "confidence": "HIGH"
+  },
+  {
+   "map": "World Extended",
+   "territories": 47,
+   "graph": "totalrisk/world-extended.json",
+   "geometry": "totalrisk/worldMapExtended.svg",
+   "licence": "Unlicense",
+   "confidence": "MEDIUM"
+  },
+  {
+   "map": "Napoleonic Europe",
+   "territories": 59,
+   "graph": "totalrisk/napoleonic-europe.json",
+   "geometry": "totalrisk/napoleonMap.svg",
+   "licence": "Unlicense",
+   "confidence": "MEDIUM-HIGH"
+  }
+ ],
+ "graph_only_maps": [
+  {
+   "map": "Middle Earth",
+   "territories": 38,
+   "file": "preeminence/middle-earth.json",
+   "licence": "MIT",
+   "confidence": "MEDIUM-HIGH",
+   "warning": "Tolkien place-names are Tolkien Estate IP - rename before shipping"
+  },
+  {
+   "map": "Quad",
+   "territories": 20,
+   "file": "preeminence/quad.json",
+   "licence": "MIT",
+   "confidence": "HIGH"
+  },
+  {
+   "map": "Mini",
+   "territories": 6,
+   "file": "preeminence/mini.json",
+   "licence": "MIT",
+   "confidence": "HIGH"
+  },
+  {
+   "map": "Tiny3 / Tiny4",
+   "territories": "3 / 4",
+   "file": "preeminence/tiny3.json, preeminence/tiny4.json",
+   "licence": "MIT",
+   "confidence": "HIGH"
+  }
+ ],
+ "reference_catalogue": {
+  "file": "smg-catalogue/all-maps.json",
+  "maps": 134,
+  "has": "territory + region counts, map pack, size bucket, blizzard/portal counts, per-region bonus values",
+  "lacks": "adjacency and geometry (not published anywhere)",
+  "licence": "CC BY-SA 3.0 wiki text; the numbers are facts"
+ },
+ "geometry_toolkit": {
+  "naturalearth/": "PUBLIC DOMAIN country + admin-1 polygons (build any region)",
+  "topojson-atlas/": "ISC TopoJSON world + US states (small, web-ready)",
+  "wikimedia/BlankMap-World.svg": "PUBLIC DOMAIN world SVG with per-country ISO ids",
+  "country-borders/": "CC BY-SA 4.0 country land-border pairs (auto-derive adjacency; attribution required)"
+ },
+ "cross_check_only": {
+  "risk-neighborhood/": "MIT but 3 known errors - do not ship",
+  "conquest-tracker/": "MIT, exact graph + x,y label points, crude continent blobs",
+  "conquete/": "MIT, exact graph + best rules engine",
+  "gfceccon/": "CC0, exact graph"
+ },
+ "licence_rules": {
+  "safe_to_ship": [
+   "Unlicense",
+   "CC0-1.0",
+   "MIT",
+   "Apache-2.0",
+   "ISC",
+   "public domain"
+  ],
+  "attribution_required": [
+   "CC BY-SA 3.0/4.0 (also ShareAlike - viral)",
+   "geodatasource CC BY-SA 4.0"
+  ],
+  "never_ship": [
+   "Wikimedia Risk_board.svg / Risk_game_board.svg and the Risk board PNGs - traced from a retail Hasbro board",
+   "Domination community maps - no licence",
+   "Lux Delux / Warzone / TripleA maps - no licence or proprietary",
+   "amCharts geodata - linkware",
+   "djaiss/mapsicon - no licence, anti-resale"
+  ]
+ }
+}

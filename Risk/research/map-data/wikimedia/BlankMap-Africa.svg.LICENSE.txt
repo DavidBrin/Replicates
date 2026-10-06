@@ -1,0 +1,16 @@
+FILE: BlankMap-Africa.svg
+COMMONS PAGE: https://commons.wikimedia.org/wiki/File:BlankMap-Africa.svg
+DIRECT URL: https://upload.wikimedia.org/wikipedia/commons/f/f9/BlankMap-Africa.svg
+AUTHOR: User:Lokal_Profil, based on BlankMap-World6.svg by Canuckguy et al.
+LICENCE: PUBLIC DOMAIN. Permission (verbatim): "This work has been released into the public
+  domain by its author, Lokal_Profil. This applies worldwide. In some countries this may not
+  be legally possible; if so: Lokal_Profil grants anyone the right to use this work for any
+  purpose, without any conditions..."
+ATTRIBUTION: not required.
+VERDICT: SAFE TO REUSE, including commercially.
+DESCRIPTION (verbatim): "Political map of Africa. Detailed SVG map with grouping enabled to
+  connect all non-contiguous parts of a country's territory for easy colouring. Smaller
+  countries can also be represented by larger circles... All countries are tagged by their
+  ISO code." -- i.e. per-country selectable groups, same id convention as BlankMap-World.svg.
+NOTE: a same-family set of PD regional cuts exists on Commons (Africa, Europe, Asia, etc.),
+  all descended from BlankMap-World6.svg / BlankMap-World.svg and all PD.

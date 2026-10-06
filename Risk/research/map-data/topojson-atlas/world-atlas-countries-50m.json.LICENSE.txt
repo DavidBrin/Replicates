@@ -1,0 +1,8 @@
+FILE: world-atlas-countries-50m.json  (TopoJSON)
+SOURCE: https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json
+LICENCE: ISC (SPDX: ISC) for the packaging, Copyright 2013-2019 Michael Bostock;
+  underlying geometry is Natural Earth 1:50m = PUBLIC DOMAIN.
+  See world-atlas-countries-110m.json.LICENSE.txt for the verbatim ISC text.
+VERDICT: SAFE TO REUSE, including commercially.
+CONTENT: objects = {countries, land} at 1:50m medium scale -- better coastline detail than
+  110m, still small enough (~740 KB) to ship to a browser.

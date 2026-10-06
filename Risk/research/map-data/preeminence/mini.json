@@ -1,0 +1,97 @@
+{
+ "$schema_version": "1.0",
+ "slug": "mini",
+ "name": "Mini",
+ "confidence": "HIGH - small test board",
+ "territory_count": 6,
+ "continent_count": 2,
+ "undirected_edge_count": 7,
+ "integrity": {
+  "asymmetric_edges": [],
+  "dangling_refs": []
+ },
+ "continents": [
+  {
+   "id": "left",
+   "name": "Left",
+   "bonus": null,
+   "territories": [
+    "l1",
+    "l2",
+    "l3"
+   ]
+  },
+  {
+   "id": "right",
+   "name": "Right",
+   "bonus": null,
+   "territories": [
+    "r1",
+    "r2",
+    "r3"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "l1",
+   "name": "L1",
+   "continent": "left",
+   "adjacent": [
+    "l2",
+    "l3"
+   ]
+  },
+  {
+   "id": "l2",
+   "name": "L2",
+   "continent": "left",
+   "adjacent": [
+    "l1",
+    "l3"
+   ]
+  },
+  {
+   "id": "l3",
+   "name": "L3",
+   "continent": "left",
+   "adjacent": [
+    "l1",
+    "l2",
+    "r1"
+   ]
+  },
+  {
+   "id": "r1",
+   "name": "R1",
+   "continent": "right",
+   "adjacent": [
+    "l3",
+    "r2",
+    "r3"
+   ]
+  },
+  {
+   "id": "r2",
+   "name": "R2",
+   "continent": "right",
+   "adjacent": [
+    "r1",
+    "r3"
+   ]
+  },
+  {
+   "id": "r3",
+   "name": "R3",
+   "continent": "right",
+   "adjacent": [
+    "r1",
+    "r2"
+   ]
+  }
+ ],
+ "geometry": null,
+ "note": "Graph only - Preeminence ships NO coordinates or geometry, and no bonus values.",
+ "source": "https://github.com/DouglasOrr/Preeminence  maps/mini.json",
+ "license": "MIT - see LICENSE in this folder"
+}

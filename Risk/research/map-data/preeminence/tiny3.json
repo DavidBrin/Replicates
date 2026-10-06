@@ -1,0 +1,58 @@
+{
+ "$schema_version": "1.0",
+ "slug": "tiny3",
+ "name": "Tiny3",
+ "confidence": "HIGH - toy board",
+ "territory_count": 3,
+ "continent_count": 1,
+ "undirected_edge_count": 3,
+ "integrity": {
+  "asymmetric_edges": [],
+  "dangling_refs": []
+ },
+ "continents": [
+  {
+   "id": "all",
+   "name": "All",
+   "bonus": null,
+   "territories": [
+    "a",
+    "b",
+    "c"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "a",
+   "name": "A",
+   "continent": "all",
+   "adjacent": [
+    "b",
+    "c"
+   ]
+  },
+  {
+   "id": "b",
+   "name": "B",
+   "continent": "all",
+   "adjacent": [
+    "a",
+    "c"
+   ]
+  },
+  {
+   "id": "c",
+   "name": "C",
+   "continent": "all",
+   "adjacent": [
+    "a",
+    "b"
+   ]
+  }
+ ],
+ "geometry": null,
+ "note": "Graph only - Preeminence ships NO coordinates or geometry, and no bonus values.",
+ "source": "https://github.com/DouglasOrr/Preeminence  maps/tiny3.json",
+ "license": "MIT - see LICENSE in this folder"
+}

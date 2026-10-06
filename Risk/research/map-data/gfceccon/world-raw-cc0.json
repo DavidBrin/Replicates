@@ -1,0 +1,250 @@
+{
+    "continents": [
+        {
+            "name": "North America",
+            "territories": [
+                {
+                    "id": 1,
+                    "name": "Alaska",
+                    "borders": ["Northwest Territory", "Alberta", "Kamchatka"]
+                },
+                {
+                    "id": 2,
+                    "name": "Northwest Territory",
+                    "borders": ["Alaska", "Alberta", "Ontario", "Greenland"]
+                },
+                {
+                    "id": 3,
+                    "name": "Greenland",
+                    "borders": ["Northwest Territory", "Ontario", "Quebec", "Iceland"]
+                },
+                {
+                    "id": 4,
+                    "name": "Alberta",
+                    "borders": ["Alaska", "Northwest Territory", "Ontario", "Western United States"]
+                },
+                {
+                    "id": 5,
+                    "name": "Ontario",
+                    "borders": ["Northwest Territory", "Greenland", "Quebec", "Alberta", "Western United States", "Eastern United States"]
+                },
+                {
+                    "id": 6,
+                    "name": "Quebec",
+                    "borders": ["Greenland", "Ontario", "Eastern United States"]
+                },
+                {
+                    "id": 7,
+                    "name": "Western United States",
+                    "borders": ["Alberta", "Ontario", "Eastern United States", "Central America"]
+                },
+                {
+                    "id": 8,
+                    "name": "Eastern United States",
+                    "borders": ["Ontario", "Quebec", "Western United States", "Central America"]
+                },
+                {
+                    "id": 9,
+                    "name": "Central America",
+                    "borders": ["Western United States", "Eastern United States", "Venezuela"]
+                }
+            ],
+            "bonus": 5
+        },
+        {
+            "name": "South America",
+            "territories": [
+                {
+                    "id": 10,
+                    "name": "Venezuela",
+                    "borders": ["Central America", "Brazil", "Peru"]
+                },
+                {
+                    "id": 11,
+                    "name": "Brazil",
+                    "borders": ["Venezuela", "Peru", "Argentina", "North Africa"]
+                },
+                {
+                    "id": 12,
+                    "name": "Peru",
+                    "borders": ["Venezuela", "Brazil", "Argentina"]
+                },
+                {
+                    "id": 13,
+                    "name": "Argentina",
+                    "borders": ["Brazil", "Peru"]
+                }
+            ],
+            "bonus": 2
+        },
+        {
+            "name": "Europe",
+            "territories": [
+                {
+                    "id": 14,
+                    "name": "Iceland",
+                    "borders": ["Greenland", "Great Britain", "Scandinavia"]
+                },
+                {
+                    "id": 15,
+                    "name": "Great Britain",
+                    "borders": ["Iceland", "Scandinavia", "Northern Europe", "Western Europe"]
+                },
+                {
+                    "id": 16,
+                    "name": "Scandinavia",
+                    "borders": ["Iceland", "Great Britain", "Northern Europe", "Ukraine"]
+                },
+                {
+                    "id": 17,
+                    "name": "Northern Europe",
+                    "borders": ["Great Britain", "Scandinavia", "Ukraine", "Western Europe", "Southern Europe"]
+                },
+                {
+                    "id": 18,
+                    "name": "Ukraine",
+                    "borders": ["Scandinavia", "Northern Europe", "Southern Europe", "Ural", "Afghanistan", "Middle East"]
+                },
+                {
+                    "id": 19,
+                    "name": "Western Europe",
+                    "borders": ["Great Britain", "Northern Europe", "Southern Europe", "North Africa"]
+                },
+                {
+                    "id": 20,
+                    "name": "Southern Europe",
+                    "borders": ["Northern Europe", "Ukraine", "Western Europe", "North Africa", "Egypt", "Middle East"]
+                }
+            ],
+            "bonus": 5
+        },
+        {
+            "name": "Africa",
+            "territories": [
+                {
+                    "id": 21,
+                    "name": "North Africa",
+                    "borders": ["Brazil", "Western Europe", "Southern Europe", "Egypt", "East Africa", "Congo"]
+                },
+                {
+                    "id": 22,
+                    "name": "Egypt",
+                    "borders": ["Southern Europe", "North Africa", "East Africa", "Middle East"]
+                },
+                {
+                    "id": 23,
+                    "name": "East Africa",
+                    "borders": ["North Africa", "Egypt", "Congo", "South Africa", "Madagascar", "Middle East"]
+                },
+                {
+                    "id": 24,
+                    "name": "Congo",
+                    "borders": ["North Africa", "East Africa", "South Africa"]
+                },
+                {
+                    "id": 25,
+                    "name": "South Africa",
+                    "borders": ["Congo", "East Africa", "Madagascar"]
+                },
+                {
+                    "id": 26,
+                    "name": "Madagascar",
+                    "borders": ["East Africa", "South Africa"]
+                }
+            ],
+            "bonus": 3
+        },
+        {
+            "name": "Asia",
+            "territories": [
+                {
+                    "id": 27,
+                    "name": "Middle East",
+                    "borders": ["Ukraine", "Southern Europe", "Egypt", "East Africa", "Afghanistan", "India"]
+                },
+                {
+                    "id": 28,
+                    "name": "Afghanistan",
+                    "borders": ["Ukraine", "Middle East", "Ural", "China", "India"]
+                },
+                {
+                    "id": 29,   
+                    "name": "Ural",
+                    "borders": ["Ukraine", "Afghanistan", "Siberia", "China"]
+                },
+                {
+                    "id": 30,
+                    "name": "Siberia",
+                    "borders": ["Ural", "China", "Mongolia", "Irkutsk", "Yakutsk"]
+                },
+                {
+                    "id": 31,
+                    "name": "Yakutsk",
+                    "borders": ["Siberia", "Irkutsk", "Kamchatka"]
+                },
+                {
+                    "id": 32,
+                    "name": "Kamchatka",
+                    "borders": ["Yakutsk", "Irkutsk", "Mongolia", "Japan", "Alaska"]
+                },
+                {
+                    "id": 33,
+                    "name": "Irkutsk",
+                    "borders": ["Siberia", "Yakutsk", "Kamchatka", "Mongolia"]
+                },
+                {
+                    "id": 34,
+                    "name": "Mongolia",
+                    "borders": ["Siberia", "Irkutsk", "Kamchatka", "China", "Japan"]
+                },
+                {
+                    "id": 35,
+                    "name": "Japan",
+                    "borders": ["Kamchatka", "Mongolia"]
+                },
+                {
+                    "id": 36,
+                    "name": "China",
+                    "borders": ["Afghanistan", "Ural", "Siberia", "Mongolia", "India", "Siam"]
+                },
+                {
+                    "id": 37,
+                    "name": "India",
+                    "borders": ["Middle East", "Afghanistan", "China", "Siam"]
+                },
+                {
+                    "id": 38,
+                    "name": "Siam",
+                    "borders": ["China", "India", "Indonesia"]
+                }
+            ],
+            "bonus": 7
+        },
+        {
+            "name": "Australia",
+            "territories": [
+                {
+                    "id": 39,
+                    "name": "Indonesia",
+                    "borders": ["Siam", "New Guinea", "Western Australia"]
+                },
+                {
+                    "id": 40,
+                    "name": "New Guinea",
+                    "borders": ["Indonesia", "Western Australia", "Eastern Australia"]
+                },
+                {
+                    "id": 41,
+                    "name": "Western Australia",
+                    "borders": ["Indonesia", "New Guinea", "Eastern Australia"]
+                },
+                {
+                    "id": 42,
+                    "name": "Eastern Australia",
+                    "borders": ["New Guinea", "Western Australia"]
+                }
+            ],
+            "bonus": 2
+        }
+    ]
+}

@@ -1,0 +1,11 @@
+FILE: ne_110m_admin_0_countries.zip  (ESRI Shapefile bundle: .shp/.shx/.dbf/.prj/.cpg + README)
+SOURCE (official CDN): https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip
+  (naciscdn.org is Natural Earth's own CDN. The legacy
+   https://www.naturalearthdata.com/http//www.naturalearthdata.com/download/110m/cultural/...zip
+   style URLs now return HTTP 406 and should not be used.)
+LICENCE: PUBLIC DOMAIN. https://www.naturalearthdata.com/about/terms-of-use/
+  "All versions of Natural Earth raster + vector map data found on this website are in the
+   public domain." / "No permission is needed to use Natural Earth. Crediting the authors is
+   unnecessary."
+ATTRIBUTION: NOT required.
+VERDICT: SAFE TO REUSE, including commercially.

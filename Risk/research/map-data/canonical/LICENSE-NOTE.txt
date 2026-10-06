@@ -1,0 +1,30 @@
+classic-world.json — the verified canonical Risk classic world map (42 territories, 6 continents, 83 edges).
+
+LICENCE STATUS: no licence restriction applies to this file's substance.
+
+WHY
+- The contents are FACTS about a published board game: territory names, which territory
+  borders which, how many armies each continent is worth. Facts and discovered
+  information are not copyrightable (no originality in a factual border list).
+- The file was not copied from any single source. It was BUILT by diffing nine
+  independent open-source adjacency lists and adjudicating the five edges they
+  disagreed on. See the "verification" and "adjudications" blocks inside the JSON.
+- Seven of those nine sources agree with this graph exactly, and they are variously
+  MIT, Apache-2.0, CC0 and Unlicense — all permissive. The two that disagreed were
+  overruled, so nothing was taken from them.
+
+ATTRIBUTION (courtesy, not required)
+  Cross-verified against: arjanfrans/conquete (MIT), Zach-Hayton/Conquest-Tracker (MIT),
+  DouglasOrr/Preeminence (MIT), gfceccon/risk (CC0-1.0), AndreasThinks/ai-at-risk (MIT),
+  dartlangfr/risk-codelab (Apache-2.0), hcekne/risk-game (Apache-2.0),
+  plus Wikipedia "Risk (game)" and the RISK: Global Domination Fandom wiki.
+
+GEOMETRY IS SEPARATE
+  This file carries NO geometry. The SVG paths live in ../totalrisk/worldMap.svg
+  (Unlicense / public domain) and ../risk-codelab/board.svg (Apache-2.0). Honour
+  those licences when you ship the artwork.
+
+TRADEMARK WARNING
+  "RISK" is a trademark of Hasbro, and the retail board artwork is Hasbro's copyright.
+  This graph is safe to use; the NAME is not. Do not call the product "Risk", and do
+  not ship Hasbro's board art or SMG Studio's map images.

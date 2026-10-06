@@ -1,0 +1,168 @@
+@import "tailwindcss" source(none);
+
+/*
+ * Scan the source tree, and only the source tree. Tailwind v4's automatic
+ * content walk would otherwise read `research/screenshots/*.jpg` and extract
+ * "class names" from compressed bytes — a lesson the Linear replica learned
+ * as a 500 on every route.
+ */
+@source "../**/*.{ts,tsx}";
+
+/*
+ * Design tokens — measured from the real game's frames (SPEC §8,
+ * research/04-visual-design.md §8.1). Every colour a menu, dialog, HUD or map
+ * painter needs is a variable here so slices agree on the exact value without
+ * importing each other. Relationships are fixed; values are tunable.
+ */
+:root {
+  /* ---------- board ---------- */
+  --ocean:            #22A4C8;
+  --ocean-deep:       #06202A;
+  --ocean-glow:       #7FE3FF;
+  --ocean-line:       rgba(255,255,255,.10);
+  --land-neutral:     #6B7785;
+  --land-outline:     #0B0B0D;
+  --land-wall:        #07070A;
+  --sea-route:        rgba(255,255,255,.85);
+
+  /* ---------- chrome ---------- */
+  --chrome-900:       #0D1E30;   /* menu base            */
+  --chrome-800:       #101D24;   /* solid panel          */
+  --chrome-700:       rgba(12,42,52,.70);  /* HUD glass  */
+  --chrome-600:       #2A7F9E;   /* menu card top        */
+  --chrome-650:       #1B5570;   /* menu card bottom     */
+  --chrome-line:      #4E9CBB;   /* card border          */
+  --tray:             linear-gradient(#B9B6B0,#8E8B85);
+  --scrim:            rgba(0,0,0,.42);
+  --scrim-heavy:      rgba(0,0,0,.55);
+
+  /* ---------- semantic ---------- */
+  --go:               #A6DC5F;
+  --go-mid:           #7FBE42;
+  --go-deep:          #4E7C2A;
+  --go-bezel:         #3E6420;
+  --danger:           #D8415C;
+  --danger-deep:      #8C2739;
+  --ok:               #7ED957;
+  --ok-deep:          #55B13C;
+  --gold:             #F0C40F;   /* win chance, active toggle glyph */
+  --cyan:             #19A7DB;   /* active segmented toggle         */
+  --amber-top:        #E6A93A;
+  --amber-bottom:     #EFCB55;
+  --amber-border:     #EDC94F;
+  --brand-red:        #C42A30;
+  --disabled:         #757575;
+  --disabled-line:    #505050;
+
+  /* ---------- paper (cards) ---------- */
+  --paper:            #F3E6CB;
+  --paper-edge:       #D8C9A4;
+  --suit:             #BE2E36;
+
+  /* ---------- text ---------- */
+  --text:             #FFFFFF;
+  --text-muted:       #A9B6BC;
+  --text-dim:         #6D8792;
+  --text-on-amber:    #4A3410;
+  --text-on-paper:    #2A2318;
+  --stroke-dark:      #161616;
+
+  /* ---------- continents ---------- */
+  --c-na: #36B0EA;  --c-na-fill: #0A2431;
+  --c-sa: #DA3A4F;  --c-sa-fill: #300B0C;
+  --c-eu: #5FBF2A;  --c-eu-fill: #1B310B;
+  --c-af: #9B4AE8;  --c-af-fill: #1E0D31;
+  --c-as: #E08A24;  --c-as-fill: #180D02;
+  --c-au: #F0C33A;  --c-au-fill: #312A0F;
+
+  /* ---------- radii ---------- */
+  --r-pill:  999px;
+  --r-card:  18px;   /* territory card            */
+  --r-panel: 12px;   /* dark panels               */
+  --r-menu:  10px;   /* menu tiles                */
+  --r-tray:  18px;   /* grey icon-button tray     */
+  --r-tip:   30px;   /* tutorial card             */
+  --r-sheet: 20px;   /* top amber banner, bottom  */
+
+  /* ---------- shadows ---------- */
+  --sh-token:  0 4px 6px rgba(0,0,0,.45);
+  --sh-chip:   0 3px 6px rgba(0,0,0,.40);
+  --sh-panel:  0 10px 26px rgba(0,0,0,.50);
+  --sh-card:   0 10px 18px rgba(0,0,0,.50);
+  --sh-float:  0 14px 40px rgba(0,0,0,.60);
+  --bezel-go:   0 4px 0 var(--go-bezel);
+  --bezel-red:  0 4px 0 #6F1A28;
+
+  /* ---------- type ---------- */
+  --fw-head: 700;  --fw-black: 900;  --fw-body: 500;
+  --ts-xs: .75rem; --ts-sm: .875rem; --ts-md: 1rem;
+  --ts-lg: 1.375rem; --ts-xl: 1.875rem; --ts-2xl: 2.5rem; --ts-3xl: 3.5rem;
+
+  /* ---------- spacing (4px base) ---------- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+
+  /* ---------- z layers ---------- */
+  --z-ocean:        0;
+  --z-land:        10;
+  --z-routes:      20;
+  --z-highlight:   30;   /* selected outlines, continent glow */
+  --z-arrow:       40;
+  --z-tokens:      50;
+  --z-labels:      60;
+  --z-floaters:    70;   /* damage numerals, +N          */
+  --z-hud:        100;   /* roster, action bar, icons    */
+  --z-scrim:      200;
+  --z-modal:      210;   /* cards, dice, sliders         */
+  --z-banner:     220;   /* turn banner, amber confirm   */
+  --z-tip:        230;
+  --z-toast:      240;
+
+  /* ---------- players (research/04 §8.2): token / face highlight / land / wall / selected / text-on ---------- */
+  --p-red: #D93244; --p-red-light: #EC5C6B; --p-red-dark: #A8293A; --p-red-wall: #6E1A25; --p-red-hot: #F4001A; --p-red-on: #FFFFFF;
+  --p-green: #8FC94F; --p-green-light: #AEDB78; --p-green-dark: #4A7A3C; --p-green-wall: #2E4E26; --p-green-hot: #5FE800; --p-green-on: #12300A;
+  --p-blue: #4DABF1; --p-blue-light: #7DC5F6; --p-blue-dark: #3A7FB5; --p-blue-wall: #245173; --p-blue-hot: #009BFF; --p-blue-on: #06243A;
+  --p-yellow: #E0B52E; --p-yellow-light: #EFCE63; --p-yellow-dark: #B59525; --p-yellow-wall: #745F17; --p-yellow-hot: #FFC800; --p-yellow-on: #3A2C00;
+  --p-orange: #E7773D; --p-orange-light: #F29A6C; --p-orange-dark: #B5652C; --p-orange-wall: #73401C; --p-orange-hot: #FF6A00; --p-orange-on: #3A1704;
+  --p-pink: #D139AD; --p-pink-light: #E36CC6; --p-pink-dark: #9B2A80; --p-pink-wall: #631A52; --p-pink-hot: #FF00C8; --p-pink-on: #FFFFFF;
+  --p-black: #3D3D3D; --p-black-light: #5E5E5E; --p-black-dark: #2B2B2D; --p-black-wall: #141415; --p-black-hot: #000000; --p-black-on: #FFFFFF;
+  --p-white: #D3D4D4; --p-white-light: #EDEEEE; --p-white-dark: #B4B7BA; --p-white-wall: #7B8085; --p-white-hot: #FFFFFF; --p-white-on: #1A1D1F;
+  --p-purple: #7B3FE0; --p-purple-light: #9D6FEB; --p-purple-dark: #4A2A86; --p-purple-wall: #2E1A55; --p-purple-hot: #4A00E9; --p-purple-on: #FFFFFF;
+}
+
+@theme inline {
+  --font-head: var(--font-head), "Titillium Web", "Barlow Semi Condensed", system-ui, sans-serif;
+  --font-body: var(--font-body), "Barlow", "Titillium Web", system-ui, sans-serif;
+  --color-ocean: var(--ocean);
+  --color-chrome-900: var(--chrome-900);
+  --color-chrome-800: var(--chrome-800);
+  --color-go: var(--go);
+  --color-go-deep: var(--go-deep);
+  --color-danger: var(--danger);
+  --color-gold: var(--gold);
+  --color-paper: var(--paper);
+}
+
+html, body {
+  background: var(--chrome-900);
+  color: var(--text);
+  font-family: var(--font-body), "Barlow", system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
+/* The signature treatment: outlined text over the board (D45). */
+.on-board-text {
+  font-family: var(--font-head), "Titillium Web", system-ui, sans-serif;
+  font-weight: var(--fw-black);
+  color: var(--text);
+  paint-order: stroke fill;
+  -webkit-text-stroke: 3px var(--stroke-dark);
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
