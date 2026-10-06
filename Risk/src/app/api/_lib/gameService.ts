@@ -393,6 +393,22 @@ async function appendOwed(
  * below cannot be raced either; the `23505` catch underneath it is belt and
  * braces rather than the mechanism.
  */
+/**
+ * The actions R80 deliberately does **not** turn-gate (see the fence below).
+ *
+ * Read off the POST body rather than off the folded action, because the fence
+ * runs before the body is turned into an `Action`; an `intent` is an attack and
+ * never diplomacy.
+ */
+function isDiplomacy(post: ActionPost): boolean {
+  return (
+    post.kind === "action" &&
+    (post.action.type === "ALLIANCE_PROPOSE" ||
+      post.action.type === "ALLIANCE_ACCEPT" ||
+      post.action.type === "ALLIANCE_BREAK")
+  );
+}
+
 export async function submitAction(
   gameId: string,
   playerId: string,
@@ -431,7 +447,19 @@ export async function submitAction(
       }
 
       const { map, state } = await withFold(tx, engine, row);
-      if (currentSeatOf(state) !== seat) return { kind: "notYourTurn" };
+      // The turn fence — but **not** for the three alliance actions.
+      //
+      // R80's alliances are diplomacy, not play: `validateAlliance` gates them
+      // on `rules.alliances` and on both seats still being contenders and on
+      // nothing else, deliberately skipping the `turnGate` every other action
+      // runs through, because an offer you can only accept during your own turn
+      // is an offer nobody would ever take. Applying this fence to them made
+      // `ALLIANCE_ACCEPT` answer `409 notYourTurn` for every seat but the one
+      // to play, which is the whole feature. Seated-ness is still required —
+      // `seatOf` above — and still-playing-ness is the engine's to enforce.
+      if (!isDiplomacy(post) && currentSeatOf(state) !== seat) {
+        return { kind: "notYourTurn" };
+      }
 
       // The authenticated seat wins over the body's claim: the cookie is the
       // only thing that was verified.

@@ -185,8 +185,20 @@ function claimCandidates(state: GameState, seat: Seat): Action[] {
  * so this needs to know nothing about which transitions the reducer allows —
  * which matters, because §3's phase machine is S1's and `END_TURN` out of
  * `draft` is exactly the sort of thing that is legal in one reading and not
- * in another. §5.6's table is the order: place what is unplaced, then end the
- * turn, then fall back to ending the phase.
+ * in another. §5.6's table is the order — "`END_PHASE` / `END_TURN`" — so:
+ * place what is unplaced, then end the **phase**, and only end the turn when
+ * no phase exit is legal.
+ *
+ * **`END_PHASE` before `END_TURN` is load-bearing, not cosmetic.** `END_TURN`
+ * is legal out of `attack` (the reducer offers both there), so offering it
+ * first sent a timed-out attacking seat straight past `fortify` — and the R20
+ * card award is pinned to `fortify` by `owedServerAction` and by
+ * `validateCardDrawn`, so a seat that conquered and then ran out of time was
+ * silently robbed of the card it had earned. Ending the phase instead walks the
+ * seat through `fortify` in the same tick (the timeout stands until the seat
+ * changes hands), the award lands there, and `END_TURN` comes out of `fortify`,
+ * which is its only legal exit (R67). `nextBotAction` has always ordered the
+ * two this way; the timeout path simply disagreed with it.
  */
 export function autoSkipAction(
   engine: ServerEngine,
@@ -203,7 +215,7 @@ export function autoSkipAction(
     try {
       targets = engine.legalDraftTargets(state, seat);
     } catch {
-      // The engine cannot answer yet (S1 pending). The END_TURN / END_PHASE
+      // The engine cannot answer yet (S1 pending). The END_PHASE / END_TURN
       // candidates below still move the game on.
       targets = [];
     }
@@ -213,8 +225,8 @@ export function autoSkipAction(
     }
   }
 
-  candidates.push({ type: "END_TURN", seat });
   candidates.push({ type: "END_PHASE", seat });
+  candidates.push({ type: "END_TURN", seat });
 
   for (const candidate of candidates) {
     if (engine.validate(state, map, candidate) === null) return candidate;

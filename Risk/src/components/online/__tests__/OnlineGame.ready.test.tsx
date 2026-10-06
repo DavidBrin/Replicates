@@ -106,9 +106,17 @@ vi.mock("@/game/session", () => ({
       ingest: (rows: readonly { seq: number }[]) => {
         sessions.log.push(`actions:${rows.map((row) => row.seq).join(",")}`);
       },
-      ingestSnapshot: (snapshot: unknown, at: number) => {
+      ingestSnapshot: (
+        snapshot: unknown,
+        at: number,
+        animate?: readonly { seq: number }[],
+      ) => {
         sessions.snapshots.push(snapshot);
-        sessions.log.push(`snapshot:${at}`);
+        sessions.log.push(
+          animate === undefined
+            ? `snapshot:${at}`
+            : `snapshot:${at}+animate:${animate.map((r) => r.seq).join(",")}`,
+        );
       },
     };
   }),
@@ -378,10 +386,12 @@ describe("catching the new session up on the buffered bodies", () => {
     });
     await waitFor(() => expect(sessions.count).toBe(1));
 
+    // An authoritative snapshot keeps snapshot-then-fold, and carries no
+    // `animate` argument: its rows are a real delta.
     expect(sessions.log).toEqual(["snapshot:1", "actions:2"]);
   });
 
-  it("replays a masked view's actions BEFORE the view, and drops the unfoldable rows", async () => {
+  it("replays a masked view's actions AS the view's animation, dropping the unfoldable rows", async () => {
     mapMode = "deferred";
     render(<OnlineGame gameId="g_1" />);
     await waitFor(() => expect(emitSync).not.toBeNull());
@@ -413,9 +423,12 @@ describe("catching the new session up on the buffered bodies", () => {
     });
     await waitFor(() => expect(sessions.count).toBe(1));
 
-    // Snapshot-first would have set `folded` to 9 and skipped the lot; the two
-    // redacted rows are not foldable at all.
-    expect(sessions.log).toEqual(["actions:9", "snapshot:9"]);
+    // A masked view's rows are animation, never a delta: they do not apply to
+    // a masked state, so `ingest` would refuse them and the session would read
+    // the refusal as a desync. They ride the snapshot as `ingestSnapshot`'s
+    // third argument instead, and `ingest` is never called at all. The two
+    // redacted rows are not even animatable, so they are dropped first.
+    expect(sessions.log).toEqual(["snapshot:9+animate:9"]);
   });
 });
 

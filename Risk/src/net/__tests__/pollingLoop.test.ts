@@ -312,6 +312,65 @@ describe("the loop", () => {
     expect(poll).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * The exception `resync()` needs (§5.8, D16).
+   *
+   * A desync is discovered *inside* the poll that delivered the offending row,
+   * so the in-flight poll `pollNow` would join is the one the caller has
+   * already rejected: joining it means the cold read is never issued at all.
+   * `pollFresh` waits that poll out and then asks again.
+   */
+  it("pollFresh waits an in-flight poll out and then issues its own", async () => {
+    const time = clock();
+    const released: (() => void)[] = [];
+    const poll = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          released.push(resolve);
+        }),
+    );
+    const loop = createPollingLoop({
+      poll,
+      intervalMs: () => 4000,
+      now: time.now,
+      schedule: time.schedule,
+      random: () => 0.5,
+    });
+
+    loop.start();
+    await Promise.resolve();
+    expect(poll).toHaveBeenCalledTimes(1);
+
+    const fresh = loop.pollFresh();
+    // Still waiting: it has not raced a second request alongside the first.
+    expect(poll).toHaveBeenCalledTimes(1);
+
+    released.shift()?.();
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+    expect(poll).toHaveBeenCalledTimes(2);
+
+    released.shift()?.();
+    await fresh;
+    expect(poll).toHaveBeenCalledTimes(2);
+  });
+
+  it("pollFresh issues exactly one request when nothing is in flight", async () => {
+    const time = clock();
+    const poll = vi.fn(async () => undefined);
+    const loop = createPollingLoop({
+      poll,
+      intervalMs: () => 4000,
+      now: time.now,
+      schedule: time.schedule,
+      random: () => 0.5,
+      visibility: { isVisible: () => true, subscribe: () => () => undefined },
+    });
+
+    await loop.pollFresh();
+    expect(poll).toHaveBeenCalledTimes(1);
+    loop.stop();
+  });
+
   it("stop() cancels the pending tick and polls no more", async () => {
     const time = clock();
     const poll = vi.fn(async () => undefined);
