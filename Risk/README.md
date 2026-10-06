@@ -138,7 +138,9 @@ the Neutral Army: the original's third, neutral holding, here **off unless asked
 battle of the game with who lost what and where (D108); the Continent Overlay repaints
 the whole board by continent with the bonus badges riding the land (D109); the card
 panel opens with the best set already picked (D110); a fortify ends the turn (D107);
-and the red ✗ at the top-left — and on the victory frame — goes home (D111).
+eliminating a seat and inheriting your way to five cards sends you straight back to
+the draft to trade (D114); and the red ✗ at the top-left — and on the victory frame —
+goes home (D111).
 
 **Bots.** Five tiers labelled as the original labels them — Beginner, Easy, Medium,
 Hard, Expert. They differ by *policy*, not by arithmetic: every tier computes the same

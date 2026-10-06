@@ -11,6 +11,7 @@ import { buildState, card, startedAction, territoryCard, persona } from "./__fix
 import { classicWorld, mini, tiny4 } from "./__fixtures__/maps";
 import { apply, createInitialState } from "./reducer";
 import { legalActions } from "./legalActions";
+import { cardSets } from "./cards";
 import { validate } from "./validate";
 import { hashState } from "./hash";
 import {
@@ -916,13 +917,12 @@ describe("R22–R27 — trading", () => {
     });
   });
 
-  it("R26 — an inheritance that leaves the hand UNDER six waits for the next turn, even after a trade", () => {
+  it("R26/D114 — an inheritance back UP to five bounces for a same-turn trade, even after a trade", () => {
     /*
-     * Codex round 2, finding 9: the mid-trade-down predicate must stay keyed on R27's bounce and
-     * not be re-derived from the hand size. Seat 0 opens with five and a set (R24 forces the
-     * trade), comes down to two, then eliminates a seat holding three and is back at five —
-     * `hand.length + 3 * setsTradedThisTurn = 8`, yet it has never held six and R26 explicitly
-     * defers this hand to its next turn.
+     * Codex round 2, finding 9 shaped this walk: seat 0 opens with five and a set (R24 forces
+     * the trade), comes down to two, then eliminates a seat holding three and is back at five.
+     * Under D114 five is the trigger, so the seizure bounces play back to draft at once; the
+     * mid-trade-down predicate is still keyed on R27's bounce, never on the hand size.
      */
     const state = buildState(mini, {
       seats: 3,
@@ -947,11 +947,35 @@ describe("R22–R27 — trading", () => {
 
     expect(s.seats[0]?.cards).toHaveLength(5);
     expect(s.setsTradedThisTurn).toBe(1);
-    // No bounce, so no trade-down is owed: play simply carries on in attack.
+    // D114 — five is the trigger: the seizure bounces, and the only move is the trade.
+    expect(s.phase).toBe("draft");
+    expect(s.resumePhase).toBe("attack");
+    expect(legalActions(s, mini, 0)).toEqual(["TRADE_CARDS"]);
+    const set = cardSets(s.seats[0]?.cards ?? [])[0] as [string, string, string];
+    s = ok(s, mini, { type: "TRADE_CARDS", seat: 0, cards: set, bonusTerritory: null }).state;
+    expect(s.seats[0]?.cards).toHaveLength(2);
+    s = ok(s, mini, { type: "DRAFT", seat: 0, territory: 0, count: s.troopsToPlace }).state;
+    s = ok(s, mini, { type: "END_PHASE", seat: 0 }).state;
+    expect(s.phase).toBe("attack");
+    expect(ok(s, mini, { type: "END_TURN", seat: 0 }).state.currentIndex).toBe(2);
+  });
+
+  it("R26 — an inheritance that leaves the hand at FOUR waits for the next turn", () => {
+    const state = buildState(mini, {
+      seats: 3,
+      owners: [0, 0, 0, 1, 2, 2],
+      troops: [1, 1, 6, 1, 1, 1],
+      phase: "attack",
+      hands: { 0: [inf("a1"), cav("a2")], 1: [cav("v1"), art("v2")] },
+    });
+    let s = ok(state, mini, {
+      type: "ATTACK", seat: 0, from: 2, to: 3, mode: "blitz", attackerLosses: 0, defenderLosses: 1,
+    }).state;
+    s = ok(s, mini, { type: "MOVE_IN", seat: 0, count: 3 }).state;
+    expect(s.seats[0]?.cards).toHaveLength(4);
     expect(s.phase).toBe("attack");
     expect(s.resumePhase).toBeNull();
     expect(legalActions(s, mini, 0)).toContain("END_TURN");
-    expect(ok(s, mini, { type: "END_TURN", seat: 0 }).state.currentIndex).toBe(2);
   });
 
   it("R28/F51 — a seven-card hand returns illegalAction rather than throwing", () => {

@@ -251,8 +251,14 @@ describe("the three card-timing branches", () => {
     expect(mustTradeNow(nextTurn, 0)).toBe(true);
   });
 
-  it("R26 — an inheritance that leaves you under six waits for your next turn", () => {
-    const state = buildState(mini, { phase: "attack", hands: { 0: fiveCards } });
+  it("R26/D114 — an inheritance to five IS a trade-down once the reducer has bounced it", () => {
+    const state = buildState(mini, { phase: "draft", resumePhase: "attack", hands: { 0: fiveCards } });
+    expect(mustTradeDown(state, 0)).toBe(true);
+    expect(mustTradeNow(state, 0)).toBe(true);
+  });
+
+  it("R26 — an inheritance that leaves you under five waits for your next turn", () => {
+    const state = buildState(mini, { phase: "attack", hands: { 0: fiveCards.slice(0, 4) } });
     expect(mustTradeDown(state, 0)).toBe(false);
     expect(mustTradeNow(state, 0)).toBe(false);
   });

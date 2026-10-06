@@ -1726,7 +1726,7 @@ describe("the scripted double agrees with the real engine", () => {
         seat: 0,
         state: hand([...SET, cav("x"), cav("y")], { resumePhase: "attack", setsTradedThisTurn: 1 }),
       },
-      // ...and the hand of five that arrived by inheritance alone, which R26 defers.
+      // ...and the hand of five that arrived by inheritance alone — bounced, so D114 forces it.
       {
         label: "five inherited, nothing traded",
         seat: 0,

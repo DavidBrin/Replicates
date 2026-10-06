@@ -859,7 +859,10 @@ describe("fog with the real viewFor", () => {
   });
 
   it("hides something from each side and shows each side its own board", async () => {
-    const game = await twoPlayerGame({ ...TEST_RULES, fogOfWar: true });
+    // With the neutral holding on (D106) the deal is three piles of fourteen, so each seat has
+    // territories it neither holds nor borders. Two seats splitting forty-two can each border
+    // every enemy tile, which hides nothing and is not a fog defect.
+    const game = await twoPlayerGame({ ...TEST_RULES, fogOfWar: true, neutralHolding: true });
     const mine = (await (await poll(game.a, game.gameId, 0)).json()) as { snapshot: GameState };
     const theirs = (await (await poll(game.b, game.gameId, 0)).json()) as { snapshot: GameState };
     expect(mine.snapshot.territories).not.toEqual(theirs.snapshot.territories);

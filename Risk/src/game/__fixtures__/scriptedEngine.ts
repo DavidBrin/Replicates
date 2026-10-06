@@ -229,7 +229,7 @@ export function mustTradeNow(state: GameState, seat: Seat): boolean {
   if (state.turnOrder[state.currentIndex] !== seat) return false;
   if (!cardSets(s.cards).length) return false;
   if (state.resumePhase !== null) {
-    if (s.cards.length >= 6) return true;
+    if (s.cards.length >= 5) return true; // D114 — the seizure trigger is five
     if (s.cards.length > TRADE_DOWN_FLOOR && state.setsTradedThisTurn > 0) return true;
   }
   return s.cards.length >= 5 && state.setsTradedThisTurn === 0 && state.phase === "draft";

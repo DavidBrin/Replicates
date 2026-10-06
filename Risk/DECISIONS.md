@@ -1100,3 +1100,17 @@ Which seat wins is deliberately **not** asserted: the offline seed is minted per
 **Decision.** Where the original shows the acting seat's avatar in the action bar, this build shows the troops still to deploy during the draft phase — a 92 px disc in the seat's colour — and nothing at all in every other phase; a same-sized spacer keeps the primary pill centred. The roster capsule already marks whose turn it is.
 
 **Why.** Review feedback: the number left to draft is the one thing the player needs at that moment, and the avatar was covering territory.
+
+## D113 — One key, one job: the board does not pan while a dialog owns the keyboard
+
+**Decision.** The board's keyboard map (arrows / WASD to pan, `+` `−` to zoom, `0` to reset) is ignored while any modal is open and while focus is in a text field. The count slider's own keys (← → step, `1` `5` `0`, Enter, Escape) are the only thing an arrow does while it is up.
+
+**Why.** Review feedback: pressing ← → to change the troop count also slid the map. Two listeners on `window` both answered the same key.
+
+## D114 — A seizure to five cards forces the same-turn trade, not six
+
+**Decision.** `SEIZURE_TRADE_THRESHOLD` is five. Eliminating a seat and inheriting its hand to **five or more** bounces play back to `draft` at once (R26, R27) and the only legal action is the trade, down to four or fewer; an inheritance to four waits for the next turn. R25 is unchanged: the end-of-turn reward draw to five or six forces nothing, because the trade-down is still keyed on the bounce marker and the award never sets it.
+
+**Why.** Review feedback: five is already a hand that must trade at the next draft (R24), so letting a seat end its turn on five and then draw to six was the one way past five — and the cap of six was being reached by inheritance plus award. With the trigger at five, the only hand that can reach six is R25's own award, as the rules intend.
+
+**Consequence.** The walk codex round 2 (finding 9) shaped — trade at turn start to two, inherit three, back to five — now bounces instead of waiting, and its test says so; the predicate is still keyed on `resumePhase`, never on the hand size.

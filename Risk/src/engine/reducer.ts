@@ -25,7 +25,7 @@
  *   is the seizure-without-conquest case R28's hand-size check can still
  *   produce. One site, one order.
  */
-import { cardTradeValue, hasSet } from "./cards";
+import { cardTradeValue, hasSet, SEIZURE_TRADE_THRESHOLD } from "./cards";
 import { continentsHeldBy } from "./continents";
 import { diceAugmentFor, resolveManualRoll } from "./modifiers";
 import {
@@ -268,7 +268,8 @@ function bounceForTradeDown(d: Draft, seat: Seat): boolean {
   if (d.phase === "claim" || d.phase === "over") return false;
   const row = d.seats[seat];
   if (row === undefined) return false;
-  if (row.cards.length < 6 || !hasSet(row.cards)) return false;
+  // D114 — the trigger is five, not six: five already owes R24's trade at the next draft.
+  if (row.cards.length < SEIZURE_TRADE_THRESHOLD || !hasSet(row.cards)) return false;
   if (d.phase === "draft") {
     d.resumePhase ??= "attack";
     return true;

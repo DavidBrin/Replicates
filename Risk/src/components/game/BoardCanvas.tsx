@@ -170,6 +170,11 @@ export function BoardCanvas({ session, hidden, legend }: BoardCanvasProps) {
     stage.addEventListener("pointermove", onHover);
     stage.addEventListener("pointerleave", onLeave);
     const onKey = (event: KeyboardEvent) => {
+      // One key, one job (D113): while a dialog owns the keyboard — the count slider steps on
+      // ← → — the board must not also pan. Typing in a field never pans either.
+      if (session.store.getState().modal !== null) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (input.handleKey(event.key)) event.preventDefault();
       if (event.key === "0") {
         const cam = cameraRef.current;

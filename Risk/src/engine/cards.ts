@@ -167,6 +167,14 @@ export function mustTradeAtTurnStart(state: GameState, seat: Seat): boolean {
 export const TRADE_DOWN_FLOOR = 4;
 
 /**
+ * R26's trigger (D114): a seizure that lifts the hand to **five** or more forces the immediate,
+ * same-turn trade-down. Five, not six, because five is already a hand that must trade at the
+ * next draft (R24) — so a seat holding five at the end of its turn could only grow past five
+ * through R20's reward draw, which is the one way a hand may legitimately reach six.
+ */
+export const SEIZURE_TRADE_THRESHOLD = 5;
+
+/**
  * True when R27's bounce has fired this turn — i.e. an **inheritance** is what put this hand where
  * it is, and R26's "immediate, same-turn" is in force.
  *
@@ -181,9 +189,9 @@ function tradeDownBounced(state: GameState): boolean {
 }
 
 /**
- * R26 — an **inheritance** forces an immediate trade-down. A *seizure* that lifts the hand to six
- * or more must be traded down to **four or fewer** in the same turn, one set at a time, stopping as
- * soon as the hand reaches 4, 3 or 2.
+ * R26 — an **inheritance** forces an immediate trade-down. A *seizure* that lifts the hand to
+ * `SEIZURE_TRADE_THRESHOLD` (five, D114) or more must be traded down to **four or fewer** in the
+ * same turn, one set at a time, stopping as soon as the hand reaches 4, 3 or 2.
  *
  * Both branches are gated on R27's bounce marker, because the bounce is what tells an inheritance
  * apart from the **other** way a hand legitimately reaches six: R20's end-of-turn reward draw.
@@ -215,7 +223,7 @@ export function mustTradeDown(state: GameState, seat: Seat): boolean {
   const hand = handOf(state, seat);
   if (!hasSet(hand)) return false;
   if (!tradeDownBounced(state)) return false;
-  if (hand.length >= 6) return true;
+  if (hand.length >= SEIZURE_TRADE_THRESHOLD) return true;
   return hand.length > TRADE_DOWN_FLOOR && state.setsTradedThisTurn > 0;
 }
 
