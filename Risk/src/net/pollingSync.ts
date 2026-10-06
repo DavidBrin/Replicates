@@ -1,8 +1,9 @@
-import type { Action, AttackIntent, GameState } from "@/engine/types";
+import type { Action, AttackIntent, GameState, Standing } from "@/engine/types";
 import type { ChatSend, LoggedAction, SyncPort, SyncStatus } from "@/ports/sync";
 
 import {
   createPollingLoop,
+  HIDDEN_MS,
   MY_TURN_MS,
   OTHER_TURN_MS,
   type Cancel,
@@ -74,6 +75,23 @@ export interface PollingSyncPort extends SyncPort {
   say(line: ChatSend): Promise<void>;
   /** Resign: `SEAT_TO_BOT { reason: "resigned" }` (D76). */
   resign(): Promise<readonly LoggedAction[]>;
+  /**
+   * Whether the viewer's own seat is out — `eliminated` or `resigned`.
+   *
+   * §5.5's cadence table ends "Game finished, or you are eliminated → stop",
+   * and the port is where that is enforced, because `presence[].standing` for
+   * `you.seat` is a field of the poll body and nothing else has to be folded
+   * to read it.
+   */
+  readonly eliminated: boolean;
+  /**
+   * Resume as a watcher at the 15 s cadence — the one exception to the stop.
+   *
+   * It is opt-in on purpose: an eliminated tab left open is exactly the
+   * abandoned-tab cost D11 is about, so the player has to ask. Once asked,
+   * a later poll must not stop the loop again.
+   */
+  watch(): void;
 }
 
 type Listener<T> = (value: T) => void;
@@ -102,6 +120,72 @@ function listeners<T>(): {
   };
 }
 
+/**
+ * Rows the session must **not** fold, dropped before `onActions` (§5.5, F36).
+ *
+ * A fog poll carries its actions "FOR ANIMATION ONLY", and two of their shapes
+ * are deliberately not replayable:
+ *
+ * - **`HIDDEN`** stands in for an action the viewer may not see at all. It is
+ *   not an `Action` the engine knows, so folding one answers `illegalAction`
+ *   and flips the session to `desynced` on every poll of every fog game.
+ * - **`CARD_DRAWN` with `card: null`** is another seat's draw with the card
+ *   redacted. The size is already in the masked snapshot's `cardCount`, so
+ *   there is nothing to fold and a null card would invent a card that is not
+ *   there.
+ *
+ * Both are matched structurally rather than through the `Action` union:
+ * `HIDDEN` is a wire shape the authority mints for a masked view, and the
+ * client's job is to survive one, not to be able to construct one.
+ */
+function foldable(row: LoggedAction): boolean {
+  const action = row.action as { readonly type: string; readonly card?: unknown };
+  if (action.type === "HIDDEN") return false;
+  if (action.type === "CARD_DRAWN" && (action.card === null || action.card === undefined)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * {@link foldable} over a batch, exported for the **one** other place that
+ * hands rows to a session: `/play/online/[gameId]`'s replay of the bodies that
+ * arrived while the map was still loading. Two copies of this filter would be
+ * two places for a `HIDDEN` row to reach `engine.apply`.
+ */
+export function foldableActions(actions: readonly LoggedAction[]): readonly LoggedAction[] {
+  return actions.filter(foldable);
+}
+
+/**
+ * Whether a snapshot is a **masked view** rather than authoritative state.
+ *
+ * `viewFor` stamps `fogged: true`, which is what makes a state unhashable
+ * (F36) — and unfoldable-onto, which is what matters here: the actions in the
+ * same body are animation, not a delta to apply after it.
+ */
+export function isMaskedView(snapshot: GameState): boolean {
+  const view = snapshot as {
+    readonly fogged?: boolean;
+    readonly rules?: { readonly fogOfWar?: boolean };
+  };
+  return view.fogged === true || view.rules?.fogOfWar === true;
+}
+
+/** The highest `seq` in a batch, or `0`. What an idempotent retry needs. */
+function highestSeq(actions: readonly LoggedAction[]): number {
+  let top = 0;
+  for (const row of actions) top = Math.max(top, row.seq);
+  return top;
+}
+
+/** The viewer's own `standing`, off `presence`, or `null` if they hold no seat. */
+function viewerStanding(body: GameSyncBody): Standing | null {
+  const mine = body.you.seat;
+  if (mine === null || mine === undefined) return null;
+  return body.presence.find((row) => row.seat === mine)?.standing ?? null;
+}
+
 export function createPollingSync(options: PollingSyncOptions): PollingSyncPort {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const actionListeners = listeners<readonly LoggedAction[]>();
@@ -115,6 +199,8 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
   let status: SyncStatus = "idle";
   let overrideMs: number | null = null;
   let closed = false;
+  let eliminated = false;
+  let watching = false;
 
   function setStatus(next: SyncStatus): void {
     if (status === next) return;
@@ -146,6 +232,16 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
    *    "Connecting…" with a perfectly healthy `seq`.
    * 2. **then the snapshot**, which replaces the confirmed state.
    * 3. **then the actions**, which fold on top of it (§5.5).
+   *
+   * **Except in view mode, where 2 and 3 swap.** A fog body carries the
+   * viewer's masked snapshot at `snapshotSeq === seq` *and* the actions since
+   * `since` for animation. Emitting the snapshot first set the session's
+   * `folded` cursor to the head, so every one of those rows was then skipped
+   * as already folded and a fog game animated nothing at all — no dice, no
+   * troop arcs, no capture flash. The masked snapshot is also the last word on
+   * the state either way (it is authoritative-for-this-viewer and replaces
+   * whatever the animation rows did to it), so animating first and replacing
+   * second is both the right order and the safe one.
    */
   function accept(body: GameSyncBody): void {
     for (const line of body.chat) chatSince = Math.max(chatSince, line.id);
@@ -155,17 +251,27 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     etag = `W/"${body.seq}"`;
     syncListeners.emit(body);
 
+    const rows = body.actions.filter(foldable);
+    const masked = body.snapshot !== undefined && isMaskedView(body.snapshot);
+
+    if (masked && rows.length > 0) actionListeners.emit(rows);
     if (body.snapshot !== undefined) {
       snapshotListeners.emit({
         snapshot: body.snapshot,
         seq: body.snapshotSeq ?? body.seq,
       });
     }
-    if (body.actions.length > 0) actionListeners.emit(body.actions);
+    if (!masked && rows.length > 0) actionListeners.emit(rows);
 
-    if (body.status !== "playing") {
+    // §5.5's cadence table: "Game finished, or you are eliminated → stop".
+    // `pause` rather than `stop`, so a viewer who asks to watch comes back
+    // with the hidden-tab cadence and the five-minute hidden stop intact.
+    const standing = viewerStanding(body);
+    eliminated = standing === "eliminated" || standing === "resigned";
+
+    if (body.status !== "playing" || (eliminated && !watching)) {
       setStatus("idle");
-      loop.stop();
+      loop.pause();
     }
   }
 
@@ -236,9 +342,15 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
    */
   async function send(body: unknown): Promise<readonly LoggedAction[]> {
     const answer = await post<ActionPostBody>("/actions", body);
-    if (answer.actions.length > 0) actionListeners.emit(answer.actions);
-    seq = Math.max(seq, answer.seq);
-    etag = `W/"${answer.seq}"`;
+    const rows = answer.actions.filter(foldable);
+    if (rows.length > 0) actionListeners.emit(rows);
+    // An **idempotent retry** answers with the ORIGINAL `seq` — the one the
+    // first attempt was assigned — plus every action appended since. Trusting
+    // `answer.seq` alone would walk the cursor back behind rows this port has
+    // just delivered and ask for them all again on the next poll, so the
+    // cursor takes whichever is further on.
+    seq = Math.max(seq, answer.seq, highestSeq(answer.actions));
+    etag = `W/"${seq}"`;
     void loop.pollNow();
     return answer.actions;
   }
@@ -280,10 +392,19 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     },
     async resign() {
       const answer = await post<ActionPostBody>("/resign", {});
-      if (answer.actions.length > 0) actionListeners.emit(answer.actions);
-      seq = Math.max(seq, answer.seq);
+      const rows = answer.actions.filter(foldable);
+      if (rows.length > 0) actionListeners.emit(rows);
+      seq = Math.max(seq, answer.seq, highestSeq(answer.actions));
       void loop.pollNow();
       return answer.actions;
+    },
+    get eliminated() {
+      return eliminated;
+    },
+    watch() {
+      watching = true;
+      overrideMs = HIDDEN_MS;
+      loop.resume();
     },
     close() {
       closed = true;
