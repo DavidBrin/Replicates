@@ -1,0 +1,118 @@
+"use client";
+
+/**
+ * Everything `GameScreen` derives from one session, in one place.
+ *
+ * The live `GameState` is read here during render and **never stored** — the
+ * `version` counter in the UI slice is what makes the derivation re-run
+ * (§10).
+ */
+import { useCallback, useMemo, useState } from "react";
+
+import type { Card, GameState, SeatState, Seat } from "@/engine/types";
+import type { Session } from "@/game/session";
+import { useUi } from "@/game/useSession";
+import type { PresenceRow } from "@/ports/sync";
+import { playEngine } from "@/game/pending";
+import { dialogText } from "@/content/dialog";
+
+import type { RosterRow } from "./RosterCapsule";
+
+export interface GameScreenModel {
+  readonly state: GameState;
+  readonly rows: readonly RosterRow[];
+  readonly balloons: Readonly<Record<number, string>>;
+  readonly acting: SeatState | undefined;
+  readonly viewer: SeatState | undefined;
+  readonly yourTurn: boolean;
+  readonly myCards: readonly Card[];
+  readonly sets: readonly (readonly [string, string, string])[];
+  readonly tradeValue: number;
+  readonly mustTrade: boolean;
+  readonly countValue: number;
+  setCountValue(value: number): void;
+}
+
+export function useGameScreenModel(
+  session: Session, presence?: readonly PresenceRow[],
+): GameScreenModel {
+  const ui = useUi(session, (s) => s);
+  const engine = playEngine();
+  const state = session.view;
+  const [countValue, setCountValue] = useState(1);
+
+  const acting = state.seats[ui.actingSeat];
+  const viewer = state.seats[ui.viewerSeat];
+  const myCards = viewer?.cards ?? [];
+
+  const sets = useMemo(() => engine.cardSets(myCards), [engine, myCards]);
+  const tradeValue = useMemo(() => {
+    const first = sets[0];
+    if (!first) return 0;
+    const cards = first.map((id) => myCards.find((c) => c.id === id)).filter((c): c is Card => !!c);
+    return cards.length === 3 ? engine.cardTradeValue(cards, state.setsTradedTotal, state.rules.cardBonus) : 0;
+  }, [sets, myCards, engine, state.setsTradedTotal, state.rules.cardBonus]);
+
+  const mustTrade = useMemo(
+    () => engine.mustTradeNow(state, ui.actingSeat),
+    [engine, state, ui.actingSeat],
+  );
+
+  const territories = useMemo(() => engine.territoryCounts(state), [engine, state]);
+  const troops = useMemo(() => engine.troopCounts(state), [engine, state]);
+
+  const rows = useMemo<readonly RosterRow[]>(() => state.seats.map((s) => {
+    const row = presence?.find((p) => p.seat === s.seat);
+    return {
+      seat: s.seat,
+      name: s.name,
+      colour: s.colour,
+      standing: s.standing,
+      bot: s.kind === "bot",
+      you: s.seat === ui.viewerSeat,
+      active: s.seat === ui.actingSeat,
+      troops: troops[s.seat] ?? null,
+      territories: territories[s.seat] ?? null,
+      cards: s.cardCount,
+      ...(row ? { online: row.online, missedTurns: row.missedTurns } : {}),
+    };
+  }), [state.seats, presence, ui.viewerSeat, ui.actingSeat, troops, territories]);
+
+  const balloons = useMemo(() => {
+    const out: Record<number, string> = {};
+    for (const b of ui.balloons) out[b.seat] = b.text;
+    return out;
+  }, [ui.balloons]);
+
+  const setCount = useCallback((value: number) => setCountValue(value), []);
+
+  return {
+    state,
+    rows,
+    balloons,
+    acting,
+    viewer,
+    yourTurn: ui.actingSeat === mySeatOf(session, ui.viewerSeat) && !ui.botPlaying,
+    myCards,
+    sets,
+    tradeValue,
+    mustTrade,
+    countValue: clamp(countValue, ui.countRequest?.min ?? 1, ui.countRequest?.max ?? 1),
+    setCountValue: setCount,
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function mySeatOf(session: Session, fallback: Seat): Seat {
+  try {
+    return session.mySeat();
+  } catch {
+    return fallback;
+  }
+}
+
+/** The text of a balloon, so a test can assert it without reaching into content. */
+export const balloonText = dialogText;
