@@ -14,8 +14,11 @@ const NAMES = [
   "Quarry", "Ridgeway", "Sablefen", "Thornwick", "Upwood", "Varden", "Westmere", "Yarrow",
 ];
 
-const REGION_NAMES = ["Northmarch", "Midlands", "Southreach", "Farshore"];
-const REGION_COLOURS = ["#36B0EA", "#DA3A4F", "#5FBF2A", "#E08A24"];
+const REGION_NAMES = [
+  "Northmarch", "Midlands", "Southreach", "Farshore", "Eastholm", "Westmarch",
+  "Highreach", "Lowshore", "Stormfell", "Sunvale", "Coldwater",
+];
+const REGION_COLOURS = ["#36B0EA", "#DA3A4F", "#5FBF2A", "#9B4AE8", "#E08A24", "#F0C33A"];
 
 export interface DemoMapOptions {
   readonly slug?: string;
@@ -36,7 +39,10 @@ export function buildDemoMap(options: DemoMapOptions = {}): MapFile {
   const cellW = (W - padX * 2 - gap * (cols - 1)) / cols;
   const cellH = (H - padY * 2 - gap * (rows - 1)) / rows;
 
-  const id = (c: number, r: number) => `${REGION_NAMES[c % REGION_NAMES.length]?.toLowerCase()}-${r + 1}`;
+  // Ids carry the column index, not the region name, so a board wider than
+  // the name list still has unique slugs.
+  const id = (c: number, r: number) => `t${c}-${r + 1}`;
+  const regionId = (c: number) => `region-${c}`;
 
   const territories: MapFile["territories"][number][] = [];
   let n = 0;
@@ -64,7 +70,7 @@ export function buildDemoMap(options: DemoMapOptions = {}): MapFile {
       territories.push({
         id: id(c, r),
         name: NAMES[n % NAMES.length] as string,
-        continent: REGION_NAMES[c % REGION_NAMES.length]?.toLowerCase() as string,
+        continent: regionId(c),
         suit: (["infantry", "cavalry", "artillery"] as const)[n % 3] as "infantry",
         adjacent,
         d,
@@ -78,7 +84,7 @@ export function buildDemoMap(options: DemoMapOptions = {}): MapFile {
   }
 
   const continents: MapFile["continents"] = Array.from({ length: cols }, (_, c) => ({
-    id: REGION_NAMES[c % REGION_NAMES.length]?.toLowerCase() as string,
+    id: regionId(c),
     name: REGION_NAMES[c % REGION_NAMES.length] as string,
     bonus: 2 + (c % 3),
     color: REGION_COLOURS[c % REGION_COLOURS.length] as string,
