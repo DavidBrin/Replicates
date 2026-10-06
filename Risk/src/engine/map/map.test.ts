@@ -16,7 +16,7 @@ import {
   bboxOfRings, countVertices, largestRing, parseRings, pointInRing, pointInRings, ringArea,
   ringsToPath, tokenisePath, type Point,
 } from "./path";
-import { checkMap, loadMap, parseViewBox, validateMap } from "./schema";
+import { checkMap, loadMap, MAX_VERTICES, parseViewBox, validateMap } from "./schema";
 import { blizzardCandidates, boundedU32, portalCandidates, shuffledIndices, slotsFor } from "./slots";
 
 import type { MapFile } from "../types";
@@ -210,10 +210,26 @@ describe("validateMap", () => {
   });
 
   it("catches a territory over the vertex budget", () => {
-    const ring: Point[] = Array.from({ length: 40 }, (_, i) => [50 + 40 * Math.cos(i), 50 + 40 * Math.sin(i)]);
+    const n = MAX_VERTICES + 10;
+    const ring: Point[] = Array.from(
+      { length: n },
+      (_, i) => [50 + 40 * Math.cos((i * 2 * Math.PI) / n), 50 + 40 * Math.sin((i * 2 * Math.PI) / n)],
+    );
     const file = board();
     poke(file.territories[0], "d", ringsToPath([ring]));
-    expect(validateMap(file).join("\n")).toMatch(/more than 30/);
+    expect(validateMap(file).join("\n")).toMatch(new RegExp(`more than ${MAX_VERTICES}`));
+  });
+
+  it("catches a subpath below a triangle even when the territory is over the floor", () => {
+    // The budget is per territory but the floor is per ring: a big mainland
+    // plus a two-vertex offcut passes the count and is still not drawable.
+    const file = board();
+    const mainland: Point[] = Array.from(
+      { length: 12 },
+      (_, i) => [50 + 40 * Math.cos((i * Math.PI) / 6), 50 + 40 * Math.sin((i * Math.PI) / 6)],
+    );
+    poke(file.territories[0], "d", `${ringsToPath([mainland])}M5 5L6 6Z`);
+    expect(validateMap(file).join("\n")).toMatch(/fewer than 3 vertices/);
   });
 
   it("catches a duplicate sea link", () => {

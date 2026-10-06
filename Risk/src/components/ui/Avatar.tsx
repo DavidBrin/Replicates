@@ -33,9 +33,16 @@ export interface AvatarProps {
   readonly className?: string;
 }
 
-/** Up to two initials, from the first and last word of the display name. */
+/**
+ * Up to two initials, from the first and last word of the display name.
+ *
+ * The generated `<Adjective> <Noun> <NN>` names (§7) end in a number, and a
+ * digit is not an initial: `Northern Warden 21` reads `NW`, not `N2`.
+ */
 export function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
+  const all = name.trim().split(/\s+/).filter(Boolean);
+  const letters = all.filter((word) => /\p{L}/u.test(word));
+  const words = letters.length > 0 ? letters : all;
   if (words.length === 0) return "?";
   const first = words[0] ?? "";
   const last = words.length > 1 ? (words[words.length - 1] ?? "") : "";

@@ -85,6 +85,28 @@ describe("ReceivedTroops", () => {
       territories={14} />);
     expect(screen.getByTestId("received-troops-banner")).toHaveTextContent("Bot 2 turn");
   });
+
+  it("is a centred plate, not a full-bleed band (bt1-0055: x 428–1172, h 78)", () => {
+    render(<ReceivedTroops variant="received" name="Solace" colour="red" you total={3}
+      territories={10} />);
+    const banner = screen.getByTestId("received-troops-banner");
+    expect(banner.style.width).toBe("744px");
+    expect(banner.style.height).toBe("78px");
+    expect(banner.style.left).toBe("26.75%");
+  });
+
+  it("gives a bot only the turn banner — no scrim, no ring, no dialog", () => {
+    render(<ReceivedTroops variant="received" name="Bot 1" colour="green" you={false} total={4}
+      territories={12} bannerOnly />);
+    expect(screen.getByTestId("received-troops-banner")).toHaveTextContent("Bot 1 turn");
+    expect(screen.queryByTestId("received-troops-ring")).toBeNull();
+    expect(screen.queryByTestId("received-troops-header")).toBeNull();
+    expect(screen.queryByTestId("received-troops-award")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const root = screen.getByTestId("received-troops");
+    expect(root).toHaveAttribute("data-banner-only", "true");
+    expect(root.style.pointerEvents).toBe("none");
+  });
 });
 
 describe("VictoryOverlay", () => {

@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { TROOPS_UNKNOWN, type MapDef } from "@/engine/types";
-import { createInput } from "@/game/input";
+import { createInput, territoryAtPoint } from "@/game/input";
 import type { Session } from "@/game/session";
 import { useElementSize, useRenderLoop, useUi } from "@/game/useSession";
 import { createArrowLayer, type ArrowLayerHandle } from "@/render/arrows";
@@ -41,6 +41,8 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
   const tokensRef = useRef<TokenLayerHandle | null>(null);
   const arrowsRef = useRef<ArrowLayerHandle | null>(null);
   const cameraRef = useRef<Camera | null>(null);
+  /** The territory under the pointer: a label the greedy pass hid comes back. */
+  const hoveredRef = useRef<number | null>(null);
 
   const map: MapDef = session.map;
   const [, , boardW, boardH] = map.viewBox;
@@ -99,6 +101,23 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
       onTapAway: () => session.setMode("idle"),
     });
     const detach = input.attach(stage);
+    // Hover is a *reveal* only — it changes no game state, so it marks the
+    // board dirty and nothing else, and only when the territory changes.
+    const onHover = (event: PointerEvent) => {
+      const next = event.pointerType === "mouse"
+        ? territoryAtPoint(event.clientX, event.clientY)
+        : null;
+      if (next === hoveredRef.current) return;
+      hoveredRef.current = next;
+      session.markDirty();
+    };
+    const onLeave = () => {
+      if (hoveredRef.current === null) return;
+      hoveredRef.current = null;
+      session.markDirty();
+    };
+    stage.addEventListener("pointermove", onHover);
+    stage.addEventListener("pointerleave", onLeave);
     const onKey = (event: KeyboardEvent) => {
       if (input.handleKey(event.key)) event.preventDefault();
       if (event.key === "0") {
@@ -113,6 +132,8 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
     return () => {
       detach();
       input.destroy();
+      stage.removeEventListener("pointermove", onHover);
+      stage.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("keydown", onKey);
     };
   }, [session, boardW, boardH, size]);
@@ -175,6 +196,7 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
       selected: ui.selected,
       radius,
       showLabels: true,
+      hovered: hoveredRef.current,
     };
     tokens.paint(tokenPaint, cam);
 

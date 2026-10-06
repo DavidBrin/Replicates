@@ -146,11 +146,21 @@ export class PlayersRepository {
     await this.db.execute("update players set last_seen_at = now() where id = $1", [id]);
   }
 
-  /** Stamp the player's seat in every live game too, for the away sweep. */
-  async touchSeats(id: string): Promise<void> {
+  /**
+   * Stamp the player's seat **in one game**, for the away sweep (§5.6).
+   *
+   * One game, never all of them. The seat stamp is what says "this seat's
+   * owner is at the board", and the away takeover, the reclaim and POLL 3's
+   * `presence` all read it — so a player sitting in the lobby browser, or
+   * polling game A, must not keep their seat in game B looking live. Stamping
+   * every seat made the two-minute away rule unreachable for anybody with a
+   * second tab open.
+   */
+  async touchSeat(id: string, gameId: string): Promise<void> {
     await this.db.execute(
-      `update game_players set last_seen_at = now() where player_id = $1`,
-      [id],
+      `update game_players set last_seen_at = now()
+        where player_id = $1 and game_id = $2`,
+      [id, gameId],
     );
   }
 

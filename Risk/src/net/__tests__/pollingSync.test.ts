@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { GameState } from "@/engine/types";
+import type { GameState, Standing } from "@/engine/types";
 import type { LoggedAction, SyncStatus } from "@/ports/sync";
 
 import { createPollingSync } from "../pollingSync";
-import { MY_TURN_MS, OTHER_TURN_MS, type VisibilitySource } from "../pollingLoop";
+import { HIDDEN_MS, MY_TURN_MS, OTHER_TURN_MS, type VisibilitySource } from "../pollingLoop";
 import { SyncHttpError, type GameSyncBody } from "../types";
 
 /**
@@ -744,6 +744,281 @@ describe("the hard failures", () => {
     expect(time.pending).toBe(OTHER_TURN_MS);
     await time.tick();
     expect(calls).toHaveLength(2);
+    port.close();
+  });
+});
+
+/* ------------------------------------------------------- fog: view mode -- */
+
+/**
+ * A fog poll body (§5.5, §6): the viewer's **masked** snapshot at
+ * `snapshotSeq === seq`, plus the actions since `since` for animation only.
+ */
+function fogBody(at: number, actions: readonly LoggedAction[]): GameSyncBody {
+  return syncBody({
+    seq: at,
+    snapshot: { fogged: true, rules: { fogOfWar: true } } as unknown as GameState,
+    snapshotSeq: at,
+    actions,
+  });
+}
+
+/** A row carrying a wire shape the `Action` union does not declare. */
+function wireRow(at: number, payload: unknown): LoggedAction {
+  return { ...action(at), action: payload as LoggedAction["action"] };
+}
+
+describe("fog view mode", () => {
+  it("emits the animation actions BEFORE the masked snapshot", async () => {
+    const order: string[] = [];
+    const { fetchImpl } = recorder(() => jsonResponse(fogBody(9, [action(8), action(9)])));
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 7,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onSnapshot((_snapshot, at) => order.push(`snapshot:${at}`));
+    port.onActions((rows) => order.push(`actions:${rows.map((row) => row.seq).join(",")}`));
+    await settle();
+
+    // The other order set the session's `folded` cursor to 9 first, so both
+    // rows were then skipped as already folded and nothing animated at all.
+    expect(order).toEqual(["actions:8,9", "snapshot:9"]);
+    port.close();
+  });
+
+  it("keeps snapshot-then-actions when the snapshot is authoritative", async () => {
+    const order: string[] = [];
+    const { fetchImpl } = recorder(() =>
+      jsonResponse(
+        syncBody({ seq: 9, snapshot: state(), snapshotSeq: 4, actions: [action(5), action(9)] }),
+      ),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 0,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onSnapshot((_snapshot, at) => order.push(`snapshot:${at}`));
+    port.onActions((rows) => order.push(`actions:${rows.map((row) => row.seq).join(",")}`));
+    await settle();
+
+    expect(order).toEqual(["snapshot:4", "actions:5,9"]);
+    port.close();
+  });
+
+  it("drops HIDDEN rows and a redacted CARD_DRAWN, keeping the rest", async () => {
+    const { fetchImpl } = recorder(() =>
+      jsonResponse(
+        fogBody(10, [
+          wireRow(8, { type: "HIDDEN", seat: 2 }),
+          wireRow(9, { type: "CARD_DRAWN", seat: 2, card: null }),
+          action(10),
+        ]),
+      ),
+    );
+    const batches: number[][] = [];
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 7,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onActions((rows) => batches.push(rows.map((row) => row.seq)));
+    await settle();
+
+    // Neither shape is foldable: one is not an `Action` at all, the other has
+    // no card to put in a hand.
+    expect(batches).toEqual([[10]]);
+    // The cursor still moved past them, so they are never asked for again.
+    expect(port.seq).toBe(10);
+    port.close();
+  });
+
+  it("emits nothing when every fog row is unfoldable", async () => {
+    const { fetchImpl } = recorder(() =>
+      jsonResponse(fogBody(8, [wireRow(8, { type: "HIDDEN", seat: 1 })])),
+    );
+    const actions = vi.fn();
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 7,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onActions(actions);
+    await settle();
+    expect(actions).not.toHaveBeenCalled();
+    port.close();
+  });
+});
+
+/* --------------------------------------------------- the eliminated seat -- */
+
+/** A body in which `you.seat` holds `standing`. */
+function standingBody(at: number, seat: number, standing: Standing): GameSyncBody {
+  return syncBody({
+    seq: at,
+    you: { seat, cards: [] },
+    presence: [{ seat, standing, online: true, missedTurns: 0 }],
+  });
+}
+
+describe("an eliminated viewer", () => {
+  it("stops polling once its own seat is eliminated", async () => {
+    const { calls, fetchImpl } = recorder(() =>
+      jsonResponse(standingBody(20, 1, "eliminated")),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 0,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    await settle();
+
+    expect(port.eliminated).toBe(true);
+    expect(time.pending).toBeNull();
+    expect(calls).toHaveLength(1);
+    port.close();
+  });
+
+  it("treats a resigned seat the same way", async () => {
+    const { fetchImpl } = recorder(() => jsonResponse(standingBody(20, 0, "resigned")));
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 0,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    await settle();
+    expect(port.eliminated).toBe(true);
+    expect(time.pending).toBeNull();
+    port.close();
+  });
+
+  it("keeps polling while its own seat is active and somebody else is out", async () => {
+    const { fetchImpl } = recorder(() =>
+      jsonResponse(
+        syncBody({
+          seq: 20,
+          you: { seat: 1, cards: [] },
+          presence: [
+            { seat: 0, standing: "eliminated", online: true, missedTurns: 0 },
+            { seat: 1, standing: "active", online: true, missedTurns: 0 },
+          ],
+        }),
+      ),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 0,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      random: () => 0.5,
+      visibility: visibility(),
+    });
+    await settle();
+    expect(port.eliminated).toBe(false);
+    expect(time.pending).toBe(OTHER_TURN_MS);
+    port.close();
+  });
+
+  it("watch() resumes at the 15 s cadence and is never stopped again", async () => {
+    const { calls, fetchImpl } = recorder(() =>
+      jsonResponse(standingBody(20, 1, "eliminated")),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 0,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      random: () => 0.5,
+      visibility: visibility(),
+    });
+    await settle();
+    expect(time.pending).toBeNull();
+
+    port.watch();
+    await settle();
+    expect(calls).toHaveLength(2);
+    // The one exception the cadence table allows, at the slowest interval the
+    // design has.
+    expect(time.pending).toBe(HIDDEN_MS);
+
+    // The next body still says "eliminated", and must not stop the watcher.
+    await time.tick();
+    expect(calls).toHaveLength(3);
+    expect(time.pending).toBe(HIDDEN_MS);
+    port.close();
+  });
+
+  it("still stops when the game itself finishes, watcher or not", async () => {
+    const bodies: GameSyncBody[] = [
+      standingBody(20, 1, "eliminated"),
+      { ...standingBody(21, 1, "eliminated"), status: "finished" },
+    ];
+    const { fetchImpl } = recorder(() => jsonResponse(bodies.shift() ?? bodies[0]));
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 0,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      random: () => 0.5,
+      visibility: visibility(),
+    });
+    await settle();
+    port.watch();
+    await settle();
+    expect(time.pending).toBeNull();
+    port.close();
+  });
+});
+
+/* ----------------------------------------------- an idempotent POST retry -- */
+
+describe("an idempotent retry", () => {
+  it("advances the cursor to the newest action, not to the replayed seq", async () => {
+    const { calls, fetchImpl } = recorder((call) =>
+      call.method === "POST"
+        ? // The retry answers with the ORIGINAL seq plus everything appended
+          // since — a bot's whole reply turn, here.
+          jsonResponse({ seq: 6, actions: [action(6), action(7), action(8)] })
+        : new Response(null, { status: 204 }),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 5,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    await settle();
+    await port.submit({ type: "END_TURN", seat: 0 }, "c1");
+    await settle();
+
+    expect(port.seq).toBe(8);
+    const poll = calls.filter((call) => call.method === "GET").at(-1);
+    expect(poll?.url).toBe("/api/games/g_1?since=8&chatSince=0");
+    expect(poll?.headers["if-none-match"]).toBe('W/"8"');
     port.close();
   });
 });

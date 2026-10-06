@@ -19,6 +19,14 @@ import { PLAYER_COLOURS } from "./palette";
 /** §8: a label is hidden when its territory covers less than this on screen. */
 export const LABEL_MIN_AREA = 2500;
 
+/** §8.6 label type: 20 px, stepped down one notch on a crowded board. */
+export const LABEL_FONT = 20;
+export const LABEL_FONT_DENSE = 17;
+/** Above this many territories the label type steps down (§8.6's 19–22 px band). */
+export const DENSE_TERRITORIES = 50;
+/** The greedy pass's one nudge, in screen px. */
+export const LABEL_NUDGE = 12;
+
 /** The chip is authored in a 48×56 box with r = 19; everything scales off that. */
 const BASE_RADIUS = 19;
 const CHIP_VIEW_H = 56;
@@ -35,6 +43,8 @@ export interface TokenPaint {
   readonly selected: number | null;
   readonly radius: number;                  // palette.tokenRadius(map.territories.length)
   readonly showLabels: boolean;
+  /** The territory under the pointer, if any: its label is always shown. */
+  readonly hovered?: number | null;
 }
 
 export interface TokenLayerHandle {
@@ -89,6 +99,96 @@ export function labelVisible(map: MapDef, index: number, cam: Camera): boolean {
   if (!view) return true;
   const [sx, sy] = toScreen(cam, territory.token);
   return sx >= 0 && sy >= 0 && sx <= view.w && sy <= view.h;
+}
+
+/* -------------------------------------------------------- label layout -- */
+
+/** §8.6: one step down on a board with more than 50 territories. */
+export function labelFontSize(territoryCount: number): number {
+  return territoryCount > DENSE_TERRITORIES ? LABEL_FONT_DENSE : LABEL_FONT;
+}
+
+/**
+ * A label's box in screen px, without measuring the DOM.
+ *
+ * The render loop may not read layout (§10), so the box is estimated from the
+ * glyph count: Titillium Web 700 averages ≈0.55 em of advance, the line box
+ * is ≈1.15 em, and the 3 px outline adds 6 px on each axis.
+ */
+export function labelBoxSize(text: string, fontSize: number): { readonly w: number; readonly h: number } {
+  return { w: text.length * fontSize * 0.55 + 6, h: fontSize * 1.15 + 6 };
+}
+
+export interface LabelPlacement {
+  /** Screen-px offset applied to the label, on top of the map's own anchor. */
+  readonly dy: number;
+  /** Still colliding after every candidate: shown only on hover or selection. */
+  readonly crowded: boolean;
+}
+
+interface Box { x: number; y: number; w: number; h: number }
+
+function overlaps(a: Box, b: Box): boolean {
+  return Math.abs(a.x - b.x) * 2 < a.w + b.w && Math.abs(a.y - b.y) * 2 < a.h + b.h;
+}
+
+/**
+ * The greedy label pass **[ours]**.
+ *
+ * `research/04 §8.6` records that the original makes no attempt at collision
+ * avoidance and its labels simply overlap — which is exactly what the
+ * Great Britain / Northern Europe / Western Europe cluster looks like on a
+ * 42-territory board. This pass keeps the §8.6 anchor and only moves a label
+ * that would be unreadable: 0 → `+12` below → flipped above the token → and,
+ * failing all three, marked `crowded`, which hides it until the territory is
+ * hovered or selected.
+ *
+ * It is a pure function of the map, the token radius and the camera's *shape*
+ * (zoom and tilt) — pan only translates the board, so the plan is computed
+ * about a fixed origin and memoised per zoom/tilt, never recomputed while the
+ * player merely pans.
+ */
+export function planLabels(
+  map: MapDef, cam: Pick<Camera, "zoom" | "tilt" | "perspective">, radius: number,
+): readonly LabelPlacement[] {
+  const font = labelFontSize(map.territories.length);
+  const frame: Camera = {
+    pan: [0, 0], zoom: cam.zoom, tilt: cam.tilt, origin: [0, 0],
+    ...(cam.perspective === undefined ? {} : { perspective: cam.perspective }),
+  };
+  const tokens: Box[] = map.territories.map((t) => {
+    const [x, y] = toScreen(frame, t.token);
+    return { x, y, w: radius * 2, h: radius * 2 };
+  });
+  const anchors = map.territories.map((t) => toScreen(frame, t.label));
+
+  const placed: Box[] = [];
+  return map.territories.map((territory, i) => {
+    const anchor = anchors[i] as readonly [number, number];
+    const token = tokens[i] as Box;
+    const { w, h } = labelBoxSize(territory.name, font);
+    const boxAt = (dy: number): Box => ({ x: anchor[0], y: anchor[1] + dy, w, h });
+    // Below, nudged further below, then mirrored to sit above the token.
+    const above = -2 * (anchor[1] - token.y) - LABEL_NUDGE;
+    // Text over text is unreadable; text over a chip is what §8.6 already
+    // shows the original doing, so a token only *steers* the choice — it
+    // never costs a territory its name.
+    let clearOfLabels: number | null = null;
+    for (const dy of [0, LABEL_NUDGE, above]) {
+      const box = boxAt(dy);
+      if (placed.some((p) => overlaps(box, p))) continue;
+      if (!tokens.some((t, j) => j !== i && overlaps(box, t))) {
+        placed.push(box);
+        return { dy, crowded: false };
+      }
+      if (clearOfLabels === null) clearOfLabels = dy;
+    }
+    if (clearOfLabels !== null) {
+      placed.push(boxAt(clearOfLabels));
+      return { dy: clearOfLabels, crowded: false };
+    }
+    return { dy: 0, crowded: true };
+  });
 }
 
 /* ---------------------------------------------------------------- chip -- */
@@ -168,6 +268,11 @@ function layerCss(gradientId: string): string {
     ".risk-tokens .label { z-index: var(--z-labels); pointer-events: none; }",
     '.risk-tokens[data-labels="0"] .label { display: none; }',
     '.risk-tokens .label[data-hidden="1"] { display: none; }',
+    // A label the greedy pass could not place is hidden until its territory
+    // is hovered or selected, when it comes back on top of everything.
+    '.risk-tokens .label[data-crowded="1"] { display: none; }',
+    '.risk-tokens .label[data-crowded="1"][data-reveal="1"] { display: block;',
+    "  z-index: var(--z-floaters); }",
     ".risk-tokens .chip { position: absolute; left: 0; top: 0; display: block;",
     "  transform: translate(-50%, -50%); }",
     // `--sh-token` as a filter, so the shadow follows the stadium silhouette.
@@ -182,9 +287,9 @@ function layerCss(gradientId: string): string {
     "  -webkit-text-stroke: 3px var(--stroke-dark);",
     "  font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }",
     ".risk-tokens .label-text { position: absolute; left: 0; top: 0;",
-    "  transform: translate(-50%, -50%);",
+    "  transform: translate(-50%, calc(-50% + var(--label-dy, 0px)));",
     "  font-family: var(--font-head), 'Titillium Web', system-ui, sans-serif;",
-    "  font-weight: 700; font-size: 20px; color: #fff; paint-order: stroke fill;",
+    "  font-weight: 700; font-size: var(--label-font, 20px); color: #fff; paint-order: stroke fill;",
     "  -webkit-text-stroke: 3px var(--stroke-dark);",
     "  text-shadow: 0 2px 2px rgba(0,0,0,.6); white-space: nowrap; }",
     ...[...PLAYER_COLOURS, ...SENTINELS].map((key) => ownerVars(key, gradientId)),
@@ -226,6 +331,8 @@ export function createTokenLayer(map: MapDef, doc: Document = document): TokenLa
   const element = doc.createElement("div");
   element.className = "risk-tokens";
   element.setAttribute("data-labels", "1");
+  // One step down on a board of more than 50 territories (§8.6).
+  element.style.setProperty("--label-font", `${labelFontSize(map.territories.length)}px`);
 
   const style = doc.createElement("style");
   style.textContent = layerCss(gradientId);
@@ -275,6 +382,22 @@ export function createTokenLayer(map: MapDef, doc: Document = document): TokenLa
   const shownDigits: number[] = map.territories.map(() => 0);
   const shownText: string[] = map.territories.map(() => "");
   const shownLabel: boolean[] = map.territories.map(() => true);
+  const shownCrowded: boolean[] = map.territories.map(() => false);
+  const shownDy: number[] = map.territories.map(() => 0);
+  const shownReveal: boolean[] = map.territories.map(() => false);
+
+  // The greedy pass is a function of the camera's shape and the chip radius
+  // only, so it re-runs on a zoom or a tilt and never on a pan (§10).
+  let planKey = "";
+  let plan: readonly LabelPlacement[] = map.territories.map(() => ({ dy: 0, crowded: false }));
+  const planFor = (cam: Camera, radius: number): readonly LabelPlacement[] => {
+    const key = `${cam.zoom.toFixed(3)}|${cam.tilt}|${radius}`;
+    if (key !== planKey) {
+      plan = planLabels(map, cam, radius);
+      planKey = key;
+    }
+    return plan;
+  };
 
   const writeChip = (index: number, radius: number, digits: number): void => {
     const chip = chips[index];
@@ -296,6 +419,8 @@ export function createTokenLayer(map: MapDef, doc: Document = document): TokenLa
       element.setAttribute("data-labels", next.showLabels ? "1" : "0");
     }
     const resized = !prev || prev.radius !== next.radius;
+    const placements = planFor(cam, next.radius);
+    const hovered = next.hovered ?? null;
 
     for (let i = 0; i < tokens.length; i += 1) {
       const token = tokens[i];
@@ -327,6 +452,23 @@ export function createTokenLayer(map: MapDef, doc: Document = document): TokenLa
         if (visible) label.removeAttribute("data-hidden");
         else label.setAttribute("data-hidden", "1");
         shownLabel[i] = visible;
+      }
+
+      const place = placements[i] ?? { dy: 0, crowded: false };
+      if (place.dy !== shownDy[i]) {
+        label.style.setProperty("--label-dy", `${place.dy.toFixed(1)}px`);
+        shownDy[i] = place.dy;
+      }
+      if (place.crowded !== shownCrowded[i]) {
+        if (place.crowded) label.setAttribute("data-crowded", "1");
+        else label.removeAttribute("data-crowded");
+        shownCrowded[i] = place.crowded;
+      }
+      const reveal = selected || hovered === i;
+      if (reveal !== shownReveal[i]) {
+        if (reveal) label.setAttribute("data-reveal", "1");
+        else label.removeAttribute("data-reveal");
+        shownReveal[i] = reveal;
       }
     }
     prev = next;

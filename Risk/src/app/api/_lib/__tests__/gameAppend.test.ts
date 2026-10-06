@@ -422,10 +422,15 @@ describe("idempotency (D15)", () => {
     const retry = await submit(game.a, game.gameId, body);
     expect(retry.status).toBe(200);
     const parsed = (await retry.json()) as { seq: number; actions: LoggedAction[] };
-    // `seq` is the game's current one; the action is the one that was
-    // recorded at the time, not a replay of it.
-    expect(parsed.seq).toBe(3);
-    expect(parsed.actions[0]?.seq).toBe(2);
+    // `seq` is the ORIGINAL action's, and `actions` runs from it to the head:
+    // `{ seq, actions }` is the submitter's cursor, so answering with the
+    // game's current `seq` and only the one recorded row would tell the
+    // client it is up to date with rows it was never given (the `seq: 3`
+    // this used to assert). A cursor that is too low costs one re-delivery —
+    // `ingest` drops anything at or below what it has folded — and one that
+    // is too high loses actions for the rest of the game.
+    expect(parsed.seq).toBe(2);
+    expect(parsed.actions.map((action) => action.seq)).toEqual([2, 3]);
   });
 
   it("treats a retry with a FRESH id as a second, distinct action", async () => {

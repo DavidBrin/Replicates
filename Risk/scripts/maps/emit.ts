@@ -24,6 +24,17 @@ export const OUT_DIR = join(ROOT, "src", "content", "maps");
 /** §10's ceiling, on the minified JSON (F53). */
 export const SIZE_LIMIT = 100 * 1024;
 
+/**
+ * The §8 gate, duplicated from `schema.ts` as plain numbers.
+ *
+ * `engine.ts` explains why this side of the fence cannot import the validator;
+ * these three are asserted against `schema.ts`'s own constants by the T7 suite,
+ * so they cannot drift silently.
+ */
+export const MIN_VERTICES = 3;
+export const MAX_VERTICES = 120;
+export const MIN_RING_VERTICES = 3;
+
 export interface MapReport {
   readonly slug: string;
   readonly name: string;
@@ -35,6 +46,10 @@ export interface MapReport {
   readonly edges: number;
   readonly minVertices: number;
   readonly maxVertices: number;
+  /** Subpaths below a triangle — always zero, and a hard failure when it is not. */
+  readonly thinRings: number;
+  /** Subpaths across the whole board, which is what the ring policy decides. */
+  readonly rings: number;
   readonly bytes: number;
   readonly suits: Readonly<Record<string, number>>;
   readonly bonuses: readonly number[];
@@ -47,6 +62,7 @@ export function measure(file: MapFile, changed: boolean): MapReport {
     for (const other of t.adjacent) land.add([t.id, other].sort().join("|"));
   }
   const vertices = file.territories.map((t) => engine.countVertices(t.d));
+  const rings = file.territories.flatMap((t) => engine.parseRings(t.d));
   const suits: Record<string, number> = { infantry: 0, cavalry: 0, artillery: 0 };
   for (const t of file.territories) suits[t.suit] = (suits[t.suit] ?? 0) + 1;
   return {
@@ -59,6 +75,8 @@ export function measure(file: MapFile, changed: boolean): MapReport {
     edges: land.size + file.seaLinks.length,
     minVertices: vertices.length === 0 ? 0 : Math.min(...vertices),
     maxVertices: vertices.length === 0 ? 0 : Math.max(...vertices),
+    thinRings: rings.filter((r) => r.length < MIN_RING_VERTICES).length,
+    rings: rings.length,
     bytes: JSON.stringify(file).length,
     suits,
     bonuses: file.continents.map((c) => c.bonus),
@@ -92,8 +110,14 @@ export function writeMap(file: MapFile): MapReport {
   if (report.bytes > SIZE_LIMIT) {
     throw new Error(`${file.slug}: ${report.bytes} bytes minified exceeds the ${SIZE_LIMIT} byte ceiling (§10 F53)`);
   }
-  if (report.maxVertices > 30 || report.minVertices < 3) {
-    throw new Error(`${file.slug}: vertices per territory ${report.minVertices}..${report.maxVertices} is outside 3..30 (§8)`);
+  if (report.maxVertices > MAX_VERTICES || report.minVertices < MIN_VERTICES) {
+    throw new Error(
+      `${file.slug}: vertices per territory ${report.minVertices}..${report.maxVertices}`
+      + ` is outside ${MIN_VERTICES}..${MAX_VERTICES} (§8)`,
+    );
+  }
+  if (report.thinRings > 0) {
+    throw new Error(`${file.slug}: ${report.thinRings} subpath(s) have fewer than ${MIN_RING_VERTICES} vertices (§8)`);
   }
   return report;
 }
@@ -107,7 +131,8 @@ export function formatReport(report: MapReport): string {
     `${String(report.continents).padStart(2)}C`,
     `${String(report.edges).padStart(3)}e`,
     `(${String(report.landEdges).padStart(3)} land + ${String(report.seaLinks).padStart(2)} sea)`,
-    `v${String(report.minVertices).padStart(2)}-${String(report.maxVertices).padStart(2)}`,
+    `v${String(report.minVertices).padStart(3)}-${String(report.maxVertices).padStart(3)}`,
+    `${String(report.rings).padStart(3)}r`,
     `suits ${suits.padEnd(9)}`,
     `${(report.bytes / 1024).toFixed(1).padStart(5)} KB`,
     report.changed ? "written" : "unchanged",

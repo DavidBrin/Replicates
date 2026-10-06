@@ -37,7 +37,7 @@ export async function POST(request: Request, context: Context): Promise<Response
     const { id } = await context.params;
     if (!id || id.length > 64) return notFound("game not found");
 
-    await heartbeat(player);
+    await heartbeat(player, id);
     const result = await resignSeat(id, player.id);
 
     switch (result.kind) {

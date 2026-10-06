@@ -24,14 +24,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  areaOf, assignSuits, bandNames, clipHalfPlane, conformVertices, mergeToTarget, slugify,
-  slugifyKebab, splitShape, toRoman,
+  areaOf, assignSuits, bandNames, clipHalfPlane, clipToWindow, conformVertices, dissolve,
+  mergeToTarget, nudgeLabels, slugify, slugifyKebab, splitShape, toRoman, unwrapLongitude,
 } from "./geom";
 import { QUANTUM, extentOf, fitProjection, quantise, worldCountries } from "./sources";
 import { attribute, decodeEntities, multiply, normaliseName, parseTransform } from "./svg";
 import {
-  countVertices, fitVertexBudget, ringArea, ringsToPath, sharedVertexAdjacency, simplifyOpen,
-  simplifyRing, type Point, type Ring,
+  countVertices, fitRings, fitVertexBudget, RING_POLICY, ringArea, ringsToPath, selectRings,
+  sharedVertexAdjacency, simplifyOpen, simplifyRing, simplifyToCount, type Point, type Ring,
 } from "./engine";
 
 const quantiser = (n: number): number => Math.round(n * 64) / 64;
@@ -343,6 +343,251 @@ describe("simplifyRing and fitVertexBudget", () => {
     const fitted = fitVertexBudget([circle(400)], 30, 1024);
     const d = ringsToPath(fitted);
     expect(countVertices(d)).toBe(fitted.reduce((n, r) => n + r.length, 0));
+  });
+});
+
+/* ------------------------------------------------------------------ ring policy -- */
+
+describe("the ring policy", () => {
+  /** A circle of `n` points at radius `r`, quantised like the pipeline's own output. */
+  const disc = (n: number, r: number, cx = 500, cy = 500): Ring => Array.from({ length: n }, (_, i) => {
+    const t = (i / n) * Math.PI * 2;
+    return [quantise(cx + r * Math.cos(t)), quantise(cy + r * Math.sin(t))] as Point;
+  });
+
+  it("keeps the mainland and every island worth 2% of it, and drops the rest", () => {
+    // Areas scale as r²: 100, 20, 15 and 3 give shares of 1, 4%, 2.25% and 0.09%.
+    const kept = selectRings([disc(40, 100), disc(40, 20, 900), disc(40, 15, 950), disc(40, 3, 990)]);
+    expect(kept).toHaveLength(3);
+    expect(kept.map((r) => Math.round(ringArea(r)))).toEqual(
+      [...kept.map((r) => Math.round(ringArea(r)))].sort((a, b) => b - a),
+    );
+  });
+
+  it("drops a ring below the absolute sliver floor however big its mainland is not", () => {
+    // The Arctic offcuts: a 2% share of a tiny mainland is still a stray triangle.
+    const rings = [disc(40, 12), disc(40, 6, 600)];
+    expect(selectRings(rings)).toHaveLength(2);
+    expect(selectRings(rings, 200)).toHaveLength(1);
+  });
+
+  it("keeps at most three rings when the territory is only islands", () => {
+    // No ring holds half the area, so this is an archipelago, not a coastline.
+    const kept = selectRings([disc(40, 50), disc(40, 48, 700), disc(40, 46, 900), disc(40, 44, 1100)]);
+    expect(kept).toHaveLength(RING_POLICY.maxArchipelago);
+  });
+
+  it("caps a mainland's islands at five", () => {
+    const rings = [disc(40, 300), ...Array.from({ length: 9 }, (_, i) => disc(40, 60, 2000 + i * 200))];
+    expect(selectRings(rings)).toHaveLength(RING_POLICY.maxSecondary + 1);
+  });
+
+  it("budgets each ring separately rather than sharing one allowance", () => {
+    // The bug: one shared budget and one shared tolerance meant a territory
+    // with many rings drove the tolerance up until *every* ring bottomed out,
+    // which is what rendered the dissolved country groups as triangle soup.
+    const rings = [disc(400, 200), disc(300, 60, 900), disc(300, 55, 1200), disc(300, 50, 1500)];
+    const shared = fitVertexBudget(rings, 30, 1600);
+    // Thirty vertices over four rings leaves the mainland below the twelve a
+    // coastline needs — every ring is squeezed by the same tolerance.
+    expect((shared[0] as Ring).length).toBeLessThan(RING_POLICY.primaryMin);
+
+    const fitted = fitRings(rings, 1600);
+    expect(fitted).toHaveLength(4);
+    expect((fitted[0] as Ring).length).toBeGreaterThanOrEqual(RING_POLICY.primaryMin);
+    expect((fitted[0] as Ring).length).toBeLessThanOrEqual(RING_POLICY.primaryMax);
+    for (const ring of fitted.slice(1)) {
+      expect(ring.length).toBeGreaterThanOrEqual(RING_POLICY.secondaryMin);
+      expect(ring.length).toBeLessThanOrEqual(RING_POLICY.secondaryMax);
+    }
+  });
+
+  it("never spends more than the validator's per-territory ceiling", () => {
+    const rings = [disc(900, 400), ...Array.from({ length: 5 }, (_, i) => disc(400, 90, 3000 + i * 300))];
+    const total = fitRings(rings, 4000).reduce((n, r) => n + r.length, 0);
+    expect(total).toBeLessThanOrEqual(RING_POLICY.totalMax);
+  });
+
+  it("floors the simplifier at a quadrilateral, not a triangle", () => {
+    // A four-vertex island still reads as an island; a three-vertex one is the
+    // triangle that gave the whole failure its name.
+    for (const tolerance of [50, 400, 5000, 100000]) {
+      expect(simplifyRing(disc(80, 40), tolerance, 4).length).toBeGreaterThanOrEqual(4);
+    }
+    // …unless the input never had four.
+    expect(simplifyRing([[0, 0], [10, 0], [5, 9]], 5000, 4)).toHaveLength(3);
+  });
+
+  it("spends as much of a ring's allowance as the shape can use", () => {
+    // Bisecting for the SMALLEST tolerance that fits, not the first one found.
+    const fitted = simplifyToCount(disc(600, 300), 60, 1024, 4);
+    expect(fitted.length).toBeLessThanOrEqual(60);
+    expect(fitted.length).toBeGreaterThan(40);
+  });
+});
+
+/* ------------------------------------------------------------------ dissolve -- */
+
+describe("dissolve", () => {
+  it("fuses two shapes that share an edge into one ring", () => {
+    const left = box(0, 0, 10, 10);
+    const right: Ring = [[10, 0], [20, 0], [20, 10], [10, 10]];
+    const result = dissolve([left, right]);
+    expect(result.fellBack).toBe(false);
+    expect(result.rings).toHaveLength(1);
+    expect(result.after).toBeLessThanOrEqual(result.before);
+    expect(ringArea(result.rings[0] as Ring)).toBeCloseTo(200, 6);
+    // The internal border is gone: nothing left on x = 10 between the corners.
+    // The two corners themselves survive as collinear vertices, which is
+    // Douglas-Peucker's job to remove, not the union's.
+    const onBorder = (result.rings[0] as Ring).filter((p) => p[0] === 10 && p[1] > 0 && p[1] < 10);
+    expect(onBorder).toEqual([]);
+    expect((result.rings[0] as Ring).length).toBe(6);
+    expect(simplifyRing(result.rings[0] as Ring, 0.5)).toHaveLength(4);
+  });
+
+  it("never returns more rings than it was given — the merge assertion", () => {
+    const strip = (i: number): Ring => [[i * 10, 0], [i * 10 + 10, 0], [i * 10 + 10, 10], [i * 10, 10]];
+    for (const n of [2, 3, 5, 9]) {
+      const result = dissolve(Array.from({ length: n }, (_, i) => strip(i)));
+      expect(result.after, `${n} strips`).toBeLessThanOrEqual(result.before);
+      expect(result.after).toBe(1);
+      expect(ringArea(result.rings[0] as Ring)).toBeCloseTo(n * 100, 6);
+    }
+  });
+
+  it("leaves disjoint islands as separate rings", () => {
+    const result = dissolve([box(0, 0, 10, 10), box(100, 100, 10, 10)]);
+    expect(result.fellBack).toBe(false);
+    expect(result.after).toBe(2);
+    expect(result.before).toBe(2);
+  });
+
+  it("is winding-agnostic: a reversed member still fuses", () => {
+    const left = box(0, 0, 10, 10);
+    const right: Ring = [...([[10, 0], [20, 0], [20, 10], [10, 10]] as Ring)].reverse();
+    expect(dissolve([left, right]).after).toBe(1);
+  });
+
+  it("drops a hole the merge left behind rather than drawing a donut", () => {
+    // Four strips round an empty middle: the union is a frame, and the inner
+    // boundary comes back wound the other way.
+    const frame: Ring[] = [
+      box(0, 0, 30, 10), box(0, 20, 30, 10), box(0, 10, 10, 10), box(20, 10, 10, 10),
+    ];
+    const result = dissolve(frame);
+    expect(result.rings.every((r) => ringArea(r) > 0)).toBe(true);
+    expect(result.after).toBe(1);
+    // The outer boundary only — the hole is not a second subpath.
+    expect(ringArea(result.rings[0] as Ring)).toBeCloseTo(900, 6);
+  });
+
+  it("dissolves the pieces of a split shape back into the shape", () => {
+    const original = box(0, 0, 600, 400);
+    const pieces = splitShape([original], 6, quantiser);
+    const conformed = conformVertices(pieces, 1 / QUANTUM);
+    const result = dissolve(conformed.flat());
+    expect(result.after).toBe(1);
+    expect(ringArea(result.rings[0] as Ring)).toBeCloseTo(600 * 400, 4);
+  });
+
+  it("keeps the input when the edges will not close, rather than losing the land", () => {
+    // Two shapes that overlap rather than abut share no cancelling edge pair,
+    // so the walk has nothing to fuse; the fallback is the old concatenation.
+    const result = dissolve([box(0, 0, 10, 10), box(5, 5, 10, 10)]);
+    expect(result.rings).toHaveLength(2);
+    expect(result.after).toBeLessThanOrEqual(result.before);
+  });
+});
+
+/* ------------------------------------------------------------------ clipping -- */
+
+describe("clipHalfPlane splits rather than bridges", () => {
+  /** A comb: a base with two teeth pointing up (y-down space, so "up" is −y). */
+  const comb: Ring = [
+    [0, 100], [60, 100], [60, 80], [40, 80], [40, 0], [30, 0],
+    [30, 80], [20, 80], [20, 0], [10, 0], [10, 80], [0, 80],
+  ];
+
+  it("returns one ring per surviving piece, not one ring with bridges", () => {
+    // The old Sutherland–Hodgman returned a single ring joining the two teeth
+    // along the cut. The bridges were zero-width until Douglas–Peucker
+    // decimated them, and then they inflated into the bands that ran across
+    // the top of the Europe and world boards.
+    const tips = clipHalfPlane([comb], 1, 40, "low");
+    expect(tips).toHaveLength(2);
+    for (const ring of tips) expect(ringArea(ring)).toBeCloseTo(400, 6);
+  });
+
+  it("keeps a single piece single", () => {
+    const base = clipHalfPlane([comb], 1, 40, "high");
+    expect(base).toHaveLength(1);
+    expect(areaOf(base)).toBeCloseTo(ringArea(comb) - 800, 6);
+  });
+
+  it("survives simplification without inflating a band", () => {
+    const tips = clipHalfPlane([comb], 1, 40, "low");
+    const before = areaOf(tips);
+    const after = areaOf(tips.map((r) => simplifyRing(r, 2, 4)));
+    expect(after).toBeCloseTo(before, 6);
+  });
+
+  it("still agrees on the crossing points from both sides, so adjacency holds", () => {
+    const onCut = (rings: Ring[]): string[] => [...new Set(
+      rings.flat().filter((p) => p[1] === 40).map((p) => `${p[0]},${p[1]}`),
+    )].sort();
+    expect(onCut(clipHalfPlane([comb], 1, 40, "low")))
+      .toEqual(onCut(clipHalfPlane([comb], 1, 40, "high")));
+  });
+});
+
+describe("the antimeridian", () => {
+  it("makes a wrapping ring's longitudes continuous", () => {
+    const ring: Ring = [[170, 10], [-170, 10], [-170, 20], [170, 20]];
+    expect(unwrapLongitude(ring).map((p) => p[0])).toEqual([170, 190, 190, 170]);
+  });
+
+  it("cuts a ring that straddles 180° into one piece each side", () => {
+    // Natural Earth ships Russia and Wrangel Island like this, and projected
+    // whole they drew a line the full width of the board.
+    const ring: Ring = [[170, 10], [-170, 10], [-170, 20], [170, 20]];
+    const pieces = clipToWindow([ring], [-180, 180], [-90, 90]);
+    expect(pieces).toHaveLength(2);
+    const spans = pieces.map((r) => Math.max(...r.map((p) => p[0])) - Math.min(...r.map((p) => p[0])));
+    for (const span of spans) expect(span).toBeCloseTo(10, 6);
+  });
+
+  it("leaves a ring that does not straddle alone", () => {
+    const pieces = clipToWindow([box(0, 0, 10, 10)], [-180, 180], [-90, 90]);
+    expect(pieces).toHaveLength(1);
+    expect(ringArea(pieces[0] as Ring)).toBeCloseTo(100, 6);
+  });
+
+  it("windows a region without reaching round the globe for it", () => {
+    const ring: Ring = [[170, 10], [-170, 10], [-170, 20], [170, 20]];
+    expect(clipToWindow([ring], [-25, 45], [34, 72])).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ labels -- */
+
+describe("nudgeLabels", () => {
+  const anchors = (pts: [number, number][]): { token: [number, number]; label: [number, number] }[] =>
+    pts.map((p) => ({ token: p, label: [p[0], p[1] + 26] }));
+
+  it("leaves a label that collides with nothing where it is", () => {
+    expect(nudgeLabels(anchors([[100, 100], [600, 600]]), 1000)).toEqual([126, 626]);
+  });
+
+  it("pushes a label clear of another territory's token", () => {
+    // The second token sits exactly where the first one's label wants to go.
+    const out = nudgeLabels(anchors([[100, 100], [100, 126]]), 1000);
+    expect(out[0]).toBeGreaterThan(126);
+  });
+
+  it("never pushes a label out of the frame", () => {
+    const out = nudgeLabels(anchors([[100, 960], [100, 986]]), 1000);
+    for (const y of out) expect(y).toBeLessThanOrEqual(998);
   });
 });
 

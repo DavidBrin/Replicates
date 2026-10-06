@@ -1103,8 +1103,13 @@ The resolver is the **only** place randomness enters, and it never mutates state
 ```ts
 /** PCG32 over a 64-bit state held as two u32s; integer ops only (Math.imul, >>> 0). */
 export function pcg32(seedHi: number, seedLo: number): Rng;
-/** Purpose-tagged sub-stream: pcg32(hash(seed, purpose, turn)). The determinism keystone (D4). */
-export function rngFor(seed: string, purpose: RngPurpose, turn: number): Rng;
+/**
+ * Purpose-tagged sub-stream: pcg32(hash(seed, purpose, index)). The determinism keystone (D4).
+ * `index` is the SEQ OF THE ACTION BEING PRODUCED (the session's / server's `nextSeq`), never
+ * `state.turn` — keyed on the turn, every attack in a turn would reuse the stream's first draw
+ * (codex round 1, finding 7). Personas and the deal use index 0. [SPEC]
+ */
+export function rngFor(seed: string, purpose: RngPurpose, index: number): Rng;
 
 // ---- resolver signatures (src/engine/resolver/) ----
 /**
@@ -2019,6 +2024,13 @@ on each response (fog):
   queue response.actions into the animation queue, in seq order
 displayedState = fold(apply, confirmedState, pendingActions)   // my own moves only, all visible to me
 ```
+
+**The fog action list is REDACTED** (codex round 1, finding 17 **[SPEC]**): `GAME_STARTED` is omitted
+entirely; an action naming any territory the viewer cannot see (not owned, not adjacent) arrives as
+exactly `{ type: "HIDDEN", seat }`; another seat's card award arrives as
+`{ type: "CARD_DRAWN", seat, card: null }`. The client animates what it can and folds nothing — an
+unknown `type` or a null card is a no-op, never a desync. The raw rows stay in the log, so the
+debug route and the server fold are unaffected.
 
 The cost is one masked snapshot per changed poll instead of a delta — paid only by fog games, which
 are the opt-in minority, and §6.4's envelope absorbs it because the 204 path is untouched and a

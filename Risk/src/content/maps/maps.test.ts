@@ -19,8 +19,8 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_SLUGS, loadMapFile, MAP_SLUGS } from "./index";
 import {
-  countVertices, generateVoronoiMap, loadMap, MAX_VERTICES, MIN_VERTICES, normaliseOptions,
-  parseRings, pointInRings, validateMap,
+  countVertices, generateVoronoiMap, loadMap, MAX_VERTICES, MIN_RING_VERTICES, MIN_VERTICES,
+  normaliseOptions, parseRings, pointInRings, subpathVertexCounts, validateMap,
 } from "@/engine/map";
 import { MAX_SEATS, type MapFile } from "@/engine/types";
 
@@ -38,6 +38,11 @@ function poke(target: unknown, key: string, value: unknown): void {
 /** §10's ceiling, on the minified JSON (F53). */
 const SIZE_LIMIT = 100 * 1024;
 const MAPS_DIR = join(process.cwd(), "src", "content", "maps");
+/** The nine Tier 3 boards: the ones whose geometry this pipeline simplifies from geodata. */
+const GENERATED_SLUGS: readonly string[] = [
+  "world-simple", "europe", "usa-states", "asia", "africa",
+  "north-america", "south-america", "australia-new-zealand", "middle-east",
+];
 
 /** Loaded once: sixteen boards is 286 KB and every block below reads them. */
 const FILES: Map<string, MapFile> = new Map(
@@ -110,15 +115,37 @@ describe("T7 — validateMap over every shipped map", () => {
     expect(oversize).toEqual([]);
   });
 
-  it("spends 3 to 30 vertices on every territory (§8)", () => {
+  it("spends 3 to 120 vertices on every territory, 3 per subpath (§8)", () => {
     const outside: string[] = [];
     for (const slug of MAP_SLUGS) {
       for (const t of fileFor(slug).territories) {
         const n = countVertices(t.d);
         if (n < MIN_VERTICES || n > MAX_VERTICES) outside.push(`${slug}/${t.id}=${n}`);
+        // Per ring as well as per territory: the budget is spent ring by ring,
+        // so a territory inside the ceiling can still carry an undrawable
+        // two-vertex offcut, and that is what the old shared budget produced.
+        for (const ring of subpathVertexCounts(t.d)) {
+          if (ring < MIN_RING_VERTICES) outside.push(`${slug}/${t.id} subpath=${ring}`);
+        }
       }
     }
     expect(outside).toEqual([]);
+  });
+
+  it("gives every generated territory's largest subpath a real coastline (§8)", () => {
+    // The symptom the per-ring budget exists to prevent: a territory whose
+    // biggest ring is a triangle is not a shape, it is a collapse. Four is the
+    // simplifier's floor, so anything at three came from source geometry that
+    // only had three.
+    const thin: string[] = [];
+    for (const slug of GENERATED_SLUGS) {
+      for (const t of fileFor(slug).territories) {
+        const rings = parseRings(t.d);
+        const largest = Math.max(0, ...rings.map((r) => r.length));
+        if (largest < 4) thin.push(`${slug}/${t.id}=${largest}`);
+      }
+    }
+    expect(thin).toEqual([]);
   });
 
   it("puts every token anchor inside its own polygon", () => {
@@ -263,7 +290,7 @@ describe("T7 — the counts every other board promises", () => {
     ["world-extended", 47, 6, 94],
     ["napoleonic-europe", 59, 11, 127],
     ["world-simple", 24, 6, 30],
-    ["europe", 44, 7, 88],
+    ["europe", 44, 7, 90],
     ["usa-states", 42, 9, 91],
     ["asia", 48, 9, 102],
     ["africa", 37, 7, 86],

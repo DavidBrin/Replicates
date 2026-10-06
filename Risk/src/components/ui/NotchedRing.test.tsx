@@ -74,9 +74,12 @@ describe("SegmentedToggle", () => {
 });
 
 describe("Avatar", () => {
-  it("derives up to two initials from the display name", () => {
-    expect(initialsOf("Bold General 42")).toBe("B4");
+  it("derives up to two initials from the display name, skipping the generated number", () => {
+    // `<Adjective> <Noun> <NN>` (§7): a digit is not an initial.
+    expect(initialsOf("Bold General 42")).toBe("BG");
+    expect(initialsOf("Northern Warden 21")).toBe("NW");
     expect(initialsOf("Solace")).toBe("S");
+    expect(initialsOf("42")).toBe("4");
     expect(initialsOf("   ")).toBe("?");
   });
 

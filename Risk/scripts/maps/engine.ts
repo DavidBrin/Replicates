@@ -49,7 +49,8 @@ export const { sharedVertexAdjacency, componentsOf, growGroups, bonusFor, slotsF
 export const {
   parseRings, tokenisePath, countVertices, ringArea, ringArea2, largestRing, pointInRing,
   pointInRings, bboxOfRings, ringsToPath, simplifyRing, simplifyOpen, segmentDistance2,
-  fitVertexBudget, centroidOf, poleOfWith, anchorsFromPole, LABEL_OFFSET_Y, POLE_PRECISION,
+  fitVertexBudget, fitRings, selectRings, simplifyToCount, RING_POLICY,
+  centroidOf, poleOfWith, anchorsFromPole, LABEL_OFFSET_Y, POLE_PRECISION,
 } = loaded;
 
 export type Point = PathModule.Point;

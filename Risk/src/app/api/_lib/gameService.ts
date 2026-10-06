@@ -37,10 +37,12 @@ import {
   MAX_TICK_ACTIONS,
   MISSED_TURNS_TO_BOT,
   nextBotAction,
+  owedServerAction,
   storeGrudge,
   TICK_LEASE_SECONDS,
   turnSecondsFor,
 } from "./gameState";
+import { redactLogForSeat, type RedactedAction } from "./redact";
 import { asAction, asIntent, type ActionPost } from "./schemas";
 
 /**
@@ -70,7 +72,14 @@ export interface GameSync {
   fromSeq?: number;
   snapshot?: GameState;
   snapshotSeq?: number;
-  actions: LoggedAction[];
+  /**
+   * The delta. A non-fog client folds these and hash-checks every row, so
+   * they go out as stored; a fog client only animates them, so they are
+   * redacted per viewer ({@link redactLogForSeat}) and a hidden payload
+   * arrives as `{ type: "HIDDEN", seat }`. `LoggedAction` is a subtype of
+   * `RedactedAction`, so the serialised shape is the same either way.
+   */
+  actions: RedactedAction[];
   presence: PresenceRow[];
   turnDeadline: string | null;
   chat: ChatLine[];
@@ -134,6 +143,10 @@ async function authoritative(
  * always holds; they advance only once the fold has drifted past
  * {@link COMPACTION_THRESHOLD}. See that constant for why the snapshot has to
  * lag rather than track `seq`.
+ *
+ * The turn deadline is renewed **only when the seat changes hands** (§5.6):
+ * see `GameCommit.renewDeadline` for why a commit in the middle of a turn
+ * must leave the clock alone.
  */
 async function commitState(
   db: SqlExecutor,
@@ -157,6 +170,7 @@ async function commitState(
     phase: state.phase,
     // A bot's turn carries no deadline: there is nobody to time out.
     turnSeconds: state.outcome !== null || seatIsBot ? null : seconds,
+    renewDeadline: seat !== row.currentSeat,
     status: state.outcome !== null ? "finished" : row.status,
     winnerSeat: state.outcome?.winner ?? row.winnerSeat,
     botMemory,
@@ -174,12 +188,25 @@ async function commitState(
  * (D5): `GameState` has no field for it, so the response serialiser cannot
  * reach it and there is nothing to strip.
  */
-export async function createGame(input: {
-  lobbyId: string | null;
-  mapSlug: string;
-  rules: Rules;
-  seats: readonly GameSeatInput[];
-}): Promise<string> {
+export async function createGame(
+  input: {
+    lobbyId: string | null;
+    mapSlug: string;
+    rules: Rules;
+    seats: readonly GameSeatInput[];
+  },
+  /**
+   * An executor to write through, when the caller already owns a transaction.
+   *
+   * `startLobby` passes its own, so the lobby's `open → starting → playing`
+   * flip, the `games` row and `GAME_STARTED` are one atomic write. It is
+   * passed rather than relying on a nested `transaction()` call joining the
+   * outer one, because that is a PGlite behaviour and not a contract the Neon
+   * adapter keeps: there, a nested call takes a second connection and commits
+   * on its own.
+   */
+  executor?: SqlExecutor,
+): Promise<string> {
   const engine = serverEngine();
   const map = await loadMapDef(input.mapSlug);
   const seed = config().online.fixedSeed ?? newSeed();
@@ -217,7 +244,7 @@ export async function createGame(input: {
   const seat = currentSeatOf(state);
   const seatIsBot = state.seats[seat]?.kind === "bot";
 
-  await getDb().transaction(async (tx) => {
+  const write = async (tx: SqlExecutor): Promise<void> => {
     await new GamesRepository(tx).create({
       id: gameId,
       lobbyId: input.lobbyId,
@@ -244,7 +271,10 @@ export async function createGame(input: {
       clientActionId: null,
       stateHash: hash,
     });
-  });
+  };
+
+  if (executor) await write(executor);
+  else await getDb().transaction(write);
 
   return gameId;
 }
@@ -300,6 +330,61 @@ async function appendChain(
 }
 
 /**
+ * Append whatever the **authority itself** owes after an action: the card
+ * award and the round-start portal relocation (§5.7, R20, R76).
+ *
+ * Online these are the server's, not a client's — the schema refuses a
+ * `CARD_DRAWN` or `PORTALS_MOVED` body outright — and they land in the *same
+ * transaction* as the action that earned them, so no poll can ever observe a
+ * `fortify` state that owes a card or a new round whose portals have not
+ * moved yet. {@link owedServerAction} decides what is due and holds the
+ * reasoning; this walks it until nothing is.
+ *
+ * At most two rows can come out of one action (a card, then a relocation), so
+ * the loop is bounded by construction rather than by a counter.
+ */
+async function appendOwed(
+  tx: SqlExecutor,
+  engine: ServerEngine,
+  row: GameSecretRow,
+  map: MapDef,
+  from: { state: GameState; seq: number },
+  portalsDue: boolean,
+): Promise<{ state: GameState; seq: number; logged: LoggedAction[] }> {
+  const actions = new ActionsRepository(tx);
+  let state = from.state;
+  let seq = from.seq;
+  const due = { card: true, portals: portalsDue };
+  const logged: LoggedAction[] = [];
+
+  for (let step = 0; step < 2; step += 1) {
+    if (state.outcome !== null) break;
+    const owed = owedServerAction(engine, row.seed, state, map, seq + 1, due);
+    if (owed === null) break;
+    // Each is offered once: a card per capturing turn (R20) and a relocation
+    // per round start, whatever the board allows.
+    if (owed.type === "PORTALS_MOVED") due.portals = false;
+    if (owed.type === "CARD_DRAWN") due.card = false;
+
+    const result = engine.apply(state, map, owed);
+    if (result.error) break;
+    state = result.state;
+    seq += 1;
+    const appended = await actions.append({
+      gameId: row.id,
+      seq,
+      action: owed,
+      actor: "server",
+      clientActionId: null,
+      stateHash: engine.hashState(state),
+    });
+    logged.push(appended.logged);
+  }
+
+  return { state, seq, logged };
+}
+
+/**
  * `POST /api/games/:id/actions` — one transaction, `select … for update`.
  *
  * The lock is the fence that stops a double-clicked Attack racing two inserts
@@ -335,7 +420,7 @@ export async function submitAction(
       // Idempotency first: a retry must be indistinguishable from a slow
       // success, and must not re-run any of the work below (D15).
       const already = await actions.byClientActionId(gameId, post.clientActionId);
-      if (already) return { kind: "ok", seq: row.seq, actions: [already] };
+      if (already) return await replayFrom(actions, gameId, already);
 
       if (row.status !== "playing") return { kind: "finished" };
 
@@ -357,7 +442,11 @@ export async function submitAction(
                 state,
                 map,
                 asIntent(post.intent),
-                engine.rngFor(row.seed, "battle", state.turn),
+                // The sub-stream index is the `seq` THIS attack will take.
+                // Keyed on `state.turn` — which is what this did — every
+                // attack in a turn is handed the same stream from its start,
+                // so a seat that attacks twice rolls the same dice twice.
+                engine.rngFor(row.seed, "battle", row.seq + 1),
                 oddsFor(state.rules.diceMode),
                 state.rules.diceMode,
               ),
@@ -372,17 +461,60 @@ export async function submitAction(
         { action, actor: "human", clientActionId: post.clientActionId },
       ]);
 
+      // The card award and the round-start relocation ride the same
+      // transaction as the action that earned them (§5.7, R20).
+      const owed = await appendOwed(
+        tx,
+        engine,
+        row,
+        map,
+        appended,
+        appended.state.round !== state.round,
+      );
+
       await games.setMissedTurns(gameId, seat, 0);
-      await commitState(tx, engine, row, appended.state, appended.seq, row.botMemory);
-      return { kind: "ok", seq: appended.seq, actions: appended.logged };
+      await commitState(tx, engine, row, owed.state, owed.seq, row.botMemory);
+      return {
+        kind: "ok",
+        seq: owed.seq,
+        actions: [...appended.logged, ...owed.logged],
+      };
     });
   } catch (error) {
     if (error instanceof DuplicateSubmission) {
-      const seq = (await new GamesRepository(getDb()).head(gameId))?.seq ?? error.logged.seq;
-      return { kind: "ok", seq, actions: [error.logged] };
+      return replayFrom(new ActionsRepository(getDb()), gameId, error.logged);
     }
     throw error;
   }
+}
+
+/**
+ * A retry's answer: the action that was already recorded, **and every action
+ * appended since it** (D15).
+ *
+ * `{ seq, actions }` is also the submitter's cursor — `pollingSync` folds
+ * `actions` and then sets `seq` — so answering a retry with the game's
+ * current `seq` and only the one recorded action tells the client it is
+ * up to date with rows it has never been given: the card award that followed
+ * it, a bot's reply turn, another seat's move. Those rows are then never
+ * folded and the client is silently behind for the rest of the game.
+ *
+ * So the range starts at the original action and `seq` is the original
+ * action's own. `ingest` drops anything at or below what it has folded, so a
+ * cursor that is too *low* costs one re-delivery and nothing else, where one
+ * that is too high loses actions outright.
+ */
+async function replayFrom(
+  actions: ActionsRepository,
+  gameId: string,
+  already: LoggedAction,
+): Promise<SubmitResult> {
+  const from = await actions.since(gameId, already.seq - 1);
+  return {
+    kind: "ok",
+    seq: already.seq,
+    actions: from.length > 0 ? from : [already],
+  };
 }
 
 /* ---------------------------------------------------------------- resign -- */
@@ -501,13 +633,13 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
   const head = await games.head(gameId);
   if (!head || head.status !== "playing") return NO_TICK;
 
-  const seats = await games.players(gameId);
-  const current = seats.find((row) => row.seat === head.currentSeat);
-  const deadlinePassed =
+  const preSeats = await games.players(gameId);
+  const preCurrent = preSeats.find((row) => row.seat === head.currentSeat);
+  const preDeadlinePassed =
     head.turnDeadline !== null && Date.parse(head.turnDeadline) <= Date.now();
-  const away = current?.kind === "human" && isUnseen(current.lastSeenAt);
+  const preAway = preCurrent?.kind === "human" && isUnseen(preCurrent.lastSeenAt);
 
-  if (current?.kind !== "bot" && !deadlinePassed && !away) return NO_TICK;
+  if (preCurrent?.kind !== "bot" && !preDeadlinePassed && !preAway) return NO_TICK;
 
   const lease = await games.takeTickLease(gameId, TICK_LEASE_SECONDS);
   if (lease === null) return NO_TICK;
@@ -521,6 +653,18 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
       const row = await txGames.secretForUpdate(gameId);
       if (!row) return NO_TICK;
 
+      // Everything the loop branches on is re-read HERE, under the lease and
+      // the row lock. The reads above are a cheap "is there anything to do at
+      // all" filter, and by the time this transaction owns the row they can
+      // all be stale: the seat whose deadline had passed may have moved
+      // (their own POST renews the clock and advances `current_seat`), an
+      // away seat may have polled, and `missed_turns` may have been reset.
+      // Acting on the pre-lock answer is how a tick auto-skips a turn that
+      // the player had in fact just played.
+      const seats = await txGames.players(gameId);
+      const deadlinePassed =
+        row.turnDeadline !== null && Date.parse(row.turnDeadline) <= Date.now();
+
       const folded = await withFold(tx, engine, row);
       const map = folded.map;
       let state = folded.state;
@@ -529,6 +673,12 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
       let appended = 0;
       let capped = false;
       let timedOut = deadlinePassed;
+      /** The round start whose relocation is still owed, and the turn whose
+       *  card award has already been offered (§5.7, R20). */
+      let portalsOwed = false;
+      let cardOfferedForTurn: number | null = null;
+      /** The seat whose current timeout has already been counted (§5.6). */
+      let counted: Seat | null = null;
 
       const missed = new Map<Seat, number>(seats.map((seat) => [seat.seat, seat.missedTurns]));
       const lastSeen = new Map<Seat, string | null>(
@@ -543,7 +693,19 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
 
         let step: ChainStep | null = null;
 
-        if (isBot) {
+        // The authority's own owed work comes first, whoever is to play: the
+        // card award is pinned to `fortify` and has to land BEFORE the
+        // `END_TURN` a timeout or a bot is about to produce (R20), and a new
+        // round's portals move before its first action (§5.7).
+        const owed = owedServerAction(engine, row.seed, state, map, seq + 1, {
+          card: cardOfferedForTurn !== state.turn,
+          portals: portalsOwed,
+        });
+        if (owed !== null) {
+          if (owed.type === "PORTALS_MOVED") portalsOwed = false;
+          if (owed.type === "CARD_DRAWN") cardOfferedForTurn = state.turn;
+          step = { action: owed, actor: "server" };
+        } else if (isBot) {
           const persona = state.seats[seat]?.persona ?? null;
           if (persona) {
             const grudge = grudgeFor(memory, seat, state.seats.length);
@@ -552,6 +714,7 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
               grudge,
               odds: oddsFor(state.rules.diceMode),
               seed: row.seed,
+              nextSeq: seq + 1,
             });
             memory = storeGrudge(memory, seat, grudge);
             if (action) step = { action, actor: "bot" };
@@ -564,6 +727,17 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
           // "They are gone, whatever their turn count" (§5.6).
           step = { action: seatToBot(engine, row.seed, state, seat, "away"), actor: "server" };
         } else if (timedOut) {
+          // The miss is counted the moment the deadline is acted on, not when
+          // the END_TURN happens to come out: a timed-out turn is usually two
+          // actions (AUTO_DEPLOY then END_TURN) and the takeover decision is
+          // taken before either of them. Counting afterwards made
+          // `MISSED_TURNS_TO_BOT = 2` mean the THIRD expiry, because the
+          // comparison always ran against the previous turn's total — and
+          // counting per action rather than per turn would have doubled it.
+          if (counted !== seat) {
+            missed.set(seat, (missed.get(seat) ?? 0) + 1);
+            counted = seat;
+          }
           if ((missed.get(seat) ?? 0) >= MISSED_TURNS_TO_BOT) {
             // "They are still polling — just not playing."
             step = {
@@ -572,10 +746,7 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
             };
           } else {
             const fallback = autoSkipAction(engine, state, map, seat);
-            if (fallback) {
-              step = { action: fallback, actor: "server" };
-              if (fallback.type === "END_TURN") missed.set(seat, (missed.get(seat) ?? 0) + 1);
-            }
+            if (fallback) step = { action: fallback, actor: "server" };
           }
         } else {
           // A live human inside their deadline: the tick's work is done and
@@ -584,6 +755,7 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
         }
 
         if (!step) break;
+        const roundBefore = state.round;
 
         const result = engine.apply(state, map, step.action);
         if (result.error) break;
@@ -605,8 +777,14 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
           await txGames.setSeatKind(gameId, step.action.seat, "bot", standing, step.action.tier);
         }
 
+        // A new round owes its portal relocation before anybody acts in it.
+        if (state.round !== roundBefore) portalsOwed = true;
+
         // The deadline is renewed the moment the seat changes hands.
-        if (currentSeatOf(state) !== seat) timedOut = false;
+        if (currentSeatOf(state) !== seat) {
+          timedOut = false;
+          counted = null;
+        }
         if (appended >= MAX_TICK_ACTIONS) capped = true;
       }
 
@@ -636,7 +814,16 @@ function isUnseen(lastSeenAt: string | null): boolean {
   return Date.parse(lastSeenAt) < Date.now() - AWAY_SECONDS * 1000;
 }
 
-/** Mint the persona a `SEAT_TO_BOT` row has to carry (§4.8). */
+/**
+ * Mint the persona a `SEAT_TO_BOT` row has to carry (§4.8).
+ *
+ * The persona streams stay at **index 0**, the same place `createGame` draws
+ * from: a persona is a property of a seat rather than of an action, and
+ * `state.turn` as an index was simply wrong — the same turn index is shared by
+ * every seat's takeover in that turn, so two takeovers in one turn drew the
+ * same stream anyway. The payload carries the persona, so the log stays the
+ * authority either way.
+ */
 function seatToBot(
   engine: ServerEngine,
   seed: string,
@@ -647,8 +834,8 @@ function seatToBot(
   const tier: BotTier = state.rules.aiDifficulty;
   const persona = engine.drawPersonas(
     [tier],
-    engine.rngFor(seed, "personaAssign", state.turn),
-    engine.rngFor(seed, "personaJitter", state.turn),
+    engine.rngFor(seed, "personaAssign", 0),
+    engine.rngFor(seed, "personaJitter", 0),
   )[0];
   if (!persona) throw new Error("drawPersonas returned no persona for a seat takeover");
   return { type: "SEAT_TO_BOT", seat, reason, tier, persona };
@@ -709,12 +896,22 @@ export async function pollGame(input: {
 
   if (head.rules.fogOfWar === true) {
     // View mode: always the caller's masked snapshot at `snapshotSeq === seq`,
-    // plus the actions since `since` FOR ANIMATION ONLY.
+    // plus the actions since `since` FOR ANIMATION ONLY — a fog client never
+    // folds them and never hash-checks them, because a masked view is
+    // unhashable (F36). So they are **redacted against the same view** that
+    // the snapshot was masked with: `GAME_STARTED` is dropped, a payload
+    // naming anything the caller cannot see becomes `{ type: "HIDDEN", seat }`
+    // and another seat's `CARD_DRAWN` loses its card. Sending the log as
+    // stored would have handed every fog client the whole board (R73).
     const loaded = await authoritative(db, engine, input.gameId);
     if (!loaded) return { kind: "notFound" };
-    body.snapshot = engine.viewFor(loaded.state, loaded.map, seat);
+    const view = engine.viewFor(loaded.state, loaded.map, seat);
+    body.snapshot = view;
     body.snapshotSeq = head.seq;
-    body.actions = await actions.since(input.gameId, input.since);
+    body.actions = redactLogForSeat(await actions.since(input.gameId, input.since), {
+      seat,
+      state: view,
+    });
     body.you.cards = [...(loaded.state.seats[seat]?.cards ?? [])];
     return { kind: "body", seq: head.seq, body };
   }
@@ -730,17 +927,63 @@ export async function pollGame(input: {
 
   // Cold (`since === 0`) or behind the compaction horizon: the authoritative
   // snapshot, `fogged: false`, because the client must hash it to keep folding
-  // (F12 ∧ F36). It reveals nothing a non-fog client was not already getting,
-  // since it replays the whole log including every `CARD_DRAWN`.
+  // (F12 ∧ F36).
+  //
+  // **This carries every seat's hand, and that is an accepted trade-off.** It
+  // reveals nothing a non-fog client was not already getting: the delta it
+  // folds replays the whole log including every `CARD_DRAWN`, so a client that
+  // wanted the other hands could read them there. Masking the snapshot would
+  // make it unhashable and so unfoldable, and masking the log would need a
+  // state model for a card that is known to exist but not known which — which
+  // is a bigger change than the leak is worth in a casual game where the
+  // roster already shows every seat's `cardCount`. Fog games are a different
+  // matter and take the masked path above.
   const row = await games.secret(input.gameId);
   if (!row) return { kind: "notFound" };
   const map = await loadMapDef(row.mapSlug);
+  const delta = await actions.since(input.gameId, row.snapshotSeq);
   body.snapshot = row.snapshot;
   body.snapshotSeq = row.snapshotSeq;
-  body.actions = await actions.since(input.gameId, row.snapshotSeq);
-  const folded = foldActions(engine, row.snapshot, map, body.actions);
+  body.actions = delta;
+  const folded = foldActions(engine, row.snapshot, map, delta);
   body.you.cards = [...(folded.seats[seat]?.cards ?? [])];
   return { kind: "body", seq: head.seq, body };
+}
+
+/**
+ * The caller's seat in a game, or why they have none — POLL 3's authorisation
+ * fence (§6).
+ *
+ * Separate from {@link pollGame} because the poll's route has to answer `403`
+ * **before** it reclaims a seat or runs a tick: both of those append to the
+ * log, and a request that is about to be refused must not move the game on.
+ */
+export async function seatFor(
+  gameId: string,
+  playerId: string,
+): Promise<{ kind: "ok"; seat: number } | { kind: "notFound" } | { kind: "notSeated" }> {
+  const games = new GamesRepository(getDb());
+  if (!(await games.head(gameId))) return { kind: "notFound" };
+  const seat = await games.seatOf(gameId, playerId);
+  return seat === null ? { kind: "notSeated" } : { kind: "ok", seat };
+}
+
+/**
+ * A seat's live allies, folded from the log (R80, §5.9's ally-only lines).
+ *
+ * The folded state and not `games.snapshot`: the snapshot deliberately lags
+ * `seq` (see {@link COMPACTION_THRESHOLD}), so an alliance accepted in the
+ * last fifty actions is not in it, and a chat line gated on the snapshot
+ * alone would be refused for the rest of the turn it was agreed in.
+ */
+export async function alliesOf(gameId: string, seat: number): Promise<readonly Seat[] | null> {
+  const engine = serverEngine();
+  const db = getDb();
+  const row = await new GamesRepository(db).secret(gameId);
+  if (!row) return null;
+  await loadMapDef(row.mapSlug);
+  const { state } = await withFold(db, engine, row);
+  return state.seats[seat]?.allies ?? null;
 }
 
 /**

@@ -4,6 +4,7 @@ import type { BotTier, PlayerColour, Rules } from "@/engine/types";
 
 import type { SqlExecutor } from "../driver";
 import { getDb } from "../index";
+import { isSqlState, UNIQUE_VIOLATION } from "./actions";
 import { newLobbyCode } from "./ids";
 
 /**
@@ -140,6 +141,13 @@ export class LobbiesRepository {
    * seat 0. The code is retried against the primary key rather than probed
    * first — a `select` then `insert` is a race, and 24⁴ codes make a
    * collision rare enough that a retry loop is the cheap answer.
+   *
+   * `"alreadyHosting"` comes back when `lobbies_one_live_per_host` fires.
+   * One lobby per host is a **database** rule rather than a handler's read:
+   * two create requests from the same player — a double-tapped button, or a
+   * reloaded create screen — both pass a `select … where host_id = …` and
+   * both insert, and the second lobby then sits in everyone's browser list as
+   * a dead end until the reaper closes it.
    */
   async create(input: {
     hostId: string;
@@ -147,16 +155,24 @@ export class LobbiesRepository {
     mapSlug: string;
     rules: Rules;
     maxSeats: number;
-  }): Promise<LobbyRow> {
+  }): Promise<LobbyRow | "alreadyHosting"> {
     for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
       const code = newLobbyCode();
-      const rows = await this.db.query<DbLobby>(
-        `insert into lobbies (id, host_id, title, status, map_id, max_seats, settings)
-         values ($1, $2, $3, 'open', $4, $5, $6::jsonb)
-         on conflict (id) do nothing
-         returning ${LOBBY_COLUMNS}`,
-        [code, input.hostId, input.title, input.mapSlug, input.maxSeats, JSON.stringify(input.rules)],
-      );
+      let rows: DbLobby[];
+      try {
+        rows = await this.db.query<DbLobby>(
+          `insert into lobbies (id, host_id, title, status, map_id, max_seats, settings)
+           values ($1, $2, $3, 'open', $4, $5, $6::jsonb)
+           on conflict (id) do nothing
+           returning ${LOBBY_COLUMNS}`,
+          [code, input.hostId, input.title, input.mapSlug, input.maxSeats, JSON.stringify(input.rules)],
+        );
+      } catch (error) {
+        // `on conflict (id)` covers the code collision only; the host index
+        // still raises, and that one is an answer rather than a failure.
+        if (isSqlState(error, UNIQUE_VIOLATION)) return "alreadyHosting";
+        throw error;
+      }
       const row = rows[0];
       if (!row) continue;
 
@@ -288,7 +304,7 @@ export class LobbiesRepository {
     code: string,
     playerId: string,
     seat: number | null,
-  ): Promise<number | "lobbyFull" | "seatTaken" | "alreadySeated"> {
+  ): Promise<number | "lobbyFull" | "seatTaken" | "alreadySeated" | "gameAlreadyStarted"> {
     const existing = await this.db.query<{ seat: number }>(
       "select seat from lobby_seats where lobby_id = $1 and player_id = $2",
       [code, playerId],
@@ -306,14 +322,49 @@ export class LobbiesRepository {
       seat = Number(first.seat);
     }
 
+    // The `status = 'open'` fence is part of the seat-taking statement, not a
+    // read before it: a `BATTLE` press that lands between the handler's
+    // status check and this update would otherwise seat a player in a lobby
+    // that is already dealing a board, and the game would be created from a
+    // seat list that does not include them.
     const taken = await this.db.execute(
       `update lobby_seats set kind = 'human', player_id = $3, bot_level = null,
               ready = false, joined_at = now()
-        where lobby_id = $1 and seat = $2 and kind = 'open'`,
+        where lobby_id = $1 and seat = $2 and kind = 'open'
+          and exists (select 1 from lobbies l
+                       where l.id = $1 and l.status = 'open')`,
       [code, seat, playerId],
     );
-    if (taken === 0) return "seatTaken";
-    return seat;
+    if (taken > 0) return seat;
+    // Zero rows is two different answers, and the two need different copy.
+    const lobby = await this.db.query<{ status: string }>(
+      "select status from lobbies where id = $1",
+      [code],
+    );
+    const status = lobby[0]?.status;
+    if (status !== undefined && status !== "open") return "gameAlreadyStarted";
+    return "seatTaken";
+  }
+
+  /**
+   * Take a lobby from `open` to `starting`, or report that somebody else
+   * already did (§6's `409 gameAlreadyStarted`).
+   *
+   * A status-qualified compare-and-set, and that is the whole point: two
+   * `BATTLE` presses — a double click, or two tabs — both read `open` under a
+   * plain `select` and both go on to create a game, so one lobby becomes two
+   * boards with the same seats in them. Here exactly one press gets a row
+   * back, and the loser answers `409` without having created anything.
+   */
+  async claimForStart(code: string): Promise<LobbyRow | null> {
+    const rows = await this.db.query<DbLobby>(
+      `update lobbies set status = 'starting', updated_at = now()
+        where id = $1 and status = 'open'
+        returning ${LOBBY_COLUMNS}`,
+      [code],
+    );
+    const row = rows[0];
+    return row ? toLobby(row) : null;
   }
 
   /** Vacate every seat this player holds in `code`. Returns the seat, if any. */
@@ -389,13 +440,25 @@ export class LobbiesRepository {
     );
   }
 
-  /** Hand the host to the lowest-seated other human, or `null` if none. */
+  /**
+   * Hand the host to the lowest-seated other human, or `null` if none.
+   *
+   * A candidate who already hosts a live lobby of their own is skipped:
+   * `lobbies_one_live_per_host` is a real unique index, so handing them a
+   * second one would raise `23505` out of a `Leave` button. Skipping them
+   * closes the lobby instead, which is what happens anyway when the only
+   * other occupant is a bot.
+   */
   async handOffHost(code: string, leavingHostId: string): Promise<string | null> {
     const rows = await this.db.query<{ player_id: string }>(
-      `select player_id from lobby_seats
-        where lobby_id = $1 and kind = 'human' and player_id is not null
-          and player_id <> $2
-        order by seat asc limit 1`,
+      `select ls.player_id from lobby_seats ls
+        where ls.lobby_id = $1 and ls.kind = 'human' and ls.player_id is not null
+          and ls.player_id <> $2
+          and not exists (select 1 from lobbies other
+                           where other.host_id = ls.player_id
+                             and other.id <> $1
+                             and other.status in ('open','starting'))
+        order by ls.seat asc limit 1`,
       [code, leavingHostId],
     );
     const next = rows[0]?.player_id ?? null;

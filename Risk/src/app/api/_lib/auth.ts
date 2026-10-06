@@ -84,14 +84,21 @@ export async function currentPlayer(request: Request): Promise<PlayerRow | null>
 /**
  * The player, with their presence heartbeat stamped.
  *
- * Every authenticated poll stamps `players.last_seen_at` and the caller's
- * `game_players.last_seen_at` in the same invocation — presence is never its
- * own request (D12). The seat stamp is what the away sweep and POLL 3's
- * `presence` read, and it is what flips a bot-held seat back to its human on
- * their next poll.
+ * Every authenticated request stamps `players.last_seen_at` in the same
+ * invocation — presence is never its own request (D12).
+ *
+ * `gameId` additionally stamps **that game's** seat, and only that one. The
+ * seat stamp is a stronger claim than the account stamp: it says "the owner of
+ * this seat is at this board", and the away takeover (§5.6), the reclaim and
+ * POLL 3's `presence` all read it. So it is made by the game's own requests —
+ * POLL 3, the append and the resign — and by nothing else. A lobby poll or a
+ * session write stamps the account alone; stamping every seat a player holds,
+ * from any route, made the two-minute away rule unreachable for anybody who
+ * left a lobby tab open, and kept a seat in game B looking live while its
+ * owner played game A.
  */
-export async function heartbeat(player: PlayerRow): Promise<void> {
+export async function heartbeat(player: PlayerRow, gameId?: string): Promise<void> {
   const players = playersRepository(getDb());
   await players.touch(player.id);
-  await players.touchSeats(player.id);
+  if (gameId !== undefined) await players.touchSeat(player.id, gameId);
 }

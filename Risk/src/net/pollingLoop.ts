@@ -62,9 +62,20 @@ export interface PollingLoop {
   start(): void;
   /** Poll now and reschedule from now. Resolves when the poll has settled. */
   pollNow(): Promise<void>;
-  /** Stop permanently (a finished game, an eliminated seat, an unmount). */
+  /** Stop permanently and release the visibility subscription (an unmount). */
   stop(): void;
-  /** Re-arm a stopped loop — what `visibilitychange → visible` does. */
+  /**
+   * Stop scheduling but stay subscribed to `visibilitychange`.
+   *
+   * This is the stop a **finished game or an eliminated seat** wants (§5.5's
+   * cadence table): both are re-armable — an eliminated viewer may ask to
+   * watch — and a loop that had torn down its visibility subscription would
+   * come back without the hidden-tab cadence or the five-minute hidden stop,
+   * which is the one thing that must never be lost (D11, the 182.5 CU-hour
+   * argument above). `stop()` stays the permanent teardown for an unmount.
+   */
+  pause(): void;
+  /** Re-arm a stopped or paused loop — what `visibilitychange → visible` does. */
   resume(): void;
   readonly stopped: boolean;
   /** The last delay actually scheduled, in ms. For tests and the debug hook. */
@@ -191,6 +202,11 @@ export function createPollingLoop(options: PollingLoopOptions): PollingLoop {
       running = false;
       clear();
       unsubscribe();
+    },
+    pause(): void {
+      stopped = true;
+      running = false;
+      clear();
     },
     resume(): void {
       stopped = false;

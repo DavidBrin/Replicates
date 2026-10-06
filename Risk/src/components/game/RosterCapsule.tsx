@@ -53,6 +53,9 @@ export function RosterCapsule({ row, height, balloon }: RosterCapsuleProps) {
   return (
     <div
       data-testid={`roster-row-${row.seat}`}
+      // The capsule is all glyphs and numerals; the seat's name is the only
+      // thing that makes the row readable to anything but an eye.
+      aria-label={row.name}
       data-seat={row.seat}
       data-active={row.active ? "true" : "false"}
       data-standing={row.standing}
