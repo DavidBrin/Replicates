@@ -30,7 +30,12 @@ See §4 and §5 for the validation receipts.
    (net-for-draft-then-random *beat* their full trained agent), and Hahn (the eventual winner is
    statistically identifiable 60 % of the way in). **Expert's compute budget belongs in the draft.**
    This is the opposite of where intuition points. (§2.6, §2.9, §2.15)
-6. **Two live traps.** (a) The widespread "attack with twice as many armies" rule descends from
+6. **Balanced Blitz changes bot strategy, not just dice.** BB leaves the `A ≥ D+1` break-even
+   **unchanged** (the transform's fixed point is 50 %), but amplifies favourable attacks by **+8 to
+   +14 points** and *penalises* marginal ones — and anything past 95 % snaps to a **guaranteed win**
+   (20 v 15 = exactly 100 %). So a bot must be given the **BB-adjusted odds table** when BB is on, or
+   it misjudges its own odds by up to 14 points. This is a correctness issue. (§5.4)
+7. **Two live traps.** (a) The widespread "attack with twice as many armies" rule descends from
    Tan (1997), whose 2-dice-vs-2-dice probabilities are **wrong** (an independence error Osborne
    corrected); the real break-even is `A ≥ D + 1`, and Tan's rule makes a bot far too passive.
    (b) Osborne's conquer-odds table **text-extracts transposed** — rows are attackers. Either
@@ -219,7 +224,7 @@ allow 1 or 2 bots to snowball… and the player can't see it happening."* **Our 
 capital-awareness rules are therefore an improvement on RGD, not a replication of it** — worth
 calling out so nobody "fixes" them to match.
 
-**⚠️ Bots play Balanced Blitz, and that interacts with their odds gate — see §5.5.** Player reports:
+**⚠️ Bots play Balanced Blitz, and that interacts with their odds gate — see §5.4.** Player reports:
 *"The only thing that bothers me is that the bots use Blitz… this is also limiting the AI bots to
 just go all in because they can't stop on time to see that it's maybe better to stop the attack"*,
 and critically *"the AI only takes favourable odds, which in Balanced Blitz **favours the
@@ -769,7 +774,7 @@ sure a bot always does something sensible. For Easy/Medium a flat greedy scorer 
 
 > **Licensing.** Lux's SDK is distributed for writing bots for Lux; Warzone's AI release did not state
 > explicit licence terms in the announcement. Treat both as **design references read for ideas**, as
-> with SMG's dice code (§5.4) — **do not vendor or copy either codebase.** Method *names* and
+> with SMG's dice code (§5.5) — **do not vendor or copy either codebase.** Method *names* and
 > architectural decompositions are facts about the design space; their source text is not ours.
 
 #### Lux: the reusable heuristic library and its actual constants
@@ -1078,7 +1083,11 @@ NBSR(t) = BSR(t) / Σ_z BSR(z)   over our own territories              // reinfo
 | `secure` | fill lowest-BSR borders to `bsrTarget`, remainder to the springboard | Medium+ default |
 | `stack` | everything onto one territory regardless of plan | the **Stacker** persona |
 
-**Card-trade timing.** RGD supports fixed and progressive card sets. Correct play differs sharply:
+**Card-trade timing.** RGD ships **four** card modes — **Fixed**, **Progressive**, **Exponential**
+and **Per-Player** — with Fixed being **4 / 6 / 8 / 10** (per SMG's sandbox documentation). Correct
+play differs sharply by mode, and **I found no first-party or player statement about what RGD's bots
+actually do with cards** beyond "they trade and dump the troops onto one stack", so the rules below
+are derived, not replicated:
 
 - **Fixed sets** (4/6/8/10/12/15 then +5): the set value is independent of who cashes, so **trade
   as soon as you legally can** — there is no option value in holding, only risk of elimination.
@@ -1664,7 +1673,64 @@ stage alone is *not* sufficient (it gives only 75.7 % at A=49) — the outcome-c
 the remaining ~6 points. Any reimplementation that models Balanced Blitz as "just raise the odds to
 a power" will be visibly wrong.
 
-### 5.4 Implementing it deterministically from a seeded PRNG
+### 5.4 How Balanced Blitz changes bot strategy (and why bots must use the BB table)
+
+This fell out of a player observation — *"the AI only takes favourable odds, which in Balanced Blitz
+**favours the attacker**"* (§1.3) — which turns out to be exactly right, and quantifiable. True-random
+vs full 4-stage Balanced Blitz win chance, computed with my validated pipeline:
+
+| A v D | True Random | Balanced Blitz | Δ (pp) |
+|---|---|---|---|
+| 3 v 3 | 47.03 % | 45.17 % | **−1.86** |
+| 4 v 4 | 47.65 % | 46.19 % | **−1.46** |
+| 5 v 5 | 50.62 % | 51.01 % | +0.39 |
+| 8 v 8 | 54.74 % | 57.68 % | +2.94 |
+| 10 v 10 | 56.76 % | 60.94 % | +4.18 |
+| 15 v 15 | 60.52 % | 66.93 % | +6.40 |
+| 20 v 20 | 63.34 % | 71.33 % | +7.99 |
+| 2 v 1 | 75.42 % | 88.90 % | **+13.47** |
+| 3 v 2 | 65.60 % | 74.78 % | +9.18 |
+| 5 v 4 | 63.83 % | 72.08 % | +8.25 |
+| 5 v 3 | 76.94 % | 90.91 % | **+13.97** |
+| 10 v 8 | 72.40 % | 84.74 % | **+12.34** |
+| **20 v 15** | 86.04 % | **100.00 %** | **+13.96** |
+
+Three consequences, all of which change bot design:
+
+1. **The break-even point does not move.** Because the win-chance-power transform has a fixed point at
+   `w = 0.5`, the minimum `A` needed to be a favourite is **identical** under both modes at every `D`
+   I tested (D = 2, 3, 5, 8, 10, 15, 20 → A ≥ 3, 4, 5, 8, 10, 14, 18 in *both* modes). So **`A ≥ D+1`
+   remains the correct gate regardless of dice mode.** Good: one rule.
+2. **But the *payoff* of a favourable attack is massively amplified** — +8 to +14 points for
+   moderate-to-strong favourites — while **marginal underdogs get slightly worse** (3v3 and 4v4 both
+   lose ~1.5 points). Balanced Blitz therefore **rewards patience and punishes coin-flips**. A bot
+   should raise `minWinChance` under BB, not lower it: the extra value is in the attacks it was
+   already going to make, not in new marginal ones.
+3. **Strong attacks become *certain*.** `20 v 15` is 86.04 % true-random but **exactly 100 %** under
+   Balanced Blitz, because stage 1's `winChanceCutoff = 0.05` snaps anything past 95 % to certainty.
+   This is a **qualitative** change: above that threshold an attack carries *no risk at all*, so a
+   BB-aware bot can chain conquests through territories it would otherwise have to hedge against.
+   It is also the mechanism behind the community complaint that *"5 vs 1 wins 100%"* (§5.2).
+
+**Implementation requirements:**
+
+- **Build one odds table per dice mode and give the bot the one matching the active match setting.**
+  A bot using the true-random table in a Balanced Blitz game systematically **underestimates its own
+  odds by up to 14 points** and plays far too conservatively; the reverse overestimates and suicides.
+  This is a correctness issue, not a tuning nicety.
+- **Precompute the BB win-chance table the same way as the true-random one** — the balance transform
+  is a pure function of the exact outcome distribution, so `W_bb[A][D]` is just as cacheable.
+  (Cost note: the *full outcome distribution* DP is O(A·D) per `(A,D)` pair rather than O(1), so
+  building a complete BB table is O(A²D²)-ish if done naively. Build it **lazily with memoisation**
+  on the pairs the bot actually queries, or precompute a coarse grid and interpolate. This is the one
+  place in the design where the cost is non-trivial — see §6.)
+- **Expose a `certainWin` predicate** (`W_bb ≥ 1.0 − ε`) and let Expert exploit it explicitly when
+  planning conquest chains. It is the single biggest strategic lever Balanced Blitz creates.
+- **Also note RGD's bots blitz** — players report they *"can't stop on time to see that it's maybe
+  better to stop the attack"*. Our `stopUntil` support (§2.13) plus a real stop rule (§3.2) is a
+  deliberate improvement over RGD here.
+
+### 5.5 Implementing it deterministically from a seeded PRNG
 
 The good news: **Balanced Blitz is already deterministic.** Stages 1–4 are pure functions of
 `(A, D, roundConfig, balanceConfig)` — no randomness anywhere. Randomness enters at exactly one
@@ -1728,14 +1794,31 @@ Measured on this machine with Node (`process.hrtime.bigint`), single-threaded:
 
 | Operation | Cost |
 |---|---|
-| Build 101×101 win-chance DP table (incl. enumerating all 6 round distributions) | **2.07 ms**, 80 KiB |
-| Build 201×201 win-chance DP table | **1.80 ms**, 316 KiB |
+| Build 101×101 **true-random** win-chance DP table (incl. all 6 round distributions) | **2.07 ms**, 80 KiB |
+| Build 201×201 true-random win-chance DP table | **1.80 ms**, 316 KiB |
+| Build 32×32 **Balanced Blitz** win-chance table | **4.4 ms** (4.3 µs/cell) |
+| Build 64×64 Balanced Blitz win-chance table | **37.2 ms** (9.1 µs/cell) |
+| Build 100×100 Balanced Blitz win-chance table | **199.8 ms** (20.0 µs/cell) |
 | 5,000,000 table lookups | **5.75 ms** (≈ **1.15 ns** each) |
 | Greedy scan of 400 candidate attacks with ~8-flop scoring | **0.0013 ms** |
 | 20 such passes (draft + attack chain + fortify) | **≈ 0.027 ms** |
 
 **Conclusion: the 100 ms budget is ~3,700× larger than a full greedy bot turn needs.** The stated
-constraint is not a real constraint for tiers Easy–Hard. Complexity analysis for a map with `T`
+constraint is not a real constraint for tiers Easy–Hard.
+
+> ⚠️ **The one real cost in the whole design is the Balanced Blitz table.** True-random win chances
+> come from a single shared O(A·D) DP, so the whole table costs 2 ms. Balanced Blitz needs the **full
+> outcome distribution per `(A, D)` pair** (§5.2), which is itself O(A·D) — so a complete table is
+> ~O(A²D²) and measures **200 ms at 100×100**, i.e. **over budget if built synchronously at init**.
+> It is still only a *one-time* cost, never per-decision. Three mitigations, in order of preference:
+> **(a) ship it as a precomputed binary asset** — 100×100 `Float32Array` is 40 KiB, which also removes
+> the `Math.pow` portability risk (§5.5 rule 4); **(b) build it lazily with memoisation** — a real
+> game queries far fewer than 10,000 distinct `(A, D)` pairs, and small battles dominate (32×32 is
+> only 4.4 ms); **(c) build it once during a loading screen** with a yield between rows. Do **not**
+> compute it per turn.
+>
+> *(This JS implementation independently reproduced my Python pipeline — 10 v 10 → 0.6094, 20 v 15 →
+> 1.0000 — so the §5.3 validation holds across two languages.)* Complexity analysis for a map with `T`
 territories (42–100), `E` adjacencies (`E ≈ 2T`), `P` players:
 
 | Phase | Complexity | At T=100 | Fits? |
@@ -1828,7 +1911,7 @@ tweak that adds or removes one PRNG draw **breaks every stored replay**.
    for non-total orders and ties will reorder. Always compare score **then id**.
 4. **No wall-clock, no animation state, no UI state** inside the engine. Bot "thinking time" is a
    presentation-layer delay, applied *after* the decision is computed.
-5. **Quantise before comparing** anywhere a float decides a branch (see §5.4 rule 4) — notably the
+5. **Quantise before comparing** anywhere a float decides a branch (see §5.5 rule 4) — notably the
    Balanced Blitz CDF walk and any `score > best` comparison that could be affected by `Math.pow`.
    For scores, prefer integer or fixed-point arithmetic in the scoring function so `>` is exact.
 6. **Golden replay tests.** Store `(seed, map, settings, persona assignment)` plus a hash of the
@@ -1858,7 +1941,7 @@ function decideTurn(
 `TurnPlan` is **data, not side effects** — the engine then applies it action by action, which means:
 - the UI can animate the plan at any speed without affecting the outcome;
 - the plan is serialisable, so it goes straight into the replay log;
-- attacks are *declared*, and each one's resolution consumes exactly one PRNG draw (§5.4), so a
+- attacks are *declared*, and each one's resolution consumes exactly one PRNG draw (§5.5), so a
   replay can be verified without re-running the bot at all.
 
 One subtlety worth designing for up front: an attack chain is **adaptive** — whether you make the
@@ -1910,7 +1993,28 @@ persona, then the persona table, then tiering, then Expert's ply-1 lookahead.
 | Steam: **Bots are absolutely horrible** | https://steamcommunity.com/app/1128810/discussions/0/3192488348527650080/ | Player complaints about bot attack/stacking behaviour. §1.3 |
 | Steam: **Does bot difficulty skew the random chance?** | https://steamcommunity.com/app/1128810/discussions/0/3081016749018365058/ | Difficulty-name evidence and the dice-fairness question. §1.2, §1.3 |
 | Steam: **AI should stop others getting bonuses / work together** | https://steamcommunity.com/app/1128810/discussions/0/604142224713712839 | Player feature request for coalition-against-the-leader behaviour — evidence that it is *not* currently coded. §1.1 |
-| SteamAH, **RISK: Global Domination Beginners' Guide** | https://steamah.com/risk-global-domination-beginners-guide/ | Secondary evidence for the difficulty ladder names. §1.2 |
+| SMG Studio, **"How do I change the RISK computer players' difficulty?"** (mod. 2 Nov 2022) | https://smgstudio.freshdesk.com/support/solutions/articles/11000024863-how-do-i-change-the-risk-computer-players-difficulty- | **First-party.** The full one-sentence body: *"Choose from Beginner to Expert."* §1.2 |
+| SMG Studio, **the screenshot attached to that article** | https://s3.amazonaws.com/cdn.freshdesk.com/data/helpdesk/attachments/production/11092627820/original/lDVzZ3-DGoqdffZPjwV3CwMne_ckT_adFA.png?1666677511 | **First-party image.** Shows the UI label **"AI Difficulty"** set to **"Medium"**, alongside Manual Placement / Card Bonus / Turn Timer / Dice Rolls ("Balanced Blitz"). The only official attestation of "Medium". §1.2 |
+| SMG Studio, **"How are the dice rolling odds calculated for RISK computer players?"** (mod. 19 Aug 2019) | https://smgstudio.freshdesk.com/support/solutions/articles/11000024866-how-are-the-dice-rolling-odds-calculated-for-risk-computer-players- | **First-party.** No dice advantage at any difficulty or rank; **Mersenne Twister for cards, player order and dice**; ±5 % tolerance vs a control matrix; and the **mode dice modifiers that STACK** (zombie ties-to-attacker, zombie −1 attack die, capital +1 defend die, wall +1 defend die). §1.1, §4.6, §7.1 |
+| **Steam achievements** for app 1128810 | https://steamcommunity.com/stats/1128810/achievements | **First-party.** *"Defeat 5 **expert** AIs…"* — the official attestation of the "Expert" tier name. §1.2 |
+| RGD fandom wiki, **Steam Version Details** (archive of removed store copy) | https://risk-global-domination.fandom.com/wiki/Steam_Version_Details | Verbatim archive of the official store bullet *"5 difficulty AI settings for rookies and veterans"* — **since removed from the live store page**, so the count of 5 is officially attested but stale. §1.2 |
+| RGD fandom wiki, **Our RISK AI** (mirror, wikitext ts. 27 Sep 2019) | https://risk-global-domination.fandom.com/wiki/Our_RISK_AI | Dates the persona claim to **2019**, crediting the freshdesk original. §1.2 |
+| Steam news, **v3.20 release notes** (8 Sep 2025) | https://store.steampowered.com/news/app/1128810/view/1809869180155683 | **First-party.** The **"Inactivity Behaviour"** setting (Automated vs Neutral) — a bot-out control distinct from AI Difficulty. §1.2 |
+| Steam news, **v3.19 release notes** (21 Jul 2025) | https://store.steampowered.com/news/app/1128810/view/1805431065452143 | *"Playing Secret Assassin shouldn't change your remembered bot difficulty"* — evidence difficulty is persisted per-mode. §1.2 |
+| Steam news, **v2.5** (23 Apr 2020) | https://store.steampowered.com/news/app/1128810/view/3112493747265982072 | *"Improved AI after taking over for a player"* — **the only AI-logic patch note in the game's entire Steam news history** (294 items swept). §1.2 |
+| Steam, **Lee \| SMG [developer] on Capitals AI** (4 Mar 2026) | https://steamcommunity.com/app/1128810/discussions/0/732532498321513703/ | **First-party dev.** *"We are planning to spend time on the AI logic later this year. In the short term, there are some tests we can explore related to Capitals to affect their defensiveness."* §1.3 |
+| Steam, **Lee \| SMG [developer] on the AI revisit** (6 Aug 2026) | https://steamcommunity.com/app/1128810/discussions/0/570418160339170096/ | **First-party dev.** *"AI improvements are on the cards for next year, ideally Q1-2."* — confirms the rework has **not** shipped. §1.2 |
+| Steam, **Lee \| SMG on per-AI difficulty** (19 Dec 2025) | https://steamcommunity.com/app/1128810/discussions/0/688618329542370515/ | **First-party dev.** Per-opponent difficulty *"is something we're adding in Q1 next year"* — worth designing for. §1.2 |
+| Steam, **SMG Studio (Studio Head) on AI difficulty of Risk** (15 Mar 2020) | https://steamcommunity.com/app/1128810/discussions/0/1744521326160009019/ | **First-party.** *"we havent coded Deep Blue… Compared to Chess, RISK is much harder to code AI for."* Also the player feature request for power assessment / coalitions. §1.1, §1.3 |
+| Steam, **"AI should know…" (CaptainCanadaEhh) + Lee \| SMG reply** | https://steamcommunity.com/app/1128810/discussions/0/573770913622907062/ | Competitive player claim that *"expert bots start to pick on the weakest player and don't break bonus territories like they should"*, with the dev reply *"An AI revisit is overdue."* Also alliance fog-vision mechanics. §1.3 |
+| Steam, **persona taxonomy thread** (Kenpoleon Bonaparte, FlappyJak) | https://steamcommunity.com/app/1128810/discussions/0/591769151491562584/ | The clearest player accounts of bot mechanics: *"attack the first one that meets a 'likely win' condition"*; draft placement proportional to bordering enemy troops; the stack-vs-split exploit; fortify randomness; the five observed personas; *"They supposedly have personas on hard and above."* §1.3 |
+| Steam, **bot targeting / botpath thread** (Vlarimov) | https://steamcommunity.com/app/1128810/discussions/0/833871463312420311/ | *"path of least resistance"*; tie-break by internal territory id; *"Suicidal does not make a smarter AI"*. §1.3 |
+| Steam, **"bots use Blitz"** (Dwarfblood) | https://steamcommunity.com/app/1128810/discussions/0/591770858068912839/ | *"limiting the AI bots to just go all in because they can't stop on time"*. §1.3, §5.4 |
+| Steam, **"Ai cheats, dice loaded"** (FlappyJak) | https://steamcommunity.com/app/1128810/discussions/0/688615792191915528/ | **The key insight for §5.4:** *"the AI only takes favourable odds, which in Balanced Blitz FAVOURS THE ATTACKER."* §1.3, §5.4 |
+| Steam, **70 % domination / unusual modes** (Vlarimov + SMG's Nick) | https://steamcommunity.com/app/1128810/discussions/0/601917691382528228/ | *"AI is quite handicapped at unusual game modes"*, with the dev reply *"we actually want to revisit our AI to improve them."* §1.3 |
+| Steam, **alliance bot-out bug report** (MarshalRay, 29 Sep 2020) | https://steamcommunity.com/app/1128810/discussions/0/2838914020281199410/ | Unanswered report that a bot replacing an ally *"will not attack you, even if you attack them"* — the only alliance-related bot datum found. §1.3 |
+| SMG Studio, **Sandbox documentation** | https://smgstudio.freshdesk.com/support/solutions/articles/11000135637-everything-you-need-to-know-about-sandbox | **First-party.** The four card modes — Fixed / Progressive / Exponential / Per-Player — and Fixed = 4/6/8/10. §3.1 |
+| SteamAH, **RISK: Global Domination Beginners' Guide** | https://steamah.com/risk-global-domination-beginners-guide/ | Secondary; the only (weak) evidence for bots favouring Australia: *"AIs had already started aiming for Australia."* §1.2, §1.3 |
 | **Jason A. Osborne**, *Markov Chains for the RISK Board Game Revisited*, Mathematics Magazine 76(2) 2003, 129–135 | https://www4.stat.ncsu.edu/~jaosborn/research/osborne.mathmag.pdf | The exact 14 single-roll probabilities incl. `π₃₂₂ = 2890/7776`; the absorbing-chain formulation `F = (I−Q)⁻¹R`; the conquer-odds table; `A = D ≥ 5` favours the attacker; expected losses for A=D=5; the table-orientation warning. §2.2, §4.1, §4.3 |
 | **Baris Tan**, *Markov Chains and the RISK Board Game*, Mathematics Magazine 70(5) 1997, 349–357 | https://faculty.ozyegin.edu.tr/baristan/files/2024/05/MMrisk97.pdf | The original chain formulation; the verbatim independence assumption that is the error; Tan's wrong 2v2/3v2 values; the "attack with twice as many" rule we must avoid; the unsolved mid-battle-withdrawal problem. §2.3, §2.13 |
 | **Franz Hahn**, *Evaluating Heuristics in the Game Risk*, Maastricht Univ. BSc paper, 2010 | https://project.dke.maastrichtuniversity.nl/games/files/bsc/Hahn_Bsc-paper.pdf | **The exact published BSR / BST / NBSR definitions and worked example**; 18-configuration 1,000-game study; "High Chance Attack" being the strongest single lever; reinforcement heuristics showing no benefit; first-player advantage 66.59 % CI [58.42, 74.77]; full game under 50 ms; correctly oriented reprint of Osborne's table. §2.5, §3.1, §3.2 |

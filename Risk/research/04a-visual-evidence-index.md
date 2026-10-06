@@ -222,7 +222,7 @@ source for pixel-level UI detail.
 #### Elimination, victory and social
 | File | Shows |
 |---|---|
-| `bt5-0104-defeated-elimination-banner.jpg` | **"Defeated!" elimination banner** — greyed-out portrait of the knocked-out player ("Seymour The Rock") |
+| `bt5-0104-blitz-win-chance-99-zoomed-battle.jpg` | **Zoomed Blitz battle view at 99 %** — tilted camera, attacker/defender portraits, three red dice, Attack Limit slider at 7/7. (Originally mislabelled as a "Defeated!" banner; no elimination-banner frame was captured.) |
 | `bt5-0108-territory-cards-seized-on-elimination.jpg`, `c3d-0743-territory-cards-seized-plus2.jpg` | **"Territory Cards Seized!"** — the defeated player's cards transferring to the attacker (`+2`) |
 | `c3d-0749-victory-conquered-all-opponents.jpg` | **Victory!** — "You conquered all your opponents!" |
 | `c3d-0751-victory-battle-points-earned.jpg` | Victory screen with the Battle Points Earned readout |
