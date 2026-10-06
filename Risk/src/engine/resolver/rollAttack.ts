@@ -35,12 +35,28 @@
  * - landing at index `A + k`  -> the defender held, having lost `j = D - 1 - k`:
  *   `defenderLosses = j`, and `attackerLosses` is every troop the attacker
  *   committed — `A` with no limiter, or `(A + 1) - stopUntil` with one (R48).
- *   `unresolved` is then true exactly when that is fewer than `A`.
  *
- * So with a `stopUntil`, S2's `defendLoss[j < D]` must mean "the battle ended
- * with the defender alive, having lost `j`" — the truncated distribution's
- * stopped outcomes live there, and `unresolved` is their total. `dist.unresolved`
- * is read only to cross-check; the walk never needs a slot for it.
+ * **`attackLoss` and `defendLoss` describe resolved battles only.** A truncated
+ * distribution's stopped mass is *not* folded into `defendLoss[j < D]`: it lives
+ * in `dist.stopped`, and the two arrays therefore sum to `1 − unresolved`. So
+ * with a `stopUntil` the walk is the combined array **plus one slot per stopped
+ * outcome, appended after it**:
+ *
+ * ```
+ * walk = [ ...combined,                       // length A + D, as above
+ *          stopped[0].p, …, stopped[n-1].p ]  // dist.stopped, already sorted
+ * ```
+ *
+ * - landing at index `A + D + s` -> the limiter stopped the battle with both
+ *   sides alive: the losses are `stopped[s]`'s own, which the DP recorded
+ *   exactly, so they are neither guessed nor flattened onto `committed`.
+ *
+ * The tail is appended rather than interleaved so that the CDF *prefix* — and
+ * with it every pinned draw at `u ∈ {0, ε, 0.5}` and every un-limited battle —
+ * is byte-identical to the un-truncated walk. Omitting the tail is what used to
+ * let a draw in `[1 − unresolved, 1)` fall off the end of the loop and come back
+ * as `lastIndexWithMass`, i.e. as the most defender-favourable *resolved*
+ * outcome (F46).
  *
  * ## The quantised CDF walk, written out (R59, D7)
  *
@@ -72,6 +88,7 @@ import type {
   OddsTables,
   OutcomeDist,
   Rng,
+  StoppedOutcome,
 } from "../types";
 
 /** The grid every branch-deciding float is rounded onto before comparison (R59, D7). */
@@ -87,6 +104,27 @@ export function combinedOutcomes(dist: OutcomeDist): number[] {
   const out: number[] = [];
   for (let i = 0; i < dist.a; i++) out.push(dist.attackLoss[i] ?? 0);
   for (let j = dist.d - 1; j >= 0; j--) out.push(dist.defendLoss[j] ?? 0);
+  return out;
+}
+
+/**
+ * The limiter's stopped outcomes, in the DP's pinned order, or `[]` when the
+ * battle was fought to a conclusion. Never trusts `unresolved > 0` on its own:
+ * an `OutcomeDist` from an older adapter may carry the scalar and no breakdown,
+ * and in that case the walk has to stay what it always was.
+ */
+export function stoppedOutcomes(dist: OutcomeDist): readonly StoppedOutcome[] {
+  return dist.stopped ?? [];
+}
+
+/**
+ * The full sampling distribution of R52/R48: the combined array, then one slot
+ * per stopped outcome. Sums to 1 (up to float residue) whether or not the
+ * Attack Limiter was set, which `combinedOutcomes` alone does not.
+ */
+export function sampledOutcomes(dist: OutcomeDist): number[] {
+  const out = combinedOutcomes(dist);
+  for (const s of stoppedOutcomes(dist)) out.push(s.p);
   return out;
 }
 
@@ -149,11 +187,13 @@ export function rollAttack(
   const d = Math.max(0, targetTroops);
   const aug = diceAugmentFor(state, map, intent.from, intent.to);
   const dist = odds.outcome(a, d, aug, intent.stopUntil);
-  const combined = combinedOutcomes(dist);
+  // R48 — the stopped tail is part of the distribution, not a rounding error.
+  const stopped = stoppedOutcomes(dist);
+  const walk = sampledOutcomes(dist);
 
   // R58 — exactly one draw, however long the battle "lasts".
   const u = rng.nextFloat();
-  const at = walkCdf(combined, u);
+  const at = walkCdf(walk, u);
 
   const committed = intent.stopUntil === undefined ? a : Math.max(0, Math.min(a, a + 1 - intent.stopUntil));
 
@@ -167,9 +207,14 @@ export function rollAttack(
   } else if (at < dist.a) {
     attackerLosses = at;
     defenderLosses = d;
-  } else {
+  } else if (at < dist.a + dist.d) {
     defenderLosses = dist.d - 1 - (at - dist.a);
     attackerLosses = committed;
+  } else {
+    // The limiter stopped it with both sides alive; the DP knows exactly where.
+    const hit = stopped[at - dist.a - dist.d] as StoppedOutcome;
+    attackerLosses = Math.min(a, hit.attackerLosses);
+    defenderLosses = Math.min(d, hit.defenderLosses);
   }
 
   const base = {

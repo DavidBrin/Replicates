@@ -72,6 +72,25 @@ export type SessionConfigStore = SessionConfigState & SessionConfigActions;
 /** The placeholder `defaultSeat` gives the viewer's own seat. */
 export const VIEWER_SEAT_PLACEHOLDER = "You";
 
+/**
+ * R8/R72 — `winCondition: "capitals"` and the `capitals` modifier are one choice, not two.
+ *
+ * The win condition is "hold every capital", and the modifier is what puts capitals on the board at
+ * all (R8) and gives them their extra defence die (R36). Picking the win condition without the
+ * modifier therefore starts a game **nobody can win** — `evaluateOutcome` is looking for capitals
+ * that were never dealt — and turning the modifier off underneath the win condition leaves the same
+ * unwinnable board. So the coupling is enforced where every rules change already funnels through,
+ * rather than in each of the two controls that can break it.
+ */
+export function coupleCapitals(current: Rules, patch: Partial<Rules>): Partial<Rules> {
+  const condition = patch.winCondition ?? current.winCondition;
+  return {
+    ...patch,
+    ...(patch.winCondition === "capitals" ? { capitals: true } : {}),
+    ...(patch.capitals === false && condition === "capitals" ? { winCondition: "world" as const } : {}),
+  };
+}
+
 /** A seat row with the first free colour and a sensible default name. */
 export function defaultSeat(index: number, kind: SeatConfig["kind"], tier: BotTier): SeatConfig {
   return {
@@ -139,7 +158,7 @@ export function createSessionConfigStore(): StoreApi<SessionConfigStore> {
       set({ source, ready: false });
     },
     setRules(patch) {
-      const rules = { ...get().rules, ...patch };
+      const rules = { ...get().rules, ...coupleCapitals(get().rules, patch) };
       // The tier on the rules row is the pool every bot seat is drawn from.
       const seats = patch.aiDifficulty
         ? get().seats.map((s) => (s.kind === "bot" ? { ...s, tier: patch.aiDifficulty as BotTier } : s))

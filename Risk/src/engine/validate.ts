@@ -127,6 +127,14 @@ export function validate(state: GameState, map: MapDef, action: Action): RuleErr
    * `apply` returns `illegalAction` and never asserts or throws. The one way
    * out of such a state is R26's forced trade-down, so `TRADE_CARDS` is the
    * single action still accepted from that seat.
+   *
+   * The guard stays at SEVEN and is deliberately **not** widened to R26's floor
+   * of four. A hand of six is the state F41 routes through `MOVE_IN` to reach
+   * the R27 bounce, and a hand of five mid-trade-down is already refused with
+   * the precise `mustTradeCards` code by every action `mustTradeDown` gates —
+   * `DRAFT`, `AUTO_DEPLOY`, `END_PHASE`, `END_TURN` — while `ATTACK`,
+   * `FORTIFY` and `MOVE_IN` are unreachable from the bounced `draft` phase. A
+   * blanket gate here would block the bounce itself.
    */
   const actor = (action as { seat?: unknown }).seat;
   if (typeof actor === "number" && action.type !== "TRADE_CARDS") {

@@ -78,6 +78,10 @@ export interface HarnessOptions {
   readonly resume?: SessionOptions["resume"];
   readonly save?: SessionOptions["save"];
   readonly mySeat?: number;
+  /** Swap the scripted engine for a wrapper, so a test can watch what the runner asks it for. */
+  readonly engine?: SessionOptions["engine"];
+  /** Default `true`: the harness collapses presentation. Set `false` to test a pause. */
+  readonly skipAnimations?: boolean;
 }
 
 export function seat(
@@ -124,13 +128,13 @@ export function makeSession(options: HarnessOptions = {}): Harness {
   const session = createSession({
     map,
     config,
-    engine: createScriptedEngine(),
+    engine: options.engine ?? createScriptedEngine(),
     odds: createFakeOdds(config.rules.diceMode),
     bots: fakeBots,
     settings: createMemorySettings(),
     progress: createMemoryProgress(),
     schedule: options.schedule ?? syncScheduler().schedule,
-    skipAnimations: true,
+    skipAnimations: options.skipAnimations ?? true,
     now: () => 0,
     sync: options.sync ?? null,
     resume: options.resume ?? null,

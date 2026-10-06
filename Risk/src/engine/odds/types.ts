@@ -6,9 +6,9 @@
  * them unchanged and owns everything else.
  */
 
-export type { DiceAugment, OutcomeDist, OddsTables } from "@/engine";
+export type { DiceAugment, OutcomeDist, OddsTables, StoppedOutcome } from "@/engine";
 
-import type { DiceAugment, OutcomeDist } from "@/engine";
+import type { DiceAugment, OutcomeDist, StoppedOutcome } from "@/engine";
 
 /** Standard play: attacker ≤3 dice, defender ≤2, ties to the defender (R21, R31). */
 export const STANDARD_AUGMENT: DiceAugment = {
@@ -70,20 +70,14 @@ export interface RoundShape {
 }
 
 /**
- * One terminal state of a battle the Attack Limiter stopped (R48).
+ * S2's internal distribution: the published contract with the limiter's per-pair breakdown
+ * **required** rather than optional.
  *
- * `OutcomeDist` carries only the scalar `unresolved`, which is all S1's resolver needs to report
- * "neither side eliminated"; `sampleOutcome` needs the actual troop losses, so S2's own distribution
- * type carries the per-pair breakdown alongside. Sorted by `attackerLosses` then `defenderLosses`,
- * so the sampling walk is pinned (R59).
+ * `StoppedOutcome` and `OutcomeDist.stopped` are declared in S1's `src/engine/types.ts` and
+ * re-exported above, because S1's resolver has to read the breakdown to name the actual troop
+ * losses of a stopped battle (F46). Sorted by `attackerLosses` then `defenderLosses`, so the
+ * sampling walk is pinned (R59).
  */
-export interface StoppedOutcome {
-  readonly attackerLosses: number;
-  readonly defenderLosses: number;
-  readonly p: number;
-}
-
-/** S2's internal distribution: the published contract plus the limiter's per-pair breakdown. */
 export interface BattleDist extends OutcomeDist {
   readonly stopped: readonly StoppedOutcome[];
 }

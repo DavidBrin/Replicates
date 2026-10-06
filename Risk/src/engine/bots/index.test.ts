@@ -5,11 +5,15 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { SEAT_NONE, type GameState, type SeatState, type TerritoryState } from "@/engine";
+import {
+  SEAT_NONE,
+  type DiceAugment, type GameState, type OddsTables, type SeatState, type TerritoryState,
+} from "@/engine";
 import { createOdds } from "@/engine/odds";
 
 import { attackCandidates, passesGates, scoreAttack } from "./attack";
 import { decideTurn, drawCountFor } from "./index";
+import { augmentFor } from "./score";
 import { makeView } from "./view";
 import {
   buildMap, card, classicShapedMap, countingRng, crossMap, emptyBoard, fixedRng, makeTestView,
@@ -755,5 +759,51 @@ describe("T13 — the decideTurn budget", () => {
     const start = performance.now();
     for (let i = 0; i < 10; i++) decideTurn(view, trueRandom, countingRng(i));
     expect((performance.now() - start) / 10).toBeLessThan(10);
+  });
+});
+
+describe("R36/R57 — certainWin is asked with the augment this attack actually faces", () => {
+  /** Wraps a real `OddsTables` and records the augment every `certainWin` is asked with. */
+  function spyCertainWin(base: OddsTables) {
+    const seen: (DiceAugment | undefined)[] = [];
+    const spy: OddsTables = {
+      mode: base.mode,
+      winChance: (a, d, aug) => base.winChance(a, d, aug),
+      outcome: (a, d, aug, stopUntil) => base.outcome(a, d, aug, stopUntil),
+      expectedAttackerLoss: (a, d, aug) => base.expectedAttackerLoss(a, d, aug),
+      certainWin: (a, d, aug) => {
+        seen.push(aug);
+        return base.certainWin(a, d, aug);
+      },
+    };
+    return { spy, seen };
+  }
+
+  const board = [[0, 10], [0, 3], [0, 3], [1, 1], [1, 4], [1, 4]] as const;
+
+  it("passes the capital's +1 defence die, not a hard-coded standard augment", () => {
+    const view = makeTestView({
+      map: crossMap(), persona: personaAt("hard"), board: [...board],
+      rules: { capitals: true },
+      capital: [0, 3],   // territory 3 — the 10-stack's target — is seat 1's capital
+    });
+    const { spy, seen } = spyCertainWin(trueRandom);
+    const plan = decideTurn(view, spy, countingRng(7));
+    expect(plan.attacks[0]?.to).toBe(3);
+    expect(seen).not.toHaveLength(0);
+    // It used to be called with { defendDiceBonus: 0, ... } whatever the target was.
+    expect(seen.at(-1)).toEqual(augmentFor(view, 3));
+    expect(seen.at(-1)?.defendDiceBonus).toBe(1);
+  });
+
+  it("still passes the standard augment when the target is not a capital", () => {
+    const view = makeTestView({
+      map: crossMap(), persona: personaAt("hard"), board: [...board],
+      rules: { capitals: true },
+      capital: [0, 5],
+    });
+    const { spy, seen } = spyCertainWin(trueRandom);
+    decideTurn(view, spy, countingRng(7));
+    expect(seen.at(-1)?.defendDiceBonus).toBe(0);
   });
 });

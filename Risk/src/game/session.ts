@@ -93,6 +93,17 @@ export interface SessionUiState {
   award: { seat: Seat; base: number; bonus: number; capitals: number; total: number } | null;
   /** The seat eliminated most recently, for the roster flip and the seizure banner. */
   lastElimination: { seat: Seat; by: Seat } | null;
+  /**
+   * Alliance proposals in the air, newest last (R80).
+   *
+   * `ALLIANCE_PROPOSE` is the one action that changes no `GameState` field — the reducer only
+   * emits `allianceChanged { state: "proposed" }` — so the offer has to live in the UI slice.
+   * That is also the right place for it: an offer is a conversation, not a rule, and it dies with
+   * the tab rather than surviving in a replay.
+   */
+  allianceOffers: readonly { from: Seat; to: Seat }[];
+  /** The roster capsule whose alliance popover is open, or `null` (§7.1). */
+  alliancePopover: Seat | null;
 }
 
 export interface SessionOptions {
@@ -122,6 +133,16 @@ export interface SavedSession {
   readonly turn: number;
   readonly grudge: readonly number[];
   readonly savedAt: number;
+  /**
+   * The runner's monotonic action counter — the sub-stream index every resolver call is keyed on.
+   *
+   * Offline the runner is the authority, so it mints the seq a server would: `nextSeq` is the seq
+   * of the action about to be produced. It has to be persisted, because resuming a save and
+   * re-deriving it from `state.turn` would hand the next battle a sub-stream the pre-save game had
+   * already spent. Optional so an envelope written before this existed still loads (it falls back
+   * to the folded count).
+   */
+  readonly nextSeq?: number;
 }
 
 export interface Session {
@@ -177,10 +198,31 @@ export interface Session {
   sayEmoji(emoji: string): void;
   /** Online only: fold an authoritative batch. Exposed so S5 can push poll results in. */
   ingest(actions: readonly LoggedAction[]): void;
-  /** Online only: replace the confirmed state with the authority's masked snapshot. */
-  ingestSnapshot(snapshot: GameState, snapshotSeq: number): void;
+  /**
+   * Online only: replace the confirmed state with the authority's masked snapshot.
+   *
+   * `animate` is optional and additive: rows whose **events** should play (the fog path sends a
+   * masked view plus the actions behind it) without being folded or moving `seq`.
+   */
+  ingestSnapshot(snapshot: GameState, snapshotSeq: number, animate?: readonly LoggedAction[]): void;
   /** The authoritative sequence number this client has folded to. */
   seq(): number;
+  // ---- alliances (R80). All three go through the normal submit path, so they work online too. ----
+  /** Offer `with` an alliance. */
+  proposeAlliance(withSeat: Seat): void;
+  /** Accept the offer `from` has made me. */
+  acceptAlliance(from: Seat): void;
+  /** Break an alliance with `withSeat`. */
+  breakAlliance(withSeat: Seat): void;
+  /** Open (or close, with `null`) the alliance popover on a roster capsule. */
+  openAlliancePopover(seat: Seat | null): void;
+  /** What my seat may do about `seat` right now, for the popover's buttons. */
+  allianceState(seat: Seat): {
+    readonly allied: boolean;
+    readonly offeredToMe: boolean;
+    readonly offeredByMe: boolean;
+    readonly canPropose: boolean;
+  };
 }
 
 const defaultSchedule = (fn: () => void, ms: number): (() => void) => {
@@ -202,6 +244,9 @@ const PROMPTS: Readonly<Record<string, string>> = {
   draftIncomplete: "You must draft all of your available troops during your draft phase",
   attack: "Select an adjacent territory to attack",
   fortify: "Select a territory to move your troops from",
+  claim: "Tap a territory to place an army",
+  /** R6 — the 2-seat variant's companion placement. The lit zone is the neutral's own tiles. */
+  claimNeutral: "Place a neutral army",
 };
 
 export function createSession(options: SessionOptions): Session {
@@ -230,9 +275,27 @@ export function createSession(options: SessionOptions): Session {
   if (options.resume?.grudge) options.resume.grudge.forEach((v, i) => { grudge[i] = v; });
 
   let confirmedState: GameState = options.resume?.state ?? openingState();
-  let pendingActions: Action[] = [];
+  /**
+   * My optimistic actions, each tagged with the `clientActionId` it was SENT with (§5.5).
+   *
+   * The id is what the authority echoes back, so it is the only thing that can retire the right
+   * entry. Counting confirmations instead retires the oldest N, which drops somebody else's row
+   * from the front of the queue the moment two of my actions are in flight at once.
+   */
+  let pendingActions: { readonly id: string; readonly action: Action }[] = [];
   let displayedState: GameState = confirmedState;
   let folded = online ? 0 : 1;
+  /**
+   * The seq of the action this runner is about to produce — the RNG sub-stream index (D5, R88).
+   *
+   * Every resolver call is keyed on it: `rngFor(seed, "battle", nextSeq)`,
+   * `rngFor(seed, "cardDeck", nextSeq)`, `rngFor(seed, "portalMove", nextSeq)` and
+   * `rngFor(seed, `bot:${seat}`, nextSeq)`. `state.turn` is the wrong index and always was: it
+   * changes once per turn, so **two attacks in the same turn drew the same dice** and a bot
+   * re-entered twice in one turn blundered identically. The server keys on the action's seq, so
+   * this is also the one index the two authorities agree on.
+   */
+  let nextSeq = options.resume?.nextSeq ?? folded + 1;
 
   function openingState(): GameState {
     const personas = bots.drawPersonas(
@@ -291,6 +354,8 @@ export function createSession(options: SessionOptions): Session {
     chat: [],
     award: null,
     lastElimination: null,
+    allianceOffers: [],
+    alliancePopover: null,
   }));
 
   const set = (patch: Partial<SessionUiState>): void => {
@@ -326,8 +391,8 @@ export function createSession(options: SessionOptions): Session {
 
   function refold(): void {
     let next = confirmedState;
-    for (const action of pendingActions) {
-      const r = engine.apply(next, map, action);
+    for (const entry of pendingActions) {
+      const r = engine.apply(next, map, entry.action);
       if (r.error) continue;
       next = r.state;
     }
@@ -350,6 +415,7 @@ export function createSession(options: SessionOptions): Session {
       turn: confirmedState.turn,
       grudge: [...grudge],
       savedAt: Date.now(),
+      nextSeq,
     });
   }
 
@@ -391,11 +457,31 @@ export function createSession(options: SessionOptions): Session {
             const seat = displayedState.turnOrder[displayedState.currentIndex];
             if (seat !== undefined) botReact(seat, "badRoll");
           }
+          // The anchor's work is done — unless dice are still on screen, in which case the
+          // overlay that is using it clears it when it leaves.
+          if (store.getState().dice === null) set({ pendingAttack: null });
           break;
         case "diceRolled":
-          set({ dice: { attacker: e.attackerDice, defender: e.defenderDice } });
-          later(() => set({ dice: null }), 1600);
+          // Re-anchor from the event, so the overlay is positioned by the authority's own
+          // from/to whether the roll was resolved here or arrived through `ingest`.
+          set({
+            dice: { attacker: e.attackerDice, defender: e.defenderDice },
+            pendingAttack: { from: e.from, to: e.to },
+          });
+          later(() => {
+            if (store.getState().dice === null) return;
+            set({ dice: null, pendingAttack: null });
+          }, 1600);
           break;
+        case "allianceChanged": {
+          const offers = store.getState().allianceOffers
+            .filter((o) => !((o.from === e.a && o.to === e.b) || (o.from === e.b && o.to === e.a)));
+          // A proposal stands until it is accepted or broken; accepting or breaking retires it.
+          set({
+            allianceOffers: e.state === "proposed" ? [...offers, { from: e.a, to: e.b }] : offers,
+          });
+          break;
+        }
         case "gameOver":
           finish(e.outcome);
           break;
@@ -463,6 +549,7 @@ export function createSession(options: SessionOptions): Session {
     }
     confirmedState = result.state;
     folded += 1;
+    nextSeq += 1;
     handleEvents(result.events);
     refold();
     persist();
@@ -477,7 +564,13 @@ export function createSession(options: SessionOptions): Session {
     return result;
   }
 
-  /** Non-attack actions are applied optimistically and sent (§5.5). */
+  /**
+   * Non-attack actions are applied optimistically and sent (§5.5).
+   *
+   * The id is minted **before** the action joins the pending queue, because the id is the handle
+   * the authority's echo comes back on: an entry queued without one cannot be retired by the row
+   * that confirms it, and `ingest` was reduced to retiring a *count* of entries instead.
+   */
   function submitOnline(action: Action): ApplyResult {
     const probe = engine.apply(displayedState, map, action);
     if (probe.error) {
@@ -485,15 +578,26 @@ export function createSession(options: SessionOptions): Session {
       later(() => set({ toast: null }), 1400);
       return probe;
     }
-    pendingActions = [...pendingActions, action];
-    refold();
     const id = clientActionId();
+    pendingActions = [...pendingActions, { id, action }];
+    refold();
     void sync?.submit(action, id).catch(() => {
-      pendingActions = pendingActions.filter((a) => a !== action);
+      retirePending(id);
       refold();
       set({ syncStatus: "behind" });
     });
     return probe;
+  }
+
+  /** One resync ask per desync, until a snapshot answers it. */
+  let resyncRequested = false;
+
+  /** Drop the one optimistic entry the authority has now spoken for. */
+  function retirePending(id: string | null): boolean {
+    if (id === null) return false;
+    const before = pendingActions.length;
+    pendingActions = pendingActions.filter((entry) => entry.id !== id);
+    return pendingActions.length !== before;
   }
 
   function clientActionId(): string {
@@ -510,16 +614,43 @@ export function createSession(options: SessionOptions): Session {
     if (confirmedState.outcome) return;
     if (action.type === "END_TURN") {
       roundStartWork();
-      afterTurnEnd();
+      afterRound(afterTurnEnd);
       return;
     }
     refreshSelection();
   }
 
+  /** The round the runner has already paused for. */
+  let pausedRound = confirmedState.round;
+
+  /**
+   * `rules.roundDelayMs` — a beat at the top of each new round, and nothing more (§4.7).
+   *
+   * Purely presentational: it is a pause between two actions, never an input to one, so it cannot
+   * change an outcome and it is skipped entirely under `skipAnimations` / reduced motion. The
+   * control on `/new/rules` has always written the field; this is what reads it. The banner the
+   * `turnStarted` event raises is what fills the pause.
+   */
+  function afterRound(then: () => void): void {
+    const round = confirmedState.round;
+    if (round === pausedRound) {
+      then();
+      return;
+    }
+    pausedRound = round;
+    const ms = skip ? 0 : Math.max(0, Math.min(10_000, Math.floor(confirmedState.rules.roundDelayMs || 0)));
+    if (ms <= 0) {
+      then();
+      return;
+    }
+    set({ bannerText: `Round ${String(round)}` });
+    later(then, ms);
+  }
+
   /** Unstable portals relocate at the start of every third round (R76, §5.7). */
   function roundStartWork(): void {
     if (confirmedState.currentIndex !== 0 || confirmedState.rules.portals !== "unstable") return;
-    const moved = engine.movePortals(confirmedState, map, engine.rngFor(config.seed, "portalMove", confirmedState.turn));
+    const moved = engine.movePortals(confirmedState, map, engine.rngFor(config.seed, "portalMove", nextSeq));
     if (moved) applyLocal(moved, true);
   }
 
@@ -574,7 +705,7 @@ export function createSession(options: SessionOptions): Session {
     set({ botPlaying: true, actingSeat: seat, selected: null, litZone: [], actionMode: "idle" });
     driver = createBotDriver({
       engine, bots, odds, map, seat, grudge,
-      rng: () => engine.rngFor(config.seed, `bot:${seat}`, confirmedState.turn),
+      rng: () => engine.rngFor(config.seed, `bot:${seat}`, nextSeq),
     });
     stepBot(seat);
   }
@@ -597,7 +728,7 @@ export function createSession(options: SessionOptions): Session {
       set({ botPlaying: false });
       if (!r.error) {
         roundStartWork();
-        afterTurnEnd();
+        afterRound(afterTurnEnd);
       }
       return;
     }
@@ -605,7 +736,7 @@ export function createSession(options: SessionOptions): Session {
     if (step.kind === "intent") {
       const action = engine.rollAttack(
         confirmedState, map, step.intent,
-        engine.rngFor(config.seed, "battle", confirmedState.turn),
+        engine.rngFor(config.seed, "battle", nextSeq),
         odds, confirmedState.rules.diceMode,
       );
       applyLocal(action, true);
@@ -615,7 +746,7 @@ export function createSession(options: SessionOptions): Session {
       set({ botPlaying: false });
       if (!r.error) {
         roundStartWork();
-        afterTurnEnd();
+        afterRound(afterTurnEnd);
       }
       return;
     } else {
@@ -627,7 +758,7 @@ export function createSession(options: SessionOptions): Session {
   /** The end-of-turn card award: exactly one card, resolved by the runner (R20). */
   function awardCard(seat: Seat): void {
     const drawn = engine.drawCard(
-      confirmedState, map, seat, engine.rngFor(config.seed, "cardDeck", confirmedState.turn),
+      confirmedState, map, seat, engine.rngFor(config.seed, "cardDeck", nextSeq),
     );
     applyLocal(drawn, true);
   }
@@ -641,6 +772,17 @@ export function createSession(options: SessionOptions): Session {
     if (state.pendingMoveIn) {
       const { from, to, min, max } = state.pendingMoveIn;
       set({ actionMode: "moveIn", litZone: [to], selected: from, countRequest: { kind: "moveIn", from, to, min, max } });
+      return;
+    }
+    if (state.phase === "claim") {
+      // The claim phase lights its zone without a selection: there is nothing to select FROM, only
+      // somewhere to put the one army this step owes — the seat's, or R6's neutral.
+      const owed = engine.claimOwed(state, seat);
+      set({
+        litZone: owed === "neutral"
+          ? engine.legalNeutralClaimTargets(state)
+          : owed === "own" ? engine.legalOwnClaimTargets(state, seat) : [],
+      });
       return;
     }
     if (ui.selected === null) {
@@ -724,31 +866,94 @@ export function createSession(options: SessionOptions): Session {
     }
 
     if (state.phase === "claim") {
-      submit({ type: "CLAIM", seat, territory: at });
+      // R6 — ask the engine whose army this step owes. In the 2-seat variant each pair of the
+      // seat's own armies is followed by one neutral army, and `validate` refuses the seat's own
+      // claim until that one is placed, so a tap that always sends its own claim stalls setup
+      // outright. Never guess the alternation from the UI's side.
+      const owed = engine.claimOwed(state, seat);
+      if (owed === "none") return;
+      submit(owed === "neutral"
+        ? { type: "CLAIM", seat, territory: at, forNeutral: true }
+        : { type: "CLAIM", seat, territory: at });
+      refreshSelection();
     }
   }
 
   /* ------------------------------------------------------------ online -- */
 
+  /** The action kinds this build knows. Anything else is the authority's fog placeholder. */
+  const KNOWN_ACTIONS: ReadonlySet<string> = new Set<Action["type"]>([
+    "GAME_STARTED", "CLAIM", "TRADE_CARDS", "DRAFT", "AUTO_DEPLOY", "ATTACK", "MOVE_IN",
+    "FORTIFY", "END_PHASE", "END_TURN", "CARD_DRAWN", "SEAT_TO_BOT", "SEAT_TO_HUMAN",
+    "PORTALS_MOVED", "ALLIANCE_PROPOSE", "ALLIANCE_ACCEPT", "ALLIANCE_BREAK",
+  ]);
+
+  /**
+   * A row the fold must advance over without applying (§5.5).
+   *
+   * Under fog the authority replaces an action it must not reveal with a placeholder of an unknown
+   * `type`, and a `CARD_DRAWN` whose `card` it must not name arrives as `card: null`. Both are
+   * **legitimate gaps in knowledge, not disagreements**: treating them as a desync would put every
+   * fog game permanently in `"desynced"` from the first hidden action onwards.
+   */
+  function isMaskedRow(action: Action): boolean {
+    if (!KNOWN_ACTIONS.has(action.type)) return true;
+    return action.type === "CARD_DRAWN" && (action as { card?: unknown }).card == null;
+  }
+
+  /** The session asks the port for a cold re-read, however the adapter spells it (§5.8). */
+  function requestResync(reason: string): void {
+    if (resyncRequested) return;
+    resyncRequested = true;
+    if (typeof console !== "undefined") console.warn("[risk] resync:", reason);
+    const port = sync;
+    if (!port) return;
+    const asked = port.resync?.();
+    if (asked !== undefined) {
+      void Promise.resolve(asked).catch(() => set({ syncStatus: "desynced" }));
+      return;
+    }
+    // An adapter from before `resync` existed: nudge the cadence and poll. This cannot reset the
+    // cursor, so it is a degradation rather than a fix — see the doc comment on `SyncPort.resync`.
+    port.setIntervalMs?.(1000);
+    void Promise.resolve(port.poll?.()).catch(() => set({ syncStatus: "desynced" }));
+  }
+
   function ingest(actions: readonly LoggedAction[]): void {
     let changed = false;
+    let retired = false;
+    let gapAt: number | null = null;
     for (const row of [...actions].sort((a, b) => a.seq - b.seq)) {
-      if (row.seq <= folded) continue;
-      if (row.clientActionId) {
-        pendingActions = pendingActions.filter(() => true);
+      if (row.seq <= folded) {
+        // Already folded, but it may still be the echo that retires my optimistic copy.
+        if (retirePending(row.clientActionId)) retired = true;
+        continue;
       }
+      /*
+       * §5.5 — the fold is contiguous or it is nothing. Applying seq N+2 on top of N silently
+       * builds a state no authority ever had and then blames the next hash for it, so a gap stops
+       * the fold here and asks for a cold re-read instead.
+       */
+      if (row.seq !== folded + 1) {
+        gapAt = row.seq;
+        break;
+      }
+      if (retirePending(row.clientActionId)) retired = true;
       if (row.action.type === "GAME_STARTED") {
         confirmedState = engine.createInitialState(map, row.action);
+      } else if (isMaskedRow(row.action)) {
+        // Nothing to apply; the fold advances so the next row stays contiguous.
       } else {
         const r = engine.apply(confirmedState, map, row.action);
         if (r.error) {
-          set({ syncStatus: "desynced" });
-          continue;
+          desync(`seq ${String(row.seq)} refused: ${r.error.code}`);
+          break;
         }
         confirmedState = r.state;
         handleEvents(r.events);
       }
       folded = row.seq;
+      nextSeq = folded + 1;
       changed = true;
       if (!confirmedState.rules.fogOfWar && row.stateHash) {
         let hash: string | null = null;
@@ -758,37 +963,81 @@ export function createSession(options: SessionOptions): Session {
           hash = null;
         }
         if (hash !== null && hash !== row.stateHash) {
-          set({ syncStatus: "desynced" });
-          if (typeof console !== "undefined") console.error("[risk] desync at seq", row.seq);
+          desync(`hash mismatch at seq ${String(row.seq)}`);
+          break;
         }
       }
     }
-    // Anything the authority has now confirmed is no longer optimistic.
-    const confirmedCount = Math.min(pendingActions.length, actions.filter((a) => a.clientActionId).length);
-    if (confirmedCount > 0) pendingActions = pendingActions.slice(confirmedCount);
-    if (changed || confirmedCount > 0) {
-      refold();
-      if (store.getState().syncStatus !== "desynced") set({ syncStatus: "idle" });
+    if (changed || retired) refold();
+    if (changed && store.getState().syncStatus !== "desynced") set({ syncStatus: "idle" });
+    if (gapAt !== null) {
+      set({ syncStatus: "behind" });
+      requestResync(`gap: have ${String(folded)}, next row is ${String(gapAt)}`);
     }
   }
 
-  function ingestSnapshot(snapshot: GameState, snapshotSeq: number): void {
+  /**
+   * §5.8/D16 — a disagreement is not something to carry on from.
+   *
+   * The local fold is wrong and every later row will be applied on top of the wrong state, so the
+   * client stops trusting it: the optimistic queue goes, the status says so, and the port is asked
+   * for a snapshot at cursor 0. `ingestSnapshot` is what clears the status again.
+   */
+  function desync(reason: string): void {
+    pendingActions = [];
+    set({ syncStatus: "desynced" });
+    if (typeof console !== "undefined") console.error("[risk] desync —", reason);
+    requestResync(reason);
+  }
+
+  /**
+   * Replace the confirmed state with the authority's masked snapshot (§5.5, F36).
+   *
+   * `animate` carries rows the authority sent **for their events only** — a fog game gets a masked
+   * view plus the actions behind it, and folding those would double-apply what the snapshot already
+   * contains. So they are replayed against the pre-snapshot state purely to drain their events, and
+   * neither `folded` nor the confirmed state moves for them.
+   */
+  function ingestSnapshot(
+    snapshot: GameState, snapshotSeq: number, animate?: readonly LoggedAction[],
+  ): void {
+    if (animate && animate.length > 0) {
+      let scratch = confirmedState;
+      for (const row of [...animate].sort((a, b) => a.seq - b.seq)) {
+        if (row.action.type === "GAME_STARTED" || isMaskedRow(row.action)) continue;
+        const r = engine.apply(scratch, map, row.action);
+        if (r.error) continue;
+        scratch = r.state;
+        handleEvents(r.events);
+      }
+    }
     confirmedState = snapshot;
     folded = snapshotSeq;
+    nextSeq = snapshotSeq + 1;
     pendingActions = [];
+    resyncRequested = false;
     refold();
     set({ syncStatus: "idle" });
   }
 
   const unsubActions = sync?.onActions((rows) => ingest(rows)) ?? null;
   const unsubStatus = sync?.onStatus((status) => set({ syncStatus: status })) ?? null;
-  const unsubSnapshot = sync?.onSnapshot((snapshot, seq) => ingestSnapshot(snapshot, seq)) ?? null;
+  const unsubSnapshot = sync?.onSnapshot(
+    (snapshot, seq, animate) => ingestSnapshot(snapshot, seq, animate),
+  ) ?? null;
 
   /* -------------------------------------------------------- the actions -- */
 
   function submitAttack(intent: AttackIntent): void {
     if (!canAct()) return;
-    set({ modal: null, pendingAttack: null });
+    /*
+     * The Blitz view closes, but `pendingAttack` **stays**: it is the anchor the dice overlay is
+     * positioned on, and the `diceRolled` event that fills that overlay arrives after this call —
+     * offline from `applyLocal`, online from the next `ingest`. Clearing it here meant a manual
+     * roll's dice had nowhere to land and never animated at all. `battleResolved` clears it once
+     * the result has been shown.
+     */
+    set({ modal: null });
     if (online) {
       const id = clientActionId();
       void sync?.submitIntent(intent, id).then((rows) => ingest(rows)).catch(() => set({ syncStatus: "behind" }));
@@ -796,7 +1045,7 @@ export function createSession(options: SessionOptions): Session {
     }
     const action = engine.rollAttack(
       displayedState, map, intent,
-      engine.rngFor(config.seed, "battle", displayedState.turn),
+      engine.rngFor(config.seed, "battle", nextSeq),
       odds, displayedState.rules.diceMode,
     );
     const result = submit(action);
@@ -840,17 +1089,40 @@ export function createSession(options: SessionOptions): Session {
     if (!result.error) set({ selected: null, litZone: [], actionMode: "idle", modal: null });
   }
 
+  /**
+   * Resign (D76).
+   *
+   * Offline the runner is the authority, so it mints the `SEAT_TO_BOT` itself — persona and all.
+   * **Online it may not**: `/actions` refuses a client-submitted `SEAT_TO_BOT`, because re-seating
+   * a bot and re-timing the turn are the authority's business, so the resignation goes through the
+   * port's own `resign()` and comes back as an authoritative row like any other.
+   */
   function resign(): void {
     const seat = mySeat();
+    set({ modal: null });
+    if (online) {
+      const port = sync;
+      if (!port?.resign) {
+        // An adapter without the route: say so rather than posting an action that will bounce.
+        set({ toast: "Resigning is not available in this game" });
+        later(() => set({ toast: null }), 1400);
+        return;
+      }
+      void Promise.resolve(port.resign())
+        .then((rows) => {
+          if (rows) ingest(rows);
+        })
+        .catch(() => set({ syncStatus: "behind" }));
+      return;
+    }
     const persona = confirmedState.seats[seat]?.persona
       ?? bots.drawPersonas([confirmedState.rules.aiDifficulty],
-        engine.rngFor(config.seed, "personaAssign", confirmedState.turn),
-        engine.rngFor(config.seed, "personaJitter", confirmedState.turn))[0]
+        engine.rngFor(config.seed, "personaAssign", nextSeq),
+        engine.rngFor(config.seed, "personaJitter", nextSeq))[0]
       ?? null;
     if (!persona) return;
     submit({ type: "SEAT_TO_BOT", seat, reason: "resigned", tier: confirmedState.rules.aiDifficulty, persona });
-    set({ modal: null });
-    if (!online && actingSeat() === seat) afterTurnEnd();
+    if (actingSeat() === seat) afterTurnEnd();
   }
 
   /* -------------------------------------------------------------- misc -- */
@@ -912,7 +1184,12 @@ export function createSession(options: SessionOptions): Session {
       refreshSelection();
     },
     setAttackLimit(stopUntil) {
-      set({ attackLimit: stopUntil });
+      /*
+       * R48 — `stopUntil` is "stop with this many troops left" and is at least 1, so 0 is not a
+       * limiter at all: it is the slider's left stop, which means "no limiter". Normalising it to
+       * `null` here keeps the illegal `stopUntil: 0` out of every intent, whichever control set it.
+       */
+      set({ attackLimit: stopUntil !== null && stopUntil > 0 ? Math.floor(stopUntil) : null });
     },
     submitAttack,
     submit,
@@ -969,10 +1246,11 @@ export function createSession(options: SessionOptions): Session {
       if (r.error) throw new Error(`${r.error.code}: ${r.error.message}`);
       confirmedState = r.state;
       folded += 1;
+      nextSeq += 1;
       handleEvents(r.events);
       refold();
       persist();
-      if (action.type === "END_TURN" && !confirmedState.outcome) afterTurnEnd();
+      if (action.type === "END_TURN" && !confirmedState.outcome) afterRound(afterTurnEnd);
     },
     drainEvents() {
       const out = [...eventBuffer];
@@ -981,6 +1259,11 @@ export function createSession(options: SessionOptions): Session {
     },
     prompt() {
       const state = displayedState;
+      if (state.phase === "claim") {
+        const owed = engine.claimOwed(state, actingSeat());
+        if (owed === "neutral") return PROMPTS.claimNeutral as string;
+        return owed === "own" ? (PROMPTS.claim as string) : "";
+      }
       if (state.phase === "draft") {
         return state.troopsToPlace > 0 ? (PROMPTS.draft as string) : (PROMPTS.draftIncomplete as string);
       }
@@ -1021,6 +1304,46 @@ export function createSession(options: SessionOptions): Session {
     ingest,
     ingestSnapshot,
     seq: () => folded,
+
+    /* ---------------------------------------------------------- alliances (R80) -- */
+
+    proposeAlliance(withSeat) {
+      const me = mySeat();
+      if (withSeat === me) return;
+      submit({ type: "ALLIANCE_PROPOSE", seat: me, to: withSeat });
+      // Offline there is no second device to answer, so the offer is recorded locally too; the
+      // reducer's `allianceChanged` event does it online as well. One site, idempotent either way.
+      set({ alliancePopover: null });
+    },
+    acceptAlliance(from) {
+      const me = mySeat();
+      if (from === me) return;
+      submit({ type: "ALLIANCE_ACCEPT", seat: me, from });
+      set({ alliancePopover: null });
+    },
+    breakAlliance(withSeat) {
+      const me = mySeat();
+      if (withSeat === me) return;
+      submit({ type: "ALLIANCE_BREAK", seat: me, with: withSeat });
+      set({ alliancePopover: null });
+    },
+    openAlliancePopover(seat) {
+      set({ alliancePopover: seat });
+    },
+    allianceState(seat) {
+      const me = mySeat();
+      const offers = store.getState().allianceOffers;
+      const allied = (displayedState.seats[me]?.allies ?? []).includes(seat);
+      const offeredToMe = offers.some((o) => o.from === seat && o.to === me);
+      const offeredByMe = offers.some((o) => o.from === me && o.to === seat);
+      const kinds = engine.legalActions(displayedState, map, me);
+      return {
+        allied,
+        offeredToMe,
+        offeredByMe,
+        canPropose: !allied && !offeredByMe && kinds.includes("ALLIANCE_PROPOSE"),
+      };
+    },
   };
 
   // Autosave on tab hide, as well as after every END_TURN (§4.15).

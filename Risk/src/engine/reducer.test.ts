@@ -398,8 +398,45 @@ describe("R9 — the claim phase (Manual Placement)", () => {
       s = ok(s, tiny4, { type: "CLAIM", seat, territory }).state;
     }
     expect(s.phase).toBe("draft");
-    // Deterministic, no RNG inside `apply` (R88): the lowest-index own territory.
+    // Deterministic, no RNG inside `apply` (R88): the most-garrisoned own
+    // territory — one each here, so the tie falls to the lowest index.
     expect(s.seats.map((x) => x.capital)).toEqual([1, 2, 3]);
+  });
+
+  it("R8/R9 — the manual-placement capital is the seat's BIGGEST stack, not its lowest index", () => {
+    const started = startedAction(mini, {
+      seats: 3,
+      rules: { manualPlacement: true, capitals: true },
+      startingArmies: 3,
+    });
+    let s = createInitialState(mini, { ...started, deal: [], capitals: [null, null, null] });
+    // One army per step, round robin: the board fills, then each seat spends its
+    // last army reinforcing its SECOND territory, which becomes its biggest stack.
+    for (const [seat, territory] of [
+      [0, 0], [1, 1], [2, 2], [0, 3], [1, 4], [2, 5], [0, 3], [1, 4], [2, 5],
+    ] as const) {
+      s = ok(s, mini, { type: "CLAIM", seat, territory }).state;
+    }
+    expect(s.phase).toBe("draft");
+    expect(s.territories.map((t) => t.troops)).toEqual([1, 1, 1, 2, 2, 2]);
+    // The lowest-index rule would have answered [0, 1, 2].
+    expect(s.seats.map((x) => x.capital)).toEqual([3, 4, 5]);
+  });
+
+  it("R8/R9 — a tie on troops falls to the lowest index, so `apply` stays deterministic (R88)", () => {
+    const started = startedAction(mini, {
+      seats: 3,
+      rules: { manualPlacement: true, capitals: true },
+      startingArmies: 2,
+    });
+    let s = createInitialState(mini, { ...started, deal: [], capitals: [null, null, null] });
+    for (const [seat, territory] of [
+      [0, 0], [1, 1], [2, 2], [0, 3], [1, 4], [2, 5],
+    ] as const) {
+      s = ok(s, mini, { type: "CLAIM", seat, territory }).state;
+    }
+    expect(s.territories.map((t) => t.troops)).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(s.seats.map((x) => x.capital)).toEqual([0, 1, 2]);
   });
 
   it("a CLAIM out of the claim phase is refused", () => {

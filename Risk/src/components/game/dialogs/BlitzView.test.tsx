@@ -95,6 +95,39 @@ describe("BlitzView", () => {
     expect(onAttackLimit).toHaveBeenCalledWith(4);
   });
 
+  /*
+   * R48 — `stopUntil` is at least 1, so the slider's left stop is NOT a value: it means "no
+   * limiter", and the caller omits `stopUntil` for it rather than sending an illegal 0. The
+   * slider is also clamped, because `attackLimit` outlives one attack and the next source
+   * may be a smaller stack.
+   */
+  it("treats the slider's left stop as `no limiter`, never as stopUntil 0", () => {
+    const onAttackLimit = vi.fn();
+    renderBlitz({ attackLimit: 4, onAttackLimit });
+    const slider = screen.getByTestId("attack-limit");
+    expect(slider).toHaveAttribute("min", "0");
+    fireEvent.change(slider, { target: { value: "0" } });
+    expect(onAttackLimit).toHaveBeenCalledWith(0);
+    // Zero commits every troop — which is exactly "fight to the death".
+    renderBlitz({ attackLimit: 0 });
+    expect(screen.getAllByTestId("blitz-committed")[1]).toHaveTextContent("7/7 Troops");
+  });
+
+  it("clamps a stale limiter into this attack's legal range", () => {
+    // 7 troops: the legal stopUntil is 1..6. A 9 left over from a bigger stack is not.
+    renderBlitz({ attackLimit: 9 });
+    expect(screen.getByTestId("attack-limit")).toHaveValue("6");
+    expect(screen.getByTestId("blitz-committed")).toHaveTextContent("1/7 Troops");
+  });
+
+  it("clamps what it reports, so a slider event can never escape the range", () => {
+    const onAttackLimit = vi.fn();
+    renderBlitz({ onAttackLimit });
+    const slider = screen.getByTestId("attack-limit");
+    fireEvent.change(slider, { target: { value: "99" } });
+    expect(onAttackLimit).toHaveBeenCalledWith(6);
+  });
+
   it("reads the committed troops back out of the limiter", () => {
     const { unmount } = renderBlitz({ attackLimit: null });
     expect(screen.getByTestId("blitz-committed")).toHaveTextContent("7/7 Troops");

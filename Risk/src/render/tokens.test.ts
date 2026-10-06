@@ -198,6 +198,31 @@ describe("token layer", () => {
     expect(chips[3]?.innerHTML).toContain("<rect");
   });
 
+  it("leaves the numeral BLANK on a 0-troop tile — the R62/R63 conquest moment", () => {
+    // A conquered territory is owned with 0 armies until its MOVE_IN lands, and
+    // the board paints that step. "0" is not a troop count the game ever shows.
+    const layer = createTokenLayer(TINY4);
+    layer.paint(paintOf({ troops: [0, 1, 2, 3] }), CAM);
+    const numerals = Array.from(
+      layer.element.querySelectorAll<HTMLElement>(".troops"),
+      (n) => n.textContent,
+    );
+    expect(numerals).toEqual(["", "1", "2", "3"]);
+    // The chip itself stays: the tile is owned, it is only waiting for armies.
+    expect(layer.element.querySelectorAll(".chip-holder")[0]?.innerHTML).toContain("<circle");
+  });
+
+  it("repaints the numeral the moment the armies land", () => {
+    const layer = createTokenLayer(TINY4);
+    layer.paint(paintOf({ troops: [0, 1, 2, 3] }), CAM);
+    layer.paint(paintOf({ troops: [4, 1, 2, 3] }), CAM);
+    const numerals = Array.from(
+      layer.element.querySelectorAll<HTMLElement>(".troops"),
+      (n) => n.textContent,
+    );
+    expect(numerals).toEqual(["4", "1", "2", "3"]);
+  });
+
   it("re-cuts the chip only when the digit count or the radius changes", () => {
     const layer = createTokenLayer(TINY4);
     layer.paint(paintOf({ troops: [9, 1, 1, 1] }), CAM);

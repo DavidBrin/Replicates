@@ -23,6 +23,13 @@ export interface EngineApi {
   legalAttackTargets(state: GameState, map: MapDef, from: TerritoryId): readonly TerritoryId[];
   legalFortifyMoves(state: GameState, map: MapDef, from: TerritoryId): readonly TerritoryId[];
   legalDraftTargets(state: GameState, seat: Seat): readonly TerritoryId[];
+  /**
+   * R6/R9 — which `CLAIM` the claim phase is waiting for. Added after S1 published: the runner
+   * must not guess the 2-seat variant's own/neutral alternation, because `validate` enforces it.
+   */
+  claimOwed(state: GameState, seat: Seat): "own" | "neutral" | "none";
+  legalNeutralClaimTargets(state: GameState): readonly TerritoryId[];
+  legalOwnClaimTargets(state: GameState, seat: Seat): readonly TerritoryId[];
   cardSets(cards: readonly Card[]): readonly (readonly [string, string, string])[];
   cardTradeValue(cards: readonly Card[], setsTradedTotal: number, scheme: CardBonusScheme): number;
   mustTradeNow(state: GameState, seat: Seat): boolean;

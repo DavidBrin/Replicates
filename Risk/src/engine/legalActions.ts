@@ -17,7 +17,10 @@ import { knownTerritory, neighbours, reachableOwn } from "./graph";
 import { isAttackable } from "./modifiers";
 import { currentSeat, isContender, isGameOver, takesTurns } from "./rules";
 import { neutralArmiesOwed, seatRow } from "./validate";
-import { SEAT_NONE, type ActionKind, type GameState, type MapDef, type Seat, type TerritoryId } from "./types";
+import {
+  SEAT_NEUTRAL, SEAT_NONE,
+  type ActionKind, type GameState, type MapDef, type Seat, type TerritoryId,
+} from "./types";
 
 /** The fixed order `legalActions` reports in (R91). */
 export const ACTION_ORDER: readonly ActionKind[] = [
@@ -35,6 +38,55 @@ export const ACTION_ORDER: readonly ActionKind[] = [
   "ALLIANCE_ACCEPT",
   "ALLIANCE_BREAK",
 ];
+
+/**
+ * R6/R9 — which `CLAIM` the claim phase is waiting for from `seat`.
+ *
+ * `"neutral"` means the next claim must carry `forNeutral: true`: in the 2-seat variant each pair of
+ * the seat's own armies owes the neutral holding one, and `validate` refuses the seat's *own* claim
+ * until that army is placed. A caller that only ever sends `CLAIM { seat, territory }` therefore
+ * stalls the whole setup after the first completed pair, which is exactly what this selector exists
+ * to stop — the alternation is a rule, not a courtesy, so the UI and the bot runner must both be
+ * able to ask whose army is owed rather than guessing.
+ *
+ * `"none"` means `seat` has nothing left to place. A 3-to-6-seat game never answers `"neutral"`.
+ */
+export function claimOwed(state: GameState, seat: Seat): "own" | "neutral" | "none" {
+  if (state.phase !== "claim") return "none";
+  if (currentSeat(state) !== seat) return "none";
+  if (neutralArmiesOwed(state) > 0) return "neutral";
+  return (seatRow(state, seat)?.armiesToClaim ?? 0) > 0 ? "own" : "none";
+}
+
+/**
+ * Where R6's neutral army may land: a territory the neutral already holds, or any still unclaimed
+ * (R6, R7, R74). This is the zone the board lights while `claimOwed` says `"neutral"`.
+ */
+export function legalNeutralClaimTargets(state: GameState): readonly TerritoryId[] {
+  const out: TerritoryId[] = [];
+  for (let i = 0; i < state.territories.length; i++) {
+    const cell = state.territories[i];
+    if (cell === undefined || cell.blizzard) continue;
+    if (cell.owner === SEAT_NEUTRAL || cell.owner === SEAT_NONE) out.push(i);
+  }
+  return out;
+}
+
+/**
+ * Where `seat`'s own claim army may land: an unclaimed territory while any remain, else one of its
+ * own (R9).
+ */
+export function legalOwnClaimTargets(state: GameState, seat: Seat): readonly TerritoryId[] {
+  const unclaimed: TerritoryId[] = [];
+  const own: TerritoryId[] = [];
+  for (let i = 0; i < state.territories.length; i++) {
+    const cell = state.territories[i];
+    if (cell === undefined || cell.blizzard) continue;
+    if (cell.owner === SEAT_NONE) unclaimed.push(i);
+    else if (cell.owner === seat) own.push(i);
+  }
+  return unclaimed.length > 0 ? unclaimed : own;
+}
 
 /** Owned, non-blizzard territories — where draft troops may land (R16, R74). */
 export function legalDraftTargets(state: GameState, seat: Seat): readonly TerritoryId[] {

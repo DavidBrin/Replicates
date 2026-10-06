@@ -78,7 +78,12 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
           onAttackLimit={(stopUntil) => session.setAttackLimit(stopUntil)}
           onBattle={() => session.submitAttack(
             ui.attackDice === "blitz"
-              ? { from: attack.from, to: attack.to, mode: "blitz", ...(ui.attackLimit !== null ? { stopUntil: ui.attackLimit } : {}) }
+              // R48 — `stopUntil` is at least 1. The slider's left stop is 0, which means
+              // "no limiter", so it is OMITTED rather than sent as an illegal 0.
+              ? {
+                from: attack.from, to: attack.to, mode: "blitz",
+                ...(ui.attackLimit !== null && ui.attackLimit > 0 ? { stopUntil: ui.attackLimit } : {}),
+              }
               : { from: attack.from, to: attack.to, mode: "manual", attackerDice: ui.attackDice },
           )}
           onCancel={() => {
@@ -96,7 +101,8 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
             x: session.map.territories[attack.to]?.token[0] ?? 0,
             y: session.map.territories[attack.to]?.token[1] ?? 0,
           }}
-          onDone={() => session.store.setState({ dice: null })}
+          // The anchor lives until the dice leave: `pendingAttack` is what positions this overlay.
+          onDone={() => session.store.setState({ dice: null, pendingAttack: null })}
         />
       ) : null}
 

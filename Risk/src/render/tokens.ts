@@ -228,6 +228,18 @@ function numeralSize(radius: number, digits: number): number {
 
 function digitsOf(troops: number): { readonly text: string; readonly digits: number } {
   if (troops === TROOPS_UNKNOWN) return { text: "?", digits: 1 };
+  /*
+   * A zero is never a troop count, it is a moment: R62 hands a conquered
+   * territory over the instant the defender's last army dies and R63 makes the
+   * attacker occupy it with a separate `MOVE_IN`, so between those two actions
+   * the tile is owned and empty. The board paints every AI step, which is up to
+   * 300 ms (`aiStepMs`), and the counter would spend that frame reading "0" —
+   * which is how a production walkthrough came away with a 0-troop Ontario. The
+   * board game has no such state, so the chip stays and the numeral goes blank
+   * until the armies land. Every other owned tile holds at least one army, which
+   * `src/engine/invariants.test.ts` proves action by action.
+   */
+  if (troops <= 0) return { text: "", digits: 1 };
   const text = String(troops);
   return { text, digits: text.length };
 }

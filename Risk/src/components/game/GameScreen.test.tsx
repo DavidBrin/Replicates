@@ -8,6 +8,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { PresenceRow } from "@/ports/sync";
 import { HOTSEAT_SEATS, SOLO_SEATS, makeSession, manualScheduler } from "@/game/__fixtures__/harness";
 import type { Session } from "@/game/session";
+import { engineApi } from "@/game/engineApi";
 
 import GameScreen from "./GameScreen";
 
@@ -193,6 +194,84 @@ describe("GameScreen", () => {
     render(<GameScreen session={h.session} />);
     fireEvent.click(screen.getByTestId("dialog-line-34"));
     expect(h.session.store.getState().chat.at(-1)?.lineId).toBe(34);
+  });
+
+  /*
+   * R80 — the alliance affordance. It exists only when the rule is on, it never appears on the
+   * viewer's own capsule, and every button dispatches through the session, so the same control
+   * works online.
+   */
+  describe("the alliance popover", () => {
+    function mountAllied() {
+      const h = mountHotseat({ rules: { alliances: true }, engine: engineApi });
+      h.session.continueHandOff();
+      const me = h.session.mySeat();
+      const them = h.session.confirmed().seats.find((s) => s.seat !== me)?.seat as number;
+      return { h, me, them };
+    }
+
+    it("is absent while alliances are off", () => {
+      const h = mountHotseat();
+      h.session.continueHandOff();
+      render(<GameScreen session={h.session} />);
+      fireEvent.click(screen.getByTestId("roster-row-1"));
+      expect(screen.queryByTestId("alliance-popover-1")).toBeNull();
+    });
+
+    it("opens on an opponent's capsule and offers Propose", () => {
+      const { h, them } = mountAllied();
+      render(<GameScreen session={h.session} />);
+      fireEvent.click(screen.getByTestId(`roster-row-${them}`));
+      expect(screen.getByTestId(`alliance-popover-${them}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`alliance-status-${them}`)).toHaveTextContent("Not allied");
+      fireEvent.click(screen.getByTestId(`alliance-propose-${them}`));
+      expect(h.session.store.getState().allianceOffers).toHaveLength(1);
+      // The offer shows on the capsule as a badge, and the popover closes.
+      expect(screen.queryByTestId(`alliance-popover-${them}`)).toBeNull();
+      expect(screen.getByTestId(`roster-alliance-${them}`)).toHaveAttribute("data-alliance", "proposed");
+    });
+
+    it("offers Accept for an offer made TO me, and then Break", () => {
+      const { h, me, them } = mountAllied();
+      act(() => {
+        h.session.submit({ type: "ALLIANCE_PROPOSE", seat: them, to: me });
+      });
+      render(<GameScreen session={h.session} />);
+      fireEvent.click(screen.getByTestId(`roster-row-${them}`));
+      expect(screen.getByTestId(`alliance-status-${them}`)).toHaveTextContent("wants an alliance");
+      fireEvent.click(screen.getByTestId(`alliance-accept-${them}`));
+      expect(h.session.confirmed().seats[me]?.allies).toContain(them);
+
+      fireEvent.click(screen.getByTestId(`roster-row-${them}`));
+      expect(screen.getByTestId(`alliance-status-${them}`)).toHaveTextContent("Allied");
+      expect(screen.getByTestId(`roster-alliance-${them}`)).toHaveAttribute("data-alliance", "allied");
+      fireEvent.click(screen.getByTestId(`alliance-break-${them}`));
+      expect(h.session.confirmed().seats[me]?.allies).not.toContain(them);
+    });
+
+    it("never opens on my own capsule", () => {
+      const { h, me } = mountAllied();
+      render(<GameScreen session={h.session} />);
+      fireEvent.click(screen.getByTestId(`roster-row-${me}`));
+      expect(screen.queryByTestId(`alliance-popover-${me}`)).toBeNull();
+    });
+
+    it("unlocks the two ally-only chat lines once an alliance is live (lines 28, 29)", () => {
+      const { h, me, them } = mountAllied();
+      h.session.store.setState({ chatOpen: true, modal: null });
+      const { unmount } = render(<GameScreen session={h.session} />);
+      expect(screen.queryByTestId("dialog-line-28")).toBeNull();
+      unmount();
+
+      act(() => {
+        h.session.submit({ type: "ALLIANCE_PROPOSE", seat: them, to: me });
+        h.session.submit({ type: "ALLIANCE_ACCEPT", seat: me, from: them });
+      });
+      h.session.store.setState({ chatOpen: true, modal: null });
+      render(<GameScreen session={h.session} />);
+      expect(screen.getByTestId("dialog-line-28")).toBeInTheDocument();
+      expect(screen.getByTestId("dialog-line-29")).toBeInTheDocument();
+    });
   });
 
   it("never puts the GameState into React state", () => {
