@@ -123,10 +123,13 @@ function listeners<T>(): {
 }
 
 /**
- * Rows the session must **not** fold, dropped before `onActions` (§5.5, F36).
+ * Rows the session must **not** replay at all, dropped before either listener
+ * (§5.5, F36).
  *
- * A fog poll carries its actions "FOR ANIMATION ONLY", and two of their shapes
- * are deliberately not replayable:
+ * A fog poll carries its actions "FOR ANIMATION ONLY" — and animation still
+ * means handing them to `engine.apply` to drain the events, so these two
+ * shapes are no more usable there than in a fold. Both are deliberately not
+ * replayable:
  *
  * - **`HIDDEN`** stands in for an action the viewer may not see at all. It is
  *   not an `Action` the engine knows, so folding one answers `illegalAction`
@@ -192,7 +195,11 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const actionListeners = listeners<readonly LoggedAction[]>();
   const statusListeners = listeners<SyncStatus>();
-  const snapshotListeners = listeners<{ snapshot: GameState; seq: number }>();
+  const snapshotListeners = listeners<{
+    snapshot: GameState;
+    seq: number;
+    animate?: readonly LoggedAction[];
+  }>();
   const syncListeners = listeners<GameSyncBody>();
 
   let seq = options.since;
@@ -238,24 +245,37 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
    * 2. **then the snapshot**, which replaces the confirmed state.
    * 3. **then the actions**, which fold on top of it (§5.5).
    *
-   * **Except in view mode, where 2 and 3 swap.** A fog body carries the
-   * viewer's masked snapshot at `snapshotSeq === seq` *and* the actions since
-   * `since` for animation. Emitting the snapshot first set the session's
-   * `folded` cursor to the head, so every one of those rows was then skipped
-   * as already folded and a fog game animated nothing at all — no dice, no
-   * troop arcs, no capture flash. The masked snapshot is also the last word on
-   * the state either way (it is authoritative-for-this-viewer and replaces
-   * whatever the animation rows did to it), so animating first and replacing
-   * second is both the right order and the safe one.
+   * **Except in view mode, where there is no step 3 at all.** A fog body
+   * carries the viewer's masked snapshot at `snapshotSeq === seq` *and* the
+   * actions since `since` for animation. Those rows are not a delta and must
+   * not go out through `onActions`, which **is** the fold path: they are not
+   * foldable onto a masked state at all — `viewFor` has blanked everything the
+   * viewer cannot see, so `engine.apply` refuses an `ATTACK` across the fog and
+   * the session reads that refusal as a desync and asks for a resync, on every
+   * poll of every fog game — and the snapshot already contains whatever they
+   * did. Emitting them *before* the snapshot only moved the damage around: the
+   * fold was still attempted, just against the previous masked view.
+   *
+   * So they ride the snapshot itself, as `onSnapshot(snapshot, seq, animate)`'s
+   * third argument — rows the session replays for their **events only**, with
+   * neither the confirmed state nor the `folded` cursor moving for them. That is
+   * what keeps a fog game's dice, troop arcs and capture flashes while nothing
+   * is folded.
+   *
+   * @returns whether the body left the client **in sync**: `false` when it was
+   * refused for want of an owed snapshot, and `false` when a listener asked for
+   * a resync while it was being delivered. {@link pollOnce} reads it instead of
+   * reporting `"idle"` unconditionally, which used to erase the `"desynced"`
+   * that the very same poll had raised.
    */
-  function accept(body: GameSyncBody): void {
+  function accept(body: GameSyncBody): boolean {
     // A resync asked the authority for a cold read. Until a snapshot answers
     // it, a delta — from the resync poll or from one that was already in
     // flight — is exactly what the client can no longer apply, so it is
     // refused and the desync stays visible rather than being folded over.
     if (awaitingSnapshot && body.snapshot === undefined) {
       setStatus("desynced");
-      return;
+      return false;
     }
     awaitingSnapshot = false;
     for (const line of body.chat) chatSince = Math.max(chatSince, line.id);
@@ -268,11 +288,14 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     const rows = body.actions.filter(foldable);
     const masked = body.snapshot !== undefined && isMaskedView(body.snapshot);
 
-    if (masked && rows.length > 0) actionListeners.emit(rows);
     if (body.snapshot !== undefined) {
       snapshotListeners.emit({
         snapshot: body.snapshot,
         seq: body.snapshotSeq ?? body.seq,
+        // Animation rows, never a delta — see the doc comment. A fog poll
+        // always carries a snapshot (§6's view mode), so `masked` rows always
+        // have one to ride.
+        ...(masked && rows.length > 0 ? { animate: rows } : {}),
       });
     }
     if (!masked && rows.length > 0) actionListeners.emit(rows);
@@ -286,7 +309,15 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     if (body.status !== "playing" || (eliminated && !watching)) {
       setStatus("idle");
       loop.pause();
+      return true;
     }
+
+    // A listener — in production the session's `ingest`, running synchronously
+    // out of the emits above — may have found its fold broken and called
+    // `resync()` from inside this very call. The cursor is back at 0 and a cold
+    // read is owed, so this poll did NOT leave the client in sync and must not
+    // be allowed to report `"idle"` over the `"desynced"` it just raised.
+    return !awaitingSnapshot;
   }
 
   async function pollOnce(): Promise<void> {
@@ -313,8 +344,7 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
       throw new SyncHttpError(response.status);
     }
 
-    accept((await response.json()) as GameSyncBody);
-    setStatus("idle");
+    if (accept((await response.json()) as GameSyncBody)) setStatus("idle");
   }
 
   const loop: PollingLoop = createPollingLoop({
@@ -347,15 +377,27 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
   }
 
   /**
-   * Submit, fold the authoritative answer, then re-poll immediately.
+   * Fold a POST's authoritative answer into the cursors and out to the
+   * listeners, then re-poll immediately.
    *
    * The re-poll is not belt and braces: the authority may have appended more
    * than the one action — a card award, a bot's whole reply turn — and
    * waiting out an interval to see it is the difference between the board
    * feeling live and feeling laggy.
+   *
+   * **While a snapshot is owed, none of that happens.** A POST that was already
+   * in flight when `resync()` reset the cursor to 0 answers with the *head*
+   * `seq`, and taking it would walk the cursor straight back to where the
+   * broken fold was: every later poll is then a delta, `accept` refuses every
+   * one of them for want of the snapshot it is still owed, and the board never
+   * comes back. Its rows are no more foldable than that delta would be, for
+   * exactly the same reason — the local state they would apply to is the one
+   * being thrown away — so they are dropped rather than emitted. Nothing is
+   * lost: the cold read replaces the state wholesale, head included, and the
+   * caller still gets the answer back to resolve its own promise with.
    */
-  async function send(body: unknown): Promise<readonly LoggedAction[]> {
-    const answer = await post<ActionPostBody>("/actions", body);
+  function absorb(answer: ActionPostBody): void {
+    if (awaitingSnapshot) return;
     const rows = answer.actions.filter(foldable);
     if (rows.length > 0) actionListeners.emit(rows);
     // An **idempotent retry** answers with the ORIGINAL `seq` — the one the
@@ -366,6 +408,11 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     seq = Math.max(seq, answer.seq, highestSeq(answer.actions));
     etag = `W/"${seq}"`;
     void loop.pollNow();
+  }
+
+  async function send(body: unknown): Promise<readonly LoggedAction[]> {
+    const answer = await post<ActionPostBody>("/actions", body);
+    absorb(answer);
     return answer.actions;
   }
 
@@ -380,7 +427,7 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     onActions: (listener) => actionListeners.add(listener),
     onStatus: (listener) => statusListeners.add(listener),
     onSnapshot: (listener) =>
-      snapshotListeners.add(({ snapshot, seq: at }) => listener(snapshot, at)),
+      snapshotListeners.add(({ snapshot, seq: at, animate }) => listener(snapshot, at, animate)),
     onSync: (listener) => syncListeners.add(listener),
     setIntervalMs(ms: number) {
       overrideMs = ms > 0 ? ms : null;
@@ -417,8 +464,13 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
       chatSince = 0;
       etag = null;
       awaitingSnapshot = true;
+      // `pollFresh`, NOT `pollNow`: the session detects its desync inside the
+      // poll that delivered the bad row — `ingest` runs synchronously out of
+      // `accept`'s emit — so `pollNow` would coalesce onto that very poll
+      // (`pollingLoop.run`'s `inflight` guard), resolve, and never issue the
+      // cold read at all.
       resyncing = loop
-        .pollNow()
+        .pollFresh()
         .catch(() => {
           setStatus("desynced");
         })
@@ -429,10 +481,10 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     },
     async resign() {
       const answer = await post<ActionPostBody>("/resign", {});
-      const rows = answer.actions.filter(foldable);
-      if (rows.length > 0) actionListeners.emit(rows);
-      seq = Math.max(seq, answer.seq, highestSeq(answer.actions));
-      void loop.pollNow();
+      // Same cursor arithmetic and the same owed-snapshot fence as `send`:
+      // `/resign` appends like any other action, and a resignation that landed
+      // during a resync must not drag the cursor back to the head either.
+      absorb(answer);
       return answer.actions;
     },
     get eliminated() {
