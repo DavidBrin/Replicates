@@ -152,9 +152,20 @@ export function legalActions(state: GameState, map: MapDef, seat: Seat): readonl
   const allianceKinds: ActionKind[] = [];
   if (state.rules.alliances) {
     const others = state.seats.filter((s) => s.seat !== seat && isContender(s));
-    if (others.some((s) => !row.allies.includes(s.seat))) {
-      allianceKinds.push("ALLIANCE_PROPOSE", "ALLIANCE_ACCEPT");
-    }
+    const unallied = others.filter((s) => !row.allies.includes(s.seat));
+    /*
+     * R80 — one offer at a time per pair (§4.7), so a seat whose only unallied neighbour already
+     * has an offer in the air with it has nobody left to propose to, and `validate` would refuse
+     * every `ALLIANCE_PROPOSE` it could send. `ALLIANCE_ACCEPT` is deliberately **not** narrowed
+     * the same way: `validateAlliance` gates it on the pact, not on a recorded offer.
+     */
+    const proposable = unallied.filter(
+      (s) => !state.pendingAlliances.some(
+        ([from, to]) => (from === seat && to === s.seat) || (from === s.seat && to === seat),
+      ),
+    );
+    if (proposable.length > 0) allianceKinds.push("ALLIANCE_PROPOSE");
+    if (unallied.length > 0) allianceKinds.push("ALLIANCE_ACCEPT");
     if (row.allies.length > 0) allianceKinds.push("ALLIANCE_BREAK");
   }
 

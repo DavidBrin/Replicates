@@ -11,6 +11,7 @@ import { buildState, card, startedAction, territoryCard, persona } from "./__fix
 import { classicWorld, mini, tiny4 } from "./__fixtures__/maps";
 import { apply, createInitialState } from "./reducer";
 import { legalActions } from "./legalActions";
+import { validate } from "./validate";
 import { hashState } from "./hash";
 import {
   SEAT_NEUTRAL,
@@ -1080,6 +1081,88 @@ describe("R19/R20 — the end-of-turn card", () => {
     const state = conqueredState(six);
     refused(state, mini, { type: "CARD_DRAWN", seat: 0, card: territoryCard(mini, 0) }, "illegalAction");
   });
+
+  /*
+   * Codex round 3, finding 1 — the award to SIX, which `validateCardDrawn` admits (the guard is at
+   * five going in) and R25 says forces nothing until the seat's next turn.
+   *
+   * Read as an R26 inheritance, that hand was a dead end with no legal action at all: `END_TURN`
+   * refused with `mustTradeCards`, `END_PHASE` is illegal out of fortify (R67), `TRADE_CARDS` is
+   * draft-only (R24, R27) — and `legalActions` went on advertising `END_TURN`, so the two
+   * disagreed as well.
+   */
+  describe("R25 — the reward draw's sixth card is not an inheritance", () => {
+    /** Five cards holding a set (three infantry), so the hand of six is tradeable. */
+    const five = [inf("a1"), inf("a2"), inf("a3"), cav("a4"), art("a5")];
+
+    function awarded(): GameState {
+      const state = buildState(mini, {
+        seats: 3,
+        owners: [0, 0, 0, 1, 2, 2],
+        phase: "fortify",
+        hands: { 0: five },
+        conqueredThisTurn: true,
+      });
+      const after = ok(state, mini, { type: "CARD_DRAWN", seat: 0, card: territoryCard(mini, 4) }).state;
+      expect(after.seats[0]?.cards).toHaveLength(6);
+      expect(after.resumePhase).toBeNull();
+      return after;
+    }
+
+    it("END_TURN is legal, and `legalActions` agrees with `validate`", () => {
+      const state = awarded();
+      const offered = legalActions(state, mini, 0);
+      expect(offered).toContain("END_TURN");
+      // Every kind on offer is an action the rules actually accept — the agreement that broke.
+      for (const kind of offered) {
+        if (kind === "END_TURN") expect(validate(state, mini, { type: "END_TURN", seat: 0 })).toBeNull();
+        if (kind === "CARD_DRAWN") throw new Error("the award was already taken");
+      }
+      const after = ok(state, mini, { type: "END_TURN", seat: 0 }).state;
+      // The turn really advances: no bounce, no held turn, the next seat is up.
+      expect(after.currentIndex).toBe(1);
+      expect(after.turn).toBe(state.turn + 1);
+      expect(after.resumePhase).toBeNull();
+      expect(after.seats[0]?.cards).toHaveLength(6);
+    });
+
+    it("and R24 forces the trade when that seat's next turn opens", () => {
+      let s = awarded();
+      s = ok(s, mini, { type: "END_TURN", seat: 0 }).state;
+      // Round the table back to seat 0.
+      while (s.turnOrder[s.currentIndex] !== 0) s = playTurn(s, mini);
+      expect(s.phase).toBe("draft");
+      expect(s.seats[0]?.cards).toHaveLength(6);
+      expect(legalActions(s, mini, 0)).toEqual(["TRADE_CARDS"]);
+      refused(s, mini, { type: "DRAFT", seat: 0, territory: 0, count: 1 }, "mustTradeCards");
+      refused(s, mini, { type: "END_PHASE", seat: 0 }, "mustTradeCards");
+      const traded = ok(s, mini, {
+        type: "TRADE_CARDS", seat: 0, cards: ["a1", "a2", "a3"], bonusTerritory: null,
+      }).state;
+      expect(traded.seats[0]?.cards).toHaveLength(3);
+    });
+
+    it("but a seizure in the SAME END_TURN still bounces (R26, R81)", () => {
+      /*
+       * The scoping is "the sweep grew the hand", not "the hand is six": seat 1 owns nothing, so
+       * R81's re-check hands its cards over inside this very `END_TURN` and the trade-down is owed
+       * immediately — which is the round-2 finding-10 behaviour, kept.
+       */
+      const state = buildState(mini, {
+        seats: 3,
+        owners: [0, 0, 0, 0, 2, 2],
+        troops: [1, 1, 6, 1, 1, 1],
+        phase: "fortify",
+        hands: { 0: [inf("m1"), cav("m2"), art("m3")], 1: [inf("v1"), cav("v2"), art("v3")] },
+      });
+      const after = ok(state, mini, { type: "END_TURN", seat: 0 }).state;
+      expect(after.seats[0]?.cards).toHaveLength(6);
+      expect(after.phase).toBe("draft");
+      expect(after.resumePhase).toBe("fortify");
+      expect(after.currentIndex).toBe(0);
+      expect(legalActions(after, mini, 0)).toEqual(["TRADE_CARDS"]);
+    });
+  });
 });
 
 /* ------------------------------------------------------------------ attack -- */
@@ -1830,11 +1913,86 @@ describe("R80 — alliances", () => {
     refused(allianceState(false), mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 }, "notAlliable");
   });
 
-  it("a proposal changes nothing but emits an event", () => {
+  it("a proposal forms no pact, but is recorded so a repeat can be refused", () => {
     const state = allianceState();
     const { state: after, events } = ok(state, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 });
     expect(after.seats[0]?.allies).toEqual([]);
+    expect(after.pendingAlliances).toEqual([[0, 1]]);
     expect(events).toEqual([{ type: "allianceChanged", a: 0, b: 1, state: "proposed" }]);
+  });
+
+  /*
+   * Codex round 3, finding 4 — the three alliance actions are the only ones exempt from the online
+   * turn fence, so an accepted repeat was a log row a seated player could mint on demand: every one
+   * bumped `games.seq` and killed the poll's `204` fast path.
+   */
+  describe("one offer at a time per pair", () => {
+    const propose = (seat: number, to: number) => ({ type: "ALLIANCE_PROPOSE", seat, to }) as const;
+
+    it("refuses the same proposal while it is still on the table", () => {
+      const once = ok(allianceState(), mini, propose(0, 1)).state;
+      refused(once, mini, propose(0, 1), "notAlliable");
+      // A different target is untouched, and lands beside the first.
+      const two = ok(once, mini, propose(0, 2)).state;
+      expect(two.pendingAlliances).toEqual([[0, 1], [0, 2]]);
+    });
+
+    it("refuses a counter-offer too — the answer to an offer is ALLIANCE_ACCEPT", () => {
+      const once = ok(allianceState(), mini, propose(0, 1)).state;
+      refused(once, mini, propose(1, 0), "notAlliable");
+      const accepted = ok(once, mini, { type: "ALLIANCE_ACCEPT", seat: 1, from: 0 }).state;
+      expect(accepted.pendingAlliances).toEqual([]);
+      expect(accepted.seats[1]?.allies).toEqual([0]);
+    });
+
+    it("is never a permanent lock-out: a break clears the pair and a new offer is allowed", () => {
+      let s = ok(allianceState(), mini, propose(0, 1)).state;
+      s = ok(s, mini, { type: "ALLIANCE_ACCEPT", seat: 1, from: 0 }).state;
+      s = ok(s, mini, { type: "ALLIANCE_BREAK", seat: 0, with: 1 }).state;
+      expect(s.pendingAlliances).toEqual([]);
+      expect(ok(s, mini, propose(0, 1)).state.pendingAlliances).toEqual([[0, 1]]);
+    });
+
+    it("a break answers an unaccepted offer too, in either direction", () => {
+      const once = ok(allianceState(), mini, propose(0, 1)).state;
+      // Refused as a *break* (no pact exists), so the offer stands — only ACCEPT or an exit clears it.
+      refused(once, mini, { type: "ALLIANCE_BREAK", seat: 1, with: 0 }, "notAlliable");
+      expect(once.pendingAlliances).toEqual([[0, 1]]);
+    });
+
+    it("an elimination takes the eliminated seat's offers with it (R81)", () => {
+      const state = buildState(mini, {
+        seats: 3,
+        owners: [0, 0, 0, 1, 2, 2],
+        troops: [1, 1, 4, 1, 1, 1],
+        phase: "attack",
+        rules: { alliances: true },
+      });
+      let s = ok(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 2 }).state;
+      s = ok(s, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 2 }).state;
+      expect(s.pendingAlliances).toEqual([[1, 2], [0, 2]]);
+      s = ok(s, mini, {
+        type: "ATTACK", seat: 0, from: 2, to: 3, mode: "blitz", attackerLosses: 0, defenderLosses: 1,
+      }).state;
+      expect(s.seats[1]?.standing).toBe("eliminated");
+      expect(s.pendingAlliances).toEqual([[0, 2]]);
+    });
+
+    it("a resignation does the same (R82)", () => {
+      let s = ok(allianceState(), mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 }).state;
+      s = ok(s, mini, {
+        type: "SEAT_TO_BOT", seat: 1, reason: "resigned", tier: "medium", persona: persona(),
+      }).state;
+      expect(s.pendingAlliances).toEqual([]);
+    });
+
+    it("hashState covers it (R91, D16)", () => {
+      const bare = allianceState();
+      const offered = ok(bare, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 }).state;
+      expect(hashState(offered)).not.toBe(hashState(bare));
+      expect(hashState(offered)).toBe(hashState({ ...offered, pendingAlliances: [[0, 1]] }));
+      expect(hashState(offered)).not.toBe(hashState({ ...offered, pendingAlliances: [[1, 0]] }));
+    });
   });
 
   it("an accept records the pact symmetrically, ascending (R91)", () => {

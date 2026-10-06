@@ -11,6 +11,7 @@ import type {
   AttackIntent,
   BotPersona,
   BotTier,
+  Card,
   DiceMode,
   GameConfig,
   GameState,
@@ -57,12 +58,25 @@ export interface ServerEngine {
   validate(state: GameState, map: MapDef, action: Action): RuleError | null;
   legalActions(state: GameState, map: MapDef, seat: Seat): readonly ActionKind[];
   legalDraftTargets(state: GameState, seat: Seat): readonly TerritoryId[];
+  /**
+   * The two card selectors `autoSkipAction` needs to build the one action a seat owing a forced
+   * trade is allowed to take (R24, R26). Added to `ServerEngine` after S5 published — a widening,
+   * never a change: the tick had no `TRADE_CARDS` candidate at all, so a present-but-idle seat with
+   * a forced trade pending appended nothing for ever (codex round 3, finding 3).
+   */
+  cardSets(cards: readonly Card[]): readonly (readonly [string, string, string])[];
+  mustTradeNow(state: GameState, seat: Seat): boolean;
   viewFor(state: GameState, map: MapDef, seat: Seat): GameState;
   hashState(state: GameState): string;
   isGameOver(state: GameState): boolean;
 
   // ---- randomness: the resolver and the one PRNG entry point ----
-  rngFor(seed: string, purpose: RngPurpose, turn: number): Rng;
+  /**
+   * The purpose-tagged sub-stream (D4). `index` is the **seq of the action being produced** — the
+   * route's `row.seq + 1` — never `state.turn`, which changes once a turn and so handed every
+   * attack within one turn the same stream. Personas and the opening deal use index 0.
+   */
+  rngFor(seed: string, purpose: RngPurpose, index: number): Rng;
   dealTerritories(
     map: MapDef,
     config: GameConfig,
@@ -119,6 +133,8 @@ export const realServerEngine: ServerEngine = {
   validate: engine.validate,
   legalActions: engine.legalActions,
   legalDraftTargets: engine.legalDraftTargets,
+  cardSets: engine.cardSets,
+  mustTradeNow: engine.mustTradeNow,
   viewFor: engine.viewFor,
   hashState: engine.hashState,
   isGameOver: engine.isGameOver,

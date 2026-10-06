@@ -140,8 +140,8 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R22 — Values.** **Fixed:** Infantry×3 = **4**, Cavalry×3 = **6**, Artillery×3 = **8**, one-of-each **or any set containing a Wild** = **10**. **Progressive:** the *n*-th set traded in the whole game is worth **4, 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, …** — `n ≤ 6` from the literal list, then `15 + 5·(n − 6)`.
 - **R23 — Territory bonus.** If a traded card names a territory the trader occupies, **+2 armies placed directly on that territory**, capped at **+2 per turn** however many traded cards match. So a Fixed trade is worth at most **12** in one turn.
 - **R24 — Timing branch 1: forced at turn start.** Holding **≥5** cards at the start of your turn, you **must** trade at least one set before `DRAFT`, and **may** trade a second if you still hold one. `legalActions` in `draft` with `hand.length ≥ 5` and `setsTradedThisTurn === 0` returns only `TRADE_CARDS`.
-- **R25 — Timing branch 2: your own reward draw forces nothing.** Drawing your end-of-turn card to 5 or 6 forces nothing now; the R24 check happens at the start of your **next** turn.
-- **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests. **The floor is four, not six**: one trade removes exactly three cards, so a hand of 8 reaches 5 and must be traded again (8 -> 5 -> 2). `mustTradeDown` therefore keeps forcing above the floor while a trade-down is under way, which R27's `resumePhase` bounce plus `setsTradedThisTurn > 0` identifies without a new `GameState` field. For that key to hold, **every route a seizure to ≥6 can arrive by sets `resumePhase`** — the `MOVE_IN` branch after a conquest and `END_TURN`'s R81 re-check, whatever phase it ran in. It must **not** be re-derived from the hand size (`hand.length + 3 * setsTradedThisTurn >= 6`): a seat that traded at turn start and then inherited back up to five satisfies that without ever having held six, and R26 defers exactly that hand to the next turn. **[SPEC]**
+- **R25 — Timing branch 2: your own reward draw forces nothing.** Drawing your end-of-turn card to 5 or 6 forces nothing now; the R24 check happens at the start of your **next** turn. **Including the draw that lands on six**: `validateCardDrawn` admits the award at a hand of five (R28's guard is on the hand *going in*), so the award legitimately reaches six in `fortify`, and R26 must not read that as an inheritance. Doing so left the seat with **no legal action at all** — `END_TURN` refused `mustTradeCards`, `END_PHASE` illegal out of fortify (R67), `TRADE_CARDS` draft-only (R24, R27) — while `legalActions` went on offering `END_TURN`. **[SPEC]**
+- **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests. **The floor is four, not six**: one trade removes exactly three cards, so a hand of 8 reaches 5 and must be traded again (8 -> 5 -> 2). `mustTradeDown` therefore keeps forcing above the floor while a trade-down is under way, which R27's `resumePhase` bounce plus `setsTradedThisTurn > 0` identifies without a new `GameState` field. **Both of `mustTradeDown`'s branches are gated on that bounce**, the `≥ 6` one included, because the bounce is the only thing that tells an inheritance from R25's reward draw to six. For that key to hold, **every route a seizure to ≥6 can arrive by sets `resumePhase`** — the `MOVE_IN` branch after a conquest and `END_TURN`'s R81 re-check, whatever phase it ran in. It must **not** be re-derived from the hand size (`hand.length + 3 * setsTradedThisTurn >= 6`): a seat that traded at turn start and then inherited back up to five satisfies that without ever having held six, and R26 defers exactly that hand to the next turn. **[SPEC]**
 - **R27 — Forced trade-down during Attack.** When R26 fires in `attack`, the bonus troops go into `troopsToPlace` and the phase **reverts to `draft`** until they are placed; `END_PHASE` then returns play to `attack` with `conqueredThisTurn` and every other turn flag intact. **[SPEC]**
 
   **Ordering against a conquest (F41) [SPEC].** An elimination always arrives on a capture, and a capture always sets `pendingMoveIn` (R63). **`MOVE_IN` resolves first**: the `ATTACK` branch sets `pendingMoveIn`, records the seizure, and leaves the phase at `attack`; the **`MOVE_IN` branch** is where the R27 bounce to `draft` is applied, after the troops have moved. Only when no move-in is pending — a seizure that did not come with a conquest, which `END_TURN`'s R81 re-check can still produce — does the branch that saw it apply the bounce itself. One site per route, one order, one test each.
@@ -149,7 +149,7 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
   Two consequences the implementation has to honour:
 
   - **R28's hand-size guard exempts `MOVE_IN` as well as `TRADE_CARDS`.** The bounce is *behind* `MOVE_IN`, so gating `MOVE_IN` on "a hand of seven or more must be traded down first" wedges the seat completely: `legalActions` offers `["MOVE_IN"]` and nothing else, `validate` refuses it, and `TRADE_CARDS` is refused outside `draft`. A four-card attacker eliminating a four-card victim is enough to reach it.
-  - **`END_TURN`'s elimination sweep bounces before it advances.** The seizure it can make is an inheritance like any other and R26 calls for the trade-down *in the same turn*, so when the bounce fires the turn does not advance — advancing would clear `resumePhase` and hand the next seat's play a holder who may take no action at all. The seat trades down, `END_PHASE` returns it to the phase it was in, and it ends its turn again.
+  - **`END_TURN`'s elimination sweep bounces before it advances — for a hand the sweep itself grew.** The seizure it can make is an inheritance like any other and R26 calls for the trade-down *in the same turn*, so when the bounce fires the turn does not advance — advancing would clear `resumePhase` and hand the next seat's play a holder who may take no action at all. The seat trades down, `END_PHASE` returns it to the phase it was in, and it ends its turn again. The branch compares the hand across the sweep rather than just testing its size, because a hand of six also reaches `END_TURN` by R25's reward draw, and bouncing *that* one would force the same-turn trade R25 says is not owed. **[SPEC]**
 - **R28 — Seizure.** Eliminating a seat transfers its **whole hand**. A hand never exceeds 6 under R24–R26. A state that presents 7+ is a rule violation like any other: `apply` **returns `{ state: input, events: [], error: { code: "illegalAction" } }` and never asserts or throws** (F51 **[SPEC]**, and R86).
 
 ### 3.4 Attack — dice
@@ -286,7 +286,7 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R77 — Max Rounds.** With `rules.maxRounds = N`, the game ends the instant `END_TURN` completes round `N`. The preset `N = 5` is labelled `5-Rounds Rumble`.
 - **R78 — Max Rounds tiebreak.** Most **territories**, then most **troops**, then **lowest seat index**. An outcome decided this way carries `tiebreak: true`. **[SPEC]**
 - **R79 — Turn Timer.** `60 / 90 / 120 / 180 / 300` seconds, covering the **whole** turn (all three phases). Online only; default **90**. Offline sessions ignore it.
-- **R80 — Alliances.** `rules.alliances` on/off per game. Alliances are **non-binding**: there is no "cannot attack ally" lock and attacking an ally breaks nothing automatically. `ALLIANCE_PROPOSE` / `ALLIANCE_ACCEPT` / `ALLIANCE_BREAK` between two seats; an active alliance unlocks dialog lines 28 and 29.
+- **R80 — Alliances.** `rules.alliances` on/off per game. Alliances are **non-binding**: there is no "cannot attack ally" lock and attacking an ally breaks nothing automatically. `ALLIANCE_PROPOSE` / `ALLIANCE_ACCEPT` / `ALLIANCE_BREAK` between two seats; an active alliance unlocks dialog lines 28 and 29. **One offer at a time per pair**: a `PROPOSE` is refused (`notAlliable`) while an unanswered offer between those two seats is on the table in either direction — `GameState.pendingAlliances` (§4.7) is what records it, and `ACCEPT`, `BREAK`, an elimination and a resignation all clear it.
 
 ### 3.10 Elimination and winning
 
@@ -877,6 +877,15 @@ export interface GameState {
   } | null;
   /** Set when a forced mid-Attack trade-down bounced the phase back to draft (R27). */
   readonly resumePhase: Phase | null;
+  /** R80's unanswered offers, `[proposer, target]`, in proposal order. `ALLIANCE_PROPOSE` is the
+   *  one action with no other trace in the state, and the three alliance actions are the only ones
+   *  exempt from the online turn fence, so without this a seated player could append the same
+   *  proposal in a loop — every repeat a log row, every row a `games.seq` bump, and the poll's
+   *  `204` fast path gone with it. It cannot be derived from `allies`: an unaccepted offer leaves
+   *  that array untouched by construction. Cleared by the `ALLIANCE_ACCEPT` or `ALLIANCE_BREAK`
+   *  that answers it (both directions — an alliance is symmetric) and by the elimination or
+   *  resignation of either seat, and covered by `hashState` like every other field. [SPEC] */
+  readonly pendingAlliances: readonly (readonly [Seat, Seat])[];
   readonly portals: readonly PortalState[];
   readonly discard: readonly Card[];       // traded-in cards; the deck order is never stored (R19)
   readonly outcome: Outcome | null;
@@ -2179,6 +2188,7 @@ never a side effect** (D14):
 
 | Condition on the tick | What the server appends |
 |---|---|
+| `turn_deadline` passed with a **forced trade** owed (R24 at turn start, or R26's trade-down mid-flight) | `TRADE_CARDS` with the first set the hand holds and no R23 bonus — it is the **first** candidate offered, because it is the one state in which `validate` refuses every other action, so without it the tick appended nothing and a present-but-idle seat held the game up indefinitely **[SPEC]** |
 | `turn_deadline` passed and the phase has a legal "do nothing" | the server **walks the phases**: `END_PHASE` first, `END_TURN` only when `END_PHASE` is illegal (fortify), `missed_turns += 1` |
 | `turn_deadline` passed with troops still undrafted | `AUTO_DEPLOY` (placements chosen by the bot policy), then the same walk — `END_PHASE` first, `END_TURN` only when `END_PHASE` is illegal (fortify), so a capturing turn still reaches fortify and earns its card (R20, R67) |
 | `missed_turns >= 2` (they are still polling — just not playing) | `SEAT_TO_BOT { reason: **"timeout"** }`, `game_players.kind='bot'`, `standing='away'` |
@@ -2186,6 +2196,17 @@ never a side effect** (D14):
 | that player polls again (either path) | `SEAT_TO_HUMAN`, `kind='human'`, `missed_turns = 0` |
 | `POST /api/games/:id/resign` | `SEAT_TO_BOT { reason: "resigned" }`, `standing='resigned'` — **never reclaimable** (R82) |
 | every human seat away for 30 min | `games.status = 'abandoned'`; the bots simply stop being run |
+
+`missed_turns` is written **before** the tick's empty-handed exit, not after it: a tick that counts a
+miss and then finds nothing legal to append is exactly the case the counter exists for, and dropping
+that increment means `missed_turns` never reaches 2, the seat never changes hands, and the game stands
+still for as long as the seat keeps polling. There is no state or action row to commit on that path —
+only the column moves. **[SPEC]**
+
+The miss counter is also only **cleared by playing**: `POST /api/games/:id/actions` resets it for the
+acting seat *on its own turn*, never for an off-turn `ALLIANCE_*` POST, which the turn fence exempts
+(R80, §6). Otherwise a seat could keep its counter at zero with diplomacy alone and never take a
+turn. **[SPEC]**
 
 So a client renders "Napoleon went away — the bot took over" from the log, exactly as it renders a dice
 roll, and a replay reproduces it identically. **The three `SEAT_TO_BOT` reasons all stay** (F54) and

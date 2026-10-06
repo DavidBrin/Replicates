@@ -84,7 +84,15 @@ export function sampleOutcome(dist: OutcomeDist, u: number): SampledOutcome {
   // than falling off the end, and `-1` only for a vector with no mass at all.
   const at = walkCdf(sampledOutcomes(dist), u);
   if (at < 0) {
-    return { attackerLosses: dist.a, defenderLosses: 0, conquered: false, unresolved: false };
+    /*
+     * A vector with no mass means a battle with nothing to fight over, so nobody loses anything —
+     * **the same no-op `rollAttack` returns from its own `at < 0` branch**. It is unreachable from
+     * here (the `d === 0` and `a === 0` guards above take every such distribution) but the two must
+     * answer alike regardless: they are the same walk over the same vector, and a reader who finds
+     * them disagreeing has to work out which one is right (codex round 3, finding 7). This one used
+     * to charge the attacker all of `a`.
+     */
+    return { attackerLosses: 0, defenderLosses: 0, conquered: false, unresolved: false };
   }
   return outcomes(dist)[at] as SampledOutcome;
 }

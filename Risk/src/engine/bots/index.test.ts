@@ -649,6 +649,7 @@ describe("makeView — the fog policy (D31)", () => {
       fortifyUsed: false,
       pendingMoveIn: null,
       resumePhase: null,
+      pendingAlliances: [],
       portals: [],
       discard: [],
       outcome: null,

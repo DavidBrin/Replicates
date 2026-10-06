@@ -470,6 +470,101 @@ describe("the real append path and turn timer", () => {
     replay(log, classicWorld);
   });
 
+  /*
+   * Codex round 3, finding 4 — the exemption above is what makes diplomacy usable, and it was also
+   * the one way a seated player could append a log row whenever it liked. Two things follow from
+   * it, and both are the route's to get right.
+   */
+  describe("the off-turn exemption is not a free hand", () => {
+    async function seqOf(gameId: string): Promise<number> {
+      const rows = await harness.db.query<{ seq: string | number }>(
+        "select seq from games where id = $1",
+        [gameId],
+      );
+      return Number(rows[0]?.seq);
+    }
+
+    async function missedTurnsOf(gameId: string, seat: Seat): Promise<number> {
+      const rows = await harness.db.query<{ missed_turns: string | number }>(
+        "select missed_turns from game_players where game_id = $1 and seat = $2",
+        [gameId, seat],
+      );
+      return Number(rows[0]?.missed_turns);
+    }
+
+    it("422s a repeat proposal, so a seat cannot pump `games.seq` with it (R80)", async () => {
+      const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
+      const { session, seat } = await whoseTurn(game);
+      const other = session === game.a ? game.b : game.a;
+      const otherSeat: Seat = seat === 0 ? 1 : 0;
+
+      const first = await submit(other, game.gameId, {
+        clientActionId: actionId("propose-1"),
+        kind: "action",
+        action: { type: "ALLIANCE_PROPOSE", seat: otherSeat, to: seat },
+      });
+      expect(first.status).toBe(200);
+      const afterFirst = await seqOf(game.gameId);
+
+      // A different client action id, so this is a new submission rather than an idempotent retry.
+      const repeat = await submit(other, game.gameId, {
+        clientActionId: actionId("propose-2"),
+        kind: "action",
+        action: { type: "ALLIANCE_PROPOSE", seat: otherSeat, to: seat },
+      });
+      expect(repeat.status).toBe(422);
+      expect(await repeat.json()).toMatchObject({ code: "notAlliable" });
+      // Nothing was appended, so the poll's 204 fast path still holds.
+      expect(await seqOf(game.gameId)).toBe(afterFirst);
+
+      // Answering it clears the pair, and a fresh offer is allowed again after a break.
+      expect(
+        (await submit(session, game.gameId, {
+          clientActionId: actionId("accept"),
+          kind: "action",
+          action: { type: "ALLIANCE_ACCEPT", seat, from: otherSeat },
+        })).status,
+      ).toBe(200);
+      replay(await rawLogOf(harness.db, game.gameId), classicWorld);
+    });
+
+    it("does not let an off-turn POST reset the seat's own missed-turn counter (§5.6)", async () => {
+      const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
+      const { session, seat } = await whoseTurn(game);
+      const other = session === game.a ? game.b : game.a;
+      const otherSeat: Seat = seat === 0 ? 1 : 0;
+
+      await harness.db.execute(
+        "update game_players set missed_turns = 1 where game_id = $1 and seat = $2",
+        [game.gameId, otherSeat],
+      );
+      expect(await missedTurnsOf(game.gameId, otherSeat)).toBe(1);
+
+      const response = await submit(other, game.gameId, {
+        clientActionId: actionId("ally-no-forgiveness"),
+        kind: "action",
+        action: { type: "ALLIANCE_PROPOSE", seat: otherSeat, to: seat },
+      });
+      expect(response.status).toBe(200);
+      // The counter is forgiven by PLAYING, and this seat has not played.
+      expect(await missedTurnsOf(game.gameId, otherSeat)).toBe(1);
+
+      // The acting seat's own action still clears its counter — the offer above is there to answer.
+      await harness.db.execute(
+        "update game_players set missed_turns = 1 where game_id = $1 and seat = $2",
+        [game.gameId, seat],
+      );
+      expect(
+        (await submit(session, game.gameId, {
+          clientActionId: actionId("my-own-turn"),
+          kind: "action",
+          action: { type: "ALLIANCE_ACCEPT", seat, from: otherSeat },
+        })).status,
+      ).toBe(200);
+      expect(await missedTurnsOf(game.gameId, seat)).toBe(0);
+    });
+  });
+
   it("still 409s a non-diplomatic action from the seat that is not to play", async () => {
     const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
     const { session, seat } = await whoseTurn(game);

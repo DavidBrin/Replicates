@@ -156,45 +156,56 @@ export function mustTradeAtTurnStart(state: GameState, seat: Seat): boolean {
 export const TRADE_DOWN_FLOOR = 4;
 
 /**
- * True while a forced R26 trade-down is **already under way** this turn.
+ * True when R27's bounce has fired this turn — i.e. an **inheritance** is what put this hand where
+ * it is, and R26's "immediate, same-turn" is in force.
  *
- * R26 fires on an inheritance to ≥6 and does not stop until the hand is ≤4, but one trade removes
- * exactly three cards: from 6 you reach 3 and from 7 you reach 4, yet **from 8 you reach 5**, which
- * is still above the floor and must be traded again. A plain `hand.length >= 6` therefore lets a
- * hand of 5 out of the trade-down, and because `mustTradeAtTurnStart` also declines (a set has
- * already been traded this turn) nothing forces the second trade at all.
+ * `resumePhase` is set by the reducer on **every** route a seizure to ≥6 can arrive by — the
+ * `MOVE_IN` branch after a conquest (F41) and `END_TURN`'s R81 re-check — and cleared by the
+ * `END_PHASE` that leaves the trade-down. It is therefore exactly "a seizure sent this seat back
+ * into draft owing a trade", and it needs no new `GameState` field — which would change
+ * `hashState` for every game ever played.
+ */
+function tradeDownBounced(state: GameState): boolean {
+  return state.resumePhase !== null;
+}
+
+/**
+ * R26 — an **inheritance** forces an immediate trade-down. A *seizure* that lifts the hand to six
+ * or more must be traded down to **four or fewer** in the same turn, one set at a time, stopping as
+ * soon as the hand reaches 4, 3 or 2.
  *
- * A hand of 5 reached by *inheritance alone* is a different thing: R26 says explicitly that an
- * inheritance leaving you under 6 waits for your next turn. The two are told apart by the R27
- * bounce: `resumePhase` is set by the reducer on **every** route a seizure to ≥6 can arrive by —
- * the `MOVE_IN` branch after a conquest (F41) and `END_TURN`'s R81 re-check — and cleared by the
- * `END_PHASE` that leaves the trade-down. `resumePhase !== null` **plus** a set already traded this
- * turn is therefore exactly "mid-trade-down", and it needs no new `GameState` field — which would
- * change `hashState` for every game ever played.
+ * Both branches are gated on R27's bounce marker, because the bounce is what tells an inheritance
+ * apart from the **other** way a hand legitimately reaches six: R20's end-of-turn reward draw.
+ * `validateCardDrawn` admits the award at a hand of five, so the reward lands the hand on six in
+ * `fortify` — and R25 is explicit that a reward draw to five or six forces nothing until the seat's
+ * next turn. An ungated `hand.length >= 6` turned that hand into a dead end with **no legal action
+ * at all**: `END_TURN` refused with `mustTradeCards`, `END_PHASE` illegal out of fortify (R67),
+ * `TRADE_CARDS` draft-only (R24, R27) — while `legalActions` went on advertising `END_TURN`
+ * (codex round 3, finding 1). Gated, that hand simply ends the turn, and `mustTradeAtTurnStart`
+ * forces the trade when the seat opens its next draft, which is what R25 asks for.
+ *
+ * The second branch is the trade-down a bounce *started*, which keeps forcing while the hand is
+ * still above the floor: one trade removes exactly three cards, so from 6 you reach 3 and from 7
+ * you reach 4, yet **from 8 you reach 5** — still above `TRADE_DOWN_FLOOR` and owing another trade
+ * that `mustTradeAtTurnStart` will not ask for, a set having already been traded this turn.
  *
  * It must stay keyed on the bounce and **not** be derived from the hand size alone: a seat that
  * traded at turn start and then inherited back up to 5 satisfies `hand.length + 3 *
  * setsTradedThisTurn >= 6` without ever having held six, and R26 defers that hand to the seat's next
  * turn (codex round 2, finding 9).
- */
-function tradeDownInProgress(state: GameState): boolean {
-  return state.resumePhase !== null && state.setsTradedThisTurn > 0;
-}
-
-/**
- * R26 — inheritance forces an immediate trade-down. A seizure that lifts the hand to six or more
- * must be traded down to **four or fewer** in the same turn, one set at a time, stopping as soon as
- * the hand reaches 4, 3 or 2.
  *
- * So two branches: the inheritance itself (≥6), and the trade-down it started, which keeps forcing
- * while the hand is still above the floor — see `tradeDownInProgress` for why 5 needs both.
+ * Because `bounceForTradeDown` always leaves play in `draft`, a `true` here implies
+ * `state.phase === "draft"` — which is what keeps `legalActions` and `validate` in agreement.
+ * `legalActions`' draft branch answers `["TRADE_CARDS"]` for exactly this state; the `attack` and
+ * `fortify` branches that offer `END_TURN` are never reached while a trade-down is owed.
  */
 export function mustTradeDown(state: GameState, seat: Seat): boolean {
   if (state.turnOrder[state.currentIndex] !== seat) return false;
   const hand = handOf(state, seat);
   if (!hasSet(hand)) return false;
+  if (!tradeDownBounced(state)) return false;
   if (hand.length >= 6) return true;
-  return hand.length > TRADE_DOWN_FLOOR && tradeDownInProgress(state);
+  return hand.length > TRADE_DOWN_FLOOR && state.setsTradedThisTurn > 0;
 }
 
 /**

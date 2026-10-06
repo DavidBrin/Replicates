@@ -74,6 +74,7 @@ interface Draft {
   fortifyUsed: boolean;
   pendingMoveIn: GameState["pendingMoveIn"];
   resumePhase: Phase | null;
+  pendingAlliances: (readonly [Seat, Seat])[];
   portals: PortalState[];
   discard: Card[];
   outcome: Outcome | null;
@@ -100,6 +101,7 @@ function open(state: GameState): Draft {
     fortifyUsed: state.fortifyUsed,
     pendingMoveIn: state.pendingMoveIn,
     resumePhase: state.resumePhase,
+    pendingAlliances: state.pendingAlliances.slice(),
     portals: state.portals.slice(),
     discard: state.discard.slice(),
     outcome: state.outcome,
@@ -138,6 +140,7 @@ function snapshot(d: Draft): GameState {
     fortifyUsed: d.fortifyUsed,
     pendingMoveIn: d.pendingMoveIn,
     resumePhase: d.resumePhase,
+    pendingAlliances: d.pendingAlliances,
     portals: d.portals,
     discard: d.discard,
     outcome: d.outcome,
@@ -197,6 +200,8 @@ function eliminateIfEmpty(d: Draft, victim: Seat, by: Seat): boolean {
 
   const taken = row.cards;
   setSeat(d, victim, { standing: "eliminated", cards: [], cardCount: 0 });
+  // R80 — a seat that is out of the game takes its unanswered offers with it (§4.7).
+  dropPendingAlliancesFor(d, victim);
   if (taken.length > 0 && by >= 0) {
     const taker = d.seats[by];
     if (taker !== undefined) {
@@ -357,6 +362,7 @@ export function createInitialState(
     fortifyUsed: false,
     pendingMoveIn: null,
     resumePhase: null,
+    pendingAlliances: [],
     portals: started.portals,
     discard: [],
     outcome: null,
@@ -470,6 +476,8 @@ export function apply(state: GameState, map: MapDef, action: Action): ApplyResul
         standing: action.reason === "resigned" ? "resigned" : "active",
         missedTurns: 0,
       });
+      // R82 — a resignation takes the seat out of the game, and its offers with it (R80, §4.7).
+      if (action.reason === "resigned") dropPendingAlliancesFor(d, action.seat);
       d.events.push({ type: "seatToBot", seat: action.seat, reason: action.reason });
       settle(d, map, null);
       break;
@@ -482,14 +490,18 @@ export function apply(state: GameState, map: MapDef, action: Action): ApplyResul
       d.events.push({ type: "portalsMoved", portals: d.portals });
       break;
     case "ALLIANCE_PROPOSE":
+      // R80 — the offer is recorded so `validateAlliance` can refuse a repeat of it (§4.7).
+      addPendingAlliance(d, action.seat, action.to);
       d.events.push({ type: "allianceChanged", a: action.seat, b: action.to, state: "proposed" });
       break;
     case "ALLIANCE_ACCEPT":
       addAlly(d, action.seat, action.from);
+      clearPendingAlliance(d, action.seat, action.from);
       d.events.push({ type: "allianceChanged", a: action.seat, b: action.from, state: "accepted" });
       break;
     case "ALLIANCE_BREAK":
       removeAlly(d, action.seat, action.with);
+      clearPendingAlliance(d, action.seat, action.with);
       d.events.push({ type: "allianceChanged", a: action.seat, b: action.with, state: "broken" });
       break;
     default:
@@ -742,6 +754,11 @@ function applyEndPhase(d: Draft): void {
 }
 
 function applyEndTurn(d: Draft, map: MapDef, seat: Seat): void {
+  /*
+   * The hand this seat held *before* R81's sweep, so the bounce below can tell a seizure from a
+   * hand that was already this size — see the comment on the bounce itself.
+   */
+  const handBefore = d.seats[seat]?.cards.length ?? 0;
   // R81 — elimination is re-checked at END_TURN as well as on every capture.
   for (const row of d.seats.slice()) {
     if (row.seat === seat) continue;
@@ -758,8 +775,16 @@ function applyEndTurn(d: Draft, map: MapDef, seat: Seat): void {
    * down, `END_PHASE` returns it to the phase it was in, and it ends its turn
    * again — by which point the victim is already eliminated and the sweep is a
    * no-op.
+   *
+   * It is scoped to a hand the **sweep itself grew**, because `bounceForTradeDown` tests the hand
+   * and nothing else, and a hand of six reaches `END_TURN` by a second route: R20's reward draw,
+   * which `validateCardDrawn` admits at five. R25 defers *that* six to the seat's next turn, so
+   * bouncing it here would force the same-turn trade R25 says is not owed — and would do it after
+   * `validateEndTurn` had already (correctly, post-fix) accepted the `END_TURN`
+   * (codex round 3, finding 1).
    */
-  if (bounceForTradeDown(d, seat)) return;
+  const seized = (d.seats[seat]?.cards.length ?? 0) > handBefore;
+  if (seized && bounceForTradeDown(d, seat)) return;
 
   const previousIndex = d.currentIndex;
   const nextIndex = nextTurnIndex(d, previousIndex);
@@ -812,6 +837,27 @@ function addAlly(d: Draft, a: Seat, b: Seat): void {
     if (row === undefined || row.allies.includes(y)) continue;
     setSeat(d, x, { allies: [...row.allies, y].sort((p, q) => p - q) });
   }
+}
+
+/**
+ * Record an unanswered R80 offer (§4.7). Idempotent, so a re-folded log cannot double an entry —
+ * `validateAlliance` refuses the repeat before this is reached, and this stays total regardless.
+ */
+function addPendingAlliance(d: Draft, from: Seat, to: Seat): void {
+  if (d.pendingAlliances.some(([a, b]) => a === from && b === to)) return;
+  d.pendingAlliances = [...d.pendingAlliances, [from, to] as const];
+}
+
+/** Drop the offers between two seats, in **both** directions: an alliance is symmetric (R80). */
+function clearPendingAlliance(d: Draft, a: Seat, b: Seat): void {
+  d.pendingAlliances = d.pendingAlliances.filter(
+    ([from, to]) => !((from === a && to === b) || (from === b && to === a)),
+  );
+}
+
+/** Drop every offer a seat is party to — it is out of the game, so its offers are too (R80, R81). */
+function dropPendingAlliancesFor(d: Draft, seat: Seat): void {
+  d.pendingAlliances = d.pendingAlliances.filter(([from, to]) => from !== seat && to !== seat);
 }
 
 function removeAlly(d: Draft, a: Seat, b: Seat): void {

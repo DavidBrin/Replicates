@@ -142,6 +142,11 @@ function listeners<T>(): {
  * Both are matched structurally rather than through the `Action` union:
  * `HIDDEN` is a wire shape the authority mints for a masked view, and the
  * client's job is to survive one, not to be able to construct one.
+ *
+ * **This is the live filter.** `session.ts` keeps its own `isMaskedRow`, which
+ * is therefore unreachable through the shipped polling port — it is defence for
+ * a `SyncPort` that is not this one (a socket adapter, a test double) handing
+ * rows straight to `ingest`.
  */
 function foldable(row: LoggedAction): boolean {
   const action = row.action as { readonly type: string; readonly card?: unknown };

@@ -9,10 +9,15 @@
  * through `u64.ts`, so a replay recorded in one JS engine folds identically in
  * another.
  *
- * `rngFor(seed, purpose, turn)` hashes `seed|purpose|turn` with FNV-1a into a
- * 64-bit PCG seed. That is the determinism keystone: adding or removing a draw
- * inside one purpose can never shift another purpose's sequence, so a bot
+ * `rngFor(seed, purpose, index)` hashes `seed|purpose|index` with FNV-1a into
+ * a 64-bit PCG seed. That is the determinism keystone: adding or removing a
+ * draw inside one purpose can never shift another purpose's sequence, so a bot
  * tuning change cannot move a stored battle (D4).
+ *
+ * `index` is the **seq of the action being produced**, never `state.turn`
+ * (D5, R88): a turn index changes once a turn, so every attack within one turn
+ * would be handed the same stream from its first draw. Personas and the
+ * opening deal use index 0.
  */
 import { addU64, hexU64, mulU64, shrU64, xorU64, type U64 } from "./u64";
 import type { Rng, RngPurpose } from "./types";

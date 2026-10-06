@@ -199,10 +199,18 @@ export function cardTradeValue(
   return only && only !== "wild" ? FIXED_SET_VALUE[only] : FIXED_MIXED_VALUE;
 }
 
+/**
+ * R24 and R26, with the same gate the real `mustTradeDown` has.
+ *
+ * The `>= 6` branch is keyed on R27's bounce marker, because R20's reward draw also lands a hand on
+ * six — `validateCardDrawn` admits the award at five — and R25 defers *that* six to the seat's next
+ * turn. A fixture that forced it would be teaching this suite a rule the engine does not have
+ * (codex round 3, finding 1).
+ */
 export function mustTradeNow(state: GameState, seat: Seat): boolean {
   const s = state.seats[seat];
   if (!s) return false;
-  if (s.cards.length >= 6) return true;
+  if (s.cards.length >= 6 && state.resumePhase !== null) return true;
   return s.cards.length >= 5 && state.setsTradedThisTurn === 0 && state.phase === "draft";
 }
 
@@ -406,6 +414,7 @@ function createInitialState(map: MapDef, started: Extract<Action, { type: "GAME_
     fortifyUsed: false,
     pendingMoveIn: null,
     resumePhase: null,
+    pendingAlliances: [],
     portals: started.portals,
     discard: [],
     outcome: null,
@@ -648,8 +657,13 @@ function apply(state: GameState, map: MapDef, action: Action): ApplyResult {
         }),
         pendingMoveIn: null,
       };
-      // R27: a forced mid-Attack trade-down bounces the phase back to draft.
-      if (next.resumePhase === null && mustTradeNow(next, action.seat) && next.phase === "attack") {
+      /*
+       * R27: a forced mid-Attack trade-down bounces the phase back to draft. Keyed on the **hand**,
+       * as the real `bounceForTradeDown` is — `mustTradeNow` now reads the bounce marker this very
+       * branch sets, so asking it here would never answer yes.
+       */
+      const seized = next.seats[action.seat]?.cards.length ?? 0;
+      if (next.resumePhase === null && next.phase === "attack" && seized >= 6) {
         next = { ...next, phase: "draft", resumePhase: "attack" };
       }
       return { state: next, events };

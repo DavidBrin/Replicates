@@ -617,5 +617,26 @@ function validateAlliance(
   const already = me.allies.includes(them.seat);
   if (action.type === "ALLIANCE_BREAK" && !already) return err("notAlliable", "you are not allied (R80)");
   if (action.type !== "ALLIANCE_BREAK" && already) return err("notAlliable", "you are already allied (R80)");
+  /*
+   * R80 — one offer at a time per pair.
+   *
+   * The three alliance actions are the only ones exempt from the online turn fence (an offer you
+   * could only accept on your own turn is an offer nobody would take), so with repeats accepted a
+   * seated player could append the same `ALLIANCE_PROPOSE` as fast as it could POST: every repeat
+   * was a log row, every row bumped `games.seq`, and the poll's `204` fast path went with it
+   * (codex round 3, finding 4). The offer is already in the air; re-sending it says nothing new.
+   *
+   * It is refused in **both** directions, because an alliance is symmetric: when the other seat has
+   * already offered, the answer is `ALLIANCE_ACCEPT`, not a counter-offer. `ALLIANCE_ACCEPT`,
+   * `ALLIANCE_BREAK`, an elimination and a resignation all clear the pair, so the pair is never a
+   * permanent lock-out.
+   */
+  if (action.type === "ALLIANCE_PROPOSE") {
+    const pending = state.pendingAlliances.some(
+      ([from, to]) =>
+        (from === me.seat && to === them.seat) || (from === them.seat && to === me.seat),
+    );
+    if (pending) return err("notAlliable", "that proposal is already on the table (R80)");
+  }
   return null;
 }

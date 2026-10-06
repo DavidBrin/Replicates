@@ -97,7 +97,16 @@ export function createBotDriver(options: BotDriverOptions): BotDriver {
       const mustTrade = engine.mustTradeNow(state, seat);
       const sets = engine.cardSets(state.seats[seat]?.cards ?? []);
       const chosen = live.cardTrade ?? (mustTrade ? sets[0] ?? null : null);
-      if (chosen && state.setsTradedThisTurn === 0) {
+      /*
+       * `setsTradedThisTurn === 0` is the gate on the **optional** second trade (R24): a plan that
+       * wants another one does not get it. A trade the rules *force* is not optional, so
+       * `mustTrade` overrides the gate — R26's trade-down from a hand of eight reaches five after
+       * one trade and still owes a second, and without the override the runner fell through to
+       * `END_PHASE`, which `validate` refuses with `mustTradeCards` while the trade-down is owed.
+       * The offline driver then re-sent the same refused `END_PHASE` for ever
+       * (codex round 3, finding 2).
+       */
+      if (chosen && (state.setsTradedThisTurn === 0 || mustTrade)) {
         const bonus = bonusTerritoryFor(state, seat, chosen);
         queue.push({ kind: "action", action: { type: "TRADE_CARDS", seat, cards: chosen, bonusTerritory: bonus } });
         return; // re-enter once the trade has landed and `troopsToPlace` has grown

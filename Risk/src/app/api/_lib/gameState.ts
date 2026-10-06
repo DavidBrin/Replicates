@@ -199,6 +199,15 @@ function claimCandidates(state: GameState, seat: Seat): Action[] {
  * changes hands), the award lands there, and `END_TURN` comes out of `fortify`,
  * which is its only legal exit (R67). `nextBotAction` has always ordered the
  * two this way; the timeout path simply disagreed with it.
+ *
+ * **`TRADE_CARDS` leads the list**, because a forced trade is the one state in
+ * which *nothing else* is legal: R24 at turn start and R26's trade-down both
+ * refuse `DRAFT`, `AUTO_DEPLOY`, `END_PHASE` and `END_TURN` with
+ * `mustTradeCards`. Without the candidate this function answered `null`, the
+ * tick appended nothing, and a seat that was **present but idle** — polling,
+ * inside or outside its deadline — held the game up for ever, because the
+ * takeover counter only climbs on a tick that got somewhere
+ * (codex round 3, finding 3).
  */
 export function autoSkipAction(
   engine: ServerEngine,
@@ -207,6 +216,17 @@ export function autoSkipAction(
   seat: Seat,
 ): Action | null {
   const candidates: Action[] = [];
+
+  // R24 / R26 — the forced trade, which refuses every other action while it is owed.
+  try {
+    if (engine.mustTradeNow(state, seat)) {
+      const set = engine.cardSets(state.seats[seat]?.cards ?? [])[0];
+      // `bonusTerritory: null` declines R23's +2 rather than guessing a tile for an absent player.
+      if (set) candidates.push({ type: "TRADE_CARDS", seat, cards: set, bonusTerritory: null });
+    }
+  } catch {
+    // The engine cannot answer yet (S1 pending); the candidates below still move the game on.
+  }
 
   if (state.phase === "claim") candidates.push(...claimCandidates(state, seat));
 

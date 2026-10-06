@@ -227,6 +227,7 @@ function viewToState(view: GameView): GameState {
     fortifyUsed: false,
     pendingMoveIn: null,
     resumePhase: null,
+    pendingAlliances: [],
     portals: view.portals,
     discard: [],
     outcome: null,

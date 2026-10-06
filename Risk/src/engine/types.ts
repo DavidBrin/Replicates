@@ -339,7 +339,8 @@ export interface GameState {
   readonly currentIndex: number;           // index into turnOrder
   readonly phase: Phase;
   readonly round: number;                  // 1-based; increments on wrap
-  readonly turn: number;                   // monotonic; the rngFor sub-stream index
+  readonly turn: number;                   // monotonic turn counter; NOT the rngFor sub-stream
+                                           //   index — that is the action's seq (D5, R88)
   readonly troopsToPlace: number;
   readonly territoryBonusLeft: number;     // 0..2, reset each turn (R23)
   readonly setsTradedThisTurn: number;
@@ -352,6 +353,23 @@ export interface GameState {
   } | null;
   /** Set when a forced mid-Attack trade-down bounced the phase back to draft (R27). */
   readonly resumePhase: Phase | null;
+  /**
+   * R80's offers in the air: `[proposer, target]`, in the order they were proposed.
+   *
+   * `ALLIANCE_PROPOSE` is the one action with no other trace in the state — the reducer emits
+   * `allianceChanged { state: "proposed" }` and stops — and the three alliance actions are also the
+   * only ones exempt from the online turn fence, so a seated player could append the **same**
+   * proposal in a loop: `validate` accepted every repeat, each one bumped `games.seq`, and the
+   * poll's `204` fast path died with it (codex round 3, finding 4). A pending pair is what makes a
+   * repeat refusable, and it could not be derived from `allies` — an offer that has not been
+   * accepted leaves that array untouched by construction.
+   *
+   * Cleared by the `ALLIANCE_ACCEPT` or `ALLIANCE_BREAK` that answers it (both directions, since
+   * an alliance is symmetric) and by the elimination or resignation of either seat, so the list
+   * never outlives the conversation it records. It is part of the canonical digest like every other
+   * field (R91, D16) — `hashState` walks the whole state, so nothing had to be taught about it.
+   */
+  readonly pendingAlliances: readonly (readonly [Seat, Seat])[];
   readonly portals: readonly PortalState[];
   readonly discard: readonly Card[];       // traded-in cards; the deck order is never stored (R19)
   readonly outcome: Outcome | null;

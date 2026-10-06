@@ -154,6 +154,22 @@ describe("legalActions", () => {
     expect(legalActions(allied, mini, 2)).not.toContain("ALLIANCE_BREAK");
   });
 
+  it("R80 — stops offering ALLIANCE_PROPOSE once every pair has an offer in the air (§4.7)", () => {
+    // Two seats, so seat 1's one possible target is seat 0, and the offer below uses it up.
+    const state = buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      rules: { alliances: true },
+    });
+    expect(legalActions(state, mini, 1)).toContain("ALLIANCE_PROPOSE");
+    const offered = apply(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 0 }).state;
+    // `validate` refuses every proposal this seat could send, so `legalActions` must not offer it.
+    expect(legalActions(offered, mini, 1)).not.toContain("ALLIANCE_PROPOSE");
+    expect(legalActions(offered, mini, 0)).not.toContain("ALLIANCE_PROPOSE");
+    // Answering it is still on the table, which is the point.
+    expect(legalActions(offered, mini, 0)).toContain("ALLIANCE_ACCEPT");
+  });
+
   it("in claim, offers CLAIM while anything is owed", () => {
     const state = buildState(tiny4, {
       seats: 3,

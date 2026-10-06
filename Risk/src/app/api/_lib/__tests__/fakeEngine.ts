@@ -246,6 +246,7 @@ export function fakeState(options: FakeStateOptions = {}): GameState {
     fortifyUsed: false,
     pendingMoveIn: null,
     resumePhase: null,
+    pendingAlliances: [],
     portals: [],
     discard: [],
     outcome: null,
@@ -728,6 +729,21 @@ export function fakeEngine(options: FakeEngineOptions = {}): ServerEngine {
     legalActions: (state) => (state.phase === "draft" ? ["DRAFT", "END_PHASE"] : ["END_PHASE"]),
     legalDraftTargets: (state, seat) =>
       state.territories.flatMap((row, index) => (row.owner === seat ? [index] : [])),
+    /*
+     * The counter-state engine knows nothing of R21's suits, so "a set" is simply the first three
+     * cards of the hand, and a forced trade is a hand of five or more in `draft` — enough for the
+     * tick's `TRADE_CARDS` candidate to be exercised without importing §3's rules
+     * (`realEngine.test.ts` proves the same path against the real ones).
+     */
+    cardSets: (cards) =>
+      cards.length >= 3
+        ? [[cards[0] as Card, cards[1] as Card, cards[2] as Card].map((c) => c.id) as unknown as
+            readonly [string, string, string]]
+        : [],
+    mustTradeNow: (state, seat) =>
+      state.phase === "draft" &&
+      state.turnOrder[state.currentIndex] === seat &&
+      (state.seats[seat]?.cards.length ?? 0) >= 5,
     viewFor: fakeViewFor,
     hashState: fakeHash,
     isGameOver: (state) => state.outcome !== null,

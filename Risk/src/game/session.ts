@@ -104,10 +104,9 @@ export interface SessionUiState {
   /**
    * Alliance proposals in the air, newest last (R80).
    *
-   * `ALLIANCE_PROPOSE` is the one action that changes no `GameState` field — the reducer only
-   * emits `allianceChanged { state: "proposed" }` — so the offer has to live in the UI slice.
-   * That is also the right place for it: an offer is a conversation, not a rule, and it dies with
-   * the tab rather than surviving in a replay.
+   * `GameState.pendingAlliances` records the *pair* so the rules can refuse a repeat (§4.7, R80);
+   * it is not what the HUD reads. This is the viewer's own list of offers to answer, newest last,
+   * and it is UI: it dies with the tab rather than surviving in a replay.
    */
   allianceOffers: readonly { from: Seat; to: Seat }[];
   /** The roster capsule whose alliance popover is open, or `null` (§7.1). */
@@ -739,14 +738,119 @@ export function createSession(options: SessionOptions): Session {
   }
 
   let driver: BotDriver | null = null;
+  /** How many times one identical refused step is retried before the plan stops being trusted. */
+  const BOT_STEP_REFUSAL_LIMIT = 3;
+  let botRefusals = 0;
+  let botRefusedStep: string | null = null;
 
   function runBotTurn(seat: Seat): void {
     set({ botPlaying: true, actingSeat: seat, selected: null, litZone: [], actionMode: "idle" });
+    botRefusals = 0;
+    botRefusedStep = null;
     driver = createBotDriver({
       engine, bots, odds, map, seat, grudge,
       rng: () => engine.rngFor(config.seed, `bot:${seat}`, nextSeq),
     });
     stepBot(seat);
+  }
+
+  /**
+   * `END_TURN` plus the award and the round-start work that ride it. Shared by the three places
+   * that end a bot's turn, so none of them can forget the card it earned (R20).
+   *
+   * A refused `END_TURN` ends the stepping rather than rescheduling it: there is no step left to
+   * retry, and looping on it is the wedge {@link noteBotRefusal} exists to prevent. It is logged,
+   * because post-R25 (`mustTradeDown` gated on the R27 bounce) nothing legitimate refuses it.
+   */
+  function endBotTurn(seat: Seat): void {
+    if (confirmedState.conqueredThisTurn) awardCard(seat);
+    const r = applyLocal({ type: "END_TURN", seat }, true);
+    set({ botPlaying: false });
+    if (r.error) {
+      if (typeof console !== "undefined") {
+        console.warn(`[risk] bot seat ${String(seat)} could not end its turn:`, r.error.code);
+      }
+      return;
+    }
+    roundStartWork();
+    afterRound(afterTurnEnd);
+  }
+
+  /**
+   * Count an identical refused bot step, and say whether the plan has earned its way out.
+   *
+   * A refused step leaves `confirmedState` untouched, so a runner that ignores the refusal and
+   * reschedules asks the same plan the same question against the same board — for ever, silently,
+   * with the offline game frozen and nothing in the console (codex round 3, finding 2). The driver's
+   * plan is invalidated on every refusal, which recovers the common case (a stale plan); past
+   * {@link BOT_STEP_REFUSAL_LIMIT} identical refusals the plan is not the problem and
+   * {@link botRecoveryAction} takes over.
+   */
+  function noteBotRefusal(action: Action): boolean {
+    const key = JSON.stringify(action);
+    if (key === botRefusedStep) botRefusals += 1;
+    else {
+      botRefusedStep = key;
+      botRefusals = 1;
+    }
+    driver?.invalidate();
+    return botRefusals >= BOT_STEP_REFUSAL_LIMIT;
+  }
+
+  /**
+   * A legal action for a stuck bot seat, offered to `validate` in order — the same
+   * "first candidate the rules accept wins" shape the server's `autoSkipAction` uses, so the two
+   * paths cannot disagree about what a wedged seat may do.
+   *
+   * `TRADE_CARDS` leads because a forced trade (R24) or trade-down (R26) is the one thing that
+   * refuses *every* other action the seat could take.
+   */
+  function botRecoveryAction(seat: Seat): Action | null {
+    const state = confirmedState;
+    const candidates: Action[] = [];
+    const sets = engine.cardSets(state.seats[seat]?.cards ?? []);
+    const set = sets[0];
+    if (set) candidates.push({ type: "TRADE_CARDS", seat, cards: set, bonusTerritory: null });
+    if (state.pendingMoveIn) {
+      candidates.push({ type: "MOVE_IN", seat, count: state.pendingMoveIn.max });
+    }
+    if (state.troopsToPlace > 0) {
+      const target = engine.legalDraftTargets(state, seat)[0];
+      if (target !== undefined) {
+        candidates.push({ type: "DRAFT", seat, territory: target, count: state.troopsToPlace });
+      }
+    }
+    candidates.push({ type: "END_PHASE", seat }, { type: "END_TURN", seat });
+    for (const candidate of candidates) {
+      if (engine.validate(state, map, candidate) === null) return candidate;
+    }
+    return null;
+  }
+
+  /** The refused-step escape hatch: log loudly, then take whatever the rules still allow. */
+  function recoverBot(seat: Seat, refused: Action): boolean {
+    botRefusals = 0;
+    botRefusedStep = null;
+    const recovery = botRecoveryAction(seat);
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[risk] bot seat ${String(seat)} had ${refused.type} refused ${String(BOT_STEP_REFUSAL_LIMIT)}× in a row;`,
+        recovery === null ? "no legal action remains" : `falling back to ${recovery.type}`,
+      );
+    }
+    if (recovery === null) {
+      // Nothing at all is legal: stop rather than reschedule, so the wedge is visible instead of
+      // being a silent busy-loop. `legalActions` is the HUD's own source, so the seat is stuck for
+      // a human too, and a resume or a seat hand-off is what moves it.
+      set({ botPlaying: false });
+      return false;
+    }
+    if (recovery.type === "END_TURN") {
+      endBotTurn(seat);
+      return false;
+    }
+    applyLocal(recovery, true);
+    return true;
   }
 
   function stepBot(seat: Seat): void {
@@ -763,12 +867,7 @@ export function createSession(options: SessionOptions): Session {
     const step = driver.next(confirmedState);
     if (!step) {
       // The plan ran dry without ending the turn; end it so play cannot stall.
-      const r = applyLocal({ type: "END_TURN", seat }, true);
-      set({ botPlaying: false });
-      if (!r.error) {
-        roundStartWork();
-        afterRound(afterTurnEnd);
-      }
+      endBotTurn(seat);
       return;
     }
     const pace = aiStepMs(driver.size());
@@ -778,18 +877,16 @@ export function createSession(options: SessionOptions): Session {
         engine.rngFor(config.seed, "battle", nextSeq),
         odds, confirmedState.rules.diceMode,
       );
-      applyLocal(action, true);
-    } else if (step.action.type === "END_TURN") {
-      if (confirmedState.conqueredThisTurn) awardCard(seat);
-      const r = applyLocal(step.action, true);
-      set({ botPlaying: false });
-      if (!r.error) {
-        roundStartWork();
-        afterRound(afterTurnEnd);
+      if (applyLocal(action, true).error && noteBotRefusal(action)) {
+        if (!recoverBot(seat, action)) return;
       }
+    } else if (step.action.type === "END_TURN") {
+      endBotTurn(seat);
       return;
     } else {
-      applyLocal(step.action, true);
+      if (applyLocal(step.action, true).error && noteBotRefusal(step.action)) {
+        if (!recoverBot(seat, step.action)) return;
+      }
     }
     later(() => stepBot(seat), pace);
   }
@@ -934,6 +1031,10 @@ export function createSession(options: SessionOptions): Session {
    * `type`, and a `CARD_DRAWN` whose `card` it must not name arrives as `card: null`. Both are
    * **legitimate gaps in knowledge, not disagreements**: treating them as a desync would put every
    * fog game permanently in `"desynced"` from the first hidden action onwards.
+   *
+   * Not the live route: `pollingSync`'s own `foldable()` drops both shapes before either listener,
+   * so through the shipped port this never sees one. It is defence for a `SyncPort` that is not
+   * that one — a socket adapter, a test double — handing rows straight to `ingest`.
    */
   function isMaskedRow(action: Action): boolean {
     if (!KNOWN_ACTIONS.has(action.type)) return true;
@@ -998,6 +1099,10 @@ export function createSession(options: SessionOptions): Session {
    * drain their events — `folded`, `nextSeq` and the confirmed state all stay put — and the
    * authority is asked for the snapshot that *can* move them. A fog authority is expected to answer
    * with `onSnapshot(view, seq, rows)`, which is the same replay with a state attached.
+   *
+   * Not the live route either: `pollingSync` recognises a masked body itself and routes it to
+   * `onSnapshot`, never to `onActions`, so a batch cannot land on a masked confirmed state through
+   * the shipped port. This is defence for a `SyncPort` that does not make that distinction.
    */
   function ingestForEventsOnly(actions: readonly LoggedAction[]): void {
     let retired = false;

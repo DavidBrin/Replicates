@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Action, GameState } from "@/engine/types";
 import { SEAT_NEUTRAL, SEAT_UNKNOWN, TROOPS_UNKNOWN } from "@/engine/types";
-import { engineApi } from "./engineApi";
+import { engineApi, type EngineApi } from "./engineApi";
 import type { LoggedAction, SyncPort, SyncStatus } from "@/ports/sync";
 
 import { DEMO, HOTSEAT_SEATS, SOLO_SEATS, makeSession, manualScheduler, seat } from "./__fixtures__/harness";
@@ -405,6 +405,53 @@ describe("bot turns (§5.3)", () => {
     if (h.session.store.getState().botPlaying) {
       expect(h.session.store.getState().botPlaying).toBe(true);
     }
+    h.destroy();
+  });
+
+  /*
+   * Codex round 3, finding 2 — a refused step leaves the confirmed state untouched, so a runner
+   * that ignored the refusal and rescheduled asked the same plan the same question against the
+   * same board, for ever, with nothing in the console and the offline game frozen.
+   */
+  it("gives up on a plan whose step keeps being refused, rather than looping", () => {
+    const scripted = createScriptedEngine();
+    let refusals = 0;
+    const engine: EngineApi = {
+      ...scripted,
+      apply: (state, map, action) => {
+        // Every END_PHASE is refused, whatever the board: nothing the plan can learn from.
+        if (action.type === "END_PHASE") {
+          refusals += 1;
+          return { state, events: [], error: { code: "mustTradeCards", message: "scripted refusal" } };
+        }
+        return scripted.apply(state, map, action);
+      },
+      validate: (state, map, action) => engine.apply(state, map, action).error ?? null,
+    };
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const sched = manualScheduler();
+    const h = makeSession({
+      engine,
+      schedule: sched.schedule,
+      seats: [seat("bot", "A", "red"), seat("bot", "B", "green"), seat("bot", "C", "blue")],
+    });
+    h.session.start();
+    const steps = 300;
+    sched.flush(steps);
+
+    /*
+     * The signal is **progress**. Before the fix the board never moved: the same refused
+     * `END_PHASE` came back every step, so `turn` sat at 1 for as many steps as the test cared to
+     * run. Now the refusal is counted, the plan is dropped, and a legal action ends the turn.
+     */
+    expect(h.session.confirmed().turn).toBeGreaterThan(1);
+    // Each refused step is retried a bounded number of times, so refusals scale with turns taken.
+    expect(refusals).toBeGreaterThan(0);
+    expect(refusals).toBeLessThan(steps);
+    // And it is logged rather than swallowed.
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
     h.destroy();
   });
 

@@ -86,7 +86,10 @@ function scriptGame(map: MapDef, seats: number, seed: string, maxActions = 400):
 
     // §5.7 — round-start work, asked on every round start.
     if (state.phase === "draft" && state.troopsToPlace > 0) {
-      const moved = movePortals(state, map, rngFor(seed, "portalMove", state.turn));
+      // `log.length` is this driver's `nextSeq`: the sub-stream index is the seq of the action
+      // being produced, never `state.turn` (D5, R88), and a test that keyed it on the turn would
+      // model a contract the live runner and the live route do not have.
+      const moved = movePortals(state, map, rngFor(seed, "portalMove", log.length));
       if (moved !== null) push(moved);
     }
 
@@ -131,7 +134,7 @@ function scriptGame(map: MapDef, seats: number, seed: string, maxActions = 400):
     }
 
     if (state.phase === "fortify") {
-      if (state.conqueredThisTurn) push(drawCard(state, map, seat, rngFor(seed, "cardDeck", state.turn)));
+      if (state.conqueredThisTurn) push(drawCard(state, map, seat, rngFor(seed, "cardDeck", log.length)));
       if (!push({ type: "END_TURN", seat })) break;
       continue;
     }

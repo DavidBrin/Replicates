@@ -215,12 +215,40 @@ describe("the three card-timing branches", () => {
     }
   });
 
-  it("R26 — inheritance to six forces an immediate trade-down, in any phase", () => {
-    for (const phase of ["draft", "attack", "fortify"] as const) {
-      const state = buildState(mini, { phase, hands: { 0: [...fiveCards, art(6)] } });
+  it("R26 — inheritance to six forces a trade-down, from whatever phase it landed in", () => {
+    /*
+     * R27's bounce is part of the inheritance: whatever phase the seizure arrived in, the reducer
+     * puts play back in `draft` and records where to resume. `resumePhase` is therefore how
+     * `mustTradeDown` knows this six is an inheritance rather than R20's reward draw — see the R25
+     * case below, which is the same hand with no bounce.
+     */
+    for (const resumePhase of ["draft", "attack", "fortify"] as const) {
+      const state = buildState(mini, {
+        phase: "draft",
+        resumePhase,
+        hands: { 0: [...fiveCards, art(6)] },
+      });
       expect(mustTradeDown(state, 0)).toBe(true);
       expect(mustTradeNow(state, 0)).toBe(true);
     }
+  });
+
+  it("R25 — the reward draw's six forces nothing, and is NOT read as an inheritance", () => {
+    /*
+     * Codex round 3, finding 1. `validateCardDrawn` admits the R20 award at a hand of five, so the
+     * reward legitimately lands the hand on six in `fortify` — with no bounce, because nothing was
+     * seized. Read as an inheritance, that hand had no legal action at all: `END_TURN` refused with
+     * `mustTradeCards`, `END_PHASE` is illegal out of fortify (R67), `TRADE_CARDS` is draft-only.
+     */
+    const awarded = [...fiveCards, art(6)];
+    const landed = buildState(mini, { phase: "fortify", hands: { 0: awarded } });
+    expect(mustTradeDown(landed, 0)).toBe(false);
+    expect(mustTradeNow(landed, 0)).toBe(false);
+
+    // R24 picks it up at the start of the seat's next turn, which is what R25 asks for.
+    const nextTurn = buildState(mini, { phase: "draft", hands: { 0: awarded } });
+    expect(mustTradeAtTurnStart(nextTurn, 0)).toBe(true);
+    expect(mustTradeNow(nextTurn, 0)).toBe(true);
   });
 
   it("R26 — an inheritance that leaves you under six waits for your next turn", () => {
@@ -269,7 +297,10 @@ describe("the three card-timing branches", () => {
       const sizes: number[] = [hand.length];
       for (let step = 0; step < 4; step++) {
         const state = step === 0
-          ? buildState(mini, { phase: "attack", hands: { 0: hand } })   // the inheritance itself
+          // The inheritance itself: the reducer has already bounced play back to draft (R27).
+          ? buildState(mini, {
+            phase: "draft", resumePhase: "attack", hands: { 0: hand }, troopsToPlace: 4,
+          })
           : midTradeDown(hand);
         if (!mustTradeDown(state, 0)) break;
         const traded = cardSets(hand)[0] as readonly string[];

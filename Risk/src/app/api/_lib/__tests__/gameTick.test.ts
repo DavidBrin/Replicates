@@ -1,10 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { Action, GameState, MapDef } from "@/engine/types";
+import type { Action, Card, GameState, MapDef } from "@/engine/types";
+import { buildState, card as engineCard } from "@/engine/__fixtures__/states";
+import { mini } from "@/engine/__fixtures__/maps";
 
+import { realServerEngine } from "../engine";
 import { createGame, runLazyTick } from "../gameService";
-import { MAX_TICK_ACTIONS, spreadPlacements } from "../gameState";
+import { autoSkipAction, MAX_TICK_ACTIONS, MISSED_TURNS_TO_BOT, spreadPlacements } from "../gameState";
 import {
   actionId,
   humanVsBotGame,
@@ -76,9 +79,91 @@ describe("spreadPlacements", () => {
     }
   });
 
-  it("places nothing with no targets or no troops", () => {
+  it("places nothing with no targets or no troops (forced-trade cases below)", () => {
     expect(spreadPlacements([], 5)).toEqual([]);
     expect(spreadPlacements([1, 2], 0)).toEqual([]);
+  });
+});
+
+/*
+ * Codex round 3, finding 3 — the forced trade is the one state in which nothing else is legal, and
+ * `autoSkipAction` had no `TRADE_CARDS` candidate at all. It answered `null`, the tick appended
+ * nothing, and a seat that was present but idle held the game up indefinitely.
+ *
+ * Against the **real** engine, because the whole point is that `validate` accepts the candidate.
+ */
+describe("autoSkipAction — the forced trade (R24, R26)", () => {
+  const inf = (id: string): Card => engineCard(id, "infantry", null);
+  const cav = (id: string): Card => engineCard(id, "cavalry", null);
+  const art = (id: string): Card => engineCard(id, "artillery", null);
+  /** Five cards holding one set of three infantry. */
+  const five = [inf("f1"), inf("f2"), inf("f3"), cav("f4"), art("f5")];
+
+  function skip(state: GameState): Action | null {
+    return autoSkipAction(realServerEngine, state, mini, 0);
+  }
+
+  it("trades when R24 forces one at the seat's turn start", () => {
+    const state = buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      phase: "draft",
+      troopsToPlace: 3,
+      hands: { 0: five },
+    });
+    const action = skip(state);
+    expect(action?.type).toBe("TRADE_CARDS");
+    expect(realServerEngine.validate(state, mini, action as Action)).toBeNull();
+    // And it is accepted: the hand comes down and the trade's troops are on the table.
+    const after = realServerEngine.apply(state, mini, action as Action);
+    expect(after.error).toBeUndefined();
+    expect(after.state.seats[0]?.cards).toHaveLength(2);
+  });
+
+  it("trades again when R26's trade-down is still owed mid-flight", () => {
+    const state = buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      phase: "draft",
+      resumePhase: "attack",
+      setsTradedThisTurn: 1,
+      troopsToPlace: 4,
+      hands: { 0: five },
+    });
+    const action = skip(state);
+    expect(action?.type).toBe("TRADE_CARDS");
+    expect(realServerEngine.validate(state, mini, action as Action)).toBeNull();
+  });
+
+  it("still ends the phase when nothing is forced, trade or no trade", () => {
+    // A four-card hand with a set: R24 does not force it, so §5.6's table stands.
+    const state = buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      phase: "draft",
+      troopsToPlace: 0,
+      hands: { 0: [inf("g1"), inf("g2"), inf("g3"), cav("g4")] },
+    });
+    expect(skip(state)?.type).toBe("END_PHASE");
+  });
+
+  it("ends the turn on R20's award to six, which R25 defers (codex round 3, finding 1)", () => {
+    /*
+     * The tick's own view of finding 1: `CARD_DRAWN` has landed the hand on six in `fortify` and
+     * there is no bounce. Read as an inheritance, `END_TURN` was refused `mustTradeCards`,
+     * `END_PHASE` is illegal out of fortify (R67) and `TRADE_CARDS` is draft-only — so this
+     * answered `null` and the tick appended nothing at all.
+     */
+    const state = buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      phase: "fortify",
+      hands: { 0: [...five, art("f6")] },
+    });
+    expect(state.seats[0]?.cards).toHaveLength(6);
+    const action = skip(state);
+    expect(action?.type).toBe("END_TURN");
+    expect(realServerEngine.validate(state, mini, action as Action)).toBeNull();
   });
 });
 
@@ -303,6 +388,58 @@ describe("the turn timer (§5.6)", () => {
       [game.gameId],
     );
     expect(Number(seat[0]?.missed_turns)).toBe(1);
+  });
+
+  /*
+   * Codex round 3, finding 3 — the second half. A tick that counts a miss and then appends nothing
+   * is exactly the case the counter exists for, and persisting it *after* the `appended === 0`
+   * return threw the increment away: `missedTurns` never reached `MISSED_TURNS_TO_BOT`, the seat
+   * never changed hands, and the game stood still for as long as the seat kept polling.
+   */
+  it("persists the missed turn even when the tick can append nothing", async () => {
+    const stuck = fakeEngine();
+    const restore = await startHarness({
+      ...stuck,
+      // Nothing is legal, so `autoSkipAction` finds no candidate and the tick appends zero rows.
+      validate: () => ({ code: "illegalAction", message: "scripted: nothing is legal" }),
+    });
+    try {
+      const game = await twoPlayerGame();
+      await restore.db.execute(
+        "update games set turn_deadline = now() - interval '1 second' where id = $1",
+        [game.gameId],
+      );
+      for (const s of [0, 1]) {
+        await restore.db.execute(
+          `update game_players set last_seen_at = now() - interval '1 second'
+            where game_id = $1 and seat = $2`,
+          [game.gameId, s],
+        );
+      }
+
+      const report = await runLazyTick(game.gameId);
+      expect(report.appended).toBe(0);
+
+      const rows = await restore.db.query<{ missed_turns: string | number }>(
+        "select missed_turns from game_players where game_id = $1 and seat = 0",
+        [game.gameId],
+      );
+      expect(Number(rows[0]?.missed_turns)).toBe(1);
+
+      // A second expiry reaches the takeover threshold, which is the point of persisting it.
+      await restore.db.execute(
+        "update games set turn_deadline = now() - interval '1 second' where id = $1",
+        [game.gameId],
+      );
+      await runLazyTick(game.gameId);
+      const again = await restore.db.query<{ missed_turns: string | number }>(
+        "select missed_turns from game_players where game_id = $1 and seat = 0",
+        [game.gameId],
+      );
+      expect(Number(again[0]?.missed_turns)).toBeGreaterThanOrEqual(MISSED_TURNS_TO_BOT);
+    } finally {
+      await restore.dispose();
+    }
   });
 
   /**

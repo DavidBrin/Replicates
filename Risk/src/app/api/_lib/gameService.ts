@@ -500,7 +500,18 @@ export async function submitAction(
         appended.state.round !== state.round,
       );
 
-      await games.setMissedTurns(gameId, seat, 0);
+      /*
+       * The miss counter is forgiven by **playing**, so it is cleared only for the seat whose turn
+       * this was.
+       *
+       * The off-turn exemption above lets a seated player append diplomacy at any time, and an
+       * unconditional reset let such a seat clear its own counter without ever taking a turn —
+       * indefinitely, one `ALLIANCE_BREAK` at a time — which is the takeover rule
+       * (`MISSED_TURNS_TO_BOT`, §5.6) undone by the one action that is allowed to skip the turn
+       * fence (codex round 3, finding 4). `state` is the pre-action state, so this is "it was your
+       * turn when you acted", which is what `setMissedTurns(…, 0)` is meant to mean.
+       */
+      if (currentSeatOf(state) === seat) await games.setMissedTurns(gameId, seat, 0);
       await commitState(tx, engine, row, owed.state, owed.seq, row.botMemory);
       return {
         kind: "ok",
@@ -816,14 +827,24 @@ export async function runLazyTick(gameId: string): Promise<TickReport> {
         if (appended >= MAX_TICK_ACTIONS) capped = true;
       }
 
-      if (appended === 0) {
-        await txGames.releaseTickLease(gameId);
-        return { ticked: true, appended: 0, capped: false };
-      }
-
+      /*
+       * The miss counter is persisted **before** the empty-tick exit, not after it.
+       *
+       * A tick that counts a miss and then appends nothing is exactly the case the counter exists
+       * for: the seat's deadline passed and `autoSkipAction` could not find it a legal move. Doing
+       * this after the `appended === 0` return threw that increment away, so `missedTurns` never
+       * reached `MISSED_TURNS_TO_BOT`, the seat never changed hands, and the game stood still for
+       * as long as the seat kept polling (codex round 3, finding 3). There is no state or action
+       * row to commit on that path — only this column moves.
+       */
       for (const [seat, count] of missed) {
         const before = seats.find((candidate) => candidate.seat === seat)?.missedTurns ?? 0;
         if (count !== before) await txGames.setMissedTurns(gameId, seat, count);
+      }
+
+      if (appended === 0) {
+        await txGames.releaseTickLease(gameId);
+        return { ticked: true, appended: 0, capped: false };
       }
 
       await commitState(tx, engine, row, state, seq, memory);

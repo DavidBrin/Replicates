@@ -124,6 +124,8 @@ export interface StateSpec {
   readonly kinds?: Readonly<Record<number, SeatState["kind"]>>;
   /** R27's bounce marker: set when a forced mid-Attack trade-down sent play back to draft. */
   readonly resumePhase?: Phase | null;
+  /** R80's unanswered offers, `[proposer, target]` (§4.7). */
+  readonly pendingAlliances?: readonly (readonly [Seat, Seat])[];
 }
 
 /** A legal `GameState` over `map`, described compactly. */
@@ -171,6 +173,7 @@ export function buildState(map: MapDef, spec: StateSpec = {}): GameState {
     fortifyUsed: spec.fortifyUsed ?? false,
     pendingMoveIn: null,
     resumePhase: spec.resumePhase ?? null,
+    pendingAlliances: spec.pendingAlliances ?? [],
     portals: spec.portals ?? [],
     discard: spec.discard ?? [],
     outcome: null,
