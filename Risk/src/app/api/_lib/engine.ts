@@ -24,20 +24,23 @@ import type {
   TerritoryId,
 } from "@/engine/types";
 import { loadMapFile } from "@/content/maps";
+import { loadMap } from "@/engine/map";
 
 /**
  * The server's seam onto the engine (SPEC §12, S5's "stubs" row).
  *
  * Every engine function a route handler calls is named here, once, and bound
  * from the real barrels by {@link realServerEngine}. The point is not
- * abstraction for its own sake: `apply`, `validate`, `hashState`, the
- * resolvers, `createOdds`, `decideTurn` and `loadMapFile` all **throw
- * "pending"** while S1, S2 and S3 build them, and the transaction, the
+ * abstraction for its own sake: it is an injection point, and the route
+ * suites use it two ways. Most of them inject a **counter-state** engine — an
+ * `apply` that moves a few numbers, a fixed `hashState`, a `rollAttack` with
+ * fixed dice, a one-action `decideTurn` — because the transaction, the
  * idempotency fence, the `204` path, the lazy tick and the seat-takeover
- * logic are all provable without any of the real rules. A route test injects
- * a counter-state `apply`, a fixed `hashState`, a `rollAttack` that returns
- * fixed dice and a `decideTurn` that returns a one-action plan, and proves
- * the plumbing on PGlite `:memory:`.
+ * logic are all wrong or right independently of §3's rules, and a suite that
+ * drove the real reducer would fail for reasons that are not its own.
+ * `realEngine.test.ts` injects the opposite: the real engine with a fixture
+ * `MapDef`, which is how the same code paths are also proven against the
+ * actual `apply`, `decideTurn` and `rollAttack`.
  *
  * It is also where the two engine-adjacent concerns that are genuinely the
  * server's live: resolving a slug to a `MapDef` (memoised per slug per
@@ -109,32 +112,6 @@ export interface ServerEngine {
   loadMap(file: MapFile): MapDef;
 }
 
-/**
- * `loadMap` lives in `src/engine/map/**`, which is S3's directory and does
- * not exist yet, so a static `import … from "@/engine/map"` would not
- * typecheck. The specifier is held in a variable so TypeScript does not
- * resolve it and the bundlers leave the import alone; the moment S3's barrel
- * lands this becomes a plain static import and this function goes away.
- *
- * Nothing on the test path reaches it — every route test injects a fake
- * engine whose `loadMap` returns a fixture `MapDef`.
- */
-const ENGINE_MAP_SPECIFIER = "@/engine/map";
-let engineMapModule: Promise<{ loadMap(file: MapFile): MapDef }> | null = null;
-
-function engineMap(): Promise<{ loadMap(file: MapFile): MapDef }> {
-  engineMapModule ??= (async () => {
-    try {
-      return (await import(
-        /* webpackIgnore: true */ /* turbopackIgnore: true */ ENGINE_MAP_SPECIFIER
-      )) as { loadMap(file: MapFile): MapDef };
-    } catch (cause) {
-      throw new Error("S3 pending: @/engine/map is not available", { cause });
-    }
-  })();
-  return engineMapModule;
-}
-
 /** Every member bound straight from the published barrels. */
 export const realServerEngine: ServerEngine = {
   createInitialState: engine.createInitialState,
@@ -158,12 +135,7 @@ export const realServerEngine: ServerEngine = {
   drawPersonas: bots.drawPersonas,
 
   loadMapFile,
-  // Synchronous by contract, asynchronous to resolve while S3 is pending.
-  // `loadMapDef` awaits the module before calling it, so this is only ever
-  // reached through that path.
-  loadMap: () => {
-    throw new Error("S3 pending: call loadMapDef(), which awaits @/engine/map");
-  },
+  loadMap,
 };
 
 /**
@@ -235,10 +207,7 @@ export function loadMapDef(slug: string): Promise<MapDef> {
 
   const loading = (async () => {
     const api = serverEngine();
-    const file = await api.loadMapFile(slug);
-    if (api.loadMap !== realServerEngine.loadMap) return api.loadMap(file);
-    const { loadMap } = await engineMap();
-    return loadMap(file);
+    return api.loadMap(await api.loadMapFile(slug));
   })().catch((error: unknown) => {
     cache.delete(slug);
     throw error;

@@ -148,7 +148,7 @@ export async function createLobby(
       cookie: session.cookie,
       body: {
         title: overrides.title ?? "Test lobby",
-        mapSlug: overrides.mapSlug ?? "ring",
+        mapSlug: overrides.mapSlug ?? "tiny4",
         rules: overrides.rules ?? TEST_RULES,
         maxSeats: overrides.maxSeats ?? 6,
       },

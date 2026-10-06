@@ -145,7 +145,7 @@ describe("POST /api/session", () => {
         cookie: host.cookie,
         body: {
           title: "Held",
-          mapSlug: "ring",
+          mapSlug: "tiny4",
           rules: {
             winCondition: "world",
             dominationThreshold: 0.7,

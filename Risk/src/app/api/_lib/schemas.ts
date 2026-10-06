@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MAP_SLUGS } from "@/content/maps";
 import { EMOJI_IDS } from "@/net/emojiIds";
 import type { Action, AttackIntent, Rules } from "@/engine/types";
 import { TURN_SECONDS } from "@/engine/types";
@@ -98,9 +99,22 @@ export const LobbyCodeSchema = z
   .toUpperCase()
   .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/, "a four-letter lobby code");
 
+/**
+ * A slug the catalogue actually has.
+ *
+ * `loadMapFile` rejects an unknown slug, which would otherwise surface as a
+ * `500` from `start` long after the lobby was created — so the lobby refuses
+ * it at the boundary instead. The four fixtures stay allowed: they are not in
+ * the player-facing picker (D39), but the e2e suite plays `tiny4` on purpose.
+ */
+export const MapSlugSchema = z
+  .string()
+  .trim()
+  .refine((value) => MAP_SLUGS.includes(value), { message: "unknown map" });
+
 export const LobbyCreateSchema = z.object({
   title: z.string().trim().min(1).max(40),
-  mapSlug: z.string().trim().min(1).max(64),
+  mapSlug: MapSlugSchema,
   rules: RulesSchema,
   maxSeats: z.number().int().min(2).max(6),
 });
@@ -117,7 +131,7 @@ export const SeatPatchSchema = z.union([
 export const LobbyPatchSchema = z
   .object({
     title: z.string().trim().min(1).max(40).optional(),
-    mapSlug: z.string().trim().min(1).max(64).optional(),
+    mapSlug: MapSlugSchema.optional(),
     rules: RulesSchema.optional(),
     seats: z.array(SeatPatchSchema).max(6).optional(),
   })

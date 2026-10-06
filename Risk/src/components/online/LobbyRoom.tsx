@@ -8,6 +8,7 @@ import type { ChatSend } from "@/ports/sync";
 import type { LobbyRoomBody } from "@/net/types";
 
 import ChatColumn from "./ChatColumn";
+import { mapLabel, PLAYABLE_MAP_SLUGS } from "./maps";
 import { useScreenPoll } from "./useScreenPoll";
 
 /**
@@ -150,12 +151,34 @@ export default function LobbyRoom({ code }: LobbyRoomProps) {
             {data?.title ?? "Lobby"}
           </h1>
           <p className="text-sm text-[color:var(--text-muted)]">
-            {data?.mapSlug ?? "—"} · Turn timer:{" "}
+            <span data-testid="lobby-map">{data === null ? "—" : mapLabel(data.mapSlug)}</span> ·
+            Turn timer:{" "}
             {data?.rules.turnSeconds === null || data === null
               ? "off"
               : `${data.rules.turnSeconds}s`}{" "}
             · AI: {data?.rules.aiDifficulty ?? "—"}
           </p>
+          {isHost && data !== null && (
+            <label className="mt-2 flex items-center gap-2 text-sm text-[color:var(--text-muted)]">
+              Map
+              <select
+                data-testid="lobby-map-picker"
+                value={data.mapSlug}
+                disabled={busy}
+                onChange={(event) => void post("", { mapSlug: event.target.value })}
+                className="rounded-lg border border-[color:var(--chrome-line)] bg-[color:var(--chrome-900)] px-2 py-1 text-[color:var(--text)]"
+              >
+                {PLAYABLE_MAP_SLUGS.map((slug) => (
+                  <option key={slug} value={slug}>
+                    {mapLabel(slug)}
+                  </option>
+                ))}
+                {!PLAYABLE_MAP_SLUGS.includes(data.mapSlug) && (
+                  <option value={data.mapSlug}>{mapLabel(data.mapSlug)}</option>
+                )}
+              </select>
+            </label>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

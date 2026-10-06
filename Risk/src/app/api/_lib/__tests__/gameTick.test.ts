@@ -215,7 +215,7 @@ describe("the MAX_TICK_ACTIONS cap", () => {
     // that can stop it is the cap.
     const gameId = await createGame({
       lobbyId: null,
-      mapSlug: "ring",
+      mapSlug: "tiny4",
       rules: TEST_RULES,
       seats: [
         {
@@ -257,7 +257,7 @@ describe("the MAX_TICK_ACTIONS cap", () => {
   it("keeps games.seq in step with the log it just appended", async () => {
     const gameId = await createGame({
       lobbyId: null,
-      mapSlug: "ring",
+      mapSlug: "tiny4",
       rules: TEST_RULES,
       seats: [
         { seat: 0, kind: "bot", playerId: null, tier: "easy", displayName: "A", colour: "red" },
@@ -443,7 +443,7 @@ describe("the tick stops at a finished game", () => {
     try {
       const gameId = await createGame({
         lobbyId: null,
-        mapSlug: "ring",
+        mapSlug: "tiny4",
         rules: TEST_RULES,
         seats: [
           { seat: 0, kind: "bot", playerId: null, tier: "easy", displayName: "A", colour: "red" },

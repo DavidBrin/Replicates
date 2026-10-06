@@ -95,7 +95,7 @@ describe("POST /api/lobbies", () => {
       req("/api/lobbies", {
         method: "POST",
         cookie: host.cookie,
-        body: { title: "Second", mapSlug: "ring", rules: TEST_RULES, maxSeats: 2 },
+        body: { title: "Second", mapSlug: "tiny4", rules: TEST_RULES, maxSeats: 2 },
       }),
     );
     expect(response.status).toBe(409);
@@ -106,7 +106,7 @@ describe("POST /api/lobbies", () => {
     expect(
       (
         await routes.createLobby(
-          req("/api/lobbies", { method: "POST", body: { title: "x", mapSlug: "ring", maxSeats: 2 } }),
+          req("/api/lobbies", { method: "POST", body: { title: "x", mapSlug: "tiny4", maxSeats: 2 } }),
         )
       ).status,
     ).toBe(401);
@@ -118,7 +118,7 @@ describe("POST /api/lobbies", () => {
           req("/api/lobbies", {
             method: "POST",
             cookie: host.cookie,
-            body: { title: "", mapSlug: "ring", rules: TEST_RULES, maxSeats: 2 },
+            body: { title: "", mapSlug: "tiny4", rules: TEST_RULES, maxSeats: 2 },
           }),
         )
       ).status,
@@ -129,7 +129,7 @@ describe("POST /api/lobbies", () => {
           req("/api/lobbies", {
             method: "POST",
             cookie: host.cookie,
-            body: { title: "ok", mapSlug: "ring", rules: TEST_RULES, maxSeats: 9 },
+            body: { title: "ok", mapSlug: "tiny4", rules: TEST_RULES, maxSeats: 9 },
           }),
         )
       ).status,
@@ -144,7 +144,7 @@ describe("POST /api/lobbies", () => {
         cookie: host.cookie,
         body: {
           title: "ok",
-          mapSlug: "ring",
+          mapSlug: "tiny4",
           rules: { ...TEST_RULES, turnSeconds: 45 },
           maxSeats: 2,
         },
@@ -335,7 +335,7 @@ describe("PATCH /api/lobbies/:code", () => {
         cookie: host.cookie,
         body: {
           title: "Waterloo",
-          mapSlug: "ring",
+          mapSlug: "tiny4",
           rules: { ...TEST_RULES, fogOfWar: true, turnSeconds: 120 },
         },
       }),

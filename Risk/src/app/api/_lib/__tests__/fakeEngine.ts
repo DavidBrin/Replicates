@@ -78,7 +78,7 @@ export function fakeMapDef(count = 6): MapDef {
     border: territories.map((territory) => territory.index),
   };
   return {
-    slug: "ring",
+    slug: "tiny4",
     name: "Ring",
     viewBox: [0, 0, 100, 100],
     territories,
@@ -229,7 +229,7 @@ export function fakeState(options: FakeStateOptions = {}): GameState {
 
   return {
     version: 1,
-    mapSlug: "ring",
+    mapSlug: "tiny4",
     rules,
     seats,
     turnOrder: seats.map((seat) => seat.seat),

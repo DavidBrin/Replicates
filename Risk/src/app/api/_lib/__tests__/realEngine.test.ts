@@ -10,7 +10,11 @@ import { MAX_TICK_ACTIONS } from "../gameState";
 import { fakeMapFile } from "./fakeEngine";
 import {
   actionId,
+  humanVsBotGame,
+  mustClaim,
   poll,
+  req,
+  routes,
   startHarness,
   submit,
   TEST_RULES,
@@ -522,5 +526,98 @@ describe("fog with the real viewFor", () => {
       expect(seat.cards).toEqual([]);
       expect(typeof seat.cardCount).toBe("number");
     }
+  });
+});
+
+describe("the whole server path, with nothing injected at all", () => {
+  beforeEach(async () => {
+    // No partial engine: `loadMapDef` goes through S3's own `loadMapFile` and
+    // `@/engine/map`'s `loadMap`, which is the deployed path.
+    harness = await startHarness(realServerEngine);
+  });
+
+  it("creates and plays a game on a catalogue slug", async () => {
+    const game = await twoPlayerGame(TEST_RULES);
+    expect(await rawLogOf(harness.db, game.gameId)).toHaveLength(1);
+
+    const stored = await harness.db.query<{ map_id: string; snapshot: GameState }>(
+      "select map_id, snapshot from games where id = $1",
+      [game.gameId],
+    );
+    expect(stored[0]?.map_id).toBe("tiny4");
+    expect(stored[0]?.snapshot.mapSlug).toBe("tiny4");
+
+    // One real turn, by whichever seat the opening handed it to.
+    const { session, seat } = await whoseTurn(game);
+    const cold = await pollGame({
+      gameId: game.gameId,
+      playerId: session.playerId,
+      since: 0,
+      chatSince: 0,
+    });
+    if (cold.kind !== "body" || !cold.body.snapshot) throw new Error("expected a cold snapshot");
+    const state = cold.body.snapshot;
+    const mine = state.territories.findIndex((row) => row.owner === seat);
+
+    const response = await submit(session, game.gameId, {
+      clientActionId: actionId("real-draft"),
+      kind: "action",
+      action: { type: "DRAFT", seat, territory: mine, count: state.troopsToPlace },
+    });
+    expect(response.status).toBe(200);
+
+    // And the log still replays, through the map the catalogue loaded.
+    const { loadMapFile } = await import("@/content/maps");
+    const { loadMap } = await import("@/engine/map");
+    replay(await rawLogOf(harness.db, game.gameId), loadMap(await loadMapFile("tiny4")));
+  });
+
+  it("refuses a lobby on a slug the catalogue does not have", async () => {
+    const host = await mustClaim("Napoleon");
+    const response = await routes.createLobby(
+      req("/api/lobbies", {
+        method: "POST",
+        cookie: host.cookie,
+        body: { title: "Nowhere", mapSlug: "atlantis", rules: TEST_RULES, maxSeats: 2 },
+      }),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("runs a real bot seat on a catalogue map, with no cron", async () => {
+    const game = await humanVsBotGame(TEST_RULES);
+
+    if ((await currentSeatOf(game.gameId)) === 0) {
+      // The human holds the first turn: play it out so the bot's comes up.
+      const cold = await pollGame({
+        gameId: game.gameId,
+        playerId: game.a.playerId,
+        since: 0,
+        chatSince: 0,
+      });
+      if (cold.kind !== "body" || !cold.body.snapshot) throw new Error("expected a snapshot");
+      const state = cold.body.snapshot;
+      const mine = state.territories.findIndex((row) => row.owner === 0);
+      const turn = [
+        ["rd", { type: "DRAFT", seat: 0, territory: mine, count: state.troopsToPlace }],
+        ["rp", { type: "END_PHASE", seat: 0 }],
+        ["rt", { type: "END_TURN", seat: 0 }],
+      ] as const;
+      for (const [label, action] of turn) {
+        await submit(game.a, game.gameId, {
+          clientActionId: actionId(label),
+          kind: "action",
+          action,
+        });
+      }
+    }
+
+    const before = await rawLogOf(harness.db, game.gameId);
+    const response = await poll(game.a, game.gameId, before.at(-1)!.seq);
+    expect(response.status).toBe(200);
+
+    const after = await rawLogOf(harness.db, game.gameId);
+    expect(after.length).toBeGreaterThan(before.length);
+    expect(after.some((row) => row.actor === "bot")).toBe(true);
   });
 });

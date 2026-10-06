@@ -1,4 +1,6 @@
-import type { MapDef, MapFile } from "@/engine/types";
+import { loadMapFile } from "@/content/maps";
+import { loadMap } from "@/engine/map";
+import type { MapDef } from "@/engine/types";
 
 /**
  * Resolving a `mapSlug` to a loaded `MapDef` in the browser.
@@ -8,15 +10,12 @@ import type { MapDef, MapFile } from "@/engine/types";
  * geometry (§4.7) — so the online screen has to load the map itself before it
  * can fold anything.
  *
- * Both halves are S3's: `src/content/maps/index.ts`'s `loadMapFile` and
- * `@/engine/map`'s `loadMap`. They are reached through variable specifiers so
- * this module typechecks and bundles before that slice lands, and a missing
- * one surfaces as a readable status on the screen rather than a blank page.
- * Each becomes a plain static import the moment S3's barrels are there.
+ * Both halves are S3's: `src/content/maps/index.ts`'s `loadMapFile`, which is
+ * a per-slug **dynamic** import so no board's geometry lands in the shared
+ * bundle (D40, F6), and `@/engine/map`'s `loadMap`, which unions the sea
+ * links in (F45). The result is memoised per tab, because the map is
+ * immutable and a 42-territory `MapDef` is not free to rebuild.
  */
-
-const CATALOGUE_SPECIFIER = "@/content/maps";
-const ENGINE_MAP_SPECIFIER = "@/engine/map";
 
 const cache = new Map<string, Promise<MapDef>>();
 
@@ -35,14 +34,10 @@ export function loadMapForSlug(slug: string): Promise<MapDef> {
 
   const loading = (async () => {
     try {
-      const catalogue = (await import(
-        /* webpackIgnore: true */ /* turbopackIgnore: true */ CATALOGUE_SPECIFIER
-      )) as { loadMapFile(slug: string): Promise<MapFile> };
-      const engineMap = (await import(
-        /* webpackIgnore: true */ /* turbopackIgnore: true */ ENGINE_MAP_SPECIFIER
-      )) as { loadMap(file: MapFile): MapDef };
-      return engineMap.loadMap(await catalogue.loadMapFile(slug));
+      return loadMap(await loadMapFile(slug));
     } catch (cause) {
+      // An unknown slug, or a map the validator refuses: either way the
+      // screen says so rather than rendering an empty board.
       throw new MapUnavailableError(slug, cause);
     }
   })().catch((error: unknown) => {

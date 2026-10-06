@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
+import { PLAYABLE_MAP_SLUGS } from "@/components/online/maps";
 import { DEFAULT_RULES, TURN_SECONDS, type Rules } from "@/engine/types";
 import type { ChatSend } from "@/ports/sync";
 import type { LobbyBrowseBody } from "@/net/types";
@@ -62,7 +63,7 @@ export default function LobbyBrowser() {
         cache: "no-store",
         body: JSON.stringify({
           title: `${data?.you.displayName ?? "A"}'s game`,
-          mapSlug: "classic",
+          mapSlug: PLAYABLE_MAP_SLUGS[0] ?? "classic-world",
           rules: ONLINE_RULES,
           maxSeats: 6,
         }),
