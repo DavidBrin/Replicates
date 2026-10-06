@@ -12,7 +12,7 @@ export const ENGINE_ENTRY_POINTS: readonly string[] = [
   "types.ts", "index.ts", "prng.ts", "resolver/index.ts",
   "reducer.ts", "hash.ts",
   "odds/index.ts", "bots/index.ts",
-  // S3: "map/index.ts"
+  "map/index.ts",
 ];
 
 /**

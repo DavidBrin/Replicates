@@ -1,0 +1,875 @@
+{
+ "slug": "europe",
+ "name": "Europe",
+ "tagline": "44 territories from the Atlantic to the Urals",
+ "viewBox": "0 0 1600 1000",
+ "continents": [
+  {
+   "id": "central_europe",
+   "name": "Central Europe",
+   "bonus": 4,
+   "color": "#36B0EA",
+   "territories": [
+    "albania",
+    "bosnia_and_herz",
+    "croatia_slovenia",
+    "macedonia",
+    "montenegro_kosovo",
+    "serbia"
+   ]
+  },
+  {
+   "id": "north_west_europe",
+   "name": "North West Europe",
+   "bonus": 3,
+   "color": "#DA3A4F",
+   "territories": [
+    "iceland",
+    "ireland",
+    "north_west_russia",
+    "north_west_russia_ii",
+    "united_kingdom"
+   ]
+  },
+  {
+   "id": "north_east_europe",
+   "name": "North East Europe",
+   "bonus": 3,
+   "color": "#5FBF2A",
+   "territories": [
+    "belarus",
+    "finland",
+    "norway",
+    "south_east_russia",
+    "sweden"
+   ]
+  },
+  {
+   "id": "south_west_europe",
+   "name": "South West Europe",
+   "bonus": 4,
+   "color": "#9B4AE8",
+   "territories": [
+    "west_france",
+    "east_france",
+    "italy",
+    "portugal",
+    "west_spain",
+    "east_spain"
+   ]
+  },
+  {
+   "id": "south_east_europe",
+   "name": "South East Europe",
+   "bonus": 6,
+   "color": "#E08A24",
+   "territories": [
+    "bulgaria",
+    "cyprus",
+    "georgia_armenia",
+    "greece",
+    "moldova",
+    "romania",
+    "turkey",
+    "west_ukraine",
+    "east_ukraine"
+   ]
+  },
+  {
+   "id": "north_mid_europe",
+   "name": "North Mid Europe",
+   "bonus": 5,
+   "color": "#F0C33A",
+   "territories": [
+    "estonia",
+    "hungary",
+    "latvia",
+    "lithuania",
+    "poland",
+    "slovakia"
+   ]
+  },
+  {
+   "id": "mid_west_europe",
+   "name": "Mid West Europe",
+   "bonus": 6,
+   "color": "#2AC4A8",
+   "territories": [
+    "austria",
+    "belgium_luxembourg",
+    "czechia",
+    "denmark",
+    "germany",
+    "netherlands",
+    "switzerland"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "albania",
+   "name": "Albania",
+   "continent": "central_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "greece",
+    "macedonia",
+    "montenegro_kosovo"
+   ],
+   "d": "M990.7 777.8L991 785.7L983.9 790L983.6 799.9L974.3 814.7L970 812.6L969 805.9L955.2 795.6L951.8 781.2L951.8 760.7L954 751.3L949.7 746.6L947.3 737.1L955.6 722.4L957.7 728L963.6 725.4L969.3 733.4L975 736.4L977.7 747.3L975.8 757.5L980.4 770.4Z",
+   "tokenX": 968.8,
+   "tokenY": 782.3,
+   "labelX": 968.8,
+   "labelY": 808.3
+  },
+  {
+   "id": "austria",
+   "name": "Austria",
+   "continent": "mid_west_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "croatia_slovenia",
+    "czechia",
+    "germany",
+    "hungary",
+    "italy",
+    "slovakia",
+    "switzerland"
+   ],
+   "d": "M715.5 594.1L717.4 582.2L723.9 580.6L735.5 588.5L738.1 581L757.6 582.2L773 577.1L783.5 578L790.9 583.8L792.5 579L788 560.7L795.5 557.1L802.2 544.3L819.1 553.2L830.4 541.8L837.8 539.7L855.5 548.2L865.6 546.8L876.2 552L877.5 576.8L865.2 576.9L869.9 583L860.6 606.1L841.3 606.7L830.8 613.2L780 603.6L774.4 593.8L753 598.7L750.8 604.1L725.8 599.3Z",
+   "tokenX": 835.2,
+   "tokenY": 577.9,
+   "labelX": 835.2,
+   "labelY": 603.9
+  },
+  {
+   "id": "belarus",
+   "name": "Belarus",
+   "continent": "north_east_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "latvia",
+    "lithuania",
+    "poland",
+    "south_east_russia",
+    "west_ukraine"
+   ],
+   "d": "M1191.5 423.3L1184.6 429L1163.9 430.6L1179.7 456.4L1161.8 458L1156.5 463.8L1157.9 477.3L1130 476L1123.1 469.7L1116.1 474.4L1043.8 461.4L1027.5 462.1L1007 470.4L996.2 446.1L1008 440.7L996.1 408.7L1016.2 408.9L1037.1 399.1L1039.2 384.6L1054.6 376.4L1050.4 365L1082 351L1104.9 357.4L1109.1 363.6L1119.3 360.6L1140.7 366.6L1145.5 378.6L1142.5 385.4L1168.9 407L1168.7 411.8Z",
+   "tokenX": 1093.6,
+   "tokenY": 415.4,
+   "labelX": 1093.6,
+   "labelY": 441.4
+  },
+  {
+   "id": "belgium_luxembourg",
+   "name": "Belgium & Luxembourg",
+   "continent": "mid_west_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "east_france",
+    "germany",
+    "netherlands"
+   ],
+   "d": "M638.3 491.3L636.6 509.7L631 510.8L629.3 526.2L610 513.6L598.9 515.8L583.6 502.8L573.4 491.9L563.4 491.5L560.2 482L577.1 476.6L592.8 478.8L612.4 473.2L626.3 484.9ZM636.6 509.7L641.2 515.9L640.4 528L634.2 528.6L629.3 526.2L631 510.8Z",
+   "tokenX": 607.6,
+   "tokenY": 494.5,
+   "labelX": 607.6,
+   "labelY": 520.5
+  },
+  {
+   "id": "bosnia_and_herz",
+   "name": "Bosnia and Herz.",
+   "continent": "central_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "croatia_slovenia",
+    "montenegro_kosovo",
+    "serbia"
+   ],
+   "d": "M929 723.6L907.8 712.3L898.1 700L888.8 693.5L877.5 682.5L871.8 673.4L859.6 659.8L863.3 647.7L871.9 654.4L876.2 648.4L886.6 647.7L906.3 652.5L921.7 652.1L932.5 658.6L940.6 658.5L936.4 671.3L948.4 682.5L946.5 696.4L941.4 697.7L937.4 700.4L930.7 707.3Z",
+   "tokenX": 911.2,
+   "tokenY": 677.9,
+   "labelX": 911.2,
+   "labelY": 703.9
+  },
+  {
+   "id": "bulgaria",
+   "name": "Bulgaria",
+   "continent": "south_east_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "greece",
+    "macedonia",
+    "romania",
+    "serbia",
+    "turkey"
+   ],
+   "d": "M1016.6 676.8L1024.6 688.9L1033.1 686.7L1051 691.3L1084.4 692.8L1094.6 685.4L1120.1 678.5L1138.1 689.2L1151.9 692.3L1142 704.5L1136.8 725.7L1146.5 742.7L1126.3 738.7L1104.3 748.1L1106 763L1085.5 765.9L1068 755.4L1050.6 763.7L1033.5 762.8L1029.6 743L1017 733.4L1020.3 729.2L1017.5 725.6L1020.2 716.2L1027.7 706.9L1015.2 694.2L1011.9 683.4Z",
+   "tokenX": 1056.8,
+   "tokenY": 724.5,
+   "labelX": 1056.8,
+   "labelY": 750.5
+  },
+  {
+   "id": "croatia_slovenia",
+   "name": "Croatia & Slovenia",
+   "continent": "central_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "austria",
+    "bosnia_and_herz",
+    "hungary",
+    "italy",
+    "montenegro_kosovo",
+    "serbia"
+   ],
+   "d": "M926.9 728.6L868.9 698.2L848.2 676.6L852.5 674.4L840 652.3L825.2 647.7L819.4 660.3L811.7 640.5L831.9 636.1L848.6 641.4L856.5 618.8L873.4 611.2L898.6 627L925.4 628.2L940 647.7L932.5 658.6L886.6 647.7L871.9 654.4L863.3 647.7L859.6 659.8L907.8 712.3L929 723.6ZM868.2 601.5L873.4 611.2L856.5 618.8L848.6 641.4L812.5 640L817.3 637.4L812.3 611L830.8 613.2Z",
+   "tokenX": 873.9,
+   "tokenY": 633,
+   "labelX": 873.9,
+   "labelY": 659
+  },
+  {
+   "id": "cyprus",
+   "name": "Cyprus",
+   "continent": "south_east_europe",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M1286.3 954L1291 955.7L1297.1 952.9L1301.7 953.3L1303.7 955.2L1304.6 958.4L1305.6 957.2L1309.3 957.9L1313.5 955.5L1316.3 956.6L1317.3 959.1L1294.5 972L1282.3 967.9L1275.2 955.2Z",
+   "tokenX": 1294.5,
+   "tokenY": 962.8,
+   "labelX": 1294.5,
+   "labelY": 988.8
+  },
+  {
+   "id": "czechia",
+   "name": "Czechia",
+   "continent": "mid_west_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "austria",
+    "germany",
+    "poland",
+    "slovakia"
+   ],
+   "d": "M914.5 527.1L908.1 527.1L905.3 532.1L900.4 533.3L899.8 539.6L895.4 543.5L888.3 546.4L878.6 545.9L876.2 552L865.6 546.8L855.5 548.2L837.8 539.7L830.4 541.8L819.1 553.2L802.2 544.3L777.4 525.7L769.7 505.9L807.1 488L812 482.8L818 485.9L827.2 483.1L838.3 491.8L854.5 494.2L854 501.7L866.2 507.3L868.6 500.3L883.8 503.3L886.7 511.9L903 513.5Z",
+   "tokenX": 814.8,
+   "tokenY": 516.9,
+   "labelX": 814.8,
+   "labelY": 542.9
+  },
+  {
+   "id": "denmark",
+   "name": "Denmark",
+   "continent": "mid_west_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "germany"
+   ],
+   "d": "M711.4 381.1L698.4 385L682.6 381.6L673.3 367.5L671.2 341.8L674.1 335.1L679.5 327.7L697.1 326.1L703.8 319.3L719.4 312.4L719.8 325L714.5 333L717.4 340L728.8 343.8L724.6 353.2L718.2 350.5L704.8 368.7ZM759.3 352.5L767 365.1L756.5 385.7L733.7 371.4L730 360.8Z",
+   "tokenX": 693.2,
+   "tokenY": 348,
+   "labelX": 693.2,
+   "labelY": 374
+  },
+  {
+   "id": "estonia",
+   "name": "Estonia",
+   "continent": "north_mid_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "latvia",
+    "south_east_russia"
+   ],
+   "d": "M1060.2 270.5L1064.1 274.6L1053 288.4L1064 310.9L1057 318.7L1040.3 318.6L1021.2 309.6L1011.8 306.6L995.5 310.9L995 296.6L988.3 299.6L974 291.1L969.6 277.3L993.4 270.8L1017.6 267.3L1039.9 271.2Z",
+   "tokenX": 1032.2,
+   "tokenY": 291.4,
+   "labelX": 1032.2,
+   "labelY": 317.4
+  },
+  {
+   "id": "finland",
+   "name": "Finland",
+   "continent": "north_east_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "norway",
+    "south_east_russia",
+    "sweden"
+   ],
+   "d": "M1105 204.5L1056.3 246.5L957.3 261.8L943.5 249.1L923.2 241.5L923.4 219.1L910.2 199L916.9 186.2L931.4 172.6L980.8 145.3L976.8 136.6L948.7 127L940.7 119.2L933.1 89.1L876 67.2L885.7 62.4L907.8 72.1L951.4 75.7L966.4 67.5L971.6 54.2L997.4 48.2L1022.2 55.3L1019.7 81L1051.2 93.7L1038.7 108.3L1066.7 131.1L1059.2 148.7L1080.5 164.4L1076.7 178.3L1109.1 193.2Z",
+   "tokenX": 1018.1,
+   "tokenY": 191.9,
+   "labelX": 1018.1,
+   "labelY": 217.9
+  },
+  {
+   "id": "west_france",
+   "name": "West France",
+   "continent": "south_west_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "east_france",
+    "east_spain"
+   ],
+   "d": "M559.7 731L548.2 732.7L522.4 719.3L514.1 725.6L472.4 712.2L463.4 700.7L475.3 683L480 625.2L457.4 595.2L441.3 580.9L408.1 570L406.5 549.6L434.8 543.5L471.2 550.7L464.7 519.3L485.1 531.2L535.3 509.7L541.5 487.4L559.7 482.1Z",
+   "tokenX": 510,
+   "tokenY": 582.1,
+   "labelX": 510,
+   "labelY": 608.1
+  },
+  {
+   "id": "east_france",
+   "name": "East France",
+   "continent": "south_west_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "belgium_luxembourg",
+    "east_spain",
+    "germany",
+    "italy",
+    "switzerland",
+    "west_france"
+   ],
+   "d": "M559.7 731L560.2 482L563.4 491.5L573.4 491.9L598.9 515.8L610 513.6L650.9 535.2L682.4 540.3L672.4 559.4L670.5 579.5L654.5 581.7L655.5 588.9L640 604.9L640.1 617.8L650.5 613.3L658.6 625.9L665 644.9L657.6 653.7L664.2 676.3L676.6 680L674.5 692.7L654.6 709.4L609.7 701.4L576.9 711L574.5 728.8ZM719.7 712.9L724.8 738.4L718.3 761.5L707.7 755.4L701.5 735.3Z",
+   "tokenX": 608.3,
+   "tokenY": 567.5,
+   "labelX": 608.3,
+   "labelY": 593.5
+  },
+  {
+   "id": "georgia_armenia",
+   "name": "Georgia & Armenia",
+   "continent": "south_east_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "south_east_russia",
+    "turkey"
+   ],
+   "d": "M1411.1 700.3L1413.2 696.8L1433.4 701.9L1467.8 706.7L1501.9 720.9L1507.1 726.4L1519.9 721.7L1531.1 724.8L1540.3 765L1508.8 770.2L1483.5 755.4L1459.4 756.8L1460.2 744.1L1450.1 723.7L1434.7 712.8L1421.4 709.4ZM1550.3 811.2L1545.7 812L1534.7 803.1L1515.9 795.6L1515 780.8L1508.8 770.2L1539.8 765.5L1540.6 766.5ZM1553.2 824.9L1545.7 812L1550.3 811.2ZM1540.6 766.5L1539.8 765.5L1540.3 765Z",
+   "tokenX": 1514,
+   "tokenY": 747,
+   "labelX": 1514,
+   "labelY": 773
+  },
+  {
+   "id": "germany",
+   "name": "Germany",
+   "continent": "mid_west_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "austria",
+    "belgium_luxembourg",
+    "czechia",
+    "denmark",
+    "east_france",
+    "netherlands",
+    "poland",
+    "switzerland"
+   ],
+   "d": "M790.9 583.8L773 577.1L738.1 581L735.5 588.5L693.4 573.5L689.2 579.6L670.5 579.5L682.4 540.3L640.4 528L633.6 463L646.3 463L651.2 453L654.8 414.4L676.4 418.7L689.8 405.9L682.6 381.6L711.4 381.1L712.4 391L733.8 397L734.3 406.2L766.2 394.2L801.3 412.7L807.4 426L802.3 433L827.2 483.1L812 482.8L769.7 505.9L777.4 525.7L802.2 544.3L788 560.7Z",
+   "tokenX": 713.4,
+   "tokenY": 473,
+   "labelX": 713.4,
+   "labelY": 499
+  },
+  {
+   "id": "greece",
+   "name": "Greece",
+   "continent": "south_east_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "albania",
+    "bulgaria",
+    "macedonia",
+    "turkey"
+   ],
+   "d": "M1104.3 748.1L1116.4 756.1L1106.8 778.3L1080.3 774.6L1053.3 782.5L1071.3 799.5L1060.1 804.4L1047.2 804.5L1033.3 788.8L1029.7 795.5L1050 828L1041.9 834.7L1068.9 857.8L1071.2 875.3L1048.6 867.1L1057.1 882.9L1042.6 886.2L1054.2 913.7L1017.9 900.5L974.3 814.7L990.7 777.8L1068 755.4L1085.5 765.9L1106 763ZM1132.3 948.9L1130.3 958.3L1096.2 961L1066.3 949.6L1069.4 936.2L1083.5 946.8Z",
+   "tokenX": 1012.3,
+   "tokenY": 823.9,
+   "labelX": 1012.3,
+   "labelY": 849.9
+  },
+  {
+   "id": "hungary",
+   "name": "Hungary",
+   "continent": "north_mid_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "austria",
+    "croatia_slovenia",
+    "romania",
+    "serbia",
+    "slovakia",
+    "west_ukraine"
+   ],
+   "d": "M988.5 556.9L1001.7 564.5L1004.3 572.1L991.6 578L983.7 597.2L972.8 616.6L955.6 622L941.6 620.7L925.4 628.2L917.5 632.6L898.6 627L880.8 614.7L873.4 611.2L868.2 601.5L864.4 601.2L869.9 583L865.2 576.9L877.5 576.8L878 565.3L889.8 572.5L898.3 575.6L916.3 572.1L917.4 566.5L926 565.6L936.1 561.3L938.7 563.1L948.5 559.6L952.9 553L959.8 551.3L984.3 559.8Z",
+   "tokenX": 951.7,
+   "tokenY": 591,
+   "labelX": 951.7,
+   "labelY": 617
+  },
+  {
+   "id": "iceland",
+   "name": "Iceland",
+   "continent": "north_west_europe",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M239.3 118L233.2 131L252.3 145L225.8 161L169.1 175.6L152.1 179.5L127.7 176.3L76.2 169.5L96.7 160.2L58 149.9L92 145.9L92.5 139.8L54.5 135L70.1 121.8L98.7 118.9L124.7 132.6L154.9 121.6L177.1 127.3L209 116.6Z",
+   "tokenX": 155.1,
+   "tokenY": 150.7,
+   "labelX": 155.1,
+   "labelY": 176.7
+  },
+  {
+   "id": "ireland",
+   "name": "Ireland",
+   "continent": "north_west_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "united_kingdom"
+   ],
+   "d": "M377.2 409.8L379.9 428.5L362.9 452.1L324.5 467.9L294.7 463.9L313.6 436.1L304.4 409.5L334 389.2L350.3 377.3L353.8 391L348.8 404.9L361.7 404.5Z",
+   "tokenX": 340.6,
+   "tokenY": 431.2,
+   "labelX": 340.6,
+   "labelY": 457.2
+  },
+  {
+   "id": "italy",
+   "name": "Italy",
+   "continent": "south_west_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "austria",
+    "croatia_slovenia",
+    "east_france",
+    "switzerland"
+   ],
+   "d": "M884 865L874.3 867.5L881.9 834.9L863.3 801.8L761.7 732.3L736.7 686L706.5 673L674.5 692.7L658.6 625.9L705.8 624.6L737.1 600.1L774.4 593.8L812.3 611L817.3 637.4L781.8 643.5L790.2 681L934 798.2L930.6 809L896 789.8L887.9 809.5L904 836.8ZM863.3 907.5L798.6 876.6L800.9 860.7L869.8 857.5ZM718.2 766.7L732.9 788.1L731.5 828.4L711.8 836.7L694.3 774.5Z",
+   "tokenX": 742.5,
+   "tokenY": 645.6,
+   "labelX": 742.5,
+   "labelY": 671.6
+  },
+  {
+   "id": "latvia",
+   "name": "Latvia",
+   "continent": "north_mid_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "belarus",
+    "estonia",
+    "lithuania",
+    "south_east_russia"
+   ],
+   "d": "M1057 318.7L1068 324.3L1072.3 336.3L1082 351L1062 360.7L1050.4 365L1028.3 352.8L1017.1 351.2L1013.3 345.9L993.7 348.4L959.2 346.8L937.1 354.5L934.8 335.7L942.1 320.2L959.7 311.8L979 330.2L995.2 329.7L995.5 310.9L1011.8 306.6L1021.2 309.6L1040.3 318.6Z",
+   "tokenX": 1050.7,
+   "tokenY": 340.3,
+   "labelX": 1050.7,
+   "labelY": 366.3
+  },
+  {
+   "id": "lithuania",
+   "name": "Lithuania",
+   "continent": "north_mid_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "belarus",
+    "latvia",
+    "poland",
+    "south_east_russia"
+   ],
+   "d": "M1050.4 365L1054.6 376.4L1039.2 384.6L1037.1 399.1L1016.2 408.9L996.1 408.7L989.7 400.7L978.7 397.9L975.9 391.3L976.9 384.3L967.1 380.2L944.8 375.8L937.1 354.5L959.2 346.8L993.7 348.4L1013.3 345.9L1017.1 351.2L1028.3 352.8Z",
+   "tokenX": 1009.8,
+   "tokenY": 379.4,
+   "labelX": 1009.8,
+   "labelY": 405.4
+  },
+  {
+   "id": "macedonia",
+   "name": "Macedonia",
+   "continent": "central_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "albania",
+    "bulgaria",
+    "greece",
+    "montenegro_kosovo",
+    "serbia"
+   ],
+   "d": "M1017 733.4L1029.6 743L1033.5 762.8L1029.2 763.8L1026 769.1L1013.5 768.5L1005.5 775L990.7 777.8L980.4 770.4L975.8 757.5L977.7 747.3L980.6 747.5L981 741.4L994 736.8L999 735.6L1006.6 733.9Z",
+   "tokenX": 998.4,
+   "tokenY": 755.9,
+   "labelX": 998.4,
+   "labelY": 781.9
+  },
+  {
+   "id": "moldova",
+   "name": "Moldova",
+   "continent": "south_east_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "romania",
+    "west_ukraine"
+   ],
+   "d": "M1088.4 562.5L1092.9 558.4L1107 555.7L1124.5 564.4L1133.8 565.4L1145 573L1145 582.6L1153.8 587.2L1159.1 599.1L1168 606.3L1167.3 610.5L1171.9 613.5L1166.4 615.6L1153.1 614.7L1150.3 610.8L1146.1 613.1L1148.5 618.2L1144 627.3L1141.6 637.3L1136.5 640.4L1130.4 627.2L1130.8 615L1128.1 602.4L1112.6 585.5L1103.6 573.6L1095.5 565.3Z",
+   "tokenX": 1129.5,
+   "tokenY": 581.1,
+   "labelX": 1129.5,
+   "labelY": 607.1
+  },
+  {
+   "id": "montenegro_kosovo",
+   "name": "Montenegro & Kosovo",
+   "continent": "central_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "albania",
+    "bosnia_and_herz",
+    "croatia_slovenia",
+    "macedonia",
+    "serbia"
+   ],
+   "d": "M949.7 746.6L944.7 744.3L937.3 734.6L926.9 728.6L929 723.6L930.7 707.3L941.4 697.7L951.6 706.9L959.4 710L968.7 716.2L963.6 725.4L957.7 728L955.6 722.4L947.3 737.1ZM977.7 747.3L975 736.4L969.3 733.4L963.6 725.4L967.1 718.8L972.3 716.6L974.4 706.8L978.3 705.1L998.9 722.8L1002 722.6L998 733.4L999 735.6L981 741.4L980.6 747.5Z",
+   "tokenX": 942.9,
+   "tokenY": 717.6,
+   "labelX": 942.9,
+   "labelY": 743.6
+  },
+  {
+   "id": "netherlands",
+   "name": "Netherlands",
+   "continent": "mid_west_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "belgium_luxembourg",
+    "germany"
+   ],
+   "d": "M651 419.9L655.3 428.8L651.2 453L646.3 463L633.6 463L638.3 491.3L626.3 484.9L612.4 473.2L592.8 478.8L577.1 476.6L587.9 469.2L605.3 430.1L633.6 419.1Z",
+   "tokenX": 631.8,
+   "tokenY": 442.2,
+   "labelX": 631.8,
+   "labelY": 468.2
+  },
+  {
+   "id": "norway",
+   "name": "Norway",
+   "continent": "north_east_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "finland",
+    "south_east_russia",
+    "sweden"
+   ],
+   "d": "M619.5 291.6L602.8 213.1L704.4 158.4L774.4 91.5L847.3 54.4L913.9 47.5L937 33.2L1058.7 43.1L1037.5 47.8L1060.6 59L1032.5 66.3L1018.5 68L1022.2 55.3L997.4 48.2L971.6 54.2L951.4 75.7L885.7 62.4L865.1 68L865 80.2L810.1 87.6L760.5 152.1L762.8 167.7L744 167.3L734 187.5L751.9 228.4L748.3 255.4L726 285.2L711.4 270.6L674.3 298.3L647.8 303.9Z",
+   "tokenX": 662.8,
+   "tokenY": 240.7,
+   "labelX": 662.8,
+   "labelY": 266.7
+  },
+  {
+   "id": "poland",
+   "name": "Poland",
+   "continent": "north_mid_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "belarus",
+    "czechia",
+    "germany",
+    "lithuania",
+    "slovakia",
+    "south_east_russia",
+    "west_ukraine"
+   ],
+   "d": "M1001.2 540.1L974.2 527.8L959.2 531.7L948.6 528.9L936.5 534.8L924.3 525L915.9 528.8L903 513.5L886.7 511.9L883.8 503.3L868.6 500.3L866.2 507.3L854 501.7L854.5 494.2L838.3 491.8L816.8 465.9L817.6 456.6L802.3 433L807.4 426L801.3 412.7L870.8 384.4L892 388.8L894.4 395L989.7 400.7L1008 440.7L996.2 446.1L1021.4 493.9L1020.3 501.6L1010.2 504.8L993.9 527.6Z",
+   "tokenX": 935.3,
+   "tokenY": 460.1,
+   "labelX": 935.3,
+   "labelY": 486.1
+  },
+  {
+   "id": "portugal",
+   "name": "Portugal",
+   "continent": "south_west_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "west_spain"
+   ],
+   "d": "M317.9 734.6L323.1 749.2L336.6 749.2L340.6 745.4L353.9 746.5L359.8 761.5L348.9 769.6L347.9 793.2L344 797.6L342.6 812.1L332.5 814.5L341.1 832.9L334 853.1L341.8 862.3L329.2 882.3L330.8 892.6L321 900.7L308.8 896.3L296.5 899.7L301 875.4L299.6 856.4L289.3 853.5L284.1 841.9L286.8 821.8L296.6 810.7L304.4 780.2L304.5 767.4L300.3 756.6L299.8 746.5L308.4 738.9Z",
+   "tokenX": 312.2,
+   "tokenY": 833.1,
+   "labelX": 312.2,
+   "labelY": 859.1
+  },
+  {
+   "id": "romania",
+   "name": "Romania",
+   "continent": "south_east_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "bulgaria",
+    "hungary",
+    "moldova",
+    "serbia",
+    "west_ukraine"
+   ],
+   "d": "M1169.8 653.5L1159.9 659.8L1152.7 657L1151.9 692.3L1120.1 678.5L1094.6 685.4L1084.4 692.8L1024.6 688.9L1011.9 671.7L1016.5 666.8L1010.5 663.2L1004.3 669.7L990.2 661.2L987 649.2L972.5 642.4L969 633.2L955.6 622L972.8 616.6L991.6 578L1012.9 566.1L1040.9 569.3L1052.1 576.2L1074.8 569.2L1079.1 562.5L1088.4 562.5L1128.1 602.4L1136.5 640.4L1147.3 645.7L1157.1 641.1L1168 646Z",
+   "tokenX": 1068.8,
+   "tokenY": 632.5,
+   "labelX": 1068.8,
+   "labelY": 658.5
+  },
+  {
+   "id": "north_west_russia",
+   "name": "North West Russia",
+   "continent": "north_west_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_west_russia_ii"
+   ],
+   "d": "M238.7 66.1L59.2 66.4L38.9 148.1L238.7 148.1ZM67 36.9L238.7 37L238.7 28.2L69.4 28Z",
+   "tokenX": 161.9,
+   "tokenY": 107.1,
+   "labelX": 161.9,
+   "labelY": 133.1
+  },
+  {
+   "id": "north_west_russia_ii",
+   "name": "North West Russia II",
+   "continent": "north_west_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "north_west_russia",
+    "south_east_russia"
+   ],
+   "d": "M597.4 65.7L238.7 66.1L238.7 148.1L597.4 148.1ZM238.7 37L597.4 37L597.4 28.6L238.7 28.2Z",
+   "tokenX": 527.2,
+   "tokenY": 106.9,
+   "labelX": 527.2,
+   "labelY": 132.9
+  },
+  {
+   "id": "south_east_russia",
+   "name": "South East Russia",
+   "continent": "north_east_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "belarus",
+    "east_ukraine",
+    "estonia",
+    "finland",
+    "georgia_armenia",
+    "latvia",
+    "lithuania",
+    "north_west_russia_ii",
+    "norway",
+    "poland",
+    "west_ukraine"
+   ],
+   "d": "M1531.1 724.8L1326.3 647.4L1372.9 524.2L1179.7 456.4L1191.5 423.3L1057 318.7L1056.3 246.5L1109.1 193.2L1018.5 68L1254.5 98.3L1216.6 127.1L1116.3 114.5L1207 171.9L1200.6 144.7L1319.1 125.7L1288.8 77.1L1310.9 64.8L597.4 65.7L597.4 148.1L1348.1 148.1ZM1297.7 37.1L597.4 37L597.4 28.6ZM1321.8 640.9L1268.7 673.1L1231.5 645L1254.4 619.3ZM978.7 397.9L944.8 375.8L914.5 395.4Z",
+   "tokenX": 1253.8,
+   "tokenY": 299.7,
+   "labelX": 1253.8,
+   "labelY": 325.7
+  },
+  {
+   "id": "serbia",
+   "name": "Serbia",
+   "continent": "central_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "bosnia_and_herz",
+    "bulgaria",
+    "croatia_slovenia",
+    "hungary",
+    "macedonia",
+    "montenegro_kosovo",
+    "romania"
+   ],
+   "d": "M925.4 628.2L941.6 620.7L955.6 622L969 633.2L972.5 642.4L987 649.2L990.2 661.2L1004.3 669.7L1010.5 663.2L1016.5 666.8L1011.9 671.7L1016.6 676.8L1011.9 683.4L1015.2 694.2L1027.7 706.9L1020.2 716.2L1017 733.4L999 735.6L1002 722.6L978.3 705.1L967.1 718.8L968.7 716.2L941.4 697.7L946.5 696.4L948.4 682.5L936.4 671.3L940.6 658.5L932.5 658.6L940 647.7Z",
+   "tokenX": 973.5,
+   "tokenY": 680.4,
+   "labelX": 973.5,
+   "labelY": 706.4
+  },
+  {
+   "id": "slovakia",
+   "name": "Slovakia",
+   "continent": "north_mid_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "austria",
+    "czechia",
+    "hungary",
+    "poland",
+    "west_ukraine"
+   ],
+   "d": "M996.3 538.4L991.3 545.7L988.5 556.9L984.3 559.8L959.8 551.3L952.9 553L948.5 559.6L938.7 563.1L936.1 561.3L926 565.6L917.4 566.5L916.3 572.1L898.3 575.6L878 565.3L874.8 555.6L878.6 545.9L888.3 546.4L895.4 543.5L895.7 540.9L899.8 539.6L900.4 533.3L905.3 532.1L908.1 527.1L914.5 527.1L915.9 528.8L924.3 525L936.5 534.8L948.6 528.9L959.2 531.7L974.2 527.8Z",
+   "tokenX": 917.8,
+   "tokenY": 547.5,
+   "labelX": 917.8,
+   "labelY": 573.5
+  },
+  {
+   "id": "west_spain",
+   "name": "West Spain",
+   "continent": "south_west_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "east_spain",
+    "portugal"
+   ],
+   "d": "M326.2 691.1L353.7 696.4L419.7 700.3L419.7 906.1L403.3 905.7L388.3 916.8L379 928.6L367.4 926L358.9 915.4L352.7 897.5L330.8 892.6L329.2 882.3L341.8 862.3L334 853.1L341.1 832.9L332.5 814.5L342.6 812.1L344 797.6L347.9 793.2L348.9 769.6L359.8 761.5L353.9 746.5L340.6 745.4L336.6 749.2L323.1 749.2L317.9 734.6L299.8 746.5L301.9 725.3L293.2 712.4Z",
+   "tokenX": 379.2,
+   "tokenY": 846.3,
+   "labelX": 379.2,
+   "labelY": 872.3
+  },
+  {
+   "id": "east_spain",
+   "name": "East Spain",
+   "continent": "south_west_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_france",
+    "west_france",
+    "west_spain"
+   ],
+   "d": "M419.7 700.3L426.8 699.7L463.4 700.7L472.4 712.2L514.1 725.6L522.4 719.3L548.2 732.7L559.7 731L574.5 728.8L576 746.2L554.6 766.2L525.2 772.5L523.1 782.7L508.9 799.5L500 824.3L509 841.9L495.6 855.6L490.5 875.7L472.7 881.9L455.8 905.8L425.8 906.3L419.7 906.1Z",
+   "tokenX": 470.7,
+   "tokenY": 765.4,
+   "labelX": 470.7,
+   "labelY": 791.4
+  },
+  {
+   "id": "sweden",
+   "name": "Sweden",
+   "continent": "north_east_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "finland",
+    "norway"
+   ],
+   "d": "M933.1 89.1L948.7 127L918.1 132.7L903 147.1L908.5 159.9L848.1 195.8L839 227.3L876 256.3L861.9 282.9L841.9 288.5L839.7 329.3L831 352.7L806 350.3L796.5 370.2L772.8 371.4L726 285.2L748.3 255.4L751.9 228.4L738.3 216.9L734 187.5L744 167.3L762.8 167.7L768.3 159.3L760.5 152.1L810.1 87.6L827.5 87.7L830.5 77.2L865 80.2L865.1 68L876 67.2Z",
+   "tokenX": 837.6,
+   "tokenY": 140.1,
+   "labelX": 837.6,
+   "labelY": 166.1
+  },
+  {
+   "id": "switzerland",
+   "name": "Switzerland",
+   "continent": "mid_west_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "austria",
+    "east_france",
+    "germany",
+    "italy"
+   ],
+   "d": "M717.4 582.2L718.5 587.2L715.5 594.1L725.8 599.3L737.1 600.1L736 611.8L726.6 616.6L710 613L705.8 624.6L695.2 625.5L691.2 620.9L679.1 630.7L668.5 632L658.6 625.9L650.5 613.3L640.1 617.8L640 604.9L655.5 588.9L654.5 581.7L664.6 584.3L670.5 579.5L689.2 579.6L693.4 573.5Z",
+   "tokenX": 673.1,
+   "tokenY": 605.7,
+   "labelX": 673.1,
+   "labelY": 631.7
+  },
+  {
+   "id": "turkey",
+   "name": "Turkey",
+   "continent": "south_east_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "bulgaria",
+    "georgia_armenia",
+    "greece"
+   ],
+   "d": "M1561.1 890.3L1373.7 901.4L1364.5 932.5L1360.8 906.5L1325.9 902L1312.3 920L1276.9 923.5L1229.8 905.7L1210.1 922.4L1159.5 906.3L1122.7 858.2L1131.1 834.3L1114.6 819.6L1136.6 790.5L1172 789.3L1178.4 766.4L1222.8 770.3L1272.6 742.4L1310.3 741.7L1389.3 774.5L1483.5 755.4L1545.7 812L1531.6 820.7ZM1104.3 748.1L1146.5 742.7L1172.3 763.9L1116.3 798.7L1106.8 778.3L1116.4 756.1Z",
+   "tokenX": 1293.8,
+   "tokenY": 825.6,
+   "labelX": 1293.8,
+   "labelY": 851.6
+  },
+  {
+   "id": "west_ukraine",
+   "name": "West Ukraine",
+   "continent": "south_east_europe",
+   "suit": "artillery",
+   "adjacent": [
+    "belarus",
+    "east_ukraine",
+    "hungary",
+    "moldova",
+    "poland",
+    "romania",
+    "slovakia",
+    "south_east_russia"
+   ],
+   "d": "M1190 454.1L1190 608.4L1168 646L1136.5 640.4L1148.5 618.2L1146.1 613.1L1171.9 613.5L1153.8 587.2L1145 582.6L1145 573L1133.8 565.4L1107 555.7L1052.1 576.2L1040.9 569.3L1012.9 566.1L1004.3 572.1L1001.7 564.5L988.5 556.9L996.3 538.4L1001.2 540.1L993.9 527.6L1010.2 504.8L1020.3 501.6L1021.4 493.9L1007 470.4L1043.8 461.4L1157.9 477.3L1156.5 463.8L1161.8 458Z",
+   "tokenX": 1069.1,
+   "tokenY": 515.9,
+   "labelX": 1069.1,
+   "labelY": 541.9
+  },
+  {
+   "id": "east_ukraine",
+   "name": "East Ukraine",
+   "continent": "south_east_europe",
+   "suit": "infantry",
+   "adjacent": [
+    "south_east_russia",
+    "west_ukraine"
+   ],
+   "d": "M1191.9 451.4L1219.9 450.2L1237 465.3L1232.9 470.7L1236.5 479L1253.9 480.4L1265 497.4L1294.4 507L1309.9 502.7L1326.3 515.5L1338.8 515.3L1372.9 524.2L1375.2 532.3L1370 546.8L1378.6 562.3L1377.4 571.6L1356.6 573.7L1347.2 581.5L1349.3 594.1L1332.2 596.4L1319.5 605.6L1299.1 607.1L1282.2 617.8L1286.4 633.2L1278.8 626.6L1254.4 619.3L1250 626.4L1210.5 616.1L1207 605.4L1190 608.4Z",
+   "tokenX": 1252.1,
+   "tokenY": 557.9,
+   "labelX": 1252.1,
+   "labelY": 583.9
+  },
+  {
+   "id": "united_kingdom",
+   "name": "United Kingdom",
+   "continent": "north_west_europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "ireland"
+   ],
+   "d": "M406.5 290.6L446.5 290.5L424.4 316.8L467 313.5L442.7 356L463.8 357.6L516.4 434.4L541.9 439.4L528.8 464.3L537.4 478.1L518.2 492.3L382.1 508.8L433.8 474.5L400.5 470L394.8 459.3L417.2 451L406.1 436.8L410.6 419.5L441.8 421.9L445.1 406.8L431.3 390.5L406.3 386L403 360.7L391.5 372.7L381.6 335.7ZM348.8 404.9L350.3 377.3L389.1 392L377.2 409.8Z",
+   "tokenX": 474.6,
+   "tokenY": 452.5,
+   "labelX": 474.6,
+   "labelY": 478.5
+  }
+ ],
+ "seaLinks": [
+  {
+   "from": "united_kingdom",
+   "to": "west_france"
+  },
+  {
+   "from": "united_kingdom",
+   "to": "netherlands"
+  },
+  {
+   "from": "iceland",
+   "to": "united_kingdom"
+  },
+  {
+   "from": "cyprus",
+   "to": "turkey"
+  },
+  {
+   "from": "denmark",
+   "to": "sweden"
+  },
+  {
+   "from": "italy",
+   "to": "greece"
+  }
+ ],
+ "modifierSlots": {
+  "blizzards": 3,
+  "portals": 5,
+  "capitals": 6
+ }
+}
