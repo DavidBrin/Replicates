@@ -1,0 +1,380 @@
+{
+ "slug": "quad",
+ "name": "Quad",
+ "tagline": "Engine fixture: four continents around a central crossroads",
+ "viewBox": "0 0 1100 880",
+ "continents": [
+  {
+   "id": "a",
+   "name": "A",
+   "bonus": 2,
+   "color": "#36B0EA",
+   "territories": [
+    "a1",
+    "a2",
+    "a3",
+    "a4"
+   ]
+  },
+  {
+   "id": "b",
+   "name": "B",
+   "bonus": 3,
+   "color": "#DA3A4F",
+   "territories": [
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6"
+   ]
+  },
+  {
+   "id": "c",
+   "name": "C",
+   "bonus": 2,
+   "color": "#5FBF2A",
+   "territories": [
+    "c1",
+    "c2",
+    "c3",
+    "c4"
+   ]
+  },
+  {
+   "id": "d",
+   "name": "D",
+   "bonus": 3,
+   "color": "#9B4AE8",
+   "territories": [
+    "d1",
+    "d2",
+    "d3",
+    "d4",
+    "d5",
+    "d6"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "a1",
+   "name": "A1",
+   "continent": "a",
+   "suit": "infantry",
+   "adjacent": [
+    "a2",
+    "a4",
+    "b1",
+    "d1"
+   ],
+   "d": "M55 18L165 18L183.5 30.3L202 55L202 165L183.5 189.7L165 202L55 202L36.5 189.7L18 165L18 55L36.5 30.3Z",
+   "tokenX": 110,
+   "tokenY": 110,
+   "labelX": 110,
+   "labelY": 136
+  },
+  {
+   "id": "a2",
+   "name": "A2",
+   "continent": "a",
+   "suit": "cavalry",
+   "adjacent": [
+    "a1",
+    "a3"
+   ],
+   "d": "M275 18L385 18L403.5 30.3L422 55L422 165L403.5 189.7L385 202L275 202L256.5 189.7L238 165L238 55L256.5 30.3Z",
+   "tokenX": 330,
+   "tokenY": 110,
+   "labelX": 330,
+   "labelY": 136
+  },
+  {
+   "id": "a3",
+   "name": "A3",
+   "continent": "a",
+   "suit": "artillery",
+   "adjacent": [
+    "a2",
+    "a4"
+   ],
+   "d": "M495 18L605 18L623.5 30.3L642 55L642 165L623.5 189.7L605 202L495 202L476.5 189.7L458 165L458 55L476.5 30.3Z",
+   "tokenX": 550,
+   "tokenY": 110,
+   "labelX": 550,
+   "labelY": 136
+  },
+  {
+   "id": "a4",
+   "name": "A4",
+   "continent": "a",
+   "suit": "infantry",
+   "adjacent": [
+    "a1",
+    "a3"
+   ],
+   "d": "M715 18L825 18L843.5 30.3L862 55L862 165L843.5 189.7L825 202L715 202L696.5 189.7L678 165L678 55L696.5 30.3Z",
+   "tokenX": 770,
+   "tokenY": 110,
+   "labelX": 770,
+   "labelY": 136
+  },
+  {
+   "id": "b1",
+   "name": "B1",
+   "continent": "b",
+   "suit": "cavalry",
+   "adjacent": [
+    "a1",
+    "b2",
+    "b4",
+    "b6",
+    "c1"
+   ],
+   "d": "M935 18L1045 18L1063.5 30.3L1082 55L1082 165L1063.5 189.7L1045 202L935 202L916.5 189.7L898 165L898 55L916.5 30.3Z",
+   "tokenX": 990,
+   "tokenY": 110,
+   "labelX": 990,
+   "labelY": 136
+  },
+  {
+   "id": "b2",
+   "name": "B2",
+   "continent": "b",
+   "suit": "artillery",
+   "adjacent": [
+    "b1",
+    "b3"
+   ],
+   "d": "M55 238L165 238L183.5 250.3L202 275L202 385L183.5 409.7L165 422L55 422L36.5 409.7L18 385L18 275L36.5 250.3Z",
+   "tokenX": 110,
+   "tokenY": 330,
+   "labelX": 110,
+   "labelY": 356
+  },
+  {
+   "id": "b3",
+   "name": "B3",
+   "continent": "b",
+   "suit": "infantry",
+   "adjacent": [
+    "b2",
+    "b4"
+   ],
+   "d": "M275 238L385 238L403.5 250.3L422 275L422 385L403.5 409.7L385 422L275 422L256.5 409.7L238 385L238 275L256.5 250.3Z",
+   "tokenX": 330,
+   "tokenY": 330,
+   "labelX": 330,
+   "labelY": 356
+  },
+  {
+   "id": "b4",
+   "name": "B4",
+   "continent": "b",
+   "suit": "cavalry",
+   "adjacent": [
+    "b1",
+    "b3",
+    "b5"
+   ],
+   "d": "M495 238L605 238L623.5 250.3L642 275L642 385L623.5 409.7L605 422L495 422L476.5 409.7L458 385L458 275L476.5 250.3Z",
+   "tokenX": 550,
+   "tokenY": 330,
+   "labelX": 550,
+   "labelY": 356
+  },
+  {
+   "id": "b5",
+   "name": "B5",
+   "continent": "b",
+   "suit": "artillery",
+   "adjacent": [
+    "b4",
+    "b6"
+   ],
+   "d": "M715 238L825 238L843.5 250.3L862 275L862 385L843.5 409.7L825 422L715 422L696.5 409.7L678 385L678 275L696.5 250.3Z",
+   "tokenX": 770,
+   "tokenY": 330,
+   "labelX": 770,
+   "labelY": 356
+  },
+  {
+   "id": "b6",
+   "name": "B6",
+   "continent": "b",
+   "suit": "infantry",
+   "adjacent": [
+    "b1",
+    "b5"
+   ],
+   "d": "M935 238L1045 238L1063.5 250.3L1082 275L1082 385L1063.5 409.7L1045 422L935 422L916.5 409.7L898 385L898 275L916.5 250.3Z",
+   "tokenX": 990,
+   "tokenY": 330,
+   "labelX": 990,
+   "labelY": 356
+  },
+  {
+   "id": "c1",
+   "name": "C1",
+   "continent": "c",
+   "suit": "cavalry",
+   "adjacent": [
+    "b1",
+    "c2",
+    "c4",
+    "d1"
+   ],
+   "d": "M55 458L165 458L183.5 470.3L202 495L202 605L183.5 629.7L165 642L55 642L36.5 629.7L18 605L18 495L36.5 470.3Z",
+   "tokenX": 110,
+   "tokenY": 550,
+   "labelX": 110,
+   "labelY": 576
+  },
+  {
+   "id": "c2",
+   "name": "C2",
+   "continent": "c",
+   "suit": "artillery",
+   "adjacent": [
+    "c1",
+    "c3"
+   ],
+   "d": "M275 458L385 458L403.5 470.3L422 495L422 605L403.5 629.7L385 642L275 642L256.5 629.7L238 605L238 495L256.5 470.3Z",
+   "tokenX": 330,
+   "tokenY": 550,
+   "labelX": 330,
+   "labelY": 576
+  },
+  {
+   "id": "c3",
+   "name": "C3",
+   "continent": "c",
+   "suit": "infantry",
+   "adjacent": [
+    "c2",
+    "c4"
+   ],
+   "d": "M495 458L605 458L623.5 470.3L642 495L642 605L623.5 629.7L605 642L495 642L476.5 629.7L458 605L458 495L476.5 470.3Z",
+   "tokenX": 550,
+   "tokenY": 550,
+   "labelX": 550,
+   "labelY": 576
+  },
+  {
+   "id": "c4",
+   "name": "C4",
+   "continent": "c",
+   "suit": "cavalry",
+   "adjacent": [
+    "c1",
+    "c3"
+   ],
+   "d": "M715 458L825 458L843.5 470.3L862 495L862 605L843.5 629.7L825 642L715 642L696.5 629.7L678 605L678 495L696.5 470.3Z",
+   "tokenX": 770,
+   "tokenY": 550,
+   "labelX": 770,
+   "labelY": 576
+  },
+  {
+   "id": "d1",
+   "name": "D1",
+   "continent": "d",
+   "suit": "artillery",
+   "adjacent": [
+    "a1",
+    "c1",
+    "d2",
+    "d4",
+    "d6"
+   ],
+   "d": "M935 458L1045 458L1063.5 470.3L1082 495L1082 605L1063.5 629.7L1045 642L935 642L916.5 629.7L898 605L898 495L916.5 470.3Z",
+   "tokenX": 990,
+   "tokenY": 550,
+   "labelX": 990,
+   "labelY": 576
+  },
+  {
+   "id": "d2",
+   "name": "D2",
+   "continent": "d",
+   "suit": "infantry",
+   "adjacent": [
+    "d1",
+    "d3"
+   ],
+   "d": "M55 678L165 678L183.5 690.3L202 715L202 825L183.5 849.7L165 862L55 862L36.5 849.7L18 825L18 715L36.5 690.3Z",
+   "tokenX": 110,
+   "tokenY": 770,
+   "labelX": 110,
+   "labelY": 796
+  },
+  {
+   "id": "d3",
+   "name": "D3",
+   "continent": "d",
+   "suit": "cavalry",
+   "adjacent": [
+    "d2",
+    "d4"
+   ],
+   "d": "M275 678L385 678L403.5 690.3L422 715L422 825L403.5 849.7L385 862L275 862L256.5 849.7L238 825L238 715L256.5 690.3Z",
+   "tokenX": 330,
+   "tokenY": 770,
+   "labelX": 330,
+   "labelY": 796
+  },
+  {
+   "id": "d4",
+   "name": "D4",
+   "continent": "d",
+   "suit": "artillery",
+   "adjacent": [
+    "d1",
+    "d3",
+    "d5"
+   ],
+   "d": "M495 678L605 678L623.5 690.3L642 715L642 825L623.5 849.7L605 862L495 862L476.5 849.7L458 825L458 715L476.5 690.3Z",
+   "tokenX": 550,
+   "tokenY": 770,
+   "labelX": 550,
+   "labelY": 796
+  },
+  {
+   "id": "d5",
+   "name": "D5",
+   "continent": "d",
+   "suit": "infantry",
+   "adjacent": [
+    "d4",
+    "d6"
+   ],
+   "d": "M715 678L825 678L843.5 690.3L862 715L862 825L843.5 849.7L825 862L715 862L696.5 849.7L678 825L678 715L696.5 690.3Z",
+   "tokenX": 770,
+   "tokenY": 770,
+   "labelX": 770,
+   "labelY": 796
+  },
+  {
+   "id": "d6",
+   "name": "D6",
+   "continent": "d",
+   "suit": "cavalry",
+   "adjacent": [
+    "d1",
+    "d5"
+   ],
+   "d": "M935 678L1045 678L1063.5 690.3L1082 715L1082 825L1063.5 849.7L1045 862L935 862L916.5 849.7L898 825L898 715L916.5 690.3Z",
+   "tokenX": 990,
+   "tokenY": 770,
+   "labelX": 990,
+   "labelY": 796
+  }
+ ],
+ "seaLinks": [],
+ "modifierSlots": {
+  "blizzards": 2,
+  "portals": 3,
+  "capitals": 6
+ }
+}
