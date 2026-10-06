@@ -32,6 +32,15 @@ export interface EngineApi {
   };
   territoryCounts(state: GameState): readonly (number | null)[];
   troopCounts(state: GameState): readonly (number | null)[];
+  /**
+   * The exact counts for ONE seat. On a fogged view the array selectors above
+   * return `null` for every seat, because no viewer can total a board it
+   * cannot see; these two still answer for the **viewer's own** seat, which
+   * is what its roster capsule shows (R73, F52). Added to `EngineApi` after
+   * S1 published them — a widening, never a change.
+   */
+  territoryCountFor(state: GameState, seat: Seat): number;
+  troopCountFor(state: GameState, seat: Seat): number;
   continentsHeldBy(state: GameState, map: MapDef, seat: Seat): readonly ContinentId[];
   isGameOver(state: GameState): boolean;
 
