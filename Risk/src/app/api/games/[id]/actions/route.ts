@@ -4,6 +4,7 @@ import { riskDebugEnabled } from "@/net/debugFlag";
 
 import { currentPlayer, heartbeat } from "../../../_lib/auth";
 import { rawLog, submitAction } from "../../../_lib/gameService";
+import { withDb } from "../../../_lib/boot";
 import {
   badRequest,
   conflict,
@@ -15,7 +16,6 @@ import {
   readJson,
   unauthorized,
   unprocessable,
-  withErrors,
 } from "../../../_lib/http";
 import { ActionPostSchema } from "../../../_lib/schemas";
 
@@ -40,7 +40,7 @@ type Context = { params: Promise<{ id: string }> };
  * makes it indistinguishable from a slow success (D15).
  */
 export async function POST(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 
@@ -90,7 +90,7 @@ export async function POST(request: Request, context: Context): Promise<Response
  * not exist in production; it still requires a cookie and a seat in the game.
  */
 export async function GET(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     if (!riskDebugEnabled()) return notFound("not found");
 
     const player = await currentPlayer(request);

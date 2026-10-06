@@ -3,6 +3,7 @@ import { playersRepository } from "@/adapters/db/repositories/players";
 import type { PlayerColour } from "@/engine/types";
 
 import { clearedCookie, currentPlayer, sessionCookie } from "../_lib/auth";
+import { withDb } from "../_lib/boot";
 import {
   badRequest,
   conflict,
@@ -11,7 +12,6 @@ import {
   noContent,
   readJson,
   unauthorized,
-  withErrors,
 } from "../_lib/http";
 import { nameKey, normaliseName, suggestNames } from "../_lib/names";
 import { SessionPatchSchema, SessionPostSchema } from "../_lib/schemas";
@@ -63,7 +63,7 @@ function anyColour(): PlayerColour {
  * chose that name and should be told.
  */
 export async function POST(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const body = await readJson(request);
     if (body === undefined) return badRequest("body must be JSON");
 
@@ -103,7 +103,7 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export async function PATCH(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 
@@ -151,7 +151,7 @@ export async function PATCH(request: Request): Promise<Response> {
  * browser actually drop it.
  */
 export async function DELETE(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
     await playersRepository(getDb()).remove(player.id);

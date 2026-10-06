@@ -4,6 +4,7 @@ import { GamesRepository } from "@/adapters/db/repositories/games";
 import { lobbiesRepository } from "@/adapters/db/repositories/lobbies";
 
 import { currentPlayer, heartbeat } from "../_lib/auth";
+import { withDb } from "../_lib/boot";
 import {
   badRequest,
   forbidden,
@@ -11,7 +12,6 @@ import {
   json,
   readJson,
   unauthorized,
-  withErrors,
 } from "../_lib/http";
 import { ChatPostSchema } from "../_lib/schemas";
 
@@ -34,7 +34,7 @@ export const dynamic = "force-dynamic";
  * does not buy a voice in somebody else's room.
  */
 export async function POST(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

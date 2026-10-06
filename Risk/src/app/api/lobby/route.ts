@@ -1,5 +1,6 @@
 import { currentPlayer, heartbeat } from "../_lib/auth";
-import { intParam, json, noContent, unauthorized, withErrors } from "../_lib/http";
+import { withDb } from "../_lib/boot";
+import { intParam, json, noContent, unauthorized } from "../_lib/http";
 import { lobbyBrowse } from "../_lib/lobbyService";
 import { maybeSweep } from "../_lib/reaper";
 
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
  * a `limit` on every statement.
  */
 export async function GET(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

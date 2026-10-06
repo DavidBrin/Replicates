@@ -1,5 +1,6 @@
 import { currentPlayer, heartbeat } from "../../../_lib/auth";
 import { resignSeat } from "../../../_lib/gameService";
+import { withDb } from "../../../_lib/boot";
 import {
   conflict,
   forbidden,
@@ -7,7 +8,6 @@ import {
   notFound,
   unauthorized,
   unprocessable,
-  withErrors,
 } from "../../../_lib/http";
 
 export const runtime = "nodejs";
@@ -30,7 +30,7 @@ type Context = { params: Promise<{ id: string }> };
  * `"away"`.
  */
 export async function POST(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

@@ -63,23 +63,35 @@ export default function OnlineGame({ gameId }: OnlineGameProps) {
   const [sync, setSync] = useState<GameSyncBody | null>(null);
   const port = useRef<PollingSyncPort | null>(null);
   const session = useRef<Session | null>(null);
+  const latest = useRef<GameSyncBody | null>(null);
 
-  // `isMyTurn` picks 2,000 ms over 4,000 ms, and only the session knows whose
-  // turn it is — so the port asks through a ref rather than folding state of
-  // its own (see `PollingSyncOptions.isMyTurn`).
+  /**
+   * Whether it is the viewer's turn — what picks 2,000 ms over 4,000 ms.
+   *
+   * Both inputs are read from **refs**, and the callback has no dependencies,
+   * which is load-bearing rather than tidy: it is passed into
+   * `createPollingSync` inside the effect below, so a callback that changed
+   * whenever the poll response did would re-run that effect, close the port
+   * and create a new one on **every response** — resetting `seq` to 0 each
+   * time and making `__riskDebug.seq()` permanently 0. The two-window smoke
+   * test is how that was found.
+   */
   const isMyTurn = useCallback(() => {
     const live = session.current;
-    const body = sync;
+    const body = latest.current;
     if (!live || !body || body.you.seat === null) return false;
     const state = live.confirmed();
     return state.turnOrder[state.currentIndex] === body.you.seat;
-  }, [sync]);
+  }, []);
 
   useEffect(() => {
     const created = createPollingSync({ gameId, since: 0, isMyTurn });
     port.current = created;
 
-    const offSync = created.onSync((body) => setSync(body));
+    const offSync = created.onSync((body) => {
+      latest.current = body;
+      setSync(body);
+    });
 
     // The session can only be built once the authority has sent a snapshot:
     // online there is no local opening to fold, and the snapshot IS the
@@ -136,6 +148,7 @@ export default function OnlineGame({ gameId }: OnlineGameProps) {
       session.current?.destroy();
       session.current = null;
       port.current = null;
+      latest.current = null;
       unregisterRiskDebug(["seq", "pollNow", "setInterval"]);
     };
   }, [gameId, isMyTurn]);

@@ -2,6 +2,7 @@ import { getDb } from "@/adapters/db";
 import { lobbiesRepository } from "@/adapters/db/repositories/lobbies";
 
 import { currentPlayer, heartbeat } from "../../../_lib/auth";
+import { withDb } from "../../../_lib/boot";
 import {
   badRequest,
   conflict,
@@ -10,7 +11,6 @@ import {
   notFound,
   readJson,
   unauthorized,
-  withErrors,
 } from "../../../_lib/http";
 import { lobbyRoom } from "../../../_lib/lobbyService";
 import { LobbyCodeSchema, LobbyJoinSchema } from "../../../_lib/schemas";
@@ -30,7 +30,7 @@ type Context = { params: Promise<{ code: string }> };
  * it is a second tab, and the response still carries their seat.
  */
 export async function POST(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

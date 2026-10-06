@@ -2,7 +2,8 @@ import { getDb } from "@/adapters/db";
 import { lobbiesRepository } from "@/adapters/db/repositories/lobbies";
 
 import { currentPlayer, heartbeat } from "../../../_lib/auth";
-import { noContent, notFound, unauthorized, withErrors } from "../../../_lib/http";
+import { withDb } from "../../../_lib/boot";
+import { noContent, notFound, unauthorized } from "../../../_lib/http";
 import { LobbyCodeSchema } from "../../../_lib/schemas";
 
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ type Context = { params: Promise<{ code: string }> };
  * double-tapped `Leave` does not show an error.
  */
 export async function POST(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

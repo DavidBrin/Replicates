@@ -2,6 +2,7 @@ import { config } from "@/config/env";
 
 import { currentPlayer, heartbeat } from "../../_lib/auth";
 import { pollGame, reclaimSeat, runLazyTick } from "../../_lib/gameService";
+import { withDb } from "../../_lib/boot";
 import {
   forbidden,
   intParam,
@@ -9,7 +10,6 @@ import {
   noContent,
   notFound,
   unauthorized,
-  withErrors,
 } from "../../_lib/http";
 import { maybeSweep } from "../../_lib/reaper";
 
@@ -31,7 +31,7 @@ type Context = { params: Promise<{ id: string }> };
  * compare, and the `204` path is the common case and the whole cost argument.
  */
 export async function GET(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const started = Date.now();
     const player = await currentPlayer(request);
     if (!player) return unauthorized();

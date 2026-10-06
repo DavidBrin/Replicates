@@ -2,6 +2,7 @@ import { getDb } from "@/adapters/db";
 import { lobbiesRepository } from "@/adapters/db/repositories/lobbies";
 
 import { currentPlayer, heartbeat } from "../../../_lib/auth";
+import { withDb } from "../../../_lib/boot";
 import {
   badRequest,
   issueMessages,
@@ -9,7 +10,6 @@ import {
   notFound,
   readJson,
   unauthorized,
-  withErrors,
 } from "../../../_lib/http";
 import { lobbyRoom } from "../../../_lib/lobbyService";
 import { LobbyCodeSchema, LobbyReadySchema } from "../../../_lib/schemas";
@@ -31,7 +31,7 @@ type Context = { params: Promise<{ code: string }> };
  * a source of complaints (§7's `[ours]`).
  */
 export async function POST(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

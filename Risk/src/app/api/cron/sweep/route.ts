@@ -1,4 +1,5 @@
-import { json, unauthorized, withErrors } from "../../_lib/http";
+import { withDb } from "../../_lib/boot";
+import { json, unauthorized } from "../../_lib/http";
 import { CRON_LIMIT, sweep } from "../../_lib/reaper";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
  * key for S5 to own (§4.16).
  */
 export async function GET(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     if (!request.headers.get("x-vercel-cron")) return unauthorized();
     return json({ swept: await sweep(CRON_LIMIT) });
   });

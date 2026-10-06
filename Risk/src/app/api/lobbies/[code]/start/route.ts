@@ -1,11 +1,11 @@
 import { currentPlayer, heartbeat } from "../../../_lib/auth";
+import { withDb } from "../../../_lib/boot";
 import {
   conflict,
   forbidden,
   json,
   notFound,
   unauthorized,
-  withErrors,
 } from "../../../_lib/http";
 import { startLobby } from "../../../_lib/lobbyService";
 import { LobbyCodeSchema } from "../../../_lib/schemas";
@@ -24,7 +24,7 @@ type Context = { params: Promise<{ code: string }> };
  * about it.
  */
 export async function POST(request: Request, context: Context): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 

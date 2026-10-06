@@ -2,6 +2,7 @@ import { getDb } from "@/adapters/db";
 import { lobbiesRepository } from "@/adapters/db/repositories/lobbies";
 
 import { currentPlayer, heartbeat } from "../_lib/auth";
+import { withDb } from "../_lib/boot";
 import {
   badRequest,
   conflict,
@@ -9,7 +10,6 @@ import {
   json,
   readJson,
   unauthorized,
-  withErrors,
 } from "../_lib/http";
 import { LobbyCreateSchema } from "../_lib/schemas";
 
@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
  * `update`, never an `insert` that has to invent a seat index.
  */
 export async function POST(request: Request): Promise<Response> {
-  return withErrors(async () => {
+  return withDb(async () => {
     const player = await currentPlayer(request);
     if (!player) return unauthorized();
 
