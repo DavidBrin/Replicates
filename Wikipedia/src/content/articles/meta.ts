@@ -99,6 +99,14 @@ export const islandEmpireMeta: ArticleMeta = {
   lastEdited: "21 September 2026",
 };
 
+export const riskMeta: ArticleMeta = {
+  slug: projectSlug("Risk"),
+  title: "Risk (replica)",
+  shortDescription: "A browser rebuild of SMG Studio's RISK: Global Domination",
+  categories: ["Software replicas", "Turn-based strategy video games", "Board game adaptations"],
+  lastEdited: "6 October 2026",
+};
+
 export const artWallMeta: ArticleMeta = {
   slug: projectSlug("Art Wall"),
   title: "Art Wall",
@@ -272,6 +280,7 @@ export const articleMetas: ArticleMeta[] = [
   flStudioMeta,
   artWallMeta,
   islandEmpireMeta,
+  riskMeta,
   verilogMeta,
   nocturnalMeta,
   signalsMeta,

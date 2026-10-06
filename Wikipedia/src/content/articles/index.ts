@@ -10,6 +10,7 @@ import { dollarPixels } from "./dollar-pixels";
 import { flStudio } from "./fl-studio";
 import { artWall } from "./art-wall";
 import { islandEmpire } from "./island-empire";
+import { risk } from "./risk";
 import { verilog } from "./verilog";
 import { nocturnal } from "./nocturnal";
 import { signals } from "./signals";
@@ -44,6 +45,7 @@ export const articles: ArticleRegistry = {
   [flStudio.meta.slug]: flStudio,
   [artWall.meta.slug]: artWall,
   [islandEmpire.meta.slug]: islandEmpire,
+  [risk.meta.slug]: risk,
   [verilog.meta.slug]: verilog,
   [nocturnal.meta.slug]: nocturnal,
   [signals.meta.slug]: signals,
