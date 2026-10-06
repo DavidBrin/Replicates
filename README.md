@@ -7,6 +7,59 @@ and research notes.
 
 ---
 
+## [Risk](Risk) — RISK: Global Domination, with the dice in the action log
+
+> **the engine never rolls a die**
+
+A rebuild of [RISK: Global Domination](https://www.smgstudio.com/risk), SMG Studio's
+digital RISK: solo against five bot tiers, hot-seat for up to six on one device, and
+casual online games behind a four-letter lobby code. Sixteen boards, eleven modifiers
+(Fog of War, Capitals, Blizzards, Portals, Percentage Domination, Balanced Blitz
+dice, …), forty-two preset chat lines and no free text anywhere.
+
+| Deploying troops | The Blitz view | Choose a map |
+|---|---|---|
+| <img src="Risk/docs/screenshots/solo-draft.png" width="240" alt="A solo game in the draft phase: owner-coloured territories with numbered troop tokens, the roster capsules bleeding off the right edge, the phase pips and the green End Draft Phase pill"> | <img src="Risk/docs/screenshots/blitz.png" width="240" alt="The Blitz view: attacker and defender portraits over a scrimmed board, the win chance in gold, three red dice and the Attack Limit slider"> | <img src="Risk/docs/screenshots/map-picker.png" width="240" alt="The map picker: a grid of tilted glass-tray tiles, one board each, with a Random map tile"> |
+
+**The engine contains no randomness at all.** `apply(state, map, action)` is pure, and
+every random outcome — the opening deal, each card drawn, each battle's exact losses —
+is data inside the action that caused it. The action log is the game: replaying it must
+reproduce the authority's hash at every row, which is the first end-to-end test, and it
+is why online play needs no trust in the client. A layering test reads `src/engine`
+off disk and fails the build on `Math.random`, a clock, or a React import.
+
+**Balanced Blitz is reproduced to fifteen decimal places from SMG's own published
+examples**, four-stage reshape and all: thirty attackers against a capital held by
+fifteen, losing exactly twelve, is `0.0100282888709122` under Balanced Blitz against
+`0.02221280017072782` under True Random, and forty-nine is the fewest attackers for an
+80% Blitz against fifty. The bots use the odds table of the dice mode in play, because
+a bot given the wrong table misjudges its own attack by up to fourteen points.
+
+**Online play is one Postgres table and a polling loop, sized to the free tier.** No
+WebSockets, no realtime vendor: an append-only action log behind route handlers,
+clients polling at 2 s on their turn and 4 s off it, bot turns and timeouts run lazily
+inside whichever poll arrives next, and a `204` with no body when nothing changed.
+Twenty players online an hour a day fits with a third to spare; around the clock does
+not, and the spec says so.
+
+**No legitimate RISK geometry exists, so the boards are public domain or generated.**
+Three come from a public-domain fan project's territory paths; nine regional boards are
+dissolved out of Natural Earth data by a committed pipeline that derives adjacency from
+shared borders; a seeded Voronoi generator makes the rest. The classic 42-territory
+graph was verified against nine independent sources, seven of which agree exactly.
+
+Next.js 16 · a pure engine with an enforced layering rule · exact O(A·D) battle odds ·
+**1,860 unit and property tests** · 10 e2e tests across desktop and mobile Chrome · 16
+boards · PostgreSQL only for online play (WASM locally, Neon deployed). Built from eight
+parallel research lanes, then seven parallel build slices, then four review rounds (one
+codex, three Claude — codex ran out of credits after round one) that returned seventy
+findings, every one fixed.
+
+**[Read the README →](Risk/README.md)** ·
+[Spec](Risk/SPEC.md) · [Decisions](Risk/DECISIONS.md) · [Research](Risk/research)
+
+---
+
 ## [Island Empire](island-empire) — the Slay-like, on a square grid
 
 > **every tile pays one gold a day; every knight eats it**
