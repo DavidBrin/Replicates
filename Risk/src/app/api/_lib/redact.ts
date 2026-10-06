@@ -22,7 +22,11 @@ import type { LoggedAction } from "@/ports/sync";
  *   still learns that *somebody moved* — which is what keeps the roster's
  *   activity and the chat log's cadence honest — without learning where.
  * - **Another seat's `CARD_DRAWN` loses its card.** A hand is secret with or
- *   without fog (F12), and a card names a territory besides.
+ *   without fog (F12), and a card names a territory besides. The viewer's
+ *   **own** `CARD_DRAWN` goes out intact and skips the visibility test
+ *   entirely — the card is already in their hand, and a dealt card names a
+ *   territory anywhere on the board, so testing it would hide most of a fog
+ *   player's own awards behind `HIDDEN`.
  *
  * Visibility is read off the **already-masked view** rather than recomputed:
  * `viewFor` is the one definition of what a seat can see, and a second
@@ -70,8 +74,10 @@ function territoriesNamed(action: Action): readonly number[] | null {
     case "AUTO_DEPLOY":
       return action.placements.map((placement) => placement.territory);
     case "CARD_DRAWN":
-      // A wild card names no territory (`territory: null` iff `suit`
-      // is `"wild"`), so there is nothing in it to hide.
+      // Belt and braces: {@link redactForSeat} settles every `CARD_DRAWN`
+      // before it gets here — another seat's loses its card, the viewer's own
+      // goes out whole — so this case is unreachable through it. A wild card
+      // names no territory (`territory: null` iff `suit` is `"wild"`) anyway.
       return action.card.territory === null ? [] : [action.card.territory];
     case "PORTALS_MOVED":
       return action.portals.flatMap((portal) => [portal.a, portal.b]);
@@ -93,8 +99,20 @@ export function redactForSeat(row: LoggedAction, view: SeatView): RedactedAction
   // The opening *is* the board. There is no partial view of it worth sending.
   if (action.type === "GAME_STARTED") return null;
 
-  if (action.type === "CARD_DRAWN" && action.seat !== view.seat) {
-    return { ...row, action: { type: "CARD_DRAWN", seat: action.seat, card: null } };
+  if (action.type === "CARD_DRAWN") {
+    // Another seat's award: the event, never the card (F12).
+    if (action.seat !== view.seat) {
+      return { ...row, action: { type: "CARD_DRAWN", seat: action.seat, card: null } };
+    }
+    // **The viewer's own award goes out whole**, and must not fall through to
+    // the visibility test below: a card names a territory, R19 deals it off the
+    // whole deck, and most of the deck is territory the viewer cannot see — so
+    // the generic test turned the player's own card into `{ type: "HIDDEN" }`
+    // roughly as often as the board was fogged. The card is already theirs
+    // (it is in `you.cards` in the same body), naming it reveals nothing the
+    // hand does not, and its arrival is what the "you earned a card" beat
+    // animates off.
+    return row;
   }
 
   const named = territoriesNamed(action);

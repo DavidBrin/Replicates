@@ -435,6 +435,53 @@ describe("the real append path and turn timer", () => {
     expect(response.status).toBe(409);
   });
 
+  /**
+   * R80's alliances are diplomacy, not play.
+   *
+   * `validateAlliance` is the one validator that deliberately skips
+   * `turnGate`: it asks for `rules.alliances`, for two distinct seats, and for
+   * both of them still to be contenders — and for nothing about whose turn it
+   * is, because an offer you can only accept during your own turn is an offer
+   * nobody would ever take. The route's own blanket turn fence used to
+   * overrule that and answer `409 notYourTurn` to every seat but the one to
+   * play, which is the whole feature.
+   */
+  it("lets a seat accept an alliance off its own turn (R80)", async () => {
+    const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
+    const { session, seat } = await whoseTurn(game);
+    const other = session === game.a ? game.b : game.a;
+    const otherSeat: Seat = seat === 0 ? 1 : 0;
+
+    const response = await submit(other, game.gameId, {
+      clientActionId: actionId("ally-off-turn"),
+      kind: "action",
+      action: { type: "ALLIANCE_ACCEPT", seat: otherSeat, from: seat },
+    });
+    expect(response.status).toBe(200);
+
+    const log = await rawLogOf(harness.db, game.gameId);
+    expect(log.at(-1)?.payload).toMatchObject({
+      type: "ALLIANCE_ACCEPT",
+      seat: otherSeat,
+      from: seat,
+    });
+    // The seat whose turn it is has not changed hands, and the log still folds.
+    expect(await currentSeatOf(game.gameId)).toBe(seat);
+    replay(log, classicWorld);
+  });
+
+  it("still 409s a non-diplomatic action from the seat that is not to play", async () => {
+    const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
+    const { session, seat } = await whoseTurn(game);
+    const other = session === game.a ? game.b : game.a;
+    const response = await submit(other, game.gameId, {
+      clientActionId: actionId("ally-exempt-is-narrow"),
+      kind: "action",
+      action: { type: "END_TURN", seat: seat === 0 ? 1 : 0 },
+    });
+    expect(response.status).toBe(409);
+  });
+
   it("refuses a resolved ATTACK from a client even with the real engine behind it", async () => {
     const game = await twoPlayerGame();
     const { session, seat } = await whoseTurn(game);

@@ -333,9 +333,17 @@ describe("the seat takeover counts the miss it is deciding on (§5.6)", () => {
     await seen(game.gameId, 1, "1 second");
 
     await runLazyTick(game.gameId);
-    // The turn is AUTO_DEPLOY then END_TURN: two actions, one missed turn.
+    // The turn is AUTO_DEPLOY, then the phase exits down to `END_TURN`: four
+    // actions, one missed turn. The count is per timed-out TURN, so it does
+    // not matter how many auto-skips the turn takes.
     const rows = await log(game.gameId);
-    expect(rows.map((row) => row.type)).toEqual(["GAME_STARTED", "AUTO_DEPLOY", "END_TURN"]);
+    expect(rows.map((row) => row.type)).toEqual([
+      "GAME_STARTED",
+      "AUTO_DEPLOY",
+      "END_PHASE",
+      "END_PHASE",
+      "END_TURN",
+    ]);
     const seat = await harness.db.query<{ missed_turns: number }>(
       "select missed_turns from game_players where game_id = $1 and seat = 0",
       [game.gameId],

@@ -62,6 +62,19 @@ export interface PollingLoop {
   start(): void;
   /** Poll now and reschedule from now. Resolves when the poll has settled. */
   pollNow(): Promise<void>;
+  /**
+   * Poll now, **never coalescing** onto a request already in flight: wait that
+   * one out, then issue a new one.
+   *
+   * `pollNow()` deliberately joins an in-flight poll, because two polls folding
+   * the same actions is worse than a slightly late one. A **resync** is the one
+   * caller for which that is exactly wrong: the client discovers its fold is
+   * broken *inside* the poll that delivered the offending row — the session's
+   * `onActions` listener runs synchronously from `accept` — so the poll it would
+   * coalesce onto is the one it has already rejected, the cursor reset to 0
+   * never reaches the authority, and the cold read is simply never issued.
+   */
+  pollFresh(): Promise<void>;
   /** Stop permanently and release the visibility subscription (an unmount). */
   stop(): void;
   /**
@@ -195,6 +208,16 @@ export function createPollingLoop(options: PollingLoopOptions): PollingLoop {
         stopped = false;
         running = true;
       }
+      return run();
+    },
+    async pollFresh(): Promise<void> {
+      if (stopped) {
+        stopped = false;
+        running = true;
+      }
+      // `inflight` never rejects — `run` swallows the poll's failure — so this
+      // only ever waits, and the request below is issued either way.
+      if (inflight) await inflight;
       return run();
     },
     stop(): void {
