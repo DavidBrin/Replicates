@@ -7,12 +7,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Action, GameState } from "@/engine/types";
-import { SEAT_UNKNOWN, TROOPS_UNKNOWN } from "@/engine/types";
+import { SEAT_NEUTRAL, SEAT_UNKNOWN, TROOPS_UNKNOWN } from "@/engine/types";
+import { engineApi } from "./engineApi";
 import type { LoggedAction, SyncPort, SyncStatus } from "@/ports/sync";
 
 import { DEMO, HOTSEAT_SEATS, SOLO_SEATS, makeSession, manualScheduler, seat } from "./__fixtures__/harness";
 import { aiStepMs, AI_STEP_MIN_MS, AI_STEP_MS, type SavedSession } from "./session";
-import { territoriesOf } from "./__fixtures__/scriptedEngine";
+import { createScriptedEngine, territoriesOf } from "./__fixtures__/scriptedEngine";
 import { buildDemoMap } from "./__fixtures__/demoMap";
 import { toMapDef } from "./mapLoader";
 
@@ -464,6 +465,39 @@ describe("autosave and resume (§4.15)", () => {
     expect(saved.length).toBeGreaterThan(0);
   });
 
+  it("carries the RNG sub-stream counter through a save and a resume (D5)", () => {
+    const saved: (SavedSession | null)[] = [];
+    const first = makeSession({ seats: HOTSEAT_SEATS, save: (s) => saved.push(s) });
+    first.session.start();
+    first.session.continueHandOff();
+    const me = first.session.confirmed().turnOrder[0] as number;
+    first.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(first.session.confirmed(), me), count: 1 });
+    const snapshot = saved.filter((s): s is SavedSession => s !== null).at(-1) as SavedSession;
+    // Re-deriving it would hand the next battle a sub-stream this game already spent.
+    expect(snapshot.nextSeq).toBeGreaterThan(1);
+
+    const purposes: { purpose: string; index: number }[] = [];
+    const base = createScriptedEngine();
+    const spy = {
+      ...base,
+      rngFor: (seed: string, purpose: string, index: number) => {
+        purposes.push({ purpose, index });
+        return base.rngFor(seed, purpose as never, index);
+      },
+    } as typeof base;
+    const second = makeSession({ seats: HOTSEAT_SEATS, resume: snapshot, engine: spy });
+    second.session.start();
+    second.session.continueHandOff();
+    purposes.length = 0;
+    second.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(second.session.confirmed(), me), count: 1 });
+    second.session.endPhase();
+    second.session.submitAttack({ from: firstOwned(second.session.confirmed(), me), to: 1, mode: "blitz" });
+    const battle = purposes.filter((p) => p.purpose === "battle");
+    expect(battle[0]?.index).toBeGreaterThanOrEqual(snapshot.nextSeq as number);
+    second.destroy();
+    first.destroy();
+  });
+
   it("a resumed session does not re-open the hand-off overlay", () => {
     const saved: (SavedSession | null)[] = [];
     const first = makeSession({ seats: HOTSEAT_SEATS, save: (s) => saved.push(s) });
@@ -497,23 +531,44 @@ function makePersona() {
 
 interface FakeSync extends SyncPort {
   emitActions(rows: readonly LoggedAction[]): void;
-  emitSnapshot(snapshot: GameState, seq: number): void;
+  emitSnapshot(snapshot: GameState, seq: number, animate?: readonly LoggedAction[]): void;
   emitStatus(status: SyncStatus): void;
   readonly submitted: { action: Action; id: string }[];
   readonly intents: unknown[];
+  /** How many times the session asked for a cold re-read, and how many times it polled instead. */
+  readonly resyncs: number[];
+  readonly polls: number[];
+  readonly resignations: number[];
 }
 
 function fakeSync(): FakeSync {
   let onActions: ((rows: readonly LoggedAction[]) => void) | null = null;
-  let onSnapshot: ((s: GameState, seq: number) => void) | null = null;
   let onStatus: ((s: SyncStatus) => void) | null = null;
+  let onSnapshot:
+    | ((s: GameState, seq: number, animate?: readonly LoggedAction[]) => void)
+    | null = null;
   const submitted: { action: Action; id: string }[] = [];
   const intents: unknown[] = [];
+  const resyncs: number[] = [];
+  const polls: number[] = [];
+  const resignations: number[] = [];
   return {
     submitted,
     intents,
+    resyncs,
+    polls,
+    resignations,
     seq: 0,
-    poll: async () => {},
+    poll: async () => {
+      polls.push(1);
+    },
+    resync: async () => {
+      resyncs.push(1);
+    },
+    resign: async () => {
+      resignations.push(1);
+      return [];
+    },
     submit: async (action, id) => {
       submitted.push({ action, id });
       return [];
@@ -537,7 +592,7 @@ function fakeSync(): FakeSync {
     setIntervalMs: () => {},
     close: () => {},
     emitActions: (rows) => onActions?.(rows),
-    emitSnapshot: (s, seq) => onSnapshot?.(s, seq),
+    emitSnapshot: (s, seq, animate) => onSnapshot?.(s, seq, animate),
     emitStatus: (s) => onStatus?.(s),
   };
 }
@@ -646,6 +701,486 @@ describe("the online optimistic fold (§5.5)", () => {
     const h = makeSession({ sync: port, mySeat: 0 });
     h.session.destroy();
     expect(closed).toHaveBeenCalled();
+  });
+
+  /* ------------------------------------------- §5.5's three reconciliation bugs -- */
+
+  function row(over: Partial<LoggedAction> & { seq: number; action: Action }): LoggedAction {
+    return { seat: 0, actor: "human", clientActionId: null, stateHash: "", ...over };
+  }
+
+  it("retires the one optimistic action the authority named, not a count of them", () => {
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    const at = firstOwned(base, me);
+    // Two of my own actions in flight at once.
+    h.session.submit({ type: "DRAFT", seat: me, territory: at, count: 1 });
+    h.session.submit({ type: "DRAFT", seat: me, territory: at, count: 1 });
+    expect(h.session.store.getState().pending).toBe(2);
+    const [first, second] = sync.submitted;
+    expect(first?.id).toBeTruthy();
+    expect(second?.id).toBeTruthy();
+    expect(first?.id).not.toBe(second?.id);
+
+    // The authority confirms the SECOND one first (a reordering the server is free to do).
+    sync.emitActions([row({ seq: 1, seat: me, action: second?.action as Action, clientActionId: second?.id ?? null })]);
+    expect(h.session.store.getState().pending).toBe(1);
+    // One confirmed + one still optimistic: the displayed total is the same +2 either way, but
+    // the entry that is LEFT has to be the one the authority has not spoken for.
+    expect(h.session.state.territories[at]?.troops).toBe((base.territories[at]?.troops ?? 0) + 2);
+    expect(h.session.confirmed().territories[at]?.troops).toBe((base.territories[at]?.troops ?? 0) + 1);
+    sync.emitActions([row({ seq: 2, seat: me, action: first?.action as Action, clientActionId: first?.id ?? null })]);
+    expect(h.session.store.getState().pending).toBe(0);
+    h.destroy();
+  });
+
+  it("retires nothing for somebody else's confirmed action", () => {
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    const at = firstOwned(base, me);
+    h.session.submit({ type: "DRAFT", seat: me, territory: at, count: 1 });
+    expect(h.session.store.getState().pending).toBe(1);
+    // A row that carries a client id, but not mine: counting confirmations dropped my entry here.
+    sync.emitActions([row({
+      seq: 1, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 },
+      clientActionId: "somebody-elses-id",
+    })]);
+    expect(h.session.store.getState().pending).toBe(1);
+    h.destroy();
+  });
+
+  it("refuses to fold over a gap, and asks the port to resync", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    const at = firstOwned(base, me);
+    const before = h.session.confirmed().territories[at]?.troops ?? 0;
+    // seq 1 is missing: 2 must NOT be applied on top of 0.
+    sync.emitActions([row({ seq: 2, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } })]);
+    expect(h.session.seq()).toBe(0);
+    expect(h.session.confirmed().territories[at]?.troops).toBe(before);
+    expect(h.session.store.getState().syncStatus).toBe("behind");
+    expect(sync.resyncs).toHaveLength(1);
+    warn.mockRestore();
+    h.destroy();
+  });
+
+  it("folds the prefix of a batch and stops at the gap inside it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    const at = firstOwned(base, me);
+    const before = h.session.confirmed().territories[at]?.troops ?? 0;
+    sync.emitActions([
+      row({ seq: 1, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } }),
+      row({ seq: 3, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 5 } }),
+    ]);
+    expect(h.session.seq()).toBe(1);
+    expect(h.session.confirmed().territories[at]?.troops).toBe(before + 1);
+    expect(sync.resyncs).toHaveLength(1);
+    warn.mockRestore();
+    h.destroy();
+  });
+
+  it("drops local state on a hash mismatch and resumes from the snapshot (§5.8, D16)", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    const at = firstOwned(base, me);
+    h.session.submit({ type: "DRAFT", seat: me, territory: at, count: 1 });
+    sync.emitActions([row({
+      seq: 1, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 },
+      stateHash: "deadbeefdeadbeef",
+    })]);
+    expect(h.session.store.getState().syncStatus).toBe("desynced");
+    // The optimistic queue is gone, and a snapshot has been asked for.
+    expect(h.session.store.getState().pending).toBe(0);
+    expect(sync.resyncs).toHaveLength(1);
+
+    // The snapshot answers it, and clears the status.
+    sync.emitSnapshot({ ...base, troopsToPlace: 42 }, 9);
+    expect(h.session.confirmed().troopsToPlace).toBe(42);
+    expect(h.session.seq()).toBe(9);
+    expect(h.session.store.getState().syncStatus).toBe("idle");
+    err.mockRestore();
+    warn.mockRestore();
+    h.destroy();
+  });
+
+  it("falls back to setIntervalMs + poll when the adapter has no resync", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const legacy = fakeSync();
+    const port: SyncPort = { ...legacy, resync: undefined };
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync: port, mySeat: me });
+    legacy.emitActions([row({
+      seq: 2, seat: me, action: { type: "DRAFT", seat: me, territory: firstOwned(base, me), count: 1 },
+    })]);
+    expect(legacy.resyncs).toHaveLength(0);
+    expect(legacy.polls).toHaveLength(1);
+    warn.mockRestore();
+    h.destroy();
+  });
+
+  it("treats an unknown action type and a card-less CARD_DRAWN as fog, never as a desync", () => {
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me, rules: { fogOfWar: true } });
+    sync.emitActions([
+      row({ seq: 1, seat: me, action: { type: "HIDDEN" } as unknown as Action }),
+      row({ seq: 2, seat: me, action: { type: "CARD_DRAWN", seat: me, card: null } as unknown as Action }),
+    ]);
+    // The fold advanced over both, and nothing is desynced.
+    expect(h.session.seq()).toBe(2);
+    expect(h.session.store.getState().syncStatus).toBe("idle");
+    h.destroy();
+  });
+
+  it("plays the events of `animate` rows without folding them or moving seq", () => {
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    h.session.drainEvents();
+    const at = firstOwned(base, me);
+    sync.emitSnapshot({ ...base, troopsToPlace: 5 }, 4, [
+      row({ seq: 3, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } }),
+    ]);
+    // The snapshot is what the state is; the row only produced events.
+    expect(h.session.seq()).toBe(4);
+    expect(h.session.confirmed().troopsToPlace).toBe(5);
+    expect(h.session.drainEvents().length).toBeGreaterThan(0);
+    h.destroy();
+  });
+
+  it("online resign goes through the port's own route, never /actions (D76)", () => {
+    const base = makeSession().session.confirmed();
+    const me = base.turnOrder[base.currentIndex] as number;
+    const h = makeSession({ sync, mySeat: me });
+    h.session.resign();
+    expect(sync.resignations).toHaveLength(1);
+    expect(sync.submitted.some((s) => s.action.type === "SEAT_TO_BOT")).toBe(false);
+    h.destroy();
+  });
+
+  it("offline resign stays local: the runner mints the SEAT_TO_BOT itself (D76)", () => {
+    const h = makeSession({ seats: SOLO_SEATS });
+    h.session.start();
+    const me = h.session.mySeat();
+    h.session.resign();
+    expect(h.session.confirmed().seats[me]?.standing).toBe("resigned");
+    h.destroy();
+  });
+});
+
+describe("the manual dice overlay keeps its anchor until the result has been shown", () => {
+  function inAttackPhase(schedule?: ReturnType<typeof manualScheduler>) {
+    const h = makeSession({
+      seats: HOTSEAT_SEATS, engine: engineApi,
+      ...(schedule ? { schedule: schedule.schedule } : {}),
+    });
+    h.session.start();
+    h.session.continueHandOff();
+    const s = h.session.confirmed();
+    const me = s.turnOrder[0] as number;
+    h.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(s, me), count: s.troopsToPlace });
+    h.session.endPhase();
+    return { h, me };
+  }
+
+  it("holds pendingAttack while the dice are on screen, so a manual roll can animate", () => {
+    const sched = manualScheduler();
+    const { h, me } = inAttackPhase(sched);
+    const state = h.session.confirmed();
+    const from = state.territories.findIndex((t) => t.owner === me && t.troops >= 2);
+    const to = engineApi.legalAttackTargets(state, h.map, from)[0] as number;
+
+    h.session.tapTerritory(from);
+    h.session.tapTerritory(to);
+    expect(h.session.store.getState().pendingAttack).toEqual({ from, to });
+
+    h.session.submitAttack({ from, to, mode: "manual", attackerDice: 1 });
+    const ui = h.session.store.getState();
+    // The Blitz view is gone, the dice have arrived, and the ANCHOR is still there: without it
+    // `ManualDiceView` has nowhere to position itself and never renders at all.
+    expect(ui.modal).toBeNull();
+    expect(ui.dice).not.toBeNull();
+    expect(ui.pendingAttack).toEqual({ from, to });
+
+    // The anchor leaves with the dice.
+    sched.flush();
+    expect(h.session.store.getState().dice).toBeNull();
+    expect(h.session.store.getState().pendingAttack).toBeNull();
+    h.destroy();
+  });
+
+  it("clears the anchor straight away for a blitz, which throws no dice", () => {
+    const { h, me } = inAttackPhase();
+    const state = h.session.confirmed();
+    const from = state.territories.findIndex((t) => t.owner === me && t.troops >= 2);
+    const to = engineApi.legalAttackTargets(state, h.map, from)[0] as number;
+    h.session.tapTerritory(from);
+    h.session.tapTerritory(to);
+    h.session.submitAttack({ from, to, mode: "blitz" });
+    expect(h.session.store.getState().dice).toBeNull();
+    expect(h.session.store.getState().pendingAttack).toBeNull();
+    h.destroy();
+  });
+});
+
+describe("R6 — the 2-seat manual claim phase alternates own / neutral", () => {
+  const TWO_HUMANS = [seat("human", "Ada", "red"), seat("human", "Grace", "green")] as const;
+
+  function claimSession() {
+    const h = makeSession({
+      seats: [...TWO_HUMANS],
+      rules: { manualPlacement: true },
+      engine: engineApi,
+    });
+    h.session.start();
+    h.session.continueHandOff();
+    return h;
+  }
+
+  it("opens in claim, asking for the seat's own army", () => {
+    const h = claimSession();
+    expect(h.session.confirmed().phase).toBe("claim");
+    expect(h.session.prompt()).toBe("Tap a territory to place an army");
+    expect(h.session.store.getState().litZone.length).toBeGreaterThan(0);
+    h.destroy();
+  });
+
+  it("sends forNeutral once the pair is complete, instead of stalling the setup", () => {
+    const h = claimSession();
+    const me = h.session.confirmed().turnOrder[0] as number;
+    h.session.tapTerritory(0);
+    h.session.tapTerritory(1);
+    expect(h.session.confirmed().territories[0]?.owner).toBe(me);
+    expect(h.session.confirmed().territories[1]?.owner).toBe(me);
+
+    // The pair is done, so R6 owes the neutral an army — and nothing else is legal.
+    expect(h.session.prompt()).toBe("Place a neutral army");
+    expect(h.session.store.getState().litZone).toEqual(
+      engineApi.legalNeutralClaimTargets(h.session.confirmed()),
+    );
+    expect(h.session.submit({ type: "CLAIM", seat: me, territory: 2 }).error?.code)
+      .toBe("mustPlaceAllTroops");
+
+    // The tap path sends the right one, so the army lands on the neutral holding.
+    h.session.tapTerritory(2);
+    expect(h.session.confirmed().territories[2]?.owner).toBe(SEAT_NEUTRAL);
+    // ...and the turn passes on, asking for an own army again.
+    expect(h.session.store.getState().toast).toBeNull();
+    h.destroy();
+  });
+
+  it("the bot runner alternates too, so a bot seat cannot hang the setup", () => {
+    const h = makeSession({
+      seats: [seat("human", "Ada", "red"), seat("bot", "Napoleon", "green", "medium")],
+      rules: { manualPlacement: true },
+      engine: engineApi,
+    });
+    h.session.start();
+    const me = h.session.confirmed().turnOrder[0] as number;
+    // Drive the human's pair, then let the bot take over for its own step.
+    let guard = 0;
+    while (h.session.confirmed().phase === "claim" && guard < 200) {
+      guard += 1;
+      const s = h.session.confirmed();
+      const acting = s.turnOrder[s.currentIndex] as number;
+      if (s.seats[acting]?.kind === "bot") break;      // the runner owns it from here
+      const owed = engineApi.claimOwed(s, acting);
+      const zone = owed === "neutral"
+        ? engineApi.legalNeutralClaimTargets(s)
+        : engineApi.legalOwnClaimTargets(s, acting);
+      const at = zone[0];
+      if (at === undefined) break;
+      h.session.tapTerritory(at);
+    }
+    // The human never got stuck: some claims landed and no refusal was toasted.
+    expect(h.session.confirmed().territories.some((t) => t.owner === me)).toBe(true);
+    expect(h.session.store.getState().toast).toBeNull();
+    h.destroy();
+  });
+});
+
+describe("alliances (R80) dispatch through the submit path", () => {
+  const ALLY_SEATS = [
+    seat("human", "Ada", "red"), seat("human", "Grace", "green"), seat("human", "Alan", "blue"),
+  ] as const;
+
+  it("proposes, accepts and breaks, and tracks the offer in the UI slice", () => {
+    const h = makeSession({ seats: [...ALLY_SEATS], rules: { alliances: true }, engine: engineApi });
+    h.session.start();
+    h.session.continueHandOff();
+    const me = h.session.mySeat();
+    const them = h.session.confirmed().seats.find((s) => s.seat !== me)?.seat as number;
+
+    expect(h.session.allianceState(them).allied).toBe(false);
+    expect(h.session.allianceState(them).canPropose).toBe(true);
+
+    h.session.proposeAlliance(them);
+    // PROPOSE changes no GameState field, so the offer lives in the slice.
+    expect(h.session.store.getState().allianceOffers).toEqual([{ from: me, to: them }]);
+    expect(h.session.allianceState(them).offeredByMe).toBe(true);
+
+    // The other seat accepts, which is what puts the alliance on the board.
+    h.session.submit({ type: "ALLIANCE_ACCEPT", seat: them, from: me });
+    expect(h.session.confirmed().seats[me]?.allies).toContain(them);
+    expect(h.session.store.getState().allianceOffers).toEqual([]);
+    expect(h.session.allianceState(them).allied).toBe(true);
+
+    h.session.breakAlliance(them);
+    expect(h.session.confirmed().seats[me]?.allies).not.toContain(them);
+    h.destroy();
+  });
+
+  it("offers nothing when the rule is off", () => {
+    const h = makeSession({ seats: [...ALLY_SEATS], engine: engineApi });
+    h.session.start();
+    h.session.continueHandOff();
+    const me = h.session.mySeat();
+    const them = h.session.confirmed().seats.find((s) => s.seat !== me)?.seat as number;
+    expect(h.session.allianceState(them).canPropose).toBe(false);
+    h.destroy();
+  });
+
+  it("opens and closes the popover, and never on the viewer's own capsule", () => {
+    const h = makeSession({ seats: [...ALLY_SEATS], rules: { alliances: true }, engine: engineApi });
+    h.session.start();
+    h.session.continueHandOff();
+    const me = h.session.mySeat();
+    h.session.openAlliancePopover(1 - me === me ? 2 : 1);
+    expect(h.session.store.getState().alliancePopover).not.toBeNull();
+    h.session.openAlliancePopover(null);
+    expect(h.session.store.getState().alliancePopover).toBeNull();
+    h.destroy();
+  });
+});
+
+describe("the RNG sub-stream index is the action's seq, never the turn (D5)", () => {
+  function watching() {
+    const base = createScriptedEngine();
+    const seen: { purpose: string; index: number }[] = [];
+    const engine = {
+      ...base,
+      rngFor: (seed: string, purpose: string, index: number) => {
+        seen.push({ purpose, index });
+        return base.rngFor(seed, purpose as never, index);
+      },
+    } as typeof base;
+    return { engine, seen };
+  }
+
+  it("two attacks in ONE turn get two different sub-streams", () => {
+    const { engine, seen } = watching();
+    const h = makeSession({ seats: HOTSEAT_SEATS, engine });
+    h.session.start();
+    h.session.continueHandOff();
+    const state = h.session.confirmed();
+    const me = state.turnOrder[0] as number;
+    h.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(state, me), count: state.troopsToPlace });
+    h.session.endPhase();
+    expect(h.session.confirmed().phase).toBe("attack");
+
+    const turn = h.session.confirmed().turn;
+    seen.length = 0;
+    const from = firstOwned(h.session.confirmed(), me);
+    const targets = engine.legalAttackTargets(h.session.confirmed(), h.map, from);
+    const to = targets[0] as number;
+    h.session.submitAttack({ from, to, mode: "blitz" });
+    h.session.submitAttack({ from, to, mode: "blitz" });
+    // Still the same turn, so `state.turn` would have handed both battles one stream.
+    expect(h.session.confirmed().turn).toBe(turn);
+    const battles = seen.filter((p) => p.purpose === "battle").map((p) => p.index);
+    expect(battles.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(battles).size).toBe(battles.length);
+    h.destroy();
+  });
+
+  it("a bot's decideTurn and its card draw are keyed on the seq too", () => {
+    const { engine, seen } = watching();
+    const h = makeSession({ seats: SOLO_SEATS, engine });
+    h.session.start();
+    const bot = seen.filter((p) => p.purpose.startsWith("bot:")).map((p) => p.index);
+    // The bot is re-entered several times in one turn; every call is its own sub-stream.
+    expect(bot.length).toBeGreaterThan(1);
+    expect(new Set(bot).size).toBeGreaterThan(1);
+    // The opening draws are the only ones pinned to index 0 (personas and the deal).
+    for (const purpose of ["personaAssign", "personaJitter", "deal", "turnOrder", "modifierPlace"]) {
+      expect(seen.filter((p) => p.purpose === purpose).every((p) => p.index === 0)).toBe(true);
+    }
+    h.destroy();
+  });
+});
+
+describe("rules.roundDelayMs — a presentation pause at each round start", () => {
+  /** Play every seat's turn out until the round wraps. Returns the session's round. */
+  function playToRound2(h: ReturnType<typeof makeSession>, handOff: boolean): number {
+    for (let guard = 0; guard < 60 && h.session.confirmed().round === 1; guard += 1) {
+      const s = h.session.confirmed();
+      const me = s.turnOrder[s.currentIndex] as number;
+      if (s.phase === "draft" && s.troopsToPlace > 0) {
+        h.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(s, me), count: s.troopsToPlace });
+        continue;
+      }
+      if (s.phase === "draft" || s.phase === "attack") {
+        h.session.endPhase();
+        continue;
+      }
+      h.session.endTurn();
+      if (handOff && h.session.confirmed().round === 1) h.session.continueHandOff();
+    }
+    return h.session.confirmed().round;
+  }
+
+  it("holds a beat and raises the round banner when the round turns", () => {
+    const sched = manualScheduler();
+    const h = makeSession({
+      seats: HOTSEAT_SEATS, rules: { roundDelayMs: 1200 },
+      schedule: sched.schedule, skipAnimations: false,
+    });
+    h.session.start();
+    h.session.continueHandOff();
+    expect(playToRound2(h, true)).toBe(2);
+    // The follow-on work is deferred, and the pause is filled by the round banner.
+    expect(h.session.store.getState().bannerText).toBe("Round 2");
+    expect(h.session.store.getState().handOff).toBeNull();
+    sched.flush();
+    // Once the pause expires, play carries on exactly as it would have.
+    expect(h.session.store.getState().handOff).not.toBeNull();
+    h.destroy();
+  });
+
+  it("is skipped entirely under reduced motion, whatever the rules say", () => {
+    const sched = manualScheduler();
+    const h = makeSession({
+      seats: HOTSEAT_SEATS, rules: { roundDelayMs: 2400 },
+      schedule: sched.schedule, skipAnimations: true,
+    });
+    h.session.start();
+    h.session.continueHandOff();
+    expect(playToRound2(h, true)).toBe(2);
+    expect(h.session.store.getState().handOff).not.toBeNull();
+    h.destroy();
+  });
+
+  it("does not pause when the delay is 0, which is the default", () => {
+    const sched = manualScheduler();
+    const h = makeSession({ seats: HOTSEAT_SEATS, schedule: sched.schedule, skipAnimations: false });
+    expect(h.config.rules.roundDelayMs).toBe(0);
+    h.session.start();
+    h.session.continueHandOff();
+    expect(playToRound2(h, true)).toBe(2);
+    expect(h.session.store.getState().bannerText).not.toBe("Round 2");
+    expect(h.session.store.getState().handOff).not.toBeNull();
+    h.destroy();
   });
 });
 

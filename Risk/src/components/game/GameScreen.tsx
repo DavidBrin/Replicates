@@ -26,9 +26,13 @@ import { CountSlider } from "@/components/ui/CountSlider";
 import { ActionBar, phaseLabelFor, primaryLabelFor } from "./ActionBar";
 import { BoardCanvas } from "./BoardCanvas";
 import { BottomLeftStack, OverlayToolbar, TitlePill, UtilityButtons } from "./HudChrome";
+import { AlliancePopover } from "./dialogs/AlliancePopover";
 import { Roster } from "./Roster";
 import { useGameScreenModel } from "./useGameScreenModel";
 import { GameDialogs } from "./GameDialogs";
+
+/** A shared empty array, so a seat with no allies does not re-run the badge memo every frame. */
+const EMPTY_ALLIES: readonly number[] = [];
 
 export interface GameScreenProps {
   readonly session: Session;
@@ -95,6 +99,58 @@ export default function GameScreen(props: GameScreenProps) {
 
   const me = model.rows.find((r) => r.seat === ui.viewerSeat) ?? model.rows[0];
 
+  /*
+   * R80 — the alliance affordance. It exists only when the rule is on, and only on another seat's
+   * capsule: tapping it opens the three-button popover, and the capsule carries a badge while an
+   * offer is in the air. Every button dispatches through the session's submit path, so the same
+   * control works online without a second code path.
+   */
+  const alliances = model.state.rules.alliances;
+  const viewer = ui.viewerSeat;
+
+  const onTapSeat = useCallback((seat: number) => {
+    if (seat === viewer) return;
+    session.openAlliancePopover(ui.alliancePopover === seat ? null : seat);
+  }, [session, ui.alliancePopover, viewer]);
+
+  // Derived from the slice rather than from `session.allianceState`, so the memo's inputs are the
+  // two things that can change it: my allies (GameState, via `version`) and the offers in the air.
+  const myAllies = model.state.seats[viewer]?.allies ?? EMPTY_ALLIES;
+  const allianceBadges = useMemo(() => {
+    const out: Record<number, "proposed" | "allied" | null> = {};
+    if (!alliances) return out;
+    for (const row of model.rows) {
+      if (row.seat === viewer) continue;
+      const offered = ui.allianceOffers.some(
+        (o) => (o.from === row.seat && o.to === viewer) || (o.from === viewer && o.to === row.seat),
+      );
+      out[row.seat] = myAllies.includes(row.seat) ? "allied" : offered ? "proposed" : null;
+    }
+    return out;
+  }, [alliances, model.rows, myAllies, ui.allianceOffers, viewer]);
+
+  const popoverFor = useCallback((seat: number) => {
+    if (!alliances || ui.alliancePopover !== seat || seat === viewer) return null;
+    const row = model.rows.find((r) => r.seat === seat);
+    if (!row) return null;
+    const s = session.allianceState(seat);
+    return (
+      <AlliancePopover
+        seat={seat}
+        name={row.name}
+        colour={row.colour}
+        allied={s.allied}
+        offeredToMe={s.offeredToMe}
+        offeredByMe={s.offeredByMe}
+        canPropose={s.canPropose}
+        onPropose={() => session.proposeAlliance(seat)}
+        onAccept={() => session.acceptAlliance(seat)}
+        onBreak={() => session.breakAlliance(seat)}
+        onClose={() => session.openAlliancePopover(null)}
+      />
+    );
+  }, [alliances, model.rows, session, ui.alliancePopover, viewer]);
+
   return (
     <main
       data-testid="game-screen"
@@ -115,7 +171,11 @@ export default function GameScreen(props: GameScreenProps) {
             syncStatus={props.sync ? ui.syncStatus : null}
           />
           <TitlePill text={ui.bannerText ?? ""} />
-          <Roster rows={model.rows} balloons={model.balloons} />
+          <Roster
+            rows={model.rows}
+            balloons={model.balloons}
+            {...(alliances ? { onTapSeat: onTapSeat, allianceBadges, popoverFor } : {})}
+          />
           <OverlayToolbar mode={ui.overlayMode} onMode={(mode) => session.setOverlay(mode)} />
           <BottomLeftStack
             cardCount={model.myCards.length}

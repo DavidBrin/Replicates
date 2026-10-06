@@ -122,6 +122,44 @@ export function legalDraftTargets(state: GameState, seat: Seat): TerritoryId[] {
   return territoriesOf(state, seat).filter((t) => !state.territories[t]?.blizzard);
 }
 
+/* --------------------------------------------------------------- claim -- */
+
+/**
+ * R6's alternation, scripted: one neutral army is owed per completed pair of the acting seat's own
+ * armies. The real engine derives this from `neutralArmiesOwed`; this stand-in only has to agree on
+ * the shape of the answer.
+ */
+export function claimOwed(state: GameState, seat: Seat): "own" | "neutral" | "none" {
+  if (state.phase !== "claim") return "none";
+  if (state.turnOrder[state.currentIndex] !== seat) return "none";
+  if (state.rules.manualPlacement && state.seats.length === 2) {
+    let own = 0;
+    let neutral = 0;
+    for (const t of state.territories) {
+      if (t.owner === SEAT_NEUTRAL) neutral += t.troops;
+      else if (t.owner >= 0) own += t.troops;
+    }
+    if (Math.floor(own / 2) > neutral) return "neutral";
+  }
+  return (state.seats[seat]?.armiesToClaim ?? 0) > 0 ? "own" : "none";
+}
+
+export function legalNeutralClaimTargets(state: GameState): TerritoryId[] {
+  const out: TerritoryId[] = [];
+  state.territories.forEach((t, i) => {
+    if (!t.blizzard && (t.owner === SEAT_NEUTRAL || t.owner === SEAT_NONE)) out.push(i);
+  });
+  return out;
+}
+
+export function legalOwnClaimTargets(state: GameState, seat: Seat): TerritoryId[] {
+  const unclaimed: TerritoryId[] = [];
+  state.territories.forEach((t, i) => {
+    if (!t.blizzard && t.owner === SEAT_NONE) unclaimed.push(i);
+  });
+  return unclaimed.length > 0 ? unclaimed : legalDraftTargets(state, seat);
+}
+
 /* --------------------------------------------------------------- cards -- */
 
 export function cardSets(cards: readonly Card[]): (readonly [string, string, string])[] {
@@ -940,6 +978,9 @@ export function createScriptedEngine(): EngineApi {
     legalAttackTargets,
     legalFortifyMoves,
     legalDraftTargets,
+    claimOwed,
+    legalNeutralClaimTargets,
+    legalOwnClaimTargets,
     cardSets,
     cardTradeValue,
     mustTradeNow,

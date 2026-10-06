@@ -13,6 +13,8 @@
  */
 export { dealTerritories } from "./dealTerritories";
 export { placeModifiers } from "./placeModifiers";
-export { rollAttack, combinedOutcomes, walkCdf, quantise, QUANTISATION } from "./rollAttack";
+export {
+  rollAttack, combinedOutcomes, sampledOutcomes, stoppedOutcomes, walkCdf, quantise, QUANTISATION,
+} from "./rollAttack";
 export { drawCard } from "./drawCard";
 export { movePortals, relocationDue } from "./movePortals";

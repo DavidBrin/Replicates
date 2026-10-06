@@ -18,7 +18,7 @@ import clsx from "clsx";
 
 import type { BotTier, Rules } from "@/engine/types";
 import { TURN_SECONDS } from "@/engine/types";
-import { BOT_TIERS, tierLabel } from "@/game/sessionConfig";
+import { BOT_TIERS, coupleCapitals, tierLabel } from "@/game/sessionConfig";
 
 export interface RulesControlsProps {
   readonly rules: Rules;
@@ -88,7 +88,11 @@ export function RulesControls({ rules, onChange, online }: RulesControlsProps) {
         <Choice
           name="win"
           value={rules.winCondition}
-          onPick={(winCondition) => onChange({ winCondition })}
+          // R8/R72 — "Capitals" is a win condition AND a board modifier, and the win condition is
+          // unreachable without it: no modifier means no capitals were ever dealt. `coupleCapitals`
+          // is the one place that invariant lives; the control routes through it so it holds even
+          // when this panel is hosted by something that does not funnel through the config store.
+          onPick={(winCondition) => onChange(coupleCapitals(rules, { winCondition }))}
           options={[
             { value: "world", label: "World Domination" },
             { value: "percentage", label: "Percentage" },

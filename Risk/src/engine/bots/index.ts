@@ -44,7 +44,7 @@ import { decideClaim, decidePlacements } from "./draft";
 import { decideFortify } from "./fortify";
 import { withLookahead } from "./lookahead";
 import { DOMINANT_ONLY_PERSONAS, ONE_ATTACK_PERSONAS } from "./personas";
-import { reserve, threat } from "./score";
+import { augmentFor, reserve, threat } from "./score";
 import { DEFAULT_WEIGHTS, type BotWeights, type GameView, type TurnPlan } from "./types";
 
 export type { GameView, TurnPlan, PlannedAttack, BotWeights, TierRow, Scored } from "./types";
@@ -172,9 +172,11 @@ function chooseAttack(
   if (chosen === undefined) return null;
 
   const sourceTroops = view.troops[chosen.from] as number;
-  const certain = odds.certainWin(sourceTroops - 1, view.troops[chosen.to] as number, {
-    defendDiceBonus: 0, attackDicePenalty: 0, favourDefenderOnDraw: true,
-  });
+  // R36 — the same augment `scoreAttack` priced this candidate with. A hard-coded
+  // standard augment calls a capital assault certain at odds the capital's extra
+  // defence die makes it anything but, and then drops the limiter (R57) on the
+  // strength of it.
+  const certain = odds.certainWin(sourceTroops - 1, view.troops[chosen.to] as number, augmentFor(view, chosen.to));
   // R57's lever: a certain win needs no hedge, so no limiter, and everything spare can move in.
   const stopUntil = certain ? undefined : stopUntilFor(view, chosen);
 

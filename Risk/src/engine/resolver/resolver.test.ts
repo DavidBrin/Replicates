@@ -15,12 +15,17 @@ import { buildState, config, personasFor, territoryCard } from "../__fixtures__/
 import { deckFor, remainingDeck } from "../cards";
 import { pcg32, rngFor } from "../prng";
 import { SEAT_NEUTRAL, SEAT_NONE, STARTING_ARMIES, type Card, type MapDef, type Rng } from "../types";
-import { combinedOutcomes, quantise, walkCdf } from "./rollAttack";
+import { combinedOutcomes, quantise, sampledOutcomes, stoppedOutcomes, walkCdf } from "./rollAttack";
 import { dealTerritories } from "./dealTerritories";
 import { drawCard } from "./drawCard";
 import { movePortals, relocationDue } from "./movePortals";
 import { placeModifiers } from "./placeModifiers";
 import { rollAttack } from "./rollAttack";
+
+/** An `Rng` whose single blitz draw is exactly `u`, so a walk has one right answer. */
+function fixedU(u: number): Rng {
+  return { nextU32: () => Math.round(u * 2 ** 32), nextFloat: () => u, state: [0, 0] };
+}
 
 /** How many draws `run` took out of a fresh `pcg32(hi, lo)`. */
 function drawsTaken(hi: number, lo: number, run: (rng: Rng) => void): number {
@@ -585,6 +590,82 @@ describe("rollAttack — blitz (R58, R59, D6, D7)", () => {
     const action = rollAttack(state(), mini, { from: 2, to: 3, mode: "blitz" }, pcg32(1, 1), fakeOdds(), "trueRandom");
     if (action.mode !== "blitz") throw new Error("expected a blitz");
     expect("stopUntil" in action).toBe(false);
+  });
+
+  /*
+   * R48/F46 — the limiter's stopped mass lives in `dist.stopped`, NOT in
+   * `defendLoss[j < D]`, so `attackLoss` + `defendLoss` sum to `1 - unresolved`
+   * and a walk over those two alone leaves the whole stopped tail unreachable:
+   * every `u` above the resolved mass used to fall off the end of the loop and
+   * come back as `lastIndexWithMass`, i.e. as "the defender held, having lost
+   * nothing". These pin the tail.
+   */
+  describe("the stopped tail (R48, F46)", () => {
+    // A = 9, D = 6, stopUntil = 4 -> committed = (A + 1) - stopUntil = 6.
+    const limited = (a: number, d: number) => makeDist(a, d, {
+      conquerLosing: { 0: 0.2 },
+      holdLosing: { 0: 0.3 },
+      stopped: [
+        { attackerLosses: 6, defenderLosses: 2, p: 0.3 },
+        { attackerLosses: 8, defenderLosses: 4, p: 0.2 },
+      ],
+    });
+
+    function at(u: number) {
+      const action = rollAttack(
+        state(10, 6), mini, { from: 2, to: 3, mode: "blitz", stopUntil: 4 },
+        fixedU(u), fakeOdds(limited), "trueRandom",
+      );
+      if (action.mode !== "blitz") throw new Error("expected a blitz");
+      return { attackerLosses: action.attackerLosses, defenderLosses: action.defenderLosses };
+    }
+
+    it("the published arrays sum to 1 - unresolved, and the sampled walk to 1", () => {
+      const dist = limited(9, 6);
+      const total = (xs: readonly number[]) => xs.reduce((acc, x) => acc + x, 0);
+      expect(dist.unresolved).toBeCloseTo(0.5, 12);
+      expect(total(combinedOutcomes(dist))).toBeCloseTo(0.5, 12);
+      expect(total(sampledOutcomes(dist))).toBeCloseTo(1, 12);
+      expect(stoppedOutcomes(dist)).toHaveLength(2);
+      expect(sampledOutcomes(dist)).toHaveLength(9 + 6 + 2);
+    });
+
+    it("a u in the stopped tail reports the stopped outcome's own losses", () => {
+      // Both of these used to come back as { 6, 0 } — the last RESOLVED cell.
+      expect(at(0.6)).toEqual({ attackerLosses: 6, defenderLosses: 2 });
+      expect(at(0.9)).toEqual({ attackerLosses: 8, defenderLosses: 4 });
+    });
+
+    it("a draw in the stopped tail never reports a draw as a defender hold", () => {
+      // The defender is alive AND has lost troops: neither half of `combined`
+      // can express that, which is why the tail has to exist.
+      const stopped = at(0.9);
+      expect(stopped.defenderLosses).toBeGreaterThan(0);
+      expect(stopped.defenderLosses).toBeLessThan(6);
+    });
+
+    it("leaves the resolved prefix of the CDF exactly where it was", () => {
+      expect(at(0)).toEqual({ attackerLosses: 0, defenderLosses: 6 });
+      expect(at(0.45)).toEqual({ attackerLosses: 6, defenderLosses: 0 });
+    });
+
+    it("stays within what the reducer will accept, across the whole unit interval", () => {
+      for (let n = 0; n <= 200; n++) {
+        const out = at(n / 201);
+        expect(out.attackerLosses).toBeLessThanOrEqual(9); // sourceTroops - 1
+        expect(out.defenderLosses).toBeLessThanOrEqual(6);
+      }
+    });
+
+    it("an OutcomeDist with no `stopped` breakdown walks exactly as it always did", () => {
+      const legacy = fakeOdds((a, d) => makeDist(a, d, { holdLosing: { 2: 1 } }));
+      const action = rollAttack(
+        state(10, 6), mini, { from: 2, to: 3, mode: "blitz", stopUntil: 4 },
+        pcg32(1, 1), legacy, "trueRandom",
+      );
+      if (action.mode !== "blitz") throw new Error("expected a blitz");
+      expect(action).toMatchObject({ attackerLosses: 6, defenderLosses: 2 });
+    });
   });
 
   it("maps an attacker-half outcome to (lost i, defender wiped)", () => {

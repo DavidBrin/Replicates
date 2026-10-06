@@ -10,10 +10,13 @@ import {
   ACTION_ORDER,
   canAttackSomewhere,
   canFortifySomewhere,
+  claimOwed,
   legalActions,
   legalAttackTargets,
   legalDraftTargets,
   legalFortifyMoves,
+  legalNeutralClaimTargets,
+  legalOwnClaimTargets,
 } from "./legalActions";
 import { apply } from "./reducer";
 import { SEAT_NEUTRAL, SEAT_NONE, type Card } from "./types";
@@ -259,5 +262,63 @@ describe("legalActions", () => {
     ).toBeUndefined();
     expect(apply(state, mini, { type: "END_PHASE", seat: 0 }).error).toBeUndefined();
     expect(apply(state, mini, { type: "END_TURN", seat: 0 }).error).toBeUndefined();
+  });
+});
+
+describe("claimOwed — R6's alternation, asked rather than guessed", () => {
+  const twoSeat = (spec: Parameters<typeof buildState>[1] = {}) => buildState(mini, {
+    seats: 2,
+    phase: "claim",
+    rules: { manualPlacement: true },
+    armiesToClaim: { 0: 8, 1: 8 },
+    ...spec,
+  });
+
+  it("asks for the seat's own army first", () => {
+    const state = twoSeat({ owners: [] });
+    expect(claimOwed(state, 0)).toBe("own");
+  });
+
+  it("asks for the NEUTRAL army once the seat's pair of two is complete (R6)", () => {
+    // Seat 0 has placed two armies; the neutral holding is owed one.
+    const state = twoSeat({ owners: [0, 0], troops: [1, 1] });
+    expect(claimOwed(state, 0)).toBe("neutral");
+    // Which is exactly what `validate` insists on, and nothing else.
+    expect(apply(state, mini, { type: "CLAIM", seat: 0, territory: 2 }).error?.code)
+      .toBe("mustPlaceAllTroops");
+    expect(apply(state, mini, { type: "CLAIM", seat: 0, territory: 2, forNeutral: true }).error)
+      .toBeUndefined();
+  });
+
+  it("goes back to the seat's own army once the neutral is placed", () => {
+    const state = twoSeat({ owners: [0, 0, SEAT_NEUTRAL], troops: [1, 1, 1] });
+    expect(claimOwed(state, 0)).toBe("own");
+  });
+
+  it("never answers `neutral` in a 3-to-6-seat game", () => {
+    const state = buildState(mini, {
+      seats: 3, phase: "claim", rules: { manualPlacement: true },
+      armiesToClaim: { 0: 4, 1: 4, 2: 4 }, owners: [0, 0, 1, 1, 2, 2], troops: [1, 1, 1, 1, 1, 1],
+    });
+    expect(claimOwed(state, 0)).toBe("own");
+  });
+
+  it("answers `none` out of the claim phase, off-turn and once the seat is spent", () => {
+    expect(claimOwed(twoSeat({ phase: "draft", owners: [] }), 0)).toBe("none");
+    expect(claimOwed(twoSeat({ owners: [] }), 1)).toBe("none");
+    expect(claimOwed(twoSeat({ owners: [], armiesToClaim: { 0: 0, 1: 0 } }), 0)).toBe("none");
+  });
+
+  it("lights the neutral's own and the unclaimed tiles for a neutral claim (R6)", () => {
+    const state = twoSeat({ owners: [0, 0, SEAT_NEUTRAL], troops: [1, 1, 1] });
+    expect(legalNeutralClaimTargets(state)).toEqual([2, 3, 4, 5]);
+    expect(legalNeutralClaimTargets(state)).not.toContain(0);
+  });
+
+  it("lights the unclaimed tiles for an own claim, then the seat's own once the board is full", () => {
+    expect(legalOwnClaimTargets(twoSeat({ owners: [0, 0], troops: [1, 1] }), 0))
+      .toEqual([2, 3, 4, 5]);
+    const full = twoSeat({ owners: [0, 0, 0, 1, 1, 1], troops: [1, 1, 1, 1, 1, 1] });
+    expect(legalOwnClaimTargets(full, 0)).toEqual([0, 1, 2]);
   });
 });

@@ -108,7 +108,15 @@ export function BlitzView({
   attackLimit, onAttackLimit, onBattle, onCancel, faces = [5, 3, 6],
 }: BlitzViewProps) {
   const percent = Math.round(winChance * 100);
-  const stop = attackLimit ?? 0;
+  /*
+   * R48 — the legal `stopUntil` range here is 1 .. attacker.troops − 1: at least one troop has to
+   * be committed, and one always stays behind. The slider's **left stop, 0, is not a value** — it
+   * is "no limiter", which the caller sends by omitting `stopUntil` altogether. Everything is
+   * clamped into the range because `attackLimit` outlives one attack and the next source may be a
+   * smaller stack.
+   */
+  const limitMax = Math.max(0, attacker.troops - 1);
+  const stop = Math.max(0, Math.min(limitMax, Math.floor(attackLimit ?? 0)));
   const committed = Math.max(0, attacker.troops - stop);
   const committedPct = attacker.troops > 0
     ? Math.round((committed / attacker.troops) * 100)
@@ -195,7 +203,7 @@ export function BlitzView({
           data-testid="attack-limit-fill"
           style={{
             position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 999,
-            width: `${attacker.troops > 1 ? (stop / (attacker.troops - 1)) * 100 : 0}%`,
+            width: `${limitMax > 0 ? (stop / limitMax) * 100 : 0}%`,
             background: TRACK_FILLED,
           }}
         />
@@ -203,11 +211,14 @@ export function BlitzView({
           data-testid="attack-limit"
           type="range"
           min={0}
-          max={Math.max(0, attacker.troops - 1)}
+          max={limitMax}
           step={1}
           value={stop}
           aria-label="Attack Limit"
-          onChange={(e) => onAttackLimit(Number(e.currentTarget.value))}
+          onChange={(e) => {
+            const raw = Math.floor(Number(e.currentTarget.value));
+            onAttackLimit(Number.isFinite(raw) ? Math.max(0, Math.min(limitMax, raw)) : 0);
+          }}
           style={{ position: "absolute", left: 0, top: -22, width: "100%", height: 58, opacity: 0,
             cursor: "pointer", margin: 0 }}
         />
@@ -215,7 +226,7 @@ export function BlitzView({
           aria-hidden
           style={{
             position: "absolute", top: -17,
-            left: `calc(${attacker.troops > 1 ? (stop / (attacker.troops - 1)) * 100 : 0}% - 24px)`,
+            left: `calc(${limitMax > 0 ? (stop / limitMax) * 100 : 0}% - 24px)`,
             width: 48, height: 48, borderRadius: "50%", background: TRACK_FILLED,
             border: `3px solid ${TRACK_UNFILLED}`, display: "grid", placeItems: "center",
           }}

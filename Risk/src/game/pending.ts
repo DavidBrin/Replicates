@@ -1,14 +1,18 @@
 /**
- * Slice hand-over, in one place.
+ * The slice entry points the screens and the session runner call through.
  *
- * S1, S2 and S3 publish barrels whose every member throws `"<slice> pending"`
- * until that slice lands. S4 is built and tested against its own fixtures, so
- * the screens must still run: each accessor below probes the real barrel once
- * and falls back to S4's stand-in, memoising the answer.
+ * This file used to be a hand-over shim: while S1, S2 and S3 published barrels whose every member
+ * threw `"<slice> pending"`, each accessor below **probed** the real barrel once and fell back to
+ * S4's stand-in, memoising the answer. All three slices have landed, so the probes are gone and the
+ * real barrels are imported directly — a probe that can only ever take one branch is a `try/catch`
+ * around production code, and it kept S4's fake engine, fake odds and demo maps in the production
+ * bundle for the sake of a branch nothing reaches.
  *
- * **This whole module is deletable** the day S1–S3 are merged — nothing but
- * the three `useReal*` probes depends on the fallbacks, and every fallback
- * lives under `src/game/__fixtures__/`.
+ * The fixtures themselves live on under `src/game/__fixtures__/` and `src/engine/__fixtures__/`,
+ * where the tests that inject them can find them. Nothing here imports one.
+ *
+ * What remains is the indirection the screens actually want: one place that knows which catalogue
+ * the map picker offers, which `OddsTables` a dice mode means, and that `engineApi` is the engine.
  */
 import * as bots from "@/engine/bots";
 import type { GameView, TurnPlan } from "@/engine/bots/types";
@@ -19,65 +23,31 @@ import type {
 import { generateVoronoiMap, loadMap, type VoronoiOptions } from "@/engine/map";
 import { FIXTURE_SLUGS, MAP_SLUGS, loadMapFile } from "@/content/maps";
 
-import { buildDemoMap } from "./__fixtures__/demoMap";
-import * as fakeBots from "./__fixtures__/fakeBots";
-import { createFakeOdds } from "./__fixtures__/fakeOdds";
-import { scriptedEngine } from "./__fixtures__/scriptedEngine";
-import { TINY4_FILE } from "./__fixtures__/tiny4";
 import type { EngineApi } from "./engineApi";
 import { engineApi } from "./engineApi";
-import { toMapDefCached } from "./mapLoader";
-
-/** True when `error` is one of the published "slice pending" stubs. */
-export function isPending(error: unknown): boolean {
-  return error instanceof Error && /^S[0-9]+ pending/.test(error.message);
-}
-
-function probe<T>(real: () => T, fallback: () => T, label: string): T {
-  try {
-    return real();
-  } catch (error) {
-    if (!isPending(error)) throw error;
-    if (typeof console !== "undefined") {
-      console.warn(`[risk] ${label} is still stubbed — using S4's development stand-in.`);
-    }
-    return fallback();
-  }
-}
 
 /* -------------------------------------------------------------- engine -- */
 
-let engineChoice: EngineApi | null = null;
-
-/** The real `@/engine`, or S4's scripted stand-in while S1 is still stubbed. */
+/** The engine. */
 export function playEngine(): EngineApi {
-  if (engineChoice) return engineChoice;
-  engineChoice = probe(
-    () => {
-      // One cheap call that every real implementation answers and every stub throws on.
-      engineApi.cardSets([]);
-      return engineApi;
-    },
-    () => scriptedEngine,
-    "@/engine",
-  );
-  return engineChoice;
-}
-
-/** True when the real engine answered the probe. */
-export function engineIsReal(): boolean {
-  return playEngine() === engineApi;
+  return engineApi;
 }
 
 /* ---------------------------------------------------------------- odds -- */
 
 const oddsCache = new Map<DiceMode, OddsTables>();
 
-/** The real `@/engine/odds`, or S4's smooth stand-in while S2 is still stubbed. */
+/**
+ * The `OddsTables` for a dice mode, built once per mode.
+ *
+ * Memoised because `createOdds` builds the 129×129 `W[A][D]` table eagerly (D22) and two screens
+ * asking for the same mode must share it — a second table is 65 KiB and a cold start, never a
+ * different answer.
+ */
 export function playOdds(mode: DiceMode): OddsTables {
   const hit = oddsCache.get(mode);
   if (hit) return hit;
-  const tables = probe(() => createOdds(mode), () => createFakeOdds(mode), "@/engine/odds");
+  const tables = createOdds(mode);
   oddsCache.set(mode, tables);
   return tables;
 }
@@ -85,8 +55,10 @@ export function playOdds(mode: DiceMode): OddsTables {
 /* ---------------------------------------------------------------- bots -- */
 
 /**
- * The three `@/engine/bots` entry points the session runner needs, probed as
- * one unit: a half-real bots barrel would be worse than either whole.
+ * The three `@/engine/bots` entry points the session runner needs.
+ *
+ * Still an interface rather than the module type, because `createSession` takes it as an option so
+ * a test can hand the runner a scripted planner (F33).
  */
 export interface BotsApi {
   drawPersonas(tiers: readonly (BotTier | null)[], assignRng: Rng, jitterRng: Rng):
@@ -95,67 +67,28 @@ export interface BotsApi {
   decideTurn(view: GameView, odds: OddsTables, rng: Rng): TurnPlan;
 }
 
-let botsChoice: BotsApi | null = null;
-
 export function playBots(): BotsApi {
-  if (botsChoice) return botsChoice;
-  botsChoice = probe<BotsApi>(
-    () => {
-      bots.drawPersonas([null], { nextU32: () => 0, nextFloat: () => 0, state: [0, 0] },
-        { nextU32: () => 0, nextFloat: () => 0, state: [0, 0] });
-      return bots;
-    },
-    () => fakeBots,
-    "@/engine/bots",
-  );
-  return botsChoice;
+  return bots;
 }
 
 /* ---------------------------------------------------------------- maps -- */
 
-/** S4's development catalogue, used only while `MAP_SLUGS` is still empty. */
-const FALLBACK_MAPS: Readonly<Record<string, () => MapFile>> = {
-  "demo-grid": () => buildDemoMap({ slug: "demo-grid", name: "Demo Grid", cols: 4, rows: 3 }),
-  "demo-wide": () => buildDemoMap({ slug: "demo-wide", name: "Demo Wide", cols: 6, rows: 4 }),
-  tiny4: () => TINY4_FILE,
-};
-
 /**
- * Every slug the picker should offer: S3's catalogue minus the engine
- * fixtures (`tiny3`/`tiny4`/`mini`/`quad` exist for tests, not for players),
- * or S4's stand-in while the catalogue is empty.
+ * Every slug the picker should offer: S3's catalogue minus the engine fixtures
+ * (`tiny3`/`tiny4`/`mini`/`quad` exist for tests, not for players).
  */
 export function playMapSlugs(): readonly string[] {
-  if (MAP_SLUGS.length === 0) return Object.keys(FALLBACK_MAPS);
   return MAP_SLUGS.filter((slug) => !FIXTURE_SLUGS.includes(slug));
 }
 
-/** True when S3's real catalogue is in place. */
-export function mapsAreReal(): boolean {
-  return MAP_SLUGS.length > 0;
-}
-
-/** Load one map file by slug, through S3's loader when it exists. */
+/** Load one map file by slug, through S3's loader. */
 export async function playMapFile(slug: string): Promise<MapFile> {
-  if (MAP_SLUGS.includes(slug)) return loadMapFile(slug);
-  const fallback = FALLBACK_MAPS[slug];
-  if (fallback) return fallback();
-  // Unknown to S4; let S3's loader produce its own rejection.
   return loadMapFile(slug);
 }
 
-/**
- * `MapFile` → `MapDef` through S3's `loadMap`, which is the canonical one.
- * S4's `toMapDefCached` stays as the fallback for its own fixtures, and the
- * two agree on the contract that matters: the sea-link union (F45).
- */
+/** `MapFile` → `MapDef`, through S3's canonical indexer. */
 export function indexMap(file: MapFile): MapDef {
-  try {
-    return loadMap(file);
-  } catch (error) {
-    if (!isPending(error)) throw error;
-    return toMapDefCached(file);
-  }
+  return loadMap(file);
 }
 
 /** Load and index one map by slug. */
@@ -164,9 +97,8 @@ export async function playMapDef(slug: string): Promise<MapDef> {
 }
 
 /**
- * The seeded random map (§4.14). `generateVoronoiMap` takes the options and a
- * seed; the slug is minted from that seed, so `GameState` never has to
- * describe a generator.
+ * The seeded random map (§4.14). `generateVoronoiMap` takes the options and a seed; the slug is
+ * minted from that seed, so `GameState` never has to describe a generator.
  */
 export function playRandomMap(options: VoronoiOptions, seed: string): MapDef {
   return indexMap(generateVoronoiMap(options, seed));

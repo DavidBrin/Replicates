@@ -118,7 +118,7 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R6 — 2-player remainder.** Remaining armies alternate: the acting seat places **2 on any one or two of its own territories**, then **1 neutral army on any neutral territory**, until both seats are exhausted. **When a seat's remainder is odd its final step places 1, not 2** (F50 **[SPEC]**) — the alternation never overshoots the starting-army total. Under Auto Placement this is performed by the resolver inside R3; under Manual Placement it is the claim-phase loop (R9), where the neutral placement is a `CLAIM` with `forNeutral: true`.
 - **R7 — Neutral behaviour.** The neutral holding is a **sentinel owner, not a seat**: `SEAT_NEUTRAL` appears in `TerritoryState.owner` and nowhere else, there is no `SeatState` for it, and `SeatKind` has no `"neutral"` member (F17 **[SPEC]**). It never takes a turn, never attacks, never receives reinforcements and holds no cards. It **defends exactly like a seat** (R24–R27): the resolver rolls its dice the way it rolls any defender's, with no special case. It is excluded from elimination, win and tiebreak checks: you win a 2-player game by eliminating your **opponent**, not the neutrals.
 - **R8 — Capitals assignment [SPEC].** With Capitals on, each seat's capital is one of its **own dealt** territories, chosen by the resolver **after** the deal (R3 ④) and carried in `GAME_STARTED`. Capitals are never placed on a blizzard — which is automatic, because a blizzard tile is never dealt to a seat.
-- **R9 — Manual Placement (claim phase).** With Manual Placement on, R3 assigns no owners (steps ② and ④ still run; the capital is drawn once the seat's claims have resolved). The game opens in `phase: "claim"`: seats alternate in `turnOrder`, each `CLAIM` placing exactly one army — onto an unowned non-blizzard territory while any remain, thereafter onto one of their own. The phase ends when every seat's starting armies are placed; play then begins at `turnOrder[0]`'s Draft.
+- **R9 — Manual Placement (claim phase).** With Manual Placement on, R3 assigns no owners (steps ② and ④ still run; the capital is drawn once the seat's claims have resolved). The game opens in `phase: "claim"`: seats alternate in `turnOrder`, each `CLAIM` placing exactly one army — onto an unowned non-blizzard territory while any remain, thereafter onto one of their own. The phase ends when every seat's starting armies are placed; play then begins at `turnOrder[0]`'s Draft. The capital drawn at that point is the seat's **most-garrisoned owned territory, ties broken by the lowest index** — deterministic, so `apply` still takes no RNG (R88), and it reads as the stack the player chose to build rather than an accident of territory numbering. **[SPEC]**
 - **R10 — Blizzards.** `placeModifiers` freezes `map.modifierSlots.blizzards` territories (per-map count **2–11**), chosen seeded and uniformly at random, **before the deal** (R3 ②) and therefore before any capital exists — so the old "territories with no capital" filter is vacuous and is dropped **[SPEC]**; never more than one per continent while alternatives remain. A blizzard territory has no owner and no troops for the whole game.
 - **R11 — Portals.** `placeModifiers` creates `map.modifierSlots.portals` portals (per-map count **3–7**), each a pair of **non-adjacent, non-blizzard** territories, no territory in two portals. The modifier setting fixes whether they are `stable` or `unstable`.
 
@@ -141,7 +141,7 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R23 — Territory bonus.** If a traded card names a territory the trader occupies, **+2 armies placed directly on that territory**, capped at **+2 per turn** however many traded cards match. So a Fixed trade is worth at most **12** in one turn.
 - **R24 — Timing branch 1: forced at turn start.** Holding **≥5** cards at the start of your turn, you **must** trade at least one set before `DRAFT`, and **may** trade a second if you still hold one. `legalActions` in `draft` with `hand.length ≥ 5` and `setsTradedThisTurn === 0` returns only `TRADE_CARDS`.
 - **R25 — Timing branch 2: your own reward draw forces nothing.** Drawing your end-of-turn card to 5 or 6 forces nothing now; the R24 check happens at the start of your **next** turn.
-- **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests.
+- **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests. **The floor is four, not six**: one trade removes exactly three cards, so a hand of 8 reaches 5 and must be traded again (8 -> 5 -> 2). `mustTradeDown` therefore keeps forcing above the floor while a trade-down is under way, which R27's `resumePhase` bounce plus `setsTradedThisTurn > 0` identifies without a new `GameState` field. **[SPEC]**
 - **R27 — Forced trade-down during Attack.** When R26 fires in `attack`, the bonus troops go into `troopsToPlace` and the phase **reverts to `draft`** until they are placed; `END_PHASE` then returns play to `attack` with `conqueredThisTurn` and every other turn flag intact. **[SPEC]**
 
   **Ordering against a conquest (F41) [SPEC].** An elimination always arrives on a capture, and a capture always sets `pendingMoveIn` (R63). **`MOVE_IN` resolves first**: the `ATTACK` branch sets `pendingMoveIn`, records the seizure, and leaves the phase at `attack`; the **`MOVE_IN` branch** is where the R27 bounce to `draft` is applied, after the troops have moved. Only when no move-in is pending — a seizure that did not come with a conquest, which R28's hand-size check can still produce — does the `ATTACK` branch apply the bounce itself. One site, one order, one test.
@@ -602,6 +602,23 @@ export interface OutcomeDist {
   /** P(the Attack Limiter stopped the battle with both sides alive). 0 without `stopUntil`. */
   readonly unresolved: number;
   readonly winChance: number;
+  /**
+   * The per-pair breakdown of `unresolved`, sorted by `attackerLosses` then `defenderLosses`.
+   *
+   * **The stopped mass lives here and nowhere else**: `attackLoss` and `defendLoss` describe
+   * resolved battles only, so with a limiter the two arrays sum to `1 - unresolved` and a walk over
+   * them alone cannot reach the stopped tail at all (R48, F46). `rollAttack` appends one slot per
+   * entry after R52's combined array, which is also the order `sampleOutcome` walks. Optional: a
+   * distribution with no limiter has nothing to break down.
+   */
+  readonly stopped?: readonly StoppedOutcome[];
+}
+
+/** One terminal state of a battle the Attack Limiter stopped with **both sides alive** (R48). */
+export interface StoppedOutcome {
+  readonly attackerLosses: number;
+  readonly defenderLosses: number;
+  readonly p: number;
 }
 
 /** The MINIMAL structural contract the resolver calls through. S2's `createOdds` returns something
@@ -1041,6 +1058,20 @@ export function reinforcementsFor(state: GameState, map: MapDef, seat: Seat): {
 export function legalAttackTargets(state: GameState, map: MapDef, from: TerritoryId): readonly TerritoryId[];
 export function legalFortifyMoves(state: GameState, map: MapDef, from: TerritoryId): readonly TerritoryId[];
 export function legalDraftTargets(state: GameState, seat: Seat): readonly TerritoryId[];
+/**
+ * R6/R9 — which `CLAIM` the claim phase is waiting for from `seat`.
+ *
+ * `"neutral"` means the next claim must carry `forNeutral: true`. The alternation is a RULE, not a
+ * courtesy — `validate` refuses the seat's own claim while the neutral army its pair owes is still
+ * outstanding — so a caller that only ever sends `CLAIM { seat, territory }` stalls the 2-seat
+ * setup outright. The UI and the bot runner ask; neither guesses. A 3-to-6-seat game never answers
+ * `"neutral"`, and `"none"` means the seat has nothing left to place.
+ */
+export function claimOwed(state: GameState, seat: Seat): "own" | "neutral" | "none";
+/** Where R6's neutral army may land: the neutral's own tiles, plus any still unclaimed. */
+export function legalNeutralClaimTargets(state: GameState): readonly TerritoryId[];
+/** Where the seat's own claim army may land: unclaimed while any remain, else its own (R9). */
+export function legalOwnClaimTargets(state: GameState, seat: Seat): readonly TerritoryId[];
 export function cardSets(cards: readonly Card[]): readonly (readonly [string, string, string])[];
 /**
  * The value of ONE set, as a function of its three cards and the two things the scheme needs — not
@@ -1599,6 +1630,15 @@ export interface SavedSession {
   readonly turn: number;
   readonly grudge: readonly number[];
   readonly savedAt: number;
+  /**
+   * The runner's monotonic action counter: the seq of the action about to be produced, and the
+   * sub-stream index EVERY resolver call is keyed on — `rngFor(seed, "battle", nextSeq)`,
+   * `"cardDeck"`, `"portalMove"` and `` `bot:${seat}` ``. Never `state.turn`, which changes once a
+   * turn and so handed two attacks in one turn the same dice. Persisted because re-deriving it on
+   * resume would re-spend a sub-stream the pre-save game had already used. Optional: an envelope
+   * written before this existed falls back to the folded count. (D5, R88)
+   */
+  readonly nextSeq?: number;
 }
 
 export interface Session {
@@ -1731,11 +1771,39 @@ export interface SyncPort {
   submitIntent(intent: AttackIntent, clientActionId: string): Promise<readonly LoggedAction[]>;
   onActions(listener: (actions: readonly LoggedAction[]) => void): () => void;
   onStatus(listener: (status: SyncStatus) => void): () => void;
-  /** The caller's masked snapshot, when the authority sent one instead of a delta (§5.5, F36). */
-  onSnapshot(listener: (snapshot: GameState, snapshotSeq: number) => void): () => void;
+  /**
+   * The caller's masked snapshot, when the authority sent one instead of a delta (§5.5, F36).
+   *
+   * The third argument is optional and additive: rows the listener should play the **events** of
+   * without folding them or moving `seq`. A fog game's snapshot is a masked view, and the actions
+   * behind it ride along purely so the board can animate what just happened.
+   */
+  onSnapshot(
+    listener: (snapshot: GameState, snapshotSeq: number, animate?: readonly LoggedAction[]) => void,
+  ): () => void;
   setIntervalMs(ms: number): void;
   readonly seq: number;
   close(): void;
+
+  // ---- added after S5 shipped; both OPTIONAL, so the existing adapter still satisfies the type --
+
+  /**
+   * Throw this client's folded state away and start again from the authority (§5.8, D16).
+   *
+   * The adapter resets its action cursor to **0**, polls once, and lets the authority answer with a
+   * masked snapshot, which the session folds through `ingestSnapshot` and nothing else. Idempotent
+   * and safe to call while a poll is in flight, because a desync is exactly when polls race.
+   * Absent, the session falls back to `setIntervalMs` + `poll` — which nudges the cadence but
+   * cannot reset the cursor, so it is a degradation, not a fix.
+   */
+  resync?(): Promise<void>;
+
+  /**
+   * Resign this seat (D76). The authority owns the action — `SEAT_TO_BOT { reason: "resigned" }` —
+   * because it has to re-seat the bot and re-time the turn, so it goes to its own route and **not**
+   * through `submit`, which refuses a client-submitted `SEAT_TO_BOT`.
+   */
+  resign?(): Promise<readonly LoggedAction[] | void>;
 }
 
 export interface LoggedAction {
