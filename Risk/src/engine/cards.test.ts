@@ -286,6 +286,23 @@ describe("the three card-timing branches", () => {
       expect(mustTradeDown(state, 0)).toBe(false);
       expect(mustTradeNow(state, 0)).toBe(false);
     });
+
+    it("and still waits when a set HAS been traded this turn but no bounce happened", () => {
+      /*
+       * Codex round 2, finding 9 — the shape that rules out deriving "mid-trade-down" from the
+       * hand size: `hand.length + 3 * setsTradedThisTurn = 8 >= 6`, yet this seat traded at turn
+       * start and only then inherited back up to five, so it has never held six. R26 defers it.
+       * `reducer.test.ts` drives the same shape through `apply` end to end.
+       */
+      const state = buildState(mini, {
+        phase: "attack",
+        resumePhase: null,
+        setsTradedThisTurn: 1,
+        hands: { 0: five },
+      });
+      expect(mustTradeDown(state, 0)).toBe(false);
+      expect(mustTradeNow(state, 0)).toBe(false);
+    });
   });
 
   it("R26 — one trade from six reaches three, which is why it stops there", () => {

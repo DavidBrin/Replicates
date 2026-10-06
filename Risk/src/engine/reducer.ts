@@ -234,15 +234,34 @@ function emitContinentDiff(d: Draft, map: MapDef, before: GameState, seats: read
   }
 }
 
-/** R26/R27 — bounce a forced mid-Attack trade-down back to draft. One site (F41). */
-function bounceForTradeDown(d: Draft, seat: Seat): void {
-  if (d.phase !== "attack") return;
+/**
+ * R26/R27 — bounce a forced trade-down back to `draft` and say whether one is owed.
+ *
+ * `resumePhase` records where the turn was when the seizure landed, so `END_PHASE` puts play back
+ * exactly there with every turn flag intact (R27). It is also what `mustTradeDown` reads to tell a
+ * trade-down **in progress** (a hand of 5 on the way from 8) from a hand of 5 that arrived by
+ * inheritance alone and waits for the next turn — so every route into a trade-down has to set it,
+ * which is why this is reached from the `MOVE_IN` branch (the conquest case, F41) *and* from
+ * `END_TURN`'s R81 elimination re-check, whatever phase that sweep ran in (codex round 2,
+ * finding 10). A sweep that ran in `draft` has no attack to resume, so it resumes at `attack`,
+ * which is where `draft` always leads.
+ *
+ * Returns `true` when the seat now owes a trade-down, so a caller that was about to advance play
+ * stops instead: the trade-down is R26's "immediate, same-turn", not the next turn's problem.
+ */
+function bounceForTradeDown(d: Draft, seat: Seat): boolean {
+  if (d.phase === "claim" || d.phase === "over") return false;
   const row = d.seats[seat];
-  if (row === undefined) return;
-  if (row.cards.length < 6 || !hasSet(row.cards)) return;
-  d.resumePhase = "attack";
-  d.events.push({ type: "phaseChanged", from: "attack", to: "draft" });
+  if (row === undefined) return false;
+  if (row.cards.length < 6 || !hasSet(row.cards)) return false;
+  if (d.phase === "draft") {
+    d.resumePhase ??= "attack";
+    return true;
+  }
+  d.resumePhase = d.phase;
+  d.events.push({ type: "phaseChanged", from: d.phase, to: "draft" });
   d.phase = "draft";
+  return true;
 }
 
 /** R12–R15 — pay a seat for the turn it is about to take, and announce it. */
@@ -682,8 +701,10 @@ function applyAttack(d: Draft, map: MapDef, action: Extract<Action, { type: "ATT
   const eliminated = eliminateIfEmpty(d, victim, action.seat);
   // R65 — the continent and win checks run on the capture, not on the move.
   if (settle(d, map, null)) return;
-  // F41 — with a move-in pending the bounce belongs to the MOVE_IN branch; the
-  // ATTACK branch only owns a seizure that came with no conquest.
+  // F41 — with a move-in pending the bounce belongs to the MOVE_IN branch, which
+  // is every capture: R63 pends one unconditionally. The guard is the belt for a
+  // capture path that ever stops doing so; the live producer of a seizure with no
+  // conquest is `END_TURN`'s R81 re-check, which bounces for itself.
   if (eliminated && d.pendingMoveIn === null) bounceForTradeDown(d, action.seat);
 }
 
@@ -727,6 +748,18 @@ function applyEndTurn(d: Draft, map: MapDef, seat: Seat): void {
     eliminateIfEmpty(d, row.seat, seat);
   }
   if (settle(d, map, null)) return;
+  /*
+   * R26/R28 — the sweep above can hand this seat a whole hand, and that seizure
+   * is as much an inheritance as a capture's: it forces an immediate, same-turn
+   * trade-down. So the bounce runs here too and, when it fires, the turn does
+   * **not** advance — advancing would clear `resumePhase` and carry a hand of
+   * seven or more into the next seat's turn, where `validate` refuses every
+   * action the holder could take (codex round 2, finding 10). The seat trades
+   * down, `END_PHASE` returns it to the phase it was in, and it ends its turn
+   * again — by which point the victim is already eliminated and the sweep is a
+   * no-op.
+   */
+  if (bounceForTradeDown(d, seat)) return;
 
   const previousIndex = d.currentIndex;
   const nextIndex = nextTurnIndex(d, previousIndex);

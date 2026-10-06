@@ -72,7 +72,12 @@ export interface EngineApi {
   movePortals(
     state: GameState, map: MapDef, rng: Rng,
   ): Extract<Action, { type: "PORTALS_MOVED" }> | null;
-  rngFor(seed: string, purpose: RngPurpose, turn: number): Rng;
+  /**
+   * The purpose-tagged sub-stream (D4). `index` is the **seq of the action being produced** — the
+   * session's `nextSeq` — never `state.turn`, which changes once a turn and so handed every attack
+   * in a turn the same dice. Personas and the opening deal use index 0.
+   */
+  rngFor(seed: string, purpose: RngPurpose, index: number): Rng;
 }
 
 /** The real one: every member bound straight from `@/engine`. */

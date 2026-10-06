@@ -41,7 +41,7 @@ exactly (§12).
 | **Fortify** | Phase 3. **One** move of troops along a connected path of own territories, then the turn ends. |
 | **Claim phase** | The Manual Placement opening: seats alternate placing one army until every territory is claimed, then alternate placing the remainder. |
 | **Round** | One full pass through `turnOrder`, from the first live seat back to it. `round` increments on wrap. |
-| **Turn** | One seat's Draft→Attack→Fortify between two `END_TURN`s. `turn` is a monotonic counter used as the RNG sub-stream index. |
+| **Turn** | One seat's Draft→Attack→Fortify between two `END_TURN`s. `turn` is a monotonic counter; it is **not** the RNG sub-stream index — that is the action's `seq` (see **RNG sub-stream**). |
 | **Blitz** | The default attack mode: the whole battle resolves in one action, from one PRNG draw, fighting to the death unless the Attack Limiter stops it. |
 | **Manual roll** | The opt-in alternative: one roll of 1–3 attacker dice vs 1–2 defender dice, shown as dice on the board. **Always True Random, by design.** |
 | **Attack Limiter** | A slider capping how many of the source territory's troops are committed to a Blitz. Modelled as `stopUntil`: the battle stops when the attacker is reduced to that many troops, producing an *unresolved* outcome. |
@@ -68,7 +68,7 @@ exactly (§12).
 | **Snapshot** | A serialised `GameState` at a known `seq`, so a cold client need not replay from 1. |
 | **State hash** | `hashState(state)`: a 64-bit hex digest over a canonical serialisation, stored on every action row and asserted by every client. |
 | **Resolver** | The pure-but-RNG-taking layer (`rollAttack`, `drawCard`, `dealTerritories`, `placeModifiers`, `movePortals`) that turns an *intent* into the **action whose payload carries the outcome**. The only place randomness enters. |
-| **RNG sub-stream** | `rngFor(seed, purpose, turn)` — a PCG32 seeded by `hash(seed, purpose, turn)`, so adding or removing a draw in one purpose never shifts another. |
+| **RNG sub-stream** | `rngFor(seed, purpose, index)` — a PCG32 seeded by `hash(seed, purpose, index)`, so adding or removing a draw in one purpose never shifts another. `index` is the **seq of the action being produced** (the session's / the server's `nextSeq`), never `state.turn`; personas and the opening deal use index 0. |
 | **Intent** | What the player asked for, before dice: `{ from, to, mode, attackerDice?, stopUntil? }`. Clients submit intents; the authority returns actions. |
 | **Hand-off** | The full-screen "pass the device to `<name>`" overlay between two human turns in Pass & Play. Presentational; it never dismisses itself. |
 | **View** | `viewFor(state, map, seat)`: a `GameState` with every fogged territory's owner and troops replaced by sentinels and every other seat's hand emptied down to a `cardCount`. What a client is allowed to see, and what a non-cheating bot reasons over. `fogged: true`, so it is never hashed. |
@@ -141,10 +141,15 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R23 — Territory bonus.** If a traded card names a territory the trader occupies, **+2 armies placed directly on that territory**, capped at **+2 per turn** however many traded cards match. So a Fixed trade is worth at most **12** in one turn.
 - **R24 — Timing branch 1: forced at turn start.** Holding **≥5** cards at the start of your turn, you **must** trade at least one set before `DRAFT`, and **may** trade a second if you still hold one. `legalActions` in `draft` with `hand.length ≥ 5` and `setsTradedThisTurn === 0` returns only `TRADE_CARDS`.
 - **R25 — Timing branch 2: your own reward draw forces nothing.** Drawing your end-of-turn card to 5 or 6 forces nothing now; the R24 check happens at the start of your **next** turn.
-- **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests. **The floor is four, not six**: one trade removes exactly three cards, so a hand of 8 reaches 5 and must be traded again (8 -> 5 -> 2). `mustTradeDown` therefore keeps forcing above the floor while a trade-down is under way, which R27's `resumePhase` bounce plus `setsTradedThisTurn > 0` identifies without a new `GameState` field. **[SPEC]**
+- **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests. **The floor is four, not six**: one trade removes exactly three cards, so a hand of 8 reaches 5 and must be traded again (8 -> 5 -> 2). `mustTradeDown` therefore keeps forcing above the floor while a trade-down is under way, which R27's `resumePhase` bounce plus `setsTradedThisTurn > 0` identifies without a new `GameState` field. For that key to hold, **every route a seizure to ≥6 can arrive by sets `resumePhase`** — the `MOVE_IN` branch after a conquest and `END_TURN`'s R81 re-check, whatever phase it ran in. It must **not** be re-derived from the hand size (`hand.length + 3 * setsTradedThisTurn >= 6`): a seat that traded at turn start and then inherited back up to five satisfies that without ever having held six, and R26 defers exactly that hand to the next turn. **[SPEC]**
 - **R27 — Forced trade-down during Attack.** When R26 fires in `attack`, the bonus troops go into `troopsToPlace` and the phase **reverts to `draft`** until they are placed; `END_PHASE` then returns play to `attack` with `conqueredThisTurn` and every other turn flag intact. **[SPEC]**
 
-  **Ordering against a conquest (F41) [SPEC].** An elimination always arrives on a capture, and a capture always sets `pendingMoveIn` (R63). **`MOVE_IN` resolves first**: the `ATTACK` branch sets `pendingMoveIn`, records the seizure, and leaves the phase at `attack`; the **`MOVE_IN` branch** is where the R27 bounce to `draft` is applied, after the troops have moved. Only when no move-in is pending — a seizure that did not come with a conquest, which R28's hand-size check can still produce — does the `ATTACK` branch apply the bounce itself. One site, one order, one test.
+  **Ordering against a conquest (F41) [SPEC].** An elimination always arrives on a capture, and a capture always sets `pendingMoveIn` (R63). **`MOVE_IN` resolves first**: the `ATTACK` branch sets `pendingMoveIn`, records the seizure, and leaves the phase at `attack`; the **`MOVE_IN` branch** is where the R27 bounce to `draft` is applied, after the troops have moved. Only when no move-in is pending — a seizure that did not come with a conquest, which `END_TURN`'s R81 re-check can still produce — does the branch that saw it apply the bounce itself. One site per route, one order, one test each.
+
+  Two consequences the implementation has to honour:
+
+  - **R28's hand-size guard exempts `MOVE_IN` as well as `TRADE_CARDS`.** The bounce is *behind* `MOVE_IN`, so gating `MOVE_IN` on "a hand of seven or more must be traded down first" wedges the seat completely: `legalActions` offers `["MOVE_IN"]` and nothing else, `validate` refuses it, and `TRADE_CARDS` is refused outside `draft`. A four-card attacker eliminating a four-card victim is enough to reach it.
+  - **`END_TURN`'s elimination sweep bounces before it advances.** The seizure it can make is an inheritance like any other and R26 calls for the trade-down *in the same turn*, so when the bounce fires the turn does not advance — advancing would clear `resumePhase` and hand the next seat's play a holder who may take no action at all. The seat trades down, `END_PHASE` returns it to the phase it was in, and it ends its turn again.
 - **R28 — Seizure.** Eliminating a seat transfers its **whole hand**. A hand never exceeds 6 under R24–R26. A state that presents 7+ is a rule violation like any other: `apply` **returns `{ state: input, events: [], error: { code: "illegalAction" } }` and never asserts or throws** (F51 **[SPEC]**, and R86).
 
 ### 3.4 Attack — dice
@@ -327,7 +332,7 @@ src/
     fog.ts                     S1 — viewFor(state, map, seat)
     hash.ts                    S1 — canonical serialisation + hashState
     serialize.ts               S1 — serializeState / deserializeState
-    prng.ts                    S1 — PCG32, rngFor(seed, purpose, turn)
+    prng.ts                    S1 — PCG32, rngFor(seed, purpose, index)   // index = the action's seq
     resolver/
       index.ts                 S1 — the resolver barrel
       rollAttack.ts            S1 — the only caller of odds + rng for a battle
@@ -858,7 +863,8 @@ export interface GameState {
   readonly currentIndex: number;           // index into turnOrder
   readonly phase: Phase;
   readonly round: number;                  // 1-based; increments on wrap
-  readonly turn: number;                   // monotonic; the rngFor sub-stream index
+  readonly turn: number;                   // monotonic turn counter; NOT the rngFor sub-stream
+                                           //   index — that is the action's seq (D5, R88)
   readonly troopsToPlace: number;
   readonly territoryBonusLeft: number;     // 0..2, reset each turn (R23)
   readonly setsTradedThisTurn: number;
@@ -1229,6 +1235,14 @@ export function roundDistribution(attackDice: number, defendDice: number, favour
  *  built here on first call and memoised on `augmentKey(aug)` (F49). */
 export function battleTable(aug: DiceAugment): Float32Array;
 export function balance(raw: OutcomeDist, cfg?: typeof BALANCE_CONFIG): OutcomeDist;
+/**
+ * The walk itself is **S1's** `sampledOutcomes` + `walkCdf`, imported from `@/engine` (the
+ * permitted direction, §4.2): `rollAttack` resolves live battles through the same two functions, so
+ * there is exactly one implementation of R52's order and R59's tie rule and the two cannot drift.
+ * What lives here is only the index → losses mapping. A resolved defender-hold costs the attacker
+ * **all of `a`** — the DP writes `defendLoss[j < D]` only on the transition that empties the
+ * attacker's force; a limiter that stopped the battle early is in `dist.stopped` with its own losses.
+ */
 export function sampleOutcome(dist: OutcomeDist, u: number): {
   attackerLosses: number; defenderLosses: number; conquered: boolean; unresolved: boolean;
 };
@@ -1744,7 +1758,8 @@ export interface EngineApi {
   movePortals(
     state: GameState, map: MapDef, rng: Rng,
   ): Extract<Action, { type: "PORTALS_MOVED" }> | null;
-  rngFor(seed: string, purpose: RngPurpose, turn: number): Rng;
+  /** `index` = the seq of the action being produced, never `state.turn`; personas/deal at 0. */
+  rngFor(seed: string, purpose: RngPurpose, index: number): Rng;
 }
 
 /** The real one: every member bound straight from `@/engine`. */
@@ -1963,7 +1978,7 @@ tap own territory  →  actionMode "attackFrom", litZone = legalAttackTargets()
 tap enemy          →  the full-screen Blitz view opens; blitzWinChance = odds.winChance(...)
                    →  steppers pick blitz | 1 | 2 | 3 dice; the Attack Limiter sets stopUntil
 BATTLE             →  session.submitAttack(intent)
-                   →  rollAttack(state, map, intent, rngFor(seed, "battle", turn), odds, diceMode)
+                   →  rollAttack(state, map, intent, rngFor(seed, "battle", nextSeq), odds, diceMode)
                    →  the ATTACK action  →  apply  →  diceRolled / battleResolved / territoryCaptured
                    →  on conquest, pendingMoveIn is set and the Move Troops slider opens (R63)
 End Attack Phase   →  apply(END_PHASE)
@@ -1983,7 +1998,7 @@ When `turnOrder[currentIndex]` is a bot seat, the runner:
 1. builds `view = makeView(engine.viewFor(state, map, seat), map, seat, persona, grudge)` — the fog
    view for an honest persona, the authoritative state for Expert (`fogHonest: false`, D31). `seat`
    and `persona` land on the view as `view.me` and `view.persona` (F20);
-2. calls <code>decideTurn(view, odds, rngFor(seed, \`bot:${seat}\`, turn))</code> **synchronously** —
+2. calls <code>decideTurn(view, odds, rngFor(seed, \`bot:${seat}\`, nextSeq))</code> **synchronously** —
    a template literal, matching `RngPurpose`'s `` `bot:${number}` `` member exactly (F18), never a
    hand-built `"bot:" + seat` concatenation;
 3. converts the `TurnPlan` into actions and replays them one at a time on a schedule of
@@ -2043,7 +2058,7 @@ begin;
   authorise: cookie → player → game_players.seat; 403 if no seat, 409 if seat <> current_seat
   map = loadMapFile(games.map_id) |> loadMap            -- memoised per slug per process (§5.1)
   fold forward to `state`; validate(state, map, action) → 422 on a RuleError
-  roll the dice server-side (rollAttack with rngFor(games.seed, "battle", turn)) and splice
+  roll the dice server-side (rollAttack with rngFor(games.seed, "battle", seq+1)) and splice
     the outcome into the payload
   insert into game_actions (...) values ($1, $seq+1, ..., state_hash);   -- 23505 on a retry
   update games set seq, snapshot, snapshot_seq, state_hash, current_seat, phase,
@@ -2164,8 +2179,8 @@ never a side effect** (D14):
 
 | Condition on the tick | What the server appends |
 |---|---|
-| `turn_deadline` passed and the phase has a legal "do nothing" | `END_PHASE` / `END_TURN`, `missed_turns += 1` |
-| `turn_deadline` passed with troops still undrafted | `AUTO_DEPLOY` (placements chosen by the bot policy), then `END_TURN` |
+| `turn_deadline` passed and the phase has a legal "do nothing" | the server **walks the phases**: `END_PHASE` first, `END_TURN` only when `END_PHASE` is illegal (fortify), `missed_turns += 1` |
+| `turn_deadline` passed with troops still undrafted | `AUTO_DEPLOY` (placements chosen by the bot policy), then the same walk — `END_PHASE` first, `END_TURN` only when `END_PHASE` is illegal (fortify), so a capturing turn still reaches fortify and earns its card (R20, R67) |
 | `missed_turns >= 2` (they are still polling — just not playing) | `SEAT_TO_BOT { reason: **"timeout"** }`, `game_players.kind='bot'`, `standing='away'` |
 | `last_seen_at` older than 2 min (they are gone, whatever their turn count) | `SEAT_TO_BOT { reason: **"away"** }`, `kind='bot'`, `standing='away'` |
 | that player polls again (either path) | `SEAT_TO_HUMAN`, `kind='human'`, `missed_turns = 0` |
@@ -2181,9 +2196,12 @@ different causes with two different copy lines must not share one enum member.
 
 ### 5.7 Round-start work
 
-At the start of each round (when `currentIndex` wraps to 0 and `round` increments), the authority — the
-session runner offline, the tick or the submitting handler online — asks
-`movePortals(state, map, rngFor(seed, "portalMove", turn))`. It returns a `PORTALS_MOVED` action when
+At the start of each round — **the condition is `round` increasing**, compared across the `END_TURN`
+apply (`roundBefore !== state.round`), *not* `currentIndex === 0`: `nextTurnIndex` skips eliminated
+seats, so once `turnOrder[0]` is out the wrap lands on index 1 or later and a `currentIndex === 0`
+gate silently stops firing for the rest of the game — the authority (the session runner offline, the
+tick or the submitting handler online) asks
+`movePortals(state, map, rngFor(seed, "portalMove", nextSeq))`. It returns a `PORTALS_MOVED` action when
 `rules.portals === "unstable"` and `round % 3 === 0`, and `null` otherwise. The action is appended
 before the round's first seat acts, so `activeFrom = round + 1` is already visible to everyone (R76).
 
@@ -2196,9 +2214,19 @@ asserts after each apply; on mismatch it does **not** reconcile: it drops local 
 snapshot, sets `syncStatus: "desynced"` and makes it loud (a console error, and a thrown error in
 dev). A desync is a bug in `apply`, and the only useful response is loud and recoverable (D16).
 
+The resync ask is **de-duplicated, not one-shot**: one ask is in flight at a time, and the latch is
+released when a snapshot lands, when the port's `resync()` rejects, and in any case after 10 s. An
+ask that is refused, dropped, or answered by an adapter that cannot actually rewind its cursor must
+not leave the session unable to ask ever again.
+
 **In a fog game the client does not fold and therefore cannot desync** (§5.5): it is handed a masked
 snapshot at `snapshotSeq === seq` on every changed poll, so `syncStatus` never reaches `"desynced"`
-there. The hash is still written on every row and is still asserted — by the **server**, which folds
+there. That is a property the client enforces for itself, not a promise it extracts from the
+authority: a batch of action rows that arrives while the confirmed state is a masked view is
+replayed **for its events only** — against a scratch copy, tolerating every refusal, with `folded`,
+`nextSeq` and the confirmed state all left where they were — and a snapshot is asked for. `apply` is
+never called on a `fogged: true` state in a way that can move the fold, because a view's numbers are
+not a state any authority ever held. The hash is still written on every row and is still asserted — by the **server**, which folds
 the authoritative state anyway, and by **T10.1**, which replays the whole log off the debug route
 (§6) and compares every `state_hash`. Fog removes the client-side assertion, not the guarantee.
 

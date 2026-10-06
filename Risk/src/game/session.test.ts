@@ -829,6 +829,152 @@ describe("the online optimistic fold (§5.5)", () => {
     h.destroy();
   });
 
+  /*
+   * Codex round 2, finding 5 — the resync ask is a latch, not a one-shot. An ask that is refused,
+   * or accepted and never answered, used to leave `resyncRequested` set for the life of the
+   * session: the client sat in `"desynced"` and never asked again.
+   */
+  describe("the resync latch releases (§5.8)", () => {
+    function gap(port: { emitActions: FakeSync["emitActions"] }, me: number, at: number, seq: number): void {
+      port.emitActions([row({ seq, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } })]);
+    }
+
+    it("releases on a rejected resync, so the next gap asks again", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const base = makeSession().session.confirmed();
+      const me = base.turnOrder[base.currentIndex] as number;
+      const at = firstOwned(base, me);
+      const inner = fakeSync();
+      let asks = 0;
+      const sched = manualScheduler();
+      const port: SyncPort = {
+        ...inner,
+        resync: async () => {
+          asks += 1;
+          throw new Error("the authority refused");
+        },
+      };
+      const h = makeSession({ sync: port, mySeat: me, schedule: sched.schedule });
+
+      gap(inner, me, at, 2);
+      expect(asks).toBe(1);
+      // The rejection lands on a microtask; until it does the ask is still in flight.
+      gap(inner, me, at, 3);
+      expect(asks).toBe(1);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(h.session.store.getState().syncStatus).toBe("desynced");
+
+      gap(inner, me, at, 4);
+      expect(asks).toBe(2);
+      warn.mockRestore();
+      h.destroy();
+    });
+
+    it("releases after the retry window when no snapshot ever lands", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const base = makeSession().session.confirmed();
+      const me = base.turnOrder[base.currentIndex] as number;
+      const at = firstOwned(base, me);
+      const port = fakeSync();
+      const sched = manualScheduler();
+      const h = makeSession({ sync: port, mySeat: me, schedule: sched.schedule });
+
+      gap(port, me, at, 2);
+      expect(port.resyncs).toHaveLength(1);
+      // Still latched: one ask at a time.
+      gap(port, me, at, 3);
+      expect(port.resyncs).toHaveLength(1);
+
+      sched.flush();
+      gap(port, me, at, 4);
+      expect(port.resyncs).toHaveLength(2);
+      warn.mockRestore();
+      h.destroy();
+    });
+
+    it("a landed snapshot releases it immediately, without waiting for the window", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const base = makeSession().session.confirmed();
+      const me = base.turnOrder[base.currentIndex] as number;
+      const at = firstOwned(base, me);
+      const port = fakeSync();
+      const sched = manualScheduler();
+      const h = makeSession({ sync: port, mySeat: me, schedule: sched.schedule });
+
+      gap(port, me, at, 2);
+      expect(port.resyncs).toHaveLength(1);
+      port.emitSnapshot({ ...base, troopsToPlace: 7 }, 5);
+      expect(h.session.store.getState().syncStatus).toBe("idle");
+      // And the release timer was disarmed with it, so nothing is left queued.
+      expect(sched.size()).toBe(0);
+
+      gap(port, me, at, 9);
+      expect(port.resyncs).toHaveLength(2);
+      warn.mockRestore();
+      h.destroy();
+    });
+  });
+
+  /*
+   * Codex round 2, finding 12 — `apply` is never called on a masked view in a way that can move
+   * the fold. A view's numbers are not a state any authority held, so a refusal there is the mask
+   * talking: folding it, or desyncing on it, put a fog game in `"desynced"` for good.
+   */
+  describe("a batch that lands on a masked view is animation only (§5.5, F36)", () => {
+    it("drains the events, moves neither the fold nor the state, and asks for a snapshot", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const base = makeSession().session.confirmed();
+      const me = base.turnOrder[base.currentIndex] as number;
+      const at = firstOwned(base, me);
+      const h = makeSession({ sync, mySeat: me, rules: { fogOfWar: true } });
+
+      const masked: GameState = { ...base, fogged: true };
+      sync.emitSnapshot(masked, 4);
+      expect(h.session.confirmed().fogged).toBe(true);
+      expect(h.session.seq()).toBe(4);
+      const before = h.session.confirmed();
+
+      sync.emitActions([
+        row({ seq: 5, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } }),
+        row({ seq: 6, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } }),
+      ]);
+
+      // Nothing folded, nothing desynced, and the snapshot that CAN move it was asked for.
+      expect(h.session.seq()).toBe(4);
+      expect(h.session.confirmed()).toBe(before);
+      expect(h.session.store.getState().syncStatus).toBe("behind");
+      expect(sync.resyncs).toHaveLength(1);
+
+      // The authority answers with the view plus the rows behind it; that is what advances us.
+      sync.emitSnapshot({ ...masked, troopsToPlace: 3 }, 6);
+      expect(h.session.seq()).toBe(6);
+      expect(h.session.store.getState().syncStatus).toBe("idle");
+      warn.mockRestore();
+      h.destroy();
+    });
+
+    it("never replays the same masked batch's events twice", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const base = makeSession().session.confirmed();
+      const me = base.turnOrder[base.currentIndex] as number;
+      const at = firstOwned(base, me);
+      const h = makeSession({ sync, mySeat: me, rules: { fogOfWar: true } });
+      sync.emitSnapshot({ ...base, fogged: true }, 4);
+      h.session.drainEvents();
+
+      const batch = [row({ seq: 5, seat: me, action: { type: "DRAFT", seat: me, territory: at, count: 1 } })];
+      sync.emitActions(batch);
+      const first = h.session.drainEvents().length;
+      expect(first).toBeGreaterThan(0);
+      sync.emitActions(batch);
+      expect(h.session.drainEvents()).toHaveLength(0);
+      warn.mockRestore();
+      h.destroy();
+    });
+  });
+
   it("treats an unknown action type and a card-less CARD_DRAWN as fog, never as a desync", () => {
     const base = makeSession().session.confirmed();
     const me = base.turnOrder[base.currentIndex] as number;
@@ -1314,6 +1460,126 @@ describe("applyForTest", () => {
   it("throws on an illegal action rather than swallowing it", () => {
     const h = makeSession();
     expect(() => h.session.applyForTest({ type: "DRAFT", seat: 99, territory: 0, count: 1 })).toThrow();
+    h.destroy();
+  });
+});
+
+/*
+ * Codex round 2, finding 7 — round-start work fires on the ROUND CHANGING, which is what the
+ * server keys on (`if (state.round !== roundBefore) portalsOwed = true`). The old
+ * `currentIndex === 0` gate was wrong the moment a seat went out: the wrap skips eliminated seats,
+ * so it lands on index 1 or later and unstable portals stopped relocating for the rest of the game.
+ */
+describe("offline round-start work (§5.7, R76)", () => {
+  function spyEngine(calls: { portals: number }): ReturnType<typeof createScriptedEngine> {
+    const base = createScriptedEngine();
+    return {
+      ...base,
+      movePortals: (...args: Parameters<typeof base.movePortals>) => {
+        calls.portals += 1;
+        return base.movePortals(...args);
+      },
+    };
+  }
+
+  /** Round 2, the LAST seat to move, and seat 0 already out of the game. */
+  function seatZeroEliminated(base: GameState): GameState {
+    let flip = 1;
+    return {
+      ...base,
+      rules: { ...base.rules, portals: "unstable" },
+      // The deal shuffles the order, and the point of the test is who sits at index 0.
+      turnOrder: [0, 1, 2],
+      round: 2,
+      currentIndex: 2,
+      phase: "fortify",
+      portals: [{ a: 0, b: 5, kind: "unstable", activeFrom: 1 }],
+      seats: base.seats.map((s) => (s.seat === 0 ? { ...s, standing: "eliminated" as const } : s)),
+      territories: base.territories.map((t) => {
+        if (t.owner !== 0) return t;
+        flip = flip === 1 ? 2 : 1;
+        return { ...t, owner: flip };
+      }),
+    };
+  }
+
+  function resumed(calls: { portals: number }): ReturnType<typeof makeSession> {
+    // Every seat human, so no bot runner plays on past the round we are watching.
+    const first = makeSession({ seats: HOTSEAT_SEATS, rules: { portals: "unstable" } });
+    const base = first.session.confirmed();
+    const saved: SavedSession = {
+      version: 1,
+      config: first.config,
+      state: seatZeroEliminated(base),
+      turn: base.turn,
+      grudge: [],
+      savedAt: 0,
+      nextSeq: 20,
+    };
+    first.destroy();
+    return makeSession({ seats: HOTSEAT_SEATS, resume: saved, engine: spyEngine(calls) });
+  }
+
+  it("relocates unstable portals on the round whose wrap SKIPS seat 0", () => {
+    const calls = { portals: 0 };
+    const h = resumed(calls);
+    expect(h.session.confirmed().round).toBe(2);
+
+    h.session.submit({ type: "END_TURN", seat: 2 });
+
+    const after = h.session.confirmed();
+    // The wrap skipped the eliminated seat, so this is exactly the state the old gate missed.
+    expect(after.round).toBe(3);
+    expect(after.currentIndex).not.toBe(0);
+    expect(calls.portals).toBe(1);
+    // R76 — the relocated portal is inactive for the whole of the round it moved in.
+    expect(after.portals[0]?.activeFrom).toBe(4);
+    h.destroy();
+  });
+
+  it("asks once per round, not once per turn", () => {
+    const calls = { portals: 0 };
+    const h = resumed(calls);
+    h.session.submit({ type: "END_TURN", seat: 2 });
+    expect(calls.portals).toBe(1);
+    const mid = h.session.confirmed();
+    h.session.submit({ type: "END_TURN", seat: mid.turnOrder[mid.currentIndex] as number });
+    expect(h.session.confirmed().round).toBe(3);
+    expect(calls.portals).toBe(1);
+    h.destroy();
+  });
+});
+
+/*
+ * Codex round 2, finding 14 — every persona draw in the game is keyed at sub-stream index 0, the
+ * opening's own stream. The offline resignation used `nextSeq`, so the takeover persona depended on
+ * how many actions happened to precede it.
+ */
+describe("offline resignation (§5.6, D76)", () => {
+  it("draws the takeover persona at sub-stream index 0, like every other persona draw", () => {
+    const base = createScriptedEngine();
+    const draws: { purpose: string; index: number }[] = [];
+    const spy = {
+      ...base,
+      rngFor: (seed: string, purpose: string, index: number) => {
+        draws.push({ purpose, index });
+        return base.rngFor(seed, purpose as never, index);
+      },
+    } as typeof base;
+    const h = makeSession({ seats: SOLO_SEATS, engine: spy });
+    h.session.start();
+    const me = h.session.mySeat();
+    // Spend a few sub-streams first, so `nextSeq` is nowhere near 0.
+    h.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(h.session.confirmed(), me), count: 1 });
+    expect(h.session.seq()).toBeGreaterThan(1);
+    draws.length = 0;
+
+    h.session.resign();
+
+    const personaDraws = draws.filter((d) => d.purpose.startsWith("persona"));
+    expect(personaDraws.map((d) => d.purpose).sort()).toEqual(["personaAssign", "personaJitter"]);
+    expect(personaDraws.every((d) => d.index === 0)).toBe(true);
+    expect(h.session.confirmed().seats[me]?.standing).toBe("resigned");
     h.destroy();
   });
 });
