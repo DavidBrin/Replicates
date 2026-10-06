@@ -6,14 +6,21 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Action, GameState } from "@/engine/types";
+import type { Action, Card, GameState } from "@/engine/types";
 import { SEAT_NEUTRAL, SEAT_UNKNOWN, TROOPS_UNKNOWN } from "@/engine/types";
+import { mustTradeNow as realMustTradeNow } from "@/engine/cards";
+import { buildState, card as engineCard } from "@/engine/__fixtures__/states";
+import { mini } from "@/engine/__fixtures__/maps";
 import { engineApi, type EngineApi } from "./engineApi";
 import type { LoggedAction, SyncPort, SyncStatus } from "@/ports/sync";
 
 import { DEMO, HOTSEAT_SEATS, SOLO_SEATS, makeSession, manualScheduler, seat } from "./__fixtures__/harness";
 import { aiStepMs, AI_STEP_MIN_MS, AI_STEP_MS, type SavedSession } from "./session";
-import { createScriptedEngine, territoriesOf } from "./__fixtures__/scriptedEngine";
+import {
+  createScriptedEngine,
+  mustTradeNow as scriptedMustTradeNow,
+  territoriesOf,
+} from "./__fixtures__/scriptedEngine";
 import { buildDemoMap } from "./__fixtures__/demoMap";
 import { toMapDef } from "./mapLoader";
 
@@ -498,6 +505,42 @@ describe("autosave and resume (§4.15)", () => {
     const second = makeSession({ seats: HOTSEAT_SEATS, resume: snapshot });
     expect(second.session.confirmed().territories).toEqual(snapshot.state.territories);
     expect(second.session.confirmed().troopsToPlace).toBe(snapshot.state.troopsToPlace);
+    second.destroy();
+  });
+
+  /**
+   * R92/§4.7 — an envelope written before `pendingAlliances` existed still resumes
+   * (codex round 4, finding 3).
+   *
+   * `risk:session:v1:…` is plain JSON that nothing re-validates field by field, and the field was
+   * added to `GameState` without a format move. A save written by the previous build therefore had
+   * no `pendingAlliances`, and the first question `legalActions` or `validate` asked about an
+   * alliance threw a `TypeError` — the resumed game crashed on its first repaint rather than
+   * refusing anything. `createSession` fills the only value an absent field can mean.
+   */
+  it("resumes a save written before pendingAlliances existed (R92)", () => {
+    const saved: (SavedSession | null)[] = [];
+    const first = makeSession({
+      seats: HOTSEAT_SEATS,
+      rules: { alliances: true },
+      save: (s) => saved.push(s),
+    });
+    first.session.start();
+    first.session.continueHandOff();
+    const me = first.session.confirmed().turnOrder[0] as number;
+    first.session.submit({ type: "DRAFT", seat: me, territory: firstOwned(first.session.confirmed(), me), count: 1 });
+    const snapshot = saved.filter((s): s is SavedSession => s !== null).at(-1) as SavedSession;
+    first.destroy();
+
+    const stale = { ...snapshot.state } as Record<string, unknown>;
+    delete stale.pendingAlliances;
+    const old = { ...snapshot, state: stale as unknown as GameState };
+
+    const second = makeSession({ seats: HOTSEAT_SEATS, rules: { alliances: true }, resume: old });
+    expect(second.session.confirmed().pendingAlliances).toEqual([]);
+    // The derived UI slice is what crashed: it asks `legalActions` for the viewer's seat.
+    expect(() => second.session.legal()).not.toThrow();
+    expect(second.session.confirmed().territories).toEqual(snapshot.state.territories);
     second.destroy();
   });
 
@@ -1627,6 +1670,106 @@ describe("offline resignation (§5.6, D76)", () => {
     expect(personaDraws.map((d) => d.purpose).sort()).toEqual(["personaAssign", "personaJitter"]);
     expect(personaDraws.every((d) => d.index === 0)).toBe(true);
     expect(h.session.confirmed().seats[me]?.standing).toBe("resigned");
+    h.destroy();
+  });
+});
+
+/**
+ * The scripted double versus the engine it stands in for (F33; codex round 4, finding 8).
+ *
+ * `scriptedEngine` is not the engine, and is not meant to be: it implements the branches the
+ * session runner drives and nothing else. But where it answers a rule question at all it has to
+ * answer the same way, or every S4 test built on it is asserting a rule the game does not have.
+ * Two places had drifted, and both are rules a session can reach.
+ */
+describe("the scripted double agrees with the real engine", () => {
+  const inf = (id: string) => engineCard(id, "infantry", null);
+  const cav = (id: string) => engineCard(id, "cavalry", null);
+
+  /** A board where seat 0 is to play, with whatever hand and turn flags a branch needs. */
+  function hand(cards: readonly Card[], overrides: Parameters<typeof buildState>[1] = {}) {
+    return buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      phase: "draft",
+      hands: { 0: cards },
+      ...overrides,
+    });
+  }
+
+  const SET = [inf("s1"), inf("s2"), inf("s3")];
+
+  it("R24/R26 — mustTradeNow matches on every branch the runner can reach", () => {
+    const cases = [
+      // R24 at turn start: five with a set forces, five without does not.
+      { label: "five with a set", seat: 0, state: hand([...SET, cav("x"), cav("y")]) },
+      { label: "five with no set", seat: 0, state: hand([inf("a"), inf("b"), cav("c"), cav("d"), cav("e")]) },
+      { label: "four", seat: 0, state: hand([...SET, cav("x")]) },
+      // R25 — a reward draw to six in fortify forces nothing until the next turn.
+      {
+        label: "six in fortify, unbounced",
+        seat: 0,
+        state: hand([...SET, cav("x"), cav("y"), cav("z")], { phase: "fortify" }),
+      },
+      // R26's first branch: six or more after a bounce.
+      {
+        label: "eight mid-bounce",
+        seat: 0,
+        state: hand(
+          [...SET, cav("x"), cav("y"), cav("z"), inf("p"), cav("q")],
+          { resumePhase: "attack", setsTradedThisTurn: 1 },
+        ),
+      },
+      // R26's THIRD branch, the one the double was missing: 8 -> 5 is still above the floor.
+      {
+        label: "five mid-trade-down",
+        seat: 0,
+        state: hand([...SET, cav("x"), cav("y")], { resumePhase: "attack", setsTradedThisTurn: 1 }),
+      },
+      // ...and the hand of five that arrived by inheritance alone, which R26 defers.
+      {
+        label: "five inherited, nothing traded",
+        seat: 0,
+        state: hand([...SET, cav("x"), cav("y")], {
+          resumePhase: "attack", setsTradedThisTurn: 0, phase: "attack",
+        }),
+      },
+      // The current-seat gate: seat 1 is never forced while seat 0 is to play.
+      { label: "off-turn", seat: 1, state: hand([...SET, cav("x"), cav("y")]) },
+    ] as const;
+    for (const { label, seat, state } of cases) {
+      expect(scriptedMustTradeNow(state, seat), label).toBe(realMustTradeNow(state, seat));
+    }
+  });
+
+  /**
+   * R80/§4.7 — the double now moves `pendingAlliances`, so a session test can assert the rule the
+   * field exists for: one offer at a time per pair, cleared by the answer.
+   */
+  it("R80 — records an offer and clears it on the answer", () => {
+    const h = makeSession({ seats: HOTSEAT_SEATS, rules: { alliances: true } });
+    h.session.start();
+    h.session.continueHandOff();
+    h.session.applyForTest({ type: "ALLIANCE_PROPOSE", seat: 0, to: 1 });
+    expect(h.session.confirmed().pendingAlliances).toEqual([[0, 1]]);
+    h.session.applyForTest({ type: "ALLIANCE_ACCEPT", seat: 1, from: 0 });
+    expect(h.session.confirmed().pendingAlliances).toEqual([]);
+    expect(h.session.confirmed().seats[0]?.allies).toEqual([1]);
+    h.destroy();
+  });
+
+  /** And a seat that leaves takes its pacts with it, as the reducer does (R81, R82). */
+  it("R82 — a resignation clears the resigning seat's pacts", () => {
+    const h = makeSession({ seats: HOTSEAT_SEATS, rules: { alliances: true } });
+    h.session.start();
+    h.session.continueHandOff();
+    h.session.applyForTest({ type: "ALLIANCE_PROPOSE", seat: 0, to: 1 });
+    h.session.applyForTest({ type: "ALLIANCE_ACCEPT", seat: 1, from: 0 });
+    h.session.applyForTest({
+      type: "SEAT_TO_BOT", seat: 1, reason: "resigned", tier: "medium", persona: makePersona(),
+    });
+    expect(h.session.confirmed().seats[1]?.allies).toEqual([]);
+    expect(h.session.confirmed().seats[0]?.allies).toEqual([]);
     h.destroy();
   });
 });

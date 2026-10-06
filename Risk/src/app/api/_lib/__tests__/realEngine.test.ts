@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { apply, hashState, type Action, type GameState, type MapDef, type Seat } from "@/engine";
+import {
+  apply,
+  hashState,
+  type Action,
+  type Card,
+  type GameState,
+  type MapDef,
+  type Seat,
+} from "@/engine";
 import { classicWorld, tiny4 } from "@/engine/__fixtures__/maps";
 
 import { realServerEngine, type ServerEngine } from "../engine";
@@ -355,6 +363,119 @@ describe("the real append path and turn timer", () => {
     replay(log, classicWorld);
   });
 
+  /**
+   * R28/§5.6 — a seat owing a **7-or-8-card trade-down** can still be handed over and can still
+   * resign (codex round 4, finding 1).
+   *
+   * R28's seven-card guard reads `action.seat`, and on `SEAT_TO_BOT`, `SEAT_TO_HUMAN` and
+   * `PORTALS_MOVED` that field names the seat the action is *about*, never a seat taking a play.
+   * Gating them wedged the game exactly as gating `MOVE_IN` once did:
+   *
+   * - the lazy tick's away branch (`isUnseen`) produces `SEAT_TO_BOT` and nothing else, so the
+   *   whole tick came back `appended === 0`;
+   * - `missedTurns` is only climbed by the *timeout* branch below it, so the takeover escape that
+   *   feeds `MISSED_TURNS_TO_BOT` was never reached;
+   * - `POST /resign` validates the same action, so it answered `422` to the one player who had
+   *   decided they wanted out.
+   *
+   * The board below is the reachable one: a seizure past six bounces play to `draft` with
+   * `resumePhase` set (R27), and a trade has already gone this turn, so R26 still owes another
+   * (8 → 5 is above the floor of four).
+   */
+  describe("a seat owing a 7-or-8-card trade-down (R26, R28)", () => {
+    /** Plant a hand of eight mid-trade-down on whichever seat is to play, as `games.snapshot`. */
+    async function wedge(gameId: string): Promise<Seat> {
+      const rows = await harness.db.query<{ snapshot: GameState; seq: string | number }>(
+        "select snapshot, seq from games where id = $1",
+        [gameId],
+      );
+      const snapshot = rows[0]!.snapshot;
+      const seat = snapshot.turnOrder[snapshot.currentIndex] as Seat;
+      // Two full sets plus two spares: eight cards, and `cardSets` can always find a trade.
+      const hand: Card[] = [
+        { id: "w-1", suit: "infantry", territory: 0 },
+        { id: "w-2", suit: "infantry", territory: 1 },
+        { id: "w-3", suit: "infantry", territory: 2 },
+        { id: "w-4", suit: "cavalry", territory: 3 },
+        { id: "w-5", suit: "cavalry", territory: 4 },
+        { id: "w-6", suit: "cavalry", territory: 5 },
+        { id: "w-7", suit: "artillery", territory: 6 },
+        { id: "w-8", suit: "artillery", territory: 7 },
+      ];
+      const wedged: GameState = {
+        ...snapshot,
+        phase: "draft",
+        troopsToPlace: 0,
+        // R27's bounce marker, and a set already traded this turn — R26's third branch.
+        resumePhase: "attack",
+        setsTradedThisTurn: 1,
+        seats: snapshot.seats.map((s) =>
+          (s.seat === seat ? { ...s, cards: hand, cardCount: hand.length } : s)),
+      };
+      await harness.db.execute(
+        "update games set snapshot = $2::jsonb, snapshot_seq = seq, phase = 'draft' where id = $1",
+        [gameId, JSON.stringify(wedged)],
+      );
+      return seat;
+    }
+
+    it("is handed to a bot by the tick's away branch rather than freezing the game (§5.6)", async () => {
+      const game = await twoPlayerGame();
+      const seat = await wedge(game.gameId);
+      await harness.db.execute(
+        `update game_players set last_seen_at = now() - interval '5 minutes'
+          where game_id = $1 and seat = $2`,
+        [game.gameId, seat],
+      );
+
+      const report = await runLazyTick(game.gameId);
+      expect(report.ticked).toBe(true);
+      expect(report.appended).toBeGreaterThan(0);
+
+      const log = await rawLogOf(harness.db, game.gameId);
+      const takeover = log.find((row) => row.type === "SEAT_TO_BOT");
+      expect(takeover?.payload).toMatchObject({ seat, reason: "away" });
+      const after = await harness.db.query<{ kind: string; standing: string }>(
+        "select kind, standing from game_players where game_id = $1 and seat = $2",
+        [game.gameId, seat],
+      );
+      expect(after[0]).toMatchObject({ kind: "bot", standing: "away" });
+    });
+
+    it("can still resign, which is 200 and not 422 (D76)", async () => {
+      const game = await twoPlayerGame();
+      const seat = await wedge(game.gameId);
+      const session = seat === 0 ? game.a : game.b;
+
+      const response = await routes.resign(
+        game.gameId,
+        req(`/api/games/${game.gameId}/resign`, { method: "POST", cookie: session.cookie }),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { actions: { action: Action }[] };
+      expect(body.actions[0]?.action).toMatchObject({ type: "SEAT_TO_BOT", seat, reason: "resigned" });
+    });
+
+    /** The exemption is narrow: a draft placement is the seat's own play and stays refused. */
+    it("still cannot draft, auto-deploy or end the phase (R26)", async () => {
+      const game = await twoPlayerGame();
+      const seat = await wedge(game.gameId);
+      const session = seat === 0 ? game.a : game.b;
+      for (const [label, action] of [
+        ["draft", { type: "DRAFT", seat, territory: 0, count: 1 }],
+        ["endphase", { type: "END_PHASE", seat }],
+        ["endturn", { type: "END_TURN", seat }],
+      ] as const) {
+        const response = await submit(session, game.gameId, {
+          clientActionId: actionId(`wedged-${label}`),
+          kind: "action",
+          action,
+        });
+        expect(response.status, label).toBe(422);
+      }
+    });
+  });
+
   it("rolls a real attack from an intent and logs the dice", async () => {
     const game = await twoPlayerGame();
     const { session, seat } = await whoseTurn(game);
@@ -445,12 +566,27 @@ describe("the real append path and turn timer", () => {
    * nobody would ever take. The route's own blanket turn fence used to
    * overrule that and answer `409 notYourTurn` to every seat but the one to
    * play, which is the whole feature.
+   *
+   * The `ACCEPT` is now preceded by the `PROPOSE` it answers: `validateAlliance` gates an accept on
+   * a recorded `[from, seat]` offer, because without that gate a seat could forge a pact nobody
+   * offered it and churn `games.seq` with the pair off-turn (codex round 4, finding 2). This test
+   * used to pin the no-offer accept at `200`, which was the bug rather than the contract — the
+   * off-turn exemption is what it is here to prove, and the offer below is sent off-turn too.
    */
   it("lets a seat accept an alliance off its own turn (R80)", async () => {
     const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
     const { session, seat } = await whoseTurn(game);
     const other = session === game.a ? game.b : game.a;
     const otherSeat: Seat = seat === 0 ? 1 : 0;
+
+    // The seat whose turn it IS makes the offer; the seat whose turn it is not answers it.
+    expect(
+      (await submit(session, game.gameId, {
+        clientActionId: actionId("ally-offer"),
+        kind: "action",
+        action: { type: "ALLIANCE_PROPOSE", seat, to: otherSeat },
+      })).status,
+    ).toBe(200);
 
     const response = await submit(other, game.gameId, {
       clientActionId: actionId("ally-off-turn"),
@@ -468,6 +604,38 @@ describe("the real append path and turn timer", () => {
     // The seat whose turn it is has not changed hands, and the log still folds.
     expect(await currentSeatOf(game.gameId)).toBe(seat);
     replay(log, classicWorld);
+  });
+
+  /**
+   * R80 — an accept with nothing to accept is `422`, not a free pact (codex round 4, finding 2).
+   *
+   * The three alliance actions are the only ones exempt from the online turn fence, so a forged
+   * accept was a log row any seated player could mint whenever it liked: `games.seq` moved, and
+   * with it every other client's `204` fast path. Nothing is appended, which is the assertion that
+   * matters.
+   */
+  it("422s an ALLIANCE_ACCEPT with no offer on the table (R80)", async () => {
+    const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
+    const { session, seat } = await whoseTurn(game);
+    const other = session === game.a ? game.b : game.a;
+    const otherSeat: Seat = seat === 0 ? 1 : 0;
+
+    const before = await harness.db.query<{ seq: string | number }>(
+      "select seq from games where id = $1",
+      [game.gameId],
+    );
+    const response = await submit(other, game.gameId, {
+      clientActionId: actionId("ally-forged"),
+      kind: "action",
+      action: { type: "ALLIANCE_ACCEPT", seat: otherSeat, from: seat },
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: "notAlliable" });
+    const after = await harness.db.query<{ seq: string | number }>(
+      "select seq from games where id = $1",
+      [game.gameId],
+    );
+    expect(Number(after[0]?.seq)).toBe(Number(before[0]?.seq));
   });
 
   /*
@@ -563,6 +731,47 @@ describe("the real append path and turn timer", () => {
       ).toBe(200);
       expect(await missedTurnsOf(game.gameId, seat)).toBe(0);
     });
+  });
+
+  /**
+   * R92/§4.7 — a `games.snapshot` written before `pendingAlliances` existed still folds
+   * (codex round 4, finding 3).
+   *
+   * The column is `jsonb` and the fold starts from it, so it is a state the engine running *now*
+   * reads and an older engine wrote. `validate`, `legalActions` and `apply` all read
+   * `pendingAlliances`, so a row without the field threw a `TypeError` out of the fold itself and
+   * so out of every route that folds — the poll included, which is a `500` on a game that was
+   * perfectly playable a deploy ago.
+   */
+  it("folds a snapshot row written before pendingAlliances existed (R92)", async () => {
+    const game = await twoPlayerGame({ ...TEST_RULES, alliances: true });
+    const rows = await harness.db.query<{ snapshot: GameState }>(
+      "select snapshot from games where id = $1",
+      [game.gameId],
+    );
+    const stale = { ...rows[0]!.snapshot } as Record<string, unknown>;
+    delete stale.pendingAlliances;
+    await harness.db.execute(
+      "update games set snapshot = $2::jsonb, snapshot_seq = seq where id = $1",
+      [game.gameId, JSON.stringify(stale)],
+    );
+
+    // The poll folds it, and hands the client a snapshot that carries the field.
+    const polled = await poll(game.a, game.gameId, 0);
+    expect(polled.status).toBe(200);
+    const body = (await polled.json()) as { snapshot?: GameState };
+    expect(body.snapshot?.pendingAlliances).toEqual([]);
+
+    // And the append path folds it too, so diplomacy works on the migrated-in-flight state.
+    const { session, seat } = await whoseTurn(game);
+    const otherSeat: Seat = seat === 0 ? 1 : 0;
+    expect(
+      (await submit(session, game.gameId, {
+        clientActionId: actionId("stale-propose"),
+        kind: "action",
+        action: { type: "ALLIANCE_PROPOSE", seat, to: otherSeat },
+      })).status,
+    ).toBe(200);
   });
 
   it("still 409s a non-diplomatic action from the seat that is not to play", async () => {

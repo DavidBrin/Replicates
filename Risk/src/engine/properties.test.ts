@@ -16,11 +16,21 @@ import { describe, expect, it } from "vitest";
 
 import { classicWorld, mini, tiny4 } from "./__fixtures__/maps";
 import { fakeOdds, makeDist } from "./__fixtures__/odds";
-import { buildState, config, personasFor } from "./__fixtures__/states";
+import { buildState, card, config, personasFor } from "./__fixtures__/states";
 import { areAdjacent, neighbours } from "./graph";
 import { viewFor } from "./fog";
 import { canonicalize, hashState } from "./hash";
-import { legalAttackTargets } from "./legalActions";
+import { cardSets } from "./cards";
+import {
+  ACTION_ORDER,
+  claimOwed,
+  legalActions,
+  legalAttackTargets,
+  legalDraftTargets,
+  legalFortifyMoves,
+  legalNeutralClaimTargets,
+  legalOwnClaimTargets,
+} from "./legalActions";
 import { pcg32, rngFor } from "./prng";
 import { apply, createInitialState } from "./reducer";
 import { dealTerritories, drawCard, movePortals, rollAttack } from "./resolver";
@@ -31,11 +41,13 @@ import {
   SEAT_UNKNOWN,
   TROOPS_UNKNOWN,
   type Action,
+  type ActionKind,
   type GameState,
   type MapDef,
   type OutcomeDist,
   type PortalState,
   type Seat,
+  type TerritoryId,
 } from "./types";
 
 /** A battle distribution with mass on both halves, so a scripted game varies. */
@@ -701,5 +713,382 @@ describe("T5 — the resolver is a pure function of its rng", () => {
       }),
       { numRuns: 200 },
     );
+  });
+});
+
+/* ------------------------------------------- legalActions <-> validate agreement -- */
+
+/**
+ * T5 — `legalActions` and `validate` must agree, over a few hundred **reachable** states
+ * (SPEC §4.10, R91; the codex round-4 reviewer's harness).
+ *
+ * Every round of review so far has found the same shape of bug twice over: a kind the list
+ * advertises that the validator refuses (an `ALLIANCE_BREAK` for a dead ally, an `ALLIANCE_ACCEPT`
+ * with no offer on the table, a `MOVE_IN` past a six-card hand), or a kind the validator accepts
+ * that the list never offers (`END_TURN` out of `draft`, the alliance kinds dropped by R24's early
+ * return). Each was found by reading; none was caught by a test, because every test asserted one
+ * side or the other. This asserts the **relation**, which is the only thing that catches the next
+ * one.
+ *
+ * The property, at every state a driven game passes through, for **every** seat and not just the
+ * one to play:
+ *
+ * - every kind `legalActions` advertises has at least one concrete action `validate` accepts;
+ * - every concrete action `validate` accepts has its kind advertised.
+ *
+ * It is scoped to {@link ACTION_ORDER}, which is deliberately not the whole `ActionKind` union:
+ * `GAME_STARTED`, `SEAT_TO_BOT`, `SEAT_TO_HUMAN` and `PORTALS_MOVED` are the *authority's* to
+ * produce and never a seat's to submit, so `legalActions` not advertising them is the contract
+ * rather than a disagreement. `CARD_DRAWN` and `AUTO_DEPLOY` are in the order and so are checked.
+ */
+describe("T5 — legalActions and validate agree on every reachable state (§4.10)", () => {
+  /**
+   * Every concrete action of each kind that is worth offering to `validate` from `seat`.
+   *
+   * Breadth matters more than realism: an advertised kind is only honoured if *some* payload of it
+   * validates, so a candidate list that is too narrow reports a false disagreement. Payloads come
+   * from the same selectors and resolvers the UI and the authority use, which is the point — a
+   * representative nobody could ever construct would prove nothing.
+   */
+  function representatives(
+    state: GameState,
+    map: MapDef,
+    seat: Seat,
+    rngIndex: number,
+  ): Map<ActionKind, Action[]> {
+    const out = new Map<ActionKind, Action[]>();
+    const add = (kind: ActionKind, actions: readonly Action[]) => {
+      if (actions.length > 0) out.set(kind, [...actions]);
+    };
+    const row = state.seats[seat];
+    if (row === undefined) return out;
+    const others = state.seats.filter((s) => s.seat !== seat).map((s) => s.seat);
+
+    add("CLAIM", [
+      ...legalOwnClaimTargets(state, seat).map((territory): Action => ({ type: "CLAIM", seat, territory })),
+      ...legalNeutralClaimTargets(state).map(
+        (territory): Action => ({ type: "CLAIM", seat, territory, forNeutral: true }),
+      ),
+    ]);
+
+    const trades: Action[] = [];
+    for (const set of cardSets(row.cards)) {
+      trades.push({ type: "TRADE_CARDS", seat, cards: set, bonusTerritory: null });
+      for (const id of set) {
+        const t = row.cards.find((c) => c.id === id)?.territory;
+        if (t !== null && t !== undefined) {
+          trades.push({ type: "TRADE_CARDS", seat, cards: set, bonusTerritory: t });
+        }
+      }
+    }
+    add("TRADE_CARDS", trades);
+
+    const draftTargets = legalDraftTargets(state, seat);
+    add("DRAFT", draftTargets.flatMap((territory): Action[] => [
+      { type: "DRAFT", seat, territory, count: 1 },
+      { type: "DRAFT", seat, territory, count: Math.max(1, state.troopsToPlace) },
+    ]));
+    if (draftTargets.length > 0 && state.troopsToPlace > 0) {
+      // An even spread, the way the tick's `spreadPlacements` builds one.
+      const counts = new Map<TerritoryId, number>();
+      const sorted = [...draftTargets].sort((a, b) => a - b);
+      for (let i = 0; i < state.troopsToPlace; i += 1) {
+        const t = sorted[i % sorted.length] as TerritoryId;
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+      add("AUTO_DEPLOY", [{
+        type: "AUTO_DEPLOY",
+        seat,
+        placements: [...counts].map(([territory, count]) => ({ territory, count })),
+      }]);
+    }
+
+    const attacks: Action[] = [];
+    for (let from = 0; from < map.territories.length; from += 1) {
+      if (state.territories[from]?.owner !== seat) continue;
+      for (const to of legalAttackTargets(state, map, from)) {
+        attacks.push(rollAttack(
+          state, map, { from, to, mode: "blitz" },
+          rngFor("agreement", "battle", rngIndex + from * 131 + to), ODDS, "trueRandom",
+        ));
+      }
+    }
+    add("ATTACK", attacks);
+
+    if (state.pendingMoveIn !== null) {
+      const { min, max } = state.pendingMoveIn;
+      add("MOVE_IN", [...new Set([min, max])].map((count): Action => ({ type: "MOVE_IN", seat, count })));
+    }
+
+    const fortifies: Action[] = [];
+    for (let from = 0; from < map.territories.length; from += 1) {
+      if (state.territories[from]?.owner !== seat) continue;
+      for (const to of legalFortifyMoves(state, map, from)) {
+        fortifies.push({ type: "FORTIFY", seat, from, to, count: 1 });
+      }
+    }
+    add("FORTIFY", fortifies);
+
+    add("END_PHASE", [{ type: "END_PHASE", seat }]);
+    add("END_TURN", [{ type: "END_TURN", seat }]);
+    // The resolver's own draw, which is the only `CARD_DRAWN` the authority ever appends.
+    add("CARD_DRAWN", [drawCard(state, map, seat, rngFor("agreement", "cardDeck", rngIndex))]);
+
+    add("ALLIANCE_PROPOSE", others.map((to): Action => ({ type: "ALLIANCE_PROPOSE", seat, to })));
+    add("ALLIANCE_ACCEPT", others.map((from): Action => ({ type: "ALLIANCE_ACCEPT", seat, from })));
+    add("ALLIANCE_BREAK", others.map((other): Action => ({ type: "ALLIANCE_BREAK", seat, with: other })));
+    return out;
+  }
+
+  /** The two halves of the property, asserted for one seat at one state. */
+  function assertAgreement(state: GameState, map: MapDef, seat: Seat, where: string, rngIndex: number): void {
+    const advertised = new Set(legalActions(state, map, seat));
+    const reps = representatives(state, map, seat, rngIndex);
+    for (const kind of ACTION_ORDER) {
+      const candidates = reps.get(kind) ?? [];
+      const accepted = candidates.filter((action) => validate(state, map, action) === null);
+      if (advertised.has(kind)) {
+        expect(
+          accepted.length,
+          `${where}: seat ${String(seat)} is offered ${kind}, but validate refuses every payload of it`
+            + ` (${candidates.map((c) => validate(state, map, c)?.code ?? "ok").join(", ")})`,
+        ).toBeGreaterThan(0);
+      } else {
+        expect(
+          accepted.length,
+          `${where}: validate accepts ${kind} for seat ${String(seat)}, but legalActions does not offer it`,
+        ).toBe(0);
+      }
+    }
+  }
+
+  /**
+   * Drive a game the way the session runner and the lazy tick do, asserting the property at every
+   * state and for every seat on the way through.
+   *
+   * Alliances are **on**, and the driver proposes, accepts and breaks as it goes: three of the four
+   * disagreements this harness exists for were in the alliance branches, and a drive with
+   * `alliances: false` would have walked straight past all of them. The trade-down branches are
+   * reached the same way the real game reaches them — by capture and elimination.
+   */
+  function driveAndCheck(map: MapDef, seats: number, seed: string, maxSteps: number): number {
+    const cfg = config(map, seats, { alliances: true, capitals: false, blizzards: false, portals: "off" }, seed);
+    const started = dealTerritories(map, cfg, personasFor(seats), {
+      deal: rngFor(seed, "deal", 0),
+      turnOrder: rngFor(seed, "turnOrder", 0),
+      modifierPlace: rngFor(seed, "modifierPlace", 0),
+    });
+    let state = createInitialState(map, started);
+    let checked = 0;
+
+    for (let step = 1; step <= maxSteps && state.outcome === null; step += 1) {
+      for (const row of state.seats) assertAgreement(state, map, row.seat, `${map.slug} step ${String(step)}`, step);
+      checked += 1;
+
+      const seat = state.turnOrder[state.currentIndex] as Seat;
+      const reps = representatives(state, map, seat, step);
+      /*
+       * The order a turn is actually played in, and it matters: `MOVE_IN` first because R63 blocks
+       * everything else, then play, and `END_PHASE` before `END_TURN` the way `autoSkipAction` and
+       * `decideTurn` both order them. Diplomacy is interleaved so `pendingAlliances` and `allies`
+       * are non-empty for most of the drive rather than only at the end.
+       *
+       * `TRADE_CARDS` is **last**, deliberately: a driver that traded the moment it held a set
+       * never let a hand reach five, so R24's forced-trade state — the one `legalActions` answers
+       * with an early return, and the one finding 7 lived in — was never visited. Put last, it is
+       * reached only when R24 and R26 have refused everything else, which is exactly that state.
+       */
+      const order: ActionKind[] = [
+        "MOVE_IN", "CLAIM",
+        ...(step % 7 === 0 ? (["ALLIANCE_PROPOSE", "ALLIANCE_ACCEPT"] as ActionKind[]) : []),
+        ...(step % 23 === 0 ? (["ALLIANCE_BREAK"] as ActionKind[]) : []),
+        "DRAFT", "ATTACK", "FORTIFY", "CARD_DRAWN", "END_PHASE", "END_TURN", "TRADE_CARDS",
+      ];
+
+      let moved = false;
+      for (const kind of order) {
+        for (const action of reps.get(kind) ?? []) {
+          if (validate(state, map, action) !== null) continue;
+          const result = apply(state, map, action);
+          expect(result.error, `${kind} validated and then apply refused it`).toBeUndefined();
+          state = result.state;
+          moved = true;
+          break;
+        }
+        if (moved) break;
+      }
+      /*
+       * Nothing legal for the seat to play is itself a disagreement worth failing on: the assertion
+       * above has already passed, so `legalActions` agreed there was nothing — and a seat with no
+       * legal action at all is the dead end every one of these findings ended in.
+       */
+      if (!moved) {
+        const off = state.seats.flatMap((row) =>
+          (row.seat === seat ? [] : [...legalActions(state, map, row.seat)]));
+        expect(
+          [...legalActions(state, map, seat), ...off],
+          `${map.slug} step ${String(step)}: no seat has a legal action and the game is not over`,
+        ).toEqual([]);
+        break;
+      }
+    }
+    return checked;
+  }
+
+  /**
+   * Several seeds per map, because `mini` is six territories and a game on it is over in a few
+   * dozen actions: one drive is not "a few hundred reachable states", and the count is asserted so
+   * a future change that makes the driver bail early cannot quietly shrink the coverage.
+   */
+  it("holds across eight driven 2-to-4-seat games on mini", () => {
+    let checked = 0;
+    for (let i = 0; i < 8; i += 1) {
+      checked += driveAndCheck(mini, 2 + (i % 3), `agree-mini-${String(i)}`, 200);
+    }
+    expect(checked).toBeGreaterThan(150);
+  });
+
+  it("holds across four driven 3-to-6-seat games on classic-world", () => {
+    let checked = 0;
+    for (let i = 0; i < 4; i += 1) {
+      checked += driveAndCheck(classicWorld, 3 + i, `agree-world-${String(i)}`, 300);
+    }
+    expect(checked).toBeGreaterThan(300);
+  });
+
+  /**
+   * The corners a drive reaches only by luck, pinned by hand.
+   *
+   * A driven game visits hundreds of states but it visits *ordinary* ones: five cards with a set at
+   * turn start, a hand of eight mid-trade-down, a resigned seat, a pact with a seat that has just
+   * been eliminated. Each of those is one of the round-4 findings, and each is a branch the drive
+   * passes through at most once in a long game — so they are built directly and run through the
+   * same two-sided check.
+   */
+  describe("the corner states each finding lived in", () => {
+    const inf = (id: string, t: TerritoryId | null = null) => card(id, "infantry", t);
+    const cav = (id: string, t: TerritoryId | null = null) => card(id, "cavalry", t);
+    const art = (id: string, t: TerritoryId | null = null) => card(id, "artillery", t);
+    const SET = [inf("c1"), inf("c2"), inf("c3")];
+
+    const cases: readonly { readonly label: string; readonly state: GameState }[] = [
+      {
+        // Finding 7 — R24's early return dropped the alliance kinds `validate` was accepting.
+        label: "R24 forced trade at turn start, alliances on",
+        state: buildState(mini, {
+          seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [2, 2, 2, 2, 2, 2],
+          phase: "draft", troopsToPlace: 3, rules: { alliances: true },
+          hands: { 0: [...SET, cav("x"), cav("y")] },
+        }),
+      },
+      {
+        // Finding 1 — R28's guard refuses every action carrying this seat but the trade.
+        label: "R26 trade-down from eight, alliances on",
+        state: buildState(mini, {
+          seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [2, 2, 2, 2, 2, 2],
+          phase: "draft", troopsToPlace: 0, rules: { alliances: true },
+          resumePhase: "attack", setsTradedThisTurn: 1,
+          hands: { 0: [...SET, cav("x"), cav("y"), cav("z"), art("p"), art("q")] },
+        }),
+      },
+      {
+        // Finding 6 — `END_TURN` out of a finished draft.
+        label: "draft with every troop placed",
+        state: buildState(mini, {
+          seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [2, 2, 2, 2, 2, 2],
+          phase: "draft", troopsToPlace: 0, rules: { alliances: true },
+        }),
+      },
+      {
+        // Finding 5 — a resigned seat keeps taking turns but is no longer a contender.
+        label: "a resigned seat, alliances on",
+        state: buildState(mini, {
+          seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [2, 2, 2, 2, 2, 2],
+          phase: "attack", rules: { alliances: true }, standings: { 1: "resigned" },
+        }),
+      },
+      {
+        // Finding 2 — an offer on the table, in one direction only.
+        label: "one offer in the air",
+        state: buildState(mini, {
+          seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [2, 2, 2, 2, 2, 2],
+          phase: "attack", rules: { alliances: true }, pendingAlliances: [[1, 0]],
+        }),
+      },
+      {
+        // R25 — the reward draw that lands a hand on six in fortify forces nothing.
+        label: "six cards in fortify, unbounced",
+        state: buildState(mini, {
+          seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [2, 2, 2, 2, 2, 2],
+          phase: "fortify", rules: { alliances: true },
+          hands: { 0: [...SET, cav("x"), cav("y"), cav("z")] },
+        }),
+      },
+      {
+        // R63 — a conquest pending, which refuses everything but the move-in.
+        label: "a move-in pending",
+        state: {
+          ...buildState(mini, {
+            seats: 3, owners: [0, 0, 1, 1, 2, 2], troops: [3, 2, 2, 2, 2, 2],
+            phase: "attack", rules: { alliances: true },
+          }),
+          pendingMoveIn: { from: 0, to: 2, min: 1, max: 2 },
+        },
+      },
+    ];
+
+    it.each(cases.map((c) => [c.label, c.state] as const))("%s", (label, state) => {
+      for (const row of state.seats) assertAgreement(state, mini, row.seat, label, 1);
+    });
+
+    /**
+     * Finding 4 — an elimination used to leave the survivor holding a pact with a dead seat, which
+     * `legalActions` advertised an `ALLIANCE_BREAK` for and `validate` refused. Built by *playing*
+     * the elimination, so the reducer is what produces the state rather than the fixture.
+     */
+    it("a pact that an elimination has just ended (R81)", () => {
+      const start = buildState(mini, {
+        seats: 3, owners: [0, 0, 0, 1, 2, 2], troops: [1, 1, 4, 1, 1, 1],
+        phase: "attack", rules: { alliances: true },
+      });
+      const offered = apply(start, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 2 });
+      expect(offered.error).toBeUndefined();
+      const allied = apply(offered.state, mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 1 });
+      expect(allied.error).toBeUndefined();
+      const killed = apply(allied.state, mini, {
+        type: "ATTACK", seat: 0, from: 2, to: 3, mode: "blitz", attackerLosses: 0, defenderLosses: 1,
+      });
+      expect(killed.error).toBeUndefined();
+      expect(killed.state.seats[1]?.standing).toBe("eliminated");
+      for (const row of killed.state.seats) {
+        assertAgreement(killed.state, mini, row.seat, "after an elimination", 1);
+      }
+    });
+  });
+
+  it("holds across a 2-seat manual-placement game, which is the claim phase's own shape (R6)", () => {
+    const cfg = config(mini, 2, { alliances: true, manualPlacement: true }, "agree-manual");
+    const started = dealTerritories(mini, cfg, personasFor(2), {
+      deal: rngFor("agree-manual", "deal", 0),
+      turnOrder: rngFor("agree-manual", "turnOrder", 0),
+      modifierPlace: rngFor("agree-manual", "modifierPlace", 0),
+    });
+    let state = createInitialState(mini, started);
+    expect(state.phase).toBe("claim");
+    for (let step = 1; step <= 120 && state.phase === "claim"; step += 1) {
+      for (const row of state.seats) assertAgreement(state, mini, row.seat, `claim step ${String(step)}`, step);
+      const seat = state.turnOrder[state.currentIndex] as Seat;
+      const owed = claimOwed(state, seat);
+      const territory = owed === "neutral"
+        ? legalNeutralClaimTargets(state)[0]
+        : legalOwnClaimTargets(state, seat)[0];
+      if (territory === undefined) break;
+      const action: Action = owed === "neutral"
+        ? { type: "CLAIM", seat, territory, forNeutral: true }
+        : { type: "CLAIM", seat, territory };
+      const result = apply(state, mini, action);
+      expect(result.error).toBeUndefined();
+      state = result.state;
+    }
   });
 });

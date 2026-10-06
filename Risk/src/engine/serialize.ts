@@ -13,8 +13,32 @@
  */
 import { RULESET_VERSION, type GameState } from "./types";
 
-/** The envelope version, bumped only by a shape change (R92). */
-export const STATE_FORMAT_VERSION = 1;
+/**
+ * The envelope version, bumped only by a shape change (R92).
+ *
+ * **v2 — `GameState.pendingAlliances` (§4.7).** R80's unanswered offers became a field of the
+ * state, and a v1 envelope does not carry it. Leaving the version at 1 made every such envelope a
+ * *valid* v1 state that was in fact half understood: `validate`, `legalActions` and `apply` all
+ * read `pendingAlliances` and all three threw a `TypeError` on the first alliance question, which
+ * is exactly the silent misreading the envelope exists to prevent (codex round 4, finding 3).
+ */
+export const STATE_FORMAT_VERSION = 2;
+
+/** The versions {@link deserializeState} accepts, oldest first. Each needs a {@link MIGRATIONS} step. */
+export const SUPPORTED_STATE_FORMAT_VERSIONS: readonly number[] = [1, 2];
+
+/**
+ * One step per version, applied in order from the envelope's own version up to the current one.
+ *
+ * A step takes the raw parsed object and fills in whatever its version did not carry. It is
+ * deliberately *additive* and never reinterprets an existing field: a migration that changed the
+ * meaning of a stored value would move `hashState`, and R92's promise is that a stored replay keeps
+ * playing back.
+ */
+const MIGRATIONS: Readonly<Record<number, (state: Record<string, unknown>) => Record<string, unknown>>> = {
+  // 1 → 2: the field did not exist, so there were no offers in the air.
+  1: (state) => ({ ...state, pendingAlliances: state.pendingAlliances ?? [] }),
+};
 
 export function serializeState(state: GameState): string {
   return JSON.stringify({ v: STATE_FORMAT_VERSION, state });
@@ -24,10 +48,18 @@ export function deserializeState(json: string): GameState {
   const parsed: unknown = JSON.parse(json);
   if (typeof parsed !== "object" || parsed === null) throw new Error("deserializeState: not an object");
   const envelope = parsed as { v?: unknown; state?: unknown };
-  if (envelope.v !== STATE_FORMAT_VERSION) {
+  if (typeof envelope.v !== "number" || !SUPPORTED_STATE_FORMAT_VERSIONS.includes(envelope.v)) {
     throw new Error(`deserializeState: unsupported envelope version ${String(envelope.v)}`);
   }
-  const state = envelope.state as GameState | undefined;
+  let migrated = envelope.state;
+  if (typeof migrated === "object" && migrated !== null) {
+    for (let v = envelope.v; v < STATE_FORMAT_VERSION; v += 1) {
+      const step = MIGRATIONS[v];
+      if (!step) throw new Error(`deserializeState: no migration from envelope version ${String(v)}`);
+      migrated = step(migrated as Record<string, unknown>);
+    }
+  }
+  const state = migrated as GameState | undefined;
   if (
     typeof state !== "object" ||
     state === null ||
@@ -43,5 +75,7 @@ export function deserializeState(json: string): GameState {
   if (state.version > RULESET_VERSION) {
     throw new Error(`deserializeState: state was produced under a newer ruleset (${state.version})`);
   }
-  return state;
+  // Belt as well as braces: a v2 envelope hand-written without the field is not a version this can
+  // migrate, and it must still come back as a state the engine can read (R92, §4.7).
+  return Array.isArray(state.pendingAlliances) ? state : { ...state, pendingAlliances: [] };
 }

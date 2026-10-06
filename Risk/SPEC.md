@@ -139,7 +139,7 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R21 — Valid sets.** Three of a kind · one of each · any two plus a Wild.
 - **R22 — Values.** **Fixed:** Infantry×3 = **4**, Cavalry×3 = **6**, Artillery×3 = **8**, one-of-each **or any set containing a Wild** = **10**. **Progressive:** the *n*-th set traded in the whole game is worth **4, 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, …** — `n ≤ 6` from the literal list, then `15 + 5·(n − 6)`.
 - **R23 — Territory bonus.** If a traded card names a territory the trader occupies, **+2 armies placed directly on that territory**, capped at **+2 per turn** however many traded cards match. So a Fixed trade is worth at most **12** in one turn.
-- **R24 — Timing branch 1: forced at turn start.** Holding **≥5** cards at the start of your turn, you **must** trade at least one set before `DRAFT`, and **may** trade a second if you still hold one. `legalActions` in `draft` with `hand.length ≥ 5` and `setsTradedThisTurn === 0` returns only `TRADE_CARDS`.
+- **R24 — Timing branch 1: forced at turn start.** Holding **≥5** cards at the start of your turn, you **must** trade at least one set before `DRAFT`, and **may** trade a second if you still hold one. `legalActions` in `draft` with `hand.length ≥ 5` and `setsTradedThisTurn === 0` returns `TRADE_CARDS` as the only **play** — plus whichever of R80's alliance kinds are available, because `validateAlliance` never reads the hand and so accepts them throughout the forced trade (§4.7). Returning a bare `["TRADE_CARDS"]` advertised less than the validator accepts, which is a disagreement in the direction that costs the player a move rather than one that offers an illegal one. **A hand of seven or more is the one case where it really is `TRADE_CARDS` alone**, and that falls out of R28's guard rather than needing a case of its own: the guard refuses every action carrying that seat but the exempt list, alliance actions included. **[SPEC]**
 - **R25 — Timing branch 2: your own reward draw forces nothing.** Drawing your end-of-turn card to 5 or 6 forces nothing now; the R24 check happens at the start of your **next** turn. **Including the draw that lands on six**: `validateCardDrawn` admits the award at a hand of five (R28's guard is on the hand *going in*), so the award legitimately reaches six in `fortify`, and R26 must not read that as an inheritance. Doing so left the seat with **no legal action at all** — `END_TURN` refused `mustTradeCards`, `END_PHASE` illegal out of fortify (R67), `TRADE_CARDS` draft-only (R24, R27) — while `legalActions` went on offering `END_TURN`. **[SPEC]**
 - **R26 — Timing branch 3: inheritance forces an immediate trade-down.** Inheriting an eliminated seat's hand mid-turn to **≥6** forces an **immediate, same-turn** trade-down to **≤4**, one set at a time, stopping as soon as the hand reaches 4, 3 or 2. If the inheritance leaves you under 6, you wait until your next turn. These three branches are three separate rules and three separate tests. **The floor is four, not six**: one trade removes exactly three cards, so a hand of 8 reaches 5 and must be traded again (8 -> 5 -> 2). `mustTradeDown` therefore keeps forcing above the floor while a trade-down is under way, which R27's `resumePhase` bounce plus `setsTradedThisTurn > 0` identifies without a new `GameState` field. **Both of `mustTradeDown`'s branches are gated on that bounce**, the `≥ 6` one included, because the bounce is the only thing that tells an inheritance from R25's reward draw to six. For that key to hold, **every route a seizure to ≥6 can arrive by sets `resumePhase`** — the `MOVE_IN` branch after a conquest and `END_TURN`'s R81 re-check, whatever phase it ran in. It must **not** be re-derived from the hand size (`hand.length + 3 * setsTradedThisTurn >= 6`): a seat that traded at turn start and then inherited back up to five satisfies that without ever having held six, and R26 defers exactly that hand to the next turn. **[SPEC]**
 - **R27 — Forced trade-down during Attack.** When R26 fires in `attack`, the bonus troops go into `troopsToPlace` and the phase **reverts to `draft`** until they are placed; `END_PHASE` then returns play to `attack` with `conqueredThisTurn` and every other turn flag intact. **[SPEC]**
@@ -149,6 +149,7 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
   Two consequences the implementation has to honour:
 
   - **R28's hand-size guard exempts `MOVE_IN` as well as `TRADE_CARDS`.** The bounce is *behind* `MOVE_IN`, so gating `MOVE_IN` on "a hand of seven or more must be traded down first" wedges the seat completely: `legalActions` offers `["MOVE_IN"]` and nothing else, `validate` refuses it, and `TRADE_CARDS` is refused outside `draft`. A four-card attacker eliminating a four-card victim is enough to reach it.
+  - **It exempts the three administrative actions too: `SEAT_TO_BOT`, `SEAT_TO_HUMAN` and `PORTALS_MOVED` [SPEC].** The guard reads `action.seat`, and on those three that field is the seat the action is *about* — or, for a relocation, nothing but a log stamp naming whoever is to play — never a seat taking a play of its own. All three are server-resolved and §6's schema refuses a client body carrying one, so the exemption adds no surface a player can reach. Gating them wedged the game the same way: the lazy tick's away branch (§5.6) produces `SEAT_TO_BOT` and nothing else, so a seat that went away owing a 7-or-8-card trade-down could not be handed to a bot, the tick came back `appended === 0`, `missedTurns` never climbed (only the *timeout* branch below it counts a miss), and `POST /resign` answered `422` to the one player who had decided to leave. `AUTO_DEPLOY` is **not** exempt — a draft placement is the seat's own play, and R26's floor already refuses it with the precise `mustTradeCards` code.
   - **`END_TURN`'s elimination sweep bounces before it advances — for a hand the sweep itself grew.** The seizure it can make is an inheritance like any other and R26 calls for the trade-down *in the same turn*, so when the bounce fires the turn does not advance — advancing would clear `resumePhase` and hand the next seat's play a holder who may take no action at all. The seat trades down, `END_PHASE` returns it to the phase it was in, and it ends its turn again. The branch compares the hand across the sweep rather than just testing its size, because a hand of six also reaches `END_TURN` by R25's reward draw, and bouncing *that* one would force the same-turn trade R25 says is not owed. **[SPEC]**
 - **R28 — Seizure.** Eliminating a seat transfers its **whole hand**. A hand never exceeds 6 under R24–R26. A state that presents 7+ is a rule violation like any other: `apply` **returns `{ state: input, events: [], error: { code: "illegalAction" } }` and never asserts or throws** (F51 **[SPEC]**, and R86).
 
@@ -271,6 +272,8 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 
 - **R66 — One move per turn.** One source, one destination, any count from 1 to `sourceTroops − 1`, with a **graph-reachability check through the seat's own territories only** (the connected-path variant). Multi-hop is legal; the intermediate territories must all be owned by the mover.
 - **R67 — Fortify is optional and ends the turn.** `END_PHASE` is **not legal out of `fortify`**; the phase exits only via `END_TURN`, which also performs the end-of-turn card award (R20). **[SPEC]**
+
+  **`END_TURN` is legal out of `attack` and `fortify`, and nowhere else [SPEC].** `claim`, `draft` and `over` are all refused with `wrongPhase`. The phase list used to deny only `claim` and `over`, which let a `draft` with every troop placed end the turn there — skipping the Attack phase R27 promises every turn — and let a hand owing R24's turn-start trade skip that too, `validateEndTurn` reading R26's `mustTradeDown` rather than `mustTradeNow`. `legalActions` never advertised either, so only a crafted client could reach them, and the ruling is that the validator rather than the advertiser is the authority. Nothing the authority produces relied on the `draft` path: `autoSkipAction` (§5.6), `decideTurn` (§4.13) and the offline runner's `endBotTurn` all offer `END_PHASE` before `END_TURN`, and in a finished `draft` `END_PHASE` is the action that takes play on — to `resumePhase` when R27 bounced it there, to `attack` otherwise.
 - **R68 — Active portals count as edges for fortify reachability** exactly as they do for attack adjacency.
 - **R69 — Attacking is stricter than fortifying.** Attack needs direct adjacency or an explicit sea route; fortify needs only a path.
 
@@ -287,6 +290,12 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R78 — Max Rounds tiebreak.** Most **territories**, then most **troops**, then **lowest seat index**. An outcome decided this way carries `tiebreak: true`. **[SPEC]**
 - **R79 — Turn Timer.** `60 / 90 / 120 / 180 / 300` seconds, covering the **whole** turn (all three phases). Online only; default **90**. Offline sessions ignore it.
 - **R80 — Alliances.** `rules.alliances` on/off per game. Alliances are **non-binding**: there is no "cannot attack ally" lock and attacking an ally breaks nothing automatically. `ALLIANCE_PROPOSE` / `ALLIANCE_ACCEPT` / `ALLIANCE_BREAK` between two seats; an active alliance unlocks dialog lines 28 and 29. **One offer at a time per pair**: a `PROPOSE` is refused (`notAlliable`) while an unanswered offer between those two seats is on the table in either direction — `GameState.pendingAlliances` (§4.7) is what records it, and `ACCEPT`, `BREAK`, an elimination and a resignation all clear it.
+
+  **An `ACCEPT` answers an offer, so one has to exist [SPEC].** `ALLIANCE_ACCEPT { seat, from }` is refused (`notAlliable`) unless `pendingAlliances` holds the **directed** pair `[from, seat]` — the offer `from` made to `seat`. `[seat, from]` is the seat's own outstanding proposal and accepting it is not an answer. Without the gate a seat could forge a pact nobody offered it, and — the three alliance actions being the only ones exempt from §5.5's online turn fence — churn `ACCEPT`/`BREAK` off-turn as fast as it could POST, every repeat a log row, every row a `games.seq` bump, and the poll's `204` fast path gone with it. `legalActions` narrows its `ALLIANCE_ACCEPT` the same way, which is what keeps the two sides in agreement.
+
+  **Leaving the game ends a seat's diplomacy — offers *and* pacts [SPEC].** An elimination (R81) and a resignation (R82) drop the seat from every other seat's `allies` as well as clearing its `pendingAlliances`, each removal emitting the `allianceChanged … "broken"` every other end of a pact emits. Dropping only the offers left survivors holding a pact with a seat that was out: `legalActions` advertised an `ALLIANCE_BREAK` for it and `validateAlliance` refused that same action ("both seats must still be playing"), which is a dead entry in the list and a dead button in the UI. An **away** or **timeout** takeover is not leaving the game (D76) and keeps both.
+
+  **`legalActions` offers the alliance kinds only to a *contender*.** That is `isContender`, not the `takesTurns` the function's own gate uses: a resigned seat keeps taking turns (D76) but has stopped being a contender (R84), and `validateAlliance` asks for two contenders. It also mirrors R28's hand guard, so a seat owing a 7-or-8-card trade-down is offered no diplomacy either.
 
 ### 3.10 Elimination and winning
 
@@ -305,6 +314,8 @@ resolve an open item from the brief's §11 table; rules marked **[ours]** have n
 - **R90 — Adjacency symmetry is an invariant, not an assumption.** It is checked by the map validator at build time and by a property test over every modifier combination.
 - **R91 — Determinism of iteration.** Nothing in the engine iterates a `Map`, `Set` or object whose insertion order can vary; every ordered pass sorts by a stable id first, and every `sort` uses a total comparator (`(a, b) => (b.score − a.score) || (a.id − b.id)`).
 - **R92 — Ruleset version.** `GameState.version` is the ruleset version. A change that alters a golden replay hash bumps it, so stored replays keep playing back.
+
+  **`STATE_FORMAT_VERSION` is the separate *envelope* version, and a new `GameState` field bumps it [SPEC].** It is **2**; the 1 → 2 move is `pendingAlliances` (§4.7). `deserializeState` accepts every supported version and runs the migrations in order up to the current one, each step purely additive — a step that reinterpreted a stored value would move `hashState` and break the promise above. Adding the field *without* the bump left a v1 envelope being accepted as a current state that was in fact half understood: `validate`, `legalActions` and `apply` all read `pendingAlliances`, so all three threw a `TypeError` on the first alliance question and a resumed autosave crashed, which is exactly the silent misreading the envelope exists to prevent. The envelope is not the only door, so it is not the only defence: `games.snapshot`, a POLL 3 body and a `risk:session:v1:` save are **already-parsed** states that never pass through it, and each of those boundaries defaults the field in as it reads it (`foldActions`, `createSession`'s resume, `ingestSnapshot`). `pendingAlliancesOf` is what the engine itself reads through, so `apply` stays total (R86).
 
 ---
 
@@ -884,7 +895,18 @@ export interface GameState {
    *  `204` fast path gone with it. It cannot be derived from `allies`: an unaccepted offer leaves
    *  that array untouched by construction. Cleared by the `ALLIANCE_ACCEPT` or `ALLIANCE_BREAK`
    *  that answers it (both directions — an alliance is symmetric) and by the elimination or
-   *  resignation of either seat, and covered by `hashState` like every other field. [SPEC] */
+   *  resignation of either seat, and covered by `hashState` like every other field.
+   *
+   *  It is also what an `ALLIANCE_ACCEPT` is **gated on**: the directed pair `[from, seat]` must be
+   *  here, or the accept is refused `notAlliable` (R80). Accepting your own `[seat, from]` offer is
+   *  not an answer to it.
+   *
+   *  Adding this field bumped `STATE_FORMAT_VERSION` to **2** (R92): a persisted state written
+   *  before it exists lacks it, and reading `.some` on `undefined` threw a `TypeError` out of
+   *  `validate`, `legalActions` and `apply` alike. `deserializeState` migrates a v1 envelope, and
+   *  every boundary that reads an already-parsed foreign state — `foldActions` on `games.snapshot`,
+   *  `createSession`'s resume, `ingestSnapshot` on a POLL 3 body — defaults it to `[]`. The engine
+   *  itself reads it through `pendingAlliancesOf`, so `apply` stays total (R86). [SPEC] */
   readonly pendingAlliances: readonly (readonly [Seat, Seat])[];
   readonly portals: readonly PortalState[];
   readonly discard: readonly Card[];       // traded-in cards; the deck order is never stored (R19)
@@ -1063,7 +1085,26 @@ export function apply(state: GameState, map: MapDef, action: Action): ApplyResul
 /** Why `action` would be refused, or null. Never mutates and never throws. */
 export function validate(state: GameState, map: MapDef, action: Action): RuleError | null;
 
-/** The action kinds `seat` may submit right now, in a stable order. */
+/**
+ * The action kinds `seat` may submit right now, in a stable order (`ACTION_ORDER`, R91).
+ *
+ * **`legalActions` and `validate` must agree, and the agreement is a property T5 asserts [SPEC].**
+ * Over a few hundred reachable states — driven games on `mini` and `classic-world` with alliances
+ * on, plus the corner states each round of review has found a bug in — for **every** seat and not
+ * only the one to play:
+ *
+ *   - every kind this returns has at least one concrete action `validate` accepts;
+ *   - every concrete action `validate` accepts has its kind returned here.
+ *
+ * Asserting one side at a time is how every disagreement so far shipped: an advertised kind the
+ * validator refused (`MOVE_IN` past a six-card hand, `ALLIANCE_BREAK` for a dead ally,
+ * `ALLIANCE_ACCEPT` with no offer on the table, any alliance kind for a resigned seat) or an
+ * accepted action it never offered (`END_TURN` out of `draft`, the alliance kinds R24's early
+ * return dropped). The property is scoped to `ACTION_ORDER`, which deliberately omits
+ * `GAME_STARTED`, `SEAT_TO_BOT`, `SEAT_TO_HUMAN` and `PORTALS_MOVED`: those are the authority's to
+ * produce and never a seat's to submit, so not advertising them is the contract, not a
+ * disagreement.
+ */
 export function legalActions(state: GameState, map: MapDef, seat: Seat): readonly ActionKind[];
 
 // ---- selectors the UI and the bots share ----
@@ -2192,7 +2233,7 @@ never a side effect** (D14):
 | `turn_deadline` passed and the phase has a legal "do nothing" | the server **walks the phases**: `END_PHASE` first, `END_TURN` only when `END_PHASE` is illegal (fortify), `missed_turns += 1` |
 | `turn_deadline` passed with troops still undrafted | `AUTO_DEPLOY` (placements chosen by the bot policy), then the same walk — `END_PHASE` first, `END_TURN` only when `END_PHASE` is illegal (fortify), so a capturing turn still reaches fortify and earns its card (R20, R67) |
 | `missed_turns >= 2` (they are still polling — just not playing) | `SEAT_TO_BOT { reason: **"timeout"** }`, `game_players.kind='bot'`, `standing='away'` |
-| `last_seen_at` older than 2 min (they are gone, whatever their turn count) | `SEAT_TO_BOT { reason: **"away"** }`, `kind='bot'`, `standing='away'` |
+| `last_seen_at` older than 2 min (they are gone, whatever their turn count) | `SEAT_TO_BOT { reason: **"away"** }`, `kind='bot'`, `standing='away'`. This branch sits **above** the timeout one and produces that one action and nothing else, so it is the branch R28's hand guard has to exempt: a seat that went away owing a 7-or-8-card trade-down could not be handed over, the tick returned `appended === 0`, and the `missed_turns` escape below is never reached from here (only the *timeout* branch counts a miss) **[SPEC]** |
 | that player polls again (either path) | `SEAT_TO_HUMAN`, `kind='human'`, `missed_turns = 0` |
 | `POST /api/games/:id/resign` | `SEAT_TO_BOT { reason: "resigned" }`, `standing='resigned'` — **never reclaimable** (R82) |
 | every human seat away for 30 min | `games.status = 'abandoned'`; the bots simply stop being run |

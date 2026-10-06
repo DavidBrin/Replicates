@@ -4,8 +4,17 @@
  * `legalActions` exists so the UI and the bots never have to re-derive the
  * rules: it is `validate` run over one representative of every action kind, in
  * a fixed order. The one branch that is not a filter is R24 — in draft with
- * five or more cards and nothing traded yet, it returns **only**
- * `TRADE_CARDS`, because that is the only thing the seat is allowed to do.
+ * five or more cards and nothing traded yet, `TRADE_CARDS` is the only **play**
+ * on offer, and the alliance kinds ride along because `validateAlliance` never
+ * reads the hand (§4.7).
+ *
+ * **This function and `validate` must agree, in both directions**, and T5
+ * asserts exactly that over a few hundred reachable states (SPEC §4.10): every
+ * kind returned here has a payload `validate` accepts, and every payload
+ * `validate` accepts has its kind returned. Every disagreement found so far was
+ * found by reading rather than by a test, because each test asserted one side
+ * alone — so the conditions below are written to mirror `validate`'s, comment
+ * and all, rather than to approximate them.
  *
  * The three `legal*` zone selectors are **graph queries**, gated on ownership
  * and troop count alone, not on the phase or on `fortifyUsed`. They are what
@@ -15,7 +24,7 @@
 import { hasSet, mustTradeNow } from "./cards";
 import { knownTerritory, neighbours, reachableOwn } from "./graph";
 import { isAttackable } from "./modifiers";
-import { currentSeat, isContender, isGameOver, takesTurns } from "./rules";
+import { currentSeat, isContender, isGameOver, pendingAlliancesOf, takesTurns } from "./rules";
 import { neutralArmiesOwed, seatRow } from "./validate";
 import {
   SEAT_NEUTRAL, SEAT_NONE,
@@ -150,23 +159,53 @@ export function legalActions(state: GameState, map: MapDef, seat: Seat): readonl
   if (row === null || !takesTurns(row)) return [];
 
   const allianceKinds: ActionKind[] = [];
-  if (state.rules.alliances) {
+  /*
+   * R80 — diplomacy is for seats still in the game.
+   *
+   * `isContender(row)` is the condition `validateAlliance` applies to the actor, and it is NOT the
+   * `takesTurns(row)` above: a **resigned** seat keeps taking turns (D76) but has stopped being a
+   * contender (R84), so without this it was advertised `ALLIANCE_PROPOSE` and `ALLIANCE_ACCEPT`
+   * that `validate` then refused with `notAlliable` (codex round 4, finding 5).
+   *
+   * The hand-size test is R28's guard, mirrored: an alliance action carries a `seat`, so a hand of
+   * seven or more refuses it in `validate` like any other play, and the forced trade-down really is
+   * the only thing such a seat may send. It is read here rather than in the `draft` branch below
+   * because the off-turn return a few lines down answers from `allianceKinds` alone.
+   */
+  if (state.rules.alliances && isContender(row) && row.cards.length <= 6) {
+    const offers = pendingAlliancesOf(state);
+    /*
+     * The ally list is filtered through `isContender` too, because elimination and resignation are
+     * what *end* a pact: a survivor's `allies` can still name a seat that is out, and advertising
+     * `ALLIANCE_BREAK` for a pact `validateAlliance` no longer recognises is the same disagreement
+     * from the other end (codex round 4, finding 4). The reducer drops the entry at the source;
+     * reading the standing here is what keeps a state folded by an older build honest.
+     */
     const others = state.seats.filter((s) => s.seat !== seat && isContender(s));
     const unallied = others.filter((s) => !row.allies.includes(s.seat));
+    const allied = others.filter((s) => row.allies.includes(s.seat));
     /*
      * R80 — one offer at a time per pair (§4.7), so a seat whose only unallied neighbour already
      * has an offer in the air with it has nobody left to propose to, and `validate` would refuse
-     * every `ALLIANCE_PROPOSE` it could send. `ALLIANCE_ACCEPT` is deliberately **not** narrowed
-     * the same way: `validateAlliance` gates it on the pact, not on a recorded offer.
+     * every `ALLIANCE_PROPOSE` it could send.
      */
     const proposable = unallied.filter(
-      (s) => !state.pendingAlliances.some(
+      (s) => !offers.some(
         ([from, to]) => (from === seat && to === s.seat) || (from === s.seat && to === seat),
       ),
     );
+    /*
+     * `ALLIANCE_ACCEPT` answers a **recorded** offer, in that direction: `validateAlliance` refuses
+     * it outright when no `[other, seat]` pair is on the table, so the pact-only test this used to
+     * run advertised an action that could not be sent (codex round 4, finding 2). My own
+     * `[seat, other]` offer is not something I can accept.
+     */
+    const acceptable = unallied.filter(
+      (s) => offers.some(([from, to]) => from === s.seat && to === seat),
+    );
     if (proposable.length > 0) allianceKinds.push("ALLIANCE_PROPOSE");
-    if (unallied.length > 0) allianceKinds.push("ALLIANCE_ACCEPT");
-    if (row.allies.length > 0) allianceKinds.push("ALLIANCE_BREAK");
+    if (acceptable.length > 0) allianceKinds.push("ALLIANCE_ACCEPT");
+    if (allied.length > 0) allianceKinds.push("ALLIANCE_BREAK");
   }
 
   if (currentSeat(state) !== seat) return ACTION_ORDER.filter((k) => allianceKinds.includes(k));
@@ -183,8 +222,19 @@ export function legalActions(state: GameState, map: MapDef, seat: Seat): readonl
   }
 
   if (state.phase === "draft") {
-    // R24 — the forced trade is the only thing on offer.
-    if (mustTradeNow(state, seat)) return ["TRADE_CARDS"];
+    /*
+     * R24 — the forced trade is the only **play** on offer.
+     *
+     * Diplomacy rides along, because `validateAlliance` does not read the hand: it gates on
+     * `rules.alliances`, on two contenders and on the pair, and nothing else. A bare
+     * `["TRADE_CARDS"]` therefore dropped alliance kinds `validate` was accepting all along
+     * (codex round 4, finding 7). A hand of **seven or more** is the one case where it really is
+     * `TRADE_CARDS` alone, and `allianceKinds` is already empty for it (R28's guard, mirrored
+     * above), so no special case is needed here.
+     */
+    if (mustTradeNow(state, seat)) {
+      return ACTION_ORDER.filter((k) => k === "TRADE_CARDS" || allianceKinds.includes(k));
+    }
     if (hasSet(row.cards)) kinds.push("TRADE_CARDS");
     if (state.troopsToPlace > 0 && legalDraftTargets(state, seat).length > 0) {
       kinds.push("DRAFT", "AUTO_DEPLOY");

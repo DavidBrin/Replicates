@@ -28,7 +28,14 @@
 import { cardTradeValue, hasSet } from "./cards";
 import { continentsHeldBy } from "./continents";
 import { diceAugmentFor, resolveManualRoll } from "./modifiers";
-import { evaluateOutcome, reinforcementsFor, takesTurns, territoryCountFor, troopCountFor } from "./rules";
+import {
+  evaluateOutcome,
+  pendingAlliancesOf,
+  reinforcementsFor,
+  takesTurns,
+  territoryCountFor,
+  troopCountFor,
+} from "./rules";
 import { neutralArmiesOwed, validate } from "./validate";
 import {
   RULESET_VERSION,
@@ -101,7 +108,10 @@ function open(state: GameState): Draft {
     fortifyUsed: state.fortifyUsed,
     pendingMoveIn: state.pendingMoveIn,
     resumePhase: state.resumePhase,
-    pendingAlliances: state.pendingAlliances.slice(),
+    // `pendingAlliancesOf`, not `state.pendingAlliances`: the draft is built from whatever state
+    // `apply` was handed, and a state persisted before the field existed has none (R92, §4.7).
+    // `apply` never throws, so the one place that could is the one place that must not.
+    pendingAlliances: pendingAlliancesOf(state).slice(),
     portals: state.portals.slice(),
     discard: state.discard.slice(),
     outcome: state.outcome,
@@ -200,8 +210,8 @@ function eliminateIfEmpty(d: Draft, victim: Seat, by: Seat): boolean {
 
   const taken = row.cards;
   setSeat(d, victim, { standing: "eliminated", cards: [], cardCount: 0 });
-  // R80 — a seat that is out of the game takes its unanswered offers with it (§4.7).
-  dropPendingAlliancesFor(d, victim);
+  // R80 — a seat that is out of the game takes its diplomacy with it, offers and pacts (§4.7).
+  dropAlliancesFor(d, victim);
   if (taken.length > 0 && by >= 0) {
     const taker = d.seats[by];
     if (taker !== undefined) {
@@ -476,8 +486,8 @@ export function apply(state: GameState, map: MapDef, action: Action): ApplyResul
         standing: action.reason === "resigned" ? "resigned" : "active",
         missedTurns: 0,
       });
-      // R82 — a resignation takes the seat out of the game, and its offers with it (R80, §4.7).
-      if (action.reason === "resigned") dropPendingAlliancesFor(d, action.seat);
+      // R82 — a resignation takes the seat out of the game, and its diplomacy with it (R80, §4.7).
+      if (action.reason === "resigned") dropAlliancesFor(d, action.seat);
       d.events.push({ type: "seatToBot", seat: action.seat, reason: action.reason });
       settle(d, map, null);
       break;
@@ -855,9 +865,27 @@ function clearPendingAlliance(d: Draft, a: Seat, b: Seat): void {
   );
 }
 
-/** Drop every offer a seat is party to — it is out of the game, so its offers are too (R80, R81). */
-function dropPendingAlliancesFor(d: Draft, seat: Seat): void {
+/**
+ * Take a seat out of R80's diplomacy entirely: every unanswered offer it is party to **and every
+ * pact it holds** (R80, R81, R82, §4.7).
+ *
+ * The pact half was missing (codex round 4, finding 4). An elimination or a resignation dropped the
+ * offers and left the pacts standing, so every survivor kept an `allies` entry naming a seat that
+ * was out: `legalActions` advertised `ALLIANCE_BREAK` for it and `validateAlliance` refused that
+ * same action with `notAlliable` ("both seats must still be playing"), which is a dead entry in the
+ * list and a dead button in the UI. R80 is explicit that an elimination and a resignation clear the
+ * pair, so the clearing happens here, at the source, and emits the `allianceChanged … "broken"`
+ * every other end of a pact emits — the renderer and the dialog have no other way to learn of it.
+ */
+function dropAlliancesFor(d: Draft, seat: Seat): void {
   d.pendingAlliances = d.pendingAlliances.filter(([from, to]) => from !== seat && to !== seat);
+  const row = d.seats[seat];
+  if (row === undefined) return;
+  // Ascending, so the event order is a function of the state and not of the array's history (R91).
+  for (const other of [...row.allies].sort((a, b) => a - b)) {
+    removeAlly(d, seat, other);
+    d.events.push({ type: "allianceChanged", a: seat, b: other, state: "broken" });
+  }
 }
 
 function removeAlly(d: Draft, a: Seat, b: Seat): void {

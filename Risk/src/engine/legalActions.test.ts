@@ -20,6 +20,7 @@ import {
 } from "./legalActions";
 import { apply } from "./reducer";
 import { SEAT_NEUTRAL, SEAT_NONE, type Card } from "./types";
+import { validate } from "./validate";
 
 const inf = (id: string): Card => card(id, "infantry", null);
 const cav = (id: string): Card => card(id, "cavalry", null);
@@ -144,14 +145,50 @@ describe("legalActions", () => {
   it("offers nothing to a seat whose turn it is not, unless alliances are on", () => {
     expect(legalActions(board(), mini, 1)).toEqual([]);
     const allied = board({ rules: { alliances: true } });
-    expect(legalActions(allied, mini, 1)).toEqual(["ALLIANCE_PROPOSE", "ALLIANCE_ACCEPT"]);
+    // `ALLIANCE_ACCEPT` is NOT here: `validateAlliance` answers an offer, and there is none in the
+    // air yet (R80, §4.7 — codex round 4, finding 2).
+    expect(legalActions(allied, mini, 1)).toEqual(["ALLIANCE_PROPOSE"]);
+    const offered = apply(allied, mini, { type: "ALLIANCE_PROPOSE", seat: 2, to: 1 }).state;
+    expect(legalActions(offered, mini, 1)).toEqual(["ALLIANCE_PROPOSE", "ALLIANCE_ACCEPT"]);
   });
 
   it("R80 — offers ALLIANCE_BREAK only to a seat that holds a pact", () => {
     const state = board({ rules: { alliances: true } });
-    const allied = apply(state, mini, { type: "ALLIANCE_ACCEPT", seat: 0, from: 1 }).state;
+    const offered = apply(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 0 }).state;
+    const allied = apply(offered, mini, { type: "ALLIANCE_ACCEPT", seat: 0, from: 1 }).state;
     expect(legalActions(allied, mini, 0)).toContain("ALLIANCE_BREAK");
     expect(legalActions(allied, mini, 2)).not.toContain("ALLIANCE_BREAK");
+  });
+
+  /**
+   * R80 — `ALLIANCE_ACCEPT` answers an offer in **that** direction (codex round 4, finding 2).
+   *
+   * The pair is directed, so my own outstanding proposal is not something I can accept: the
+   * proposer must wait for the other seat. `validateAlliance` says exactly that, and the list has
+   * to agree or the UI lights a button the authority refuses.
+   */
+  it("R80 — does not offer ALLIANCE_ACCEPT to the seat that made the offer (§4.7)", () => {
+    const state = board({ rules: { alliances: true } });
+    const offered = apply(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 0 }).state;
+    expect(legalActions(offered, mini, 1)).not.toContain("ALLIANCE_ACCEPT");
+    expect(legalActions(offered, mini, 0)).toContain("ALLIANCE_ACCEPT");
+    expect(validate(offered, mini, { type: "ALLIANCE_ACCEPT", seat: 1, from: 0 })?.code).toBe("notAlliable");
+  });
+
+  /**
+   * R80/R84 — a **resigned** seat is out of the game's diplomacy (codex round 4, finding 5).
+   *
+   * It keeps taking turns (D76), which is the gate this function opens on, but it has stopped being
+   * a contender — and `validateAlliance` asks for two contenders. Advertising a kind it refuses is
+   * the same disagreement from the other end.
+   */
+  it("R80 — offers a resigned seat no alliance kinds at all", () => {
+    const state = board({ rules: { alliances: true }, standings: { 1: "resigned" } });
+    expect(legalActions(state, mini, 1)).toEqual([]);
+    expect(validate(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 2 })?.code).toBe("notAlliable");
+    // And nobody may propose TO it either.
+    expect(legalActions(state, mini, 2)).not.toContain("ALLIANCE_ACCEPT");
+    expect(validate(state, mini, { type: "ALLIANCE_PROPOSE", seat: 2, to: 1 })?.code).toBe("notAlliable");
   });
 
   it("R80 — stops offering ALLIANCE_PROPOSE once every pair has an offer in the air (§4.7)", () => {
@@ -206,7 +243,14 @@ describe("legalActions", () => {
     expect(legalActions(state, mini, 0)).toEqual(["TRADE_CARDS", "DRAFT", "AUTO_DEPLOY"]);
   });
 
-  it("R24 — in draft with five cards and nothing traded, offers ONLY TRADE_CARDS", () => {
+  /**
+   * R24 — the forced trade is the only **play**, and diplomacy rides along (codex round 4,
+   * finding 7).
+   *
+   * `validateAlliance` never reads the hand: it gates on `rules.alliances`, two contenders and the
+   * pair. A bare `["TRADE_CARDS"]` therefore dropped kinds `validate` was accepting all along.
+   */
+  it("R24 — in draft with five cards and nothing traded, offers only TRADE_CARDS plus diplomacy", () => {
     const hand = [inf("a"), inf("b"), inf("c"), cav("d"), cav("e")];
     const state = board({
       phase: "draft",
@@ -214,7 +258,32 @@ describe("legalActions", () => {
       hands: { 0: hand },
       rules: { alliances: true },
     });
+    expect(legalActions(state, mini, 0)).toEqual(["TRADE_CARDS", "ALLIANCE_PROPOSE"]);
+    expect(validate(state, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 })).toBeNull();
+    // With alliances off it really is the trade alone.
+    expect(legalActions(board({ phase: "draft", troopsToPlace: 3, hands: { 0: hand } }), mini, 0))
+      .toEqual(["TRADE_CARDS"]);
+  });
+
+  /**
+   * R28 — a hand of seven or more is the one case where it IS `TRADE_CARDS` alone.
+   *
+   * `validate`'s seven-card guard refuses every action carrying that seat but the trade (and
+   * `MOVE_IN`, and the administrative three), alliance actions included, so the list must shed them
+   * too or the agreement property breaks.
+   */
+  it("R28 — with eight cards mid-trade-down, offers TRADE_CARDS and nothing else", () => {
+    const hand = [inf("a"), inf("b"), inf("c"), cav("d"), cav("e"), cav("f"), inf("g"), cav("h")];
+    const state = board({
+      phase: "draft",
+      troopsToPlace: 3,
+      hands: { 0: hand },
+      resumePhase: "attack",
+      setsTradedThisTurn: 1,
+      rules: { alliances: true },
+    });
     expect(legalActions(state, mini, 0)).toEqual(["TRADE_CARDS"]);
+    expect(validate(state, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 })?.code).toBe("illegalAction");
   });
 
   it("in attack, offers the attack actions", () => {
