@@ -8,7 +8,7 @@
  * difference is the seat configuration the setup flow left in the store, and
  * the hand-off overlay the session raises when two or more seats are human.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { GameConfig, MapDef } from "@/engine/types";
@@ -37,7 +37,6 @@ export function PlayPage({ mode }: PlayPageProps) {
   const store = useSessionConfig((s) => s);
   const [ready, setReady] = useState<Ready | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const built = useRef(false);
 
   const source = store.source;
   const seats = store.seats;
@@ -55,10 +54,15 @@ export function PlayPage({ mode }: PlayPageProps) {
       router.replace("/new");
       return;
     }
-    if (built.current || !source) return;
-    built.current = true;
+    if (!source) return;
 
+    // No `built once` ref here: React Strict Mode mounts, cleans up and
+    // mounts again, and a ref that survives the cleanup would let the second
+    // mount skip the build while the first mount's build had already been
+    // cancelled — the board would never arrive. The effect builds every time
+    // and the cleanup destroys whatever it built.
     let cancelled = false;
+    let session: Session | null = null;
     void (async () => {
       try {
         if (source.kind === "random") {
@@ -68,7 +72,7 @@ export function PlayPage({ mode }: PlayPageProps) {
         if (cancelled) return;
         const config = toGameConfig({ ...store, seats, rules }, map.slug, newId());
         const { resume, save } = autosaveFor(config);
-        const session = createSession({
+        session = createSession({
           map,
           // A resumed game keeps the seed it was dealt from (D5).
           config: resume ? resume.config : config,
@@ -79,6 +83,10 @@ export function PlayPage({ mode }: PlayPageProps) {
           resume,
           save,
         });
+        if (cancelled) {
+          session.destroy();
+          return;
+        }
         session.start();
         setReady({ session, map, config });
       } catch (cause) {
@@ -88,12 +96,12 @@ export function PlayPage({ mode }: PlayPageProps) {
 
     return () => {
       cancelled = true;
+      session?.destroy();
+      setReady(null);
     };
-    // The session is built exactly once per mount; the store is a snapshot.
+    // The store is read as a snapshot at build time, not tracked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured]);
-
-  useEffect(() => () => ready?.session.destroy(), [ready]);
 
   if (error) {
     return (

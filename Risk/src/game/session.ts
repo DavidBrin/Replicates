@@ -31,6 +31,10 @@ import { DEFAULT_SETTINGS } from "@/adapters/localStorage/settings";
 export const AI_STEP_MS = 300;
 export const AI_TURN_BUDGET_MS = 4000;
 export const AI_STEP_MIN_MS = 40;
+/** How long the Received Troops popup holds before it leaves on its own (§8's motion list). */
+export const AWARD_HOLD_MS = 2200;
+/** How long Get Ready holds. It is shown once, on the viewer's first turn (§7.2). */
+export const GET_READY_HOLD_MS = 2600;
 export function aiStepMs(actionCount: number): number {
   return Math.max(AI_STEP_MIN_MS, Math.min(AI_STEP_MS, Math.floor(AI_TURN_BUDGET_MS / Math.max(1, actionCount))));
 }
@@ -363,11 +367,17 @@ export function createSession(options: SessionOptions): Session {
           });
           later(() => set({ bannerText: null }), 1500);
           break;
-        case "troopsAwarded":
-          set({
-            award: { seat: e.seat, base: e.base, bonus: e.bonus, capitals: e.capitals, total: e.total },
-          });
+        case "troopsAwarded": {
+          // The award is a POPUP, not a modal: it holds for a beat and then
+          // leaves. Nothing dismisses it otherwise, and while it is up its
+          // scrim swallows every tap on the board underneath.
+          const award = { seat: e.seat, base: e.base, bonus: e.bonus, capitals: e.capitals, total: e.total };
+          set({ award });
+          later(() => {
+            if (store.getState().award === award) set({ award: null });
+          }, AWARD_HOLD_MS);
           break;
+        }
         case "playerEliminated":
           set({ lastElimination: { seat: e.seat, by: e.by } });
           botReact(e.seat, "eliminated");
@@ -537,12 +547,24 @@ export function createSession(options: SessionOptions): Session {
     beginHumanTurn(seat);
   }
 
+  /** Get Ready is shown once per seat, on its first turn — not every turn. */
+  const greeted = new Set<Seat>();
+
   function beginHumanTurn(seat: Seat): void {
     set({
       actingSeat: seat, viewerSeat: online ? store.getState().viewerSeat : seat,
       botPlaying: false, hidden: false, handOff: null, selected: null, litZone: [],
       actionMode: "idle", attackDice: "blitz", attackLimit: null,
     });
+    if (!greeted.has(seat) && !options.resume) {
+      greeted.add(seat);
+      set({ modal: "getReady" });
+      // A popup, not a modal: it leaves on its own, like the award. Anything
+      // still up when the player wants to tap the board is a bug, not a beat.
+      later(() => {
+        if (store.getState().modal === "getReady") set({ modal: null });
+      }, GET_READY_HOLD_MS);
+    }
     refreshSelection();
   }
 
@@ -867,9 +889,8 @@ export function createSession(options: SessionOptions): Session {
       set({ handOff: { seat }, hidden: true, actingSeat: seat });
       return;
     }
-    set({ modal: "getReady", viewerSeat: seat, actingSeat: seat });
+    set({ viewerSeat: seat, actingSeat: seat });
     beginHumanTurn(seat);
-    set({ modal: "getReady" });
   }
 
   const session: Session = {
@@ -904,9 +925,8 @@ export function createSession(options: SessionOptions): Session {
     continueHandOff() {
       const h = store.getState().handOff;
       if (!h) return;
-      set({ handOff: null, hidden: false, viewerSeat: h.seat, modal: "getReady" });
+      set({ handOff: null, hidden: false, viewerSeat: h.seat });
       beginHumanTurn(h.seat);
-      set({ modal: "getReady" });
     },
     setOverlay(mode) {
       set({ overlayMode: mode });

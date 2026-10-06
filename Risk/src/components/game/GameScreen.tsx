@@ -123,7 +123,7 @@ export default function GameScreen(props: GameScreenProps) {
             unreadChat={0}
             onStats={() => session.setOverlay(ui.overlayMode === "players" ? "none" : "players")}
             onCards={() => session.setModal("cards")}
-            onChat={() => session.setModal(null)}
+            onChat={() => session.store.setState({ chatOpen: !ui.chatOpen })}
           />
           <ActionBar
             phase={model.state.phase}
