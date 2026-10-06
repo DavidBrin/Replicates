@@ -50,8 +50,19 @@ const CLASSIC_COLORS: Record<string, string> = {
 const PALETTE = ["#36B0EA", "#DA3A4F", "#5FBF2A", "#9B4AE8", "#E08A24", "#F0C33A",
   "#2AC4A8", "#E8569B", "#7D8CF0", "#C7D63A", "#D96A2A"];
 
-/** §8's budget. The pipeline spends the whole allowance so the coastline stays recognisable. */
-const VERTEX_BUDGET = 30;
+/**
+ * §8's per-ring budget lives in `path.ts`; the pipeline spends the whole
+ * allowance so the coastline stays recognisable.
+ *
+ * The one thing these boards need on top of it is the sliver floor. TotalRisk's
+ * SVGs carry a scatter of two- and three-vertex offcuts in the Arctic, around
+ * Japan and through Indonesia — leftovers of whatever drew them — which render
+ * as stray triangles in open water. They are secondary rings of a territory
+ * that already has a mainland, so an absolute area floor removes them without
+ * touching any territory that *is* a small island. The declared boxes are a
+ * little over 1024 × 640, so this is `SLIVER_SHARE` of that frame.
+ */
+const SLIVER_AREA = 0.0005 * 1024 * 643;
 /** Coordinates are snapped here so a shared border is the same number on both sides. */
 const QUANTUM = 64;
 const q = (n: number): number => {
@@ -203,7 +214,8 @@ export function buildTier1(spec: Tier1Spec): MapFile {
   }
 
   const ordered = [...graph.territories].sort((a, b) => idOf(a.id).localeCompare(idOf(b.id)));
-  const fitted = ordered.map((t) => engine.fitVertexBudget(shapes.get(idOf(t.id)) ?? [], VERTEX_BUDGET, 1024));
+  // Pre-fit only to size the viewBox; `assemble` applies the same policy again.
+  const fitted = ordered.map((t) => engine.fitRings(shapes.get(idOf(t.id)) ?? [], 1024, SLIVER_AREA));
   const viewBox = fitViewBox(file.viewBox, fitted, 4);
 
   const colors = spec.colors ?? {};
@@ -214,7 +226,6 @@ export function buildTier1(spec: Tier1Spec): MapFile {
     viewBox,
     width: widthOf(viewBox),
     height: heightOf(viewBox),
-    vertexBudget: VERTEX_BUDGET,
     capitals: 6,
     continents: graph.continents.map((c, i) => ({
       id: c.id,

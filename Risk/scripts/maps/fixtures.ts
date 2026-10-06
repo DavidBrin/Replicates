@@ -98,9 +98,6 @@ export function buildFixture(slug: string, tagline: string): MapFile {
     viewBox: `0 0 ${cols * CELL} ${rows * CELL}`,
     width: cols * CELL,
     height: rows * CELL,
-    // A schematic cell is twelve vertices and stays twelve; the budget is the
-    // real board's, applied uniformly so nothing here is a special case.
-    vertexBudget: 30,
     capitals: 6,
     continents: graph.continents.map((c, i) => ({
       id: c.id,

@@ -27,7 +27,8 @@ type EngineModule = typeof import("./engine");
 const engine = (await import(ENGINE_MODULE)) as EngineModule;
 
 const {
-  anchorsForRings, bonusFor, fitVertexBudget, ringArea, ringsToPath, segmentDistance2, sharedVertexAdjacency,
+  anchorsForRings, bonusFor, fitRings, ringArea, ringArea2, ringsToPath, segmentDistance2,
+  sharedVertexAdjacency,
 } = engine;
 
 /** One territory's geometry: an outer ring per landmass, in `viewBox` units. */
@@ -39,36 +40,152 @@ export type Shape = readonly Ring[];
 type Side = "low" | "high";
 
 /**
- * Sutherland–Hodgman against one axis-aligned half-plane, ring by ring.
+ * Clip one ring against an axis-aligned half-plane, emitting **separate closed
+ * rings** — one per connected piece of land that survives.
  *
- * A concave ring that crosses the cut more than twice comes back with
- * zero-width bridges along the cut line. That is geometrically degenerate and
- * visually invisible at board scale, and it is what keeps the crossing points
- * **exactly** equal on both sides of the cut — which is the property the
- * adjacency pass depends on.
+ * ## Why not Sutherland–Hodgman
+ *
+ * The obvious algorithm here is Sutherland–Hodgman, and it is what this was.
+ * SH returns a *single* ring whatever the input, so a concave coastline that
+ * crosses the cut more than twice comes back with its surviving pieces strung
+ * together by bridges running along the cut line, traversed once out and once
+ * back. Those bridges are zero-width and invisible — **until something
+ * simplifies the ring**. Douglas–Peucker decimates the two coincident traversals
+ * independently, they stop cancelling, and the bridge inflates into a filled
+ * band. That is exactly what put two rectangular green bands across the top of
+ * the Europe board where north-western Russia should be, and what made Alaska a
+ * triangle: Russia's coast crosses 72°N a dozen times, and every gap between
+ * those crossings was a bridge waiting to be inflated.
+ *
+ * ## What this does instead
+ *
+ * Walk the ring into **chains** — maximal runs of kept vertices, each opening at
+ * an entry crossing and closing at an exit crossing — then close the chains by
+ * walking along the cut line itself. From a chain's exit point, the next entry
+ * point in the direction that keeps the retained half-plane on the inside of the
+ * traversal is the one to join to; following that rule round yields one closed
+ * ring per piece, with no bridges to inflate.
+ *
+ * Crossing points are still computed as `t` along `(a, b)` in the ring's own
+ * vertex order, so both sides of a cut land on **bit-identical** coordinates —
+ * which is the property `sharedVertexAdjacency` and `dissolve` depend on, and
+ * the reason a split's two halves still read as neighbours.
  */
 export function clipHalfPlane(shape: Shape, axis: 0 | 1, cut: number, side: Side): Ring[] {
-  const inside = (p: Point): number => (side === "low" ? cut - p[axis] : p[axis] - cut);
   const out: Ring[] = [];
-  for (const ring of shape) {
-    const next: Point[] = [];
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i] as Point;
-      const b = ring[(i + 1) % ring.length] as Point;
-      const da = inside(a);
-      const db = inside(b);
-      if (da >= 0) next.push(a);
-      if ((da >= 0) !== (db >= 0)) {
-        // `t` is computed from (a, b) in the ring's own order on both sides of
-        // the cut, so both halves land on the same crossing point.
-        const t = da / (da - db);
-        next.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
-      }
-    }
-    const deduped = dedupe(next);
-    if (deduped.length >= 3 && ringArea(deduped) > 0) out.push(deduped);
-  }
+  for (const ring of shape) out.push(...clipRingHalfPlane(ring, axis, cut, side));
   return out;
+}
+
+/** One ring in, zero or more closed rings out. See `clipHalfPlane`. */
+export function clipRingHalfPlane(ring: Ring, axis: 0 | 1, cut: number, side: Side): Ring[] {
+  const inside = (p: Point): number => (side === "low" ? cut - p[axis] : p[axis] - cut);
+  const n = ring.length;
+  if (n < 3) return [];
+
+  let kept = 0;
+  for (const p of ring) if (inside(p) >= 0) kept++;
+  if (kept === n) {
+    const whole = dedupe(ring);
+    return whole.length >= 3 && ringArea(whole) > 0 ? [whole] : [];
+  }
+  if (kept === 0) return [];
+
+  // Start the walk at a vertex that is outside, so no chain straddles the wrap.
+  let start = 0;
+  while (start < n && inside(ring[start] as Point) >= 0) start++;
+  const at = (i: number): Point => ring[(start + i) % n] as Point;
+
+  /** `t` from the ring's own vertex order, so the two sides of a cut agree exactly. */
+  const crossing = (a: Point, b: Point): Point => {
+    const da = inside(a);
+    const db = inside(b);
+    const t = da / (da - db);
+    return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+  };
+
+  interface Chain { readonly entry: Point; readonly points: Point[]; readonly exit: Point }
+  const chains: Chain[] = [];
+  let open: { entry: Point; points: Point[] } | null = null;
+  for (let i = 0; i < n; i++) {
+    const a = at(i);
+    const b = at(i + 1);
+    const da = inside(a);
+    const db = inside(b);
+    // The rotation above starts the walk outside, so a kept vertex is always
+    // inside an open chain.
+    if (da >= 0 && open !== null) open.points.push(a);
+    if (da < 0 && db >= 0) open = { entry: crossing(a, b), points: [] };
+    else if (da >= 0 && db < 0 && open !== null) {
+      chains.push({ entry: open.entry, points: open.points, exit: crossing(a, b) });
+      open = null;
+    }
+  }
+  if (open !== null) {
+    // The ring ended mid-chain, which the "start outside" rotation rules out
+    // except for floating-point ties. Close it on its own entry.
+    chains.push({ entry: open.entry, points: open.points, exit: open.entry });
+  }
+  if (chains.length === 0) return [];
+
+  // Travel direction along the cut line, with the kept half-plane to the left of
+  // the traversal. `axis`/`side` give the inward normal; the ring's own winding
+  // decides whether "left" means +1 or -1 along the other axis.
+  const other = axis === 0 ? 1 : 0;
+  const normal = side === "low" ? -1 : 1;
+  const winding = ringArea2(ring) >= 0 ? 1 : -1;
+  // For axis 0 the inward normal is (normal, 0) and rotating it by -90° in a
+  // y-down frame gives (0, -normal); for axis 1 it is (0, normal) → (normal, 0).
+  const along = (axis === 0 ? -normal : normal) * winding;
+
+  const unused = new Set(chains.keys());
+  const rings: Ring[] = [];
+  while (unused.size > 0) {
+    const first = Math.min(...unused);
+    let current = first;
+    const points: Point[] = [];
+    for (let guard = 0; guard <= chains.length; guard++) {
+      const chain = chains[current] as Chain;
+      unused.delete(current);
+      points.push(chain.entry, ...chain.points, chain.exit);
+      const next = nextChain(chains, chain.exit, other, along, unused, first);
+      if (next < 0 || next === first) break;
+      current = next;
+    }
+    const closed = dedupe(points);
+    if (closed.length >= 3 && ringArea(closed) > 0) rings.push(closed);
+  }
+  return rings;
+}
+
+/**
+ * From an exit point on the cut line, the chain whose entry point comes next in
+ * the travel direction.
+ *
+ * Along the cut line the clipped region is a set of disjoint intervals whose
+ * ends alternate exit, entry, exit, entry…, so "the nearest entry ahead" is
+ * always the right join. `first` stays a candidate so the last chain of a piece
+ * closes back onto the one it started from.
+ */
+function nextChain(
+  chains: readonly { readonly entry: Point }[],
+  exit: Point,
+  other: 0 | 1,
+  along: number,
+  unused: ReadonlySet<number>,
+  first: number,
+): number {
+  let pick = -1;
+  let best = Infinity;
+  for (let i = 0; i < chains.length; i++) {
+    if (!unused.has(i) && i !== first) continue;
+    const entry = (chains[i] as { readonly entry: Point }).entry;
+    const t = along * (entry[other] - exit[other]);
+    if (t <= 0 || t >= best) continue;
+    best = t;
+    pick = i;
+  }
+  return pick;
 }
 
 function dedupe(ring: readonly Point[]): Point[] {
@@ -80,6 +197,68 @@ function dedupe(ring: readonly Point[]): Point[] {
   const first = out[0];
   const end = out[out.length - 1];
   if (out.length > 1 && first !== undefined && end !== undefined && first[0] === end[0] && first[1] === end[1]) out.pop();
+  return out;
+}
+
+/* ------------------------------------------------------------------ the dateline -- */
+
+/** How far a ring may be shifted to find the window. One turn either way covers every case. */
+const TURNS: readonly number[] = [-360, 0, 360];
+
+/**
+ * Make a ring's longitudes continuous: a jump of more than 180° between
+ * consecutive vertices is the antimeridian, not a journey across the map.
+ */
+export function unwrapLongitude(ring: Ring): Ring {
+  const out: Point[] = [];
+  let previous: number | null = null;
+  for (const p of ring) {
+    let lon = p[0];
+    if (previous !== null) {
+      while (lon - previous > 180) lon -= 360;
+      while (previous - lon > 180) lon += 360;
+    }
+    out.push([lon, p[1]]);
+    previous = lon;
+  }
+  return out;
+}
+
+/**
+ * Clip lon/lat rings to a window, cutting them at the antimeridian on the way.
+ *
+ * Natural Earth does **not** split its polygons at ±180°: Russia's main outline
+ * is one ring running from 19°E clean across the dateline to Chukotka, and
+ * Wrangel Island is a ten-vertex ring listing both −180° and 178.9°. Projected
+ * naively, those two rings draw a line the full width of the board — which is
+ * precisely the pair of bands that ran across the top of the world map, and
+ * neither simplification nor the clip put them there.
+ *
+ * So each ring is first unwrapped into continuous longitude, and then clipped
+ * once per whole turn: a ring that genuinely straddles the dateline is kept by
+ * two different offsets and comes back as two rings, one each side, which is
+ * what it should have been all along.
+ */
+export function clipToWindow(
+  rings: readonly Ring[],
+  lon: readonly [number, number],
+  lat: readonly [number, number],
+): Ring[] {
+  const cuts: [0 | 1, number, Side][] = [
+    [0, lon[0], "high"], [0, lon[1], "low"], [1, lat[0], "high"], [1, lat[1], "low"],
+  ];
+  const out: Ring[] = [];
+  for (const ring of rings) {
+    const unwrapped = unwrapLongitude(ring);
+    for (const turn of TURNS) {
+      let shape: Ring[] = [unwrapped.map((p) => [p[0] + turn, p[1]] as Point)];
+      for (const [axis, cut, side] of cuts) {
+        shape = clipHalfPlane(shape, axis, cut, side);
+        if (shape.length === 0) break;
+      }
+      out.push(...shape);
+    }
+  }
   return out;
 }
 
@@ -216,6 +395,160 @@ export function splitShape(shape: Shape, pieces: number, quantise: (n: number) =
     return [shape];
   }
   return [...splitShape(low, left, quantise), ...splitShape(high, pieces - left, quantise)];
+}
+
+/* ------------------------------------------------------------------ dissolving -- */
+
+const pointKey = (p: Point): string => `${p[0]},${p[1]}`;
+const edgeKey = (a: Point, b: Point): string => `${pointKey(a)}|${pointKey(b)}`;
+
+export interface DissolveResult {
+  readonly rings: Ring[];
+  /** Rings in, rings out — the assertion a merge has to satisfy. */
+  readonly before: number;
+  readonly after: number;
+  /** True when the edge walk could not close, and the input was kept as it was. */
+  readonly fellBack: boolean;
+}
+
+/**
+ * Union a merged territory's member shapes into as few rings as the geography
+ * allows — the step whose absence turned the world board into triangle soup.
+ *
+ * Before this, a merged territory's geometry was the **concatenation** of its
+ * members' rings: "North West Africa" was seven separate country outlines
+ * stacked on top of each other, internal borders and all. Seven rings then had
+ * to share one vertex budget, so each was simplified to its floor, and the
+ * territory rendered as a pile of triangles. Dissolving first means the
+ * territory is one ring, which then gets the whole primary budget.
+ *
+ * ## How
+ *
+ * Every coordinate in this pipeline is quantised to `1/QUANTUM` and
+ * `conformVertices` has already inserted each neighbour's vertices into the
+ * other's edges, so two members that share a border name that border with the
+ * **same** vertices, traversed in opposite directions. So the union is a
+ * directed-edge cancellation: orient every ring the same way, drop each edge
+ * that also occurs reversed (those are the internal borders), and chain what is
+ * left head-to-tail. This is `topojson.merge`'s argument, run on the projected
+ * and split pieces rather than on source arcs — which it has to be, because a
+ * piece of a split country has no arc of its own.
+ *
+ * Rings that come back wound against the input are holes (an enclave the merge
+ * did not include) and are dropped, exactly as `ringsOf` drops a source
+ * feature's holes: a territory is land, not a donut.
+ */
+export function dissolve(rings: readonly Ring[]): DissolveResult {
+  const input = rings.filter((r) => r.length >= 3);
+  const before = input.length;
+  const fallback = (): DissolveResult => ({ rings: [...input], before, after: before, fellBack: true });
+  if (before <= 1) return { rings: [...input], before, after: before, fellBack: false };
+
+  // One orientation, so "the same edge reversed" really is an internal border.
+  const oriented = input.map((r) => (ringArea2(r) < 0 ? [...r].reverse() : [...r]));
+
+  const count = new Map<string, number>();
+  const segment = new Map<string, readonly [Point, Point]>();
+  for (const ring of oriented) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i] as Point;
+      const b = ring[(i + 1) % ring.length] as Point;
+      if (a[0] === b[0] && a[1] === b[1]) continue;
+      const k = edgeKey(a, b);
+      count.set(k, (count.get(k) ?? 0) + 1);
+      segment.set(k, [a, b]);
+    }
+  }
+
+  // An edge survives only as far as it outnumbers its own reverse.
+  const outgoing = new Map<string, (readonly [Point, Point])[]>();
+  let live = 0;
+  for (const [k, edge] of segment) {
+    const surplus = (count.get(k) ?? 0) - (count.get(edgeKey(edge[1], edge[0])) ?? 0);
+    if (surplus <= 0) continue;
+    const from = pointKey(edge[0]);
+    const list = outgoing.get(from);
+    for (let i = 0; i < surplus; i++) {
+      if (list === undefined) outgoing.set(from, [edge]);
+      else list.push(edge);
+      live++;
+    }
+  }
+  if (live === 0) return fallback();
+
+  const out: Ring[] = [];
+  let remaining = live;
+  // Deterministic start order, so a rebuild is byte-identical.
+  const starts = [...outgoing.keys()].sort();
+  for (const startKey of starts) {
+    while ((outgoing.get(startKey)?.length ?? 0) > 0) {
+      const ring: Point[] = [];
+      let edge = take(outgoing, startKey);
+      if (edge === null) break;
+      const origin = edge[0];
+      for (let guard = 0; guard <= live; guard++) {
+        remaining--;
+        ring.push(edge[0]);
+        if (pointKey(edge[1]) === pointKey(origin)) break;
+        const next = takeBest(outgoing, edge);
+        if (next === null) return fallback();
+        edge = next;
+      }
+      const closed = dedupe(ring);
+      if (closed.length >= 3) out.push(closed);
+    }
+  }
+  if (remaining !== 0) return fallback();
+
+  // Same winding as the input is land; the opposite is an enclave's hole.
+  const land = out.filter((r) => ringArea2(r) > 0 && ringArea(r) > 0);
+  if (land.length === 0 || land.length > before) return fallback();
+  land.sort((a, b) => ringArea(b) - ringArea(a));
+  return { rings: land, before, after: land.length, fellBack: false };
+}
+
+function take(
+  outgoing: Map<string, (readonly [Point, Point])[]>,
+  from: string,
+): readonly [Point, Point] | null {
+  const list = outgoing.get(from);
+  if (list === undefined || list.length === 0) return null;
+  return list.pop() ?? null;
+}
+
+/**
+ * The next edge out of `edge`'s head, picking the sharpest right turn where
+ * several leave the same vertex.
+ *
+ * Two members of a merged group can touch at a single point — a corner where
+ * three countries meet, or an isthmus the quantisation pinched shut. Taking the
+ * most clockwise continuation at such a vertex is the standard planar-face walk
+ * and is what keeps the outer boundary outer instead of cutting the corner.
+ */
+function takeBest(
+  outgoing: Map<string, (readonly [Point, Point])[]>,
+  edge: readonly [Point, Point],
+): readonly [Point, Point] | null {
+  const from = pointKey(edge[1]);
+  const list = outgoing.get(from);
+  if (list === undefined || list.length === 0) return null;
+  if (list.length === 1) return list.pop() ?? null;
+
+  const inDirection = Math.atan2(edge[1][1] - edge[0][1], edge[1][0] - edge[0][0]);
+  let pick = 0;
+  let best = -Infinity;
+  list.forEach((candidate, i) => {
+    const out = Math.atan2(candidate[1][1] - candidate[0][1], candidate[1][0] - candidate[0][0]);
+    // Turn angle in (-π, π]; the largest is the sharpest left, so negate for right.
+    let turn = out - inDirection;
+    while (turn <= -Math.PI) turn += 2 * Math.PI;
+    while (turn > Math.PI) turn -= 2 * Math.PI;
+    if (-turn > best) {
+      best = -turn;
+      pick = i;
+    }
+  });
+  return list.splice(pick, 1)[0] ?? null;
 }
 
 /* ------------------------------------------------------------------ merging -- */
@@ -474,7 +807,11 @@ export interface AssembleInput {
   readonly viewBox: string;
   readonly width: number;
   readonly height: number;
-  readonly vertexBudget: number;
+  /**
+   * A secondary ring smaller than this fraction of the frame is an ocean sliver
+   * — a clip artefact or a rock — and is dropped before anything is simplified.
+   */
+  readonly sliverShare?: number;
   readonly continents: readonly ContinentDraft[];
   readonly territories: readonly TerritoryDraft[];
   readonly seaLinks: readonly (readonly [string, string])[];
@@ -494,9 +831,53 @@ export interface AssembleInput {
  * nothing is being papered over — the file that lands on disk is symmetric by
  * construction and checked anyway.
  */
+export const SLIVER_SHARE = 0.0005;
+
+/** Half the width and height of the box a token occupies, in `viewBox` units. */
+const TOKEN_HALF_WIDTH = 34;
+const TOKEN_HALF_HEIGHT = 11;
+/** How far down a colliding label is pushed, and how many times it may be pushed. */
+const NUDGE_Y = 12;
+const NUDGE_PASSES = 3;
+
+/**
+ * Push a label down when it lands on top of another territory's token.
+ *
+ * A single greedy pass in territory order: deliberately not a solver. A board
+ * with forty labels and forty tokens at fixed positions has collisions no
+ * amount of nudging removes, and chasing the last few would mean moving labels
+ * far enough from their own territory to be worse than the overlap. Three
+ * 12-unit steps clear the ones a reader actually notices; the rest are listed
+ * in the build report.
+ */
+export function nudgeLabels(
+  anchors: readonly { readonly token: readonly [number, number]; readonly label: readonly [number, number] }[],
+  height: number,
+): number[] {
+  const ceiling = height - 2;
+  const out = anchors.map((a) => Math.min(a.label[1], ceiling));
+  const hits = (x: number, y: number, self: number): boolean =>
+    anchors.some((other, j) =>
+      j !== self
+      && Math.abs(other.token[0] - x) < TOKEN_HALF_WIDTH
+      && Math.abs(other.token[1] - y) < TOKEN_HALF_HEIGHT);
+
+  anchors.forEach((a, i) => {
+    for (let pass = 0; pass < NUDGE_PASSES; pass++) {
+      const y = out[i] as number;
+      if (!hits(a.label[0], y, i)) break;
+      const moved = y + NUDGE_Y;
+      if (moved > ceiling) break;
+      out[i] = moved;
+    }
+  });
+  return out;
+}
+
 export function assemble(input: AssembleInput): MapFile {
   const span = Math.max(input.width, input.height);
-  const fitted = input.territories.map((t) => fitVertexBudget(t.shape, input.vertexBudget, span));
+  const sliver = (input.sliverShare ?? SLIVER_SHARE) * input.width * input.height;
+  const fitted = input.territories.map((t) => fitRings(t.shape, span, sliver));
 
   const ids = input.territories.map((t) => t.id);
   const suits = assignSuits(ids, input.suits ?? {});
@@ -514,10 +895,17 @@ export function assemble(input: AssembleInput): MapFile {
     .map(([a, b]) => [a, b] as const)
     .filter(([a, b]) => neighbours.has(a) && neighbours.has(b) && !(neighbours.get(a)?.has(b) ?? false));
 
-  const territories = input.territories.map((t, i) => {
+  const placed = input.territories.map((t, i) => {
     const shape = fitted[i] as Ring[];
-    const d = ringsToPath(shape);
-    const anchors = anchorsForRings(shape);
+    return { shape, d: ringsToPath(shape), anchors: anchorsForRings(shape) };
+  });
+  const labelY = nudgeLabels(
+    placed.map((p) => p.anchors),
+    input.height,
+  );
+
+  const territories = input.territories.map((t, i) => {
+    const { d, anchors } = placed[i] as (typeof placed)[number];
     return {
       id: t.id,
       name: t.name,
@@ -528,9 +916,7 @@ export function assemble(input: AssembleInput): MapFile {
       tokenX: anchors.token[0],
       tokenY: anchors.token[1],
       labelX: anchors.label[0],
-      // Keep the label inside the frame; the validator requires both anchors in
-      // the viewBox, and a southern coast can sit fewer than 26 units from it.
-      labelY: Math.min(anchors.label[1], input.height - 2),
+      labelY: labelY[i] as number,
     };
   });
 
@@ -569,4 +955,7 @@ export function assemble(input: AssembleInput): MapFile {
 }
 
 /** Re-exported so callers need only one import for the build-time geometry. */
-export { sharedVertexAdjacency, bonusFor, ringArea, ringsToPath, anchorsForRings, fitVertexBudget, segmentDistance2 };
+export {
+  sharedVertexAdjacency, bonusFor, ringArea, ringArea2, ringsToPath, anchorsForRings, fitRings,
+  segmentDistance2,
+};

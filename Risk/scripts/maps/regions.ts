@@ -48,7 +48,6 @@ const engine = (await import(ENGINE_MODULE)) as typeof import("./engine");
 const PALETTE = ["#36B0EA", "#DA3A4F", "#5FBF2A", "#9B4AE8", "#E08A24", "#F0C33A",
   "#2AC4A8", "#E8569B", "#7D8CF0", "#C7D63A", "#D96A2A"];
 
-const VERTEX_BUDGET = 30;
 const MARGIN = 28;
 
 /* ------------------------------------------------------------------ the spec -- */
@@ -74,6 +73,14 @@ export interface RegionSpec {
    * first also means the projection is fitted to what is actually drawn.
    */
   readonly window?: { readonly lon: readonly [number, number]; readonly lat: readonly [number, number] };
+  /**
+   * Source name → the name this board calls it.
+   *
+   * A windowed board draws part of a country, and calling that part by the
+   * whole country's name is simply wrong: what Europe keeps of Russia is
+   * western Russia, so that is what the territory is called.
+   */
+  readonly rename?: Readonly<Record<string, string>>;
   /** Feature name → how many territories to cut it into. */
   readonly split?: Readonly<Record<string, number>>;
   /** Feature name → the word the pieces are named after. Defaults to the feature's own name. */
@@ -110,6 +117,8 @@ export interface RegionSpec {
   readonly continentMode?: "grow" | "source";
   readonly projection: ProjectionKind;
   readonly rotate?: readonly [number, number];
+  /** A conic projection's two standard parallels. Ignored by the others. */
+  readonly parallels?: readonly [number, number];
   readonly width: number;
   readonly height: number;
   /** Hand-authored, by final territory id. See the module header. */
@@ -168,23 +177,30 @@ export function selectFeatures(spec: RegionSpec): SourceFeature[] {
   // Antarctica and the open-ocean polygon are never a board.
   chosen = chosen.filter((f) => f.rings.length > 0 && f.continent !== "Antarctica" && f.name !== "Antarctica");
 
-  if (spec.window !== undefined) {
-    const { lon, lat } = spec.window;
+  // Every lon/lat board is clipped, whether or not the spec names a window: the
+  // default is the whole globe, which is still a cut at the antimeridian, and
+  // that cut is what stops a wrapping ring drawing a band across the board.
+  if (spec.source !== "usStates") {
+    const lon = spec.window?.lon ?? ([-180, 180] as const);
+    const lat = spec.window?.lat ?? ([-90, 90] as const);
+    const minExtent = spec.window === undefined ? 0 : 0.02;
     chosen = chosen
       .map((f) => {
-        let rings = f.rings.map((r) => r.map((p) => [p[0], p[1]] as Point)) as Ring[];
-        for (const [axis, cut, side] of [
-          [0, lon[0], "high"], [0, lon[1], "low"], [1, lat[0], "high"], [1, lat[1], "low"],
-        ] as [0 | 1, number, "low" | "high"][]) {
-          rings = geom.clipHalfPlane(rings, axis, cut, side);
-        }
-        // A sliver left by the clip is a rendering artefact, not a territory.
-        const kept = rings.filter((r) => r.length >= 3);
-        return { ...f, rings: kept.map((r) => r.map((p) => [p[0], p[1]] as const)), extent: sources.extentOf(kept.map((r) => r.map((p) => [p[0], p[1]] as const))) };
+        const rings = geom.clipToWindow(
+          f.rings.map((r) => r.map((p) => [p[0], p[1]] as Point)) as Ring[],
+          lon,
+          lat,
+        ).filter((r) => r.length >= 3)
+          .map((r) => r.map((p) => [p[0], p[1]] as const));
+        return { ...f, rings, extent: sources.extentOf(rings) };
       })
-      .filter((f) => f.extent > 0.02);
+      .filter((f) => f.extent > minExtent);
   }
-  return chosen.sort((a, b) => a.name.localeCompare(b.name));
+
+  const rename = spec.rename ?? {};
+  return chosen
+    .map((f) => (rename[f.name] === undefined ? f : { ...f, name: rename[f.name] as string }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Project, then split whatever the spec says to split. One flat list of pieces. */
@@ -192,6 +208,7 @@ function piecesOf(spec: RegionSpec, features: readonly SourceFeature[]): Piece[]
   const project = sources.fitProjection(
     spec.projection, features, spec.width, spec.height, MARGIN,
     spec.rotate === undefined ? undefined : [spec.rotate[0], spec.rotate[1]],
+    spec.parallels,
   );
   const out: Piece[] = [];
   for (const feature of features) {
@@ -268,6 +285,7 @@ export function buildRegion(spec: RegionSpec): RegionBuild {
     : mergePerContinent(pieces, pieceAdjacency, spec.territoriesPerContinent, nearestTo);
 
   /* ---- merged groups become territories ---- */
+  const notDissolved: string[] = [];
   const drafts = plan.groups.map((members) => {
     const byArea = [...members].sort((a, b) => (pieces[b]?.area ?? 0) - (pieces[a]?.area ?? 0));
     const largest = pieces[byArea[0] ?? 0];
@@ -276,9 +294,24 @@ export function buildRegion(spec: RegionSpec): RegionBuild {
     // reads better with "Guinea & Sierra Leone" than with an invented word.
     const second = byArea.length > 1 ? pieces[byArea[1] as number]?.name : undefined;
     const memberName = second === undefined ? (largest?.name ?? "Territory") : `${largest?.name ?? ""} & ${second}`;
-    const shape = members.flatMap((m) => pieces[m]?.shape ?? []);
+    // Dissolve rather than concatenate: the members share exact border vertices
+    // (quantised, then conformed), so the internal borders cancel and the group
+    // becomes as few rings as the geography allows. Concatenating instead is
+    // what made every multi-country territory a pile of triangles.
+    const parts = members.flatMap((m) => pieces[m]?.shape ?? []);
+    const union = geom.dissolve(parts);
+    if (union.fellBack || union.after > union.before) notDissolved.push(memberName);
+    const shape = union.rings;
     return { memberName, continent: largest?.continent ?? "", shape, members, centre: centreOf(shape) };
   });
+  if (notDissolved.length > 0) {
+    // Not fatal — the fallback is the old concatenation, which still draws —
+    // but it means a territory is about to spend its budget on internal
+    // borders, so the build says so rather than shipping triangle soup again.
+    process.stdout.write(
+      `    ${spec.slug}: ${notDissolved.length} group(s) did not dissolve: ${notDissolved.join(", ")}\n`,
+    );
+  }
 
   const names = spec.nameBy === "continentBand" ? continentBandNames(drafts) : drafts.map((d) => d.memberName);
   const taken = new Set<string>();
@@ -349,7 +382,6 @@ export function buildRegion(spec: RegionSpec): RegionBuild {
     viewBox: `0 0 ${spec.width} ${spec.height}`,
     width: spec.width,
     height: spec.height,
-    vertexBudget: VERTEX_BUDGET,
     capitals: 6,
     continents: continentIds.map((id, i) => ({
       id,

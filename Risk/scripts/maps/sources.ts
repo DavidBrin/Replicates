@@ -248,10 +248,18 @@ export function fitProjection(
   height: number,
   margin: number,
   rotate?: readonly [number, number] | readonly [number, number, number],
+  parallels?: readonly [number, number],
 ): Projector {
   const projection = (PROJECTIONS[kind] ?? geoEqualEarth)();
   if (rotate !== undefined && projection.rotate !== undefined) {
     projection.rotate([rotate[0], rotate[1], rotate[2] ?? 0]);
+  }
+  // The two standard parallels are what makes a conic projection fit *this*
+  // region: left at d3's default 30°/30° a Europe board is stretched east–west
+  // and the Baltic shears. A conic without them is a worse Mercator.
+  const conic = projection as GeoProjection & { parallels?: (p: [number, number]) => unknown };
+  if (parallels !== undefined && typeof conic.parallels === "function") {
+    conic.parallels([parallels[0], parallels[1]]);
   }
   projection.scale(1).translate([0, 0]);
 

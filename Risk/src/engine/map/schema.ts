@@ -16,14 +16,29 @@
 import type { ContinentId, MapDef, MapFile, Suit, TerritoryId } from "../types";
 import { MAX_SEATS } from "../types";
 
-import { bboxOfRings, countVertices, parseRings, pointInRings } from "./path";
+import { bboxOfRings, countVertices, parseRings, pointInRings, subpathVertexCounts } from "./path";
 
 /* ------------------------------------------------------------------ gates -- */
 
-/** §8's vertex budget per territory. The lower bound is what the validator can honestly assert:
- *  a triangle is the smallest closed shape, and tiny islands legitimately simplify below 12. */
+/**
+ * §8's vertex budget per territory, and the floor per subpath.
+ *
+ * The ceiling is per **territory** and the budget underneath it is per **ring**
+ * (`RING_POLICY` in `path.ts`): the largest ring may spend 60, each secondary
+ * ring 12, and a territory keeps at most five secondaries — so 120 is the sum
+ * the policy can actually produce, not a number picked to let anything through.
+ * A flat 30 per territory was the old ceiling, and it was the reason a
+ * dissolved country group or an archipelago collapsed into triangles: every one
+ * of its rings had to come out of the same thirty.
+ *
+ * The lower bound is what the validator can honestly assert: a triangle is the
+ * smallest closed shape, and a genuinely tiny island legitimately simplifies
+ * below 12.
+ */
 export const MIN_VERTICES = 3;
-export const MAX_VERTICES = 30;
+export const MAX_VERTICES = 120;
+/** No subpath may be less than a triangle, however the budget is spent. */
+export const MIN_RING_VERTICES = 3;
 /** `modifierSlots` ranges (R74–R76, SPEC §4.5). */
 export const BLIZZARD_RANGE = [2, 11] as const;
 export const PORTAL_RANGE = [3, 7] as const;
@@ -160,6 +175,8 @@ export function validateMap(file: MapFile): string[] {
     const vertices = countVertices(t.d);
     if (vertices < MIN_VERTICES) fail(`territory ${t.id} has ${vertices} vertices, fewer than ${MIN_VERTICES}`);
     if (vertices > MAX_VERTICES) fail(`territory ${t.id} has ${vertices} vertices, more than ${MAX_VERTICES}`);
+    const thin = subpathVertexCounts(t.d).filter((n) => n < MIN_RING_VERTICES).length;
+    if (thin > 0) fail(`territory ${t.id} has ${thin} subpath(s) with fewer than ${MIN_RING_VERTICES} vertices`);
 
     const rings = parseRings(t.d);
     if (rings.length === 0) {

@@ -60,7 +60,7 @@ Sources, none of which ever reaches the client bundle (D40):
 | file | T / C / edges | region | catalogue reference |
 |---|---|---|---|
 | `world-simple.json` | 24 / 6 / 30 | every country, merged within Natural Earth's own six continents | — (the small-board bucket is 19–35) |
-| `europe.json` | 44 / 7 / 88 | Europe clipped to 25°W–45°E, plus Anatolia and the Caucasus | Europe 44 / 7 |
+| `europe.json` | 44 / 7 / 90 | Europe clipped to 25°W–45°E, plus Anatolia and the Caucasus | Europe 44 / 7 |
 | `usa-states.json` | 42 / 9 / 91 | the 50 states plus DC, merged to 42 | United States 42 / 9 |
 | `asia.json` | 48 / 9 / 102 | Asia plus Siberia (Natural Earth files Russia under Europe) | Asia 1800s 48 / 9 |
 | `africa.json` | 37 / 7 / 86 | all 51 African countries, merged to 37 | Africa 37 / 7 |
@@ -77,6 +77,36 @@ territories are named after their largest source countries ("Guinea & Senegal")
 or by compass band within their continent ("North West Africa"), and continents
 are named by compass band. Where one of those coincides with a real region name,
 that is because compass directions are compass directions.
+
+### Geometry quality
+
+Three rules decide what a territory's outline looks like, and each one exists
+because its absence was visible on the board:
+
+1. **Dissolve before simplifying.** A merged territory's members are unioned by
+   directed-edge cancellation (`geom.ts`'s `dissolve`) — the members share exact
+   border vertices, so the internal borders cancel and the group becomes one
+   ring. Concatenating them instead made every multi-country territory a stack
+   of outlines sharing one vertex budget, and the world board rendered as
+   triangles.
+2. **A budget per ring, not per territory.** The largest ring may spend 60
+   vertices, each kept island 12, and a territory 120 in total (`RING_POLICY` in
+   `src/engine/map/path.ts`, which is what `MAX_VERTICES` is set from). A ring
+   is kept if it holds 2% of the largest ring's area and 0.05% of the frame;
+   a mainland keeps five islands, an archipelago its largest three. The
+   simplifier's floor is a quadrilateral, never a triangle.
+3. **Clip into rings, not bands.** The lon/lat window clip splits a ring into
+   one closed ring per surviving piece. Sutherland–Hodgman returns a single ring
+   whose pieces are joined by zero-width bridges along the cut, and Douglas–
+   Peucker inflates those bridges into filled bands — which is what put two
+   rectangles across the top of the Europe board. Rings are also unwrapped and
+   cut at the antimeridian first: Natural Earth does not split its polygons
+   there, so Russia's outline is one ring running from 19°E to Chukotka.
+
+Projections are chosen per region: Lambert conformal conic for Europe (15°E,
+40°N/65°N standard parallels), `geoAlbersUsa` for the United States so Alaska
+and Hawaii are inset, and Equal Earth for the world and the remaining regional
+boards, so Greenland is not a continent.
 
 Adjacency is **derived topologically** from shared polygon borders, never
 hand-typed — verified against `topojson.neighbors` over all 177 world countries

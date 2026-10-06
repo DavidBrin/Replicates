@@ -10,7 +10,7 @@
 
 export {
   loadMap, validateMap, checkMap, parseViewBox,
-  MIN_VERTICES, MAX_VERTICES, BLIZZARD_RANGE, PORTAL_RANGE,
+  MIN_VERTICES, MAX_VERTICES, MIN_RING_VERTICES, BLIZZARD_RANGE, PORTAL_RANGE,
 } from "./schema";
 export { anchorsFor, poleOf, solvePole, LABEL_OFFSET_Y, type Anchors } from "./anchors";
 export {
@@ -23,8 +23,11 @@ export {
 } from "./voronoi";
 export { sharedVertexAdjacency, componentsOf, growGroups, bonusFor, slotsForSize } from "./graph";
 export {
-  parseRings, tokenisePath, countVertices, ringArea, ringArea2, largestRing, pointInRing,
+  parseRings, tokenisePath, countVertices, subpathVertexCounts, ringArea, ringArea2,
+  largestRing, pointInRing,
   pointInRings, bboxOfRings, ringsToPath, simplifyRing, simplifyOpen, segmentDistance2,
-  fitVertexBudget, centroidOf, poleOfWith, anchorsFromPole, POLE_PRECISION,
+  fitVertexBudget, fitRings, selectRings, simplifyToCount, RING_POLICY,
+  centroidOf, poleOfWith, anchorsFromPole, POLE_PRECISION,
+  type RingPolicy,
   type Point, type Ring, type PoleSolver,
 } from "./path";
