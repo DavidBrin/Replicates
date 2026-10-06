@@ -10,7 +10,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 
 import {
-  DEFAULT_RULES, type BotTier, type GameConfig, type PlayerColour, type Rules, type SeatConfig,
+  DEFAULT_RULES, MAX_SEATS, type BotTier, type GameConfig, type PlayerColour, type Rules, type SeatConfig,
 } from "@/engine/types";
 
 /** S3's `VoronoiOptions` (§4.14), restated because `@/engine/map` is S3's barrel. */
@@ -126,10 +126,21 @@ export function withIdentityName(
   });
 }
 
-/** Solo: one human and `count - 1` bots. Pass & Play: every seat human. */
+/**
+ * Solo: one human and `count - 1` bots. Pass & Play and Online: every seat human — online a
+ * human row is an OPEN seat for someone to join (D115). A lobby that opened with the solo
+ * pattern was host-plus-bots: full before anyone arrived, so every join was refused.
+ */
 export function defaultSeats(mode: GameMode, count: number, tier: BotTier): SeatConfig[] {
   return Array.from({ length: count }, (_, i) =>
-    defaultSeat(i, mode === "pass-and-play" || i === 0 ? "human" : "bot", tier));
+    defaultSeat(i, mode !== "solo" || i === 0 ? "human" : "bot", tier));
+}
+
+/** The seat count a mode opens with: two for the kitchen table, every seat open online. */
+export function defaultSeatCount(mode: GameMode, current: number): number {
+  if (mode === "pass-and-play") return 2;
+  if (mode === "online") return MAX_SEATS;
+  return current;
 }
 
 function initial(): SessionConfigState {
@@ -148,7 +159,7 @@ export function createSessionConfigStore(): StoreApi<SessionConfigStore> {
     ...initial(),
 
     setMode(mode) {
-      const seats = defaultSeats(mode, mode === "pass-and-play" ? 2 : get().seats.length, get().rules.aiDifficulty);
+      const seats = defaultSeats(mode, defaultSeatCount(mode, get().seats.length), get().rules.aiDifficulty);
       set({ mode, seats, ready: false });
     },
     setFormat(format) {

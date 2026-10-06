@@ -84,7 +84,8 @@ export default function NewGamePage() {
           options={[{ value: "ffa", label: "FFA" }, { value: "1v1", label: "1v1" }]}
           onChange={(next) => sessionConfigStore.getState().setFormat(next)}
         />
-        <Pill label="BATTLE" testId="new-battle" onClick={() => router.push("/new/map")} />
+        {/* D115 — Online opens the lobby browser; the map and modifiers come with `Create`. */}
+        <Pill label="BATTLE" testId="new-battle" onClick={() => router.push(mode === "online" ? "/lobby" : "/new/map")} />
       </footer>
     </main>
   );

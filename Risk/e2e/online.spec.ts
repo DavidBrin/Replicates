@@ -165,7 +165,16 @@ test("T10.4 — lobby, a turn each, chat both ways, a timeout to a bot and a rec
 
     /* ---- create, join by code, ready, start ----------------------------- */
 
+    // D115 — `Create` starts the setup flow: the map, then the modifiers, then BATTLE posts the
+    // lobby and opens the room with that map and those modifiers.
     await pageA.locator(SEL.lobbyCreate).click(CLICK);
+    await pageA.locator(SEL.mapPickerScreen).waitFor({ timeout: 30_000 });
+    const tile = pageA.locator(SEL.mapTile("classic-world"));
+    await tile.click(CLICK);
+    await expect(tile).toHaveAttribute("data-selected", "true");
+    await pageA.locator(SEL.mapNext).click(CLICK);
+    await pageA.locator(SEL.rulesScreen).waitFor({ timeout: 30_000 });
+    await pageA.locator(SEL.rulesBattle).click(CLICK);
     await pageA.locator(SEL.lobbyRoom).waitFor({ timeout: 30_000 });
     const code = (await pageA.locator(SEL.lobbyCode).innerText()).trim();
     expect(code, "four unambiguous capitals, for reading aloud").toMatch(/^[A-HJ-NP-Z]{4}$/);

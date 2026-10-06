@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { DEFAULT_VORONOI, sessionConfigStore } from "@/game/sessionConfig";
@@ -15,6 +15,10 @@ beforeEach(() => {
   sessionConfigStore.getState().reset();
   routerMock.push.mockClear();
   withRandomMap();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("/new/rules (Modes and Modifiers)", () => {
@@ -163,6 +167,20 @@ describe("/new/rules (Modes and Modifiers)", () => {
     fireEvent.click(screen.getByTestId("rules-modifiers"));
     fireEvent.click(screen.getByTestId("rules-turn-timer-120"));
     expect(sessionConfigStore.getState().rules.turnSeconds).toBe(120);
+  });
+
+  it("online, BATTLE creates the lobby and opens the room (D115)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/lobbies" && init?.method === "POST") {
+        return new Response(JSON.stringify({ code: "QRST" }), { status: 201 });
+      }
+      return new Response("{}", { status: 200 });
+    }));
+    act(() => { sessionConfigStore.getState().setMode("online"); withRandomMap(); });
+    render(<RulesPage />);
+    fireEvent.click(screen.getByTestId("rules-battle"));
+    await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/lobby/QRST"));
+    expect(sessionConfigStore.getState().ready).toBe(true);
   });
 
   it("sets ready and routes into the game from BATTLE", () => {

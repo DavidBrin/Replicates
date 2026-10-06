@@ -1114,3 +1114,13 @@ Which seat wins is deliberately **not** asserted: the offline seed is minted per
 **Why.** Review feedback: five is already a hand that must trade at the next draft (R24), so letting a seat end its turn on five and then draw to six was the one way past five — and the cap of six was being reached by inheritance plus award. With the trigger at five, the only hand that can reach six is R25's own award, as the rules intend.
 
 **Consequence.** The walk codex round 2 (finding 9) shaped — trade at turn start to two, inherit three, back to five — now bounces instead of waiting, and its test says so; the predicate is still keyed on `resumePhase`, never on the hand size.
+
+## D115 — Online: `Create` starts the setup flow, BATTLE posts the lobby, and the online turn's follow-ups wait for confirmation
+
+**Decision.** Three online fixes from the second hands-on round.
+
+1. **Routing.** Choosing *Online* on `/new` and pressing BATTLE opens the lobby browser directly. The map picker and the modifiers appear only after `Create` in the browser, and `/new/rules`' BATTLE is what posts `POST /api/lobbies` (via `createLobby`) and opens the room. Before, every online player walked the map and modifier screens just to *see* who was online, and `Create` then posted whatever the store held.
+2. **A fortify online ends the turn only once the authority has accepted it.** `submit` takes an `onConfirmed` callback that runs when the server answers; `fortify` ends the turn from it. The two posts used to race as concurrent fetches, and when `END_TURN` landed first the turn had passed and the `FORTIFY` was refused `notYourTurn` — the checkmark ended the turn and moved nothing.
+3. **The `Move Troops` pill opens the count dialog from the state.** Online, a conquest arrives by ingest, which never ran the selection refresh a tap would have; `countRequest` stayed null and the dialog had nothing to show until the board was tapped once. `setModal("count")` now derives the request, and every ingest that changed the board re-derives the selection for the acting player.
+
+**Why.** Review feedback on the live site, all three from one online game.

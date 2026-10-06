@@ -21,6 +21,8 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { Pill } from "@/components/ui/Pill";
 import { SETUP_TOKENS } from "@/components/ui/tokens";
 import { sessionConfigStore, useSessionConfig } from "@/game/sessionConfig";
+import { createIdentityAdapter } from "@/adapters/localStorage/identity";
+import { createLobby } from "@/components/online/createLobby";
 
 interface ModifierSpec {
   readonly key: string;
@@ -65,6 +67,8 @@ const PLAY_ROUTE = {
 export default function RulesPage() {
   const router = useRouter();
   const [panelOpen, setPanelOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const mode = useSessionConfig((s) => s.mode);
   const rules = useSessionConfig((s) => s.rules);
   const seats = useSessionConfig((s) => s.seats);
@@ -169,12 +173,33 @@ export default function RulesPage() {
         <Pill
           label="BATTLE"
           testId="rules-battle"
-          disabled={source === null}
+          disabled={source === null || creating}
           onClick={() => {
             sessionConfigStore.getState().setReady(true);
-            router.push(PLAY_ROUTE[mode]);
+            if (mode !== "online") {
+              router.push(PLAY_ROUTE[mode]);
+              return;
+            }
+            // D115 — online, BATTLE is what creates the lobby: the room opens with this map and
+            // these modifiers, and the host is in it.
+            setCreating(true);
+            setCreateError(null);
+            const name = createIdentityAdapter().readCached()?.displayName ?? "A";
+            void createLobby(sessionConfigStore.getState(), `${name}'s game`).then((result) => {
+              if ("code" in result) {
+                router.push(`/lobby/${result.code}`);
+                return;
+              }
+              setCreating(false);
+              setCreateError(result.error);
+            });
           }}
         />
+        {createError !== null ? (
+          <p data-testid="rules-create-error" className="text-sm" style={{ color: "var(--danger)" }}>
+            {createError}
+          </p>
+        ) : null}
       </footer>
 
       {panelOpen ? (

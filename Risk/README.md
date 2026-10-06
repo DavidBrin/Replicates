@@ -121,7 +121,9 @@ move per turn and is optional. Eliminate a seat and you take its whole hand.
 
 **Modes.** *Solo* against one to five bots. *Pass & Play* for two to six on one
 device, with a full-screen hand-off between turns that conceals the board rather than
-merely covering it. *Online*, two to six players, behind a four-letter lobby code
+merely covering it. *Online* opens the lobby browser straight away — who is here, and
+the open games — and `Create` is where the map and modifiers are chosen (D115);
+two to six players, behind a four-letter lobby code
 there is no friends list to manage.
 
 **Modifiers**, all independent: Fog of War (you see what you hold and what you border,

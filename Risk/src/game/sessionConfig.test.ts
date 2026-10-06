@@ -251,3 +251,14 @@ describe("autosave", () => {
     expect(list[0]?.saved.savedAt).toBe(20);
   });
 });
+
+describe("online seats (D115)", () => {
+  it("opens online with every seat human — an open seat — and all six of them", () => {
+    sessionConfigStore.getState().reset();
+    sessionConfigStore.getState().setMode("online");
+    const seats = sessionConfigStore.getState().seats;
+    expect(seats).toHaveLength(6);
+    expect(seats.every((s) => s.kind === "human")).toBe(true);
+    expect(defaultSeats("online", 4, "medium").every((s) => s.kind === "human")).toBe(true);
+  });
+});

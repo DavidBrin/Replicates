@@ -626,9 +626,9 @@ export function createSession(options: SessionOptions): Session {
     return result;
   }
 
-  function submit(action: Action): ApplyResult {
+  function submit(action: Action, onConfirmed?: () => void): ApplyResult {
     if (destroyed) return { state: displayedState, events: [], error: { code: "illegalAction", message: "destroyed" } };
-    if (online) return submitOnline(action);
+    if (online) return submitOnline(action, onConfirmed);
     const result = applyLocal(action, false);
     if (!result.error) afterAction(action);
     return result;
@@ -641,7 +641,14 @@ export function createSession(options: SessionOptions): Session {
    * the authority's echo comes back on: an entry queued without one cannot be retired by the row
    * that confirms it, and `ingest` was reduced to retiring a *count* of entries instead.
    */
-  function submitOnline(action: Action): ApplyResult {
+  /**
+   * `onConfirmed` runs once the authority has **accepted** this action (D115). Two actions posted
+   * back to back race on the wire — a `FORTIFY` and the `END_TURN` that follows it were two
+   * concurrent fetches, and when the `END_TURN` landed first the turn had passed and the fortify
+   * was refused as `notYourTurn`: the checkmark ended the turn and moved nothing. Anything that
+   * must follow an action online therefore follows its confirmation, not its dispatch.
+   */
+  function submitOnline(action: Action, onConfirmed?: () => void): ApplyResult {
     const probe = engine.apply(displayedState, map, action);
     if (probe.error) {
       set({ toast: probe.error.message });
@@ -651,7 +658,9 @@ export function createSession(options: SessionOptions): Session {
     const id = clientActionId();
     pendingActions = [...pendingActions, { id, action }];
     refold();
-    void sync?.submit(action, id).catch(() => {
+    void sync?.submit(action, id).then(() => {
+      if (!destroyed) onConfirmed?.();
+    }).catch(() => {
       retirePending(id);
       refold();
       set({ syncStatus: "behind" });
@@ -1254,6 +1263,9 @@ export function createSession(options: SessionOptions): Session {
     }
     if (changed || retired) refold();
     if (changed && store.getState().syncStatus !== "desynced") set({ syncStatus: "idle" });
+    // D115 — what the authority just folded may have changed what I can do (a conquest owing a
+    // move-in, a target no longer legal), so the selection is re-derived the way a tap would.
+    if (changed && canAct()) refreshSelection();
     if (gapAt !== null) {
       set({ syncStatus: "behind" });
       requestResync(`gap: have ${String(folded)}, next row is ${String(gapAt)}`);
@@ -1304,6 +1316,8 @@ export function createSession(options: SessionOptions): Session {
     releaseResync();
     refold();
     set({ syncStatus: "idle" });
+    // D115 — a snapshot is a whole new board for me to act on; derive the selection from it.
+    if (canAct()) refreshSelection();
   }
 
   const unsubActions = sync?.onActions((rows) => ingest(rows)) ?? null;
@@ -1357,13 +1371,14 @@ export function createSession(options: SessionOptions): Session {
   }
 
   function fortify(from: TerritoryId, to: TerritoryId, count: number): void {
-    const result = submit({ type: "FORTIFY", seat: actingSeat(), from, to, count });
-    if (result.error) return;
-    set({ countRequest: null, modal: null, selected: null, litZone: [], actionMode: "idle" });
     // D107 — the one fortify move IS the end of the turn (R66, R67): nothing else is legal in the
     // phase once it is spent, so asking "skip fortify?" after a fortify was a question with no
-    // answer. The turn ends here, confirmation setting or not.
-    endTurn();
+    // answer. The turn ends here, confirmation setting or not — and online it ends only once the
+    // authority has accepted the move (D115), so the troops move FIRST.
+    const result = submit({ type: "FORTIFY", seat: actingSeat(), from, to, count }, () => endTurn());
+    if (result.error) return;
+    set({ countRequest: null, modal: null, selected: null, litZone: [], actionMode: "idle" });
+    if (!online) endTurn();
   }
 
   function endPhase(): void {
@@ -1503,6 +1518,11 @@ export function createSession(options: SessionOptions): Session {
       set({ overlayMode: mode });
     },
     setModal(modal) {
+      // D115 — the `Move Troops` pill opens the count dialog straight from the state: online the
+      // conquest arrives by ingest, which never ran the selection refresh a tap would have, so
+      // `countRequest` was still null and the dialog had nothing to show until the board was
+      // tapped once.
+      if (modal === "count" && store.getState().countRequest === null) refreshSelection();
       set({ modal });
     },
     updateSettings,

@@ -1856,3 +1856,75 @@ describe("D107 — a fortify move ends the turn, and D108 — the battle log", (
     h.destroy();
   });
 });
+
+describe("D115 — online, a fortify's END_TURN follows the authority's confirmation", () => {
+  /** An online session at the opening of a turn whose seat holds two adjacent territories. */
+  function onlineAtFortify(sync: FakeSync) {
+    for (let i = 0; i < 40; i += 1) {
+      const seed = `online-fortify-${String(i)}`;
+      const probe = makeSession({ seats: HOTSEAT_SEATS, engine: engineApi, seed });
+      const s = probe.session.confirmed();
+      probe.destroy();
+      const me = s.turnOrder[0] as number;
+      const target = territoriesOf(s, me).find((t) =>
+        (probe.map.adjacency[t] ?? []).some((n) => s.territories[n]?.owner === me));
+      if (target === undefined) continue;
+      const h = makeSession({ seats: HOTSEAT_SEATS, engine: engineApi, seed, sync, mySeat: me });
+      h.session.submit({ type: "DRAFT", seat: me, territory: target, count: s.troopsToPlace });
+      h.session.endPhase();
+      h.session.endPhase();
+      expect(h.session.state.phase).toBe("fortify");
+      const to = engineApi.legalFortifyMoves(h.session.state, h.map, target)[0] as number;
+      return { h, me, from: target, to };
+    }
+    throw new Error("no seed in 40 dealt the opening seat an adjacent pair");
+  }
+
+  it("sends FORTIFY, and END_TURN only after the submit promise resolves", async () => {
+    const sync = fakeSync();
+    const { h, from, to } = onlineAtFortify(sync);
+    const before = sync.submitted.length;
+
+    h.session.fortify(from, to, 1);
+    // Synchronously: the fortify is on the wire, the turn is not.
+    expect(sync.submitted.slice(before).map((s) => s.action.type)).toEqual(["FORTIFY"]);
+    await new Promise((r) => setTimeout(r, 0));
+    // Once the authority answered: the END_TURN, and nothing in between.
+    expect(sync.submitted.slice(before).map((s) => s.action.type)).toEqual(["FORTIFY", "END_TURN"]);
+    h.destroy();
+  });
+
+  it("never ends the turn when the authority refuses the fortify", async () => {
+    const sync = fakeSync();
+    const refused: FakeSync["submit"] = async (action, id) => {
+      sync.submitted.push({ action, id });
+      throw new Error("refused");
+    };
+    sync.submit = refused;
+    const { h, from, to } = onlineAtFortify(sync);
+    const before = sync.submitted.length;
+    h.session.fortify(from, to, 1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sync.submitted.slice(before).map((s) => s.action.type)).toEqual(["FORTIFY"]);
+    expect(h.session.store.getState().syncStatus).toBe("behind");
+    h.destroy();
+  });
+
+  it("the Move Troops pill opens the count dialog with no tap first", () => {
+    const sync = fakeSync();
+    const { h, me } = onlineAtFortify(sync);
+    // A conquest the authority folded: pendingMoveIn set, no selection refreshed by any tap.
+    const state = h.session.state;
+    const owned = territoriesOf(state, me);
+    const from = owned[0] as number;
+    const enemy = state.territories.findIndex((t) => t.owner !== me && t.owner >= 0);
+    const conquered = { ...state, phase: "attack" as const, pendingMoveIn: { from, to: enemy, min: 1, max: 3 } };
+    sync.emitSnapshot(conquered, 99);
+    expect(h.session.store.getState().countRequest).not.toBeNull();
+    h.session.store.setState({ countRequest: null }); // as a cold mount would have it
+    h.session.setModal("count");
+    expect(h.session.store.getState().modal).toBe("count");
+    expect(h.session.store.getState().countRequest?.kind).toBe("moveIn");
+    h.destroy();
+  });
+});

@@ -78,6 +78,7 @@ function seat(kind: SeatConfig["kind"], tier: SeatConfig["tier"] = null): SeatCo
 
 let LobbyBrowser: typeof import("../LobbyBrowser").default;
 let lobbyChoice: typeof import("../LobbyBrowser").lobbyChoice;
+let createLobby: typeof import("../createLobby").createLobby;
 
 beforeEach(async () => {
   calls.length = 0;
@@ -87,6 +88,7 @@ beforeEach(async () => {
   const loaded = await import("../LobbyBrowser");
   LobbyBrowser = loaded.default;
   lobbyChoice = loaded.lobbyChoice;
+  createLobby = (await import("../createLobby")).createLobby;
 });
 
 afterEach(() => {
@@ -194,7 +196,21 @@ describe("lobbyChoice", () => {
 
 /* ------------------------------------------------------------ the request -- */
 
-describe("Create", () => {
+describe("Create (D115)", () => {
+  it("starts the online setup flow: mode online, not ready, and off to the map picker", async () => {
+    render(<LobbyBrowser />);
+    await waitFor(() => expect(screen.getByTestId("lobby-create")).toBeTruthy());
+    await act(async () => {
+      screen.getByTestId("lobby-create").click();
+    });
+    expect(pushed).toContain("/new/map");
+    expect(sessionConfigStore.getState().mode).toBe("online");
+    expect(sessionConfigStore.getState().ready).toBe(false);
+    expect(calls.some((call) => call.method === "POST")).toBe(false);
+  });
+});
+
+describe("createLobby (D115) — what `/new/rules`' BATTLE posts", () => {
   it("posts the map, rules and seat count from the store, then fills the bots", async () => {
     const store = sessionConfigStore.getState();
     store.setMode("online");
@@ -205,15 +221,11 @@ describe("Create", () => {
       seats: [seat("human"), seat("bot", "hard"), seat("human")],
     });
 
-    render(<LobbyBrowser />);
-    await waitFor(() => expect(screen.getByTestId("lobby-create")).toBeTruthy());
-
-    await act(async () => {
-      screen.getByTestId("lobby-create").click();
-    });
-    await waitFor(() => expect(pushed).toContain("/lobby/ABCD"));
+    const result = await createLobby(sessionConfigStore.getState(), "Alpha's game");
+    expect(result).toEqual({ code: "ABCD" });
 
     const post = calls.find((call) => call.method === "POST" && call.url === "/api/lobbies");
+    expect(post?.body.title).toBe("Alpha's game");
     expect(post?.body.mapSlug).toBe("europe");
     expect(post?.body.maxSeats).toBe(3);
     expect((post?.body.rules as { fogOfWar: boolean }).fogOfWar).toBe(true);
@@ -231,13 +243,15 @@ describe("Create", () => {
     store.setReady(true);
     sessionConfigStore.setState({ seats: [seat("human"), seat("human")] });
 
-    render(<LobbyBrowser />);
-    await waitFor(() => expect(screen.getByTestId("lobby-create")).toBeTruthy());
-    await act(async () => {
-      screen.getByTestId("lobby-create").click();
-    });
-    await waitFor(() => expect(pushed).toContain("/lobby/ABCD"));
-
+    const result = await createLobby(sessionConfigStore.getState(), "Alpha's game");
+    expect(result).toEqual({ code: "ABCD" });
     expect(calls.some((call) => call.method === "PATCH")).toBe(false);
+  });
+
+  it("answers with the room already hosted on a 409, and an error otherwise", async () => {
+    const hosting = async () => new Response(JSON.stringify({ code: "WXYZ" }), { status: 409 });
+    expect(await createLobby(sessionConfigStore.getState(), "x", hosting as typeof fetch)).toEqual({ code: "WXYZ" });
+    const broken = async () => new Response("", { status: 500 });
+    expect(await createLobby(sessionConfigStore.getState(), "x", broken as typeof fetch)).toEqual({ error: "Could not create a lobby." });
   });
 });

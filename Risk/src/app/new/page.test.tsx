@@ -42,6 +42,13 @@ describe("/new (Select a game type)", () => {
     expect(sessionConfigStore.getState().seats).toHaveLength(2);
   });
 
+  it("routes Online straight to the lobby browser (D115)", () => {
+    sessionConfigStore.getState().setMode("online");
+    render(<NewGamePage />);
+    fireEvent.click(screen.getByTestId("new-battle"));
+    expect(routerMock.push).toHaveBeenCalledWith("/lobby");
+  });
+
   it("routes to /new/map from the green BATTLE pill", () => {
     render(<NewGamePage />);
     expect(screen.getByTestId("new-battle")).toHaveTextContent("BATTLE");
