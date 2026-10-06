@@ -266,8 +266,11 @@ describe("a human turn, end to end", () => {
     h.destroy();
   });
 
-  it("records the award so the Received Troops popup can render it", () => {
-    const h = makeSession({ seats: HOTSEAT_SEATS });
+  it("records the award so the Received Troops popup can render it, then lets it go", () => {
+    // A manual scheduler, because the award is a popup that dismisses itself:
+    // under the synchronous scheduler the hold elapses before the assertion.
+    const sched = manualScheduler();
+    const h = makeSession({ seats: HOTSEAT_SEATS, schedule: sched.schedule });
     h.session.start();
     h.session.continueHandOff();
     const me = h.session.confirmed().turnOrder[0] as number;
@@ -278,6 +281,10 @@ describe("a human turn, end to end", () => {
     const award = h.session.store.getState().award;
     expect(award).not.toBeNull();
     expect(award?.total).toBeGreaterThanOrEqual(3);
+    // It is a popup, not a modal: nothing else dismisses it, and while it is
+    // up its scrim covers the board.
+    sched.flush();
+    expect(h.session.store.getState().award).toBeNull();
     h.destroy();
   });
 });

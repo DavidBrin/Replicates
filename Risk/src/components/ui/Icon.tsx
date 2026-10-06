@@ -177,11 +177,13 @@ const PATHS: Record<IconName, ReactNode> = {
       <path {...EVEN_ODD} d="M17.4 13.4a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 0 1 0-8.4Zm0 2.6a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z" />
     </>
   ),
+  // A tapered cup with a die tipping out of it. The taper and the overlapping
+  // die are what keep it from reading as a waste bin at HUD size.
   "dice-cup": (
     <>
-      <path d="M3.6 6.4h16.8l-2 13.4a2.4 2.4 0 0 1-2.4 2H8a2.4 2.4 0 0 1-2.4-2Z" />
-      <path d="M2.6 2.8h18.8V6H2.6Z" />
-      <path d="M15.6 0.2 19 2l-1.4 2.6-3.4-1.8Z" />
+      <path d="M4.2 9.4h12.4l-1.5 10.9a2.3 2.3 0 0 1-2.3 2H8a2.3 2.3 0 0 1-2.3-2Z" />
+      <path d="M3.2 6.6h14.4v2.4H3.2Z" />
+      <path {...EVEN_ODD} d="M16.4 1.2 22.8 4l-2.8 6.4-6.4-2.8Zm1.3 2.6a.95.95 0 1 0 .8 1.7.95.95 0 0 0-.8-1.7Zm-1.5 3.4a.95.95 0 1 0 .8 1.7.95.95 0 0 0-.8-1.7Z" />
     </>
   ),
 };

@@ -23,7 +23,8 @@ describe("MapTile", () => {
     const board = await screen.findByTestId("map-tile-board");
     const paths = board.querySelectorAll("path");
     expect(paths.length).toBeGreaterThan(0);
-    expect(paths[0]?.getAttribute("d")).toMatch(/^M /);
+    // S3's boards omit the space after the moveto; S4's fixtures include it.
+    expect(paths[0]?.getAttribute("d")).toMatch(/^M\s*-?\d/);
     // the glass tray is tilted ~30° back and ~6° yawed
     expect(screen.getByTestId("map-tile-tray").getAttribute("style")).toContain("rotateX(30deg)");
   });

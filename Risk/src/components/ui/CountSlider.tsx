@@ -114,6 +114,10 @@ export function CountSlider({
           touchAction: "none",
         }}
         onPointerDown={(event) => {
+          // A press that starts on ✗, ✓ or `Move All` is a button press, not
+          // a drag. Capturing the pointer here would redirect the pointerup
+          // to the strip and the button would never see a click at all.
+          if ((event.target as Element | null)?.closest?.("button")) return;
           drag.current = { x: event.clientX, from: current };
           setDragging(true);
           event.currentTarget.setPointerCapture?.(event.pointerId);

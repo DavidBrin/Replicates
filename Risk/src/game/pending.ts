@@ -16,7 +16,8 @@ import { createOdds } from "@/engine/odds";
 import type {
   BotPersona, BotTier, DiceMode, GameState, MapDef, MapFile, OddsTables, Rng, Seat,
 } from "@/engine/types";
-import { MAP_SLUGS, loadMapFile } from "@/content/maps";
+import { generateVoronoiMap, loadMap, type VoronoiOptions } from "@/engine/map";
+import { FIXTURE_SLUGS, MAP_SLUGS, loadMapFile } from "@/content/maps";
 
 import { buildDemoMap } from "./__fixtures__/demoMap";
 import * as fakeBots from "./__fixtures__/fakeBots";
@@ -119,9 +120,14 @@ const FALLBACK_MAPS: Readonly<Record<string, () => MapFile>> = {
   tiny4: () => TINY4_FILE,
 };
 
-/** Every slug the picker should offer: S3's catalogue, or S4's stand-in. */
+/**
+ * Every slug the picker should offer: S3's catalogue minus the engine
+ * fixtures (`tiny3`/`tiny4`/`mini`/`quad` exist for tests, not for players),
+ * or S4's stand-in while the catalogue is empty.
+ */
 export function playMapSlugs(): readonly string[] {
-  return MAP_SLUGS.length > 0 ? MAP_SLUGS : Object.keys(FALLBACK_MAPS);
+  if (MAP_SLUGS.length === 0) return Object.keys(FALLBACK_MAPS);
+  return MAP_SLUGS.filter((slug) => !FIXTURE_SLUGS.includes(slug));
 }
 
 /** True when S3's real catalogue is in place. */
@@ -138,7 +144,30 @@ export async function playMapFile(slug: string): Promise<MapFile> {
   return loadMapFile(slug);
 }
 
+/**
+ * `MapFile` → `MapDef` through S3's `loadMap`, which is the canonical one.
+ * S4's `toMapDefCached` stays as the fallback for its own fixtures, and the
+ * two agree on the contract that matters: the sea-link union (F45).
+ */
+export function indexMap(file: MapFile): MapDef {
+  try {
+    return loadMap(file);
+  } catch (error) {
+    if (!isPending(error)) throw error;
+    return toMapDefCached(file);
+  }
+}
+
 /** Load and index one map by slug. */
 export async function playMapDef(slug: string): Promise<MapDef> {
-  return toMapDefCached(await playMapFile(slug));
+  return indexMap(await playMapFile(slug));
+}
+
+/**
+ * The seeded random map (§4.14). `generateVoronoiMap` takes the options and a
+ * seed; the slug is minted from that seed, so `GameState` never has to
+ * describe a generator.
+ */
+export function playRandomMap(options: VoronoiOptions, seed: string): MapDef {
+  return indexMap(generateVoronoiMap(options, seed));
 }

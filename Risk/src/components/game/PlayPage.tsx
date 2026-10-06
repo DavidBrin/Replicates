@@ -16,7 +16,7 @@ import { createProgressAdapter } from "@/adapters/localStorage/progress";
 import { createSettingsAdapter } from "@/adapters/localStorage/settings";
 import { newId } from "@/adapters/localStorage/store";
 import { autosaveFor } from "@/game/autosave";
-import { playEngine, playMapDef, playOdds } from "@/game/pending";
+import { playEngine, playMapDef, playOdds, playRandomMap } from "@/game/pending";
 import { createSession, type Session } from "@/game/session";
 import { toGameConfig, useSessionConfig, type GameMode } from "@/game/sessionConfig";
 
@@ -65,10 +65,11 @@ export function PlayPage({ mode }: PlayPageProps) {
     let session: Session | null = null;
     void (async () => {
       try {
-        if (source.kind === "random") {
-          throw new Error("S3 pending: the random-map generator has not landed yet");
-        }
-        const map = await playMapDef(source.slug);
+        // A generated map's slug is minted from its seed, so `GameState`
+        // never has to describe a generator (§4.14).
+        const map = source.kind === "random"
+          ? playRandomMap(source.options, source.seed)
+          : await playMapDef(source.slug);
         if (cancelled) return;
         const config = toGameConfig({ ...store, seats, rules }, map.slug, newId());
         const { resume, save } = autosaveFor(config);

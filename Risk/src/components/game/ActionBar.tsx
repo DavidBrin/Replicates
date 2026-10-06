@@ -45,12 +45,15 @@ export function ActionBar(props: ActionBarProps) {
   return (
     <div
       data-testid="action-bar"
-      className="pointer-events-auto absolute inset-x-0 bottom-0 flex items-end justify-center gap-4 pb-3"
+      // The band spans the full width, so it must not eat clicks: only its
+      // own controls are interactive. Without this the bottom-left stack —
+      // Stats, Cards and Emote — sits underneath an invisible sheet.
+      className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-center gap-4 pb-3"
       style={{ height: "16%", minHeight: 120, zIndex: "var(--z-hud)" }}
     >
       <Avatar colour={props.colour} name={props.seatName} size={92} laurel={props.you} bot={props.bot} />
 
-      <div className="flex flex-col items-center gap-2">
+      <div className="pointer-events-auto flex flex-col items-center gap-2">
         <p
           data-testid="action-prompt"
           className="on-board-text text-center"
@@ -101,6 +104,7 @@ export function ActionBar(props: ActionBarProps) {
       </div>
 
       <IconButton
+        className="pointer-events-auto"
         chassis="circle"
         icon="dice-cup"
         size={116}
