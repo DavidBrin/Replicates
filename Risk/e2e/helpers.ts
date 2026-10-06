@@ -401,11 +401,21 @@ export async function claimIdentity(page: Page, name: string, colour?: string): 
   await visit(page, ROUTES.home);
   await page.locator(SEL.homeScreen).waitFor();
 
-  if ((await page.locator(SEL.identitySheet).count()) === 0) {
-    await page.locator(SEL.homeSettings).click(CLICK);
-  }
+  // **"Is the sheet already open?" is not answerable on the first frame.**
+  // Home reads the cached identity in an effect, never during render, so that
+  // the server markup and the first client paint agree — which means the
+  // sheet is raised a tick or two *after* `home-screen` exists. Asking
+  // immediately gets `0` on a cold context too, and the ⚙ click that follows
+  // then races the sheet appearing over it and hangs on an intercepted
+  // pointer. So: give it a moment to raise itself, and only reach for ⚙ if it
+  // does not — which is the warm case, where an identity is already cached.
   const sheet = page.locator(SEL.identitySheet);
-  await sheet.waitFor();
+  try {
+    await sheet.waitFor({ timeout: 10_000 });
+  } catch {
+    await page.locator(SEL.homeSettings).click(CLICK);
+    await sheet.waitFor({ timeout: 15_000 });
+  }
 
   await sheet.locator(SEL.identityName).fill(name);
   if (colour) await sheet.locator(SEL.identityColour(colour)).click(CLICK);

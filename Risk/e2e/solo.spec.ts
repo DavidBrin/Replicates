@@ -10,6 +10,7 @@ import {
   playHumanTurn,
   readState,
   startSolo,
+  troopsOf,
   uniqueName,
   visit,
   waitForHumanTurn,
@@ -24,8 +25,7 @@ import {
  * pixels can only tell you something was painted, not whether the simulation
  * moved.
  *
- * Two deviations from §11's wording, both forced and both recorded in
- * `DECISIONS.md` (D82, D83):
+ * Two deviations from §11's wording, both forced and both recorded as D104:
  *
  *  - **The board is `south-america` (20 territories), not `tiny4`.** The four
  *    engine fixtures are deliberately absent from the map picker (D39), and
@@ -33,31 +33,36 @@ import {
  *    fills — so there is no honest way to reach `tiny4` by walking the menu,
  *    and walking the menu is the thing this test exists to exercise.
  *    `south-america` is the smallest board a player can actually choose.
- *  - **The win condition is Percentage Domination**, which is a first-class
- *    win condition (R71) and reachable in a few turns on twenty territories.
- *    World Domination on the same board is the same evaluation code path with
- *    a longer runtime, and runtime is what a suite that has to stay green on
- *    a 412 px phone cannot spend. The threshold is left at its default 70%
- *    (D60) — 14 of 20 against a seat holding 7 and a neutral holding 6, which
- *    is a real game and not a one-turn formality.
+ *  - **The win condition is Percentage Domination at its default 70%**, which
+ *    is a first-class win condition (R71): 14 of 20, against a seat holding 7
+ *    and a neutral holding 6. World Domination on the same board is the same
+ *    evaluation code path with a much longer runtime, and runtime is what a
+ *    suite that also has to stay green on a 412 px phone cannot spend.
  */
 
 /**
- * One human, one Beginner bot, Percentage Domination on the smallest real
- * board.
+ * One human, one Beginner bot, Percentage Domination **and Max Rounds**, on
+ * the smallest real board.
  *
- * **Beginner, not the default Medium**, and that is the test's own admission:
- * the greedy script in `playHumanTurn` is not a good Risk player — it drafts
- * onto one border tile and blitzes the weakest neighbour — and a Medium bot
- * beat it on this board. Pinning the tier is what makes "the human wins"
- * a statement about the HUD rather than a coin flip about bot strength. That
- * a Beginner loses to a greedy script and a Medium does not is itself the
- * behaviour T8 measures.
+ * Two deliberate pins, for two different reasons:
+ *
+ *  - **Beginner, not the default Medium**, and that is the test's own
+ *    admission: the greedy script in `playHumanTurn` is not a good Risk
+ *    player — it drafts onto its biggest stack and blitzes the weakest
+ *    neighbour — and a Medium bot beats it on this board.
+ *  - **Max Rounds on**, as a backstop. Percentage Domination at 70% is
+ *    fourteen of twenty territories, and two mediocre players can trade the
+ *    same border back and forth without either reaching it; a run that ends
+ *    with "no outcome after fourteen turns" is a slow test, not a bug found.
+ *    The 5-Rounds Rumble guarantees the game *ends* — on territories, then
+ *    troops, then the lowest seat index (R78) — so the spec can assert a
+ *    lawful outcome in bounded time, and it exercises the Max-Rounds ladder
+ *    and its `tiebreak: true` flag into the bargain.
  */
 const SOLO = {
   map: "south-america",
   seats: 2,
-  modifiers: ["percentage-domination"] as const,
+  modifiers: ["percentage-domination", "max-rounds"] as const,
   rules: [["ai-difficulty", "beginner"]] as const,
 } as const;
 
@@ -87,6 +92,7 @@ test("T10.2 — a solo game against one bot is played to victory through the HUD
   expect(ownedBy(opening, -2).length, "the neutral holding").toBe(6);
   expect(opening.rules.winCondition).toBe("percentage");
   expect(opening.rules.dominationThreshold, "70% is the default (D60)").toBeCloseTo(0.7, 10);
+  expect(opening.rules.maxRounds, "the 5-Rounds Rumble preset (D59)").toBe(5);
   expect(opening.fogged, "offline state is authoritative, never a view").toBe(false);
 
   // 70% of twenty playable territories is fourteen; the human starts on seven.
@@ -122,12 +128,33 @@ test("T10.2 — a solo game against one bot is played to victory through the HUD
   // exactly; the human's own conquests are checked separately, below.
   expect(final.outcome, `no outcome after ${turnsPlayed} human turns`).not.toBeNull();
   const outcome = final.outcome!;
-  expect(outcome.reason, "percentage domination, since that is what was chosen").toBe("percentage");
-  expect(outcome.tiebreak, "only a Max-Rounds win is a tiebreak (R78)").toBe(false);
   expect([0, 1], "the neutral holding can never win (R7)").toContain(outcome.winner);
-  expect(ownedBy(final, outcome.winner).length, "the winner is over the threshold").toBeGreaterThanOrEqual(target);
   expect(final.phase, "the reducer parks a finished game in `over`").toBe("over");
   expect(outcome.round).toBeGreaterThanOrEqual(1);
+
+  // Two lawful endings are possible with these rules, and the two carry
+  // different claims — so each is checked on its own terms rather than being
+  // flattened into "the game ended".
+  expect(["percentage", "maxRounds"]).toContain(outcome.reason);
+  if (outcome.reason === "percentage") {
+    expect(outcome.tiebreak, "a conquest is never a tiebreak").toBe(false);
+    expect(
+      ownedBy(final, outcome.winner).length,
+      "a percentage win means the winner is over the threshold",
+    ).toBeGreaterThanOrEqual(target);
+  } else {
+    expect(outcome.tiebreak, "every Max-Rounds outcome is a tiebreak (R78)").toBe(true);
+    expect(outcome.round, "the round limit was reached").toBeGreaterThanOrEqual(5);
+    // Most territories, then most troops, then the lowest seat index.
+    const loser = outcome.winner === 0 ? 1 : 0;
+    const held = ownedBy(final, outcome.winner).length;
+    const theirs = ownedBy(final, loser).length;
+    expect(
+      held > theirs ||
+        (held === theirs && troopsOf(final, outcome.winner) >= troopsOf(final, loser)),
+      `the ladder picked seat ${outcome.winner} on ${held} v ${theirs} territories`,
+    ).toBe(true);
+  }
 
   // The HUD's own attacks took ground: the human ends or passes through more
   // territories than it was dealt. Without this the test above could pass on
@@ -138,10 +165,13 @@ test("T10.2 — a solo game against one bot is played to victory through the HUD
   const victory = page.locator(SEL.victory);
   await victory.waitFor({ timeout: 15_000 });
   await expect(victory.locator(SEL.victoryName)).toHaveText(final.seats[outcome.winner]!.name);
+  // The tiebreak line ("Most territories at the end of round 5") appears for a
+  // Max-Rounds win and for nothing else, so the screen and the outcome have to
+  // agree about which kind of ending this was.
   expect(
     await victory.locator(SEL.victoryTiebreak).count(),
-    "the tiebreak line belongs to a Max-Rounds win only",
-  ).toBe(0);
+    `the tiebreak line belongs to a Max-Rounds win only (reason=${outcome.reason})`,
+  ).toBe(outcome.tiebreak ? 1 : 0);
 
   expect(errors, "no page errors and no desync").toEqual([]);
 });
