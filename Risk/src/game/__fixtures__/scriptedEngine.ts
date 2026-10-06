@@ -454,7 +454,6 @@ function finish(state: GameState, map: MapDef, events: Event[]): GameState {
   return { ...state, phase: "over", outcome };
 }
 
-// eslint-disable-next-line complexity
 function apply(state: GameState, map: MapDef, action: Action): ApplyResult {
   if (!state) return fail("illegalAction", "no state");
   if (state.outcome && action.type !== "GAME_STARTED") return refuse(state, "gameOver", "the game is over");

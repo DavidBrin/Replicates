@@ -18,7 +18,6 @@ export interface RiskDebug {
 }
 
 declare global {
-  // eslint-disable-next-line no-var, vars-on-top
   interface Window { __riskDebug?: Partial<RiskDebug> }
 }
 

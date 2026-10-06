@@ -8,7 +8,7 @@
  * render. `version` bumps on every state change, so a selector that depends
  * on the board re-runs without the board itself ever being stored in React.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 
 import type { Session, SessionUiState } from "./session";
@@ -80,21 +80,32 @@ export function useElementSize(ref: { current: HTMLElement | null }): { w: numbe
   return size;
 }
 
-/** `prefers-reduced-motion`, as a live boolean. */
+/**
+ * `prefers-reduced-motion`, as a live boolean.
+ *
+ * `useSyncExternalStore` rather than an effect: the media query is an
+ * external store, and reading it in an effect would mean one render at the
+ * wrong answer followed by a cascading re-render.
+ */
+function motionQuery(): MediaQueryList | null {
+  if (typeof window === "undefined" || !window.matchMedia) return null;
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)");
+  } catch {
+    return null;
+  }
+}
+
+function subscribeMotion(onChange: () => void): () => void {
+  const query = motionQuery();
+  query?.addEventListener?.("change", onChange);
+  return () => query?.removeEventListener?.("change", onChange);
+}
+
 export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    let query: MediaQueryList;
-    try {
-      query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    } catch {
-      return;
-    }
-    setReduced(query.matches);
-    const onChange = () => setReduced(query.matches);
-    query.addEventListener?.("change", onChange);
-    return () => query.removeEventListener?.("change", onChange);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(
+    subscribeMotion,
+    () => motionQuery()?.matches ?? false,
+    () => false,
+  );
 }

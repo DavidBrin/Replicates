@@ -43,7 +43,12 @@ export function PlayPage({ mode }: PlayPageProps) {
   const seats = store.seats;
   const rules = store.rules;
 
-  const configured = useMemo(() => store.ready && source !== null, [store.ready, source]);
+  // The route and the store must agree: landing on `/play/solo` with a
+  // pass-and-play configuration means the setup flow was abandoned halfway.
+  const configured = useMemo(
+    () => store.ready && source !== null && store.mode === mode,
+    [store.ready, source, store.mode, mode],
+  );
 
   useEffect(() => {
     if (!configured) {

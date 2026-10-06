@@ -200,7 +200,6 @@ const PROMPTS: Readonly<Record<string, string>> = {
   fortify: "Select a territory to move your troops from",
 };
 
-// eslint-disable-next-line max-lines-per-function
 export function createSession(options: SessionOptions): Session {
   const { map, config, engine, odds } = options;
   const now = options.now ?? (() => (typeof performance !== "undefined" ? performance.now() : Date.now()));
@@ -212,7 +211,7 @@ export function createSession(options: SessionOptions): Session {
   const bots = options.bots ?? playBots();
   const online = sync !== null;
 
-  let skip = options.skipAnimations ?? prefersReducedMotion();
+  const skip = options.skipAnimations ?? prefersReducedMotion();
   let destroyed = false;
   let dirty = true;
   let recorded = false;

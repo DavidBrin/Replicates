@@ -18,6 +18,8 @@ import { dialogText } from "@/content/dialog";
 
 import type { RosterRow } from "./RosterCapsule";
 
+const EMPTY_HAND: readonly Card[] = [];
+
 export interface GameScreenModel {
   readonly state: GameState;
   readonly rows: readonly RosterRow[];
@@ -43,7 +45,9 @@ export function useGameScreenModel(
 
   const acting = state.seats[ui.actingSeat];
   const viewer = state.seats[ui.viewerSeat];
-  const myCards = viewer?.cards ?? [];
+  // Memoised, not `?? []`: a fresh empty array each render would re-run every
+  // selector below it on every frame.
+  const myCards = useMemo<readonly Card[]>(() => viewer?.cards ?? EMPTY_HAND, [viewer]);
 
   const sets = useMemo(() => engine.cardSets(myCards), [engine, myCards]);
   const tradeValue = useMemo(() => {
