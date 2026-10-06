@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+
+# The local PGlite database. It exists to survive a restart on one machine; it
+# is not something to share between them.
+.data/
+
+test-results/
+playwright-report/
+blob-report/
+.playwright-mcp/
+*.tsbuildinfo
+.env
+.env.local
+.env*.local
+.DS_Store
+.vercel
+.env*
