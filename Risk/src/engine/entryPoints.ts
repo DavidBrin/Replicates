@@ -9,7 +9,8 @@
 /** Files that must exist for the guard to be checking the real engine. */
 export const ENGINE_ENTRY_POINTS: readonly string[] = [
   "layering.test.ts",
-  // S1: "types.ts", "index.ts", "reducer.ts", "hash.ts", "prng.ts", "resolver/index.ts"
+  "types.ts", "index.ts", "prng.ts", "resolver/index.ts",
+  // S1 adds: "reducer.ts", "hash.ts"
   // S2: "odds/index.ts", "bots/index.ts"
   // S3: "map/index.ts"
 ];
