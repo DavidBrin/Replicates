@@ -77,6 +77,21 @@ export interface GameCommit {
   readonly phase: string;
   /** Seconds from `now()`, computed by the database; `null` clears the timer. */
   readonly turnSeconds: number | null;
+  /**
+   * Whether this commit starts a new seat's turn (§5.6).
+   *
+   * The turn timer belongs to **a turn**, not to a write, so a commit in the
+   * middle of one leaves `turn_deadline` exactly where it was. Renewing it on
+   * every commit — which is what this did — means a seat can hold the board
+   * forever by drafting one troop every eighty seconds: each append pushes
+   * its own deadline out and the timer never fires.
+   *
+   * The deadline is also renewed when the row currently has none, which is
+   * the game's first commit and the resume after a bot turn or a reclaim: a
+   * `null` deadline means nobody was on the clock, so whoever is now gets a
+   * full one.
+   */
+  readonly renewDeadline: boolean;
   readonly status: GameStatus;
   readonly winnerSeat: number | null;
   readonly botMemory: Record<string, { grudge: number[] }>;
@@ -267,8 +282,11 @@ export class GamesRepository {
       `update games set
          seq = $2, snapshot = $3::jsonb, snapshot_seq = $4, state_hash = $5,
          current_seat = $6, phase = $7,
-         turn_deadline = case when $8::int is null then null
-                              else now() + ($8::int * interval '1 second') end,
+         turn_deadline = case
+           when $8::int is null then null
+           when $12::boolean or turn_deadline is null
+             then now() + ($8::int * interval '1 second')
+           else turn_deadline end,
          status = $9, winner_seat = $10, bot_memory = $11::jsonb,
          tick_lease = null, updated_at = now()
        where id = $1`,
@@ -284,6 +302,7 @@ export class GamesRepository {
         commit.status,
         commit.winnerSeat,
         JSON.stringify(commit.botMemory),
+        commit.renewDeadline,
       ],
     );
   }

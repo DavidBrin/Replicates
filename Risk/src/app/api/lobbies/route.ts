@@ -45,6 +45,10 @@ export async function POST(request: Request): Promise<Response> {
     const hosting = await lobbies.hostedBy(player.id);
     if (hosting) return conflict("alreadyHosting", { code: hosting });
 
+    // The read above is a courtesy — it is what puts the existing `code` in
+    // the response — and `lobbies_one_live_per_host` is the rule. Two create
+    // requests from the same player both pass that read, so the loser of the
+    // insert is answered from the index's `23505` with the same `409`.
     const lobby = await lobbies.create({
       hostId: player.id,
       title: parsed.data.title,
@@ -52,6 +56,9 @@ export async function POST(request: Request): Promise<Response> {
       rules: parsed.data.rules,
       maxSeats: parsed.data.maxSeats,
     });
+    if (lobby === "alreadyHosting") {
+      return conflict("alreadyHosting", { code: await lobbies.hostedBy(player.id) });
+    }
     return json({ code: lobby.code }, 201);
   });
 }
