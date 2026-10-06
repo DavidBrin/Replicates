@@ -329,6 +329,81 @@ export function bboxOfRings(rings: readonly Ring[]): readonly [number, number, n
   return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
 }
 
+/* ------------------------------------------------------------------ anchors -- */
+
+/** The label sits this far below the token (SPEC §8: "label ~26 px below token"). */
+export const LABEL_OFFSET_Y = 26;
+
+export interface Anchors {
+  readonly token: [number, number];
+  readonly label: [number, number];
+}
+
+/**
+ * A pole-of-inaccessibility solver: rings in, interior point out.
+ *
+ * Injected rather than imported so this module stays dependency-free. The one
+ * implementation lives in `anchors.ts` over `polylabel` — the only runtime
+ * package the engine may reach for (`ALLOWED_PACKAGES`) — and the build
+ * pipeline binds the same solver without importing the engine's module graph,
+ * which `node --experimental-strip-types` cannot resolve.
+ */
+export type PoleSolver = (rings: [number, number][][], precision: number) => readonly [number, number];
+
+/** `polylabel`'s precision, in `viewBox` units. Half a unit is well under a token's radius. */
+export const POLE_PRECISION = 0.5;
+
+/**
+ * The pole of inaccessibility of the largest subpath, rounded for the JSON.
+ *
+ * Solved on the **largest** ring: a token on Indonesia belongs on Java, not
+ * averaged across the archipelago. Rounding can push a pole that sat a fraction
+ * of a unit inside a sliver back out, so the result is re-tested and falls back
+ * to the unrounded solve and then to a fan-triangle centroid — `anchorsFor` can
+ * never hand back a point outside the land, which is what T7 asserts.
+ */
+export function poleOfWith(rings: readonly Ring[], solve: PoleSolver): [number, number] {
+  const ring = largestRing(rings);
+  if (ring === null || ring.length < 3) return [0, 0];
+  const outer: [number, number][] = ring.map((p) => [p[0], p[1]]);
+  const [x, y] = solve([outer], POLE_PRECISION);
+  const pole: Point = [round1(x), round1(y)];
+  if (pointInRing(pole, ring)) return [pole[0], pole[1]];
+  if (pointInRing([x, y], ring)) return [x, y];
+  return interiorFallback(ring);
+}
+
+/** Token plus the label offset below it. */
+export function anchorsFromPole(pole: readonly [number, number]): Anchors {
+  return { token: [pole[0], pole[1]], label: [pole[0], pole[1] + LABEL_OFFSET_Y] };
+}
+
+function round1(n: number): number {
+  const r = Math.round(n * 10) / 10;
+  return Object.is(r, -0) ? 0 : r;
+}
+
+/**
+ * Any interior point at all. Used only for geometry so thin that a half-unit
+ * solver cell cannot fit inside it; the centroid of the largest fan triangle is
+ * inside any simple polygon.
+ */
+function interiorFallback(ring: Ring): [number, number] {
+  let best: [number, number] = [ring[0]?.[0] ?? 0, ring[0]?.[1] ?? 0];
+  let bestArea = -1;
+  const a = ring[0] as Point;
+  for (let i = 1; i + 1 < ring.length; i++) {
+    const b = ring[i] as Point;
+    const c = ring[i + 1] as Point;
+    const area = ringArea([a, b, c]);
+    if (area > bestArea) {
+      bestArea = area;
+      best = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3];
+    }
+  }
+  return [round1(best[0]), round1(best[1])];
+}
+
 /* ------------------------------------------------------------------ simplify -- */
 
 /**
@@ -361,7 +436,26 @@ export function simplifyRing(ring: Ring, tolerance: number): Ring {
   const b = simplifyOpen(secondHalf, tolerance);
   // Both halves carry the shared anchors; drop the duplicates on rejoin.
   const out = [...a, ...b.slice(1, b.length - 1)];
-  return out.length >= 3 ? out : ring;
+  // A tolerance wide enough to flatten both halves leaves two points, which is
+  // not a polygon. Falling back to the INPUT here would make the vertex count
+  // non-monotone in `tolerance` and break `fitVertexBudget`'s bisection, so the
+  // floor is the coarsest honest triangle instead: the two anchors plus the
+  // vertex furthest from the chord between them.
+  return out.length >= 3 ? out : coarsestTriangle(ring, ring[ai] as Point, ring[bi] as Point);
+}
+
+/** The two anchors plus whichever vertex stands furthest off the line between them. */
+function coarsestTriangle(ring: Ring, a: Point, b: Point): Ring {
+  let apex: Point | null = null;
+  let best = -1;
+  for (const p of ring) {
+    const d2 = segmentDistance2(p, a, b);
+    if (d2 > best) {
+      best = d2;
+      apex = p;
+    }
+  }
+  return apex === null || best <= 0 ? ring.slice(0, 3) : [a, apex, b];
 }
 
 /** The mean of a ring's vertices. Only ever used to seed a search, never as an anchor. */

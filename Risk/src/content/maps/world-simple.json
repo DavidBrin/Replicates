@@ -1,0 +1,471 @@
+{
+ "slug": "world-simple",
+ "name": "World Simple",
+ "tagline": "24 territories, six continents — the whole world, fast",
+ "viewBox": "0 0 1600 900",
+ "continents": [
+  {
+   "id": "africa",
+   "name": "Africa",
+   "bonus": 2,
+   "color": "#36B0EA",
+   "territories": [
+    "north_west_africa",
+    "north_west_africa_ii",
+    "south_east_africa",
+    "south_east_africa_ii"
+   ]
+  },
+  {
+   "id": "asia",
+   "name": "Asia",
+   "bonus": 5,
+   "color": "#DA3A4F",
+   "territories": [
+    "north_mid_asia",
+    "south_west_asia",
+    "north_east_asia",
+    "north_west_asia",
+    "south_mid_asia",
+    "south_east_asia"
+   ]
+  },
+  {
+   "id": "europe",
+   "name": "Europe",
+   "bonus": 2,
+   "color": "#5FBF2A",
+   "territories": [
+    "north_west_europe",
+    "south_east_europe",
+    "north_east_europe",
+    "south_west_europe"
+   ]
+  },
+  {
+   "id": "north_america",
+   "name": "North America",
+   "bonus": 3,
+   "color": "#9B4AE8",
+   "territories": [
+    "south_west_north_america",
+    "south_east_north_america",
+    "north_east_north_america",
+    "north_west_north_america"
+   ]
+  },
+  {
+   "id": "oceania",
+   "name": "Oceania",
+   "bonus": 2,
+   "color": "#E08A24",
+   "territories": [
+    "north_west_oceania",
+    "south_east_oceania",
+    "north_west_oceania_ii"
+   ]
+  },
+  {
+   "id": "south_america",
+   "name": "South America",
+   "bonus": 2,
+   "color": "#F0C33A",
+   "territories": [
+    "south_west_south_america",
+    "north_east_south_america",
+    "north_west_south_america"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "north_west_africa",
+   "name": "North West Africa",
+   "continent": "africa",
+   "suit": "infantry",
+   "adjacent": [
+    "north_west_africa_ii"
+   ],
+   "d": "M817.1 259.3L744.6 309.1L799.7 370.7ZM761.6 333.1L805.2 384.9L747.5 428.6ZM744.3 318L703.6 358.3L725.8 399.4ZM774.9 270.8L745.5 282.3L703.9 355.6ZM770.6 462.5L746.8 466.6L744.5 428.7ZM786.5 397.4L794 418.8L761.3 430.7ZM775 464.3L789.8 456.3L782.5 422.3ZM718.2 412.6L741.4 415.9L741 447.2ZM707.1 387.5L703.7 413.9L728.8 413.5ZM793.8 454.9L788.4 426.4L798.5 414.9Z",
+   "tokenX": 782.8,
+   "tokenY": 313.9,
+   "labelX": 782.8,
+   "labelY": 339.9
+  },
+  {
+   "id": "north_west_africa_ii",
+   "name": "North West Africa II",
+   "continent": "africa",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_west_africa",
+    "south_east_africa",
+    "south_west_asia"
+   ],
+   "d": "M928.5 582.7L844.9 535.8L880 462.2ZM903.8 364.6L898 290.4L836.6 282.9ZM859.3 446.5L899.8 392.9L859.4 343ZM854.8 346.4L853.4 413.3L795.1 416.8ZM959.2 351.9L903 351.9L899.3 292.4ZM849.1 406.3L804.5 406.4L813.5 467.3ZM863.2 480.5L918.7 460.9L895.8 422ZM854.9 410.8L826.2 465.8L862.8 484ZM875.1 472.3L848.8 480.5L843 528.8ZM848.2 480.1L828 500.6L839 521.8Z",
+   "tokenX": 877.9,
+   "tokenY": 525.2,
+   "labelX": 877.9,
+   "labelY": 551.2
+  },
+  {
+   "id": "south_east_africa",
+   "name": "South East Africa",
+   "continent": "africa",
+   "suit": "artillery",
+   "adjacent": [
+    "north_west_africa_ii"
+   ],
+   "d": "M904.6 441.2L903 351.9L959.2 351.9ZM932.2 640.6L878 656.5L869.3 715.8ZM844.9 535.8L841 609L896 610.4ZM1018.1 442.6L967.6 397.2L945.6 444.1ZM976.9 567.3L934.7 550.5L933.9 503ZM869.8 683.1L841 609L903.1 609.3ZM981 563.5L930.4 592.7L933.9 668.8ZM944.4 556.4L901 567.5L896 610.4ZM906.7 427.7L945.8 415.3L948.3 470.4ZM881.8 669.4L924 639.6L905 611.3Z",
+   "tokenX": 923.4,
+   "tokenY": 371.9,
+   "labelX": 923.4,
+   "labelY": 397.9
+  },
+  {
+   "id": "south_east_africa_ii",
+   "name": "South East Africa II",
+   "continent": "africa",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M997 661.8L991 657.9L989.4 644L989.4 639.4L990.8 634.8L993.1 633.7L996.9 622.7L995.5 615.6L995.6 609.6L998.6 601.9L1007.8 599.1L1015.1 591.4L1016.8 588.1L1016.4 585.4L1018.4 586.1L1021.3 581.6L1021.7 577.7L1023.5 574.8L1027 584.7L1027.2 592.5L1028.2 595.5L1027.4 598.6L1026.4 600.5L1025.1 596.7L1024 598.7L1024.5 603.5L1023.9 606.2L1022.4 607.7L1021.6 613.1L1005.4 657.6Z",
+   "tokenX": 1008.2,
+   "tokenY": 613,
+   "labelX": 1008.2,
+   "labelY": 639
+  },
+  {
+   "id": "north_mid_asia",
+   "name": "North Mid Asia",
+   "continent": "asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_europe",
+    "north_west_asia",
+    "south_mid_asia",
+    "south_west_asia"
+   ],
+   "d": "M1341.6 335.8L1310.4 362.5L1281.2 343.3L1265.5 357L1237.4 312.2L1156.6 300.8L1105.9 243.3L1141.9 191.8L1196.3 227.3L1252.1 228.4L1281.7 205.6L1261.2 171.8L1282.6 174L1342.7 208.7L1344.1 229.1L1299.8 249.9L1327.4 260.4ZM1141.9 191.8L1178.1 177.8L1281.7 205.6L1236.5 233.6ZM1337.3 256.1L1325.4 243.1L1339.1 225.8ZM1340.9 255.1L1352.9 275.4L1362.4 271.3ZM1309 376.2L1303.2 368.7L1312.5 364.2Z",
+   "tokenX": 1283.8,
+   "tokenY": 295.2,
+   "labelX": 1283.8,
+   "labelY": 321.2
+  },
+  {
+   "id": "south_west_asia",
+   "name": "South West Asia",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_europe",
+    "north_mid_asia",
+    "north_west_africa_ii",
+    "north_west_asia",
+    "south_east_europe",
+    "south_mid_asia"
+   ],
+   "d": "M953.3 292.8L990.5 388.2L1046.7 364.7ZM977.2 245.9L1056.1 263L1072.8 332.5ZM1132.3 268.9L1118.4 337L1072.8 332.5ZM982.7 259L968.1 233.7L898.8 245.7ZM1033.2 371.1L992.8 380.2L995.5 412.3ZM971.9 258.7L962.7 288.8L1007.6 302.4ZM1049 333.4L1067.6 349.9L1040 386.2ZM946.4 285.5L947.5 261.1L971.9 258.7ZM959.8 281.5L946.5 285.5L945.5 305.9ZM999.4 252.3L993.5 232.4L978.7 235.6Z",
+   "tokenX": 1002.8,
+   "tokenY": 358.6,
+   "labelX": 1002.8,
+   "labelY": 384.6
+  },
+  {
+   "id": "north_east_asia",
+   "name": "North East Asia",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M1381.7 295.7L1369.3 282L1377.1 269.2L1390.4 268.7L1389 258.2L1393.7 261L1397.7 252.9L1390.9 239.5L1390.3 235.9L1394.1 234.8L1404.9 247.4L1412.2 271L1400.4 274.1L1397.6 281L1390.8 274.2L1374.6 278.4L1381.5 282.9ZM1399.5 231.4L1390 227.5L1392 233.7L1387.3 233.8L1379.4 211.7L1393.5 219.2L1398.5 218.1L1404.3 224.3L1399.1 225.8ZM1386.3 275.6L1391.9 278.9L1387.4 285.5L1382.2 281Z",
+   "tokenX": 1401.1,
+   "tokenY": 264.7,
+   "labelX": 1401.1,
+   "labelY": 290.7
+  },
+  {
+   "id": "north_west_asia",
+   "name": "North West Asia",
+   "continent": "asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_europe",
+    "north_mid_asia",
+    "south_west_asia"
+   ],
+   "d": "M1140.5 192.3L1128.5 229.4L1080.3 238.9L1029.6 211.5L1026 235.2L1010.4 232.5L1004.7 204.7L974.9 191.5L1031.3 184.1L1025 168.1L1051.5 161.4ZM1115.9 257.6L1089.3 302.6L1064.3 303L1057.8 268ZM1010.4 232.5L1035.1 227.1L1078.6 257.9L1023.2 258.8ZM1019.9 214.8L1100.6 237.7L1078.6 257.9L1026 235.2ZM1128.5 229.4L1087.7 245.4L1100.6 237.7L1088.9 227.4ZM1079.9 245.1L1086.3 259.9L1115.9 257.6Z",
+   "tokenX": 1084.7,
+   "tokenY": 205.9,
+   "labelX": 1084.7,
+   "labelY": 231.9
+  },
+  {
+   "id": "south_mid_asia",
+   "name": "South Mid Asia",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_mid_asia",
+    "north_west_oceania_ii",
+    "south_west_asia"
+   ],
+   "d": "M1163.4 442.9L1235.9 315L1132.3 268.9ZM1264.8 430L1222.5 355.2L1234.8 312.7ZM1362.4 468.1L1354 522L1325.2 514.9ZM1279.9 457.9L1293.7 393.2L1261.1 362ZM1302.6 534.1L1294.2 494.8L1251.3 459.3ZM1472.6 555.6L1476.3 512.7L1425.1 501.7ZM1281.2 343.3L1314.2 407.1L1297.9 438.7ZM1303.9 402.1L1269.6 380.6L1265.5 349.9ZM1323.6 486.6L1355.5 449.8L1368.3 459.7ZM1398.3 484.6L1373.7 491.7L1371.2 532.9Z",
+   "tokenX": 1182.2,
+   "tokenY": 332.6,
+   "labelX": 1182.2,
+   "labelY": 358.6
+  },
+  {
+   "id": "south_east_asia",
+   "name": "South East Asia",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M1386.6 412.9L1368.4 404.3L1362.3 374.2L1369.7 374.4L1373.1 401.3L1384.5 404.8ZM1398.6 458.6L1388.5 443.8L1380.7 448L1387.3 438.1L1396.8 436.2L1395.8 431.1L1403.3 448ZM1392.5 428.7L1387.5 412.8L1396.4 422.7L1392.4 420.9ZM1388 421.5L1384.7 436L1382.8 423.8L1385.3 427.8ZM1356.8 440.3L1367.3 425.9L1365.6 420.6ZM1376.6 417.1L1383 419.2L1378.6 426.6ZM1367.3 406.9L1373.6 409.5L1373.3 415.1Z",
+   "tokenX": 1366.9,
+   "tokenY": 378.8,
+   "labelX": 1366.9,
+   "labelY": 404.8
+  },
+  {
+   "id": "north_west_europe",
+   "name": "North West Europe",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M734.5 114L733.3 116.4L736.9 119L731.9 122L721.3 124.8L718.1 125.5L713.5 124.9L703.8 123.6L707.7 121.9L700.4 119.9L706.8 119.2L706.9 118L699.8 117.2L702.7 114.7L708 114.1L712.9 116.7L718.6 114.6L722.8 115.7L728.8 113.7Z",
+   "tokenX": 718.4,
+   "tokenY": 120.1,
+   "labelX": 718.4,
+   "labelY": 146.1
+  },
+  {
+   "id": "south_east_europe",
+   "name": "South East Europe",
+   "continent": "europe",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_europe",
+    "north_east_south_america",
+    "north_west_south_america",
+    "south_west_asia"
+   ],
+   "d": "M948.4 197.4L918.6 176.3L875.2 196.4ZM816.2 221.9L817.7 193.3L765.8 195ZM751.6 259.4L744.6 225.6L797.4 228.7ZM838 201.4L809.8 191L817.7 163.5ZM877.5 193.2L875.4 167L840 169.3ZM855.5 254.3L842.1 206.5L813.2 209.3ZM909.2 214.5L893.9 197.5L869 208.6ZM913.3 171.3L892.7 157.7L876.6 175.6ZM896.9 232.3L872.5 244.8L887.5 263.4ZM905.8 221.8L897.2 235.1L880.5 229.5Z",
+   "tokenX": 759.9,
+   "tokenY": 238.8,
+   "labelX": 759.9,
+   "labelY": 264.8
+  },
+  {
+   "id": "north_east_europe",
+   "name": "North East Europe",
+   "continent": "europe",
+   "suit": "infantry",
+   "adjacent": [
+    "north_mid_asia",
+    "north_west_asia",
+    "south_east_europe",
+    "south_west_asia"
+   ],
+   "d": "M152.3 119.6L991.1 236.1L1432 130.4ZM190.4 98.7L198.1 96.4L1375.5 98.8ZM864.8 108.5L829.3 123.2L834.7 161.5ZM897 130.2L862.9 137.2L854 104.4ZM805.9 146.6L835 109L888.3 99.9ZM999.3 82.5L974.8 99L952.4 94.9ZM1383.2 208.5L1375 193.5L1339.9 167ZM850.4 77.1L834.2 81.9L816.3 75.7ZM1090 77.2L1072.6 72.8L1060.1 74.4ZM937.8 212.2L927.8 218.2L920.8 212.9Z",
+   "tokenX": 988.4,
+   "tokenY": 181,
+   "labelX": 988.4,
+   "labelY": 207
+  },
+  {
+   "id": "south_west_europe",
+   "name": "South West Europe",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M765.9 146.4L773.4 146.4L769.2 151.3L777.2 150.7L772.6 158.6L776.6 159L786.5 173.4L791.3 174.3L788.8 179L790.4 181.6L786.8 184.3L761.3 187.4L771 180.9L764.7 180.1L763.7 178.1L767.9 176.5L765.8 173.8L766.6 170.6L772.5 171L773.1 168.2L770.5 165.1L765.8 164.3L765.2 159.5L763 161.8L761.2 154.8ZM755 167.8L755.3 162.6L762.6 165.4L760.4 168.8Z",
+   "tokenX": 778.6,
+   "tokenY": 177,
+   "labelX": 778.6,
+   "labelY": 203
+  },
+  {
+   "id": "south_west_north_america",
+   "name": "South West North America",
+   "continent": "north_america",
+   "suit": "artillery",
+   "adjacent": [],
+   "d": "M431.4 362.8L430.6 364.3L427.3 365.1L413.9 365.6L417.7 362L416.1 360.3L413.1 359.9L411.8 358.1L411.3 354.5L408.6 354.7L403.4 351.7L397.4 350.7L396 349.5L398.1 347.9L393.5 347.5L389.4 350.8L387.5 350.9L386.5 352.5L382.1 352.6L386.5 348.3L391.6 345.7L396.6 344.4L404.3 344.9L408.3 347L409.7 349.4L414.2 348.7L421.3 357L425.5 358.2L424.8 360L428.3 360.2Z",
+   "tokenX": 415.5,
+   "tokenY": 356,
+   "labelX": 415.5,
+   "labelY": 382
+  },
+  {
+   "id": "south_east_north_america",
+   "name": "South East North America",
+   "continent": "north_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M457.8 373.5L455.6 376.2L453.5 374.8L449.8 374.7L446.9 376.3L446.3 374.7L442.1 380.1L441 379.1L440.4 373.5L441.8 372.4L443.4 365.4L450.9 366.9L451.5 369.2L454.1 369.1L453.7 371L455.8 371.2ZM442.6 366.5L441.8 372.4L440.4 373.5L441 377.2L432.8 376.1L430.4 377.3L428.1 375.3L428.9 373.2L436.7 374.6L438.6 373.2L436.8 370.4L437.3 368L434.4 367L435.8 365.2Z",
+   "tokenX": 447.5,
+   "tokenY": 370.7,
+   "labelX": 447.5,
+   "labelY": 396.7
+  },
+  {
+   "id": "north_east_north_america",
+   "name": "North East North America",
+   "continent": "north_america",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M748 72.8L724 74.7L731 74.8L724.4 77.5L727.3 81.4L717.1 82.3L722.5 83.5L719.3 86L722.9 88.3L704.1 94L712.7 99.2L700.8 96.8L697 100.6L710.3 101L645.5 117.7L630.6 128.8L624.4 139.9L619.1 140.1L607.7 136.5L600.7 125L599.4 111.2L615.1 101.6L601.8 102.7L605.2 98.7L614.5 99.5L601.9 96L607.3 93.2L602.7 87.2L559.1 79L604.7 71.6Z",
+   "tokenX": 638.1,
+   "tokenY": 95.4,
+   "labelX": 638.1,
+   "labelY": 121.4
+  },
+  {
+   "id": "north_west_north_america",
+   "name": "North West North America",
+   "continent": "north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "north_west_south_america"
+   ],
+   "d": "M264.9 138.9L428.8 233.2L565.1 171.7ZM503.8 203.6L406.7 332.5L243.4 274.1ZM253.4 286.5L305.3 385.8L372.6 356.2ZM313.7 102.4L277.6 164.2L142.2 166.2ZM571.7 112.4L544.7 132L489.1 97.4ZM448.4 101.3L401.4 106.4L393.5 96.3ZM600.6 70.8L510.9 71.8L505.4 82.6ZM367.8 422.4L359.6 410.5L383.2 396.9ZM540.1 200.7L564.1 205.8L563.3 180.1ZM383.2 396.9L361.4 410L352.8 400.6Z",
+   "tokenX": 391.1,
+   "tokenY": 279.9,
+   "labelX": 391.1,
+   "labelY": 305.9
+  },
+  {
+   "id": "north_west_oceania",
+   "name": "North West Oceania",
+   "continent": "oceania",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M1301.9 714.3L1325.7 637.5L1361.1 624.3L1392.4 589L1410.4 593.9L1428.3 568.8L1447.6 573.6L1438.8 594L1457.1 611.6L1478.3 565.8L1480.1 591.1L1486.4 594L1484.3 619.6L1497.5 641.6L1499.3 664.7L1481.1 699L1447.3 733.4L1424.8 742.8L1423.6 736.2L1403.8 736.9L1405.5 715.5L1396.5 720.7L1408.5 706.6L1393.9 718.5L1393.4 704.9L1383.3 698.1L1313 719.5ZM1426 753.3L1405.2 768.3L1411.4 752.3Z",
+   "tokenX": 1415.6,
+   "tokenY": 650.5,
+   "labelX": 1415.6,
+   "labelY": 676.5
+  },
+  {
+   "id": "south_east_oceania",
+   "name": "South East Oceania",
+   "continent": "oceania",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M1536.8 753.5L1534 758.3L1519.4 767.3L1518.5 769.9L1509.6 772.1L1497.5 781.2L1488.3 785.1L1479.5 782.8L1486.7 776.8L1516.9 762.5L1528.7 753.7L1533.9 751.1L1531.8 755.8ZM1538.6 757.9L1538.1 755.6L1545.8 747.8L1543 745.5L1549.6 741.4L1556.6 733.2L1559.6 716.3L1561.6 715.9L1561.8 719.2L1564.1 720.7L1560.2 732.1L1563.3 728.2L1561.3 734.2L1563.4 736.1L1572 735L1562.7 743.5L1559.5 743.4Z",
+   "tokenX": 1493.8,
+   "tokenY": 778.2,
+   "labelX": 1493.8,
+   "labelY": 804.2
+  },
+  {
+   "id": "north_west_oceania_ii",
+   "name": "North West Oceania II",
+   "continent": "oceania",
+   "suit": "artillery",
+   "adjacent": [
+    "south_mid_asia"
+   ],
+   "d": "M1476.3 512.7L1493.4 521L1499.5 531.6L1507.3 535.7L1508.1 539.1L1503.5 539.9L1504.1 544.2L1518.1 565.2L1505.1 562.3L1498 548.7L1492 545.8L1484.3 549.9L1484.3 554.7L1480.2 557L1472.6 555.6ZM1510.8 533.4L1518.4 531.8L1520.1 528.5L1520.3 532L1523.1 531.5L1527.4 523L1531.2 524L1528.9 531.7L1519.8 537.2ZM1533.4 527L1525 512L1534.7 521.8ZM1545.6 541.2L1542.2 528.8L1547.9 538.7Z",
+   "tokenX": 1487,
+   "tokenY": 534.6,
+   "labelX": 1487,
+   "labelY": 560.6
+  },
+  {
+   "id": "south_west_south_america",
+   "name": "South West South America",
+   "continent": "south_america",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_south_america",
+    "north_west_south_america"
+   ],
+   "d": "M514.1 814.7L498.3 813L488.7 804.7L484.6 775L475.3 761L462.3 685.1L470.6 638L480.6 644.1L487 639.3L514 659L512.2 671.3L522.6 673.9L529.4 662.6L534.4 665L520.4 690.3L530.7 737.8L511.5 741.5L515.5 752.1L503.3 754.3L513.2 762.8L502.7 779.2L513.1 788.3L506.4 806.5ZM520.4 690.3L543.5 705.5L538.6 718.9L521.5 712.6ZM512.9 816.1L531.1 828.6L518.2 827Z",
+   "tokenX": 496.7,
+   "tokenY": 716.2,
+   "labelX": 496.7,
+   "labelY": 742.2
+  },
+  {
+   "id": "north_east_south_america",
+   "name": "North East South America",
+   "continent": "south_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_west_south_america",
+    "south_east_europe",
+    "south_west_south_america"
+   ],
+   "d": "M544.1 711.8L520.4 690.3L534.4 665L520.7 641.3L510.3 639.6L504.3 602.5L466.8 571.7L466.2 559.8L441.5 568L441 558.1L433 561.8L423 545.1L427.6 530.3L442.1 523.9L442.1 484.1L463 490.3L473.8 480.9L466.9 468.7L487.2 461.1L495 486.8L524.9 481.4L533.1 467.7L535.8 494L546.2 503.7L588.5 514.5L612.1 531.6L613.3 554.8L597.2 581.4L590.7 638.6L561.2 657.3Z",
+   "tokenX": 544,
+   "tokenY": 561.6,
+   "labelX": 544,
+   "labelY": 587.6
+  },
+  {
+   "id": "north_west_south_america",
+   "name": "North West South America",
+   "continent": "south_america",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_south_america",
+    "north_west_north_america",
+    "south_east_europe",
+    "south_west_south_america"
+   ],
+   "d": "M447.7 615.7L387 536L416 495.8ZM442.1 523.9L397.1 484.3L436.5 413.6ZM446.4 567.6L508.9 626.1L464.3 644.6ZM459.2 490.7L445.1 415.4L492.9 440.3ZM450.8 610.7L506.4 822L470.3 785.1ZM526.1 672.9L529.3 651.8L489.9 623.9ZM396.6 528.2L415.4 501.5L397.7 486.3ZM497.4 487.1L504.9 456L492.9 440.3ZM507.2 482.9L500.9 463.7L520.5 457.4ZM524.4 829.1L512.9 816.1L489.5 817.1Z",
+   "tokenX": 482.3,
+   "tokenY": 779.6,
+   "labelX": 482.3,
+   "labelY": 805.6
+  }
+ ],
+ "seaLinks": [
+  {
+   "from": "south_east_africa_ii",
+   "to": "south_east_africa"
+  },
+  {
+   "from": "north_west_europe",
+   "to": "south_west_europe"
+  },
+  {
+   "from": "north_east_europe",
+   "to": "north_west_europe"
+  },
+  {
+   "from": "north_east_north_america",
+   "to": "north_east_europe"
+  },
+  {
+   "from": "south_east_north_america",
+   "to": "north_west_south_america"
+  },
+  {
+   "from": "south_west_north_america",
+   "to": "north_west_north_america"
+  },
+  {
+   "from": "north_west_oceania",
+   "to": "north_west_oceania_ii"
+  },
+  {
+   "from": "south_east_oceania",
+   "to": "north_west_oceania_ii"
+  },
+  {
+   "from": "north_west_oceania_ii",
+   "to": "south_east_asia"
+  },
+  {
+   "from": "north_west_north_america",
+   "to": "north_east_asia"
+  }
+ ],
+ "modifierSlots": {
+  "blizzards": 2,
+  "portals": 3,
+  "capitals": 6
+ }
+}

@@ -1,0 +1,130 @@
+{
+ "slug": "mini",
+ "name": "Mini",
+ "tagline": "Engine fixture: two three-territory continents on one bridge",
+ "viewBox": "0 0 660 440",
+ "continents": [
+  {
+   "id": "left",
+   "name": "Left",
+   "bonus": 2,
+   "color": "#36B0EA",
+   "territories": [
+    "l1",
+    "l2",
+    "l3"
+   ]
+  },
+  {
+   "id": "right",
+   "name": "Right",
+   "bonus": 2,
+   "color": "#DA3A4F",
+   "territories": [
+    "r1",
+    "r2",
+    "r3"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "l1",
+   "name": "L1",
+   "continent": "left",
+   "suit": "infantry",
+   "adjacent": [
+    "l2",
+    "l3"
+   ],
+   "d": "M55 18L165 18L183.5 30.3L202 55L202 165L183.5 189.7L165 202L55 202L36.5 189.7L18 165L18 55L36.5 30.3Z",
+   "tokenX": 110,
+   "tokenY": 110,
+   "labelX": 110,
+   "labelY": 136
+  },
+  {
+   "id": "l2",
+   "name": "L2",
+   "continent": "left",
+   "suit": "cavalry",
+   "adjacent": [
+    "l1",
+    "l3"
+   ],
+   "d": "M275 18L385 18L403.5 30.3L422 55L422 165L403.5 189.7L385 202L275 202L256.5 189.7L238 165L238 55L256.5 30.3Z",
+   "tokenX": 330,
+   "tokenY": 110,
+   "labelX": 330,
+   "labelY": 136
+  },
+  {
+   "id": "l3",
+   "name": "L3",
+   "continent": "left",
+   "suit": "artillery",
+   "adjacent": [
+    "l1",
+    "l2",
+    "r1"
+   ],
+   "d": "M495 18L605 18L623.5 30.3L642 55L642 165L623.5 189.7L605 202L495 202L476.5 189.7L458 165L458 55L476.5 30.3Z",
+   "tokenX": 550,
+   "tokenY": 110,
+   "labelX": 550,
+   "labelY": 136
+  },
+  {
+   "id": "r1",
+   "name": "R1",
+   "continent": "right",
+   "suit": "infantry",
+   "adjacent": [
+    "l3",
+    "r2",
+    "r3"
+   ],
+   "d": "M55 238L165 238L183.5 250.3L202 275L202 385L183.5 409.7L165 422L55 422L36.5 409.7L18 385L18 275L36.5 250.3Z",
+   "tokenX": 110,
+   "tokenY": 330,
+   "labelX": 110,
+   "labelY": 356
+  },
+  {
+   "id": "r2",
+   "name": "R2",
+   "continent": "right",
+   "suit": "cavalry",
+   "adjacent": [
+    "r1",
+    "r3"
+   ],
+   "d": "M275 238L385 238L403.5 250.3L422 275L422 385L403.5 409.7L385 422L275 422L256.5 409.7L238 385L238 275L256.5 250.3Z",
+   "tokenX": 330,
+   "tokenY": 330,
+   "labelX": 330,
+   "labelY": 356
+  },
+  {
+   "id": "r3",
+   "name": "R3",
+   "continent": "right",
+   "suit": "artillery",
+   "adjacent": [
+    "r1",
+    "r2"
+   ],
+   "d": "M495 238L605 238L623.5 250.3L642 275L642 385L623.5 409.7L605 422L495 422L476.5 409.7L458 385L458 275L476.5 250.3Z",
+   "tokenX": 550,
+   "tokenY": 330,
+   "labelX": 550,
+   "labelY": 356
+  }
+ ],
+ "seaLinks": [],
+ "modifierSlots": {
+  "blizzards": 2,
+  "portals": 3,
+  "capitals": 6
+ }
+}

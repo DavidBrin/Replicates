@@ -1,0 +1,946 @@
+{
+ "slug": "world-extended",
+ "name": "World Extended",
+ "tagline": "47 territories — the classic world plus five island outposts",
+ "viewBox": "0 8 1024 643",
+ "continents": [
+  {
+   "id": "africa",
+   "name": "Africa",
+   "bonus": 3,
+   "color": "#9B4AE8",
+   "territories": [
+    "congo",
+    "east_africa",
+    "egypt",
+    "madagascar",
+    "north_africa",
+    "south_africa"
+   ]
+  },
+  {
+   "id": "south_america",
+   "name": "South America",
+   "bonus": 2,
+   "color": "#DA3A4F",
+   "territories": [
+    "argentina",
+    "brazil",
+    "falkland_isles",
+    "peru",
+    "venezuela"
+   ]
+  },
+  {
+   "id": "europe",
+   "name": "Europe",
+   "bonus": 5,
+   "color": "#5FBF2A",
+   "territories": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "svalbard",
+    "ukraine",
+    "western_europe"
+   ]
+  },
+  {
+   "id": "north_america",
+   "name": "North America",
+   "bonus": 5,
+   "color": "#36B0EA",
+   "territories": [
+    "alaska",
+    "alberta",
+    "central_america",
+    "eastern_united_states",
+    "greenland",
+    "hawaii",
+    "northwest_territory",
+    "ontario",
+    "quebec",
+    "western_united_states"
+   ]
+  },
+  {
+   "id": "asia",
+   "name": "Asia",
+   "bonus": 7,
+   "color": "#E08A24",
+   "territories": [
+    "afghanistan",
+    "china",
+    "india",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "middle_east",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural",
+    "yakutsk"
+   ]
+  },
+  {
+   "id": "australia",
+   "name": "Australia",
+   "bonus": 2,
+   "color": "#F0C33A",
+   "territories": [
+    "eastern_australia",
+    "indonesia",
+    "new_guinea",
+    "new_zealand",
+    "philippines",
+    "western_australia"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "afghanistan",
+   "name": "Afghanistan",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [
+    "china",
+    "india",
+    "middle_east",
+    "ukraine",
+    "ural"
+   ],
+   "d": "M627.6 299.3L623.6 291.3L626.6 272.3L623.6 272.3L623.6 279.3L621.6 270.3L614.6 267.3L619.6 255.3L622.6 258.3L622.6 249.3L604.6 254.3L602.2 229.5L604.6 221.3L628.1 215.1L652.7 215.8L661.6 211.3L661.6 196.3L676.6 195.7L685.2 199L706.6 222.3L715.9 225.8L721.6 238.3L698.6 270.3L687.6 272.3L694.6 298.3L687.6 303.3L681.6 295.3L676 295L652.6 309.3L640.4 297.8Z",
+   "tokenX": 658.6,
+   "tokenY": 251.2,
+   "labelX": 658.6,
+   "labelY": 277.2
+  },
+  {
+   "id": "alaska",
+   "name": "Alaska",
+   "continent": "north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "alberta",
+    "northwest_territory"
+   ],
+   "d": "M32.6 102.3L63.1 90.2L104.6 99.3L104.6 148.3L116.9 155.8L123.6 180.3L106.6 163.3L109.6 159.3L76.6 144.3L77.6 150.3L60.6 155.3L65.8 146.2L53.6 151.3L46.6 164.3L17.6 173.3L38.6 156.3L24.6 158.3L26.6 151.3L15.6 142.3L18.6 134.3L37.5 128.3L23.6 123.3L27.6 114.3L36.6 114.3ZM45.6 171.3L52.6 167.3L51.6 164.3ZM110.6 173.3L108.6 175.3L113.6 183.3Z",
+   "tokenX": 65.2,
+   "tokenY": 118.7,
+   "labelX": 65.2,
+   "labelY": 144.7
+  },
+  {
+   "id": "alberta",
+   "name": "Alberta",
+   "continent": "north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "alaska",
+    "northwest_territory",
+    "ontario",
+    "western_united_states"
+   ],
+   "d": "M111.6 148.3L214.6 154.3L213.7 167.2L211.5 193.4L210.6 206.3L192.5 205.7L149.7 204.7L137.6 204.3L135.3 201.6L134.5 200.9L133.6 200.3L133.8 198.8L134.4 196.3L134.6 194.3L126.6 186.3L122.6 186.3L122.6 181.3L123.5 182.3L123.6 183.3L123.5 177.3L123.3 174.5L122.9 171.6L122.3 168.9L121.5 166.2L120.6 163.5L119.5 161L118.3 158.4L116.9 155.8L115.3 153.3L113.5 150.8Z",
+   "tokenX": 156.7,
+   "tokenY": 178,
+   "labelX": 156.7,
+   "labelY": 204
+  },
+  {
+   "id": "argentina",
+   "name": "Argentina",
+   "continent": "south_america",
+   "suit": "infantry",
+   "adjacent": [
+    "brazil",
+    "peru"
+   ],
+   "d": "M233.6 484.3L243.5 501.7L259.6 497.3L280.6 510.3L276.6 521.3L293.6 513.3L295.6 516.3L284.6 529.3L291.6 529.3L301.5 544.7L293.9 550.3L278.6 548.3L286.6 555.3L286.6 563.3L270.6 568.3L268.6 577.3L261.6 575.3L257.8 595.6L259.6 608.3L254.6 620.3L260.6 632.3L278.6 642.3L272.8 643.9L252.6 642.3L250.6 636.3L238.6 632.3L223.6 600.3L223.6 589.3L227.6 589.3L228.6 486.3Z",
+   "tokenX": 254.7,
+   "tokenY": 536,
+   "labelX": 254.7,
+   "labelY": 562
+  },
+  {
+   "id": "brazil",
+   "name": "Brazil",
+   "continent": "south_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "argentina",
+    "peru",
+    "venezuela"
+   ],
+   "d": "M209.2 437.5L215.4 424.4L229.6 423.3L229.6 405.3L247.6 405.3L250.6 396.3L265.6 392.3L269.6 405.3L278.3 404.9L296.2 402L305.6 390.3L314.6 406.3L321.6 406.3L318.6 411.3L372.6 428.3L354.6 466.3L354.6 482.3L342.1 499L319.6 508.3L303.6 543.3L291.6 535.3L291.6 529.3L284.6 529.3L295.6 516.3L268.6 463.3L245.6 448.3L229.6 455.3L228.6 446.3L219.6 448.3Z",
+   "tokenX": 312.9,
+   "tokenY": 455.1,
+   "labelX": 312.9,
+   "labelY": 481.1
+  },
+  {
+   "id": "central_america",
+   "name": "Central America",
+   "continent": "north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "eastern_united_states",
+    "western_united_states"
+   ],
+   "d": "M145.6 274.3L159.6 274.3L192.6 286.3L198.6 292.3L198.2 309.3L203.6 318.3L215.6 318.3L221.7 315.5L227.8 317.8L228.3 322.6L216.6 331.3L222.6 334.3L222.6 340.3L211.6 351.3L225.6 357.3L213.6 362.3L204.6 348.3L202.6 332.3L174.6 316.3L174.6 313.3L178.6 313.3L177.6 309.3L170.6 301.2L161.4 282.3L159.6 283.3L170.6 315.3L166.7 312.8L160.6 299.3L154.1 294.2L152.8 285.9Z",
+   "tokenX": 185.3,
+   "tokenY": 297.9,
+   "labelX": 185.3,
+   "labelY": 323.9
+  },
+  {
+   "id": "china",
+   "name": "China",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [
+    "afghanistan",
+    "india",
+    "mongolia",
+    "siam",
+    "siberia",
+    "ural"
+   ],
+   "d": "M687.6 272.3L698.6 270.3L721.6 238.3L747.1 250.7L824.9 262.5L839.6 278.3L853.6 278.3L840.6 286.3L851.2 298.6L850.3 315.3L839.1 333.8L813.6 353.3L795.4 341.7L781.6 352.3L777.6 333.3L772.6 335.3L769.6 327.3L756.6 335.3L757.6 340.3L741.6 345.3L742.6 340.3L707.6 325.3L711.6 305.3L694.6 298.3ZM842.6 344.3L845.6 332.3L851.6 329.3ZM804.6 360.3L813.6 358.3L813.6 354.3Z",
+   "tokenX": 801.7,
+   "tokenY": 300.3,
+   "labelX": 801.7,
+   "labelY": 326.3
+  },
+  {
+   "id": "congo",
+   "name": "Congo",
+   "continent": "africa",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_africa",
+    "north_africa",
+    "south_africa"
+   ],
+   "d": "M516.6 431.3L532.6 460.3L534.6 457.3L536.6 463.3L552.6 465.3L550.7 473.3L542.6 484.3L538.6 484.3L536.1 492.6L531.6 496.3L533.6 513.3L530.6 518.3L527.6 518.3L529.6 534.3L525.6 534.3L525.6 530.3L508.8 525.2L504.6 510.3L498.6 509.3L493.6 513.3L489.6 504.3L474.6 501.3L463.8 483.3L469.6 472.3L475.6 472.3L475.6 469.3L488.6 471.3L488.6 451.3L498.6 444.3L499.6 440.3Z",
+   "tokenX": 513.4,
+   "tokenY": 478.2,
+   "labelX": 513.4,
+   "labelY": 504.2
+  },
+  {
+   "id": "east_africa",
+   "name": "East Africa",
+   "continent": "africa",
+   "suit": "artillery",
+   "adjacent": [
+    "congo",
+    "egypt",
+    "madagascar",
+    "north_africa",
+    "south_africa"
+   ],
+   "d": "M563.6 377.3L585.6 430.3L582.6 430.3L592.4 433.2L612.6 429.3L613.6 431.3L597.6 465.3L584.8 477.6L564.6 504.3L565.6 525.3L549.6 529.3L547.6 547.3L542.6 546.3L542.6 523.3L533.6 513.3L531.6 496.3L536.1 492.6L538.6 484.3L542.6 484.3L550.7 473.3L552.6 465.3L536.6 463.3L534.6 457.3L532.6 460.3L516.6 431.3L516.8 418.4L520.6 390.3L524.6 390.3L525.6 381.3L558.6 381.3Z",
+   "tokenX": 548.6,
+   "tokenY": 423.7,
+   "labelX": 548.6,
+   "labelY": 449.7
+  },
+  {
+   "id": "eastern_australia",
+   "name": "Eastern Australia",
+   "continent": "australia",
+   "suit": "infantry",
+   "adjacent": [
+    "new_guinea",
+    "western_australia"
+   ],
+   "d": "M846.6 494.3L849.6 494.3L851.6 498.3L863.6 498.3L858.6 504.3L858.6 509.3L874.9 514.5L880.6 493.3L883.6 492.3L886.5 502.2L898.4 521.3L905.6 526.3L909.6 534.3L916.5 536.9L924 544.8L924.3 561.5L912.6 596.3L890.6 602.3L887.6 599.3L887.6 607.3L897.6 608.3L894.4 616.5L886.6 620.3L882.3 605L876.6 599.3L876.6 547.3L835.6 547.3L834.8 506.4L838.4 500.7L846.6 498.3Z",
+   "tokenX": 900.5,
+   "tokenY": 558,
+   "labelX": 900.5,
+   "labelY": 584
+  },
+  {
+   "id": "eastern_united_states",
+   "name": "Eastern United States",
+   "continent": "north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "central_america",
+    "ontario",
+    "quebec",
+    "western_united_states"
+   ],
+   "d": "M192.6 286.3L192.6 273.3L197.6 272.3L200.6 259.3L208.6 258.3L210.6 249.3L228.6 249.3L230.6 206.3L242.6 210.3L239.6 216.3L260.6 217.3L253 224.4L248.6 237.3L261.6 220.3L261.6 229.3L265.6 229.3L264.6 236.3L268 236.3L320.6 215.3L320.6 228.3L287.6 249.3L280.4 261.7L265.6 270.3L259.6 300.3L253.6 302.3L252.6 282.3L232.6 280.3L233.6 286.3L214.1 283.4L198.6 292.3Z",
+   "tokenX": 247.2,
+   "tokenY": 259.7,
+   "labelX": 247.2,
+   "labelY": 285.7
+  },
+  {
+   "id": "egypt",
+   "name": "Egypt",
+   "continent": "africa",
+   "suit": "artillery",
+   "adjacent": [
+    "east_africa",
+    "middle_east",
+    "north_africa"
+   ],
+   "d": "M563.6 377.3L560.8 378.5L558.6 381.3L525.6 381.3L524 386.9L524.6 390.3L520.6 390.3L520.6 394.3L517.6 393.1L509.9 387.3L505.6 385.3L503.6 379.3L486.3 375.2L475.6 368.3L474.6 339.3L476.3 338L477 336.3L477.6 330.3L481.6 327.7L485.6 327.3L500.9 334.9L506.6 336.4L508.6 336.3L509.6 329.3L518.6 328.7L527.5 330.7L544.6 337.3L558.6 337.3L562.6 352.3L556.6 351.3Z",
+   "tokenX": 524.1,
+   "tokenY": 356.3,
+   "labelX": 524.1,
+   "labelY": 382.3
+  },
+  {
+   "id": "falkland_isles",
+   "name": "Falkland Isles",
+   "continent": "south_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M313 617.5L311.5 610.2L311.1 600L317.2 594.6L322.3 591.5L327.1 590.3L332.3 590.3L346.1 592.2L346.5 597.2L348 601.9L340.9 604.7L336.1 607.8L332.4 612.3L328.6 619.4L324 621.1L319.9 621.3L316.2 620.1ZM293.6 619.4L291.2 615.8L285.8 613.6L285.8 609.7L291 608.1L293.6 607.8L287.8 600L295.1 596L305.3 592.2L305.7 603.6L307.2 611.6L303.7 615L301.1 617Z",
+   "tokenX": 323,
+   "tokenY": 605.1,
+   "labelX": 323,
+   "labelY": 631.1
+  },
+  {
+   "id": "great_britain",
+   "name": "Great Britain",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "iceland",
+    "northern_europe",
+    "scandinavia",
+    "western_europe"
+   ],
+   "d": "M426.6 233.3L425.6 230.3L437.6 223.3L431.6 222.3L434.6 210.3L439.6 210.3L440.6 202.3L437.6 201.3L437.6 197.3L434.6 197.3L435.5 188L437.6 176.3L445.6 174.3L445.6 180.3L451.6 183.3L448.9 188.7L448.4 196.4L453.6 216.3L456.6 217.3L456.6 225.3L436 232.1ZM416.6 225.3L416.6 205.3L420.6 203.3L420.6 198.3L433.6 200.3L433.6 209.3L430.6 209.3L428.3 219L423.3 223.4Z",
+   "tokenX": 444.8,
+   "tokenY": 217.6,
+   "labelX": 444.8,
+   "labelY": 243.6
+  },
+  {
+   "id": "greenland",
+   "name": "Greenland",
+   "continent": "north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "northwest_territory",
+    "ontario",
+    "quebec"
+   ],
+   "d": "M301.6 65.3L311.6 66.3L305.1 59.6L347.6 35.3L387.6 31.3L386.6 22.3L410.1 17.4L467.6 33.3L454.6 40.3L490.6 41.3L470.6 57.3L473.6 86.3L465.6 97.3L453.6 96.3L460.6 99.3L458.6 114.3L448.6 105.3L443.6 112.3L450.6 118.3L390.6 139.3L374.6 173.3L351.6 153.3L349.4 129.2L357.6 118.3L348.6 122.3L347.6 115.3L357.6 112.3L345.2 87.9L330.6 74.3L303.6 75.3Z",
+   "tokenX": 401.2,
+   "tokenY": 81.1,
+   "labelX": 401.2,
+   "labelY": 107.1
+  },
+  {
+   "id": "hawaii",
+   "name": "Hawaii",
+   "continent": "north_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M47.9 270.7L49.8 270.4L55.3 274.1L63.2 276.3L71.3 281.8L73.1 283.7L74 289.3L76.5 289L78.9 294.4L82.9 297.1L81.8 298.9L75.4 304L70.3 305.5L65.8 305.3L59 312.3L57 315.7L54.2 317.3L52.4 315L50.3 314.8L46.5 312.3L46.3 309.1L47.7 300.5L44.8 295.3L44.7 292.2L42.2 288.8L43 286.4L45.6 285.2L50.1 280.8L47.5 274.3L47.3 272Z",
+   "tokenX": 59.7,
+   "tokenY": 291.6,
+   "labelX": 59.7,
+   "labelY": 317.6
+  },
+  {
+   "id": "iceland",
+   "name": "Iceland",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "great_britain",
+    "scandinavia"
+   ],
+   "d": "M416.6 147.3L416.6 144.3L420.6 144.3L420.6 143.3L416.6 143.3L417.6 140.3L420 139.2L421.6 138.7L423.3 138.8L425.6 139.3L425.6 141.3L448.6 140.3L451.6 142.3L449.6 144.3L452.6 144.3L451.9 147L450.6 149.2L449 150.9L447 152.3L444.7 153.2L442.3 153.9L436.9 154.7L426.6 155.3L423 153.9L418.6 153.3L418.5 150.8L417.6 148.3L420.3 148.2L420.6 147.9L420.6 147.3Z",
+   "tokenX": 432.2,
+   "tokenY": 148,
+   "labelX": 432.2,
+   "labelY": 174
+  },
+  {
+   "id": "india",
+   "name": "India",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "middle_east",
+    "siam"
+   ],
+   "d": "M676.7 294.9L687.6 303.3L701.6 298.3L711.6 305.3L711.6 321.3L707.6 325.3L742.6 340.3L741.6 345.3L757.6 340.3L756.6 335.3L768.4 327.6L772.6 335.3L758.6 368.3L738.6 375.3L719.6 402.3L713.6 434.3L702.6 440.3L687.6 401.3L687.6 377.3L680 380.3L676.6 376.3L680.6 374.3L670.6 362.3L657.6 362.3L661.6 346.3L651.6 326.3L652.6 309.3ZM714.6 451.3L711.6 437.3L719.3 444.3Z",
+   "tokenX": 712.4,
+   "tokenY": 360.3,
+   "labelX": 712.4,
+   "labelY": 386.3
+  },
+  {
+   "id": "indonesia",
+   "name": "Indonesia",
+   "continent": "australia",
+   "suit": "infantry",
+   "adjacent": [
+    "new_guinea",
+    "western_australia"
+   ],
+   "d": "M823.6 476.3L787.6 475.3L758.6 428.3L771.6 432.3L789.6 452.3L793.9 469ZM803.6 459.3L800.6 438.3L822.6 419.3L831.6 420.3L817.6 456.3ZM822.6 464.3L832.6 440.3L847.6 438.3L834.6 443.3L841.6 446.3L835.6 460.3L828.6 453.3ZM823.6 475.3L835.6 476.3L841.6 472.3ZM847.6 473.3L840.5 472.7L836.6 479.3ZM842.6 455.3L842.6 457.3L859.6 457.3ZM850.6 436.3L850.6 444.3L854.6 444.3Z",
+   "tokenX": 812,
+   "tokenY": 442.3,
+   "labelX": 812,
+   "labelY": 468.3
+  },
+  {
+   "id": "irkutsk",
+   "name": "Irkutsk",
+   "continent": "asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "kamchatka",
+    "mongolia",
+    "siberia",
+    "yakutsk"
+   ],
+   "d": "M785.2 213.5L783.5 210.3L781.7 202.6L782 194.2L783.8 185.6L786.9 177.8L790.6 171.3L798.6 165.3L809.6 163.3L814.6 156.3L839.2 155.1L843.6 155.3L844.6 157.3L846.3 157.9L852.6 158.3L855 163.3L860.6 167.3L854.6 197.3L846.2 197.9L842.6 196.3L837.6 199.3L837.3 205.7L833.6 208.3L833.1 213.8L830.6 221.3L827.6 221.3L826.6 214.3L815.6 219.3L792.2 217.5L787.6 216.3Z",
+   "tokenX": 811.5,
+   "tokenY": 191,
+   "labelX": 811.5,
+   "labelY": 217
+  },
+  {
+   "id": "japan",
+   "name": "Japan",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "kamchatka",
+    "mongolia"
+   ],
+   "d": "M879.6 283.3L895.6 266.3L901.6 267.3L903.6 243.3L908.6 244.3L910.6 239.3L906.6 235.3L901.6 241.3L906.6 231L895 202L894.6 183.3L909 211L908.4 223.3L918.6 231.3L919.6 238.3L913.4 242.9L914.3 271L908.6 279.3L901.6 282.3L899.6 274.3ZM884.6 299.3L879.6 300.3L881.6 290.3L877.6 292.3L877.6 284.3L888.6 287.3ZM888.6 287.3L890.7 280.7L901.6 276.3L898.5 283Z",
+   "tokenX": 905.9,
+   "tokenY": 272,
+   "labelX": 905.9,
+   "labelY": 298
+  },
+  {
+   "id": "kamchatka",
+   "name": "Kamchatka",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [
+    "irkutsk",
+    "japan",
+    "mongolia",
+    "yakutsk"
+   ],
+   "d": "M1014.6 122.3L1001.6 134.3L986.6 121.3L978.6 130.3L986.6 144.3L966.6 157.3L946.9 156.6L935.6 201.3L925.9 175.9L947.6 144.3L936.6 155.3L921.6 151.3L922.6 163.3L882.4 164.7L867.6 182.3L885.6 185.3L890.6 228.3L868.6 216.3L854.6 197.3L862.6 162.5L882.6 139.3L905.6 145.3L912.6 138.3L905.6 118.3L931.6 101.3L970.6 99.3ZM960.6 97.3L965.6 98.3L968.6 92.3Z",
+   "tokenX": 956.7,
+   "tokenY": 123.2,
+   "labelX": 956.7,
+   "labelY": 149.2
+  },
+  {
+   "id": "madagascar",
+   "name": "Madagascar",
+   "continent": "africa",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_africa",
+    "south_africa"
+   ],
+   "d": "M580.6 588.3L579.5 586.8L577.9 583.3L577.2 579.6L577.2 575.7L577.8 571.8L579.6 566.3L581.6 566.3L583.3 555.3L584.5 552L585.4 550.8L588.2 548.6L590.2 547.5L595.6 545.3L601 540.5L602 539.1L602.6 537.3L605.6 537.3L605.6 554.3L603.6 554.3L603.6 558.3L600.6 558.3L599.6 564.1L597.4 570.1L594.4 575.9L592.5 578.7L590.5 581.2L588.3 583.5L585.9 585.5L583.3 587.1Z",
+   "tokenX": 591.6,
+   "tokenY": 558.4,
+   "labelX": 591.6,
+   "labelY": 584.4
+  },
+  {
+   "id": "middle_east",
+   "name": "Middle East",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "afghanistan",
+    "egypt",
+    "india",
+    "southern_europe",
+    "ukraine"
+   ],
+   "d": "M539.6 274.3L544.6 280.3L586.6 279.3L600.6 295.3L609.6 293.3L611.6 304.3L639.5 298.5L652.6 310.3L651.6 326.3L661.6 346.3L657.6 362.3L641.6 364.3L641.6 358.3L621.9 354.5L616.2 341.9L606.6 342.3L619.6 364.3L623.7 361.5L623.1 369.7L638.6 361.3L647 373.7L640.6 394.3L591.6 421.3L560.9 338.5L566.6 309.3L536.6 310.3L531.6 289.3ZM549.6 320.3L548.6 316.3L558.6 314.3Z",
+   "tokenX": 591.3,
+   "tokenY": 320.8,
+   "labelX": 591.3,
+   "labelY": 346.8
+  },
+  {
+   "id": "mongolia",
+   "name": "Mongolia",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "japan",
+    "kamchatka",
+    "siberia"
+   ],
+   "d": "M787.6 216.3L815.6 219.3L826.6 214.3L827.6 221.3L830.6 221.3L837.9 199L842.6 196.3L856 197.8L868.6 216.3L877.6 216.3L882.6 224.3L890.6 228.3L879.6 245.3L873.6 244.3L864.6 259.3L864.6 262.3L873.3 270.8L875.6 279.3L864.6 284.3L865 278.3L859.7 273.6L859.6 269.3L847.6 271.3L846.6 262.3L837.6 270.3L827.9 263.5L803.6 259.3L803.6 250.3L795.6 249.3L787.6 231.3Z",
+   "tokenX": 849.2,
+   "tokenY": 237.2,
+   "labelX": 849.2,
+   "labelY": 263.2
+  },
+  {
+   "id": "new_guinea",
+   "name": "New Guinea",
+   "continent": "australia",
+   "suit": "cavalry",
+   "adjacent": [
+    "eastern_australia",
+    "indonesia",
+    "western_australia"
+   ],
+   "d": "M885.6 450.3L897.1 447.5L899.6 448.3L896.6 454.3L899.6 457.3L906.9 451.2L927.6 460.6L934.6 468.3L935.6 471.3L931.6 471.3L933.6 476.3L941.6 482.3L937.6 484.3L929.6 481.3L923.6 472.3L916.8 476.3L902.6 473.3L905.6 467.3L895.6 461.3L896.6 459.3L889.9 460.5L888.6 456.3L891.6 455.3L887.6 455.3ZM956.6 460.3L949.6 465.5L935.8 466.8ZM949.6 453.3L960.6 459.3L956.6 460.3Z",
+   "tokenX": 915.2,
+   "tokenY": 465.6,
+   "labelX": 915.2,
+   "labelY": 491.6
+  },
+  {
+   "id": "new_zealand",
+   "name": "New Zealand",
+   "continent": "australia",
+   "suit": "artillery",
+   "adjacent": [],
+   "d": "M944.2 601L929.9 590.5L928.7 587L930 581.3L931.8 577.3L937.3 576.1L941.7 572.9L946.5 562.6L953.3 561.4L957.8 549L961.2 549L962.3 554.6L968 558L966.9 561.4L970.3 561.4L960.1 584.1L956.7 584.1L950.8 595.3ZM962.3 519.6L969.1 530.9L970.3 529.8L973.7 534.3L981.6 535.4L982.7 533.1L986.1 539.9L978.2 556.9L971.4 558L969.1 548.8L963.5 542.2L965.2 534.6Z",
+   "tokenX": 943.3,
+   "tokenY": 585.7,
+   "labelX": 943.3,
+   "labelY": 611.7
+  },
+  {
+   "id": "north_africa",
+   "name": "North Africa",
+   "continent": "africa",
+   "suit": "infantry",
+   "adjacent": [
+    "congo",
+    "east_africa",
+    "egypt"
+   ],
+   "d": "M429.6 311.3L438.1 313.2L453.6 307.3L481.6 305.3L480.6 320.3L476.6 320.7L485.6 327.3L477.6 330.3L474.6 339.3L475.6 368.3L503.6 379.3L505.6 385.3L520.6 394.3L516.6 431.3L488.6 451.3L488.6 471.3L469.6 472.3L469.6 462.3L456.6 459.3L452.6 452.3L438.6 453.3L438.6 456.3L410.6 455.7L398.5 444.9L390.6 426.3L385.6 423.3L388.6 370.3L398.6 350.3L410.5 341.2L415.6 325.3Z",
+   "tokenX": 437.6,
+   "tokenY": 402.1,
+   "labelX": 437.6,
+   "labelY": 428.1
+  },
+  {
+   "id": "northern_europe",
+   "name": "Northern Europe",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "great_britain",
+    "scandinavia",
+    "southern_europe",
+    "ukraine",
+    "western_europe"
+   ],
+   "d": "M478.6 181.3L479.8 193.3L477.9 201L490.6 205.3L491.6 202.3L493.6 205.3L507.6 200.3L506.6 203.3L508.6 204.3L508.6 201.3L512.6 200.3L521.6 206.3L524.6 229.3L521.6 229.3L516.6 250.3L510.6 253.1L501.6 252.3L500.9 240.6L497.3 238L489.6 237.3L488.6 242.3L483.6 243.4L473.3 242L465.6 237.3L456.6 226.3L463.6 218.3L466.1 210.3L471.8 206L469.6 200.3L471.6 188.3Z",
+   "tokenX": 481.6,
+   "tokenY": 221.1,
+   "labelX": 481.6,
+   "labelY": 247.1
+  },
+  {
+   "id": "northwest_territory",
+   "name": "Northwest Territory",
+   "continent": "north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "alaska",
+    "alberta",
+    "greenland",
+    "ontario"
+   ],
+   "d": "M104.6 99.3L104.6 148.3L229.6 155.3ZM229.6 155.3L266 78.9L344.6 122.3ZM260.8 51.8L270.6 20.3L352.7 25.1ZM177.6 91.3L223.6 77.3L233.6 99.3ZM182.6 68.3L200.6 77.3L228.6 69.3ZM247.6 45.3L253.6 65.3L288.6 72.3ZM161.6 87.3L175.6 70.3L188.6 74.3ZM265.6 144.3L271.6 129.3L284.6 138.3ZM236.6 94.3L236.6 82.3L252.6 83.3ZM232.6 72.3L233.6 62.3L247.6 61.3Z",
+   "tokenX": 277.1,
+   "tokenY": 115,
+   "labelX": 277.1,
+   "labelY": 141
+  },
+  {
+   "id": "ontario",
+   "name": "Ontario",
+   "continent": "north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "alberta",
+    "eastern_united_states",
+    "greenland",
+    "northwest_territory",
+    "quebec",
+    "western_united_states"
+   ],
+   "d": "M214.6 154.3L239.6 155.3L239.6 160.3L242.6 161.3L243.6 167.3L251.6 172.3L251.6 175.3L266.7 179.9L274.6 180.3L275.6 189.5L279.6 197.3L278.6 222.3L282.6 222.3L282.6 220.3L286.8 220.5L293.6 224.3L284.6 227.3L284.6 229.3L273 234.7L264.6 236.3L268.6 224.3L272.6 226.3L271.6 220.3L265.4 217.3L257.6 209.1L251 207.9L242.6 210.3L239.6 207.3L210.6 206.3Z",
+   "tokenX": 233.4,
+   "tokenY": 186,
+   "labelX": 233.4,
+   "labelY": 212
+  },
+  {
+   "id": "peru",
+   "name": "Peru",
+   "continent": "south_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "argentina",
+    "brazil",
+    "venezuela"
+   ],
+   "d": "M189.6 405.3L221.6 421.3L214.9 424.9L209.2 435.8L219.6 448.3L228.6 446.3L230.9 455.4L245.6 448.3L250.1 455.3L268.6 463.3L269.9 471.8L276.9 475.6L282.6 488.3L280.6 495.3L292 507L293.6 513.3L288.6 519.3L276.6 521.3L280.6 510.3L259.6 497.3L249.9 496.5L244.6 502.3L234.6 492.3L233.6 484.3L224.9 485L206.6 472.3L181.6 438.3L185.6 424.3L182.6 427.3L182 419.8Z",
+   "tokenX": 251.2,
+   "tokenY": 476.6,
+   "labelX": 251.2,
+   "labelY": 502.6
+  },
+  {
+   "id": "philippines",
+   "name": "Philippines",
+   "continent": "australia",
+   "suit": "artillery",
+   "adjacent": [],
+   "d": "M868.1 354.5L879.3 354.5L878.1 359.5L880.5 361L878.1 366.5L876.8 365.5L877.5 371L885.5 374.5L889.3 386.5L885.5 387.5L884.3 379.5L874.3 379.5L865 373.7L864.4 372.5L869.3 372.5L865.7 365.2L865.6 361.5L869.3 365.5L867.3 360.3ZM850.7 395.5L865.6 381.5L861.9 391.1ZM869.3 381.5L884.3 387.5L879.3 389.5L878.1 393.5L874.3 393.5ZM881.8 390.5L879.3 397.5L874.3 398.5Z",
+   "tokenX": 872.9,
+   "tokenY": 359.9,
+   "labelX": 872.9,
+   "labelY": 385.9
+  },
+  {
+   "id": "quebec",
+   "name": "Quebec",
+   "continent": "north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "eastern_united_states",
+    "greenland",
+    "ontario"
+   ],
+   "d": "M300.6 143.3L320.6 148.3L327.8 165.1L342.6 153.3L348.6 177.3L356.6 183.3L352.6 187.3L361.6 187.3L362.6 196.3L325.6 206.3L332.6 209.3L331.6 221.3L341.6 224.3L322.5 234L325.6 228.3L320.6 228.3L320.6 215.3L303.3 223.7L278.6 222.3L279.6 197.3L284.6 180.3L295.6 174.3L292.6 159.3L298.7 154.9ZM345.6 213.3L365.6 197.3L360.6 202.8L366.6 208.3L366.6 216.3L358.6 218.3Z",
+   "tokenX": 304.5,
+   "tokenY": 196.1,
+   "labelX": 304.5,
+   "labelY": 222.1
+  },
+  {
+   "id": "scandinavia",
+   "name": "Scandinavia",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "great_britain",
+    "iceland",
+    "northern_europe",
+    "ukraine"
+   ],
+   "d": "M487.6 195.3L481.6 173.3L478.6 171.3L474.6 178.3L462.6 175.3L460.7 149.9L483.6 126.3L488.6 110.3L493.6 109.3L493.6 98.3L507.6 95.3L514.2 84.7L524.6 86.3L525.9 80.6L529.6 80.3L529.6 86.3L532.6 81.3L543.6 85.3L538.9 112.2L543.6 151.3L536.6 164.3L515.6 166.3L512.2 155.1L518.1 137.9L516.6 128.3L502.6 151.3L504.6 172.3L498.6 177.3L495.7 191.1Z",
+   "tokenX": 520,
+   "tokenY": 109.8,
+   "labelX": 520,
+   "labelY": 135.8
+  },
+  {
+   "id": "siam",
+   "name": "Siam",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "china",
+    "india"
+   ],
+   "d": "M776.7 333.4L779.9 341.7L777.6 349.3L781.6 349.3L781.6 352.3L793.6 341.9L802.1 345.9L803.6 348.3L796.6 353.3L795.6 361.3L800.6 362.3L804.6 370.3L807.6 370.3L804.6 391.3L799.6 391.3L793.6 399.3L789.6 389.3L778.6 385.3L777.6 381.3L775.3 396.6L779.6 405.3L786.6 408.3L787.6 425.3L777.9 419L770.3 400.8L767.8 380.5L758.6 372.3L762.1 357.3L765.6 355.3L772.6 335.3Z",
+   "tokenX": 776.2,
+   "tokenY": 366.3,
+   "labelX": 776.2,
+   "labelY": 392.3
+  },
+  {
+   "id": "siberia",
+   "name": "Siberia",
+   "continent": "asia",
+   "suit": "infantry",
+   "adjacent": [
+    "china",
+    "irkutsk",
+    "mongolia",
+    "ural",
+    "yakutsk"
+   ],
+   "d": "M686.6 98.3L708.6 111.3L698.6 90.3L758.5 66.2L786.1 74L771.6 91.3L815.6 91.3L809.6 122.3L786.6 124.3L798.6 133.3L798.6 165.3L781.7 202.6L803.6 259.3L759.6 249.3L694.6 117.3L685.6 118.3ZM730.6 58.3L748.6 50.3L745.6 61.3ZM721.6 48.3L726.6 52.3L735.6 47.3ZM748.6 53.3L751.4 64.1L757.6 64.3ZM726.6 52.3L719.6 52.3L719.6 58.3Z",
+   "tokenX": 745.8,
+   "tokenY": 128.4,
+   "labelX": 745.8,
+   "labelY": 154.4
+  },
+  {
+   "id": "south_africa",
+   "name": "South Africa",
+   "continent": "africa",
+   "suit": "cavalry",
+   "adjacent": [
+    "congo",
+    "east_africa",
+    "madagascar"
+   ],
+   "d": "M565.6 525.3L563.9 548.1L546.6 565.3L544.3 580.5L536.6 587.3L533.6 605.3L515.8 623L488.6 630.3L483.6 628.3L484.9 613.8L469.9 554.4L471.3 541.8L476.6 538.3L475.6 514.3L478.6 509.1L474.6 501.3L489.6 504.3L493.6 513.3L498.6 509.3L504.6 510.3L508.8 525.2L525.6 530.3L525.6 534.3L529.6 534.3L527.6 518.3L535.6 513.3L542.6 523.3L542.6 546.3L547.6 547.3L549.6 529.3Z",
+   "tokenX": 509,
+   "tokenY": 565.4,
+   "labelX": 509,
+   "labelY": 591.4
+  },
+  {
+   "id": "southern_europe",
+   "name": "Southern Europe",
+   "continent": "europe",
+   "suit": "artillery",
+   "adjacent": [
+    "middle_east",
+    "northern_europe",
+    "ukraine",
+    "western_europe"
+   ],
+   "d": "M492.6 305.3L488.6 301.3L497.6 293.3L479.6 266.3L468.5 265.3L468.8 247.9L472.6 242.3L482.9 244.6L497.3 239L501.6 253.3L511.6 253.8L520.6 235.3L528.6 233.3L542.6 259.3L528.6 288.3L522.6 287.3L522.9 305.5L518.6 308.3L513.6 290.3L488.6 256.3L489.9 266.5L508.6 291.3L503.6 287.3L503.6 296.3ZM518.6 309.3L534.6 315.3L522.6 315.3ZM475.6 287.3L476.6 277.3L473.6 277.3Z",
+   "tokenX": 519.2,
+   "tokenY": 268.9,
+   "labelX": 519.2,
+   "labelY": 294.9
+  },
+  {
+   "id": "svalbard",
+   "name": "Svalbard",
+   "continent": "europe",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M561.4 50.4L556.7 50.4L554.5 57.3L548.8 58.3L539.4 69.3L533.5 66.5L534.6 64.6L529.9 61.5L531.5 55.1L522 55.1L517.3 42.5L529.1 43.5L540.9 41L544.1 47.3L550.4 36.3L553.5 45.7L560.2 46.4ZM556.7 34.7L566.1 34.7L567.7 39.4L577.2 39.4L575.6 47.3L556.7 45.7ZM556.7 61.5L558.3 55.1L569.3 53.6L567.7 56.7L570.9 58.3L566 63.8L561.4 66.2Z",
+   "tokenX": 540,
+   "tokenY": 54.9,
+   "labelX": 540,
+   "labelY": 80.9
+  },
+  {
+   "id": "ukraine",
+   "name": "Ukraine",
+   "continent": "europe",
+   "suit": "cavalry",
+   "adjacent": [
+    "afghanistan",
+    "middle_east",
+    "northern_europe",
+    "scandinavia",
+    "southern_europe",
+    "ural"
+   ],
+   "d": "M658.6 101.3L651.2 133.8L661.6 211.3L604.6 221.3L601.8 264.2L612.6 280.3L599.6 294.3L568.6 257.3L574.6 247.3L543.6 258.3L520.6 234.3L511.6 192.3L524.6 185.3L521.6 172.3L539.6 169.3L544.4 93L577.8 111L552.6 117.3L562.6 135.3L579.6 136.3L587.6 107.3L599.6 120.3L639.2 97.4ZM604.6 79.3L634.6 53.3L616.6 70.3L620.6 84.3ZM638.6 98.3L633.6 96.3L634.6 90.3Z",
+   "tokenX": 608.6,
+   "tokenY": 173,
+   "labelX": 608.6,
+   "labelY": 199
+  },
+  {
+   "id": "ural",
+   "name": "Ural",
+   "continent": "asia",
+   "suit": "artillery",
+   "adjacent": [
+    "afghanistan",
+    "china",
+    "siberia",
+    "ukraine"
+   ],
+   "d": "M668.6 91.3L680.6 98.3L676.6 107.9L681.6 115.3L680.6 130.3L671.6 136.3L684.6 134.3L686.6 123.3L690.6 123.3L693.6 130.3L699.6 131.3L702.6 144.3L716.6 168.3L723.4 189.5L747.6 213.3L745.6 222.3L754.6 228L759.6 249.3L747.1 250.7L721.6 238.3L714.7 224.5L706.6 222.3L685.2 199L676.6 195.7L661.6 196.3L659.6 191.3L655.6 190.3L651.2 131.9L660.6 118.3L661.6 105.3Z",
+   "tokenX": 682.6,
+   "tokenY": 166.7,
+   "labelX": 682.6,
+   "labelY": 192.7
+  },
+  {
+   "id": "venezuela",
+   "name": "Venezuela",
+   "continent": "south_america",
+   "suit": "infantry",
+   "adjacent": [
+    "brazil",
+    "peru"
+   ],
+   "d": "M189.6 405.3L194.6 384.3L191.6 383.3L192.1 379.2L193.6 373.3L196.6 373.3L196.6 368.3L202.6 376.3L201.6 370.3L213.6 362.3L230.6 356.3L233.6 359.3L229.6 363.3L232.6 368.3L235.8 361.1L260.8 363.7L265.5 366.3L271.6 376.3L305.6 390.3L294.7 402.5L289.6 401.3L283.3 404.3L269.6 405.3L265.6 392.3L250.6 396.3L247.6 405.3L236.6 403.3L230.1 405L229.6 423.3L221.6 423.3Z",
+   "tokenX": 221.3,
+   "tokenY": 385.9,
+   "labelX": 221.3,
+   "labelY": 411.9
+  },
+  {
+   "id": "western_australia",
+   "name": "Western Australia",
+   "continent": "australia",
+   "suit": "cavalry",
+   "adjacent": [
+    "eastern_australia",
+    "indonesia",
+    "new_guinea"
+   ],
+   "d": "M876.6 599.3L871.6 598.3L869.6 589.3L865.1 588.1L867.6 583.3L862.6 585.3L865.6 581.3L857.6 583.3L852.6 573.3L849.6 572.9L834.8 573.3L826.9 576.4L820.6 582.3L807.6 581.3L790.3 588.4L777.6 586.3L779 571.6L773.6 552L775.6 551.3L775.6 536.3L779.6 536.3L781.4 533.3L800.6 525.3L800.6 522.3L828.6 504.3L832.6 509.3L835.6 547.3L876.6 547.3Z",
+   "tokenX": 807.6,
+   "tokenY": 553.1,
+   "labelX": 807.6,
+   "labelY": 579.1
+  },
+  {
+   "id": "western_europe",
+   "name": "Western Europe",
+   "continent": "europe",
+   "suit": "artillery",
+   "adjacent": [
+    "great_britain",
+    "northern_europe",
+    "southern_europe"
+   ],
+   "d": "M416.6 306.3L414.7 293.6L415.6 271.6L422.3 266.6L440.6 267.3L442.8 260.3L439.6 245.3L431.6 241.3L435.6 237.3L438.6 237.3L438.6 239.3L444.7 237.1L443.6 233.3L451.6 233.3L453.6 228.3L456.6 226.3L465.6 237.3L471.6 241.3L467.8 246.9L465.9 254.7L466.6 262.3L470.6 267.3L469.6 270.3L457.6 271.3L451.9 283L450.3 297L444.6 304.3L435.8 306.8L430.6 311.3L425.6 306.3Z",
+   "tokenX": 433.1,
+   "tokenY": 287,
+   "labelX": 433.1,
+   "labelY": 313
+  },
+  {
+   "id": "western_united_states",
+   "name": "Western United States",
+   "continent": "north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "alberta",
+    "central_america",
+    "eastern_united_states",
+    "ontario"
+   ],
+   "d": "M137.6 204.3L210.6 206.3L230.6 206.3L228.6 249.3L210.6 249.3L209.1 254.5L208.6 258.3L200.6 259.3L197.6 272.3L195.2 273.1L192.6 273.3L192.6 286.3L189.1 284.8L186.6 284.3L184.4 282.2L179.7 279.8L177.4 279.3L166 278.3L161.7 276.2L159.6 274.3L145.6 274.3L139.3 263.4L137 258.6L135.3 254L133.3 245.3L132.9 240.9L133.4 231.3L136.6 213.3L140.6 213.3L139.5 208.4Z",
+   "tokenX": 169.7,
+   "tokenY": 240.5,
+   "labelX": 169.7,
+   "labelY": 266.5
+  },
+  {
+   "id": "yakutsk",
+   "name": "Yakutsk",
+   "continent": "asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "irkutsk",
+    "kamchatka",
+    "siberia"
+   ],
+   "d": "M798.6 165.3L798.6 133.3L786.6 124.3L809.6 122.3L817.6 103.3L814.6 86.3L832.9 86.3L834.6 95.3L847.6 99.3L868.6 95.3L862.6 88.3L882.6 87.3L879.6 91.3L927.6 102.3L905.6 118.3L904.6 128.3L912.6 130.3L905.6 145.3L882.6 139.3L860.6 167.3L839.2 155.1ZM858.6 76.3L851.9 79.7L843.6 73.3ZM863.6 72.3L863.6 76.3L873.6 76.3ZM858.6 86.3L860.6 82.3L869.6 83.3Z",
+   "tokenX": 853.1,
+   "tokenY": 128.7,
+   "labelX": 853.1,
+   "labelY": 154.7
+  }
+ ],
+ "seaLinks": [
+  {
+   "from": "alaska",
+   "to": "kamchatka"
+  },
+  {
+   "from": "brazil",
+   "to": "north_africa"
+  },
+  {
+   "from": "central_america",
+   "to": "venezuela"
+  },
+  {
+   "from": "east_africa",
+   "to": "middle_east"
+  },
+  {
+   "from": "egypt",
+   "to": "southern_europe"
+  },
+  {
+   "from": "greenland",
+   "to": "iceland"
+  },
+  {
+   "from": "indonesia",
+   "to": "siam"
+  },
+  {
+   "from": "north_africa",
+   "to": "southern_europe"
+  },
+  {
+   "from": "north_africa",
+   "to": "western_europe"
+  },
+  {
+   "from": "hawaii",
+   "to": "japan"
+  },
+  {
+   "from": "hawaii",
+   "to": "kamchatka"
+  },
+  {
+   "from": "hawaii",
+   "to": "western_united_states"
+  },
+  {
+   "from": "svalbard",
+   "to": "greenland"
+  },
+  {
+   "from": "svalbard",
+   "to": "scandinavia"
+  },
+  {
+   "from": "falkland_isles",
+   "to": "argentina"
+  },
+  {
+   "from": "falkland_isles",
+   "to": "south_africa"
+  },
+  {
+   "from": "philippines",
+   "to": "indonesia"
+  },
+  {
+   "from": "philippines",
+   "to": "japan"
+  },
+  {
+   "from": "new_zealand",
+   "to": "argentina"
+  },
+  {
+   "from": "new_zealand",
+   "to": "eastern_australia"
+  }
+ ],
+ "modifierSlots": {
+  "blizzards": 3,
+  "portals": 5,
+  "capitals": 6
+ }
+}

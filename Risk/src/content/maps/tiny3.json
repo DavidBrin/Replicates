@@ -1,0 +1,72 @@
+{
+ "slug": "tiny3",
+ "name": "Tiny3",
+ "tagline": "Engine fixture: three mutually adjacent territories",
+ "viewBox": "0 0 440 440",
+ "continents": [
+  {
+   "id": "all",
+   "name": "All",
+   "bonus": 1,
+   "color": "#36B0EA",
+   "territories": [
+    "a",
+    "b",
+    "c"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "a",
+   "name": "A",
+   "continent": "all",
+   "suit": "infantry",
+   "adjacent": [
+    "b",
+    "c"
+   ],
+   "d": "M55 18L165 18L183.5 30.3L202 55L202 165L183.5 189.7L165 202L55 202L36.5 189.7L18 165L18 55L36.5 30.3Z",
+   "tokenX": 110,
+   "tokenY": 110,
+   "labelX": 110,
+   "labelY": 136
+  },
+  {
+   "id": "b",
+   "name": "B",
+   "continent": "all",
+   "suit": "cavalry",
+   "adjacent": [
+    "a",
+    "c"
+   ],
+   "d": "M275 18L385 18L403.5 30.3L422 55L422 165L403.5 189.7L385 202L275 202L256.5 189.7L238 165L238 55L256.5 30.3Z",
+   "tokenX": 330,
+   "tokenY": 110,
+   "labelX": 330,
+   "labelY": 136
+  },
+  {
+   "id": "c",
+   "name": "C",
+   "continent": "all",
+   "suit": "artillery",
+   "adjacent": [
+    "a",
+    "b"
+   ],
+   "d": "M55 238L165 238L183.5 250.3L202 275L202 385L183.5 409.7L165 422L55 422L36.5 409.7L18 385L18 275L36.5 250.3Z",
+   "tokenX": 110,
+   "tokenY": 330,
+   "labelX": 110,
+   "labelY": 356
+  }
+ ],
+ "seaLinks": [],
+ "modifierSlots": {
+  "blizzards": 2,
+  "portals": 3,
+  "capitals": 6
+ }
+}
