@@ -1,0 +1,779 @@
+{
+ "slug": "australia-new-zealand",
+ "name": "Australia & New Zealand",
+ "tagline": "38 territories across the Australian states, New Zealand and Papua",
+ "viewBox": "0 0 1600 1100",
+ "continents": [
+  {
+   "id": "mid_west_australasia",
+   "name": "Mid West Australasia",
+   "bonus": 6,
+   "color": "#36B0EA",
+   "territories": [
+    "north_west_new_south_wales",
+    "south_west_new_south_wales",
+    "south_west_queensland",
+    "north_west_south_australia",
+    "north_east_south_australia",
+    "north_mid_south_australia",
+    "south_mid_south_australia"
+   ]
+  },
+  {
+   "id": "north_east_australasia",
+   "name": "North East Australasia",
+   "bonus": 1,
+   "color": "#DA3A4F",
+   "territories": [
+    "west_papua_new_guinea",
+    "east_papua_new_guinea"
+   ]
+  },
+  {
+   "id": "mid_east_australasia",
+   "name": "Mid East Australasia",
+   "bonus": 2,
+   "color": "#5FBF2A",
+   "territories": [
+    "north_east_new_zealand",
+    "north_east_new_zealand_ii"
+   ]
+  },
+  {
+   "id": "north_west_australasia",
+   "name": "North West Australasia",
+   "bonus": 6,
+   "color": "#9B4AE8",
+   "territories": [
+    "south_west_northern_territory",
+    "south_west_south_australia",
+    "north_west_western_australia",
+    "north_east_western_australia_ii",
+    "mid_west_western_australia",
+    "south_west_western_australia",
+    "central_western_australia",
+    "south_mid_western_australia"
+   ]
+  },
+  {
+   "id": "north_mid_australasia",
+   "name": "North Mid Australasia",
+   "bonus": 5,
+   "color": "#E08A24",
+   "territories": [
+    "north_west_northern_territory",
+    "north_east_northern_territory",
+    "north_mid_northern_territory",
+    "south_mid_northern_territory",
+    "north_mid_queensland",
+    "north_west_queensland",
+    "north_east_western_australia"
+   ]
+  },
+  {
+   "id": "south_mid_australasia",
+   "name": "South Mid Australasia",
+   "bonus": 2,
+   "color": "#F0C33A",
+   "territories": [
+    "south_west_new_zealand",
+    "south_west_new_zealand_ii"
+   ]
+  },
+  {
+   "id": "central_australasia",
+   "name": "Central Australasia",
+   "bonus": 6,
+   "color": "#2AC4A8",
+   "territories": [
+    "north_east_new_south_wales",
+    "north_mid_new_south_wales",
+    "south_mid_new_south_wales",
+    "north_east_queensland",
+    "south_mid_queensland",
+    "south_east_queensland",
+    "west_victoria",
+    "east_victoria"
+   ]
+  },
+  {
+   "id": "south_west_australasia",
+   "name": "South West Australasia",
+   "bonus": 1,
+   "color": "#E8569B",
+   "territories": [
+    "west_tasmania",
+    "east_tasmania"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "north_west_new_south_wales",
+   "name": "North West New South Wales",
+   "continent": "mid_west_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_new_south_wales",
+    "north_mid_new_south_wales",
+    "north_mid_south_australia",
+    "south_mid_new_south_wales",
+    "south_mid_south_australia",
+    "south_west_new_south_wales",
+    "south_west_queensland"
+   ],
+   "d": "M745.6 773.4L760.8 743.2L792.1 681.1L836 681.1L836 714.2L836 759.8L836 773.4Z",
+   "tokenX": 801.7,
+   "tokenY": 738.7,
+   "labelX": 801.7,
+   "labelY": 764.7
+  },
+  {
+   "id": "south_west_new_south_wales",
+   "name": "South West New South Wales",
+   "continent": "mid_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_victoria",
+    "north_west_new_south_wales",
+    "south_mid_new_south_wales",
+    "south_mid_south_australia",
+    "west_victoria"
+   ],
+   "d": "M733.1 798.1L745.6 773.4L836 773.4L836 874.6L817.7 859.9L820.9 856.5L825 842.9L823 841.5L817.8 841.5L813.9 844L811.6 843.3L808.7 844.9L800.5 842.3L795.3 843.8L785 838.8L777.1 839.9L773.7 844.2L770.2 845.3L767.3 842.3L766 834.2L761.4 829.2L759.3 823.7L763 815L756.2 810.5L750.3 814.8L750.1 810.6L752.6 804.7L750.9 801.1L744.9 799.7L739 801.3Z",
+   "tokenX": 800.7,
+   "tokenY": 807.8,
+   "labelX": 800.7,
+   "labelY": 833.8
+  },
+  {
+   "id": "north_east_new_south_wales",
+   "name": "North East New South Wales",
+   "continent": "central_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_mid_new_south_wales",
+    "north_west_new_south_wales",
+    "south_east_queensland",
+    "south_mid_queensland",
+    "south_west_queensland"
+   ],
+   "d": "M1022.7 661L1016 677.7L1006.3 688L997.7 702.1L988.1 714.2L836 714.2L836 681.1L932.6 681.1L946.9 671.2L949.5 672L958.4 670.7L961.8 670.8L963 672.9L967.4 672.6L971.4 674.3L972.1 677.6L973.6 678.7L973.6 684.4L978.6 680.1L982.5 678.5L983.2 680.5L987.9 678.2L990.6 674.2L990.8 670.2L1003.2 663.7L1003.9 665.2L1004.9 664.5L1006.7 666L1013.3 665.8L1015.7 663.6Z",
+   "tokenX": 954,
+   "tokenY": 692.8,
+   "labelX": 954,
+   "labelY": 718.8
+  },
+  {
+   "id": "north_mid_new_south_wales",
+   "name": "North Mid New South Wales",
+   "continent": "central_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_new_south_wales",
+    "north_west_new_south_wales",
+    "south_mid_new_south_wales"
+   ],
+   "d": "M988.1 714.2L985.2 717.8L983.1 721.4L981.2 725.8L978.5 729.9L976.2 732.8L972.7 738L965.5 746.2L958.2 752.2L955.4 756.7L953.7 758.8L952.8 759.8L836 759.8L836 714.2Z",
+   "tokenX": 912,
+   "tokenY": 737,
+   "labelX": 912,
+   "labelY": 763
+  },
+  {
+   "id": "south_mid_new_south_wales",
+   "name": "South Mid New South Wales",
+   "continent": "central_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_victoria",
+    "north_mid_new_south_wales",
+    "north_west_new_south_wales",
+    "south_west_new_south_wales"
+   ],
+   "d": "M952.8 759.8L943.9 766.8L942.6 766.8L942.3 767.3L942.9 767.8L942 768.6L937.5 770L934 771.9L922.4 782.2L919.2 786.2L916 787.5L914.9 790.2L911.1 795.4L909.7 796.8L909.3 796.3L907.4 797.2L908.9 797.8L900.6 803.9L889.3 817.4L888.1 820.2L885.8 820.8L884.9 822.6L881.2 824.7L866.1 838.7L853.7 854.9L847.7 861.5L842.1 870.7L837.8 876.1L836 874.6L836 759.8Z",
+   "tokenX": 868.2,
+   "tokenY": 792.1,
+   "labelX": 868.2,
+   "labelY": 818.1
+  },
+  {
+   "id": "south_west_new_zealand",
+   "name": "South West New Zealand",
+   "continent": "south_mid_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "south_west_new_zealand_ii"
+   ],
+   "d": "M1052.7 1042L1032 1056.9L1010.5 1066.1L996.8 1072L982.6 1071.5L978.8 1064.8L962.9 1063.3L967.5 1055.8L990.5 1040.4L1029.7 1019.7L1043.7 1015.8L1052.7 1012Z",
+   "tokenX": 1024.1,
+   "tokenY": 1041.8,
+   "labelX": 1024.1,
+   "labelY": 1067.8
+  },
+  {
+   "id": "south_west_new_zealand_ii",
+   "name": "South West New Zealand II",
+   "continent": "south_mid_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_new_zealand_ii",
+    "south_west_new_zealand"
+   ],
+   "d": "M1062.6 1007.7L1086.5 996.6L1106.1 985.6L1127.3 969.6L1138.3 964.1L1151 952.1L1152.6 951.2L1152.6 982L1131.7 995.3L1115.6 1003.9L1112.3 1014L1099.6 1014.3L1078.3 1022.2L1061.1 1035.9L1052.7 1042L1052.7 1012Z",
+   "tokenX": 1103,
+   "tokenY": 1001.6,
+   "labelX": 1103,
+   "labelY": 1027.6
+  },
+  {
+   "id": "north_east_new_zealand",
+   "name": "North East New Zealand",
+   "continent": "mid_east_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_new_zealand_ii"
+   ],
+   "d": "M1228.3 906L1231 904.9L1247.3 887.8L1257.7 873.5L1262.2 858.5L1265.6 854.5L1264.3 845.2L1265.3 825.2L1269.3 809.2L1277 807.4L1277.5 820L1286.7 825.9L1276.9 846L1271.5 869.6L1283.3 854.3L1286.4 860.4L1276 877.3L1283.9 884.6L1293.9 886.4L1310.2 877.9L1316.7 880.5L1296.9 900.1L1289.7 906Z",
+   "tokenX": 1265.9,
+   "tokenY": 890,
+   "labelX": 1265.9,
+   "labelY": 916
+  },
+  {
+   "id": "north_east_new_zealand_ii",
+   "name": "North East New Zealand II",
+   "continent": "mid_east_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_new_zealand",
+    "south_west_new_zealand_ii"
+   ],
+   "d": "M1246.7 932.7L1230.4 944.5L1209.4 959.3L1189.2 967.9L1191.3 962.2L1187.1 959.1L1211.9 941.3L1216.5 929.3L1205.8 920.5L1212.7 912.5L1228.3 906L1289.7 906L1281.2 913L1268.8 912.5L1258.9 919.2L1252.6 928.6ZM1152.6 951.2L1171 942L1166.9 951.3L1163 960.2L1182.3 951.4L1179.2 960.5L1171.3 969.6L1156.4 979.6L1152.6 982Z",
+   "tokenX": 1231.8,
+   "tokenY": 922.7,
+   "labelX": 1231.8,
+   "labelY": 948.7
+  },
+  {
+   "id": "north_west_northern_territory",
+   "name": "North West Northern Territory",
+   "continent": "north_mid_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_northern_territory",
+    "north_east_western_australia",
+    "north_mid_northern_territory",
+    "south_west_northern_territory"
+   ],
+   "d": "M664.7 418.9L688.1 338.5L690.5 345.7L693 338.5L698.3 345.2L699.9 338L703.9 337.4L697.5 326.6L710 306.2L719.1 299.5L719 290.9L728.7 283.1L729.8 277.7L733.8 280.9L743.8 268.7L745.6 273.9L762.5 272.6L762.5 254.3L756.8 248.8L760.9 246.9L762.5 418.9ZM738.1 265.1L731.2 257.4L730.2 247.3L736.6 251.6L747 246.7L751 252.9ZM722.3 262.6L729.1 250.4L732.1 262.4Z",
+   "tokenX": 721.8,
+   "tokenY": 378.2,
+   "labelX": 721.8,
+   "labelY": 404.2
+  },
+  {
+   "id": "north_east_northern_territory",
+   "name": "North East Northern Territory",
+   "continent": "north_mid_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_mid_northern_territory",
+    "north_mid_queensland",
+    "north_west_northern_territory"
+   ],
+   "d": "M841.7 265.9L806.9 335.7L844.3 380.2L831.7 418.9L762.5 418.9L762.5 249.3ZM827 322.1L836.9 324.1L839.2 311ZM770.8 249.9L770.2 242.9L772.3 241.2ZM850.2 242.3L848.7 246.8L843.7 252.9ZM831.2 362.1L829.9 359.3L831.8 356.4ZM827.6 308.5L828 311.6L825.1 312.3ZM842.7 253.6L840.4 256.5L836.3 258.9ZM824.8 355.2L823.1 355.2L822.5 357.2ZM829.9 354.1L829.6 356.3L828.6 357.2Z",
+   "tokenX": 798.6,
+   "tokenY": 382.5,
+   "labelX": 798.6,
+   "labelY": 408.5
+  },
+  {
+   "id": "south_west_northern_territory",
+   "name": "South West Northern Territory",
+   "continent": "north_west_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "central_western_australia",
+    "north_east_western_australia",
+    "north_east_western_australia_ii",
+    "north_mid_northern_territory",
+    "north_west_northern_territory",
+    "north_west_south_australia",
+    "south_mid_northern_territory"
+   ],
+   "d": "M609 610L620.4 571L653.3 457.8L664.7 418.9L691.5 418.9L691.5 501.1L691.5 610Z",
+   "tokenX": 656,
+   "tokenY": 574.1,
+   "labelX": 656,
+   "labelY": 600.1
+  },
+  {
+   "id": "north_mid_northern_territory",
+   "name": "North Mid Northern Territory",
+   "continent": "north_mid_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_northern_territory",
+    "north_mid_queensland",
+    "north_west_northern_territory",
+    "north_west_queensland",
+    "south_mid_northern_territory",
+    "south_west_northern_territory"
+   ],
+   "d": "M691.5 418.9L762.5 418.9L831.7 418.9L831.2 420.5L805 501.1L691.5 501.1Z",
+   "tokenX": 761.6,
+   "tokenY": 460,
+   "labelX": 761.6,
+   "labelY": 486
+  },
+  {
+   "id": "south_mid_northern_territory",
+   "name": "South Mid Northern Territory",
+   "continent": "north_mid_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_south_australia",
+    "north_mid_northern_territory",
+    "north_west_queensland",
+    "north_west_south_australia",
+    "south_west_northern_territory",
+    "south_west_queensland"
+   ],
+   "d": "M805 501.1L793.7 536L769.6 610L700.9 610L691.5 610L691.5 501.1Z",
+   "tokenX": 739.1,
+   "tokenY": 548.7,
+   "labelX": 739.1,
+   "labelY": 574.7
+  },
+  {
+   "id": "west_papua_new_guinea",
+   "name": "West Papua New Guinea",
+   "continent": "north_east_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "east_papua_new_guinea"
+   ],
+   "d": "M950.7 30.6L982.4 48L1009.7 59.6L1009.7 157.8L994 164.6L981.6 172.9L981.5 191.4L965.6 200L955.8 195.8L936.6 194.8L945.7 112.8Z",
+   "tokenX": 976.6,
+   "tokenY": 134.5,
+   "labelX": 976.6,
+   "labelY": 160.5
+  },
+  {
+   "id": "east_papua_new_guinea",
+   "name": "East Papua New Guinea",
+   "continent": "north_east_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "west_papua_new_guinea"
+   ],
+   "d": "M1009.7 59.6L1037.8 88L1039.5 102.9L1069.2 118.5L1072.4 131.8L1054.9 134.5L1057.2 151.3L1110.8 231.5L1061 220.2L1033.7 168.4L1009.7 157.8ZM1082.6 110L1084.8 102.2L1111.7 103.9L1118.3 91.2L1119 104.6L1129.8 102.6L1147 85L1146.1 70.1L1160.8 73.8L1151.8 103.2L1117.2 124.3ZM1169.1 85.2L1163 60.6L1131.7 34.1L1137.2 28L1174.2 65.4ZM1215.7 139.5L1202.7 92.2L1224.6 129.9Z",
+   "tokenX": 1033,
+   "tokenY": 126.3,
+   "labelX": 1033,
+   "labelY": 152.3
+  },
+  {
+   "id": "north_mid_queensland",
+   "name": "North Mid Queensland",
+   "continent": "north_mid_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_northern_territory",
+    "north_east_queensland",
+    "north_mid_northern_territory",
+    "north_west_queensland"
+   ],
+   "d": "M831.2 420.5L844.3 380.2L860.7 388.7L874.2 408.5L890.7 401.4L920 343.1L924.2 311.8L938 285.4L935.4 275.7L958.7 234.6L965 265.8L963.4 325.5L977.3 322.6L988.3 340.3L980.6 420.5ZM874.7 376.4L875.7 379.2L864.4 384.8ZM952.7 231.8L953.7 234.6L951.9 236ZM869 391L869.7 393.5L866.7 394.4ZM956.4 220.4L956.9 221.7L954.5 222.8ZM953.9 218.2L952.7 220L953.3 221.5Z",
+   "tokenX": 944.7,
+   "tokenY": 381.3,
+   "labelX": 944.7,
+   "labelY": 407.3
+  },
+  {
+   "id": "north_west_queensland",
+   "name": "North West Queensland",
+   "continent": "north_mid_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_queensland",
+    "north_mid_northern_territory",
+    "north_mid_queensland",
+    "south_mid_northern_territory",
+    "south_mid_queensland",
+    "south_west_queensland"
+   ],
+   "d": "M793.7 536L805 501.1L831.2 420.5L909.3 420.5L909.3 536L871.6 536Z",
+   "tokenX": 860.7,
+   "tokenY": 487,
+   "labelX": 860.7,
+   "labelY": 513
+  },
+  {
+   "id": "north_east_queensland",
+   "name": "North East Queensland",
+   "continent": "central_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_mid_queensland",
+    "north_west_queensland",
+    "south_east_queensland",
+    "south_mid_queensland"
+   ],
+   "d": "M909.3 420.5L980.6 420.5L982.4 442.3L997.2 449.7L1000.1 459.3L1014.4 472L1010.7 479.1L1016.2 503.4L1013.1 524.3L1017 527L1022.3 517.6L1027.1 527.2L1030.4 522.6L1028.2 536L909.3 536ZM983.5 427.8L981.5 422L984.4 421.4ZM1019.6 468.7L1019.7 471.7L1018.5 472.3ZM1020.4 514.8L1019.5 515.5L1018.5 519.1ZM1029.4 518.8L1029.6 521.1L1028.3 521.5ZM1020.2 466L1019.3 468.2L1017.9 468.4Z",
+   "tokenX": 958.8,
+   "tokenY": 486.6,
+   "labelX": 958.8,
+   "labelY": 512.6
+  },
+  {
+   "id": "south_west_queensland",
+   "name": "South West Queensland",
+   "continent": "mid_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_new_south_wales",
+    "north_east_south_australia",
+    "north_mid_south_australia",
+    "north_west_new_south_wales",
+    "north_west_queensland",
+    "south_mid_northern_territory",
+    "south_mid_queensland"
+   ],
+   "d": "M769.6 610L793.7 536L871.6 536L871.6 681.1L836 681.1L792.1 681.1L792.3 680.8L823.2 610Z",
+   "tokenX": 833.7,
+   "tokenY": 573.8,
+   "labelX": 833.7,
+   "labelY": 599.8
+  },
+  {
+   "id": "south_mid_queensland",
+   "name": "South Mid Queensland",
+   "continent": "central_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_new_south_wales",
+    "north_east_queensland",
+    "north_west_queensland",
+    "south_east_queensland",
+    "south_west_queensland"
+   ],
+   "d": "M871.6 536L909.3 536L949.4 536L949.4 671.9L948.6 670.9L946.9 671.2L945.8 671.9L944.7 673L942.2 674.6L938.4 676.6L936 678.2L934.9 679.4L933.1 680.8L932.6 681.1L871.6 681.1Z",
+   "tokenX": 910.5,
+   "tokenY": 608.6,
+   "labelX": 910.5,
+   "labelY": 634.6
+  },
+  {
+   "id": "south_east_queensland",
+   "name": "South East Queensland",
+   "continent": "central_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_new_south_wales",
+    "north_east_queensland",
+    "south_mid_queensland"
+   ],
+   "d": "M949.4 536L1028.2 536L1024.2 549L1026.7 556.8L1035.6 565L1036.2 576.4L1040 581.3L1040.6 609.2L1026.4 638.5L1022.7 661L1013.3 665.8L1003.2 663.7L990.8 670.2L987.9 678.2L978.6 680.1L973.6 684.4L969.7 673.1L949.4 671.9ZM1040.6 604.7L1055.1 579.6L1053.4 587.6ZM1028.3 556.6L1028.1 549L1030.7 550.7ZM1026.1 650.6L1027.9 645.8L1031 643.9ZM1034.3 634.7L1031.4 637.1L1030.2 641.7Z",
+   "tokenX": 994.8,
+   "tokenY": 595,
+   "labelX": 994.8,
+   "labelY": 621
+  },
+  {
+   "id": "north_west_south_australia",
+   "name": "North West South Australia",
+   "continent": "mid_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "central_western_australia",
+    "north_east_south_australia",
+    "north_mid_south_australia",
+    "south_mid_northern_territory",
+    "south_mid_western_australia",
+    "south_west_northern_territory",
+    "south_west_south_australia"
+   ],
+   "d": "M579.2 680.8L590.5 653.9L609 610L691.5 610L700.9 610L700.9 680.8L655.5 680.8Z",
+   "tokenX": 640.1,
+   "tokenY": 645.4,
+   "labelX": 640.1,
+   "labelY": 671.4
+  },
+  {
+   "id": "north_east_south_australia",
+   "name": "North East South Australia",
+   "continent": "mid_west_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_mid_south_australia",
+    "north_west_south_australia",
+    "south_mid_northern_territory",
+    "south_west_queensland"
+   ],
+   "d": "M700.9 610L769.6 610L823.2 610L792.3 680.8L700.9 680.8Z",
+   "tokenX": 762.1,
+   "tokenY": 645.4,
+   "labelX": 762.1,
+   "labelY": 671.4
+  },
+  {
+   "id": "south_west_south_australia",
+   "name": "South West South Australia",
+   "continent": "north_west_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "north_mid_south_australia",
+    "north_west_south_australia",
+    "south_mid_south_australia",
+    "south_mid_western_australia"
+   ],
+   "d": "M579.2 680.8L655.5 680.8L655.5 823.6L646.9 825.3L655.5 818.1L655.5 797.2L637.2 812.2L634.5 819.5L633 816.8L629.5 818.5L624.9 810.5L627.8 808.2L630.6 810.3L634.3 795L634 780L627.9 778L629.3 768.4L633.9 763.8L628 755.9L620.4 755.4L615 750.1L605 751.3L592 739.4L552.6 744ZM632.7 840L650.1 833.3L655.5 837L655.5 839.6L645.8 844.2L634.5 843.2Z",
+   "tokenX": 620.5,
+   "tokenY": 715.7,
+   "labelX": 620.5,
+   "labelY": 741.7
+  },
+  {
+   "id": "north_mid_south_australia",
+   "name": "North Mid South Australia",
+   "continent": "mid_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_south_australia",
+    "north_west_new_south_wales",
+    "north_west_south_australia",
+    "south_mid_south_australia",
+    "south_west_queensland",
+    "south_west_south_australia"
+   ],
+   "d": "M655.5 680.8L700.9 680.8L792.3 680.8L792.1 681.1L760.8 743.2L655.5 743.2Z",
+   "tokenX": 723.9,
+   "tokenY": 712,
+   "labelX": 723.9,
+   "labelY": 738
+  },
+  {
+   "id": "south_mid_south_australia",
+   "name": "South Mid South Australia",
+   "continent": "mid_west_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_mid_south_australia",
+    "north_west_new_south_wales",
+    "south_west_new_south_wales",
+    "south_west_south_australia",
+    "west_victoria"
+   ],
+   "d": "M760.8 743.2L733.1 798.1L678.3 888.8L673.2 887.8L669.8 870.4L680.7 850.8L678.1 833L682.5 831.7L683.2 833.7L686.2 828.4L669.7 834.4L664.3 833.7L677.5 820.4L680.4 814.5L681 801L662 823.1L655.5 823.6L655.5 818.1L659.7 817.9L670.9 800.8L685.6 787.5L692.5 776.3L695.1 764.5L673 788.6L655.5 797.2L655.5 743.2ZM660.1 837L658.6 840.2L655.5 839.6L655.5 837Z",
+   "tokenX": 719.9,
+   "tokenY": 768.5,
+   "labelX": 719.9,
+   "labelY": 794.5
+  },
+  {
+   "id": "west_tasmania",
+   "name": "West Tasmania",
+   "continent": "south_west_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_tasmania"
+   ],
+   "d": "M679.1 1007.5L685.5 1002.7L680.5 1002.2L680.1 994.4L686.5 979.5L686.8 985.1L689.7 982.2L690 977.7L687.6 978.8L695.7 954.7L702.9 945.9L710.7 948L710.7 996.6L710.7 993.8L704 1000.5L701 999.3L691.5 1008.9L687.9 1006.8ZM697.6 933.9L707.4 922.1L704.1 930.3ZM704.1 1001.9L700.4 1006.6L697.9 1006.6ZM708 997.7L705.8 999.4L705.7 1001.1ZM707.5 940.8L705.6 941.8L704.6 944.1Z",
+   "tokenX": 699.3,
+   "tokenY": 987.9,
+   "labelX": 699.3,
+   "labelY": 1013.9
+  },
+  {
+   "id": "east_tasmania",
+   "name": "East Tasmania",
+   "continent": "south_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "west_tasmania"
+   ],
+   "d": "M712.8 1000.6L713.8 996.4L717.8 994.4L715.5 992.7L710.7 996.6L710.7 948L721.7 956.5L729.7 954.7L730.4 956.7L735.5 952.8L743 953L755 948.2L757.9 949.9L738.3 979.2L740.1 973.9L725.6 986.8L717 999.3ZM765.3 937L765.7 928.4L770.7 925.3L772.8 931ZM768.9 939.3L765.8 942.1L761.7 940.1ZM728.5 987.8L727.7 987.3L725 989.9ZM763.4 942.3L761.5 942.6L761.5 944.2Z",
+   "tokenX": 724.3,
+   "tokenY": 969.8,
+   "labelX": 724.3,
+   "labelY": 995.8
+  },
+  {
+   "id": "west_victoria",
+   "name": "West Victoria",
+   "continent": "central_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "east_victoria",
+    "south_mid_south_australia",
+    "south_west_new_south_wales"
+   ],
+   "d": "M732.6 797.2L739 801.3L748 799.9L748 901.8L746.1 899.1L748 897.3L748 893L739.3 898.3L737.6 894.8L740.8 894.8L747.9 889.3L746.8 885L735.1 890.3L738.6 891.9L710.8 905.4L706.7 903.7L698.9 895.8L694.2 896.1L691.5 893.5L688.3 893.2L684.4 895.8L681.9 895.3L681.1 891L678.3 888.8ZM745.4 898.1L745.1 899.5L741.7 898.9ZM746.8 896.5L748 896L748 894.3Z",
+   "tokenX": 721.6,
+   "tokenY": 867.7,
+   "labelX": 721.6,
+   "labelY": 893.7
+  },
+  {
+   "id": "east_victoria",
+   "name": "East Victoria",
+   "continent": "central_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "south_mid_new_south_wales",
+    "south_west_new_south_wales",
+    "west_victoria"
+   ],
+   "d": "M748 799.9L752.6 804.7L750.3 814.8L756.2 810.5L763 815L759.3 823.7L768.5 844.5L785 838.8L795.3 843.8L806.2 844.7L823 841.5L825.3 843.5L817.7 859.9L837.8 876.1L826 882.1L796.6 885.8L768.7 901.9L757.1 903.3L756.6 907L759.6 905.8L753.2 912L754 906.4L749.8 907.2L750.8 902L748 901.8L751.7 892.6L748 893ZM749.8 894.2L748 894.3L748 896Z",
+   "tokenX": 774,
+   "tokenY": 869.4,
+   "labelX": 774,
+   "labelY": 895.4
+  },
+  {
+   "id": "north_west_western_australia",
+   "name": "North West Western Australia",
+   "continent": "north_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "central_western_australia",
+    "mid_west_western_australia",
+    "north_east_western_australia",
+    "north_east_western_australia_ii"
+   ],
+   "d": "M343.3 571L348.3 558.9L356.4 548L360.7 535.8L360.6 529.1L371.9 510.8L374 509.5L369.9 525.4L375.2 521.9L384.7 509.4L400.5 501.3L413.6 490.1L428.7 480.9L436.6 480.6L441 482.5L446.5 480.6L457.6 474.1L468.4 471.3L476.6 464.8L485.1 465.8L488.9 463.9L497 462.7L511 456.7L515.7 453.6L515.7 571ZM405.5 481.2L404.9 484.2L403.3 486.1L402.2 485.7Z",
+   "tokenX": 468.3,
+   "tokenY": 523.1,
+   "labelX": 468.3,
+   "labelY": 549.1
+  },
+  {
+   "id": "north_east_western_australia",
+   "name": "North East Western Australia",
+   "continent": "north_mid_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_western_australia_ii",
+    "north_west_northern_territory",
+    "north_west_western_australia",
+    "south_west_northern_territory"
+   ],
+   "d": "M688.1 338.5L653.3 457.8L515.7 457.8L547.5 418.6L551.6 394.5L568.6 377.3L573.3 404L581.4 372L601.9 376.4L595.7 373.9L600.7 353.9L612.4 352.7L609.8 345.7L619.5 344.7L628.8 323.2L628.1 330L634.9 329.1L638.1 316.3L646.7 320.8L654.9 310.5L663.8 317.6L673.7 334.5L668.4 349.8L678.8 336.4ZM617.8 332.8L619.3 331.2L619.2 328.2ZM603.2 352.3L604.4 350.5L603.3 348.3Z",
+   "tokenX": 620.8,
+   "tokenY": 414.9,
+   "labelX": 620.8,
+   "labelY": 440.9
+  },
+  {
+   "id": "north_east_western_australia_ii",
+   "name": "North East Western Australia II",
+   "continent": "north_west_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "central_western_australia",
+    "north_east_western_australia",
+    "north_west_western_australia",
+    "south_west_northern_territory"
+   ],
+   "d": "M653.3 457.8L620.4 571L515.7 571L515.7 457.8Z",
+   "tokenX": 572.4,
+   "tokenY": 514.4,
+   "labelX": 572.4,
+   "labelY": 540.4
+  },
+  {
+   "id": "mid_west_western_australia",
+   "name": "Mid West Western Australia",
+   "continent": "north_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "central_western_australia",
+    "north_west_western_australia",
+    "south_mid_western_australia",
+    "south_west_western_australia"
+   ],
+   "d": "M343.3 571L441.4 571L441.4 698.8L326.1 698.8L330 684.5L328.4 678.1L329.7 670.4L327.1 659.5L330.8 642.1L325.3 614.4L327.3 615.8L329.2 611.9L329.4 623.3L332.9 623.4L336 617.9L333.2 612.4L332.7 603.2L334.6 600.4L337.5 606L335.3 613.1L338.6 610.4L338.6 617.7L339.8 619.4L342.8 616.9L346.3 606.5L343.3 585.5ZM325.5 612.3L324.5 604.8L325.1 599.7L326.9 598.5Z",
+   "tokenX": 388.1,
+   "tokenY": 645.2,
+   "labelX": 388.1,
+   "labelY": 671.2
+  },
+  {
+   "id": "south_west_western_australia",
+   "name": "South West Western Australia",
+   "continent": "north_west_australasia",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_west_western_australia",
+    "south_mid_western_australia"
+   ],
+   "d": "M284.5 804.9L283.3 802.9L284.8 798.3L290.7 786L292.6 789L295.7 788.9L302.7 782.7L319.8 748.5L321 744L321 717.7L326.1 698.8L441.4 698.8L441.4 789.2L436.5 793.4L427.2 796.8L424 794.4L408.9 796.9L408.7 794.2L397.9 793.1L369.6 796.5L358.4 805.5L347.7 808L329.2 819.6L318.5 822.1L301.4 819.6L294.4 815.2L291.1 806.8L287.4 804Z",
+   "tokenX": 369.5,
+   "tokenY": 747.4,
+   "labelX": 369.5,
+   "labelY": 773.4
+  },
+  {
+   "id": "central_western_australia",
+   "name": "Central Western Australia",
+   "continent": "north_west_australasia",
+   "suit": "infantry",
+   "adjacent": [
+    "mid_west_western_australia",
+    "north_east_western_australia_ii",
+    "north_west_south_australia",
+    "north_west_western_australia",
+    "south_mid_western_australia",
+    "south_west_northern_territory"
+   ],
+   "d": "M609 610L590.5 653.9L441.4 653.9L441.4 571L515.7 571L620.4 571Z",
+   "tokenX": 530.9,
+   "tokenY": 612.5,
+   "labelX": 530.9,
+   "labelY": 638.5
+  },
+  {
+   "id": "south_mid_western_australia",
+   "name": "South Mid Western Australia",
+   "continent": "north_west_australasia",
+   "suit": "cavalry",
+   "adjacent": [
+    "central_western_australia",
+    "mid_west_western_australia",
+    "north_west_south_australia",
+    "south_west_south_australia",
+    "south_west_western_australia"
+   ],
+   "d": "M590.5 653.9L579.2 680.8L552.6 744L551.5 744.2L542.5 748.5L532.3 752.7L524.6 754.6L517.2 757.2L512.7 758L507.3 758.3L496.7 757.1L492.5 758L484.1 762.8L481.8 764L477.7 765.3L466 771.5L461.4 772.8L458.5 773.2L455.7 774.5L452.4 777.2L446.2 784.4L442.9 787.9L441.4 789.2L441.4 698.8L441.4 653.9Z",
+   "tokenX": 506.6,
+   "tokenY": 706,
+   "labelX": 506.6,
+   "labelY": 732
+  }
+ ],
+ "seaLinks": [
+  {
+   "from": "west_tasmania",
+   "to": "west_victoria"
+  },
+  {
+   "from": "south_west_new_zealand",
+   "to": "east_victoria"
+  },
+  {
+   "from": "north_east_new_zealand",
+   "to": "north_east_new_south_wales"
+  },
+  {
+   "from": "west_papua_new_guinea",
+   "to": "north_mid_queensland"
+  }
+ ],
+ "modifierSlots": {
+  "blizzards": 2,
+  "portals": 4,
+  "capitals": 6
+ }
+}

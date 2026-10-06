@@ -1,0 +1,975 @@
+{
+ "slug": "asia",
+ "name": "Asia",
+ "tagline": "48 territories from the Bosphorus to the Bering Strait",
+ "viewBox": "0 0 1600 1000",
+ "continents": [
+  {
+   "id": "central_asia",
+   "name": "Central Asia",
+   "bonus": 5,
+   "color": "#36B0EA",
+   "territories": [
+    "afghanistan",
+    "east_iran",
+    "kyrgyzstan",
+    "pakistan",
+    "tajikistan",
+    "uzbekistan"
+   ]
+  },
+  {
+   "id": "south_east_asia",
+   "name": "South East Asia",
+   "bonus": 5,
+   "color": "#DA3A4F",
+   "territories": [
+    "south_west_india",
+    "south_east_india",
+    "west_indonesia",
+    "east_indonesia_timor_leste",
+    "malaysia_brunei",
+    "myanmar_bangladesh",
+    "philippines",
+    "thailand"
+   ]
+  },
+  {
+   "id": "north_east_asia",
+   "name": "North East Asia",
+   "bonus": 4,
+   "color": "#5FBF2A",
+   "territories": [
+    "north_mid_china",
+    "north_east_china",
+    "japan",
+    "mongolia",
+    "north_korea_south_korea",
+    "south_east_russia"
+   ]
+  },
+  {
+   "id": "north_west_asia",
+   "name": "North West Asia",
+   "bonus": 4,
+   "color": "#9B4AE8",
+   "territories": [
+    "west_iran",
+    "west_kazakhstan",
+    "south_west_russia",
+    "south_west_russia_ii",
+    "turkmenistan"
+   ]
+  },
+  {
+   "id": "mid_east_asia",
+   "name": "Mid East Asia",
+   "bonus": 6,
+   "color": "#E08A24",
+   "territories": [
+    "cambodia",
+    "south_west_china",
+    "south_mid_china",
+    "north_east_india_bhutan",
+    "laos",
+    "nepal",
+    "taiwan",
+    "vietnam"
+   ]
+  },
+  {
+   "id": "north_mid_asia",
+   "name": "North Mid Asia",
+   "bonus": 5,
+   "color": "#F0C33A",
+   "territories": [
+    "north_west_china",
+    "north_west_india",
+    "east_kazakhstan",
+    "north_mid_russia",
+    "north_mid_russia_ii",
+    "north_east_russia"
+   ]
+  },
+  {
+   "id": "south_mid_asia",
+   "name": "South Mid Asia",
+   "bonus": 1,
+   "color": "#2AC4A8",
+   "territories": [
+    "sri_lanka"
+   ]
+  },
+  {
+   "id": "south_west_asia",
+   "name": "South West Asia",
+   "bonus": 3,
+   "color": "#E8569B",
+   "territories": [
+    "oman_united_arab_emirates",
+    "west_saudi_arabia",
+    "east_saudi_arabia_qatar",
+    "yemen"
+   ]
+  },
+  {
+   "id": "mid_west_asia",
+   "name": "Mid West Asia",
+   "bonus": 3,
+   "color": "#7D8CF0",
+   "territories": [
+    "azerbaijan_georgia",
+    "iraq_kuwait",
+    "syria_jordan",
+    "turkey"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "afghanistan",
+   "name": "Afghanistan",
+   "continent": "central_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_iran",
+    "north_west_china",
+    "pakistan",
+    "tajikistan",
+    "turkmenistan",
+    "uzbekistan"
+   ],
+   "d": "M688.4 375.6L691 378.8L664.7 386L661.1 391L667.3 401.6L664.8 415.1L656.3 414.7L661.9 422.4L655.2 432.4L657.5 439.5L638.1 446.6L636.8 463.4L604.2 470.2L587.9 464.1L593.8 453.3L576.8 426.8L575.2 395.8L591.4 398.7L591.8 393.5L602.2 388.2L601.3 379.1L608 376.9L608.2 372.8L630.9 380.1L639.6 378.7L640.8 373.4L646 373.7L648.7 363.5L663.9 383.4L673.3 374.7Z",
+   "tokenX": 621.3,
+   "tokenY": 416.7,
+   "labelX": 621.3,
+   "labelY": 442.7
+  },
+  {
+   "id": "cambodia",
+   "name": "Cambodia",
+   "continent": "mid_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "laos",
+    "thailand",
+    "vietnam"
+   ],
+   "d": "M1013.2 682.7L1008.8 667.3L1013.2 656.8L1025 654.4L1034.1 656.2L1042.7 661.1L1045.5 652.4L1054.7 657.1L1058.2 665.5L1059.4 680.8L1044.8 690.5L1050 698.3L1040.1 699.2L1032.6 704.3L1024.4 702.5L1019.8 695.8Z",
+   "tokenX": 1031.5,
+   "tokenY": 676.7,
+   "labelX": 1031.5,
+   "labelY": 702.7
+  },
+  {
+   "id": "north_west_china",
+   "name": "North West China",
+   "continent": "north_mid_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "afghanistan",
+    "east_kazakhstan",
+    "kyrgyzstan",
+    "mongolia",
+    "nepal",
+    "north_east_india_bhutan",
+    "north_mid_russia_ii",
+    "north_west_india",
+    "pakistan",
+    "south_west_china",
+    "tajikistan"
+   ],
+   "d": "M739.1 247.5L778.2 272.3L786.8 289.1L809.2 292.4L809.2 479.1L742.3 444.1L736 431.1L742.9 432.7L741.4 426.7L734 411.2L720.3 397.6L704.5 393L683.8 364.7L675.3 363.3L669.6 352.9L669.1 347.8L675.3 342.5L689.8 341.8L690.4 334.8L700.7 333.4L712.8 323.2L709.7 314.5L714.2 311.7L698.7 293L716.2 286.5L713 267.7L730.7 271.1L732.8 266.4L727.9 256.1L734 255.2Z",
+   "tokenX": 755.3,
+   "tokenY": 356.2,
+   "labelX": 755.3,
+   "labelY": 382.2
+  },
+  {
+   "id": "south_west_china",
+   "name": "South West China",
+   "continent": "mid_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "mongolia",
+    "myanmar_bangladesh",
+    "nepal",
+    "north_east_china",
+    "north_east_india_bhutan",
+    "north_mid_china",
+    "north_west_china",
+    "south_mid_china"
+   ],
+   "d": "M809.2 292.4L822.5 299.1L828.2 300.3L837.1 310.2L845.2 316.6L854.2 316.3L872.7 318.8L882.9 317.3L892 318.9L907.8 325.5L917.9 325.5L920.9 327.3L920.9 482.8L909.8 481.1L911.3 476L904.8 468.6L900 473.6L891.5 470.7L883.5 478.3L878 487.3L871.1 488.8L866.2 485.5L854.1 482.5L850.1 485.5L846.7 494.5L843.3 485L838.5 487.5L827.6 486.4L816.7 483.6L809.2 479.1Z",
+   "tokenX": 865,
+   "tokenY": 393.5,
+   "labelX": 865,
+   "labelY": 419.5
+  },
+  {
+   "id": "north_mid_china",
+   "name": "North Mid China",
+   "continent": "north_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "mongolia",
+    "north_east_china",
+    "north_east_russia",
+    "north_korea_south_korea",
+    "south_east_russia",
+    "south_west_china"
+   ],
+   "d": "M1120.9 255.9L1132.5 290.6L1116.9 292.5L1133 320.2L1123.3 313.8L1114.2 324.6L1119.3 330.4L1105.6 326.5L1096.5 347.4L1083.5 355.4L1076.8 355.4L1067.6 336.1L1056.3 354.9L920.9 355.4L920.9 327.3L953.8 318.8L967.5 305.6L959 291.1L974 294.2L993.4 274.5L1011.4 274.3L988.5 260.1L967.4 259.4L964 241.6L976.3 245.4L982.7 239L971.5 208.5L1013.3 213L1051.8 242.9L1094.3 263Z",
+   "tokenX": 1052.6,
+   "tokenY": 293.2,
+   "labelX": 1052.6,
+   "labelY": 319.2
+  },
+  {
+   "id": "north_east_china",
+   "name": "North East China",
+   "continent": "north_east_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_mid_china",
+    "south_mid_china",
+    "south_west_china"
+   ],
+   "d": "M1132.6 462.4L920.9 462.4L920.9 355.4L1083.5 355.4L1083.3 355.8L1075.8 358.9L1076.8 355.4L1048.7 355.4L1048.2 355.5L1046.7 360.7L1055.3 368.3L1063.3 370.2L1066.3 375.3L1074.8 378.6L1080.1 370.5L1090.2 374.9L1095.9 375.2L1100.4 381.2L1089.9 384.3L1089 390.5L1083.5 396.3L1083 404.4L1095.4 410.8L1104.3 422.2L1114.5 432.9L1124.6 442L1128.3 450.8L1124.1 454L1128.9 460.4Z",
+   "tokenX": 974.4,
+   "tokenY": 408.9,
+   "labelX": 974.4,
+   "labelY": 434.9
+  },
+  {
+   "id": "south_mid_china",
+   "name": "South Mid China",
+   "continent": "mid_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "laos",
+    "myanmar_bangladesh",
+    "north_east_china",
+    "south_west_china",
+    "vietnam"
+   ],
+   "d": "M1135.7 464.1L1139.7 483.3L1128.1 528L1109.5 549.7L1067.2 566.8L1067.3 579.9L1062.4 580.7L1058.6 566.8L1031.2 561.7L1025.1 549.5L1010.4 542.7L979.9 555.4L984.8 569.6L976.7 561.2L970.9 564.8L958.3 557.9L958.5 547.6L946.9 533.9L937.8 536L935 521.4L940.8 511.3L935.1 492L920.9 482.8L920.9 462.4ZM1064.6 606.7L1056.1 602.8L1053.4 592.1L1071.3 583.2L1071.3 600.7Z",
+   "tokenX": 1061.3,
+   "tokenY": 514.1,
+   "labelX": 1061.3,
+   "labelY": 540.1
+  },
+  {
+   "id": "azerbaijan_georgia",
+   "name": "Azerbaijan & Georgia",
+   "continent": "mid_west_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "south_west_russia",
+    "south_west_russia_ii",
+    "turkey",
+    "west_iran"
+   ],
+   "d": "M461.7 365.4L453 360.1L451.5 351.2L440.3 360.3L438.4 352.5L429.9 347.7L431.5 344.1L421.3 332.8L434.5 334.8L431.7 326L445.4 333.8L450.1 326.6L469.5 343.7L462.7 344.6ZM374.2 308.9L422.3 319L435.4 333.5L422.9 331L409.9 334.5L400.7 329.1L391.8 329.6L388.5 317.5ZM440.3 360.3L412.5 343.8L409.9 334.5L421.3 332.8L427.3 337.6ZM437.2 360.7L423.4 349.8L432 352.4Z",
+   "tokenX": 444,
+   "tokenY": 343.9,
+   "labelX": 444,
+   "labelY": 369.9
+  },
+  {
+   "id": "north_west_india",
+   "name": "North West India",
+   "continent": "north_mid_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_india_bhutan",
+    "north_west_china",
+    "pakistan",
+    "south_west_india"
+   ],
+   "d": "M752.6 543.1L674 543.1L668.5 538.5L673.1 530.3L693.3 530.3L689.4 519.8L683 513.6L680.1 504.3L673 498.8L680.2 486.2L690.9 487.1L697.4 474.5L700 462.4L705.6 450.4L703.3 442L708.9 435.2L700.2 429.4L694.9 421.4L688.8 411.3L691.6 406.2L705.7 409.1L715 407.3L720.3 397.6L734 411.2L736 420.7L741.4 426.7L742.9 432.7L736 431.1L742.3 444.1L752.6 451.2Z",
+   "tokenX": 719.1,
+   "tokenY": 504.7,
+   "labelX": 719.1,
+   "labelY": 530.7
+  },
+  {
+   "id": "north_east_india_bhutan",
+   "name": "North East India & Bhutan",
+   "continent": "mid_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "myanmar_bangladesh",
+    "nepal",
+    "north_west_china",
+    "north_west_india",
+    "south_east_india",
+    "south_west_china",
+    "south_west_india"
+   ],
+   "d": "M922.7 497.1L906.3 503.3L905.8 536.5L898 533.7L900 543.1L882.2 543.1L886.5 522.8L863.2 519.2L847.1 504.8L857.5 543.1L752.6 543.1L752.6 451.2L767.8 459.9L763.2 476.5L816.2 501.4L842.7 505.2L838.5 487.5L843.3 485L857 501.5L877.3 500.1L871.1 488.8L891.5 470.7L904.8 468.6L909.8 481.1L920.1 482.9ZM877.3 500.1L857 501.5L846.7 494.5L854.1 482.5L871.1 488.8Z",
+   "tokenX": 780.4,
+   "tokenY": 515.3,
+   "labelX": 780.4,
+   "labelY": 541.3
+  },
+  {
+   "id": "south_west_india",
+   "name": "South West India",
+   "continent": "south_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_india_bhutan",
+    "north_west_india",
+    "south_east_india"
+   ],
+   "d": "M775.5 729.9L771.2 724.6L765.3 706.7L760.5 693.8L756.7 687.8L750.4 675.6L746.3 659.7L743.8 651.8L733.1 634.5L725.9 610.1L720.7 594.1L718.3 579L714.6 567.3L702.4 574.8L695.6 573.3L681.1 558.3L684.7 553.8L681.2 548.9L674 543.1L752.6 543.1L775.5 543.1Z",
+   "tokenX": 746.6,
+   "tokenY": 572,
+   "labelX": 746.6,
+   "labelY": 598
+  },
+  {
+   "id": "south_east_india",
+   "name": "South East India",
+   "continent": "south_east_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "myanmar_bangladesh",
+    "north_east_india_bhutan",
+    "south_west_india"
+   ],
+   "d": "M900 543.1L901.9 555.9L898 558.8L890.4 543.1L886.2 543.1L886.4 547.2L882.2 543.1L857.5 543.1L864.3 558.7L864 563.2L846.8 565.6L849.3 574.9L845.8 582.3L834 590.7L826.1 605.4L812.4 621.5L813.3 627.3L797 635.6L795.5 645.2L801.3 672.3L798.5 684.3L800.6 706L795.8 706.6L792.3 716.3L795.5 720.6L787.1 724.2L784.6 732.9L781 736.6L775.5 729.9L775.5 543.1Z",
+   "tokenX": 807.1,
+   "tokenY": 574.7,
+   "labelX": 807.1,
+   "labelY": 600.7
+  },
+  {
+   "id": "west_indonesia",
+   "name": "West Indonesia",
+   "continent": "south_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_indonesia_timor_leste",
+    "malaysia_brunei"
+   ],
+   "d": "M1052.2 914.3L1041.6 914.5L1022.5 893.3L985.5 815.5L952.1 768.5L973.2 771.5L1004.9 811.9L1014.7 812.1L1035.8 837.6L1031.9 848.1L1056.8 878.4ZM1139.8 891.8L1125 879.1L1113.5 883.8L1096.2 876.8L1084.7 833.6L1091.2 813.1L1099.6 829L1121.8 819.7L1131 823.3L1138.7 820.5L1144.9 800.4L1144.9 889.2ZM1143.6 946.6L1132.2 951.4L1046.9 927.1L1054.4 914.8L1078 926.2L1096.2 927.4L1098.7 922.1Z",
+   "tokenX": 1038,
+   "tokenY": 883.8,
+   "labelX": 1038,
+   "labelY": 909.8
+  },
+  {
+   "id": "east_indonesia_timor_leste",
+   "name": "East Indonesia & Timor-Leste",
+   "continent": "south_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "malaysia_brunei",
+    "west_indonesia"
+   ],
+   "d": "M1383.2 956.1L1390.3 872.5L1290.8 851ZM1152.2 890.6L1180.6 827.4L1160.2 783.5ZM1238.5 817.8L1190.6 831.7L1185.6 912ZM1265.7 811L1273.2 824.4L1267.6 850.6ZM1292.5 888.6L1264.8 882.7L1267.3 875.6ZM1212.4 943L1210.2 950.1L1183.1 952.2ZM1230.9 953.3L1223.8 969.2L1215.3 972ZM1254.1 946.9L1232.4 950.2L1231.3 959.7ZM1175.7 950.9L1164.8 943L1152.5 955ZM1172.9 961.8L1182 959.2L1188.3 970.5Z",
+   "tokenX": 1362.5,
+   "tokenY": 893.3,
+   "labelX": 1362.5,
+   "labelY": 919.3
+  },
+  {
+   "id": "west_iran",
+   "name": "West Iran",
+   "continent": "north_west_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "azerbaijan_georgia",
+    "east_iran",
+    "iraq_kuwait",
+    "turkey",
+    "turkmenistan"
+   ],
+   "d": "M418.3 353L423.4 349.8L431.1 359.2L437.2 360.7L451.5 351.2L454.7 354.5L453 360.1L461.7 365.4L466.2 373.8L482.1 381.8L494.8 383.8L507.6 380.8L519.4 369.4L527.9 368L527.9 500.2L508.2 487.7L491 460.3L486.5 462.2L480.2 458.3L477.6 462.9L471.7 456.7L461.5 432.8L449.6 426.4L441.5 415.3L441.9 406.2L445.6 402.3L443.6 395.5L437.3 392.1L422.6 369.3Z",
+   "tokenX": 493.2,
+   "tokenY": 418.7,
+   "labelX": 493.2,
+   "labelY": 444.7
+  },
+  {
+   "id": "east_iran",
+   "name": "East Iran",
+   "continent": "central_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "afghanistan",
+    "pakistan",
+    "turkmenistan",
+    "west_iran"
+   ],
+   "d": "M528.4 367.6L534.8 368.7L545.8 374.4L553 375.7L565.4 385.8L572 386.2L575.2 395.8L574.9 418.7L579.1 420.4L576.8 426.8L581.8 436.2L584.2 443.7L591.4 445.7L593.8 453.3L587.9 464.1L598.7 477.6L608.4 482.9L610.7 493.5L615.4 495.5L617.3 501.1L605.4 507.3L604.4 521.5L576.2 515L565.7 513.4L559.3 498.5L554.6 496.4L548 498.5L539.8 504.4L527.9 500.2L527.9 368Z",
+   "tokenX": 558.3,
+   "tokenY": 459.5,
+   "labelX": 558.3,
+   "labelY": 485.5
+  },
+  {
+   "id": "iraq_kuwait",
+   "name": "Iraq & Kuwait",
+   "continent": "mid_west_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_saudi_arabia_qatar",
+    "syria_jordan",
+    "turkey",
+    "west_iran",
+    "west_saudi_arabia"
+   ],
+   "d": "M408 377.8L421.7 377.5L425.3 380.4L429 378.4L437.3 392.1L443.6 395.5L445.6 402.3L441.9 406.2L441.5 415.3L449.6 426.4L461.5 432.8L467.7 441.8L467.7 450.4L470.5 450.4L471.7 456.7L477.6 462.9L466.1 461.4L461.3 472.8L444.5 471.9L415.7 447.9L390.1 436.5L384.5 422.2L402 410.1L400.7 387.7ZM478.9 479.4L472.6 479.7L469.5 474L461.3 472.8L466.1 461.4L472.3 462.4Z",
+   "tokenX": 420.1,
+   "tokenY": 424.8,
+   "labelX": 420.1,
+   "labelY": 450.8
+  },
+  {
+   "id": "japan",
+   "name": "Japan",
+   "continent": "north_east_asia",
+   "suit": "artillery",
+   "adjacent": [],
+   "d": "M1206.1 449.8L1182 423.1L1197.2 398.3L1223.2 397.3L1220.5 376.9L1229.5 382.3L1237.4 366.6L1224.1 340.3L1222.9 333.3L1230.4 331.3L1251.3 355.7L1265.6 401.7L1242.5 407.9L1237.2 421.2L1223.9 408L1192.4 416.3L1205.7 424.9ZM1240.8 324.6L1222.3 317.1L1226.3 329L1217.1 329.2L1201.7 286.3L1229.1 301L1239 298.7L1250.2 310.8L1240.1 313.8ZM1215.1 410.7L1226.1 417.2L1217.3 430.1L1207.1 421.2Z",
+   "tokenX": 1244.4,
+   "tokenY": 389.7,
+   "labelX": 1244.4,
+   "labelY": 415.7
+  },
+  {
+   "id": "west_kazakhstan",
+   "name": "West Kazakhstan",
+   "continent": "north_west_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_kazakhstan",
+    "south_west_russia",
+    "south_west_russia_ii",
+    "turkmenistan",
+    "uzbekistan"
+   ],
+   "d": "M414.4 256.8L416.8 235.9L426.7 241.7L425.4 234.4L437.9 223.7L511.4 235L523.7 232.5L523.8 227.8L508.4 221L517.7 211.2L511.4 201.3L563.1 188.4L577.6 190.4L586.1 199.8L586.1 309.7L556.6 308.2L520.5 285.9L501.4 292.2L513.5 332.1L494.5 321L483 326.9L480 315.9L456.5 296.3L464.8 297.3L462.9 289.5L477 289.4L471.9 272.7L456.3 270.6L441.4 277.4Z",
+   "tokenX": 548.8,
+   "tokenY": 260,
+   "labelX": 548.8,
+   "labelY": 286
+  },
+  {
+   "id": "east_kazakhstan",
+   "name": "East Kazakhstan",
+   "continent": "north_mid_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "kyrgyzstan",
+    "north_mid_russia",
+    "north_mid_russia_ii",
+    "north_west_china",
+    "south_west_russia_ii",
+    "uzbekistan",
+    "west_kazakhstan"
+   ],
+   "d": "M713 320.7L701.4 315.2L672.1 314.9L658.5 310.4L654.7 312.6L655.8 319L635.8 316.8L635.7 321.6L623.3 331.3L622.3 339.1L604.3 333.6L586.1 309.7L586.1 199.8L603.3 201L605.3 206.3L626.6 196.8L625.5 199.7L669.8 231.8L671.3 226.7L685.1 232.4L694.9 229.8L736.4 248.4L734 255.2L727.9 256.1L730.7 271.1L713 267.7L716.2 286.5L698.7 293L714.2 311.7L709.7 314.5Z",
+   "tokenX": 635.3,
+   "tokenY": 267.1,
+   "labelX": 635.3,
+   "labelY": 293.1
+  },
+  {
+   "id": "kyrgyzstan",
+   "name": "Kyrgyzstan",
+   "continent": "central_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "east_kazakhstan",
+    "north_west_china",
+    "tajikistan",
+    "uzbekistan"
+   ],
+   "d": "M713 320.7L712.8 323.2L702 329.1L700.7 333.4L690.4 334.8L689.8 341.8L680.3 340.3L675.3 342.5L669.1 347.8L669.6 352.9L654.1 354.6L642.4 351L633.5 351.8L632.2 345.4L642 347.3L643.9 343.9L650.8 345L658.8 337L646.7 331.2L641.7 333.9L634 329.8L638.6 322.7L635.7 321.6L635.8 316.8L640.7 315.3L655.8 319L654.7 312.6L658.5 310.4L672.1 314.9L701.4 315.2Z",
+   "tokenX": 670.5,
+   "tokenY": 329.4,
+   "labelX": 670.5,
+   "labelY": 355.4
+  },
+  {
+   "id": "laos",
+   "name": "Laos",
+   "continent": "mid_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "cambodia",
+    "myanmar_bangladesh",
+    "south_mid_china",
+    "thailand",
+    "vietnam"
+   ],
+   "d": "M1054.7 657.1L1045.5 652.4L1042.7 661.1L1034.1 656.2L1036.2 650.5L1034.8 639.8L1025.2 628.8L1022.2 616.4L1013 606.2L1005.8 605.3L1004.8 609.7L996.1 607.8L987.8 615.3L984.8 590.9L978.4 590.3L976.2 582.8L971.3 579L978.3 566.3L979.8 569.3L984.8 569.6L979.9 555.4L984.3 553.6L999 574.6L1010.4 574.8L1016.5 585.6L1011.3 588.9L1009.7 593.3L1022.5 600.8L1050.2 635.5L1054.2 644.4Z",
+   "tokenX": 997.7,
+   "tokenY": 587.8,
+   "labelX": 997.7,
+   "labelY": 613.8
+  },
+  {
+   "id": "malaysia_brunei",
+   "name": "Malaysia & Brunei",
+   "continent": "south_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "east_indonesia_timor_leste",
+    "thailand",
+    "west_indonesia"
+   ],
+   "d": "M1092.9 821.8L1091.2 813.1L1098.3 817.5L1105.6 815.1L1107.2 804.3L1122.6 799L1133.3 780.7L1137.9 787.4L1144.3 783.4L1144.4 768.9L1155.1 749.9L1165.3 762L1180 769.4L1168.6 785.7L1149.3 783.5L1138.7 820.5L1121.8 819.7L1099.6 829ZM998.5 753.5L1007.9 765.8L1016.8 758.9L1025.2 767.9L1039.4 822.3L1032.6 823.2L1011.8 803.4L999 770.6ZM1144.4 768.9L1144.3 783.4L1137.9 787.4L1133.3 780.7Z",
+   "tokenX": 1157.6,
+   "tokenY": 771.9,
+   "labelX": 1157.6,
+   "labelY": 797.9
+  },
+  {
+   "id": "mongolia",
+   "name": "Mongolia",
+   "continent": "north_east_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_russia",
+    "north_mid_china",
+    "north_mid_russia_ii",
+    "north_west_china",
+    "south_west_china"
+   ],
+   "d": "M739.1 247.5L765.7 232.5L811.8 243.2L815.1 236.3L808.2 230.4L809.6 220.2L839.7 227.9L846.2 235.4L860.1 239.6L884.2 237.7L903.5 247.7L921.9 249.3L943.1 238L964 241.6L972.4 263.6L988.5 260.1L1011.4 274.3L993.4 274.5L988.4 284.5L974 294.2L959 291.1L959 297.9L967.5 305.6L961.3 315L923.4 328.9L882.9 317.3L845.2 316.6L828.2 300.3L786.8 289.1L778.2 272.3Z",
+   "tokenX": 875.6,
+   "tokenY": 277.7,
+   "labelX": 875.6,
+   "labelY": 303.7
+  },
+  {
+   "id": "myanmar_bangladesh",
+   "name": "Myanmar & Bangladesh",
+   "continent": "south_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "laos",
+    "north_east_india_bhutan",
+    "south_east_india",
+    "south_mid_china",
+    "south_west_china",
+    "thailand"
+   ],
+   "d": "M978.5 711.4L958.6 633.1L952.7 622.6L938.5 638L926.8 633.9L923.2 606.5L896.1 565.8L906.3 503.3L922.7 497.1L920.1 482.9L935.1 492L937.8 536L946.9 533.9L958.3 557.9L978.3 566.3L951.1 603.6L970.7 632.1L966.3 645.4L985.4 686.4ZM898.9 575.8L884.4 549.9L875.8 549.4L876.4 561.4L864.3 558.7L847.1 504.8L863.2 519.2L886.5 522.8L879.8 540.8L886.4 547.2L888.5 539.3Z",
+   "tokenX": 929.2,
+   "tokenY": 563.4,
+   "labelX": 929.2,
+   "labelY": 589.4
+  },
+  {
+   "id": "nepal",
+   "name": "Nepal",
+   "continent": "mid_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "north_east_india_bhutan",
+    "north_west_china",
+    "south_west_china"
+   ],
+   "d": "M838.5 487.5L839.2 492.7L842.4 500.4L842.7 505.2L835.2 505.4L823.5 502.6L816.2 501.4L809.4 495.3L796.6 493.7L783.1 486.9L773 481L763.2 476.5L763.7 465.3L767.8 459.9L770.7 457L778.9 460.7L790.1 468.5L795.7 470.2L800.3 475.9L807.9 478.3L809.2 479.1L816.7 483.6L827.6 486.4Z",
+   "tokenX": 774.3,
+   "tokenY": 470.1,
+   "labelX": 774.3,
+   "labelY": 496.1
+  },
+  {
+   "id": "north_korea_south_korea",
+   "name": "North Korea & South Korea",
+   "continent": "north_east_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_mid_china",
+    "south_east_russia"
+   ],
+   "d": "M1119.6 372.8L1112 367.8L1107.9 351.6L1096.5 347.4L1104.8 334.3L1105.6 326.5L1119.3 330.4L1114.2 324.6L1124 319.9L1123.3 313.8L1135.4 322.1L1131.8 321.4L1130.6 328.9L1135.9 336.8L1125.3 349.3L1127.7 355.4L1140.3 364.8L1131.3 366.1L1130.9 371.2L1121.5 369.7ZM1126.8 370.8L1130.9 371.2L1131.3 366.1L1140.3 364.8L1139.9 362.1L1161.3 382.8L1168.7 402.4L1150 410.4L1132.8 383.5L1138.1 381.6Z",
+   "tokenX": 1114.9,
+   "tokenY": 341.8,
+   "labelX": 1114.9,
+   "labelY": 367.8
+  },
+  {
+   "id": "oman_united_arab_emirates",
+   "name": "Oman & United Arab Emirates",
+   "continent": "south_west_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_saudi_arabia_qatar",
+    "yemen"
+   ],
+   "d": "M558.2 523.4L569.4 536.2L582.1 540L594.4 555.5L585.4 578.8L579.6 581.2L580.4 597.3L570.8 602L568.8 610.8L563 610.6L556.1 622.4L540.7 626.2L527.3 596.7L553.8 584.2L556.7 559.3L550.8 545.6L555.9 533.1L553.5 523.4ZM553 509.6L558.2 523.4L553.5 523.4L555.9 533.1L552.1 535.5L549.8 553.2L521.3 547L515.4 531.7L537.8 533.2ZM555.4 513.7L553 509.6L554.9 505.4Z",
+   "tokenX": 574.2,
+   "tokenY": 558.2,
+   "labelX": 574.2,
+   "labelY": 584.2
+  },
+  {
+   "id": "pakistan",
+   "name": "Pakistan",
+   "continent": "central_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "afghanistan",
+    "east_iran",
+    "north_west_china",
+    "north_west_india"
+   ],
+   "d": "M720.3 397.6L715 407.3L691.6 406.2L688.8 411.3L708.9 435.2L690.9 487.1L680.2 486.2L673 498.8L693.3 530.3L673.1 530.3L668.5 538.5L648.1 517.3L604.4 521.5L605.4 507.3L617.3 501.1L608.4 482.9L587.9 464.1L604.2 470.2L636.8 463.4L638.1 446.6L657.5 439.5L655.2 432.4L661.9 422.4L656.3 414.7L664.8 415.1L667.3 401.6L661.1 391L664.7 386L691 378.8L704.5 393Z",
+   "tokenX": 646.9,
+   "tokenY": 489.5,
+   "labelX": 646.9,
+   "labelY": 515.5
+  },
+  {
+   "id": "philippines",
+   "name": "Philippines",
+   "continent": "south_east_asia",
+   "suit": "artillery",
+   "adjacent": [],
+   "d": "M1215.7 678.2L1180.2 661.4L1168.5 602.9L1182.8 603.2L1189.5 655.5L1211.7 662.4ZM1239.2 767.2L1219.5 738.3L1204.3 746.5L1217.1 727.3L1235.5 723.5L1233.7 713.6L1248.2 746.5ZM1227.3 708.8L1217.5 677.9L1234.9 697.2L1227.1 693.8ZM1218.4 694.8L1212 723L1208.3 699.3L1213.2 707.1ZM1157.6 731.4L1178 703.5L1174.9 693.1ZM1196.3 686.4L1208.6 690.3L1200.2 704.9ZM1178.2 666.4L1190.5 671.5L1189.8 682.4Z",
+   "tokenX": 1177,
+   "tokenY": 610.6,
+   "labelX": 1177,
+   "labelY": 636.6
+  },
+  {
+   "id": "south_west_russia",
+   "name": "South West Russia",
+   "continent": "north_west_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "azerbaijan_georgia",
+    "south_west_russia_ii",
+    "west_kazakhstan"
+   ],
+   "d": "M416.4 317.4L343.2 289.6L360.2 244.5L289.5 219.7L275.3 186.8L253.8 181.1L244.4 142.9L263.7 123.4L230.6 77.6L316.9 88.7L266.3 94.6L299.5 115.6L297.2 105.6L340.5 98.7L329.4 80.9L354.8 94.3L416.4 76.3L213.3 76.6L221.2 106.9L416.4 106.9ZM416.4 35.9L393.9 56.7L413.6 66.8L370 58.8ZM416.4 66.3L210.5 66.3L209.7 63.3ZM341.5 287.2L322.1 299L308.5 288.7Z",
+   "tokenX": 351.1,
+   "tokenY": 172.1,
+   "labelX": 351.1,
+   "labelY": 198.1
+  },
+  {
+   "id": "south_west_russia_ii",
+   "name": "South West Russia II",
+   "continent": "north_west_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "azerbaijan_georgia",
+    "east_kazakhstan",
+    "north_mid_russia",
+    "south_west_russia",
+    "west_kazakhstan"
+   ],
+   "d": "M441.5 333.1L416.4 317.4L416.4 81.7L496.8 84.2L471.2 64.9L500.7 54.4L532.5 98L541.8 86.5L513.4 54L562.3 60.4L546.1 49.4L591.1 40.3L591.1 76.1L416.4 76.3L416.4 106.9L591.1 106.9L591.1 198L511.4 201.3L523.7 232.5L437.9 223.7L416.8 235.9L416.4 258.4L441.4 277.4L426.8 296.3ZM591.1 66.3L416.4 66.3L416.4 63.6ZM461.4 34.5L416.4 35.9L416.4 42.6Z",
+   "tokenX": 471.7,
+   "tokenY": 162.4,
+   "labelX": 471.7,
+   "labelY": 188.4
+  },
+  {
+   "id": "north_mid_russia",
+   "name": "North Mid Russia",
+   "continent": "north_mid_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "east_kazakhstan",
+    "north_mid_russia_ii",
+    "south_west_russia_ii"
+   ],
+   "d": "M736 248.1L694.9 229.8L685.1 232.4L671.3 226.7L669.8 231.8L625.5 199.7L626.6 196.8L605.3 206.3L603.3 201L591.1 198L591.1 40.3L655.9 35.1L658.5 31.1L670.5 29.3L695 34.8L736 36.7L736 42.5L722.9 46.5L736 47.8L736 75.9L591.1 76.1L591.1 106.9L736 106.9ZM736 66.4L591.1 66.3L591.1 63.8ZM646.3 28L639.8 28.3L640.1 28Z",
+   "tokenX": 677.4,
+   "tokenY": 165.4,
+   "labelX": 677.4,
+   "labelY": 191.4
+  },
+  {
+   "id": "north_mid_russia_ii",
+   "name": "North Mid Russia II",
+   "continent": "north_mid_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_kazakhstan",
+    "mongolia",
+    "north_east_russia",
+    "north_mid_russia",
+    "north_west_china"
+   ],
+   "d": "M884 237.7L860.1 239.6L846.2 235.4L839.7 227.9L809.6 220.2L808.2 230.4L815.1 236.3L811.8 243.2L765.7 232.5L746.4 245.8L736 248.1L736 36.7L742.9 40.5L736 42.5L736 47.8L818 53.2L812.4 48.9L837 49.9L884 65.7L884 75.8L736 75.9L736 106.9L884 106.9ZM884 66.4L884 64.1L736 63.9L736 66.4ZM884 38.9L883.1 37.4L884 37.3Z",
+   "tokenX": 825.9,
+   "tokenY": 164.7,
+   "labelX": 825.9,
+   "labelY": 190.7
+  },
+  {
+   "id": "north_east_russia",
+   "name": "North East Russia",
+   "continent": "north_mid_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "mongolia",
+    "north_mid_china",
+    "north_mid_russia_ii",
+    "south_east_russia"
+   ],
+   "d": "M884 237.7L884.7 59.9L936.4 62L927.7 53.9L1041.1 65.3L1041.1 75.6L884 75.8L884 106.9L1041.1 106.9L1041.1 233.4L1013.3 213L979.5 206.8L969.1 213.3L979.8 221L982.7 239L976.3 245.4L943.1 238L921.9 249.3ZM884 66.4L884 64.1L1041.1 64.3ZM934.1 43.1L902.9 44.2L884 37.3ZM971.4 41.8L957.2 43.3L940.9 39.6ZM919.3 51L928.7 48.3L944.1 51.9Z",
+   "tokenX": 941.1,
+   "tokenY": 163.8,
+   "labelX": 941.1,
+   "labelY": 189.8
+  },
+  {
+   "id": "south_east_russia",
+   "name": "South East Russia",
+   "continent": "north_east_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "north_east_russia",
+    "north_korea_south_korea",
+    "north_mid_china"
+   ],
+   "d": "M1041.1 65.3L1209.1 75.4L1041.1 75.6L1041.1 106.9L1274.8 106.9L1261.8 109.7L1302.5 125.8L1222.5 148.3L1269.2 193.3L1269.2 230.4L1201.7 175.7L1197.4 126L1190 142.6L1155.7 135.1L1169.2 154.5L1077 155.5L1066.3 194.5L1129.1 210.1L1161.3 256.2L1160.6 309.3L1135.4 322.1L1120.9 255.9L1094.3 263L1041.1 233.4ZM1209.2 280.1L1193.2 250.8L1124.8 199.3ZM1194.2 66.4L1041.1 66.4L1041.1 64.3Z",
+   "tokenX": 1098.1,
+   "tokenY": 232.1,
+   "labelX": 1098.1,
+   "labelY": 258.1
+  },
+  {
+   "id": "west_saudi_arabia",
+   "name": "West Saudi Arabia",
+   "continent": "south_west_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "east_saudi_arabia_qatar",
+    "iraq_kuwait",
+    "syria_jordan",
+    "yemen"
+   ],
+   "d": "M390.1 436.5L401.3 439.7L415.7 447.9L444.5 471.9L449.8 472.2L449.8 615.4L448.6 614.5L446.7 620.6L448 625.9L444.3 630L438.4 615.8L433.2 611.3L427.3 600.8L423.8 590.6L416.6 582L412.3 580L405.1 568.1L402.9 552.2L396.3 538.5L386.3 531.2L379.6 515.1L360 485.3L355.5 485.3L356.7 469.8L366.9 471.7L371.9 463.7L378.6 462L379.5 458L382.2 456L371.8 444.2Z",
+   "tokenX": 411.3,
+   "tokenY": 493.7,
+   "labelX": 411.3,
+   "labelY": 519.7
+  },
+  {
+   "id": "east_saudi_arabia_qatar",
+   "name": "East Saudi Arabia & Qatar",
+   "continent": "south_west_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "iraq_kuwait",
+    "oman_united_arab_emirates",
+    "west_saudi_arabia",
+    "yemen"
+   ],
+   "d": "M449.8 472.2L469.5 474L472.6 479.7L478.9 479.4L484 489.8L498.1 501.9L500.8 515L507.5 525.5L513 527L521.3 547L549.8 553.2L551.3 550.6L556.7 559.3L553.8 584.2L527.3 596.7L501 601.5L492.8 607.1L487.3 620.3L483.2 622.4L480.4 618.2L466 616.3L452.8 617.7L449.8 615.4ZM509.4 508.9L512.7 512.7L513.9 519.8L513 527L510.6 527.9L507.5 525.5L505.6 516.6Z",
+   "tokenX": 488,
+   "tokenY": 565.6,
+   "labelX": 488,
+   "labelY": 591.6
+  },
+  {
+   "id": "sri_lanka",
+   "name": "Sri Lanka",
+   "continent": "south_mid_asia",
+   "suit": "artillery",
+   "adjacent": [],
+   "d": "M821.8 742.3L821.2 755.6L817.4 759.3L809.3 762.2L804.2 752L801.3 733.6L804 712.8L811.1 719.9L816.3 728.9Z",
+   "tokenX": 812.5,
+   "tokenY": 743.9,
+   "labelX": 812.5,
+   "labelY": 769.9
+  },
+  {
+   "id": "syria_jordan",
+   "name": "Syria & Jordan",
+   "continent": "mid_west_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "iraq_kuwait",
+    "turkey",
+    "west_saudi_arabia"
+   ],
+   "d": "M358.3 429.9L363.9 412.6L355.7 398.6L360.5 382.5L384.7 383.6L408 377.8L400.7 387.7L402 410.1L369 434.7ZM384.5 422.2L390.1 436.5L371.8 444.2L382.2 456L366.9 471.7L356.7 469.8L358.5 430L369 434.7ZM356.2 468L347.9 447.6L352.5 425.7L358.5 423.4L353.2 439.9L353.6 446L357.5 444.4L358.3 449ZM352.7 425.5L357.8 407.4L361.8 408L363.9 412.6L358.5 423.4Z",
+   "tokenX": 380.2,
+   "tokenY": 402.3,
+   "labelX": 380.2,
+   "labelY": 428.3
+  },
+  {
+   "id": "taiwan",
+   "name": "Taiwan",
+   "continent": "mid_east_asia",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M1157.3 529.9L1158.1 549.6L1157.2 559.7L1149.2 549.3L1145.3 540.2L1146.8 528.1L1151 518.8L1156.4 522.5Z",
+   "tokenX": 1151.7,
+   "tokenY": 539.3,
+   "labelX": 1151.7,
+   "labelY": 565.3
+  },
+  {
+   "id": "tajikistan",
+   "name": "Tajikistan",
+   "continent": "central_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "afghanistan",
+    "kyrgyzstan",
+    "north_west_china",
+    "uzbekistan"
+   ],
+   "d": "M618.3 351.3L625.6 351.8L627.9 338.5L638.3 335.9L638.3 341.1L640.6 344.1L643.9 343.9L642 347.3L632.2 345.4L633.5 351.8L642.4 351L654.1 354.6L669.6 352.9L675.3 363.3L683.8 364.7L688.4 375.6L673.3 374.7L663.9 383.4L659.3 379.6L654.1 366.1L648.7 363.5L646 373.7L640.8 373.4L639.6 378.7L636 376.5L630.9 380.1L627.8 378.7L629.2 367.2L624.7 358.8L617.7 356.2Z",
+   "tokenX": 665.5,
+   "tokenY": 366.7,
+   "labelX": 665.5,
+   "labelY": 392.7
+  },
+  {
+   "id": "thailand",
+   "name": "Thailand",
+   "continent": "south_east_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "cambodia",
+    "laos",
+    "malaysia_brunei",
+    "myanmar_bangladesh"
+   ],
+   "d": "M1007.9 765.8L1006.7 759.1L997 755.8L980 731.2L979.1 738.8L977 723.7L985.4 686.4L977.3 661.8L966.3 645.4L970.7 632.1L951.1 603.6L956 587.8L971.3 579L978.4 590.3L984.8 590.9L987.8 615.3L996.1 607.8L1013 606.2L1034.8 639.8L1034.1 656.2L1013.2 656.8L1008.8 667.3L1013.2 682.7L995.9 677.1L995.9 667.1L987.5 667.2L985.8 720.3L992 720.7L999.7 743.5L1016.8 758.9Z",
+   "tokenX": 994.6,
+   "tokenY": 640.1,
+   "labelX": 994.6,
+   "labelY": 666.1
+  },
+  {
+   "id": "turkey",
+   "name": "Turkey",
+   "continent": "mid_west_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "azerbaijan_georgia",
+    "iraq_kuwait",
+    "syria_jordan",
+    "west_iran"
+   ],
+   "d": "M429 378.4L360.5 382.5L357.1 393.9L355.8 384.3L343 382.7L338 389.3L325.1 390.6L307.9 384L300.7 390.1L282.2 384.3L268.7 366.7L271.8 357.9L265.7 352.5L273.8 341.9L286.7 341.5L289.1 333.1L305.3 334.5L323.5 324.3L337.3 324.1L366.2 336.1L400.7 329.1L423.4 349.8L418.3 353ZM261.9 326.4L277.4 324.4L286.8 332.2L266.3 344.9L262.8 337.4L266.4 329.3Z",
+   "tokenX": 325.7,
+   "tokenY": 357.9,
+   "labelX": 325.7,
+   "labelY": 383.9
+  },
+  {
+   "id": "turkmenistan",
+   "name": "Turkmenistan",
+   "continent": "north_west_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "afghanistan",
+    "east_iran",
+    "uzbekistan",
+    "west_iran",
+    "west_kazakhstan"
+   ],
+   "d": "M483 326.9L494.5 321L509.3 332.6L522.9 331.9L520 326.4L531.1 316.3L544.1 322.1L551.5 333L563.9 334.6L590.6 359L614 369.3L615.8 376.3L608.2 372.8L601.3 379.1L602.2 388.2L585.2 400.2L575.2 395.8L572 386.2L534.8 368.7L519.4 369.4L507.8 378.1L502.7 358.3L495.1 354.5L495.4 346.8L489.6 346.2L489.1 336.9L504.2 336L492.2 323.2L486.2 326L487.5 334Z",
+   "tokenX": 554.7,
+   "tokenY": 354.7,
+   "labelX": 554.7,
+   "labelY": 380.7
+  },
+  {
+   "id": "uzbekistan",
+   "name": "Uzbekistan",
+   "continent": "central_asia",
+   "suit": "infantry",
+   "adjacent": [
+    "afghanistan",
+    "east_kazakhstan",
+    "kyrgyzstan",
+    "tajikistan",
+    "turkmenistan",
+    "west_kazakhstan"
+   ],
+   "d": "M501.4 292.2L520.5 285.9L556.6 308.2L579.7 305.8L592.4 313.6L604.3 333.6L615.1 334L619.1 339.2L635.7 321.6L634 329.8L658.8 337L650.8 345L640.6 344.1L638.3 335.9L627.9 338.5L625.6 351.8L618.3 351.3L617.7 356.2L629.2 367.2L627.8 378.7L615.8 376.3L614 369.3L590.6 359L563.9 334.6L551.5 333L544.1 322.1L531.1 316.3L520 326.4L522.9 331.9L513.5 332.1Z",
+   "tokenX": 579.9,
+   "tokenY": 326,
+   "labelX": 579.9,
+   "labelY": 352
+  },
+  {
+   "id": "vietnam",
+   "name": "Vietnam",
+   "continent": "mid_east_asia",
+   "suit": "cavalry",
+   "adjacent": [
+    "cambodia",
+    "laos",
+    "south_mid_china"
+   ],
+   "d": "M1010.4 542.7L1025.1 549.5L1025.5 556.6L1031.2 561.7L1041.4 564.9L1031.7 575.5L1026.8 587.3L1026.7 595.9L1048.7 625.5L1066.3 643.5L1074.7 666.9L1076.7 689.3L1043 728.4L1038.7 720.3L1040.4 711.6L1032.6 704.3L1040.1 699.2L1050 698.3L1044.8 690.5L1059.4 680.8L1054.2 644.4L1050.2 635.5L1022.5 600.8L1009.7 593.3L1016.5 585.6L1010.4 574.8L999 574.6L984.3 553.6L988.4 550.6L1004.4 549.2Z",
+   "tokenX": 1012.2,
+   "tokenY": 560.9,
+   "labelX": 1012.2,
+   "labelY": 586.9
+  },
+  {
+   "id": "yemen",
+   "name": "Yemen",
+   "continent": "south_west_asia",
+   "suit": "artillery",
+   "adjacent": [
+    "east_saudi_arabia_qatar",
+    "oman_united_arab_emirates",
+    "west_saudi_arabia"
+   ],
+   "d": "M527.3 596.7L540.7 626.2L534.3 629.5L533.1 639.4L509.7 650.7L501.9 659.6L495 659.5L489.8 664.8L484 667.3L473.8 668.6L468.2 676.1L463.6 675.9L460.6 677.6L454.1 676.9L451.2 669.5L451 662.6L443.7 644.3L445.5 643.7L444.3 630L448 625.9L446.7 620.6L448.6 614.5L452.8 617.7L466 616.3L476.9 618.8L480.4 618.2L483.2 622.4L487.3 620.3L492.8 607.1L501 601.5Z",
+   "tokenX": 470.5,
+   "tokenY": 643.8,
+   "labelX": 470.5,
+   "labelY": 669.8
+  }
+ ],
+ "seaLinks": [
+  {
+   "from": "philippines",
+   "to": "west_indonesia"
+  },
+  {
+   "from": "philippines",
+   "to": "taiwan"
+  },
+  {
+   "from": "taiwan",
+   "to": "south_mid_china"
+  },
+  {
+   "from": "japan",
+   "to": "north_korea_south_korea"
+  },
+  {
+   "from": "japan",
+   "to": "south_east_russia"
+  },
+  {
+   "from": "sri_lanka",
+   "to": "south_east_india"
+  },
+  {
+   "from": "oman_united_arab_emirates",
+   "to": "east_iran"
+  }
+ ],
+ "modifierSlots": {
+  "blizzards": 4,
+  "portals": 6,
+  "capitals": 6
+ }
+}

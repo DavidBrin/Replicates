@@ -274,6 +274,9 @@ export function loadMap(file: MapFile): MapDef {
     id: t.id,
     name: t.name,
     continent: continentIndex.get(t.continent) as ContinentId,
+    // Copied straight across, never derived (R19, F7): the deck a map deals has
+    // to be the same on every build, and `Territory.suit` is where R19 reads it.
+    suit: t.suit,
     adjacent: adjacency[i] as readonly TerritoryId[],
     seaLinked: [...(sea[i] ?? [])].sort(ascending) as readonly TerritoryId[],
     d: t.d,

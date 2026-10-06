@@ -1,0 +1,757 @@
+{
+ "slug": "north-america",
+ "name": "North America",
+ "tagline": "38 territories from Panama to the high Arctic",
+ "viewBox": "0 0 1600 1100",
+ "continents": [
+  {
+   "id": "south_mid_north_america",
+   "name": "South Mid North America",
+   "bonus": 3,
+   "color": "#36B0EA",
+   "territories": [
+    "bahamas",
+    "cuba",
+    "dominican_rep_haiti",
+    "jamaica",
+    "puerto_rico",
+    "trinidad_and_tobago"
+   ]
+  },
+  {
+   "id": "north_east_north_america",
+   "name": "North East North America",
+   "bonus": 1,
+   "color": "#DA3A4F",
+   "territories": [
+    "west_greenland",
+    "east_greenland"
+   ]
+  },
+  {
+   "id": "north_west_north_america",
+   "name": "North West North America",
+   "bonus": 5,
+   "color": "#5FBF2A",
+   "territories": [
+    "north_far_west_canada",
+    "north_west_canada",
+    "north_far_west_america",
+    "north_west_america",
+    "mid_west_america",
+    "south_west_america"
+   ]
+  },
+  {
+   "id": "north_east_north_america_ii",
+   "name": "North East North America II",
+   "bonus": 5,
+   "color": "#9B4AE8",
+   "territories": [
+    "south_west_canada",
+    "north_east_canada",
+    "south_east_canada",
+    "north_far_east_canada",
+    "mid_east_canada",
+    "south_far_east_canada"
+   ]
+  },
+  {
+   "id": "south_west_north_america",
+   "name": "South West North America",
+   "bonus": 3,
+   "color": "#E08A24",
+   "territories": [
+    "costa_rica",
+    "guatemala_belize",
+    "honduras",
+    "south_east_mexico",
+    "nicaragua",
+    "panama"
+   ]
+  },
+  {
+   "id": "central_north_america",
+   "name": "Central North America",
+   "bonus": 5,
+   "color": "#F0C33A",
+   "territories": [
+    "north_east_america",
+    "south_east_america",
+    "south_east_america_ii",
+    "mid_far_east_america",
+    "mid_far_east_america_ii",
+    "south_far_east_america"
+   ]
+  },
+  {
+   "id": "mid_west_north_america",
+   "name": "Mid West North America",
+   "bonus": 5,
+   "color": "#2AC4A8",
+   "territories": [
+    "mid_far_west_canada",
+    "mid_far_west_canada_ii",
+    "north_west_mexico",
+    "north_west_mexico_ii",
+    "mid_far_west_america",
+    "north_far_west_america_ii"
+   ]
+  }
+ ],
+ "territories": [
+  {
+   "id": "bahamas",
+   "name": "Bahamas",
+   "continent": "south_mid_north_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M865.4 706.6L868.3 707.1L869.4 718.3L867.8 726.2L865.2 726.8L864.3 719.1L861.4 715.2ZM862.3 685.5L867.3 684.4L873.8 684.8L873.3 688.3L861.9 690.4ZM875 682.1L881.5 688.1L877.6 697.6L876.1 695.9L877.9 688.9L874.7 683.6Z",
+   "tokenX": 865.6,
+   "tokenY": 714.9,
+   "labelX": 865.6,
+   "labelY": 740.9
+  },
+  {
+   "id": "north_far_west_canada",
+   "name": "North Far West Canada",
+   "continent": "north_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_far_west_canada",
+    "mid_far_west_canada_ii",
+    "north_far_west_america",
+    "north_far_west_america_ii",
+    "north_west_america",
+    "north_west_canada"
+   ],
+   "d": "M573.2 322.2L574.3 318.5L576.7 311.5L574 307.1L572.9 303.2L574.2 298.3L572.3 298.8L562.8 301.3L549 306.7L549 300.4L548.2 296.3L543.6 293.7L536.1 293.4L559.7 274.9L572.3 265L599.9 243.5L640.6 214.9L651.4 216.7L657.7 220.2L664.2 220.9L674.9 217.8L686.8 215.5L695.1 216.3L695.1 274.1L695.1 322.2Z",
+   "tokenX": 645.3,
+   "tokenY": 272.5,
+   "labelX": 645.3,
+   "labelY": 298.5
+  },
+  {
+   "id": "mid_far_west_canada",
+   "name": "Mid Far West Canada",
+   "continent": "mid_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_far_west_canada_ii",
+    "north_east_america",
+    "north_far_west_america_ii",
+    "north_far_west_canada",
+    "north_west_america"
+   ],
+   "d": "M551.8 389.9L555.2 380.2L562.1 373.6L555.2 369.1L561.5 360.5L558.3 353L578.6 336.2L571 329.8L573.2 322.2L695.1 322.2L695.1 410.1L574.4 410.1L563.7 394.4ZM565.6 415.6L559.9 417.2L549.5 412L546.2 401L538.9 399L540.5 393L543.3 390.5L561.5 395.7L561.5 404.8L566.7 409.4ZM546.3 354.7L532.7 366.6L532.3 375.2L528.9 375.2L528.4 362.1L531.2 357.5L534.8 354.2Z",
+   "tokenX": 623.5,
+   "tokenY": 366.1,
+   "labelX": 623.5,
+   "labelY": 392.1
+  },
+  {
+   "id": "north_west_canada",
+   "name": "North West Canada",
+   "continent": "north_west_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "mid_far_west_canada_ii",
+    "north_east_canada",
+    "north_far_west_canada",
+    "south_west_canada"
+   ],
+   "d": "M869.6 222.6L869.6 274.1L695.1 274.1L695.1 216.3L763.4 211.7L757.3 217.2L781.2 214.3L823.2 224.6L808.5 228.4L851 232.5ZM814 218.9L812.2 213.1L850.8 210.3L813.3 209L832.7 203.7L811.7 202L855.8 190.7L869.6 193.2L869.6 220.6ZM854.8 189.7L779.8 206.5L768.7 200L797 184.8ZM825.8 174.5L867.4 172.3L869.6 167.4ZM853.6 179.4L869.6 174.2L869.6 180.2Z",
+   "tokenX": 742.1,
+   "tokenY": 243.6,
+   "labelX": 742.1,
+   "labelY": 269.6
+  },
+  {
+   "id": "mid_far_west_canada_ii",
+   "name": "Mid Far West Canada II",
+   "continent": "mid_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_far_west_canada",
+    "north_east_america",
+    "north_far_west_canada",
+    "north_west_canada",
+    "south_west_canada"
+   ],
+   "d": "M783.7 410.1L769.8 410.1L740 410.1L713.8 410.1L695.1 410.1L695.1 322.2L695.1 274.1L783.7 274.1Z",
+   "tokenX": 739.4,
+   "tokenY": 342.1,
+   "labelX": 739.4,
+   "labelY": 368.1
+  },
+  {
+   "id": "south_west_canada",
+   "name": "South West Canada",
+   "continent": "north_east_north_america_ii",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_far_east_america",
+    "mid_far_west_canada_ii",
+    "north_east_america",
+    "north_east_canada",
+    "north_west_canada",
+    "south_east_canada"
+   ],
+   "d": "M869.6 274.1L869.6 350.8L869.6 419L863.3 421.1L860.4 421.2L851.1 418.3L843.2 419.8L836.6 416.3L828.7 414.5L822.9 413.8L821.3 411.9L823.4 405.8L820.4 405.8L817.8 410.1L803.8 410.1L799.7 410.1L783.7 410.1L783.7 274.1Z",
+   "tokenX": 826.6,
+   "tokenY": 347.6,
+   "labelX": 826.6,
+   "labelY": 373.6
+  },
+  {
+   "id": "north_east_canada",
+   "name": "North East Canada",
+   "continent": "north_east_north_america_ii",
+   "suit": "infantry",
+   "adjacent": [
+    "mid_east_canada",
+    "north_far_east_canada",
+    "north_west_canada",
+    "south_east_canada",
+    "south_west_canada"
+   ],
+   "d": "M986.6 199.9L986.6 350.8L869.6 350.8ZM929.6 212.7L869.6 193.2L869.6 220.6ZM938.8 175.3L878.4 172.6L869.6 180.2ZM981.7 188L957.5 204L937.5 195.8ZM958.8 177.5L984.5 180.7L986.6 171.8ZM961 219.3L950.2 211.8L933.3 217.2ZM986.6 165.2L973.8 159.8L958.6 163.3ZM925.4 165.1L907.1 167.9L899.4 166.3ZM930.3 190L919.4 194.2L913.8 189.8ZM881.2 166.7L869.6 167.4L869.6 171.8Z",
+   "tokenX": 948,
+   "tokenY": 312.6,
+   "labelX": 948,
+   "labelY": 338.6
+  },
+  {
+   "id": "south_east_canada",
+   "name": "South East Canada",
+   "continent": "north_east_north_america_ii",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_east_canada",
+    "mid_far_east_america",
+    "mid_far_east_america_ii",
+    "north_east_canada",
+    "south_far_east_canada",
+    "south_west_canada"
+   ],
+   "d": "M986.6 350.8L986.6 455.8L975.3 455.9L970.3 458L951 472L933.6 472.1L928.8 474L927.9 481.2L887.5 495.4L884.9 491.8L902.2 472.7L907.9 451.8L901 446.4L903.1 444.3L900 442.9L900 438.3L895.5 439.2L896.5 438L895 436.9L895.6 433.9L872.9 417.9L869.6 419L869.6 350.8L962.3 350.8L957.1 363.5L956.5 375.5L963.7 385.7L972.2 382.2L982.7 371.2L986.6 357.8Z",
+   "tokenX": 916.9,
+   "tokenY": 394.9,
+   "labelX": 916.9,
+   "labelY": 420.9
+  },
+  {
+   "id": "north_far_east_canada",
+   "name": "North Far East Canada",
+   "continent": "north_east_north_america_ii",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_east_canada",
+    "north_east_canada"
+   ],
+   "d": "M1193.8 236.5L1058.3 256.7L1016.8 204.3ZM1256 147.2L1063.6 149.5L1051.8 172.6ZM1064.9 218.9L986.6 199.9L986.6 256.7ZM1002.4 171.2L1038.6 183.5L1109.1 178.8ZM1090.4 159.1L1039.3 163.5L1023.3 155.7ZM1029.5 187.4L995.3 187.3L986.6 198.8ZM1032.2 256.3L1008.8 245.6L996.6 256.7ZM1092.6 190.6L1098.9 194.3L1122.7 192ZM1083.5 234.7L1091.1 226.5L1102.7 227.6ZM1015.2 180.8L1011 177L993.1 181.1Z",
+   "tokenX": 1067,
+   "tokenY": 234.4,
+   "labelX": 1067,
+   "labelY": 260.4
+  },
+  {
+   "id": "mid_east_canada",
+   "name": "Mid East Canada",
+   "continent": "north_east_north_america_ii",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_canada",
+    "north_far_east_canada",
+    "south_east_canada",
+    "south_far_east_canada"
+   ],
+   "d": "M986.6 256.7L986.6 357.8L986.6 348.5L1023 330L1020.7 307.6L1045.7 275L1079.5 273.8L1104.7 286.4L1095.5 306.2L1104.7 313.4L1140.2 293.1L1143 331.9L1172.2 349.4L1179 365.8L986.6 365.8ZM1155.3 265.5L1125.7 262.4L1136.1 278.5L1089.6 256.7L1058.3 256.7L1155.2 256.7ZM1039.2 262.6L986.6 264L996.6 256.7ZM1020.3 269.8L1009.8 269.7L1000.9 276.2ZM1035 274.6L1027.1 277.1L1026.4 280.4Z",
+   "tokenX": 1062,
+   "tokenY": 326.2,
+   "labelX": 1062,
+   "labelY": 352.2
+  },
+  {
+   "id": "south_far_east_canada",
+   "name": "South Far East Canada",
+   "continent": "north_east_north_america_ii",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_east_canada",
+    "mid_far_east_america",
+    "south_east_canada"
+   ],
+   "d": "M1179 365.8L1130.5 396.3L1075.3 396.5L1017.8 434.8L1082.3 407.5L1074.3 441.5L1099.2 445.6L1112.7 432.6L1101.1 452.8L1048.3 472.1L1070.7 452.5L1045.6 454.3L1048.4 432L1037.3 427.6L1015.4 450.5L986.6 455.8L986.6 365.8ZM1126.3 425.8L1175.9 381.6L1156.8 401L1183.5 407.3L1177.7 436.7L1171.3 424.2L1157.8 434.1ZM1089.9 400.4L1103.6 402.2L1110.1 408.9ZM1097.1 439.1L1087.5 444.6L1077.1 435.9Z",
+   "tokenX": 1017.9,
+   "tokenY": 397.2,
+   "labelX": 1017.9,
+   "labelY": 423.2
+  },
+  {
+   "id": "costa_rica",
+   "name": "Costa Rica",
+   "continent": "south_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "nicaragua",
+    "panama"
+   ],
+   "d": "M781.8 941.5L776.3 938.4L774.4 935.5L775.8 933L775.6 929.9L773 926.5L765.7 921.9L765.4 917.8L762.9 915.3L763.2 919.4L760.8 922.8L758.8 918.9L755.5 917.5L754.4 914.6L756.6 905.9L753.9 903.9L758.4 899.4L764.9 903.1L767.4 901.3L770.6 902.5L772.1 905.4L775 906.3L777.8 903.3L779.7 911L787.6 922.6L783.5 923.9L783 929.6L785.1 931.7L783.4 933.3L783.6 935.9Z",
+   "tokenX": 773.7,
+   "tokenY": 917.1,
+   "labelX": 773.7,
+   "labelY": 943.1
+  },
+  {
+   "id": "cuba",
+   "name": "Cuba",
+   "continent": "south_mid_north_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M893.2 773.5L891.4 776.7L884.3 778.5L855.6 779.4L863.8 771.8L860.2 768.2L853.8 767.3L851 763.3L850 755.5L844.2 756.1L833 749.5L820.1 747.5L817.1 744.8L821.6 741.4L811.8 740.7L803.1 747.8L798.8 748L796.7 751.3L787.3 751.5L796.7 742.4L807.7 736.7L818.4 733.9L834.9 735L843.4 739.7L846.5 744.6L856.2 743.1L871.4 760.9L880.4 763.5L879 767.3L886.4 767.9Z",
+   "tokenX": 858.9,
+   "tokenY": 759.3,
+   "labelX": 858.9,
+   "labelY": 785.3
+  },
+  {
+   "id": "dominican_rep_haiti",
+   "name": "Dominican Rep. & Haiti",
+   "continent": "south_mid_north_america",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M949.6 796.5L945 802.1L940.5 799.1L932.5 799L926.2 802.4L925.1 799L916 810.5L913.7 808.3L912.4 796.4L915.3 794.1L918.7 779L935 782.3L936.1 787.1L941.7 786.8L940.8 791L945.3 791.4ZM917.1 781.3L915.3 794.1L912.4 796.4L913.7 804.3L896.1 801.9L890.9 804.5L886.1 800.2L887.6 795.8L904.4 798.8L908.5 795.7L904.8 789.8L905.6 784.5L899.5 782.4L902.4 778.6Z",
+   "tokenX": 927.4,
+   "tokenY": 790.1,
+   "labelX": 927.4,
+   "labelY": 816.1
+  },
+  {
+   "id": "west_greenland",
+   "name": "West Greenland",
+   "continent": "north_east_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "east_greenland"
+   ],
+   "d": "M1166.9 164.8L1221.8 158.8L1225.5 157.3L1209.2 155.9L1248.8 149.9L1350.6 149.1L1350.6 248.9L1335.4 264.7L1320.2 271.7L1320.6 278.7L1307 295.3L1295.6 295.9L1286.9 288.3L1271.2 288.3L1256.1 263.4L1257.6 250.3L1251.1 242.7L1256.9 236.8L1253.4 234L1287 213.4L1258.4 215.7L1265.7 207.1L1285.8 208.8L1258.7 201.4L1270.2 195.3L1260.5 182.3L1239.2 174.6L1190.4 174.8L1175.1 169.9L1207.5 168Z",
+   "tokenX": 1314.3,
+   "tokenY": 186.4,
+   "labelX": 1314.3,
+   "labelY": 212.4
+  },
+  {
+   "id": "east_greenland",
+   "name": "East Greenland",
+   "continent": "north_east_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "west_greenland"
+   ],
+   "d": "M1572 151.5L1520.5 155.7L1535.5 155.8L1521.3 161.6L1520.3 166.8L1527.5 170L1505.7 171.8L1517.4 174.6L1517.9 179.3L1510.5 179.8L1518.2 184.8L1487.9 190.7L1494.9 197.9L1477.8 196.9L1494.9 202.7L1496.3 208.2L1483.3 209.5L1470.9 202.9L1472 207.5L1462.8 211.2L1491.2 211.9L1419 226.7L1397.5 238L1350.6 248.9L1350.6 149.1L1364.8 150.2L1352.3 147.2L1478.6 144.6L1517.7 146.9L1446.5 148.5Z",
+   "tokenX": 1394.8,
+   "tokenY": 190,
+   "labelX": 1394.8,
+   "labelY": 216
+  },
+  {
+   "id": "guatemala_belize",
+   "name": "Guatemala & Belize",
+   "continent": "south_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "honduras",
+    "south_east_mexico"
+   ],
+   "d": "M734 807.6L728.7 834.2L738.8 836.4L727.8 845.6L727.1 851L715.4 864.2L703.9 861.5L694.9 853L696.3 843L703.1 831.7L716.4 831.7L717.4 827L708.9 815.3L713.5 815.3L714.9 807.5ZM744.3 798L746 800.1L739.1 825.3L731.8 834.2L728.7 834.2L734.3 805.6L737.2 806.6ZM737.1 872.4L717.9 867.2L716 862.1L721.8 855.4L727.3 855.7L732.1 862.6L736.9 861L740.1 863.5Z",
+   "tokenX": 711,
+   "tokenY": 846.9,
+   "labelX": 711,
+   "labelY": 872.9
+  },
+  {
+   "id": "honduras",
+   "name": "Honduras",
+   "continent": "south_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "guatemala_belize",
+    "nicaragua"
+   ],
+   "d": "M789.8 846.6L786.3 846.3L775.6 851.8L771 849.5L767.7 855.5L760.1 862.8L757.4 859.9L754.7 863.7L750.1 863.9L749.4 870.8L746.2 874.1L742.9 874.7L741.6 870.3L738.7 869.1L740.1 863.5L738.9 862L736.9 861L732.1 862.6L727.3 855.7L724.4 854.6L727.1 851L727.8 845.6L742.4 834.5L752.5 836L757.3 835.7L762.3 832.6L767.8 834.2L772.8 832.7L778.8 834.9L787.6 842.8Z",
+   "tokenX": 746.8,
+   "tokenY": 849.7,
+   "labelX": 746.8,
+   "labelY": 875.7
+  },
+  {
+   "id": "jamaica",
+   "name": "Jamaica",
+   "continent": "south_mid_north_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M854.5 798.2L861.2 799.4L866.1 802.7L867.2 806.5L860 806.8L856.5 809.1L851.1 806.8L846 801.8L847.7 798.7L852.2 797.7Z",
+   "tokenX": 855,
+   "tokenY": 803.2,
+   "labelX": 855,
+   "labelY": 829.2
+  },
+  {
+   "id": "north_west_mexico",
+   "name": "North West Mexico",
+   "continent": "mid_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_far_west_america",
+    "north_far_west_america_ii",
+    "north_west_mexico_ii",
+    "south_east_mexico",
+    "south_west_america"
+   ],
+   "d": "M511.4 609.9L535.8 607.5L533.8 610L564.5 625.5L591.7 625.4L595.4 620L595.4 804.4L587.7 800.9L572.3 778.1L571.5 771.5L579.5 758L576.5 739.5L561.9 707.1L555 701.6L558.3 690.1L540.6 656.7L542.8 627.6L530.2 619.4L522.6 640.8L536 687.1L535.6 718.9L540.4 719.3L544.5 731.5L538 738.9L522.1 713L526.3 695.9L506.7 673L511.6 672.8L519.6 661.9L511.1 648.8Z",
+   "tokenX": 568.7,
+   "tokenY": 652.2,
+   "labelX": 568.7,
+   "labelY": 678.2
+  },
+  {
+   "id": "north_west_mexico_ii",
+   "name": "North West Mexico II",
+   "continent": "mid_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "north_west_mexico",
+    "south_east_mexico",
+    "south_west_america"
+   ],
+   "d": "M595.4 620L610.7 620L612.5 624.7L619.7 634.5L620.4 641.4L620.3 648.6L624.1 652.6L630.9 656.5L640.7 646.1L648.8 645.9L654 651.1L656.9 667.9L660.4 675.5L659.7 684.8L660.7 691.1L667.3 695.2L673.5 698.2L677.5 697.8L670.4 709.5L666 719.3L660.7 737.4L658 744L658 751.4L659.6 758.6L743.8 758.6L749.8 757L758.8 757.4L765.2 756.3L766.7 758.6L595.4 758.6Z",
+   "tokenX": 631.1,
+   "tokenY": 712.1,
+   "labelX": 631.1,
+   "labelY": 738.1
+  },
+  {
+   "id": "south_east_mexico",
+   "name": "South East Mexico",
+   "continent": "south_west_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "guatemala_belize",
+    "north_west_mexico",
+    "north_west_mexico_ii"
+   ],
+   "d": "M767 759.2L754.2 782.3L748.5 801.3L746.5 797.8L742.3 798.2L737.2 806.6L714.9 807.5L713.5 815.3L708.9 815.3L717.4 827L716.4 831.7L703.1 831.7L696.3 843L694.9 853L680.8 833.5L673 829.8L652.4 837.5L622.6 822.8L602.9 806.1L595.4 804.4L595.4 758.6L659.6 758.6L659.3 768.7L667.2 793.5L677.4 797.2L680.5 802.9L713.4 792.9L721 787.3L730.8 763.7L743.8 758.6Z",
+   "tokenX": 633,
+   "tokenY": 790.3,
+   "labelX": 633,
+   "labelY": 816.3
+  },
+  {
+   "id": "nicaragua",
+   "name": "Nicaragua",
+   "continent": "south_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "costa_rica",
+    "honduras"
+   ],
+   "d": "M756.6 901.2L739.1 875.7L740.5 873.6L742 875.6L746.2 874.1L747.9 870.9L749.4 870.8L750.1 863.9L754.7 863.7L757.4 859.9L760.1 862.8L767.7 855.5L768.2 852.7L771 849.5L775.6 851.8L784.6 848.2L786.3 846.3L789.8 846.6L787.8 851L788.2 856.1L783.4 866.5L781.9 882.6L780.2 884L778.9 893.7L776.4 897.3L777.8 903.3L775 906.3L767.4 901.3L764.9 903.1L758.4 899.4Z",
+   "tokenX": 763.5,
+   "tokenY": 880.6,
+   "labelX": 763.5,
+   "labelY": 906.6
+  },
+  {
+   "id": "panama",
+   "name": "Panama",
+   "continent": "south_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "costa_rica"
+   ],
+   "d": "M841.4 945.6L839.1 949.8L835.8 948.8L834.1 955.7L829.1 944L831.9 940.2L822.8 930.7L818.1 931.6L807.6 943.4L812.1 951.1L807.5 955L802.5 955.7L801.3 947.3L799.8 949.7L796.3 948.8L794.6 943.2L783.3 940.6L782.8 943.7L785.1 931.7L783 929.6L783.5 923.9L787.6 922.6L790.5 930.7L795.7 930.2L798.3 933.6L814.8 926.2L818.8 922L829.8 924.7L841 935.3L839.5 937.3Z",
+   "tokenX": 801,
+   "tokenY": 940.2,
+   "labelX": 801,
+   "labelY": 966.2
+  },
+  {
+   "id": "puerto_rico",
+   "name": "Puerto Rico",
+   "continent": "south_mid_north_america",
+   "suit": "infantry",
+   "adjacent": [],
+   "d": "M970.3 797.8L975.4 799L976.9 801.8L973.8 805.3L966.1 805.2L960 805.7L960.2 799.8L962 797.8Z",
+   "tokenX": 964.2,
+   "tokenY": 801.5,
+   "labelX": 964.2,
+   "labelY": 827.5
+  },
+  {
+   "id": "trinidad_and_tobago",
+   "name": "Trinidad and Tobago",
+   "continent": "south_mid_north_america",
+   "suit": "cavalry",
+   "adjacent": [],
+   "d": "M1006.9 905.8L1013 904L1015.2 904.5L1014 915L1005.2 916.5L1003.4 915.3L1006.7 911.4Z",
+   "tokenX": 1010.6,
+   "tokenY": 911.6,
+   "labelX": 1010.6,
+   "labelY": 937.6
+  },
+  {
+   "id": "north_far_west_america",
+   "name": "North Far West America",
+   "continent": "north_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_far_west_america",
+    "north_far_west_america_ii",
+    "north_far_west_canada",
+    "north_west_america"
+   ],
+   "d": "M369.9 274.9L386.9 267.6L424 262.2L428.4 258.3L426.5 256.8L437 253.5L401 256.4L393 254.4L393.4 246.2L432.4 238.8L438.5 238.8L431 242.9L447.2 242.5L449.1 237.6L444.9 234.5L444.6 227.3L438.7 224.9L449.4 221L548.2 203.4L556.4 204.8L556.4 207.9L572.3 207L570 208.6L572.3 208.9L572.3 265L559.7 274.9ZM357.3 266.3L346.5 269.1L335 265.4L340.6 262.1Z",
+   "tokenX": 537.8,
+   "tokenY": 240.6,
+   "labelX": 537.8,
+   "labelY": 266.6
+  },
+  {
+   "id": "mid_far_west_america",
+   "name": "Mid Far West America",
+   "continent": "mid_west_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "north_far_west_america",
+    "north_far_west_america_ii",
+    "north_west_mexico"
+   ],
+   "d": "M273 351.7L392.1 306.5L349.5 308.9L369.9 274.9L526.6 274.9ZM511.4 609.9L489 528.7L526.6 463.4ZM415.9 316.4L403 324.2L389.3 325.4ZM54.5 792.3L66.3 784.2L59 773.8ZM340.9 293.5L329.7 298.6L325.8 294.3ZM60.1 766.9L54.8 769.6L53.6 764.7ZM44.2 753.9L46 759.3L41.1 759.4ZM33.2 747.1L30.4 751.7L28 749.2ZM54.3 761.3L49.5 760.7L48.2 762.4Z",
+   "tokenX": 403.8,
+   "tokenY": 292.9,
+   "labelX": 403.8,
+   "labelY": 318.9
+  },
+  {
+   "id": "north_far_west_america_ii",
+   "name": "North Far West America II",
+   "continent": "mid_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_far_west_america",
+    "mid_far_west_canada",
+    "mid_west_america",
+    "north_far_west_america",
+    "north_far_west_canada",
+    "north_west_america",
+    "north_west_mexico",
+    "south_west_america"
+   ],
+   "d": "M572.3 625.5L564.5 625.5L533.8 610L535.8 607.5L526.6 608.5L526.6 463.4L537.3 449.8L555.1 417.1L565 420.9L561.9 431.6L566.2 428.6L572.3 417.8ZM572.3 342.8L563.2 347.6L562.3 343.7L558.2 340.5L564.7 331.6L562.4 323.5L567.8 314.3L548.2 313.4L541.8 310.6L536.6 300.6L526.6 297.3L526.6 274.9L559.7 274.9L536.1 293.4L543.6 293.7L548.2 296.3L549 306.7L572.3 298.8Z",
+   "tokenX": 549.5,
+   "tokenY": 521.3,
+   "labelX": 549.5,
+   "labelY": 547.3
+  },
+  {
+   "id": "north_west_america",
+   "name": "North West America",
+   "continent": "north_west_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_far_west_canada",
+    "mid_west_america",
+    "north_east_america",
+    "north_far_west_america",
+    "north_far_west_america_ii",
+    "north_far_west_canada"
+   ],
+   "d": "M575.6 410.1L684.2 410.1L684.2 477.8L572.3 477.8L572.3 417.8ZM640.6 214.9L599.9 243.5L572.3 265L572.3 298.8L574.2 298.3L572.9 303.2L574 307.1L576.7 311.5L574.3 318.5L572.3 325.2L572.3 330.9L578.6 336.2L572.6 342.7L572.3 342.8L572.3 207L573 207L572.3 207.4L572.3 208.9L578.9 209.8L587.3 209.1L598.8 211.3L611.4 212L615.5 212.9L626.8 211.8L634.3 213.9Z",
+   "tokenX": 628.2,
+   "tokenY": 443.9,
+   "labelX": 628.2,
+   "labelY": 469.9
+  },
+  {
+   "id": "mid_west_america",
+   "name": "Mid West America",
+   "continent": "north_west_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "north_east_america",
+    "north_far_west_america_ii",
+    "north_west_america",
+    "south_east_america",
+    "south_west_america"
+   ],
+   "d": "M684.2 477.8L684.2 490L684.2 563.2L572.3 563.2L572.3 477.8Z",
+   "tokenX": 628.2,
+   "tokenY": 520.5,
+   "labelX": 628.2,
+   "labelY": 546.5
+  },
+  {
+   "id": "south_west_america",
+   "name": "South West America",
+   "continent": "north_west_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_west_america",
+    "north_far_west_america_ii",
+    "north_west_mexico",
+    "north_west_mexico_ii",
+    "south_east_america",
+    "south_east_america_ii"
+   ],
+   "d": "M677.5 697.8L673.5 698.2L667.3 695.2L660.7 691.1L659.7 684.8L660.4 675.5L656.9 667.9L656 660.1L654 651.1L648.8 645.9L640.7 646.1L630.9 656.5L624.1 652.6L620.3 648.6L620.4 641.4L619.7 634.5L616 628.8L612.5 624.7L610.7 620L593.8 620L591.7 625.4L583.9 625.4L572.3 625.5L572.3 563.2L684.2 563.2L684.2 673.2L681.2 677.6L678.3 686.8L677 693.2Z",
+   "tokenX": 645.3,
+   "tokenY": 602.1,
+   "labelX": 645.3,
+   "labelY": 628.1
+  },
+  {
+   "id": "north_east_america",
+   "name": "North East America",
+   "continent": "central_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_far_east_america",
+    "mid_far_east_america_ii",
+    "mid_far_west_canada",
+    "mid_far_west_canada_ii",
+    "mid_west_america",
+    "north_west_america",
+    "south_east_america",
+    "south_west_canada"
+   ],
+   "d": "M684.2 410.1L687.5 410.1L695.1 410.1L713.8 410.1L740 410.1L769.8 410.1L783.7 410.1L799.7 410.1L803.8 410.1L803.8 487L803.8 490L684.2 490L684.2 477.8Z",
+   "tokenX": 744,
+   "tokenY": 450,
+   "labelX": 744,
+   "labelY": 476
+  },
+  {
+   "id": "south_east_america",
+   "name": "South East America",
+   "continent": "central_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "mid_far_east_america_ii",
+    "mid_west_america",
+    "north_east_america",
+    "south_east_america_ii",
+    "south_far_east_america",
+    "south_west_america"
+   ],
+   "d": "M803.8 490L803.8 548.1L803.8 569.8L684.2 569.8L684.2 563.2L684.2 490Z",
+   "tokenX": 744,
+   "tokenY": 529.9,
+   "labelX": 744,
+   "labelY": 555.9
+  },
+  {
+   "id": "south_east_america_ii",
+   "name": "South East America II",
+   "continent": "central_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "south_east_america",
+    "south_far_east_america",
+    "south_west_america"
+   ],
+   "d": "M803.8 569.8L803.8 639L801.6 637.7L790 639.4L781.7 637.9L773.9 638.8L769.3 640.9L770 644.3L768.2 649.7L769.5 652.3L767.1 654L764 652.1L759.6 654.6L752.5 654.2L747.3 647.2L738.2 648.8L732 645.8L725.5 646.7L716.3 649.8L704.2 659.6L692.6 665.3L685.2 671.6L684.2 673.2L684.2 569.8Z",
+   "tokenX": 743.3,
+   "tokenY": 608.8,
+   "labelX": 743.3,
+   "labelY": 634.8
+  },
+  {
+   "id": "mid_far_east_america",
+   "name": "Mid Far East America",
+   "continent": "central_north_america",
+   "suit": "artillery",
+   "adjacent": [
+    "mid_far_east_america_ii",
+    "north_east_america",
+    "south_east_canada",
+    "south_far_east_canada",
+    "south_west_canada"
+   ],
+   "d": "M803.8 410.1L817.8 410.1L823.4 405.8L822.9 413.8L843.2 419.8L863.3 421.1L872.9 417.9L895.6 433.9L895.5 439.2L900 438.3L903.1 444.3L901 446.4L907.9 451.8L902.2 472.7L888.8 487L913.6 487L927.9 481.2L928.8 474L951 472L975.3 455.9L1005.7 455.8L1015.4 450.5L1037.3 427.6L1048.4 432L1042.2 447.7L1045.7 458.1L1012.3 471.4L1000 487L803.8 487Z",
+   "tokenX": 837.7,
+   "tokenY": 453,
+   "labelX": 837.7,
+   "labelY": 479
+  },
+  {
+   "id": "mid_far_east_america_ii",
+   "name": "Mid Far East America II",
+   "continent": "central_north_america",
+   "suit": "infantry",
+   "adjacent": [
+    "mid_far_east_america",
+    "north_east_america",
+    "south_east_america",
+    "south_east_canada",
+    "south_far_east_america"
+   ],
+   "d": "M1006.7 492.4L1004.8 495.9L967.1 504.4L981.5 502.1L983.5 504.5L969.2 508.1L964 506.6L957.4 519.4L947.3 528.9L943.9 522L943.6 535.5L932.2 548.1L935.4 541.3L932.2 536.5L934.6 526.3L930.3 539.5L924.7 537.5L929.8 541.5L927.8 548.1L803.8 548.1L803.8 487L888.8 487L884.9 491.8L887.5 495.4L913.6 487L1000 487L1000.6 493.8L1004.3 494.2L1004.9 489.8Z",
+   "tokenX": 834.3,
+   "tokenY": 517.6,
+   "labelX": 834.3,
+   "labelY": 543.6
+  },
+  {
+   "id": "south_far_east_america",
+   "name": "South Far East America",
+   "continent": "central_north_america",
+   "suit": "cavalry",
+   "adjacent": [
+    "mid_far_east_america_ii",
+    "south_east_america",
+    "south_east_america_ii"
+   ],
+   "d": "M932.2 548.1L930.3 550.3L930.7 548.1L927.8 548.1L926.2 553.4L928.7 554.3L925.5 571.3L916.5 580.7L905.4 584.5L896.8 592L891.7 592.8L882.7 601.9L862.1 616.4L855.3 624.1L851.1 633.4L850.3 642.5L852.4 663.1L851.9 684.3L843.4 706.7L840 708.4L835.4 706.7L827.5 676.1L827.4 670.9L831.7 662.1L830.9 654.8L826.3 643.8L823 641.8L811.4 647.8L803.8 639L803.8 548.1Z",
+   "tokenX": 841.1,
+   "tokenY": 585.5,
+   "labelX": 841.1,
+   "labelY": 611.5
+  }
+ ],
+ "seaLinks": [
+  {
+   "from": "cuba",
+   "to": "south_far_east_america"
+  },
+  {
+   "from": "cuba",
+   "to": "bahamas"
+  },
+  {
+   "from": "cuba",
+   "to": "jamaica"
+  },
+  {
+   "from": "cuba",
+   "to": "dominican_rep_haiti"
+  },
+  {
+   "from": "puerto_rico",
+   "to": "dominican_rep_haiti"
+  },
+  {
+   "from": "trinidad_and_tobago",
+   "to": "puerto_rico"
+  },
+  {
+   "from": "west_greenland",
+   "to": "north_far_east_canada"
+  }
+ ],
+ "modifierSlots": {
+  "blizzards": 3,
+  "portals": 4,
+  "capitals": 6
+ }
+}

@@ -188,7 +188,77 @@ export function growGroups(
     owner[i] = pick;
     (members[pick] as number[]).push(i);
   }
+
+  rebalance(owner, members, adjacency);
   return owner;
+}
+
+/**
+ * Even the sizes out by handing boundary members from the largest group to the
+ * smallest, as long as the donor stays connected.
+ *
+ * Growth alone can **starve** a group: seed three groups on a 3×3 grid and the
+ * corner seeds box the third one in after two steps, leaving 4/4/1. On a real
+ * board that showed up as continents holding a single territory and paying a
+ * bonus of 1 — technically valid, and no fun. Every choice here is by lowest
+ * index, so the pass is a total order (R91) and the result is reproducible.
+ */
+function rebalance(
+  owner: number[],
+  members: number[][],
+  adjacency: readonly ReadonlySet<number>[],
+): void {
+  const limit = adjacency.length * 4;
+  for (let pass = 0; pass < limit; pass++) {
+    const sizes = members.map((m) => m.length);
+    if (Math.max(...sizes) - Math.min(...sizes) <= 1) return;
+
+    const receivers = [...sizes.keys()].sort((a, b) => (sizes[a] as number) - (sizes[b] as number) || a - b);
+    const donors = [...sizes.keys()].sort((a, b) => (sizes[b] as number) - (sizes[a] as number) || a - b);
+
+    let moved = false;
+    for (const to of receivers) {
+      for (const from of donors) {
+        if (from === to || (sizes[from] as number) - (sizes[to] as number) <= 1) continue;
+        const candidates = (members[from] as number[])
+          .filter((m) => [...(adjacency[m] ?? [])].some((other) => owner[other] === to))
+          .sort((a, b) => a - b);
+        for (const member of candidates) {
+          if (!connectedWithout(members[from] as number[], member, adjacency)) continue;
+          members[from] = (members[from] as number[]).filter((m) => m !== member);
+          (members[to] as number[]).push(member);
+          owner[member] = to;
+          moved = true;
+          break;
+        }
+        if (moved) break;
+      }
+      if (moved) break;
+    }
+    if (!moved) return;
+  }
+}
+
+/** Is `group` still one piece, within itself, once `without` is removed? */
+function connectedWithout(
+  group: readonly number[],
+  without: number,
+  adjacency: readonly ReadonlySet<number>[],
+): boolean {
+  const inside = new Set(group.filter((m) => m !== without));
+  if (inside.size === 0) return false;
+  const start = [...inside].sort((a, b) => a - b)[0] as number;
+  const seen = new Set<number>([start]);
+  const stack = [start];
+  while (stack.length > 0) {
+    for (const other of adjacency[stack.pop() as number] ?? []) {
+      if (inside.has(other) && !seen.has(other)) {
+        seen.add(other);
+        stack.push(other);
+      }
+    }
+  }
+  return seen.size === inside.size;
 }
 
 function frontierOf(
