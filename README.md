@@ -49,12 +49,13 @@ shared borders; a seeded Voronoi generator makes the rest. The classic 42-territ
 graph was verified against nine independent sources, seven of which agree exactly.
 
 Next.js 16 · a pure engine with an enforced layering rule · exact O(A·D) battle odds ·
-**1,860 unit and property tests** · 10 e2e tests across desktop and mobile Chrome · 16
+**1,882 unit and property tests** · 10 e2e tests across desktop and mobile Chrome · 16
 boards · PostgreSQL only for online play (WASM locally, Neon deployed). Built from eight
 parallel research lanes, then seven parallel build slices, then four review rounds (one
 codex, three Claude — codex ran out of credits after round one) that returned seventy
 findings, every one fixed.
 
+**Live: [risk-david.vercel.app](https://risk-david.vercel.app)** ·
 **[Read the README →](Risk/README.md)** ·
 [Spec](Risk/SPEC.md) · [Decisions](Risk/DECISIONS.md) · [Research](Risk/research)
 

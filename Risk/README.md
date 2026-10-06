@@ -68,7 +68,7 @@ asset: the dice, the cards, the suit silhouettes, the emoji and the laurel wreat
 all geometry, colour and type (D38, D1).
 
 Next.js 16 · a pure engine with an enforced layering rule · exact O(A·D) battle odds
-to 128 troops and a fitted logistic beyond · **1,860 unit and property tests** ·
+to 128 troops and a fitted logistic beyond · **1,882 unit and property tests** ·
 **10 end-to-end tests** across desktop and mobile Chrome · 16 boards · PostgreSQL only
 for online play (WASM locally, Neon deployed). Built from 8 parallel research lanes,
 then 7 parallel build slices, then four review rounds (one codex, three Claude) that
@@ -98,7 +98,7 @@ returned seventy findings, every one fixed.
 ```bash
 pnpm install
 pnpm run dev          # http://localhost:3300 — no database needed for solo or hot-seat
-pnpm run verify       # typecheck + lint + 1,860 unit tests
+pnpm run verify       # typecheck + lint + 1,882 unit tests
 pnpm run test:e2e     # production build + Playwright on port 3300 (~5 min)
 ```
 
@@ -214,8 +214,8 @@ free allowances and what actually binds first, is `SPEC.md` §6.4.
 
 ## Deploying
 
-The project is its own Vercel project (`risk-david`), deployed by hand from this
-directory:
+The project is its own Vercel project (`risk-david`), live at
+**https://risk-david.vercel.app** and deployed by hand from this directory:
 
 ```bash
 npx vercel deploy --prod --yes
