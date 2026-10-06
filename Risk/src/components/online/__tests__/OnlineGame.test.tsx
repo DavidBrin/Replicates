@@ -22,7 +22,8 @@ let emitSnapshot: ((snapshot: unknown, seq: number) => void) | null = null;
 let seq = 0;
 const closed = { count: 0 };
 
-vi.mock("@/net/pollingSync", () => ({
+vi.mock("@/net/pollingSync", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/net/pollingSync")>()),
   createPollingSync: vi.fn(() => {
     created.count += 1;
     return {

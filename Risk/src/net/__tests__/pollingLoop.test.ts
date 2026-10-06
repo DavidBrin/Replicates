@@ -330,6 +330,36 @@ describe("the loop", () => {
     expect(loop.stopped).toBe(true);
   });
 
+  it("pause() stops scheduling but keeps the visibility subscription", async () => {
+    const time = clock();
+    const vis = visibility();
+    const poll = vi.fn(async () => undefined);
+    const loop = createPollingLoop({
+      poll,
+      intervalMs: () => 4000,
+      now: time.now,
+      schedule: time.schedule,
+      random: () => 0.5,
+      visibility: vis,
+    });
+
+    loop.start();
+    await Promise.resolve();
+    loop.pause();
+    expect(time.pending).toBeNull();
+    expect(loop.stopped).toBe(true);
+
+    // This is the whole difference from `stop()`: a paused loop that is
+    // resumed — an eliminated viewer asking to watch — still gets the
+    // hidden-tab cadence, because it never dropped the listener.
+    loop.resume();
+    await Promise.resolve();
+    await Promise.resolve();
+    vis.set(false);
+    expect(time.pending).toBe(HIDDEN_MS);
+    loop.stop();
+  });
+
   it("start() twice does not double the polling", async () => {
     const time = clock();
     const poll = vi.fn(async () => undefined);

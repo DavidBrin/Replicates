@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import type { BotTier } from "@/engine/types";
+import { readoutLines } from "@/components/setup/RulesReadout";
+import type { BotTier, Rules } from "@/engine/types";
 import type { ChatSend } from "@/ports/sync";
 import type { LobbyRoomBody } from "@/net/types";
 
@@ -25,6 +26,29 @@ import { useScreenPoll } from "./useScreenPoll";
  */
 
 const TIERS: readonly BotTier[] = ["beginner", "easy", "medium", "hard", "expert"];
+
+/**
+ * The host's modifiers, as chips — **read-only, for everyone** (SPEC §7).
+ *
+ * The room showed the map, the turn timer and the AI tier and nothing else, so
+ * a joiner could not tell Fog of War, Capitals or a 5-Rounds Rumble from a
+ * plain game until the board was already dealt. The six `Setup / Turn Timer /
+ * AI Difficulty / Card Bonus / Dice Rolls / Alliances` entries come from
+ * `/new/rules`' own `readoutLines`, so the two readouts cannot drift apart;
+ * these are the switches that readout does not carry.
+ */
+function modifierChips(rules: Rules): readonly string[] {
+  const chips: string[] = [];
+  if (rules.fogOfWar) chips.push("Fog of War");
+  if (rules.capitals) chips.push("Capitals");
+  if (rules.blizzards) chips.push("Blizzards");
+  if (rules.portals !== "off") chips.push(`Portals: ${rules.portals}`);
+  if (rules.winCondition === "percentage") {
+    chips.push(`Domination: ${Math.round(rules.dominationThreshold * 100)}%`);
+  }
+  if (rules.maxRounds !== null) chips.push(`Max rounds: ${rules.maxRounds}`);
+  return chips;
+}
 
 export interface LobbyRoomProps {
   readonly code: string;
@@ -158,6 +182,32 @@ export default function LobbyRoom({ code }: LobbyRoomProps) {
               : `${data.rules.turnSeconds}s`}{" "}
             · AI: {data?.rules.aiDifficulty ?? "—"}
           </p>
+          {data !== null && (
+            <div
+              data-testid="lobby-rules"
+              className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--text-muted)]"
+            >
+              {readoutLines(data.rules)
+                .flat()
+                .map((entry) => (
+                  <span key={entry.key} data-testid={`lobby-rule-${entry.key}`}>
+                    <strong className="font-head font-bold text-[color:var(--text)]">
+                      {entry.label}:
+                    </strong>{" "}
+                    {entry.value}
+                  </span>
+                ))}
+              {modifierChips(data.rules).map((chip) => (
+                <span
+                  key={chip}
+                  data-testid="lobby-rule-modifier"
+                  className="rounded-full border border-[color:var(--chrome-line)] px-2 py-0.5 text-[color:var(--gold)]"
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
           {isHost && data !== null && (
             <label className="mt-2 flex items-center gap-2 text-sm text-[color:var(--text-muted)]">
               Map
