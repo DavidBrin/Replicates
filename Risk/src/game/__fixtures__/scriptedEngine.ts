@@ -947,6 +947,9 @@ export function createScriptedEngine(): EngineApi {
     dicePlan,
     territoryCounts: (state) => countsBySeat(state, () => 1),
     troopCounts: (state) => countsBySeat(state, (t) => t.troops),
+    territoryCountFor: (state, seat) => territoriesOf(state, seat).length,
+    troopCountFor: (state, seat) =>
+      territoriesOf(state, seat).reduce((n, t) => n + Math.max(0, state.territories[t]?.troops ?? 0), 0),
     continentsHeldBy,
     isGameOver: (state) => state.outcome !== null,
     viewFor,

@@ -67,6 +67,10 @@ export function useGameScreenModel(
 
   const rows = useMemo<readonly RosterRow[]>(() => state.seats.map((s) => {
     const row = presence?.find((p) => p.seat === s.seat);
+    // Under fog the array selectors return `null` for every seat — nobody can
+    // total a board they cannot see. The viewer's **own** capsule still shows
+    // its exact numbers, which is what the evidence shows (R73, F52).
+    const own = s.seat === ui.viewerSeat;
     return {
       seat: s.seat,
       name: s.name,
@@ -75,12 +79,12 @@ export function useGameScreenModel(
       bot: s.kind === "bot",
       you: s.seat === ui.viewerSeat,
       active: s.seat === ui.actingSeat,
-      troops: troops[s.seat] ?? null,
-      territories: territories[s.seat] ?? null,
+      troops: troops[s.seat] ?? (own ? engine.troopCountFor(state, s.seat) : null),
+      territories: territories[s.seat] ?? (own ? engine.territoryCountFor(state, s.seat) : null),
       cards: s.cardCount,
       ...(row ? { online: row.online, missedTurns: row.missedTurns } : {}),
     };
-  }), [state.seats, presence, ui.viewerSeat, ui.actingSeat, troops, territories]);
+  }), [state, presence, ui.viewerSeat, ui.actingSeat, troops, territories, engine]);
 
   const balloons = useMemo(() => {
     const out: Record<number, string> = {};

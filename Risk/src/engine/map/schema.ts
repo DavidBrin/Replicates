@@ -274,6 +274,9 @@ export function loadMap(file: MapFile): MapDef {
     id: t.id,
     name: t.name,
     continent: continentIndex.get(t.continent) as ContinentId,
+    // S1 made `suit` a required member of `Territory` after this file was
+    // written; the authored value carries straight through (F7).
+    suit: t.suit,
     adjacent: adjacency[i] as readonly TerritoryId[],
     seaLinked: [...(sea[i] ?? [])].sort(ascending) as readonly TerritoryId[],
     d: t.d,

@@ -92,6 +92,7 @@ export function toMapDef(file: MapFile): MapDef {
       id: t.id,
       name: t.name,
       continent,
+      suit: t.suit,
       adjacent: sorted(rows[index]),
       seaLinked: sorted(seaRows[index]),
       d: t.d,

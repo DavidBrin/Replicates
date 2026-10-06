@@ -161,13 +161,15 @@ export function createBotDriver(options: BotDriverOptions): BotDriver {
       if (queue.length === 0) fill(state);
       const step = queue.shift() ?? null;
       planned = Math.max(1, queue.length + 1);
-      // A battle, a trade or a phase change invalidates the plan: re-enter.
-      if (step && (step.kind === "intent"
+      // `decideTurn` plans one phase per call and returns at most one attack;
+      // `done: false` is its request to be re-entered. A battle, a trade or a
+      // phase change invalidates the plan for the same reason: the board the
+      // plan was made against no longer exists.
+      const transitional = step !== null && (step.kind === "intent"
         || step.action.type === "TRADE_CARDS"
         || step.action.type === "END_PHASE"
-        || step.action.type === "MOVE_IN")) {
-        plan = null;
-      }
+        || step.action.type === "MOVE_IN");
+      if (transitional || (queue.length === 0 && plan?.done === false)) plan = null;
       return step;
     },
     size: () => planned,
