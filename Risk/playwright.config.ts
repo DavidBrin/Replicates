@@ -47,6 +47,8 @@ export default defineConfig({
       // Inlined at build time: installs `window.__riskDebug` on every play
       // route, including the ones reached by navigation without `?debug=1`.
       NEXT_PUBLIC_RISK_DEBUG: "1",
+      // Short turns so the online spec can force a timeout → bot takeover.
+      RISK_TURN_SECONDS: "3",
     },
   },
 });

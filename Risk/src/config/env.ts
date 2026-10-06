@@ -31,6 +31,14 @@ function oneOf<T extends string>(name: string, allowed: readonly T[], fallback: 
   return match;
 }
 
+function positiveInt(name: string): number | undefined {
+  const value = raw(name);
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`${name} must be a positive integer, got "${value}"`);
+  return n;
+}
+
 export const DB_DRIVERS = ["pglite", "neon"] as const;
 export type DbDriver = (typeof DB_DRIVERS)[number];
 
@@ -42,6 +50,12 @@ export interface ServerConfig {
     /** PGlite's data directory, or `":memory:"`. Ignored by the Neon driver. */
     readonly dataDir: string;
     readonly url: string | undefined;
+  };
+  readonly online: {
+    /** Overrides every lobby's turn timer (seconds); the e2e suite sets 3. */
+    readonly turnSecondsOverride: number | undefined;
+    /** Fixes `games.seed` for every new game; the e2e suite uses it for golden replays. */
+    readonly fixedSeed: string | undefined;
   };
 }
 
@@ -101,6 +115,10 @@ function build(): ServerConfig {
       driver,
       dataDir: str("DB_DATA_DIR", isTest ? ":memory:" : ".data/risk"),
       url,
+    },
+    online: {
+      turnSecondsOverride: positiveInt("RISK_TURN_SECONDS"),
+      fixedSeed: raw("RISK_FIXED_SEED"),
     },
   };
 }

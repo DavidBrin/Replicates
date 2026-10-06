@@ -1,2 +1,6 @@
 allowBuilds:
   unrs-resolver: true
+  # mapshaper (build-time map pipeline only) optionally depends on these native
+  # modules; nothing here needs them compiled.
+  better-sqlite3: false
+  msgpackr-extract: false

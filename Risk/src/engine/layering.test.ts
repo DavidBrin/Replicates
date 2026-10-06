@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { ALLOWED_PACKAGES, ENGINE_ENTRY_POINTS } from "./entryPoints";
+
 /**
  * The guard that keeps the engine pure (SPEC §4 "The engine contract", D2, D4, D9).
  *
@@ -122,9 +124,6 @@ const FILES = walk(ENGINE_DIR);
 const SOURCES = new Map(FILES.map((f) => [f, readFileSync(f, "utf8")]));
 const STRIPPED = new Map(FILES.map((f) => [f, stripCommentsAndStrings(SOURCES.get(f) as string)]));
 
-/** Files that must exist for the guard to be checking the real engine. */
-const ENGINE_ENTRY_POINTS: string[] = ["layering.test.ts"];
-
 function relative(file: string): string {
   return file.slice(ENGINE_DIR.length);
 }
@@ -149,7 +148,10 @@ describe("engine layering", () => {
         const bare = spec.split("/")[0] as string;
         if (BANNED_PACKAGES.includes(bare)) violations.push(`${relative(file)} imports ${spec}`);
         else if (!spec.startsWith(".") && !spec.startsWith("@/") && !isTest && bare !== "vitest") {
-          violations.push(`${relative(file)} imports package ${spec}`);
+          const allowed = ALLOWED_PACKAGES.find((p) => p.name === bare);
+          if (!allowed || !relative(file).startsWith(allowed.under)) {
+            violations.push(`${relative(file)} imports package ${spec}`);
+          }
         }
         const layer = layerOf(spec);
         if (layer !== null && BANNED_LAYERS.includes(layer)) violations.push(`${relative(file)} imports ${spec}`);
@@ -162,7 +164,7 @@ describe("engine layering", () => {
   it("pins its own imports, since it is the one file exempt from the scan", () => {
     const self = SOURCES.get(join(ENGINE_DIR, "layering.test.ts")) as string;
     const header = self.slice(0, self.indexOf("const ENGINE_DIR"));
-    expect(new Set(importSpecifiers(header))).toEqual(new Set(["node:fs", "node:path", "vitest"]));
+    expect(new Set(importSpecifiers(header))).toEqual(new Set(["node:fs", "node:path", "vitest", "./entryPoints"]));
   });
 
   it("calls nothing that makes a transition irreproducible", () => {

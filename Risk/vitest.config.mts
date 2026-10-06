@@ -23,7 +23,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
     css: false,
     // PGlite boots a WASM Postgres per suite; the default 5s is not enough
     // on a cold run, and a flaky timeout here would read as a schema bug.
