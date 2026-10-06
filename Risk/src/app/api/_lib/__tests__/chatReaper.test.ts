@@ -274,10 +274,13 @@ describe("the lazy reaper (§6.3)", () => {
   });
 
   it("bounds every sweep by its limit so no one request can be slow", async () => {
-    const host = await mustClaim("Napoleon");
-    // Inserted directly: `POST /api/lobbies` allows one open lobby per host,
-    // and what is under test here is the `limit`, not that rule.
-    for (const code of ["AAAA", "BBBB", "CCCC", "DDDD"]) {
+    // One lobby per host, because one live lobby per host is now a unique
+    // index (`lobbies_one_live_per_host`) rather than a handler's read — four
+    // open lobbies for one player is no longer a state the database will
+    // hold. What is under test here is the sweep's `limit`.
+    const codes = ["AAAA", "BBBB", "CCCC", "DDDD"];
+    for (const [index, code] of codes.entries()) {
+      const host = await mustClaim(`Host ${index}`);
       await harness.db.execute(
         `insert into lobbies (id, host_id, title, updated_at)
          values ($1, $2, 'Stale', now() - interval '25 minutes')`,

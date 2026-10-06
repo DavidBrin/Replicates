@@ -54,7 +54,7 @@ export async function POST(request: Request, context: Context): Promise<Response
       return badRequest("bad action", { errors: issueMessages(parsed.error) });
     }
 
-    await heartbeat(player);
+    await heartbeat(player, id);
     const result = await submitAction(id, player.id, parsed.data);
 
     switch (result.kind) {

@@ -3,8 +3,11 @@ import { chatRepository } from "@/adapters/db/repositories/chat";
 import { GamesRepository } from "@/adapters/db/repositories/games";
 import { lobbiesRepository } from "@/adapters/db/repositories/lobbies";
 
+import { DIALOG_LINES } from "@/content/dialog";
+
 import { currentPlayer, heartbeat } from "../_lib/auth";
 import { withDb } from "../_lib/boot";
+import { alliesOf } from "../_lib/gameService";
 import {
   badRequest,
   forbidden,
@@ -12,8 +15,12 @@ import {
   json,
   readJson,
   unauthorized,
+  unprocessable,
 } from "../_lib/http";
 import { ChatPostSchema } from "../_lib/schemas";
+
+/** Lines 28 and 29: offered only while an alliance is active (R80, §7.3). */
+const ALLY_ONLY = new Set(DIALOG_LINES.filter((line) => line.allyOnly).map((line) => line.id));
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +65,19 @@ export async function POST(request: Request): Promise<Response> {
     if (parsed.data.scope === "game") {
       const seat = await new GamesRepository(db).seatOf(scopeId ?? "", player.id);
       if (seat === null) return forbidden("not in that game");
+
+      // R80 — lines 28 and 29 are unlocked by an active alliance and by
+      // nothing else. The client only offers them to an allied seat, which is
+      // a presentation rule; without this they are a hand-rolled POST away,
+      // and "Sorry, I need to attack your territory." sent to somebody you
+      // have no pact with is exactly the social lever alliances are for.
+      const lineId = parsed.data.lineId;
+      if (lineId !== undefined && ALLY_ONLY.has(lineId)) {
+        const allies = await alliesOf(scopeId ?? "", seat);
+        if (allies === null || allies.length === 0) {
+          return unprocessable("illegalAction", "that line needs an active alliance (R80)");
+        }
+      }
     }
 
     const id = await chatRepository(db).post({

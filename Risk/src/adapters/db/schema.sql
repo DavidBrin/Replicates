@@ -86,6 +86,14 @@ create table if not exists lobbies (
   constraint lobbies_title  check (char_length(btrim(title)) between 1 and 40)
 );
 create index if not exists lobbies_open_idx on lobbies (status, updated_at desc);
+-- One LIVE lobby per host, enforced by the database rather than by a handler
+-- that reads before it inserts. `POST /api/lobbies` answers `409
+-- alreadyHosting` off this index's `23505`: two create requests from the same
+-- player both pass a `select … where host_id = …`, and the loser's lobby then
+-- sits in every browser's list as a dead end until the reaper closes it.
+-- `playing` and `closed` are excluded, so finishing a game frees the host.
+create unique index if not exists lobbies_one_live_per_host
+  on lobbies (host_id) where status in ('open','starting');
 
 alter table lobbies drop constraint if exists lobbies_game_fk;
 alter table lobbies add  constraint lobbies_game_fk

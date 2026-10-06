@@ -1,7 +1,7 @@
 import { config } from "@/config/env";
 
 import { currentPlayer, heartbeat } from "../../_lib/auth";
-import { pollGame, reclaimSeat, runLazyTick } from "../../_lib/gameService";
+import { pollGame, reclaimSeat, runLazyTick, seatFor } from "../../_lib/gameService";
 import { withDb } from "../../_lib/boot";
 import {
   forbidden,
@@ -29,6 +29,20 @@ type Context = { params: Promise<{ id: string }> };
  *
  * `ETag: W/"<seq>"` plus `If-None-Match` make the `204` path a string
  * compare, and the `204` path is the common case and the whole cost argument.
+ *
+ * **Authorisation comes before any of it.** The reclaim and the tick both
+ * append to the action log, so running them ahead of the seated check let an
+ * authenticated outsider — anyone with a session and a game id — drive another
+ * table's game forward and then be told `403`. The seat is read first and the
+ * refusal costs one indexed select.
+ *
+ * In a **fog** game the `actions` this returns are redacted per seat
+ * (`_lib/redact.ts`): `GAME_STARTED` is absent, a payload naming anything the
+ * caller cannot see arrives as `{ type: "HIDDEN", seat }` and another seat's
+ * `CARD_DRAWN` has `card: null`. A fog client **animates these rows and never
+ * folds them** — it is handed a fresh masked snapshot at `snapshotSeq === seq`
+ * on every changed poll, and a masked view is unhashable (F36), so there is
+ * nothing for a delta to fold onto and nothing to hash-check.
  */
 export async function GET(request: Request, context: Context): Promise<Response> {
   return withDb(async () => {
@@ -47,7 +61,16 @@ export async function GET(request: Request, context: Context): Promise<Response>
     // snapshot it already has.
     const since = Math.max(sinceParam, etagSeq(request.headers.get("if-none-match")));
 
-    await heartbeat(player);
+    // Authorise before anything that writes: both the reclaim and the tick
+    // append actions, and a request that is about to be refused must not move
+    // somebody else's game on.
+    const seated = await seatFor(id, player.id);
+    if (seated.kind === "notFound") return notFound("game not found");
+    if (seated.kind === "notSeated") return forbidden("not seated in that game");
+
+    // This game's seat, and no other: a seat stamp says "its owner is at THIS
+    // board", which is what the away takeover and the reclaim read (§5.6).
+    await heartbeat(player, id);
     // The returning player's seat flips back BEFORE the tick, so one poll
     // both reclaims the seat and sees the game move on (§5.6).
     await reclaimSeat(id, player.id);

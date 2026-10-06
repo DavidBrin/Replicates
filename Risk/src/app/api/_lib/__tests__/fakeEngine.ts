@@ -479,6 +479,11 @@ export function fakeApply(state: GameState, map: MapDef, action: Action): ApplyR
       return {
         state: {
           ...state,
+          // R20 — the award CLEARS the flag, which is what keeps it to
+          // exactly one card per capturing turn. The server reads the flag
+          // back to decide whether a card is still owed, so a reducer that
+          // left it set would let the tick deal a whole hand.
+          conqueredThisTurn: false,
           seats: withSeat(state, action.seat, {
             cards: [...(state.seats[action.seat]?.cards ?? []), action.card],
             cardCount: (state.seats[action.seat]?.cardCount ?? 0) + 1,

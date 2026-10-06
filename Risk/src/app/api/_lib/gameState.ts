@@ -1,6 +1,7 @@
 import "server-only";
 
 import { config } from "@/config/env";
+import { SEAT_NEUTRAL, SEAT_NONE } from "@/engine/types";
 import type {
   Action,
   BotPersona,
@@ -122,14 +123,70 @@ export function spreadPlacements(
 }
 
 /**
+ * The claim-phase candidates a timed-out seat is offered, lowest id first.
+ *
+ * The claim phase has **no `END_TURN` and no `END_PHASE`** — `validate`
+ * refuses both in `claim` — so without a `CLAIM` here a seat that times out
+ * during Manual Placement wedges the game: the tick finds no legal action,
+ * appends nothing, and every later poll repeats the same no-op.
+ *
+ * The 2-seat variant's alternation (R6) is not reimplemented: the neutral
+ * candidates are simply offered first and `validate` arbitrates. It refuses
+ * `forNeutral` when nothing is owed and refuses an own claim while one is, so
+ * whichever of the two R6 demands is the one that survives.
+ */
+function claimCandidates(state: GameState, seat: Seat): Action[] {
+  const first = (owner: (value: Seat) => boolean): TerritoryId | null => {
+    for (let index = 0; index < state.territories.length; index += 1) {
+      const cell = state.territories[index];
+      if (cell === undefined || cell.blizzard) continue;
+      if (owner(cell.owner)) return index;
+    }
+    return null;
+  };
+
+  const candidates: Action[] = [];
+  const push = (territory: TerritoryId | null, forNeutral: boolean): void => {
+    if (territory === null) return;
+    candidates.push(
+      forNeutral
+        ? { type: "CLAIM", seat, territory, forNeutral: true }
+        : { type: "CLAIM", seat, territory },
+    );
+  };
+
+  // The neutral army lands on the neutral holding when there is one, and on an
+  // unclaimed territory otherwise (R6).
+  push(
+    first((owner) => owner === SEAT_NEUTRAL),
+    true,
+  );
+  push(
+    first((owner) => owner === SEAT_NONE),
+    true,
+  );
+  // The seat's own claim: an unowned territory while any remain, then a
+  // reinforcement of its own (R9).
+  push(
+    first((owner) => owner === SEAT_NONE),
+    false,
+  );
+  push(
+    first((owner) => owner === seat),
+    false,
+  );
+  return candidates;
+}
+
+/**
  * The next action a timed-out seat takes, or `null` when it cannot move.
  *
  * Candidates are offered in order and the first one `validate` accepts wins,
  * so this needs to know nothing about which transitions the reducer allows —
  * which matters, because §3's phase machine is S1's and `END_TURN` out of
  * `draft` is exactly the sort of thing that is legal in one reading and not
- * in another. §5.6's table is the order: deploy what is undrafted, then end
- * the turn, then fall back to ending the phase.
+ * in another. §5.6's table is the order: place what is unplaced, then end the
+ * turn, then fall back to ending the phase.
  */
 export function autoSkipAction(
   engine: ServerEngine,
@@ -138,6 +195,8 @@ export function autoSkipAction(
   seat: Seat,
 ): Action | null {
   const candidates: Action[] = [];
+
+  if (state.phase === "claim") candidates.push(...claimCandidates(state, seat));
 
   if (state.troopsToPlace > 0) {
     let targets: readonly TerritoryId[] = [];
@@ -187,6 +246,14 @@ export function resolveMoveIn(
  * As with {@link autoSkipAction}, every candidate is offered to `validate` and
  * the first acceptable one wins, so a plan that disagrees with the reducer
  * degrades into ending the phase rather than wedging the tick.
+ *
+ * **`context.nextSeq` is the sub-stream index for every draw here** — the
+ * `seq` the action being produced will be appended at. Keying on `state.turn`
+ * instead (which is what this did) hands every re-entry inside one turn the
+ * *same* stream from its start: a bot's second attack of a turn re-rolls the
+ * first one's dice, and a chain of `decideTurn` calls re-plans identically
+ * forever. `seq` is unique per action by construction, which is exactly the
+ * property a sub-stream index needs.
  */
 export function nextBotAction(
   engine: ServerEngine,
@@ -198,13 +265,15 @@ export function nextBotAction(
     readonly grudge: Float32Array | undefined;
     readonly odds: OddsTables;
     readonly seed: string;
+    /** The `seq` the action this call produces will be appended at. */
+    readonly nextSeq: number;
   },
 ): Action | null {
   const view = engine.makeView(state, map, seat, context.persona, context.grudge);
   const plan = engine.decideTurn(
     view,
     context.odds,
-    engine.rngFor(context.seed, `bot:${seat}`, state.turn),
+    engine.rngFor(context.seed, `bot:${seat}`, context.nextSeq),
   );
 
   const candidates: Action[] = [];
@@ -256,7 +325,7 @@ export function nextBotAction(
           state,
           map,
           intent,
-          engine.rngFor(context.seed, "battle", state.turn),
+          engine.rngFor(context.seed, "battle", context.nextSeq),
           context.odds,
           state.rules.diceMode,
         ),
@@ -277,6 +346,78 @@ export function nextBotAction(
   for (const candidate of candidates) {
     if (engine.validate(state, map, candidate) === null) return candidate;
   }
+  return null;
+}
+
+/* ------------------------------------------- the authority's own actions -- */
+
+/**
+ * The action the **authority itself** owes before anybody may act again, or
+ * `null` when it owes nothing (§5.7, R20, R76).
+ *
+ * Two pieces of per-turn work are the runner's online exactly as they are the
+ * offline session's (`src/game/session.ts`'s `awardCard` and
+ * `roundStartWork`), and neither can be a client's to send: the schema refuses
+ * a `CARD_DRAWN` or `PORTALS_MOVED` body outright, because both carry a
+ * server-rolled value.
+ *
+ * - **The card award.** `conqueredThisTurn` is the whole condition: `apply`
+ *   *clears* it when it folds `CARD_DRAWN`, so the flag doubles as "and no
+ *   card has been awarded yet this turn", which is what keeps it to exactly
+ *   one card per capturing turn (R20). `validate` pins the award to the
+ *   `fortify` phase (R67), so that is the one phase it is offered in.
+ * - **The unstable-portal relocation.** Due at the start of a round, which is
+ *   what `portalsOwed` reports; `movePortals` answers `null` unless
+ *   `rules.portals === "unstable"` and `round % 3 === 0` (R76), so the caller
+ *   asks on every round start without a condition of its own.
+ *
+ * `nextSeq` is the `seq` the returned action will be appended at, and it is
+ * the sub-stream index for both draws — the same rule {@link nextBotAction}
+ * follows, and the reason a second card award in one game does not replay the
+ * first one's draw.
+ *
+ * Nothing here throws: a resolver that cannot answer yet must not wedge a
+ * turn, and `validate` has the last word on every candidate, so a card that
+ * would overfill a hand (R28) or a relocation the board cannot satisfy is
+ * simply not offered.
+ */
+export function owedServerAction(
+  engine: ServerEngine,
+  seed: string,
+  state: GameState,
+  map: MapDef,
+  nextSeq: number,
+  /**
+   * What is still outstanding. The caller clears each flag once it has been
+   * offered, so neither can be asked twice for the same turn or round — the
+   * flag conditions above are the *engine's* bookkeeping, and a reducer that
+   * failed to clear `conqueredThisTurn` would otherwise deal a whole hand.
+   */
+  due: { readonly card: boolean; readonly portals: boolean },
+): Action | null {
+  if (due.card && state.phase === "fortify" && state.conqueredThisTurn) {
+    try {
+      const drawn = engine.drawCard(
+        state,
+        map,
+        currentSeatOf(state),
+        engine.rngFor(seed, "cardDeck", nextSeq),
+      );
+      if (engine.validate(state, map, drawn) === null) return drawn;
+    } catch {
+      /* the resolver cannot draw yet; the turn still ends below */
+    }
+  }
+
+  if (due.portals) {
+    try {
+      const moved = engine.movePortals(state, map, engine.rngFor(seed, "portalMove", nextSeq));
+      if (moved !== null && engine.validate(state, map, moved) === null) return moved;
+    } catch {
+      /* ditto */
+    }
+  }
+
   return null;
 }
 

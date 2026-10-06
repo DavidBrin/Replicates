@@ -49,8 +49,14 @@ export async function POST(request: Request, context: Context): Promise<Response
     if (!lobby) return notFound("lobby not found");
     if (lobby.status !== "open") return conflict("gameAlreadyStarted");
 
+    // `join` carries the `status = 'open'` fence in the seat-taking statement
+    // itself: the check above is a read, and a `BATTLE` press landing between
+    // the two would otherwise seat somebody in a lobby that is already
+    // dealing a board — they would hold a lobby seat in a game that does not
+    // have one for them.
     const seat = await lobbies.join(code.data, player.id, parsed.data.seat ?? null);
     if (typeof seat === "string") {
+      if (seat === "gameAlreadyStarted") return conflict("gameAlreadyStarted");
       if (seat === "alreadySeated") {
         const existing = (await lobbies.seats(code.data)).find(
           (row) => row.playerId === player.id,
