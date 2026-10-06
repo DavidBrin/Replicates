@@ -3,8 +3,13 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
+import { rollAttack, type GameState, type Rng } from "@/engine";
+import { mini } from "@/engine/__fixtures__/maps";
+import { buildState } from "@/engine/__fixtures__/states";
+
 import { balance } from "./balance";
 import { outcomeDist } from "./dp";
+import { createOdds } from "./index";
 import { cumulativeGrid, sampleOutcome } from "./sample";
 import { CDF_QUANTUM, STANDARD_AUGMENT } from "./types";
 
@@ -159,5 +164,83 @@ describe("totality", () => {
     expect(sampleOutcome(dist, 1)).toEqual(sampleOutcome(dist, ALMOST_ONE));
     expect(sampleOutcome(dist, -1)).toEqual(sampleOutcome(dist, 0));
     expect(sampleOutcome(dist, Number.NaN)).toEqual(sampleOutcome(dist, 0));
+  });
+});
+
+/*
+ * The walk has exactly ONE implementation (codex round 2, findings 8 and 16b).
+ *
+ * `rollAttack` (S1) and `sampleOutcome` (S2) both resolve a battle from one `u` over R52's combined
+ * array plus R48's stopped tail. They used to carry two copies of that walk and the copies
+ * disagreed: S2 credited a resolved defender-hold with all of `A`, which is what the DP's
+ * `defendLoss[j < D]` means, while S1 credited `(A + 1) - stopUntil`, the limiter's committed count.
+ * These tests drive S1's resolver against the REAL DP, so a future divergence has to fail here.
+ */
+describe("rollAttack and sampleOutcome agree, against the real DP", () => {
+  /** An `Rng` whose single blitz draw is exactly `u`. */
+  function fixedU(u: number): Rng {
+    return { nextU32: () => Math.round(u * 2 ** 32), nextFloat: () => u, state: [0, 0] };
+  }
+
+  const odds = createOdds("trueRandom");
+
+  /** Seat 0 holds `source` troops on territory 2, seat 1 holds `target` on the adjacent 3. */
+  function board(source: number, target: number): GameState {
+    return buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      troops: [1, 1, source, target, 1, 1],
+      phase: "attack",
+    });
+  }
+
+  function blitz(
+    source: number, target: number, u: number, stopUntil?: number,
+  ): { attackerLosses: number; defenderLosses: number } {
+    const action = rollAttack(
+      board(source, target), mini,
+      { from: 2, to: 3, mode: "blitz", ...(stopUntil === undefined ? {} : { stopUntil }) },
+      fixedU(u), odds, "trueRandom",
+    );
+    if (action.mode !== "blitz") throw new Error("expected a blitz");
+    return { attackerLosses: action.attackerLosses, defenderLosses: action.defenderLosses };
+  }
+
+  it("R48 — a RESOLVED hold under a limiter costs the attacker all of A, not the committed count", () => {
+    // A = 4, D = 2, stopUntil = 2. The real DP leaves mass on `defendLoss[0]`: from A = 2 the
+    // attacker can lose both armies in one round, so it reaches zero without ever sitting at or
+    // below the limiter's floor. That cell therefore means "wiped out" — 4 — where the old
+    // `(A + 1) - stopUntil` arithmetic said 3.
+    const dist = outcomeDist(4, 2, STANDARD_AUGMENT, 2);
+    expect(dist.defendLoss[0] as number).toBeGreaterThan(0);
+    expect(dist.unresolved).toBeGreaterThan(0);
+
+    // u = 0.80 lands on `defendLoss[0]`: past the three conquest cells (cumulative about 0.726)
+    // and short of the stopped tail (about 0.857).
+    expect(blitz(5, 2, 0.8, 2)).toEqual({ attackerLosses: 4, defenderLosses: 0 });
+    // The tail itself still reports the DP's own recorded losses, not `A`.
+    expect(blitz(5, 2, 0.95, 2)).toEqual({ attackerLosses: 3, defenderLosses: 1 });
+  });
+
+  it("resolves every u to exactly what sampleOutcome says, limiter or not", () => {
+    const cases: readonly (readonly [number, number, number | undefined])[] = [
+      [5, 2, 2], [7, 4, 2], [7, 4, 3], [10, 6, 4], [5, 3, undefined], [9, 9, undefined],
+    ];
+    for (const [source, target, stopUntil] of cases) {
+      const a = source - 1;
+      const dist = outcomeDist(a, target, STANDARD_AUGMENT, stopUntil);
+      for (let n = 0; n <= 400; n++) {
+        const u = n / 401;
+        const mine = blitz(source, target, u, stopUntil);
+        const theirs = sampleOutcome(dist, u);
+        expect(mine).toEqual({
+          attackerLosses: theirs.attackerLosses,
+          defenderLosses: theirs.defenderLosses,
+        });
+        // Whatever the walk says, the reducer has to be able to apply it (R63).
+        expect(mine.attackerLosses).toBeLessThanOrEqual(a);
+        expect(mine.defenderLosses).toBeLessThanOrEqual(target);
+      }
+    }
   });
 });

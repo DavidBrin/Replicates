@@ -166,10 +166,16 @@ export const TRADE_DOWN_FLOOR = 4;
  *
  * A hand of 5 reached by *inheritance alone* is a different thing: R26 says explicitly that an
  * inheritance leaving you under 6 waits for your next turn. The two are told apart by the R27
- * bounce: a seizure arrives on a capture, so a trade-down always starts in `attack` and the first
- * forced trade bounces the phase back to `draft` with `resumePhase` set (F41). `resumePhase !== null`
- * **plus** a set already traded this turn is therefore exactly "mid-trade-down", and it needs no new
- * `GameState` field — which would change `hashState` for every game ever played.
+ * bounce: `resumePhase` is set by the reducer on **every** route a seizure to ≥6 can arrive by —
+ * the `MOVE_IN` branch after a conquest (F41) and `END_TURN`'s R81 re-check — and cleared by the
+ * `END_PHASE` that leaves the trade-down. `resumePhase !== null` **plus** a set already traded this
+ * turn is therefore exactly "mid-trade-down", and it needs no new `GameState` field — which would
+ * change `hashState` for every game ever played.
+ *
+ * It must stay keyed on the bounce and **not** be derived from the hand size alone: a seat that
+ * traded at turn start and then inherited back up to 5 satisfies `hand.length + 3 *
+ * setsTradedThisTurn >= 6` without ever having held six, and R26 defers that hand to the seat's next
+ * turn (codex round 2, finding 9).
  */
 function tradeDownInProgress(state: GameState): boolean {
   return state.resumePhase !== null && state.setsTradedThisTurn > 0;

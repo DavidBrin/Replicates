@@ -86,14 +86,20 @@ function avalanche(x: number): number {
 }
 
 /** The 64-bit PCG seed `rngFor` derives, exposed so a test can pin it. */
-export function seedFor(seed: string, purpose: RngPurpose, turn: number): readonly [number, number] {
-  const key = `${seed}|${purpose}|${turn}`;
+export function seedFor(seed: string, purpose: RngPurpose, index: number): readonly [number, number] {
+  const key = `${seed}|${purpose}|${index}`;
   return [avalanche(fnv1a32(key, FNV_BASIS)), avalanche(fnv1a32(key, FNV_BASIS_B))];
 }
 
-/** Purpose-tagged sub-stream: `pcg32(hash(seed, purpose, turn))` (D4). */
-export function rngFor(seed: string, purpose: RngPurpose, turn: number): Rng {
-  const [hi, lo] = seedFor(seed, purpose, turn);
+/**
+ * Purpose-tagged sub-stream: `pcg32(hash(seed, purpose, index))` — the determinism keystone (D4).
+ *
+ * `index` is the **seq of the action being produced** (the session's / the server's `nextSeq`),
+ * never `state.turn`: keyed on the turn, every attack within one turn would reuse the stream's
+ * first draw. Personas and the opening deal use index 0.
+ */
+export function rngFor(seed: string, purpose: RngPurpose, index: number): Rng {
+  const [hi, lo] = seedFor(seed, purpose, index);
   return pcg32(hi, lo);
 }
 

@@ -33,8 +33,13 @@
  *
  * - landing at index `i < A`  -> conquest: `attackerLosses = i`, `defenderLosses = D`;
  * - landing at index `A + k`  -> the defender held, having lost `j = D - 1 - k`:
- *   `defenderLosses = j`, and `attackerLosses` is every troop the attacker
- *   committed — `A` with no limiter, or `(A + 1) - stopUntil` with one (R48).
+ *   `defenderLosses = j` and `attackerLosses = A`. **`A`, not what a limiter let
+ *   the attacker commit**: the DP writes `defendLoss[j < D]` only on the
+ *   transition that takes the attacker's force to zero, so a cell in that range
+ *   *means* "the attacker is wiped out". A battle the limiter stopped with the
+ *   attacker still standing is in `dist.stopped` and carries its own losses, so
+ *   crediting `(A + 1) - stopUntil` here under-reported the loss on a resolved
+ *   hold at `stopUntil = 2` (codex round 2, finding 8).
  *
  * **`attackLoss` and `defendLoss` describe resolved battles only.** A truncated
  * distribution's stopped mass is *not* folded into `defendLoss[j < D]`: it lives
@@ -195,8 +200,6 @@ export function rollAttack(
   const u = rng.nextFloat();
   const at = walkCdf(walk, u);
 
-  const committed = intent.stopUntil === undefined ? a : Math.max(0, Math.min(a, a + 1 - intent.stopUntil));
-
   let attackerLosses: number;
   let defenderLosses: number;
   if (at < 0) {
@@ -209,7 +212,10 @@ export function rollAttack(
     defenderLosses = d;
   } else if (at < dist.a + dist.d) {
     defenderLosses = dist.d - 1 - (at - dist.a);
-    attackerLosses = committed;
+    // The DP writes this range only where the attacker's force reached zero, so
+    // a resolved hold costs every one of `a` — a limiter's partial commitment
+    // lands in `dist.stopped` below instead (R48, R52).
+    attackerLosses = a;
   } else {
     // The limiter stopped it with both sides alive; the DP knows exactly where.
     const hit = stopped[at - dist.a - dist.d] as StoppedOutcome;

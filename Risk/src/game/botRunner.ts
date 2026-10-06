@@ -22,7 +22,8 @@ export interface BotDriverOptions {
   readonly odds: OddsTables;
   readonly map: MapDef;
   readonly seat: Seat;
-  /** `rngFor(seed, \`bot:${seat}\`, turn)` — a template literal, never a concatenation (F18). */
+  /** ``rngFor(seed, `bot:${seat}`, nextSeq)`` — a template literal, never a concatenation (F18).
+   *  The index is the seq of the action being produced, never `state.turn` (D5, R88). */
   readonly rng: () => Rng;
   /** Cross-turn bot memory, carried by the runner (F43). */
   readonly grudge: Float32Array;

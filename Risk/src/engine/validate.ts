@@ -129,15 +129,25 @@ export function validate(state: GameState, map: MapDef, action: Action): RuleErr
    * single action still accepted from that seat.
    *
    * The guard stays at SEVEN and is deliberately **not** widened to R26's floor
-   * of four. A hand of six is the state F41 routes through `MOVE_IN` to reach
-   * the R27 bounce, and a hand of five mid-trade-down is already refused with
-   * the precise `mustTradeCards` code by every action `mustTradeDown` gates —
-   * `DRAFT`, `AUTO_DEPLOY`, `END_PHASE`, `END_TURN` — while `ATTACK`,
-   * `FORTIFY` and `MOVE_IN` are unreachable from the bounced `draft` phase. A
-   * blanket gate here would block the bounce itself.
+   * of four. A hand of five mid-trade-down is already refused with the precise
+   * `mustTradeCards` code by every action `mustTradeDown` gates — `DRAFT`,
+   * `AUTO_DEPLOY`, `END_PHASE`, `END_TURN` — while `ATTACK` and `FORTIFY` are
+   * unreachable from the bounced `draft` phase. A blanket gate here would block
+   * the bounce itself.
+   *
+   * **`MOVE_IN` is exempt, not just `TRADE_CARDS`** (F41). A seizure arrives on
+   * a capture and a capture always sets `pendingMoveIn`, so the R27 bounce that
+   * is the only way *out* of a seven-or-more hand sits behind `MOVE_IN`: the
+   * reducer applies it after the troops move. Gating `MOVE_IN` here wedged every
+   * elimination that lifted the hand past six — `legalActions` offered
+   * `["MOVE_IN"]`, `validate` refused it, and `TRADE_CARDS` is refused outside
+   * `draft` — so a 4-card attacker eliminating a 4-card victim could take no
+   * action at all (codex round 2, finding 2). `validateMoveIn` still pins the
+   * count to `pendingMoveIn`'s own window, so the exemption lets through exactly
+   * the one action R63 already demands.
    */
   const actor = (action as { seat?: unknown }).seat;
-  if (typeof actor === "number" && action.type !== "TRADE_CARDS") {
+  if (typeof actor === "number" && action.type !== "TRADE_CARDS" && action.type !== "MOVE_IN") {
     const row = seatRow(state, actor);
     if (row !== null && row.cards.length > 6) {
       return err("illegalAction", "a hand of seven or more cards must be traded down first (R28)");

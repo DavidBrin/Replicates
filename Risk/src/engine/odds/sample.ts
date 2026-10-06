@@ -23,45 +23,45 @@
  * **strictly exceeds** the quantised `u` wins, i.e. `qu < qcum`. So `u = 0` always picks the first
  * entry carrying mass, and `u = 1 − ε` always picks the last. If floating-point drift leaves the
  * walk short of `u`, the last entry carrying mass is returned rather than falling off the end.
+ *
+ * ## One walk, not two
+ *
+ * The probability vector and the walk over it are **S1's** `sampledOutcomes` and `walkCdf` (R52,
+ * R59), imported from `@/engine` — the permitted direction (`odds → engine`, §4.2). `rollAttack`
+ * resolves a live battle through the very same two functions, so the two cannot drift apart; what
+ * lives here is only the mapping from an index of that walk to a `SampledOutcome`, which is what
+ * callers who want the losses rather than the index ask for. They did drift once: this file always
+ * credited a resolved defender-hold with `a` attacker losses (which is what the DP's
+ * `defendLoss[j < D]` means) while `rollAttack` credited a limiter's committed count (codex round 2,
+ * findings 8 and 16b).
  */
 
 import { CDF_QUANTUM, type BattleDist, type OutcomeDist, type SampledOutcome } from "./types";
+import { sampledOutcomes, walkCdf } from "@/engine";
 
 function quantise(x: number): number {
   return Math.round(x * CDF_QUANTUM);
 }
 
-/** One entry of the pinned walk. */
-interface Step {
-  readonly p: number;
-  readonly out: SampledOutcome;
-}
-
-function steps(dist: OutcomeDist): Step[] {
+/** The outcome each index of {@link sampledOutcomes}'s vector stands for, in the same order. */
+function outcomes(dist: OutcomeDist): SampledOutcome[] {
   const a = dist.a;
   const d = dist.d;
-  const out: Step[] = [];
+  const out: SampledOutcome[] = [];
   for (let i = 0; i < a; i++) {
-    out.push({
-      p: dist.attackLoss[i] as number,
-      out: { attackerLosses: i, defenderLosses: d, conquered: true, unresolved: false },
-    });
+    out.push({ attackerLosses: i, defenderLosses: d, conquered: true, unresolved: false });
   }
   for (let j = d - 1; j >= 0; j--) {
-    out.push({
-      p: dist.defendLoss[j] as number,
-      out: { attackerLosses: a, defenderLosses: j, conquered: false, unresolved: false },
-    });
+    // The DP writes `defendLoss[j < d]` only on the transition that empties the
+    // attacker's force, so a resolved hold always costs the attacker all of `a`.
+    out.push({ attackerLosses: a, defenderLosses: j, conquered: false, unresolved: false });
   }
   for (const s of (dist as BattleDist).stopped ?? []) {
     out.push({
-      p: s.p,
-      out: {
-        attackerLosses: s.attackerLosses,
-        defenderLosses: s.defenderLosses,
-        conquered: false,
-        unresolved: true,
-      },
+      attackerLosses: s.attackerLosses,
+      defenderLosses: s.defenderLosses,
+      conquered: false,
+      unresolved: true,
     });
   }
   return out;
@@ -80,26 +80,21 @@ export function sampleOutcome(dist: OutcomeDist, u: number): SampledOutcome {
   if (dist.d === 0) return { attackerLosses: 0, defenderLosses: 0, conquered: true, unresolved: false };
   if (dist.a === 0) return { attackerLosses: 0, defenderLosses: 0, conquered: false, unresolved: false };
 
-  const walk = steps(dist);
-  const qu = quantise(u);
-  let cumulative = 0;
-  let last: SampledOutcome | null = null;
-  for (const step of walk) {
-    if (step.p <= 0) continue;
-    cumulative += step.p;
-    last = step.out;
-    if (qu < quantise(cumulative)) return step.out;
+  // S1's walk, verbatim: `walkCdf` returns the last index carrying mass rather
+  // than falling off the end, and `-1` only for a vector with no mass at all.
+  const at = walkCdf(sampledOutcomes(dist), u);
+  if (at < 0) {
+    return { attackerLosses: dist.a, defenderLosses: 0, conquered: false, unresolved: false };
   }
-  // Only reachable when rounding left the final cumulative at or below `qu`.
-  return last ?? { attackerLosses: dist.a, defenderLosses: 0, conquered: false, unresolved: false };
+  return outcomes(dist)[at] as SampledOutcome;
 }
 
 /** The quantised cumulative grid, in walk order. Exported so T5 can assert the walk itself. */
 export function cumulativeGrid(dist: OutcomeDist): readonly number[] {
   const out: number[] = [];
   let cumulative = 0;
-  for (const step of steps(dist)) {
-    cumulative += step.p;
+  for (const p of sampledOutcomes(dist)) {
+    cumulative += p;
     out.push(quantise(cumulative));
   }
   return out;

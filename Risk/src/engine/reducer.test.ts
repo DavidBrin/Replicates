@@ -804,7 +804,7 @@ describe("R22–R27 — trading", () => {
     expect(back.events).toEqual([{ type: "phaseChanged", from: "draft", to: "attack" }]);
   });
 
-  it("F41 — a seizure with no conquest bounces from the ATTACK branch itself", () => {
+  it("F41 — a seizure with no conquest bounces from the branch that saw it, and holds the turn", () => {
     // Seat 1 already owns nothing, so END_TURN's elimination re-check hands its
     // cards over with no capture and no pending move-in.
     const victimHand = [inf("v1"), inf("v2"), inf("v3"), cav("v4"), cav("v5"), cav("v6")];
@@ -818,6 +818,138 @@ describe("R22–R27 — trading", () => {
     const { state: after, events } = ok(state, mini, { type: "END_TURN", seat: 0 });
     expect(eventTypes(events)).toContain("cardsSeized");
     expect(after.seats[0]?.cards).toHaveLength(6);
+    // R26 — the trade-down is owed in THIS turn, so the bounce fires and END_TURN
+    // does not advance: seat 0 is still the one to move, in draft, with the attack
+    // phase waiting on the other side of the forced trade.
+    expect(after.phase).toBe("draft");
+    expect(after.resumePhase).toBe("attack");
+    expect(after.currentIndex).toBe(0);
+    expect(after.turn).toBe(state.turn);
+    expect(after.round).toBe(state.round);
+    expect(legalActions(after, mini, 0)).toEqual(["TRADE_CARDS"]);
+    // And the way out works: trade, place the bonus, resume attack, end the turn.
+    let s = ok(after, mini, { type: "TRADE_CARDS", seat: 0, cards: ["v1", "v2", "v3"], bonusTerritory: null }).state;
+    expect(s.seats[0]?.cards).toHaveLength(3);
+    s = ok(s, mini, { type: "DRAFT", seat: 0, territory: 0, count: s.troopsToPlace }).state;
+    s = ok(s, mini, { type: "END_PHASE", seat: 0 }).state;
+    expect(s.phase).toBe("attack");
+    s = ok(s, mini, { type: "END_TURN", seat: 0 }).state;
+    expect(s.currentIndex).toBe(2); // seat 1 is out, so the wrap skips it (R81)
+  });
+
+  /*
+   * Codex round 2, finding 2 — the whole F41 sequence from a hand that only an
+   * elimination can produce. The bounce lives behind MOVE_IN, so MOVE_IN has to be
+   * exempt from R28's seven-or-more guard or the seat has no legal action at all.
+   */
+  describe("F41 — a seizure past six with a conquest pending is never a dead end", () => {
+    /** Seat 0 attacks seat 1's last territory from territory 2 and wipes it out. */
+    function seize(mine: readonly Card[], theirs: readonly Card[]): GameState {
+      const state = buildState(mini, {
+        seats: 3,
+        owners: [0, 0, 0, 1, 2, 2],
+        troops: [1, 1, 6, 1, 1, 1],
+        phase: "attack",
+        hands: { 0: mine, 1: theirs },
+      });
+      const { state: after, events } = ok(state, mini, {
+        type: "ATTACK", seat: 0, from: 2, to: 3, mode: "blitz", attackerLosses: 0, defenderLosses: 1,
+      });
+      expect(eventTypes(events)).toContain("cardsSeized");
+      expect(after.phase).toBe("attack");
+      expect(after.pendingMoveIn).not.toBeNull();
+      return after;
+    }
+
+    it("4 + 4 = 8 — MOVE_IN is offered AND accepted, and the floor of four forces 8 -> 5 -> 2", () => {
+      const seized = seize(
+        [inf("a1"), inf("a2"), inf("a3"), cav("a4")],
+        [cav("v1"), cav("v2"), art("v3"), art("v4")],
+      );
+      expect(seized.seats[0]?.cards).toHaveLength(8);
+      // `legalActions` and `validate` have to agree: this used to offer MOVE_IN and refuse it.
+      expect(legalActions(seized, mini, 0)).toEqual(["MOVE_IN"]);
+      const moved = ok(seized, mini, { type: "MOVE_IN", seat: 0, count: 3 }).state;
+      expect(moved.phase).toBe("draft");
+      expect(moved.resumePhase).toBe("attack");
+
+      expect(legalActions(moved, mini, 0)).toEqual(["TRADE_CARDS"]);
+      const once = ok(moved, mini, {
+        type: "TRADE_CARDS", seat: 0, cards: ["a1", "a2", "a3"], bonusTerritory: null,
+      }).state;
+      expect(once.seats[0]?.cards).toHaveLength(5);
+      // R26's floor is four, so five is still above it and the trade-down keeps forcing.
+      expect(legalActions(once, mini, 0)).toEqual(["TRADE_CARDS"]);
+      const twice = ok(once, mini, {
+        type: "TRADE_CARDS", seat: 0, cards: ["a4", "v1", "v2"], bonusTerritory: null,
+      }).state;
+      expect(twice.seats[0]?.cards).toHaveLength(2);
+      expect(twice.setsTradedThisTurn).toBe(2);
+
+      // R27 — both bonuses are in troopsToPlace, and END_PHASE returns play to attack.
+      let s = ok(twice, mini, { type: "DRAFT", seat: 0, territory: 0, count: twice.troopsToPlace }).state;
+      s = ok(s, mini, { type: "END_PHASE", seat: 0 }).state;
+      expect(s.phase).toBe("attack");
+      expect(s.resumePhase).toBeNull();
+      expect(s.conqueredThisTurn).toBe(true);
+    });
+
+    it("3 + 4 = 7 — one trade reaches the floor of four and nothing more is forced", () => {
+      const seized = seize(
+        [inf("a1"), inf("a2"), cav("a3")],
+        [inf("v1"), cav("v2"), cav("v3"), art("v4")],
+      );
+      expect(seized.seats[0]?.cards).toHaveLength(7);
+      expect(legalActions(seized, mini, 0)).toEqual(["MOVE_IN"]);
+      const moved = ok(seized, mini, { type: "MOVE_IN", seat: 0, count: 4 }).state;
+      expect(moved.phase).toBe("draft");
+      expect(legalActions(moved, mini, 0)).toEqual(["TRADE_CARDS"]);
+      const once = ok(moved, mini, {
+        type: "TRADE_CARDS", seat: 0, cards: ["a1", "a2", "v1"], bonusTerritory: null,
+      }).state;
+      expect(once.seats[0]?.cards).toHaveLength(4);
+      // Four is the floor: the optional second trade is offered, never forced.
+      expect(legalActions(once, mini, 0)).toContain("DRAFT");
+      expect(legalActions(once, mini, 0)).toContain("TRADE_CARDS");
+    });
+  });
+
+  it("R26 — an inheritance that leaves the hand UNDER six waits for the next turn, even after a trade", () => {
+    /*
+     * Codex round 2, finding 9: the mid-trade-down predicate must stay keyed on R27's bounce and
+     * not be re-derived from the hand size. Seat 0 opens with five and a set (R24 forces the
+     * trade), comes down to two, then eliminates a seat holding three and is back at five —
+     * `hand.length + 3 * setsTradedThisTurn = 8`, yet it has never held six and R26 explicitly
+     * defers this hand to its next turn.
+     */
+    const state = buildState(mini, {
+      seats: 3,
+      owners: [0, 0, 0, 1, 2, 2],
+      troops: [1, 1, 6, 1, 1, 1],
+      phase: "draft",
+      troopsToPlace: 3,
+      hands: {
+        0: [inf("a1"), inf("a2"), inf("a3"), cav("a4"), art("a5")],
+        1: [cav("v1"), cav("v2"), art("v3")],
+      },
+    });
+    expect(legalActions(state, mini, 0)).toEqual(["TRADE_CARDS"]);
+    let s = ok(state, mini, { type: "TRADE_CARDS", seat: 0, cards: ["a1", "a2", "a3"], bonusTerritory: null }).state;
+    expect(s.seats[0]?.cards).toHaveLength(2);
+    s = ok(s, mini, { type: "DRAFT", seat: 0, territory: 0, count: s.troopsToPlace }).state;
+    s = ok(s, mini, { type: "END_PHASE", seat: 0 }).state;
+    s = ok(s, mini, {
+      type: "ATTACK", seat: 0, from: 2, to: 3, mode: "blitz", attackerLosses: 0, defenderLosses: 1,
+    }).state;
+    s = ok(s, mini, { type: "MOVE_IN", seat: 0, count: 3 }).state;
+
+    expect(s.seats[0]?.cards).toHaveLength(5);
+    expect(s.setsTradedThisTurn).toBe(1);
+    // No bounce, so no trade-down is owed: play simply carries on in attack.
+    expect(s.phase).toBe("attack");
+    expect(s.resumePhase).toBeNull();
+    expect(legalActions(s, mini, 0)).toContain("END_TURN");
+    expect(ok(s, mini, { type: "END_TURN", seat: 0 }).state.currentIndex).toBe(2);
   });
 
   it("R28/F51 — a seven-card hand returns illegalAction rather than throwing", () => {

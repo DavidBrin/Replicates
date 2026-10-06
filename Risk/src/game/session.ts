@@ -35,6 +35,14 @@ export const AI_STEP_MIN_MS = 40;
 export const AWARD_HOLD_MS = 2200;
 /** How long Get Ready holds. It is shown once, on the viewer's first turn (§7.2). */
 export const GET_READY_HOLD_MS = 2600;
+/**
+ * How long a resync ask stays latched before the session is allowed to ask again (§5.8).
+ *
+ * An ask that is accepted and then answered by a snapshot clears the latch immediately; this is the
+ * ceiling for one that is refused, dropped, or answered by an adapter that cannot actually rewind
+ * its cursor. Not an animation beat, so it is never shortened by `skipAnimations`.
+ */
+export const RESYNC_RETRY_MS = 10_000;
 export function aiStepMs(actionCount: number): number {
   return Math.max(AI_STEP_MIN_MS, Math.min(AI_STEP_MS, Math.floor(AI_TURN_BUDGET_MS / Math.max(1, actionCount))));
 }
@@ -285,6 +293,13 @@ export function createSession(options: SessionOptions): Session {
   let pendingActions: { readonly id: string; readonly action: Action }[] = [];
   let displayedState: GameState = confirmedState;
   let folded = online ? 0 : 1;
+  /**
+   * The highest seq already drained for its **events** without being folded (§5.5).
+   *
+   * Only moves while the confirmed state is a masked view, where rows cannot be folded at all; it
+   * is what keeps the same batch from replaying its animations on every poll.
+   */
+  let animatedThrough = folded;
   /**
    * The seq of the action this runner is about to produce — the RNG sub-stream index (D5, R88).
    *
@@ -589,8 +604,19 @@ export function createSession(options: SessionOptions): Session {
     return probe;
   }
 
-  /** One resync ask per desync, until a snapshot answers it. */
+  /**
+   * One resync ask at a time — but a **latch, not a one-shot** (codex round 2, finding 5).
+   *
+   * `ingestSnapshot` clearing it is only the happy path: an adapter whose `resync()` rejects, or
+   * one that accepts and then never lands a snapshot (an older adapter that can only nudge the
+   * poll cadence cannot reset the cursor at all), would otherwise leave the flag set for the life
+   * of the session and the client stuck in `"desynced"` with no way to ask again. So the ask is
+   * released on rejection and, failing that, after {@link RESYNC_RETRY_MS} if no snapshot has
+   * landed.
+   */
   let resyncRequested = false;
+  /** Cancels the pending release timer, so a landed snapshot does not leave one armed. */
+  let resyncTimeout: (() => void) | null = null;
 
   /** Drop the one optimistic entry the authority has now spoken for. */
   function retirePending(id: string | null): boolean {
@@ -647,9 +673,22 @@ export function createSession(options: SessionOptions): Session {
     later(then, ms);
   }
 
-  /** Unstable portals relocate at the start of every third round (R76, §5.7). */
+  /** The round the offline authority has already done its round-start work for. */
+  let portalRound = confirmedState.round;
+
+  /**
+   * Unstable portals relocate at the start of every third round (R76, §5.7).
+   *
+   * The trigger is **`round` changing**, which is what the server keys on too
+   * (`if (state.round !== roundBefore) portalsOwed = true`). It is emphatically *not*
+   * `currentIndex === 0`: `nextTurnIndex` skips eliminated seats, so once `turnOrder[0]` is out the
+   * wrap lands on index 1 or later and the relocation stopped happening for the rest of the game
+   * (codex round 2, finding 7). `movePortals` answers `null` unless the rules ask for unstable
+   * portals and `round % 3 === 0`, so the caller needs no condition beyond "a new round started".
+   */
   function roundStartWork(): void {
-    if (confirmedState.currentIndex !== 0 || confirmedState.rules.portals !== "unstable") return;
+    if (confirmedState.round === portalRound) return;
+    portalRound = confirmedState.round;
     const moved = engine.movePortals(confirmedState, map, engine.rngFor(config.seed, "portalMove", nextSeq));
     if (moved) applyLocal(moved, true);
   }
@@ -901,25 +940,92 @@ export function createSession(options: SessionOptions): Session {
     return action.type === "CARD_DRAWN" && (action as { card?: unknown }).card == null;
   }
 
+  /** Let the next desync or gap ask again, and disarm the release timer. */
+  function releaseResync(): void {
+    resyncRequested = false;
+    const cancel = resyncTimeout;
+    resyncTimeout = null;
+    if (cancel) {
+      timers.delete(cancel);
+      cancel();
+    }
+  }
+
   /** The session asks the port for a cold re-read, however the adapter spells it (§5.8). */
   function requestResync(reason: string): void {
     if (resyncRequested) return;
     resyncRequested = true;
     if (typeof console !== "undefined") console.warn("[risk] resync:", reason);
+    // A resync nobody answers must not latch the session shut: release the ask so the next gap or
+    // hash mismatch can make it again. `ingestSnapshot` disarms this when a snapshot lands first.
+    let armed: (() => void) | null = null;
+    let elapsed = false;
+    const onElapsed = (): void => {
+      elapsed = true;
+      if (armed) timers.delete(armed);
+      resyncTimeout = null;
+      resyncRequested = false;
+    };
+    armed = schedule(onElapsed, RESYNC_RETRY_MS);
+    if (!elapsed) {
+      resyncTimeout = armed;
+      timers.add(armed);
+    }
     const port = sync;
     if (!port) return;
+    const failed = (): void => {
+      set({ syncStatus: "desynced" });
+      releaseResync();
+    };
     const asked = port.resync?.();
     if (asked !== undefined) {
-      void Promise.resolve(asked).catch(() => set({ syncStatus: "desynced" }));
+      void Promise.resolve(asked).catch(failed);
       return;
     }
     // An adapter from before `resync` existed: nudge the cadence and poll. This cannot reset the
     // cursor, so it is a degradation rather than a fix — see the doc comment on `SyncPort.resync`.
     port.setIntervalMs?.(1000);
-    void Promise.resolve(port.poll?.()).catch(() => set({ syncStatus: "desynced" }));
+    void Promise.resolve(port.poll?.()).catch(failed);
+  }
+
+  /**
+   * A batch that lands while the confirmed state is a **masked view** — animation only (§5.5, F36).
+   *
+   * A view is not a state the fold can build on: the mask zeroes troop counts and hides hands, so
+   * `apply` either builds numbers no authority ever had or refuses outright, and a refusal there is
+   * the mask talking, not a disagreement. Treating it as a desync put a fog game in `"desynced"`
+   * for good (codex round 2, finding 12). So the rows are replayed against a scratch copy purely to
+   * drain their events — `folded`, `nextSeq` and the confirmed state all stay put — and the
+   * authority is asked for the snapshot that *can* move them. A fog authority is expected to answer
+   * with `onSnapshot(view, seq, rows)`, which is the same replay with a state attached.
+   */
+  function ingestForEventsOnly(actions: readonly LoggedAction[]): void {
+    let retired = false;
+    let scratch = confirmedState;
+    let highest = animatedThrough;
+    for (const row of [...actions].sort((a, b) => a.seq - b.seq)) {
+      if (retirePending(row.clientActionId)) retired = true;
+      if (row.seq <= animatedThrough) continue;
+      highest = Math.max(highest, row.seq);
+      if (row.action.type === "GAME_STARTED" || isMaskedRow(row.action)) continue;
+      const r = engine.apply(scratch, map, row.action);
+      if (r.error) continue;
+      scratch = r.state;
+      handleEvents(r.events);
+    }
+    animatedThrough = highest;
+    if (retired) refold();
+    if (highest > folded) {
+      set({ syncStatus: "behind" });
+      requestResync(`masked view at seq ${String(folded)}, log is at ${String(highest)}`);
+    }
   }
 
   function ingest(actions: readonly LoggedAction[]): void {
+    if (confirmedState.fogged) {
+      ingestForEventsOnly(actions);
+      return;
+    }
     let changed = false;
     let retired = false;
     let gapAt: number | null = null;
@@ -1004,6 +1110,7 @@ export function createSession(options: SessionOptions): Session {
     if (animate && animate.length > 0) {
       let scratch = confirmedState;
       for (const row of [...animate].sort((a, b) => a.seq - b.seq)) {
+        if (row.seq <= animatedThrough) continue;
         if (row.action.type === "GAME_STARTED" || isMaskedRow(row.action)) continue;
         const r = engine.apply(scratch, map, row.action);
         if (r.error) continue;
@@ -1013,9 +1120,10 @@ export function createSession(options: SessionOptions): Session {
     }
     confirmedState = snapshot;
     folded = snapshotSeq;
+    animatedThrough = snapshotSeq;
     nextSeq = snapshotSeq + 1;
     pendingActions = [];
-    resyncRequested = false;
+    releaseResync();
     refold();
     set({ syncStatus: "idle" });
   }
@@ -1115,10 +1223,13 @@ export function createSession(options: SessionOptions): Session {
         .catch(() => set({ syncStatus: "behind" }));
       return;
     }
+    // §5.1/§5.6 — every persona draw in the game is keyed at index 0, the opening's
+    // own sub-stream, so a takeover persona replays identically however many
+    // actions happened to precede the resignation (codex round 2, finding 14).
     const persona = confirmedState.seats[seat]?.persona
       ?? bots.drawPersonas([confirmedState.rules.aiDifficulty],
-        engine.rngFor(config.seed, "personaAssign", nextSeq),
-        engine.rngFor(config.seed, "personaJitter", nextSeq))[0]
+        engine.rngFor(config.seed, "personaAssign", 0),
+        engine.rngFor(config.seed, "personaJitter", 0))[0]
       ?? null;
     if (!persona) return;
     submit({ type: "SEAT_TO_BOT", seat, reason: "resigned", tier: confirmedState.rules.aiDifficulty, persona });

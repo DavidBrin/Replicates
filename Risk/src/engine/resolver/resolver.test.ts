@@ -581,8 +581,14 @@ describe("rollAttack — blitz (R58, R59, D6, D7)", () => {
     expect(seen).toBe(4);
     if (action.mode !== "blitz") throw new Error("expected a blitz");
     expect(action.stopUntil).toBe(4);
-    // Committed troops = (A + 1) - stopUntil = 10 - 4 = 6, all of them lost.
-    expect(action.attackerLosses).toBe(6);
+    /*
+     * `holdLosing` is the **resolved** defender-hold range, and the DP writes a cell there only on
+     * the transition that empties the attacker's force — so the attacker's loss is all of `A`, 9,
+     * whatever the limiter would have let it commit. It used to report `(A + 1) - stopUntil = 6`,
+     * which under-counted a real, reachable outcome (codex round 2, finding 8); `odds/sample.test.ts`
+     * pins the same branch against the REAL DP at a reachable `stopUntil: 2`.
+     */
+    expect(action.attackerLosses).toBe(9);
     expect(action.defenderLosses).toBe(2);
   });
 
@@ -646,7 +652,8 @@ describe("rollAttack — blitz (R58, R59, D6, D7)", () => {
 
     it("leaves the resolved prefix of the CDF exactly where it was", () => {
       expect(at(0)).toEqual({ attackerLosses: 0, defenderLosses: 6 });
-      expect(at(0.45)).toEqual({ attackerLosses: 6, defenderLosses: 0 });
+      // A resolved hold costs the attacker all of A = 9 — see the note on R48 above.
+      expect(at(0.45)).toEqual({ attackerLosses: 9, defenderLosses: 0 });
     });
 
     it("stays within what the reducer will accept, across the whole unit interval", () => {
@@ -664,7 +671,7 @@ describe("rollAttack — blitz (R58, R59, D6, D7)", () => {
         pcg32(1, 1), legacy, "trueRandom",
       );
       if (action.mode !== "blitz") throw new Error("expected a blitz");
-      expect(action).toMatchObject({ attackerLosses: 6, defenderLosses: 2 });
+      expect(action).toMatchObject({ attackerLosses: 9, defenderLosses: 2 });
     });
   });
 
