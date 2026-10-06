@@ -256,6 +256,25 @@ const PROMPTS: Readonly<Record<string, string>> = {
   claimNeutral: "Place a neutral army",
 };
 
+/**
+ * A `GameState` that arrived from **outside this build** — an autosave envelope or a poll body —
+ * in the shape the engine running now expects (R92, §4.7).
+ *
+ * Both of those are plain JSON that nothing re-validates field by field, and both can have been
+ * written by an older engine. `pendingAlliances` was added to `GameState` without a format move, so
+ * a state written before it lacks the field, and the first alliance question in `validate`,
+ * `legalActions` or `apply` then threw a `TypeError` — crashing a resumed autosave and the first
+ * fold after a snapshot (codex round 4, finding 3). An absent field means no offers are in the air,
+ * which is the only thing it can mean for a build with no way to record one.
+ *
+ * Kept local rather than reached for through `EngineApi`: it is a property of the *wire*, the
+ * scripted double must not have to implement it, and the engine's own envelope path
+ * (`deserializeState`) carries the matching 1 → 2 migration.
+ */
+function adoptForeignState(state: GameState): GameState {
+  return Array.isArray(state.pendingAlliances) ? state : { ...state, pendingAlliances: [] };
+}
+
 export function createSession(options: SessionOptions): Session {
   const { map, config, engine, odds } = options;
   const now = options.now ?? (() => (typeof performance !== "undefined" ? performance.now() : Date.now()));
@@ -281,7 +300,7 @@ export function createSession(options: SessionOptions): Session {
   const grudge = new Float32Array(config.seats.length);
   if (options.resume?.grudge) options.resume.grudge.forEach((v, i) => { grudge[i] = v; });
 
-  let confirmedState: GameState = options.resume?.state ?? openingState();
+  let confirmedState: GameState = options.resume ? adoptForeignState(options.resume.state) : openingState();
   /**
    * My optimistic actions, each tagged with the `clientActionId` it was SENT with (§5.5).
    *
@@ -758,11 +777,28 @@ export function createSession(options: SessionOptions): Session {
    * `END_TURN` plus the award and the round-start work that ride it. Shared by the three places
    * that end a bot's turn, so none of them can forget the card it earned (R20).
    *
-   * A refused `END_TURN` ends the stepping rather than rescheduling it: there is no step left to
-   * retry, and looping on it is the wedge {@link noteBotRefusal} exists to prevent. It is logged,
-   * because post-R25 (`mustTradeDown` gated on the R27 bounce) nothing legitimate refuses it.
+   * **It walks the phases first.** `END_TURN` is legal out of `attack` and `fortify` only (R27,
+   * R67), and the callers reach here from *anywhere* — `stepBot`'s "the plan ran dry" escape fires
+   * in whatever phase the plan gave up in, and R27's trade-down bounce puts play back in `draft`.
+   * Sending `END_TURN` from `draft` is refused `wrongPhase`, and before the refusal existed this
+   * function quietly ended a turn out of `draft`, skipping the Attack phase R27 promises. Ending
+   * the **phase** instead and stepping again is the order `autoSkipAction` and §5.6's table both
+   * use: it carries the seat on to `attack` and then to `fortify`, which is where R20's award lands
+   * and the one place `END_TURN` is the only exit.
+   *
+   * A refused `END_TURN` with no phase exit left ends the stepping rather than rescheduling it:
+   * there is no step left to retry, and looping on it is the wedge {@link noteBotRefusal} exists to
+   * prevent. It is logged, because nothing legitimate reaches that point.
    */
   function endBotTurn(seat: Seat): void {
+    if (
+      engine.validate(confirmedState, map, { type: "END_TURN", seat }) !== null &&
+      engine.validate(confirmedState, map, { type: "END_PHASE", seat }) === null
+    ) {
+      applyLocal({ type: "END_PHASE", seat }, true);
+      later(() => stepBot(seat), aiStepMs(1));
+      return;
+    }
     if (confirmedState.conqueredThisTurn) awardCard(seat);
     const r = applyLocal({ type: "END_TURN", seat }, true);
     set({ botPlaying: false });
@@ -1223,7 +1259,7 @@ export function createSession(options: SessionOptions): Session {
         handleEvents(r.events);
       }
     }
-    confirmedState = snapshot;
+    confirmedState = adoptForeignState(snapshot);
     folded = snapshotSeq;
     animatedThrough = snapshotSeq;
     nextSeq = snapshotSeq + 1;

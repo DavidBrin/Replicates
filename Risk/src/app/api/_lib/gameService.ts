@@ -27,6 +27,7 @@ import type { ChatLine, LoggedAction, PresenceRow } from "@/ports/sync";
 
 import { loadMapDef, oddsFor, serverEngine, type ServerEngine } from "./engine";
 import {
+  adoptPersistedState,
   autoSkipAction,
   AWAY_SECONDS,
   COMPACTION_THRESHOLD,
@@ -991,7 +992,9 @@ export async function pollGame(input: {
   if (!row) return { kind: "notFound" };
   const map = await loadMapDef(row.mapSlug);
   const delta = await actions.since(input.gameId, row.snapshotSeq);
-  body.snapshot = row.snapshot;
+  // The cold client folds this snapshot itself and hash-checks every row on top of it, so it has
+  // to leave here in the shape the current engine reads (R92, §4.7).
+  body.snapshot = adoptPersistedState(row.snapshot);
   body.snapshotSeq = row.snapshotSeq;
   body.actions = delta;
   const folded = foldActions(engine, row.snapshot, map, delta);

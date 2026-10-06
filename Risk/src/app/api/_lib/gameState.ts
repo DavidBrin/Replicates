@@ -77,13 +77,32 @@ export function turnSecondsFor(rules: Rules): number | null {
 }
 
 /** Fold `actions` into `state`, in `seq` order. Throws on a rule error. */
+/**
+ * A persisted state as the **current** engine expects it, whatever build wrote it (R92, §4.7).
+ *
+ * `games.snapshot` is `jsonb` and an autosave is plain JSON: both are read back by the engine
+ * running now and were written by whatever engine was running then. `pendingAlliances` was added to
+ * `GameState` without a format move, so a row written before it lacks the field — and the first
+ * alliance question in `validate`, `legalActions` or `apply` then threw a `TypeError` straight out
+ * of the fold, and so out of every route that folds (codex round 4, finding 3). An absent field
+ * means "no offers in the air", which is the only thing it can mean for a build with no way to
+ * record one.
+ *
+ * Deliberately **not** `deserializeState`: these are already-parsed states rather than versioned
+ * envelopes, and a fold must not acquire a second opinion about the ruleset version. The envelope
+ * path has its own 1 → 2 migration.
+ */
+export function adoptPersistedState(state: GameState): GameState {
+  return Array.isArray(state.pendingAlliances) ? state : { ...state, pendingAlliances: [] };
+}
+
 export function foldActions(
   engine: ServerEngine,
   state: GameState,
   map: MapDef,
   actions: readonly LoggedAction[],
 ): GameState {
-  let current = state;
+  let current = adoptPersistedState(state);
   for (const logged of actions) {
     const result = engine.apply(current, map, logged.action);
     if (result.error) {
@@ -188,6 +207,13 @@ function claimCandidates(state: GameState, seat: Seat): Action[] {
  * in another. §5.6's table is the order — "`END_PHASE` / `END_TURN`" — so:
  * place what is unplaced, then end the **phase**, and only end the turn when
  * no phase exit is legal.
+ *
+ * `END_TURN` out of `draft` has since been settled the other way: it is
+ * refused `wrongPhase`, because a turn that ends there skips the Attack phase
+ * R27 promises (codex round 4, finding 6). This order is what makes that a
+ * no-op here rather than a wedge — `END_PHASE` is already the candidate a
+ * finished draft is answered with, and it is the action that takes play on to
+ * `resumePhase` or to `attack`.
  *
  * **`END_PHASE` before `END_TURN` is load-bearing, not cosmetic.** `END_TURN`
  * is legal out of `attack` (the reducer offers both there), so offering it

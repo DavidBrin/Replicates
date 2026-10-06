@@ -17,11 +17,19 @@
 import { isValidSet, mustTradeDown, mustTradeNow, remainingDeck } from "./cards";
 import { areAdjacent, isBlizzard, knownTerritory, reachableOwn } from "./graph";
 import { dicePlan, isAttackable, resolveManualRoll, diceAugmentFor } from "./modifiers";
-import { currentSeat, isContender, isGameOver, takesTurns, troopCountFor } from "./rules";
+import {
+  currentSeat,
+  isContender,
+  isGameOver,
+  pendingAlliancesOf,
+  takesTurns,
+  troopCountFor,
+} from "./rules";
 import {
   SEAT_NEUTRAL,
   SEAT_NONE,
   type Action,
+  type ActionKind,
   type Card,
   type GameState,
   type MapDef,
@@ -35,6 +43,20 @@ import {
 function err(code: RuleErrorCode, message: string): RuleError {
   return { code, message };
 }
+
+/**
+ * The action kinds R28's seven-card guard does **not** apply to — see the long comment inside
+ * {@link validate}. `TRADE_CARDS` is the way out, `MOVE_IN` is the step the way out sits behind,
+ * and the other three are administrative: their `seat` names the subject of the action, not a seat
+ * taking a play.
+ */
+const EXEMPT_FROM_HAND_GUARD: ReadonlySet<ActionKind> = new Set<ActionKind>([
+  "TRADE_CARDS",
+  "MOVE_IN",
+  "SEAT_TO_BOT",
+  "SEAT_TO_HUMAN",
+  "PORTALS_MOVED",
+]);
 
 /** The seat row for an index, or null for the neutral sentinel and for nonsense. */
 export function seatRow(state: GameState, seat: Seat): SeatState | null {
@@ -126,7 +148,9 @@ export function validate(state: GameState, map: MapDef, action: Action): RuleErr
    * R28 / F51 — a hand of seven or more is a rule violation like any other:
    * `apply` returns `illegalAction` and never asserts or throws. The one way
    * out of such a state is R26's forced trade-down, so `TRADE_CARDS` is the
-   * single action still accepted from that seat.
+   * single *play* still accepted from that seat; {@link EXEMPT_FROM_HAND_GUARD}
+   * is the whole list, and the three exemptions beyond `MOVE_IN` are not plays
+   * at all.
    *
    * The guard stays at SEVEN and is deliberately **not** widened to R26's floor
    * of four. A hand of five mid-trade-down is already refused with the precise
@@ -145,9 +169,23 @@ export function validate(state: GameState, map: MapDef, action: Action): RuleErr
    * action at all (codex round 2, finding 2). `validateMoveIn` still pins the
    * count to `pendingMoveIn`'s own window, so the exemption lets through exactly
    * the one action R63 already demands.
+   *
+   * **The three administrative actions are exempt too** (codex round 4, finding 1). The guard
+   * reads `action.seat`, but on `SEAT_TO_BOT`, `SEAT_TO_HUMAN` and `PORTALS_MOVED` that field is
+   * the seat the action is *about* — or, for a relocation, nothing but a log stamp naming whoever
+   * is to play — never a seat taking a play of its own. All three are server-resolved and the
+   * route schema refuses a client body carrying one (§6), so there is nothing here for a player to
+   * abuse. Gating them wedged the lazy tick exactly as gating `MOVE_IN` once did: a seat that went
+   * away holding a 7-or-8-card trade-down could not be handed to a bot, the away branch appended
+   * nothing, `missedTurns` never climbed because the escape it feeds is only reached on the
+   * *timeout* branch, and `POST /resign` answered `422` to the one player who wanted out.
+   *
+   * `AUTO_DEPLOY` is deliberately **not** exempt: a draft placement is the seat's own play, and
+   * R26's floor already refuses it with the precise `mustTradeCards` code. `CARD_DRAWN` stays
+   * subject for the same reason, and `validateCardDrawn`'s own `>= 6` test refuses it anyway.
    */
   const actor = (action as { seat?: unknown }).seat;
-  if (typeof actor === "number" && action.type !== "TRADE_CARDS" && action.type !== "MOVE_IN") {
+  if (typeof actor === "number" && !EXEMPT_FROM_HAND_GUARD.has(action.type)) {
     const row = seatRow(state, actor);
     if (row !== null && row.cards.length > 6) {
       return err("illegalAction", "a hand of seven or more cards must be traded down first (R28)");
@@ -463,17 +501,31 @@ function validateEndPhase(state: GameState, action: Extract<Action, { type: "END
   return err("wrongPhase", `END_PHASE is not legal in ${state.phase}`);
 }
 
+/**
+ * `END_TURN` ends a turn from **`attack` or `fortify` only** (R27, R67; codex round 4, finding 6).
+ *
+ * The phase list used to be a denial of `claim` and `over`, which left `draft` through: a hand with
+ * nothing left to place satisfied the `troopsToPlace` test and the turn ended there, skipping the
+ * Attack phase R27 promises every turn — and a hand owing R24's turn-start trade skipped *that*
+ * too, because `validateEndTurn` reads `mustTradeDown` (R26's bounce) and not `mustTradeNow`.
+ * `legalActions` never advertised either, so only a crafted client could reach them; the ruling is
+ * that the validator, not the advertiser, is the authority, so it says no.
+ *
+ * Nothing the authority itself produces relied on the `draft` path: `autoSkipAction` and
+ * `decideTurn` both offer `END_PHASE` before `END_TURN`, and in `draft` with every troop placed
+ * `END_PHASE` is legal — it is the action that takes play on to `attack` (R27's `resumePhase`
+ * included).
+ */
 function validateEndTurn(state: GameState, action: Extract<Action, { type: "END_TURN" }>): RuleError | null {
   const gate = turnGate(state, action.seat);
   if (gate !== null) return gate;
-  if (state.phase === "claim" || state.phase === "over") {
+  if (state.phase !== "attack" && state.phase !== "fortify") {
     return err("wrongPhase", `END_TURN is not legal in ${state.phase}`);
   }
   if (state.pendingMoveIn !== null) return err("moveInPending", "occupy the conquered territory first (R63)");
+  // `mustTradeDown` implies `draft`, which is already refused above; kept because the two
+  // predicates are independent and a future bounce that leaves play elsewhere must still be caught.
   if (mustTradeDown(state, action.seat)) return err("mustTradeCards", "trade down to four cards first (R26)");
-  if (state.phase === "draft" && state.troopsToPlace > 0) {
-    return err("mustPlaceAllTroops", "you must draft all of your available troops (R17)");
-  }
   return null;
 }
 
@@ -631,12 +683,30 @@ function validateAlliance(
    * `ALLIANCE_BREAK`, an elimination and a resignation all clear the pair, so the pair is never a
    * permanent lock-out.
    */
+  const offers = pendingAlliancesOf(state);
   if (action.type === "ALLIANCE_PROPOSE") {
-    const pending = state.pendingAlliances.some(
+    const pending = offers.some(
       ([from, to]) =>
         (from === me.seat && to === them.seat) || (from === them.seat && to === me.seat),
     );
     if (pending) return err("notAlliable", "that proposal is already on the table (R80)");
+  }
+  /*
+   * R80 — an `ACCEPT` answers an offer, so there has to BE one (codex round 4, finding 2).
+   *
+   * This gate used to be missing entirely: `validateAlliance` asked only that the pair were not
+   * already allied, so a seated player could forge a pact nobody offered it — and, because the
+   * three alliance actions are the only ones exempt from the online turn fence, churn
+   * `ACCEPT`/`BREAK` off-turn as fast as it could POST, each one a log row and a `games.seq` bump
+   * that cost every other client the poll's `204` fast path.
+   *
+   * The pair is directed: `ALLIANCE_ACCEPT { seat, from }` answers the offer `from` made to
+   * `seat`, which is `[from, seat]` in proposal order. `[seat, from]` is *my own* offer, and
+   * accepting your own proposal is not an answer.
+   */
+  if (action.type === "ALLIANCE_ACCEPT") {
+    const offered = offers.some(([from, to]) => from === them.seat && to === me.seat);
+    if (!offered) return err("notAlliable", "there is no offer from that seat to accept (R80)");
   }
   return null;
 }

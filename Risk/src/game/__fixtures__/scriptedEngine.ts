@@ -25,6 +25,9 @@ import { nextInt, rngFor, shuffle } from "./scriptedRng";
 
 const PHASES = ["draft", "attack", "fortify"] as const;
 
+/** R26's floor, mirroring `@/engine/cards`' `TRADE_DOWN_FLOOR`. Local, because this is a double. */
+const TRADE_DOWN_FLOOR = 4;
+
 function fail(code: RuleError["code"], message: string): ApplyResult {
   return { state: null as unknown as GameState, events: [], error: { code, message } };
 }
@@ -200,17 +203,35 @@ export function cardTradeValue(
 }
 
 /**
- * R24 and R26, with the same gate the real `mustTradeDown` has.
+ * R24 and R26, with the same gates the real `mustTradeDown` / `mustTradeAtTurnStart` have.
  *
  * The `>= 6` branch is keyed on R27's bounce marker, because R20's reward draw also lands a hand on
  * six — `validateCardDrawn` admits the award at five — and R25 defers *that* six to the seat's next
  * turn. A fixture that forced it would be teaching this suite a rule the engine does not have
  * (codex round 3, finding 1).
+ *
+ * Three gates the double used to be missing (codex round 4, finding 8), each of which let it
+ * disagree with the engine it stands in for:
+ *
+ * - **the current seat.** `mustTradeDown` answers `false` for anyone but the seat to play, so a
+ *   double that forced a trade on an off-turn seat taught this suite that a hand of five freezes
+ *   every other player.
+ * - **`hasSet`.** Neither branch forces anything a hand cannot actually do: five cards with no set
+ *   is a hand R24 waits on, not one it wedges. Without this the double demanded a `TRADE_CARDS`
+ *   that `cardSets` could not even construct.
+ * - **R26's third branch.** One trade removes exactly three cards, so a hand of 8 reaches 5 —
+ *   still above the floor of four and still owing a trade that `mustTradeAtTurnStart` will not ask
+ *   for, a set having already gone this turn. Without it the double let a trade-down stop half way.
  */
 export function mustTradeNow(state: GameState, seat: Seat): boolean {
   const s = state.seats[seat];
   if (!s) return false;
-  if (s.cards.length >= 6 && state.resumePhase !== null) return true;
+  if (state.turnOrder[state.currentIndex] !== seat) return false;
+  if (!cardSets(s.cards).length) return false;
+  if (state.resumePhase !== null) {
+    if (s.cards.length >= 6) return true;
+    if (s.cards.length > TRADE_DOWN_FLOOR && state.setsTradedThisTurn > 0) return true;
+  }
   return s.cards.length >= 5 && state.setsTradedThisTurn === 0 && state.phase === "draft";
 }
 
@@ -224,6 +245,35 @@ function withTerritory(
 
 function withSeat(state: GameState, seat: Seat, patch: Partial<SeatState>): readonly SeatState[] {
   return state.seats.map((s) => (s.seat === seat ? { ...s, ...patch } : s));
+}
+
+/** Record an unanswered R80 offer in proposal order, idempotently (§4.7). */
+function withOffer(state: GameState, from: Seat, to: Seat): GameState {
+  const offers = state.pendingAlliances ?? [];
+  if (offers.some(([a, b]) => a === from && b === to)) return state;
+  return { ...state, pendingAlliances: [...offers, [from, to] as const] };
+}
+
+/** Drop the offers between two seats, in **both** directions: an alliance is symmetric (R80). */
+function withoutOffer(state: GameState, a: Seat, b: Seat): GameState {
+  const offers = state.pendingAlliances ?? [];
+  return {
+    ...state,
+    pendingAlliances: offers.filter(
+      ([from, to]) => !((from === a && to === b) || (from === b && to === a)),
+    ),
+  };
+}
+
+/** Drop every offer and pact a seat is party to — it is out of the game (R80, R81, R82). */
+function withoutDiplomacy(state: GameState, seat: Seat): GameState {
+  const offers = state.pendingAlliances ?? [];
+  return {
+    ...state,
+    pendingAlliances: offers.filter(([from, to]) => from !== seat && to !== seat),
+    seats: state.seats.map((s) =>
+      (s.seat === seat ? { ...s, allies: [] } : { ...s, allies: s.allies.filter((x) => x !== seat) })),
+  };
 }
 
 function livePlaySeats(state: GameState): Seat[] {
@@ -490,6 +540,11 @@ function eliminationSweep(state: GameState, by: Seat, events: Event[]): GameStat
         return row;
       }),
     };
+    // R80 — a seat that is out takes its offers and its pacts with it (§4.7).
+    next = withoutDiplomacy(next, s.seat);
+    for (const other of s.allies) {
+      events.push({ type: "allianceChanged", a: s.seat, b: other, state: "broken" });
+    }
   }
   return next;
 }
@@ -754,18 +809,22 @@ function apply(state: GameState, map: MapDef, action: Action): ApplyResult {
       return { state: { ...state, territories, troopsToPlace: left }, events };
     }
 
-    case "SEAT_TO_BOT":
+    case "SEAT_TO_BOT": {
       events.push({ type: "seatToBot", seat: action.seat, reason: action.reason });
-      return {
-        state: {
-          ...state,
-          seats: withSeat(state, action.seat, {
-            kind: "bot", tier: action.tier, persona: action.persona,
-            standing: action.reason === "resigned" ? "resigned" : "away",
-          }),
-        },
-        events,
+      const handed: GameState = {
+        ...state,
+        seats: withSeat(state, action.seat, {
+          kind: "bot", tier: action.tier, persona: action.persona,
+          standing: action.reason === "resigned" ? "resigned" : "away",
+        }),
       };
+      // R82 — a resignation ends the seat's diplomacy; an away takeover does not (R80, §4.7).
+      if (action.reason !== "resigned") return { state: handed, events };
+      for (const other of state.seats[action.seat]?.allies ?? []) {
+        events.push({ type: "allianceChanged", a: action.seat, b: other, state: "broken" });
+      }
+      return { state: withoutDiplomacy(handed, action.seat), events };
+    }
 
     case "SEAT_TO_HUMAN":
       events.push({ type: "seatToHuman", seat: action.seat });
@@ -803,16 +862,25 @@ function apply(state: GameState, map: MapDef, action: Action): ApplyResult {
       return { state: next, events };
     }
 
+    /*
+     * R80's three actions, with `pendingAlliances` kept (codex round 4, finding 8).
+     *
+     * The double used to leave the field exactly as it found it, so the one piece of state R80's
+     * "one offer at a time per pair" rule is built on never moved: a session driven by this double
+     * could accept an offer that was never made and re-propose one already on the table, neither of
+     * which the real `validateAlliance` allows. Recording it here is what lets a session test
+     * assert R80 against the double at all.
+     */
     case "ALLIANCE_PROPOSE":
       events.push({ type: "allianceChanged", a: action.seat, b: action.to, state: "proposed" });
-      return { state, events };
+      return { state: withOffer(state, action.seat, action.to), events };
     case "ALLIANCE_ACCEPT": {
       events.push({ type: "allianceChanged", a: action.from, b: action.seat, state: "accepted" });
       const link = (s: SeatState, other: Seat) =>
         ({ ...s, allies: [...new Set([...s.allies, other])].sort((x, y) => x - y) });
       return {
         state: {
-          ...state,
+          ...withoutOffer(state, action.seat, action.from),
           seats: state.seats.map((s) =>
             s.seat === action.seat ? link(s, action.from) : s.seat === action.from ? link(s, action.seat) : s),
         },
@@ -824,7 +892,7 @@ function apply(state: GameState, map: MapDef, action: Action): ApplyResult {
       const cut = (s: SeatState, other: Seat) => ({ ...s, allies: s.allies.filter((x) => x !== other) });
       return {
         state: {
-          ...state,
+          ...withoutOffer(state, action.seat, action.with),
           seats: state.seats.map((s) =>
             s.seat === action.seat ? cut(s, action.with) : s.seat === action.with ? cut(s, action.seat) : s),
         },

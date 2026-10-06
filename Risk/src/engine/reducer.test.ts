@@ -1774,9 +1774,29 @@ describe("END_TURN and the turn pipeline", () => {
     expect(legalActions(over, mini, 0)).toEqual([]);
   });
 
-  it("END_TURN out of draft with troops left is refused (R17)", () => {
-    const state = turnState({ phase: "draft", troopsToPlace: 3 });
-    refused(state, mini, { type: "END_TURN", seat: 0 }, "mustPlaceAllTroops");
+  /**
+   * R27/R67 — `END_TURN` ends a turn from `attack` or `fortify`, never from `draft`
+   * (codex round 4, finding 6).
+   *
+   * The phase list used to deny only `claim` and `over`, so a draft with every troop placed slipped
+   * through and the turn ended there — skipping the Attack phase R27 promises every turn — and a
+   * hand owing R24's turn-start trade skipped *that* too, `validateEndTurn` reading R26's
+   * `mustTradeDown` rather than `mustTradeNow`. `legalActions` never advertised either, so only a
+   * crafted client could reach them; the validator is the authority, so it says no.
+   */
+  it("END_TURN out of draft is refused whatever is still owed (R27, R67)", () => {
+    refused(turnState({ phase: "draft", troopsToPlace: 3 }), mini, { type: "END_TURN", seat: 0 }, "wrongPhase");
+    refused(turnState({ phase: "draft", troopsToPlace: 0 }), mini, { type: "END_TURN", seat: 0 }, "wrongPhase");
+    // A hand owing R24's forced trade at turn start is refused for the same reason.
+    const forced = turnState({
+      phase: "draft",
+      troopsToPlace: 0,
+      hands: { 0: [card("f1", "infantry", 0), card("f2", "infantry", 1), card("f3", "infantry", 2),
+        card("f4", "cavalry", 0), card("f5", "cavalry", 1)] },
+    });
+    refused(forced, mini, { type: "END_TURN", seat: 0 }, "wrongPhase");
+    // `END_PHASE` is the action that moves a finished draft on, and it is the one offered.
+    expect(legalActions(turnState({ phase: "draft", troopsToPlace: 0 }), mini, 0)).toEqual(["END_PHASE"]);
   });
 
   it("END_TURN in the claim phase is refused", () => {
@@ -1995,21 +2015,113 @@ describe("R80 — alliances", () => {
     });
   });
 
+  /**
+   * R80/R81/R82 — leaving the game ends the **pacts** too, not just the offers
+   * (codex round 4, finding 4).
+   *
+   * The reducer used to drop only `pendingAlliances`, so every survivor kept an `allies` entry
+   * naming a seat that was out: `legalActions` advertised `ALLIANCE_BREAK` for it and
+   * `validateAlliance` refused that same action with `notAlliable` ("both seats must still be
+   * playing"), which is a dead entry in the list and a dead button in the UI. R80 says an
+   * elimination and a resignation clear the pair, so the pair is cleared at the source, with the
+   * `allianceChanged … "broken"` the renderer and the dialog have no other way to learn of.
+   */
+  describe("leaving the game ends its diplomacy", () => {
+    it("an elimination drops the dead seat from every ally list, with an event (R81)", () => {
+      const state = buildState(mini, {
+        seats: 3,
+        owners: [0, 0, 0, 1, 2, 2],
+        troops: [1, 1, 4, 1, 1, 1],
+        phase: "attack",
+        rules: { alliances: true },
+      });
+      let s = ok(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 2 }).state;
+      s = ok(s, mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 1 }).state;
+      expect(s.seats[1]?.allies).toEqual([2]);
+      expect(s.seats[2]?.allies).toEqual([1]);
+
+      // Seat 0 takes seat 1's last territory.
+      const killed = ok(s, mini, {
+        type: "ATTACK", seat: 0, from: 2, to: 3, mode: "blitz", attackerLosses: 0, defenderLosses: 1,
+      });
+      const after = killed.state;
+      expect(after.seats[1]?.standing).toBe("eliminated");
+      expect(after.seats[1]?.allies).toEqual([]);
+      expect(after.seats[2]?.allies).toEqual([]);
+      expect(killed.events).toEqual(
+        expect.arrayContaining([{ type: "allianceChanged", a: 1, b: 2, state: "broken" }]),
+      );
+      // And the survivor is no longer offered — nor refused — a break it cannot make.
+      expect(legalActions(after, mini, 2)).not.toContain("ALLIANCE_BREAK");
+      expect(validate(after, mini, { type: "ALLIANCE_BREAK", seat: 2, with: 1 })?.code).toBe("notAlliable");
+    });
+
+    it("a resignation drops its pacts too, with an event (R82)", () => {
+      let s = ok(allianceState(), mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 }).state;
+      s = ok(s, mini, { type: "ALLIANCE_ACCEPT", seat: 1, from: 0 }).state;
+      expect(s.seats[0]?.allies).toEqual([1]);
+
+      const resigned = ok(s, mini, {
+        type: "SEAT_TO_BOT", seat: 1, reason: "resigned", tier: "medium", persona: persona(),
+      });
+      expect(resigned.state.seats[1]?.allies).toEqual([]);
+      expect(resigned.state.seats[0]?.allies).toEqual([]);
+      expect(resigned.events).toEqual(
+        expect.arrayContaining([{ type: "allianceChanged", a: 1, b: 0, state: "broken" }]),
+      );
+      expect(legalActions(resigned.state, mini, 0)).not.toContain("ALLIANCE_BREAK");
+    });
+
+    /** An away or timeout takeover is NOT leaving the game (D76), so it keeps its diplomacy. */
+    it("an away takeover keeps the pact (D76)", () => {
+      let s = ok(allianceState(), mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 }).state;
+      s = ok(s, mini, { type: "ALLIANCE_ACCEPT", seat: 1, from: 0 }).state;
+      const away = ok(s, mini, {
+        type: "SEAT_TO_BOT", seat: 1, reason: "away", tier: "medium", persona: persona(),
+      }).state;
+      expect(away.seats[1]?.allies).toEqual([0]);
+      expect(away.seats[0]?.allies).toEqual([1]);
+      expect(validate(away, mini, { type: "ALLIANCE_BREAK", seat: 0, with: 1 })).toBeNull();
+    });
+  });
+
+  /** An offer, then its answer — the only sequence R80 admits (codex round 4, finding 2). */
+  function offered(from: number, to: number) {
+    return ok(allianceState(), mini, { type: "ALLIANCE_PROPOSE", seat: from, to }).state;
+  }
+
   it("an accept records the pact symmetrically, ascending (R91)", () => {
-    const state = allianceState();
+    const state = offered(0, 2);
     const { state: after, events } = ok(state, mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 });
     expect(after.seats[2]?.allies).toEqual([0]);
     expect(after.seats[0]?.allies).toEqual([2]);
     expect(events).toEqual([{ type: "allianceChanged", a: 2, b: 0, state: "accepted" }]);
   });
 
+  /**
+   * R80 — an `ACCEPT` answers an offer, so one has to be on the table (codex round 4, finding 2).
+   *
+   * Without this gate a seat could forge a pact nobody offered it, and — the three alliance actions
+   * being the only ones exempt from the online turn fence — churn `ACCEPT`/`BREAK` off-turn as fast
+   * as it could POST, each one a log row and a `games.seq` bump that cost every other client the
+   * poll's `204` fast path.
+   */
+  it("an accept with no offer on the table is refused", () => {
+    refused(allianceState(), mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 }, "notAlliable");
+  });
+
+  /** The pair is directed: accepting my own proposal is not an answer to it. */
+  it("the proposer cannot accept its own offer", () => {
+    refused(offered(0, 2), mini, { type: "ALLIANCE_ACCEPT", seat: 0, from: 2 }, "notAlliable");
+  });
+
   it("accepting twice is refused", () => {
-    const after = ok(allianceState(), mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 }).state;
+    const after = ok(offered(0, 2), mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 }).state;
     refused(after, mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 }, "notAlliable");
   });
 
   it("a break removes it from both sides", () => {
-    const allied = ok(allianceState(), mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 }).state;
+    const allied = ok(offered(0, 2), mini, { type: "ALLIANCE_ACCEPT", seat: 2, from: 0 }).state;
     const { state: after, events } = ok(allied, mini, { type: "ALLIANCE_BREAK", seat: 0, with: 2 });
     expect(after.seats[0]?.allies).toEqual([]);
     expect(after.seats[2]?.allies).toEqual([]);
@@ -2028,7 +2140,8 @@ describe("R80 — alliances", () => {
       phase: "attack",
       rules: { alliances: true },
     });
-    const allied = ok(state, mini, { type: "ALLIANCE_ACCEPT", seat: 0, from: 1 }).state;
+    const proposed = ok(state, mini, { type: "ALLIANCE_PROPOSE", seat: 1, to: 0 }).state;
+    const allied = ok(proposed, mini, { type: "ALLIANCE_ACCEPT", seat: 0, from: 1 }).state;
     const { state: after } = ok(allied, mini, {
       type: "ATTACK",
       seat: 0,

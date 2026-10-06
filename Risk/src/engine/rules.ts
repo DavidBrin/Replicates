@@ -73,6 +73,21 @@ export function hasHiddenTerritories(state: GameState): boolean {
   return state.territories.some((t) => t.owner === SEAT_UNKNOWN || t.troops === TROOPS_UNKNOWN);
 }
 
+/**
+ * R80's unanswered offers, tolerating a state that predates the field (R92, §4.7).
+ *
+ * `pendingAlliances` was added to `GameState` after states had already been persisted — a snapshot
+ * row, an autosave envelope, a poll body — and every one of those arrives as plain JSON that
+ * nothing re-validates field by field. Reading `state.pendingAlliances.some(...)` on one threw a
+ * `TypeError` out of `validate`, `legalActions` **and** `apply`, which is the one thing §4 promises
+ * cannot happen: an illegal action is data, and a stale shape is not an action at all
+ * (codex round 4, finding 3). {@link deserializeState} migrates the field in at the envelope
+ * boundary; this accessor is what keeps every *other* door total.
+ */
+export function pendingAlliancesOf(state: GameState): readonly (readonly [Seat, Seat])[] {
+  return state.pendingAlliances ?? [];
+}
+
 /** Territories `seat` owns. Counts only what is visible, so a view undercounts (R74). */
 export function territoryCountFor(state: GameState, seat: Seat): number {
   let n = 0;

@@ -7,8 +7,12 @@ import { buildState, card, territoryCard } from "./__fixtures__/states";
 import { classicWorld, mini, tiny4 } from "./__fixtures__/maps";
 import { canSee, viewFor, visibilityFor } from "./fog";
 import { canonicalize, hashState } from "./hash";
+import { legalActions } from "./legalActions";
+import { apply } from "./reducer";
+import { pendingAlliancesOf } from "./rules";
 import { deserializeState, serializeState, STATE_FORMAT_VERSION } from "./serialize";
-import { SEAT_UNKNOWN, TROOPS_UNKNOWN } from "./types";
+import { SEAT_UNKNOWN, TROOPS_UNKNOWN, type GameState } from "./types";
+import { validate } from "./validate";
 
 const hands = {
   0: [territoryCard(mini, 0), territoryCard(mini, 1)],
@@ -265,5 +269,58 @@ describe("serialize / deserialize", () => {
   it("accepts a state from an older ruleset, so stored replays keep playing back (R92)", () => {
     const older = { ...split(false), version: 0 };
     expect(deserializeState(JSON.stringify({ v: 1, state: older })).version).toBe(0);
+  });
+
+  /**
+   * R92 — the v1 → v2 move, which is `GameState.pendingAlliances` (§4.7; codex round 4, finding 3).
+   *
+   * The field was added to the state without a format bump, so a v1 envelope was accepted as a
+   * *current* state that was in fact half understood: `validate`, `legalActions` and `apply` all
+   * read `pendingAlliances`, and all three threw a `TypeError` on the first alliance question —
+   * crashing a resumed autosave, which is exactly the silent misreading the envelope exists to
+   * stop. The migration fills the only value it can mean: nothing was in the air, because that
+   * build had no way to record an offer.
+   */
+  describe("the v1 → v2 migration", () => {
+    function v1Envelope(): string {
+      const state = { ...split(false) } as Record<string, unknown>;
+      delete state.pendingAlliances;
+      return JSON.stringify({ v: 1, state });
+    }
+
+    it("is a real version move, not a silent widening", () => {
+      expect(STATE_FORMAT_VERSION).toBe(2);
+      expect(JSON.parse(serializeState(split(false))) as { v: number }).toMatchObject({ v: 2 });
+    });
+
+    it("deserialises a v1 envelope that lacks pendingAlliances", () => {
+      const back = deserializeState(v1Envelope());
+      expect(back.pendingAlliances).toEqual([]);
+    });
+
+    it("the migrated state answers every engine door that reads the field", () => {
+      const back = deserializeState(v1Envelope());
+      expect(() => legalActions(back, mini, 0)).not.toThrow();
+      expect(validate(back, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 })?.code).toBe("notAlliable");
+      // `alliances` is off on this fixture, so the refusal above is R80's toggle and not a crash.
+      expect(apply(back, mini, { type: "END_PHASE", seat: 0 }).error).toBeUndefined();
+    });
+
+    /**
+     * The belt behind the braces: {@link pendingAlliancesOf} is what every *other* door reads
+     * through, because a snapshot row and a poll body are already-parsed states that never pass
+     * through the envelope at all. `apply` is the one that must not throw (R86).
+     */
+    it("pendingAlliancesOf and apply tolerate a state the envelope never saw", () => {
+      const stale = { ...split(false), rules: { ...split(false).rules, alliances: true } } as Record<string, unknown>;
+      delete stale.pendingAlliances;
+      const foreign = stale as unknown as GameState;
+      expect(pendingAlliancesOf(foreign)).toEqual([]);
+      expect(() => legalActions(foreign, mini, 0)).not.toThrow();
+      expect(() => validate(foreign, mini, { type: "ALLIANCE_PROPOSE", seat: 0, to: 1 })).not.toThrow();
+      expect(() => apply(foreign, mini, { type: "END_PHASE", seat: 0 })).not.toThrow();
+      // And the state `apply` hands back carries the field, so the next fold needs no help.
+      expect(apply(foreign, mini, { type: "END_PHASE", seat: 0 }).state.pendingAlliances).toEqual([]);
+    });
   });
 });
