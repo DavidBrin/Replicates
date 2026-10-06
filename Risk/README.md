@@ -234,14 +234,12 @@ schema on first boot (D102), so a fresh clone needs no database setup at all.
   evidence frame by frame in geometry, but every animation duration and easing curve is
   an invention calibrated to the art (D72) — the evidence set is entirely still frames,
   which can prove an animation exists but never how it moves.
-- **Known to be narrower than the spec, and why.** Board taps on the online game route
-  do not currently reach the session, so `e2e/online.spec.ts` appends its two turns
-  through the HTTP route rather than through the HUD; the HUD is proved offline
-  instead (D105). Two phone-width layout collisions are worked around in the suite
-  rather than hidden: the card-trade fan is wider than a 412 px viewport, so its outer
-  cards sit at negative `x`, and the action bar's phase-pip row overlaps the
-  bottom-left Stats / Cards / Chat stack, so the Chat button cannot be tapped. In both
-  places the spec falls back to a dispatched event and says so in a comment.
+- **Found by the suite and fixed.** The first online spec could not tap the board after the
+  lobby hand-over; the cause was the board rebinding its pointer listeners on every resize
+  tick, so a tap that spanned a resize was lost (D105). Every dialog had rendered unscaled on
+  phones because the stage's `scale()` was given a length, and the action bar intercepted the
+  bottom-left stack at phone width; all three are fixed and the mobile project of the suite
+  now taps through them.
 
 ## Known gaps
 
