@@ -762,3 +762,293 @@ rests on. Numbered sequentially; entries are never renumbered or reused.
 **Why.** `research/06-online-play-free-tier.md §4.5.4` already defines one mechanism for a seat changing hands (timeout → bot → reclaim), and every such change is a row in the action log (D14). Neutralising a resigner's territories (`owner: null`) was considered and rejected: it hands a free continent to whichever neighbour is closest, so resigning becomes a weapon against a specific opponent. Gifting to a bot keeps the board's balance and reuses one code path.
 
 **Consequence.** The engine needs no `RESIGN` reducer branch beyond `SEAT_TO_BOT`; the lobby/game UI shows the seat as "resigned" (skull-less, robot chip) and the `standing` column records `resigned`.
+
+---
+
+## D77 — The 2-player neutral holding is a sentinel owner and nothing else: no `SeatState`, and no `"neutral"` member of `SeatKind`
+
+**Decision.** `SEAT_NEUTRAL = -2` appears in `TerritoryState.owner` and nowhere else. `SeatKind` is exactly `"human" | "bot"`, no seat row is ever created for the neutral, and it is excluded from `turnOrder`, from elimination, from the win check and from the Max-Rounds tiebreak. It still *defends* like any other territory, with dice the resolver rolls for it in the ordinary way.
+
+**Why.** The alternative — a third `SeatState` with `kind: "neutral"` — pushes a special case into every selector, every roster row and every win predicate, and each of those is somewhere the neutral could be accidentally counted as a player. Making it a sentinel owner means the type system refuses the mistake instead of a test having to catch it: there is no value of `SeatKind` that could reach a code path expecting a player (R7, F17).
+
+**Consequence.** `state.seats.length` is the number of real players, always, so "two seats and a neutral" is `seats.length === 2` with six of twenty territories owned by `-2`. Anything that wants to total the board has to decide explicitly what to do with negative owners rather than iterating seats and getting the neutral for free.
+
+---
+
+## D78 — `dealTerritories` performs the whole opening in one fixed order, drawing from three named sub-streams
+
+**Decision.** The opening is one function and one order: ① seat order, from the `turnOrder` stream · ② blizzards and portals via `placeModifiers`, from the `modifierPlace` stream · ③ the deal over the **non-blizzard** territories only, from the `deal` stream · ④ capitals, each drawn from that seat's own dealt territories, also from the `deal` stream. The signature takes `rngs: { deal, turnOrder, modifierPlace }` rather than one generator.
+
+**Why.** Two of those orderings are load-bearing rather than aesthetic: a blizzard tile is never dealt, so blizzards must be placed *before* the deal, and a capital is one of its seat's dealt territories, so capitals must be assigned *after* it. The old "capitals avoid territories with no capital" filter is vacuous under this order and is dropped. Splitting the randomness into named sub-streams is what stops a change in one area from silently reshuffling another — adding a draw to modifier placement must not move the deal, or every golden replay hash in T6 shifts for no reason (R3, R8, R10, F39).
+
+**Consequence.** `(mapSlug, seed)` reproduces a board exactly, and the per-call draw counts are part of the contract: `seats - 1` from `turnOrder`, `blizzardSlots + 2 × portalSlots` from `modifierPlace`, and `nonBlizzard - 1 + seats` from `deal`. Capitals share the `deal` stream rather than having a fourth of their own, so turning Capitals on does change the deal's stream position — which is correct, because it is the same opening decision.
+
+---
+
+## D79 — The 2-player deal generalises to any board as three piles differing by at most one, with the larger piles going first in turn order
+
+**Decision.** On a 42-territory map the rulebook's figures apply directly: three 14-card piles and 40 armies each (D64). On any other board the `T` non-blizzard territories are dealt round-robin into three piles, so their sizes differ by at most one, and the larger piles fall to `turnOrder[0]`, then `turnOrder[1]`, then the neutral.
+
+**Why.** The rulebook only describes the 42-territory board, and this project ships sixteen boards from 3 to 59 territories, so a rule was needed that degenerates to the printed one. Round-robin dealing gives the ≤1 property by construction rather than by arithmetic that has to be checked. The recipients are ordered by **turn order, not seat index**, because turn order is itself a seeded draw and the seat that plays first is the one the opening advantage should attach to.
+
+**Consequence.** On an odd board the first seat in turn order holds one more territory than its opponent, and a test that indexes the piles by seat number rather than by `turnOrder[0]` will pass or fail depending on the seed. The resolver's own fixture asserts it the right way round.
+
+---
+
+## D80 — The neutral's outstanding armies are derived from the board, never stored in `GameState`
+
+**Decision.** Under Manual Placement in a 2-player game, the number of neutral armies still owed is computed on demand from the state — the per-seat army totals, the two seats' remaining `armiesToClaim`, and the armies already standing on neutral territories — rather than being carried as a field.
+
+**Why.** It is a quantity that is fully determined by the board, and a stored copy is a second source of truth that can drift from the first. Every place that needs it (the claim-phase advance, `legalActions`, and two `validate` branches) can recompute it cheaply, and `hashState` then has one fewer field whose serialisation has to be pinned (R6, R9).
+
+**Consequence.** The alternation rule — each seat places two armies, then one neutral army — is expressed as a predicate over the state rather than as a counter that the reducer has to remember to decrement, so a replay that starts from a mid-claim snapshot cannot disagree with one that folds from the opening.
+
+---
+
+## D81 — Under Manual Placement a capital is the seat's lowest-index non-blizzard owned territory
+
+**Decision.** With Capitals on and Manual Placement on, each seat's capital is assigned when the claim phase finishes, and it is the **lowest-index territory that seat owns**, skipping blizzards. A seat that owns nothing keeps `capital: null`. Under Auto Placement the resolver has already drawn one (D78 ④) and this is a no-op. **[SPEC]** — the original's Manual Placement capital rule was not sourced.
+
+**Why.** Under Auto Placement the capital can be drawn from a seeded stream because the deal and the capital happen in the same resolver call. Under Manual Placement the board is built by a sequence of player `CLAIM` actions, so there is no resolver call left to draw from, and inventing one would mean threading an RNG into the reducer — which D2 forbids outright. A deterministic rule over the finished board needs no randomness at all; "lowest index" is the only such rule that is both total and obviously fair to state.
+
+**Consequence.** A Manual Placement capital is predictable, which is a small strategic difference from the auto-dealt game and is worth knowing before anyone reads a bias into it. The blizzard skip matters: a frozen tile has no owner, so it can never be a capital, and the check is written as "owned and not frozen" rather than relying on ownership alone.
+
+---
+
+## D82 — `CARD_DRAWN` is legal only in the fortify phase, and the pin lives in `validate` rather than in the reducer branch
+
+**Decision.** The end-of-turn card award is a `CARD_DRAWN` action that `validate` refuses with `wrongPhase` unless `state.phase === "fortify"`, and which `legalActions` offers only in `fortify` and only when `conqueredThisTurn`. The reducer's own branch carries no phase check.
+
+**Why.** R20 awards exactly one card for a turn in which something was conquered, and R67 makes `fortify` the last phase of a turn, so "end of turn" and "during fortify" are the same moment — pinning the action to that phase is what makes the award unambiguous without a separate flag. Putting the check in `validate` rather than in the reducer keeps the single-gate rule that `apply` enforces every precondition in one place and the branches stay small enough to read.
+
+**Consequence.** A log that awards a card outside `fortify` is refused rather than folded, so a hand can never grow at a moment no client expected. It also means the reducer branch cannot be called directly in a test and trusted to enforce the rule — `apply`, which runs `validate` first, is the only honest entry point.
+
+---
+
+## D83 — The forced trade-down bounce is applied from the `MOVE_IN` branch, and from `ATTACK` only when no move-in is pending
+
+**Decision.** When eliminating a seat pushes the attacker's hand to six or more cards with a tradeable set, R27 reverts the phase to `draft` until the bonus troops are placed. That bounce has **one** implementation and two call sites: the `MOVE_IN` branch applies it after the troops have moved, and the `ATTACK` branch applies it only when `pendingMoveIn === null` — a seizure that came with no conquest. A capture that ends the game never bounces at all.
+
+**Why.** An elimination always arrives on a capture and a capture always sets `pendingMoveIn` (R63), which blocks every other action — so applying the bounce in the `ATTACK` branch would leave the state in `draft` with a move-in still owed, which is a phase no rule describes. Resolving the move first and bouncing afterwards is the only order in which both rules hold at once. The second call site exists because R28's hand-size check can produce a seizure without a conquest, and that case has no move-in to wait for (F41).
+
+**Consequence.** One site, one order, and two tests — one per path. A single combined test would pass with the bounce in the wrong branch.
+
+---
+
+## D84 — An illegal state returns `{ error: { code: "illegalAction" } }`; `apply` never asserts and never throws
+
+**Decision.** `apply` returns `{ state: <the input, unchanged>, events: [], error: { code, message } }` for every refusal, including the ones that indicate a corrupt state rather than a bad move — a hand of seven or more cards being the named example. It never throws, and it never mutates its input.
+
+**Why.** `apply` is the fold used by the server, by every client and by the replay proof, and all three of them run it over data that arrived from somewhere else. A throw in that position turns one bad row into a 500, a blank screen or an aborted replay; a returned error lets each caller decide — the route answers `422`, the client marks itself desynced and refetches, the replay test reports which `seq` broke. Returning the *input* state rather than a partial one is what makes "refused" indistinguishable from "never attempted" (R28, R86, F51).
+
+**Consequence.** Every call site must look at `result.error`, because nothing else will tell it. The compensating benefit is that `apply` is total: there is no input for which it does anything but return a value.
+
+---
+
+## D85 — `END_PHASE` is refused out of `fortify`; the only way out of a turn is `END_TURN`
+
+**Decision.** `END_PHASE` moves `draft → attack` and `attack → fortify` and is a `wrongPhase` error in `fortify`. The fortify phase is left only by `END_TURN`, which is also what performs the end-of-turn card award (D82). **[SPEC]** — the original's phase machine was inferred from footage.
+
+**Why.** Fortify is optional (R32) and is the last phase, so "end this phase" and "end this turn" would mean the same thing there — and two actions with one meaning is exactly the ambiguity that lets a client and a server disagree about whether a turn ended. Collapsing it to one action also gives the card award a single site instead of two.
+
+**Consequence.** `legalActions` in `fortify` offers `FORTIFY`, `CARD_DRAWN` and `END_TURN` and nothing else, and the HUD's primary pill reads `End Turn` rather than `End Fortify Phase`. The auto-skip path for a timed-out seat relies on this: it offers `END_TURN` before `END_PHASE` and takes whichever `validate` accepts.
+
+---
+
+## D86 — The Max-Rounds tiebreak is territories, then troops, then the lowest seat index, and such an outcome always carries `tiebreak: true`
+
+**Decision.** When the round limit expires the winner is the living seat with the most territories; ties go to the most troops; ties again go to the lowest seat index. The resulting `Outcome` carries `tiebreak: true`, and no other win reason ever does. The neutral holding is not a candidate (D77).
+
+**Why.** The first two keys are the ones the community sources agree on; the third is ours, and it exists because a comparator used to pick a winner must be **total**. Falling back to "whoever the sort happened to leave first" would make the result depend on array order, which is precisely the kind of incidental dependency R91's canonical-ordering rule exists to remove. Flagging the outcome is what lets the Victory screen say *"Most territories at the end of round 5"* rather than implying a conquest (R78).
+
+**Consequence.** A UI or a stats view can distinguish "won the game" from "was ahead when the clock ran out" without re-deriving the reason, and the lowest-index fallback is a documented tiebreak rather than an accident to be discovered in a dead heat.
+
+---
+
+## D87 — The fitted logistic is consulted for the standard augment only, and table indices are never clamped independently
+
+**Decision.** Win chance comes from a precomputed `W[A][D]` table for `A, D ≤ 128`. Above the table, a **standard** augment uses the fitted logistic `σ((A − 0.860·D) / (0.630·√(A+D)))`; any non-standard augment instead extends the exact DP on demand and memoises the result. Indices are never clamped individually.
+
+**Why.** The logistic was fitted against the standard augment and nothing else, so its error bound — max 0.03205, at `(333, 400)`, RMS 0.0088 over `A, D ∈ [129, 400]` — says nothing about a board with a capital or a Zombies penalty in play; using it there would be quoting an accuracy that was never measured (R43, F48). Independent clamping is worse than wrong: `W[min(A,128)][min(D,128)]` reads 129 attackers against 381 defenders — a true win chance of about zero — as 85.65%, because clamping destroys the troop *ratio*, which is the entire signal.
+
+**Consequence.** A non-standard augment pays a one-off DP build the first time it is asked about a battle larger than the table, which T13 budgets at under 10 ms. There is a test asserting the 129 v 381 case specifically, because it is the one a clamping bug would silently pass.
+
+---
+
+## D88 — Balanced Blitz's stage-3 concatenation is pinned by the bit-exact oracle, not by the prose
+
+**Decision.** Stage 3 builds its combined distribution by taking the attacker-loss cells in ascending order and then the defender-loss cells **reversed**, excluding the two aggregate cells, and computes its weight from the *unnormalised* sums (`w3 = lowSum / (lowSum + highSum)`) rather than renormalising in place. That ordering is the one SPEC §3.6 describes in prose, and it is recorded here because the acceptance test — not the paragraph — is what decides it (R52, F46).
+
+**Why.** The published description of the reshape admits more than one reading, and the readings differ in the fifteenth decimal place rather than in the shape of the curve, so no amount of re-reading settles it. What settles it is SMG's own printed example: 30 attackers against a capital held by 15, losing exactly 12, must come out at `0.0100282888709122` under Balanced Blitz against `0.02221280017072782` under True Random, 49 must be the fewest attackers for ≥80% against 50, and `20 v 15` must be exactly 1. This ordering reproduces all of them; it was the first tried and no alternative was needed.
+
+**Consequence.** The digits are the specification. Anyone changing the pipeline has T4 as the arbiter — `toBeCloseTo(x, 15)`, because `Math.pow` appears twice and is not bit-identical across engines, but fifteen places is tighter than any plausible engine difference. Two separate traps are recorded alongside it: stage 3 does not renormalise in place, and stage 4 renormalises each side separately.
+
+---
+
+## D89 — `CERTAIN_EPS` is `1e-9` and `ANTI_BOT_BIAS` is `0.5`, both chosen here because the sources give only the predicate
+
+**Decision.** Expert's "certain win" test is `winChance(a, d, aug) >= 1 - 1e-9`. A persona with `antiBotBias` resolves it to the magnitude `0.5`, which raises a bot-held target's score by 5%. **[SPEC]** both: the research gives the predicate `W ≥ 1 − ε` with no epsilon, and the bot descriptions say only "yes" or "no".
+
+**Why.** An epsilon is unavoidable — the DP's probabilities are doubles and a genuinely certain battle computes to `1 - 2.2e-16`, not `1` — and `1e-9` is far enough above the floating-point noise to be robust while being far below any real uncertainty a bot should act on. The bias magnitude had to be a number for the score function to use at all; 0.5 was chosen to land as a 5% nudge, which changes target selection between close candidates and never overrides a large difference.
+
+**Consequence.** Neither number is sourced, so neither should be defended in an audit as RGD behaviour; both are tuning defaults with a test pinning them so a change is deliberate. The 5% figure in particular is the sort of value a balance pass would legitimately revisit.
+
+---
+
+## D90 — The tier reserve ladder is 0.4 / 0.5 / 0.8 / 1.0 / 1.2, and the ±10% persona jitter touches nine knobs but never the tier's own values
+
+**Decision.** `tierReserveFactor` runs 0.4 (Beginner), 0.5 (Easy), 0.8 (Medium), 1.0 (Hard), 1.2 (Expert). At match start each bot's persona is jittered by ±10% — ±5% at Beginner — across **nine** knobs: aggression, reserve factor, continent focus, expansionism, stackiness, turtle aversion, leader bias, grudge weight and grudge decay. Unit-range knobs are clamped to [0, 1] and grudge decay to [0.5, 0.95]. The tier's own fields, `tierReserveFactor` among them, are applied *after* the jitter and are not perturbed.
+
+**Why.** The ladder's shape is sourced — low tiers under-defend, Expert over-defends — but only Expert's 1.2 is marked as ours; the rest fill the curve. The jitter exists so two games at the same tier are not identical, which is a texture the original plainly has; restricting it to nine named knobs and clamping each keeps "varied" from becoming "broken", and a tighter amplitude at Beginner stops the weakest tier from occasionally rolling a competent personality. Excluding the tier's fields is what keeps the tier itself meaningful: a jittered `tierReserveFactor` would let a Hard bot defend like an Easy one.
+
+**Consequence.** Exactly nine draws come off the jitter stream per bot seat and two off the assignment stream, which is part of the opening's draw-count contract (D78). A test that asserts a persona field exactly must read a tier field, not a jittered one.
+
+---
+
+## D91 — Every shipped map offers all six capital slots, and the generator assigns suits round-robin so the ≤1 rule holds by construction
+
+**Decision.** All sixteen map files declare `modifierSlots.capitals: 6`, matching `MAX_SEATS`, so Capitals is playable at every seat count on every board. The Voronoi generator assigns card suits by `SUIT_ORDER[i % 3]` over the territory index, and no territory is ever given the wild suit.
+
+**Why.** A per-map capital allowance would be one more number to source for sixteen boards and one more reason for a mode to be quietly unavailable; since a capital is simply one of a seat's own dealt territories (D78 ④), the only real constraint is that a seat exists to own it, so the slot count is just `MAX_SEATS`. Round-robin suits satisfy T7's "the three counts differ by at most one" (F7) by construction rather than by a balancing pass that could regress — which matters because a generated board has no sourced suit assignment to honour, so the only property worth guaranteeing is the one the validator checks.
+
+**Consequence.** The `6` is a literal in each JSON file rather than an import, so it is a convention the files satisfy and not a derived value; a new board added by hand has to carry it. The wild cards come from the deck, never from a territory, which is why `suit: "wild"` appears in `Card` but never in a map file.
+
+---
+
+## D92 — Two type shapes are chosen for canonical serialisation rather than for expressiveness: `dynamicMinWinChance` as a boolean, and `GameState.version` as a plain `number`
+
+**Decision.** Expert's `minWinChance: "dynamic"` is resolved at persona-draw time into a boolean `dynamicMinWinChance`; when it is true the floor is `score <= 0` and the numeric `minWinChance` is ignored. `GameState.version` is typed `number`, not `typeof RULESET_VERSION`. **[SPEC]** both.
+
+**Why.** A `number | string` union inside `GameState` would not serialise canonically — the hash would depend on which arm was present — and R91/D16 require one byte string per state. Collapsing the union at the boundary keeps the state's shape flat. The version field is the mirror image: a state deserialised from an *older* replay legitimately carries an older number, so pinning it to the current literal would make a perfectly valid historical state unrepresentable.
+
+**Consequence.** The tier tables keep the readable `"dynamic"` spelling and the fold turns it into a flag, so the two spellings must stay in step. And `RULESET_VERSION` can be bumped (D55) without the type refusing yesterday's golden replays.
+
+---
+
+## D93 — A non-fog online game sends the authoritative snapshot and the raw action log, so another seat's hand is visible to anyone reading the wire
+
+**Decision.** With Fog of War off, POLL 3 sends the **authoritative** state on a cold or compaction-lagging poll and the plain action log otherwise. Nothing is redacted: a client that reads its own network traffic can see every seat's cards. This is accepted rather than fixed.
+
+**Why.** The client has to be able to fold the log and hash the result, because that fold is what detects a desync and what makes the delta path — one action, under a kilobyte — affordable at all (F12 ∧ F36, T12). Redacting hands while keeping the fold would need an *unknown-card* state model: a hand the client knows the size of but not the contents of, which `apply` would have to carry through trades and seizures, and `hashState` would have to canonicalise. That is a real feature, not a patch, and it buys nothing a casual replica needs — this is a game with no ranking, no stakes and no accounts.
+
+**Consequence.** Card secrecy online is a *UI* property, not a security one, and should never be described otherwise. Fog of War is the mode that actually hides information, and it hides it by sending a masked view instead of a foldable log (D94). If hidden hands ever matter, the unknown-card state model is the piece of work, and `viewFor` already has the right shape to hang it on.
+
+---
+
+## D94 — A fog game sends the caller's masked view plus a redacted action list for animation only, and the client never folds
+
+**Decision.** When `rules.fogOfWar` is on, every changed poll returns the caller's own masked snapshot at `snapshotSeq === seq`, carrying `fogged: true`, plus an action list that exists **only to animate** and is redacted: `GAME_STARTED` is omitted entirely, any action naming a territory the viewer cannot see arrives as exactly `{ type: "HIDDEN", seat }`, and another seat's card award arrives as `CARD_DRAWN` with `card: null`. The client ingests the snapshot and never folds the actions.
+
+**Why.** `hashState` refuses a fogged state outright, so a masked view cannot take part in the fold-and-compare loop that keeps a non-fog client honest — which means fog has to be a different transport, not the same one with fields blanked. Sending the view is the only way to be sure the client never holds a fact it is not allowed to see; sending the actions anyway, redacted, is what lets the board still animate a capture at the edge of vision instead of teleporting. `GAME_STARTED` goes because it carries the whole deal, and a null card because the *count* is public (F12) while the identity is not.
+
+**Consequence.** A fog game costs a snapshot per changed poll rather than a delta, which is why T12 asserts the masked snapshot stays under 4 KB on Classic and why the 204 path has to be byte-identical in both modes. `{ type: "HIDDEN" }` is a wire shape only: it never reaches `apply`, and a client that tried to fold it would be refused.
+
+---
+
+## D95 — Every RNG sub-stream is keyed by the `seq` of the action being produced, never by `state.turn`
+
+**Decision.** `rngFor(seed, purpose, index)` is called with the **sequence number the new action will take**, for every per-action stream: `battle`, `cardDeck`, `portalMove` and each `bot:<seat>`. Only the opening draws — the deal, turn order, modifier placement and persona assignment — use index 0.
+
+**Why.** Keying by `state.turn` makes every draw inside one turn identical, which is visible immediately: two attacks in the same turn roll the same dice. The seq is the one number that is unique per action by construction, monotonic, and already recorded in the log — so it is also the one key a replay can reproduce without tracking any extra state. The opening is the exception because it happens once, before any action has a seq to be keyed by.
+
+**Consequence.** An action's randomness is reproducible from `(seed, purpose, seq)` alone, which is what lets the authority roll a battle inside the append transaction without having to know anything about the turn it belongs to. It also means inserting an action into a log — which nothing is allowed to do — would change every later roll, as it should.
+
+---
+
+## D96 — `GET /api/games/:id/actions` is the determinism proof's only door, and it exists only behind the debug flag
+
+**Decision.** A debug-gated `GET /api/games/:id/actions?from=<seq>` returns the raw log: unmasked payloads, every `state_hash`, from `seq` 1. It is gated on `NEXT_PUBLIC_RISK_DEBUG === "1"` and answers `404` otherwise, and even with the flag on it still requires a session cookie and a seat in that game.
+
+**Why.** The replay proof has to compare a local fold against the authority's stored hashes, and POLL 3 cannot provide that: in a fog game it returns a masked view (D94) and a replay checked against a masked state proves nothing, while in a non-fog game it returns deltas against a cursor rather than the log from the beginning. A second, read-only door is the smallest thing that makes the proof possible, and flag-gating it means production has no such endpoint at all (F37).
+
+**Consequence.** T10.1 reads this route and nothing else, and the `GAME_STARTED` row it returns is the one that carries the deal — which is safe because `games.seed` is a column and never a payload field (D5), so there is nothing to strip and nothing that can leak. The suite's own assertion that the serialised log contains no `seed` is the guard on that.
+
+---
+
+## D97 — There is exactly one projection between map and screen coordinates, and it lives in `render/camera.ts`
+
+**Decision.** `toScreen` and `toMap` are defined once, in `src/render/camera.ts`, and the three places that project points — the camera itself, the token layer and the input layer — all call them. Nothing re-derives a matrix, and nothing writes a second inverse.
+
+**Why.** The coordinate contract is a perspective `rotateX` on the stage plus a translate-and-scale on the board, with a counter-rotation on every token so the chips stay upright (§8). Three independent implementations of that would have to agree to the pixel, and the failure mode when they do not is the worst kind: a tap that lands one territory away from the token the player aimed at, intermittently, depending on zoom. One function means the input layer and the renderer cannot disagree, because there is nothing to disagree about (F40).
+
+**Consequence.** The hit test is `document.elementFromPoint` against the SVG paths — the browser's own picking, which is correct under `rotateX` by construction and cheaper than re-projecting forty-two polygons — and `toMap` is used only to report where the tap landed in map units. Changing the camera is a change to one file.
+
+---
+
+## D98 — The game poll answers `200` when only chat is new, so `204` means "nothing at all" rather than "no actions"
+
+**Decision.** POLL 3 returns `204 No Content` only when `head.seq === since` **and** no chat line is newer than `chatSince`. New chat alone is enough to make it a `200` with a body.
+
+**Why.** In-game chat rides this poll and nothing else (§5.9). Treating `seq` as the only cursor would make a line undeliverable until somebody moved a troop — on a slow turn, minutes — which is not a latency problem but a lost message. The cost is small and bounded: a chat-only body carries no actions and no snapshot, so it stays well inside the delta budget T12 asserts.
+
+**Consequence.** `204` is a stronger statement than it looks: it means the game and the conversation have both stopped. The weak `ETag` still carries only `seq`, so a client that revalidates on the ETag alone would miss a chat-only change — which is why the cursor pair, not the ETag, is the client's source of truth.
+
+---
+
+## D99 — `ready` is its own route, and any seated player sets their own flag
+
+**Decision.** `POST /api/lobbies/:code/ready` takes `{ ready: boolean }` and is open to any player seated in that lobby. It is deliberately **not** folded into the host-only `PATCH /api/lobbies/:code`, which §6's table originally put it in. **[SPEC]**
+
+**Why.** `I'M READY` is on everybody's screen, and a host who could flip somebody else's flag could start a game that player had not agreed to — which is the one thing a ready check exists to prevent. The host's patch stays host-only for the things that genuinely are the host's: the map, the rules, adding and removing bots, and kicking.
+
+**Consequence.** The only authority check on the ready route is "are you seated here", and an unseated caller gets `404` rather than `403`, because from outside the lobby the seat does not exist. There is also no ready-check timer: `BATTLE` enables at two occupied seats with every human ready and waits as long as it takes (§7).
+
+---
+
+## D100 — The snapshot deliberately lags `seq`, and is rewritten only once the fold drifts more than fifty actions behind
+
+**Decision.** `games.snapshot` is a cache of the log's fold, not a second source of truth. The append path rewrites it only when `seq - snapshot_seq` exceeds `COMPACTION_THRESHOLD = 50`; otherwise the old snapshot and its `snapshot_seq` are written back unchanged. A sweep in the reaper advances stragglers.
+
+**Why.** Rewriting on every append would make `snapshot_seq` always equal `seq`, which sounds tidy and is the one regression that would blow the cost envelope: every client behind by a single action would fall into §6's `since < snapshot_seq` branch and a one-action change would cost a whole snapshot. Lagging keeps `since >= snapshot_seq → delta` the common branch, and keeps the other branch reachable at all — which is the case the compaction sweep exists for (T12).
+
+**Consequence.** A cold client folds up to fifty actions on top of the snapshot it receives, which is cheap, and the predicate is strictly greater-than, so the rewrite actually fires at a drift of fifty-one. The three columns — snapshot, `snapshot_seq` and the state hash — move together or not at all.
+
+---
+
+## D101 — A timed-out seat's `AUTO_DEPLOY` spreads troops evenly, lowest territory first, with no persona and no RNG
+
+**Decision.** When the turn timer fires on a human seat that still has troops to place, the server appends an `AUTO_DEPLOY` whose placements are a round-robin over that seat's legal draft targets, lowest territory id first. §5.6 says those placements are "chosen by the bot policy"; they are chosen here instead.
+
+**Why.** The bot policy needs a `BotPersona`, and a human seat has none. Minting one for a seat that is about to be handed straight back to its owner would put a persona into the log that nothing ever plays — a lie in the permanent record for the sake of one deployment. An even spread needs no persona, no RNG and no map knowledge, is reproducible from the log alone, and reads as a visibly fair "you were not here" move rather than as a stranger playing your turn badly.
+
+**Consequence.** The auto-skip offers `AUTO_DEPLOY`, then `END_TURN`, then `END_PHASE`, and takes the first that `validate` accepts — so it needs to know nothing about which transitions the reducer allows, which matters because the phase machine is the engine's business and not the route's. Only an `END_TURN` increments the seat's missed-turn count, so a deployment alone never costs the player a strike toward the takeover.
+
+---
+
+## D102 — `ensureSchema()` runs once per database instance, from the one wrapper every data route goes through
+
+**Decision.** `withDb` — the wrapper all fourteen data routes use — calls `ensureSchema()` first. It returns immediately unless the driver is PGlite, and memoises the migration promise in a `WeakMap` keyed by the database instance, held on `globalThis` under a `Symbol.for` key. A failed migration deletes its own entry.
+
+**Why.** PGlite is the local and e2e driver and starts empty, so something has to apply the schema, and a developer running `pnpm run dev` should not have to run a migration by hand first. Neon is migrated by `pnpm run db:push` at deploy time and must never migrate inside a request. Keying the memo on the *instance* rather than on the process is what makes the route test suites work: each file swaps in a fresh `:memory:` database and each gets its own schema. Sharing one promise between concurrent callers means the first request through the door does the work and the rest wait rather than racing.
+
+**Consequence.** One wrapper rather than one line at the top of fourteen handlers, and a failed migration is retried on the next request instead of being remembered as done. In production the call is a single boolean check.
+
+---
+
+## D103 — `mapSlug` is validated at the lobby boundary, and the four engine fixtures stay allowed there
+
+**Decision.** A zod refinement checks `mapSlug` against `MAP_SLUGS` when a lobby is created or patched. Nothing inside `src/engine/**` validates a slug. All sixteen slugs are accepted, **including** the four fixtures (`tiny3`, `tiny4`, `mini`, `quad`), which are hidden from every player-facing picker (D39) but remain loadable.
+
+**Why.** `loadMapFile` rejects an unknown slug, but it is only called when the host presses `BATTLE` — so without a boundary check a typo would surface as a `500` from `start`, long after the lobby was created and with five other people sitting in it. Refusing it at creation is both earlier and clearer. The fixtures stay on the allow-list because a four-territory board is the only honest way to drive a whole online game inside a test's budget, and the picker already keeps them away from players.
+
+**Consequence.** "In the catalogue" and "offered to players" are two different questions with two different answers, and code that conflates them will either break the e2e suite or leak a test board into the map picker. The filter a picker wants is `MAP_SLUGS.filter((s) => !FIXTURE_SLUGS.includes(s))`.
+
+---
+
+## D104 — The offline e2e specs play the smallest *player-facing* board, because no fixture board can be reached by walking the menu
+
+**Decision.** T10.2 plays `south-america` (20 territories) and T10.3 plays `classic-world` with six hot-seat seats, rather than the `tiny4` and `mini` SPEC §11 names. T10.1 and the online lobby still use `tiny4`, which the API accepts (D103).
+
+**Why.** Three constraints meet here. The fixtures are deliberately absent from the map picker (D39); the offline play routes read a client-side store that only the picker fills, and refuse a cold load by bouncing to `/new`; and walking the real menu is the thing those two specs exist to exercise, so deep-linking past it would test the bounce instead of the game. `south-america` is the smallest board a player can actually choose. T10.3 needs six seats for a second reason: fog hides a tile only when the viewer neither occupies it nor borders it, so two seats holding fourteen Classic territories each see **all forty-two** between them and their neighbours, and every fog assertion would pass over an empty set. Six seats hold seven each and about a third of the board is dark.
+
+**Consequence.** T10.2 wins by Percentage Domination at its default 70% rather than by World Domination — the same evaluation path, reachable in a few turns on twenty territories instead of a few dozen — and it pins the bot to Beginner, because the greedy script that drives the HUD is a mediocre Risk player and a Medium bot beats it. Which seat wins is deliberately not asserted: the offline seed is minted per game, the dice are real, and pinning the winner would make the spec a coin flip dressed as an assertion. What is asserted is that the game reaches a lawful outcome through the HUD, that the human captured ground on the way, and that the Victory overlay names the seat the simulation says won.
+
+---
+
+## D105 — T10.4 appends its two online turns through the HTTP route rather than through the board, and the reason is a live bug
+
+**Decision.** The online end-to-end spec drives identity, the lobby, readiness, the start, chat, the roster and the takeover through the real UI, but appends the two turns with `POST /api/games/:id/actions` from each context's own cookie jar. Board taps are not used on `/play/online/[gameId]`.
+
+**Why.** Taps on the online route do not reach the session after the lobby hands the players over. The evidence is specific: the `pointerdown`/`pointerup` pair *does* arrive at `#stage`, at a point the browser's own hit test resolves to the intended territory; the painted owner and the confirmed owner agree; it is the viewer's turn, the primary pill reads `End Draft Phase`, the stage is not hidden, no dialog is open and `troopsToPlace` is positive — every precondition `canAct()` checks is satisfied — and yet nothing is selected and no count dialog opens. The same tap works when the page is opened directly at the game URL, which points at the online composition's mount or re-render lifecycle rather than at the input layer. Blocking the protocol coverage — two cookie jars, contiguous `seq`, idempotent retries, the `notYourTurn` fence, the delta/snapshot split, chat both ways, the turn timer, the bot takeover and the reclaim — on that one defect would have been the worse trade.
+
+**Consequence.** HUD-driven play is proved offline, where T10.2 carries a game from the menu to a victory and T10.3 drives a hot-seat hand-off, so the gap is specifically "taps on the online route", not "taps". The request path used instead is the same one the browser uses, on the same `risk_sid`, so what it exercises on the server is unchanged. This entry is the record that the spec is narrower than SPEC §11 T10.4 asks for, and why.

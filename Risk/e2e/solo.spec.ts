@@ -65,7 +65,10 @@ const SOLO = {
 const WORLD = { map: "south-america", seats: 2 } as const;
 
 test("T10.2 — a solo game against one bot is played to victory through the HUD", async ({ page }) => {
-  test.slow();
+  // A whole game through the HUD, one tap at a time, with a camera pan for
+  // every territory the board does not already have on screen. The default
+  // 30 s is nowhere near it, and `test.slow()`'s 90 s only sometimes is.
+  test.setTimeout(300_000);
   const errors = watchErrors(page);
 
   await claimIdentity(page, uniqueName("Solo"));
@@ -144,7 +147,10 @@ test("T10.2 — a solo game against one bot is played to victory through the HUD
 });
 
 test("T10.2b — walking back into the same configuration resumes the autosaved game", async ({ page }) => {
-  test.slow();
+  // A whole game through the HUD, one tap at a time, with a camera pan for
+  // every territory the board does not already have on screen. The default
+  // 30 s is nowhere near it, and `test.slow()`'s 90 s only sometimes is.
+  test.setTimeout(300_000);
   const errors = watchErrors(page);
   const name = uniqueName("Resume");
 

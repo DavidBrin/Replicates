@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  CLICK,
   SEL,
   actingSeat,
   claimIdentity,
@@ -78,6 +79,7 @@ async function viewerSeat(page: Page): Promise<number> {
 async function handOverDevice(page: Page): Promise<number> {
   const overlay = page.locator(SEL.handOff);
   await overlay.waitFor({ timeout: 90_000 });
+  const outgoing = await viewerSeat(page);
 
   await expect(overlay).toHaveAttribute("role", "dialog");
   await expect(overlay).toHaveAttribute("aria-modal", "true");
@@ -101,17 +103,23 @@ async function handOverDevice(page: Page): Promise<number> {
   ).toBe(0);
   expect(await page.locator(SEL.roster).count(), "and no roster to read troop counts off").toBe(0);
 
-  // **The incoming seat's board does not exist yet.** `viewerSeat` is still
-  // the outgoing player's while the overlay is up, so the only ownership in
-  // the DOM behind it is the view that player was already allowed to see —
-  // never the fog the next player is about to be shown. That invariant, not
-  // the opacity of the overlay, is what makes the hand-off safe (§5.4).
+  // **The incoming seat's board does not exist yet.** The viewer is still the
+  // outgoing player's seat for as long as the overlay is up, so the only
+  // ownership in the DOM behind it is the view that player was already
+  // allowed to see — never the fog the next player is about to be shown.
+  // That invariant, not the opacity of the overlay, is what makes the
+  // hand-off safe (§5.4).
+  //
+  // Stated as "the viewer has not moved" rather than "the viewer is not the
+  // incoming seat", because at the **first** hand-off they can legitimately
+  // be the same number: the viewer starts at seat 0 and the seed may well
+  // have put seat 0 first.
   expect(
     await viewerSeat(page),
-    "the viewer has not advanced to the incoming seat yet",
-  ).not.toBe(incoming);
+    "the viewer has not advanced while the overlay is up",
+  ).toBe(outgoing);
 
-  await overlay.locator(SEL.handOffContinue).click();
+  await overlay.locator(SEL.handOffContinue).click(CLICK);
   await overlay.waitFor({ state: "hidden", timeout: 15_000 });
   await expect(stage).toHaveAttribute("data-hidden", "false");
   await expect
@@ -141,7 +149,10 @@ async function paintedBoard(page: Page): Promise<number[]> {
 test("T10.3 — the hand-off conceals the board between two human seats, and fog follows the viewer", async ({
   page,
 }) => {
-  test.slow();
+  // A whole game through the HUD, one tap at a time, with a camera pan for
+  // every territory the board does not already have on screen. The default
+  // 30 s is nowhere near it, and `test.slow()`'s 90 s only sometimes is.
+  test.setTimeout(300_000);
   const errors = watchErrors(page);
 
   await claimIdentity(page, uniqueName("Hotseat"));

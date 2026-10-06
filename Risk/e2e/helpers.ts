@@ -23,6 +23,20 @@ import {
  * missing debug hook is a bug in S4 or S5, never something to add from here.
  */
 
+/**
+ * Every `click` in this suite carries this timeout, and it is not belt-and-braces.
+ *
+ * `playwright.config.ts` sets no `actionTimeout` — it is S0's file, not S6's —
+ * so a Playwright action's default budget is **unbounded**: a click on an
+ * element that is visible and enabled but cannot receive events retries until
+ * the whole test times out, and the failure then points at the test's last
+ * line rather than at the button. That cost half an hour once: a `Received
+ * Troops` popup sits on `--z-modal` and comes after the chat drawer in DOM
+ * order, so it covers the drawer, and clicking a chat line hung for five
+ * minutes with nothing in the report to say why.
+ */
+export const CLICK = { timeout: 20_000 } as const;
+
 /* ----------------------------------------------------------- routes ---- */
 
 export const ROUTES = {
@@ -89,7 +103,8 @@ export const SEL = {
   seatCount: '[data-testid="seat-count"]',
   seatAdd: '[data-testid="seat-add"]',
   seatRow: (index: number) => `[data-testid="seat-row-${index}"]`,
-  seatKind: (index: number, kind: string) => `[data-testid="seat-row-${index}"] [data-testid="seat-tier-${index}"]`,
+  seatTier: (index: number) => `[data-testid="seat-tier-${index}"]`,
+  seatRemove: (index: number) => `[data-testid="seat-remove-${index}"]`,
   rulesChoice: (name: string, value: string | number) => `[data-testid="rules-${name}-${value}"]`,
   domination: '[data-testid="rules-domination"]',
   dominationValue: '[data-testid="rules-domination-value"]',
@@ -126,6 +141,7 @@ export const SEL = {
 
   // dialogs
   countSlider: '[data-testid="count-slider"]',
+  countSliderTitle: '[data-testid="count-slider-title"]',
   countConfirm: '[data-testid="count-confirm"]',
   countCancel: '[data-testid="count-cancel"]',
   countMoveAll: '[data-testid="count-move-all"]',
@@ -386,14 +402,14 @@ export async function claimIdentity(page: Page, name: string, colour?: string): 
   await page.locator(SEL.homeScreen).waitFor();
 
   if ((await page.locator(SEL.identitySheet).count()) === 0) {
-    await page.locator(SEL.homeSettings).click();
+    await page.locator(SEL.homeSettings).click(CLICK);
   }
   const sheet = page.locator(SEL.identitySheet);
   await sheet.waitFor();
 
   await sheet.locator(SEL.identityName).fill(name);
-  if (colour) await sheet.locator(SEL.identityColour(colour)).click();
-  await sheet.locator(SEL.identityContinue).click();
+  if (colour) await sheet.locator(SEL.identityColour(colour)).click(CLICK);
+  await sheet.locator(SEL.identityContinue).click(CLICK);
 
   await expect(page.locator(SEL.homeName)).toHaveText(name);
 }
@@ -411,8 +427,8 @@ export async function claimOnline(page: Page, name: string, colour?: string): Pr
   const sheet = page.locator(SEL.identitySheet);
   await sheet.waitFor({ timeout: 30_000 });
   await sheet.locator(SEL.identityName).fill(name);
-  if (colour) await sheet.locator(SEL.identityColour(colour)).click();
-  await sheet.locator(SEL.identityContinue).click();
+  if (colour) await sheet.locator(SEL.identityColour(colour)).click(CLICK);
+  await sheet.locator(SEL.identityContinue).click(CLICK);
   await page.locator(SEL.lobbyBrowser).waitFor({ timeout: 30_000 });
 
   const body = await apiJson<{ you: { playerId: string; displayName: string } }>(
@@ -452,46 +468,46 @@ export async function startSolo(page: Page, options: StartSoloOptions): Promise<
   const mode = options.mode ?? "solo";
 
   await page.locator(SEL.homeScreen).waitFor();
-  await page.locator(SEL.homeBattle).click();
+  await page.locator(SEL.homeBattle).click(CLICK);
 
   // /new — the game type
   await page.locator(SEL.gameTypeScreen).waitFor();
-  await page.locator(SEL.gameType(mode)).click();
-  await page.locator(SEL.newBattle).click();
+  await page.locator(SEL.gameType(mode)).click(CLICK);
+  await page.locator(SEL.newBattle).click(CLICK);
 
   // /new/map — the board
   await page.locator(SEL.mapPickerScreen).waitFor();
   const tile = page.locator(SEL.mapTile(options.map));
   await tile.waitFor();
-  await tile.click();
+  await tile.click(CLICK);
   await expect(tile).toHaveAttribute("data-selected", "true");
-  await page.locator(SEL.mapNext).click();
+  await page.locator(SEL.mapNext).click(CLICK);
 
   // /new/rules — modifiers, seats and the rest of `Rules`
   await page.locator(SEL.rulesScreen).waitFor();
   for (const key of options.modifiers ?? []) {
-    await page.locator(SEL.modifier(key)).click();
+    await page.locator(SEL.modifier(key)).click(CLICK);
   }
 
   const wantsPanel =
     options.seats !== undefined || (options.rules?.length ?? 0) > 0 || options.dominationPercent !== undefined;
   if (wantsPanel) {
-    await page.locator(SEL.rulesModifiers).click();
+    await page.locator(SEL.rulesModifiers).click(CLICK);
     const panel = page.locator(SEL.modifiersPanel);
     await panel.waitFor();
 
     if (options.seats !== undefined) await setSeatCount(page, options.seats);
     for (const [name, value] of options.rules ?? []) {
-      await panel.locator(SEL.rulesChoice(name, value)).click();
+      await panel.locator(SEL.rulesChoice(name, value)).click(CLICK);
     }
     if (options.dominationPercent !== undefined) {
       await panel.locator(SEL.domination).fill(String(options.dominationPercent));
       await expect(panel.locator(SEL.dominationValue)).toHaveText(`${options.dominationPercent}%`);
     }
-    await panel.locator(SEL.modifiersClose).click();
+    await panel.locator(SEL.modifiersClose).click(CLICK);
   }
 
-  await page.locator(SEL.rulesBattle).click();
+  await page.locator(SEL.rulesBattle).click(CLICK);
 
   // the board
   await page.locator(SEL.gameScreen).waitFor({ timeout: 60_000 });
@@ -512,9 +528,9 @@ export async function setSeatCount(page: Page, want: number): Promise<void> {
     const current = Number(await panel.locator(SEL.seatCount).innerText());
     if (current === want) return;
     if (current < want) {
-      await panel.locator(SEL.seatAdd).click();
+      await panel.locator(SEL.seatAdd).click(CLICK);
     } else {
-      await panel.locator(`[data-testid="seat-remove-${current - 1}"]`).click();
+      await panel.locator(SEL.seatRemove(current - 1)).click(CLICK);
     }
   }
   expect(Number(await panel.locator(SEL.seatCount).innerText())).toBe(want);
@@ -538,7 +554,7 @@ export async function dismissOverlays(page: Page): Promise<boolean> {
     // Both are `Stage`s with `onBackdropClick`, so a tap in the corner lifts
     // them; if the corner is not the backdrop they go on their own, so the
     // wait is the fallback rather than the plan.
-    await overlay.first().click({ position: { x: 4, y: 4 } }).catch(() => undefined);
+    await overlay.first().click({ position: { x: 4, y: 4 }, timeout: 5_000 }).catch(() => undefined);
     await overlay
       .first()
       .waitFor({ state: "hidden", timeout: 8_000 })
@@ -749,7 +765,7 @@ export async function revealTerritory(page: Page, id: number): Promise<{ x: numb
  * the next tap.
  */
 export async function resetCamera(page: Page): Promise<void> {
-  await page.locator(SEL.boardStage).click({ position: { x: 2, y: 2 } }).catch(() => undefined);
+  await page.locator(SEL.boardStage).click({ position: { x: 2, y: 2 }, timeout: 5_000 }).catch(() => undefined);
   await page.keyboard.press("0");
   await page.waitForTimeout(60);
 }
@@ -759,10 +775,50 @@ export async function canTapTerritory(page: Page, id: number): Promise<boolean> 
   return (await findTerritoryPoint(page, id)) !== null;
 }
 
-/** Tap a territory the way a player does: a real pointer event on the stage. */
+/**
+ * Tap a territory the way a player does: a real pointer event on the stage.
+ *
+ * `bringToFront` is not decoration. This suite drives **two pages at once**
+ * in the online spec, and a page that is not the foreground tab is throttled
+ * by the browser — `requestAnimationFrame` stops, so the dirty-flag render
+ * loop never repaints and the camera the hit test was computed against drifts
+ * from the one the session reads. Raising the page first is what makes a tap
+ * on window B behave like a tap on window A.
+ */
 export async function tapTerritory(page: Page, id: number): Promise<void> {
+  await page.bringToFront();
   const point = await revealTerritory(page, id);
   await page.mouse.click(point.x, point.y);
+}
+
+/**
+ * The same tap as a pair of synthetic `PointerEvent`s on the element under
+ * the point.
+ *
+ * A fallback, used only when a real `mouse.click` demonstrably did nothing.
+ * `src/game/input.ts` listens for `pointerdown` / `pointerup` on `#stage` and
+ * hit-tests with `document.elementFromPoint`, so this exercises exactly the
+ * same code path — it just does not depend on the browser's own input
+ * pipeline delivering to this particular page.
+ */
+export async function syntheticTap(page: Page, point: { x: number; y: number }): Promise<void> {
+  await page.evaluate(({ x, y }) => {
+    const target = document.elementFromPoint(x, y) ?? document.getElementById("stage");
+    if (!target) return;
+    const init: PointerEventInit = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: 1,
+      isPrimary: true,
+      pointerType: "mouse",
+      clientX: x,
+      clientY: y,
+      button: 0,
+    };
+    target.dispatchEvent(new PointerEvent("pointerdown", { ...init, buttons: 1 }));
+    target.dispatchEvent(new PointerEvent("pointerup", { ...init, buttons: 0 }));
+  }, point);
 }
 
 /* ------------------------------------------------ driving one turn ----- */
@@ -807,7 +863,7 @@ export async function confirmCountMax(page: Page): Promise<void> {
   const slider = page.locator(SEL.countSlider);
   await slider.waitFor({ timeout: 10_000 });
   await page.keyboard.press("a");
-  await slider.locator(SEL.countConfirm).click();
+  await slider.locator(SEL.countConfirm).click(CLICK);
   await slider.waitFor({ state: "hidden", timeout: 10_000 });
 }
 
@@ -826,9 +882,18 @@ export async function draftOnce(page: Page): Promise<void> {
 
   const slider = page.locator(SEL.countSlider);
   const tried: string[] = [];
+  await watchStageTaps(page);
   for (const territory of await orderByReachability(page, mine)) {
+    let point: { x: number; y: number };
+    let direct = false;
     try {
-      await tapTerritory(page, territory);
+      await page.bringToFront();
+      direct = (await findTerritoryPoint(page, territory)) !== null;
+      point = await revealTerritory(page, territory);
+      await page.mouse.click(point.x, point.y);
+      if ((await page.locator(SEL.countSlider).count()) === 0) {
+        await page.mouse.click(point.x, point.y);
+      }
     } catch {
       tried.push(`${territory}:unreachable`);
       continue; // unreachable with the camera where it is; try the next one
@@ -838,11 +903,34 @@ export async function draftOnce(page: Page): Promise<void> {
     try {
       await slider.waitFor({ timeout: 2_000 });
     } catch {
+      await syntheticTap(page, point);
+      try {
+        await slider.waitFor({ timeout: 2_000 });
+        tried.push(`${territory}:synthetic-worked`);
+        await confirmCountMax(page);
+        return;
+      } catch {
+        /* fall through to the diagnostic below */
+      }
       const painted = await page
         .locator(SEL.territory(territory))
         .getAttribute("data-state")
         .catch(() => "?");
-      tried.push(`${territory}:no-slider(state=${painted})`);
+      const owner = await page
+        .locator(SEL.territory(territory))
+        .getAttribute("data-owner")
+        .catch(() => "?");
+      const under = await page.evaluate(
+        ({ x, y }) => {
+          const el = document.elementFromPoint(x, y);
+          return el ? (el.getAttribute("data-territory") ?? el.getAttribute("data-testid") ?? el.tagName) : "null";
+        },
+        point,
+      );
+      tried.push(
+        `${territory}:no-slider(state=${painted},owner=${owner}/${state.territories[territory]?.owner},` +
+          `pt=${Math.round(point.x)},${Math.round(point.y)},under=${under},direct=${direct})`,
+      );
       continue;
     }
     await confirmCountMax(page);
@@ -850,7 +938,43 @@ export async function draftOnce(page: Page): Promise<void> {
   }
   throw new Error(
     `no owned territory accepted a draft tap — ${await describeBoard(page)} ` +
-      `toPlace=${state.troopsToPlace} tried=[${tried.slice(0, 6).join(" ")}]`,
+      `toPlace=${state.troopsToPlace} taps=[${(await readStageTaps(page)).slice(0, 8).join(" ")}] ` +
+      `tried=[${tried.slice(0, 4).join(" ")}]`,
+  );
+}
+
+/**
+ * Record every pointer event that reaches the board, from now on.
+ *
+ * Diagnostic only, and worth keeping: "the tap did nothing" has two very
+ * different causes — the event never arrived (the board's listener is gone,
+ * or something is sitting on top of it) or it arrived and the session refused
+ * it — and no amount of staring at `data-state` tells those apart.
+ */
+export async function watchStageTaps(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __riskTaps?: string[]; __riskTapsOn?: boolean };
+    w.__riskTaps = [];
+    if (w.__riskTapsOn) return;
+    w.__riskTapsOn = true;
+    for (const type of ["pointerdown", "pointerup"]) {
+      document.addEventListener(
+        type,
+        (event) => {
+          const target = event.target as Element | null;
+          const onStage = Boolean(target?.closest?.("#stage"));
+          w.__riskTaps!.push(type + (onStage ? "@stage" : "@" + (target?.tagName ?? "?")));
+        },
+        true,
+      );
+    }
+  });
+}
+
+/** What {@link watchStageTaps} has seen since it was armed. */
+export async function readStageTaps(page: Page): Promise<string[]> {
+  return page.evaluate(
+    () => (window as unknown as { __riskTaps?: string[] }).__riskTaps ?? ["not-watching"],
   );
 }
 
@@ -881,7 +1005,10 @@ export async function describeBoard(page: Page): Promise<string> {
       `viewer=${screen?.getAttribute("data-viewer-seat")} ` +
       `primary="${primary?.textContent?.trim() ?? "-"}" ` +
       `stageHidden=${document.querySelector('[data-testid="board-stage"]')?.getAttribute("data-hidden")} ` +
-      `painted=${document.querySelectorAll('[data-territory]:not([data-owner="none"])').length}`
+      `painted=${document.querySelectorAll('[data-territory]:not([data-owner="none"])').length} ` +
+      `paths=${document.querySelectorAll("[data-territory]").length} ` +
+      `stages=${document.querySelectorAll("#stage").length} ` +
+      `screens=${document.querySelectorAll('[data-testid="game-screen"]').length}`
     );
   });
 }
@@ -912,11 +1039,11 @@ async function orderByReachability(page: Page, ids: readonly number[]): Promise<
 export async function resolveMoveIn(page: Page): Promise<void> {
   const state = await readState(page);
   if (!state.pendingMoveIn) return;
-  await page.locator(SEL.primary).click();
+  await page.locator(SEL.primary).click(CLICK);
   const slider = page.locator(SEL.countSlider);
   await slider.waitFor({ timeout: 10_000 });
-  await slider.locator(SEL.countMoveAll).click();
-  await slider.locator(SEL.countConfirm).click();
+  await slider.locator(SEL.countMoveAll).click(CLICK);
+  await slider.locator(SEL.countConfirm).click(CLICK);
   await waitForState(page, (s) => s.pendingMoveIn === null, {
     message: "the move-in never resolved",
   });
@@ -973,7 +1100,7 @@ export async function blitzFrom(page: Page, from: number): Promise<BlitzResult> 
   await tapTerritory(page, target);
   const blitz = page.locator(SEL.blitzView);
   await blitz.waitFor({ timeout: 10_000 });
-  await blitz.locator(SEL.blitzBattle).click();
+  await blitz.locator(SEL.blitzBattle).click(CLICK);
   await blitz.waitFor({ state: "hidden", timeout: 15_000 });
 
   // The dice have resolved when the simulation moved: either the target
@@ -998,10 +1125,10 @@ export async function blitzFrom(page: Page, from: number): Promise<BlitzResult> 
 export async function pressPrimary(page: Page): Promise<void> {
   const primary = page.locator(SEL.primary);
   await expect(primary).toBeEnabled({ timeout: 15_000 });
-  await primary.click();
+  await primary.click(CLICK);
   const confirm = page.locator(SEL.endTurnConfirm);
   if ((await confirm.count()) > 0) {
-    await confirm.locator(SEL.endTurnYes).click();
+    await confirm.locator(SEL.endTurnYes).click(CLICK);
     await confirm.waitFor({ state: "hidden", timeout: 10_000 });
   }
 }
@@ -1063,7 +1190,7 @@ export async function tradeIfForced(page: Page): Promise<boolean> {
     const label = await page.locator(SEL.primary).innerText().catch(() => "");
     if (!/Trade In Now/i.test(label)) return traded;
 
-    await page.locator(SEL.primary).click();
+    await page.locator(SEL.primary).click(CLICK);
     const panel = page.locator(SEL.cardTradePanel);
     await panel.waitFor({ timeout: 10_000 });
 
@@ -1079,7 +1206,7 @@ export async function tradeIfForced(page: Page): Promise<boolean> {
 
     const pill = panel.locator(SEL.tradeInNow);
     await expect(pill).toBeEnabled({ timeout: 10_000 });
-    await pill.click();
+    await pill.click(CLICK);
     await panel.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => undefined);
     traded = true;
   }
@@ -1118,6 +1245,12 @@ async function attackOnce(page: Page, state: DebugState): Promise<boolean> {
 export async function playHumanTurn(page: Page, maxAttacks = 8): Promise<DebugState> {
   let state = await waitForHumanTurn(page);
   if (state.outcome) return state;
+
+  // Put the camera back to the board-fits-the-viewport default before each
+  // turn. `revealTerritory` zooms in to reach an edge territory and leaves it
+  // there, and a board left at 4× means every tap next turn starts with a
+  // pan — which is most of this driver's wall-clock time.
+  await resetCamera(page);
 
   const startTurn = state.turn;
   const mySeat = await viewerSeatOf(page);
@@ -1294,6 +1427,39 @@ export async function api<T = unknown>(
   return { status: response.status(), body, headers: response.headers() };
 }
 
+/**
+ * Append one action to an online game from a context's own cookie jar.
+ *
+ * This is the same request the browser makes — `pollingSync.submit` posts
+ * exactly this body — so it drives the authority the way a client does. Used
+ * where a spec needs a turn to *happen* rather than to be *performed through
+ * the HUD*; T10.2 and T10.3 are the HUD tests.
+ */
+export async function postAction(
+  request: APIRequestContext,
+  gameId: string,
+  clientActionId: string,
+  action: Record<string, unknown>,
+): Promise<ApiResult<{ seq: number; actions: LogRow[] }>> {
+  return api(request, API.gameActions(gameId), {
+    method: "POST",
+    body: { clientActionId, kind: "action", action },
+  });
+}
+
+/** The same, for an attack: the authority rolls the dice, never the client (F11). */
+export async function postIntent(
+  request: APIRequestContext,
+  gameId: string,
+  clientActionId: string,
+  intent: Record<string, unknown>,
+): Promise<ApiResult<{ seq: number; actions: LogRow[] }>> {
+  return api(request, API.gameActions(gameId), {
+    method: "POST",
+    body: { clientActionId, kind: "intent", intent },
+  });
+}
+
 /** `api`, but a non-2xx is the test's failure rather than something to branch on. */
 export async function apiJson<T>(
   request: APIRequestContext,
@@ -1375,9 +1541,19 @@ export async function newOnlinePlayer(
  */
 export function watchErrors(page: Page): string[] {
   const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  page.on("pageerror", (error) => errors.push(`pageerror: ${String(error)}`));
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    if (message.type() !== "error") return;
+    const text = message.text();
+    // Chrome logs **every** non-2xx response as a console error, and this
+    // suite provokes them on purpose: a `409` for a taken name, a `403` for a
+    // guest pressing BATTLE, a `422` for a client-rolled attack, a `400` for
+    // a free-text chat attempt, a `401` on the first poll before a session
+    // exists. Those are assertions passing, not faults — so the filter is on
+    // the *transport* noise only, and anything the app itself logged still
+    // counts.
+    if (/Failed to load resource/i.test(text)) return;
+    errors.push(text);
   });
   return errors;
 }
