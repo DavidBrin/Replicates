@@ -131,10 +131,30 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
     return options.isMyTurn?.() === true ? MY_TURN_MS : OTHER_TURN_MS;
   }
 
-  /** Fold one POLL 3 body into the port's cursors and out to the listeners. */
+  /**
+   * Fold one POLL 3 body into the port's cursors and out to the listeners.
+   *
+   * The order is deliberate, and all three steps matter:
+   *
+   * 1. **`onSync` first.** It carries the response's *metadata* — presence,
+   *    the turn deadline, chat, and `you.seat` — none of which is game state.
+   *    `you.seat` is what the online screen needs to build a session at all
+   *    (`mySeat`), and on a cold poll the snapshot and the seat arrive in the
+   *    same body; emitting the snapshot first meant the screen was handed a
+   *    board before it knew whose board it was, and the session was never
+   *    built. The two-window smoke test caught it as a game stuck on
+   *    "Connecting…" with a perfectly healthy `seq`.
+   * 2. **then the snapshot**, which replaces the confirmed state.
+   * 3. **then the actions**, which fold on top of it (§5.5).
+   */
   function accept(body: GameSyncBody): void {
-    // Order matters: a snapshot replaces the client's confirmed state, so it
-    // has to land before the actions that follow it (§5.5).
+    for (const line of body.chat) chatSince = Math.max(chatSince, line.id);
+    // `seq` only ever moves forward: a response that overtook another must
+    // not walk the cursor back and re-deliver actions already folded.
+    seq = Math.max(seq, body.seq);
+    etag = `W/"${body.seq}"`;
+    syncListeners.emit(body);
+
     if (body.snapshot !== undefined) {
       snapshotListeners.emit({
         snapshot: body.snapshot,
@@ -142,13 +162,6 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
       });
     }
     if (body.actions.length > 0) actionListeners.emit(body.actions);
-
-    for (const line of body.chat) chatSince = Math.max(chatSince, line.id);
-    // `seq` only ever moves forward: a response that overtook another must
-    // not walk the cursor back and re-deliver actions already folded.
-    seq = Math.max(seq, body.seq);
-    etag = `W/"${body.seq}"`;
-    syncListeners.emit(body);
 
     if (body.status !== "playing") {
       setStatus("idle");

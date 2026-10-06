@@ -620,4 +620,61 @@ describe("the whole server path, with nothing injected at all", () => {
     expect(after.length).toBeGreaterThan(before.length);
     expect(after.some((row) => row.actor === "bot")).toBe(true);
   });
+
+  /**
+   * The chain a *watching* client folds.
+   *
+   * The bot-only suite above proves one long tick replays; this proves the
+   * other shape — a human seat that never moves while the tick runs the bot's
+   * turns over many polls — which is exactly what a browser sitting on the
+   * online route does, and the only shape in which a client ever reported a
+   * desync.
+   */
+  it("keeps a human-plus-bot log foldable across many bot ticks", async () => {
+    const game = await humanVsBotGame(TEST_RULES);
+
+    // Four rounds of "the human plays its turn, then polls until the bot has
+    // played its own" — which is what a browser on the online route does, and
+    // the only shape in which a desync was ever reported.
+    for (let round = 0; round < 4; round += 1) {
+      if ((await currentSeatOf(game.gameId)) === 0) {
+        const cold = await pollGame({
+          gameId: game.gameId,
+          playerId: game.a.playerId,
+          since: 0,
+          chatSince: 0,
+        });
+        if (cold.kind !== "body" || !cold.body.snapshot) break;
+        const state = cold.body.snapshot;
+        if (state.outcome !== null) break;
+        const mine = state.territories.findIndex((row) => row.owner === 0);
+        const turn: readonly (readonly [string, unknown])[] = [
+          [`d${round}`, { type: "DRAFT", seat: 0, territory: mine, count: state.troopsToPlace }],
+          [`p${round}`, { type: "END_PHASE", seat: 0 }],
+          [`t${round}`, { type: "END_TURN", seat: 0 }],
+        ];
+        for (const [label, action] of turn) {
+          await submit(game.a, game.gameId, {
+            clientActionId: actionId(label),
+            kind: "action",
+            action,
+          });
+        }
+      }
+      for (let i = 0; i < 3; i += 1) {
+        const head = await rawLogOf(harness.db, game.gameId);
+        await poll(game.a, game.gameId, head.at(-1)!.seq);
+      }
+    }
+
+    const log = await rawLogOf(harness.db, game.gameId);
+    expect(log.length).toBeGreaterThan(6);
+    expect(log.map((row) => row.seq)).toEqual(
+      Array.from({ length: log.length }, (_, index) => index + 1),
+    );
+
+    const { loadMapFile } = await import("@/content/maps");
+    const { loadMap } = await import("@/engine/map");
+    replay(log, loadMap(await loadMapFile("tiny4")));
+  });
 });
