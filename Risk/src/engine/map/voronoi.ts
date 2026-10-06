@@ -24,6 +24,7 @@ import type { MapFile, Rng, Suit } from "../types";
 import { MAX_SEATS } from "../types";
 
 import { anchorsFor } from "./anchors";
+import { bonusFor, growGroups, sharedVertexAdjacency, slotsForSize } from "./graph";
 import { fitVertexBudget, pointInRings, ringArea, ringsToPath, type Point, type Ring } from "./path";
 import { MAX_VERTICES } from "./schema";
 
@@ -347,40 +348,6 @@ export function hexSites(
 
 /* ------------------------------------------------------------------ merging -- */
 
-/** Cell adjacency: two cells are neighbours when their rings share two vertices — a whole edge. */
-export function cellAdjacency(cells: readonly Ring[]): Set<number>[] {
-  const byVertex = new Map<string, number[]>();
-  cells.forEach((ring, i) => {
-    for (const p of ring) {
-      const k = keyOf(p);
-      const list = byVertex.get(k);
-      if (list === undefined) byVertex.set(k, [i]);
-      else if (!list.includes(i)) list.push(i);
-    }
-  });
-
-  const shared = new Map<string, number>();
-  for (const list of byVertex.values()) {
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const a = Math.min(list[i] as number, list[j] as number);
-        const b = Math.max(list[i] as number, list[j] as number);
-        const k = `${a}_${b}`;
-        shared.set(k, (shared.get(k) ?? 0) + 1);
-      }
-    }
-  }
-
-  const out: Set<number>[] = cells.map(() => new Set<number>());
-  for (const [k, n] of shared) {
-    if (n < 2) continue; // a single shared vertex is a corner touch, not a border
-    const [a, b] = k.split("_").map(Number) as [number, number];
-    out[a]?.add(b);
-    out[b]?.add(a);
-  }
-  return out;
-}
-
 /**
  * The outline of a connected group of cells, as rings.
  *
@@ -464,134 +431,6 @@ function ringArea2Sign(ring: Ring): number {
     sum += a[0] * b[1] - b[0] * a[1];
   }
   return sum;
-}
-
-/**
- * Grow `count` connected groups over an adjacency graph, kept the same size.
- *
- * Seeds are farthest-point sampled so the groups start spread out, then the
- * group with the fewest members always picks next — which is what stops one
- * blob eating the board. Used twice: cells into territories, then territories
- * into continents.
- */
-export function growGroups(
-  count: number,
-  adjacency: readonly ReadonlySet<number>[],
-  centres: readonly Point[],
-  nextU32: () => number,
-): number[] {
-  const n = adjacency.length;
-  const owner = new Array<number>(n).fill(-1);
-  if (count <= 0 || n === 0) return owner;
-
-  const seeds: number[] = [Math.floor(nextFloat(nextU32) * n) % n];
-  while (seeds.length < Math.min(count, n)) {
-    let best = -1;
-    let bestDistance = -1;
-    for (let i = 0; i < n; i++) {
-      if (seeds.includes(i)) continue;
-      let nearest = Infinity;
-      for (const s of seeds) {
-        const a = centres[i] as Point;
-        const b = centres[s] as Point;
-        const dx = a[0] - b[0];
-        const dy = a[1] - b[1];
-        nearest = Math.min(nearest, dx * dx + dy * dy);
-      }
-      if (nearest > bestDistance) {
-        bestDistance = nearest;
-        best = i;
-      }
-    }
-    if (best < 0) break;
-    seeds.push(best);
-  }
-
-  const members: number[][] = seeds.map((s, g) => {
-    owner[s] = g;
-    return [s];
-  });
-
-  let assigned = seeds.length;
-  while (assigned < n) {
-    // The smallest group picks first; ties go to the lowest index, so the whole
-    // pass is a total order and the result is reproducible.
-    let group = -1;
-    let smallest = Infinity;
-    for (let g = 0; g < members.length; g++) {
-      const size = (members[g] as number[]).length;
-      if (size < smallest && frontierOf(g, members, adjacency, owner).length > 0) {
-        smallest = size;
-        group = g;
-      }
-    }
-    if (group < 0) break;
-
-    const frontier = frontierOf(group, members, adjacency, owner);
-    const centre = groupCentre(members[group] as number[], centres);
-    let pick = frontier[0] as number;
-    let best = Infinity;
-    for (const candidate of frontier) {
-      const p = centres[candidate] as Point;
-      const dx = p[0] - centre[0];
-      const dy = p[1] - centre[1];
-      const d2 = dx * dx + dy * dy;
-      if (d2 < best) {
-        best = d2;
-        pick = candidate;
-      }
-    }
-    owner[pick] = group;
-    (members[group] as number[]).push(pick);
-    assigned++;
-  }
-
-  // Anything the growth could not reach (an island with no graph edge) joins
-  // the nearest group outright, so no member is left unowned.
-  for (let i = 0; i < n; i++) {
-    if (owner[i] !== -1) continue;
-    let pick = 0;
-    let best = Infinity;
-    for (let g = 0; g < members.length; g++) {
-      const centre = groupCentre(members[g] as number[], centres);
-      const p = centres[i] as Point;
-      const dx = p[0] - centre[0];
-      const dy = p[1] - centre[1];
-      if (dx * dx + dy * dy < best) {
-        best = dx * dx + dy * dy;
-        pick = g;
-      }
-    }
-    owner[i] = pick;
-    (members[pick] as number[]).push(i);
-  }
-  return owner;
-}
-
-function frontierOf(
-  group: number,
-  members: readonly number[][],
-  adjacency: readonly ReadonlySet<number>[],
-  owner: readonly number[],
-): number[] {
-  const out: number[] = [];
-  for (const m of members[group] as number[]) {
-    for (const other of adjacency[m] ?? []) {
-      if (owner[other] === -1 && !out.includes(other)) out.push(other);
-    }
-  }
-  return out.sort((a, b) => a - b);
-}
-
-function groupCentre(members: readonly number[], centres: readonly Point[]): Point {
-  let sx = 0;
-  let sy = 0;
-  for (const m of members) {
-    const p = centres[m] as Point;
-    sx += p[0];
-    sy += p[1];
-  }
-  return members.length === 0 ? [0, 0] : [sx / members.length, sy / members.length];
 }
 
 /* ------------------------------------------------------------------ naming -- */
@@ -687,11 +526,12 @@ export function generateVoronoiMap(options: VoronoiOptions, seed: string | Rng):
   });
 
   const compact = live.map((i) => cells[i] as Ring);
-  const cellAdj = cellAdjacency(compact);
+  // Each cell is a single ring, so each "shape" handed to the adjacency pass is `[ring]`.
+  const cellAdj = sharedVertexAdjacency(compact.map((ring) => [ring]));
   const cellCentres = compact.map((ring) => polygonCentre(ring));
 
   /* ---- cells into territories ---- */
-  const owner = growGroups(o.territories, cellAdj, cellCentres, nextU32);
+  const owner = growGroups(o.territories, cellAdj, cellCentres, nextU32() % Math.max(1, compact.length));
   const groupCount = Math.max(...owner) + 1;
   const groups: number[][] = Array.from({ length: groupCount }, () => []);
   owner.forEach((g, cell) => {
@@ -719,7 +559,7 @@ export function generateVoronoiMap(options: VoronoiOptions, seed: string | Rng):
 
   /* ---- territories into continents ---- */
   const centres = outlines.map((rings) => polygonCentre(largestOf(rings)));
-  const continentOf = growGroups(o.continents, territoryAdj, centres, nextU32);
+  const continentOf = growGroups(o.continents, territoryAdj, centres, nextU32() % Math.max(1, groups.length));
   const continentCount = Math.max(...continentOf) + 1;
 
   /* ---- names and ids ---- */
@@ -815,26 +655,7 @@ export function generateVoronoiMap(options: VoronoiOptions, seed: string | Rng):
     continents,
     territories,
     seaLinks: seaLinks.filter((l) => territories.some((t) => t.id === l.from) && territories.some((t) => t.id === l.to)),
-    modifierSlots: slotsForSize(count),
-  };
-}
-
-/** `bonus ≈ round(size / 3 + borders / 2)`, at least 1. Reproduces Classic's 5/2/5/3/7/2 within one. */
-export function bonusFor(size: number, borders: number): number {
-  return Math.max(1, Math.round(size / 3 + borders / 2));
-}
-
-/**
- * Blizzard and portal counts that track the real catalogue: Classic (42) is
- * 3 and 5, Africa (37) is 2 and 4, Asia 1800s (48) is 4 and 6
- * (`smg-catalogue/all-maps.json`). Clamped to R74/R76's 2–11 and 3–7.
- */
-export function slotsForSize(territories: number): { blizzards: number; portals: number; capitals: number } {
-  const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
-  return {
-    blizzards: clamp(Math.round(territories / 15), 2, 11),
-    portals: clamp(Math.round(territories / 9), 3, 7),
-    capitals: MAX_SEATS,
+    modifierSlots: slotsForSize(count, MAX_SEATS),
   };
 }
 
