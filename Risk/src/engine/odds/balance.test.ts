@@ -217,3 +217,36 @@ describe("the stages, and what each one is and is not allowed to do", () => {
     });
   });
 });
+
+describe("the reshaped win chance stays monotone, which is what `certainWin` relies on", () => {
+  it("is non-decreasing in A and non-increasing in D", () => {
+    // Stage 3 shaves a fixed 0.10 off each tail, which could in principle reorder two neighbouring
+    // cells; it does not. If it ever did, `certainWin` would flicker and R42's break-even would stop
+    // being a single crossing point.
+    for (const d of [1, 2, 3, 5, 8, 12, 20]) {
+      let previous = -1;
+      for (let a = 1; a <= 40; a++) {
+        const w = balance(outcomeDist(a, d, STANDARD_AUGMENT)).winChance;
+        expect(w, `A=${a} D=${d}`).toBeGreaterThanOrEqual(previous - 1e-12);
+        previous = w;
+      }
+    }
+    for (const a of [2, 5, 10, 20]) {
+      let previous = 2;
+      for (let d = 1; d <= 30; d++) {
+        const w = balance(outcomeDist(a, d, STANDARD_AUGMENT)).winChance;
+        expect(w, `A=${a} D=${d}`).toBeLessThanOrEqual(previous + 1e-12);
+        previous = w;
+      }
+    }
+  });
+
+  it("a certain win stays certain as the attacker adds troops", () => {
+    let certainFrom = 1;
+    while (balance(outcomeDist(certainFrom, 15, STANDARD_AUGMENT)).winChance < 1) certainFrom++;
+    expect(certainFrom).toBeLessThanOrEqual(20);
+    for (let a = certainFrom; a <= certainFrom + 10; a++) {
+      expect(balance(outcomeDist(a, 15, STANDARD_AUGMENT)).winChance, `A=${a}`).toBe(1);
+    }
+  });
+});
