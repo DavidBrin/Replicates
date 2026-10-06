@@ -286,11 +286,11 @@ describe("the loop", () => {
 
   it("coalesces a pollNow that lands while a poll is in flight", async () => {
     const time = clock();
-    let release: (() => void) | null = null;
+    const released: (() => void)[] = [];
     const poll = vi.fn(
       () =>
         new Promise<void>((resolve) => {
-          release = resolve;
+          released.push(resolve);
         }),
     );
     const loop = createPollingLoop({
@@ -307,7 +307,7 @@ describe("the loop", () => {
 
     const second = loop.pollNow();
     expect(poll).toHaveBeenCalledTimes(1);
-    release?.();
+    released.shift()?.();
     await second;
     expect(poll).toHaveBeenCalledTimes(1);
   });

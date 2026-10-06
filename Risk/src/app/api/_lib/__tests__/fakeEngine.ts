@@ -60,6 +60,7 @@ export function fakeMapDef(count = 6): MapDef {
       id: `t${index}`,
       name: `Territory ${index}`,
       continent: 0,
+      suit: (["infantry", "cavalry", "artillery"] as const)[index % 3]!,
       adjacent: [(index + count - 1) % count, (index + 1) % count].sort((a, b) => a - b),
       seaLinked: [],
       d: "M0 0 L1 0 L1 1 Z",

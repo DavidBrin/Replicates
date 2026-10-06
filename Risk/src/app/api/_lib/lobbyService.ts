@@ -2,11 +2,7 @@ import "server-only";
 
 import { getDb } from "@/adapters/db";
 import { ChatRepository } from "@/adapters/db/repositories/chat";
-import {
-  LobbiesRepository,
-  type LobbyListRow,
-  type LobbySeatRow,
-} from "@/adapters/db/repositories/lobbies";
+import { LobbiesRepository, type LobbyListRow } from "@/adapters/db/repositories/lobbies";
 import { PlayersRepository } from "@/adapters/db/repositories/players";
 import type { BotTier, PlayerColour, Rules } from "@/engine/types";
 import type { ChatLine } from "@/ports/sync";

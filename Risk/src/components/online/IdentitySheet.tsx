@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { PlayerColour } from "@/engine/types";
 import type { Identity } from "@/ports/identity";
@@ -64,17 +64,27 @@ export interface IdentitySheetProps {
 
 export default function IdentitySheet({ onClaimed, title }: IdentitySheetProps) {
   const identity = useMemo(() => createIdentityClient(), []);
-  const [name, setName] = useState("");
-  const [colour, setColour] = useState<PlayerColour>("red");
+
+  /**
+   * Seeded from `risk:identity:v1` in a lazy initialiser rather than in an
+   * effect: reading the cache in an effect and calling `setState` from its
+   * body is a cascading render, and this sheet is only ever mounted on the
+   * client (after a poll has answered `401`), so there is no server render
+   * for the two values to disagree across.
+   */
+  const [initial] = useState(() => {
+    const cached = identity.readCached();
+    return {
+      name: cached?.displayName ?? suggestDisplayName(),
+      colour: cached?.colour ?? ("red" as PlayerColour),
+    };
+  });
+
+  const [name, setName] = useState(initial.name);
+  const [colour, setColour] = useState<PlayerColour>(initial.colour);
   const [suggestions, setSuggestions] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const cached = identity.readCached();
-    setName(cached?.displayName ?? suggestDisplayName());
-    if (cached?.colour) setColour(cached.colour);
-  }, [identity]);
 
   async function claim(candidate: string): Promise<void> {
     setBusy(true);

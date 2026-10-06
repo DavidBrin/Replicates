@@ -310,7 +310,10 @@ describe("the debug action log (F37)", () => {
     expect(parsed.actions).toHaveLength(1);
     expect(parsed.actions[0]).toMatchObject({ seq: 1, stateHash: expect.any(String) });
     // Unmasked: the whole deal is there, with real owners, in a FOG game.
-    const started = parsed.actions[0]!.action as { type: string; deal: { owner: number }[] };
+    const started = parsed.actions[0]!.action as unknown as {
+      type: string;
+      deal: { owner: number }[];
+    };
     expect(started.type).toBe("GAME_STARTED");
     expect(started.deal.every((row) => row.owner >= 0)).toBe(true);
   });

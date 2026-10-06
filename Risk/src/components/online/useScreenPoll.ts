@@ -18,6 +18,13 @@ import { createPollingLoop, LOBBY_MS, type PollingLoop } from "@/net/pollingLoop
  * The chat window is accumulated because the server sends only the lines
  * newer than `chatSince`: replacing the array would make the column flash
  * empty on every poll that carried no new line.
+ *
+ * **The cursors live for as long as the component does.** `path` is expected
+ * to be fixed per mount — `/api/lobby` is a literal, and a lobby room's path
+ * comes from the route segment, so a different code is a different mount. A
+ * caller that wants to switch paths in place should give the component a
+ * `key`, which is cheaper and clearer than resetting four pieces of state
+ * from inside an effect.
  */
 
 export interface ScreenPollBody {
@@ -44,6 +51,7 @@ export function useScreenPoll<T extends ScreenPollBody>(
   const [chat, setChat] = useState<readonly ChatLine[]>([]);
   const [status, setStatus] = useState<ScreenPollState<T>["status"]>("loading");
 
+  // Mutated only from inside `poll`, which is a callback and not render.
   const version = useRef(0);
   const chatSince = useRef(0);
   const etag = useRef<string | null>(null);
@@ -59,6 +67,8 @@ export function useScreenPoll<T extends ScreenPollBody>(
       { method: "GET", headers, cache: "no-store" },
     );
 
+    // A `204` is the common case and means exactly "nothing has moved": the
+    // last body stays on screen and no cursor advances.
     if (response.status === 204) {
       setStatus("live");
       return;
@@ -86,13 +96,6 @@ export function useScreenPoll<T extends ScreenPollBody>(
 
   useEffect(() => {
     if (path === null) return;
-    version.current = 0;
-    chatSince.current = 0;
-    etag.current = null;
-    setData(null);
-    setChat([]);
-    setStatus("loading");
-
     const created = createPollingLoop({ poll, intervalMs: () => intervalMs });
     loop.current = created;
     created.start();
