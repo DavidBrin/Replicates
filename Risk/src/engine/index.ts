@@ -1,74 +1,41 @@
 /**
  * `@/engine` — the public API (SPEC §4.10).
  *
- * Hour-one stub: every function throws "S1 pending" until the engine slice
- * lands; the TYPES are real. Stubs are typed consts so the signatures below
- * are the contract S2–S5 compile against.
+ * **Every function that reasons about the board takes the `MapDef` as its
+ * second parameter** (F1). `GameState` holds only `mapSlug` (§4.7), so there is
+ * one shape across the whole API and no hidden global map. `hashState` is the
+ * one deliberate exception: it takes the state alone and **never covers the
+ * map** — two clients agreeing on a hash have agreed about the game, not about
+ * the geometry.
+ *
+ * Nothing in here imports `@/engine/odds`, `@/engine/bots` or `@/engine/map`
+ * (§4.2): the resolver takes an `OddsTables` as a parameter, so the dependency
+ * direction stays one-way.
  */
-
-import type {
-  Action, ActionKind, ApplyResult, Card, CardBonusScheme, ContinentId, DiceAugment, GameState, MapDef,
-  RuleError, Seat, TerritoryId,
-} from "./types";
-
 export * from "./types";
 export * from "./resolver";
+
+/** The FUNCTIONS only. `Rng` and `RngPurpose` are types from `./types` (F13). */
 export { pcg32, rngFor } from "./prng";
 
-function pending(name: string): never {
-  throw new Error(`S1 pending: ${name}`);
-}
-
-/** Folds `GAME_STARTED` into an empty board. The map must already be loaded. */
-export const createInitialState: (
-  map: MapDef, started: Extract<Action, { type: "GAME_STARTED" }>,
-) => GameState = () => pending("createInitialState");
-
-/** The one door into the rules. Pure, total, non-mutating (R86–R88). */
-export const apply: (state: GameState, map: MapDef, action: Action) => ApplyResult = () => pending("apply");
-
-/** Why `action` would be refused, or null. Never mutates and never throws. */
-export const validate: (state: GameState, map: MapDef, action: Action) => RuleError | null = () =>
-  pending("validate");
-
-/** The action kinds `seat` may submit right now, in a stable order. */
-export const legalActions: (state: GameState, map: MapDef, seat: Seat) => readonly ActionKind[] = () =>
-  pending("legalActions");
+export { apply, createInitialState } from "./reducer";
+export { validate } from "./validate";
+export { legalActions, legalAttackTargets, legalDraftTargets, legalFortifyMoves } from "./legalActions";
 
 // ---- selectors the UI and the bots share ----
-export const reinforcementsFor: (
-  state: GameState, map: MapDef, seat: Seat,
-) => { base: number; continents: readonly ContinentId[]; bonus: number; capitals: number; total: number } =
-  () => pending("reinforcementsFor");
-export const legalAttackTargets: (state: GameState, map: MapDef, from: TerritoryId) => readonly TerritoryId[] =
-  () => pending("legalAttackTargets");
-export const legalFortifyMoves: (state: GameState, map: MapDef, from: TerritoryId) => readonly TerritoryId[] =
-  () => pending("legalFortifyMoves");
-export const legalDraftTargets: (state: GameState, seat: Seat) => readonly TerritoryId[] = () =>
-  pending("legalDraftTargets");
-export const cardSets: (cards: readonly Card[]) => readonly (readonly [string, string, string])[] = () =>
-  pending("cardSets");
-/** The value of ONE set (R22); see SPEC §4.10 for why it takes cards, not a state. */
-export const cardTradeValue: (cards: readonly Card[], setsTradedTotal: number, scheme: CardBonusScheme) => number =
-  () => pending("cardTradeValue");
-export const mustTradeNow: (state: GameState, seat: Seat) => boolean = () => pending("mustTradeNow");
-export const diceAugmentFor: (state: GameState, map: MapDef, from: TerritoryId, to: TerritoryId) => DiceAugment =
-  () => pending("diceAugmentFor");
-export const dicePlan: (
-  state: GameState, map: MapDef, from: TerritoryId, to: TerritoryId,
-) => { maxAttackDice: 1 | 2 | 3; defendDice: 1 | 2 | 3 | 4 } = () => pending("dicePlan");
-/** By seat; `null` where fog hides the total from the viewer (R73). */
-export const territoryCounts: (state: GameState) => readonly (number | null)[] = () => pending("territoryCounts");
-export const troopCounts: (state: GameState) => readonly (number | null)[] = () => pending("troopCounts");
-export const continentsHeldBy: (state: GameState, map: MapDef, seat: Seat) => readonly ContinentId[] = () =>
-  pending("continentsHeldBy");
-export const isGameOver: (state: GameState) => boolean = () => pending("isGameOver");
+export { continentsHeldBy } from "./continents";
+export {
+  isGameOver,
+  reinforcementsFor,
+  territoryCounts,
+  territoryCountFor,
+  troopCounts,
+  troopCountFor,
+} from "./rules";
+export { cardSets, cardTradeValue, mustTradeNow } from "./cards";
+export { diceAugmentFor, dicePlan } from "./modifiers";
 
 // ---- fog, hashing, serialisation ----
-/** Masks other hands always and fogged territories when `rules.fogOfWar`; sets `fogged: true`. */
-export const viewFor: (state: GameState, map: MapDef, seat: Seat) => GameState = () => pending("viewFor");
-/** Canonical hash; asserts `state.fogged === false` (D16, F36). */
-export const hashState: (state: GameState) => string = () => pending("hashState");
-export const canonicalize: (state: GameState) => string = () => pending("canonicalize");
-export const serializeState: (state: GameState) => string = () => pending("serializeState");
-export const deserializeState: (json: string) => GameState = () => pending("deserializeState");
+export { viewFor } from "./fog";
+export { canonicalize, hashState } from "./hash";
+export { deserializeState, serializeState } from "./serialize";

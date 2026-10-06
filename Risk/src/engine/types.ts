@@ -133,6 +133,16 @@ export interface Territory {
   readonly id: string;
   readonly name: string;
   readonly continent: ContinentId;
+  /**
+   * The suit of this territory's card, carried through from `MapFile.suit`.
+   *
+   * [S1 CONTRACT CHANGE vs SPEC §4.5] `MapFile` authors a `suit` per territory
+   * and R19 builds the deck from it, but the loaded `Territory` in §4.5 had no
+   * field to carry it — so the engine had no way to build a map's deck at all.
+   * Added as a required field: `loadMap` copies `MapFile.territories[].suit`
+   * straight across. Nothing derives it at runtime.
+   */
+  readonly suit: Exclude<Suit, "wild">;
   /** EVERY neighbour: the file's land `adjacent` UNIONED with its `seaLinks` (F45). Sorted
    *  ascending (R91). This is the set attack adjacency and fortify reachability both read. */
   readonly adjacent: readonly TerritoryId[];
