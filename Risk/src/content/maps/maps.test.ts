@@ -97,10 +97,16 @@ describe("T7 — validateMap over every shipped map", () => {
     for (const slug of MAP_SLUGS) expect(() => loadMap(fileFor(slug))).not.toThrow();
   });
 
-  it("keeps every map's minified JSON under 100 KB", () => {
+  it("keeps every map under 100 KB minified, and on disk too", () => {
+    // §10's ceiling is on the minified JSON (F53); the committed files are
+    // pretty-printed, so both numbers are checked rather than conflated.
     const oversize = MAP_SLUGS
-      .map((slug) => ({ slug, bytes: readFileSync(join(MAPS_DIR, `${slug}.json`), "utf8").length }))
-      .filter((m) => JSON.stringify(fileFor(m.slug)).length > SIZE_LIMIT);
+      .map((slug) => ({
+        slug,
+        minified: JSON.stringify(fileFor(slug)).length,
+        onDisk: readFileSync(join(MAPS_DIR, `${slug}.json`), "utf8").length,
+      }))
+      .filter((m) => m.minified > SIZE_LIMIT || m.onDisk > SIZE_LIMIT);
     expect(oversize).toEqual([]);
   });
 
