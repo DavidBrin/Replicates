@@ -69,14 +69,42 @@ export interface SessionConfigActions {
 
 export type SessionConfigStore = SessionConfigState & SessionConfigActions;
 
+/** The placeholder `defaultSeat` gives the viewer's own seat. */
+export const VIEWER_SEAT_PLACEHOLDER = "You";
+
 /** A seat row with the first free colour and a sensible default name. */
 export function defaultSeat(index: number, kind: SeatConfig["kind"], tier: BotTier): SeatConfig {
   return {
     kind,
-    name: kind === "human" ? (index === 0 ? "You" : `Player ${index + 1}`) : `Bot ${index}`,
+    name: kind === "human"
+      ? (index === 0 ? VIEWER_SEAT_PLACEHOLDER : `Player ${index + 1}`)
+      : `Bot ${index}`,
     colour: SEAT_COLOURS[index % SEAT_COLOURS.length] as PlayerColour,
     tier: kind === "bot" ? tier : null,
   };
+}
+
+/**
+ * The viewer's seat takes the display name the identity sheet claimed, so the
+ * roster capsule, the `Get Ready` name plate, the turn banner and the avatar
+ * initial all read `Northern Warden 21` rather than `You` (SPEC §7: the name
+ * plate carries the display name; the *copy* under it keeps `player N`).
+ *
+ * Only the seat still carrying the `You` placeholder is renamed — a Pass &
+ * Play seat the player named in the Modifiers panel keeps its own name, and
+ * so does every bot.
+ */
+export function withIdentityName(
+  seats: readonly SeatConfig[], displayName: string | null | undefined,
+): readonly SeatConfig[] {
+  const name = displayName?.trim();
+  if (!name) return seats;
+  let renamed = false;
+  return seats.map((seat) => {
+    if (renamed || seat.kind !== "human" || seat.name !== VIEWER_SEAT_PLACEHOLDER) return seat;
+    renamed = true;
+    return { ...seat, name };
+  });
 }
 
 /** Solo: one human and `count - 1` bots. Pass & Play: every seat human. */

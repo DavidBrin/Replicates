@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_RULES } from "@/engine/types";
 
 import {
-  BOT_TIERS, DEFAULT_VORONOI, SEAT_COLOURS, createSessionConfigStore, defaultSeat, defaultSeats,
-  sessionConfigStore, sourceKey, tierLabel, toGameConfig,
+  BOT_TIERS, DEFAULT_VORONOI, SEAT_COLOURS, VIEWER_SEAT_PLACEHOLDER, createSessionConfigStore,
+  defaultSeat, defaultSeats, sessionConfigStore, sourceKey, tierLabel, toGameConfig,
+  withIdentityName,
 } from "./sessionConfig";
 import { gameConfig } from "./__fixtures__/harness";
 import { SESSION_KEY_PREFIX, autosaveFor, hasSavedSession, listSavedSessions, readSaved, sessionKey, writeSaved }
@@ -124,6 +125,34 @@ describe("the session-config store", () => {
     expect(config.mapSlug).toBe("classic-world");
     expect(config.seed).toBe("seed-1");
     expect(config.seats).toHaveLength(3);
+  });
+});
+
+describe("withIdentityName — the viewer's seat takes the claimed display name", () => {
+  it("renames the `You` seat and leaves every other seat alone", () => {
+    const seats = defaultSeats("solo", 3, "medium");
+    expect(seats[0]?.name).toBe(VIEWER_SEAT_PLACEHOLDER);
+    const named = withIdentityName(seats, "Northern Warden 21");
+    expect(named.map((s) => s.name)).toEqual(["Northern Warden 21", "Bot 1", "Bot 2"]);
+    // Everything but the name is untouched, so the autosave key does not move.
+    expect(named[0]?.colour).toBe(seats[0]?.colour);
+    expect(sourceKey(toGameConfig({ ...sessionConfigStore.getState(), seats: named }, "m", "s")))
+      .toBe(sourceKey(toGameConfig({ ...sessionConfigStore.getState(), seats }, "m", "s")));
+  });
+
+  it("renames at most one seat — Pass & Play seats keep their own names", () => {
+    const seats = defaultSeats("pass-and-play", 3, "medium");
+    const named = withIdentityName(seats, "Solace");
+    expect(named.map((s) => s.name)).toEqual(["Solace", "Player 2", "Player 3"]);
+  });
+
+  it("leaves a seat the player renamed, and ignores an empty identity", () => {
+    const seats = defaultSeats("solo", 2, "medium").map((s, i) => (i === 0 ? { ...s, name: "Rook" } : s));
+    expect(withIdentityName(seats, "Solace")).toEqual(seats);
+    expect(withIdentityName(defaultSeats("solo", 2, "medium"), "  ")[0]?.name)
+      .toBe(VIEWER_SEAT_PLACEHOLDER);
+    expect(withIdentityName(defaultSeats("solo", 2, "medium"), null)[0]?.name)
+      .toBe(VIEWER_SEAT_PLACEHOLDER);
   });
 });
 

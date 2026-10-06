@@ -142,6 +142,9 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
           you={ui.award.seat === ui.viewerSeat}
           total={ui.award.total}
           territories={countTerritories(state.territories, ui.award.seat)}
+          // A bot's draft award is the bot's news. The viewer gets the turn
+          // banner and keeps the board; only a human seat gets the popup.
+          bannerOnly={state.seats[ui.award.seat]?.kind === "bot"}
           onDone={() => session.dismissAward()}
         />
       ) : null}

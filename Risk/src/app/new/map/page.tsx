@@ -3,7 +3,7 @@
 /**
  * The map picker (SPEC §7, `/new/map`).
  *
- * A grid of ~8:7 tiles over a pale-blue radial ray burst fading to `#0E2430`,
+ * A grid of tiles over a pale-blue radial ray burst fading to `#0E2430`,
  * **no locked tiles — every map is free**, plus a `Random map` tile that
  * writes `{ kind: "random", options, seed }` into the store with
  * territory-count and continent-count steppers for the `VoronoiOptions`.
@@ -38,12 +38,13 @@ function Stepper({
   readonly max: number;
   readonly onChange: (next: number) => void;
 }) {
+  // §9: every interactive control is at least a 44 px touch target.
   const button = {
     width: 44, height: 44, borderRadius: 10,
     background: "var(--chrome-900)", border: "2px solid var(--chrome-line)", color: "var(--text)",
   } as const;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <button
         type="button"
         data-testid={`random-${name}-dec`}
@@ -91,7 +92,7 @@ export default function MapPickerPage() {
   return (
     <main
       data-testid="map-picker-screen"
-      className="relative flex min-h-dvh flex-1 flex-col items-center gap-6 px-4 py-6"
+      className="relative flex min-h-dvh flex-1 flex-col items-center gap-4 px-4 py-4"
       style={{
         background: `radial-gradient(circle at 50% 40%, #A9D8EC 0%, #2C6C8C 38%, ${SETUP_TOKENS.mapBackdrop} 100%)`,
       }}
@@ -100,7 +101,9 @@ export default function MapPickerPage() {
         Choose a map
       </h1>
 
-      <div className="grid w-full max-w-[1200px] grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
+      {/* 2 columns at phone width, 3 at ≤1024, 5 at 1600 — fixed counts, not
+          `auto-fill`, which gives four cramped columns at tablet width. */}
+      <div className="grid w-full max-w-[1200px] grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         {slugs.map((slug) => (
           <MapTile
             key={slug}
@@ -110,12 +113,14 @@ export default function MapPickerPage() {
           />
         ))}
 
-        {/* the Random map tile — ours, and the only tile with its own controls */}
+        {/* The Random tile — ours, and the only tile with its own controls.
+            It is laid out exactly like a `MapTile`: the name on the same
+            line, a tray of the same proportion holding the dice and
+            **both steppers inside it**, and the same stat line beneath. */}
         <div
           data-testid="map-tile-random-wrap"
-          className="flex flex-col items-center justify-between gap-2 p-2"
+          className="flex flex-col items-center gap-1 p-2"
           style={{
-            aspectRatio: "8 / 7",
             borderRadius: "var(--r-menu)",
             border: `2px solid ${randomSelected ? "var(--go)" : "transparent"}`,
             background: randomSelected ? "rgba(166,220,95,.10)" : "transparent",
@@ -127,17 +132,18 @@ export default function MapPickerPage() {
             aria-pressed={randomSelected}
             data-selected={randomSelected ? "true" : "false"}
             onClick={() => pickRandom(options)}
-            className="flex w-full flex-1 cursor-pointer flex-col items-center justify-center gap-2 outline-none focus-visible:ring-4 focus-visible:ring-white/70"
-            style={{ minHeight: 44, color: "var(--text)" }}
+            className="on-board-text flex w-full shrink-0 cursor-pointer items-center justify-center outline-none focus-visible:ring-4 focus-visible:ring-white/70"
+            style={{ fontSize: "clamp(14px, 1.7vw, 40px)", lineHeight: 1.08, minHeight: "2.16em" }}
           >
-            <span className="on-board-text" style={{ fontSize: "clamp(18px, 2.6vw, 40px)" }}>
-              Random map
-            </span>
-            <Icon name="dice-cup" size={72} />
+            Random map
           </button>
 
-          <div className="flex w-full flex-wrap items-center justify-center gap-3" style={{ color: "var(--text)" }}>
-            <label className="flex items-center gap-2 font-body text-sm">
+          <div
+            className="flex w-full shrink-0 flex-col items-center justify-center gap-0.5"
+            style={{ aspectRatio: "8 / 4.5", color: "var(--text)" }}
+          >
+            <Icon name="dice-cup" size={24} />
+            <label className="flex w-full items-center justify-between gap-2 font-body" style={{ fontSize: "clamp(10px, .8vw, 18px)" }}>
               Territories
               <Stepper
                 name="territories"
@@ -147,7 +153,7 @@ export default function MapPickerPage() {
                 onChange={(territories) => pickRandom({ ...options, territories })}
               />
             </label>
-            <label className="flex items-center gap-2 font-body text-sm">
+            <label className="flex w-full items-center justify-between gap-2 font-body" style={{ fontSize: "clamp(10px, .8vw, 18px)" }}>
               Continents
               <Stepper
                 name="continents"
@@ -158,6 +164,16 @@ export default function MapPickerPage() {
               />
             </label>
           </div>
+
+          <span
+            className="flex w-full shrink-0 items-center justify-center text-center font-body"
+            style={{
+              fontSize: "clamp(11px, 1.05vw, 26px)", lineHeight: 1.2, minHeight: "1.2em",
+              color: "var(--text-muted)", textShadow: "0 1px 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.6)",
+            }}
+          >
+            {options.territories} territories · {options.continents} regions
+          </span>
         </div>
       </div>
 

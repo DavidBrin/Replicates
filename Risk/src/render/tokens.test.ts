@@ -10,7 +10,10 @@ import { toMapDef } from "@/game/mapLoader";
 import { TROOPS_UNKNOWN } from "@/engine/types";
 
 import type { Camera } from "./camera";
-import { createTokenLayer, labelVisible, LABEL_MIN_AREA, tokenSvg, type TokenPaint } from "./tokens";
+import {
+  createTokenLayer, labelBoxSize, labelFontSize, labelVisible, LABEL_FONT, LABEL_FONT_DENSE,
+  LABEL_MIN_AREA, LABEL_NUDGE, planLabels, tokenSvg, type TokenPaint,
+} from "./tokens";
 
 const CAM: Camera = {
   pan: [0, 0],
@@ -83,6 +86,67 @@ describe("labelVisible — §8's 2,500 px² floor", () => {
 
   it("is false for an index the map does not have", () => {
     expect(labelVisible(TINY4, 99, CAM)).toBe(false);
+  });
+});
+
+describe("planLabels — the greedy collision pass [ours]", () => {
+  /** Four territories on a big board, at anchors the test dictates. */
+  function mapOf(anchors: readonly (readonly [number, number])[]) {
+    return toMapDef({
+      ...TINY4_FILE,
+      viewBox: "0 0 2000 2000",
+      territories: TINY4_FILE.territories.map((t, i) => {
+        const [x, y] = anchors[i] ?? [0, 0];
+        return { ...t, tokenX: x, tokenY: y, labelX: x, labelY: y + 26 };
+      }),
+    });
+  }
+
+  const APART = mapOf([[200, 200], [1200, 200], [1200, 1200], [200, 1200]]);
+  const FLAT = { zoom: 1, tilt: 0 } as const;
+
+  it("leaves every label on its §8.6 anchor when nothing collides", () => {
+    const plan = planLabels(APART, FLAT, 19);
+    expect(plan).toHaveLength(4);
+    for (const place of plan) expect(place).toEqual({ dy: 0, crowded: false });
+  });
+
+  it("nudges a label 12 px down off a near-miss with the label above it", () => {
+    // Bravo's label lands on the bottom edge of Alpha's; 12 px clears it.
+    const near = mapOf([[200, 174], [255, 200], [1200, 1200], [200, 1200]]);
+    const plan = planLabels(near, FLAT, 19);
+    expect(plan[0]).toEqual({ dy: 0, crowded: false });
+    expect(plan[1]).toEqual({ dy: LABEL_NUDGE, crowded: false });
+  });
+
+  it("flips a label above its token when neither the anchor nor the nudge is free", () => {
+    const pile = mapOf([[200, 200], [200, 200], [1200, 1200], [200, 1200]]);
+    const plan = planLabels(pile, FLAT, 19);
+    expect(plan[0]?.dy).toBe(LABEL_NUDGE);
+    expect(plan[1]?.dy).toBeLessThan(0);
+    expect(plan[1]?.crowded).toBe(false);
+  });
+
+  it("marks a label crowded once all three candidates are taken", () => {
+    const pile = mapOf([[200, 200], [200, 200], [200, 200], [200, 200]]);
+    const plan = planLabels(pile, FLAT, 19);
+    expect(plan.map((p) => p.crowded)).toEqual([false, false, true, true]);
+    // A crowded label keeps its anchor; it is hidden, not moved somewhere odd.
+    for (const place of plan) if (place.crowded) expect(place.dy).toBe(0);
+  });
+
+  it("stops moving labels once the zoom has pulled the anchors apart", () => {
+    const near = mapOf([[200, 174], [255, 200], [1200, 1200], [200, 1200]]);
+    expect(planLabels(near, { zoom: 1, tilt: 0 }, 19)[1]?.dy).toBe(LABEL_NUDGE);
+    expect(planLabels(near, { zoom: 4, tilt: 0 }, 19)[1]?.dy).toBe(0);
+  });
+
+  it("steps the label type down one notch above 50 territories (§8.6)", () => {
+    expect(labelFontSize(42)).toBe(LABEL_FONT);
+    expect(labelFontSize(50)).toBe(LABEL_FONT);
+    expect(labelFontSize(59)).toBe(LABEL_FONT_DENSE);
+    expect(labelBoxSize("Alpha", LABEL_FONT_DENSE).w)
+      .toBeLessThan(labelBoxSize("Alpha", LABEL_FONT).w);
   });
 });
 
@@ -179,6 +243,45 @@ describe("token layer", () => {
     const stop = layer.element.querySelector('radialGradient[id$="-red"] stop');
     expect(stop?.getAttribute("style")).toBe("stop-color: var(--p-red-light)");
     expect(layer.element.querySelectorAll("radialGradient")).toHaveLength(9);
+  });
+
+  it("writes the plan's offset, hides a crowded label and reveals it on hover or selection", () => {
+    const stacked = toMapDef({
+      ...TINY4_FILE,
+      territories: TINY4_FILE.territories.map((t) => ({
+        ...t, tokenX: 105, tokenY: 76, labelX: 105, labelY: 102,
+      })),
+    });
+    const layer = createTokenLayer(stacked);
+    layer.paint({
+      owners: stacked.territories.map(() => "none"),
+      troops: stacked.territories.map(() => 1),
+      selected: null,
+      radius: 19,
+      showLabels: true,
+    }, CAM);
+    const label = (i: number) => layer.element.querySelector<HTMLElement>(`.label[data-label="${i}"]`);
+    expect(label(0)?.style.getPropertyValue("--label-dy")).toBe("12.0px");
+    expect(label(3)?.getAttribute("data-crowded")).toBe("1");
+    expect(label(3)?.hasAttribute("data-reveal")).toBe(false);
+
+    layer.paint({
+      owners: stacked.territories.map(() => "none"),
+      troops: stacked.territories.map(() => 1),
+      selected: null,
+      radius: 19,
+      showLabels: true,
+      hovered: 3,
+    }, CAM);
+    expect(label(3)?.getAttribute("data-reveal")).toBe("1");
+  });
+
+  it("carries the label size on the layer, once, not per label", () => {
+    const layer = createTokenLayer(TINY4);
+    expect(layer.element.style.getPropertyValue("--label-font")).toBe(`${LABEL_FONT}px`);
+    for (const text of layer.element.querySelectorAll<HTMLElement>(".label-text")) {
+      expect(text.style.fontSize).toBe("");
+    }
   });
 
   it("destroy detaches the layer and empties it", () => {
