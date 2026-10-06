@@ -134,9 +134,7 @@ export function legalActions(state: GameState, map: MapDef, seat: Seat): readonl
       kinds.push("MOVE_IN");
     } else {
       if (canAttackSomewhere(state, map, seat)) kinds.push("ATTACK");
-      kinds.push("END_PHASE");
-      if (state.conqueredThisTurn) kinds.push("CARD_DRAWN");
-      kinds.push("END_TURN");
+      kinds.push("END_PHASE", "END_TURN");
     }
   }
 

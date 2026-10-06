@@ -14,7 +14,7 @@
  * - an unknown `type` falls through to `illegalAction` rather than off the end
  *   of a switch, which is what keeps `apply` total under fast-check (T5).
  */
-import { hasSet, isValidSet, mustTradeDown, mustTradeNow, remainingDeck } from "./cards";
+import { isValidSet, mustTradeDown, mustTradeNow, remainingDeck } from "./cards";
 import { areAdjacent, isBlizzard, knownTerritory, reachableOwn } from "./graph";
 import { dicePlan, isAttackable, resolveManualRoll, diceAugmentFor } from "./modifiers";
 import { currentSeat, isContender, isGameOver, takesTurns, troopCountFor } from "./rules";
@@ -468,6 +468,15 @@ function validateCardDrawn(
 ): RuleError | null {
   const gate = turnGate(state, action.seat);
   if (gate !== null) return gate;
+  /*
+   * R20/R67 — the award is the END OF THE TURN's, and `END_TURN` is the only
+   * exit from fortify, so `fortify` is the one phase it lands in (§5.2: the
+   * authority resolves `drawCard` and appends `CARD_DRAWN` immediately before
+   * `END_TURN`). Pinning the phase is what keeps it to **exactly one** card
+   * per capturing turn: `conqueredThisTurn` is cleared by the award, and a
+   * later capture in the same turn would otherwise set it again.
+   */
+  if (state.phase !== "fortify") return err("wrongPhase", "the card is awarded at the end of the turn (R20, R67)");
   if (!state.conqueredThisTurn) return err("illegalAction", "a card is earned by capturing (R20)");
   const row = seatRow(state, action.seat) as SeatState;
   // R28/F51: a hand never legally exceeds six, and a state that would present
@@ -592,6 +601,3 @@ function validateAlliance(
   if (action.type !== "ALLIANCE_BREAK" && already) return err("notAlliable", "you are already allied (R80)");
   return null;
 }
-
-/** Re-exported for the reducer, which needs the same "does a set exist" answer. */
-export { hasSet };

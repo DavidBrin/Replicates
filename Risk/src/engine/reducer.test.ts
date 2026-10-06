@@ -673,13 +673,13 @@ describe("R22–R27 — trading", () => {
       seats: 2,
       owners: [0, 0, 0, 1, 1, 1],
       troops: [1, 1, 5, 1, 1, 1],
-      phase: "attack",
+      phase: "fortify",
       hands: { 0: four },
       conqueredThisTurn: true,
     });
     const { state: after } = ok(state, mini, { type: "CARD_DRAWN", seat: 0, card: territoryCard(mini, 4) });
     expect(after.seats[0]?.cards).toHaveLength(5);
-    expect(after.phase).toBe("attack");
+    expect(after.phase).toBe("fortify");
     expect(after.resumePhase).toBeNull();
     // Nothing is forced until the next turn's draft.
     expect(legalActions(after, mini, 0)).toContain("END_TURN");
@@ -859,6 +859,30 @@ describe("R19/R20 — the end-of-turn card", () => {
   it("R20 — no capture, no card", () => {
     const state = buildState(mini, { seats: 2, owners: [0, 0, 0, 1, 1, 1], phase: "fortify" });
     refused(state, mini, { type: "CARD_DRAWN", seat: 0, card: territoryCard(mini, 0) }, "illegalAction");
+  });
+
+  it("R20/R67 — the award belongs to the end of the turn, not to the attack phase", () => {
+    const state = buildState(mini, {
+      seats: 2,
+      owners: [0, 0, 0, 1, 1, 1],
+      phase: "attack",
+      conqueredThisTurn: true,
+    });
+    refused(state, mini, { type: "CARD_DRAWN", seat: 0, card: territoryCard(mini, 0) }, "wrongPhase");
+  });
+
+  it("R20 — exactly one card per capturing turn, even if another capture follows", () => {
+    const state = buildState(mini, {
+      seats: 3,
+      owners: [0, 0, 0, 1, 2, 2],
+      phase: "fortify",
+      conqueredThisTurn: true,
+    });
+    const after = ok(state, mini, { type: "CARD_DRAWN", seat: 0, card: territoryCard(mini, 0) }).state;
+    expect(after.conqueredThisTurn).toBe(false);
+    // And there is no way back to attack from fortify (R67), so no second
+    // capture can re-arm the flag inside this turn.
+    refused(after, mini, { type: "END_PHASE", seat: 0 }, "wrongPhase");
   });
 
   it("R19 — a card already held or discarded is not in the deck", () => {
