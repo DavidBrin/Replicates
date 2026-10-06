@@ -10,8 +10,8 @@
 export const ENGINE_ENTRY_POINTS: readonly string[] = [
   "layering.test.ts",
   "types.ts", "index.ts", "prng.ts", "resolver/index.ts",
-  // S1 adds: "reducer.ts", "hash.ts"
-  // S2: "odds/index.ts", "bots/index.ts"
+  "reducer.ts", "hash.ts",
+  "odds/index.ts", "bots/index.ts",
   "map/index.ts",
 ];
 
