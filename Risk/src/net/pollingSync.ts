@@ -75,6 +75,8 @@ export interface PollingSyncPort extends SyncPort {
   say(line: ChatSend): Promise<void>;
   /** Resign: `SEAT_TO_BOT { reason: "resigned" }` (D76). */
   resign(): Promise<readonly LoggedAction[]>;
+  /** Always present on this adapter (optional on the port): see the member's doc comment. */
+  resync(): Promise<void>;
   /**
    * Whether the viewer's own seat is out — `eliminated` or `resigned`.
    *
@@ -201,6 +203,9 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
   let closed = false;
   let eliminated = false;
   let watching = false;
+  /** Set by `resync()`: the next accepted body MUST carry a snapshot (§5.8, D16). */
+  let awaitingSnapshot = false;
+  let resyncing: Promise<void> | null = null;
 
   function setStatus(next: SyncStatus): void {
     if (status === next) return;
@@ -244,6 +249,15 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
    * second is both the right order and the safe one.
    */
   function accept(body: GameSyncBody): void {
+    // A resync asked the authority for a cold read. Until a snapshot answers
+    // it, a delta — from the resync poll or from one that was already in
+    // flight — is exactly what the client can no longer apply, so it is
+    // refused and the desync stays visible rather than being folded over.
+    if (awaitingSnapshot && body.snapshot === undefined) {
+      setStatus("desynced");
+      return;
+    }
+    awaitingSnapshot = false;
     for (const line of body.chat) chatSince = Math.max(chatSince, line.id);
     // `seq` only ever moves forward: a response that overtook another must
     // not walk the cursor back and re-deliver actions already folded.
@@ -389,6 +403,29 @@ export function createPollingSync(options: PollingSyncOptions): PollingSyncPort 
         body: JSON.stringify({ scope: "game", scopeId: options.gameId, ...line }),
       });
       void loop.pollNow();
+    },
+    /**
+     * `SyncPort.resync` (§5.8, D16): throw the folded state away and start again
+     * from the authority. Reset both cursors so the next poll is a cold read,
+     * poll once, and resolve once that response has been delivered. Idempotent —
+     * a second call while one is in flight joins it — and safe under racing
+     * polls, because `accept` refuses every delta until a snapshot has landed.
+     */
+    resync(): Promise<void> {
+      if (resyncing) return resyncing;
+      seq = 0;
+      chatSince = 0;
+      etag = null;
+      awaitingSnapshot = true;
+      resyncing = loop
+        .pollNow()
+        .catch(() => {
+          setStatus("desynced");
+        })
+        .finally(() => {
+          resyncing = null;
+        });
+      return resyncing;
     },
     async resign() {
       const answer = await post<ActionPostBody>("/resign", {});

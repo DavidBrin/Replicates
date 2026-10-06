@@ -704,6 +704,63 @@ describe("submitting", () => {
   });
 });
 
+describe("resync", () => {
+  it("resets the cursor, polls cold, and resolves once the snapshot has been delivered", async () => {
+    const seen: number[] = [];
+    const { calls, fetchImpl } = recorder((call) => {
+      const since = Number(new URL(call.url, "http://x").searchParams.get("since"));
+      return since === 0
+        ? jsonResponse(syncBody({ seq: 12, snapshot: state(), snapshotSeq: 12 }))
+        : new Response(null, { status: 204 });
+    });
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 9,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+    });
+    port.onSnapshot((_snapshot, at) => seen.push(at));
+    await settle();
+    expect(seen).toEqual([]);
+
+    await port.resync();
+
+    const cold = calls.find((call) => call.url.includes("since=0"));
+    expect(cold).toBeDefined();
+    expect(cold?.headers["if-none-match"]).toBeUndefined();
+    expect(seen).toEqual([12]);
+    expect(port.seq).toBe(12);
+    port.close();
+  });
+
+  it("refuses a delta while a snapshot is owed and reports desynced", async () => {
+    const statuses: SyncStatus[] = [];
+    const folded: number[] = [];
+    const { fetchImpl } = recorder(() =>
+      jsonResponse(syncBody({ seq: 11, actions: [action(10), action(11)] })),
+    );
+    const port = createPollingSync({
+      gameId: "g_1",
+      since: 9,
+      fetch: fetchImpl,
+      now: time.now,
+      schedule: time.schedule,
+      visibility: visibility(),
+      autoStart: false,
+    });
+    port.onStatus((status) => statuses.push(status));
+    port.onActions((rows) => folded.push(...rows.map((row) => row.seq)));
+
+    await port.resync();
+
+    expect(folded).toEqual([]);
+    expect(statuses).toContain("desynced");
+    port.close();
+  });
+});
+
 describe("the hard failures", () => {
   it("stops and reports offline on a 401, 403 or 404", async () => {
     for (const status of [401, 403, 404]) {
