@@ -14,6 +14,18 @@ import GameScreen from "./GameScreen";
 
 const sessions: Session[] = [];
 
+/** jsdom has no `PointerEvent` constructor; `input.test.ts` builds them the same way. */
+function pointerEvent(type: string, id: number, x: number, y: number): Event {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperties(event, {
+    pointerId: { value: id },
+    clientX: { value: x },
+    clientY: { value: y },
+    pointerType: { value: "mouse" },
+  });
+  return event;
+}
+
 afterEach(() => {
   for (const s of sessions.splice(0)) s.destroy();
 });
@@ -34,6 +46,65 @@ describe("GameScreen", () => {
     expect(screen.getByTestId("board-stage")).toBeInTheDocument();
     expect(screen.getByTestId("roster")).toBeInTheDocument();
     expect(screen.getByTestId("action-bar")).toBeInTheDocument();
+  });
+
+  it("keeps a press alive across a stage resize (§9)", () => {
+    /*
+     * The regression this pins: `BoardCanvas`'s input effect used to depend on
+     * the measured stage size, so every `ResizeObserver` tick detached the
+     * pointer listeners and built a fresh `createInput` — `pointers` map and
+     * all. A resize that landed **between a `pointerdown` and its
+     * `pointerup`** lost the tap in silence, because the new handle had never
+     * seen the press and `onPointerUp` returned before the hit test. Both
+     * events still arrived at `#stage` and the hit test still resolved, which
+     * is what made it read as "the session is ignoring taps".
+     *
+     * Resizes are routine: a phone rotating, a mobile URL bar collapsing
+     * `100dvh`, a window dragged, and the document scrollbar the lobby has
+     * and the board does not.
+     */
+    const ticks: (() => void)[] = [];
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      private readonly cb: () => void;
+      constructor(cb: () => void) {
+        this.cb = cb;
+        ticks.push(() => this.cb());
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+
+    try {
+      const h = mountHotseat();
+      h.session.continueHandOff();
+      const tap = vi.spyOn(h.session, "tapTerritory");
+      render(<GameScreen session={h.session} />);
+
+      const stage = screen.getByTestId("board-stage");
+      const path = screen.getByTestId("board-wrapper").querySelector("[data-territory]")!;
+      // jsdom has no layout, so the app's own hit test is stubbed the way
+      // `input.test.ts` stubs it.
+      (document as unknown as { elementFromPoint: () => Element | null }).elementFromPoint =
+        () => path;
+
+      stage.dispatchEvent(pointerEvent("pointerdown", 1, 40, 40));
+
+      // The resize: a new measurement, then the observer's callback.
+      stage.getBoundingClientRect = () =>
+        ({ x: 0, y: 0, width: 800, height: 450, top: 0, left: 0, right: 800, bottom: 450 }) as DOMRect;
+      act(() => {
+        for (const tick of ticks) tick();
+      });
+
+      stage.dispatchEvent(pointerEvent("pointerup", 1, 40, 40));
+      expect(tap, "a resize between down and up must not eat the tap").toHaveBeenCalledWith(
+        Number(path.getAttribute("data-territory")),
+      );
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
   });
 
   it("builds the board inside the wrapper, sized to the map's viewBox", () => {

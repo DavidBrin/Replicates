@@ -16,8 +16,29 @@ import type { CSSProperties, ReactNode } from "react";
 export const STAGE_W = 1600;
 export const STAGE_H = 900;
 
-/** The uniform fit scale, as a CSS expression. */
-export const STAGE_SCALE = `min(100vw / ${STAGE_W}, 100vh / ${STAGE_H})`;
+/**
+ * The uniform fit scale, as a CSS expression — a **unitless number**, which
+ * is the whole point.
+ *
+ * This used to read `min(100vw / 1600, 100vh / 900)`. A length divided by a
+ * number is a *length*, `min()` of two lengths is a length, and
+ * `scale(<length>)` is not valid CSS — so the browser threw the whole
+ * `transform` away and **every measured §7.2 dialog rendered at its full
+ * 1600×900 design size**, centred and clipped by the viewport. At 1280 px
+ * only 160 px was lost off each side, so the centre-anchored controls still
+ * worked and nobody noticed; at 412 px the stage sat at x −594 and the
+ * outer third of the card fan, the close ✗ at x 75 and the whole bonus
+ * legend at x 1320–1565 were off-screen at negative or overflowing `x`.
+ *
+ * `tan(atan2(a, b))` is the CSS idiom for a ratio of two lengths: `atan2`
+ * takes lengths and yields an angle, and `tan` of that angle is the plain
+ * number `a / b`. Both arguments are positive here, so the angle is in
+ * (0°, 90°) and the identity holds exactly. The width term is capped by the
+ * height term the same way `min()` did: `100vh × 16/9` is the width a
+ * height-limited 16:9 stage would have.
+ */
+export const STAGE_SCALE =
+  `tan(atan2(min(100vw, 100vh * ${STAGE_W / STAGE_H}), ${STAGE_W}px))`;
 
 /** A measured x in stage pixels, as a percentage of the stage width. */
 export function pctX(x: number): string {

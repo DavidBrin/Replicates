@@ -1169,21 +1169,13 @@ export function findTradeSet(suits: readonly string[]): [number, number, number]
 /**
  * Tap one card in the fan.
  *
- * **The fan does not fit a narrow viewport.** The card-trade panel lays itself
- * out in SPEC §7.2's measured 1600×900 stage, uniformly scaled to fit — which
- * on a 412 px phone is a 412×232 letterbox, and a six-card fan of 175 px
- * cards is wider than that, so the outer cards sit at negative `x` and
- * Playwright refuses to click them ("element is outside of the viewport").
- * That is a real layout gap at phone width, reported rather than papered
- * over; the `dispatchEvent` fallback is here so the rest of the suite can
- * still prove the *rules* on `mobile-chrome` while it stands.
+ * A plain click, at every viewport the suite runs. The card-trade panel lays
+ * itself out in SPEC §7.2's measured 1600×900 stage, uniformly scaled to fit
+ * — which on a 412 px phone is a 412×232 letterbox with every card of the
+ * hand inside it.
  */
 async function pickCard(card: Locator): Promise<void> {
-  try {
-    await card.click({ timeout: 3_000 });
-  } catch {
-    await card.dispatchEvent("click");
-  }
+  await card.click(CLICK);
   await expect(card).toHaveAttribute("data-selected", "true", { timeout: 5_000 });
 }
 

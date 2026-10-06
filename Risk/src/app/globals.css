@@ -102,6 +102,24 @@
   --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
   --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
 
+  /* ----------------------------------------------------------------------
+   * Action-bar geometry, shared so nothing has to guess it (SPEC §7.1, §8.9)
+   *
+   * The bottom-left icon stack and the action bar are two independently
+   * anchored HUD layers, and at phone width they used to land on top of each
+   * other: the bar's own interactive column (prompt, phase label, pips,
+   * primary pill) is taller than the band it is anchored in, so it reached up
+   * over the Stats / Cards / Chat stack and `phase-pip-attack` intercepted
+   * every tap meant for Chat. The stack now lifts itself clear by the bar's
+   * own height, which is why that height is a token rather than a literal in
+   * `ActionBar`.
+   * -------------------------------------------------------------------- */
+  --action-bar-h: max(16%, 120px);
+  --pip-w: 92px;
+  --pip-gap: 12px;
+  --prompt-size: 20px;
+  --phase-label-size: 28px;
+
   /* ---------- z layers ---------- */
   --z-ocean:        0;
   --z-land:        10;
@@ -158,6 +176,21 @@ html, body {
   paint-order: stroke fill;
   -webkit-text-stroke: 3px var(--stroke-dark);
   text-shadow: 0 2px 3px rgba(0, 0, 0, 0.55);
+}
+
+/*
+ * Phone width (SPEC §8.9: "< 820 px … the icon stack goes horizontal", and
+ * the portrait rules). The pip row and the two lines of board type above it
+ * shrink so the bar's column fits inside its own band instead of growing up
+ * into the icon stack.
+ */
+@media (max-width: 480px) {
+  :root {
+    --pip-w: 52px;
+    --pip-gap: 8px;
+    --prompt-size: 15px;
+    --phase-label-size: 20px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

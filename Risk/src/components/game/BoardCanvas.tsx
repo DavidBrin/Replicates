@@ -47,6 +47,29 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
   const map: MapDef = session.map;
   const [, , boardW, boardH] = map.viewBox;
   const size = useElementSize(stageRef);
+  /**
+   * The live viewport, for the handlers that must not be re-created when it
+   * changes.
+   *
+   * The input effect below used to depend on `size` directly, and that made
+   * every `ResizeObserver` tick detach the pointer listeners, throw the
+   * `createInput` handle away — `pointers` map and all — and attach a fresh
+   * one. A resize that landed **between a `pointerdown` and its
+   * `pointerup`** therefore lost the tap in silence: the new handle had never
+   * seen the press, so `onPointerUp` found no matching entry and returned
+   * before the hit test (`src/game/input.ts`). Both events still arrived at
+   * `#stage`, the hit test still resolved to the right territory and every
+   * `canAct()` precondition still held, which is exactly what makes the
+   * symptom so hard to read.
+   *
+   * Resizes are not rare: a phone rotating, a mobile URL bar collapsing
+   * `100dvh`, a desktop window dragged, and — on the online route — the
+   * document scrollbar the lobby had and the board does not.
+   */
+  const sizeRef = useRef(size);
+  useEffect(() => {
+    sizeRef.current = size;
+  }, [size]);
   const radius = useMemo(() => tokenRadius(map.territories.length), [map.territories.length]);
   const colourPatterns = useUi(session, (s) => s.settings.colourPatterns);
 
@@ -92,7 +115,10 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
     if (!stage) return;
     const input = createInput({
       camera: () => cameraRef.current
-        ?? createCamera({ board: { w: boardW, h: boardH }, viewport: size.w ? size : { w: boardW, h: boardH } }),
+        ?? createCamera({
+          board: { w: boardW, h: boardH },
+          viewport: sizeRef.current.w ? sizeRef.current : { w: boardW, h: boardH },
+        }),
       setCamera: (next) => {
         cameraRef.current = next;
         session.markDirty();
@@ -123,7 +149,10 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
       if (event.key === "0") {
         const cam = cameraRef.current;
         if (cam) {
-          cameraRef.current = createCamera({ board: { w: boardW, h: boardH }, viewport: cam.viewport ?? size });
+          cameraRef.current = createCamera({
+            board: { w: boardW, h: boardH },
+            viewport: cam.viewport ?? sizeRef.current,
+          });
           session.markDirty();
         }
       }
@@ -136,7 +165,7 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
       stage.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("keydown", onKey);
     };
-  }, [session, boardW, boardH, size]);
+  }, [session, boardW, boardH]);
 
   /* ---- paint --------------------------------------------------------- */
   const paint = useCallback(() => {

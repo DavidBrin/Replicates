@@ -20,6 +20,12 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: "on-first-retry",
     viewport: { width: 1280, height: 800 },
+    /**
+     * A ceiling on one action, so a control that has become unreachable fails
+     * with Playwright's own "intercepts pointer events" log instead of
+     * burning the whole test timeout inside a single click.
+     */
+    actionTimeout: 10_000,
   },
   projects: [
     { name: "desktop-chrome", use: { ...devices["Desktop Chrome"] } },

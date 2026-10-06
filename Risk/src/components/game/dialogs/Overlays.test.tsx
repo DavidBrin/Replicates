@@ -11,6 +11,7 @@ import { GetReadyOverlay } from "./GetReadyOverlay";
 import { ManualDiceView } from "./ManualDiceView";
 import { ReceivedTroops } from "./ReceivedTroops";
 import { SettingsDialog } from "./SettingsDialog";
+import { Stage, STAGE_H, STAGE_SCALE, STAGE_W } from "./stage";
 import { TipCard } from "./TipCard";
 import { VictoryOverlay } from "./VictoryOverlay";
 
@@ -280,5 +281,33 @@ describe("ManualDiceView", () => {
     expect(onDone).not.toHaveBeenCalled();
     fireEvent.animationEnd(screen.getByTestId("manual-die-attacker-1"), { bubbles: true });
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the 1600×900 stage (SPEC §7.2)", () => {
+  it("scales by a unitless number, so the transform is valid CSS", () => {
+    // `min(100vw / 1600, 100vh / 900)` is a LENGTH, and `scale(<length>)` is
+    // invalid — the browser dropped the whole transform and every measured
+    // dialog rendered at its full 1600×900 size, clipped by the viewport. At
+    // 412 px that put the outer card-fan cards, the close ✗ at x 75 and the
+    // bonus legend at x 1320–1565 off screen. `tan(atan2(a, b))` is the CSS
+    // idiom for the plain ratio `a / b` of two lengths.
+    expect(STAGE_SCALE).toBe("tan(atan2(min(100vw, 100vh * 1.7777777777777777), 1600px))");
+    expect(STAGE_SCALE, "a length would be refused by scale()").not.toMatch(/\/\s*\d/);
+    expect(STAGE_W / STAGE_H).toBeCloseTo(16 / 9, 10);
+  });
+
+  it("puts the fit scale on the stage, not on the scrim", () => {
+    render(
+      <Stage testId="probe-stage" label="Probe">
+        <span data-testid="probe-child">x</span>
+      </Stage>,
+    );
+    const scrim = screen.getByTestId("probe-stage");
+    expect(scrim.style.transform).toBe("");
+    const inner = scrim.firstElementChild as HTMLElement;
+    expect(inner.style.transform).toBe(`scale(${STAGE_SCALE})`);
+    expect(inner.style.width).toBe(`${STAGE_W}px`);
+    expect(inner.style.height).toBe(`${STAGE_H}px`);
   });
 });
