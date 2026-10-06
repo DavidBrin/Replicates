@@ -262,6 +262,39 @@ export function countVertices(d: string): number {
   return n;
 }
 
+/**
+ * Authored vertices per subpath, **degenerate subpaths included**.
+ *
+ * `parseRings` drops anything below a triangle on the way out, which is right
+ * for drawing and useless for a validator: the whole point of a "≥ 3 per ring"
+ * gate is to catch the two-vertex offcut `parseRings` would hide. So the count
+ * comes off the token stream instead.
+ */
+export function subpathVertexCounts(d: string): number[] {
+  const out: number[] = [];
+  let n = 0;
+  let open = false;
+  for (const token of tokenisePath(d)) {
+    const upper = token.cmd.toUpperCase();
+    const arity = ARITY[upper] ?? 0;
+    if (upper === "Z") {
+      if (open) out.push(n);
+      n = 0;
+      open = false;
+      continue;
+    }
+    if (arity === 0) continue;
+    if (upper === "M") {
+      if (open) out.push(n);
+      n = 0;
+      open = true;
+    }
+    n += Math.floor(token.args.length / arity);
+  }
+  if (open) out.push(n);
+  return out;
+}
+
 /** Twice the signed area. Positive for a counter-clockwise ring in y-down screen space. */
 export function ringArea2(ring: Ring): number {
   let sum = 0;
@@ -415,8 +448,8 @@ function interiorFallback(ring: Ring): [number, number] {
  * diameter instead is stable under rotation of the vertex list, which is what
  * keeps a rebuild of a map byte-identical.
  */
-export function simplifyRing(ring: Ring, tolerance: number): Ring {
-  if (ring.length <= 3 || tolerance <= 0) return ring;
+export function simplifyRing(ring: Ring, tolerance: number, floor = 3): Ring {
+  if (ring.length <= Math.max(3, floor) || tolerance <= 0) return ring;
 
   // Two O(n) passes rather than an O(n²) exact diameter: the vertex furthest
   // from the centroid, then the vertex furthest from that one. Coastlines run to
@@ -438,24 +471,46 @@ export function simplifyRing(ring: Ring, tolerance: number): Ring {
   const out = [...a, ...b.slice(1, b.length - 1)];
   // A tolerance wide enough to flatten both halves leaves two points, which is
   // not a polygon. Falling back to the INPUT here would make the vertex count
-  // non-monotone in `tolerance` and break `fitVertexBudget`'s bisection, so the
-  // floor is the coarsest honest triangle instead: the two anchors plus the
-  // vertex furthest from the chord between them.
-  return out.length >= 3 ? out : coarsestTriangle(ring, ring[ai] as Point, ring[bi] as Point);
+  // non-monotone in `tolerance` and break the bisection in `fitRings`, so the
+  // floor is the coarsest honest polygon instead: the two anchors plus the
+  // vertices standing furthest off the chord between them, one per side.
+  return out.length >= floor ? out : coarsestPolygon(ring, ring[ai] as Point, ring[bi] as Point, floor);
 }
 
-/** The two anchors plus whichever vertex stands furthest off the line between them. */
-function coarsestTriangle(ring: Ring, a: Point, b: Point): Ring {
-  let apex: Point | null = null;
-  let best = -1;
+/**
+ * The two anchors plus the vertices standing furthest off the line between
+ * them — one apex for a triangle, one apex per side of the chord for a quad.
+ *
+ * A quad rather than a triangle is the floor the ring policy asks for: a
+ * triangle is what a collapsed archipelago looks like, and the whole point of
+ * the per-ring budget is that no ring ever has to collapse that far. Keeping an
+ * apex on **each** side of the chord also keeps the ring's own two lobes, which
+ * is what makes a four-vertex island still read as an island.
+ */
+function coarsestPolygon(ring: Ring, a: Point, b: Point, floor: number): Ring {
+  const side = (p: Point): number => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+  let left: Point | null = null;
+  let right: Point | null = null;
+  let bestLeft = 0;
+  let bestRight = 0;
   for (const p of ring) {
     const d2 = segmentDistance2(p, a, b);
-    if (d2 > best) {
-      best = d2;
-      apex = p;
+    if (d2 <= 0) continue;
+    if (side(p) > 0) {
+      if (d2 > bestLeft) {
+        bestLeft = d2;
+        left = p;
+      }
+    } else if (d2 > bestRight) {
+      bestRight = d2;
+      right = p;
     }
   }
-  return apex === null || best <= 0 ? ring.slice(0, 3) : [a, apex, b];
+  // `a → left → b → right` is a simple quadrilateral: the chord `a–b` separates
+  // the two apexes, so the boundary never crosses itself.
+  if (floor >= 4 && left !== null && right !== null) return [a, left, b, right];
+  const apex = (bestLeft >= bestRight ? left : right) ?? null;
+  return apex === null ? ring.slice(0, Math.max(3, Math.min(floor, ring.length))) : [a, apex, b];
 }
 
 /** The mean of a ring's vertices. Only ever used to seed a search, never as an anchor. */
@@ -581,6 +636,140 @@ export function fitVertexBudget(rings: readonly Ring[], budget: number, span: nu
     spent += ring.length;
   }
   return out.length > 0 ? out : [(candidate[0] ?? rings[0] ?? []).slice(0, 3)];
+}
+
+/* ------------------------------------------------------------------ ring policy -- */
+
+/**
+ * The per-**ring** vertex policy (SPEC §8).
+ *
+ * The budget that preceded this one was per *territory*, and shared: one
+ * Douglas–Peucker tolerance was cranked up until the **sum** over every subpath
+ * fitted. On a territory with one ring that is exactly right. On a territory
+ * with twenty — a dissolved country group, Alaska with its Aleutians, Michigan
+ * with its Upper Peninsula — it drives the tolerance so high that *every* ring
+ * bottoms out at its coarsest fallback, and the board renders as triangle soup.
+ * The fix is to budget each ring separately and to decide *which* rings are
+ * worth drawing before simplifying any of them.
+ */
+export interface RingPolicy {
+  /** Vertices the largest ring may spend. */
+  readonly primaryMax: number;
+  /** What the largest ring should keep if the source has at least this many. */
+  readonly primaryMin: number;
+  /** Vertices each secondary ring may spend. */
+  readonly secondaryMax: number;
+  /** The floor the simplifier may never go below — an island is a quad, not a triangle. */
+  readonly secondaryMin: number;
+  /** A secondary ring is worth drawing at this fraction of the largest ring's area. */
+  readonly secondaryShare: number;
+  /** How many secondary rings a territory may keep. */
+  readonly maxSecondary: number;
+  /** …and how many in total when no ring dominates, i.e. the territory is only islands. */
+  readonly maxArchipelago: number;
+  /** A ring holding this share of the territory's area counts as its mainland. */
+  readonly mainlandShare: number;
+  /** The ceiling on the sum, which is what the validator gates on. */
+  readonly totalMax: number;
+}
+
+export const RING_POLICY: RingPolicy = {
+  primaryMax: 60,
+  primaryMin: 12,
+  secondaryMax: 12,
+  secondaryMin: 4,
+  secondaryShare: 0.02,
+  maxSecondary: 5,
+  maxArchipelago: 3,
+  mainlandShare: 0.5,
+  totalMax: 120,
+};
+
+/**
+ * Which of a territory's rings are worth drawing, largest first.
+ *
+ * Largest ring always; then any ring holding at least `secondaryShare` of the
+ * largest — the islands that actually read at board scale — up to
+ * `maxSecondary`. `minArea` additionally drops anything below an absolute floor,
+ * which is how a clip's ocean slivers leave the board. A territory where no ring
+ * holds `mainlandShare` of the area is an archipelago rather than a mainland
+ * with islands, and keeps only its largest `maxArchipelago`.
+ */
+export function selectRings(
+  rings: readonly Ring[],
+  minArea = 0,
+  policy: RingPolicy = RING_POLICY,
+): Ring[] {
+  const ordered = [...rings].filter((r) => r.length >= 3).sort((a, b) => ringArea(b) - ringArea(a));
+  const primary = ordered[0];
+  if (primary === undefined) return [];
+
+  const primaryArea = ringArea(primary);
+  const totalArea = ordered.reduce((n, r) => n + ringArea(r), 0);
+  const floor = Math.max(primaryArea * policy.secondaryShare, minArea);
+  const secondary = ordered.slice(1).filter((r) => ringArea(r) >= floor);
+
+  const archipelago = totalArea > 0 && primaryArea < totalArea * policy.mainlandShare;
+  const keep = archipelago ? policy.maxArchipelago - 1 : policy.maxSecondary;
+  return [primary, ...secondary.slice(0, Math.max(0, keep))];
+}
+
+/**
+ * Simplify one ring down to at most `max` vertices, never below `floor`.
+ *
+ * Bisects for the **smallest** tolerance that fits, so the ring spends as much
+ * of its allowance as the shape can use: the coarsest tolerance that happens to
+ * fit would throw away detail the budget had room for.
+ */
+export function simplifyToCount(ring: Ring, max: number, span: number, floor: number): Ring {
+  if (ring.length <= max) return ring;
+  let lo = 0;
+  let hi = Math.max(span, 1e-6);
+  let best: Ring = simplifyRing(ring, hi, floor);
+  for (let step = 0; step < 28; step++) {
+    const mid = (lo + hi) / 2;
+    const tried = simplifyRing(ring, mid, floor);
+    if (tried.length <= max) {
+      best = tried;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return best.length >= 3 ? best : ring.slice(0, 3);
+}
+
+/**
+ * Apply the ring policy and the per-ring budget to one territory's geometry.
+ *
+ * The largest ring gets `primaryMax`, each secondary `secondaryMax`, and the
+ * sum is trimmed to `totalMax` by dropping the smallest secondaries — so the
+ * validator's per-territory ceiling holds by construction rather than by
+ * flattening the coastline until it does.
+ */
+export function fitRings(
+  rings: readonly Ring[],
+  span: number,
+  minArea = 0,
+  policy: RingPolicy = RING_POLICY,
+): Ring[] {
+  const chosen = selectRings(rings, minArea, policy);
+  if (chosen.length === 0) return [];
+
+  const out: Ring[] = [];
+  chosen.forEach((ring, i) => {
+    const max = i === 0 ? policy.primaryMax : policy.secondaryMax;
+    const fitted = simplifyToCount(ring, max, span, policy.secondaryMin);
+    if (fitted.length >= 3) out.push(fitted);
+  });
+  if (out.length === 0) return [];
+
+  // Trim from the tail — the smallest rings — until the sum fits.
+  let spent = out.reduce((n, r) => n + r.length, 0);
+  while (out.length > 1 && spent > policy.totalMax) {
+    spent -= (out.pop() as Ring).length;
+  }
+  return out;
 }
 
 /** `M x,y L …Z` per ring, coordinates rounded to `places`. The emitted form of every shipped map. */

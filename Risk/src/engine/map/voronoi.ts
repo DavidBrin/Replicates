@@ -26,7 +26,6 @@ import { MAX_SEATS } from "../types";
 import { anchorsFor } from "./anchors";
 import { bonusFor, growGroups, sharedVertexAdjacency, slotsForSize } from "./graph";
 import { fitVertexBudget, pointInRings, ringArea, ringsToPath, type Point, type Ring } from "./path";
-import { MAX_VERTICES } from "./schema";
 
 /* ------------------------------------------------------------------ options -- */
 
@@ -44,6 +43,15 @@ export interface VoronoiOptions {
 export const TERRITORY_RANGE = [19, 104] as const;
 export const CONTINENT_RANGE = [4, 11] as const;
 export const DEFAULT_SIZE = [1600, 900] as const;
+/**
+ * A generated territory's vertex allowance.
+ *
+ * A Voronoi territory is one convex-ish blob with no islands, so the per-ring
+ * policy the geodata boards use has nothing to decide here — and a hundred-plus
+ * territory board at the validator's 120-vertex ceiling would be megabytes.
+ * Thirty is what the merged cell outlines actually need.
+ */
+const CELL_VERTEX_BUDGET = 30;
 
 /** Defaults filled in, every field clamped into range. */
 export function normaliseOptions(options: Partial<VoronoiOptions>): VoronoiOptions {
@@ -540,7 +548,7 @@ export function generateVoronoiMap(options: VoronoiOptions, seed: string | Rng):
 
   const outlines = groups.map((group) => {
     const rings = unionOutline(group, compact);
-    const fitted = fitVertexBudget(rings, MAX_VERTICES, Math.max(o.width, o.height));
+    const fitted = fitVertexBudget(rings, CELL_VERTEX_BUDGET, Math.max(o.width, o.height));
     return fitted.length > 0 ? fitted : [compact[group[0] ?? 0] ?? []];
   });
 

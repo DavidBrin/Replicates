@@ -46,16 +46,25 @@ export const EUROPE: RegionSpec = {
   alsoWorld: ["Turkey", "Cyprus", "Georgia", "Armenia", "Azerbaijan"],
   drop: ["N. Cyprus"],
   window: { lon: [-25, 45], lat: [34, 72] },
-  split: { Russia: 3, France: 2, Spain: 2, Ukraine: 2 },
-  splitBase: { Russia: "Russia", France: "France", Spain: "Spain", Ukraine: "Ukraine" },
+  // What survives the 45°E cut is western Russia, so that is what it is called:
+  // "Russia" would be a lie about a territory that stops at the Volga, and
+  // splitting that remnant into three produced three bands rather than three
+  // territories.
+  rename: { Russia: "Western Russia" },
+  split: { France: 2, Spain: 2, Ukraine: 2 },
+  splitBase: { France: "France", Spain: "Spain", Ukraine: "Ukraine" },
   territories: 44,
   continents: 7,
   continentWord: "Europe",
-  // Equal-area, like every other regional board here. `conicConformal` without
-  // an explicit rotation sends the far hemisphere towards infinity, which makes
-  // `fitExtent` scale the whole of Europe down to nothing — `fitProjection`
-  // now refuses that outright rather than emitting a collapsed board.
-  projection: "equalEarth",
+  // Lambert conformal conic on 40°N/65°N, rotated onto a 15°E central meridian:
+  // the standard choice for a European wall map, and the one that keeps Italy a
+  // boot and Scandinavia a peninsula. Equal Earth is a whole-globe projection
+  // and sheared the Baltic badly at this scale. The explicit rotation matters —
+  // an unrotated conic sends the far hemisphere towards infinity and the fit
+  // collapses, which `fitProjection` refuses outright.
+  projection: "conicConformal",
+  rotate: [-15, 0],
+  parallels: [40, 65],
   width: 1600,
   height: 1000,
   slots: { blizzards: 3, portals: 5 },
