@@ -129,8 +129,16 @@ and nothing else), Capitals (a capital gives its defender a third die and can be
 win condition), Blizzards (two to eleven frozen territories, out of play all game,
 still paying their continent's bonus), Portals (stable or relocating every three
 rounds), Percentage Domination (50–90%, default 70), Manual Placement, Max Rounds
-(the 5-Rounds Rumble, decided on territories then troops), Round Delay, Alliances, and
-the choice between Balanced Blitz and True Random dice.
+(the 5-Rounds Rumble, decided on territories then troops), Round Delay, Alliances, the
+choice between Balanced Blitz and True Random dice, and — for a two-seat game only —
+the Neutral Army: the original's third, neutral holding, here **off unless asked for**
+(D106).
+
+**On the board.** Tap anywhere on a territory. The dice button is the Battle Log, every
+battle of the game with who lost what and where (D108); the Continent Overlay repaints
+the whole board by continent with the bonus badges riding the land (D109); the card
+panel opens with the best set already picked (D110); a fortify ends the turn (D107);
+and the red ✗ at the top-left — and on the victory frame — goes home (D111).
 
 **Bots.** Five tiers labelled as the original labels them — Beginner, Easy, Medium,
 Hard, Expert. They differ by *policy*, not by arithmetic: every tier computes the same

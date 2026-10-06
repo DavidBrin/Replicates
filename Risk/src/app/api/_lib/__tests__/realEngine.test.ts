@@ -140,7 +140,8 @@ describe("creating a game with the real resolver", () => {
     const gameId = await createGame({
       lobbyId: null,
       mapSlug: "classic-world",
-      rules: TEST_RULES,
+      // D106 — the 2-seat neutral is opt-in; this test asks for it so the deal below has three piles.
+      rules: { ...TEST_RULES, neutralHolding: true },
       seats: [
         { seat: 0, kind: "human", playerId: null, tier: null, displayName: "Alpha", colour: "red" },
         { seat: 1, kind: "bot", playerId: null, tier: "medium", displayName: "Bot", colour: "blue" },
@@ -158,7 +159,7 @@ describe("creating a game with the real resolver", () => {
     expect(started.seats[1]?.persona).not.toBeNull();
     expect(started.seats[1]?.persona?.tier).toBe("medium");
     expect(started.seats[0]?.persona).toBeNull();
-    // Two seats means the neutral holding (R6), which the deal says so.
+    // Two seats WITH the option on means the neutral holding (R6, D106), which the deal says so.
     expect(started.neutral).toBe(true);
 
     // And the stored snapshot is the fold of that one action.

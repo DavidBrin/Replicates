@@ -20,6 +20,36 @@ function blank(map: MapDef = TINY4): BoardPaint {
   };
 }
 
+describe("board — hit-testing (D109, the locked-units bug)", () => {
+  it("the continent-ring and route layers take no pointer events", () => {
+    const { svg } = createBoard(TINY4);
+    expect(svg.querySelector('[data-layer="rings"]')?.getAttribute("pointer-events")).toBe("none");
+    expect(svg.querySelector('[data-layer="routes"]')?.getAttribute("pointer-events")).toBe("none");
+    expect(BOARD_CSS).toMatch(/\.continent-rings[^}]*pointer-events: none/);
+    expect(BOARD_CSS).toMatch(/\.routes[^}]*pointer-events: none/);
+  });
+
+  it("a ring path is drawn above the territories, which is why it must not intercept", () => {
+    const board = createBoard(TINY4);
+    board.paint({ ...blank(), rings: [{ continent: 0, colour: "var(--c-0)" }] });
+    const ring = board.svg.querySelector("path.continent-ring");
+    expect(ring).not.toBeNull();
+    const layers = Array.from(board.svg.children).map((c) => c.getAttribute("data-layer"));
+    expect(layers.indexOf("rings")).toBeGreaterThan(layers.indexOf("territories"));
+  });
+});
+
+describe("board — the Continent Overlay's fills (D109)", () => {
+  it("replaces the owner fill with the continent accent, and clears it again", () => {
+    const board = createBoard(TINY4);
+    const fills = TINY4.territories.map(() => "var(--c-0)");
+    board.paint({ ...blank(), continentFills: fills });
+    expect(board.pathFor(0)?.style.fill).toBe("var(--c-0)");
+    board.paint(blank());
+    expect(board.pathFor(0)?.style.fill).toBe("");
+  });
+});
+
 describe("board — structure", () => {
   it("builds <defs> and then §8's eight layers, in order", () => {
     const { svg } = createBoard(TINY4);

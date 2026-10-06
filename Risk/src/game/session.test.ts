@@ -1176,7 +1176,7 @@ describe("R6 — the 2-seat manual claim phase alternates own / neutral", () => 
   function claimSession() {
     const h = makeSession({
       seats: [...TWO_HUMANS],
-      rules: { manualPlacement: true },
+      rules: { manualPlacement: true, neutralHolding: true },
       engine: engineApi,
     });
     h.session.start();
@@ -1219,7 +1219,7 @@ describe("R6 — the 2-seat manual claim phase alternates own / neutral", () => 
   it("the bot runner alternates too, so a bot seat cannot hang the setup", () => {
     const h = makeSession({
       seats: [seat("human", "Ada", "red"), seat("bot", "Napoleon", "green", "medium")],
-      rules: { manualPlacement: true },
+      rules: { manualPlacement: true, neutralHolding: true },
       engine: engineApi,
     });
     h.session.start();
@@ -1770,6 +1770,89 @@ describe("the scripted double agrees with the real engine", () => {
     });
     expect(h.session.confirmed().seats[1]?.allies).toEqual([]);
     expect(h.session.confirmed().seats[0]?.allies).toEqual([]);
+    h.destroy();
+  });
+});
+
+describe("D107 — a fortify move ends the turn, and D108 — the battle log", () => {
+  /**
+   * A seeded deal in which the opening seat holds two ADJACENT territories, so a fortify pair
+   * exists on turn one; the deal is seeded, so the first seed that qualifies is always the same.
+   */
+  function inAttackPhase() {
+    for (let i = 0; i < 40; i += 1) {
+      const h = makeSession({ seats: HOTSEAT_SEATS, engine: engineApi, seed: `fortify-${String(i)}` });
+      h.session.start();
+      h.session.continueHandOff();
+      const s = h.session.confirmed();
+      const me = s.turnOrder[0] as number;
+      const target = territoriesOf(s, me).find((t) =>
+        (h.map.adjacency[t] ?? []).some((n) => s.territories[n]?.owner === me));
+      if (target === undefined) {
+        h.destroy();
+        continue;
+      }
+      h.session.submit({ type: "DRAFT", seat: me, territory: target, count: s.troopsToPlace });
+      h.session.endPhase();
+      return { h, me, target };
+    }
+    throw new Error("no seed in 40 dealt the opening seat an adjacent pair");
+  }
+
+  it("D108 — every resolved battle lands in the log with both seats, both losses and the outcome", () => {
+    const { h, me } = inAttackPhase();
+    const state = h.session.confirmed();
+    const from = state.territories.findIndex((t) => t.owner === me && t.troops >= 2);
+    const to = engineApi.legalAttackTargets(state, h.map, from)[0] as number;
+    const defender = state.territories[to]?.owner as number;
+    expect(h.session.store.getState().battleLog).toEqual([]);
+
+    h.session.submitAttack({ from, to, mode: "blitz" });
+    const log = h.session.store.getState().battleLog;
+    expect(log).toHaveLength(1);
+    const row = log[0]!;
+    expect(row).toMatchObject({ id: 1, round: state.round, attacker: me, defender, from, to });
+    expect(row.attackerLosses + row.defenderLosses).toBeGreaterThan(0);
+    const after = h.session.confirmed();
+    expect(row.conquered).toBe(after.territories[to]?.owner === me || after.pendingMoveIn !== null);
+    h.destroy();
+  });
+
+  it("D107 — confirming a fortify ends the turn with no confirmation banner, confirmation setting or not", () => {
+    const { h, me } = inAttackPhase();
+    h.session.endPhase(); // attack → fortify
+    expect(h.session.confirmed().phase).toBe("fortify");
+    h.session.updateSettings({ endPhaseConfirmation: true });
+
+    const state = h.session.confirmed();
+    const from = territoriesOf(state, me).find((t) =>
+      (state.territories[t]?.troops ?? 0) >= 2 && engineApi.legalFortifyMoves(state, h.map, t).length > 0);
+    expect(from).toBeDefined();
+    const to = engineApi.legalFortifyMoves(state, h.map, from as number)[0] as number;
+    const turnBefore = state.turn;
+
+    h.session.tapTerritory(from as number);
+    h.session.tapTerritory(to);
+    expect(h.session.store.getState().countRequest?.kind).toBe("fortify");
+    h.session.confirmCount(1);
+
+    // The move landed, and the turn is over: no "Skip Fortify phase?" banner, no second tap.
+    expect(h.session.confirmed().turn).toBeGreaterThan(turnBefore);
+    expect(h.session.store.getState().modal).not.toBe("endTurn");
+    expect(h.session.store.getState().countRequest).toBeNull();
+    h.destroy();
+  });
+
+  it("D107 — a refused fortify does not end the turn", () => {
+    const { h, me } = inAttackPhase();
+    h.session.endPhase();
+    const state = h.session.confirmed();
+    const turnBefore = state.turn;
+    const from = firstOwned(state, me);
+    const enemy = state.territories.findIndex((t) => t.owner !== me && t.owner >= 0);
+    h.session.fortify(from, enemy, 1);
+    expect(h.session.confirmed().turn).toBe(turnBefore);
+    expect(h.session.confirmed().phase).toBe("fortify");
     h.destroy();
   });
 });

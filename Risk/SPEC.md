@@ -747,6 +747,7 @@ export interface Rules {
   readonly turnSeconds: number | null;    // online only; null offline (R79)
   readonly alliances: boolean;
   readonly aiDifficulty: BotTier;         // the pool every bot seat is drawn from
+  readonly neutralHolding: boolean;       // the 2-seat neutral holding, OPT-IN (D106); default false
 }
 
 export const DEFAULT_RULES: Rules = {

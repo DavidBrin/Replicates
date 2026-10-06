@@ -367,7 +367,7 @@ function dealTerritories(
 
   // ③ the deal over the non-blizzard territories
   const dealable = shuffle(rngs.deal, map.territories.map((t) => t.index).filter((t) => !blizzards.includes(t)));
-  const neutral = seatCount === 2;
+  const neutral = seatCount === 2 && config.rules.neutralHolding === true;
   const piles: Seat[] = neutral ? [0, 1, SEAT_NEUTRAL] : turnOrder;
   const owners = new Map<TerritoryId, Seat>();
   dealable.forEach((t, i) => owners.set(t, piles[i % piles.length] as Seat));

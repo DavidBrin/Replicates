@@ -34,8 +34,8 @@ import {
  *    and walking the menu is the thing this test exists to exercise.
  *    `south-america` is the smallest board a player can actually choose.
  *  - **The win condition is Percentage Domination at its default 70%**, which
- *    is a first-class win condition (R71): 14 of 20, against a seat holding 7
- *    and a neutral holding 6. World Domination on the same board is the same
+ *    is a first-class win condition (R71): 14 of 20, against a seat holding
+ *    the other 10 (no neutral by default, D106). World Domination on the same board is the same
  *    evaluation code path with a much longer runtime, and runtime is what a
  *    suite that also has to stay green on a 412 px phone cannot spend.
  */
@@ -82,14 +82,15 @@ test("T10.2 — a solo game against one bot is played to victory through the HUD
   const opening = await readState(page);
   const me = humanSeats(opening)[0]!;
 
-  // The opening, as R5/R7 deal it: two seats and a neutral holding whose
-  // piles differ by at most one, and no `SeatState` for the neutral.
-  expect(opening.seats, "two seats, and the neutral is not one of them").toHaveLength(2);
+  // The opening, as R5 deals it with the neutral holding OFF (D106, the default): two seats
+  // splitting the whole board evenly, and no neutral territory anywhere.
+  expect(opening.seats, "two seats").toHaveLength(2);
   expect(opening.seats.map((s) => s.kind).sort()).toEqual(["bot", "human"]);
-  expect([...opening.turnOrder].sort(), "the neutral never takes a turn").toEqual([0, 1]);
+  expect([...opening.turnOrder].sort()).toEqual([0, 1]);
   expect(opening.territories).toHaveLength(20);
-  expect(ownedBy(opening, me).length, "the human's pile").toBe(7);
-  expect(ownedBy(opening, -2).length, "the neutral holding").toBe(6);
+  expect(opening.rules.neutralHolding, "the neutral is opt-in (D106)").toBe(false);
+  expect(ownedBy(opening, me).length, "the human's pile").toBe(10);
+  expect(ownedBy(opening, -2).length, "no neutral holding by default").toBe(0);
   expect(opening.rules.winCondition).toBe("percentage");
   expect(opening.rules.dominationThreshold, "70% is the default (D60)").toBeCloseTo(0.7, 10);
   expect(opening.rules.maxRounds, "the 5-Rounds Rumble preset (D59)").toBe(5);

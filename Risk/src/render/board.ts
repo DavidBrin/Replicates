@@ -36,6 +36,12 @@ export interface BoardPaint {
   readonly blizzards: readonly number[];
   /** Colour-vision pattern id per territory, or null (see palette.patternFor). */
   readonly patterns?: readonly (string | null)[];
+  /**
+   * Continent Overlay (§7.2, D109): a fill per territory that REPLACES the owner colour — the
+   * continent's accent — or null to show ownership. The whole board switches look, which is
+   * what the evidence shows; a glow on top of the owner fills was not it.
+   */
+  readonly continentFills?: readonly (string | null)[];
 }
 
 export interface BoardHandle {
@@ -90,6 +96,12 @@ export const BOARD_CSS: string = [
   // A frozen tile is out of play: hatched, and never a hit-test target (R-blizzard).
   '.territory[data-blizzard="1"] { pointer-events: none; cursor: default; }',
   ".risk-board .overlay { pointer-events: none; }",
+  // The continent ring is a FILLED path with the whole continent's `d` — its filter leaves only
+  // the glow visible, but hit-testing ignores filters. Without this, every tap on a completed
+  // continent landed on the ring, `closest("[data-territory]")` found nothing, and the session
+  // read it as a tap on open water: the "locked units" bug. Routes and their nodes likewise.
+  ".risk-board .continent-rings, .risk-board .continent-rings *, .risk-board .routes, .risk-board .routes * {",
+  "  pointer-events: none; }",
 ].join("\n");
 
 /* ----------------------------------------------------------------- defs -- */
@@ -258,8 +270,8 @@ export function createBoard(map: MapDef, doc: Document = document): BoardHandle 
     `<path class="land-wall" data-layer="wall" transform="translate(0,${WALL_OFFSET})" d="${union}"/>`,
     `<g class="territories" data-layer="territories" filter="url(#relief)">${territoryPaths}` +
       `<g class="overlays"></g></g>`,
-    '<g class="continent-rings" data-layer="rings"></g>',
-    `<g class="routes" data-layer="routes">${routeMarkup(map)}</g>`,
+    '<g class="continent-rings" data-layer="rings" pointer-events="none"></g>',
+    `<g class="routes" data-layer="routes" pointer-events="none">${routeMarkup(map)}</g>`,
     `<rect class="vignette" data-layer="vignette" fill="url(#vignette)" pointer-events="none" ` +
       `x="${vx}" y="${vy}" width="${vw}" height="${vh}"/>`,
   ].join("");
@@ -345,6 +357,10 @@ export function createBoard(map: MapDef, doc: Document = document): BoardHandle 
         if (frozen) path.setAttribute("data-blizzard", "1");
         else path.removeAttribute("data-blizzard");
       }
+
+      const accent = next.continentFills?.[i] ?? null;
+      const prevAccent = prev?.continentFills?.[i] ?? null;
+      if (accent !== prevAccent) path.style.fill = accent ?? "";
 
       const fill = overlayFill(i, next);
       const prevFill = prev ? overlayFill(i, prev) : null;

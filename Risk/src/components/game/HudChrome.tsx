@@ -15,28 +15,30 @@ import { IconButton } from "@/components/ui/IconButton";
 export interface UtilityButtonsProps {
   readonly onSettings: () => void;
   readonly onHelp: () => void;
-  readonly onDiceSettings: () => void;
-  /** Online adds a connection glyph after the three buttons. */
+  /** Where the red ✗ goes. Defaults to the home page (D111). */
+  readonly homeHref?: string;
+  /** Online adds a connection glyph after the buttons. */
   readonly syncStatus?: SyncStatus | null;
 }
 
 /**
- * Three circular **outline-only** buttons — 3 px white stroke, no fill — at a
- * 78 px pitch, with the online connection glyph after them.
+ * A red ✗ that leaves for home, then two circular **outline-only** buttons —
+ * 3 px white stroke, no fill — at a 78 px pitch, with the online connection
+ * glyph after them. The original's third button opened dice settings; this
+ * replica has nothing to put behind it, so it is gone (D108, D111).
  */
-export function UtilityButtons({ onSettings, onHelp, onDiceSettings, syncStatus }: UtilityButtonsProps) {
+export function UtilityButtons({ onSettings, onHelp, homeHref = "/", syncStatus }: UtilityButtonsProps) {
   return (
     <div
       data-testid="utility-buttons"
       className="pointer-events-auto absolute left-0 top-0 flex items-center gap-[34px] p-[30px]"
       style={{ zIndex: "var(--z-hud)" }}
     >
+      <HomeLink href={homeHref} testId="utility-home" size={44} />
       <IconButton chassis="outline" icon="gear" size={44} label="Settings" onClick={onSettings}
         testId="utility-settings" />
       <IconButton chassis="outline" icon="question" size={44} label="Help" onClick={onHelp}
         testId="utility-help" />
-      <IconButton chassis="outline" icon="die" size={44} label="Dice settings" onClick={onDiceSettings}
-        testId="utility-dice" />
       {syncStatus && syncStatus !== "offline" ? (
         <span
           data-testid="sync-status"
@@ -49,6 +51,39 @@ export function UtilityButtons({ onSettings, onHelp, onDiceSettings, syncStatus 
         </span>
       ) : null}
     </div>
+  );
+}
+
+export interface HomeLinkProps {
+  readonly href?: string;
+  readonly size?: number;
+  readonly testId?: string;
+  readonly label?: string;
+}
+
+/**
+ * The red ✗ that goes home (D111): a plain anchor in the danger circle's
+ * clothes, so it works as a link — new tab, back button, no router context —
+ * from the game screen, the victory frame and anywhere else it is placed.
+ */
+export function HomeLink({ href = "/", size = 44, testId = "home-link", label = "Back to home" }: HomeLinkProps) {
+  const box = Math.max(44, size);
+  return (
+    <a
+      href={href}
+      data-testid={testId}
+      aria-label={label}
+      title={label}
+      className="inline-flex shrink-0 items-center justify-center outline-none focus-visible:ring-4 focus-visible:ring-white/70"
+      style={{
+        width: box, height: box, borderRadius: "var(--r-pill)",
+        background: "linear-gradient(var(--danger), var(--danger-deep))",
+        border: "3px solid var(--danger-deep)", color: "var(--text)",
+        boxShadow: "0 4px 0 var(--danger-deep)",
+      }}
+    >
+      <Icon name="cross" size={Math.round(box * 0.5)} />
+    </a>
   );
 }
 

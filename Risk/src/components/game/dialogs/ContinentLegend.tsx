@@ -8,7 +8,11 @@
  *
  * It is an absolutely-positioned overlay INSIDE the board wrapper, so it takes
  * raw map coordinates and lets the parent's camera transform carry it (§8, the
- * coordinate contract).
+ * coordinate contract). Each badge applies the same counter `rotateX(-θ)` and
+ * `scale(1/zoom)` the troop tokens do, reading the two variables the camera
+ * writes on the wrapper once per frame — so it stays upright and screen-sized
+ * while its anchor pans and zooms with the land under it. `origin` is the
+ * map's `viewBox` origin, subtracted exactly as the token layer does.
  */
 
 import clsx from "clsx";
@@ -27,6 +31,8 @@ export interface ContinentLegendEntry {
 export interface ContinentLegendProps {
   readonly entries: readonly ContinentLegendEntry[];
   readonly className?: string;
+  /** The map's `viewBox` origin; `[0, 0]` when the legend is not inside a board wrapper. */
+  readonly origin?: readonly [number, number];
 }
 
 const OUTER = 36;
@@ -34,7 +40,7 @@ const THICK = 7;
 const R = OUTER - THICK / 2;
 const C = 2 * Math.PI * R;
 
-export function ContinentLegend({ entries, className }: ContinentLegendProps) {
+export function ContinentLegend({ entries, className, origin = [0, 0] }: ContinentLegendProps) {
   return (
     <div
       data-testid="continent-legend"
@@ -51,8 +57,20 @@ export function ContinentLegend({ entries, className }: ContinentLegendProps) {
             data-testid={`continent-legend-${entry.name}`}
             style={{
               position: "absolute",
-              left: entry.at.x,
-              top: entry.at.y,
+              left: entry.at.x - origin[0],
+              top: entry.at.y - origin[1],
+              width: 0,
+              height: 0,
+              // The token layer's counter-transform, verbatim (render/tokens.ts).
+              transform: "rotateX(calc(-1 * var(--tilt, 0deg))) scale(calc(1 / var(--zoom, 1)))",
+              transformStyle: "preserve-3d",
+            }}
+          >
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
               transform: "translate(-50%, -50%)",
               display: "flex",
               flexDirection: "column",
@@ -107,6 +125,7 @@ export function ContinentLegend({ entries, className }: ContinentLegendProps) {
             >
               {entry.held}/{entry.total} ({pct}%)
             </span>
+          </div>
           </div>
         );
       })}

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { buildState, card } from "./__fixtures__/states";
+import { buildState, card, territoryCard } from "./__fixtures__/states";
 import { mini, tiny4 } from "./__fixtures__/maps";
 import {
   ACTION_ORDER,
@@ -354,7 +354,7 @@ describe("claimOwed — R6's alternation, asked rather than guessed", () => {
   const twoSeat = (spec: Parameters<typeof buildState>[1] = {}) => buildState(mini, {
     seats: 2,
     phase: "claim",
-    rules: { manualPlacement: true },
+    rules: { manualPlacement: true, neutralHolding: true },
     armiesToClaim: { 0: 8, 1: 8 },
     ...spec,
   });
@@ -405,5 +405,36 @@ describe("claimOwed — R6's alternation, asked rather than guessed", () => {
       .toEqual([2, 3, 4, 5]);
     const full = twoSeat({ owners: [0, 0, 0, 1, 1, 1], troops: [1, 1, 1, 1, 1, 1] });
     expect(legalOwnClaimTargets(full, 0)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("CARD_DRAWN is offered only when a card can be drawn (T5 on the neutral-free 2-seat board)", () => {
+  const everyCard = [
+    ...mini.territories.map((t) => territoryCard(mini, t.index)),
+    card("wild-1", "wild"), card("wild-2", "wild"),
+  ];
+  const earned = (spec: Parameters<typeof buildState>[1] = {}) => buildState(mini, {
+    seats: 2, owners: [0, 0, 0, 1, 1, 1], troops: [2, 2, 2, 2, 2, 2],
+    phase: "fortify", conqueredThisTurn: true, ...spec,
+  });
+
+  it("offers it while the deck still has a card", () => {
+    expect(legalActions(earned(), mini, 0)).toContain("CARD_DRAWN");
+  });
+
+  it("withholds it when every card is held and nothing is discarded — validate would refuse every draw", () => {
+    const state = earned({ hands: { 0: everyCard.slice(0, 4), 1: everyCard.slice(4) } });
+    expect(legalActions(state, mini, 0)).not.toContain("CARD_DRAWN");
+    expect(legalActions(state, mini, 0)).toContain("END_TURN");
+  });
+
+  it("offers it again once the discard can be reshuffled (R19)", () => {
+    const state = earned({ hands: { 0: everyCard.slice(0, 4), 1: everyCard.slice(4, 7) }, discard: everyCard.slice(7) });
+    expect(legalActions(state, mini, 0)).toContain("CARD_DRAWN");
+  });
+
+  it("withholds it from a six-card hand (R28)", () => {
+    const state = earned({ hands: { 0: everyCard.slice(0, 6) } });
+    expect(legalActions(state, mini, 0)).not.toContain("CARD_DRAWN");
   });
 });

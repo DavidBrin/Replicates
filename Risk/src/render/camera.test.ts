@@ -9,7 +9,10 @@ import {
   boardTransform,
   clampPan,
   counterTransformVars,
+  containScale,
   coverScale,
+  minZoom,
+  MIN_ZOOM_FACTOR,
   createCamera,
   MAX_ZOOM_FACTOR,
   PERSPECTIVE_PX,
@@ -117,10 +120,18 @@ describe("camera — the single projection", () => {
     expect(after[1]).toBeCloseTo(before[1], 4);
   });
 
-  it("zoomAt clamps to the cover scale and to 4x it", () => {
+  it("zoomAt clamps to 85% of the contain scale and to 4x the cover scale", () => {
     const start = reset(base());
     const cover = coverScale(start);
-    expect(zoomAt(start, 0.1, [800, 450]).zoom).toBeCloseTo(cover, 10);
+    // The floor is BELOW cover: the whole board plus a margin, so a territory the HUD covers at
+    // the default framing can always be brought into the clear.
+    expect(zoomAt(start, 0.1, [800, 450]).zoom).toBeCloseTo(minZoom(start), 10);
+    expect(minZoom(start)).toBeCloseTo(containScale(start) * MIN_ZOOM_FACTOR, 10);
+    expect(minZoom(start)).toBeLessThan(cover);
+    // Zoomed all the way out, the board sits wholly inside the viewport.
+    const out = zoomAt(start, 0.1, [800, 450]);
+    expect(out.pan[0]).toBeGreaterThanOrEqual(0);
+    expect(out.pan[1]).toBeGreaterThanOrEqual(0);
     let cam = start;
     for (let i = 0; i < 12; i += 1) cam = zoomAt(cam, 2, [800, 450]);
     expect(cam.zoom).toBeCloseTo(cover * MAX_ZOOM_FACTOR, 10);

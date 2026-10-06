@@ -220,6 +220,7 @@ export const TEST_RULES: Rules = {
   turnSeconds: null,
   alliances: false,
   aiDifficulty: "medium",
+  neutralHolding: false,
 };
 
 /**

@@ -289,8 +289,24 @@ describe("serialize / deserialize", () => {
     }
 
     it("is a real version move, not a silent widening", () => {
-      expect(STATE_FORMAT_VERSION).toBe(2);
-      expect(JSON.parse(serializeState(split(false))) as { v: number }).toMatchObject({ v: 2 });
+      expect(STATE_FORMAT_VERSION).toBe(3);
+      expect(JSON.parse(serializeState(split(false))) as { v: number }).toMatchObject({ v: 3 });
+    });
+
+    it("v2 → v3 (D106): a two-seat board of that era had the neutral, any other did not", () => {
+      const two = { ...split(false) } as Record<string, unknown>;
+      delete (two.rules as Record<string, unknown>).neutralHolding;
+      const backTwo = deserializeState(JSON.stringify({ v: 2, state: two }));
+      expect(backTwo.rules.neutralHolding).toBe(true);
+
+      const three = { ...buildState(mini, { seats: 3, owners: [0, 0, 1, 1, 2, 2] }) } as Record<string, unknown>;
+      delete (three.rules as Record<string, unknown>).neutralHolding;
+      const backThree = deserializeState(JSON.stringify({ v: 2, state: three }));
+      expect(backThree.rules.neutralHolding).toBe(false);
+
+      // A v3 envelope that already says so is left alone, whatever the seat count.
+      const kept = deserializeState(serializeState(split(false)));
+      expect(kept.rules.neutralHolding).toBe(false);
     });
 
     it("deserialises a v1 envelope that lacks pendingAlliances", () => {

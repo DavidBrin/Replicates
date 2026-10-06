@@ -21,7 +21,7 @@
  * the renderer lights up and what a bot enumerates over, so they stay usable
  * for a hypothetical; `validate` remains the only authority on legality.
  */
-import { hasSet, mustTradeNow } from "./cards";
+import { canDrawCard, hasSet, mustTradeNow } from "./cards";
 import { knownTerritory, neighbours, reachableOwn } from "./graph";
 import { isAttackable } from "./modifiers";
 import { currentSeat, isContender, isGameOver, pendingAlliancesOf, takesTurns } from "./rules";
@@ -253,7 +253,7 @@ export function legalActions(state: GameState, map: MapDef, seat: Seat): readonl
 
   if (state.phase === "fortify") {
     if (!state.fortifyUsed && canFortifySomewhere(state, map, seat)) kinds.push("FORTIFY");
-    if (state.conqueredThisTurn) kinds.push("CARD_DRAWN");
+    if (state.conqueredThisTurn && canDrawCard(state, map, seat)) kinds.push("CARD_DRAWN");
     kinds.push("END_TURN");
   }
 

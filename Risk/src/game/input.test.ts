@@ -143,7 +143,7 @@ describe("createInput", () => {
     detach();
   });
 
-  it("never zooms below the cover scale", () => {
+  it("never zooms below the floor — 85% of the contain scale", () => {
     for (let i = 0; i < 20; i += 1) {
       const wheel = new Event("wheel", { bubbles: true, cancelable: true }) as WheelEvent;
       Object.defineProperties(wheel, {
@@ -151,7 +151,7 @@ describe("createInput", () => {
       });
       element.dispatchEvent(wheel);
     }
-    expect(cam.zoom).toBeCloseTo(0.5, 6); // 800/1600 === 450/900
+    expect(cam.zoom).toBeCloseTo((800 / 2400) * 0.85, 6); // contain = min(800/2400, 450/900), then the margin
     detach();
   });
 

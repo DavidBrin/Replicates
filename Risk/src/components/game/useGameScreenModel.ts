@@ -10,6 +10,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import type { Card, GameState, SeatState, Seat } from "@/engine/types";
+import { bestCardSet, type BestSet } from "@/game/cardChoice";
 import type { Session } from "@/game/session";
 import { useUi } from "@/game/useSession";
 import type { PresenceRow } from "@/ports/sync";
@@ -29,6 +30,8 @@ export interface GameScreenModel {
   readonly yourTurn: boolean;
   readonly myCards: readonly Card[];
   readonly sets: readonly (readonly [string, string, string])[];
+  /** The highest-value legal set, the one the panel opens with (D110). */
+  readonly bestSet: BestSet | null;
   readonly tradeValue: number;
   readonly mustTrade: boolean;
   readonly countValue: number;
@@ -50,12 +53,12 @@ export function useGameScreenModel(
   const myCards = useMemo<readonly Card[]>(() => viewer?.cards ?? EMPTY_HAND, [viewer]);
 
   const sets = useMemo(() => engine.cardSets(myCards), [engine, myCards]);
-  const tradeValue = useMemo(() => {
-    const first = sets[0];
-    if (!first) return 0;
-    const cards = first.map((id) => myCards.find((c) => c.id === id)).filter((c): c is Card => !!c);
-    return cards.length === 3 ? engine.cardTradeValue(cards, state.setsTradedTotal, state.rules.cardBonus) : 0;
-  }, [sets, myCards, engine, state.setsTradedTotal, state.rules.cardBonus]);
+  const bestSet = useMemo(() => bestCardSet(
+    sets, myCards,
+    (cards) => engine.cardTradeValue(cards, state.setsTradedTotal, state.rules.cardBonus),
+    (t) => state.territories[t]?.owner === ui.viewerSeat,
+  ), [sets, myCards, engine, state.setsTradedTotal, state.rules.cardBonus, state.territories, ui.viewerSeat]);
+  const tradeValue = bestSet?.value ?? 0;
 
   const mustTrade = useMemo(
     () => engine.mustTradeNow(state, ui.actingSeat),
@@ -103,6 +106,7 @@ export function useGameScreenModel(
     yourTurn: ui.actingSeat === mySeatOf(session, ui.viewerSeat) && !ui.botPlaying,
     myCards,
     sets,
+    bestSet,
     tradeValue,
     mustTrade,
     countValue: clamp(countValue, ui.countRequest?.min ?? 1, ui.countRequest?.max ?? 1),

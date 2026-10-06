@@ -160,14 +160,13 @@ export default function GameScreen(props: GameScreenProps) {
       className="relative h-dvh w-full overflow-hidden"
       style={{ background: "var(--ocean-deep)" }}
     >
-      <BoardCanvas session={session} hidden={ui.hidden} />
+      <BoardCanvas session={session} hidden={ui.hidden} legend={legend} />
 
       {!ui.hidden ? (
         <>
           <UtilityButtons
             onSettings={() => session.setModal("settings")}
             onHelp={() => session.setModal("help")}
-            onDiceSettings={() => session.setModal("dice")}
             syncStatus={props.sync ? ui.syncStatus : null}
           />
           <TitlePill text={ui.bannerText ?? ""} />
@@ -196,7 +195,8 @@ export default function GameScreen(props: GameScreenProps) {
             primaryLabel={primary.label}
             primaryDisabled={primary.disabled}
             onPrimary={onPrimary}
-            onDice={() => session.setModal("dice")}
+            onDice={() => session.setModal("log")}
+            draftLeft={model.state.phase === "draft" ? model.state.troopsToPlace : null}
             turnDeadline={props.turnDeadline ?? ui.turnDeadline}
             turnSeconds={model.state.rules.turnSeconds}
           />
@@ -216,7 +216,7 @@ export default function GameScreen(props: GameScreenProps) {
         />
       ) : null}
 
-      <GameDialogs session={session} model={model} legend={legend} />
+      <GameDialogs session={session} model={model} />
 
       <ChatDrawer
         open={ui.chatOpen}

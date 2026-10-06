@@ -230,7 +230,8 @@ describe("R9 — the claim phase (Manual Placement)", () => {
   function claimState(seats = 2, armies = 3) {
     const started = startedAction(tiny4, {
       seats,
-      rules: { manualPlacement: true },
+      // D106 — the neutral is asked for; these are the R6 alternation's own tests.
+      rules: { manualPlacement: true, neutralHolding: true },
       startingArmies: armies,
     });
     // R3 assigns no owners under Manual Placement.
@@ -241,7 +242,7 @@ describe("R9 — the claim phase (Manual Placement)", () => {
   function claimMini(seats: number, armies: number) {
     const started = startedAction(mini, {
       seats,
-      rules: { manualPlacement: true },
+      rules: { manualPlacement: true, neutralHolding: true },
       startingArmies: armies,
     });
     const stripped: Action = { ...started, deal: [] };

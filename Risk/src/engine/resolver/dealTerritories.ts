@@ -88,7 +88,8 @@ export function dealTerritories(
   // ③ The deal over the non-blizzard territories only (R3, R5).
   const frozen = new Set<TerritoryId>(blizzards);
   const dealable = map.territories.filter((t) => !frozen.has(t.index)).map((t) => t.index);
-  const neutral = seatCount === 2;
+  // D106 — the neutral is a 2-seat *option*, never the 2-seat default.
+  const neutral = seatCount === 2 && config.rules.neutralHolding === true;
   const startingArmies = STARTING_ARMIES[seatCount] ?? 20;
   const deal: DealEntry[] = [];
   const pilesBySeat = new Map<Seat, TerritoryId[]>();

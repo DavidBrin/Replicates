@@ -211,6 +211,15 @@ export function RulesControls({ rules, onChange, online }: RulesControlsProps) {
         />
       </Row>
 
+      <Row label="Neutral Army (1v1)">
+        <Choice
+          name="neutralHolding"
+          value={rules.neutralHolding ? "on" : "off"}
+          onPick={(v) => onChange({ neutralHolding: v === "on" })}
+          options={[{ value: "off", label: "Off" }, { value: "on", label: "On" }]}
+        />
+      </Row>
+
       <Row label="Capital Draft Bonus">
         <Choice
           name="capital-draft-bonus"

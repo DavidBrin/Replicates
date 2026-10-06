@@ -73,6 +73,8 @@ export const RulesSchema: z.ZodType<Rules> = z.object({
     .nullable(),
   alliances: z.boolean(),
   aiDifficulty: BotTierSchema,
+  // D106 — opt-in; a lobby row written before the field existed reads as "off".
+  neutralHolding: z.boolean().default(false),
 });
 
 /* ------------------------------------------------------------- /api/session -- */

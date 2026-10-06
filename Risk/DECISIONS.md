@@ -1053,3 +1053,50 @@ Which seat wins is deliberately **not** asserted: the offline seed is minted per
 **Why.** The spec was first written against a live defect: on `/play/online/[gameId]` a tap would arrive at the stage, hit-test to the right territory, satisfy every precondition, and still select nothing. The root cause was in `src/components/game/BoardCanvas.tsx`: the input-binding effect depended on the element-size measurement, so every `ResizeObserver` tick detached the pointer listeners and rebuilt the input state — a resize landing between a `pointerdown` and its `pointerup` lost the tap, because the `pointerup` found no entry for its pointer id. The online route resizes more (the lobby hands over to a freshly mounted screen), which is why the symptom looked route-specific. A second part of the original evidence was a misread: `window.__riskDebug.state()` returns the **confirmed** state while the board acts on the **displayed** one, so with polling pinned off a second draft tap after an optimistic draft is correctly refused while the confirmed read still shows troops owing. The fix keeps the viewport in a ref and binds the input once; a jsdom test pins a tap that spans a resize.
 
 **Consequence.** HUD-driven play is proved online as well as offline. The same fix pass found that every dialog had always rendered unscaled on phones — `scale()` had been given a length instead of a number and the browser dropped the transform — and that the action bar's column intercepted the bottom-left stack at phone width; both are fixed and covered by the mobile project of the suite.
+## D106 — The 2-seat neutral holding is opt-in, never the 2-seat default
+
+**Decision.** `Rules.neutralHolding` (default `false`) is what puts R6/R7's third, neutral holding on a two-seat board. A plain 1v1 deals the whole board to the two seats, exactly as a three-seat game would. The toggle sits with the other modifiers on `/new/rules` and in the per-seat panel; above two seats it is ignored. The state format moves to v3, and the migration writes `true` for every stored two-seat state of the earlier builds — those boards were all dealt with a neutral — and `false` for everything else, so `hashState` is unmoved.
+
+**Why.** Review feedback on the first playable build: the neutral territories had to be asked for, not assumed. The original makes the neutral the 1v1 rule; here the host decides.
+
+**Consequence.** The T5 agreement property immediately found a reachable state the neutral had always hidden: two seats on a six-territory board can hold every card, and `legalActions` offered `CARD_DRAWN` while `validate` refused every draw. `canDrawCard` (hand under six, pool or discard non-empty) now gates the offer, and the end-of-turn award is simply skipped when nothing can be drawn.
+
+## D107 — The one fortify move is the end of the turn
+
+**Decision.** Confirming a fortify ends the turn. `session.fortify` submits `FORTIFY` and then `END_TURN` as one gesture; the `Skip Fortify phase?` banner is shown only when the player ends the turn *without* fortifying, which is the question it asks.
+
+**Why.** R66 allows one fortify move, so nothing else is legal once it is spent; asking "skip fortify?" after a fortify was a question with no answer, and every reviewer-turn ended with that extra tap.
+
+**Consequence.** A refused fortify (no path, too few troops) leaves the turn exactly where it was. The e2e turn driver is unchanged because its fortify step was already "press End Turn, answer the banner"; a session test pins both the end and the no-banner.
+
+## D108 — The dice button opens a Battle Log; the dice-settings button is gone
+
+**Decision.** The action bar's dice button opens the Battle Log: every battle of the game, oldest first, with the attacking seat, the defending seat (or the neutral), both territories, both sides' losses and whether the territory fell, under a per-seat tally of killed / lost / took / ceded. The log is built from `battleResolved` as the session drains events, so it is identical offline and online, and it is UI: it dies with the tab. The top-left utility row loses its third, dice-settings button, which the replica had nothing to put behind (the dice mode is a lobby rule, R46).
+
+**Why.** Review feedback: the dice icon should do something, and what it should do is account for every troop gained and lost.
+
+**Consequence.** `SessionUiState.modal` gains `"log"`; `SessionUiState.battleLog` is the list. Under fog the log still names both territories — it is the viewer's own battles and the ones the authority's redacted events let through, which is what the roster already shows.
+
+## D109 — The Continent Overlay changes the whole look, inside the board
+
+**Decision.** In Continent Overlay every territory is painted its **continent's accent in place of its owner's colour**, the troop tokens step aside, every continent is ringed, and the badge — bonus, name, held/total — is portalled INTO the board wrapper so it pans and zooms with the land it labels, counter-rotated the way the tokens are. The continent ring and the sea-route layers take no pointer events.
+
+**Why.** Two review findings. The overlay was a glow on top of the owner colours with badges floating at fixed screen positions, which stopped making sense the moment the board was zoomed. And the continent ring — a filled path with the whole continent's `d`, visually reduced to a glow by its filter — sat above the territories and intercepted every tap on a completed continent: `closest("[data-territory]")` found nothing and the session read it as a tap on water. That was the "units lock when a continent is completed" bug, and it also explained attacks and fortifies that "sometimes" refused: they refused exactly on completed continents.
+
+**Consequence.** `BoardPaint.continentFills` is the per-territory override; `render/board.ts` sets `pointer-events="none"` on the two layers and a test pins it. The default framing is unchanged; the camera now zooms OUT to 85% of the contain scale so a territory the HUD chrome covers at cover scale can always be brought into the clear.
+
+## D110 — The card panel opens with the best set already selected
+
+**Decision.** `bestCardSet` picks the legal set worth the most — its own value plus R23's +2 when one of its cards names a held territory, ties kept in the engine's id order — and the panel opens with it selected, the `+2 to <territory>` caption filled in, and the pill live. The player can re-pick; a re-open starts from the best set again.
+
+**Why.** Review feedback: offer the three that make the highest bonus rather than making the player work it out.
+
+## D111 — Every screen has a way home: a red ✗
+
+**Decision.** A red ✗ anchor (`HomeLink`) sits first in the top-left utility row of the game screen and at the top-left of the Victory / Defeated frame; `Leave Game` in Settings goes to the same place. It is a plain `<a href="/">`, not a router call, so it works as a link anywhere it is placed.
+
+## D112 — The action bar's avatar disc becomes the draft counter, and only in the draft phase
+
+**Decision.** Where the original shows the acting seat's avatar in the action bar, this build shows the troops still to deploy during the draft phase — a 92 px disc in the seat's colour — and nothing at all in every other phase; a same-sized spacer keeps the primary pill centred. The roster capsule already marks whose turn it is.
+
+**Why.** Review feedback: the number left to draft is the one thing the player needs at that moment, and the avatar was covering territory.

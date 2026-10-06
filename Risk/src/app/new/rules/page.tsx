@@ -46,6 +46,8 @@ const MODIFIERS: readonly ModifierSpec[] = [
   { key: "manual-placement", label: "Manual Placement", icon: "map-pin", on: (r) => r.manualPlacement, set: (on) => ({ manualPlacement: on }) },
   { key: "max-rounds", label: "Max Rounds", icon: "bar-chart", on: (r) => r.maxRounds !== null, set: (on) => ({ maxRounds: on ? 5 : null }) },
   { key: "round-delay", label: "Round Delay", icon: "stopwatch", on: (r) => r.roundDelayMs > 0, set: (on) => ({ roundDelayMs: on ? 1200 : 0 }) },
+  // D106 — the 2-seat neutral is asked for, never assumed. Ignored above two seats.
+  { key: "neutral-holding", label: "Neutral Army (1v1)", icon: "person", on: (r) => r.neutralHolding, set: (on) => ({ neutralHolding: on }) },
 ];
 
 const MODE_LABEL: Record<Rules["winCondition"], string> = {

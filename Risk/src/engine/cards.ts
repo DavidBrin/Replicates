@@ -134,6 +134,17 @@ export function cardTradeValue(
   return FIXED_MIXED_VALUE;
 }
 
+/**
+ * `true` when a card CAN be awarded to `seat` right now: the hand is under six (R28) and there is
+ * a card to draw — the pool, or the discard the pool reshuffles from (R19). On a small board where
+ * two seats hold every card there is nothing to draw, and offering `CARD_DRAWN` then is a
+ * legalActions↔validate disagreement (T5 found it once the 2-seat neutral became opt-in, D106).
+ */
+export function canDrawCard(state: GameState, map: MapDef, seat: Seat): boolean {
+  if (handOf(state, seat).length >= 6) return false;
+  return remainingDeck(state, map).length > 0 || state.discard.length > 0;
+}
+
 /** The hand of `seat`, or `[]` for an index that is not a seat. */
 export function handOf(state: GameState, seat: Seat): readonly Card[] {
   return state.seats[seat]?.cards ?? [];

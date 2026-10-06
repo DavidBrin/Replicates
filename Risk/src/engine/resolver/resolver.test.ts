@@ -264,7 +264,7 @@ describe("dealTerritories", () => {
   });
 
   it("R5/R7/D64 — the 2-seat variant deals three piles, the third to the neutral", () => {
-    const started = deal(classicWorld, 2);
+    const started = deal(classicWorld, 2, { neutralHolding: true });
     expect(started.neutral).toBe(true);
     expect(started.startingArmies).toBe(40);
     for (const owner of [0, 1, SEAT_NEUTRAL]) {
@@ -274,7 +274,7 @@ describe("dealTerritories", () => {
   });
 
   it("R5 — on any other map the three piles differ by at most one, larger piles first", () => {
-    const started = deal(mini, 2);
+    const started = deal(mini, 2, { neutralHolding: true });
     const sizes = [started.turnOrder[0] as number, started.turnOrder[1] as number, SEAT_NEUTRAL].map(
       (owner) => started.deal.filter((d) => d.owner === owner).length,
     );

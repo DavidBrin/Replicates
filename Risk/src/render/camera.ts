@@ -20,6 +20,12 @@ export const PERSPECTIVE_PX = 1400;
 export const TILT_IDLE = 4;
 export const TILT_BATTLE = 18;
 export const MAX_ZOOM_FACTOR = 4;
+/**
+ * The zoom floor is this much *below* the contain scale: the whole board, with a margin of ocean
+ * around it, so a territory the HUD chrome covers at the cover framing can always be brought
+ * into the clear. The default framing stays at cover; this is only how far out a pinch goes.
+ */
+export const MIN_ZOOM_FACTOR = 0.85;
 
 export interface Camera {
   pan: readonly [number, number];
@@ -91,7 +97,23 @@ export function coverScale(cam: Camera): number {
   return Math.max(view.w / board.w, view.h / board.h);
 }
 
-/** Clamp pan so the board always covers the viewport — the ocean never runs out. */
+/** The zoom at which the whole board fits inside the viewport. */
+export function containScale(cam: Camera): number {
+  const board = cam.board;
+  const view = cam.viewport;
+  if (!board || !view || board.w <= 0 || board.h <= 0) return 1;
+  return Math.min(view.w / board.w, view.h / board.h);
+}
+
+/** The smallest zoom a pinch or wheel may reach: the whole board, plus a margin. */
+export function minZoom(cam: Camera): number {
+  return containScale(cam) * MIN_ZOOM_FACTOR;
+}
+
+/**
+ * Clamp pan so the board never leaves the viewport: while it is larger than the viewport the
+ * ocean never runs out, and while it is smaller it stays wholly inside the viewport.
+ */
 export function clampPan(cam: Camera): Camera {
   const board = cam.board;
   const view = cam.viewport;
@@ -148,8 +170,8 @@ export function panBy(cam: Camera, dx: number, dy: number): Camera {
 
 /** Zoom about a fixed screen point, so a pinch keeps the pinched map point still. */
 export function zoomAt(cam: Camera, factor: number, at: readonly [number, number]): Camera {
-  const min = coverScale(cam);
-  const next = Math.min(min * MAX_ZOOM_FACTOR, Math.max(min, cam.zoom * factor));
+  const min = minZoom(cam);
+  const next = Math.min(coverScale(cam) * MAX_ZOOM_FACTOR, Math.max(min, cam.zoom * factor));
   if (next === cam.zoom) return cam;
   const before = toMap(cam, at);
   const scaled: Camera = { ...cam, zoom: next };
@@ -165,7 +187,7 @@ export function zoomAt(cam: Camera, factor: number, at: readonly [number, number
 
 export function withViewport(cam: Camera, viewport: { w: number; h: number }): Camera {
   const next: Camera = { ...cam, viewport };
-  return next.zoom < coverScale(next) ? reset(next) : clampPan(next);
+  return next.zoom < minZoom(next) ? reset(next) : clampPan(next);
 }
 
 export function withTilt(cam: Camera, tilt: number): Camera {

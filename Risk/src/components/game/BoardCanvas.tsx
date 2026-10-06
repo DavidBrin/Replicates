@@ -14,7 +14,8 @@
  * per map and painted by diff on the session's dirty flag plus a slow ambient
  * bucket.
  */
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { TROOPS_UNKNOWN, type MapDef } from "@/engine/types";
 import { createInput, territoryAtPoint } from "@/game/input";
@@ -25,16 +26,23 @@ import { createBoard, type BoardHandle, type BoardPaint } from "@/render/board";
 import {
   type Camera, boardTransform, counterTransformVars, createCamera, stageTransform, withViewport,
 } from "@/render/camera";
-import { ownerKey, patternFor, tokenRadius } from "@/render/palette";
+import { continentVar, ownerKey, patternFor, tokenRadius } from "@/render/palette";
 import { createTokenLayer, type TokenLayerHandle, type TokenPaint } from "@/render/tokens";
+
+import { ContinentLegend, type ContinentLegendEntry } from "./dialogs/ContinentLegend";
 
 export interface BoardCanvasProps {
   readonly session: Session;
   /** Concealed behind the hand-off overlay (§5.4) — the board is not painted at all. */
   readonly hidden: boolean;
+  /**
+   * The Continent Overlay's badges (D109). They are portalled INTO the board wrapper, so they pan
+   * and zoom with the land they annotate rather than floating over the screen.
+   */
+  readonly legend?: readonly ContinentLegendEntry[];
 }
 
-export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
+export function BoardCanvas({ session, hidden, legend }: BoardCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<BoardHandle | null>(null);
@@ -45,7 +53,15 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
   const hoveredRef = useRef<number | null>(null);
 
   const map: MapDef = session.map;
-  const [, , boardW, boardH] = map.viewBox;
+  const [boardX, boardY, boardW, boardH] = map.viewBox;
+  /** The legend's portal target: a child of the wrapper, so the camera carries it. */
+  const [legendHost, setLegendHost] = useState<HTMLDivElement | null>(null);
+  /** Which continent each territory belongs to, for the overlay's fills. */
+  const continentOf = useMemo(() => {
+    const out: (number | null)[] = map.territories.map(() => null);
+    for (const c of map.continents) for (const t of c.territories) out[t] = c.index;
+    return out;
+  }, [map]);
   const size = useElementSize(stageRef);
   /**
    * The live viewport, for the handlers that must not be re-created when it
@@ -85,15 +101,24 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
     board.svg.insertBefore(arrows.element, board.svg.lastElementChild);
     wrapper.appendChild(board.svg);
     wrapper.appendChild(tokens.element);
+    const host = document.createElement("div");
+    host.setAttribute("data-testid", "legend-host");
+    host.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;" +
+      "transform-style:preserve-3d;z-index:var(--z-labels)";
+    wrapper.appendChild(host);
     boardRef.current = board;
     tokensRef.current = tokens;
     arrowsRef.current = arrows;
+    setLegendHost(host);
     session.markDirty();
     return () => {
+      // Each layer removes its own node; the portal host is React's to empty, so the wrapper is
+      // never `replaceChildren()`-ed out from under a mounted portal.
+      setLegendHost(null);
       arrows.destroy();
       tokens.destroy();
       board.destroy();
-      wrapper.replaceChildren();
+      host.remove();
       boardRef.current = null;
       tokensRef.current = null;
       arrowsRef.current = null;
@@ -216,8 +241,18 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
       })
       .map((c) => ({ continent: c.index, colour: c.color }));
 
-    const boardPaint: BoardPaint = { owners, states, rings, blizzards, patterns };
+    // D109 — the overlay switches the whole look: every territory takes its continent's accent
+    // in place of its owner's colour, and the troop tokens step aside for the badges.
+    const overlay = ui.overlayMode === "continents";
+    const continentFills = overlay
+      ? continentOf.map((c) => (c === null ? null : continentVar(c)))
+      : undefined;
+    const boardPaint: BoardPaint = {
+      owners, states, rings, blizzards, patterns,
+      ...(continentFills ? { continentFills } : {}),
+    };
     board.paint(boardPaint);
+    tokens.element.style.display = overlay ? "none" : "";
 
     const tokenPaint: TokenPaint = {
       owners,
@@ -253,7 +288,7 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
         arrows.clear();
       }
     }
-  }, [session, radius, colourPatterns]);
+  }, [session, radius, colourPatterns, continentOf]);
 
   useRenderLoop(hidden ? null : session, paint);
 
@@ -286,6 +321,9 @@ export function BoardCanvas({ session, hidden }: BoardCanvasProps) {
         className="origin-top-left"
         style={{ position: "relative", width: boardW, height: boardH }}
       />
+      {legendHost && legend && legend.length > 0
+        ? createPortal(<ContinentLegend entries={legend} origin={[boardX, boardY]} />, legendHost)
+        : null}
     </div>
   );
 }

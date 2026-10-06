@@ -97,6 +97,7 @@ function territoryGate(map: MapDef, t: TerritoryId): RuleError | null {
 export function neutralArmiesOwed(state: GameState): number {
   if (!state.rules.manualPlacement) return 0;
   if (state.seats.length !== 2) return 0;
+  if (state.rules.neutralHolding !== true) return 0; // D106: no holding, nothing owed
   let due = 0;
   for (const row of state.seats) {
     const placed = troopCountFor(state, row.seat);
@@ -287,7 +288,9 @@ function validateClaim(
   const row = seatRow(state, action.seat) as SeatState;
 
   if (action.forNeutral === true) {
-    if (state.seats.length !== 2) return err("illegalAction", "only the 2-seat variant has a neutral (R6, R7)");
+    if (state.seats.length !== 2 || state.rules.neutralHolding !== true) {
+      return err("illegalAction", "only the 2-seat variant with the neutral holding on has a neutral (R6, R7, D106)");
+    }
     if (neutralArmiesOwed(state) <= 0) return err("tooManyTroops", "the neutral holding is fully placed (R6)");
     if (cell.owner !== SEAT_NEUTRAL && cell.owner !== SEAT_NONE) {
       return err("notOwned", "a neutral army lands on a neutral territory (R6)");

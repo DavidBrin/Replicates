@@ -214,6 +214,9 @@ export interface Rules {
   readonly turnSeconds: number | null;    // online only; null offline (R79)
   readonly alliances: boolean;
   readonly aiDifficulty: BotTier;         // the pool every bot seat is drawn from
+  /** The 2-seat variant's third, neutral holding (R6, R7). **Opt-in**: a plain 1v1 deals the
+   *  whole board to the two seats, and the neutral exists only when the host asks for it (D106). */
+  readonly neutralHolding: boolean;
 }
 
 export const DEFAULT_RULES: Rules = {
@@ -221,6 +224,7 @@ export const DEFAULT_RULES: Rules = {
   diceMode: "balancedBlitz", fogOfWar: false, capitals: false, capitalDraftBonus: false,
   blizzards: false, portals: "off", manualPlacement: false, maxRounds: null,
   roundDelayMs: 0, turnSeconds: null, alliances: false, aiDifficulty: "medium",
+  neutralHolding: false,
 };
 
 /** Everything that shapes an initial state. `seed` never reaches a client online (D5). */

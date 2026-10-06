@@ -86,6 +86,23 @@ describe("the action bar", () => {
     onPrimary: () => {}, onDice: () => {},
   };
 
+  it("shows the troops left to deploy where the avatar sat, in the draft phase only (D112)", () => {
+    const { rerender } = render(<ActionBar {...base} phase="draft" phaseLabel="DRAFT" draftLeft={7} />);
+    expect(screen.getByTestId("draft-counter")).toHaveTextContent("7");
+    rerender(<ActionBar {...base} draftLeft={null} />);
+    expect(screen.queryByTestId("draft-counter")).toBeNull();
+    expect(screen.queryByTestId("avatar")).toBeNull();
+  });
+
+  it("the dice button opens the battle log, not dice settings (D108)", () => {
+    const onDice = vi.fn();
+    render(<ActionBar {...base} onDice={onDice} />);
+    const button = screen.getByTestId("dice-button");
+    expect(button).toHaveAttribute("aria-label", "Battle log");
+    fireEvent.click(button);
+    expect(onDice).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the phase label, the prompt and the primary pill", () => {
     render(<ActionBar {...base} />);
     expect(screen.getByTestId("phase-label")).toHaveTextContent("ATTACK");
@@ -203,16 +220,17 @@ describe("phaseLabelFor", () => {
 });
 
 describe("the HUD chrome", () => {
-  it("draws three outline-only utility buttons", () => {
-    render(<UtilityButtons onSettings={() => {}} onHelp={() => {}} onDiceSettings={() => {}} />);
+  it("draws the home ✗ and two outline-only utility buttons — no dice settings (D108, D111)", () => {
+    render(<UtilityButtons onSettings={() => {}} onHelp={() => {}} />);
+    expect(screen.getByTestId("utility-home")).toHaveAttribute("href", "/");
     expect(screen.getByTestId("utility-settings")).toBeInTheDocument();
     expect(screen.getByTestId("utility-help")).toBeInTheDocument();
-    expect(screen.getByTestId("utility-dice")).toBeInTheDocument();
+    expect(screen.queryByTestId("utility-dice")).toBeNull();
     expect(screen.queryByTestId("sync-status")).toBeNull();
   });
 
   it("adds the connection glyph online only", () => {
-    render(<UtilityButtons onSettings={() => {}} onHelp={() => {}} onDiceSettings={() => {}}
+    render(<UtilityButtons onSettings={() => {}} onHelp={() => {}}
       syncStatus="polling" />);
     expect(screen.getByTestId("sync-status")).toHaveAttribute("data-status", "polling");
   });

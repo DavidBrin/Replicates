@@ -74,7 +74,7 @@ export interface SessionUiState {
   dice: { attacker: readonly number[]; defender: readonly number[] } | null;
   handOff: { seat: Seat } | null;
   hidden: boolean;                      // board concealed behind the hand-off overlay
-  modal: "cards" | "dice" | "count" | "settings" | "help" | "endTurn" | "getReady" | null;
+  modal: "cards" | "dice" | "count" | "settings" | "help" | "endTurn" | "getReady" | "log" | null;
   toast: string | null;
   chatOpen: boolean;
   gameOver: Outcome | null;
@@ -111,6 +111,25 @@ export interface SessionUiState {
   allianceOffers: readonly { from: Seat; to: Seat }[];
   /** The roster capsule whose alliance popover is open, or `null` (§7.1). */
   alliancePopover: Seat | null;
+  /**
+   * Every battle this session has seen, oldest first (D108). Built from `battleResolved` as the
+   * events drain, so it is the same list offline and online, and it is UI: it dies with the tab.
+   */
+  battleLog: readonly BattleLogEntry[];
+}
+
+/** One resolved battle, as the Battle Log shows it (D108). */
+export interface BattleLogEntry {
+  readonly id: number;
+  readonly round: number;
+  readonly attacker: Seat;
+  /** The seat that held `to` when the battle began — a seat, or `SEAT_NEUTRAL`. */
+  readonly defender: Seat;
+  readonly from: TerritoryId;
+  readonly to: TerritoryId;
+  readonly attackerLosses: number;
+  readonly defenderLosses: number;
+  readonly conquered: boolean;
 }
 
 export interface SessionOptions {
@@ -389,6 +408,7 @@ export function createSession(options: SessionOptions): Session {
     lastElimination: null,
     allianceOffers: [],
     alliancePopover: null,
+    battleLog: [],
   }));
 
   const set = (patch: Partial<SessionUiState>): void => {
@@ -485,7 +505,23 @@ export function createSession(options: SessionOptions): Session {
           if (e.from >= 0) botReact(e.from, "lostTerritory");
           botReact(e.to, "conquered");
           break;
-        case "battleResolved":
+        case "battleResolved": {
+          // D108 — the log row. The attacker still holds `from`; the defender is whoever held `to`
+          // when the dice were thrown, which after a conquest is only the capture event's `from`.
+          const captured = events.find(
+            (x): x is Extract<Event, { type: "territoryCaptured" }> =>
+              x.type === "territoryCaptured" && x.territory === e.to,
+          );
+          const attackerSeat = captured ? captured.to : (confirmedState.territories[e.from]?.owner ?? -1);
+          const defenderSeat = captured ? captured.from : (confirmedState.territories[e.to]?.owner ?? -1);
+          const log = store.getState().battleLog;
+          set({
+            battleLog: [...log, {
+              id: log.length + 1, round: confirmedState.round,
+              attacker: attackerSeat, defender: defenderSeat, from: e.from, to: e.to,
+              attackerLosses: e.attackerLosses, defenderLosses: e.defenderLosses, conquered: e.conquered,
+            }],
+          });
           if (!e.conquered && e.attackerLosses >= 2) {
             const seat = displayedState.turnOrder[displayedState.currentIndex];
             if (seat !== undefined) botReact(seat, "badRoll");
@@ -494,6 +530,7 @@ export function createSession(options: SessionOptions): Session {
           // overlay that is using it clears it when it leaves.
           if (store.getState().dice === null) set({ pendingAttack: null });
           break;
+        }
         case "diceRolled":
           // Re-anchor from the event, so the overlay is positioned by the authority's own
           // from/to whether the roll was resolved here or arrived through `ingest`.
@@ -1321,7 +1358,12 @@ export function createSession(options: SessionOptions): Session {
 
   function fortify(from: TerritoryId, to: TerritoryId, count: number): void {
     const result = submit({ type: "FORTIFY", seat: actingSeat(), from, to, count });
-    if (!result.error) set({ countRequest: null, modal: null, selected: null, litZone: [], actionMode: "idle" });
+    if (result.error) return;
+    set({ countRequest: null, modal: null, selected: null, litZone: [], actionMode: "idle" });
+    // D107 — the one fortify move IS the end of the turn (R66, R67): nothing else is legal in the
+    // phase once it is spent, so asking "skip fortify?" after a fortify was a question with no
+    // answer. The turn ends here, confirmation setting or not.
+    endTurn();
   }
 
   function endPhase(): void {

@@ -35,8 +35,9 @@ export function readoutLines(rules: Rules): readonly (readonly Entry[])[] {
     { key: "card-bonus", label: "Card Bonus", value: rules.cardBonus === "fixed" ? "Fixed" : "Progressive" },
     { key: "dice-rolls", label: "Dice Rolls", value: rules.diceMode === "balancedBlitz" ? "Balanced Blitz" : "True Random" },
     { key: "alliances", label: "Alliances", value: rules.alliances ? "On" : "Off" },
+    { key: "neutral-holding", label: "Neutral (1v1)", value: rules.neutralHolding ? "On" : "Off" },
   ];
-  return [entries.slice(0, 2), entries.slice(2, 4), entries.slice(4, 6)];
+  return [entries.slice(0, 2), entries.slice(2, 4), entries.slice(4, 7)];
 }
 
 export function RulesReadout({ rules, testId, className }: RulesReadoutProps) {

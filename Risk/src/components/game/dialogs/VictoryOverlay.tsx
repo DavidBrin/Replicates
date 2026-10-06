@@ -15,6 +15,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import type { Outcome, PlayerColour } from "@/engine/types";
 import { playerVar } from "@/render/palette";
 
+import { HomeLink } from "../HudChrome";
+
 import { at, outlined, Stage } from "./stage";
 
 export interface VictoryOverlayProps {
@@ -76,6 +78,11 @@ export function VictoryOverlay({
 
       <div style={{ ...at(800, 95), ...outlined(56), WebkitTextStroke: "5px var(--stroke-dark)" }}>
         {title}
+      </div>
+
+      {/* D111 — every end frame has a way home. */}
+      <div style={at(75, 80)}>
+        <HomeLink testId="victory-home" size={68} label="Back to home" />
       </div>
 
       <div style={{ ...at(800, 420), filter: defeated ? "grayscale(1) brightness(.7)" : undefined }}>

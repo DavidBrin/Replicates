@@ -5,16 +5,17 @@
  * (SPEC §7.2). The dialogs themselves are presentational and import no
  * session; this file is the only place the two meet.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { Card, TerritoryId } from "@/engine/types";
+import { bonusTerritoryFor } from "@/game/cardChoice";
 import type { Session } from "@/game/session";
 import { useUi } from "@/game/useSession";
 import { playEngine } from "@/game/pending";
 
+import { BattleLogPanel } from "./dialogs/BattleLogPanel";
 import { BlitzView } from "./dialogs/BlitzView";
 import { CardTradePanel } from "./dialogs/CardTradePanel";
-import { ContinentLegend, type ContinentLegendEntry } from "./dialogs/ContinentLegend";
 import { EndTurnConfirm } from "./dialogs/EndTurnConfirm";
 import { GetReadyOverlay } from "./dialogs/GetReadyOverlay";
 import { ManualDiceView } from "./dialogs/ManualDiceView";
@@ -27,21 +28,51 @@ import type { GameScreenModel } from "./useGameScreenModel";
 export interface GameDialogsProps {
   readonly session: Session;
   readonly model: GameScreenModel;
-  readonly legend: readonly ContinentLegendEntry[];
+  /** Where `Leave Game` and the end frames go. Defaults to the home page (D111). */
+  readonly homeHref?: string;
 }
 
 const HELP_TEXT = "Hold a whole continent at the start of your turn to collect its bonus.";
+const EMPTY_SELECTION: readonly string[] = [];
 
-export function GameDialogs({ session, model, legend }: GameDialogsProps) {
+export function GameDialogs({ session, model, homeHref = "/" }: GameDialogsProps) {
   const ui = useUi(session, (s) => s);
   const engine = playEngine();
-  const [selectedCards, setSelectedCards] = useState<readonly string[]>([]);
+  /*
+   * D110 — the panel opens with the best set already picked, so a trade is one tap. The player
+   * can still re-pick; a re-open starts from the best set again. The selection is keyed on the
+   * best set it was derived from and re-derived DURING RENDER when that key moves (React's
+   * "adjust state when a prop changes" idiom), never in an effect: an effect would paint one
+   * frame with the stale selection and then cascade a second render.
+   */
+  const bestSet = model.bestSet;
+  const cardsOpen = ui.modal === "cards";
+  const [selection, setSelection] = useState<{ key: typeof bestSet | undefined; cards: readonly string[] }>(
+    { key: undefined, cards: [] },
+  );
+  if (cardsOpen && selection.key !== bestSet) {
+    setSelection({ key: bestSet, cards: bestSet ? [...bestSet.set] : [] });
+  } else if (!cardsOpen && selection.key !== undefined) {
+    setSelection({ key: undefined, cards: [] });
+  }
+  const selectedCards = useMemo(
+    () => (cardsOpen && selection.key === bestSet ? selection.cards : EMPTY_SELECTION),
+    [cardsOpen, selection, bestSet],
+  );
+  const setSelectedCards = useCallback((next: readonly string[] | ((prev: readonly string[]) => readonly string[])) => {
+    setSelection((prev) => ({ key: prev.key, cards: typeof next === "function" ? next(prev.cards) : next }));
+  }, []);
+
+  const leave = useCallback(() => {
+    session.setModal(null);
+    window.location.assign(homeHref);
+  }, [session, homeHref]);
 
   const toggleCard = useCallback((id: string) => {
     setSelectedCards((prev) => (prev.includes(id)
       ? prev.filter((x) => x !== id)
       : [...prev, id].slice(-3)));
-  }, []);
+  }, [setSelectedCards]);
 
   const state = model.state;
   const attack = ui.pendingAttack;
@@ -52,7 +83,7 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
     const bonus = bonusTerritoryFor(model.myCards, trio, (t) => state.territories[t]?.owner === ui.viewerSeat);
     session.tradeCards(trio, bonus);
     setSelectedCards([]);
-  }, [selectedCards, model.myCards, session, state.territories, ui.viewerSeat]);
+  }, [selectedCards, model.myCards, session, state.territories, ui.viewerSeat, setSelectedCards]);
 
   const tradeValue = selectedCards.length === 3
     ? engine.cardTradeValue(
@@ -61,9 +92,20 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
     )
     : model.tradeValue;
 
+  const selectedBonus = selectedCards.length === 3
+    ? bonusTerritoryFor(model.myCards, selectedCards, (t) => state.territories[t]?.owner === ui.viewerSeat)
+    : null;
+
   return (
     <>
-      {legend.length > 0 ? <ContinentLegend entries={legend} /> : null}
+      {ui.modal === "log" ? (
+        <BattleLogPanel
+          entries={ui.battleLog}
+          seats={state.seats.map((s) => ({ seat: s.seat, name: s.name, colour: s.colour }))}
+          territoryName={(t) => session.map.territories[t]?.name ?? `#${t}`}
+          onClose={() => session.setModal(null)}
+        />
+      ) : null}
 
       {ui.modal === "dice" && attack ? (
         <BlitzView
@@ -114,7 +156,7 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
           onToggle={toggleCard}
           value={tradeValue}
           scheme={state.rules.cardBonus}
-          bonusTerritoryName={null}
+          bonusTerritoryName={selectedBonus === null ? null : (session.map.territories[selectedBonus]?.name ?? null)}
           forced={model.mustTrade}
           onTrade={onTrade}
           onClose={() => session.setModal(null)}
@@ -164,7 +206,7 @@ export function GameDialogs({ session, model, legend }: GameDialogsProps) {
             session.setModal(null);
             session.resign();
           }}
-          onLeave={() => session.setModal(null)}
+          onLeave={leave}
           onClose={() => session.setModal(null)}
         />
       ) : null}
@@ -196,17 +238,6 @@ function combatant(model: GameScreenModel, at: TerritoryId, viewer: number) {
     you: seat?.seat === viewer,
     bot: seat?.kind === "bot",
   };
-}
-
-/** The first traded card naming a territory the trader occupies (R23). */
-function bonusTerritoryFor(
-  hand: readonly Card[], trio: readonly string[], owned: (t: TerritoryId) => boolean,
-): TerritoryId | null {
-  for (const id of trio) {
-    const card = hand.find((c) => c.id === id);
-    if (card?.territory != null && owned(card.territory)) return card.territory;
-  }
-  return null;
 }
 
 function countTerritories(

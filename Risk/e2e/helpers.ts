@@ -238,6 +238,7 @@ export interface DebugState {
     readonly capitals: boolean;
     readonly maxRounds: number | null;
     readonly turnSeconds: number | null;
+    readonly neutralHolding: boolean;
   };
   readonly seats: readonly DebugSeat[];
   readonly turnOrder: readonly number[];
@@ -1196,15 +1197,20 @@ export async function tradeIfForced(page: Page): Promise<boolean> {
     const panel = page.locator(SEL.cardTradePanel);
     await panel.waitFor({ timeout: 10_000 });
 
-    // `[data-suit]` matches only the cards themselves — `card-<id>-selected`
-    // is a sibling marker and `card-bonus-territory` is a caption.
+    // D110 — the panel opens with the best set already picked, so the pill is live at once.
+    // The manual pick is kept as the fallback for a panel that, for any reason, opened empty.
     const cards = panel.locator("[data-suit]");
-    const suits = await cards.evaluateAll((nodes) =>
-      nodes.map((n) => n.getAttribute("data-suit") ?? ""),
-    );
-    const trio = findTradeSet(suits);
-    expect(trio, `a forced trade with no tradeable set: ${suits.join(",")}`).not.toBeNull();
-    for (const index of trio!) await pickCard(cards.nth(index));
+    const preselected = await panel.locator('[data-suit][data-selected="true"]').count();
+    if (preselected !== 3) {
+      // `[data-suit]` matches only the cards themselves — `card-<id>-selected`
+      // is a sibling marker and `card-bonus-territory` is a caption.
+      const suits = await cards.evaluateAll((nodes) =>
+        nodes.map((n) => n.getAttribute("data-suit") ?? ""),
+      );
+      const trio = findTradeSet(suits);
+      expect(trio, `a forced trade with no tradeable set: ${suits.join(",")}`).not.toBeNull();
+      for (const index of trio!) await pickCard(cards.nth(index));
+    }
 
     const pill = panel.locator(SEL.tradeInNow);
     await expect(pill).toBeEnabled({ timeout: 10_000 });
