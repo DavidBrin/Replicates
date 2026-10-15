@@ -178,7 +178,42 @@ interface DemoAsset {
    * for the same reason.
    */
   readonly viewCount?: number;
+  /**
+   * The channel it lands on. Defaults to Open Cinema, the Creative Commons
+   * shelf; a video of one's own names its own channel (see `DAVID_CHANNEL`).
+   */
+  readonly channel?: ChannelSpec;
 }
+
+interface ChannelSpec {
+  readonly handle: string;
+  readonly name: string;
+  readonly monogram: string;
+  readonly email: string;
+  readonly description: string;
+  readonly palette: readonly [string, string, string];
+}
+
+const DEMO_CHANNEL: ChannelSpec = {
+  handle: "opencinema",
+  name: "Open Cinema",
+  monogram: "OC",
+  email: "opencinema@seed.invalid",
+  description:
+    "Freely licensed film, credited as the licence requires. Added by `pnpm seed:demo`; every video here links its source and its licence.",
+  palette: ["#0d1408", "#e8f5c8", "#84cc16"],
+};
+
+/** The portfolio's own channel: where the David's Internet demo lands. */
+const DAVID_CHANNEL: ChannelSpec = {
+  handle: "david",
+  name: "David",
+  monogram: "D",
+  email: "david@seed.invalid",
+  description:
+    "The person behind David's Internet. Videos about the projects on david-internet.vercel.app.",
+  palette: ["#ffffff", "#202124", "#4285f4"],
+};
 
 /**
  * The catalogue.
@@ -197,6 +232,35 @@ interface DemoAsset {
  * has to rediscover it.
  */
 const ASSETS: readonly DemoAsset[] = [
+  {
+    // The portfolio's own demo video, rendered locally (David-Internet
+    // `brag-output/brag.mp4`) and dropped into `public/demo-media/` by hand.
+    // First in the list so `pnpm seed:demo --limit=1` adds only this one and
+    // makes no network request at all.
+    key: "davids-internet-demo",
+    title: "David's Internet, in 23 seconds",
+    synopsis:
+      "A search engine for a very small internet. Every result is something David built: " +
+      "twelve working replicas and eighteen interactive demos behind a Google-shaped front door. " +
+      "This video opens on the real homepage and ends on the real URL.",
+    attribution:
+      "David — david-internet.vercel.app. Music: \"Happy Beats / Business Moves\" by Sascha Ende " +
+      "(ende.app, CC BY 4.0), via the /brag skill. Sound effects: Kenney (CC0).",
+    licence: "All rights reserved",
+    licenceUrl: "https://david-internet.vercel.app/about",
+    sourcePage: "https://david-internet.vercel.app",
+    tags: ["davids internet", "portfolio", "search engine", "demo", "replicas"],
+    category: "Science & Technology",
+    palette: ["#202124", "#f8f9fa", "#4285f4"],
+    urls: [],
+    extension: "mp4",
+    width: 1920,
+    height: 1080,
+    durationSeconds: 23,
+    megabytes: 8,
+    viewCount: 2_400_000,
+    channel: DAVID_CHANNEL,
+  },
   {
     key: "caminandes-llama-drama",
     title: "Caminandes: Llama Drama",
@@ -371,36 +435,47 @@ async function main(): Promise<void> {
   const store = await blobModule.blobStore();
   const { blobKeys } = blobKeysModule;
 
-  /* ------------------------------------------------------------ channel -- */
+  /* ----------------------------------------------------------- channels -- */
 
   const users = usersRepo.createUsersRepository(db);
   const channels = channelsRepo.createChannelsRepository(db);
 
-  let channel = await channels.findByHandle(DEMO_CHANNEL.handle);
-  if (channel === null) {
-    const registered = await users.register({
-      email: DEMO_CHANNEL.email,
-      password: corpusModule.SEED_PASSWORD,
-      displayName: DEMO_CHANNEL.name,
-      handle: DEMO_CHANNEL.handle,
-    });
-    channel = registered.channel;
-  }
-
   const browser = await generateClips.openSeedBrowser();
   try {
-    const art = await browser.renderChannelArt({
-      name: DEMO_CHANNEL.name,
-      monogram: DEMO_CHANNEL.monogram,
-      palette: DEMO_CHANNEL.palette,
-    });
-    const storedArt = await thumbnails.storeChannelArt(store, channel.id, art);
-    await channels.update(channel.id, {
-      name: DEMO_CHANNEL.name,
-      description: DEMO_CHANNEL.description,
-      avatarKey: storedArt.avatarKey,
-      bannerKey: storedArt.bannerKey,
-    });
+    type Channel = NonNullable<Awaited<ReturnType<typeof channels.findByHandle>>>;
+    const ready = new Map<string, Channel>();
+
+    /** The channel for a spec: registered on first sight, art refreshed once per run. */
+    async function channelFor(spec: ChannelSpec): Promise<Channel> {
+      const cached = ready.get(spec.handle);
+      if (cached !== undefined) return cached;
+
+      let channel = await channels.findByHandle(spec.handle);
+      if (channel === null) {
+        const registered = await users.register({
+          email: spec.email,
+          password: corpusModule.SEED_PASSWORD,
+          displayName: spec.name,
+          handle: spec.handle,
+        });
+        channel = registered.channel;
+      }
+
+      const art = await browser.renderChannelArt({
+        name: spec.name,
+        monogram: spec.monogram,
+        palette: spec.palette,
+      });
+      const storedArt = await thumbnails.storeChannelArt(store, channel.id, art);
+      await channels.update(channel.id, {
+        name: spec.name,
+        description: spec.description,
+        avatarKey: storedArt.avatarKey,
+        bannerKey: storedArt.bannerKey,
+      });
+      ready.set(spec.handle, channel);
+      return channel;
+    }
 
     /* ---------------------------------------------------------- videos -- */
 
@@ -411,6 +486,8 @@ async function main(): Promise<void> {
         log(`  ${asset.title} is already in the library (${id})`);
         continue;
       }
+      const spec = asset.channel ?? DEMO_CHANNEL;
+      const channel = await channelFor(spec);
 
       await videosRepo.createVideo(db, {
         id,
@@ -466,7 +543,7 @@ async function main(): Promise<void> {
         kind: "video",
         title: asset.title,
         description: describe(asset),
-        channelName: DEMO_CHANNEL.name,
+        channelName: spec.name,
         tags: asset.tags,
         publishedAt: new Date(),
         viewCount,
@@ -476,10 +553,10 @@ async function main(): Promise<void> {
       });
 
       added += 1;
-      log(`  added ${id}  ${asset.title} — ${asset.attribution}`);
+      log(`  added ${id}  ${asset.title} → @${spec.handle} — ${asset.attribution}`);
     }
 
-    log(`\nadded ${added} Creative Commons video(s) to @${DEMO_CHANNEL.handle}`);
+    log(`\nadded ${added} video(s)`);
     log(`sources cached in public/demo-media/ (gitignored); re-running re-uses them`);
   } finally {
     await browser.close();
@@ -487,15 +564,6 @@ async function main(): Promise<void> {
   }
 }
 
-const DEMO_CHANNEL = {
-  handle: "opencinema",
-  name: "Open Cinema",
-  monogram: "OC",
-  email: "opencinema@seed.invalid",
-  description:
-    "Freely licensed film, credited as the licence requires. Added by `pnpm seed:demo`; every video here links its source and its licence.",
-  palette: ["#0d1408", "#e8f5c8", "#84cc16"] as const,
-} as const;
 
 /**
  * The description, with the credit block the licence requires.

@@ -91,8 +91,31 @@ must be `mp4` or `webm` — anything else is stored with the wrong content type.
 pnpm seed:demo                 # or --limit=1 while you iterate
 ```
 
-Everything lands on a channel called **Open Cinema** (`@opencinema`). If you
-want it on a channel of your own, change `DEMO_CHANNEL` in the same file.
+By default a video lands on **Open Cinema** (`@opencinema`), the Creative
+Commons shelf. An entry may name its own `channel` instead; the worked example
+is the first entry in `ASSETS`, the David's Internet demo (`davids-internet-demo`,
+`public/demo-media/davids-internet-demo.mp4`, rendered from the portfolio with
+`/brag`), which lands on **David** (`@david`) with a `viewCount` that puts it at
+the top of the grid. Because it is first, `pnpm seed:demo --limit=1` adds it and
+nothing else, and makes no network request.
+
+### Deploying it to youtube-david
+
+The production deployment needs a Neon `DATABASE_URL` and the four `R2_*`
+variables before it can hold any video at all (without them the home page
+renders empty and every other route 500s). Once they are set on the Vercel
+project, seed from this machine against production:
+
+```bash
+npx vercel env pull .env.production.local --environment=production
+set -a; source .env.production.local; set +a
+pnpm seed                   # once, if the production library is still empty
+pnpm seed:demo --limit=1    # the demo video → https://youtube-david.vercel.app/watch?v=vhgG-DQ4d6j
+```
+
+The video id is derived from the key, so that URL is fixed before the seed runs;
+David-Internet's About page, its Videos tab, and the Wikipedia replica already
+link to it.
 
 ### The fields that matter, and why
 
