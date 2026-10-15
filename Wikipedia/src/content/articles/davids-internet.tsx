@@ -1,5 +1,5 @@
 import type { ArticleModule } from "@/lib/registry";
-import { DAVID_INTERNET_URL, projects } from "@/content/projects";
+import { DAVID_INTERNET_DEMO_VIDEO_URL, DAVID_INTERNET_URL, projects } from "@/content/projects";
 import { davidsInternetMeta } from "@/content/articles/meta";
 import {
   B,
@@ -51,6 +51,14 @@ export const davidsInternet: ArticleModule = {
               <ExternalLink href={DAVID_INTERNET_URL}>david-internet.vercel.app</ExternalLink>
             ),
           },
+          {
+            label: "Demo video",
+            value: (
+              <ExternalLink href={DAVID_INTERNET_DEMO_VIDEO_URL}>
+                23 seconds, on the YouTube replica
+              </ExternalLink>
+            ),
+          },
         ]}
       />
 
@@ -67,7 +75,9 @@ export const davidsInternet: ArticleModule = {
         The search engine went live in September 2026 at{" "}
         <ExternalLink href={DAVID_INTERNET_URL}>david-internet.vercel.app</ExternalLink>
         . Results look like a Google SERP. A hit opens the live project when
-        one exists, or this encyclopedia when it does not.
+        one exists, or this encyclopedia when it does not. A{" "}
+        <ExternalLink href={DAVID_INTERNET_DEMO_VIDEO_URL}>23-second demo video</ExternalLink>{" "}
+        of the search engine is hosted on the YouTube replica.
       </P>
 
       <Section heading="Background">

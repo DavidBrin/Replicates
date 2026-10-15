@@ -15,6 +15,13 @@ import type { ProjectInfo } from "@/lib/registry";
 
 export const DAVID_INTERNET_URL = "https://david-internet.vercel.app";
 
+/**
+ * The 23-second demo video of the search engine, hosted on the YouTube replica
+ * (`pnpm seed:demo` in `../youtube` adds it under the key `davids-internet-demo`;
+ * the id is derived from that key, so the URL is stable across re-seeds).
+ */
+export const DAVID_INTERNET_DEMO_VIDEO_URL = "https://youtube-david.vercel.app/watch?v=vhgG-DQ4d6j";
+
 export const projects: ProjectInfo[] = [
   {
     name: "Linear",

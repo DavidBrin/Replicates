@@ -24,7 +24,7 @@ export const davidsInternetMeta: ArticleMeta = {
   title: "David's Internet",
   shortDescription: "A search engine over a portfolio of software replicas",
   categories: ["Portfolio indexes", "Software replicas", "2026 establishments"],
-  lastEdited: "1 September 2026",
+  lastEdited: "15 October 2026",
 };
 
 export const linearMeta: ArticleMeta = {
