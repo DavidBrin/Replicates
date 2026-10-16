@@ -52,8 +52,6 @@ import { readSchema } from "./pglite";
  * a throw there is safe and a truncation would go unnoticed.
  */
 
-const NEON_SPECIFIER = "@neondatabase/serverless";
-
 /**
  * The HTTP client. Since `@neondatabase/serverless` 1.0 the value `neon()`
  * returns is callable only as a tagged template; a conventional call with
@@ -109,7 +107,15 @@ async function loadNeon(connectionString: string): Promise<{
   sql: NeonQueryFn;
   pool: NeonPool;
 }> {
-  const mod = (await import(/* webpackIgnore: true */ NEON_SPECIFIER)) as {
+  /**
+   * A literal specifier, on purpose. This was `import(NEON_SPECIFIER)` with a
+   * `webpackIgnore` hint, which keeps the package out of the bundle — and also
+   * out of Vercel's file trace, so the deployed function had no copy of it to
+   * load (`Cannot find package '@neondatabase/serverless'`, on every route,
+   * the first time the deployment had a database). `serverExternalPackages`
+   * already keeps it unbundled; the trace needs to be able to see it.
+   */
+  const mod = (await import("@neondatabase/serverless")) as unknown as {
     neon: (url: string, opts?: { fullResults?: boolean }) => unknown;
     Pool: new (config: { connectionString: string }) => NeonPool;
     types?: {
