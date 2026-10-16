@@ -54,10 +54,19 @@ import { readSchema } from "./pglite";
 
 const NEON_SPECIFIER = "@neondatabase/serverless";
 
-type NeonQueryFn = (
-  sql: string,
-  params?: unknown[],
-) => Promise<Record<string, unknown>[]>;
+/**
+ * The HTTP client. Since `@neondatabase/serverless` 1.0 the value `neon()`
+ * returns is callable only as a tagged template; a conventional call with
+ * `$1` placeholders goes through its `.query()` method. This used to be typed
+ * as the bare function, which compiled, loaded, and threw on the first query
+ * against a real Neon — the one path no local run ever takes.
+ */
+type NeonQueryFn = {
+  query(
+    sql: string,
+    params?: unknown[],
+  ): Promise<Record<string, unknown>[]>;
+};
 
 type PoolClient = {
   query(
@@ -121,7 +130,8 @@ async function loadNeon(connectionString: string): Promise<{
   return { sql, pool: new mod.Pool({ connectionString }) };
 }
 
-class NeonDatabase implements SqlDatabase {
+/** Exported for the unit test that pins the HTTP client's call shape. */
+export class NeonDatabase implements SqlDatabase {
   constructor(
     private readonly sql: NeonQueryFn,
     private readonly pool: NeonPool,
@@ -131,7 +141,7 @@ class NeonDatabase implements SqlDatabase {
     sql: string,
     params: readonly SqlValue[] = [],
   ): Promise<T[]> {
-    return (await this.sql(sql, [...params])) as T[];
+    return (await this.sql.query(sql, [...params])) as T[];
   }
 
   async execute(
