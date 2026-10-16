@@ -235,8 +235,8 @@ const ASSETS: readonly DemoAsset[] = [
   {
     // The portfolio's own demo video, rendered locally (David-Internet
     // `brag-output/brag.mp4`) and dropped into `public/demo-media/` by hand.
-    // First in the list so `pnpm seed:demo --limit=1` adds only this one and
-    // makes no network request at all.
+    // First in the list (the demos-page video is second) so `pnpm seed:demo
+    // --limit=2` adds the two portfolio videos and makes no network request at all.
     key: "davids-internet-demo",
     title: "David's Internet, in 23 seconds",
     synopsis:
@@ -259,6 +259,38 @@ const ASSETS: readonly DemoAsset[] = [
     durationSeconds: 23,
     megabytes: 8,
     viewCount: 2_400_000,
+    channel: DAVID_CHANNEL,
+  },
+  {
+    // The second portfolio video: the /demos page, featuring four of its
+    // eighteen demos. Rendered the same way (David-Internet
+    // `brag-output-2026-10-15-204928/brag.mp4`) and dropped into
+    // `public/demo-media/` by hand, so `--limit=2` adds both portfolio videos
+    // and still makes no network request.
+    key: "davids-internet-demos",
+    title: "David's Internet: the demos page, in 24 seconds",
+    synopsis:
+      "Four of the eighteen interactive demos on David's Internet: Cross-Teaching Segmentation " +
+      "(a U-Net and a ViT swap pseudo-labels), Autonomous Car (a ROS 2 robocar that follows tape " +
+      "and scoops up garbage), Nocturnal Neuro (a reworked OpenBCI Ganglion and a real EEG recording " +
+      "you can filter) and Quantum Playground (the algorithms studied at DTU, re-implemented so you " +
+      "can watch them run). Opens on the real /demos index and ends on the real URL.",
+    attribution:
+      "David — david-internet.vercel.app/demos. Music: \"Happy Beats / Business Moves\" by Sascha Ende " +
+      "(ende.app, CC BY 4.0), via the /brag skill. Sound effects: Kenney (CC0).",
+    licence: "All rights reserved",
+    licenceUrl: "https://david-internet.vercel.app/about",
+    sourcePage: "https://david-internet.vercel.app/demos",
+    tags: ["davids internet", "demos", "segmentation", "ros 2", "eeg", "quantum", "demo"],
+    category: "Science & Technology",
+    palette: ["#202124", "#f8f9fa", "#4285f4"],
+    urls: [],
+    extension: "mp4",
+    width: 1920,
+    height: 1080,
+    durationSeconds: 24,
+    megabytes: 17,
+    viewCount: 1_900_000,
     channel: DAVID_CHANNEL,
   },
   {

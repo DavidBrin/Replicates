@@ -96,8 +96,12 @@ Commons shelf. An entry may name its own `channel` instead; the worked example
 is the first entry in `ASSETS`, the David's Internet demo (`davids-internet-demo`,
 `public/demo-media/davids-internet-demo.mp4`, rendered from the portfolio with
 `/brag`), which lands on **David** (`@david`) with a `viewCount` that puts it at
-the top of the grid. Because it is first, `pnpm seed:demo --limit=1` adds it and
-nothing else, and makes no network request.
+the top of the grid. The second entry is the same portfolio's demos-page video
+(`davids-internet-demos`, `public/demo-media/davids-internet-demos.mp4`, 24 s,
+four of the eighteen demos), also on `@david`, with a `viewCount` just below the
+first so the two sit together. Because they are first, `pnpm seed:demo --all
+--limit=2` adds them and nothing else, and makes no network request (`--all`
+only lifts the per-asset size budget; the second file is about 17 MB).
 
 ### Deploying it to youtube-david
 
@@ -112,12 +116,14 @@ this machine against production:
 npx vercel env pull .env.production.local --environment=production
 set -a; source .env.production.local; set +a
 pnpm seed                   # once, if the production library is still empty
-pnpm seed:demo --limit=1    # the demo video → https://youtube-david.vercel.app/watch?v=vhgG-DQ4d6j
+pnpm seed:demo --all --limit=2   # the two portfolio videos:
+                                 #   https://youtube-david.vercel.app/watch?v=vhgG-DQ4d6j (the site, 23 s)
+                                 #   https://youtube-david.vercel.app/watch?v=GHSk3dRfPUD (the demos page, 24 s)
 ```
 
-The video id is derived from the key, so that URL is fixed before the seed runs;
-David-Internet's About page, its Videos tab, and the Wikipedia replica already
-link to it.
+The video ids are derived from the keys, so those URLs are fixed before the seed
+runs; David-Internet's About page, its Videos tab, and the Wikipedia replica
+already link to the first, and the Videos tab lists both.
 
 ### The fields that matter, and why
 
