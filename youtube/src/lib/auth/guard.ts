@@ -189,10 +189,10 @@ export class PrivateMediaNotEnforceableError extends Error {
   constructor() {
     super(
       "This deployment cannot enforce private video visibility: " +
-        "R2_PUBLIC_BASE_URL puts the bucket behind a public domain, so a " +
-        "private video's segments are served from an origin no route " +
-        "handler is in the path of. Either unset R2_PUBLIC_BASE_URL and let " +
-        "/api/media serve the bytes, or stop offering private visibility.",
+        "R2_PUBLIC_BASE_URL (or a public Vercel Blob store) puts the bytes " +
+        "behind a public domain, so a private video's segments are served " +
+        "from an origin no route handler is in the path of. Either serve the " +
+        "bytes through /api/media, or stop offering private visibility.",
     );
     this.name = "PrivateMediaNotEnforceableError";
   }
@@ -236,7 +236,8 @@ export function assertPrivateMediaIsEnforceable(): void {
   // Only R2 reads `R2_PUBLIC_BASE_URL`; a stray one under the filesystem
   // driver is inert, and treating it as a fault would fail a development run
   // over a variable nothing is using.
-  if (blobDriver === "r2" && env.R2_PUBLIC_BASE_URL) {
+  // A public Vercel Blob store (D21) is the same door with no lock, always.
+  if ((blobDriver === "r2" && env.R2_PUBLIC_BASE_URL) || blobDriver === "vercel-blob") {
     throw new PrivateMediaNotEnforceableError();
   }
 }

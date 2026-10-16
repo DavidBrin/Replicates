@@ -101,10 +101,12 @@ nothing else, and makes no network request.
 
 ### Deploying it to youtube-david
 
-The production deployment needs a Neon `DATABASE_URL` and the four `R2_*`
-variables before it can hold any video at all (without them the home page
-renders empty and every other route 500s). Once they are set on the Vercel
-project, seed from this machine against production:
+The production deployment needs a database and a blob store before it can hold
+any video at all (without them the home page renders empty and every other
+route 500s). `youtube-david` has both since 2026-10-15: a Neon Postgres from the
+Vercel Marketplace (`DATABASE_URL`) and a public Vercel Blob store
+(`BLOB_READ_WRITE_TOKEN`, adapter D21). With those on the project, seed from
+this machine against production:
 
 ```bash
 npx vercel env pull .env.production.local --environment=production

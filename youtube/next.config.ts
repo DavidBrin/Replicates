@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
     "@electric-sql/pglite",
     "@neondatabase/serverless",
     "@aws-sdk/client-s3",
+    "@vercel/blob",
   ],
 
   // Pin Turbopack's inferred workspace root to this package. Without it,

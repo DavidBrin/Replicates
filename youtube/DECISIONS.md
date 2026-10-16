@@ -368,3 +368,36 @@ path — so seeding exercises the muxer — or optionally Creative Commons via
 Screenshots of the **signed-in** application are gitignored. What was extracted
 from them — token values, type scale, row geometry — survives in `research/`,
 because a measurement table can be sanitised and a screenshot cannot.
+
+### D21 — A Vercel Blob adapter, so the deployment has somewhere to put bytes
+
+D14's arithmetic stands: at the scale it models, egress is the bill and R2 is
+the only store that does not charge for it. But the deployment this repository
+actually has is a Vercel Hobby project with no Cloudflare account behind it, and
+a `BlobStore` port that only R2 could fill in production meant the live site
+had no storage at all — an empty home grid and a 500 on every watch page, from
+the day it was deployed until 2026-10-15.
+
+The port was written to be swapped, so the fix is a third adapter rather than a
+change of design. `vercel-blob` (`src/adapters/blob/vercel-blob.ts`) stores
+under a **public** Vercel Blob store and hands the player the store's stable
+public URL for every object, so the bytes never pass through a function — the
+property D14 cared about besides price. `PUT` targets are presigned through the
+SDK's `issueSignedToken` + `presignUrl`, so direct browser uploads keep working
+on the same `/api/upload/target` contract. Reads use plain HTTP against the
+public host (`Range`, `If-Range`, `ETag` are the CDN's own); writes, `HEAD`,
+listing and deletion go through the SDK with the read-write token.
+
+What it gives up, stated so nobody rediscovers it: `Cache-Control` on this
+store is max-age only, with a 60-second floor, so an in-progress playlist is
+cached for a minute rather than D14's five seconds (a finalized one is a year,
+as before); a `put` costs one extra `HEAD`, because the SDK's put result
+carries no validator and the port promises one; and the egress is priced by
+Vercel, which is the curve D14 says is wrong at scale. The public hostname is
+derived from the token (`vercel_blob_rw_<store>_…` →
+`<store>.public.blob.vercel-storage.com`), and `BLOB_PUBLIC_BASE_URL` overrides
+it for a custom domain.
+
+Selection is by presence: `BLOB_READ_WRITE_TOKEN` alone selects this adapter,
+`R2_ACCOUNT_ID` still wins when both are set, and `BLOB_DRIVER` overrides
+either. R2 remains the design for a deployment that can pay for one.

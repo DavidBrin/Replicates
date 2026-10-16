@@ -27,6 +27,7 @@
     "@aws-sdk/client-s3": "^3.716.0",
     "@electric-sql/pglite": "^0.5.5",
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/blob": "2.8.2",
     "clsx": "^2.1.1",
     "jose": "^6.2.8",
     "nanoid": "^6.0.1",

@@ -274,6 +274,19 @@ describe("assertPrivateMediaIsEnforceable", () => {
     );
   });
 
+  /** D21: a public Vercel Blob store is the same door, with no base-URL switch to turn it off. */
+  it("refuses a public Vercel Blob store the same way", () => {
+    process.env = {
+      ...savedEnv,
+      BLOB_DRIVER: "vercel-blob",
+      BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_AbC123_s3cr3t",
+    };
+    resetConfigForTests();
+    expect(() => assertPrivateMediaIsEnforceable()).toThrow(
+      PrivateMediaNotEnforceableError,
+    );
+  });
+
   it("names both settings so the fix is obvious from the log", () => {
     useR2WithPublicDomain();
     let message = "";

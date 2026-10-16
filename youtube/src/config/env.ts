@@ -28,7 +28,7 @@ const schema = z.object({
 
   /* ---------------------------------------------------------- blob store - */
 
-  BLOB_DRIVER: z.enum(["filesystem", "r2"]).optional(),
+  BLOB_DRIVER: z.enum(["filesystem", "r2", "vercel-blob"]).optional(),
   BLOB_FS_ROOT: z.string().default(".data/blobs"),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
@@ -40,6 +40,15 @@ const schema = z.object({
    * media path entirely — which is the whole economic argument for R2.
    */
   R2_PUBLIC_BASE_URL: z.string().optional(),
+  /**
+   * Vercel Blob (D21). The token alone selects the adapter when no R2 account
+   * is configured — it is what `vercel blob create-store` puts on the project,
+   * so a Hobby deployment with a linked store needs no further variables. The
+   * public base URL is derived from the token's store id; the override exists
+   * for a custom domain in front of the store.
+   */
+  BLOB_READ_WRITE_TOKEN: z.string().optional(),
+  BLOB_PUBLIC_BASE_URL: z.string().optional(),
 
   /* ----------------------------------------------------------------- auth - */
 
@@ -86,7 +95,7 @@ let cached: ResolvedConfig | null = null;
 export interface ResolvedConfig {
   readonly env: Env;
   readonly dbDriver: "pglite" | "neon";
-  readonly blobDriver: "filesystem" | "r2";
+  readonly blobDriver: "filesystem" | "r2" | "vercel-blob";
   readonly isProduction: boolean;
 }
 
@@ -134,7 +143,12 @@ export function config(): ResolvedConfig {
   }
 
   const blobDriver =
-    env.BLOB_DRIVER ?? (env.R2_ACCOUNT_ID ? "r2" : "filesystem");
+    env.BLOB_DRIVER ??
+    (env.R2_ACCOUNT_ID
+      ? "r2"
+      : env.BLOB_READ_WRITE_TOKEN
+        ? "vercel-blob"
+        : "filesystem");
 
   if (blobDriver === "r2") {
     const missing = (
@@ -148,6 +162,10 @@ export function config(): ResolvedConfig {
     if (missing.length > 0) {
       throw new Error(`BLOB_DRIVER=r2 requires: ${missing.join(", ")}`);
     }
+  }
+
+  if (blobDriver === "vercel-blob" && !env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error("BLOB_DRIVER=vercel-blob requires BLOB_READ_WRITE_TOKEN.");
   }
 
   /**

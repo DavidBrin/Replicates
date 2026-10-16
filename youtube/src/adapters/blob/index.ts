@@ -56,6 +56,16 @@ async function create(): Promise<BlobStore> {
     });
   }
 
+  if (blobDriver === "vercel-blob") {
+    const { createVercelBlobStore } = await import("./vercel-blob");
+    // Non-null for the same reason as above: `config()` refuses the driver
+    // without the token.
+    return createVercelBlobStore({
+      token: env.BLOB_READ_WRITE_TOKEN!,
+      publicBaseUrl: env.BLOB_PUBLIC_BASE_URL,
+    });
+  }
+
   const { FilesystemBlobStore } = await import("./filesystem");
   return new FilesystemBlobStore(env.BLOB_FS_ROOT);
 }

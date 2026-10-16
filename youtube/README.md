@@ -188,9 +188,11 @@ needs zero flags. Two runs produce a **byte-identical** media tree.
 | `pnpm seed:demo` | optional Creative Commons clips — and the way to add **your own** video ([ADDING-VIDEOS.md](ADDING-VIDEOS.md)) |
 
 Setting `DATABASE_URL` switches to Neon; setting the R2 variables switches the
-blob store. Both are one environment variable, and both refuse to boot in
-production against the local adapters, because a filesystem that does not
-survive the invocation that wrote to it is not storage.
+blob store, and a `BLOB_READ_WRITE_TOKEN` on its own selects the Vercel Blob
+adapter (D21, what the live deployment uses). Each is one environment variable,
+and all of them refuse to boot in production against the local adapters,
+because a filesystem that does not survive the invocation that wrote to it is
+not storage.
 
 ## What is deliberately not built
 
