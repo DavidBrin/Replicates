@@ -235,8 +235,9 @@ const ASSETS: readonly DemoAsset[] = [
   {
     // The portfolio's own demo video, rendered locally (David-Internet
     // `brag-output/brag.mp4`) and dropped into `public/demo-media/` by hand.
-    // First in the list (the demos-page video is second) so `pnpm seed:demo
-    // --limit=2` adds the two portfolio videos and makes no network request at all.
+    // First in the list (the demos-page video is second, the Singularity film
+    // third) so `pnpm seed:demo --all --limit=3` adds David's three own videos
+    // and makes no network request at all.
     key: "davids-internet-demo",
     title: "David's Internet, in 23 seconds",
     synopsis:
@@ -265,8 +266,8 @@ const ASSETS: readonly DemoAsset[] = [
     // The second portfolio video: the /demos page, featuring four of its
     // eighteen demos. Rendered the same way (David-Internet
     // `brag-output-2026-10-15-204928/brag.mp4`) and dropped into
-    // `public/demo-media/` by hand, so `--limit=2` adds both portfolio videos
-    // and still makes no network request.
+    // `public/demo-media/` by hand, so `--all --limit=3` adds it with the other
+    // two and still makes no network request.
     key: "davids-internet-demos",
     title: "David's Internet: the demos page, in 24 seconds",
     synopsis:
@@ -291,6 +292,43 @@ const ASSETS: readonly DemoAsset[] = [
     durationSeconds: 24,
     megabytes: 17,
     viewCount: 1_900_000,
+    channel: DAVID_CHANNEL,
+  },
+  {
+    // Katalyxt's short film about Singularity, the product David works on. The
+    // source is a 1280x720 HEVC .mov; it was transcoded once with ffmpeg to
+    // H.264 (crf 19, audio copied, faststart) because HEVC does not play in
+    // every browser, and dropped into `public/demo-media/` by hand. Third in
+    // the list so `--all --limit=3` adds the three own videos and nothing else.
+    key: "singularity-film-short",
+    title: "Singularity: AI agents are reading your data. Badly.",
+    synopsis:
+      "Katalyxt's short film about Singularity, in 86 seconds. Every company runs on data: contracts, " +
+      "spreadsheets, system exports, emails. 90% of the data companies create is unstructured, less " +
+      "than 1% of enterprise data is used by generative AI today, and 25% of the work week goes to " +
+      "searching for information. The film asks the same agent the same question twice. ChatGPT alone, " +
+      "on the raw files, fits 38 of 9,412 files into the conversation, applies a 7% cap to every " +
+      "contract, misses 132 renewing contracts, and sounds sure about all of it. The same agent " +
+      "reading Singularity over MCP checks 1,284 trusted rows, finds all 163 contracts renewing next " +
+      "quarter and $1.23M of allowed increases, holds 7 conflicting caps for a reviewer, and gets no " +
+      "value wrong. General models are built for everyone. Singularity is built for you: custom data " +
+      "rules and pipelines for your company. The demo uses an invented company and invented data, the " +
+      "agent answers are illustrative scripted answers rather than recorded runs, and the benchmark " +
+      "figures are calculated from public studies.",
+    attribution: "Katalyxt (katalyxt.ai). Sources cited on screen: IDC via IBM 2025, IBM 2025, Atlassian State of Teams 2025.",
+    licence: "All rights reserved",
+    licenceUrl: "https://katalyxt.ai",
+    sourcePage: "https://katalyxt.ai",
+    tags: ["katalyxt", "singularity", "ai agents", "mcp", "unstructured data", "contracts", "demo"],
+    category: "Science & Technology",
+    palette: ["#0c0a15", "#f3f1f5", "#ea6429"],
+    urls: [],
+    extension: "mp4",
+    width: 1280,
+    height: 720,
+    durationSeconds: 86,
+    megabytes: 4.3,
+    viewCount: 3_100_000,
     channel: DAVID_CHANNEL,
   },
   {

@@ -99,9 +99,16 @@ is the first entry in `ASSETS`, the David's Internet demo (`davids-internet-demo
 the top of the grid. The second entry is the same portfolio's demos-page video
 (`davids-internet-demos`, `public/demo-media/davids-internet-demos.mp4`, 24 s,
 four of the eighteen demos), also on `@david`, with a `viewCount` just below the
-first so the two sit together. Because they are first, `pnpm seed:demo --all
---limit=2` adds them and nothing else, and makes no network request (`--all`
-only lifts the per-asset size budget; the second file is about 17 MB).
+first so the two sit together. The third is not a portfolio video at all but
+Katalyxt's short film about Singularity (`singularity-film-short`,
+`public/demo-media/singularity-film-short.mp4`, 86 s, 1280x720), also on
+`@david`, with the highest `viewCount` of the three so it leads the grid. Its
+source was an HEVC `.mov`; it was transcoded once with ffmpeg to H.264 (crf 19,
+audio copied, `+faststart`) because HEVC does not play in every browser, which
+is also why the recipe above says `mp4` or `webm`. Because the three are first,
+`pnpm seed:demo --all --limit=3` adds them and nothing else, and makes no
+network request (`--all` only lifts the per-asset size budget; the second file
+is about 17 MB).
 
 ### Deploying it to youtube-david
 
@@ -116,14 +123,15 @@ this machine against production:
 npx vercel env pull .env.production.local --environment=production
 set -a; source .env.production.local; set +a
 pnpm seed                   # once, if the production library is still empty
-pnpm seed:demo --all --limit=2   # the two portfolio videos:
+pnpm seed:demo --all --limit=3   # David's three own videos:
                                  #   https://youtube-david.vercel.app/watch?v=vhgG-DQ4d6j (the site, 23 s)
                                  #   https://youtube-david.vercel.app/watch?v=GHSk3dRfPUD (the demos page, 24 s)
+                                 #   https://youtube-david.vercel.app/watch?v=9i2oJlmsXQm (the Singularity film, 86 s)
 ```
 
 The video ids are derived from the keys, so those URLs are fixed before the seed
 runs; David-Internet's About page, its Videos tab, and the Wikipedia replica
-already link to the first, and the Videos tab lists both.
+already link to the first, and the Videos tab lists the two portfolio videos.
 
 ### The fields that matter, and why
 
