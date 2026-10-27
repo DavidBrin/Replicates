@@ -280,6 +280,31 @@ describe("the guest", () => {
     expect(t.peers[0].remote).toEqual({ type: "offer", sdp: "offer-sdp" });
   });
 
+  it("answers the room's replacement host when the first one left before connecting", async () => {
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    t.signalling.deliver({ t: "peer-left", peerId: "h1" });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+    t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "replacement-sdp" } });
+    await settle();
+
+    expect(t.peers).toHaveLength(1);
+    expect(t.peers[0].remote).toEqual({ type: "offer", sdp: "replacement-sdp" });
+    expect(t.signalling.sent).toContainEqual({ t: "signal", payload: { kind: "answer", sdp: "answer-sdp" } });
+  });
+
+  it("does not adopt a host that joined mid-match, even once the channel has closed", async () => {
+    const t = await linkedGuest();
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+    t.peers[0].channels[0].remoteClose();
+    t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "newcomer-sdp" } });
+    await settle();
+
+    expect(t.peers).toHaveLength(1);
+    expect(t.transport.status).toBe("waiting");
+    expect(t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "answer")).toHaveLength(1);
+  });
+
   it("does not apply candidates from anyone but the peer it is negotiating with", async () => {
     const t = setup();
     t.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });

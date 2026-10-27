@@ -113,7 +113,10 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
 
   let selfId = "pending";
   let role: Role | null = null;
-  /** The host the guest's welcome named; a guest takes offers from no one else. */
+  /**
+   * The host the room named: the welcome's, or a replacement that joined
+   * before the channel opened. A guest takes offers from no one else.
+   */
   let hostId: string | null = null;
   let status: DoSignalStatus = "waiting";
   let closed = false;
@@ -338,7 +341,10 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         break;
       case "peer-joined":
         // Once the channel is open it decides (see the header): a newcomer does not replace the peer.
-        if (role === "host" && !announced) void offerTo(event.peer.id);
+        if (announced) break;
+        if (role === "host") void offerTo(event.peer.id);
+        // Before then, a host that left can be replaced: the room makes the next joiner host.
+        else if (role === "guest" && event.peer.role === "host") hostId = event.peer.id;
         break;
       case "signal": {
         const payload = event.payload;
