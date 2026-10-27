@@ -7,6 +7,7 @@
  * marked "frames" is a whole number of 60Hz simulation frames.
  */
 
+import type { KineticState } from "./kinetic";
 import type { FighterParams } from "./params";
 
 /* ------------------------------------------------------------------ input -- */
@@ -534,6 +535,11 @@ export interface FighterState {
   lastDirPressed: number;
   /** Buffered action awaiting a legal frame, and when it was queued. */
   bufferedAction: BufferedAction | null;
+  /**
+   * KineticModule energies (see `kinetic.ts`). `vx`/`vy` above are their sum,
+   * kept for readers that only want a velocity.
+   */
+  kinetic: KineticState;
 }
 
 export type BufferedAction =

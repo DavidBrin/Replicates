@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { SHIELD_MAX_HEALTH } from "@/engine/constants";
 import { fx } from "@/engine/fixed";
 import { Btn, held, type FighterState, type GameState } from "@/engine/types";
+import { emptyKinetic } from "@/engine/kinetic";
 import { DEFAULT_STAGE_VIEW } from "./behaviours";
 import { MAX_LEVEL, MIN_LEVEL, cpuInput, decideCpu, tuningForLevel } from "./cpu";
 
@@ -55,6 +56,7 @@ function fighter(port: number, over: Partial<FighterState> = {}): FighterState {
     framesSinceDirPress: 99,
     lastDirPressed: 0,
     bufferedAction: null,
+    kinetic: emptyKinetic(),
     ...over,
   };
 }

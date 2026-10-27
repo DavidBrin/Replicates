@@ -23,6 +23,7 @@
  * state that collides with yours.
  */
 
+import type { KineticState } from "./kinetic";
 import type {
   GameState,
   FighterState,
@@ -154,6 +155,20 @@ export function mixFighter(h: number, f: FighterState): number {
     x = mixString(x, f.bufferedAction.kind);
     x = mixInt(x, f.bufferedAction.frame);
   }
+  return mixKinetic(x, f.kinetic);
+}
+
+/** The KineticModule energies, in declaration order. */
+export function mixKinetic(h: number, k: KineticState): number {
+  let x = mixInt(h, k.controlX);
+  x = mixInt(x, k.stopX);
+  x = mixInt(x, k.gravityY);
+  x = mixInt(x, k.motionX);
+  x = mixInt(x, k.motionY);
+  x = mixInt(x, k.damageX);
+  x = mixInt(x, k.damageY);
+  x = mixInt(x, k.fallFrames);
+  x = mixInt(x, k.jumpInitial);
   return x;
 }
 

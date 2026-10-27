@@ -31,6 +31,7 @@ import {
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
+import { emptyKinetic } from "./kinetic";
 import { Btn } from "./types";
 import type {
   FighterAttributes,
@@ -180,6 +181,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     framesSinceDirPress: 999,
     lastDirPressed: 0,
     bufferedAction: null,
+    kinetic: emptyKinetic(),
     ...over,
   };
 }

@@ -233,6 +233,32 @@ describe("cloneState", () => {
     expect(s.fighters[0].ledge).toBeNull();
   });
 
+  /**
+   * Review Focus #1 (rollback desync from a field `cloneState` forgets). A
+   * forgotten field would be *missing* from the copy; a shallow-copied object
+   * would be *shared* with it. Both are found by walking the original.
+   */
+  it("copies every field of every fighter, and shares no object with the original", () => {
+    const s = newState();
+    const f = s.fighters[0];
+    f.ledge = { platform: 0, side: 1 };
+    f.bufferedAction = { kind: "jump", frame: 3 };
+    f.kinetic.damageX = 7;
+    const c = cloneState(s);
+    const check = (a: unknown, b: unknown, path: string): void => {
+      if (a === null || typeof a !== "object") {
+        expect(b, path).toBe(a);
+        return;
+      }
+      expect(b, `${path} is aliased`).not.toBe(a);
+      expect(Object.keys(b as object).sort(), `${path} keys`).toEqual(Object.keys(a as object).sort());
+      for (const k of Object.keys(a as object)) {
+        check((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`);
+      }
+    };
+    check(s.fighters, c.fighters, "fighters");
+  });
+
   it("copies the rules and the Smash Ball rather than aliasing them", () => {
     const s = standing();
     const c = cloneState(s);

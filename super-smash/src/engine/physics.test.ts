@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fx, toFloat } from "./fixed";
 import { BALLOON_FALL_SPEED, LEDGE_GRAB_BACK_PENALTY, LEDGE_GRAB_RANGE_X } from "./constants";
+import { emptyKinetic } from "./kinetic";
 import {
   HARD_PLATFORM_DEPTH,
   airDrift,
@@ -107,6 +108,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     framesSinceDirPress: 999,
     lastDirPressed: 0,
     bufferedAction: null,
+    kinetic: emptyKinetic(),
     ...over,
   };
 }

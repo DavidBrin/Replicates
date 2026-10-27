@@ -95,6 +95,7 @@ import {
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
+import { cloneKinetic, emptyKinetic } from "./kinetic";
 import { emptyEvents } from "./types";
 import type {
   ActionState,
@@ -219,6 +220,7 @@ export function cloneState(state: GameState): GameState {
         f.bufferedAction === null
           ? null
           : ({ kind: f.bufferedAction.kind, frame: f.bufferedAction.frame } as FighterState["bufferedAction"]),
+      kinetic: cloneKinetic(f.kinetic),
     };
   }
   const projectiles: ProjectileState[] = new Array(state.projectiles.length);
@@ -324,6 +326,7 @@ export function createInitialState(
       framesSinceDirPress: 999,
       lastDirPressed: 0,
       bufferedAction: null,
+      kinetic: emptyKinetic(),
     };
   });
 

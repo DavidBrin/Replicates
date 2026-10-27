@@ -16,6 +16,7 @@ import {
   projectilesDueOnFrame,
   spawnProjectile,
 } from "./projectile";
+import { emptyKinetic } from "./kinetic";
 import { Btn } from "./types";
 import type {
   FighterAttributes,
@@ -249,6 +250,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     framesSinceDirPress: 999,
     lastDirPressed: 0,
     bufferedAction: null,
+    kinetic: emptyKinetic(),
     ...over,
   };
 }

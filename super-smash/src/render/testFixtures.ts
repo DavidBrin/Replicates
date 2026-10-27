@@ -21,6 +21,7 @@ import type {
   StepEvents,
 } from "@/engine/types";
 import { emptyEvents } from "@/engine/types";
+import { emptyKinetic } from "@/engine/kinetic";
 import { createCamera } from "./camera";
 import type { FxContext } from "./fxKit";
 
@@ -68,6 +69,7 @@ export function makeFighter(over: Partial<FighterState> = {}): FighterState {
     framesSinceDirPress: 99,
     lastDirPressed: 0,
     bufferedAction: null,
+    kinetic: emptyKinetic(),
     ...over,
   };
 }

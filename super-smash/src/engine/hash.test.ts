@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
 import { fx } from "./fixed";
+import { emptyKinetic } from "./kinetic";
 import { hashState, mixBool, mixInt, mixString } from "./hash";
 import type { FighterState, GameState, ProjectileState } from "./types";
 
@@ -49,6 +50,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     framesSinceDirPress: 999,
     lastDirPressed: 0,
     bufferedAction: null,
+    kinetic: emptyKinetic(),
     ...over,
   };
 }
@@ -194,10 +196,57 @@ describe("hashState", () => {
       ["fighter.framesSinceDirPress", (s) => (s.fighters[0].framesSinceDirPress = 2)],
       ["fighter.lastDirPressed", (s) => (s.fighters[0].lastDirPressed = 2)],
       ["fighter.bufferedAction", (s) => (s.fighters[0].bufferedAction = { kind: "jump", frame: 3 })],
+      ["fighter.kinetic.controlX", (s) => (s.fighters[0].kinetic.controlX += 1)],
+      ["fighter.kinetic.stopX", (s) => (s.fighters[0].kinetic.stopX += 1)],
+      ["fighter.kinetic.gravityY", (s) => (s.fighters[0].kinetic.gravityY += 1)],
+      ["fighter.kinetic.motionX", (s) => (s.fighters[0].kinetic.motionX += 1)],
+      ["fighter.kinetic.motionY", (s) => (s.fighters[0].kinetic.motionY += 1)],
+      ["fighter.kinetic.damageX", (s) => (s.fighters[0].kinetic.damageX += 1)],
+      ["fighter.kinetic.damageY", (s) => (s.fighters[0].kinetic.damageY += 1)],
+      ["fighter.kinetic.fallFrames", (s) => (s.fighters[0].kinetic.fallFrames += 1)],
+      ["fighter.kinetic.jumpInitial", (s) => (s.fighters[0].kinetic.jumpInitial += 1)],
       ["projectiles", (s) => s.projectiles.push(projectile())],
     ];
     for (const [name, mutate] of mutations) {
       expect(noticesChange(mutate), `hash ignored ${name}`).toBe(true);
+    }
+  });
+
+  /**
+   * Review Focus #1 (rollback desync from a field the hash cannot see). The
+   * list above is written by hand, so a field added later and forgotten there
+   * would pass it. This walks every leaf of a real fighter instead — including
+   * ones that do not exist yet — and requires each one to move the hash. Every
+   * nullable field is given a value first, so the leaves behind it are walked
+   * too; a new nullable field left null here fails the walk by name.
+   */
+  it("notices a mutation of every leaf of FighterState, found by walking it", () => {
+    const FULL: Partial<FighterState> = {
+      move: "jab1",
+      ledge: { platform: 0, side: 1 },
+      bufferedAction: { kind: "jump", frame: 3 },
+    };
+    const leaves: string[][] = [];
+    const walk = (v: unknown, path: string[]): void => {
+      if (v === null) throw new Error(`fighter.${path.join(".")} is null: give it a value in FULL`);
+      if (Array.isArray(v)) return; // arrays have explicit cases above
+      if (typeof v === "object") {
+        for (const k of Object.keys(v as object)) walk((v as Record<string, unknown>)[k], [...path, k]);
+        return;
+      }
+      leaves.push(path);
+    };
+    walk(fighter(FULL), []);
+    expect(leaves.length).toBeGreaterThan(40);
+    for (const path of leaves) {
+      const s = state({ fighters: [fighter({ ...FULL, port: 0 }), fighter({ port: 1, x: fx(20) })] });
+      const before = hashState(s);
+      let target = s.fighters[0] as unknown as Record<string, unknown>;
+      for (const k of path.slice(0, -1)) target = target[k] as Record<string, unknown>;
+      const key = path[path.length - 1];
+      const v = target[key];
+      target[key] = typeof v === "number" ? v + 1 : typeof v === "boolean" ? !v : `${String(v)}x`;
+      expect(hashState(s), `hash ignored fighter.${path.join(".")}`).not.toBe(before);
     }
   });
 
