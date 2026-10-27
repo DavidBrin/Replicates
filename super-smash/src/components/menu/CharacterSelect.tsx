@@ -18,6 +18,7 @@ import {
   SCHEME_INFO,
   allPortsReady,
   findFighter,
+  findStage,
   portColour,
   portTag,
   useMatchConfig,
@@ -25,6 +26,9 @@ import {
   type MenuFighter,
   type PlayerSlot,
 } from "@/lib/matchConfig";
+import { buildStartConfig, newMatchSeed } from "@/game/onlineConfig";
+import { leaveOnline, sendLobby, useOnlineStore } from "@/lib/onlineStore";
+import { ROLE_PORT } from "@/net/signalProtocol";
 
 /**
  * Five, which puts the eight fighters and the random slot into two rows.
@@ -57,6 +61,19 @@ export function CharacterSelect() {
   const setFighter = useMatchConfig((s) => s.setFighter);
   const addPlayer = useMatchConfig((s) => s.addPlayer);
   const removePlayer = useMatchConfig((s) => s.removePlayer);
+  const stageId = useMatchConfig((s) => s.stageId);
+  const stageForm = useMatchConfig((s) => s.stageForm);
+  const rules = useMatchConfig((s) => s.rules);
+
+  // Online, each machine owns exactly one panel: the host P1, the guest P2.
+  // The other panel is filled by the opponent's own pick (lib/onlineStore).
+  const onlineRole = useOnlineStore((s) => s.role);
+  const onlineStatus = useOnlineStore((s) => s.status);
+  const onlineConfig = useOnlineStore((s) => s.config);
+  const hostStage = useOnlineStore((s) => s.hostStage);
+  // One thing to say: an error outranks a notice (lib/onlineStore).
+  const onlineMessage = useOnlineStore((s) => s.error ?? s.notice);
+  const onlinePort = onlineRole === null ? null : ROLE_PORT[onlineRole];
 
   const [gridIndex, setGridIndex] = useState(0);
   const [requestedPort, setActivePort] = useState(0);
@@ -69,7 +86,7 @@ export function CharacterSelect() {
    * is never a frame rendered against a panel that does not exist, and no
    * cascading re-render to fix it afterwards.
    */
-  const activePort = Math.min(requestedPort, players.length - 1);
+  const activePort = onlinePort ?? Math.min(requestedPort, players.length - 1);
 
   const tiles = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -90,12 +107,16 @@ export function CharacterSelect() {
   const assign = useCallback(
     (fighterId: string) => {
       setFighter(activePort, fighterId);
+      if (onlinePort !== null) {
+        sendLobby({ kind: "pick", fighterId, costume: players[activePort]?.costume ?? activePort });
+        return;
+      }
       // Hand the cursor to the next empty panel, so filling four ports is four
       // presses rather than four presses and three port switches.
       const next = players.find((p) => p.port !== activePort && p.fighterId === null);
       if (next) setActivePort(next.port);
     },
-    [activePort, players, setFighter],
+    [activePort, onlinePort, players, setFighter],
   );
 
   const focusTile = useCallback((index: number) => {
@@ -134,14 +155,17 @@ export function CharacterSelect() {
           if (inControl) return;
           event.preventDefault();
           setFighter(activePort, null);
+          if (onlinePort !== null) sendLobby({ kind: "pick", fighterId: null, costume: activePort });
           return;
         case "+":
         case "=":
+          if (onlinePort !== null) return;
           event.preventDefault();
           addPlayer();
           return;
         case "-":
         case "_":
+          if (onlinePort !== null) return;
           event.preventDefault();
           removePlayer();
           return;
@@ -150,14 +174,62 @@ export function CharacterSelect() {
       }
 
       const port = Number(event.key) - 1;
-      if (Number.isInteger(port) && port >= 0 && port < players.length) {
+      if (onlinePort === null && Number.isInteger(port) && port >= 0 && port < players.length) {
         setActivePort(port);
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activePort, addPlayer, assign, entries, focusTile, gridIndex, players.length, removePlayer, setFighter]);
+  }, [activePort, addPlayer, assign, entries, focusTile, gridIndex, onlinePort, players.length, removePlayer, setFighter]);
+
+  // The guest follows the host into the match the moment the start arrives.
+  useEffect(() => {
+    if (onlineRole === "guest" && onlineConfig) router.push("/play");
+  }, [onlineConfig, onlineRole, router]);
+
+  // Whoever takes an empty seat starts from an empty page, so when the channel
+  // opens again each side repeats its own pick, and the host its stage (chosen
+  // on the way here). Arriving needs none of this: the room opened in the
+  // lobby, before anything was picked. A store subscription rather than an
+  // effect on the status, so that a leave and a rejoin landing in one render
+  // still count.
+  useEffect(() => {
+    if (onlinePort === null) return;
+    return useOnlineStore.subscribe((now, before) => {
+      if (now.status !== "connected" || before.status === "connected") return;
+      const match = useMatchConfig.getState();
+      const own = match.players[onlinePort];
+      sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? onlinePort });
+      if (now.role === "host") sendLobby({ kind: "stage", stageId: match.stageId, form: match.stageForm });
+    });
+  }, [onlinePort]);
+
+  // Online, only the host starts, and only with both players in the room.
+  const canStart = ready && (onlineRole === null || (onlineRole === "host" && onlineStatus === "connected"));
+
+  const startMatch = () => {
+    if (!canStart) return;
+    if (onlineRole === null) {
+      router.push("/play");
+      return;
+    }
+    const config = buildStartConfig({ players, stageId, stageForm, rules, seed: newMatchSeed() });
+    // Not sent means the room is gone or the start would not arrive as built;
+    // the store has the error to show, and this side stays here with it.
+    if (!sendLobby({ kind: "start", config })) return;
+    useOnlineStore.getState().patch({ config });
+    router.push("/play");
+  };
+
+  const bannerTag =
+    onlineRole === "guest"
+      ? hostStage
+        ? `Stage: ${findStage(roster, hostStage.stageId)?.name ?? "Random"}`
+        : "The host is picking the stage"
+      : onlineRole === "host"
+        ? "Online"
+        : `${players.length} fighters`;
 
   return (
     // A fixed-height column with the grid as the only scrolling part: the
@@ -166,17 +238,31 @@ export function CharacterSelect() {
     // important screen invisible until you scroll.
     <main className="flex h-dvh flex-col overflow-hidden bg-[#101215]">
       <ScreenBanner
-        onBack={() => router.push("/stage")}
-        backLabel="Back to stage select"
+        onBack={() => {
+          // The guest has no stage select to go back to: going back is leaving.
+          if (onlineRole === "guest") {
+            leaveOnline();
+            router.push("/online");
+          } else {
+            router.push("/stage");
+          }
+        }}
+        backLabel={onlineRole === "guest" ? "Leave the room" : "Back to stage select"}
         tab={<ModeTab label="Smash" />}
       >
         <SkewTag
           className="hidden border-[3px] border-panel-ink bg-panel-ink sm:inline-block"
           innerClassName="px-4 py-1 text-xs font-bold tracking-wide text-white/75"
         >
-          {players.length} fighters
+          {bannerTag}
         </SkewTag>
       </ScreenBanner>
+
+      {onlineMessage ? (
+        <p role="alert" className="mx-auto w-full max-w-7xl px-4 text-sm font-bold text-smash-yellow sm:px-8">
+          {onlineMessage}
+        </p>
+      ) : null}
 
       <div className="mx-auto grid w-full max-w-7xl min-h-0 flex-1 items-center gap-5 overflow-y-auto px-4 py-3 lg:grid-cols-[1fr_18rem] sm:px-8">
         <section aria-label="Fighters">
@@ -264,8 +350,10 @@ export function CharacterSelect() {
           </ul>
 
           <p className="mt-3 text-xs text-white/40">
-            Arrows move · Enter chooses · 1–4 switches port · Backspace clears · + / − adds and removes a
-            player
+            {/* Online there is one panel to choose for and the two seats are fixed. */}
+            {onlinePort === null
+              ? "Arrows move · Enter chooses · 1–4 switches port · Backspace clears · + / − adds and removes a player"
+              : "Arrows move · Enter chooses · Backspace clears"}
           </p>
         </section>
 
@@ -316,47 +404,51 @@ export function CharacterSelect() {
               player={player}
               fighter={findFighter(roster, player.fighterId)}
               active={player.port === activePort}
-              onActivate={() => setActivePort(player.port)}
+              onActivate={() => {
+                if (onlinePort === null) setActivePort(player.port);
+              }}
+              online={onlinePort !== null}
+              local={player.port === onlinePort}
             />
           ))}
 
-          <div className="flex flex-col justify-center gap-2">
-            <button
-              type="button"
-              aria-label="Add a player"
-              disabled={players.length >= MAX_PLAYERS}
-              onClick={addPlayer}
-              className="grid size-10 place-items-center border-[3px] border-panel-ink bg-smash-yellow font-display text-2xl text-panel-ink disabled:bg-[#2a2d33] disabled:text-white/25"
-              style={{ transform: "skewX(-12deg)" }}
-            >
-              <span style={{ transform: "skewX(12deg)" }}>+</span>
-            </button>
-            <button
-              type="button"
-              aria-label="Remove a player"
-              disabled={players.length <= MIN_PLAYERS}
-              onClick={removePlayer}
-              className="grid size-10 place-items-center border-[3px] border-panel-ink bg-smash-yellow font-display text-2xl text-panel-ink disabled:bg-[#2a2d33] disabled:text-white/25"
-              style={{ transform: "skewX(-12deg)" }}
-            >
-              <span style={{ transform: "skewX(12deg)" }}>−</span>
-            </button>
-          </div>
+          {onlinePort === null ? (
+            <div className="flex flex-col justify-center gap-2">
+              <button
+                type="button"
+                aria-label="Add a player"
+                disabled={players.length >= MAX_PLAYERS}
+                onClick={addPlayer}
+                className="grid size-10 place-items-center border-[3px] border-panel-ink bg-smash-yellow font-display text-2xl text-panel-ink disabled:bg-[#2a2d33] disabled:text-white/25"
+                style={{ transform: "skewX(-12deg)" }}
+              >
+                <span style={{ transform: "skewX(12deg)" }}>+</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Remove a player"
+                disabled={players.length <= MIN_PLAYERS}
+                onClick={removePlayer}
+                className="grid size-10 place-items-center border-[3px] border-panel-ink bg-smash-yellow font-display text-2xl text-panel-ink disabled:bg-[#2a2d33] disabled:text-white/25"
+                style={{ transform: "skewX(-12deg)" }}
+              >
+                <span style={{ transform: "skewX(12deg)" }}>−</span>
+              </button>
+            </div>
+          ) : null}
 
           <div className="ml-auto flex items-center">
             <SkewButton
-              onClick={() => router.push("/play")}
-              disabled={!ready}
-              aria-disabled={!ready}
+              onClick={startMatch}
+              disabled={!canStart}
+              aria-disabled={!canStart}
               className={cn(
                 "border-[4px] border-panel-ink px-8 py-4 shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform",
-                ready
-                  ? "bg-smash-yellow text-panel-ink hover:-translate-y-1"
-                  : "bg-[#2a2d33] text-white/30",
+                canStart ? "bg-smash-yellow text-panel-ink hover:-translate-y-1" : "bg-[#2a2d33] text-white/30",
               )}
               innerClassName="font-display text-xl leading-none tracking-[0.16em] uppercase sm:text-2xl"
             >
-              Ready to Fight
+              {onlineRole === "guest" ? "Waiting for Host" : "Ready to Fight"}
             </SkewButton>
           </div>
         </div>
@@ -370,11 +462,15 @@ function PlayerPanel({
   fighter,
   active,
   onActivate,
+  online = false,
+  local = false,
 }: {
   player: PlayerSlot;
   fighter: MenuFighter | null;
   active: boolean;
   onActivate: () => void;
+  online?: boolean;
+  local?: boolean;
 }) {
   const setCpuLevel = useMatchConfig((s) => s.setCpuLevel);
   const togglePlayerKind = useMatchConfig((s) => s.togglePlayerKind);
@@ -469,10 +565,12 @@ function PlayerPanel({
         )}
       </div>
 
-      <div className="flex items-stretch px-4 pb-2">
-        <KindTab label="CPU" active={isCpu} port={player.port} onSelect={() => togglePlayerKind(player.port)} />
-        <KindTab label="HMN" active={!isCpu} port={player.port} onSelect={() => togglePlayerKind(player.port)} />
-      </div>
+      {online ? null : (
+        <div className="flex items-stretch px-4 pb-2">
+          <KindTab label="CPU" active={isCpu} port={player.port} onSelect={() => togglePlayerKind(player.port)} />
+          <KindTab label="HMN" active={!isCpu} port={player.port} onSelect={() => togglePlayerKind(player.port)} />
+        </div>
+      )}
 
       <div
         className="flex items-center justify-between border-t-[3px] border-panel-ink px-4 py-1"
@@ -480,7 +578,7 @@ function PlayerPanel({
       >
         <Unskew className="font-display text-lg leading-none text-panel-ink">{tag}</Unskew>
         <Unskew className="text-[0.6rem] font-black tracking-[0.14em] text-panel-ink/70 uppercase">
-          {isCpu ? "Computer" : "Human"}
+          {isCpu ? "Computer" : online ? (local ? "You" : "Opponent") : "Human"}
         </Unskew>
       </div>
     </SkewCard>

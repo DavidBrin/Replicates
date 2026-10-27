@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { toFloat } from "@/engine/fixed";
@@ -18,6 +18,8 @@ import {
   type MenuStage,
   type StageForm,
 } from "@/lib/matchConfig";
+import { leaveOnline, sendLobby, useOnlineStore } from "@/lib/onlineStore";
+import { ROLE_PORT } from "@/net/signalProtocol";
 
 const COLUMNS = 4;
 
@@ -33,6 +35,27 @@ export function StageSelect() {
   const stageForm = useMatchConfig((s) => s.stageForm);
   const setStage = useMatchConfig((s) => s.setStage);
   const cycleStageForm = useMatchConfig((s) => s.cycleStageForm);
+  const onlineRole = useOnlineStore((s) => s.role);
+  const onlineStatus = useOnlineStore((s) => s.status);
+  // One thing to say: an error outranks a notice (lib/onlineStore).
+  const onlineMessage = useOnlineStore((s) => s.error ?? s.notice);
+
+  // The host's stage goes to the guest on the way on, which needs the guest there to hear it.
+  const canContinue = onlineRole !== "host" || onlineStatus === "connected";
+
+  // A newcomer in the empty seat starts from an empty page. The host may be
+  // back here from fighters with a pick made, so it repeats that pick when the
+  // channel opens again; the stage is still being chosen, and goes with
+  // Choose Fighters as the first time. (Character select repeats both.)
+  useEffect(() => {
+    if (onlineRole !== "host") return;
+    const port = ROLE_PORT.host;
+    return useOnlineStore.subscribe((now, before) => {
+      if (now.status !== "connected" || before.status === "connected") return;
+      const own = useMatchConfig.getState().players[port];
+      sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? port });
+    });
+  }, [onlineRole]);
 
   const tiles = useRef<(HTMLButtonElement | null)[]>([]);
   const entries: (MenuStage | null)[] = [...roster.stages, null];
@@ -56,12 +79,26 @@ export function StageSelect() {
   return (
     <main className="flex min-h-dvh flex-col bg-[#101215]">
       <ScreenBanner
-        onBack={() => router.push("/rules")}
-        backLabel="Back to rules"
+        onBack={() => {
+          // Online, the rules screen belongs to the local flow; going back is leaving the room.
+          if (onlineRole) {
+            leaveOnline();
+            router.push("/online");
+          } else {
+            router.push("/rules");
+          }
+        }}
+        backLabel={onlineRole ? "Leave the room" : "Back to rules"}
         tab={<ModeTab label="Stage" />}
       >
         <FormToggle form={stageForm} onCycle={cycleStageForm} />
       </ScreenBanner>
+
+      {onlineMessage ? (
+        <p role="alert" className="mx-auto w-full max-w-6xl px-5 pb-4 text-sm font-bold text-smash-yellow sm:px-8">
+          {onlineMessage}
+        </p>
+      ) : null}
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 gap-6 px-5 pb-10 lg:grid-cols-[1.4fr_1fr] sm:px-8">
         <section aria-label="Stages">
@@ -164,8 +201,20 @@ export function StageSelect() {
           </SkewPanel>
 
           <SkewButton
-            onClick={() => router.push("/fighters")}
-            className="border-[4px] border-panel-ink bg-smash-yellow px-8 py-3 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform hover:-translate-y-1"
+            onClick={() => {
+              if (!canContinue) return;
+              // The guest waits on character select; this is how it learns the
+              // stage. Not sent means the room is gone: the store has the error
+              // to show, and the host stays here with it.
+              if (onlineRole === "host" && !sendLobby({ kind: "stage", stageId, form: stageForm })) return;
+              router.push("/fighters");
+            }}
+            disabled={!canContinue}
+            aria-disabled={!canContinue}
+            className={cn(
+              "border-[4px] border-panel-ink px-8 py-3 shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform",
+              canContinue ? "bg-smash-yellow text-panel-ink hover:-translate-y-1" : "bg-[#2a2d33] text-white/30",
+            )}
             innerClassName="font-display text-xl tracking-[0.18em] uppercase"
           >
             Choose Fighters →

@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
 import { RANDOM_STAGE, resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
+import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
+import { getActiveSession, setActiveSession } from "@/net/online/session";
+import { fakeSession, type FakeSession } from "@/net/online/testing";
 import { StageSelect } from "./StageSelect";
 
 async function renderStages() {
@@ -91,5 +94,78 @@ describe("StageSelect", () => {
     fireEvent.click(screen.getByRole("button", { name: /choose fighters/i }));
 
     expect(routerMock.push).toHaveBeenCalledWith("/fighters");
+  });
+});
+
+describe("StageSelect, hosting online", () => {
+  /** The host as the lobby hands it on: seated, bound and connected, the guest already in. */
+  function host(): FakeSession {
+    const fake = fakeSession("host");
+    setActiveSession(fake.session);
+    bindSession(fake.session);
+    useMatchConfig.getState().configureOnline();
+    useOnlineStore.getState().patch({ role: "host", status: "connected", roomCode: "ABCD" });
+    return fake;
+  }
+
+  const chooseFighters = () => screen.getByRole("button", { name: /choose fighters/i });
+
+  // Here rather than at the end of a test, so a failing test cannot leave its room to the next.
+  afterEach(() => {
+    act(() => leaveOnline());
+  });
+
+  it("tells the guest the stage on the way to fighters", async () => {
+    const { sent } = host();
+    await renderStages();
+    fireEvent.click(chooseFighters());
+    expect(sent).toEqual([{ kind: "stage", stageId: "battlefield", form: "normal" }]);
+    expect(routerMock.push).toHaveBeenCalledWith("/fighters");
+  });
+
+  it("leaves the room instead of going back to the rules", async () => {
+    host();
+    await renderStages();
+    fireEvent.click(screen.getByRole("button", { name: "Leave the room" }));
+    expect(getActiveSession()).toBeNull();
+    expect(useOnlineStore.getState().status).toBe("idle");
+    expect(routerMock.push).toHaveBeenCalledWith("/online");
+  });
+
+  it("holds the way on to fighters while the seat is empty, and says why", async () => {
+    const { sent } = host();
+    await renderStages();
+    act(() => useOnlineStore.getState().patch({ status: "waiting", notice: PEER_LEFT_NOTICE }));
+    expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
+    expect(chooseFighters()).toBeDisabled();
+    fireEvent.click(chooseFighters());
+    expect(sent).toEqual([]);
+    expect(routerMock.push).not.toHaveBeenCalled();
+  });
+
+  it("stays here when the stage could not be sent, and says why", async () => {
+    const fake = host();
+    // As the real session does once the room is gone: refuses the send, and says so.
+    fake.session.sendLobby.mockImplementationOnce(() => {
+      fake.emit({ type: "error", reason: "room-lost" });
+      return false;
+    });
+    await renderStages();
+    fireEvent.click(chooseFighters());
+    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(roomErrorMessage("room-lost", "ABCD"));
+    expect(chooseFighters()).toBeDisabled();
+  });
+
+  /** Back here from fighters to change the stage, with a pick made: a newcomer's page starts empty. */
+  it("repeats the host's pick when somebody takes the empty seat", async () => {
+    const fake = host();
+    useMatchConfig.getState().setFighter(0, "mario");
+    await renderStages();
+    act(() => fake.emit({ type: "link", status: "waiting" }));
+    act(() => fake.emit({ type: "peer", present: true }));
+    act(() => fake.emit({ type: "link", status: "open" }));
+    // The stage is still being chosen; it goes with Choose Fighters, as the first time.
+    expect(fake.sent).toEqual([{ kind: "pick", fighterId: "mario", costume: 0 }]);
   });
 });
