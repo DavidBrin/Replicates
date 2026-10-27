@@ -210,6 +210,71 @@ describe("OnlineSession", () => {
       expect(errors(events)).toHaveLength(1);
     });
 
+    it("once the grace has run out, a late open cannot undo the loss", async () => {
+      vi.useFakeTimers();
+      const { session, signalling, channel, events } = await negotiatingHost();
+      signalling.deliver(ROOM_DROP);
+      vi.advanceTimersByTime(ROOM_LOST_GRACE_MS);
+      expect(session.transport.status).toBe("closed");
+      channel.open();
+      expect(events).not.toContainEqual({ type: "link", status: "open" });
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+    });
+
+    it("a lobby message during the grace loses the room, and the negotiation with it", async () => {
+      vi.useFakeTimers();
+      const { session, signalling, channel, events } = await negotiatingHost();
+      signalling.deliver(ROOM_DROP);
+      expect(session.sendLobby({ kind: "pick", fighterId: "fox", costume: 1 })).toBe(false);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      expect(session.transport.status).toBe("closed");
+      expect(vi.getTimerCount()).toBe(0);
+      channel.open();
+      expect(events).not.toContainEqual({ type: "link", status: "open" });
+    });
+
+    it("with the link already failed, the room is lost at once", async () => {
+      const { signalling, events, fail } = await negotiatingHost();
+      fail();
+      expect(errors(events)).toEqual([]);
+      signalling.deliver(ROOM_DROP);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+    });
+
+    it("with the channel open in the lobby, a stage or a start is not sent: the room is lost, once", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      signalling.deliver(ROOM_DROP);
+      expect(errors(events)).toEqual([]);
+      const written = signalling.sent.length;
+
+      expect(session.sendLobby({ kind: "stage", stageId: "battlefield", form: "normal" })).toBe(false);
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(false);
+
+      expect(signalling.sent).toHaveLength(written);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+    });
+
+    it("with the channel open, an away is dropped without a word", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      signalling.deliver(ROOM_DROP);
+      const written = signalling.sent.length;
+      expect(session.sendLobby({ kind: "away", away: true })).toBe(false);
+      expect(signalling.sent).toHaveLength(written);
+      expect(errors(events)).toEqual([]);
+    });
+
+    it("with the channel open, the channel closing loses the room, once", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      signalling.deliver(ROOM_DROP);
+      channel.drop();
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      expect(session.sendLobby({ kind: "pick", fighterId: "fox", costume: 1 })).toBe(false);
+      expect(errors(events)).toHaveLength(1);
+    });
+
     it("mid-negotiation, a link that fails or falls through loses the room at once", async () => {
       vi.useFakeTimers();
       const failing = await negotiatingHost();
@@ -240,26 +305,36 @@ describe("OnlineSession", () => {
 
   it("sends lobby messages through the room", async () => {
     const { session, signalling } = await open();
-    session.sendLobby({ kind: "away", away: true });
+    expect(session.sendLobby({ kind: "away", away: true })).toBe(true);
     expect(signalling.sent.at(-1)).toEqual({ t: "lobby", payload: { kind: "away", away: true } });
   });
 
   it("sends a start the guest's parser will take", async () => {
     const { session, signalling, events } = await open();
-    session.sendLobby({ kind: "start", config: CONFIG });
+    expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
     expect(signalling.sent).toEqual([{ t: "lobby", payload: { kind: "start", config: CONFIG } }]);
     expect(events).toEqual([]);
   });
 
   it("keeps back a start the guest would drop, and makes it the host's error", async () => {
     const { session, signalling, events } = await open();
-    session.sendLobby({ kind: "start", config: { ...CONFIG, fighters: ["mario", "nobody"] } });
-    session.sendLobby({ kind: "start", config: { ...CONFIG, seed: 1.5 } });
+    expect(session.sendLobby({ kind: "start", config: { ...CONFIG, fighters: ["mario", "nobody"] } })).toBe(false);
+    expect(session.sendLobby({ kind: "start", config: { ...CONFIG, seed: 1.5 } })).toBe(false);
     expect(signalling.sent).toEqual([]);
     expect(events).toEqual([
       { type: "error", reason: "bad-start" },
       { type: "error", reason: "bad-start" },
     ]);
+  });
+
+  it("keeps back a start the guest would read differently, and makes it the host's error", async () => {
+    const { session, signalling, events } = await open();
+    // As though MatchRules grew a field the lobby parser does not read yet: the guest would play without it.
+    const rules = { ...CONFIG.rules, items: true };
+    const config: OnlineMatchConfig = { ...CONFIG, rules };
+    expect(session.sendLobby({ kind: "start", config })).toBe(false);
+    expect(signalling.sent).toEqual([]);
+    expect(events).toEqual([{ type: "error", reason: "bad-start" }]);
   });
 
   it("close() closes the transport and the socket, and goes quiet", async () => {

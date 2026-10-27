@@ -12,22 +12,25 @@ import { createDoSignalTransport, type DoSignalStatus, type DoSignalTransport, t
 import type { IceResponse } from "../iceConfig";
 import { fetchIceServers, toRtcIceServers } from "../iceServers";
 import { createSignallingClient, type SignallingClient } from "../signalling";
-import { ROLE_PORT, roomErrorForCloseCode, type Role, type RoomError, type RoomIntent } from "../signalProtocol";
+import { ROLE_PORT, isRecord, roomErrorForCloseCode, type Role, type RoomError, type RoomIntent } from "../signalProtocol";
 import { createEmitter, type Emitter, type Unsubscribe } from "../transport";
 import { parseLobbyMessage, type LobbyMessage } from "./lobby";
 
 /**
  * Why the session cannot go on. The room's refusals; "unreachable" when no
- * room ever answered; "room-lost" when the room's socket dropped before the
- * data channel could carry the match; "bad-start" when this side built a
- * `start` the other side's parser would refuse, so it was never sent.
+ * room ever answered; "room-lost" when the room's socket dropped while the
+ * session still needed it (to negotiate, or to carry the lobby); "bad-start"
+ * when this side built a `start` the other side would refuse or read
+ * differently, so it was never sent.
  */
 export type SessionError = RoomError | "unreachable" | "room-lost" | "bad-start";
 
 /**
- * How long a negotiation already under way when the room drops gets to open
- * the channel on its own. With offer and answer across, only ICE remains,
- * and that takes seconds; past this, the player is better off with a new room.
+ * How long a negotiation under way when the room drops gets to open the
+ * channel without it. "Negotiating" starts before the offer exists, and ICE
+ * candidates ride the room socket too, so the grace only helps when the offer,
+ * the answer and enough candidates crossed before the drop. When they did, ICE
+ * finishes in seconds; past this, the player is better off with a new room.
  */
 export const ROOM_LOST_GRACE_MS = 15_000;
 
@@ -45,7 +48,12 @@ export interface OnlineSessionLike {
   readonly turn: boolean;
   readonly transport: DoSignalTransport;
   on(cb: (event: SessionEvent) => void): Unsubscribe;
-  sendLobby(message: LobbyMessage): void;
+  /**
+   * True when the message went to the room; false when it did not (the session
+   * closed, the room gone, or a `start` the other side would not read as sent).
+   * Apart from a dropped `away`, the reason reaches `on()` as an `error`.
+   */
+  sendLobby(message: LobbyMessage): boolean;
   close(): void;
 }
 
@@ -79,7 +87,9 @@ export class OnlineSession implements OnlineSessionLike {
 
   private readonly events: Emitter<[SessionEvent]> = createEmitter();
   private welcomed = false;
+  /** The room socket closed, for whatever reason; it never reconnects. */
   private roomGone = false;
+  private roomLost = false;
   /** Running while a negotiation outlives the room; see `roomDropped`. */
   private grace: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
@@ -115,9 +125,11 @@ export class OnlineSession implements OnlineSessionLike {
           this.events.emit({ type: "error", reason: event.reason });
           break;
         case "closed":
+          if (this.closed || this.roomGone) break;
+          this.roomGone = true;
           // A refusal already arrived as an `error`. Before a welcome, nobody
           // answered; after one, a drop is a Worker deploy restarting the room.
-          if (this.closed || this.roomGone || roomErrorForCloseCode(event.code) !== null) break;
+          if (roomErrorForCloseCode(event.code) !== null) break;
           if (this.welcomed) this.roomDropped();
           else this.events.emit({ type: "error", reason: "unreachable" });
           break;
@@ -140,18 +152,27 @@ export class OnlineSession implements OnlineSessionLike {
     return this.events.add(cb);
   }
 
-  sendLobby(message: LobbyMessage): void {
-    if (this.closed) return;
+  sendLobby(message: LobbyMessage): boolean {
+    if (this.closed) return false;
+    if (this.roomGone) {
+      // The socket would swallow it. The lobby cannot go on without the room —
+      // the stage, the picks and the start all ride it — so that is the room
+      // lost. An `away` lost this way only costs the peer some patience.
+      if (message.kind !== "away" && this.welcomed) this.loseRoom();
+      return false;
+    }
     // The guest drops a `start` its parser refuses, then waits for one that
-    // never comes while the host plays alone. So a start is read here first,
-    // exactly as the guest will read it off the wire, and a refusal is this
-    // side's error rather than a silence on the other. A refused pick, stage
-    // or away costs only a stale lobby screen: the start carries the match.
-    if (message.kind === "start" && parseLobbyMessage(JSON.parse(JSON.stringify(message))) === null) {
+    // never comes while the host plays alone; a field the parser does not read
+    // would desync the match instead. So a start is read here first, exactly
+    // as the guest will read it off the wire, and anything but the same config
+    // is this side's error rather than a silence or a desync on the other. A
+    // refused pick, stage or away costs only a stale lobby screen.
+    if (message.kind === "start" && !arrivesAsSent(message)) {
       this.events.emit({ type: "error", reason: "bad-start" });
-      return;
+      return false;
     }
     this.signalling.send({ t: "lobby", payload: message });
+    return true;
   }
 
   close(): void {
@@ -167,32 +188,36 @@ export class OnlineSession implements OnlineSessionLike {
   }
 
   /**
-   * The room is gone and will not come back: the socket never reconnects.
-   * An open channel needs nothing more from it — the match is peer to peer and
-   * carries on (spec review focus). A negotiation under way may still open the
-   * channel on its own, so it gets a grace. Anything else needs the room to
-   * introduce a peer, and that will not happen now.
+   * The room is gone after the welcome, and will not come back. An open
+   * channel says nothing yet: mid-match it needs nothing more from the room
+   * (spec review focus). In the lobby it still does, and the next lobby
+   * message, or the channel closing, reports the loss. A negotiation under way
+   * gets a grace to open the channel without the room. Anything else needs
+   * the room to introduce a peer, and that will not happen now.
    */
   private roomDropped(): void {
-    this.roomGone = true;
     const status = this.transport.status;
     if (status === "open") return;
     if (status === "negotiating") this.grace = setTimeout(() => this.loseRoom(), ROOM_LOST_GRACE_MS);
     else this.loseRoom();
   }
 
-  /** Every transport status passes through here, out as a `link` event and then against a grace. */
+  /** Every transport status passes through here, out as a `link` event and then against a lost room. */
   private linkChanged(status: DoSignalStatus): void {
     this.events.emit({ type: "link", status });
-    if (this.grace === null || status === "negotiating") return;
+    if (!this.roomGone || this.closed || status === "negotiating") return;
     if (status === "open") this.endGrace();
-    // Failed, or the channel gave up before opening: with no room, nothing renegotiates.
+    // Failed, closed, or back to waiting: with no room, nothing renegotiates.
     else this.loseRoom();
   }
 
   private loseRoom(): void {
     this.endGrace();
+    if (this.roomLost) return;
+    this.roomLost = true;
     this.events.emit({ type: "error", reason: "room-lost" });
+    // A negotiation left running could still open the channel and report "open" over the loss.
+    if (this.transport.status === "negotiating") this.transport.close();
   }
 
   private endGrace(): void {
@@ -217,4 +242,24 @@ export function getActiveSession(): OnlineSessionLike | null {
 export function setActiveSession(next: OnlineSessionLike | null): void {
   if (active && active !== next) active.close();
   active = next;
+}
+
+/* ----------------------------------------------------------------- helpers -- */
+
+/** Whether the other side, parsing this off the wire, ends up holding exactly this message. */
+function arrivesAsSent(message: LobbyMessage): boolean {
+  const received = parseLobbyMessage(JSON.parse(JSON.stringify(message)));
+  return received !== null && sameJson(received, message);
+}
+
+/** Structural equality over the plain objects, arrays and primitives a lobby message is made of. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, i) => sameJson(value, b[i]));
+  }
+  if (isRecord(a) && isRecord(b)) {
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && sameJson(a[key], b[key]));
+  }
+  return a === b;
 }
