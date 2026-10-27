@@ -69,6 +69,25 @@ describe("the rate limit on /api/ice and the room sockets", () => {
     await expect(refusal({}, request(ROOM, { "cf-connecting-ip": "203.0.113.7" }), "room")).resolves.toBeNull();
   });
 
+  /** A limiter outage must never take the game down with it. */
+  it("serves the request when the limiter throws, and logs only the error's name", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const RATE_LIMITER = {
+        limit: vi.fn<RateLimit["limit"]>(async () => {
+          throw new TypeError("quota store said no to 203.0.113.7");
+        }),
+      };
+      await expect(refusal({ RATE_LIMITER }, request(ROOM, { "cf-connecting-ip": "203.0.113.7" }), "room")).resolves.toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+      const logged = warn.mock.calls[0].map(String).join(" ");
+      expect(logged).toContain("TypeError");
+      expect(logged).not.toMatch(/quota store|203\.0\.113\.7/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("does not count a page from another site against the address", async () => {
     const RATE_LIMITER = limiter(true);
     const refused = await refusal(

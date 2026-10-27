@@ -37,10 +37,19 @@ function fromThisSite(request: Request): boolean {
   return true;
 }
 
-/** One budget per address, shared by `/api/ice` and the room sockets. */
+/**
+ * One budget per address, shared by `/api/ice` and the room sockets. Fails
+ * open: a limiter that cannot answer must never take the game down with it.
+ */
 async function withinRateLimit(env: GuardEnv, request: Request): Promise<boolean> {
   const ip = request.headers.get("cf-connecting-ip");
   if (!env.RATE_LIMITER || ip === null) return true;
-  const { success } = await env.RATE_LIMITER.limit({ key: ip });
-  return success;
+  try {
+    const { success } = await env.RATE_LIMITER.limit({ key: ip });
+    return success;
+  } catch (error) {
+    // The name alone: a message could carry the address.
+    console.warn(`rate limiter unavailable (${error instanceof Error ? error.name : typeof error}); serving the request`);
+    return true;
+  }
 }
