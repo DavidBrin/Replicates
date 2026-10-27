@@ -15,9 +15,10 @@
  * of them) is dropped after a timeout.
  */
 
+import { PRODUCT_SLUG } from "@/lib/brand";
 import { createEmitter, type Transport } from "../transport";
 
-const CHANNEL_PREFIX = "super-smash:";
+const CHANNEL_PREFIX = `${PRODUCT_SLUG}:`;
 
 /** Announcements and heartbeats, twice a second. */
 export const HEARTBEAT_MS = 500;

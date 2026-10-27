@@ -68,4 +68,9 @@ describe("MainMenu", () => {
 
     expect(screen.getByRole("button", { name: /online/i })).toHaveFocus();
   });
+
+  it("carries the product name in the header", async () => {
+    await renderMenu();
+    expect(screen.getByText("David-Smash")).toBeInTheDocument();
+  });
 });

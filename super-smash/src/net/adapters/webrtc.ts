@@ -39,6 +39,8 @@
  */
 
 import { joinRoom, selfId as trysteroSelfId } from "trystero";
+
+import { PRODUCT_SLUG } from "@/lib/brand";
 import { createEmitter, type Transport } from "../transport";
 
 /* -------------------------------------------------------------- room codes -- */
@@ -125,7 +127,7 @@ export interface WebRtcStatus {
   readonly channel: "reliable" | "unreliable" | "closed";
 }
 
-export const DEFAULT_APP_ID = "super-smash";
+export const DEFAULT_APP_ID = PRODUCT_SLUG;
 export const INPUT_CHANNEL_LABEL = "smash-input";
 /** Any id both peers agree on and Trystero does not use. */
 export const DEFAULT_UNRELIABLE_CHANNEL_ID = 42;

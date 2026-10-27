@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Anton, M_PLUS_Rounded_1c } from "next/font/google";
 
+import { PRODUCT_NAME } from "@/lib/brand";
+
 import "./globals.css";
 
 /**
@@ -30,7 +32,7 @@ const rounded = M_PLUS_Rounded_1c({
 });
 
 export const metadata: Metadata = {
-  title: "Super Smash",
+  title: PRODUCT_NAME,
   description:
     "Eight fighters, one keyboard, sixty frames a second. A browser rebuild of Super Smash Bros. Ultimate's versus mode.",
 };

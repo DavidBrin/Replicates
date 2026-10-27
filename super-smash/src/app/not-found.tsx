@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { StopScreen } from "@/components/menu/StopScreen";
+import { pageTitle } from "@/lib/brand";
 
-export const metadata: Metadata = { title: "No Contest · Super Smash" };
+export const metadata: Metadata = { title: pageTitle("No Contest") };
 
 /**
  * The 404, and the reason the App Router needs to own it.

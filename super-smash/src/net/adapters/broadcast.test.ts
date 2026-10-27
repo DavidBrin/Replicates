@@ -218,7 +218,7 @@ describe("messages", () => {
     const joins: string[] = [];
     first.onPeerJoin((id) => joins.push(id));
 
-    const stranger = bus.open("super-smash:room");
+    const stranger = bus.open("david-smash:room");
     stranger.postMessage({ t: "msg", from: "ghost", d: new Uint8Array([1]) });
 
     expect(joins).toEqual(["ghost"]);

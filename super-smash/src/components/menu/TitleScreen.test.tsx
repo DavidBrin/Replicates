@@ -48,4 +48,10 @@ describe("TitleScreen", () => {
     render(<TitleScreen />);
     expect(screen.getByText(/press any button/i)).toBeInTheDocument();
   });
+
+  it("spells the wordmark and the emblem as David-Smash", () => {
+    render(<TitleScreen />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/david\s*smash/i);
+    expect(screen.getAllByRole("img", { name: "David-Smash emblem" }).length).toBeGreaterThan(0);
+  });
 });

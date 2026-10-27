@@ -8,6 +8,7 @@ import { FighterBust } from "@/components/ui/FighterBust";
 import { SkewPanel, SkewTag } from "@/components/ui/SkewPanel";
 import { Tile } from "@/components/ui/Tile";
 import { SmashEmblem } from "./TitleScreen";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { useRoster } from "@/lib/matchConfig";
 
 interface Mode {
@@ -113,7 +114,7 @@ export function MainMenu() {
           className="border-[3px] border-panel-ink bg-panel-ink"
           innerClassName="px-4 py-1 font-display text-lg tracking-[0.2em] text-white uppercase"
         >
-          Super Smash
+          {PRODUCT_NAME}
         </SkewTag>
         <SkewTag
           className="ml-auto border-[3px] border-panel-ink bg-smash-yellow"

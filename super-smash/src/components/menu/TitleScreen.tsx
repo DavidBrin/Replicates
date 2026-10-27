@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
+import { PRODUCT_NAME } from "@/lib/brand";
+
 /**
  * The title screen.
  *
@@ -68,7 +70,7 @@ export function TitleScreen() {
             className="font-display text-[clamp(1.9rem,6vw,4.5rem)] leading-none tracking-[0.1em] text-smash-red uppercase drop-shadow-[0_4px_0_rgb(9_11_12/0.85)]"
             style={{ transform: "skewX(-12deg)" }}
           >
-            Super
+            David
           </span>
           <span
             className="mt-1 font-display text-[clamp(3.4rem,13vw,10rem)] leading-[0.92] tracking-[0.01em] text-panel-ink uppercase drop-shadow-[0_7px_0_rgb(173_0_0/0.95)]"
@@ -126,7 +128,7 @@ export function SmashEmblem({
       viewBox="0 0 100 100"
       className={className}
       role={decorative ? undefined : "img"}
-      aria-label={decorative ? undefined : "Super Smash emblem"}
+      aria-label={decorative ? undefined : `${PRODUCT_NAME} emblem`}
       aria-hidden={decorative || undefined}
     >
       <circle
