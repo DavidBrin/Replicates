@@ -184,9 +184,11 @@ export function CharacterSelect() {
     return () => window.removeEventListener("keydown", onKey);
   }, [activePort, addPlayer, assign, entries, focusTile, gridIndex, onlinePort, players.length, removePlayer, setFighter]);
 
-  // The guest follows the host into the match the moment the start arrives.
+  // The guest follows the host into the match the moment the start arrives —
+  // if it is still the live one. A match left by browser Back withdraws its
+  // start in the very commit that mounts this screen, after this render read it.
   useEffect(() => {
-    if (onlineRole === "guest" && onlineConfig) router.push("/play");
+    if (onlineRole === "guest" && onlineConfig && useOnlineStore.getState().config === onlineConfig) router.push("/play");
   }, [onlineConfig, onlineRole, router]);
 
   // A newcomer in the empty seat starts from an empty page: repeat this side's

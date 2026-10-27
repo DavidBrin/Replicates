@@ -16,7 +16,7 @@ import {
   type MatchResult,
   type PlayerResultStat,
 } from "@/lib/matchConfig";
-import { leaveOnline } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline } from "@/lib/onlineStore";
 
 const ORDINALS = ["1st", "2nd", "3rd", "4th"] as const;
 
@@ -26,16 +26,6 @@ const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
   suddenDeath: "Sudden Death",
   connectionLost: "Connection Lost",
 };
-
-/**
- * How long an online result keeps the room open before leaving it. The peer
- * that ended first has nothing left to play, but the other one may still be
- * waiting on its last input packets to reach the same result over a lossy
- * link; closing the transport at once would strand it. Leaving earlier than
- * this (Quit, Back, the screen unmounting) is the player's call and is not
- * held up.
- */
-export const ONLINE_RESULT_LINGER_MS = 1_500;
 
 /**
  * Results.

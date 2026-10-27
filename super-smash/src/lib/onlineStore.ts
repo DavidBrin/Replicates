@@ -25,6 +25,17 @@ export type OnlineErrorReason = SessionError | "link-failed";
 /** Shown while the seat the opponent left stands empty. */
 export const PEER_LEFT_NOTICE = "The other player left the room.";
 
+/**
+ * How long an online result keeps the room open before leaving it. The peer
+ * that ended first has nothing left to play, but the other one may still be
+ * waiting on its last input packets to reach the same result over a lossy
+ * link; closing the transport at once would strand it. The results screen
+ * holds the room this long, and the play page's runner keeps re-sending its
+ * last inputs for as long. Leaving earlier than this (Quit, Back, the screen
+ * unmounting) is the player's call and is not held up.
+ */
+export const ONLINE_RESULT_LINGER_MS = 1_500;
+
 export interface OnlineFields {
   status: OnlineStatus;
   roomCode: string | null;

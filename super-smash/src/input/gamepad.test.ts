@@ -480,20 +480,28 @@ describe("holding ports for a match (holdPorts)", () => {
     expect(poll.frames[2]).toBe(Btn.Special);
   });
 
-  it("never moves a connected pad, so a pad with no port left drives nothing", () => {
+  it("drives nothing from a pad with no port left", () => {
+    const input = match([pad({ index: 0, buttons: [0] }), pad({ index: 1, buttons: [1] }), pad({ index: 2, buttons: [2] })]);
+    expect(input.poll().frames).toEqual([Btn.Attack, 0, Btn.Special, 0]);
+  });
+
+  it("gives a freed port to the spare pad already connected, lowest first, and moves no seated pad", () => {
     const pads: (Gamepad | null)[] = [
       pad({ index: 0, buttons: [0] }),
       pad({ index: 1, buttons: [1] }),
       pad({ index: 2, buttons: [2] }),
+      pad({ index: 3, buttons: [4] }),
     ];
     const input = match(pads);
     expect(input.poll().frames).toEqual([Btn.Attack, 0, Btn.Special, 0]);
-    // The spare pad was there all along with no port; a port freeing up is
-    // for whoever plugs in next, not a reshuffle of the pads still connected.
-    pads[0] = null;
-    expect(input.poll().frames).toEqual([0, 0, Btn.Special, 0]);
-    pads.push(pad({ index: 3, buttons: [4] }));
-    expect(input.poll().frames).toEqual([Btn.Shield, 0, Btn.Special, 0]);
+    // Port 2's pad goes: the first spare takes it, the second stays spare,
+    // and the pad on port 0 stays where it is.
+    pads[1] = null;
+    expect(input.poll().frames).toEqual([Btn.Attack, 0, Btn.Jump, 0]);
+    expect(input.poll().frames).toEqual([Btn.Attack, 0, Btn.Jump, 0]);
+    // The old pad coming back finds both ports held, and drives nothing.
+    pads[1] = pad({ index: 1, buttons: [1] });
+    expect(input.poll().frames).toEqual([Btn.Attack, 0, Btn.Jump, 0]);
   });
 
   it("forgets the seats on detach", () => {

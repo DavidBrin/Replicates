@@ -789,6 +789,18 @@ describe("an online match that ended here lingers after dispose", () => {
     expect(sent).toHaveLength(total);
   });
 
+  it("lingers once however many times it is disposed", () => {
+    const { host, sent, released } = endedPair({ lingerMs: LINGER_MS });
+    sent.length = 0;
+    host.runner.dispose();
+    host.runner.dispose();
+    vi.advanceTimersByTime(LINGER_MS - 1);
+    // One immediate resend, then one per interval: a second linger would double it.
+    expect(sent).toHaveLength(1 + Math.floor((LINGER_MS - 1) / LINGER_RESEND_MS));
+    vi.advanceTimersByTime(1);
+    expect(released).toHaveBeenCalledTimes(3);
+  });
+
   it("stops as soon as the transport can no longer deliver", () => {
     let open = true;
     const { host, sent, released } = endedPair({ lingerMs: LINGER_MS, isOpen: () => open });

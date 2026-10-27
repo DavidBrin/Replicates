@@ -35,9 +35,8 @@ import { createGamepadInput, padPortMap, type GamepadInput } from "@/input/gamep
 import { AudioEngine } from "@/audio";
 import { conflictFreeSelection } from "@/input/schemes";
 import { useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
-import { leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { NetHud } from "@/components/match/NetHud";
-import { ONLINE_RESULT_LINGER_MS } from "@/components/menu/Results";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, type OnlineSessionLike } from "@/net/online/session";
 import type { LinkHealth } from "@/net/online/watchdog";
@@ -112,6 +111,17 @@ function onlineAtMount(): OnlineMount | null {
   return config && session && localPort !== null ? { config, session, localPort } : null;
 }
 
+/**
+ * The leave an online match's unmount scheduled, not yet run.
+ *
+ * Leaving /play any way but to the results (browser Back, a swipe) abandons
+ * the match, and the room with it. But React's development mode unmounts and
+ * remounts every effect once on the way in, and that must not end a match
+ * before it starts. So the unmount leaves a moment later, and a remount in the
+ * same task finds this and cancels it. Module-level so the remount can.
+ */
+let pendingLeave: ReturnType<typeof setTimeout> | null = null;
+
 interface MountArgs {
   readonly canvas: HTMLCanvasElement;
   readonly slots: RunnerSlot[];
@@ -157,53 +167,68 @@ function mountMatch(args: MountArgs): Mounted {
     audio = null;
   }
 
-  const tracker = createTracker(slots.length);
-  const runner = createMatchRunner({
-    stage: args.stage,
-    players: slots,
-    rules: args.rules,
-    seed: args.seed,
-    getFighter: getFighterOrThrow,
-    keyboard: args.keyboard,
-    gamepad: args.gamepad,
-    net: args.net,
-    audio,
-    onFrame: (state, events) => {
-      // The canvas is opaque to an end-to-end test, so the frame counter is
-      // published deliberately: it is the one honest signal that the
-      // simulation is advancing.
-      (window as unknown as { __smashFrame?: number }).__smashFrame = state.frame;
+  // Released with the match, or straight away if the runner cannot be built:
+  // the context and the gesture listener would otherwise outlive the page.
+  const releaseAudio = () => {
+    releaseAudioGesture?.();
+    // Disposed, not just silenced: browsers cap how many AudioContexts a
+    // page may hold, and leaking one per match eventually mutes the game.
+    audio?.dispose();
+  };
 
-      for (const hit of events.hits) {
-        if (hit.attacker === hit.victim) continue;
-        tracker.lastHitBy[hit.victim] = hit.attacker;
-        tracker.lastHitFrame[hit.victim] = state.frame;
-      }
-      for (const ko of events.kos) {
-        tracker.falls[ko.port] += 1;
-        const killer = tracker.lastHitBy[ko.port];
-        const recent = state.frame - tracker.lastHitFrame[ko.port] <= KILL_CREDIT_FRAMES;
-        if (killer >= 0 && recent) tracker.kos[killer] += 1;
-        else tracker.sds[ko.port] += 1;
-        tracker.lastHitBy[ko.port] = -1;
-      }
-    },
-    onEnd: (outcome: MatchOutcome) => {
-      const stats: PlayerResultStat[] = ports.map((port) => ({
-        port,
-        kos: tracker.kos[port] ?? 0,
-        falls: tracker.falls[port] ?? 0,
-        sds: tracker.sds[port] ?? 0,
-      }));
-      args.onResult({
-        kind: outcome.kind,
-        placings: outcome.placings,
-        stats,
-        fighters: Object.fromEntries(slots.map((s, i) => [ports[i], s.selection.defId])),
-        ...(args.net ? { online: true } : {}),
-      });
-    },
-  });
+  const tracker = createTracker(slots.length);
+  let runner: MatchRunner;
+  try {
+    runner = createMatchRunner({
+      stage: args.stage,
+      players: slots,
+      rules: args.rules,
+      seed: args.seed,
+      getFighter: getFighterOrThrow,
+      keyboard: args.keyboard,
+      gamepad: args.gamepad,
+      net: args.net,
+      audio,
+      onFrame: (state, events) => {
+        // The canvas is opaque to an end-to-end test, so the frame counter is
+        // published deliberately: it is the one honest signal that the
+        // simulation is advancing.
+        (window as unknown as { __smashFrame?: number }).__smashFrame = state.frame;
+
+        for (const hit of events.hits) {
+          if (hit.attacker === hit.victim) continue;
+          tracker.lastHitBy[hit.victim] = hit.attacker;
+          tracker.lastHitFrame[hit.victim] = state.frame;
+        }
+        for (const ko of events.kos) {
+          tracker.falls[ko.port] += 1;
+          const killer = tracker.lastHitBy[ko.port];
+          const recent = state.frame - tracker.lastHitFrame[ko.port] <= KILL_CREDIT_FRAMES;
+          if (killer >= 0 && recent) tracker.kos[killer] += 1;
+          else tracker.sds[ko.port] += 1;
+          tracker.lastHitBy[ko.port] = -1;
+        }
+      },
+      onEnd: (outcome: MatchOutcome) => {
+        const stats: PlayerResultStat[] = ports.map((port) => ({
+          port,
+          kos: tracker.kos[port] ?? 0,
+          falls: tracker.falls[port] ?? 0,
+          sds: tracker.sds[port] ?? 0,
+        }));
+        args.onResult({
+          kind: outcome.kind,
+          placings: outcome.placings,
+          stats,
+          fighters: Object.fromEntries(slots.map((s, i) => [ports[i], s.selection.defId])),
+          ...(args.net ? { online: true } : {}),
+        });
+      },
+    });
+  } catch (e) {
+    releaseAudio();
+    throw e;
+  }
 
   // How an end-to-end test sees the simulation. Accessors rather than a
   // per-frame snapshot: publishing a fresh object 60 times a second would put
@@ -249,10 +274,7 @@ function mountMatch(args: MountArgs): Mounted {
     runner,
     dispose() {
       runner.dispose();
-      releaseAudioGesture?.();
-      // Disposed, not just silenced: browsers cap how many AudioContexts a
-      // page may hold, and leaking one per match eventually mutes the game.
-      audio?.dispose();
+      releaseAudio();
       delete (window as unknown as { __smashDebug?: unknown }).__smashDebug;
     },
   };
@@ -279,23 +301,38 @@ export default function PlayPage() {
   const setResult = useMatchConfig((s) => s.setResult);
 
   const [online] = useState(onlineAtMount);
+  // Seated for an online match with none to play: the start was withdrawn
+  // (the opponent left) before this page mounted. The seats are two humans on
+  // one keyboard, not a local match, so this goes back to the lobby instead.
+  const [stranded] = useState(() => online === null && useMatchConfig.getState().online);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [netStats, setNetStats] = useState<NetStats | null>(null);
   const [linkHealth, setLinkHealth] = useState<LinkHealth>("ok");
   const [peerAway, setPeerAway] = useState(false);
 
+  /** Cancels the hand-off to the results screen while it waits out the KO's play-out. */
+  const cancelResultRef = useRef<(() => void) | null>(null);
+
   const quit = useCallback(() => {
+    // Leaving during the play-out must not be followed by the results.
+    cancelResultRef.current?.();
     runnerRef.current?.dispose();
     keyboardRef.current?.detach();
     router.push("/menu");
     if (online) leaveOnline();
   }, [online, router]);
 
+  useEffect(() => {
+    if (!stranded) return;
+    leaveOnline();
+    router.replace("/online");
+  }, [stranded, router]);
+
   /* ------------------------------------------------------------ local match -- */
 
   useEffect(() => {
-    if (online) return;
+    if (online || stranded) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -303,6 +340,7 @@ export default function PlayPage() {
     let keyboard: KeyboardInput | null = null;
     let gamepad: GamepadInput | null = null;
     let resultTimer = 0;
+    cancelResultRef.current = () => window.clearTimeout(resultTimer);
 
     try {
       bootstrapEngine();
@@ -361,29 +399,40 @@ export default function PlayPage() {
     }
 
     return () => {
-      // Quitting during the KO's play-out must not be followed by the results.
+      // Leaving during the KO's play-out must not be followed by the results.
       window.clearTimeout(resultTimer);
+      cancelResultRef.current = null;
       mounted?.dispose();
       keyboard?.detach();
       gamepad?.detach();
       runnerRef.current = null;
       keyboardRef.current = null;
     };
-  }, [online, players, stageId, stageForm, rules, bindings, router, setResult]);
+  }, [online, stranded, players, stageId, stageForm, rules, bindings, router, setResult]);
 
   /* ----------------------------------------------------------- online match -- */
 
   useEffect(() => {
     if (!online) return;
+    const { config, session, localPort } = online;
+    // React's development remount: the unmount just undone withdrew the start
+    // and scheduled a leave, but this is the same match, so neither stands.
+    if (pendingLeave !== null) {
+      clearTimeout(pendingLeave);
+      pendingLeave = null;
+      useOnlineStore.getState().patch({ config });
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const { config, session, localPort } = online;
 
     let mounted: Mounted | null = null;
     let stopMonitor: (() => void) | null = null;
     let statsTimer = 0;
     let resultTimer = 0;
+    cancelResultRef.current = () => window.clearTimeout(resultTimer);
     let finished = false;
+    /** The result has gone to the results screen, and the room with it. */
+    let handedOff = false;
     // Each player is on their own machine, so each gets Config 1 (with their
     // own rebinding) and every pad, on their own port.
     const keyboard = createKeyboardInput([{ port: localPort, scheme: schemeForMenuId("arrows", bindings.arrows) }]);
@@ -397,7 +446,10 @@ export default function PlayPage() {
       // The room is the results screen's to leave: at once after a lost
       // connection, after a short grace otherwise (Results.tsx), during which
       // the runner keeps this side's last inputs going out (`lingerMs`).
-      resultTimer = window.setTimeout(() => router.push("/results"), delayMs);
+      resultTimer = window.setTimeout(() => {
+        handedOff = true;
+        router.push("/results");
+      }, delayMs);
     };
 
     try {
@@ -462,6 +514,7 @@ export default function PlayPage() {
     return () => {
       window.clearInterval(statsTimer);
       window.clearTimeout(resultTimer);
+      cancelResultRef.current = null;
       stopMonitor?.();
       mounted?.dispose();
       keyboard.detach();
@@ -469,6 +522,18 @@ export default function PlayPage() {
       runnerRef.current = null;
       keyboardRef.current = null;
       delete (window as unknown as { __smashNet?: unknown }).__smashNet;
+      if (!handedOff) {
+        // Gone some other way than to the results (browser Back, a swipe): the
+        // match is abandoned, and the room with it. The start is withdrawn
+        // now, or the guest's character select, mounting in this same commit,
+        // would follow it straight back here; the room is left a moment later
+        // (see `pendingLeave`), and only if it is still this match's.
+        useOnlineStore.getState().patch({ config: null });
+        pendingLeave = setTimeout(() => {
+          pendingLeave = null;
+          if (getActiveSession() === session) leaveOnline();
+        }, 0);
+      }
     };
   }, [online, bindings, router, setResult]);
 

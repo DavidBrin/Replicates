@@ -3,10 +3,10 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
 import { resetRosterCache, useMatchConfig, type MatchResult } from "@/lib/matchConfig";
-import { leaveOnline } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline } from "@/lib/onlineStore";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
-import { ONLINE_RESULT_LINGER_MS, Results } from "./Results";
+import { Results } from "./Results";
 
 // The real leave, counted: "exactly one leave" is a claim about calls, and the
 // session's own `close` cannot show it (a second leave finds nothing to close).

@@ -161,9 +161,11 @@ export interface GamepadOptions {
    * Hold each pad to the port it took for as long as it stays connected — a
    * match, since the play page builds a reader per match. Without this, ports
    * follow connection order on every poll, so a pad below another unplugging
-   * hands the one above it someone else's fighter. With it, an unplugged pad's
-   * port goes idle, a pad that connects takes the first port `portForPad`
-   * lists that no connected pad holds, and a connected pad never moves.
+   * hands the one above it someone else's fighter. With it, a connected pad
+   * never moves, and an unplugged pad's port goes to the first pad without
+   * one, lowest connection ordinal first (a spare already connected, or the
+   * next to plug in); until then it is idle. Ports are offered in
+   * `portForPad`'s order.
    */
   readonly holdPorts?: boolean;
   readonly onConnectionChange?: (padIndex: number, connected: boolean) => void;
@@ -192,7 +194,7 @@ export class GamepadInput {
   /** Last poll's packed frame per pad index, for edge detection. */
   private readonly lastFrames = new Map<number, InputFrame>();
   private readonly connected = new Set<number>();
-  /** With `holdPorts`: the port each connected pad holds, by pad index; -1 for none. */
+  /** With `holdPorts`: the port each seated pad holds, by pad index. */
   private readonly heldPorts = new Map<number, number>();
   private attached = false;
 
@@ -281,7 +283,7 @@ export class GamepadInput {
     return { frames, pressed, released, sticks, connectedPads: seen };
   }
 
-  /** An unplugged pad gives up its port; nobody else moves into it but a pad that connects later. */
+  /** An unplugged pad gives up its port, for a pad without one to take. */
   private releaseUnplugged(pads: readonly Gamepad[]): void {
     for (const index of [...this.heldPorts.keys()]) {
       if (!pads.some((pad) => pad.index === index)) this.heldPorts.delete(index);
@@ -289,24 +291,23 @@ export class GamepadInput {
   }
 
   /**
-   * The port a connected pad holds. A pad seen for the first time takes the
-   * first port in `portForPad`'s order that no connected pad holds, or none
-   * when every port is taken, and keeps that answer while it stays connected.
+   * The port a connected pad holds, or -1. A pad without one takes the first
+   * port in `portForPad`'s order that no connected pad holds, and keeps it
+   * while it stays connected; with every port held it asks again next poll.
+   * `poll` asks in connection order, so the lowest ordinal is seated first.
    */
   private heldPortFor(index: number, portCount: number): number {
     const held = this.heldPorts.get(index);
     if (held !== undefined) return held;
     const taken = new Set(this.heldPorts.values());
-    let port = -1;
     for (let ordinal = 0; ordinal < portCount; ordinal++) {
-      const candidate = this.portForPad(ordinal);
-      if (candidate >= 0 && candidate < portCount && !taken.has(candidate)) {
-        port = candidate;
-        break;
+      const port = this.portForPad(ordinal);
+      if (port >= 0 && port < portCount && !taken.has(port)) {
+        this.heldPorts.set(index, port);
+        return port;
       }
     }
-    this.heldPorts.set(index, port);
-    return port;
+    return -1;
   }
 
   private readStick(pad: Gamepad): Stick {

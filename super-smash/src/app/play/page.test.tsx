@@ -5,18 +5,20 @@
  * hands them and what it does with what they report.
  */
 
+import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { routerMock } from "../../../vitest.setup";
-import { ONLINE_RESULT_LINGER_MS } from "@/components/menu/Results";
+import { AudioEngine } from "@/audio";
+import { CharacterSelect } from "@/components/menu/CharacterSelect";
 import { resolveMatchStage } from "@/game/bootstrap";
 import type { LinkMonitorOptions } from "@/game/linkMonitor";
 import type { MatchRunnerOptions } from "@/game/matchRunner";
 import { runnerSlotsFor } from "@/game/onlineConfig";
 import type { GamepadOptions } from "@/input/gamepad";
-import { useMatchConfig } from "@/lib/matchConfig";
-import { leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import type { DoSignalStatus } from "@/net/adapters/doSignal";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
@@ -26,14 +28,20 @@ import type { Role } from "@/net/signalProtocol";
 import PlayPage from "./page";
 
 const mocks = vi.hoisted(() => {
-  const runners: { options: MatchRunnerOptions; runner: { stop: Mock; dispose: Mock; netStats: NetStats | null } }[] = [];
+  const runners: { options: MatchRunnerOptions; runner: { start: Mock; stop: Mock; dispose: Mock; netStats: NetStats | null } }[] = [];
   const monitors: { options: LinkMonitorOptions; stop: Mock }[] = [];
   const pads: { options: GamepadOptions; detach: Mock }[] = [];
-  return { runners, monitors, pads };
+  /** Set to make the next runner refuse to build. */
+  const fail = { next: false };
+  return { runners, monitors, pads, fail };
 });
 
 vi.mock("@/game/matchRunner", () => ({
   createMatchRunner: (options: MatchRunnerOptions) => {
+    if (mocks.fail.next) {
+      mocks.fail.next = false;
+      throw new Error("The runner refused to build");
+    }
     const runner = {
       start: vi.fn(),
       stop: vi.fn(),
@@ -104,9 +112,22 @@ beforeEach(() => {
   mocks.runners.length = 0;
   mocks.monitors.length = 0;
   mocks.pads.length = 0;
+  mocks.fail.next = false;
   routerMock.push.mockClear();
+  routerMock.replace.mockClear();
   useMatchConfig.getState().reset();
 });
+
+/** Whatever the page left on a timer for "a moment later" — its deferred leave. */
+function flushTimers() {
+  act(() => vi.advanceTimersByTime(0));
+}
+
+/** Esc, then the overlay's way out. */
+function quitFromMenu(name: "QUIT MATCH" | "LEAVE MATCH") {
+  fireEvent.keyDown(window, { code: "Escape" });
+  fireEvent.click(screen.getByRole("button", { name }));
+}
 
 afterEach(() => {
   act(() => leaveOnline());
@@ -211,7 +232,144 @@ describe("the play page, online", () => {
   });
 });
 
+describe("the play page, leaving online", () => {
+  it("leaves the room when the page goes away mid-match", () => {
+    const { fake } = goOnline("guest");
+    const { unmount } = render(<PlayPage />);
+    unmount();
+    flushTimers();
+    expect(getActiveSession()).toBeNull();
+    expect(fake.session.close).toHaveBeenCalled();
+    expect(useOnlineStore.getState().config).toBeNull();
+  });
+
+  it("leaves the room when the page goes away during the KO's play-out", () => {
+    goOnline("host");
+    const { unmount } = render(<PlayPage />);
+    act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [0, 1] }));
+    act(() => vi.advanceTimersByTime(1000));
+    unmount();
+    flushTimers();
+    expect(getActiveSession()).toBeNull();
+    // ...and never bounces to the results it walked away from.
+    act(() => vi.advanceTimersByTime(5000));
+    expect(routerMock.push).not.toHaveBeenCalledWith("/results");
+  });
+
+  it("keeps the room for the results screen once the result is handed over", () => {
+    const { fake } = goOnline("guest");
+    const { unmount } = render(<PlayPage />);
+    act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [1, 0] }));
+    act(() => vi.advanceTimersByTime(2400));
+    expect(routerMock.push).toHaveBeenCalledWith("/results");
+    unmount();
+    flushTimers();
+    expect(getActiveSession()).toBe(fake.session);
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
+
+  it("keeps the room through React's development remount", () => {
+    const { fake } = goOnline("guest");
+    render(
+      <StrictMode>
+        <PlayPage />
+      </StrictMode>,
+    );
+    flushTimers();
+    expect(getActiveSession()).toBe(fake.session);
+    expect(useOnlineStore.getState().config).toBe(CONFIG);
+    // The remount's match is the one left running.
+    expect(mocks.runners.at(-1)?.runner.dispose).not.toHaveBeenCalled();
+  });
+
+  it("does not send the guest straight back into the match it walked away from", async () => {
+    goOnline("guest");
+    resetRosterCache();
+    function Screen({ at }: { at: "play" | "fighters" }) {
+      return at === "play" ? <PlayPage /> : <CharacterSelect />;
+    }
+    const { rerender } = render(<Screen at="play" />);
+    routerMock.push.mockClear();
+    // One commit: the match unmounts and character select mounts, as a browser Back does.
+    rerender(<Screen at="fighters" />);
+    await act(async () => {});
+    flushTimers();
+    expect(routerMock.push).not.toHaveBeenCalledWith("/play");
+    expect(getActiveSession()).toBeNull();
+  });
+
+  it("stops watching the link and drops its e2e handle on unmount", () => {
+    goOnline("host");
+    const { unmount } = render(<PlayPage />);
+    expect((window as { __smashNet?: unknown }).__smashNet).toBeDefined();
+    unmount();
+    expect(only(mocks.monitors).stop).toHaveBeenCalled();
+    expect((window as { __smashNet?: unknown }).__smashNet).toBeUndefined();
+  });
+
+  it("does not bounce to the results after leaving during the KO's play-out", () => {
+    goOnline("guest");
+    render(<PlayPage />);
+    act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [1, 0] }));
+    quitFromMenu("LEAVE MATCH");
+    act(() => vi.advanceTimersByTime(5000));
+    expect(routerMock.push).toHaveBeenCalledWith("/menu");
+    expect(routerMock.push).not.toHaveBeenCalledWith("/results");
+  });
+
+  it("goes back to the lobby, not into a local match, when the start was withdrawn before it mounted", () => {
+    // Seated online, but the opponent left between the start and this page: no config.
+    const { fake } = goOnline("guest");
+    useOnlineStore.getState().patch({ config: null });
+    render(<PlayPage />);
+    expect(mocks.runners).toEqual([]);
+    expect(routerMock.replace).toHaveBeenCalledWith("/online");
+    expect(getActiveSession()).toBeNull();
+    expect(fake.session.close).toHaveBeenCalled();
+    expect(useMatchConfig.getState().online).toBe(false);
+  });
+});
+
 describe("the play page, local", () => {
+  it("pauses on Esc and resumes on Esc again", () => {
+    render(<PlayPage />);
+    const { runner } = only(mocks.runners);
+    expect(runner.start).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { code: "Escape" });
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    expect(runner.stop).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { code: "Escape" });
+    expect(screen.queryByText("PAUSED")).toBeNull();
+    expect(runner.start).toHaveBeenCalledTimes(2);
+    expect(runner.start).toHaveBeenLastCalledWith(screen.getByLabelText("Match"));
+  });
+
+  it("does not bounce to the results after quitting during the KO's play-out", () => {
+    render(<PlayPage />);
+    act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [0, 1] }));
+    quitFromMenu("QUIT MATCH");
+    act(() => vi.advanceTimersByTime(5000));
+    expect(routerMock.push).toHaveBeenCalledWith("/menu");
+    expect(routerMock.push).not.toHaveBeenCalledWith("/results");
+  });
+
+  it("releases the sound when the match cannot be built", async () => {
+    const release = vi.fn();
+    const unlock = vi.spyOn(AudioEngine.prototype, "unlockOnGesture").mockReturnValue(release);
+    const dispose = vi.spyOn(AudioEngine.prototype, "dispose");
+    try {
+      mocks.fail.next = true;
+      render(<PlayPage />);
+      await act(async () => {});
+      expect(screen.getByRole("alert")).toHaveTextContent("The runner refused to build");
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(dispose).toHaveBeenCalledTimes(1);
+    } finally {
+      unlock.mockRestore();
+      dispose.mockRestore();
+    }
+  });
+
   it("plays the menus' match with no network, each pad held to its human's port", () => {
     const config = useMatchConfig.getState();
     config.addPlayer();
