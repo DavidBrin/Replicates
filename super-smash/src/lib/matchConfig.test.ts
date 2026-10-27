@@ -224,3 +224,30 @@ describe("formatTime", () => {
     expect(formatTime(0)).toBe("0:00");
   });
 });
+
+describe("online mode", () => {
+  beforeEach(() => {
+    useMatchConfig.getState().reset();
+  });
+
+  it("seats two humans on their own keyboards with empty panels", () => {
+    useMatchConfig.getState().configureOnline();
+    const { players, rules } = useMatchConfig.getState();
+    expect(players.map((p) => [p.port, p.kind, p.scheme, p.fighterId])).toEqual([
+      [0, "human", "arrows", null],
+      [1, "human", "arrows", null],
+    ]);
+    expect(rules.oneOnOne).toBe(true);
+  });
+
+  it("goes back to one human and a CPU on leaving", () => {
+    useMatchConfig.getState().configureOnline();
+    useMatchConfig.getState().leaveOnline();
+    expect(useMatchConfig.getState().players.map((p) => p.kind)).toEqual(["human", "cpu"]);
+  });
+
+  it("can record a match the connection ended", () => {
+    useMatchConfig.getState().setResult({ kind: "connectionLost", placings: [], stats: [], fighters: {}, online: true });
+    expect(useMatchConfig.getState().result?.kind).toBe("connectionLost");
+  });
+});

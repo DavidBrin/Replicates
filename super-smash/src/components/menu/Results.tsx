@@ -22,6 +22,7 @@ const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
   stockOut: "Game Set",
   timeUp: "Time Up",
   suddenDeath: "Sudden Death",
+  connectionLost: "Connection Lost",
 };
 
 /**

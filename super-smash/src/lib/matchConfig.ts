@@ -659,8 +659,9 @@ export interface PlayerResultStat {
 }
 
 export interface MatchResult {
-  readonly kind: MatchOutcome["kind"];
-  /** Ports in finishing order, winner first. */
+  /** How the match ended — or that the network ended it first. */
+  readonly kind: MatchOutcome["kind"] | "connectionLost";
+  /** Ports in finishing order, winner first. Empty when the connection was lost. */
   readonly placings: readonly number[];
   readonly stats: readonly PlayerResultStat[];
   /**
@@ -669,6 +670,8 @@ export interface MatchResult {
    * results screen would relabel a match that has already been played.
    */
   readonly fighters: Readonly<Record<number, string>>;
+  /** Played online: no local rematch, and quitting leaves the room. */
+  readonly online?: boolean;
 }
 
 export interface RebindResult {
@@ -704,6 +707,10 @@ interface MatchConfigState {
   setFighter(port: number, fighterId: string | null): void;
   setCostume(port: number, costume: number): void;
   setScheme(port: number, scheme: SchemeId): boolean;
+  /** Two humans, one per machine, each on their own keyboard's Config 1. */
+  configureOnline(): void;
+  /** Back to the offline default: one human and a CPU. */
+  leaveOnline(): void;
 
   rebind(scheme: SchemeId, action: ControlAction, code: string): RebindResult;
   resetBindings(scheme: SchemeId): void;
@@ -727,6 +734,10 @@ function makePlayer(port: number): PlayerSlot {
 
 function initialPlayers(): PlayerSlot[] {
   return [makePlayer(0), makePlayer(1)];
+}
+
+function onlinePlayer(port: number): PlayerSlot {
+  return { port, kind: "human", cpuLevel: 3, fighterId: null, costume: port, scheme: "arrows" };
 }
 
 /**
@@ -840,6 +851,20 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
     }));
     return true;
   },
+
+  configureOnline: () =>
+    set((s) => {
+      const players = [onlinePlayer(0), onlinePlayer(1)];
+      return { players, rules: withDerivedRules(s.rules, players), result: null };
+    }),
+
+  // `result` is kept: the results screen calls this on its way out, and
+  // clearing it there would flash "No match yet" before the navigation lands.
+  leaveOnline: () =>
+    set((s) => {
+      const players = initialPlayers();
+      return { players, rules: withDerivedRules(s.rules, players) };
+    }),
 
   /**
    * Rebinding refuses a key another *active* human already holds, because a
