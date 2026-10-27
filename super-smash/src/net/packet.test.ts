@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { Btn } from "@/engine/types";
 import {
-  INPUT_WINDOW_FRAMES,
   MAX_ENCODED_BYTES,
+  MAX_INPUT_WINDOW_FRAMES,
   MAX_PACKET_BYTES,
   PROTOCOL_VERSION,
   PacketType,
@@ -13,7 +13,7 @@ import {
   type Packet,
 } from "./packet";
 
-const fullWindow = Array.from({ length: INPUT_WINDOW_FRAMES }, (_, i) => i * 37);
+const fullWindow = Array.from({ length: MAX_INPUT_WINDOW_FRAMES }, (_, i) => i * 37);
 
 describe("packet round-trips", () => {
   it("carries a full input window intact", () => {
@@ -21,7 +21,8 @@ describe("packet round-trips", () => {
       type: PacketType.Input,
       port: 2,
       senderFrame: 1234,
-      startFrame: 1225,
+      startFrame: 1107,
+      ack: 1230,
       inputs: fullWindow,
     };
     expect(decodePacket(encodePacket(packet))).toEqual(packet);
@@ -36,6 +37,7 @@ describe("packet round-trips", () => {
         port: 0,
         senderFrame: 1,
         startFrame: 0,
+        ack: 0,
         inputs: [everything, 0, Btn.Jump],
       }),
     );
@@ -48,10 +50,18 @@ describe("packet round-trips", () => {
       type: PacketType.Input,
       port: 3,
       senderFrame: 4_000_000_000,
-      startFrame: 3_999_999_991,
+      startFrame: 3_999_999_873,
+      ack: 3_999_999_990,
       inputs: fullWindow,
     };
     expect(decodePacket(encodePacket(packet))).toEqual(packet);
+  });
+
+  it("carries the acknowledgement, including the one that says nothing has arrived yet", () => {
+    for (const ack of [-1, 0, 1, 0xffff_fffe]) {
+      const packet: Packet = { type: PacketType.Input, port: 1, senderFrame: 5, startFrame: 3, ack, inputs: [] };
+      expect(decodePacket(encodePacket(packet))).toEqual(packet);
+    }
   });
 
   it("round-trips ping and pong", () => {
@@ -76,16 +86,18 @@ describe("packet round-trips", () => {
 });
 
 describe("packet size", () => {
-  it("keeps a full ten-frame window far under the fragmentation threshold", () => {
+  it("keeps a window at the cap far under the fragmentation threshold", () => {
     const bytes = encodePacket({
       type: PacketType.Input,
       port: 0,
       senderFrame: 999,
-      startFrame: 990,
+      startFrame: 872,
+      ack: 871,
       inputs: fullWindow,
     });
-    expect(bytes.length).toBe(inputPacketBytes(INPUT_WINDOW_FRAMES));
-    expect(bytes.length).toBe(32);
+    expect(bytes.length).toBe(inputPacketBytes(MAX_INPUT_WINDOW_FRAMES));
+    // 16 bytes of header and two a frame: 128 frames is 272 bytes.
+    expect(bytes.length).toBe(272);
     expect(bytes.length).toBeLessThan(MAX_PACKET_BYTES);
   });
 
@@ -102,7 +114,8 @@ describe("packet size", () => {
         port: 0,
         senderFrame: 0,
         startFrame: 0,
-        inputs: new Array(INPUT_WINDOW_FRAMES + 1).fill(0),
+        ack: -1,
+        inputs: new Array(MAX_INPUT_WINDOW_FRAMES + 1).fill(0),
       }),
     ).toThrow(/at most/);
   });
@@ -123,6 +136,19 @@ describe("decoding hostile bytes", () => {
     expect(decodePacket(bytes)).toBeNull();
   });
 
+  it("rejects an input packet from a peer on the layout before acknowledgements", () => {
+    // Version 1: no ack, so a header four bytes shorter. Read as this layout,
+    // its first two inputs would pass for an ack and every frame would move.
+    const old = new Uint8Array(12 + 3 * 2);
+    const view = new DataView(old.buffer);
+    old.set([1, PacketType.Input, 0, 3]);
+    view.setUint32(4, 50, true);
+    view.setUint32(8, 48, true);
+    for (let i = 0; i < 3; i++) view.setUint16(12 + i * 2, Btn.Jump, true);
+    expect(PROTOCOL_VERSION).toBeGreaterThan(1);
+    expect(decodePacket(old)).toBeNull();
+  });
+
   it("rejects an unknown packet type", () => {
     const bytes = encodePacket({ type: PacketType.Ping, token: 1 });
     bytes[1] = 99;
@@ -135,6 +161,7 @@ describe("decoding hostile bytes", () => {
       port: 0,
       senderFrame: 10,
       startFrame: 1,
+      ack: 0,
       inputs: fullWindow,
     });
     for (let cut = 1; cut < bytes.length; cut++) {
@@ -148,10 +175,16 @@ describe("decoding hostile bytes", () => {
       port: 0,
       senderFrame: 10,
       startFrame: 1,
+      ack: 0,
       inputs: [1, 2, 3],
     });
     bytes[3] = 200;
     expect(decodePacket(bytes)).toBeNull();
+    // …even when the bytes are all there to read.
+    const long = new Uint8Array(inputPacketBytes(MAX_INPUT_WINDOW_FRAMES + 1));
+    long.set(encodePacket({ type: PacketType.Input, port: 0, senderFrame: 10, startFrame: 1, ack: 0, inputs: [] }));
+    long[3] = MAX_INPUT_WINDOW_FRAMES + 1;
+    expect(decodePacket(long)).toBeNull();
   });
 
   it("decodes a packet that sits inside a larger buffer", () => {
@@ -167,7 +200,7 @@ describe("decoding hostile bytes", () => {
 describe("the soft-stick bit", () => {
   it("survives the wire, since it is how a gamepad's walk reaches the other peer", () => {
     const inputs = [Btn.Right | Btn.Soft, Btn.Soft | Btn.Attack];
-    const packet: Packet = { type: PacketType.Input, port: 1, senderFrame: 10, startFrame: 8, inputs };
+    const packet: Packet = { type: PacketType.Input, port: 1, senderFrame: 10, startFrame: 8, ack: 9, inputs };
     expect(decodePacket(encodePacket(packet))).toEqual(packet);
   });
 });

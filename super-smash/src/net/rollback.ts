@@ -52,7 +52,7 @@ import type { GameState, InputFrame, StepEvents } from "@/engine/types";
 import { emptyEvents } from "@/engine/types";
 import type { Transport, Unsubscribe } from "./transport";
 import {
-  INPUT_WINDOW_FRAMES,
+  MAX_INPUT_WINDOW_FRAMES,
   PacketType,
   decodePacket,
   encodePacket,
@@ -67,6 +67,15 @@ export const MAX_PREDICTION_FRAMES = 8;
 
 /** Frames of input history kept per port. A power of two so `%` is a mask. */
 export const INPUT_HISTORY_FRAMES = 256;
+
+/**
+ * How far back a guess looks for the last real input before a hole: the ten
+ * frames packets used to carry. Packets now resend from the receiver's
+ * acknowledgement, so every one that lands starts no later than the first
+ * frame its receiver lacks; no hole forms, and the guess is the last confirmed
+ * input either way. The bound stays so a guess is made exactly as it was.
+ */
+const PREDICTION_LOOKBACK_FRAMES = 10;
 
 /**
  * How many save slots a given prediction cap needs.
@@ -303,7 +312,7 @@ class PortInputs {
    * yet — the frame before the hole is a better guess than the newest frame.
    */
   predict(frame: number): InputFrame {
-    for (let f = frame; f > frame - INPUT_WINDOW_FRAMES && f >= 0; f--) {
+    for (let f = frame; f > frame - PREDICTION_LOOKBACK_FRAMES && f >= 0; f--) {
       if (this.has(f)) return this.value[f % INPUT_HISTORY_FRAMES];
     }
     return this.lastKnownFrame >= 0 ? this.lastKnownValue : NEUTRAL_INPUT;
@@ -331,6 +340,12 @@ interface PeerInfo {
   /** Ports we have actually heard input from, for diagnostics. */
   readonly ports: Set<number>;
   lastPacketFrame: number;
+  /**
+   * The newest of our frames this peer holds without a gap, by its own
+   * account: the highest `ack` it has sent. -1 until it says. Every input
+   * packet resends what comes after it.
+   */
+  ack: number;
 }
 
 /* ----------------------------------------------------------------- session -- */
@@ -467,7 +482,7 @@ export class RollbackSession<S = GameState> {
     this.unsubscribes.push(
       this.transport.onMessage((bytes, peerId) => this.receive(bytes, peerId)),
       this.transport.onPeerJoin((peerId) => {
-        this.peers.set(peerId, { id: peerId, ports: new Set(), lastPacketFrame: -1 });
+        this.peers.set(peerId, { id: peerId, ports: new Set(), lastPacketFrame: -1, ack: -1 });
         this.onPeerJoinCb?.(peerId);
       }),
       this.transport.onPeerLeave((peerId) => {
@@ -647,8 +662,11 @@ export class RollbackSession<S = GameState> {
    * For the grace after a match ends here: nothing ticks any more, so no
    * heartbeat goes out, but the peer may still be a lost packet short of the
    * inputs that end the match on its side. Nothing has been scheduled since
-   * the last heartbeat, so this carries the same window of inputs, stamped
-   * with the frame the session is on. Nothing once closed.
+   * the last heartbeat, so this carries the same window a heartbeat would:
+   * every frame the peer has not acknowledged, however many a burst of loss
+   * left it missing, stamped with the frame the session is on. Packets keep
+   * arriving meanwhile, so the window shrinks as the peer catches up. Nothing
+   * once closed.
    */
   resendInputs(): void {
     if (this.closed) return;
@@ -847,10 +865,21 @@ export class RollbackSession<S = GameState> {
     this.maybePing();
   }
 
+  /**
+   * Every frame of this port's input that some peer has not acknowledged, and
+   * this machine's own acknowledgement.
+   *
+   * Oldest first: a receiver can only confirm frames in order, so the one it
+   * is stuck on must go out even when the cap (packet.ts) trims the window.
+   * Never further back than the history still holds, where an overwritten slot
+   * would go out as an input nobody pressed; with the prediction cap anywhere
+   * near its default the peer cannot fall that far behind.
+   */
   private sendInputWindow(port: number): void {
     if (this.highestScheduled < 0) return;
-    const end = this.highestScheduled;
-    const start = Math.max(0, end - INPUT_WINDOW_FRAMES + 1);
+    const newest = this.highestScheduled;
+    const start = Math.max(0, this.peerAck() + 1, newest - INPUT_HISTORY_FRAMES + 1);
+    const end = Math.min(newest, start + MAX_INPUT_WINDOW_FRAMES - 1);
     const queue = this.inputs[port];
     const window: InputFrame[] = [];
     for (let f = start; f <= end; f++) window.push(queue.get(f) ?? NEUTRAL_INPUT);
@@ -859,8 +888,20 @@ export class RollbackSession<S = GameState> {
       port,
       senderFrame: this.currentFrame,
       startFrame: start,
+      ack: this.remotePorts.length === 0 ? -1 : this.remoteConfirmedFrame(),
       inputs: window,
     });
+  }
+
+  /**
+   * The newest frame of ours every peer holds without a gap: the slowest
+   * peer's acknowledgement, since one broadcast window serves them all. -1
+   * before any peer has said, or with none, which resends from the start.
+   */
+  private peerAck(): number {
+    let ack = Infinity;
+    for (const peer of this.peers.values()) ack = Math.min(ack, peer.ack);
+    return ack === Infinity ? -1 : ack;
   }
 
   private maybePing(): void {
@@ -897,7 +938,7 @@ export class RollbackSession<S = GameState> {
       // A packet from an unannounced peer is still a peer. Adapters differ on
       // whether join fires before the first message, and the session must not
       // depend on which.
-      peer = { id: peerId, ports: new Set(), lastPacketFrame: -1 };
+      peer = { id: peerId, ports: new Set(), lastPacketFrame: -1, ack: -1 };
       this.peers.set(peerId, peer);
       this.onPeerJoinCb?.(peerId);
     }
@@ -937,6 +978,9 @@ export class RollbackSession<S = GameState> {
     if (this.localPorts.includes(port)) return; // our own port echoed back
     peer.ports.add(port);
     peer.lastPacketFrame = packet.senderFrame;
+    // Packets arrive out of order, so an older acknowledgement can land after
+    // a newer one; what the peer holds only ever grows.
+    peer.ack = Math.max(peer.ack, packet.ack);
 
     const queue = this.inputs[port];
     let earliestMismatch: number | null = null;

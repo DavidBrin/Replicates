@@ -15,12 +15,13 @@
  * went — is performance. This is correctness.
  */
 
+import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
 import { Btn, emptyEvents, pressed, type InputFrame, type StepEvents } from "@/engine/types";
 import { LoopbackNetwork } from "./adapters/loopback";
-import { PacketType, decodePacket, type InputPacket } from "./packet";
-import { createNullTransport } from "./transport";
+import { MAX_INPUT_WINDOW_FRAMES, PacketType, decodePacket, encodePacket, type InputPacket } from "./packet";
+import { createNullTransport, type Transport } from "./transport";
 import {
   MAX_PREDICTION_FRAMES,
   MAX_PREDICTION_FRAMES_LIMIT,
@@ -107,10 +108,12 @@ function makeDeps(overrides: Partial<RollbackDeps<FakeState>> = {}): RollbackDep
  * constant input the prediction is always right, so every outstanding
  * correction lands and the session's current state becomes final. Comparing a
  * *provisional* state against the reference would be comparing a guess.
+ *
+ * `seed` shifts the whole script, for a property that wants other streams.
  */
-function scriptedInput(port: number, readFrame: number, quietAfter: number): InputFrame {
+function scriptedInput(port: number, readFrame: number, quietAfter: number, seed = 0): InputFrame {
   if (readFrame >= quietAfter) return 0;
-  const phase = (readFrame + port * 7) % 23;
+  const phase = (readFrame + port * 7 + seed) % 23;
   let input = 0;
   if (phase < 6) input |= Btn.Right;
   else if (phase < 11) input |= Btn.Left;
@@ -134,10 +137,11 @@ function referenceState(
   delay: number,
   quietAfter: number,
   deps: RollbackDeps<FakeState>,
+  seed = 0,
 ): FakeState {
   const inputsAt = (frame: number): InputFrame[] =>
     [0, 1].map((port) =>
-      frame - delay < 0 ? 0 : scriptedInput(port, frame - delay, quietAfter),
+      frame - delay < 0 ? 0 : scriptedInput(port, frame - delay, quietAfter, seed),
     );
   let state = initialState();
   for (let frame = 0; frame < frames; frame++) {
@@ -148,6 +152,21 @@ function referenceState(
 }
 
 /* ----------------------------------------------------------------- the harness -- */
+
+/**
+ * A stretch of wall time in which one direction of the link, or both, loses
+ * every packet: Wi-Fi's usual failure, and not the same thing as random loss.
+ * A burst outlasts any fixed redundancy, so only what the sender knows the
+ * receiver is still missing can repair it.
+ */
+interface Burst {
+  /** The loop iteration (one frame of wall time each) the loss starts on. */
+  readonly at: number;
+  /** How many frames of wall time it lasts. */
+  readonly frames: number;
+  /** Whose packets are lost: A's on the way to B, B's on the way to A, or both. */
+  readonly from: "A" | "B" | "both";
+}
 
 interface MatchOptions {
   latencyMs?: number;
@@ -162,6 +181,11 @@ interface MatchOptions {
   depsB?: RollbackDeps<FakeState>;
   onDesyncA?: (report: unknown) => void;
   onSpikeA?: (info: unknown) => void;
+  /** Shifts both players' scripts (see `scriptedInput`). */
+  scriptSeed?: number;
+  burst?: Burst;
+  /** Called after every iteration of the loop, before the network moves. */
+  observe?: (iteration: number, a: RollbackSession<FakeState>, b: RollbackSession<FakeState>) => void;
 }
 
 function runMatch(options: MatchOptions = {}) {
@@ -169,6 +193,7 @@ function runMatch(options: MatchOptions = {}) {
   const tail = options.tailFrames ?? 90;
   const total = frames + tail;
   const delay = options.inputDelay ?? 2;
+  const scriptSeed = options.scriptSeed ?? 0;
   const depsA = makeDeps();
   const depsB = options.depsB ?? makeDeps();
 
@@ -178,6 +203,19 @@ function runMatch(options: MatchOptions = {}) {
     lossRate: options.lossRate ?? 0,
     seed: options.seed ?? 0xc0ffee,
   });
+
+  let iterations = 0;
+  const burst = options.burst;
+  /** This endpoint, with its sends thrown away while a burst covers it. */
+  const endpoint = (id: "A" | "B"): Transport => {
+    const transport = network.connect(id);
+    const lost = () =>
+      burst !== undefined &&
+      (burst.from === id || burst.from === "both") &&
+      iterations >= burst.at &&
+      iterations < burst.at + burst.frames;
+    return { ...transport, send: (bytes) => (lost() ? undefined : transport.send(bytes)) };
+  };
 
   const common = {
     playerCount: 2,
@@ -192,7 +230,7 @@ function runMatch(options: MatchOptions = {}) {
 
   const a = new RollbackSession<FakeState>({
     ...common,
-    transport: network.connect("A"),
+    transport: endpoint("A"),
     deps: depsA,
     initialState: initialState(),
     localPorts: [0],
@@ -201,17 +239,18 @@ function runMatch(options: MatchOptions = {}) {
   });
   const b = new RollbackSession<FakeState>({
     ...common,
-    transport: network.connect("B"),
+    transport: endpoint("B"),
     deps: depsB,
     initialState: initialState(),
     localPorts: [1],
   });
 
-  let iterations = 0;
   const budget = total * 6;
-  while ((a.frame < total || b.frame < total) && iterations++ < budget) {
-    if (a.frame < total) a.advance(scriptedInput(0, a.frame, frames));
-    if (b.frame < total) b.advance(scriptedInput(1, b.frame, frames));
+  while ((a.frame < total || b.frame < total) && iterations < budget) {
+    if (a.frame < total) a.advance(scriptedInput(0, a.frame, frames, scriptSeed));
+    if (b.frame < total) b.advance(scriptedInput(1, b.frame, frames, scriptSeed));
+    options.observe?.(iterations, a, b);
+    iterations++;
     network.advance(FRAME_MS);
   }
   network.flush();
@@ -227,7 +266,7 @@ function runMatch(options: MatchOptions = {}) {
     stalledOut: iterations >= budget,
     /** Does this session hold the state a lone machine would have reached? */
     matchesReference(session: RollbackSession<FakeState>, deps = depsA): boolean {
-      const expected = referenceState(session.frame, delay, frames, deps);
+      const expected = referenceState(session.frame, delay, frames, deps, scriptSeed);
       return deps.hashState(session.currentState) === deps.hashState(expected);
     },
   };
@@ -306,6 +345,198 @@ describe("packet loss", () => {
     expect(match.stalledOut).toBe(false);
     expect(match.matchesReference(match.a)).toBe(true);
     expect(match.matchesReference(match.b)).toBe(true);
+  });
+});
+
+describe("acknowledged input windows", () => {
+  /**
+   * Session A against a peer played by hand, so a test decides exactly what A
+   * hears: which of port 1's frames, and which acknowledgement of its own.
+   */
+  function handPlayed() {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const a = new RollbackSession<FakeState>({
+      transport: network.connect("A"),
+      deps: makeDeps(),
+      initialState: initialState(),
+      playerCount: 2,
+      localPorts: [0],
+      inputDelay: 2,
+      autoInputDelay: false,
+      now: () => network.now(),
+    });
+    const b = network.connect("B");
+    const fromA: InputPacket[] = [];
+    b.onMessage((bytes) => {
+      const packet = decodePacket(bytes);
+      if (packet?.type === PacketType.Input) fromA.push(packet);
+    });
+    network.advance(0);
+    /** Port 1's neutral input for `frames`, saying A's own frames are acknowledged through `ack`. */
+    const tell = (frames: readonly number[], ack: number) => {
+      const start = frames[0] ?? 0;
+      b.send(
+        encodePacket({
+          type: PacketType.Input,
+          port: 1,
+          senderFrame: a.frame,
+          startFrame: start,
+          ack,
+          inputs: frames.map(() => 0),
+        }),
+      );
+      network.advance(0);
+    };
+    /** One frame of A, with port 1 kept a few frames ahead of it. */
+    const step = (ack: number) => {
+      const from = Math.max(1, a.frame - 1);
+      tell(Array.from({ length: a.frame + 7 - from }, (_, i) => from + i), ack);
+      a.advance(scriptedInput(0, a.frame, 10_000));
+      network.advance(FRAME_MS);
+    };
+    return { a, network, fromA, tell, step };
+  }
+
+  /** What A scheduled for its own port at `frame`: the script, two frames late. */
+  const scheduled = (frame: number) => (frame < 2 ? 0 : scriptedInput(0, frame - 2, 10_000));
+
+  it("sends every frame the peer has not acknowledged, oldest first, up to the cap", () => {
+    const { a, fromA, step } = handPlayed();
+    for (let i = 0; i < 200; i++) step(5);
+    expect(a.frame).toBeGreaterThan(MAX_INPUT_WINDOW_FRAMES + 20);
+
+    // Frame 6 is the first the peer lacks, so it leads, however far behind it
+    // is; the cap trims the newest end, which the peer cannot use yet anyway.
+    const last = fromA.at(-1);
+    expect(last?.startFrame).toBe(6);
+    expect(last?.inputs).toEqual(Array.from({ length: MAX_INPUT_WINDOW_FRAMES }, (_, i) => scheduled(6 + i)));
+  });
+
+  it("drops what the peer acknowledges, and keeps the highest acknowledgement it has heard", () => {
+    const { a, fromA, step } = handPlayed();
+    for (let i = 0; i < 200; i++) step(5);
+    step(150);
+    const newest = a.frame + 1; // scheduled `inputDelay` ahead, as of the last frame run
+    expect(fromA.at(-1)?.startFrame).toBe(151);
+    expect(fromA.at(-1)?.inputs).toEqual(
+      Array.from({ length: newest - 150 }, (_, i) => scheduled(151 + i)),
+    );
+    // An older acknowledgement arriving late, out of order, takes nothing back.
+    step(100);
+    expect(fromA.at(-1)?.startFrame).toBe(151);
+  });
+
+  it("acknowledges the remote frames it holds without a gap, and no further", () => {
+    const { a, network, fromA, tell } = handPlayed();
+    const ackAfter = (frames: readonly number[]) => {
+      tell(frames, -1);
+      a.advance(0);
+      network.advance(0);
+      return fromA.at(-1)?.ack;
+    };
+    expect(ackAfter(Array.from({ length: 10 }, (_, i) => i))).toBe(9);
+    // Frames 20 to 29 arrive, 10 to 19 do not: still 9.
+    expect(ackAfter(Array.from({ length: 10 }, (_, i) => 20 + i))).toBe(9);
+    expect(ackAfter(Array.from({ length: 10 }, (_, i) => 10 + i))).toBe(29);
+  });
+
+  it("sends a window as short as the round trip on a good link, not a fixed ten frames", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const make = (transport: Transport, port: number) =>
+      new RollbackSession<FakeState>({
+        transport,
+        deps: makeDeps(),
+        initialState: initialState(),
+        playerCount: 2,
+        localPorts: [port],
+        inputDelay: 2,
+        autoInputDelay: false,
+        now: () => network.now(),
+      });
+    const a = make(network.connect("A"), 0);
+    const bLink = network.connect("B");
+    const lengths: number[] = [];
+    bLink.onMessage((bytes) => {
+      const packet = decodePacket(bytes);
+      if (packet?.type === PacketType.Input) lengths.push(packet.inputs.length);
+    });
+    const b = make(bLink, 1);
+    for (let i = 0; i < 120; i++) {
+      a.advance(scriptedInput(0, a.frame, 10_000));
+      b.advance(scriptedInput(1, b.frame, 10_000));
+      network.advance(FRAME_MS);
+    }
+    expect(a.frame).toBe(120);
+    // A frame stays in the window only until its acknowledgement is back, a
+    // round trip later: two frames here, with nothing on the wire delayed.
+    expect(Math.max(...lengths.slice(10))).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("a burst of one-way loss", () => {
+  /**
+   * Frames, after the link comes back, for both sessions to confirm past
+   * every frame either reached while it was down: half a second. The side
+   * that was cut off has to play up through the frames the other ran ahead
+   * (about the prediction cap) after a spike pause and the latency, which is
+   * 18 frames here at most; a burst both ways leaves neither ahead, and 2.
+   */
+  const RECOVERY_FRAMES = 30;
+  const BURST_AT = 100;
+
+  const cases = (["A", "B", "both"] as const).flatMap((from) =>
+    [10, 20, 60, 120].map((frames) => ({ from, frames })),
+  );
+
+  it.each(cases)("resumes within a bounded number of frames after a $frames-frame burst from $from", ({ from, frames }) => {
+    const end = BURST_AT + frames;
+    let reached = -1;
+    let recoveredAfter: number | null = null;
+    const match = runMatch({
+      latencyMs: 30,
+      frames: 240,
+      burst: { at: BURST_AT, frames, from },
+      observe(i, a, b) {
+        if (i < end) {
+          reached = Math.max(reached, a.frame, b.frame);
+        } else if (recoveredAfter === null && a.confirmedFrame > reached && b.confirmedFrame > reached) {
+          recoveredAfter = i - end;
+        }
+      },
+    });
+
+    expect(recoveredAfter).not.toBeNull();
+    expect(recoveredAfter).toBeLessThanOrEqual(RECOVERY_FRAMES);
+    expect(match.stalledOut).toBe(false);
+    expect(match.matchesReference(match.a)).toBe(true);
+    expect(match.matchesReference(match.b)).toBe(true);
+    expect(match.a.stats().lateInputs + match.b.stats().lateInputs).toBe(0);
+    expect(match.a.stats().inputConflicts + match.b.stats().inputConflicts).toBe(0);
+  });
+
+  it("plays the same match whatever the burst, bit for bit, on both peers", () => {
+    // The redundancy changes which packet a frame arrives in, never which
+    // input it carries: the same scripts reach the same final state with no
+    // burst, one the old ten-frame window covered, and two it could not.
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 22 }),
+        fc.integer({ min: 20, max: 200 }),
+        fc.constantFrom("A" as const, "B" as const, "both" as const),
+        fc.constantFrom(0, 30, 80),
+        (scriptSeed, at, from, latencyMs) => {
+          const hashes = [0, 5, 30, 90].flatMap((frames) => {
+            const match = runMatch({ latencyMs, frames: 240, scriptSeed, burst: { at, frames, from } });
+            expect(match.stalledOut).toBe(false);
+            return [match.a, match.b].map((session) => `${session.frame}:${match.depsA.hashState(session.currentState)}`);
+          });
+          const deps = makeDeps();
+          const truth = `${240 + 90}:${deps.hashState(referenceState(240 + 90, 2, 240, deps, scriptSeed))}`;
+          expect(hashes).toEqual(new Array(hashes.length).fill(truth));
+        },
+      ),
+      { numRuns: 30 },
+    );
   });
 });
 
@@ -844,8 +1075,9 @@ describe("resending the input window", () => {
     session.resendInputs();
     session.resendInputs();
     network.advance(FRAME_MS);
-    // The same window of inputs, stamped with the frame the session is on.
-    const window = { port: last?.port, startFrame: last?.startFrame, inputs: last?.inputs };
+    // The same window of inputs, stamped with the frame the session is on:
+    // nothing new has been acknowledged since, so nothing has been dropped.
+    const window = { port: last?.port, startFrame: last?.startFrame, ack: last?.ack, inputs: last?.inputs };
     expect(inputs).toEqual([
       { type: PacketType.Input, ...window, senderFrame: frame },
       { type: PacketType.Input, ...window, senderFrame: frame },
@@ -856,5 +1088,45 @@ describe("resending the input window", () => {
     session.resendInputs();
     network.advance(FRAME_MS);
     expect(inputs).toHaveLength(2);
+  });
+
+  it("reaches every frame the peer is missing after a long burst at the very end", () => {
+    // A's link to B goes down; both run on to their prediction caps, then A
+    // stops playing (its match is over) as the link comes back. All A does
+    // from then on is resend, a few times a round trip, and B must still end
+    // up holding every input A ever scheduled.
+    const network = new LoopbackNetwork({ latencyMs: 30 });
+    let down = false;
+    const aLink = network.connect("A");
+    const make = (transport: Transport, port: number) =>
+      new RollbackSession<FakeState>({
+        transport,
+        deps: makeDeps(),
+        initialState: initialState(),
+        playerCount: 2,
+        localPorts: [port],
+        inputDelay: 2,
+        autoInputDelay: false,
+        now: () => network.now(),
+      });
+    const a = make({ ...aLink, send: (bytes) => (down ? undefined : aLink.send(bytes)) }, 0);
+    const b = make(network.connect("B"), 1);
+    for (let i = 0; i < 160; i++) {
+      down = i >= 100;
+      a.advance(scriptedInput(0, a.frame, 10_000));
+      b.advance(scriptedInput(1, b.frame, 10_000));
+      network.advance(FRAME_MS);
+    }
+    const sentThrough = a.frame + 1; // A's last scheduled frame
+    expect(sentThrough - b.confirmedFrame).toBeGreaterThan(10);
+
+    down = false;
+    for (let i = 0; i < 60; i++) {
+      if (i % 3 === 0) a.resendInputs();
+      b.advance(scriptedInput(1, b.frame, 10_000));
+      network.advance(FRAME_MS);
+    }
+    expect(b.confirmedFrame).toBe(sentThrough);
+    expect(b.stats().inputConflicts).toBe(0);
   });
 });

@@ -7,20 +7,31 @@
  * no retransmission, so every packet must be independently useful and must not
  * assume it is the first, the last, or the only copy of itself.
  *
- * That is why an input packet carries a **window** of the last ten frames
- * rather than one frame. A dropped packet is repaired 16ms later by the next
- * one, which still carries the frame that went missing — nine more chances
- * before the loss can matter. Asking for a retransmission would cost a round
- * trip, and an input that arrives a round trip late has already been simulated
- * with a prediction; the redundancy is both cheaper and earlier. Ten frames of
- * cover survives a 150ms outage, which is longer than the rollback window can
- * absorb anyway, so widening it further would buy nothing.
+ * That is why an input packet carries a **window** of frames rather than one,
+ * and why the window is *every frame the receiver has not acknowledged*
+ * (GGPO's scheme). Each packet also carries an `ack`: the last frame of the
+ * receiver's input the sender holds without a gap. A dropped packet is
+ * repaired 16ms later by the next one, which still carries the frame that went
+ * missing, and the next, until an ack says it arrived. Asking for a
+ * retransmission would cost a round trip, and an input that arrives a round
+ * trip late has already been simulated with a prediction; the redundancy is
+ * both cheaper and earlier.
+ *
+ * A fixed window, which this once was (the last ten frames), is not enough.
+ * Wi-Fi drops out for a few hundred milliseconds at a time, and a burst longer
+ * than the window loses frames that no later packet carries: both peers then
+ * stall at the prediction cap for good, while heartbeats keep flowing. Tying
+ * the window to the ack means a frame keeps being sent until it is known to
+ * have landed, however long the outage.
  */
 
 import type { InputFrame } from "@/engine/types";
 
-/** Bumped when a layout below changes. A peer on another version is rejected. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped when a layout below changes. A peer on another version is rejected.
+ * 2: input packets carry an `ack`, and windows of up to 128 frames.
+ */
+export const PROTOCOL_VERSION = 2;
 
 /**
  * The ceiling every packet must stay under.
@@ -32,8 +43,19 @@ export const PROTOCOL_VERSION = 1;
  */
 export const MAX_PACKET_BYTES = 1200;
 
-/** Frames of local input carried by every input packet. See the note above. */
-export const INPUT_WINDOW_FRAMES = 10;
+/**
+ * The most frames one input packet carries. See the note above.
+ *
+ * The span a sender can have unacknowledged is bounded by the prediction caps
+ * on both sides, since each stalls rather than run past the input it lacks:
+ * twice the cap plus both input delays, however long the outage. With the
+ * default cap of 8 that is under 34 frames even at the largest delay (bursts
+ * in the tests peak at 20 at the default delay of 2, and 32 at a delay of 8).
+ * 128 leaves room for a raised cap, fits the one-byte count, and costs 272
+ * bytes at most (`inputPacketBytes(128)`). Past it, the oldest frames go
+ * first: the receiver can only use them in order.
+ */
+export const MAX_INPUT_WINDOW_FRAMES = 128;
 
 export const PacketType = {
   Input: 1,
@@ -61,7 +83,13 @@ export interface InputPacket {
   readonly senderFrame: number;
   /** Absolute frame number of `inputs[0]`. The frames are consecutive. */
   readonly startFrame: number;
-  /** Up to `INPUT_WINDOW_FRAMES` consecutive frames of input. */
+  /**
+   * The highest frame of the *receiver's* input the sender holds together
+   * with every frame before it; -1 before it holds any. The receiver resends
+   * everything after it, and nothing before.
+   */
+  readonly ack: number;
+  /** Up to `MAX_INPUT_WINDOW_FRAMES` consecutive frames of input; none when all are acknowledged. */
   readonly inputs: readonly InputFrame[];
 }
 
@@ -91,7 +119,7 @@ export type Packet = InputPacket | PingPacket | PongPacket | HashPacket;
 /* ---------------------------------------------------------------- encoding -- */
 
 const HEADER_BYTES = 2; // version, type
-const INPUT_HEADER_BYTES = HEADER_BYTES + 1 + 1 + 4 + 4; // port, count, senderFrame, startFrame
+const INPUT_HEADER_BYTES = HEADER_BYTES + 1 + 1 + 4 + 4 + 4; // port, count, senderFrame, startFrame, ack
 const PING_BYTES = HEADER_BYTES + 4;
 const HASH_BYTES = HEADER_BYTES + 1 + 1 + 4 + 4; // port, pad, frame, hash
 
@@ -108,7 +136,7 @@ export function inputPacketBytes(count: number): number {
  * and not noticing that the packet crossed the MTU.
  */
 export const MAX_ENCODED_BYTES = Math.max(
-  inputPacketBytes(INPUT_WINDOW_FRAMES),
+  inputPacketBytes(MAX_INPUT_WINDOW_FRAMES),
   PING_BYTES,
   HASH_BYTES,
 );
@@ -117,9 +145,9 @@ export function encodePacket(packet: Packet): Uint8Array {
   switch (packet.type) {
     case PacketType.Input: {
       const count = packet.inputs.length;
-      if (count > INPUT_WINDOW_FRAMES) {
+      if (count > MAX_INPUT_WINDOW_FRAMES) {
         throw new RangeError(
-          `input window is ${count} frames; the protocol carries at most ${INPUT_WINDOW_FRAMES}`,
+          `input window is ${count} frames; the protocol carries at most ${MAX_INPUT_WINDOW_FRAMES}`,
         );
       }
       const bytes = new Uint8Array(inputPacketBytes(count));
@@ -130,6 +158,9 @@ export function encodePacket(packet: Packet): Uint8Array {
       bytes[3] = count;
       view.setUint32(4, packet.senderFrame >>> 0, true);
       view.setUint32(8, packet.startFrame >>> 0, true);
+      // Stored one up, so "nothing yet" (-1) fits the same unsigned field as
+      // every other frame number.
+      view.setUint32(12, (packet.ack + 1) >>> 0, true);
       for (let i = 0; i < count; i++) {
         // An InputFrame is a 10-bit button mask (see engine/types Btn); 16 bits
         // leaves room for six more buttons before this needs revisiting.
@@ -181,15 +212,16 @@ export function decodePacket(bytes: Uint8Array): Packet | null {
       if (bytes.length < INPUT_HEADER_BYTES) return null;
       const port = bytes[2];
       const count = bytes[3];
-      if (count > INPUT_WINDOW_FRAMES) return null;
+      if (count > MAX_INPUT_WINDOW_FRAMES) return null;
       if (bytes.length < inputPacketBytes(count)) return null;
       const senderFrame = view.getUint32(4, true);
       const startFrame = view.getUint32(8, true);
+      const ack = view.getUint32(12, true) - 1;
       const inputs: InputFrame[] = new Array(count);
       for (let i = 0; i < count; i++) {
         inputs[i] = view.getUint16(INPUT_HEADER_BYTES + i * 2, true);
       }
-      return { type: PacketType.Input, port, senderFrame, startFrame, inputs };
+      return { type: PacketType.Input, port, senderFrame, startFrame, ack, inputs };
     }
     case PacketType.Ping:
     case PacketType.Pong: {

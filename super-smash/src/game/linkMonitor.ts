@@ -1,10 +1,13 @@
 /**
  * Whether the other player is still there, during an online match.
  *
- * Three signals, one verdict. The data channel closing is final. Silence is
- * judged by the watchdog (net/online/watchdog.ts). And a tab going to the
+ * Four signals, one verdict. The data channel closing is final. Silence is
+ * judged by the watchdog (net/online/watchdog.ts). A tab going to the
  * background tells the opponent first — through the room, which a hidden tab
  * can still reach — so their watchdog waits a minute instead of ten seconds.
+ * And a match that stops confirming frames is over even while packets arrive:
+ * a peer stuck at its prediction cap still sends a heartbeat every frame, so
+ * silence alone would wait on it forever.
  *
  * The verdict is given once. The first "lost" stops everything here, so a
  * packet straggling in afterwards cannot revive a match that has already been
@@ -12,10 +15,23 @@
  */
 
 import type { OnlineSessionLike } from "@/net/online/session";
-import { ConnectionWatchdog, type LinkHealth } from "@/net/online/watchdog";
+import { AWAY_LOST_MS, ConnectionWatchdog, type LinkHealth } from "@/net/online/watchdog";
 import type { Transport } from "@/net/transport";
 
 export const LINK_CHECK_MS = 250;
+
+/**
+ * How long a match may confirm no frame, while this tab is on screen and the
+ * opponent's is too, before it is lost however many packets still arrive.
+ *
+ * The same ten seconds silence gets (`SILENCE_LOST_MS`), and an opponent who
+ * said it is away gets the same minute. Nothing in a running match stops the
+ * confirmed frame for anywhere near this long on its own: it counts ticks,
+ * which a KO's freeze does not stop (the simulation still steps), and an
+ * online match has no pause (Esc only opens the way out). A spike pause or a
+ * time-sync stall is a few frames.
+ */
+export const STALL_LOST_MS = 10_000;
 
 export interface VisibilitySource {
   readonly hidden: boolean;
@@ -28,6 +44,11 @@ export interface LinkMonitorOptions {
   readonly session: Pick<OnlineSessionLike, "on" | "sendLobby">;
   readonly onHealth: (health: LinkHealth, peerAway: boolean) => void;
   readonly onLost: () => void;
+  /**
+   * The rollback session's confirmed frame: the highest frame with every
+   * player's input in hand. Absent, silence alone decides.
+   */
+  readonly confirmedFrame?: () => number;
   /** Monotonic milliseconds; `performance.now()` unless given. */
   readonly now?: () => number;
   /** Defaults to `document`; null for none. */
@@ -56,6 +77,21 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
   let stopped = false;
   let lastHealth: LinkHealth | null = null;
   let lastAway = false;
+  // When the confirmed frame last moved, judged like silence: from the start,
+  // and afresh whenever this tab returns or the opponent says it left or came back.
+  let confirmed = options.confirmedFrame?.() ?? -1;
+  let progressAt = now();
+
+  const stalledOut = (at: number): boolean => {
+    if (!options.confirmedFrame) return false;
+    const frame = options.confirmedFrame();
+    if (frame > confirmed) {
+      confirmed = frame;
+      progressAt = at;
+      return false;
+    }
+    return at - progressAt >= (dog.peerAway ? AWAY_LOST_MS : STALL_LOST_MS);
+  };
 
   const declareLost = () => {
     if (lost || stopped) return;
@@ -70,8 +106,9 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
     // silence measured then says nothing about the opponent. It is judged
     // again from the moment the tab is back (see `onVisibility`).
     if (visibility?.hidden) return;
-    const health = dog.check(now());
-    if (health === "lost") {
+    const at = now();
+    const health = dog.check(at);
+    if (health === "lost" || stalledOut(at)) {
       declareLost();
       return;
     }
@@ -86,8 +123,13 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
     if (!visibility) return;
     options.session.sendLobby({ kind: "away", away: visibility.hidden });
     // Back on screen: the opponent gets a fresh ten seconds from now, not
-    // whatever was left of them when this tab went away.
-    if (!visibility.hidden) dog.heard(now());
+    // whatever was left of them when this tab went away. So does the match,
+    // which stopped confirming when this tab stopped drawing.
+    if (!visibility.hidden) {
+      const at = now();
+      dog.heard(at);
+      progressAt = at;
+    }
   };
 
   const offs = [
@@ -95,7 +137,9 @@ export function startLinkMonitor(options: LinkMonitorOptions): () => void {
     options.transport.onPeerLeave(() => declareLost()),
     options.session.on((event) => {
       if (event.type === "lobby" && event.message.kind === "away") {
-        dog.setPeerAway(event.message.away, now());
+        const at = now();
+        dog.setPeerAway(event.message.away, at);
+        progressAt = at;
         report();
       }
     }),

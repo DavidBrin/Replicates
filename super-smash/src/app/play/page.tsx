@@ -490,6 +490,8 @@ export default function PlayPage() {
       stopMonitor = startLinkMonitor({
         transport: session.transport,
         session,
+        // A match stuck with packets still arriving is lost too.
+        confirmedFrame: () => runner.netStats?.confirmedFrame ?? -1,
         onHealth: (health, away) => {
           setLinkHealth(health);
           setPeerAway(away);

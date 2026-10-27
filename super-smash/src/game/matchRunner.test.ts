@@ -26,6 +26,7 @@ import {
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
 import { meleeReachFromDef } from "@/ai/behaviours";
 import { hashState } from "@/engine/hash";
+import { KO_FREEZE_FRAMES } from "@/engine/simulate";
 import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engine/types";
 import { KeyboardInput } from "@/input/keyboard";
 import { CONFIG_ARROWS } from "@/input/schemes";
@@ -372,6 +373,11 @@ describe("an online match ends once, on both machines", () => {
     /** Seeds both the script and the network's jitter. */
     readonly seed: number;
     readonly period: number;
+    /**
+     * Frames of wall time, from frame `at`, in which every packet one side
+     * sends (or both sides) is lost: the shape of a Wi-Fi dropout.
+     */
+    readonly burst?: { readonly at: number; readonly frames: number; readonly from: "host" | "guest" | "both" };
   }
 
   // Fixed, so one machine can say what the result should be: a retuned delay
@@ -422,8 +428,16 @@ describe("an online match ends once, on both machines", () => {
     const network = new LoopbackNetwork({ latencyMs: link.latencyMs, jitterMs: link.jitterMs, seed: link.seed });
     const ends: [MatchOutcome[], MatchOutcome[]] = [[], []];
     const roles = ["host", "guest"] as const;
+    let wallFrame = 0;
+    const burst = link.burst;
+    const lost = (role: (typeof roles)[number]) =>
+      burst !== undefined &&
+      (burst.from === role || burst.from === "both") &&
+      wallFrame >= burst.at &&
+      wallFrame < burst.at + burst.frames;
     const peers = roles.map((role) => {
       const port = ROLE_PORT[role];
+      const transport = network.connect(role);
       const runner: MatchRunner = createMatchRunner({
         stage: getStageOrThrow("battlefield"),
         players: HUMANS,
@@ -432,7 +446,7 @@ describe("an online match ends once, on both machines", () => {
         getFighter: getFighterOrThrow,
         gamepad: padOn(port, () => scripted(port, runner.frame, link.seed, link.period)),
         net: {
-          transport: network.connect(role),
+          transport: { ...transport, send: (bytes) => (lost(role) ? undefined : transport.send(bytes)) },
           localPorts: [port],
           inputDelay: INPUT_DELAY,
           autoInputDelay: false,
@@ -444,6 +458,7 @@ describe("an online match ends once, on both machines", () => {
     });
     const gone = [false, false];
     for (let i = 0; i < budget && !(gone[0] && gone[1]); i++) {
+      wallFrame = i;
       for (const role of roles) {
         const port = ROLE_PORT[role];
         if (!gone[port]) {
@@ -464,7 +479,8 @@ describe("an online match ends once, on both machines", () => {
   function problems(rules: MatchRules, link: Link, budget: number): string[] {
     const truth = oneMachine(rules, link, budget);
     const [host, guest] = playOut(rules, link, budget);
-    const name = `${rules.mode} ${link.latencyMs}±${link.jitterMs} ms, seed ${link.seed}, period ${link.period}`;
+    const burst = link.burst ? `, ${link.burst.frames}-frame burst from ${link.burst.from}` : "";
+    const name = `${rules.mode} ${link.latencyMs}±${link.jitterMs} ms, seed ${link.seed}, period ${link.period}${burst}`;
     if (truth === null) return [`${name}: one machine never finished; pick another script`];
     const found: string[] = [];
     for (const [side, ends] of [["host", host], ["guest", guest]] as const) {
@@ -504,6 +520,55 @@ describe("an online match ends once, on both machines", () => {
       }
     }
     expect(found).toEqual([]);
+  });
+
+  it("finishes on both sides, on one machine's result, through a burst of one-way loss", () => {
+    // Longer than any fixed window of redundancy: each side resends what the
+    // other has not acknowledged, so the match picks up where the link
+    // dropped instead of freezing on both machines.
+    const found: string[] = [];
+    for (const from of ["host", "guest", "both"] as const) {
+      for (const frames of [10, 20, 60, 120]) {
+        found.push(...problems(TIMED, { latencyMs: 50, jitterMs: 0, seed: 2, period: 4, burst: { at: 60, frames, from } }, 900));
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("confirms a frame on every tick through a KO's freeze, which the link monitor's stall check relies on", () => {
+    // linkMonitor.ts calls a match lost when its confirmed frame stands still
+    // for ten seconds. A KO freezes the picture, not the frame count: the
+    // simulation still steps, so the session still confirms, every tick.
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const rules: MatchRules = { ...RULES, mode: "stock", stocks: 2 };
+    const [host, guest] = ([0, 1] as const).map((port) => {
+      const runner: MatchRunner = createMatchRunner({
+        stage: getStageOrThrow("battlefield"),
+        players: HUMANS,
+        rules,
+        seed: 0x5eed1e55,
+        getFighter: getFighterOrThrow,
+        // A script that loses a stock within a few hundred frames.
+        gamepad: padOn(port, () => scripted(port, runner.frame, 1, 4)),
+        net: { transport: network.connect(`p${port}`), localPorts: [port], inputDelay: INPUT_DELAY, autoInputDelay: false, now: () => network.now() },
+      });
+      return runner;
+    });
+    network.advance(0);
+    let confirmed = host.netStats?.confirmedFrame ?? -1;
+    let frozenTicks = 0;
+    const stood: number[] = [];
+    for (let i = 0; i < 1200 && frozenTicks < KO_FREEZE_FRAMES; i++) {
+      host.advance(1);
+      guest.advance(1);
+      network.advance(FRAME_MS);
+      const latest = host.netStats?.confirmedFrame ?? -1;
+      if (host.state.freezeFrames > 0) frozenTicks++;
+      if (latest <= confirmed) stood.push(host.frame);
+      confirmed = latest;
+    }
+    expect(frozenTicks).toBe(KO_FREEZE_FRAMES);
+    expect(stood).toEqual([]);
   });
 
   it("reports a result once, however long the match stays on screen", () => {
@@ -764,7 +829,7 @@ describe("an online match that ended here lingers after dispose", () => {
     return { host, ...link };
   }
 
-  it("keeps re-sending its last input packet on a timer, without running, until the linger is up", () => {
+  it("keeps re-sending its unacknowledged inputs on a timer, without running, until the linger is up", () => {
     const { host, sent, released } = endedPair({ lingerMs: LINGER_MS });
     const last = sent.at(-1);
     const frame = host.runner.frame;
@@ -774,8 +839,13 @@ describe("an online match that ended here lingers after dispose", () => {
     host.runner.dispose();
     vi.advanceTimersByTime(LINGER_MS - 1);
     expect(sent.length).toBeGreaterThanOrEqual(Math.floor((LINGER_MS - 1) / LINGER_RESEND_MS));
-    // Every resend is the window the last frame sent, from the frame the match ended on.
-    expect(sent).toEqual(new Array(sent.length).fill({ ...last, senderFrame: frame }));
+    // Every resend is the same packet, from the frame the match ended on: the
+    // part of the last frame's window the guest has not acknowledged since
+    // (its final packet landed after that frame), through the last input.
+    expect(sent).toEqual(new Array(sent.length).fill(sent[0]));
+    const skipped = (sent[0]?.startFrame ?? 0) - (last?.startFrame ?? 0);
+    expect(skipped).toBeGreaterThanOrEqual(0);
+    expect(sent[0]).toMatchObject({ port: last?.port, senderFrame: frame, inputs: last?.inputs.slice(skipped) });
     expect(released).not.toHaveBeenCalled();
     // The match itself stays where it ended.
     expect(host.runner.frame).toBe(frame);
@@ -845,11 +915,8 @@ describe("an online match that ended here lingers after dispose", () => {
    * the host stops playing. Only a resend can still carry the inputs the guest
    * needs to confirm the same result.
    */
-  function guestAfterLostTail(lingerMs: number): { host: MatchOutcome[]; guest: MatchOutcome[] } {
+  function guestAfterLostTail(lingerMs: number, lostTailFrames: number): { host: MatchOutcome[]; guest: MatchOutcome[] } {
     const TIMED: MatchRules = { ...RULES, mode: "time", timeLimit: 60 };
-    // Long enough that the guest is missing frames it needs (2 is not), short
-    // enough that one input window still spans the gap (packet.ts sends 10).
-    const LOST_TAIL_FRAMES = 6;
     const network = new LoopbackNetwork({ latencyMs: 0 });
     const hostLink = network.connect("host");
     let dropping = false;
@@ -865,7 +932,7 @@ describe("an online match that ended here lingers after dispose", () => {
     let gone = false;
     for (let i = 0; i < 600 && guest.onEnd.mock.calls.length === 0; i++) {
       if (!gone) {
-        dropping = host.runner.frame >= TIMED.timeLimit - LOST_TAIL_FRAMES;
+        dropping = host.runner.frame >= TIMED.timeLimit - lostTailFrames;
         host.runner.advance(1);
         if (host.onEnd.mock.calls.length > 0) {
           gone = true;
@@ -880,13 +947,18 @@ describe("an online match that ended here lingers after dispose", () => {
     return { host: host.onEnd.mock.calls.map(([o]) => o), guest: guest.onEnd.mock.calls.map(([o]) => o) };
   }
 
-  it("lets the machine still playing finish after the leaver's last packets were lost", () => {
+  // Long enough that the guest is missing frames it needs (2 is not); and a
+  // tail longer than the ten frames packets used to carry, which only a
+  // window reaching back to what the guest acknowledged can repair. Twelve is
+  // the longest the host can play through: past it, the guest has stopped
+  // sending (nothing of the host's to play on) before the host's result.
+  it.each([6, 12])("lets the machine still playing finish after the leaver's last %i frames of packets were lost", (tail) => {
     // Without the linger the guest is stranded, which is what makes the case worth having.
-    const without = guestAfterLostTail(0);
+    const without = guestAfterLostTail(0, tail);
     expect(without.host).toHaveLength(1);
     expect(without.guest).toEqual([]);
 
-    const lingered = guestAfterLostTail(LINGER_MS);
+    const lingered = guestAfterLostTail(LINGER_MS, tail);
     expect(lingered.host).toHaveLength(1);
     expect(lingered.guest).toEqual(lingered.host);
   });

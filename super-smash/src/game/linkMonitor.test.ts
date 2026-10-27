@@ -1,12 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fakeSession } from "@/net/online/testing";
 import { AWAY_LOST_MS, SILENCE_LOST_MS, type LinkHealth } from "@/net/online/watchdog";
 import { createEmitter } from "@/net/transport";
-import { LINK_CHECK_MS, startLinkMonitor } from "./linkMonitor";
+import { LINK_CHECK_MS, STALL_LOST_MS, startLinkMonitor } from "./linkMonitor";
 
-function harness({ hidden = false }: { hidden?: boolean } = {}) {
+/**
+ * `confirmed` hands the monitor a confirmed frame to watch, which `confirm`
+ * then moves; without it the monitor is given none, as before the backstop.
+ */
+function harness({ hidden = false, confirmed }: { hidden?: boolean; confirmed?: number } = {}) {
   let clock = 0;
+  let frame = confirmed ?? -1;
   const ticks: (() => void)[] = [];
   const messages = createEmitter<[Uint8Array, string]>();
   const leaves = createEmitter<[string]>();
@@ -29,6 +34,7 @@ function harness({ hidden = false }: { hidden?: boolean } = {}) {
     onHealth: (h, away) => health.push([h, away]),
     onLost,
     now: () => clock,
+    ...(confirmed === undefined ? {} : { confirmedFrame: () => frame }),
     visibility,
     every: (cb, ms) => {
       expect(ms).toBe(LINK_CHECK_MS);
@@ -47,7 +53,18 @@ function harness({ hidden = false }: { hidden?: boolean } = {}) {
     visibility.hidden = next;
     for (const cb of [...listeners]) cb();
   };
-  return { advance, messages, leaves, session, sent: session.sent, health, onLost, visibility, listeners, ticks, stop, setHidden };
+  /** The match confirming up to `next`. */
+  const confirm = (next: number) => {
+    frame = next;
+  };
+  /** A packet every 200 ms for `ms`: a peer whose heartbeats never stop. */
+  const heartbeats = (ms: number) => {
+    for (let t = 0; t < ms; t += 200) {
+      messages.emit(new Uint8Array([1]), "g1");
+      advance(200);
+    }
+  };
+  return { advance, messages, leaves, session, sent: session.sent, health, onLost, visibility, listeners, ticks, stop, setHidden, confirm, heartbeats };
 }
 
 describe("the online link monitor", () => {
@@ -162,5 +179,104 @@ describe("the online link monitor", () => {
     expect(h.ticks).toHaveLength(0);
     h.leaves.emit("g1");
     expect(h.onLost).not.toHaveBeenCalled();
+  });
+});
+
+describe("the stall backstop", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("calls a match lost that confirms nothing for ten seconds, though packets keep arriving", () => {
+    // A peer stuck at its prediction cap still sends a heartbeat every frame,
+    // so silence never comes; only the match standing still says it is over.
+    const h = harness({ confirmed: 40 });
+    h.heartbeats(STALL_LOST_MS - 400);
+    expect(h.onLost).not.toHaveBeenCalled();
+    h.heartbeats(400);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+    // Latched like any other lost: the monitor has let go of everything.
+    expect(h.ticks).toHaveLength(0);
+    expect(h.messages.size).toBe(0);
+    h.heartbeats(1_000);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("never calls a match lost that keeps confirming, however long it runs", () => {
+    const h = harness({ confirmed: 0 });
+    for (let i = 1; i <= 600; i++) {
+      h.confirm(i);
+      h.messages.emit(new Uint8Array([1]), "g1");
+      h.advance(200);
+    }
+    expect(h.onLost).not.toHaveBeenCalled();
+    expect(h.health).toEqual([["ok", false]]);
+  });
+
+  it("counts the ten seconds from the last frame confirmed", () => {
+    const h = harness({ confirmed: 0 });
+    h.heartbeats(8_000);
+    h.confirm(1);
+    h.heartbeats(200); // the next check sees it move
+    h.heartbeats(STALL_LOST_MS - 200);
+    expect(h.onLost).not.toHaveBeenCalled();
+    h.heartbeats(200);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks nothing while this tab is hidden, and starts the ten seconds again on its return", () => {
+    // Hidden, this tab stops drawing, so its own match stops confirming.
+    const h = harness({ confirmed: 7 });
+    h.heartbeats(5_000);
+    h.setHidden(true);
+    h.heartbeats(30_000);
+    expect(h.onLost).not.toHaveBeenCalled();
+    h.setHidden(false);
+    h.heartbeats(STALL_LOST_MS - 400);
+    expect(h.onLost).not.toHaveBeenCalled();
+    h.heartbeats(400);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives an opponent in another tab its minute, and ten seconds from its return", () => {
+    // Their tab stopped drawing, so the match stopped with it; that is the
+    // minute the silence check gives them, and the stall check gives the same.
+    const h = harness({ confirmed: 7 });
+    h.session.emit({ type: "lobby", message: { kind: "away", away: true } });
+    h.heartbeats(AWAY_LOST_MS - 400);
+    expect(h.onLost).not.toHaveBeenCalled();
+    h.session.emit({ type: "lobby", message: { kind: "away", away: false } });
+    h.heartbeats(STALL_LOST_MS - 400);
+    expect(h.onLost).not.toHaveBeenCalled();
+    h.heartbeats(400);
+    expect(h.onLost).toHaveBeenCalledTimes(1);
+
+    const gone = harness({ confirmed: 7 });
+    gone.session.emit({ type: "lobby", message: { kind: "away", away: true } });
+    gone.heartbeats(AWAY_LOST_MS);
+    expect(gone.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs on the monitor's own timer and clock", () => {
+    vi.useFakeTimers();
+    const messages = createEmitter<[Uint8Array, string]>();
+    const onLost = vi.fn();
+    const stop = startLinkMonitor({
+      transport: { onMessage: (cb) => messages.add(cb), onPeerLeave: () => () => {} },
+      session: fakeSession("guest").session,
+      onHealth: () => {},
+      onLost,
+      confirmedFrame: () => 12,
+      visibility: null,
+    });
+    for (let t = 0; t < STALL_LOST_MS - LINK_CHECK_MS; t += LINK_CHECK_MS) {
+      messages.emit(new Uint8Array([1]), "h1");
+      vi.advanceTimersByTime(LINK_CHECK_MS);
+    }
+    expect(onLost).not.toHaveBeenCalled();
+    messages.emit(new Uint8Array([1]), "h1");
+    vi.advanceTimersByTime(LINK_CHECK_MS);
+    expect(onLost).toHaveBeenCalledTimes(1);
+    stop();
   });
 });

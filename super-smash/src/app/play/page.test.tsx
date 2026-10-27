@@ -197,6 +197,16 @@ describe("the play page, online", () => {
     expect(routerMock.push).toHaveBeenCalledWith("/results");
   });
 
+  it("has the link monitor watch the match's confirmed frame, so a match stuck with packets still arriving is lost", () => {
+    goOnline("host");
+    render(<PlayPage />);
+    const { runner } = only(mocks.runners);
+    const { confirmedFrame } = only(mocks.monitors).options;
+    expect(confirmedFrame?.()).toBe(-1);
+    runner.netStats = { ...STATS, confirmedFrame: 418 };
+    expect(confirmedFrame?.()).toBe(418);
+  });
+
   it("shows the link's numbers, and says when the opponent has switched tabs", () => {
     goOnline("guest");
     render(<PlayPage />);
