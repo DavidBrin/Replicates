@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ROUTES, startFromTitle, waitForMatch } from "./helpers";
+import { ROUTES, startFromTitle, titleReady, waitForMatch } from "./helpers";
 
 /**
  * The path a player actually takes: title → menu → rules → stage → fighters →
@@ -14,6 +14,7 @@ test.describe.configure({ mode: "serial" });
 test("the title screen waits for a keypress", async ({ page }) => {
   await page.goto(ROUTES.title);
   await expect(page.getByLabel("Press any button to continue")).toBeVisible();
+  await titleReady(page);
   await page.keyboard.press("Enter");
   await page.waitForURL(`**${ROUTES.menu}`);
 });

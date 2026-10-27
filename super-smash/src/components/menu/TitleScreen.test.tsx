@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 
 import { routerMock } from "../../../vitest.setup";
 import { TitleScreen } from "./TitleScreen";
@@ -42,6 +43,37 @@ describe("TitleScreen", () => {
     fireEvent.keyDown(window, { key: "Shift", code: "ShiftLeft" });
 
     expect(routerMock.push).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The page arrives as server HTML with the button already in it, and the
+   * key listener is only attached once React has hydrated it: a press before
+   * then is lost. So the button says when it is listening, and a test (or
+   * anything else) can wait for that instead of guessing.
+   */
+  describe("says when it is listening", () => {
+    it("is not marked ready before the listener is attached, as the server sends it", () => {
+      const html = renderToString(<TitleScreen />);
+      expect(html).toContain('aria-label="Press any button to continue"');
+      expect(html).not.toContain("data-ready");
+    });
+
+    it("is marked ready once the listener is attached, and a key then advances", () => {
+      render(<TitleScreen />);
+      const button = screen.getByRole("button", { name: /press any button/i });
+      expect(button).toHaveAttribute("data-ready", "true");
+      fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
+      expect(routerMock.push).toHaveBeenCalledWith("/menu");
+    });
+
+    it("stops saying so when it goes away, along with the listener", () => {
+      const { unmount } = render(<TitleScreen />);
+      const button = screen.getByRole("button", { name: /press any button/i });
+      unmount();
+      expect(button).not.toHaveAttribute("data-ready");
+      fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
+      expect(routerMock.push).not.toHaveBeenCalled();
+    });
   });
 
   it("shows the prompt", () => {

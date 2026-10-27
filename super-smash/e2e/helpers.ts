@@ -33,6 +33,15 @@ export const P1 = {
 } as const;
 
 /**
+ * The title screen, once it is listening. Its prompt is in the server HTML,
+ * but the key listener only exists after hydration, and a press before then
+ * is lost; the button says `data-ready="true"` exactly while it listens.
+ */
+export async function titleReady(page: Page): Promise<void> {
+  await page.locator('[aria-label="Press any button to continue"][data-ready="true"]').waitFor();
+}
+
+/**
  * The title screen swallows the first keypress to advance, so every test that
  * wants a later screen goes through here rather than deep-linking — the store
  * that carries the match configuration is client-side, and a cold load of
@@ -40,7 +49,7 @@ export const P1 = {
  */
 export async function startFromTitle(page: Page): Promise<void> {
   await page.goto(ROUTES.title);
-  await page.getByLabel("Press any button to continue").waitFor();
+  await titleReady(page);
   await page.keyboard.press("Enter");
   await page.waitForURL(`**${ROUTES.menu}`);
 }

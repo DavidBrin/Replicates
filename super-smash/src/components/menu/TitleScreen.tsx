@@ -17,10 +17,17 @@ import { PRODUCT_NAME } from "@/lib/brand";
  * Advancing is guarded by a ref rather than by state: a player mashing at the
  * title screen fires several keydowns inside one frame, and two `router.push`
  * calls to the same route is a visible double transition.
+ *
+ * The page arrives as server HTML with the prompt already showing, but the
+ * key listener only exists once React has hydrated it, and a press before
+ * then is lost. So the button carries `data-ready="true"` exactly while the
+ * listener is attached: something that drives the page (the e2e suites) waits
+ * for it rather than guessing.
  */
 export function TitleScreen() {
   const router = useRouter();
   const advanced = useRef(false);
+  const target = useRef<HTMLButtonElement>(null);
 
   const advance = () => {
     if (advanced.current) return;
@@ -38,7 +45,13 @@ export function TitleScreen() {
       advance();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Set from here, beside the listener, so it is true exactly while it is.
+    const button = target.current;
+    button?.setAttribute("data-ready", "true");
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      button?.removeAttribute("data-ready");
+    };
     // `advance` closes over a ref and the router, neither of which changes in
     // a way that should re-subscribe the listener.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,6 +114,7 @@ export function TitleScreen() {
           than wrapped around it: a <button> may only contain phrasing content,
           and the wordmark is a heading. */}
       <button
+        ref={target}
         type="button"
         onClick={advance}
         aria-label="Press any button to continue"
