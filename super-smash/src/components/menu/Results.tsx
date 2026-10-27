@@ -17,9 +17,17 @@ import {
   type MatchResult,
   type PlayerResultStat,
 } from "@/lib/matchConfig";
-import { ONLINE_RESULT_LINGER_MS, leaveOnline } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 
 const ORDINALS = ["1st", "2nd", "3rd", "4th"] as const;
+
+/**
+ * The leave an unmount scheduled, not yet run. React's development mode
+ * unmounts and remounts every effect once on the way in, and that must not
+ * leave the room at the start of its grace; a remount in the same tick finds
+ * this and cancels it. The same pattern as the play page's `pendingLeave`.
+ */
+let pendingLeave: ReturnType<typeof setTimeout> | null = null;
 
 const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
   stockOut: "Game Set",
@@ -59,6 +67,8 @@ export function Results() {
    * the hash that shows it during the grace, so the room stays open for it.
    */
   const leaveAtOnce = result?.kind === "connectionLost";
+  /** The match's start, captured on the way in, for a development remount to put back. */
+  const [startedWith] = useState(() => useOnlineStore.getState().config);
 
   // An online result holds the room open until it is left, and it is left once:
   // by the grace running out, by Quit or Back, or by the screen going away,
@@ -81,13 +91,27 @@ export function Results() {
 
   useEffect(() => {
     if (!online) return;
+    // React's development remount: the unmount just undone withdrew the start
+    // and scheduled a leave, but this is the same screen, so neither stands.
+    if (pendingLeave !== null) {
+      clearTimeout(pendingLeave);
+      pendingLeave = null;
+      useOnlineStore.getState().patch({ config: startedWith });
+    }
     if (leaveAtOnce) leaveRoom();
     const grace = leaveAtOnce ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
     return () => {
       clearTimeout(grace);
-      leaveRoom();
+      // The start is withdrawn now, so a play page mounting in this same
+      // commit (browser Back) sees the match is over; the room is left a
+      // moment later.
+      useOnlineStore.getState().patch({ config: null });
+      pendingLeave = setTimeout(() => {
+        pendingLeave = null;
+        leaveRoom();
+      }, 0);
     };
-  }, [online, leaveAtOnce, leaveRoom]);
+  }, [online, leaveAtOnce, leaveRoom, startedWith]);
 
   if (!result) {
     return (

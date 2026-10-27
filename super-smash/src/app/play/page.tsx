@@ -425,21 +425,22 @@ export default function PlayPage() {
   useEffect(() => {
     if (!online) return;
     const { config, session, localPort } = online;
-    // The room this page read while rendering is gone already: browser Back
-    // from the results within their grace, whose unmount leaves the room in
-    // this same commit. A match built now would run on a closed transport,
-    // frozen until the link monitor called it lost, so start again instead.
-    if (getActiveSession() !== session) {
-      leaveOnline();
-      router.replace("/online");
-      return;
-    }
     // React's development remount: the unmount just undone withdrew the start
     // and scheduled a leave, but this is the same match, so neither stands.
     if (pendingLeave !== null) {
       clearTimeout(pendingLeave);
       pendingLeave = null;
       useOnlineStore.getState().patch({ config });
+    }
+    // The match this page read while rendering is over: browser Back from the
+    // results within their grace, whose unmount withdraws the start in this
+    // same commit and leaves the room a moment later. A match built now would
+    // run on a closing transport, frozen until the link monitor called it
+    // lost, so start again instead.
+    if (getActiveSession() !== session || useOnlineStore.getState().config !== config) {
+      leaveOnline();
+      router.replace("/online");
+      return;
     }
     const canvas = canvasRef.current;
     if (!canvas) return;

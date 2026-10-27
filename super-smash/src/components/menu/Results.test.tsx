@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
@@ -31,7 +32,10 @@ async function renderResults() {
   await act(async () => {});
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // An unmount leaves the room a tick later (StrictMode, below); let any the
+  // last test's cleanup scheduled run before its calls are counted afresh.
+  await new Promise((resolve) => setTimeout(resolve, 0));
   useMatchConfig.getState().reset();
   resetRosterCache();
   routerMock.push.mockClear();
@@ -283,6 +287,53 @@ describe("Results after an online match", () => {
       expect(leaveOnline).toHaveBeenCalledTimes(1);
     });
 
+    /**
+     * React's development mode unmounts and remounts every effect once on
+     * the way in. That must not leave the room at the start of the grace,
+     * which the other machine may still need (a desync's hash included).
+     */
+    it.each([
+      ["a finished match", { ...RESULT, online: true }],
+      ["a desync", { kind: "desync", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true }],
+    ] as const)("holds the room for the whole grace after %s under React's development remount", async (_case, result) => {
+      vi.useFakeTimers();
+      const session = seatFinishedOnlineMatch();
+      useMatchConfig.getState().setResult(result as MatchResult);
+      render(
+        <StrictMode>
+          <Results />
+        </StrictMode>,
+      );
+      await act(async () => {});
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS - 1);
+      });
+      expect(leaveOnline).not.toHaveBeenCalled();
+      expect(session.close).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(session.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("still leaves on a real unmount under React's development mode", async () => {
+      vi.useFakeTimers();
+      const session = seatFinishedOnlineMatch();
+      const { unmount } = render(
+        <StrictMode>
+          <Results />
+        </StrictMode>,
+      );
+      await act(async () => {});
+      unmount();
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(session.close).toHaveBeenCalledTimes(1);
+    });
+
     it("keeps showing the result after it has left the room", async () => {
       vi.useFakeTimers();
       seatFinishedOnlineMatch();
@@ -332,7 +383,7 @@ describe("Results after an online match", () => {
       expect(leaveOnline).toHaveBeenCalledTimes(1);
     });
 
-    it("leaves at once, and only once, when the screen unmounts before the grace is up", async () => {
+    it("leaves a tick after the screen unmounts before the grace is up, and only once", async () => {
       vi.useFakeTimers();
       const session = seatFinishedOnlineMatch();
       const { unmount } = render(<Results />);
@@ -343,6 +394,9 @@ describe("Results after an online match", () => {
       expect(leaveOnline).not.toHaveBeenCalled();
 
       unmount();
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
       expect(leaveOnline).toHaveBeenCalledTimes(1);
       expect(session.close).toHaveBeenCalledTimes(1);
       expect(getActiveSession()).toBeNull();
