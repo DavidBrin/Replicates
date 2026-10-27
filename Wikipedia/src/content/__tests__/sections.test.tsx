@@ -43,7 +43,7 @@ const cases: Array<{ name: string; module: ArticleModule; sections: Array<{ id: 
   { name: "Linear (replica)", module: linear, sections: linearSections },
   { name: "Notion (replica)", module: notion, sections: notionSections },
   { name: "YouTube (replica)", module: youtube, sections: youtubeSections },
-  { name: "Super Smash (replica)", module: superSmash, sections: superSmashSections },
+  { name: "David-Smash (replica)", module: superSmash, sections: superSmashSections },
   { name: "Fake Phone", module: fakePhone, sections: fakePhoneSections },
   { name: "Bet (app)", module: bet, sections: betSections },
   { name: "Dollar Pixels", module: dollarPixels, sections: dollarPixelsSections },

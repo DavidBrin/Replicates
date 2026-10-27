@@ -211,7 +211,7 @@ export const leaders: ArticleModule = {
             <WikiLink to="Island_Empire_(replica)">Island Empire (replica)</WikiLink>
           </li>
           <li>
-            <WikiLink to="Super_Smash_(replica)">Super Smash (replica)</WikiLink>
+            <WikiLink to="Super_Smash_(replica)">David-Smash (replica)</WikiLink>
           </li>
           <li>
             <WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink>

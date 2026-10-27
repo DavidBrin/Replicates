@@ -124,7 +124,7 @@ export const dollarPixels: ArticleModule = {
             <WikiLink to="Bet_(app)">Bet (app)</WikiLink>
           </li>
           <li>
-            <WikiLink to="Super_Smash_(replica)">Super Smash (replica)</WikiLink>
+            <WikiLink to="Super_Smash_(replica)">David-Smash (replica)</WikiLink>
           </li>
           <li>
             <WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink>

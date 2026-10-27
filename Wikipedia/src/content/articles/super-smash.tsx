@@ -36,11 +36,11 @@ export const superSmash: ArticleModule = {
       </Hatnote>
 
       <Infobox
-        title="Super Smash (replica)"
+        title="David-Smash (replica)"
         image={
           <Image
             src="/images/Super_Smash_(replica).png"
-            alt="Screenshot of the Super Smash replica's main menu"
+            alt="Screenshot of the David-Smash replica's main menu"
             width={300}
             height={169}
             className="h-auto w-full"
@@ -65,7 +65,7 @@ export const superSmash: ArticleModule = {
       />
 
       <P>
-        <B>Super Smash (replica)</B> is a browser rebuild of{" "}
+        <B>David-Smash (replica)</B> is a browser rebuild of{" "}
         <ExternalLink href={project.replicaOf.url}>Super Smash Bros. Ultimate</ExternalLink>&apos;s
         versus mode, developed in the <code>super-smash</code> folder of the{" "}
         <code>Replicates</code> repository. It implements 8 of the original
@@ -97,7 +97,10 @@ export const superSmash: ArticleModule = {
           or any transcendental <code>Math</code> function is used inside the
           engine. Netcode is tuned to 2 frames of input delay with an 8-frame
           prediction cap; a shared-WiFi LAN path required no additional code,
-          relying on ICE host candidates.
+          relying on ICE host candidates. Since October 2026 the two browsers
+          find each other through a room code held by a Durable Object on a
+          Cloudflare Worker, which also serves the game and mints Cloudflare
+          TURN credentials for networks a direct connection cannot cross.
         </P>
       </Section>
 

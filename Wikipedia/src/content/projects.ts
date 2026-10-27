@@ -77,7 +77,7 @@ export const projects: ProjectInfo[] = [
     ],
   },
   {
-    name: "Super Smash",
+    name: "David-Smash",
     slug: "Super_Smash_(replica)",
     tagline: "eight fighters, one keyboard, sixty frames a second",
     replicaOf: { name: "Super Smash Bros. Ultimate", url: "https://www.smashbros.com/en_US/" },
@@ -85,12 +85,13 @@ export const projects: ProjectInfo[] = [
     stack: [
       "Next.js",
       "WebRTC rollback netcode",
+      "Cloudflare Workers + Durable Objects",
       "Q12 fixed-point simulation",
       "seeded PRNG inside GameState",
     ],
     testStats: "1,285 unit/property tests, 7 e2e",
     builtWith: "Eight research lanes, frozen engine contract, six build slices",
-    liveUrl: "https://smash-david.vercel.app",
+    liveUrl: "https://david-smash.leaders-game.workers.dev",
     screenshots: [
       "super-smash/docs/screenshots/title.png",
       "super-smash/docs/screenshots/main-menu.png",

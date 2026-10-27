@@ -81,4 +81,11 @@ describe("projects.ts <-> articles registry", () => {
       expect(project.builtWith.length).toBeGreaterThan(0);
     }
   });
+
+  it("calls the smash replica David-Smash and links its Cloudflare deployment, under the old slug", () => {
+    const smash = projects.find((p) => p.slug === "Super_Smash_(replica)");
+    expect(smash?.name).toBe("David-Smash");
+    expect(smash?.liveUrl).toBe("https://david-smash.leaders-game.workers.dev");
+    expect(articles["Super_Smash_(replica)"]?.meta.title).toBe("David-Smash (replica)");
+  });
 });

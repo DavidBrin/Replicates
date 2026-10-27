@@ -88,7 +88,7 @@ export const davidsInternet: ArticleModule = {
           <code>README.md</code>, <code>SPEC.md</code>, <code>DECISIONS.md</code>{" "}
           and <code>research/</code> directory. The search engine was the
           first live deployment, in September 2026. Seven replicas are live
-          (Linear, Notion, Super Smash, Fake Phone, Bet, FL Studio, and Dollar
+          (Linear, Notion, David-Smash, Fake Phone, Bet, FL Studio, and Dollar
           Pixels). Art Wall and Leaders are separate live apps, not replicas. YouTube still
           needs object storage, so its Website link stays a red stub. The
           interactive demos already run on the search site, so their Website

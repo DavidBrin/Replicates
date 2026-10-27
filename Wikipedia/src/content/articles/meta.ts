@@ -52,11 +52,11 @@ export const youtubeMeta: ArticleMeta = {
 };
 
 export const superSmashMeta: ArticleMeta = {
-  slug: projectSlug("Super Smash"),
-  title: "Super Smash (replica)",
+  slug: projectSlug("David-Smash"),
+  title: "David-Smash (replica)",
   shortDescription: "A browser rebuild of Super Smash Bros. Ultimate's versus mode",
   categories: ["Software replicas", "Fighting games", "Browser games"],
-  lastEdited: "18 August 2026",
+  lastEdited: "24 October 2026",
 };
 
 export const fakePhoneMeta: ArticleMeta = {

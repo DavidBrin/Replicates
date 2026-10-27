@@ -130,7 +130,7 @@ export const islandEmpire: ArticleModule = {
       <Section heading="See also">
         <ul className="list-disc pl-6">
           <li>
-            <WikiLink to="Super_Smash_(replica)">Super Smash (replica)</WikiLink>
+            <WikiLink to="Super_Smash_(replica)">David-Smash (replica)</WikiLink>
           </li>
           <li>
             <WikiLink to="Linear_(replica)">Linear (replica)</WikiLink>

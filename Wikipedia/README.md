@@ -7,7 +7,7 @@ guide" for **David's Internet** — a planned search engine over the portfolio
 projects in this repo. A search engine is not a dashboard: it needs somewhere to
 send you that *explains* what each project is. That somewhere is an encyclopedia.
 The base page is itself a Wikipedia-style article about David's Internet, and
-every sibling replica (Linear, Notion, YouTube, Super Smash, Fake Phone, Bet,
+every sibling replica (Linear, Notion, YouTube, David-Smash, Fake Phone, Bet,
 Dollar Pixels) gets an article written in encyclopedic register from its own
 README — with an infobox, references, categories, and a link to the live project.
 

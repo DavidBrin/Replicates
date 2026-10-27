@@ -108,7 +108,7 @@ export const flStudio: ArticleModule = {
 
       <Section heading="See also">
         <ul className="list-disc pl-6">
-          <li><WikiLink to="Super_Smash_(replica)">Super Smash (replica)</WikiLink></li>
+          <li><WikiLink to="Super_Smash_(replica)">David-Smash (replica)</WikiLink></li>
           <li><WikiLink to="Early_3D_Modeling">Early 3D Modeling</WikiLink></li>
           <li><WikiLink to="Davids_Internet">David&apos;s Internet</WikiLink></li>
         </ul>
