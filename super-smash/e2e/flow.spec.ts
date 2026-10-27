@@ -18,18 +18,24 @@ test("the title screen waits for a keypress", async ({ page }) => {
   await page.waitForURL(`**${ROUTES.menu}`);
 });
 
-test("the main menu offers Smash and dims what is out of scope", async ({ page }) => {
+test("the main menu offers Smash and Online, and dims what is out of scope", async ({ page }) => {
   await startFromTitle(page);
   const smash = page.getByRole("button", { name: /smash/i }).first();
   await expect(smash).toBeVisible();
   await expect(smash).toBeEnabled();
+  await expect(page.getByRole("button", { name: /online/i }).first()).toBeEnabled();
 
-  // The other four modes are deliberately present but disabled — their absence
+  // The other three modes are deliberately present but disabled — their absence
   // would misrepresent the game more than their being greyed out does.
-  for (const mode of ["Spirits", "Games & More", "Vault", "Online"]) {
+  for (const mode of ["Spirits", "Games & More", "Vault"]) {
     const tile = page.getByRole("button", { name: new RegExp(mode, "i") }).first();
     if (await tile.count()) await expect(tile).toBeDisabled();
   }
+});
+
+test("the tab is titled David-Smash", async ({ page }) => {
+  await page.goto(ROUTES.title);
+  await expect(page).toHaveTitle("David-Smash");
 });
 
 test("rules, stage and fighters lead to a running match", async ({ page }) => {

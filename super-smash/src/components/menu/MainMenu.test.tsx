@@ -24,14 +24,15 @@ describe("MainMenu", () => {
     expect(routerMock.push).toHaveBeenCalledWith("/rules");
   });
 
-  it("shows every mode, and disables the four that are out of scope", async () => {
+  it("shows every mode, and disables the three that are out of scope", async () => {
     await renderMenu();
 
-    for (const label of ["Spirits", "Games & More", "Vault", "Online"]) {
+    for (const label of ["Spirits", "Games & More", "Vault"]) {
       const tile = screen.getByRole("button", { name: new RegExp(label, "i") });
       expect(tile).toHaveAttribute("aria-disabled", "true");
     }
     expect(screen.getByRole("button", { name: /^smash/i })).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByRole("button", { name: /online/i })).not.toHaveAttribute("aria-disabled");
   });
 
   it("does not navigate from a disabled tile", async () => {
@@ -72,5 +73,13 @@ describe("MainMenu", () => {
   it("carries the product name in the header", async () => {
     await renderMenu();
     expect(screen.getByText("David-Smash")).toBeInTheDocument();
+  });
+
+  it("opens the online lobby from the Online tile", async () => {
+    await renderMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: /online/i }));
+
+    expect(routerMock.push).toHaveBeenCalledWith("/online");
   });
 });

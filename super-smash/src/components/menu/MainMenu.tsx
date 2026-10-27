@@ -22,7 +22,7 @@ interface Mode {
 /**
  * Ultimate's five modes, in Ultimate's order.
  *
- * Four of them are out of scope and stay on the screen anyway (SPEC §12). The
+ * Three of them are out of scope and stay on the screen anyway (SPEC §12). The
  * alternative — a main menu with one tile on it — would misrepresent the game
  * being reproduced, and would hide the fact that the omission is a decision
  * rather than an oversight. They are dimmed, they say why, and they do
@@ -41,7 +41,7 @@ const MODES: readonly Mode[] = [
   { id: "spirits", label: "Spirits", sublabel: "Not built", colour: "var(--color-mode-spirits)" },
   { id: "games", label: "Games & More", sublabel: "Not built", colour: "var(--color-mode-games)" },
   { id: "vault", label: "Vault", sublabel: "Not built", colour: "var(--color-mode-vault)" },
-  { id: "online", label: "Online", sublabel: "Not built", colour: "var(--color-mode-online)" },
+  { id: "online", label: "Online", sublabel: "2 players · room code", colour: "var(--color-mode-online)", href: "/online" },
 ];
 
 const OUT_OF_SCOPE =
