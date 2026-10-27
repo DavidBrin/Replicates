@@ -275,10 +275,17 @@ export class GamepadInput {
 
     // The stick contributes the same direction bits as the d-pad, OR'd, so a
     // player may use either without a mode switch.
-    if (stick.x >= WALK_THRESHOLD) frame |= Btn.Right;
-    else if (stick.x <= -WALK_THRESHOLD) frame |= Btn.Left;
-    if (stick.y >= WALK_THRESHOLD) frame |= Btn.Up;
-    else if (stick.y <= -WALK_THRESHOLD) frame |= Btn.Down;
+    const fromPad = frame & DIRECTION_MASK;
+    let fromStick: InputFrame = 0;
+    if (stick.x >= WALK_THRESHOLD) fromStick |= Btn.Right;
+    else if (stick.x <= -WALK_THRESHOLD) fromStick |= Btn.Left;
+    if (stick.y >= WALK_THRESHOLD) fromStick |= Btn.Up;
+    else if (stick.y <= -WALK_THRESHOLD) fromStick |= Btn.Down;
+    frame |= fromStick;
+
+    // The one thing the magnitude can carry over the wire: "not all the way".
+    // A d-pad is digital, so a held d-pad direction is never soft.
+    if (fromStick !== 0 && fromPad === 0 && stick.magnitude < DASH_THRESHOLD) frame |= Btn.Soft;
 
     return frame;
   }
@@ -301,4 +308,25 @@ export class GamepadInput {
 
 export function createGamepadInput(options: GamepadOptions = {}): GamepadInput {
   return new GamepadInput(options);
+}
+
+/* ------------------------------------------------------------- combining -- */
+
+export const DIRECTION_MASK: InputFrame = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
+
+/**
+ * One port's frame from both devices.
+ *
+ * A key is a full deflection, so a direction held on the keyboard cancels the
+ * stick's "soft": otherwise a player resting a thumb on the stick could never
+ * dash with the arrow keys.
+ */
+export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame): InputFrame {
+  const merged = keys | pad;
+  return (keys & DIRECTION_MASK) !== 0 ? merged & ~Btn.Soft : merged;
+}
+
+/** Pad 0 drives the first human port, pad 1 the second; extra pads drive nothing. */
+export function padPortMap(ports: readonly number[]): (padIndex: number) => number {
+  return (padIndex) => ports[padIndex] ?? -1;
 }

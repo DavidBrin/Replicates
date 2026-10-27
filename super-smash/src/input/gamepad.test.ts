@@ -4,12 +4,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Btn, held } from "@/engine/types";
 import {
   DASH_THRESHOLD,
+  DIRECTION_MASK,
   GamepadInput,
   NEUTRAL_STICK,
   RADIAL_DEADZONE,
   STANDARD_MAPPING,
   WALK_THRESHOLD,
   createGamepadInput,
+  mergeKeyboardAndPad,
+  padPortMap,
   radialDeadzone,
 } from "./gamepad";
 
@@ -270,5 +273,77 @@ describe("connection events", () => {
     window.dispatchEvent(disconnect);
     expect(input.connectedPads).toEqual([]);
     expect(onConnectionChange).toHaveBeenCalledWith(3, false);
+  });
+});
+
+describe("analog walk (Btn.Soft)", () => {
+  const frameFor = (p: Gamepad) => new GamepadInput({ navigator: navigatorWith([p]) }).poll().frames[0];
+
+  it("marks a partial tilt soft", () => {
+    const frame = frameFor(pad({ axes: [0.5, 0] }));
+    expect(held(frame, Btn.Right)).toBe(true);
+    expect(held(frame, Btn.Soft)).toBe(true);
+  });
+
+  it("does not mark a full deflection soft", () => {
+    const frame = frameFor(pad({ axes: [1, 0] }));
+    expect(held(frame, Btn.Right)).toBe(true);
+    expect(held(frame, Btn.Soft)).toBe(false);
+  });
+
+  it("never marks the d-pad soft, even with the stick tilted", () => {
+    const frame = frameFor(pad({ buttons: [15], axes: [0.5, 0] }));
+    expect(held(frame, Btn.Right)).toBe(true);
+    expect(held(frame, Btn.Soft)).toBe(false);
+  });
+
+  it("leaves a stick at rest without the bit", () => {
+    expect(frameFor(pad({ axes: [0, 0] }))).toBe(0);
+  });
+
+  it("leaves a stick inside the dead zone without the bit", () => {
+    expect(frameFor(pad({ axes: [RADIAL_DEADZONE, 0] }))).toBe(0);
+    expect(frameFor(pad({ axes: [0.1, -0.1] }))).toBe(0);
+  });
+
+  it("leaves a diagonal that clears the dead zone but no direction threshold without the bit", () => {
+    // Magnitude ~0.28 after the dead zone, but each axis only ~0.2: no direction bit, so no Soft.
+    expect(frameFor(pad({ axes: [0.29, 0.29] }))).toBe(0);
+  });
+
+  it("keeps a button alone free of the bit", () => {
+    expect(frameFor(pad({ buttons: [0], axes: [0, 0] }))).toBe(Btn.Attack);
+  });
+
+  it("sets the bit only together with a held direction", () => {
+    fc.assert(
+      fc.property(unit, unit, (x, y) => {
+        const frame = frameFor(pad({ axes: [x, y] }));
+        if (held(frame, Btn.Soft)) expect(frame & DIRECTION_MASK).not.toBe(0);
+      }),
+    );
+  });
+});
+
+describe("mergeKeyboardAndPad", () => {
+  it("lets a key's full deflection win over a soft stick", () => {
+    expect(mergeKeyboardAndPad(Btn.Right, Btn.Right | Btn.Soft)).toBe(Btn.Right);
+  });
+
+  it("keeps the stick soft when the keyboard holds no direction", () => {
+    expect(mergeKeyboardAndPad(Btn.Attack, Btn.Left | Btn.Soft)).toBe(Btn.Attack | Btn.Left | Btn.Soft);
+  });
+
+  it("covers the four directions in its mask", () => {
+    expect(DIRECTION_MASK).toBe(Btn.Left | Btn.Right | Btn.Up | Btn.Down);
+  });
+});
+
+describe("padPortMap", () => {
+  it("gives the first pad to the first human port, the second to the second", () => {
+    const map = padPortMap([0, 2]);
+    expect(map(0)).toBe(0);
+    expect(map(1)).toBe(2);
+    expect(map(2)).toBe(-1);
   });
 });
