@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
 
 import { FighterBust } from "@/components/ui/FighterBust";
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
@@ -15,6 +16,7 @@ import {
   type MatchResult,
   type PlayerResultStat,
 } from "@/lib/matchConfig";
+import { leaveOnline } from "@/lib/onlineStore";
 
 const ORDINALS = ["1st", "2nd", "3rd", "4th"] as const;
 
@@ -24,6 +26,16 @@ const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
   suddenDeath: "Sudden Death",
   connectionLost: "Connection Lost",
 };
+
+/**
+ * How long an online result keeps the room open before leaving it. The peer
+ * that ended first has nothing left to play, but the other one may still be
+ * waiting on its last input packets to reach the same result over a lossy
+ * link; closing the transport at once would strand it. Leaving earlier than
+ * this (Quit, Back, the screen unmounting) is the player's call and is not
+ * held up.
+ */
+export const ONLINE_RESULT_LINGER_MS = 1_500;
 
 /**
  * Results.
@@ -39,6 +51,30 @@ export function Results() {
   const roster = useRoster();
   const result = useMatchConfig((s) => s.result);
   const rules = useMatchConfig((s) => s.rules);
+
+  const online = result?.online === true;
+  const connectionLost = result?.kind === "connectionLost";
+
+  // An online result holds the room open until it is left, and it is left once:
+  // by the grace running out, by Quit or Back, or by the screen going away,
+  // whichever comes first. The ref is what makes the later ones no-ops.
+  const left = useRef(false);
+  const leaveRoom = useCallback(() => {
+    if (left.current) return;
+    left.current = true;
+    leaveOnline();
+  }, []);
+
+  useEffect(() => {
+    if (!online) return;
+    // Nobody is left to wait for when the connection is gone.
+    if (connectionLost) leaveRoom();
+    const grace = connectionLost ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
+    return () => {
+      clearTimeout(grace);
+      leaveRoom();
+    };
+  }, [online, connectionLost, leaveRoom]);
 
   if (!result) {
     return (
@@ -73,7 +109,10 @@ export function Results() {
   return (
     <main className="flex min-h-dvh flex-col bg-[#101215]">
       <ScreenBanner
-        onBack={() => router.push("/menu")}
+        onBack={() => {
+          if (online) leaveRoom();
+          router.push("/menu");
+        }}
         backLabel="Back to the main menu"
         tab={<ModeTab label="Results" caret={false} />}
       >
@@ -86,6 +125,11 @@ export function Results() {
       </ScreenBanner>
 
       <div className="mx-auto w-full max-w-6xl flex-1 px-5 pb-10 sm:px-8">
+        {connectionLost ? (
+          <p role="status" className="mb-6 text-center text-sm font-bold text-white/80">
+            The connection to the other player was lost before the match finished. Nobody wins this one.
+          </p>
+        ) : null}
         <ol className="flex flex-wrap items-end justify-center gap-4">
           {result.placings.map((port, place) => {
             const fighter = findFighter(roster, result.fighters[port] ?? null);
@@ -158,22 +202,30 @@ export function Results() {
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          {online ? null : (
+            <>
+              <SkewButton
+                onClick={() => router.push("/play")}
+                className="border-[4px] border-panel-ink bg-smash-yellow px-8 py-3 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform hover:-translate-y-1"
+                innerClassName="font-display text-xl tracking-[0.16em] uppercase"
+              >
+                Rematch
+              </SkewButton>
+              <SkewButton
+                onClick={() => router.push("/fighters")}
+                className="border-[3px] border-panel-ink bg-panel-bone px-6 py-3 text-panel-ink transition-transform hover:-translate-y-1"
+                innerClassName="font-display text-lg tracking-[0.14em] uppercase"
+              >
+                Change Fighters
+              </SkewButton>
+            </>
+          )}
           <SkewButton
-            onClick={() => router.push("/play")}
-            className="border-[4px] border-panel-ink bg-smash-yellow px-8 py-3 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform hover:-translate-y-1"
-            innerClassName="font-display text-xl tracking-[0.16em] uppercase"
-          >
-            Rematch
-          </SkewButton>
-          <SkewButton
-            onClick={() => router.push("/fighters")}
-            className="border-[3px] border-panel-ink bg-panel-bone px-6 py-3 text-panel-ink transition-transform hover:-translate-y-1"
-            innerClassName="font-display text-lg tracking-[0.14em] uppercase"
-          >
-            Change Fighters
-          </SkewButton>
-          <SkewButton
-            onClick={() => router.push("/menu")}
+            onClick={() => {
+              // An online result still holds the room open; quitting is leaving it.
+              if (online) leaveRoom();
+              router.push("/menu");
+            }}
             className="border-[3px] border-panel-ink bg-[#2a2d33] px-6 py-3 text-white/80 transition-transform hover:-translate-y-1"
             innerClassName="font-display text-lg tracking-[0.14em] uppercase"
           >

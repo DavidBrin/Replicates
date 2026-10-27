@@ -1,9 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
 import { resetRosterCache, useMatchConfig, type MatchResult } from "@/lib/matchConfig";
-import { Results } from "./Results";
+import { leaveOnline } from "@/lib/onlineStore";
+import { getActiveSession, setActiveSession } from "@/net/online/session";
+import { fakeSession } from "@/net/online/testing";
+import { ONLINE_RESULT_LINGER_MS, Results } from "./Results";
+
+// The real leave, counted: "exactly one leave" is a claim about calls, and the
+// session's own `close` cannot show it (a second leave finds nothing to close).
+vi.mock("@/lib/onlineStore", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/onlineStore")>();
+  return { ...actual, leaveOnline: vi.fn(actual.leaveOnline) };
+});
 
 const RESULT: MatchResult = {
   kind: "stockOut",
@@ -25,6 +35,12 @@ beforeEach(() => {
   useMatchConfig.getState().reset();
   resetRosterCache();
   routerMock.push.mockClear();
+  setActiveSession(null);
+  vi.mocked(leaveOnline).mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("Results", () => {
@@ -67,5 +83,192 @@ describe("Results", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^quit$/i }));
     expect(routerMock.push).toHaveBeenCalledWith("/menu");
+  });
+});
+
+describe("Results after an online match", () => {
+  it("says the connection was lost instead of crowning anyone", async () => {
+    useMatchConfig.getState().setResult({ kind: "connectionLost", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true });
+    await renderResults();
+    expect(screen.getByText("Connection Lost")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/connection to the other player was lost/i);
+    expect(screen.queryByRole("button", { name: /rematch/i })).toBeNull();
+  });
+
+  it("offers no local rematch or fighter change after an online match", async () => {
+    useMatchConfig.getState().setResult({ ...RESULT, online: true });
+    await renderResults();
+    expect(screen.queryByRole("button", { name: /rematch/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /change fighters/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /quit/i })).toBeInTheDocument();
+  });
+
+  it("leaves the room when quitting", async () => {
+    const { session } = fakeSession("host");
+    setActiveSession(session);
+    useMatchConfig.getState().setResult({ ...RESULT, online: true });
+    await renderResults();
+    fireEvent.click(screen.getByRole("button", { name: /quit/i }));
+    expect(session.close).toHaveBeenCalled();
+    expect(getActiveSession()).toBeNull();
+    expect(routerMock.push).toHaveBeenCalledWith("/menu");
+  });
+
+  it("leaves the room from the back button too", async () => {
+    const { session } = fakeSession("guest");
+    setActiveSession(session);
+    useMatchConfig.getState().setResult({ ...RESULT, online: true });
+    await renderResults();
+    fireEvent.click(screen.getByRole("button", { name: "Back to the main menu" }));
+    expect(session.close).toHaveBeenCalled();
+    expect(getActiveSession()).toBeNull();
+  });
+
+  it("leaves at once, and only once, when the connection was lost", async () => {
+    vi.useFakeTimers();
+    const { session } = fakeSession("guest");
+    setActiveSession(session);
+    useMatchConfig.getState().setResult({ kind: "connectionLost", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true });
+    const { unmount } = render(<Results />);
+    await act(async () => {});
+
+    expect(leaveOnline).toHaveBeenCalledTimes(1);
+    expect(session.close).toHaveBeenCalledTimes(1);
+    expect(getActiveSession()).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /quit/i }));
+    act(() => {
+      vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS * 2);
+    });
+    unmount();
+    expect(leaveOnline).toHaveBeenCalledTimes(1);
+  });
+
+  describe("lingering before it leaves", () => {
+    /** An online match that ended normally, seated as the match page leaves it. */
+    function seatFinishedOnlineMatch() {
+      const fake = fakeSession("host");
+      setActiveSession(fake.session);
+      useMatchConfig.getState().configureOnline();
+      useMatchConfig.getState().setResult({ ...RESULT, online: true });
+      return fake.session;
+    }
+
+    /** The other peer may still need this side's last input packets, so the room stays up for a moment. */
+    it("holds the room open for the grace, then leaves exactly once", async () => {
+      vi.useFakeTimers();
+      const session = seatFinishedOnlineMatch();
+      const { unmount } = render(<Results />);
+      await act(async () => {});
+
+      expect(leaveOnline).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(1_499);
+      });
+      expect(leaveOnline).not.toHaveBeenCalled();
+      expect(session.close).not.toHaveBeenCalled();
+      expect(getActiveSession()).toBe(session);
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(session.close).toHaveBeenCalledTimes(1);
+      expect(getActiveSession()).toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS * 2);
+      });
+      unmount();
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps showing the result after it has left the room", async () => {
+      vi.useFakeTimers();
+      seatFinishedOnlineMatch();
+      render(<Results />);
+      await act(async () => {});
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS);
+      });
+
+      expect(useMatchConfig.getState().online).toBe(false);
+      expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("1st");
+      expect(screen.queryByRole("heading", { name: /no match yet/i })).toBeNull();
+    });
+
+    it("leaves at once, and only once, when the player quits before the grace is up", async () => {
+      vi.useFakeTimers();
+      const session = seatFinishedOnlineMatch();
+      const { unmount } = render(<Results />);
+      await act(async () => {});
+
+      fireEvent.click(screen.getByRole("button", { name: /quit/i }));
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(session.close).toHaveBeenCalledTimes(1);
+      expect(routerMock.push).toHaveBeenCalledWith("/menu");
+
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS * 2);
+      });
+      unmount();
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves at once, and only once, from the back button before the grace is up", async () => {
+      vi.useFakeTimers();
+      seatFinishedOnlineMatch();
+      const { unmount } = render(<Results />);
+      await act(async () => {});
+
+      fireEvent.click(screen.getByRole("button", { name: "Back to the main menu" }));
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(getActiveSession()).toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS * 2);
+      });
+      unmount();
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves at once, and only once, when the screen unmounts before the grace is up", async () => {
+      vi.useFakeTimers();
+      const session = seatFinishedOnlineMatch();
+      const { unmount } = render(<Results />);
+      await act(async () => {});
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS - 1);
+      });
+      expect(leaveOnline).not.toHaveBeenCalled();
+
+      unmount();
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(session.close).toHaveBeenCalledTimes(1);
+      expect(getActiveSession()).toBeNull();
+
+      // The cleared timer must not leave a second time.
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS * 2);
+      });
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("never leaves a room after a local match", async () => {
+    vi.useFakeTimers();
+    const { session } = fakeSession("host");
+    setActiveSession(session);
+    useMatchConfig.getState().setResult(RESULT);
+    const { unmount } = render(<Results />);
+    await act(async () => {});
+    act(() => {
+      vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS * 2);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^quit$/i }));
+    unmount();
+
+    expect(leaveOnline).not.toHaveBeenCalled();
+    expect(session.close).not.toHaveBeenCalled();
   });
 });
