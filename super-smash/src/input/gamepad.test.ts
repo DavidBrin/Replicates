@@ -218,9 +218,11 @@ describe("polling", () => {
     });
     live = input;
 
+    // Ports follow connection order, so the lone pad in slot 1 is the first pad
+    // and drives port 0; `connectedPads` still reports the raw slot.
     const poll = input.poll();
-    expect(poll.frames[0]).toBe(0);
-    expect(held(poll.frames[1], Btn.Special)).toBe(true);
+    expect(held(poll.frames[0], Btn.Special)).toBe(true);
+    expect(poll.frames[1]).toBe(0);
     expect(poll.connectedPads).toEqual([1]);
   });
 
@@ -325,9 +327,45 @@ describe("analog walk (Btn.Soft)", () => {
   });
 });
 
+describe("Btn.Soft and edges", () => {
+  it("does not report Soft coming or going as a press or a release", () => {
+    const pads: (Gamepad | null)[] = [pad({ axes: [0, 0] })];
+    const input = new GamepadInput({ navigator: navigatorWith(pads) });
+
+    input.poll();
+    pads[0] = pad({ axes: [0.5, 0] }); // soft tilt: Right + Soft come on
+    const tilt = input.poll();
+    expect(tilt.frames[0] & Btn.Soft).toBe(Btn.Soft);
+    expect(tilt.pressed[0]).toBe(Btn.Right);
+
+    pads[0] = pad({ axes: [1, 0] }); // pushed home: Soft goes, Right stays
+    const full = input.poll();
+    expect(full.frames[0]).toBe(Btn.Right);
+    expect(full.pressed[0]).toBe(0);
+    expect(full.released[0]).toBe(0);
+
+    pads[0] = pad({ axes: [0.5, 0] }); // eased off: Soft returns, Right stays
+    const eased = input.poll();
+    expect(eased.frames[0] & Btn.Soft).toBe(Btn.Soft);
+    expect(eased.pressed[0]).toBe(0);
+    expect(eased.released[0]).toBe(0);
+
+    pads[0] = pad({ axes: [0, 0] }); // let go: Right is released, Soft is not reported
+    const off = input.poll();
+    expect(off.released[0]).toBe(Btn.Right);
+  });
+});
+
 describe("mergeKeyboardAndPad", () => {
   it("lets a key's full deflection win over a soft stick", () => {
     expect(mergeKeyboardAndPad(Btn.Right, Btn.Right | Btn.Soft)).toBe(Btn.Right);
+  });
+
+  // By design the cancel is frame-wide: Soft is one bit for the whole frame, so
+  // any key direction makes the stick's other direction full strength too.
+  it("cancels the stick's soft for the whole frame when a key holds a different direction", () => {
+    expect(mergeKeyboardAndPad(Btn.Up, Btn.Right | Btn.Soft)).toBe(Btn.Up | Btn.Right);
+    expect(mergeKeyboardAndPad(Btn.Left, Btn.Right | Btn.Soft)).toBe(Btn.Left | Btn.Right);
   });
 
   it("keeps the stick soft when the keyboard holds no direction", () => {
@@ -340,10 +378,54 @@ describe("mergeKeyboardAndPad", () => {
 });
 
 describe("padPortMap", () => {
-  it("gives the first pad to the first human port, the second to the second", () => {
+  it("gives the first connected pad to the first human port, the second to the second", () => {
     const map = padPortMap([0, 2]);
     expect(map(0)).toBe(0);
     expect(map(1)).toBe(2);
     expect(map(2)).toBe(-1);
+  });
+
+  it("drives the first human port from a lone pad in slot 1", () => {
+    const input = new GamepadInput({
+      navigator: navigatorWith([null, pad({ index: 1, buttons: [0] })]),
+      portForPad: padPortMap([0]),
+    });
+    const poll = input.poll();
+    expect(held(poll.frames[0], Btn.Attack)).toBe(true);
+    expect(poll.frames.slice(1)).toEqual([0, 0, 0]);
+  });
+
+  it("maps two pads in slots 1 and 3 to the two human ports in order", () => {
+    const input = new GamepadInput({
+      navigator: navigatorWith([null, pad({ index: 1, buttons: [0] }), null, pad({ index: 3, buttons: [1] })]),
+      portForPad: padPortMap([0, 2]),
+    });
+    const poll = input.poll();
+    expect(poll.frames[0]).toBe(Btn.Attack);
+    expect(poll.frames[1]).toBe(0);
+    expect(poll.frames[2]).toBe(Btn.Special);
+    expect(poll.frames[3]).toBe(0);
+    expect(poll.connectedPads).toEqual([1, 3]);
+  });
+
+  it("orders pads by slot even when the browser lists them out of order", () => {
+    const input = new GamepadInput({
+      navigator: navigatorWith([pad({ index: 3, buttons: [1] }), pad({ index: 1, buttons: [0] })]),
+      portForPad: padPortMap([0, 2]),
+    });
+    const poll = input.poll();
+    expect(poll.frames[0]).toBe(Btn.Attack);
+    expect(poll.frames[2]).toBe(Btn.Special);
+  });
+
+  it("ignores a disconnected pad when counting", () => {
+    const gone = { ...pad({ index: 0, buttons: [0] }), connected: false } as Gamepad;
+    const input = new GamepadInput({
+      navigator: navigatorWith([gone, pad({ index: 1, buttons: [1] })]),
+      portForPad: padPortMap([0, 2]),
+    });
+    const poll = input.poll();
+    expect(poll.frames[0]).toBe(Btn.Special);
+    expect(poll.frames[2]).toBe(0);
   });
 });

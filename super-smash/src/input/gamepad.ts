@@ -21,15 +21,18 @@
  * a large deflection change inside a couple of frames is a smash. Those
  * distinctions are native here rather than inferred.
  *
- * What the stick's magnitude cannot do is ride along to the other peer:
+ * Almost none of the stick's magnitude can ride along to the other peer:
  * `InputFrame` is a bitfield by contract (SPEC §3 — rollback compares inputs
  * with a single integer compare, 60 times a second, for every predicted frame),
- * so the packed frame is digital either way. The analog values are exposed on
- * the poll result beside the frame, so the local layer can use them without
- * changing what goes over the wire, and the one part that survives packing is
- * the part that matters most: a flick crosses the direction threshold from zero
- * in one frame and therefore produces a *fresh press edge*, which is exactly
- * the signal `SMASH_INPUT_WINDOW` keys off.
+ * so the packed frame is digital either way. Two parts of the analog signal do
+ * survive packing. The first is one bit of magnitude, `Btn.Soft`: a stick held
+ * in a direction but short of a full push sets it, and the engine reads it as a
+ * quarter-speed walk, tilt or DI. The second is the part that matters most for
+ * smashes: a flick crosses the direction threshold from zero in one frame and
+ * therefore produces a *fresh press edge*, which is exactly the signal
+ * `SMASH_INPUT_WINDOW` keys off. The full analog values are exposed on the poll
+ * result beside the frame, so the local layer can use them without changing
+ * what goes over the wire.
  */
 
 import { Btn, type InputFrame } from "@/engine/types";
@@ -145,10 +148,15 @@ export interface GamepadOptions {
   readonly mapping?: GamepadMapping;
   readonly deadzone?: number;
   /**
-   * Which pad index drives which port. Defaults to identity — pad 0 is port 0.
-   * The player-select screen overwrites it once players pick their seats.
+   * Which port a pad drives, given the pad's place in connection order: 0 for
+   * the connected pad with the lowest `Gamepad.index`, 1 for the next, and so
+   * on. It is deliberately not the raw `Gamepad.index`, which is the browser's
+   * slot number and can start above 0 (a replug, another HID device, Firefox).
+   * Return a negative number or a port past `portCount` to drive nothing.
+   * Defaults to identity — the first connected pad is port 0. The player-select
+   * screen overwrites it once players pick their seats.
    */
-  readonly portForPad?: (padIndex: number) => number;
+  readonly portForPad?: (padOrdinal: number) => number;
   readonly onConnectionChange?: (padIndex: number, connected: boolean) => void;
 }
 
@@ -168,7 +176,7 @@ export class GamepadInput {
   private readonly nav: Navigator | undefined;
   private readonly mapping: GamepadMapping;
   private readonly deadzone: number;
-  private readonly portForPad: (padIndex: number) => number;
+  private readonly portForPad: (padOrdinal: number) => number;
   private readonly onConnectionChange: ((padIndex: number, connected: boolean) => void) | undefined;
 
   /** Last poll's packed frame per pad index, for edge detection. */
@@ -222,11 +230,14 @@ export class GamepadInput {
     const sticks = new Array<Stick>(portCount).fill(NEUTRAL_STICK);
     const seen: number[] = [];
 
-    const pads = this.supported ? this.nav!.getGamepads() : [];
-    for (const pad of pads) {
-      // `getGamepads()` returns a sparse array with holes for empty slots.
-      if (!pad || !pad.connected) continue;
-      const port = this.portForPad(pad.index);
+    // `getGamepads()` returns a sparse array with holes for empty slots. Ports
+    // follow connection order, not the slot number: a lone pad in slot 1 is the
+    // first pad, so it must drive the first port.
+    const pads = (this.supported ? [...this.nav!.getGamepads()] : [])
+      .filter((pad): pad is Gamepad => !!pad && pad.connected)
+      .sort((a, b) => a.index - b.index);
+    for (const [ordinal, pad] of pads.entries()) {
+      const port = this.portForPad(ordinal);
       if (port < 0 || port >= portCount) continue;
       seen.push(pad.index);
 
@@ -234,9 +245,12 @@ export class GamepadInput {
       const frame = this.packFrame(pad, stick);
       const previous = this.lastFrames.get(pad.index) ?? 0;
 
+      // `Btn.Soft` is a modifier on a direction, not a button: its coming and
+      // going is not a press or a release.
+      const buttons = ~Btn.Soft;
       frames[port] |= frame;
-      pressed[port] |= frame & ~previous;
-      released[port] |= previous & ~frame;
+      pressed[port] |= frame & ~previous & buttons;
+      released[port] |= previous & ~frame & buttons;
       sticks[port] = stick;
 
       this.lastFrames.set(pad.index, frame);
@@ -326,7 +340,15 @@ export function mergeKeyboardAndPad(keys: InputFrame, pad: InputFrame): InputFra
   return (keys & DIRECTION_MASK) !== 0 ? merged & ~Btn.Soft : merged;
 }
 
-/** Pad 0 drives the first human port, pad 1 the second; extra pads drive nothing. */
-export function padPortMap(ports: readonly number[]): (padIndex: number) => number {
-  return (padIndex) => ports[padIndex] ?? -1;
+/**
+ * `ports` lists the human ports in order: the first connected pad drives
+ * `ports[0]`, the second connected pad `ports[1]`, and extra pads drive
+ * nothing (-1).
+ *
+ * The argument is the pad's place in connection order (what `GamepadInput`
+ * passes to `portForPad`), not the browser's `Gamepad.index` slot, so a lone
+ * pad that landed in slot 1 still drives the first human port.
+ */
+export function padPortMap(ports: readonly number[]): (padOrdinal: number) => number {
+  return (padOrdinal) => ports[padOrdinal] ?? -1;
 }
