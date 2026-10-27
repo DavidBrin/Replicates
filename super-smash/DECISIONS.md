@@ -1510,7 +1510,9 @@ an answer and some ICE candidates, then idles until somebody leaves.
   are only shown (the start carries the rules played), and the results state the rules the match
   was played under rather than the machine's own.
 - *The lobby tells a notice from an error.* A peer leaving is a non-sticky notice, so re-pairing
-  works; real errors stay until the player leaves.
+  works; real errors stay until the player leaves. A real error (and a failed link) also leaves the
+  room at once, closing the room socket and the transport, so the code is not left joinable while
+  a screen shows a dead error.
 - *A lobby channel lost with both players seated gets a fresh connection.* The channel can close
   while both room sockets stay open (an SCTP close, a network switch); nobody joins or leaves, so
   nothing offered again and both screens waited for good. Now the host offers the guest the room
@@ -1522,12 +1524,19 @@ an answer and some ICE candidates, then idles until somebody leaves.
   fresh offer is made or accepted mid-match, where the link monitor decides as before. A new peer
   connection whose channel has not opened within 15 s (`NEGOTIATION_TIMEOUT_MS`) counts as a
   channel lost before it opened, so ICE that hangs rather than fails takes the same retries.
+  Either side can be the only one to see the close. A guest whose side closed alone asks its host
+  through the room (a `renegotiate` signal), and the host lets its own side go and retries as if
+  it had closed. A guest whose channel the host replaced passes through linking, so it repeats
+  its pick. A start withdrawn because its seat emptied releases the channel for the next guest.
 - *A desync ends the match.* A confirmed-state hash mismatch used only to warn in the console, so
   two machines could play on to different outcomes. Now it ends the match the way a lost
   connection does, as a result of its own: "Out of Sync", no placings, "The two games went out of
-  sync, so this match can't count." The runner stops, and with it this side's inputs, so the
-  other side finds out by its own hash check or by its link monitor. The warning stays for
-  diagnosis. Mismatched builds are the likeliest cause; Plan 2 Task 27 adds a build fingerprint so
+  sync, so this match can't count." The machine that finds it stops, then lingers like a match
+  that ended (`ONLINE_RESULT_LINGER_MS`), re-sending its inputs and the hash that showed the
+  mismatch: that one unreliable packet is the other machine's only way to find the same desync,
+  rather than ending on a lost connection. A frame's two hashes are compared once, so a re-sent
+  hash never reports it twice. A desync during a finished match's play-out changes nothing. The
+  warning stays for diagnosis. Mismatched builds are the likeliest cause; Plan 2 Task 27 adds a build fingerprint so
   they refuse each other at the lobby instead.
 
 **Gamepads** are wired into every match. `InputFrame` stays a bitfield (SPEC §3) with one new
