@@ -1,19 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
 import { SkewButton, SkewPanel } from "@/components/ui/SkewPanel";
-import { bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
+import { bindSession, leaveOnline, roomErrorMessage, useOnlineStore, type OnlineStatus } from "@/lib/onlineStore";
 import { OnlineSession, setActiveSession, type OnlineSessionLike, type OpenSessionOptions } from "@/net/online/session";
 import { makeRoomCode, normalizeRoomCode, roomCodeProblem } from "@/net/roomCode";
-import type { RoomIntent } from "@/net/signalProtocol";
+import type { Role, RoomIntent } from "@/net/signalProtocol";
 
 export type OpenSession = (roomCode: string, intent: RoomIntent, options: OpenSessionOptions) => Promise<OnlineSessionLike>;
 
 /** A fresh four-letter code colliding three times running means something else is wrong. */
 const MAX_CREATE_ATTEMPTS = 3;
+
+/** What the player reads when every fresh code was taken: not a code they never saw. */
+const NO_FREE_CODE = "Could not find a free room code. Try again.";
 
 /**
  * Online: make a room and read its code out, or type the code you were given.
@@ -25,23 +28,31 @@ const MAX_CREATE_ATTEMPTS = 3;
  */
 export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?: OpenSession }) {
   const router = useRouter();
-  const status = useOnlineStore((s) => s.status);
+  const storeStatus = useOnlineStore((s) => s.status);
   const role = useOnlineStore((s) => s.role);
   const roomCode = useOnlineStore((s) => s.roomCode);
-  const error = useOnlineStore((s) => s.error);
+  const storeError = useOnlineStore((s) => s.error);
   const errorReason = useOnlineStore((s) => s.errorReason);
 
   const [typed, setTyped] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const createAttempts = useRef(0);
-  /** Only a room opened from this screen may move the player on. */
-  const openedHere = useRef(false);
+  /**
+   * What the player last asked this screen for. Until they ask, the store is
+   * not this screen's to show: whatever an earlier visit left there is about
+   * to be cleared, and must not flash, bounce the player on, or be announced.
+   */
+  const [tried, setTried] = useState<RoomIntent | null>(null);
+  const errorId = useId();
+  const codePanel = useRef<HTMLDivElement>(null);
+  const codeInput = useRef<HTMLInputElement>(null);
   /**
    * Which `connect` is the live one. Opening a session awaits the network, so
    * a player can leave (back button, browser back) before it answers; the
    * answer is then stale and must not start a room nobody is looking at.
    */
   const live = useRef(0);
+  /** Set once the select screens have the room, so that leaving this screen must not close it. */
+  const handedOn = useRef(false);
 
   // Arriving here always starts afresh: a room left open by a back button or
   // a finished match must not bounce the player straight back into it.
@@ -49,74 +60,91 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
     leaveOnline();
     return () => {
       live.current += 1;
+      // Leaving any other way than on to the select screens (browser back, a
+      // swipe) abandons the room: left open, it would stay joinable by code.
+      if (!handedOn.current) leaveOnline();
     };
   }, []);
 
-  const connect = useCallback(
-    async (code: string, intent: RoomIntent) => {
-      openedHere.current = true;
-      const mine = (live.current += 1);
-      // Everything a room leaves on the store goes, so a new one starts clean.
-      useOnlineStore.getState().patch({
-        status: "connecting",
-        roomCode: code,
-        role: null,
-        error: null,
-        errorReason: null,
-        notice: null,
-        remoteAway: false,
-        config: null,
-        hostStage: null,
-      });
-      // `?ice=relay` forces TURN, so a test can prove the relay works.
-      const forceRelay = new URLSearchParams(window.location.search).get("ice") === "relay";
-      try {
-        const session = await openSession(code, intent, { forceRelay });
-        if (live.current !== mine) {
-          session.close();
-          return;
-        }
-        setActiveSession(session);
-        bindSession(session);
-      } catch {
-        if (live.current !== mine) return;
-        useOnlineStore.getState().patch({ status: "error", errorReason: "unreachable", error: roomErrorMessage("unreachable", code) });
+  /** `freshCodesLeft` is how many more codes a create may try if this one is taken. */
+  async function connect(code: string, intent: RoomIntent, freshCodesLeft = 0): Promise<void> {
+    const mine = (live.current += 1);
+    // Everything a room leaves on the store goes, so a new one starts clean.
+    useOnlineStore.getState().patch({
+      status: "connecting",
+      roomCode: code,
+      role: null,
+      error: null,
+      errorReason: null,
+      notice: null,
+      remoteAway: false,
+      config: null,
+      hostStage: null,
+    });
+    // `?ice=relay` forces TURN, so a test can prove the relay works.
+    const forceRelay = new URLSearchParams(window.location.search).get("ice") === "relay";
+    try {
+      const session = await openSession(code, intent, { forceRelay });
+      if (live.current !== mine) {
+        session.close();
+        return;
       }
-    },
-    [openSession],
-  );
-
-  // No React state is set in here: the retry effect below calls it.
-  const create = useCallback(() => {
-    createAttempts.current += 1;
-    void connect(makeRoomCode(), "create");
-  }, [connect]);
+      setActiveSession(session);
+      bindSession(session);
+      if (freshCodesLeft > 0) {
+        // A freshly made code somebody else is using: quietly make another.
+        // This listener runs right after the store's, in the same pass, so
+        // the refusal is replaced before anything is drawn.
+        session.on((event) => {
+          if (event.type === "error" && event.reason === "taken" && live.current === mine) {
+            void connect(makeRoomCode(), "create", freshCodesLeft - 1);
+          }
+        });
+      }
+    } catch {
+      if (live.current !== mine) return;
+      useOnlineStore.getState().patch({ status: "error", errorReason: "unreachable", error: roomErrorMessage("unreachable", code) });
+    }
+  }
 
   const join = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const problem = roomCodeProblem(typed);
     setFormError(problem);
     const code = normalizeRoomCode(typed);
-    if (problem || code === null) return;
-    createAttempts.current = 0;
+    if (problem || code === null) {
+      codeInput.current?.focus();
+      return;
+    }
+    setTried("join");
     void connect(code, "join");
   };
 
-  // A freshly made code somebody else is using: quietly make another. Only
-  // for a room this screen is making (`createAttempts` counts them): an old
-  // error on arrival, or a join, never makes a room.
-  useEffect(() => {
-    if (status === "error" && errorReason === "taken" && createAttempts.current > 0 && createAttempts.current < MAX_CREATE_ATTEMPTS) {
-      create();
-    }
-  }, [create, errorReason, status]);
-
-  useEffect(() => {
-    if (openedHere.current && status === "connected" && role !== null) router.push(role === "host" ? "/stage" : "/fighters");
-  }, [role, router, status]);
-
+  const status: OnlineStatus = tried === null ? "idle" : storeStatus;
   const busy = status === "connecting" || status === "waiting" || status === "linking" || status === "connected";
-  const message = formError ?? error;
+  const showCode = busy && role === "host" && status !== "connected";
+  // A taken code is only ever shown once the quiet retries have run out.
+  const storeMessage = tried === null ? null : errorReason === "taken" ? NO_FREE_CODE : storeError;
+  const message = formError ?? storeMessage;
+  /** The code the player typed is what is wrong, as opposed to a room that would not open. */
+  const codeInvalid = formError !== null || (tried === "join" && storeError !== null);
+
+  useEffect(() => {
+    if (tried !== null && status === "connected" && role !== null) {
+      handedOn.current = true;
+      router.push(role === "host" ? "/stage" : "/fighters");
+    }
+  }, [role, router, status, tried]);
+
+  // The code is the one thing the host has to read out: put the reader there.
+  useEffect(() => {
+    if (showCode) codePanel.current?.focus();
+  }, [showCode]);
+
+  // A code that did not work: back to the box, so it can be fixed.
+  useEffect(() => {
+    if (tried === "join" && !busy && storeError !== null) codeInput.current?.focus();
+  }, [busy, storeError, tried]);
 
   return (
     <main className="flex min-h-dvh flex-col bg-[#101215]">
@@ -133,29 +161,30 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-10 sm:px-8">
         <h1 className="font-display text-4xl tracking-[0.08em] text-white uppercase">Online</h1>
 
-        {busy && role === "host" && status !== "connected" ? (
+        {showCode ? (
           <SkewPanel className="border-[3px] border-panel-ink bg-panel-bone" innerClassName="px-8 py-6 text-panel-ink">
-            <p className="text-sm font-bold">Your room code</p>
-            <p data-testid="room-code" className="font-display text-6xl tracking-[0.3em]">
-              {roomCode}
-            </p>
-            <p className="mt-2 text-sm">
-              {status === "linking" ? "They are in. Opening a direct connection…" : "Read it to the other player. Waiting for them to join…"}
-            </p>
+            <div ref={codePanel} tabIndex={-1} data-testid="room-code-panel" className="outline-none">
+              <p className="text-sm font-bold">Your room code</p>
+              {/* Read as a word, "QRST" is nonsense: a screen reader gets the letters. */}
+              <p className="font-display text-6xl tracking-[0.3em]">
+                <span data-testid="room-code" aria-hidden="true">
+                  {roomCode}
+                </span>
+                <span className="sr-only">{spelledOut(roomCode)}</span>
+              </p>
+            </div>
           </SkewPanel>
-        ) : busy ? (
-          <p role="status" className="text-white/80">
-            {status === "linking" ? "Opening a direct connection…" : `Connecting to room ${roomCode ?? ""}…`}
-          </p>
-        ) : (
+        ) : null}
+
+        {!busy ? (
           <>
             <SkewButton
               onClick={() => {
                 setFormError(null);
-                createAttempts.current = 0;
-                create();
+                setTried("create");
+                void connect(makeRoomCode(), "create", MAX_CREATE_ATTEMPTS - 1);
               }}
-              className="self-start border-[4px] border-panel-ink bg-smash-yellow px-8 py-4 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)]"
+              className="self-start border-[4px] border-panel-ink bg-smash-yellow px-8 py-4 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform hover:-translate-y-1"
               innerClassName="font-display text-2xl tracking-[0.16em] uppercase"
             >
               Create room
@@ -164,9 +193,11 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
               <label className="flex flex-col gap-1 text-sm font-bold text-white/80">
                 Room code
                 <input
+                  ref={codeInput}
                   value={typed}
                   onChange={(event) => setTyped(event.target.value)}
-                  maxLength={6}
+                  aria-invalid={codeInvalid || undefined}
+                  aria-describedby={codeInvalid && message ? errorId : undefined}
                   autoComplete="off"
                   autoCapitalize="characters"
                   spellCheck={false}
@@ -175,21 +206,51 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
               </label>
               <SkewButton
                 type="submit"
-                className="border-[3px] border-panel-ink bg-panel-bone px-6 py-3 text-panel-ink"
+                className="border-[3px] border-panel-ink bg-panel-bone px-6 py-3 text-panel-ink transition-transform hover:-translate-y-1"
                 innerClassName="font-display text-lg tracking-[0.14em] uppercase"
               >
                 Join room
               </SkewButton>
             </form>
           </>
-        )}
+        ) : null}
+
+        {/* Always mounted: a live region only announces what changes inside one that was already there. */}
+        <p role="status" aria-live="polite" className="text-white/80">
+          {statusText(status, role, roomCode)}
+        </p>
 
         {message ? (
-          <p role="alert" className="text-sm font-bold text-smash-yellow">
+          <p id={errorId} role="alert" className="text-sm font-bold text-smash-yellow">
             {message}
           </p>
         ) : null}
       </div>
     </main>
   );
+}
+
+/** What the status line says at each step of the handshake; nothing when there is nothing going on. */
+function statusText(status: OnlineStatus, role: Role | null, roomCode: string | null): string {
+  switch (status) {
+    case "waiting":
+      return role === "host" ? "Read it to the other player. Waiting for them to join…" : connecting(roomCode);
+    case "linking":
+      return role === "host" ? "They are in. Opening a direct connection…" : "Opening a direct connection…";
+    case "connecting":
+    case "connected":
+      return connecting(roomCode);
+    case "idle":
+    case "error":
+      return "";
+  }
+}
+
+function connecting(roomCode: string | null): string {
+  return `Connecting to room ${roomCode ?? ""}…`;
+}
+
+/** "QRST" as "Q R S T". */
+function spelledOut(roomCode: string | null): string {
+  return (roomCode ?? "").split("").join(" ");
 }
