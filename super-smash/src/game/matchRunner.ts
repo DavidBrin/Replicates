@@ -61,6 +61,13 @@ export const FRAME_MS = 1000 / 60;
  */
 export const MAX_CATCHUP_FRAMES = 5;
 
+/**
+ * How often a lingering online runner re-sends its last input packet (see
+ * `NetplayOptions.lingerMs`). A few times a round trip, so a lossy link still
+ * gets one through quickly, at a fraction of the rate play sends at.
+ */
+export const LINGER_RESEND_MS = 50;
+
 export interface PlayerSlot {
   readonly selection: FighterSelection;
   /** CPU level 1-9, or `null` for a human on the keyboard. */
@@ -110,6 +117,19 @@ export interface NetplayOptions {
   /** RTT clock, for tests. Never reaches the simulation. */
   readonly now?: () => number;
   readonly onDesync?: (report: DesyncReport) => void;
+  /**
+   * How long `dispose()` keeps this machine's last input packet going out,
+   * once the match has ended here. The other machine may still be a lost
+   * packet short of confirming the same result, and with nothing ticking here
+   * nothing else would send it. 0, the default: not at all.
+   */
+  readonly lingerMs?: number;
+  /**
+   * Whether the transport can still deliver. A linger ends as soon as it says
+   * no: the peer has gone, or this side has left the room. Absent, the linger
+   * runs its full length.
+   */
+  readonly isOpen?: () => boolean;
 }
 
 export interface MatchRunnerOptions {
@@ -165,6 +185,8 @@ export interface MatchRunner {
   /**
    * Stop, and release the rollback session's hold on the transport. Final:
    * afterwards nothing ticks, polls, paints or reports, and `start` does nothing.
+   * An online match that has ended lets go only after its linger
+   * (`NetplayOptions.lingerMs`), re-sending its last inputs until then.
    */
   dispose(): void;
   /** Rollback counters for the HUD; null in a local match. */
@@ -220,6 +242,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       })
     : null;
   let stalled = false;
+  const lingerMs = net?.lingerMs ?? 0;
 
   // The CPU's randomness has to live somewhere that rolls back with the match.
   // Until a rollback session owns it, it lives here, and every `cpuInput` result
@@ -390,6 +413,33 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     paint(accumulator / FRAME_MS);
   }
 
+  /**
+   * The match is over here, but maybe not there: the other machine can still
+   * be a lost packet short of the inputs that end it on its side, and with
+   * nothing ticking here nothing else would send them. So the last input
+   * packet goes out again on a timer until the linger is up or the transport
+   * can no longer deliver, and only then does the session let go. The
+   * simulation stays where it ended.
+   */
+  function linger(live: RollbackSession, ms: number): void {
+    const isOpen = net?.isOpen ?? (() => true);
+    if (!isOpen()) {
+      live.close();
+      return;
+    }
+    live.resendInputs();
+    const resend = setInterval(() => {
+      if (isOpen()) live.resendInputs();
+      else finish();
+    }, LINGER_RESEND_MS);
+    const deadline = setTimeout(finish, ms);
+    function finish(): void {
+      clearInterval(resend);
+      clearTimeout(deadline);
+      live.close();
+    }
+  }
+
   return {
     start(canvas: HTMLCanvasElement) {
       if (disposed) return;
@@ -413,12 +463,14 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       paint(0);
     },
     dispose() {
+      if (disposed) return;
       disposed = true;
       running = false;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
       ctx = null;
-      session?.close();
+      if (session && ended && lingerMs > 0) linger(session, lingerMs);
+      else session?.close();
     },
     get netStats() {
       return session ? session.stats() : null;

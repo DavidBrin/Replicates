@@ -13,12 +13,14 @@
  * has tests of its own.
  */
 
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FRAME_MS,
+  LINGER_RESEND_MS,
   createMatchRunner,
   type MatchAudio,
   type MatchRunner,
+  type NetplayOptions,
   type PlayerSlot,
 } from "./matchRunner";
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
@@ -28,7 +30,7 @@ import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engi
 import { KeyboardInput } from "@/input/keyboard";
 import { CONFIG_ARROWS } from "@/input/schemes";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
-import { PacketType, decodePacket } from "@/net/packet";
+import { PacketType, decodePacket, type InputPacket } from "@/net/packet";
 import { MAX_PREDICTION_FRAMES } from "@/net/rollback";
 import { ROLE_PORT } from "@/net/signalProtocol";
 import { createNullTransport, type Transport } from "@/net/transport";
@@ -689,5 +691,191 @@ describe("dispose is final", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("an online match that ended here lingers after dispose", () => {
+  const LINGER_MS = 1_500;
+  /** Over in three frames, so both machines confirm the result almost at once. */
+  const SHORT: MatchRules = { ...RULES, mode: "time", timeLimit: 3 };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A transport that records the input packets it sends, and when its listeners are let go. */
+  function watched(transport: Transport) {
+    const sent: InputPacket[] = [];
+    const released = vi.fn();
+    const watch = (off: () => void) => () => {
+      released();
+      off();
+    };
+    const wrapped: Transport = {
+      selfId: transport.selfId,
+      send(bytes) {
+        const packet = decodePacket(bytes);
+        if (packet?.type === PacketType.Input) sent.push(packet);
+        transport.send(bytes);
+      },
+      onMessage: (cb) => watch(transport.onMessage(cb)),
+      onPeerJoin: (cb) => watch(transport.onPeerJoin(cb)),
+      onPeerLeave: (cb) => watch(transport.onPeerLeave(cb)),
+      close: () => transport.close(),
+    };
+    return { transport: wrapped, sent, released };
+  }
+
+  type Linger = Pick<NetplayOptions, "lingerMs" | "isOpen">;
+
+  function peer(port: number, transport: Transport, rules: MatchRules, now: () => number, linger: Linger = {}) {
+    const onEnd = vi.fn();
+    const onFrame = vi.fn();
+    const runner = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules,
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      net: { transport, localPorts: [port], inputDelay: 2, autoInputDelay: false, now, ...linger },
+      onEnd,
+      onFrame,
+    });
+    return { runner, onEnd, onFrame };
+  }
+
+  /** Host and guest over a clean link, played until both have their result. The host's link is watched. */
+  function endedPair(linger: Linger) {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const link = watched(network.connect("host"));
+    const host = peer(0, link.transport, SHORT, () => network.now(), linger);
+    const guest = peer(1, network.connect("guest"), SHORT, () => network.now());
+    network.advance(0);
+    for (let i = 0; i < 120 && !(host.onEnd.mock.calls.length > 0 && guest.onEnd.mock.calls.length > 0); i++) {
+      host.runner.advance(1);
+      guest.runner.advance(1);
+      network.advance(FRAME_MS);
+    }
+    expect(host.onEnd).toHaveBeenCalledTimes(1);
+    expect(guest.onEnd).toHaveBeenCalledTimes(1);
+    return { host, ...link };
+  }
+
+  it("keeps re-sending its last input packet on a timer, without running, until the linger is up", () => {
+    const { host, sent, released } = endedPair({ lingerMs: LINGER_MS });
+    const last = sent.at(-1);
+    const frame = host.runner.frame;
+    const frames = host.onFrame.mock.calls.length;
+    sent.length = 0;
+
+    host.runner.dispose();
+    vi.advanceTimersByTime(LINGER_MS - 1);
+    expect(sent.length).toBeGreaterThanOrEqual(Math.floor((LINGER_MS - 1) / LINGER_RESEND_MS));
+    // Every resend is the window the last frame sent, from the frame the match ended on.
+    expect(sent).toEqual(new Array(sent.length).fill({ ...last, senderFrame: frame }));
+    expect(released).not.toHaveBeenCalled();
+    // The match itself stays where it ended.
+    expect(host.runner.frame).toBe(frame);
+    expect(host.onFrame).toHaveBeenCalledTimes(frames);
+    expect(host.onEnd).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    expect(released).toHaveBeenCalledTimes(3);
+    const total = sent.length;
+    vi.advanceTimersByTime(10 * LINGER_MS);
+    expect(sent).toHaveLength(total);
+  });
+
+  it("stops as soon as the transport can no longer deliver", () => {
+    let open = true;
+    const { host, sent, released } = endedPair({ lingerMs: LINGER_MS, isOpen: () => open });
+    sent.length = 0;
+    host.runner.dispose();
+    vi.advanceTimersByTime(200);
+    expect(sent.length).toBeGreaterThan(0);
+
+    // The room was left: the transport is closed.
+    open = false;
+    vi.advanceTimersByTime(LINGER_RESEND_MS);
+    expect(released).toHaveBeenCalledTimes(3);
+    const total = sent.length;
+    vi.advanceTimersByTime(LINGER_MS);
+    expect(sent).toHaveLength(total);
+  });
+
+  it("does not linger without a linger time", () => {
+    const { host, sent, released } = endedPair({});
+    sent.length = 0;
+    host.runner.dispose();
+    expect(released).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(LINGER_MS);
+    expect(sent).toEqual([]);
+  });
+
+  it("goes quiet at once when it is disposed before the match ended", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const link = watched(network.connect("host"));
+    const host = peer(0, link.transport, RULES, () => network.now(), { lingerMs: LINGER_MS });
+    host.runner.advance(5);
+    link.sent.length = 0;
+    host.runner.dispose();
+    expect(link.released).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(LINGER_MS);
+    expect(link.sent).toEqual([]);
+  });
+
+  /**
+   * The reason for all of it. The link swallows everything the host sends
+   * over its last few frames, then recovers just as the host's match ends and
+   * the host stops playing. Only a resend can still carry the inputs the guest
+   * needs to confirm the same result.
+   */
+  function guestAfterLostTail(lingerMs: number): { host: MatchOutcome[]; guest: MatchOutcome[] } {
+    const TIMED: MatchRules = { ...RULES, mode: "time", timeLimit: 60 };
+    // Long enough that the guest is missing frames it needs (2 is not), short
+    // enough that one input window still spans the gap (packet.ts sends 10).
+    const LOST_TAIL_FRAMES = 6;
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const hostLink = network.connect("host");
+    let dropping = false;
+    const lossy: Transport = {
+      ...hostLink,
+      send: (bytes) => {
+        if (!dropping) hostLink.send(bytes);
+      },
+    };
+    const host = peer(0, lossy, TIMED, () => network.now(), { lingerMs });
+    const guest = peer(1, network.connect("guest"), TIMED, () => network.now());
+    network.advance(0);
+    let gone = false;
+    for (let i = 0; i < 600 && guest.onEnd.mock.calls.length === 0; i++) {
+      if (!gone) {
+        dropping = host.runner.frame >= TIMED.timeLimit - LOST_TAIL_FRAMES;
+        host.runner.advance(1);
+        if (host.onEnd.mock.calls.length > 0) {
+          gone = true;
+          host.runner.dispose();
+          dropping = false;
+        }
+      }
+      guest.runner.advance(1);
+      network.advance(FRAME_MS);
+      vi.advanceTimersByTime(FRAME_MS);
+    }
+    return { host: host.onEnd.mock.calls.map(([o]) => o), guest: guest.onEnd.mock.calls.map(([o]) => o) };
+  }
+
+  it("lets the machine still playing finish after the leaver's last packets were lost", () => {
+    // Without the linger the guest is stranded, which is what makes the case worth having.
+    const without = guestAfterLostTail(0);
+    expect(without.host).toHaveLength(1);
+    expect(without.guest).toEqual([]);
+
+    const lingered = guestAfterLostTail(LINGER_MS);
+    expect(lingered.host).toHaveLength(1);
+    expect(lingered.guest).toEqual(lingered.host);
   });
 });

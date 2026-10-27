@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Btn, emptyEvents, pressed, type InputFrame, type StepEvents } from "@/engine/types";
 import { LoopbackNetwork } from "./adapters/loopback";
+import { PacketType, decodePacket, type InputPacket } from "./packet";
 import { createNullTransport } from "./transport";
 import {
   MAX_PREDICTION_FRAMES,
@@ -809,5 +810,51 @@ describe("the confirmed state", () => {
     });
     for (let frame = 0; frame < 20; frame++) session.advance([0, 0]);
     expect(session.confirmedState()).toBe(session.currentState);
+  });
+});
+
+describe("resending the input window", () => {
+  it("sends the last heartbeat's inputs again without running a frame, and nothing once closed", () => {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const session = new RollbackSession<FakeState>({
+      transport: network.connect("A"),
+      deps: makeDeps(),
+      initialState: initialState(),
+      playerCount: 2,
+      localPorts: [0],
+      inputDelay: 2,
+      autoInputDelay: false,
+      now: () => network.now(),
+    });
+    const peer = network.connect("B");
+    const inputs: InputPacket[] = [];
+    peer.onMessage((bytes) => {
+      const packet = decodePacket(bytes);
+      if (packet?.type === PacketType.Input) inputs.push(packet);
+    });
+    network.advance(0);
+    for (let i = 0; i < 4; i++) {
+      session.advance(scriptedInput(0, session.frame, 10_000));
+      network.advance(FRAME_MS);
+    }
+    const last = inputs.at(-1);
+    const frame = session.frame;
+    inputs.length = 0;
+
+    session.resendInputs();
+    session.resendInputs();
+    network.advance(FRAME_MS);
+    // The same window of inputs, stamped with the frame the session is on.
+    const window = { port: last?.port, startFrame: last?.startFrame, inputs: last?.inputs };
+    expect(inputs).toEqual([
+      { type: PacketType.Input, ...window, senderFrame: frame },
+      { type: PacketType.Input, ...window, senderFrame: frame },
+    ]);
+    expect(session.frame).toBe(frame);
+
+    session.close();
+    session.resendInputs();
+    network.advance(FRAME_MS);
+    expect(inputs).toHaveLength(2);
   });
 });

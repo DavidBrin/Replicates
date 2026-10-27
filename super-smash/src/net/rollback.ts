@@ -641,6 +641,20 @@ export class RollbackSession<S = GameState> {
     };
   }
 
+  /**
+   * Send this machine's input window again, without running a frame.
+   *
+   * For the grace after a match ends here: nothing ticks any more, so no
+   * heartbeat goes out, but the peer may still be a lost packet short of the
+   * inputs that end the match on its side. Nothing has been scheduled since
+   * the last heartbeat, so this carries the same window of inputs, stamped
+   * with the frame the session is on. Nothing once closed.
+   */
+  resendInputs(): void {
+    if (this.closed) return;
+    for (const port of this.localPorts) this.sendInputWindow(port);
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

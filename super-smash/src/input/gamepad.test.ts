@@ -429,3 +429,83 @@ describe("padPortMap", () => {
     expect(poll.frames[2]).toBe(0);
   });
 });
+
+describe("holding ports for a match (holdPorts)", () => {
+  /** Two human ports, 0 and 2, with the pads the test plugs in and out. */
+  function match(pads: (Gamepad | null)[]) {
+    const input = new GamepadInput({ navigator: navigatorWith(pads), portForPad: padPortMap([0, 2]), holdPorts: true });
+    live = input;
+    return input;
+  }
+
+  it("seats the pads already connected in connection order, as padPortMap does", () => {
+    const input = match([null, pad({ index: 1, buttons: [0] }), null, pad({ index: 3, buttons: [1] })]);
+    const poll = input.poll();
+    expect(poll.frames[0]).toBe(Btn.Attack);
+    expect(poll.frames[2]).toBe(Btn.Special);
+  });
+
+  it("leaves a pad on its port when a pad below it unplugs", () => {
+    const pads: (Gamepad | null)[] = [pad({ index: 0, buttons: [0] }), pad({ index: 1, buttons: [1] })];
+    const input = match(pads);
+    input.poll();
+    pads[0] = null;
+    const poll = input.poll();
+    // Without holding, the second pad would become the first and take over port 0.
+    expect(poll.frames[0]).toBe(0);
+    expect(poll.frames[2]).toBe(Btn.Special);
+  });
+
+  it("gives a pad that connects mid-match the first port nobody holds", () => {
+    const pads: (Gamepad | null)[] = [pad({ index: 0, buttons: [0] }), pad({ index: 1, buttons: [1] })];
+    const input = match(pads);
+    input.poll();
+    pads[0] = null;
+    input.poll();
+    pads.push(pad({ index: 2, buttons: [2] }));
+    const poll = input.poll();
+    expect(poll.frames[0]).toBe(Btn.Jump);
+    expect(poll.frames[2]).toBe(Btn.Special);
+  });
+
+  it("gives a pad that unplugs and comes back its old port, if nobody took it", () => {
+    const pads: (Gamepad | null)[] = [pad({ index: 0, buttons: [0] }), pad({ index: 1, buttons: [1] })];
+    const input = match(pads);
+    input.poll();
+    pads[0] = null;
+    input.poll();
+    pads[0] = pad({ index: 0, buttons: [0] });
+    const poll = input.poll();
+    expect(poll.frames[0]).toBe(Btn.Attack);
+    expect(poll.frames[2]).toBe(Btn.Special);
+  });
+
+  it("never moves a connected pad, so a pad with no port left drives nothing", () => {
+    const pads: (Gamepad | null)[] = [
+      pad({ index: 0, buttons: [0] }),
+      pad({ index: 1, buttons: [1] }),
+      pad({ index: 2, buttons: [2] }),
+    ];
+    const input = match(pads);
+    expect(input.poll().frames).toEqual([Btn.Attack, 0, Btn.Special, 0]);
+    // The spare pad was there all along with no port; a port freeing up is
+    // for whoever plugs in next, not a reshuffle of the pads still connected.
+    pads[0] = null;
+    expect(input.poll().frames).toEqual([0, 0, Btn.Special, 0]);
+    pads.push(pad({ index: 3, buttons: [4] }));
+    expect(input.poll().frames).toEqual([Btn.Shield, 0, Btn.Special, 0]);
+  });
+
+  it("forgets the seats on detach", () => {
+    const pads: (Gamepad | null)[] = [pad({ index: 0, buttons: [0] }), pad({ index: 1, buttons: [1] })];
+    const input = new GamepadInput({ window, navigator: navigatorWith(pads), portForPad: padPortMap([0, 2]), holdPorts: true });
+    live = input;
+    input.attach();
+    input.poll();
+    pads[0] = null;
+    input.poll();
+    input.detach();
+    // A fresh match seats from scratch: the lone pad is the first human.
+    expect(input.poll().frames[0]).toBe(Btn.Special);
+  });
+});
