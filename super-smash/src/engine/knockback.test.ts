@@ -9,6 +9,7 @@ import {
   SAKURAI_AIRBORNE,
   SAKURAI_ANGLE,
   SAKURAI_GROUNDED,
+  SOFT_DI_SHIFT,
 } from "./constants";
 import {
   applyDI,
@@ -392,5 +393,23 @@ describe("truncating between multipliers crosses frame boundaries", () => {
     // floor(20 x 0.65 + 6) is 19. Applying fx(0.65) — which is 0.64990 — and
     // truncating first gives 18.
     expect(computeHitlag(fx(20))).toBe(19);
+  });
+});
+
+describe("applyDI with a soft stick", () => {
+  it("bends a quarter as far as a full perpendicular push", () => {
+    const full = applyDI(fx(0), 0, 1) - fx(0);
+    const soft = applyDI(fx(0), 0, 1, true) - fx(0);
+    expect(SOFT_DI_SHIFT).toBe(2);
+    expect(soft).toBe(full >> SOFT_DI_SHIFT);
+    expect(soft).toBeGreaterThan(0);
+  });
+
+  it("bends the other way just as softly", () => {
+    expect(applyDI(fx(0), 0, -1, true) - fx(0)).toBe(-((applyDI(fx(0), 0, 1) - fx(0)) >> SOFT_DI_SHIFT));
+  });
+
+  it("does nothing at neutral", () => {
+    expect(applyDI(fx(45), 0, 0, true)).toBe(fx(45));
   });
 });

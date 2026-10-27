@@ -238,6 +238,15 @@ export const OFFSCREEN_DAMAGE_CEILING = fx(150);
 
 /** DI can deviate the launch angle by at most this much. */
 export const DI_MAX_DEVIATION = fx(9.74);
+/**
+ * How much a soft stick (`Btn.Soft`) shortens DI, as a right shift: a quarter.
+ *
+ * DI scales with the square of the stick's perpendicular component (applyDI),
+ * and a soft stick is read as half deflection: 0.5² = 0.25.
+ * UNVERIFIED: the half-deflection reading is tuned, not sourced — the bitfield
+ * carries one bit of magnitude where the real game reads the analog value.
+ */
+export const SOFT_DI_SHIFT = 2;
 /** Holding up or down at launch scales launch speed. */
 export const LSI_UP = fx(1.095);
 export const LSI_DOWN = fx(0.92);

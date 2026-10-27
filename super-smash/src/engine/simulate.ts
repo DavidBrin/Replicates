@@ -1015,7 +1015,7 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   if (f.pendingFacing === 0) return;
   const facing = f.pendingFacing;
   const relStick = intent.x * (facing >= 0 ? 1 : -1);
-  const angle = applyDI(f.pendingAngle, relStick, intent.y);
+  const angle = applyDI(f.pendingAngle, relStick, intent.y, intent.soft);
   const launch = knockbackToVelocity(f.pendingKnockback, angle, facing);
   // LSI is a survival tool, not a damage buff: it only touches knockback heavy
   // enough to tumble. Without the gate, holding up scales *every* jab by 1.095×

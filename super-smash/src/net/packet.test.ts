@@ -163,3 +163,11 @@ describe("decoding hostile bytes", () => {
     expect(decodePacket(padded.subarray(4, 4 + encoded.length))).toEqual(packet);
   });
 });
+
+describe("the soft-stick bit", () => {
+  it("survives the wire, since it is how a gamepad's walk reaches the other peer", () => {
+    const inputs = [Btn.Right | Btn.Soft, Btn.Soft | Btn.Attack];
+    const packet: Packet = { type: PacketType.Input, port: 1, senderFrame: 10, startFrame: 8, inputs };
+    expect(decodePacket(encodePacket(packet))).toEqual(packet);
+  });
+});

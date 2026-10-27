@@ -145,6 +145,8 @@ export interface Intent {
   /** One SDI pulse this frame, or (0, 0). Only ever non-zero during hitlag. */
   readonly sdiX: number;
   readonly sdiY: number;
+  /** `Btn.Soft`: a partial tilt. No dash, no smash, a quarter of the DI. */
+  readonly soft: boolean;
 }
 
 function dirVector(bit: number): { x: number; y: number } {
@@ -198,9 +200,13 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
   const y = stickY(input);
   const dir = dirVector(f.lastDirPressed);
   const dirStillHeld = f.lastDirPressed !== 0 && held(input, f.lastDirPressed);
+  // A partial tilt is what the keyboard's timing rules stand in for: the stick
+  // that knows it is not fully deflected walks and tilts on its own say-so.
+  const soft = held(input, Btn.Soft);
   const smash =
     pressed(input, prev, Btn.Attack) &&
     dirStillHeld &&
+    !soft &&
     f.framesSinceDirPress <= SMASH_INPUT_WINDOW;
 
   // SDI: one pulse per fresh direction press, and at most one every four frames.
@@ -244,12 +250,13 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     shieldReleased: released(input, prev, Btn.Shield),
     grabPressed: pressed(input, prev, Btn.Grab),
     downPressed: pressed(input, prev, Btn.Down),
-    wantsDash: x !== 0 && f.framesSinceDirPress > DASH_THRESHOLD_FRAMES,
+    wantsDash: x !== 0 && !soft && f.framesSinceDirPress > DASH_THRESHOLD_FRAMES,
     smash,
     smashX: smash ? dir.x : 0,
     smashY: smash ? dir.y : 0,
     sdiX: canPulse ? dir.x : 0,
     sdiY: canPulse ? dir.y : 0,
+    soft,
   };
 }
 

@@ -46,6 +46,7 @@ import {
   STALE_QUEUE_LENGTH,
   STALE_KNOCKBACK_DAMPING,
   DI_MAX_DEVIATION,
+  SOFT_DI_SHIFT,
   LSI_UP,
   LSI_DOWN,
   LSI_DEAD_ZONE,
@@ -391,13 +392,15 @@ function unitStick(sx: number, sy: number): { x: number; y: number } {
  * mirrors the stick by the attacker's facing and works in attacker-relative space
  * throughout, so the result can be handed straight to `knockbackToVelocity`.
  */
-export function applyDI(angleFx: number, stickX: number, stickY: number): number {
+export function applyDI(angleFx: number, stickX: number, stickY: number, soft = false): number {
   if (stickX === 0 && stickY === 0) return angleFx;
   const u = unitStick(stickX, stickY);
   // Cross product of the launch direction with the stick: the signed sine of the
   // angle between them, which is exactly the perpendicular component.
   const perp = mul(cosDeg(angleFx), u.y) - mul(sinDeg(angleFx), u.x);
-  const deviation = mul(DI_MAX_DEVIATION, mul(perp, perp));
+  const full = mul(DI_MAX_DEVIATION, mul(perp, perp));
+  // A partial tilt is a shorter stick vector, and DI goes with its square.
+  const deviation = soft ? full >> SOFT_DI_SHIFT : full;
   return angleFx + (perp >= 0 ? deviation : -deviation);
 }
 

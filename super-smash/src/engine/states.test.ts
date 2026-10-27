@@ -426,6 +426,7 @@ describe("tilt versus smash", () => {
       smashY: 0,
       sdiX: 0,
       sdiY: 0,
+      soft: false,
     };
     expect(aerialSlot(f, { ...base, x: 1 })).toBe("fair");
     expect(aerialSlot(f, { ...base, x: -1 })).toBe("bair");
@@ -800,5 +801,33 @@ describe("drop through", () => {
     const f = fighter({ y: 0, platform: 0, grounded: true });
     tick(f, Btn.Down, 0);
     expect(f.action).toBe("crouchStart");
+  });
+});
+
+describe("a soft stick (a gamepad's partial tilt, Btn.Soft)", () => {
+  it("walks however long it is held, instead of dashing", () => {
+    const f = fighter();
+    hold(f, Btn.Right | Btn.Soft, 12);
+    expect(f.action).toBe("walk");
+  });
+
+  it("still dashes at full deflection", () => {
+    const f = fighter();
+    hold(f, Btn.Right, 6);
+    expect(f.action).toBe("dashStart");
+  });
+
+  it("turns a fresh direction plus attack into a tilt, not a smash", () => {
+    const fresh = { framesSinceDirPress: 0, lastDirPressed: Btn.Right };
+    const soft = interpretInput(fighter(fresh), Btn.Right | Btn.Soft | Btn.Attack, Btn.Right | Btn.Soft);
+    expect(soft.attackPressed).toBe(true);
+    expect(soft.smash).toBe(false);
+    const hard = interpretInput(fighter(fresh), Btn.Right | Btn.Attack, Btn.Right);
+    expect(hard.smash).toBe(true);
+  });
+
+  it("reports itself on the intent, for DI", () => {
+    expect(interpretInput(fighter(), Btn.Up | Btn.Soft, 0).soft).toBe(true);
+    expect(interpretInput(fighter(), Btn.Up, 0).soft).toBe(false);
   });
 });

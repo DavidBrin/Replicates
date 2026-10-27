@@ -131,8 +131,8 @@ export function encodePacket(packet: Packet): Uint8Array {
       view.setUint32(4, packet.senderFrame >>> 0, true);
       view.setUint32(8, packet.startFrame >>> 0, true);
       for (let i = 0; i < count; i++) {
-        // An InputFrame is a 9-bit button mask (see engine/types Btn); 16 bits
-        // leaves room for seven more buttons before this needs revisiting.
+        // An InputFrame is a 10-bit button mask (see engine/types Btn); 16 bits
+        // leaves room for six more buttons before this needs revisiting.
         view.setUint16(INPUT_HEADER_BYTES + i * 2, packet.inputs[i] & 0xffff, true);
       }
       return bytes;

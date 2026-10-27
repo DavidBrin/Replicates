@@ -17,7 +17,8 @@
  * every packet — an integer compare is one instruction, a deep object compare is
  * a function call. The directional bits are the raw key states; the *meaning*
  * of a direction (walk vs. dash, tilt vs. smash) is derived inside the
- * simulation from how long the bit has been held, never by the input layer.
+ * simulation from how long the bit has been held, never by the input layer —
+ * with one exception, `Btn.Soft`, which only an analog stick can know.
  * See SPEC §6.
  */
 export const enum Btn {
@@ -30,6 +31,16 @@ export const enum Btn {
   Shield = 1 << 6,
   Jump = 1 << 7,
   Grab = 1 << 8,
+  /**
+   * The stick is deflected, but not fully: a gamepad's partial tilt.
+   *
+   * A key is always a full deflection, so the keyboard never sets this. With
+   * it, a held direction stays a walk instead of becoming a dash, a fresh
+   * direction plus attack is a tilt instead of a smash, and DI bends a quarter
+   * as far. It rides the input bitfield, so it crosses the wire and rolls back
+   * like every other button.
+   */
+  Soft = 1 << 9,
 }
 
 /** A packed input frame. Zero means "no keys held". */
