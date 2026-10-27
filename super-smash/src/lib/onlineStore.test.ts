@@ -4,7 +4,15 @@ import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
 import { useMatchConfig } from "./matchConfig";
-import { bindSession, leaveOnline, roomErrorMessage, sendLobby, useOnlineStore, type OnlineErrorReason } from "./onlineStore";
+import {
+  PEER_LEFT_NOTICE,
+  bindSession,
+  leaveOnline,
+  roomErrorMessage,
+  sendLobby,
+  useOnlineStore,
+  type OnlineErrorReason,
+} from "./onlineStore";
 
 const CONFIG: OnlineMatchConfig = {
   seed: 1,
@@ -80,13 +88,46 @@ describe("binding a session to the stores", () => {
     expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "full", error: "Room ABCD already has two players." });
   });
 
-  it("says so when the opponent leaves the lobby", () => {
+  it("says so when the opponent leaves the lobby, without calling it an error", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
     emit({ type: "joined", role: "host" });
     emit({ type: "link", status: "open" });
     emit({ type: "link", status: "waiting" });
-    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", errorReason: "peer-left" });
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "waiting",
+      notice: "The other player left the room.",
+      error: null,
+      errorReason: null,
+    });
+  });
+
+  it("pairs again when somebody takes the empty seat", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "host" });
+    emit({ type: "peer", present: true });
+    emit({ type: "link", status: "open" });
+    emit({ type: "peer", present: false });
+    emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState().notice).toBe(PEER_LEFT_NOTICE);
+
+    // The same friend, back from a refresh with the same code.
+    emit({ type: "peer", present: true });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+    emit({ type: "link", status: "negotiating" });
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null, error: null });
+  });
+
+  it("clears the notice once the channel opens again", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "guest" });
+    emit({ type: "link", status: "open" });
+    emit({ type: "link", status: "waiting" });
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
   });
 
   it("records the opponent switching tabs", () => {
@@ -107,19 +148,20 @@ describe("an error, once recorded", () => {
     return fake;
   }
 
-  it("keeps the opponent having left on screen, and the match unstartable, while they come and go", () => {
+  it("outlasts the opponent leaving, which adds no notice under it", () => {
     const { emit } = connectedHost();
+    emit({ type: "error", reason: "room-lost" });
     emit({ type: "peer", present: false });
     emit({ type: "link", status: "waiting" });
-    const left = { status: "waiting", errorReason: "peer-left", error: "The other player left the room." };
-    expect(useOnlineStore.getState()).toMatchObject(left);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "room-lost", notice: null });
+  });
 
-    // Somebody takes the empty seat and the channel opens again: the screens
-    // still say who left, and nothing reads as connected until the player leaves.
-    emit({ type: "peer", present: true });
-    emit({ type: "link", status: "negotiating" });
-    emit({ type: "link", status: "open" });
-    expect(useOnlineStore.getState()).toMatchObject(left);
+  it("takes the place of a notice already showing", () => {
+    const { emit } = connectedHost();
+    emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState().notice).toBe(PEER_LEFT_NOTICE);
+    emit({ type: "error", reason: "room-lost" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "room-lost", notice: null });
   });
 
   it("is not cleared, or covered by a connection, by a later link status", () => {
@@ -150,7 +192,7 @@ describe("an error, once recorded", () => {
     bindSession(session);
     emit({ type: "joined", role: "guest" });
     emit({ type: "link", status: "open" });
-    emit({ type: "link", status: "waiting" });
+    emit({ type: "link", status: "failed" });
     emit({ type: "lobby", message: { kind: "start", config: CONFIG } });
     expect(useOnlineStore.getState().config).toBeNull();
   });
@@ -205,7 +247,6 @@ describe("sending and leaving", () => {
       "room-lost",
       "bad-start",
       "link-failed",
-      "peer-left",
     ] as const;
     // The list is hand-written; tsc fails here when a reason is added without it.
     expectTypeOf<Exclude<OnlineErrorReason, (typeof reasons)[number]>>().toBeNever();

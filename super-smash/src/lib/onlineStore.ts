@@ -20,20 +20,28 @@ import { useMatchConfig, type StageForm } from "./matchConfig";
  * only status a match may start from, so the select screens gate on it.
  */
 export type OnlineStatus = "idle" | "connecting" | "waiting" | "linking" | "connected" | "error";
-export type OnlineErrorReason = SessionError | "link-failed" | "peer-left";
+export type OnlineErrorReason = SessionError | "link-failed";
+
+/** Shown while the seat the opponent left stands empty. */
+export const PEER_LEFT_NOTICE = "The other player left the room.";
 
 export interface OnlineFields {
   status: OnlineStatus;
   roomCode: string | null;
   role: Role | null;
   /**
-   * What went wrong, in words, for the screens to show. Only a reset clears
-   * it (leaving, or opening another room), and that includes the opponent
-   * leaving (status `waiting`), so stage and character select can say why the
-   * match can no longer start.
+   * What went wrong, in words, for the screens to show. The room cannot go on:
+   * only a reset clears it (leaving, or opening another room).
    */
   error: string | null;
   errorReason: OnlineErrorReason | null;
+  /**
+   * Something the player should know that does not end the room: the opponent
+   * left (status back to `waiting`). Stage and character select show it. It
+   * clears when somebody takes the seat or the channel opens again — a refresh
+   * and a rejoin with the same code is the common case.
+   */
+  notice: string | null;
   hostStage: { readonly stageId: string; readonly form: StageForm } | null;
   /** The host's start config; set on both peers when the match begins. */
   config: OnlineMatchConfig | null;
@@ -51,6 +59,7 @@ const INITIAL: OnlineFields = {
   role: null,
   error: null,
   errorReason: null,
+  notice: null,
   hostStage: null,
   config: null,
   remoteAway: false,
@@ -92,8 +101,6 @@ function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
       return "The match could not be sent to the other player. Leave the room and start again.";
     case "link-failed":
       return "The direct connection could not be opened. Try again; strict networks need the TURN relay.";
-    case "peer-left":
-      return "The other player left the room.";
     case "bad-message":
     case "too-many-messages":
       return "The room closed the connection.";
@@ -111,8 +118,9 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   unbind?.();
   const online = useOnlineStore.getState;
   const match = useMatchConfig.getState;
+  // An error outranks a notice: the screens have one thing to say.
   const fail = (reason: OnlineErrorReason) =>
-    online().patch({ status: "error", errorReason: reason, error: roomErrorMessage(reason, session.roomCode) });
+    online().patch({ status: "error", errorReason: reason, error: roomErrorMessage(reason, session.roomCode), notice: null });
 
   const off = session.on((event) => {
     // The session's own verdict always lands; it knows best why it cannot go on.
@@ -127,18 +135,22 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     switch (event.type) {
       case "joined":
         match().configureOnline();
-        online().patch({ role: event.role, status: "waiting" });
+        online().patch({ role: event.role, status: "waiting", notice: null });
         break;
       case "peer":
-        if (online().status !== "connected") online().patch({ status: event.present ? "linking" : "waiting" });
+        if (online().status === "connected") break;
+        // Somebody took the empty seat: that the last opponent left is no longer news.
+        online().patch(event.present ? { status: "linking", notice: null } : { status: "waiting" });
         break;
       case "link":
         if (event.status === "open") {
-          online().patch({ status: "connected" });
+          online().patch({ status: "connected", notice: null });
         } else if (event.status === "failed") {
           fail("link-failed");
         } else if (event.status === "waiting" && online().status === "connected") {
-          online().patch({ status: "waiting", config: null, errorReason: "peer-left", error: roomErrorMessage("peer-left", session.roomCode) });
+          // Not an error: the transport offers to whoever joins next, so the
+          // same code can pair again. Starting waits for `connected` meanwhile.
+          online().patch({ status: "waiting", config: null, notice: PEER_LEFT_NOTICE });
         }
         break;
       case "lobby":
