@@ -18,10 +18,18 @@ import { parseLobbyMessage, type LobbyMessage } from "./lobby";
 
 /**
  * Why the session cannot go on. The room's refusals; "unreachable" when no
- * room ever answered; "bad-start" when this side built a `start` the other
- * side's parser would refuse, so it was never sent.
+ * room ever answered; "room-lost" when the room's socket dropped before the
+ * data channel could carry the match; "bad-start" when this side built a
+ * `start` the other side's parser would refuse, so it was never sent.
  */
-export type SessionError = RoomError | "unreachable" | "bad-start";
+export type SessionError = RoomError | "unreachable" | "room-lost" | "bad-start";
+
+/**
+ * How long a negotiation already under way when the room drops gets to open
+ * the channel on its own. With offer and answer across, only ICE remains,
+ * and that takes seconds; past this, the player is better off with a new room.
+ */
+export const ROOM_LOST_GRACE_MS = 15_000;
 
 export type SessionEvent =
   | { readonly type: "joined"; readonly role: Role }
@@ -56,18 +64,24 @@ export class OnlineSession implements OnlineSessionLike {
     // Nothing awaits between opening the socket and the two subscriptions
     // below: the client never replays an event, so a late listener misses it.
     const signalling = openSignalling(roomCode, intent);
-    const events = createEmitter<[SessionEvent]>();
+    // The transport reports no status until the room speaks, and by then the session exists.
+    let session: OnlineSession | null = null;
     const transport = createDoSignalTransport({
       signalling,
       iceServers: toRtcIceServers(ice),
       forceRelay: options.forceRelay,
       createPeerConnection: options.createPeerConnection,
-      onStatus: (status) => events.emit({ type: "link", status }),
+      onStatus: (status) => session?.linkChanged(status),
     });
-    return new OnlineSession(roomCode, signalling, transport, ice.turn, events);
+    session = new OnlineSession(roomCode, signalling, transport, ice.turn);
+    return session;
   }
 
+  private readonly events: Emitter<[SessionEvent]> = createEmitter();
   private welcomed = false;
+  private roomGone = false;
+  /** Running while a negotiation outlives the room; see `roomDropped`. */
+  private grace: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private readonly off: Unsubscribe;
 
@@ -76,7 +90,6 @@ export class OnlineSession implements OnlineSessionLike {
     private readonly signalling: SignallingClient,
     readonly transport: DoSignalTransport,
     readonly turn: boolean,
-    private readonly events: Emitter<[SessionEvent]>,
   ) {
     // Subscribed after the transport, so the transport has its role before
     // anybody hears "joined".
@@ -102,11 +115,11 @@ export class OnlineSession implements OnlineSessionLike {
           this.events.emit({ type: "error", reason: event.reason });
           break;
         case "closed":
-          // A refusal already arrived as an `error`. After a welcome, a drop is
-          // a Worker deploy restarting the room — the match is peer to peer
-          // and carries on (spec review focus). Before one, nobody answered.
-          if (this.closed || roomErrorForCloseCode(event.code) !== null || this.welcomed) break;
-          this.events.emit({ type: "error", reason: "unreachable" });
+          // A refusal already arrived as an `error`. Before a welcome, nobody
+          // answered; after one, a drop is a Worker deploy restarting the room.
+          if (this.closed || this.roomGone || roomErrorForCloseCode(event.code) !== null) break;
+          if (this.welcomed) this.roomDropped();
+          else this.events.emit({ type: "error", reason: "unreachable" });
           break;
         default:
           break;
@@ -144,12 +157,47 @@ export class OnlineSession implements OnlineSessionLike {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.endGrace();
     this.off();
     // Listeners first: closing the transport reports a final "closed" link
     // status, and nobody who called close() wants to hear it.
     this.events.clear();
     this.transport.close();
     this.signalling.close();
+  }
+
+  /**
+   * The room is gone and will not come back: the socket never reconnects.
+   * An open channel needs nothing more from it — the match is peer to peer and
+   * carries on (spec review focus). A negotiation under way may still open the
+   * channel on its own, so it gets a grace. Anything else needs the room to
+   * introduce a peer, and that will not happen now.
+   */
+  private roomDropped(): void {
+    this.roomGone = true;
+    const status = this.transport.status;
+    if (status === "open") return;
+    if (status === "negotiating") this.grace = setTimeout(() => this.loseRoom(), ROOM_LOST_GRACE_MS);
+    else this.loseRoom();
+  }
+
+  /** Every transport status passes through here, out as a `link` event and then against a grace. */
+  private linkChanged(status: DoSignalStatus): void {
+    this.events.emit({ type: "link", status });
+    if (this.grace === null || status === "negotiating") return;
+    if (status === "open") this.endGrace();
+    // Failed, or the channel gave up before opening: with no room, nothing renegotiates.
+    else this.loseRoom();
+  }
+
+  private loseRoom(): void {
+    this.endGrace();
+    this.events.emit({ type: "error", reason: "room-lost" });
+  }
+
+  private endGrace(): void {
+    if (this.grace !== null) clearTimeout(this.grace);
+    this.grace = null;
   }
 }
 

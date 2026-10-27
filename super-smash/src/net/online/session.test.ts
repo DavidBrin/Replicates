@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DataChannelLike, PeerConnectionLike } from "../adapters/doSignal";
 import { STUN_ONLY } from "../iceConfig";
 import type { RoomIntent } from "../signalProtocol";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import type { OnlineMatchConfig } from "./lobby";
-import { OnlineSession, getActiveSession, setActiveSession, type SessionEvent } from "./session";
+import { OnlineSession, ROOM_LOST_GRACE_MS, getActiveSession, setActiveSession, type SessionEvent } from "./session";
 
 const inertChannel = (): DataChannelLike => ({
   readyState: "connecting",
@@ -50,6 +50,11 @@ class OpenableChannel implements DataChannelLike {
     this.readyState = "open";
     this.onopen?.();
   }
+  /** The channel gives up before it ever opened. */
+  drop(): void {
+    this.readyState = "closed";
+    this.onclose?.();
+  }
 }
 
 const CONFIG: OnlineMatchConfig = {
@@ -80,7 +85,29 @@ async function open(intent: RoomIntent = "create", createPeerConnection: () => P
   return { session, signalling, events, order };
 }
 
-afterEach(() => setActiveSession(null));
+/** A host welcomed beside a guest, so it is negotiating, over a peer connection the test drives. */
+async function negotiatingHost() {
+  const channel = new OpenableChannel();
+  const peer = { ...inertPeer(), connectionState: "new", createDataChannel: () => channel };
+  const opened = await open("create", () => peer);
+  opened.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+  expect(opened.session.transport.status).toBe("negotiating");
+  const fail = () => {
+    peer.connectionState = "failed";
+    peer.onconnectionstatechange?.();
+  };
+  return { ...opened, channel, fail };
+}
+
+/** A Worker deploy restarts the Durable Object and drops its sockets without a close frame. */
+const ROOM_DROP = { t: "closed", code: 1006, reason: "" } as const;
+
+const errors = (events: readonly SessionEvent[]) => events.filter((e) => e.type === "error");
+
+afterEach(() => {
+  setActiveSession(null);
+  vi.useRealTimers();
+});
 
 describe("OnlineSession", () => {
   it("fetches ICE servers before it opens the room socket", async () => {
@@ -135,31 +162,80 @@ describe("OnlineSession", () => {
     expect(events).toEqual([{ type: "error", reason: "unreachable" }]);
   });
 
-  it("a room restart after joining is not an error", async () => {
-    const { signalling, events } = await open();
-    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
-    signalling.deliver({ t: "closed", code: 1006, reason: "" });
-    expect(events.filter((e) => e.type === "error")).toEqual([]);
-  });
+  describe("when the room drops after the welcome", () => {
+    it("while it waits for a peer, the room is lost at once", async () => {
+      const { signalling, events } = await open();
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+      signalling.deliver(ROOM_DROP);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+    });
 
-  it("a room restart mid-match leaves the open channel, and the match, running", async () => {
-    const channel = new OpenableChannel();
-    const { session, signalling, events } = await open("create", () => ({ ...inertPeer(), createDataChannel: () => channel }));
-    const left: string[] = [];
-    session.transport.onPeerLeave((id) => left.push(id));
-    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
-    channel.open();
-    expect(session.transport.status).toBe("open");
+    it("mid-match, the open channel and the match run on", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      const left: string[] = [];
+      session.transport.onPeerLeave((id) => left.push(id));
+      channel.open();
+      expect(session.transport.status).toBe("open");
 
-    // A Worker deploy restarts the Durable Object and drops its sockets without a close frame.
-    signalling.deliver({ t: "closed", code: 1006, reason: "" });
+      signalling.deliver(ROOM_DROP);
 
-    expect(events.filter((e) => e.type === "error")).toEqual([]);
-    expect(events.filter((e) => e.type === "link").at(-1)).toEqual({ type: "link", status: "open" });
-    expect(session.transport.status).toBe("open");
-    expect(left).toEqual([]);
-    session.transport.send(new Uint8Array([1, 2, 3]));
-    expect(channel.sent).toEqual([new Uint8Array([1, 2, 3])]);
+      expect(errors(events)).toEqual([]);
+      expect(events.filter((e) => e.type === "link").at(-1)).toEqual({ type: "link", status: "open" });
+      expect(session.transport.status).toBe("open");
+      expect(left).toEqual([]);
+      session.transport.send(new Uint8Array([1, 2, 3]));
+      expect(channel.sent).toEqual([new Uint8Array([1, 2, 3])]);
+    });
+
+    it("mid-negotiation, a channel that opens within the grace carries on", async () => {
+      vi.useFakeTimers();
+      const { session, signalling, channel, events } = await negotiatingHost();
+      signalling.deliver(ROOM_DROP);
+      vi.advanceTimersByTime(ROOM_LOST_GRACE_MS - 1);
+      channel.open();
+      vi.advanceTimersByTime(ROOM_LOST_GRACE_MS);
+      expect(errors(events)).toEqual([]);
+      expect(session.transport.status).toBe("open");
+    });
+
+    it("mid-negotiation, a channel that never opens loses the room when the grace runs out", async () => {
+      vi.useFakeTimers();
+      const { signalling, events } = await negotiatingHost();
+      signalling.deliver(ROOM_DROP);
+      vi.advanceTimersByTime(ROOM_LOST_GRACE_MS - 1);
+      expect(errors(events)).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      vi.advanceTimersByTime(ROOM_LOST_GRACE_MS);
+      expect(errors(events)).toHaveLength(1);
+    });
+
+    it("mid-negotiation, a link that fails or falls through loses the room at once", async () => {
+      vi.useFakeTimers();
+      const failing = await negotiatingHost();
+      failing.signalling.deliver(ROOM_DROP);
+      failing.fail();
+      expect(failing.events.slice(-2)).toEqual([
+        { type: "link", status: "failed" },
+        { type: "error", reason: "room-lost" },
+      ]);
+
+      const dropped = await negotiatingHost();
+      dropped.signalling.deliver(ROOM_DROP);
+      dropped.channel.drop();
+      expect(errors(dropped.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      // Both graces ended with their negotiations.
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("close() during the grace cancels it", async () => {
+      vi.useFakeTimers();
+      const { session, signalling } = await negotiatingHost();
+      signalling.deliver(ROOM_DROP);
+      expect(vi.getTimerCount()).toBe(1);
+      session.close();
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   it("sends lobby messages through the room", async () => {
