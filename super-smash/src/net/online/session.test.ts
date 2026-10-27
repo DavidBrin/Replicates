@@ -408,6 +408,76 @@ describe("OnlineSession", () => {
       expect(g.channels).toHaveLength(3);
     });
 
+    /** Only the guest's side closed: the host, still open, hears of it through the room. */
+    it("has the guest ask its host to renegotiate when its channel is lost, but not once a start has come", async () => {
+      const g = await linkedGuest();
+      g.channels[0].drop();
+      expect(g.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "renegotiate")).toHaveLength(1);
+
+      const started = await linkedGuest();
+      started.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: CONFIG } });
+      started.channels[0].drop();
+      expect(started.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "renegotiate")).toEqual([]);
+    });
+
+    it("has the host take its guest's request as its own channel loss, retries and all", async () => {
+      const h = await linkedHost();
+      h.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "renegotiate" } });
+      expect(h.session.transport.status).toBe("waiting");
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      expect(h.offers()).toBe(2);
+    });
+
+    it("has the host ignore a request to renegotiate once a start has gone out, or from anyone else", async () => {
+      const h = await linkedHost();
+      h.signalling.deliver({ t: "signal", from: "g2", payload: { kind: "renegotiate" } });
+      expect(h.session.transport.status).toBe("open");
+      expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      h.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "renegotiate" } });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.session.transport.status).toBe("open");
+      expect(h.offers()).toBe(1);
+    });
+
+    /** Two sessions in one room: what either sends, the other hears, stamped with the sender. */
+    async function pairedInRoom() {
+      vi.useFakeTimers();
+      const host = await opened("create");
+      const guest = await opened("join");
+      const relay = (from: typeof host, fromId: string, to: typeof host) => {
+        const send = from.signalling.send.bind(from.signalling);
+        from.signalling.send = (message) => {
+          send(message);
+          to.signalling.deliver({ ...message, from: fromId } as Parameters<typeof to.signalling.deliver>[0]);
+        };
+      };
+      relay(host, "h1", guest);
+      relay(guest, "g1", host);
+      host.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+      guest.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      host.signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(0);
+      host.channels[0].open();
+      guest.channels[0].open();
+      expect([host.session.transport.status, guest.session.transport.status]).toEqual(["open", "open"]);
+      return { host, guest };
+    }
+
+    it("brings both back when only the guest's side of the channel closed", async () => {
+      const { host, guest } = await pairedInRoom();
+      guest.channels[0].drop();
+      // The host heard the guest's request through the room and let its own side go.
+      expect(host.session.transport.status).toBe("waiting");
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      expect(host.offers()).toBe(2);
+      expect(guest.channels).toHaveLength(2);
+      host.channels[1].open();
+      guest.channels[1].open();
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect([host.session.transport.status, guest.session.transport.status]).toEqual(["open", "open"]);
+      expect([...errors(host.events), ...errors(guest.events)]).toEqual([]);
+    });
+
     it("has the guest answer its host's fresh offer and carry on", async () => {
       const g = await linkedGuest();
       g.channels[0].drop();

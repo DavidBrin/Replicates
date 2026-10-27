@@ -33,6 +33,14 @@ describe("client messages, as the room reads them", () => {
     });
   });
 
+  /** A guest whose lobby channel was lost asks its host to offer again (session.ts). */
+  it("accepts a request to renegotiate, and keeps nothing else from it", () => {
+    expect(parseClientMessage(JSON.stringify({ t: "signal", payload: { kind: "renegotiate", sdp: "x", extra: 1 } }))).toEqual({
+      t: "signal",
+      payload: { kind: "renegotiate" },
+    });
+  });
+
   it("passes lobby payloads through without understanding them", () => {
     const payload = { kind: "pick", fighterId: "fox", costume: 1 };
     expect(parseClientMessage(JSON.stringify({ t: "lobby", payload }))).toEqual({ t: "lobby", payload });
@@ -112,6 +120,11 @@ describe("server messages, as the browser reads them", () => {
       t: "signal",
       from: "a",
       payload: { kind: "offer", sdp: "v=0" },
+    });
+    expect(parseServerMessage({ t: "signal", from: "b", payload: { kind: "renegotiate" } })).toEqual({
+      t: "signal",
+      from: "b",
+      payload: { kind: "renegotiate" },
     });
     expect(parseServerMessage({ t: "lobby", from: "a", payload: { kind: "away", away: true } })).toEqual({
       t: "lobby",

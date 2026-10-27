@@ -59,7 +59,9 @@ export interface WireIceCandidate {
 export type SignalPayload =
   | { readonly kind: "offer"; readonly sdp: string }
   | { readonly kind: "answer"; readonly sdp: string }
-  | { readonly kind: "ice"; readonly candidate: WireIceCandidate };
+  | { readonly kind: "ice"; readonly candidate: WireIceCandidate }
+  /** A guest whose lobby channel was lost asks its host to offer again; the host may not have noticed. */
+  | { readonly kind: "renegotiate" };
 
 /** A lobby payload, as the room sees it: something with a short `kind`. */
 export interface OpaquePayload {
@@ -123,6 +125,7 @@ export function parseSignalPayload(value: unknown): SignalPayload | null {
     const candidate = parseIceCandidate(value.candidate);
     return candidate ? { kind: "ice", candidate } : null;
   }
+  if (kind === "renegotiate") return { kind };
   return null;
 }
 

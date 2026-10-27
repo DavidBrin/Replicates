@@ -26,8 +26,9 @@
  * nobody joins or leaves to start a new negotiation. So the host can offer the
  * guest the room still seats a fresh connection (`offerAgain`; the session
  * decides when), and a guest answers a new offer from its own host even while
- * it holds a connection, replacing it. Once the match starts, `holdChannel`
- * ends both: the match's channel is never replaced.
+ * it holds a connection, replacing it. A guest whose side closed alone says so
+ * (`renegotiate`), and its host lets its own side go. Once the match starts,
+ * `holdChannel` ends all three: the match's channel is never replaced.
  */
 
 import { asBytes } from "../bytes";
@@ -395,6 +396,10 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
           if (role === "guest" && event.from === hostId && !(announced && held)) void answer(event.from, payload.sdp);
         } else if (payload.kind === "answer") {
           if (role === "host" && event.from === remoteId) void acceptAnswer(payload.sdp);
+        } else if (payload.kind === "renegotiate") {
+          // Our guest lost its side of the lobby channel, which this side may
+          // still think open: let it go, and the session offers again.
+          if (role === "host" && event.from === remoteId && !held) lose("waiting");
         } else {
           void addIce(event.from, payload.candidate);
         }

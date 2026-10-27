@@ -277,8 +277,9 @@ export class OnlineSession implements OnlineSessionLike {
    * The lobby channel went down with the other player still seated: no join
    * or leave will follow to start another negotiation. The host offers again,
    * backing off, and calls the room lost when its tries run out; the guest
-   * waits for that offer, and calls the room lost if none comes. A failed link
-   * is an error of its own, and mid-match the link monitor decides.
+   * asks it to (`renegotiate`: only its own side may have closed), waits for
+   * that offer, and calls the room lost if none comes. A failed link is an
+   * error of its own, and mid-match the link monitor decides.
    */
   private reconnectAfter(before: DoSignalStatus, status: DoSignalStatus): void {
     if (this.closed || this.started) return;
@@ -290,6 +291,8 @@ export class OnlineSession implements OnlineSessionLike {
     const lost = status === "waiting" && (before === "open" || before === "negotiating");
     if (!lost || this.seatedPeer === null) return;
     if (this.role === "guest") {
+      // The host may still think its side open, and only it can offer: ask.
+      this.signalling.send({ t: "signal", payload: { kind: "renegotiate" } });
       this.reconnect = setTimeout(() => this.loseRoom(), GUEST_REOFFER_WAIT_MS);
       return;
     }

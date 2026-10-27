@@ -65,6 +65,14 @@ describe("relaying", () => {
     });
   });
 
+  it("forwards a guest's request to renegotiate to the host", () => {
+    const renegotiate = JSON.stringify({ t: "signal", payload: { kind: "renegotiate" } });
+    expect(relay(attach(guest), renegotiate, [host, guest])).toEqual({
+      type: "forward",
+      delivery: { to: "h1", message: { t: "signal", from: "g1", payload: { kind: "renegotiate" } } },
+    });
+  });
+
   it("cannot be talked into a forged sender", () => {
     const forged = JSON.stringify({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 0 } });
     expect(relay(attach(host), forged, [host, guest])).toEqual({

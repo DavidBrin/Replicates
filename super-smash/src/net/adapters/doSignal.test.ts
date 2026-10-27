@@ -380,6 +380,32 @@ describe("a fresh connection after the lobby channel was lost", () => {
     expect(t.transport.status).toBe("open");
   });
 
+  /** Only the guest's side of the channel closed: the host hears of it from the guest, through the room. */
+  it("has the host drop its connection when its own guest asks to renegotiate", async () => {
+    const t = await linkedHost();
+    t.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "renegotiate" } });
+    expect(t.transport.status).toBe("waiting");
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.leaves).toEqual(["g1"]);
+  });
+
+  it("ignores a request to renegotiate from anyone else, once the match holds the channel, or as a guest", async () => {
+    const stranger = await linkedHost();
+    stranger.signalling.deliver({ t: "signal", from: "g2", payload: { kind: "renegotiate" } });
+
+    const held = await linkedHost();
+    held.transport.holdChannel();
+    held.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "renegotiate" } });
+
+    const guest = await linkedGuest();
+    guest.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "renegotiate" } });
+
+    for (const t of [stranger, held, guest]) {
+      expect(t.transport.status).toBe("open");
+      expect(t.peers[0].closed).toBe(false);
+    }
+  });
+
   it("offers again once a held channel is released, when the seat the match was for emptied", async () => {
     const t = await linkedHost();
     t.transport.holdChannel();
