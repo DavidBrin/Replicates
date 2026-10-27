@@ -42,6 +42,10 @@ import { render } from "@/render/renderer";
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
 import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
+import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
+import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
+import type { Transport } from "@/net/transport";
+import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
 
 /** 60Hz, expressed once. */
 export const FRAME_MS = 1000 / 60;
@@ -91,6 +95,23 @@ function isShielding(f: FighterState): boolean {
   );
 }
 
+/**
+ * An online match. The runner hands its inputs to a `RollbackSession` instead
+ * of stepping the engine itself; the session predicts the remote port, rolls
+ * back when the real input lands, and stalls rather than guess past its cap.
+ */
+export interface NetplayOptions {
+  readonly transport: Transport;
+  /** The ports this machine supplies. Online v1: exactly one. */
+  readonly localPorts: readonly number[];
+  readonly inputDelay?: number;
+  /** On by default; tests turn it off so both peers schedule identically. */
+  readonly autoInputDelay?: boolean;
+  /** RTT clock, for tests. Never reaches the simulation. */
+  readonly now?: () => number;
+  readonly onDesync?: (report: DesyncReport) => void;
+}
+
 export interface MatchRunnerOptions {
   readonly stage: StageDef;
   readonly players: readonly PlayerSlot[];
@@ -100,6 +121,13 @@ export interface MatchRunnerOptions {
   readonly getFighter: (id: string) => FighterDef;
   /** Absent in a CPU-only demo match. */
   readonly keyboard?: KeyboardInput | null;
+  /**
+   * Pads, polled once per tick and merged with the keyboard per port. The
+   * caller attaches and detaches them; the runner only polls.
+   */
+  readonly gamepad?: Pick<GamepadInput, "poll"> | null;
+  /** Present for an online match. */
+  readonly net?: NetplayOptions | null;
   /** Absent under test, and until the player's first gesture unlocks the context. */
   readonly audio?: MatchAudio | null;
   readonly onEnd?: (outcome: MatchOutcome) => void;
@@ -134,6 +162,15 @@ export interface MatchRunner {
   readonly camera: Camera;
   /** Repaint without stepping — used when the match has ended but stays on screen. */
   redraw(): void;
+  /**
+   * Stop, and release the rollback session's hold on the transport. Final:
+   * afterwards nothing ticks, polls, paints or reports, and `start` does nothing.
+   */
+  dispose(): void;
+  /** Rollback counters for the HUD; null in a local match. */
+  readonly netStats: NetStats | null;
+  /** The last tick was refused by the rollback session — waiting on the peer. */
+  readonly stalled: boolean;
 }
 
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
@@ -144,6 +181,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     seed = DEFAULT_SEED,
     getFighter,
     keyboard = null,
+    gamepad = null,
+    net = null,
     audio = null,
     onEnd,
     onFrame,
@@ -164,6 +203,23 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   // `step` needs the previous frame's inputs to tell a press from a hold. A
   // button is an edge, and `GameState` deliberately has no field for one.
   let prevInputs: InputFrame[] = players.map(() => 0);
+
+  // Online, the session owns stepping: it saves, predicts, rolls back and
+  // replays, and the runner only feeds it local input and draws what it says.
+  const session = net
+    ? new RollbackSession({
+        transport: net.transport,
+        deps: ENGINE_ROLLBACK_DEPS,
+        initialState: state,
+        playerCount: players.length,
+        localPorts: net.localPorts,
+        inputDelay: net.inputDelay,
+        autoInputDelay: net.autoInputDelay,
+        now: net.now,
+        onDesync: net.onDesync,
+      })
+    : null;
+  let stalled = false;
 
   // The CPU's randomness has to live somewhere that rolls back with the match.
   // Until a rollback session owns it, it lives here, and every `cpuInput` result
@@ -189,24 +245,65 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let lastTime = 0;
   let accumulator = 0;
   let ended = false;
+  let disposed = false;
 
   function gatherInputs(): InputFrame[] {
     const drained = keyboard ? keyboard.drain() : null;
+    // Exactly once per tick: a pad's press edges are the diff against the last poll.
+    const pads = gamepad ? gamepad.poll(players.length) : null;
     return players.map((p, port) => {
-      if (p.cpuLevel === null) return drained?.frames[port] ?? 0;
+      if (p.cpuLevel === null) return mergeKeyboardAndPad(drained?.frames[port] ?? 0, pads?.frames[port] ?? 0);
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
       return r.input;
     });
   }
 
+  // The frame whose step produced the outcome on screen, or -1 while none is
+  // pending. See `isFinal`.
+  let outcomeFrame = -1;
+
+  /**
+   * Online, an outcome reached on a predicted frame can still be rolled back:
+   * the KO may be undone by the input that arrives next. So the match ends
+   * once every input up to the frame that *produced* the outcome is confirmed.
+   *
+   * Not "the frame just simulated is confirmed": under steady latency the peer
+   * running ahead is always at least one frame past confirmation when it
+   * checks, so that test never passes there, its match never ends, and the
+   * other machine's departure reads as a lost connection. `tick` clears the
+   * mark whenever a rollback might have moved or undone the outcome, and the
+   * next sighting records it afresh.
+   */
+  function isFinal(): boolean {
+    if (session === null) return true;
+    if (outcomeFrame < 0) outcomeFrame = state.frame - 1;
+    return session.confirmedFrame >= outcomeFrame;
+  }
+
   function tick(): void {
+    // A disposed runner reads no input and reports nothing: an `advance` from a
+    // test or a stray caller must not poll a pad or end a match after teardown.
+    if (disposed) return;
     const inputs = gatherInputs();
-    previous = state;
-    const result = step(state, inputs, { prevInputs });
-    state = result.state;
-    events = result.events;
-    prevInputs = inputs;
+    if (session) {
+      const result = session.advance(inputs);
+      stalled = !result.advanced;
+      // A replay may have moved the outcome, or undone it — including on a
+      // tick that then stalls, whose rewind is already in the session's state.
+      if (result.rolledBackFrames > 0 || !result.state.outcome) outcomeFrame = -1;
+      // A refused frame ran nothing new: nothing to age, sound or report.
+      if (!result.advanced) return;
+      previous = state;
+      state = result.state;
+      events = result.events;
+    } else {
+      previous = state;
+      const result = step(state, inputs, { prevInputs });
+      state = result.state;
+      events = result.events;
+      prevInputs = inputs;
+    }
 
     // `stepVfx`, not `ingestEvents`. Ingestion only *creates* — the sparks, the
     // KO flash, the white tint on a fighter who was just hit. Ageing them is a
@@ -232,7 +329,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
 
     onFrame?.(state, events);
 
-    if (state.outcome && !ended) {
+    if (state.outcome && !ended && isFinal()) {
       ended = true;
       onEnd?.(state.outcome);
     }
@@ -282,6 +379,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
 
   return {
     start(canvas: HTMLCanvasElement) {
+      if (disposed) return;
       ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas 2D context unavailable");
       running = true;
@@ -300,6 +398,20 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     },
     redraw() {
       paint(0);
+    },
+    dispose() {
+      disposed = true;
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      ctx = null;
+      session?.close();
+    },
+    get netStats() {
+      return session ? session.stats() : null;
+    },
+    get stalled() {
+      return stalled;
     },
     get state() {
       return state;
