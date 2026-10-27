@@ -259,4 +259,9 @@ describe("online mode", () => {
     useMatchConfig.getState().setResult({ kind: "connectionLost", placings: [], stats: [], fighters: {}, online: true });
     expect(useMatchConfig.getState().result?.kind).toBe("connectionLost");
   });
+
+  it("can record a match the two games disagreed about", () => {
+    useMatchConfig.getState().setResult({ kind: "desync", placings: [], stats: [], fighters: {}, online: true });
+    expect(useMatchConfig.getState().result?.kind).toBe("desync");
+  });
 });

@@ -112,6 +112,32 @@ describe("Results after an online match", () => {
     expect(status).toHaveTextContent(/connection to the other player was lost/i);
   });
 
+  describe("after the two games went out of sync", () => {
+    const DESYNC: MatchResult = { kind: "desync", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true };
+
+    it("says plainly the match cannot count, with no placings and no rules", async () => {
+      useMatchConfig.getState().setResult(DESYNC);
+      await renderResults();
+      expect(screen.getByText("Out of Sync")).toBeInTheDocument();
+      expect(await screen.findByText("The two games went out of sync, so this match can't count.")).toBe(screen.getByRole("status"));
+      expect(screen.queryByRole("list")).toBeNull();
+      expect(screen.queryByText(/match ·/)).toBeNull();
+      expect(screen.getByRole("button", { name: /play online again/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /quit/i })).toBeInTheDocument();
+    });
+
+    it("leaves the room at once, with nobody left to wait for", async () => {
+      vi.useFakeTimers();
+      const { session } = fakeSession("host");
+      setActiveSession(session);
+      useMatchConfig.getState().setResult(DESYNC);
+      render(<Results />);
+      await act(async () => {});
+      expect(leaveOnline).toHaveBeenCalledTimes(1);
+      expect(session.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("shows no empty placings and no rules for a match that never finished", async () => {
     useMatchConfig.getState().setResult(LOST);
     await renderResults();

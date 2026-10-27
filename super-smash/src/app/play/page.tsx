@@ -452,6 +452,25 @@ export default function PlayPage() {
     let finished = false;
     /** The result has gone to the results screen, and the room with it. */
     let handedOff = false;
+    /**
+     * The match cannot finish: nobody wins, and the results say why at once.
+     * Stopping the runner stops this side's inputs too, so the other side
+     * finds out by its own check or by its link monitor.
+     */
+    const abandon = (kind: "connectionLost" | "desync") => {
+      mounted?.runner.stop();
+      finish(
+        {
+          kind,
+          placings: [],
+          stats: [],
+          fighters: { 0: config.fighters[0], 1: config.fighters[1] },
+          rules: config.rules,
+          online: true,
+        },
+        0,
+      );
+    };
     // Each player is on their own machine, so each gets Config 1 (with their
     // own rebinding) and every pad, on their own port.
     const keyboard = createKeyboardInput([{ port: localPort, scheme: schemeForMenuId("arrows", bindings.arrows) }]);
@@ -492,7 +511,13 @@ export default function PlayPage() {
           localPorts: [localPort],
           lingerMs: ONLINE_RESULT_LINGER_MS,
           isOpen: () => session.transport.status === "open",
-          onDesync: (report) => console.warn("David-Smash: desync", report),
+          // The two machines' confirmed states differ: they are no longer
+          // playing the same match, so neither may crown anyone. The report
+          // stays in the console for diagnosis.
+          onDesync: (report) => {
+            console.warn("David-Smash: desync", report);
+            abandon("desync");
+          },
         },
         onResult: (result) => finish(result, RESULT_DELAY_MS),
       });
@@ -507,20 +532,7 @@ export default function PlayPage() {
           setLinkHealth(health);
           setPeerAway(away);
         },
-        onLost: () => {
-          runner.stop();
-          finish(
-            {
-              kind: "connectionLost",
-              placings: [],
-              stats: [],
-              fighters: { 0: config.fighters[0], 1: config.fighters[1] },
-              rules: config.rules,
-              online: true,
-            },
-            0,
-          );
-        },
+        onLost: () => abandon("connectionLost"),
       });
       statsTimer = window.setInterval(() => {
         setNetStats(runner.netStats);

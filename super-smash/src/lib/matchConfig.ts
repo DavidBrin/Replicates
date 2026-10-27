@@ -669,9 +669,12 @@ export interface PlayerResultStat {
 }
 
 export interface MatchResult {
-  /** How the match ended — or that the network ended it first. */
-  readonly kind: MatchOutcome["kind"] | "connectionLost";
-  /** Ports in finishing order, winner first. Empty when the connection was lost. */
+  /**
+   * How the match ended — or that it could not finish online: the connection
+   * was lost, or the two machines' confirmed states disagreed (a desync).
+   */
+  readonly kind: MatchOutcome["kind"] | "connectionLost" | "desync";
+  /** Ports in finishing order, winner first. Empty when the match could not finish. */
   readonly placings: readonly number[];
   readonly stats: readonly PlayerResultStat[];
   /**

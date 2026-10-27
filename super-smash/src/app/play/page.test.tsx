@@ -202,6 +202,45 @@ describe("the play page, online", () => {
     expect(routerMock.push).toHaveBeenCalledWith("/results");
   });
 
+  /**
+   * Two machines that disagree about a confirmed frame are no longer playing
+   * the same match: neither may crown anyone. Stopping here also stops the
+   * inputs, so the other side finds out too — by its own check, or its link
+   * monitor.
+   */
+  it("ends the match as out of sync the moment the confirmed states disagree, and stops playing", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      goOnline("guest");
+      const { unmount } = render(<PlayPage />);
+      const { options, runner } = only(mocks.runners);
+      const report = { frame: 600, localHash: 1, remoteHash: 2, peerId: "h1", port: 0 };
+      act(() => options.net?.onDesync?.(report));
+      expect(runner.stop).toHaveBeenCalled();
+      expect(only(mocks.monitors).stop).toHaveBeenCalled();
+      expect(useMatchConfig.getState().result).toEqual({
+        kind: "desync",
+        placings: [],
+        stats: [],
+        fighters: { 0: "mario", 1: "fox" },
+        rules: CONFIG.rules,
+        online: true,
+      });
+      // Kept for diagnosis.
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/desync/), report);
+
+      // A second report changes nothing; the results come at once.
+      act(() => options.net?.onDesync?.({ ...report, frame: 630 }));
+      act(() => vi.advanceTimersByTime(0));
+      expect(routerMock.push).toHaveBeenCalledTimes(1);
+      expect(routerMock.push).toHaveBeenCalledWith("/results");
+      unmount();
+      expect(runner.dispose).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("has the link monitor watch the match's confirmed frame, so a match stuck with packets still arriving is lost", () => {
     goOnline("host");
     render(<PlayPage />);

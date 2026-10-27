@@ -26,9 +26,14 @@ const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
   timeUp: "Time Up",
   suddenDeath: "Sudden Death",
   connectionLost: "Connection Lost",
+  desync: "Out of Sync",
 };
 
-const CONNECTION_LOST_STATUS = "The connection to the other player was lost before the match finished. Nobody wins this one.";
+/** What the status line says about an online match that could not finish. */
+const UNFINISHED_STATUS: Partial<Record<MatchResult["kind"], string>> = {
+  connectionLost: "The connection to the other player was lost before the match finished. Nobody wins this one.",
+  desync: "The two games went out of sync, so this match can't count.",
+};
 
 /**
  * Results.
@@ -46,7 +51,8 @@ export function Results() {
   const rules = useMatchConfig((s) => s.rules);
 
   const online = result?.online === true;
-  const connectionLost = result?.kind === "connectionLost";
+  /** Lost, or out of sync: no placings, nobody wins, and nobody left to wait for. */
+  const unfinished = result ? UNFINISHED_STATUS[result.kind] : undefined;
 
   // An online result holds the room open until it is left, and it is left once:
   // by the grace running out, by Quit or Back, or by the screen going away,
@@ -63,20 +69,20 @@ export function Results() {
   // with its text already in it.
   const [status, setStatus] = useState("");
   useEffect(() => {
-    const timer = setTimeout(() => setStatus(connectionLost ? CONNECTION_LOST_STATUS : ""), 0);
+    const timer = setTimeout(() => setStatus(unfinished ?? ""), 0);
     return () => clearTimeout(timer);
-  }, [connectionLost]);
+  }, [unfinished]);
 
   useEffect(() => {
     if (!online) return;
-    // Nobody is left to wait for when the connection is gone.
-    if (connectionLost) leaveRoom();
-    const grace = connectionLost ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
+    // Nobody is left to wait for when the match could not finish.
+    if (unfinished) leaveRoom();
+    const grace = unfinished ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
     return () => {
       clearTimeout(grace);
       leaveRoom();
     };
-  }, [online, connectionLost, leaveRoom]);
+  }, [online, unfinished, leaveRoom]);
 
   if (!result) {
     return (
@@ -131,7 +137,7 @@ export function Results() {
           {status}
         </p>
         {/* A match that never finished has no placings to show, and no rules worth stating. */}
-        {connectionLost ? null : (
+        {unfinished ? null : (
           <ol className="flex flex-wrap items-end justify-center gap-4">
             {result.placings.map((port, place) => {
               const fighter = findFighter(roster, result.fighters[port] ?? null);
@@ -199,7 +205,7 @@ export function Results() {
         )}
 
         {/* What was played, which online is the host's rules rather than this machine's. */}
-        {connectionLost ? null : (
+        {unfinished ? null : (
           <p className="mt-6 text-center text-xs text-white/40">{rulesLabel(result.rules ?? rules)}</p>
         )}
 
