@@ -159,6 +159,16 @@ describe("StageSelect, hosting online", () => {
     expect(chooseFighters()).toBeDisabled();
   });
 
+  it("says it is connecting while a newcomer's channel opens", async () => {
+    host();
+    await renderStages();
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    act(() => useOnlineStore.getState().patch({ status: "linking" }));
+    expect(status).toHaveTextContent("Connecting to the other player…");
+    expect(chooseFighters()).toBeDisabled();
+  });
+
   /** Back here from fighters to change the stage, with a pick made: a newcomer's page starts empty. */
   it("repeats the host's pick when somebody takes the empty seat", async () => {
     const fake = host();

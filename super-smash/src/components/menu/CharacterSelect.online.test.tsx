@@ -71,6 +71,16 @@ describe("CharacterSelect, online", () => {
     expect(sent.at(-1)).toEqual({ kind: "pick", fighterId: null, costume: 1 });
   });
 
+  /** Every pick goes out the same way, so a cleared one keeps the costume like any other. */
+  it("sends this side's own costume with every pick, a cleared one included", async () => {
+    const { sent } = goOnline("guest");
+    useMatchConfig.getState().setCostume(1, 4);
+    await renderSelect();
+    fireEvent.click(portraits()[0]);
+    fireEvent.keyDown(window, { key: "Backspace" });
+    expect(sent.map((m) => m.kind === "pick" && m.costume)).toEqual([4, 4]);
+  });
+
   it("ignores the keys and panels that switch ports in a local match", async () => {
     goOnline("host");
     await renderSelect();
@@ -79,6 +89,44 @@ describe("CharacterSelect, online", () => {
     fireEvent.click(portraits()[0]);
     expect(useMatchConfig.getState().players[0].fighterId).not.toBeNull();
     expect(useMatchConfig.getState().players[1].fighterId).toBeNull();
+  });
+
+  it("switches off the panels' port buttons, which choose nothing online", async () => {
+    goOnline("guest");
+    await renderSelect();
+    expect(screen.getByRole("button", { name: "Choose for P1" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Choose for P2" })).toBeDisabled();
+  });
+
+  it("says it is connecting while a newcomer's channel opens, and stops once it has", async () => {
+    goOnline("host");
+    await renderSelect();
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    act(() => useOnlineStore.getState().patch({ status: "linking" }));
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent("Connecting to the other player…");
+    act(() => useOnlineStore.getState().patch({ status: "connected" }));
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  /** The banner tag is hidden below `sm` for everyone else; the guest's is the one place it learns the stage. */
+  it("shows the guest the host's stage at every width", async () => {
+    goOnline("guest");
+    useOnlineStore.getState().patch({ hostStage: { stageId: "battlefield", form: "normal" } });
+    await renderSelect();
+    expect(screen.getByText("Stage: Battlefield").closest(".hidden")).toBeNull();
+  });
+
+  it("makes the host's back button leave the room once the room cannot go on", async () => {
+    const fake = goOnline("host");
+    await renderSelect();
+    expect(screen.getByRole("button", { name: "Back to stage select" })).toBeInTheDocument();
+    act(() => fake.emit({ type: "error", reason: "bad-start" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave the room" }));
+    expect(getActiveSession()).toBeNull();
+    expect(useOnlineStore.getState().status).toBe("idle");
+    expect(routerMock.push).toHaveBeenCalledWith("/online");
   });
 
   it("hides adding and removing players", async () => {

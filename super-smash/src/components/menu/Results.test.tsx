@@ -83,16 +83,63 @@ describe("Results", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^quit$/i }));
     expect(routerMock.push).toHaveBeenCalledWith("/menu");
+    expect(screen.queryByRole("button", { name: /play online again/i })).toBeNull();
   });
 });
 
 describe("Results after an online match", () => {
+  const LOST: MatchResult = { kind: "connectionLost", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true };
+
   it("says the connection was lost instead of crowning anyone", async () => {
-    useMatchConfig.getState().setResult({ kind: "connectionLost", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true });
+    useMatchConfig.getState().setResult(LOST);
     await renderResults();
     expect(screen.getByText("Connection Lost")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/connection to the other player was lost/i);
+    expect(await screen.findByText(/connection to the other player was lost/i)).toBe(screen.getByRole("status"));
     expect(screen.queryByRole("button", { name: /rematch/i })).toBeNull();
+  });
+
+  /** A status region announces a change to one it already knows, not one that arrives with its text in it. */
+  it("says it in a status region that was already there, empty, when the screen arrived", async () => {
+    vi.useFakeTimers();
+    useMatchConfig.getState().setResult(LOST);
+    render(<Results />);
+    const status = screen.getByRole("status");
+    expect(status).toBeEmptyDOMElement();
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent(/connection to the other player was lost/i);
+  });
+
+  it("shows no empty placings and no rules for a match that never finished", async () => {
+    useMatchConfig.getState().setResult(LOST);
+    await renderResults();
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.queryByText(/match ·/)).toBeNull();
+    expect(screen.getByRole("button", { name: /quit/i })).toBeInTheDocument();
+  });
+
+  it("keeps the status region, saying nothing, after a match that finished", async () => {
+    vi.useFakeTimers();
+    useMatchConfig.getState().setResult({ ...RESULT, online: true });
+    render(<Results />);
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("offers to play online again, which leaves this room for the lobby", async () => {
+    const { session } = fakeSession("guest");
+    setActiveSession(session);
+    useMatchConfig.getState().setResult({ ...RESULT, online: true });
+    await renderResults();
+    fireEvent.click(screen.getByRole("button", { name: /play online again/i }));
+    expect(session.close).toHaveBeenCalled();
+    expect(getActiveSession()).toBeNull();
+    expect(routerMock.push).toHaveBeenCalledWith("/online");
   });
 
   /** The guest's own config still holds whatever it last set locally; the match ran on the host's. */

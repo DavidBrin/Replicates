@@ -19,7 +19,7 @@ import {
   type MenuStage,
   type StageForm,
 } from "@/lib/matchConfig";
-import { leaveOnline, sendHostStage, useOnlineStore } from "@/lib/onlineStore";
+import { LINKING_STATUS, leaveOnline, sendHostStage, useOnlineStore } from "@/lib/onlineStore";
 
 const COLUMNS = 4;
 
@@ -88,6 +88,12 @@ export function StageSelect() {
       {onlineMessage ? (
         <p role="alert" className="mx-auto w-full max-w-6xl px-5 pb-4 text-sm font-bold text-smash-yellow sm:px-8">
           {onlineMessage}
+        </p>
+      ) : null}
+      {/* Always mounted online: a live region only announces what changes inside one already there. */}
+      {onlineRole !== null ? (
+        <p role="status" className="mx-auto w-full max-w-6xl px-5 text-sm font-bold text-white/80 sm:px-8">
+          {onlineStatus === "linking" ? LINKING_STATUS : ""}
         </p>
       ) : null}
 

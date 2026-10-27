@@ -29,7 +29,7 @@ import {
   type PlayerSlot,
 } from "@/lib/matchConfig";
 import { buildStartConfig, newMatchSeed } from "@/game/onlineConfig";
-import { leaveOnline, sendLobby, useOnlineStore } from "@/lib/onlineStore";
+import { LINKING_STATUS, leaveOnline, sendLobby, sendOwnPick, useOnlineStore } from "@/lib/onlineStore";
 import { ROLE_PORT } from "@/net/signalProtocol";
 
 /**
@@ -75,7 +75,11 @@ export function CharacterSelect() {
   const hostStage = useOnlineStore((s) => s.hostStage);
   // One thing to say: an error outranks a notice (lib/onlineStore).
   const onlineMessage = useOnlineStore((s) => s.error ?? s.notice);
+  const onlineFailed = useOnlineStore((s) => s.error !== null);
   const onlinePort = onlineRole === null ? null : ROLE_PORT[onlineRole];
+  // The guest has no stage select to go back to, and after an error the room
+  // cannot go on: either way, going back is leaving.
+  const backLeaves = onlineRole === "guest" || (onlineRole === "host" && onlineFailed);
 
   const [gridIndex, setGridIndex] = useState(0);
   const [requestedPort, setActivePort] = useState(0);
@@ -110,7 +114,7 @@ export function CharacterSelect() {
     (fighterId: string) => {
       setFighter(activePort, fighterId);
       if (onlinePort !== null) {
-        sendLobby({ kind: "pick", fighterId, costume: players[activePort]?.costume ?? activePort });
+        sendOwnPick(onlinePort);
         return;
       }
       // Hand the cursor to the next empty panel, so filling four ports is four
@@ -157,7 +161,7 @@ export function CharacterSelect() {
           if (inControl) return;
           event.preventDefault();
           setFighter(activePort, null);
-          if (onlinePort !== null) sendLobby({ kind: "pick", fighterId: null, costume: activePort });
+          if (onlinePort !== null) sendOwnPick(onlinePort);
           return;
         case "+":
         case "=":
@@ -232,19 +236,22 @@ export function CharacterSelect() {
     <main className="flex h-dvh flex-col overflow-hidden bg-[#101215]">
       <ScreenBanner
         onBack={() => {
-          // The guest has no stage select to go back to: going back is leaving.
-          if (onlineRole === "guest") {
+          if (backLeaves) {
             leaveOnline();
             router.push("/online");
           } else {
             router.push("/stage");
           }
         }}
-        backLabel={onlineRole === "guest" ? "Leave the room" : "Back to stage select"}
+        backLabel={backLeaves ? "Leave the room" : "Back to stage select"}
         tab={<ModeTab label="Smash" />}
       >
         <SkewTag
-          className="hidden border-[3px] border-panel-ink bg-panel-ink sm:inline-block"
+          // The guest learns the stage and the rules nowhere else, so its tag shows at every width.
+          className={cn(
+            "border-[3px] border-panel-ink bg-panel-ink",
+            onlineRole === "guest" ? "inline-block" : "hidden sm:inline-block",
+          )}
           innerClassName="px-4 py-1 text-xs font-bold tracking-wide text-white/75"
         >
           {bannerTag}
@@ -254,6 +261,12 @@ export function CharacterSelect() {
       {onlineMessage ? (
         <p role="alert" className="mx-auto w-full max-w-7xl px-4 text-sm font-bold text-smash-yellow sm:px-8">
           {onlineMessage}
+        </p>
+      ) : null}
+      {/* Always mounted online: a live region only announces what changes inside one already there. */}
+      {onlineRole !== null ? (
+        <p role="status" className="mx-auto w-full max-w-7xl px-4 text-sm font-bold text-white/80 sm:px-8">
+          {onlineStatus === "linking" ? LINKING_STATUS : ""}
         </p>
       ) : null}
 
@@ -494,6 +507,8 @@ function PlayerPanel({
         onClick={onActivate}
         aria-label={`Choose for ${tag}`}
         aria-pressed={active}
+        // Online each machine has its one panel, so there is no port to choose.
+        disabled={online}
         className="relative block h-28 w-full"
         style={{ backgroundColor: isCpu ? "var(--cpu-grey-lit)" : "#12151a" }}
       >

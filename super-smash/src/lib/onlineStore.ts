@@ -26,6 +26,9 @@ export type OnlineErrorReason = SessionError | "link-failed";
 /** Shown while the seat the opponent left stands empty. */
 export const PEER_LEFT_NOTICE = "The other player left the room.";
 
+/** The select screens' status line while a newcomer's direct connection opens. */
+export const LINKING_STATUS = "Connecting to the other player…";
+
 /**
  * How long an online result keeps the room open before leaving it. The peer
  * that ended first has nothing left to play, but the other one may still be
@@ -231,6 +234,16 @@ function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
 /** True when the message went to the room; false with no session, or one that refused it (see `OnlineSessionLike.sendLobby`). */
 export function sendLobby(message: LobbyMessage): boolean {
   return getActiveSession()?.sendLobby(message) ?? false;
+}
+
+/**
+ * This side's own panel, as the match config now holds it, for the other
+ * side's. Every pick goes out through here — a choice, a clear, a repeat for
+ * a newcomer — so none of them can say it differently.
+ */
+export function sendOwnPick(port: number): boolean {
+  const own = useMatchConfig.getState().players[port];
+  return sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? port });
 }
 
 /** The host's stage as the match config now holds it, with the rules the host will start, for the guest to see. */

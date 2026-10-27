@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FighterBust } from "@/components/ui/FighterBust";
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
@@ -27,6 +27,8 @@ const OUTCOME_LABELS: Record<MatchResult["kind"], string> = {
   suddenDeath: "Sudden Death",
   connectionLost: "Connection Lost",
 };
+
+const CONNECTION_LOST_STATUS = "The connection to the other player was lost before the match finished. Nobody wins this one.";
 
 /**
  * Results.
@@ -55,6 +57,15 @@ export function Results() {
     left.current = true;
     leaveOnline();
   }, []);
+
+  // Always mounted, and filled a moment after the screen arrives: a status
+  // region announces a change to one it already knows, not one that arrives
+  // with its text already in it.
+  const [status, setStatus] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setStatus(connectionLost ? CONNECTION_LOST_STATUS : ""), 0);
+    return () => clearTimeout(timer);
+  }, [connectionLost]);
 
   useEffect(() => {
     if (!online) return;
@@ -116,81 +127,96 @@ export function Results() {
       </ScreenBanner>
 
       <div className="mx-auto w-full max-w-6xl flex-1 px-5 pb-10 sm:px-8">
-        {connectionLost ? (
-          <p role="status" className="mb-6 text-center text-sm font-bold text-white/80">
-            The connection to the other player was lost before the match finished. Nobody wins this one.
-          </p>
-        ) : null}
-        <ol className="flex flex-wrap items-end justify-center gap-4">
-          {result.placings.map((port, place) => {
-            const fighter = findFighter(roster, result.fighters[port] ?? null);
-            const stat = statFor(port);
-            const winner = place === 0;
+        <p role="status" className={cn("text-center text-sm font-bold text-white/80", status && "mb-6")}>
+          {status}
+        </p>
+        {/* A match that never finished has no placings to show, and no rules worth stating. */}
+        {connectionLost ? null : (
+          <ol className="flex flex-wrap items-end justify-center gap-4">
+            {result.placings.map((port, place) => {
+              const fighter = findFighter(roster, result.fighters[port] ?? null);
+              const stat = statFor(port);
+              const winner = place === 0;
 
-            return (
-              <li
-                key={port}
-                className={cn("shrink-0", winner ? "w-[17rem]" : "w-[13rem]")}
-                style={{ order: place }}
-              >
-                <SkewCard
-                  className={cn(
-                    "border-[4px]",
-                    winner ? "shadow-[0_12px_0_rgb(0_0_0/0.5)]" : "shadow-[0_8px_0_rgb(0_0_0/0.4)]",
-                  )}
-                  style={{ borderColor: portColour(port), backgroundColor: "#181b20" }}
+              return (
+                <li
+                  key={port}
+                  className={cn("shrink-0", winner ? "w-[17rem]" : "w-[13rem]")}
+                  style={{ order: place }}
                 >
-                  <div className="relative">
-                    {fighter ? (
-                      <SkewArtWell className={cn("w-full", winner ? "aspect-[4/5]" : "aspect-square")}>
-                        <FighterBust fighter={fighter} className="h-full w-full" />
-                      </SkewArtWell>
-                    ) : (
-                      <div className={cn("grid w-full place-items-center bg-[#22262e]", winner ? "aspect-[4/5]" : "aspect-square")}>
-                        <Unskew className="font-display text-4xl text-white/30">?</Unskew>
-                      </div>
+                  <SkewCard
+                    className={cn(
+                      "border-[4px]",
+                      winner ? "shadow-[0_12px_0_rgb(0_0_0/0.5)]" : "shadow-[0_8px_0_rgb(0_0_0/0.4)]",
                     )}
-                    <span
-                      className="absolute top-0 left-0 border-r-[3px] border-b-[3px] border-panel-ink px-4 py-1 font-display leading-none"
-                      style={{ backgroundColor: portColour(port), fontSize: winner ? "2.25rem" : "1.5rem" }}
-                    >
-                      <Unskew className="text-panel-ink">{ORDINALS[place] ?? `${place + 1}th`}</Unskew>
-                    </span>
-                  </div>
-
-                  <div className="border-y-[3px] border-panel-ink bg-[#0f1116] px-5 py-2">
-                    <Unskew
-                      className={cn(
-                        "block max-w-full truncate font-display tracking-[0.06em] text-white uppercase",
-                        winner ? "text-2xl" : "text-lg",
+                    style={{ borderColor: portColour(port), backgroundColor: "#181b20" }}
+                  >
+                    <div className="relative">
+                      {fighter ? (
+                        <SkewArtWell className={cn("w-full", winner ? "aspect-[4/5]" : "aspect-square")}>
+                          <FighterBust fighter={fighter} className="h-full w-full" />
+                        </SkewArtWell>
+                      ) : (
+                        <div className={cn("grid w-full place-items-center bg-[#22262e]", winner ? "aspect-[4/5]" : "aspect-square")}>
+                          <Unskew className="font-display text-4xl text-white/30">?</Unskew>
+                        </div>
                       )}
-                    >
-                      {fighter?.name ?? "—"}
-                    </Unskew>
-                    <Unskew
-                      className="text-[0.65rem] font-black tracking-[0.14em] uppercase"
-                      style={{ color: portColour(port) }}
-                    >
-                      {portTag(port)}
-                    </Unskew>
-                  </div>
+                      <span
+                        className="absolute top-0 left-0 border-r-[3px] border-b-[3px] border-panel-ink px-4 py-1 font-display leading-none"
+                        style={{ backgroundColor: portColour(port), fontSize: winner ? "2.25rem" : "1.5rem" }}
+                      >
+                        <Unskew className="text-panel-ink">{ORDINALS[place] ?? `${place + 1}th`}</Unskew>
+                      </span>
+                    </div>
 
-                  <dl className="grid grid-cols-3 divide-x-[2px] divide-panel-ink px-3 text-center">
-                    <Stat label="KOs" value={stat.kos} big={winner} />
-                    <Stat label="Falls" value={stat.falls} big={winner} />
-                    <Stat label="SDs" value={stat.sds} big={winner} />
-                  </dl>
-                </SkewCard>
-              </li>
-            );
-          })}
-        </ol>
+                    <div className="border-y-[3px] border-panel-ink bg-[#0f1116] px-5 py-2">
+                      <Unskew
+                        className={cn(
+                          "block max-w-full truncate font-display tracking-[0.06em] text-white uppercase",
+                          winner ? "text-2xl" : "text-lg",
+                        )}
+                      >
+                        {fighter?.name ?? "—"}
+                      </Unskew>
+                      <Unskew
+                        className="text-[0.65rem] font-black tracking-[0.14em] uppercase"
+                        style={{ color: portColour(port) }}
+                      >
+                        {portTag(port)}
+                      </Unskew>
+                    </div>
+
+                    <dl className="grid grid-cols-3 divide-x-[2px] divide-panel-ink px-3 text-center">
+                      <Stat label="KOs" value={stat.kos} big={winner} />
+                      <Stat label="Falls" value={stat.falls} big={winner} />
+                      <Stat label="SDs" value={stat.sds} big={winner} />
+                    </dl>
+                  </SkewCard>
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
         {/* What was played, which online is the host's rules rather than this machine's. */}
-        <p className="mt-6 text-center text-xs text-white/40">{rulesLabel(result.rules ?? rules)}</p>
+        {connectionLost ? null : (
+          <p className="mt-6 text-center text-xs text-white/40">{rulesLabel(result.rules ?? rules)}</p>
+        )}
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          {online ? null : (
+          {online ? (
+            // No rematch online: the room is one match long, so playing again is a new room.
+            <SkewButton
+              onClick={() => {
+                leaveRoom();
+                router.push("/online");
+              }}
+              className="border-[4px] border-panel-ink bg-smash-yellow px-8 py-3 text-panel-ink shadow-[0_8px_0_rgb(0_0_0/0.45)] transition-transform hover:-translate-y-1"
+              innerClassName="font-display text-xl tracking-[0.16em] uppercase"
+            >
+              Play online again
+            </SkewButton>
+          ) : (
             <>
               <SkewButton
                 onClick={() => router.push("/play")}

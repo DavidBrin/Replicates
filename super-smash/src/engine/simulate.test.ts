@@ -248,12 +248,13 @@ describe("step purity", () => {
   it("never mutates the state it was given", () => {
     fc.assert(
       fc.property(
-        fc.array(fc.integer({ min: 0, max: 511 }), { minLength: 1, maxLength: 12 }),
+        // Every button bit, Btn.Soft (1 << 9) included.
+        fc.array(fc.integer({ min: 0, max: 0x3ff }), { minLength: 1, maxLength: 12 }),
         (script) => {
           let state = standing();
           let prev: readonly InputFrame[] = [0, 0];
           for (const raw of script) {
-            const inputs: InputFrame[] = [raw, (raw >> 2) & 0x1ff];
+            const inputs: InputFrame[] = [raw, (raw >> 2) & 0x3ff];
             const before = hashState(state);
             const next = step(state, inputs, { prevInputs: prev, ctx: CTX });
             if (hashState(state) !== before) return false;
