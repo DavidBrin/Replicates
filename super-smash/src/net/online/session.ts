@@ -34,6 +34,21 @@ export type SessionError = RoomError | "unreachable" | "room-lost" | "bad-start"
  */
 export const ROOM_LOST_GRACE_MS = 15_000;
 
+/**
+ * The host's waits before each fresh offer once the lobby channel is lost
+ * with both players still in the room: three tries, backing off, and then the
+ * room is lost. Nobody joins or leaves in that case, so without these nothing
+ * would ever offer again (see `reconnectAfter`).
+ */
+export const REOFFER_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000];
+
+/**
+ * How long a guest whose lobby channel was lost waits for its host's fresh
+ * offer before calling the room lost: the host's longest backoff, and time
+ * for the host to notice the loss itself, which can trail this side's.
+ */
+export const GUEST_REOFFER_WAIT_MS = 10_000;
+
 export type SessionEvent =
   | { readonly type: "joined"; readonly role: Role }
   | { readonly type: "peer"; readonly present: boolean }
@@ -89,12 +104,21 @@ export class OnlineSession implements OnlineSessionLike {
   private readonly events: Emitter<[SessionEvent]> = createEmitter();
   private welcomed = false;
   /**
-   * Whether the room says the other player is in it. Not whether they are
+   * The other player, while the room says it seats them. Not whether they are
    * there (the channel decides that), but whether the room can pass them a
-   * lobby message: their room socket can drop on its own while the channel
-   * stays open.
+   * lobby message, and whom a fresh offer goes to: their room socket can drop
+   * on its own while the channel stays open, and the channel can close while
+   * their socket stays.
    */
-  private peerInRoom = false;
+  private seatedPeer: string | null = null;
+  /** A start went out (host) or came in (guest): the match owns the channel now. */
+  private started = false;
+  /** The last link status, to tell a lost channel from a peer that never connected. */
+  private link: DoSignalStatus = "waiting";
+  /** Fresh offers the host has left for this outage; see `REOFFER_DELAYS_MS`. */
+  private reoffersLeft = REOFFER_DELAYS_MS.length;
+  /** The host's next fresh offer, or the guest's wait for one. */
+  private reconnect: ReturnType<typeof setTimeout> | null = null;
   /** The room socket closed, for whatever reason; it never reconnects. */
   private roomGone = false;
   private roomLost = false;
@@ -115,20 +139,25 @@ export class OnlineSession implements OnlineSessionLike {
       switch (event.t) {
         case "welcome":
           this.welcomed = true;
-          this.peerInRoom = event.peer !== null;
+          this.seatedPeer = event.peer?.id ?? null;
           this.events.emit({ type: "joined", role: event.self.role });
           if (event.peer) this.events.emit({ type: "peer", present: true });
           break;
         case "peer-joined":
-          this.peerInRoom = true;
+          // A newcomer gets the transport's ordinary offer, not the old seat's retries.
+          this.seatedPeer = event.peer.id;
+          this.resetReconnect();
           this.events.emit({ type: "peer", present: true });
           break;
         case "peer-left":
-          this.peerInRoom = false;
+          this.seatedPeer = null;
+          this.resetReconnect();
           this.events.emit({ type: "peer", present: false });
           break;
         case "lobby": {
           const message = parseLobbyMessage(event.payload);
+          // The guest follows the host into the match: the channel is the match's from here.
+          if (message?.kind === "start" && this.role === "guest") this.holdForMatch();
           if (message) this.events.emit({ type: "lobby", message });
           break;
         }
@@ -138,6 +167,8 @@ export class OnlineSession implements OnlineSessionLike {
         case "closed":
           if (this.closed || this.roomGone) break;
           this.roomGone = true;
+          // Fresh offers ride the room socket; with it gone there are none.
+          this.cancelReconnect();
           // A refusal already arrived as an `error`. Before a welcome, nobody
           // answered; after one, a drop is a Worker deploy restarting the room.
           if (roomErrorForCloseCode(event.code) !== null) break;
@@ -187,11 +218,12 @@ export class OnlineSession implements OnlineSessionLike {
     // side playing alone until the link monitor gave up, with the other still
     // waiting on its select screen. Their room socket is gone, so the room is
     // as good as lost: both need a new one.
-    if (message.kind === "start" && !this.peerInRoom) {
+    if (message.kind === "start" && this.seatedPeer === null) {
       this.loseRoom();
       return false;
     }
     this.signalling.send({ t: "lobby", payload: message });
+    if (message.kind === "start") this.holdForMatch();
     return true;
   }
 
@@ -199,6 +231,7 @@ export class OnlineSession implements OnlineSessionLike {
     if (this.closed) return;
     this.closed = true;
     this.endGrace();
+    this.cancelReconnect();
     this.off();
     // Listeners first: closing the transport reports a final "closed" link
     // status, and nobody who called close() wants to hear it.
@@ -224,15 +257,71 @@ export class OnlineSession implements OnlineSessionLike {
 
   /** Every transport status passes through here, out as a `link` event and then against a lost room. */
   private linkChanged(status: DoSignalStatus): void {
+    const before = this.link;
+    this.link = status;
     this.events.emit({ type: "link", status });
+    if (!this.roomGone) this.reconnectAfter(before, status);
     if (!this.roomGone || this.closed || status === "negotiating") return;
     if (status === "open") this.endGrace();
     // Failed, closed, or back to waiting: with no room, nothing renegotiates.
     else this.loseRoom();
   }
 
+  /**
+   * The lobby channel went down with the other player still seated: no join
+   * or leave will follow to start another negotiation. The host offers again,
+   * backing off, and calls the room lost when its tries run out; the guest
+   * waits for that offer, and calls the room lost if none comes. A failed link
+   * is an error of its own, and mid-match the link monitor decides.
+   */
+  private reconnectAfter(before: DoSignalStatus, status: DoSignalStatus): void {
+    if (this.closed || this.started) return;
+    if (status === "open") {
+      this.resetReconnect();
+      return;
+    }
+    this.cancelReconnect();
+    const lost = status === "waiting" && (before === "open" || before === "negotiating");
+    if (!lost || this.seatedPeer === null) return;
+    if (this.role === "guest") {
+      this.reconnect = setTimeout(() => this.loseRoom(), GUEST_REOFFER_WAIT_MS);
+      return;
+    }
+    if (this.role !== "host") return;
+    const delay = REOFFER_DELAYS_MS[REOFFER_DELAYS_MS.length - this.reoffersLeft];
+    if (delay === undefined) {
+      this.loseRoom();
+      return;
+    }
+    this.reoffersLeft -= 1;
+    const peer = this.seatedPeer;
+    this.reconnect = setTimeout(() => {
+      this.reconnect = null;
+      // The transport refuses unless the channel is still down and not held.
+      if (this.seatedPeer === peer) this.transport.offerAgain(peer);
+    }, delay);
+  }
+
+  /** The match has started: no fresh offer may replace its channel, on either side. */
+  private holdForMatch(): void {
+    this.started = true;
+    this.cancelReconnect();
+    this.transport.holdChannel();
+  }
+
+  private resetReconnect(): void {
+    this.cancelReconnect();
+    this.reoffersLeft = REOFFER_DELAYS_MS.length;
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnect !== null) clearTimeout(this.reconnect);
+    this.reconnect = null;
+  }
+
   private loseRoom(): void {
     this.endGrace();
+    this.cancelReconnect();
     if (this.roomLost) return;
     this.roomLost = true;
     this.events.emit({ type: "error", reason: "room-lost" });

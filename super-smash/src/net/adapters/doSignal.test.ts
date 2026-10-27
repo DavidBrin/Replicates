@@ -340,6 +340,69 @@ describe("the guest", () => {
   });
 });
 
+/**
+ * A lobby channel can close while both room sockets stay open (an SCTP close,
+ * a network switch): nobody joins or leaves, so nothing would offer again.
+ * The session asks for a fresh connection; these are the transport's halves.
+ */
+describe("a fresh connection after the lobby channel was lost", () => {
+  it("has the host offer the guest the room still seats a new peer connection", async () => {
+    const t = await linkedHost();
+    t.peers[0].channels[0].remoteClose();
+    expect(t.transport.status).toBe("waiting");
+
+    t.transport.offerAgain("g1");
+    await settle();
+
+    expect(t.peers).toHaveLength(2);
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.transport.status).toBe("negotiating");
+    expect(t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer")).toHaveLength(2);
+    t.signalling.deliver({ t: "signal", from: "g1", payload: { kind: "answer", sdp: "answer-sdp" } });
+    await settle();
+    t.peers[1].channels[0].open();
+    expect(t.transport.status).toBe("open");
+    expect(t.joins).toEqual(["g1", "g1"]);
+  });
+
+  it("has a guest answer its own host's new offer, replacing the connection it still holds", async () => {
+    const t = await linkedGuest();
+    // The host's side of the channel died; this side has not noticed yet.
+    t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "second-sdp" } });
+    await settle();
+
+    expect(t.peers).toHaveLength(2);
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.peers[1].remote).toEqual({ type: "offer", sdp: "second-sdp" });
+    expect(t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "answer")).toHaveLength(2);
+    t.peers[1].channels[0].open();
+    expect(t.transport.status).toBe("open");
+  });
+
+  it("offers nothing again while the channel is open, once the match holds it, from a guest, or after close()", async () => {
+    const open = await linkedHost();
+    open.transport.offerAgain("g1");
+
+    const held = await linkedHost();
+    held.transport.holdChannel();
+    held.peers[0].channels[0].remoteClose();
+    held.transport.offerAgain("g1");
+
+    const guest = await linkedGuest();
+    guest.peers[0].channels[0].remoteClose();
+    guest.transport.offerAgain("h1");
+
+    const closed = await linkedHost();
+    closed.peers[0].channels[0].remoteClose();
+    closed.transport.close();
+    closed.transport.offerAgain("g1");
+    await settle();
+
+    for (const t of [open, held, guest, closed]) expect(t.peers).toHaveLength(1);
+    expect(open.transport.status).toBe("open");
+  });
+});
+
 describe("a peer connection the browser will not build", () => {
   it.each<[string, RTCIceServer[]]>([
     ["a TURN url without credentials", [{ urls: "turn:turn.example.com:3478?transport=udp" }]],
@@ -461,10 +524,10 @@ describe("a linked match", () => {
     expect(t.peers[0].channels[0].sent).toEqual([new Uint8Array([5])]);
   });
 
-  it("keeps the guest's match when a newcomer, or anyone, offers once the channel is open", async () => {
+  it("keeps the guest's match when a newcomer, or anyone but its own host, offers once the channel is open", async () => {
     const t = await linkedGuest();
     t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "newcomer-sdp" } });
-    t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "second-sdp" } });
+    t.signalling.deliver({ t: "signal", from: "stranger", payload: { kind: "offer", sdp: "stranger-sdp" } });
     await settle();
 
     expect(t.peers).toHaveLength(1);
@@ -475,6 +538,18 @@ describe("a linked match", () => {
     expect(t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "answer")).toHaveLength(1);
     t.transport.send(new Uint8Array([4]));
     expect(t.peers[0].channels[0].sent).toEqual([new Uint8Array([4])]);
+  });
+
+  it("keeps the guest's channel, once the match holds it, even when its own host offers again", async () => {
+    const t = await linkedGuest();
+    t.transport.holdChannel();
+    t.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "second-sdp" } });
+    await settle();
+
+    expect(t.peers).toHaveLength(1);
+    expect(t.peers[0].channels[0].closed).toBe(false);
+    expect(t.transport.status).toBe("open");
+    expect(t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "answer")).toHaveLength(1);
   });
 
   it("treats a failed ICE connection as a lost peer", async () => {

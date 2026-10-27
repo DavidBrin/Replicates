@@ -21,6 +21,13 @@
  * channel opens, and so does a newcomer: the room's two-peer cap counts live
  * sockets, so after a drop it admits anyone else with the code, and an open
  * match ignores their `peer-joined` or offer rather than dropping its peer.
+ *
+ * A lobby channel can also close with both room sockets still open, and then
+ * nobody joins or leaves to start a new negotiation. So the host can offer the
+ * guest the room still seats a fresh connection (`offerAgain`; the session
+ * decides when), and a guest answers a new offer from its own host even while
+ * it holds a connection, replacing it. Once the match starts, `holdChannel`
+ * ends both: the match's channel is never replaced.
  */
 
 import { asBytes } from "../bytes";
@@ -97,6 +104,13 @@ export interface DoSignalTransport extends Transport {
   readonly status: DoSignalStatus;
   /** Known once the room's welcome arrives. */
   readonly role: Role | null;
+  /**
+   * The host offers `peerId` a fresh peer connection, as when it joined. Only
+   * while the channel is down (`waiting`) and not held; a no-op otherwise.
+   */
+  offerAgain(peerId: string): void;
+  /** The match has started: from now on its channel is never replaced, by either side. */
+  holdChannel(): void;
 }
 
 /** One cast at the boundary, for the reason webrtc.ts gives for `RoomLike`. */
@@ -120,6 +134,8 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   let hostId: string | null = null;
   let status: DoSignalStatus = "waiting";
   let closed = false;
+  /** Set by `holdChannel`: the match owns the channel now. */
+  let held = false;
 
   let pc: PeerConnectionLike | null = null;
   let channel: DataChannelLike | null = null;
@@ -349,8 +365,10 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       case "signal": {
         const payload = event.payload;
         if (payload.kind === "offer") {
-          // As above, and only from our own host.
-          if (role === "guest" && event.from === hostId && !announced) void answer(event.from, payload.sdp);
+          // Only from our own host. Once open, only in the lobby: our host
+          // offers again only after its side of the channel was lost, which
+          // this side may not have noticed yet (see the header).
+          if (role === "guest" && event.from === hostId && !(announced && held)) void answer(event.from, payload.sdp);
         } else if (payload.kind === "answer") {
           if (role === "host" && event.from === remoteId) void acceptAnswer(payload.sdp);
         } else {
@@ -396,6 +414,13 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     onMessage: (cb) => messages.add(cb),
     onPeerJoin: (cb) => joins.add(cb),
     onPeerLeave: (cb) => leaves.add(cb),
+    offerAgain(peerId) {
+      if (closed || held || role !== "host" || status !== "waiting") return;
+      void offerTo(peerId);
+    },
+    holdChannel() {
+      held = true;
+    },
     close() {
       if (closed) return;
       closed = true;

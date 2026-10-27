@@ -162,6 +162,21 @@ describe("binding a session to the stores", () => {
     expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null, error: null });
   });
 
+  /** The host offering a fresh connection after the channel was lost, with both players still in the room. */
+  it("says it is connecting again, not that the other player left, once a fresh negotiation starts", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "host" });
+    emit({ type: "peer", present: true });
+    emit({ type: "link", status: "open" });
+    emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE });
+    emit({ type: "link", status: "negotiating" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState().status).toBe("connected");
+  });
+
   it("clears the notice once the channel opens again", () => {
     const { session, emit } = fakeSession();
     bindSession(session);

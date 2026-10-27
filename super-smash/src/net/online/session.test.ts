@@ -6,7 +6,15 @@ import type { RoomIntent } from "../signalProtocol";
 import { OpenableChannel, inertPeer } from "../testing/fakePeer";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import type { OnlineMatchConfig } from "./lobby";
-import { OnlineSession, ROOM_LOST_GRACE_MS, getActiveSession, setActiveSession, type SessionEvent } from "./session";
+import {
+  GUEST_REOFFER_WAIT_MS,
+  OnlineSession,
+  REOFFER_DELAYS_MS,
+  ROOM_LOST_GRACE_MS,
+  getActiveSession,
+  setActiveSession,
+  type SessionEvent,
+} from "./session";
 
 const CONFIG: OnlineMatchConfig = {
   seed: 1234,
@@ -251,6 +259,161 @@ describe("OnlineSession", () => {
       expect(vi.getTimerCount()).toBe(1);
       session.close();
       expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
+  /**
+   * A lobby channel can close while both room sockets stay open (an SCTP
+   * close, a network switch). Nobody joins or leaves, so before this nothing
+   * offered again and both players waited on a screen that never moved.
+   */
+  describe("when the lobby channel closes with both players still in the room", () => {
+    /** Every peer connection the session builds gets a channel of its own, which the test opens or drops. */
+    async function opened(intent: RoomIntent) {
+      const channels: OpenableChannel[] = [];
+      const session = await open(intent, () => {
+        const channel = new OpenableChannel();
+        channels.push(channel);
+        return { ...inertPeer(), createDataChannel: () => channel };
+      });
+      const offers = () => session.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer").length;
+      return { ...session, channels, offers };
+    }
+
+    async function linkedHost() {
+      vi.useFakeTimers();
+      const h = await opened("create");
+      h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(0);
+      h.channels[0].open();
+      expect(h.offers()).toBe(1);
+      return h;
+    }
+
+    async function linkedGuest() {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[0].open();
+      return g;
+    }
+
+    it("has the host offer the seated guest a fresh connection a second later, and carries on once it opens", async () => {
+      const h = await linkedHost();
+      h.channels[0].drop();
+      expect(h.session.transport.status).toBe("waiting");
+
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0] - 1);
+      expect(h.offers()).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.offers()).toBe(2);
+
+      h.channels[1].open();
+      expect(h.session.transport.status).toBe("open");
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    it("backs off between offers, and after three says the room is lost, then stops", async () => {
+      const h = await linkedHost();
+      h.channels[0].drop();
+      for (const [i, delay] of REOFFER_DELAYS_MS.entries()) {
+        await vi.advanceTimersByTimeAsync(delay - 1);
+        expect(h.offers()).toBe(i + 1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(h.offers()).toBe(i + 2);
+        expect(errors(h.events)).toEqual([]);
+        // The fresh connection's channel gives up before it opens.
+        h.channels[i + 1].drop();
+      }
+      expect(errors(h.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1 + REOFFER_DELAYS_MS.length);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("counts afresh once a fresh connection has opened", async () => {
+      const h = await linkedHost();
+      h.channels[0].drop();
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      h.channels[1].open();
+      h.channels[1].drop();
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      expect(h.offers()).toBe(3);
+    });
+
+    it("never offers the old guest again once a newcomer has taken the seat", async () => {
+      const h = await linkedHost();
+      h.channels[0].drop();
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(0);
+      // The newcomer gets the ordinary offer, and nothing else follows.
+      expect(h.offers()).toBe(2);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(2);
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    it("never offers again after leaving", async () => {
+      const h = await linkedHost();
+      h.channels[0].drop();
+      h.session.close();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1);
+    });
+
+    /** Mid-match the link monitor decides, and a fresh connection must never replace the match's channel. */
+    it("never offers again once a start has gone out", async () => {
+      const h = await linkedHost();
+      expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      h.channels[0].drop();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1);
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    it("has the guest answer its host's fresh offer and carry on", async () => {
+      const g = await linkedGuest();
+      g.channels[0].drop();
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[1].open();
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(g.session.transport.status).toBe("open");
+      expect(errors(g.events)).toEqual([]);
+    });
+
+    it("has the guest say the room is lost when its host never offers again", async () => {
+      const g = await linkedGuest();
+      g.channels[0].drop();
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS - 1);
+      expect(errors(g.events)).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(errors(g.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+    });
+
+    it("has the guest wait without a word once its host has left the room, for whoever the room seats next", async () => {
+      const g = await linkedGuest();
+      g.channels[0].drop();
+      g.signalling.deliver({ t: "peer-left", peerId: "h1" });
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(errors(g.events)).toEqual([]);
+    });
+
+    it("has the guest hold its channel once the start has arrived", async () => {
+      const g = await linkedGuest();
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: CONFIG } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(g.channels).toHaveLength(1);
+      expect(g.session.transport.status).toBe("open");
+      g.channels[0].drop();
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(errors(g.events)).toEqual([]);
     });
   });
 

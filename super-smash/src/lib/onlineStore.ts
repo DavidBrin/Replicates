@@ -165,6 +165,10 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
       case "link":
         if (event.status === "open") {
           online().patch({ status: "connected", notice: null });
+        } else if (event.status === "negotiating" && online().status === "waiting") {
+          // A fresh connection to whoever the room seats: a newcomer, or the
+          // same player again after the channel was lost (session.ts).
+          online().patch({ status: "linking", notice: null });
         } else if (event.status === "failed") {
           fail("link-failed");
         } else if (event.status === "waiting" && online().status === "connected") {
