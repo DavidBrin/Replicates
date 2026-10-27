@@ -203,16 +203,21 @@ case the brief actually asked about.
 
 ## D10 — Packet loss is handled by redundancy, not retransmission
 
-**Decision.** Every input packet carries a window of the **last 10 frames** of input keyed
-by absolute frame number, over a channel configured `maxRetransmits: 0`.
+**Decision.** Every input packet carries **every frame of input the receiver has not yet
+acknowledged** (at most 128), keyed by absolute frame number, plus an `ack` of its own, over a
+channel configured `maxRetransmits: 0`. It began as a fixed window of the last 10 frames;
+[D54](#d54--david-smash-moves-to-cloudflare-and-gets-online-play) records why that was not
+enough.
 
 **Why.** A retransmitted input for frame N is worthless once the game is already predicting
 frame N+5 — it arrives too late to be anything but history. Sending a redundant window
 instead means a dropped packet heals itself 16ms later when the next one arrives carrying
-the same frames again. Prediction is only needed if ten consecutive packets are lost.
+the same frames again, and the ack means a frame keeps going out until it is known to have
+landed. Prediction is only needed while an outage lasts.
 
-**Consequence.** Packets are larger than the minimum, and irrelevant: ten frames of a
-bitfield is tens of bytes, against a 1200-byte fragmentation ceiling.
+**Consequence.** Packets are larger than the minimum, and irrelevant: a handful of frames of a
+bitfield is tens of bytes, and even the 128-frame ceiling is 272, against a 1200-byte
+fragmentation ceiling.
 
 ---
 
@@ -1444,3 +1449,72 @@ have loaded, and a Tailwind class there would be a name with nothing behind it.
 All three ship as the game's own **NO CONTEST** — what Ultimate calls a match that ends without a
 winner. A 404 and a crash are both the game stopping short, and the player already has a word for
 that.
+
+---
+
+## D54 — David-Smash moves to Cloudflare, and gets online play
+
+**Decision.** The product is called David-Smash wherever a player reads it; the directory and
+both external slugs keep `super-smash`. It is a Next static export served by one free
+Cloudflare Worker, `david-smash`, whose only dynamic parts are `GET /api/ice` (Cloudflare TURN
+credentials, STUN-only without a key) and `/ws/room/:code` (one SQLite-backed Durable Object per
+room, WebSocket Hibernation, two peers, no timers). A new transport, `adapters/doSignal.ts`,
+implements the existing `Transport` port over one negotiated, unordered, zero-retransmit
+DataChannel on stream 42; Trystero stays as an alternate. The Vercel copy is taken down.
+
+**Why.** Vercel Hobby cannot host the signalling (Functions WebSockets close at 300 s and are
+pinned to one instance), and Trystero's public Nostr relays come with no SLA and no TURN. One
+free Cloudflare account carries the static site, the rooms and TURN (spec §4, research §5). This
+replaces D9's signalling and its "no TURN" consequence; rollback over WebRTC and the LAN finding
+stand.
+
+**What the room is not.** It never runs the game: a 60 Hz loop in a Durable Object would keep it
+awake, and is the server-authoritative design this netcode exists to avoid. It relays an offer,
+an answer and some ICE candidates, then idles until somebody leaves.
+
+**Two details that are easy to get wrong.**
+- *The data channel decides whether the peer is there, not the room socket.* Every Worker deploy
+  restarts every Durable Object and drops its sockets; a match in progress must not end because
+  of a deploy. `peer-left` from the room only matters before the channel opens.
+- *A backgrounded tab is not a dead peer.* Browsers stop `requestAnimationFrame` in background
+  tabs, so its packets stop. The tab says `away` through the room first, and the other side
+  waits 60 s instead of 10.
+
+**Settled while building it.**
+- *A match ends when the fully confirmed state has an outcome.* `RollbackSession.confirmedState()`
+  is the state every input of which is known, and the outcome reported is its outcome. The first
+  design asked whether the frame just run was confirmed, which never passes on the peer running
+  ahead — a frame or more past confirmation on every tick — so its match never ended, and the
+  other machine leaving read as a lost connection.
+- *The room outlives the result by 1.5 s* (`ONLINE_RESULT_LINGER_MS`), and the runner keeps
+  resending unacknowledged inputs meanwhile, so the peer that is behind can still confirm the
+  frames that end its match.
+- *Input windows are acknowledged.* Every input packet carries an `ack`, the highest contiguous
+  frame the sender holds of the receiver's input, and a sender sends every frame not yet
+  acknowledged, up to `MAX_INPUT_WINDOW_FRAMES`. The fixed ten-frame window of D10 lost frames
+  for good when a Wi-Fi outage outlasted it, and both peers stalled at the prediction cap while
+  heartbeats kept flowing. `PROTOCOL_VERSION` is 2, so both players must reload after a deploy. A
+  10 s backstop declares a match lost when confirmed frames stop advancing.
+- *A room-socket drop is silent while the channel is open.* Afterwards, a lobby send or the
+  channel closing yields `room-lost`. A drop before the channel opens is `room-lost` at once, or
+  after a 15 s grace if a negotiation is under way.
+- *The lobby tells a notice from an error.* A peer leaving is a non-sticky notice, so re-pairing
+  works; real errors stay until the player leaves.
+
+**Gamepads** are wired into every match. `InputFrame` stays a bitfield (SPEC §3) with one new
+bit, `Btn.Soft`, for a partial stick tilt: walk instead of dash, tilt instead of smash, a quarter
+of the DI. The quarter is `UNVERIFIED:` — the bit carries one level of magnitude where the real
+game reads the analog value. Pads map to ports by connection order and are frozen for the
+duration of a match; a spare connected pad takes a freed port.
+
+**Known limits.** No online rematch: after a match both players go back through the lobby, and a
+future in-room rematch must add a match id to the packet header, because the ack latch trusts any
+packet on the transport. Online KO/fall/SD credit is counted from each frame's events as first
+shown, so a rollback that changes a hit after it was drawn can misattribute one; the placings come
+from the confirmed final state and are always right. After a room drop mid-match `away` cannot
+reach the peer, so a backgrounded tab is declared lost after 10 s instead of 60. Without a TURN
+key the Worker serves STUN only, which is the interim state if creating the key turns out to need
+a card.
+
+**Names.** The spec's `DurableObjectSignalling` is `adapters/doSignal.ts`, and the results
+heading for a lost match is "Connection Lost".

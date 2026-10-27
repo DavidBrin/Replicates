@@ -169,9 +169,11 @@ then seven parallel build slices.
 
 ---
 
-## [super-smash](super-smash) — Super Smash Bros. Ultimate, on a laptop keyboard
+## [super-smash](super-smash) — David-Smash: Super Smash Bros. Ultimate, in the browser, online
 
 > **eight fighters, one keyboard, sixty frames a second**
+
+**Live: [david-smash.leaders-game.workers.dev](https://david-smash.leaders-game.workers.dev)** · two players online by room code, keyboard or gamepad.
 
 A rebuild of [Super Smash Bros. Ultimate](https://www.smashbros.com)'s versus mode — the
 brawl, which is the mode that has carried across every game in the series since 1999 and is
@@ -188,9 +190,10 @@ there is no legitimate way to obtain Nintendo's art, and because every open-sour
 clone that tried to ship real sprites stalled on making them. Every sound is synthesised
 from oscillators. Nothing in the repository is an asset.
 
-It also does one thing the original does not: **rollback netcode**. Ultimate is delay-based.
-And the shared-WiFi case needed no code at all — ICE gathers host candidates and prefers the
-LAN route on its own, so two laptops in one room get a direct sub-10ms path for free.
+It also does one thing the original does not: **rollback netcode**, online. Ultimate is
+delay-based. Two browsers meet through a room code in a Cloudflare Durable Object, then play peer
+to peer over WebRTC, with Cloudflare TURN when no direct path exists — and on shared WiFi, ICE
+prefers the LAN route on its own, so two laptops in one room get a sub-10ms path for free.
 
 Next.js · a pure fixed-point simulation with a test that fails the build on `Math.random` ·
 1,285 unit and property tests · 7 e2e · rollback verified against a ground-truth run at six

@@ -1,4 +1,4 @@
-# Super Smash
+# David-Smash
 
 > **eight fighters, one keyboard, sixty frames a second**
 
@@ -37,7 +37,8 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/render/poses`](src/render/poses) | One file per animation, each with the frame budget it was drawn to |
 | [`src/render/chars`](src/render/chars) | One directory per fighter: their rig, their own clips, what their moves paint |
 | [`docs/character-art.md`](docs/character-art.md) | How to make a character look like themselves — the four layers and the gotchas |
-| [`src/net`](src/net) | Rollback session, wire format, and three transports |
+| [`src/net`](src/net) | Rollback session, wire format, four transports, and the online lobby |
+| [`worker`](worker) | The Cloudflare Worker: static assets, TURN credentials, and a Durable Object per room |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
 | [`src/input`](src/input) | Three control schemes and the latched keyboard reader |
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
@@ -57,17 +58,23 @@ pnpm run dev
 Open <http://localhost:3000>. Nothing to configure — no keys, no database, no account. The
 whole game runs in the browser.
 
+Online play needs the Worker as well: `pnpm preview` builds the static export and serves it
+with the Worker on <http://localhost:8787>. Open it in two browsers, then Online → Create room in
+one and Join room in the other.
+
 | Command | What it does |
 |---|---|
 | `pnpm run dev` | Development server on :3000 |
-| `pnpm run build` | Production build |
-| `pnpm start` | Serve the production build |
+| `pnpm run build` | Static export into `out/` |
+| `pnpm preview` | Build, then serve `out/` with the Worker (rooms, TURN) on :8787 |
 | `pnpm test` | Unit and property tests (vitest) |
 | `pnpm run test:watch` | The same, watching |
 | `pnpm run test:e2e` | Playwright end-to-end |
 | `pnpm run test:e2e:ui` | The same, with the inspector |
-| `pnpm run typecheck` | `tsc --noEmit` |
+| `pnpm run test:e2e:online` | Two browsers play an online match against `wrangler dev` |
+| `pnpm run typecheck` | `tsc --noEmit` for the app and for the Worker |
 | `pnpm run lint` | ESLint |
+| `pnpm run deploy` | Build and `wrangler deploy` (David's Cloudflare login) |
 
 Screenshots are captured, not taken by hand:
 
@@ -175,8 +182,13 @@ mashing works exactly as it does in the real game.
 rebinds any action in it; the match reads the bindings the player actually chose
 ([D33](DECISIONS.md#d33--a-rebinding-ui-the-match-never-read)).
 
-Walking is not reachable, and that is correct rather than missing — a key is always a *full*
-deflection, and a fully-deflected stick dashes. Micro-spacing comes from tapping.
+On a keyboard, walking is not reachable, and that is correct rather than missing — a key is
+always a *full* deflection, and a fully-deflected stick dashes. Micro-spacing comes from tapping.
+
+**A gamepad works too**, in local and online matches (W3C standard mapping: A attack, B special,
+X/Y jump, LB/LT/RT shield, RB grab; pad 1 is the first human, pad 2 the second). The analog
+stick restores what keys cannot: a partial tilt walks, makes a tilt instead of a smash, and DIs a
+quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 
 ---
 
@@ -213,10 +225,18 @@ replay eight frames of explosions ([D4](DECISIONS.md#d4--cosmetic-state-lives-ou
 
 ## Multiplayer
 
-Rollback netcode, over WebRTC, with **2 frames of input delay** and an 8-frame prediction
-cap. Your own input is never delayed by the network; the opponent's is predicted and
-corrected. Smash Ultimate itself is delay-based, so this is the one axis on which the
-replica is deliberately better than the original.
+Rollback netcode, over WebRTC, with **2 frames of input delay** (adapting between 1 and 8 from
+the measured round trip) and an 8-frame prediction cap. Your own input is never delayed by the
+network; the opponent's is predicted and corrected. Smash Ultimate itself is delay-based, so
+this is the one axis on which the replica is deliberately better than the original.
+
+**Finding each other.** Online → Create room gives a four-letter code (no I or O); the other
+player types it into Join room. The two browsers meet in a Durable Object on this project's own
+Cloudflare Worker, which relays one WebRTC offer, one answer and their ICE candidates — and then
+nothing: inputs go peer to peer over one unordered, unreliable DataChannel. The host picks the
+stage and starts; ping, input delay and rollbacks show in the corner. Where no direct path
+exists, Cloudflare TURN relays the same packets; without a TURN key the Worker hands out STUN
+only. The Trystero (Nostr) adapter is still in `src/net/adapters/webrtc.ts`, selectable in code.
 
 **Shared WiFi needs no code.** ICE gathers host candidates for every local interface, and
 when two peers share a subnet the connectivity check succeeds on those alone — no STUN, no
@@ -225,9 +245,10 @@ signalling path is used for every match, and ICE's own candidate prioritisation 
 LAN route. Two laptops in the same room get a direct sub-10ms path for free
 ([D9](DECISIONS.md#d9--rollback-over-webrtc-with-no-lan-special-case)).
 
-Packet loss is handled by **redundancy rather than retransmission** — every packet carries a
-window of the last 10 frames of input, so a dropped one heals itself 16ms later. A resent
-input for frame N is worthless once the game is predicting frame N+5.
+Packet loss is handled by **redundancy rather than retransmission** — every packet carries
+each frame of input the other side has not yet acknowledged, so a dropped one heals itself 16ms
+later, and a frame keeps going out until an ack says it landed. A resent input for frame N is
+worthless once the game is predicting frame N+5.
 
 Measured against a ground-truth single-machine run, not merely against the peer:
 
@@ -244,22 +265,30 @@ Measured against a ground-truth single-machine run, not merely against the peer:
 
 ## Deploying
 
-Vercel detects this with zero configuration — point the project root at `super-smash/`.
-Every route prerenders as static content; there is no backend, no database and no
-environment variable you have to set.
+David-Smash is a static export served by one Cloudflare Worker on the free plan:
+**<https://david-smash.leaders-game.workers.dev>**.
 
-There are no environment variables. Trystero introduces the two peers over the
-Nostr network (its default; only the handshake travels that way), rooms are
-namespaced by the `appId` constant in `src/net/adapters/webrtc.ts`, and the
-input delay starts at 2 frames and adapts between 1 and 8 from the measured
-round trip (`src/net/rollback.ts`).
+| Piece | What it is |
+|---|---|
+| `out/` | `next build` with `output: "export"` — every route is a file |
+| `wrangler.jsonc` | Worker `david-smash`: serves `out/`, runs first only for `/api/*` and `/ws/*` |
+| `GET /api/ice` | Mints 4-hour Cloudflare TURN credentials; STUN-only without the two secrets |
+| `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, 2 peers, no timers |
+
+`pnpm run deploy` builds and runs `wrangler deploy`; it needs `wrangler login` on David's
+account, and the TURN secrets are set once with `wrangler secret put` (see `.env.example`). A
+deploy restarts every room, which drops lobby sockets but not matches in progress — those are
+peer to peer.
 
 ---
 
 ## Known gaps
 
-1. **No TURN server.** On the open internet, some NAT combinations will fail to connect
-   peer-to-peer. Local network play — the case the design targets — is unaffected.
+1. **Online is two players, one match at a time.** A room holds two peers; four-player online,
+   spectating and an online rematch are not built — after a match both players go back through
+   the lobby. KO/fall/SD credit on an online results screen can be off after a rollback that
+   changed a hit; the placings are always right
+   ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 2. **Fighters have no walk initial velocity.** Ultimate gives each fighter a small starting
    speed (Mario's is about 0.5) so the first walk frame is a step rather than a ramp from
    zero. `FighterAttributes` carries only a top walk speed, so a one-frame tap travels
@@ -285,7 +314,7 @@ round trip (`src/net/rollback.ts`).
 
 A study, not a product, and not affiliated with Nintendo in any way.
 
-**Super Smash** is a rebuild of Super Smash Bros. Ultimate's versus mode as an exercise in
+**David-Smash** is a rebuild of Super Smash Bros. Ultimate's versus mode as an exercise in
 agentic software development. Every character, sound and image in this project is generated
 from code: no Nintendo sprites, models, music or logos are used, reproduced or distributed
 anywhere in this repository. Super Smash Bros. and all related characters and trademarks are
