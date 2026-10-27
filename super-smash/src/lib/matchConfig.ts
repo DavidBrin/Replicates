@@ -651,6 +651,16 @@ export function formatTime(frames: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+/**
+ * A set of rules in one line, as the results screen states them and the
+ * guest's character select shows the host's: "3-stock match · 1v1 damage
+ * 1.2× · Smash Ball off". One wording, so the two can never disagree.
+ */
+export function rulesLabel(rules: MatchRules): string {
+  const length = rules.mode === "stock" ? `${rules.stocks}-stock` : "Timed";
+  return `${length} match${rules.oneOnOne ? " · 1v1 damage 1.2×" : ""}${rules.smashBall ? " · Smash Ball on" : " · Smash Ball off"}`;
+}
+
 export interface PlayerResultStat {
   readonly port: number;
   readonly kos: number;
@@ -670,6 +680,12 @@ export interface MatchResult {
    * results screen would relabel a match that has already been played.
    */
   readonly fighters: Readonly<Record<number, string>>;
+  /**
+   * The rules the match was played under. Online that is the host's set,
+   * which the guest's own config never holds; absent, the screen falls back
+   * to this machine's rules.
+   */
+  readonly rules?: MatchRules;
   /** Played online: no local rematch, and quitting leaves the room. */
   readonly online?: boolean;
 }

@@ -95,6 +95,24 @@ describe("Results after an online match", () => {
     expect(screen.queryByRole("button", { name: /rematch/i })).toBeNull();
   });
 
+  /** The guest's own config still holds whatever it last set locally; the match ran on the host's. */
+  it("states the rules the match was played under, not this machine's own", async () => {
+    useMatchConfig.getState().setMode("stock");
+    useMatchConfig.getState().setStocks(3);
+    useMatchConfig.getState().setSmashBall(true);
+    const hosts = { mode: "time", stocks: 3, timeLimit: 7200, smashBall: false, oneOnOne: true } as const;
+    useMatchConfig.getState().setResult({ ...RESULT, rules: hosts, online: true });
+    await renderResults();
+    expect(screen.getByText(/match ·/)).toHaveTextContent("Timed match · 1v1 damage 1.2× · Smash Ball off");
+  });
+
+  it("falls back to this machine's rules for a result that carries none", async () => {
+    useMatchConfig.getState().setStocks(2);
+    useMatchConfig.getState().setResult(RESULT);
+    await renderResults();
+    expect(screen.getByText(/match ·/)).toHaveTextContent(/^2-stock match/);
+  });
+
   it("offers no local rematch or fighter change after an online match", async () => {
     useMatchConfig.getState().setResult({ ...RESULT, online: true });
     await renderResults();

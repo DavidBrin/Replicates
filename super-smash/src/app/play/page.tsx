@@ -221,6 +221,7 @@ function mountMatch(args: MountArgs): Mounted {
           placings: outcome.placings,
           stats,
           fighters: Object.fromEntries(slots.map((s, i) => [ports[i], s.selection.defId])),
+          rules: args.rules,
           ...(args.net ? { online: true } : {}),
         });
       },
@@ -423,6 +424,15 @@ export default function PlayPage() {
   useEffect(() => {
     if (!online) return;
     const { config, session, localPort } = online;
+    // The room this page read while rendering is gone already: browser Back
+    // from the results within their grace, whose unmount leaves the room in
+    // this same commit. A match built now would run on a closed transport,
+    // frozen until the link monitor called it lost, so start again instead.
+    if (getActiveSession() !== session) {
+      leaveOnline();
+      router.replace("/online");
+      return;
+    }
     // React's development remount: the unmount just undone withdrew the start
     // and scheduled a leave, but this is the same match, so neither stands.
     if (pendingLeave !== null) {
@@ -504,6 +514,7 @@ export default function PlayPage() {
               placings: [],
               stats: [],
               fighters: { 0: config.fighters[0], 1: config.fighters[1] },
+              rules: config.rules,
               online: true,
             },
             0,

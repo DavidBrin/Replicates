@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 import { routerMock } from "../../../vitest.setup";
 import { AudioEngine } from "@/audio";
 import { CharacterSelect } from "@/components/menu/CharacterSelect";
+import { Results } from "@/components/menu/Results";
 import { resolveMatchStage } from "@/game/bootstrap";
 import type { LinkMonitorOptions } from "@/game/linkMonitor";
 import type { MatchRunnerOptions } from "@/game/matchRunner";
@@ -160,6 +161,8 @@ describe("the play page, online", () => {
       kind: "stockOut",
       placings: [1, 0],
       fighters: { 0: "mario", 1: "fox" },
+      // The host's rules, which this machine's own config never held.
+      rules: CONFIG.rules,
       online: true,
     });
     expect(only(mocks.monitors).stop).toHaveBeenCalled();
@@ -191,6 +194,7 @@ describe("the play page, online", () => {
       placings: [],
       stats: [],
       fighters: { 0: "mario", 1: "fox" },
+      rules: CONFIG.rules,
       online: true,
     });
     act(() => vi.advanceTimersByTime(0));
@@ -308,6 +312,33 @@ describe("the play page, leaving online", () => {
     expect(getActiveSession()).toBeNull();
   });
 
+  /**
+   * Browser Back from the results during their grace. This page reads the
+   * room while it renders, and the results' unmount leaves it in the same
+   * commit, after that read: building the match anyway would play on a closed
+   * transport, frozen for ten seconds before calling the connection lost.
+   */
+  it("goes back to the lobby, building no match, when Back from the results lands here as they leave the room", async () => {
+    const { fake } = goOnline("guest");
+    useMatchConfig.getState().setResult({ kind: "stockOut", placings: [1, 0], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true });
+    resetRosterCache();
+    function Screen({ at }: { at: "play" | "results" }) {
+      return at === "play" ? <PlayPage /> : <Results />;
+    }
+    const { rerender } = render(<Screen at="results" />);
+    await act(async () => {});
+    expect(getActiveSession()).toBe(fake.session);
+
+    // One commit: the results unmount and the match page mounts, as a browser Back does.
+    rerender(<Screen at="play" />);
+    await act(async () => {});
+
+    expect(mocks.runners).toEqual([]);
+    expect(routerMock.replace).toHaveBeenCalledWith("/online");
+    expect(getActiveSession()).toBeNull();
+    expect(useMatchConfig.getState().online).toBe(false);
+  });
+
   it("stops watching the link and drops its e2e handle on unmount", () => {
     goOnline("host");
     const { unmount } = render(<PlayPage />);
@@ -417,6 +448,7 @@ describe("the play page, local", () => {
     act(() => only(mocks.runners).options.onEnd?.({ kind: "timeUp", placings: [0, 1] }));
     const result = useMatchConfig.getState().result;
     expect(result?.kind).toBe("timeUp");
+    expect(result?.rules).toEqual(useMatchConfig.getState().rules);
     expect(result).not.toHaveProperty("online");
     act(() => vi.advanceTimersByTime(2400));
     expect(routerMock.push).toHaveBeenCalledWith("/results");

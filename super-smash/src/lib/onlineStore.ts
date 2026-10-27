@@ -9,6 +9,7 @@
 
 import { create } from "zustand";
 
+import type { MatchRules } from "@/engine/types";
 import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
@@ -53,7 +54,8 @@ export interface OnlineFields {
    * and a rejoin with the same code is the common case.
    */
   notice: string | null;
-  hostStage: { readonly stageId: string; readonly form: StageForm } | null;
+  /** The stage the host chose, on the guest, with the host's rules when they came along. */
+  hostStage: { readonly stageId: string; readonly form: StageForm; readonly rules?: MatchRules } | null;
   /** The host's start config; set on both peers when the match begins. */
   config: OnlineMatchConfig | null;
   remoteAway: boolean;
@@ -206,11 +208,14 @@ function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
       match.setCostume(remote, message.costume);
       return;
     }
-    case "stage":
+    case "stage": {
       match.setStage(message.stageId);
       match.setStageForm(message.form);
-      useOnlineStore.getState().patch({ hostStage: { stageId: message.stageId, form: message.form } });
+      // The rules are only shown: the match is built from the start's.
+      const { stageId, form, rules } = message;
+      useOnlineStore.getState().patch({ hostStage: rules ? { stageId, form, rules } : { stageId, form } });
       return;
+    }
     case "start":
       // Only the guest follows a start; the host built it.
       if (session.role === "guest") useOnlineStore.getState().patch({ config: message.config });
@@ -224,6 +229,12 @@ function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
 /** True when the message went to the room; false with no session, or one that refused it (see `OnlineSessionLike.sendLobby`). */
 export function sendLobby(message: LobbyMessage): boolean {
   return getActiveSession()?.sendLobby(message) ?? false;
+}
+
+/** The host's stage as the match config now holds it, with the rules the host will start, for the guest to see. */
+export function sendHostStage(): boolean {
+  const { stageId, stageForm, rules } = useMatchConfig.getState();
+  return sendLobby({ kind: "stage", stageId, form: stageForm, rules });
 }
 
 /**

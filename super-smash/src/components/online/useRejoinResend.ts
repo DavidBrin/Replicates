@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { useMatchConfig } from "@/lib/matchConfig";
-import { sendLobby, useOnlineStore } from "@/lib/onlineStore";
+import { sendHostStage, sendLobby, useOnlineStore } from "@/lib/onlineStore";
 import { ROLE_PORT } from "@/net/signalProtocol";
 
 export interface RejoinResendOptions {
@@ -34,7 +34,7 @@ export function useRejoinResend({ stage }: RejoinResendOptions): void {
       const match = useMatchConfig.getState();
       const own = match.players[port];
       sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? port });
-      if (stage && role === "host") sendLobby({ kind: "stage", stageId: match.stageId, form: match.stageForm });
+      if (stage && role === "host") sendHostStage();
     });
   }, [role, stage]);
 }

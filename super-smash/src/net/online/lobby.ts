@@ -43,7 +43,8 @@ export interface OnlineMatchConfig {
 
 export type LobbyMessage =
   | { readonly kind: "pick"; readonly fighterId: string | null; readonly costume: number }
-  | { readonly kind: "stage"; readonly stageId: string; readonly form: StageForm }
+  /** `rules` are the host's, for the guest to see before it starts; the start carries the ones played. */
+  | { readonly kind: "stage"; readonly stageId: string; readonly form: StageForm; readonly rules?: MatchRules }
   | { readonly kind: "start"; readonly config: OnlineMatchConfig }
   | { readonly kind: "away"; readonly away: boolean };
 
@@ -67,7 +68,11 @@ export function parseLobbyMessage(payload: unknown): LobbyMessage | null {
       const stageId = payload.stageId;
       const form = payload.form;
       // The host may leave the stage on Random until it starts the match.
-      return (stageId === RANDOM_STAGE || isStageId(stageId)) && isStageForm(form) ? { kind: "stage", stageId, form } : null;
+      if (!(stageId === RANDOM_STAGE || isStageId(stageId)) || !isStageForm(form)) return null;
+      // Only shown, never played, so rules this side cannot read are left
+      // out rather than costing the stage they came with.
+      const rules = parseRules(payload.rules);
+      return rules ? { kind: "stage", stageId, form, rules } : { kind: "stage", stageId, form };
     }
     case "start": {
       const config = parseConfig(payload.config);

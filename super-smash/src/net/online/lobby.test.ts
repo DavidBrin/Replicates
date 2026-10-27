@@ -29,6 +29,25 @@ describe("lobby messages", () => {
     });
   });
 
+  it("reads the host's rules along with its stage, for the guest to see", () => {
+    expect(parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "stage", stageId: "smashville", form: "normal", rules: CONFIG.rules })))).toEqual({
+      kind: "stage",
+      stageId: "smashville",
+      form: "normal",
+      rules: CONFIG.rules,
+    });
+  });
+
+  /** Only shown, never played (the start carries the rules the match runs on), so they cannot cost the stage. */
+  it("reads a stage without rules, or with rules it cannot read, as a stage without them", () => {
+    const plain = { kind: "stage", stageId: "smashville", form: "normal" };
+    for (const rules of [undefined, null, "3 stocks", { ...CONFIG.rules, stocks: 0 }, { ...CONFIG.rules, mode: "coins" }, []]) {
+      const parsed = parseLobbyMessage({ ...plain, rules });
+      expect(parsed).toEqual(plain);
+      expect(Object.keys(parsed ?? {}).sort()).toEqual(["form", "kind", "stageId"]);
+    }
+  });
+
   it("reads Random as the host's stage, which the host resolves at start", () => {
     expect(parseLobbyMessage({ kind: "stage", stageId: "random", form: "normal" })).toEqual({
       kind: "stage",

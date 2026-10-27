@@ -22,6 +22,7 @@ import {
   findStage,
   portColour,
   portTag,
+  rulesLabel,
   useMatchConfig,
   useRoster,
   type MenuFighter,
@@ -215,7 +216,9 @@ export function CharacterSelect() {
   const bannerTag =
     onlineRole === "guest"
       ? hostStage
-        ? `Stage: ${findStage(roster, hostStage.stageId)?.name ?? "Random"}`
+        ? [`Stage: ${findStage(roster, hostStage.stageId)?.name ?? "Random"}`, hostStage.rules && rulesLabel(hostStage.rules)]
+            .filter(Boolean)
+            .join(" · ")
         : "The host is picking the stage"
       : onlineRole === "host"
         ? "Online"

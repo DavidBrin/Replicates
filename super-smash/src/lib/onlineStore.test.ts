@@ -66,6 +66,17 @@ describe("binding a session to the stores", () => {
     expect(useMatchConfig.getState()).toMatchObject({ stageId: "smashville", stageForm: "omega" });
   });
 
+  it("shows the guest the host's rules with its stage, without taking them as its own", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "guest" });
+    const own = useMatchConfig.getState().rules;
+    const hosts = { ...CONFIG.rules, mode: "time" } as const;
+    emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega", rules: hosts } });
+    expect(useOnlineStore.getState().hostStage).toEqual({ stageId: "smashville", form: "omega", rules: hosts });
+    expect(useMatchConfig.getState().rules).toBe(own);
+  });
+
   it("takes the start config from the host, and only on the guest", () => {
     const guest = fakeSession();
     bindSession(guest.session);

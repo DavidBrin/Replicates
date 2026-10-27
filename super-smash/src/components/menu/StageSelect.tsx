@@ -19,7 +19,7 @@ import {
   type MenuStage,
   type StageForm,
 } from "@/lib/matchConfig";
-import { leaveOnline, sendLobby, useOnlineStore } from "@/lib/onlineStore";
+import { leaveOnline, sendHostStage, useOnlineStore } from "@/lib/onlineStore";
 
 const COLUMNS = 4;
 
@@ -195,9 +195,9 @@ export function StageSelect() {
             onClick={() => {
               if (!canContinue) return;
               // The guest waits on character select; this is how it learns the
-              // stage. Not sent means the room is gone: the store has the error
-              // to show, and the host stays here with it.
-              if (onlineRole === "host" && !sendLobby({ kind: "stage", stageId, form: stageForm })) return;
+              // stage and the rules. Not sent means the room is gone: the store
+              // has the error to show, and the host stays here with it.
+              if (onlineRole === "host" && !sendHostStage()) return;
               router.push("/fighters");
             }}
             disabled={!canContinue}

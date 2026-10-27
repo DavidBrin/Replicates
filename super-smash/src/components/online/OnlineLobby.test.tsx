@@ -370,6 +370,23 @@ describe("OnlineLobby", () => {
       expect(screen.getByText(opened[0].code.split("").join(" "))).toBeInTheDocument();
     });
 
+    /**
+     * A double-click selects the whole block it lands in. With the spelling in
+     * that block, the copy is "QRSTQ R S T", and pasted into Join it is no code.
+     */
+    it("keeps the spelling out of the block that shows the code, so copying it copies just the code", async () => {
+      const { opened } = harness();
+      await create();
+      act(() => opened[0].emit({ type: "joined", role: "host" }));
+
+      const code = opened[0].code;
+      const shown = screen.getByTestId("room-code").closest("p");
+      const spelled = screen.getByText(code.split("").join(" "));
+      expect(shown?.textContent).toBe(code);
+      expect(shown).not.toContainElement(spelled);
+      expect(screen.getByTestId("room-code-panel")).toContainElement(spelled);
+    });
+
     it("puts the cursor back in the box, marked invalid and tied to the reason, after a code that will not do", async () => {
       const { openSession } = harness();
       await join("abod");
@@ -381,18 +398,34 @@ describe("OnlineLobby", () => {
       expect(openSession).not.toHaveBeenCalled();
     });
 
-    it("does the same when the room turns the code away", async () => {
+    it.each([
+      ["full", "Room ABCD already has two players."],
+      ["not-found", "There is no room ABCD. Check the code with the host."],
+    ] as const)("does the same when the room turns the code away as %s", async (reason, said) => {
       const { opened } = harness();
       await join("ABCD");
-      act(() => opened[0].emit({ type: "error", reason: "full" }));
+      act(() => opened[0].emit({ type: "error", reason }));
 
       const input = screen.getByLabelText("Room code");
       expect(input).toHaveFocus();
       expect(input).toBeInvalid();
-      expect(input).toHaveAccessibleDescription("Room ABCD already has two players.");
+      expect(input).toHaveAccessibleDescription(said);
     });
 
-    it("does not call the code wrong when a room it made could not open", async () => {
+    it("does not call a code wrong when the room could not be reached, and puts the player back on Join", async () => {
+      const { opened } = harness();
+      await join("ABCD");
+      act(() => opened[0].emit({ type: "error", reason: "unreachable" }));
+
+      const input = screen.getByLabelText("Room code");
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(input).not.toHaveFocus();
+      expect(input).not.toBeInvalid();
+      expect(input).not.toHaveAccessibleDescription();
+      expect(screen.getByRole("button", { name: /join room/i })).toHaveFocus();
+    });
+
+    it("does not call the code wrong when a room it made could not open, and puts the player back on Create", async () => {
       const { opened } = harness();
       await create();
       act(() => opened[0].emit({ type: "error", reason: "unreachable" }));
@@ -401,6 +434,7 @@ describe("OnlineLobby", () => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
       expect(input).not.toHaveFocus();
       expect(input).not.toBeInvalid();
+      expect(screen.getByRole("button", { name: /create room/i })).toHaveFocus();
     });
   });
 

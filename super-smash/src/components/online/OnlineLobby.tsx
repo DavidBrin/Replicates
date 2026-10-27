@@ -45,6 +45,8 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
   const errorId = useId();
   const codePanel = useRef<HTMLDivElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
+  const createButton = useRef<HTMLButtonElement>(null);
+  const joinButton = useRef<HTMLButtonElement>(null);
   /**
    * Which `connect` is the live one. Opening a session awaits the network, so
    * a player can leave (back button, browser back) before it answers; the
@@ -126,8 +128,10 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
   // A taken code is only ever shown once the quiet retries have run out.
   const storeMessage = tried === null ? null : errorReason === "taken" ? NO_FREE_CODE : storeError;
   const message = formError ?? storeMessage;
+  /** The room turned the code itself away: full, or no such room. Any other failure is not the code's fault. */
+  const codeRefused = tried === "join" && (errorReason === "full" || errorReason === "not-found");
   /** The code the player typed is what is wrong, as opposed to a room that would not open. */
-  const codeInvalid = formError !== null || (tried === "join" && storeError !== null);
+  const codeInvalid = formError !== null || codeRefused;
 
   useEffect(() => {
     if (tried !== null && status === "connected" && role !== null) {
@@ -141,10 +145,14 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
     if (showCode) codePanel.current?.focus();
   }, [showCode]);
 
-  // A code that did not work: back to the box, so it can be fixed.
+  // A failed attempt puts the player back where they can try again: in the
+  // box when the code is what did not work, so it can be fixed; otherwise on
+  // the button they pressed, which was hidden while it ran.
   useEffect(() => {
-    if (tried === "join" && !busy && storeError !== null) codeInput.current?.focus();
-  }, [busy, storeError, tried]);
+    if (tried === null || busy || storeError === null) return;
+    if (codeRefused) codeInput.current?.focus();
+    else (tried === "join" ? joinButton : createButton).current?.focus();
+  }, [busy, codeRefused, storeError, tried]);
 
   return (
     <main className="flex min-h-dvh flex-col bg-[#101215]">
@@ -165,13 +173,13 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
           <SkewPanel className="border-[3px] border-panel-ink bg-panel-bone" innerClassName="px-8 py-6 text-panel-ink">
             <div ref={codePanel} tabIndex={-1} data-testid="room-code-panel" className="outline-none">
               <p className="text-sm font-bold">Your room code</p>
-              {/* Read as a word, "QRST" is nonsense: a screen reader gets the letters. */}
-              <p className="font-display text-6xl tracking-[0.3em]">
-                <span data-testid="room-code" aria-hidden="true">
-                  {roomCode}
-                </span>
-                <span className="sr-only">{spelledOut(roomCode)}</span>
+              {/* Read as a word, "QRST" is nonsense: a screen reader gets the
+                  letters. From a block of their own, so that a double-click on
+                  the code selects the four letters and nothing else. */}
+              <p data-testid="room-code" aria-hidden="true" className="font-display text-6xl tracking-[0.3em]">
+                {roomCode}
               </p>
+              <p className="sr-only">{spelledOut(roomCode)}</p>
             </div>
           </SkewPanel>
         ) : null}
@@ -179,6 +187,7 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
         {!busy ? (
           <>
             <SkewButton
+              ref={createButton}
               onClick={() => {
                 setFormError(null);
                 setTried("create");
@@ -205,6 +214,7 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
                 />
               </label>
               <SkewButton
+                ref={joinButton}
                 type="submit"
                 className="border-[3px] border-panel-ink bg-panel-bone px-6 py-3 text-panel-ink transition-transform hover:-translate-y-1"
                 innerClassName="font-display text-lg tracking-[0.14em] uppercase"

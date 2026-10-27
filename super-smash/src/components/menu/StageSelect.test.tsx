@@ -115,11 +115,13 @@ describe("StageSelect, hosting online", () => {
     act(() => leaveOnline());
   });
 
-  it("tells the guest the stage on the way to fighters", async () => {
+  it("tells the guest the stage, and the rules it will play, on the way to fighters", async () => {
     const { sent } = host();
+    useMatchConfig.getState().setMode("time");
     await renderStages();
     fireEvent.click(chooseFighters());
-    expect(sent).toEqual([{ kind: "stage", stageId: "battlefield", form: "normal" }]);
+    expect(sent).toEqual([{ kind: "stage", stageId: "battlefield", form: "normal", rules: useMatchConfig.getState().rules }]);
+    expect(useMatchConfig.getState().rules.mode).toBe("time");
     expect(routerMock.push).toHaveBeenCalledWith("/fighters");
   });
 

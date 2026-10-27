@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ComponentPropsWithRef, CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -62,7 +62,7 @@ export function SkewButton({
   children,
   type = "button",
   ...rest
-}: ShearedProps & ComponentPropsWithoutRef<"button">) {
+}: ShearedProps & ComponentPropsWithRef<"button">) {
   return (
     <button
       type={type}

@@ -45,13 +45,13 @@ describe("useRejoinResend", () => {
     expect(sent).toEqual([]);
   });
 
-  it("has the host repeat its pick and its stage when the channel opens again", () => {
+  it("has the host repeat its pick and its stage, with its rules, when the channel opens again", () => {
     const { sent } = seat("host");
     renderHook(() => useRejoinResend({ stage: true }));
     rejoin();
     expect(sent).toEqual([
       { kind: "pick", fighterId: "mario", costume: 0 },
-      { kind: "stage", stageId: "smashville", form: "omega" },
+      { kind: "stage", stageId: "smashville", form: "omega", rules: useMatchConfig.getState().rules },
     ]);
   });
 

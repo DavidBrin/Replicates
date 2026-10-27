@@ -11,6 +11,7 @@ import {
   findFighter,
   portColour,
   portTag,
+  rulesLabel,
   useMatchConfig,
   useRoster,
   type MatchResult,
@@ -185,11 +186,8 @@ export function Results() {
           })}
         </ol>
 
-        <p className="mt-6 text-center text-xs text-white/40">
-          {rules.mode === "stock" ? `${rules.stocks}-stock` : "Timed"} match
-          {rules.oneOnOne ? " · 1v1 damage 1.2×" : ""}
-          {rules.smashBall ? " · Smash Ball on" : " · Smash Ball off"}
-        </p>
+        {/* What was played, which online is the host's rules rather than this machine's. */}
+        <p className="mt-6 text-center text-xs text-white/40">{rulesLabel(result.rules ?? rules)}</p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
           {online ? null : (

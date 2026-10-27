@@ -179,6 +179,14 @@ describe("CharacterSelect, online", () => {
     expect(screen.getByText("Stage: Smashville")).toBeInTheDocument();
   });
 
+  it("shows the guest the host's rules beside its stage, in the words the results use", async () => {
+    const fake = goOnline("guest");
+    await renderSelect();
+    const rules = { mode: "stock", stocks: 2, timeLimit: 9000, smashBall: false, oneOnOne: true } as const;
+    act(() => fake.emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "normal", rules } }));
+    expect(screen.getByText("Stage: Smashville · 2-stock match · 1v1 damage 1.2× · Smash Ball off")).toBeInTheDocument();
+  });
+
   it("tells the guest the host left, and forgets the host's stage", async () => {
     const fake = goOnline("guest");
     await renderSelect();
@@ -220,7 +228,7 @@ describe("CharacterSelect, online", () => {
 
       expect(fake.sent).toEqual([
         { kind: "pick", fighterId: mine.fighterId, costume: mine.costume },
-        { kind: "stage", stageId: "smashville", form: "omega" },
+        { kind: "stage", stageId: "smashville", form: "omega", rules: useMatchConfig.getState().rules },
       ]);
     });
 
