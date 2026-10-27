@@ -41,45 +41,12 @@
 import { joinRoom, selfId as trysteroSelfId } from "trystero";
 
 import { PRODUCT_SLUG } from "@/lib/brand";
+import { DEFAULT_UNRELIABLE_CHANNEL_ID, INPUT_CHANNEL_LABEL } from "../channel";
+import { normalizeRoomCode } from "../roomCode";
 import { createEmitter, type Transport } from "../transport";
 
-/* -------------------------------------------------------------- room codes -- */
-
-/**
- * Four uppercase letters, minus `I` and `O`.
- *
- * One player reads this aloud to the other, which is the whole design brief:
- * short enough to say in one breath, and free of the pairs that get misheard.
- * `I`/`1` and `O`/`0` are the classic offenders, and dropping them costs
- * nothing — 24^4 is 331,776 rooms, and the game's population will not be
- * troubled by the birthday problem.
- */
-export const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-export const ROOM_CODE_LENGTH = 4;
-
-export function makeRoomCode(random: () => number = defaultRandom): string {
-  let code = "";
-  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-    code += ROOM_CODE_ALPHABET[Math.floor(random() * ROOM_CODE_ALPHABET.length)];
-  }
-  return code;
-}
-
-/**
- * Accept what a human typed, or reject it.
- *
- * Lowercase and stray spaces are typos, not different rooms, so they are
- * repaired. `0`/`1` are folded onto `O`/`I` — which are not in the alphabet, so
- * they then fail, which is the honest answer: the code they were given did not
- * contain those characters, and silently joining a *different* valid room would
- * be worse than telling them to look again.
- */
-export function normalizeRoomCode(input: string): string | null {
-  const cleaned = input.trim().toUpperCase().replace(/[\s-]/g, "");
-  if (cleaned.length !== ROOM_CODE_LENGTH) return null;
-  for (const ch of cleaned) if (!ROOM_CODE_ALPHABET.includes(ch)) return null;
-  return cleaned;
-}
+export { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, makeRoomCode, normalizeRoomCode } from "../roomCode";
+export { DEFAULT_UNRELIABLE_CHANNEL_ID, INPUT_CHANNEL_LABEL } from "../channel";
 
 /* ------------------------------------------------------------------- types -- */
 
@@ -128,9 +95,6 @@ export interface WebRtcStatus {
 }
 
 export const DEFAULT_APP_ID = PRODUCT_SLUG;
-export const INPUT_CHANNEL_LABEL = "smash-input";
-/** Any id both peers agree on and Trystero does not use. */
-export const DEFAULT_UNRELIABLE_CHANNEL_ID = 42;
 /** Trystero namespaces are short by convention; this one carries every packet. */
 const ACTION_NAMESPACE = "smash";
 
@@ -306,14 +270,4 @@ function asBytes(data: unknown): Uint8Array | null {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
   return null;
-}
-
-function defaultRandom(): number {
-  const cryptoObj = globalThis.crypto;
-  if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
-    const buffer = new Uint32Array(1);
-    cryptoObj.getRandomValues(buffer);
-    return buffer[0] / 0x1_0000_0000;
-  }
-  return Math.random();
 }
