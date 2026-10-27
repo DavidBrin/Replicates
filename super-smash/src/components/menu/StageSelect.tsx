@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { toFloat } from "@/engine/fixed";
+import { useRejoinResend } from "@/components/online/useRejoinResend";
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
 import { SkewButton, SkewPanel, SkewTag } from "@/components/ui/SkewPanel";
 import { StageDiagram } from "@/components/ui/StageDiagram";
@@ -19,7 +20,6 @@ import {
   type StageForm,
 } from "@/lib/matchConfig";
 import { leaveOnline, sendLobby, useOnlineStore } from "@/lib/onlineStore";
-import { ROLE_PORT } from "@/net/signalProtocol";
 
 const COLUMNS = 4;
 
@@ -43,19 +43,10 @@ export function StageSelect() {
   // The host's stage goes to the guest on the way on, which needs the guest there to hear it.
   const canContinue = onlineRole !== "host" || onlineStatus === "connected";
 
-  // A newcomer in the empty seat starts from an empty page. The host may be
-  // back here from fighters with a pick made, so it repeats that pick when the
-  // channel opens again; the stage is still being chosen, and goes with
-  // Choose Fighters as the first time. (Character select repeats both.)
-  useEffect(() => {
-    if (onlineRole !== "host") return;
-    const port = ROLE_PORT.host;
-    return useOnlineStore.subscribe((now, before) => {
-      if (now.status !== "connected" || before.status === "connected") return;
-      const own = useMatchConfig.getState().players[port];
-      sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? port });
-    });
-  }, [onlineRole]);
+  // A newcomer in the empty seat starts from an empty page, and the host may be
+  // back here from fighters with a pick made: repeat it. The stage is still
+  // being chosen; it goes with Choose Fighters, as the first time.
+  useRejoinResend({ stage: false });
 
   const tiles = useRef<(HTMLButtonElement | null)[]>([]);
   const entries: (MenuStage | null)[] = [...roster.stages, null];

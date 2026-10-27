@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useRejoinResend } from "@/components/online/useRejoinResend";
 import { Cursor, GridCursor } from "@/components/ui/Cursor";
 import { FighterBust } from "@/components/ui/FighterBust";
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
@@ -188,22 +189,9 @@ export function CharacterSelect() {
     if (onlineRole === "guest" && onlineConfig) router.push("/play");
   }, [onlineConfig, onlineRole, router]);
 
-  // Whoever takes an empty seat starts from an empty page, so when the channel
-  // opens again each side repeats its own pick, and the host its stage (chosen
-  // on the way here). Arriving needs none of this: the room opened in the
-  // lobby, before anything was picked. A store subscription rather than an
-  // effect on the status, so that a leave and a rejoin landing in one render
-  // still count.
-  useEffect(() => {
-    if (onlinePort === null) return;
-    return useOnlineStore.subscribe((now, before) => {
-      if (now.status !== "connected" || before.status === "connected") return;
-      const match = useMatchConfig.getState();
-      const own = match.players[onlinePort];
-      sendLobby({ kind: "pick", fighterId: own?.fighterId ?? null, costume: own?.costume ?? onlinePort });
-      if (now.role === "host") sendLobby({ kind: "stage", stageId: match.stageId, form: match.stageForm });
-    });
-  }, [onlinePort]);
+  // A newcomer in the empty seat starts from an empty page: repeat this side's
+  // pick, and the host its stage (chosen on the way here).
+  useRejoinResend({ stage: true });
 
   // Online, only the host starts, and only with both players in the room.
   const canStart = ready && (onlineRole === null || (onlineRole === "host" && onlineStatus === "connected"));
