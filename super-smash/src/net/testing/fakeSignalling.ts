@@ -31,4 +31,8 @@ export class FakeSignalling implements SignallingClient {
   deliver(event: SignallingEvent): void {
     this.events.emit(event);
   }
+  /** How many subscriptions are still live, so a test can see its subject let go. */
+  get listenerCount(): number {
+    return this.events.size;
+  }
 }

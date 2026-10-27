@@ -18,7 +18,9 @@
  * socket is not: every Worker deploy restarts every Durable Object and drops
  * its sockets (Cloudflare's WebSocket docs say so), and a match in progress
  * must shrug that off. So `peer-left` from the room only matters before the
- * channel opens.
+ * channel opens, and so does a newcomer: the room's two-peer cap counts live
+ * sockets, so after a drop it admits anyone else with the code, and an open
+ * match ignores their `peer-joined` or offer rather than dropping its peer.
  */
 
 import { asBytes } from "../bytes";
@@ -111,6 +113,8 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
 
   let selfId = "pending";
   let role: Role | null = null;
+  /** The host the guest's welcome named; a guest takes offers from no one else. */
+  let hostId: string | null = null;
   let status: DoSignalStatus = "waiting";
   let closed = false;
 
@@ -196,17 +200,13 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   function openPeer(peerId: string): PeerConnectionLike | null {
     teardown();
     const conn = buildPeer();
-    if (conn === null) {
+    const ch = conn === null ? null : openInputChannel(conn);
+    if (conn === null || ch === null) {
+      // No peer connection, or one without the input channel: no online play in this browser.
       setStatus("failed");
       return null;
     }
     remoteId = peerId;
-    const ch = conn.createDataChannel(INPUT_CHANNEL_LABEL, {
-      negotiated: true,
-      id: DEFAULT_UNRELIABLE_CHANNEL_ID,
-      ordered: false,
-      maxRetransmits: 0,
-    });
     ch.binaryType = "arraybuffer";
 
     conn.onicecandidate = (event) => {
@@ -332,15 +332,19 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       case "welcome":
         selfId = event.self.id;
         role = event.self.role;
+        // A guest is only ever admitted beside a host, so its welcome's peer is that host.
+        hostId = role === "guest" ? (event.peer?.id ?? null) : null;
         if (role === "host" && event.peer) void offerTo(event.peer.id);
         break;
       case "peer-joined":
-        if (role === "host") void offerTo(event.peer.id);
+        // Once the channel is open it decides (see the header): a newcomer does not replace the peer.
+        if (role === "host" && !announced) void offerTo(event.peer.id);
         break;
       case "signal": {
         const payload = event.payload;
         if (payload.kind === "offer") {
-          if (role === "guest") void answer(event.from, payload.sdp);
+          // As above, and only from our own host.
+          if (role === "guest" && event.from === hostId && !announced) void answer(event.from, payload.sdp);
         } else if (payload.kind === "answer") {
           if (role === "host" && event.from === remoteId) void acceptAnswer(payload.sdp);
         } else {
@@ -401,6 +405,25 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
 }
 
 /* ----------------------------------------------------------------- helpers -- */
+
+/** The input channel on `conn`, or null, with `conn` closed, if the browser refuses it. */
+function openInputChannel(conn: PeerConnectionLike): DataChannelLike | null {
+  try {
+    return conn.createDataChannel(INPUT_CHANNEL_LABEL, {
+      negotiated: true,
+      id: DEFAULT_UNRELIABLE_CHANNEL_ID,
+      ordered: false,
+      maxRetransmits: 0,
+    });
+  } catch {
+    try {
+      conn.close();
+    } catch {
+      /* already gone */
+    }
+    return null;
+  }
+}
 
 function toWire(json: IceCandidateJson): WireIceCandidate | null {
   // An empty candidate is the end-of-candidates marker; there is nothing to relay.
