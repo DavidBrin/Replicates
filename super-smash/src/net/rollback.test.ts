@@ -21,7 +21,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Btn, emptyEvents, pressed, type InputFrame, type StepEvents } from "@/engine/types";
 import { LoopbackNetwork } from "./adapters/loopback";
 import { MAX_INPUT_WINDOW_FRAMES, PacketType, decodePacket, encodePacket, type InputPacket } from "./packet";
-import { createNullTransport, type Transport } from "./transport";
+import { createEmitter, createNullTransport, type Transport } from "./transport";
 import {
   MAX_PREDICTION_FRAMES,
   MAX_PREDICTION_FRAMES_LIMIT,
@@ -471,6 +471,53 @@ describe("acknowledged input windows", () => {
     // round trip later: two frames here, with nothing on the wire delayed.
     expect(Math.max(...lengths.slice(10))).toBeLessThanOrEqual(3);
   });
+
+  /** A's transport, with everything it sends handed back to it as well, as a shared channel would. */
+  function echoing(transport: Transport): Transport {
+    const own = createEmitter<[Uint8Array, string]>();
+    return {
+      ...transport,
+      send: (bytes) => {
+        transport.send(bytes);
+        own.emit(bytes.slice(), transport.selfId);
+      },
+      onMessage: (cb) => {
+        const offs = [transport.onMessage(cb), own.add(cb)];
+        return () => offs.forEach((off) => off());
+      },
+    };
+  }
+
+  it.each(["a third endpoint that never sends", "its own packets echoed back"] as const)(
+    "plays on with %s, since only a peer that plays has frames to acknowledge",
+    (oddity) => {
+      // Either one is a peer on the transport that never acknowledges
+      // anything. Waiting on it would pin every window to the first 128
+      // frames, and both players would stall a couple of seconds in.
+      const network = new LoopbackNetwork({ latencyMs: 0 });
+      const make = (transport: Transport, port: number) =>
+        new RollbackSession<FakeState>({
+          transport,
+          deps: makeDeps(),
+          initialState: initialState(),
+          playerCount: 2,
+          localPorts: [port],
+          inputDelay: 2,
+          autoInputDelay: false,
+          now: () => network.now(),
+        });
+      const aLink = network.connect("A");
+      const a = make(oddity === "its own packets echoed back" ? echoing(aLink) : aLink, 0);
+      const b = make(network.connect("B"), 1);
+      if (oddity === "a third endpoint that never sends") network.connect("O");
+      for (let i = 0; i < 300; i++) {
+        a.advance(scriptedInput(0, a.frame, 10_000));
+        b.advance(scriptedInput(1, b.frame, 10_000));
+        network.advance(FRAME_MS);
+      }
+      expect([a.frame, b.frame]).toEqual([300, 300]);
+    },
+  );
 });
 
 describe("a burst of one-way loss", () => {

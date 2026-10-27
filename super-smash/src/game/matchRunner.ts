@@ -62,9 +62,10 @@ export const FRAME_MS = 1000 / 60;
 export const MAX_CATCHUP_FRAMES = 5;
 
 /**
- * How often a lingering online runner re-sends its last input packet (see
- * `NetplayOptions.lingerMs`). A few times a round trip, so a lossy link still
- * gets one through quickly, at a fraction of the rate play sends at.
+ * How often a lingering online runner re-sends the inputs the other machine
+ * has not acknowledged (see `NetplayOptions.lingerMs`). A few times a round
+ * trip, so a lossy link still gets them through quickly, at a fraction of the
+ * rate play sends at.
  */
 export const LINGER_RESEND_MS = 50;
 
@@ -118,10 +119,10 @@ export interface NetplayOptions {
   readonly now?: () => number;
   readonly onDesync?: (report: DesyncReport) => void;
   /**
-   * How long `dispose()` keeps this machine's last input packet going out,
-   * once the match has ended here. The other machine may still be a lost
-   * packet short of confirming the same result, and with nothing ticking here
-   * nothing else would send it. 0, the default: not at all.
+   * How long `dispose()` keeps sending the inputs the other machine has not
+   * acknowledged, once the match has ended here. It may still be short of the
+   * ones that confirm the same result, and with nothing ticking here nothing
+   * else would send them. 0, the default: not at all.
    */
   readonly lingerMs?: number;
   /**
@@ -186,7 +187,7 @@ export interface MatchRunner {
    * Stop, and release the rollback session's hold on the transport. Final:
    * afterwards nothing ticks, polls, paints or reports, and `start` does nothing.
    * An online match that has ended lets go only after its linger
-   * (`NetplayOptions.lingerMs`), re-sending its last inputs until then.
+   * (`NetplayOptions.lingerMs`), re-sending its unacknowledged inputs until then.
    */
   dispose(): void;
   /** Rollback counters for the HUD; null in a local match. */
@@ -415,11 +416,11 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
 
   /**
    * The match is over here, but maybe not there: the other machine can still
-   * be a lost packet short of the inputs that end it on its side, and with
-   * nothing ticking here nothing else would send them. So the last input
-   * packet goes out again on a timer until the linger is up or the transport
-   * can no longer deliver, and only then does the session let go. The
-   * simulation stays where it ended.
+   * be short of the inputs that end it on its side, however many a burst of
+   * loss took, and with nothing ticking here nothing else would send them. So
+   * every input it has not acknowledged goes out again on a timer until the
+   * linger is up or the transport can no longer deliver, and only then does
+   * the session let go. The simulation stays where it ended.
    */
   function linger(live: RollbackSession, ms: number): void {
     const isOpen = net?.isOpen ?? (() => true);

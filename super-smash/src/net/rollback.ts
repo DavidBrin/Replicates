@@ -307,9 +307,11 @@ class PortInputs {
    * The guess: whatever they were last holding.
    *
    * Right far more often than it is wrong, because a human holds a direction
-   * for a dozen frames and taps a button for four. Searching backwards first
-   * covers the case where a hole in the middle of the window has not healed
-   * yet — the frame before the hole is a better guess than the newest frame.
+   * for a dozen frames and taps a button for four. The backwards search was
+   * for a hole in what had arrived, where the frame before the hole is a
+   * better guess than the newest. Acknowledged windows leave no hole (see
+   * `PREDICTION_LOOKBACK_FRAMES`), so it finds the last confirmed input, the
+   * same one the fallback below returns.
    */
   predict(frame: number): InputFrame {
     for (let f = frame; f > frame - PREDICTION_LOOKBACK_FRAMES && f >= 0; f--) {
@@ -894,13 +896,20 @@ export class RollbackSession<S = GameState> {
   }
 
   /**
-   * The newest frame of ours every peer holds without a gap: the slowest
-   * peer's acknowledgement, since one broadcast window serves them all. -1
-   * before any peer has said, or with none, which resends from the start.
+   * The newest frame of ours every playing peer holds without a gap: the
+   * slowest one's acknowledgement, since one broadcast window serves them all.
+   * -1 before any has sent input, which resends from the start.
+   *
+   * Only a peer that has sent input counts. One that joined and never plays
+   * (an observer, a third tab), or this machine's own packets echoed back,
+   * never acknowledges anything, and waiting on it would pin every window to
+   * the first 128 frames: both players would stall a couple of seconds in.
    */
   private peerAck(): number {
     let ack = Infinity;
-    for (const peer of this.peers.values()) ack = Math.min(ack, peer.ack);
+    for (const peer of this.peers.values()) {
+      if (peer.ports.size > 0) ack = Math.min(ack, peer.ack);
+    }
     return ack === Infinity ? -1 : ack;
   }
 
