@@ -1,8 +1,13 @@
-import { beforeEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
+import { NEGOTIATION_TIMEOUT_MS } from "@/net/adapters/doSignal";
+import { STUN_ONLY } from "@/net/iceConfig";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
-import { getActiveSession, setActiveSession } from "@/net/online/session";
+import { GUEST_REOFFER_WAIT_MS, OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
+import type { Role } from "@/net/signalProtocol";
+import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
+import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { useMatchConfig } from "./matchConfig";
 import {
   PEER_LEFT_NOTICE,
@@ -162,19 +167,38 @@ describe("binding a session to the stores", () => {
     expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null, error: null });
   });
 
-  /** The host offering a fresh connection after the channel was lost, with both players still in the room. */
-  it("says it is connecting again, not that the other player left, once a fresh negotiation starts", () => {
+  /** The channel lost with both players still in the room: the session is getting it back, and nobody left. */
+  it("says it is connecting again, not that the other player left, and keeps the panels", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
     emit({ type: "joined", role: "host" });
     emit({ type: "peer", present: true });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 3 } });
     emit({ type: "link", status: "waiting" });
-    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE });
-    emit({ type: "link", status: "negotiating" });
     expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+    expect(useMatchConfig.getState().players[1]).toMatchObject({ fighterId: "fox", costume: 3 });
+    emit({ type: "link", status: "negotiating" });
     emit({ type: "link", status: "open" });
-    expect(useOnlineStore.getState().status).toBe("connected");
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
+    expect(useMatchConfig.getState().players[1].fighterId).toBe("fox");
+  });
+
+  /** "The other player left" means they left: a real departure says so, whatever the channel is doing. */
+  it.each(["connected", "linking"] as const)("says the other player left, and empties their seat, when they leave the room while %s", (status) => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "guest" });
+    emit({ type: "peer", present: true });
+    emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
+    if (status === "linking") emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState().status).toBe(status);
+
+    emit({ type: "peer", present: false });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE, hostStage: null, error: null });
+    expect(useMatchConfig.getState().players[0]).toMatchObject({ fighterId: null, costume: 0 });
   });
 
   /**
@@ -215,6 +239,101 @@ describe("binding a session to the stores", () => {
   });
 });
 
+/**
+ * The store and a real session together. One machine per test: the stores
+ * belong to the page, so the other machine is played through the room.
+ */
+describe("with a real session, when the lobby channel is lost", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function seated(role: Role) {
+    vi.useFakeTimers();
+    const signalling = new FakeSignalling();
+    const channels: OpenableChannel[] = [];
+    const session = await OnlineSession.open("ABCD", role === "host" ? "create" : "join", {
+      fetchIce: async () => STUN_ONLY,
+      openSignalling: () => signalling,
+      createPeerConnection: () => {
+        const channel = new OpenableChannel();
+        channels.push(channel);
+        return { ...inertPeer(), createDataChannel: () => channel };
+      },
+    });
+    setActiveSession(session);
+    bindSession(session);
+    if (role === "host") {
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    } else {
+      signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    channels[0].open();
+    expect(useOnlineStore.getState().status).toBe("connected");
+    const notices: (string | null)[] = [];
+    useOnlineStore.subscribe((now) => notices.push(now.notice));
+    return { session, signalling, channels, notices };
+  }
+
+  it("keeps the host's panels through a re-offer, and never says the guest left", async () => {
+    const h = await seated("host");
+    useMatchConfig.getState().setFighter(0, "mario");
+    h.signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 1 } });
+
+    h.channels[0].drop();
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+    await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+    h.channels[1].open();
+
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
+    expect(useMatchConfig.getState().players.map((p) => p.fighterId)).toEqual(["mario", "fox"]);
+    expect(h.notices.every((notice) => notice === null)).toBe(true);
+  });
+
+  it("keeps the guest's panels and the host's stage while it asks for a fresh connection", async () => {
+    const g = await seated("guest");
+    g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "stage", stageId: "smashville", form: "normal" } });
+    g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "pick", fighterId: "mario", costume: 0 } });
+
+    g.channels[0].drop();
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null, hostStage: { stageId: "smashville", form: "normal" } });
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+    await vi.advanceTimersByTimeAsync(0);
+    g.channels[1].open();
+
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null, hostStage: { stageId: "smashville", form: "normal" } });
+    expect(useMatchConfig.getState().players[0].fighterId).toBe("mario");
+    expect(g.notices.every((notice) => notice === null)).toBe(true);
+  });
+
+  /**
+   * The host's re-offers run out: its room-lost closes its room socket, and
+   * the room tells the guest it left. The guest must say so, not wait in
+   * silence for an offer that will never come.
+   */
+  it("tells the guest its host left once the host's retries run out and it leaves the room", async () => {
+    const g = await seated("guest");
+    g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "stage", stageId: "smashville", form: "normal" } });
+    g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "pick", fighterId: "mario", costume: 0 } });
+
+    g.channels[0].drop();
+    // The host's re-offer, which never opens.
+    g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+    // The host gave up (room-lost) and its session left the room.
+    g.signalling.deliver({ t: "peer-left", peerId: "h1" });
+    await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 6);
+
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE, error: null, hostStage: null });
+    expect(useMatchConfig.getState().players[0].fighterId).toBeNull();
+    // The code stays joinable: the room is still this guest's.
+    expect(g.signalling.closed).toBe(false);
+  });
+});
+
 describe("an error, once recorded", () => {
   function connectedHost() {
     const fake = fakeSession();
@@ -235,7 +354,7 @@ describe("an error, once recorded", () => {
 
   it("takes the place of a notice already showing", () => {
     const { emit } = connectedHost();
-    emit({ type: "link", status: "waiting" });
+    emit({ type: "peer", present: false });
     expect(useOnlineStore.getState().notice).toBe(PEER_LEFT_NOTICE);
     emit({ type: "error", reason: "room-lost" });
     expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "room-lost", notice: null });

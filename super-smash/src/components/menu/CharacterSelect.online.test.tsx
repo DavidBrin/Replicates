@@ -191,11 +191,11 @@ describe("CharacterSelect, online", () => {
 
   /**
    * The guest's room socket alone dropped (an idle timeout) while the direct
-   * channel stayed up: the room says the guest left, the screen still says
-   * connected, and a start would go to nobody. A real session, so the guard
-   * that refuses it is the one that ships.
+   * channel stayed up: the room says the guest left, and a start would go to
+   * nobody. The screen says so and holds Ready shut; the session's own guard
+   * (session.test.ts) is the backstop. A real session.
    */
-  it("keeps the host here, and says the room is lost, when the room no longer has the guest but the channel does", async () => {
+  it("tells the host the guest left, and sends no start, when the room no longer has the guest but the channel does", async () => {
     const signalling = new FakeSignalling();
     const channel = new OpenableChannel();
     const session = await OnlineSession.open("ABCD", "create", {
@@ -215,14 +215,13 @@ describe("CharacterSelect, online", () => {
     await renderSelect();
 
     act(() => signalling.deliver({ t: "peer-left", peerId: "g1" }));
-    expect(readyButton()).toBeEnabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(PEER_LEFT_NOTICE);
+    expect(readyButton()).toBeDisabled();
     fireEvent.click(readyButton());
 
     expect(signalling.sent.some((m) => m.t === "lobby")).toBe(false);
     expect(routerMock.push).not.toHaveBeenCalled();
     expect(useOnlineStore.getState().config).toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent(roomErrorMessage("room-lost", "ABCD"));
-    expect(readyButton()).toBeDisabled();
   });
 
   it("holds Ready shut until the channel is back, and tells the host the guest left", async () => {
@@ -368,9 +367,11 @@ describe("CharacterSelect, online", () => {
       act(() => h.signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 1 } }));
       expect(readyButton()).toBeEnabled();
 
-      // Only the host's side of the channel closes: the guest's panel empties, Ready waits.
+      // Only the host's side of the channel closes. Nobody left: the guest's
+      // panel stays, nothing says they left, and Ready waits for the channel.
       act(() => h.channels[0].drop());
-      expect(useMatchConfig.getState().players[1].fighterId).toBeNull();
+      expect(useMatchConfig.getState().players[1].fighterId).toBe("fox");
+      expect(screen.queryByRole("alert")).toBeNull();
       expect(readyButton()).toBeDisabled();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);

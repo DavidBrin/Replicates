@@ -138,6 +138,25 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   const fail = (reason: OnlineErrorReason) =>
     online().patch({ status: "error", errorReason: reason, error: roomErrorMessage(reason, session.roomCode), notice: null });
 
+  /**
+   * The other player's seat emptied: whoever takes it next starts from an
+   * empty panel (a pick the last opponent left behind must not light up Ready
+   * before they choose), and a start not yet played is withdrawn. Not an
+   * error: the room offers to whoever joins next, so the same code pairs again.
+   */
+  const seatEmptied = () => {
+    const remote = remotePort(session);
+    if (remote !== null) {
+      match().setFighter(remote, null);
+      match().setCostume(remote, remote);
+    }
+    // Only the guest ever holds a `hostStage`; the host that sent it is gone.
+    online().patch({ status: "waiting", config: null, notice: PEER_LEFT_NOTICE, remoteAway: false, hostStage: null });
+  };
+
+  /** Whether the room says the other player is in it, as the session last reported. */
+  let peerSeated = false;
+
   // The emitter calls every listener it had when an emit began, so a leave
   // made by an earlier listener in the same pass would not stop this one.
   let live = true;
@@ -158,9 +177,16 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         online().patch({ role: event.role, status: "waiting", notice: null });
         break;
       case "peer":
-        if (online().status === "connected") break;
-        // Somebody took the empty seat: that the last opponent left is no longer news.
-        online().patch(event.present ? { status: "linking", notice: null } : { status: "waiting" });
+        peerSeated = event.present;
+        if (event.present) {
+          if (online().status === "connected") break;
+          // Somebody took the empty seat: that the last opponent left is no longer news.
+          online().patch({ status: "linking", notice: null });
+        } else if (online().config === null) {
+          // They left the room, whatever the channel says, and in the lobby
+          // that is news. Mid-match the channel decides (session.ts).
+          seatEmptied();
+        }
         break;
       case "link":
         if (event.status === "open") {
@@ -175,17 +201,12 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         } else if (event.status === "failed") {
           fail("link-failed");
         } else if (event.status === "waiting" && online().status === "connected") {
-          // Not an error: the transport offers to whoever joins next, so the
-          // same code can pair again. Starting waits for `connected` meanwhile,
-          // and whoever comes starts from an empty panel: a pick the last
-          // opponent left behind must not light up Ready before they choose.
-          const remote = remotePort(session);
-          if (remote !== null) {
-            match().setFighter(remote, null);
-            match().setCostume(remote, remote);
-          }
-          // Only the guest ever holds a `hostStage`; the host that sent it is gone.
-          online().patch({ status: "waiting", config: null, notice: PEER_LEFT_NOTICE, remoteAway: false, hostStage: null });
+          // Only the channel was lost, with the other player still in the room,
+          // and the session is getting it back: nobody left. The panels stay,
+          // and starting waits for `connected`. Otherwise (they are gone, or a
+          // start is out) the seat is empty.
+          if (peerSeated && online().config === null) online().patch({ status: "linking" });
+          else seatEmptied();
         }
         break;
       case "lobby":
