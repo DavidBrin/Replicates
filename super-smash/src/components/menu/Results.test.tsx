@@ -126,13 +126,22 @@ describe("Results after an online match", () => {
       expect(screen.getByRole("button", { name: /quit/i })).toBeInTheDocument();
     });
 
-    it("leaves the room at once, with nobody left to wait for", async () => {
+    /** The match page's runner re-sends the desync's hash meanwhile, so the other machine finds it too. */
+    it("holds the room open for the grace before leaving, like a match that finished", async () => {
       vi.useFakeTimers();
       const { session } = fakeSession("host");
       setActiveSession(session);
       useMatchConfig.getState().setResult(DESYNC);
       render(<Results />);
       await act(async () => {});
+      act(() => {
+        vi.advanceTimersByTime(ONLINE_RESULT_LINGER_MS - 1);
+      });
+      expect(leaveOnline).not.toHaveBeenCalled();
+      expect(session.close).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
       expect(leaveOnline).toHaveBeenCalledTimes(1);
       expect(session.close).toHaveBeenCalledTimes(1);
     });

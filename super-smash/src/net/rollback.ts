@@ -379,6 +379,8 @@ export class RollbackSession<S = GameState> {
   /** Local hashes awaiting a peer's, and peer hashes awaiting ours. */
   private readonly localHashes = new Map<number, number>();
   private readonly remoteHashes = new Map<number, { hash: number; peerId: string; port: number }>();
+  /** Frames whose two hashes have been compared: a hash re-sent for one is not compared again. */
+  private readonly comparedHashes = new Set<number>();
 
   private readonly pings = new Map<number, number>();
   private pingToken = 1;
@@ -675,6 +677,19 @@ export class RollbackSession<S = GameState> {
     for (const port of this.localPorts) this.sendInputWindow(port);
   }
 
+  /**
+   * Send this machine's hash of `frame` again. For the grace after a desync:
+   * the hash packet is the other machine's only way to find the same
+   * mismatch, and it travels as unreliably as any other. Nothing once closed,
+   * or for a frame this machine never hashed or has let go of.
+   */
+  resendHash(frame: number): void {
+    if (this.closed) return;
+    const hash = this.localHashes.get(frame);
+    if (hash === undefined) return;
+    this.emit({ type: PacketType.Hash, port: this.localPorts[0] ?? 0, frame, hash });
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -683,6 +698,7 @@ export class RollbackSession<S = GameState> {
     this.peers.clear();
     this.localHashes.clear();
     this.remoteHashes.clear();
+    this.comparedHashes.clear();
     this.pings.clear();
   }
 
@@ -971,6 +987,8 @@ export class RollbackSession<S = GameState> {
         break;
       }
       case PacketType.Hash:
+        // Re-sent after a desync, or duplicated by the link: one frame, one verdict.
+        if (this.comparedHashes.has(packet.frame)) break;
         this.remoteHashes.set(packet.frame, {
           hash: packet.hash,
           peerId,
@@ -1088,6 +1106,7 @@ export class RollbackSession<S = GameState> {
     const remote = this.remoteHashes.get(frame);
     if (local === undefined || remote === undefined) return;
     this.remoteHashes.delete(frame);
+    this.comparedHashes.add(frame);
     this.counters.hashesCompared++;
     if (local === remote.hash) return;
     this.counters.desyncs++;
@@ -1105,6 +1124,7 @@ export class RollbackSession<S = GameState> {
     if (cutoff <= 0) return;
     for (const f of this.localHashes.keys()) if (f < cutoff) this.localHashes.delete(f);
     for (const f of this.remoteHashes.keys()) if (f < cutoff) this.remoteHashes.delete(f);
+    for (const f of this.comparedHashes) if (f < cutoff) this.comparedHashes.delete(f);
   }
 
   /* ----------------------------------------------------------- delay tuning -- */

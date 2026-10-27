@@ -241,6 +241,27 @@ describe("the play page, online", () => {
     }
   });
 
+  /** The match ended here first: its result is final, and its play-out and input linger run as normal. */
+  it("leaves a finished match alone when a desync or a lost link is reported during its play-out", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      goOnline("host");
+      render(<PlayPage />);
+      const { options, runner } = only(mocks.runners);
+      act(() => options.onEnd?.({ kind: "stockOut", placings: [0, 1] }));
+      act(() => options.net?.onDesync?.({ frame: 600, localHash: 1, remoteHash: 2, peerId: "g1", port: 1 }));
+      act(() => only(mocks.monitors).options.onLost());
+      expect(runner.stop).not.toHaveBeenCalled();
+      expect(useMatchConfig.getState().result).toMatchObject({ kind: "stockOut", placings: [0, 1] });
+      act(() => vi.advanceTimersByTime(2399));
+      expect(routerMock.push).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(routerMock.push).toHaveBeenCalledWith("/results");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("has the link monitor watch the match's confirmed frame, so a match stuck with packets still arriving is lost", () => {
     goOnline("host");
     render(<PlayPage />);

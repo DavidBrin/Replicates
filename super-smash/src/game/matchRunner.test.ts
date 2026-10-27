@@ -963,3 +963,107 @@ describe("an online match that ended here lingers after dispose", () => {
     expect(lingered.guest).toEqual(lingered.host);
   });
 });
+
+/**
+ * Each machine finds a desync by comparing its own hash of a confirmed frame
+ * with the other's. The one that finds it first stops; if its hash packet for
+ * that frame was the one lost, the other could never make the comparison, and
+ * would end on a lost connection instead. So the finder lingers like a match
+ * that ended, re-sending its inputs and that hash.
+ */
+describe("a desync reaches the machine whose copy of the hash was lost", () => {
+  const LINGER_MS = 1_500;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function machine(port: number, seed: number, transport: Transport, now: () => number) {
+    const desyncs: number[] = [];
+    const runner = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules: RULES,
+      seed,
+      getFighter: getFighterOrThrow,
+      net: {
+        transport,
+        localPorts: [port],
+        inputDelay: 2,
+        autoInputDelay: false,
+        now,
+        lingerMs: LINGER_MS,
+        onDesync: (report) => desyncs.push(report.frame),
+      },
+    });
+    return { runner, desyncs };
+  }
+
+  /**
+   * Two machines whose states differ from the first frame (different seeds,
+   * the shape of two builds that disagree). Every hash the host sends is
+   * lost while it plays, so only the host can find the desync; it then stops
+   * and is disposed, as the play page does. `resend` says whether its linger
+   * may deliver anything.
+   */
+  function play(resend: boolean) {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const hostLink = network.connect("host");
+    let losingHashes = true;
+    const lossy: Transport = {
+      ...hostLink,
+      send: (bytes) => {
+        const hash = decodePacket(bytes)?.type === PacketType.Hash;
+        if (hash && (losingHashes || !resend)) return;
+        hostLink.send(bytes);
+      },
+    };
+    const host = machine(0, 0x5eed1e55, lossy, () => network.now());
+    const guest = machine(1, 0x0dd5eed, network.connect("guest"), () => network.now());
+    network.advance(0);
+    let hostStopped = false;
+    let guestStopped = false;
+    for (let i = 0; i < 600; i++) {
+      if (!hostStopped) {
+        host.runner.advance(1);
+        if (host.desyncs.length > 0) {
+          hostStopped = true;
+          host.runner.dispose();
+          losingHashes = false;
+        }
+      }
+      if (!guestStopped) {
+        guest.runner.advance(1);
+        if (guest.desyncs.length > 0) {
+          guestStopped = true;
+          // The guest lingers too, re-sending its own hash back.
+          guest.runner.dispose();
+        }
+      }
+      network.advance(FRAME_MS);
+      vi.advanceTimersByTime(FRAME_MS);
+    }
+    return { host: host.desyncs, guest: guest.desyncs };
+  }
+
+  it("has the machine that found it re-send its hash while it lingers, so the other finds the same desync", () => {
+    const { host, guest } = play(true);
+    expect(host).toHaveLength(1);
+    expect(guest).toEqual(host);
+  });
+
+  it("never reports the same desync twice when the other machine's re-sent hash comes back", () => {
+    const { host, guest } = play(true);
+    expect(host).toHaveLength(1);
+    expect(guest).toHaveLength(1);
+  });
+
+  it("leaves the other machine none the wiser when nothing is re-sent, which is the case worth having", () => {
+    const { host, guest } = play(false);
+    expect(host).toHaveLength(1);
+    expect(guest).toEqual([]);
+  });
+});

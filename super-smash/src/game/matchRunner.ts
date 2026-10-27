@@ -186,8 +186,9 @@ export interface MatchRunner {
   /**
    * Stop, and release the rollback session's hold on the transport. Final:
    * afterwards nothing ticks, polls, paints or reports, and `start` does nothing.
-   * An online match that has ended lets go only after its linger
-   * (`NetplayOptions.lingerMs`), re-sending its unacknowledged inputs until then.
+   * An online match that has ended, or found a desync, lets go only after its
+   * linger (`NetplayOptions.lingerMs`), re-sending its unacknowledged inputs
+   * (and the desync's hash) until then.
    */
   dispose(): void;
   /** Rollback counters for the HUD; null in a local match. */
@@ -239,7 +240,13 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
         inputDelay: net.inputDelay,
         autoInputDelay: net.autoInputDelay,
         now: net.now,
-        onDesync: net.onDesync,
+        onDesync: (report) => {
+          // A desync before the result ends the match here, and the linger
+          // re-sends this frame's hash so the other machine finds it too. One
+          // after the result changes nothing: that result was final.
+          if (!ended && desyncFrame === null) desyncFrame = report.frame;
+          net.onDesync?.(report);
+        },
       })
     : null;
   let stalled = false;
@@ -270,6 +277,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let accumulator = 0;
   let ended = false;
   let disposed = false;
+  /** The frame a desync was found on before the match ended, if one was. */
+  let desyncFrame: number | null = null;
 
   // Key presses from ticks the rollback session refused. A refused tick's input
   // is never scheduled, and a key tapped between two ticks is in exactly one
@@ -420,22 +429,29 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
    * loss took, and with nothing ticking here nothing else would send them. So
    * every input it has not acknowledged goes out again on a timer until the
    * linger is up or the transport can no longer deliver, and only then does
-   * the session let go. The simulation stays where it ended.
+   * the session let go. The simulation stays where it ended. A match stopped
+   * by a desync lingers the same way, and re-sends the hash that showed it:
+   * that packet is the other machine's only way to find the same mismatch.
    */
-  function linger(live: RollbackSession, ms: number): void {
+  function linger(live: RollbackSession, ms: number, hashFrame: number | null): void {
     const isOpen = net?.isOpen ?? (() => true);
     if (!isOpen()) {
       live.close();
       return;
     }
-    live.resendInputs();
-    const resend = setInterval(() => {
-      if (isOpen()) live.resendInputs();
+    // After a desync, the hash that shows it goes out again with the inputs.
+    const resend = () => {
+      live.resendInputs();
+      if (hashFrame !== null) live.resendHash(hashFrame);
+    };
+    resend();
+    const timer = setInterval(() => {
+      if (isOpen()) resend();
       else finish();
     }, LINGER_RESEND_MS);
     const deadline = setTimeout(finish, ms);
     function finish(): void {
-      clearInterval(resend);
+      clearInterval(timer);
       clearTimeout(deadline);
       live.close();
     }
@@ -470,7 +486,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
       ctx = null;
-      if (session && ended && lingerMs > 0) linger(session, lingerMs);
+      if (session && (ended || desyncFrame !== null) && lingerMs > 0) linger(session, lingerMs, desyncFrame);
       else session?.close();
     },
     get netStats() {

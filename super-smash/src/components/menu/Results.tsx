@@ -51,8 +51,14 @@ export function Results() {
   const rules = useMatchConfig((s) => s.rules);
 
   const online = result?.online === true;
-  /** Lost, or out of sync: no placings, nobody wins, and nobody left to wait for. */
+  /** Lost, or out of sync: no placings, and nobody wins. */
   const unfinished = result ? UNFINISHED_STATUS[result.kind] : undefined;
+  /**
+   * Nobody is left to wait for when the connection is gone. After a desync
+   * the other machine is still there, and the match page's runner re-sends
+   * the hash that shows it during the grace, so the room stays open for it.
+   */
+  const leaveAtOnce = result?.kind === "connectionLost";
 
   // An online result holds the room open until it is left, and it is left once:
   // by the grace running out, by Quit or Back, or by the screen going away,
@@ -75,14 +81,13 @@ export function Results() {
 
   useEffect(() => {
     if (!online) return;
-    // Nobody is left to wait for when the match could not finish.
-    if (unfinished) leaveRoom();
-    const grace = unfinished ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
+    if (leaveAtOnce) leaveRoom();
+    const grace = leaveAtOnce ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
     return () => {
       clearTimeout(grace);
       leaveRoom();
     };
-  }, [online, unfinished, leaveRoom]);
+  }, [online, leaveAtOnce, leaveRoom]);
 
   if (!result) {
     return (

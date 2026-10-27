@@ -454,10 +454,13 @@ export default function PlayPage() {
     let handedOff = false;
     /**
      * The match cannot finish: nobody wins, and the results say why at once.
-     * Stopping the runner stops this side's inputs too, so the other side
-     * finds out by its own check or by its link monitor.
+     * After a desync the runner lingers on disposal, re-sending the hash that
+     * showed it, so the other side finds the same desync. A match that already
+     * ended here is left to its play-out and its input linger: its result is
+     * final.
      */
     const abandon = (kind: "connectionLost" | "desync") => {
+      if (finished) return;
       mounted?.runner.stop();
       finish(
         {
