@@ -40,17 +40,17 @@ describe("/api/ice", () => {
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it("asks Cloudflare for four-hour credentials with the key's bearer token", async () => {
+  it("asks Cloudflare for one-hour credentials with the key's bearer token", async () => {
     const fetchFn = respond(201, CLOUDFLARE_201);
     await iceServersFor(ENV, fetchFn);
-    expect(TURN_TTL_SECONDS).toBe(4 * 60 * 60);
+    expect(TURN_TTL_SECONDS).toBe(60 * 60);
     expect(turnCredentialsUrl("key-1")).toBe(
       "https://rtc.live.cloudflare.com/v1/turn/keys/key-1/credentials/generate-ice-servers",
     );
     expect(fetchFn).toHaveBeenCalledWith(turnCredentialsUrl("key-1"), {
       method: "POST",
       headers: { Authorization: "Bearer tok", "Content-Type": "application/json" },
-      body: JSON.stringify({ ttl: 14400 }),
+      body: JSON.stringify({ ttl: 3600 }),
     });
   });
 
@@ -69,11 +69,33 @@ describe("/api/ice", () => {
   });
 
   it("falls back to STUN when Cloudflare refuses, throws, or answers nonsense", async () => {
-    await expect(iceServersFor(ENV, respond(401, { errors: [] }))).resolves.toEqual(STUN_ONLY);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(iceServersFor(ENV, respond(401, { errors: [] }))).resolves.toEqual(STUN_ONLY);
+    } finally {
+      warn.mockRestore();
+    }
     await expect(iceServersFor(ENV, respond(201, { nope: true }))).resolves.toEqual(STUN_ONLY);
     const throwing = vi.fn<FetchLike>(async () => {
       throw new Error("network down");
     });
     await expect(iceServersFor(ENV, throwing)).resolves.toEqual(STUN_ONLY);
+  });
+
+  /** The one clue `wrangler tail` gives when TURN goes dark: the status, and nothing the API sent or was sent. */
+  it("logs the status of a refusal, and never the body, the key or the token", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await iceServersFor(ENV, respond(403, { errors: [{ message: "token tok for key-1 is not allowed" }] }));
+      expect(warn).toHaveBeenCalledTimes(1);
+      const logged = warn.mock.calls[0].map(String).join(" ");
+      expect(logged).toContain("403");
+      expect(logged).not.toMatch(/tok|key-1|not allowed/);
+
+      await iceServersFor(ENV, respond(201, CLOUDFLARE_201));
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

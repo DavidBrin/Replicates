@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { refusal } from "./guards";
 import { iceServersFor } from "./ice";
 import { routeFor } from "./routes";
 
@@ -12,19 +13,23 @@ export default {
     const route = routeFor(request.method, new URL(request.url).pathname);
     switch (route.kind) {
       case "ice": {
+        const refused = await refusal(env, request, route.kind);
+        if (refused) return refused;
         // The deadline lives in this adapter (FetchInit has no signal) and is
         // never cleared, so it also bounds iceServersFor's res.json() read; an
         // abort there lands in its catch and the answer is STUN-only.
         const body = await iceServersFor(env, (url, init) =>
           fetch(url, { ...init, signal: AbortSignal.timeout(TURN_API_TIMEOUT_MS) }),
         );
-        // Minted credentials are good for 4 hours; no cache may hand them to someone else.
+        // Minted credentials are good for an hour; no cache may hand them to someone else.
         return Response.json(body, { headers: { "Cache-Control": "no-store" } });
       }
       case "room": {
         if (request.headers.get("Upgrade") !== "websocket") {
           return new Response("Expected a WebSocket upgrade", { status: 426 });
         }
+        const refused = await refusal(env, request, route.kind);
+        if (refused) return refused;
         return env.ROOMS.get(env.ROOMS.idFromName(route.code)).fetch(request);
       }
       case "not-found":

@@ -14,8 +14,12 @@
 
 import { STUN_ONLY, hasTurn, parseIceServers, withoutPort53, type IceResponse } from "../../src/net/iceConfig";
 
-/** Four hours: longer than any session, far under the spec's 48 h ceiling. */
-export const TURN_TTL_SECONDS = 4 * 60 * 60;
+/**
+ * One hour: a session is one lobby and one match, and a minted credential
+ * relays for as long as it lives, so it lives no longer than one needs. Far
+ * under the spec's 48 h ceiling.
+ */
+export const TURN_TTL_SECONDS = 60 * 60;
 
 export interface TurnEnv {
   readonly TURN_KEY_ID?: string;
@@ -50,7 +54,12 @@ export async function iceServersFor(env: TurnEnv, fetchFn: FetchLike): Promise<I
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ ttl: TURN_TTL_SECONDS }),
     });
-    if (!res.ok) return STUN_ONLY;
+    if (!res.ok) {
+      // The one clue `wrangler tail` gives when TURN goes dark. The status
+      // alone: never the body, never the key or the token.
+      console.warn(`/api/ice: the TURN API answered ${res.status}; serving STUN only`);
+      return STUN_ONLY;
+    }
     const body = await res.json();
     const raw = typeof body === "object" && body !== null ? (body as Record<string, unknown>).iceServers : undefined;
     // The docs show an array; a single server object is accepted too, rather

@@ -47,7 +47,8 @@ export class RoomDO extends DurableObject<Env> {
       // 101 instead held the client's close event for ~10 s.)
       server.accept();
       send(server, decision.message);
-      close(server, decision.closeCode, decision.reason);      return new Response(null, { status: 101, webSocket: client });
+      close(server, decision.closeCode, decision.reason);
+      return new Response(null, { status: 101, webSocket: client });
     }
 
     this.ctx.acceptWebSocket(server);
