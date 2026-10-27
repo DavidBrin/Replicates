@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PeerConnectionLike } from "../adapters/doSignal";
+import { NEGOTIATION_TIMEOUT_MS, type PeerConnectionLike } from "../adapters/doSignal";
 import { STUN_ONLY } from "../iceConfig";
 import type { RoomIntent } from "../signalProtocol";
 import { OpenableChannel, inertPeer } from "../testing/fakePeer";
@@ -56,6 +56,18 @@ async function negotiatingHost() {
     peer.onconnectionstatechange?.();
   };
   return { ...opened, channel, fail };
+}
+
+/** Every peer connection the session builds gets a channel of its own, which the test opens or drops. */
+async function opened(intent: RoomIntent) {
+  const channels: OpenableChannel[] = [];
+  const session = await open(intent, () => {
+    const channel = new OpenableChannel();
+    channels.push(channel);
+    return { ...inertPeer(), createDataChannel: () => channel };
+  });
+  const offers = () => session.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer").length;
+  return { ...session, channels, offers };
 }
 
 /** A Worker deploy restarts the Durable Object and drops its sockets without a close frame. */
@@ -174,7 +186,8 @@ describe("OnlineSession", () => {
       const { session, signalling, channel, events } = await negotiatingHost();
       signalling.deliver(ROOM_DROP);
       vi.advanceTimersByTime(ROOM_LOST_GRACE_MS);
-      expect(session.transport.status).toBe("closed");
+      // The negotiation's own deadline, set before the drop, ends it no later than the grace.
+      expect(session.transport.status).toBe("waiting");
       channel.open();
       expect(events).not.toContainEqual({ type: "link", status: "open" });
       expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
@@ -256,7 +269,8 @@ describe("OnlineSession", () => {
       vi.useFakeTimers();
       const { session, signalling } = await negotiatingHost();
       signalling.deliver(ROOM_DROP);
-      expect(vi.getTimerCount()).toBe(1);
+      // The grace, and the negotiation's own deadline.
+      expect(vi.getTimerCount()).toBe(2);
       session.close();
       expect(vi.getTimerCount()).toBe(0);
     });
@@ -268,18 +282,6 @@ describe("OnlineSession", () => {
    * offered again and both players waited on a screen that never moved.
    */
   describe("when the lobby channel closes with both players still in the room", () => {
-    /** Every peer connection the session builds gets a channel of its own, which the test opens or drops. */
-    async function opened(intent: RoomIntent) {
-      const channels: OpenableChannel[] = [];
-      const session = await open(intent, () => {
-        const channel = new OpenableChannel();
-        channels.push(channel);
-        return { ...inertPeer(), createDataChannel: () => channel };
-      });
-      const offers = () => session.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer").length;
-      return { ...session, channels, offers };
-    }
-
     async function linkedHost() {
       vi.useFakeTimers();
       const h = await opened("create");
@@ -351,6 +353,7 @@ describe("OnlineSession", () => {
       await vi.advanceTimersByTimeAsync(0);
       // The newcomer gets the ordinary offer, and nothing else follows.
       expect(h.offers()).toBe(2);
+      h.channels[1].open();
       await vi.advanceTimersByTimeAsync(60_000);
       expect(h.offers()).toBe(2);
       expect(errors(h.events)).toEqual([]);
@@ -413,6 +416,85 @@ describe("OnlineSession", () => {
       expect(g.session.transport.status).toBe("open");
       g.channels[0].drop();
       await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(errors(g.events)).toEqual([]);
+    });
+  });
+
+  /**
+   * A negotiation whose channel never opens and never closes (ICE that hangs
+   * rather than fails) would leave both players on "Connecting…" for good. It
+   * gets a deadline, and missing it is a channel lost before it opened.
+   */
+  describe("a negotiation that never finishes", () => {
+    async function hostMeetingGuest() {
+      vi.useFakeTimers();
+      const h = await opened("create");
+      h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.offers()).toBe(1);
+      return h;
+    }
+
+    it("sends the host's first connect, unopened after the deadline, into the retry path", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
+      expect(h.session.transport.status).toBe("negotiating");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.session.transport.status).toBe("waiting");
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      expect(h.offers()).toBe(2);
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    it("says the room is lost once every retry has timed out too", async () => {
+      const h = await hostMeetingGuest();
+      for (const delay of REOFFER_DELAYS_MS) {
+        await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS + delay);
+        expect(errors(h.events)).toEqual([]);
+      }
+      expect(h.offers()).toBe(1 + REOFFER_DELAYS_MS.length);
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      expect(errors(h.events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1 + REOFFER_DELAYS_MS.length);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("leaves a channel that opens before the deadline alone, for good", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(14_000);
+      h.channels[0].open();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.session.transport.status).toBe("open");
+      expect(h.offers()).toBe(1);
+      expect(errors(h.events)).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("hears nothing more once the player leaves before the deadline", async () => {
+      const h = await hostMeetingGuest();
+      await vi.advanceTimersByTimeAsync(10_000);
+      h.session.close();
+      expect(vi.getTimerCount()).toBe(0);
+      const heard = h.events.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.events).toHaveLength(heard);
+      expect(h.offers()).toBe(1);
+    });
+
+    it("sends a guest whose answer never opens back to waiting for its host's next offer", async () => {
+      vi.useFakeTimers();
+      const g = await opened("join");
+      g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+      await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS);
+      expect(g.session.transport.status).toBe("waiting");
+      // Its host's own deadline passed too, and it offers again.
+      g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[1].open();
+      await vi.advanceTimersByTimeAsync(GUEST_REOFFER_WAIT_MS * 2);
+      expect(g.session.transport.status).toBe("open");
       expect(errors(g.events)).toEqual([]);
     });
   });

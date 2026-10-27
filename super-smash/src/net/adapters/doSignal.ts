@@ -40,6 +40,14 @@ import { createEmitter, type Transport } from "../transport";
 
 export type DoSignalStatus = "waiting" | "negotiating" | "open" | "closed" | "failed";
 
+/**
+ * How long a new peer connection gets to open its channel. A healthy one opens
+ * in seconds, even through TURN; ICE that hangs rather than fails would
+ * otherwise leave both players on "Connecting…" for good. Missing it counts as
+ * the channel lost before it opened, which the session retries.
+ */
+export const NEGOTIATION_TIMEOUT_MS = 15_000;
+
 /* -------------------------------------------- the WebRTC slice, structurally -- */
 
 export interface DataChannelLike {
@@ -142,6 +150,8 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
   let remoteId: string | null = null;
   let announced = false;
   let remoteDescriptionSet = false;
+  /** The current connection's deadline to open its channel; see `NEGOTIATION_TIMEOUT_MS`. */
+  let deadline: ReturnType<typeof setTimeout> | null = null;
   /**
    * Remote candidates waiting for a description to land on, filed by sender.
    * Kept across teardown, since a sender's next offer may already have
@@ -156,7 +166,13 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     options.onStatus?.(next);
   }
 
+  function clearDeadline(): void {
+    if (deadline !== null) clearTimeout(deadline);
+    deadline = null;
+  }
+
   function teardown(): void {
+    clearDeadline();
     const ch = channel;
     const conn = pc;
     channel = null;
@@ -238,6 +254,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     };
     ch.onopen = () => {
       if (ch !== channel || closed || remoteId === null) return;
+      clearDeadline();
       setStatus("open");
       if (!announced) {
         announced = true;
@@ -258,6 +275,11 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
 
     pc = conn;
     channel = ch;
+    // Missed, it is the channel lost before it opened, as if it had closed.
+    deadline = setTimeout(() => {
+      deadline = null;
+      if (ch === channel && !announced) lose("waiting");
+    }, NEGOTIATION_TIMEOUT_MS);
     setStatus("negotiating");
     return conn;
   }

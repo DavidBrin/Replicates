@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_UNRELIABLE_CHANNEL_ID, INPUT_CHANNEL_LABEL } from "../channel";
 import { STUN_ONLY } from "../iceConfig";
@@ -6,6 +6,7 @@ import { toRtcIceServers } from "../iceServers";
 import type { WireIceCandidate } from "../signalProtocol";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import {
+  NEGOTIATION_TIMEOUT_MS,
   createDoSignalTransport,
   type DataChannelInitLike,
   type DataChannelLike,
@@ -400,6 +401,59 @@ describe("a fresh connection after the lobby channel was lost", () => {
 
     for (const t of [open, held, guest, closed]) expect(t.peers).toHaveLength(1);
     expect(open.transport.status).toBe("open");
+  });
+});
+
+describe("a negotiation's deadline", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The host meeting a guest: an offer out, and nothing back. */
+  function negotiating() {
+    vi.useFakeTimers();
+    const t = setup();
+    t.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    return t;
+  }
+
+  it("drops a connection whose channel neither opens nor closes in time, as a channel lost before it opened", async () => {
+    const t = negotiating();
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
+    expect(t.transport.status).toBe("negotiating");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.transport.status).toBe("waiting");
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.leaves).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("is gone once the channel opens, so it never touches a match", async () => {
+    const t = negotiating();
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
+    t.peers[0].channels[0].open();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS * 4);
+    expect(t.transport.status).toBe("open");
+  });
+
+  it("starts again with each new connection, and ends with the one it was set for", async () => {
+    const t = negotiating();
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1_000);
+    // The guest leaves and another arrives: a new connection, with a deadline of its own.
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    await vi.advanceTimersByTimeAsync(NEGOTIATION_TIMEOUT_MS - 1);
+    expect(t.peers).toHaveLength(2);
+    expect(t.transport.status).toBe("negotiating");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.transport.status).toBe("waiting");
+  });
+
+  it("is cleared by close()", () => {
+    const t = negotiating();
+    t.transport.close();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

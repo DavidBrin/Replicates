@@ -1519,7 +1519,9 @@ an answer and some ICE candidates, then idles until somebody leaves.
   that opens resets the count. When the tries run out the host gets `room-lost`, and a guest that
   hears no offer within 10 s (`GUEST_REOFFER_WAIT_MS`) does too, so both have the leave-and-rejoin
   path rather than a silent wait. Once a start has gone out or arrived the channel is held: no
-  fresh offer is made or accepted mid-match, where the link monitor decides as before.
+  fresh offer is made or accepted mid-match, where the link monitor decides as before. A new peer
+  connection whose channel has not opened within 15 s (`NEGOTIATION_TIMEOUT_MS`) counts as a
+  channel lost before it opened, so ICE that hangs rather than fails takes the same retries.
 - *A desync ends the match.* A confirmed-state hash mismatch used only to warn in the console, so
   two machines could play on to different outcomes. Now it ends the match the way a lost
   connection does, as a result of its own: "Out of Sync", no placings, "The two games went out of
