@@ -4,10 +4,13 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { routerMock } from "../../../vitest.setup";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
+import { STUN_ONLY } from "@/net/iceConfig";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
-import { getActiveSession, setActiveSession } from "@/net/online/session";
+import { OnlineSession, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
 import { ROLE_PORT, type Role } from "@/net/signalProtocol";
+import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
+import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { CharacterSelect } from "./CharacterSelect";
 
 const portraits = () => screen.getAllByRole("button", { name: /, number \d/i });
@@ -136,6 +139,42 @@ describe("CharacterSelect, online", () => {
     act(() => fake.emit({ type: "error", reason: "room-lost" }));
     expect(readyButton()).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent(roomErrorMessage("room-lost", "ABCD"));
+  });
+
+  /**
+   * The guest's room socket alone dropped (an idle timeout) while the direct
+   * channel stayed up: the room says the guest left, the screen still says
+   * connected, and a start would go to nobody. A real session, so the guard
+   * that refuses it is the one that ships.
+   */
+  it("keeps the host here, and says the room is lost, when the room no longer has the guest but the channel does", async () => {
+    const signalling = new FakeSignalling();
+    const channel = new OpenableChannel();
+    const session = await OnlineSession.open("ABCD", "create", {
+      fetchIce: async () => STUN_ONLY,
+      openSignalling: () => signalling,
+      createPeerConnection: () => ({ ...inertPeer(), createDataChannel: () => channel }),
+    });
+    setActiveSession(session);
+    bindSession(session);
+    act(() => {
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+      channel.open();
+    });
+    expect(useOnlineStore.getState().status).toBe("connected");
+    useMatchConfig.getState().setFighter(0, "mario");
+    useMatchConfig.getState().setFighter(1, "fox");
+    await renderSelect();
+
+    act(() => signalling.deliver({ t: "peer-left", peerId: "g1" }));
+    expect(readyButton()).toBeEnabled();
+    fireEvent.click(readyButton());
+
+    expect(signalling.sent.some((m) => m.t === "lobby")).toBe(false);
+    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(useOnlineStore.getState().config).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(roomErrorMessage("room-lost", "ABCD"));
+    expect(readyButton()).toBeDisabled();
   });
 
   it("holds Ready shut until the channel is back, and tells the host the guest left", async () => {

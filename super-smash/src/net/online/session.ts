@@ -50,8 +50,9 @@ export interface OnlineSessionLike {
   on(cb: (event: SessionEvent) => void): Unsubscribe;
   /**
    * True when the message went to the room; false when it did not (the session
-   * closed, the room gone, or a `start` the other side would not read as sent).
-   * Apart from a dropped `away`, the reason reaches `on()` as an `error`.
+   * closed, the room gone, a `start` the other side would not read as sent, or
+   * a `start` with nobody in the room to give it to). Apart from a dropped
+   * `away`, the reason reaches `on()` as an `error`.
    */
   sendLobby(message: LobbyMessage): boolean;
   close(): void;
@@ -87,6 +88,13 @@ export class OnlineSession implements OnlineSessionLike {
 
   private readonly events: Emitter<[SessionEvent]> = createEmitter();
   private welcomed = false;
+  /**
+   * Whether the room says the other player is in it. Not whether they are
+   * there (the channel decides that), but whether the room can pass them a
+   * lobby message: their room socket can drop on its own while the channel
+   * stays open.
+   */
+  private peerInRoom = false;
   /** The room socket closed, for whatever reason; it never reconnects. */
   private roomGone = false;
   private roomLost = false;
@@ -107,13 +115,16 @@ export class OnlineSession implements OnlineSessionLike {
       switch (event.t) {
         case "welcome":
           this.welcomed = true;
+          this.peerInRoom = event.peer !== null;
           this.events.emit({ type: "joined", role: event.self.role });
           if (event.peer) this.events.emit({ type: "peer", present: true });
           break;
         case "peer-joined":
+          this.peerInRoom = true;
           this.events.emit({ type: "peer", present: true });
           break;
         case "peer-left":
+          this.peerInRoom = false;
           this.events.emit({ type: "peer", present: false });
           break;
         case "lobby": {
@@ -169,6 +180,15 @@ export class OnlineSession implements OnlineSessionLike {
     // refused pick, stage or away costs only a stale lobby screen.
     if (message.kind === "start" && !arrivesAsSent(message)) {
       this.events.emit({ type: "error", reason: "bad-start" });
+      return false;
+    }
+    // The room drops a message it has nobody to give to. A lost pick or stage
+    // is repeated when somebody takes the seat; a lost start would leave this
+    // side playing alone until the link monitor gave up, with the other still
+    // waiting on its select screen. Their room socket is gone, so the room is
+    // as good as lost: both need a new one.
+    if (message.kind === "start" && !this.peerInRoom) {
+      this.loseRoom();
       return false;
     }
     this.signalling.send({ t: "lobby", payload: message });

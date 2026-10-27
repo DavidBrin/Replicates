@@ -209,6 +209,8 @@ function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
       return;
     }
     case "stage": {
+      // Only the host picks the stage, as only the host builds the start.
+      if (session.role !== "guest") return;
       match.setStage(message.stageId);
       match.setStageForm(message.form);
       // The rules are only shown: the match is built from the start's.

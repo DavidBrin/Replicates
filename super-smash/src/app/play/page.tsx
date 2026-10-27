@@ -311,6 +311,7 @@ export default function PlayPage() {
   const [netStats, setNetStats] = useState<NetStats | null>(null);
   const [linkHealth, setLinkHealth] = useState<LinkHealth>("ok");
   const [peerAway, setPeerAway] = useState(false);
+  const [stalled, setStalled] = useState(false);
 
   /** Cancels the hand-off to the results screen while it waits out the KO's play-out. */
   const cancelResultRef = useRef<(() => void) | null>(null);
@@ -521,7 +522,11 @@ export default function PlayPage() {
           );
         },
       });
-      statsTimer = window.setInterval(() => setNetStats(runner.netStats), NET_STATS_MS);
+      statsTimer = window.setInterval(() => {
+        setNetStats(runner.netStats);
+        // Sampled with the numbers: the HUD times the stall itself.
+        setStalled(runner.stalled);
+      }, NET_STATS_MS);
       (window as unknown as { __smashNet?: unknown }).__smashNet = {
         stats: () => runner.netStats,
         localPort,
@@ -587,7 +592,7 @@ export default function PlayPage() {
         className="h-full w-full"
       />
 
-      {online && !error ? <NetHud stats={netStats} health={linkHealth} peerAway={peerAway} /> : null}
+      {online && !error ? <NetHud stats={netStats} health={linkHealth} peerAway={peerAway} stalled={stalled} /> : null}
 
       {error && (
         <div

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 
 import { routerMock } from "../../../vitest.setup";
 import { AudioEngine } from "@/audio";
+import { STALL_HINT_MS } from "@/components/match/NetHud";
 import { CharacterSelect } from "@/components/menu/CharacterSelect";
 import { Results } from "@/components/menu/Results";
 import { resolveMatchStage } from "@/game/bootstrap";
@@ -29,7 +30,7 @@ import type { Role } from "@/net/signalProtocol";
 import PlayPage from "./page";
 
 const mocks = vi.hoisted(() => {
-  const runners: { options: MatchRunnerOptions; runner: { start: Mock; stop: Mock; dispose: Mock; netStats: NetStats | null } }[] = [];
+  const runners: { options: MatchRunnerOptions; runner: { start: Mock; stop: Mock; dispose: Mock; netStats: NetStats | null; stalled: boolean } }[] = [];
   const monitors: { options: LinkMonitorOptions; stop: Mock }[] = [];
   const pads: { options: GamepadOptions; detach: Mock }[] = [];
   /** Set to make the next runner refuse to build. */
@@ -219,6 +220,24 @@ describe("the play page, online", () => {
     expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12")).toBeInTheDocument();
     act(() => only(mocks.monitors).options.onHealth("waiting", true));
     expect(screen.getByRole("status")).toHaveTextContent("Opponent switched tabs…");
+  });
+
+  it("says it is waiting when the match has been held at the prediction cap for over a second", () => {
+    goOnline("host");
+    render(<PlayPage />);
+    const { runner } = only(mocks.runners);
+    act(() => vi.advanceTimersByTime(250));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    runner.stalled = true;
+    // The next stats sample sees the stall; the HUD times it from there.
+    act(() => vi.advanceTimersByTime(250));
+    act(() => vi.advanceTimersByTime(STALL_HINT_MS - 1));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for opponent…");
+    runner.stalled = false;
+    act(() => vi.advanceTimersByTime(250));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("never pauses on Esc, and leaving the match leaves the room", () => {

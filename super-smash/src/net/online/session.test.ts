@@ -1,61 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { DataChannelLike, PeerConnectionLike } from "../adapters/doSignal";
+import type { PeerConnectionLike } from "../adapters/doSignal";
 import { STUN_ONLY } from "../iceConfig";
 import type { RoomIntent } from "../signalProtocol";
+import { OpenableChannel, inertPeer } from "../testing/fakePeer";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import type { OnlineMatchConfig } from "./lobby";
 import { OnlineSession, ROOM_LOST_GRACE_MS, getActiveSession, setActiveSession, type SessionEvent } from "./session";
-
-const inertChannel = (): DataChannelLike => ({
-  readyState: "connecting",
-  binaryType: "blob",
-  onopen: null,
-  onclose: null,
-  onerror: null,
-  onmessage: null,
-  send() {},
-  close() {},
-});
-
-const inertPeer = (): PeerConnectionLike => ({
-  connectionState: "new",
-  onicecandidate: null,
-  onconnectionstatechange: null,
-  createDataChannel: inertChannel,
-  createOffer: async () => ({ sdp: "o" }),
-  createAnswer: async () => ({ sdp: "a" }),
-  setLocalDescription: async () => {},
-  setRemoteDescription: async () => {},
-  addIceCandidate: async () => {},
-  close() {},
-});
-
-/** A data channel the test opens, as the browser does once ICE connects. */
-class OpenableChannel implements DataChannelLike {
-  readyState = "connecting";
-  binaryType = "blob";
-  onopen: DataChannelLike["onopen"] = null;
-  onclose: DataChannelLike["onclose"] = null;
-  onerror: DataChannelLike["onerror"] = null;
-  onmessage: DataChannelLike["onmessage"] = null;
-  readonly sent: Uint8Array[] = [];
-  send(data: Uint8Array<ArrayBuffer>): void {
-    this.sent.push(data);
-  }
-  close(): void {
-    this.readyState = "closed";
-  }
-  open(): void {
-    this.readyState = "open";
-    this.onopen?.();
-  }
-  /** The channel gives up before it ever opened. */
-  drop(): void {
-    this.readyState = "closed";
-    this.onclose?.();
-  }
-}
 
 const CONFIG: OnlineMatchConfig = {
   seed: 1234,
@@ -311,9 +262,47 @@ describe("OnlineSession", () => {
 
   it("sends a start the guest's parser will take", async () => {
     const { session, signalling, events } = await open();
+    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
     expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
-    expect(signalling.sent).toEqual([{ t: "lobby", payload: { kind: "start", config: CONFIG } }]);
-    expect(events).toEqual([]);
+    expect(signalling.sent.filter((m) => m.t === "lobby")).toEqual([{ t: "lobby", payload: { kind: "start", config: CONFIG } }]);
+    expect(errors(events)).toEqual([]);
+  });
+
+  /**
+   * The guest's room socket alone can drop (an idle proxy or NAT timeout)
+   * while the channel stays open. The room then drops a start it has nobody
+   * to give to, and the host would play alone until the link monitor gave up.
+   */
+  describe("a start while the room says the other player is not there", () => {
+    it("is not sent, even with the channel open: the room is lost, and the host stays", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      expect(session.transport.status).toBe("open");
+      const written = signalling.sent.length;
+
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(false);
+
+      expect(signalling.sent).toHaveLength(written);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+    });
+
+    it("leaves picks and the stage alone", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      expect(session.sendLobby({ kind: "pick", fighterId: "fox", costume: 0 })).toBe(true);
+      expect(session.sendLobby({ kind: "stage", stageId: "battlefield", form: "normal" })).toBe(true);
+      expect(errors(events)).toEqual([]);
+    });
+
+    it("goes once somebody is in the seat again", async () => {
+      const { session, signalling, events } = await open();
+      signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: null });
+      signalling.deliver({ t: "peer-joined", peer: { id: "g1", role: "guest" } });
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      expect(errors(events)).toEqual([]);
+    });
   });
 
   it("keeps back a start the guest would drop, and makes it the host's error", async () => {

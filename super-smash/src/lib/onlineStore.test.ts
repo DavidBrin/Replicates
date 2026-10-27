@@ -77,6 +77,17 @@ describe("binding a session to the stores", () => {
     expect(useMatchConfig.getState().rules).toBe(own);
   });
 
+  /** Only the host picks the stage, as only the host sends a start. */
+  it("takes no stage from the guest", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "host" });
+    useMatchConfig.getState().setStage("battlefield");
+    emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
+    expect(useOnlineStore.getState().hostStage).toBeNull();
+    expect(useMatchConfig.getState()).toMatchObject({ stageId: "battlefield", stageForm: "normal" });
+  });
+
   it("takes the start config from the host, and only on the guest", () => {
     const guest = fakeSession();
     bindSession(guest.session);
