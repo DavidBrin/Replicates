@@ -380,6 +380,18 @@ describe("a fresh connection after the lobby channel was lost", () => {
     expect(t.transport.status).toBe("open");
   });
 
+  it("offers again once a held channel is released, when the seat the match was for emptied", async () => {
+    const t = await linkedHost();
+    t.transport.holdChannel();
+    t.peers[0].channels[0].remoteClose();
+    t.transport.offerAgain("g1");
+    expect(t.peers).toHaveLength(1);
+    t.transport.releaseChannel();
+    t.transport.offerAgain("g1");
+    await settle();
+    expect(t.peers).toHaveLength(2);
+  });
+
   it("offers nothing again while the channel is open, once the match holds it, from a guest, or after close()", async () => {
     const open = await linkedHost();
     open.transport.offerAgain("g1");

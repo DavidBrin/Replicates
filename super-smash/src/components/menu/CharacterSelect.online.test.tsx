@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
@@ -6,7 +6,7 @@ import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { STUN_ONLY } from "@/net/iceConfig";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
-import { OnlineSession, getActiveSession, setActiveSession } from "@/net/online/session";
+import { OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
 import { ROLE_PORT, type Role } from "@/net/signalProtocol";
 import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
@@ -290,6 +290,108 @@ describe("CharacterSelect, online", () => {
     expect(getActiveSession()).toBeNull();
     expect(useOnlineStore.getState().status).toBe("idle");
     expect(routerMock.push).toHaveBeenCalledWith("/online");
+  });
+
+  /**
+   * Only the host's side of the lobby channel closes. The host clears the
+   * guest's panel and offers again; the guest's channel is replaced without
+   * ever reporting a loss. Each screen is driven by a real session over a fake
+   * room, one machine per test (the stores are one per page).
+   */
+  describe("when only the host's side of the channel closed", () => {
+    async function realSession(role: Role) {
+      const signalling = new FakeSignalling();
+      const channels: OpenableChannel[] = [];
+      const session = await OnlineSession.open("ABCD", role === "host" ? "create" : "join", {
+        fetchIce: async () => STUN_ONLY,
+        openSignalling: () => signalling,
+        createPeerConnection: () => {
+          const channel = new OpenableChannel();
+          channels.push(channel);
+          return { ...inertPeer(), createDataChannel: () => channel };
+        },
+      });
+      setActiveSession(session);
+      bindSession(session);
+      const lobby = () => signalling.sent.flatMap((m) => (m.t === "lobby" ? [m.payload] : []));
+      return { session, signalling, channels, lobby };
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("has the guest, its channel replaced, repeat its pick and keep the host's stage", async () => {
+      vi.useFakeTimers();
+      const g = await realSession("guest");
+      await act(async () => {
+        g.signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+        g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
+        await vi.advanceTimersByTimeAsync(0);
+        g.channels[0].open();
+        g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "stage", stageId: "smashville", form: "normal" } });
+      });
+      render(<CharacterSelect />);
+      await act(async () => {});
+      fireEvent.click(portraits()[0]);
+      const mine = useMatchConfig.getState().players[ROLE_PORT.guest];
+      expect(g.lobby()).toEqual([{ kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
+
+      // The host's side died; it offers again, and this side's channel is replaced.
+      await act(async () => {
+        g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o2" } });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+      expect(screen.getByText("Stage: Smashville")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      act(() => g.channels[1].open());
+
+      expect(useOnlineStore.getState().status).toBe("connected");
+      expect(g.lobby()).toEqual([
+        { kind: "pick", fighterId: mine.fighterId, costume: mine.costume },
+        { kind: "pick", fighterId: mine.fighterId, costume: mine.costume },
+      ]);
+    });
+
+    it("has the host offer again, repeat its pick and stage, take the guest's repeated pick, and start", async () => {
+      vi.useFakeTimers();
+      const h = await realSession("host");
+      await act(async () => {
+        h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+        await vi.advanceTimersByTimeAsync(0);
+        h.channels[0].open();
+      });
+      useMatchConfig.getState().setFighter(0, "mario");
+      render(<CharacterSelect />);
+      await act(async () => {});
+      act(() => h.signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 1 } }));
+      expect(readyButton()).toBeEnabled();
+
+      // Only the host's side of the channel closes: the guest's panel empties, Ready waits.
+      act(() => h.channels[0].drop());
+      expect(useMatchConfig.getState().players[1].fighterId).toBeNull();
+      expect(readyButton()).toBeDisabled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      });
+      expect(useOnlineStore.getState().status).toBe("linking");
+      act(() => h.channels[1].open());
+      expect(h.lobby()).toEqual(
+        expect.arrayContaining([
+          { kind: "pick", fighterId: "mario", costume: 0 },
+          { kind: "stage", stageId: "battlefield", form: "normal", rules: useMatchConfig.getState().rules },
+        ]),
+      );
+
+      // The guest's store passed through linking too, so it repeats its pick.
+      act(() => h.signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 1 } }));
+      expect(useMatchConfig.getState().players.map((p) => p.fighterId)).toEqual(["mario", "fox"]);
+      expect(readyButton()).toBeEnabled();
+      fireEvent.click(readyButton());
+      expect(h.lobby().some((m) => m.kind === "start")).toBe(true);
+      expect(routerMock.push).toHaveBeenCalledWith("/play");
+    });
   });
 
   describe("when somebody takes the empty seat", () => {

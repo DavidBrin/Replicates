@@ -165,9 +165,12 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
       case "link":
         if (event.status === "open") {
           online().patch({ status: "connected", notice: null });
-        } else if (event.status === "negotiating" && online().status === "waiting") {
+        } else if (event.status === "negotiating" && (online().status === "waiting" || online().status === "connected")) {
           // A fresh connection to whoever the room seats: a newcomer, or the
-          // same player again after the channel was lost (session.ts).
+          // same player again after the channel was lost (session.ts). From
+          // connected, it is a guest whose channel the host replaced: nobody
+          // left, so the panels and the host's stage stay, but the next open
+          // is a way into connected, and the pick is repeated.
           online().patch({ status: "linking", notice: null });
         } else if (event.status === "failed") {
           fail("link-failed");

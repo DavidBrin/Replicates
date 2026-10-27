@@ -378,6 +378,36 @@ describe("OnlineSession", () => {
       expect(errors(h.events)).toEqual([]);
     });
 
+    /** A start withdrawn because its guest left before the match began: the next guest's lobby is a lobby again. */
+    it("offers again for the next guest once the guest a start went to has left", async () => {
+      const h = await linkedHost();
+      expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      h.channels[0].drop();
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.offers()).toBe(2);
+      h.channels[1].open();
+      h.channels[1].drop();
+      await vi.advanceTimersByTimeAsync(REOFFER_DELAYS_MS[0]);
+      expect(h.offers()).toBe(3);
+    });
+
+    it("has a guest whose host left after a start answer the next host while it still holds a connection", async () => {
+      const g = await linkedGuest();
+      g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: CONFIG } });
+      g.signalling.deliver({ t: "peer-left", peerId: "h1" });
+      g.channels[0].drop();
+      g.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+      g.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "o2" } });
+      await vi.advanceTimersByTimeAsync(0);
+      g.channels[1].open();
+      // The new host's own channel loss: its re-offer replaces this side's connection.
+      g.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "o3" } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(g.channels).toHaveLength(3);
+    });
+
     it("has the guest answer its host's fresh offer and carry on", async () => {
       const g = await linkedGuest();
       g.channels[0].drop();

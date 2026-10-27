@@ -177,6 +177,26 @@ describe("binding a session to the stores", () => {
     expect(useOnlineStore.getState().status).toBe("connected");
   });
 
+  /**
+   * The host's side of the channel died alone and it offered again: the
+   * guest's channel is replaced without ever reporting a loss. Passing through
+   * linking makes the next open a way into connected, so the guest repeats its
+   * pick; nothing else changes, since nobody left.
+   */
+  it("passes a replaced channel through linking, keeping the panels and the host's stage", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "guest" });
+    emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
+    emit({ type: "link", status: "negotiating" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null, hostStage: { stageId: "smashville", form: "omega" } });
+    expect(useMatchConfig.getState().players[0]).toMatchObject({ fighterId: "fox", costume: 2 });
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState().status).toBe("connected");
+  });
+
   it("clears the notice once the channel opens again", () => {
     const { session, emit } = fakeSession();
     bindSession(session);

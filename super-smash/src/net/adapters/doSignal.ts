@@ -119,6 +119,8 @@ export interface DoSignalTransport extends Transport {
   offerAgain(peerId: string): void;
   /** The match has started: from now on its channel is never replaced, by either side. */
   holdChannel(): void;
+  /** The seat the match was for emptied before it began: a lobby again (see `holdChannel`). */
+  releaseChannel(): void;
 }
 
 /** One cast at the boundary, for the reason webrtc.ts gives for `RoomLike`. */
@@ -442,6 +444,9 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
     },
     holdChannel() {
       held = true;
+    },
+    releaseChannel() {
+      held = false;
     },
     close() {
       if (closed) return;

@@ -152,6 +152,12 @@ export class OnlineSession implements OnlineSessionLike {
         case "peer-left":
           this.seatedPeer = null;
           this.resetReconnect();
+          // A start that went to (or came from) the player who left is
+          // withdrawn: whoever takes the seat meets a lobby again.
+          if (this.started) {
+            this.started = false;
+            this.transport.releaseChannel();
+          }
           this.events.emit({ type: "peer", present: false });
           break;
         case "lobby": {
