@@ -507,6 +507,26 @@ export class RollbackSession<S = GameState> {
     return Math.max(0, this.currentFrame - 1 - this.remoteConfirmedFrame());
   }
 
+  /**
+   * The newest state no input still to arrive can change, or `null` while a
+   * correction is waiting to run.
+   *
+   * That is the state at `confirmedFrame + 1`, since every input before it is
+   * known, capped at the present: the frame `maybeHash` trades, read the same
+   * way. While a rollback is pending, input that disagrees with a guess has
+   * landed and the saved frames after it are about to be replaced, so there is
+   * no answer until the next `advance()`.
+   *
+   * A read and nothing else. The object returned may be a saved slot that a
+   * rewind restores from, which is why it is `Readonly`: mutating it would
+   * corrupt the very frame it vouches for.
+   */
+  confirmedState(): Readonly<S> | null {
+    if (this.pendingRollbackFrame !== null) return null;
+    const frame = Math.min(this.confirmedFrame + 1, this.currentFrame);
+    return frame === this.currentFrame ? this.state : this.restore(frame);
+  }
+
   stats(): NetStats {
     const c = this.counters;
     return {

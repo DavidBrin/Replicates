@@ -719,3 +719,95 @@ describe("the injected simulation contract", () => {
     expect(duplicated).toBe(false);
   });
 });
+
+describe("the confirmed state", () => {
+  /**
+   * Two sessions over a bad link, stepped by hand so a test can look in the
+   * window between input landing and the frame that acts on it. `observe` runs
+   * after A's frame and again after the network delivers.
+   */
+  function laggyMatch(deps: RollbackDeps<FakeState>, observe: (a: RollbackSession<FakeState>) => void) {
+    const network = new LoopbackNetwork({ latencyMs: 100, jitterMs: 20, seed: 3 });
+    const make = (id: string, port: number) =>
+      new RollbackSession<FakeState>({
+        transport: network.connect(id),
+        deps,
+        initialState: initialState(),
+        playerCount: 2,
+        localPorts: [port],
+        inputDelay: 2,
+        autoInputDelay: false,
+        now: () => network.now(),
+      });
+    const a = make("A", 0);
+    const b = make("B", 1);
+    for (let i = 0; i < 300; i++) {
+      a.advance(scriptedInput(0, a.frame, 10_000));
+      observe(a);
+      b.advance(scriptedInput(1, b.frame, 10_000));
+      network.advance(FRAME_MS);
+      observe(a);
+    }
+    return a;
+  }
+
+  it("is the state one machine reaches on the confirmed inputs, while the session guesses past it", () => {
+    const deps = makeDeps();
+    let checked = 0;
+    let behind = 0;
+    let pending = 0;
+    const wrong: string[] = [];
+    laggyMatch(deps, (a) => {
+      const confirmed = a.confirmedState();
+      if (confirmed === null) {
+        pending++;
+        return;
+      }
+      checked++;
+      if (confirmed.frame < a.frame) behind++;
+      const expectedFrame = Math.min(a.confirmedFrame + 1, a.frame);
+      const expected = deps.hashState(referenceState(confirmed.frame, 2, 10_000, deps));
+      if (confirmed.frame !== expectedFrame || deps.hashState(confirmed) !== expected) {
+        wrong.push(`frame ${confirmed.frame} (want ${expectedFrame}) at ${a.frame}`);
+      }
+    });
+    expect(wrong).toEqual([]);
+    expect(checked).toBeGreaterThan(300);
+    // Both halves of the contract were exercised: it trailed the guesses, and
+    // it declined to answer while a correction was waiting to run.
+    expect(behind).toBeGreaterThan(0);
+    expect(pending).toBeGreaterThan(0);
+  });
+
+  it("is only a read: a session asked for it every frame plays the identical match", () => {
+    const run = (ask: boolean) => {
+      const deps = makeDeps();
+      let clones = 0;
+      const counting: RollbackDeps<FakeState> = {
+        ...deps,
+        cloneState(state) {
+          clones++;
+          return deps.cloneState(state);
+        },
+      };
+      const a = laggyMatch(counting, (session) => {
+        if (ask) session.confirmedState();
+      });
+      return { hash: deps.hashState(a.currentState), stats: a.stats(), clones };
+    };
+    expect(run(true)).toEqual(run(false));
+  });
+
+  it("is the current state when every port is local", () => {
+    const session = new RollbackSession<FakeState>({
+      transport: createNullTransport(),
+      deps: makeDeps(),
+      initialState: initialState(),
+      playerCount: 2,
+      localPorts: [0, 1],
+      autoInputDelay: false,
+    });
+    for (let frame = 0; frame < 20; frame++) session.advance([0, 0]);
+    expect(session.confirmedState()).toBe(session.currentState);
+  });
+});

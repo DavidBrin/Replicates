@@ -247,38 +247,46 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   let ended = false;
   let disposed = false;
 
+  // Key presses from ticks the rollback session refused. A refused tick's input
+  // is never scheduled, and a key tapped between two ticks is in exactly one
+  // drain, so without this the tap would be gone; it rides on the next tick.
+  const noPresses: readonly InputFrame[] = players.map(() => 0);
+  let carriedPresses = noPresses;
+  // This tick's presses plus the carried ones, kept in case it is refused too.
+  let tickPresses = noPresses;
+
   function gatherInputs(): InputFrame[] {
     const drained = keyboard ? keyboard.drain() : null;
     // Exactly once per tick: a pad's press edges are the diff against the last poll.
     const pads = gamepad ? gamepad.poll(players.length) : null;
+    tickPresses = players.map((_, port) => carriedPresses[port] | (drained?.pressed[port] ?? 0));
     return players.map((p, port) => {
-      if (p.cpuLevel === null) return mergeKeyboardAndPad(drained?.frames[port] ?? 0, pads?.frames[port] ?? 0);
+      if (p.cpuLevel === null) {
+        const keys = (drained?.frames[port] ?? 0) | carriedPresses[port];
+        return mergeKeyboardAndPad(keys, pads?.frames[port] ?? 0);
+      }
       const r = cpuInput(state, port, p.cpuLevel, cpuSeed, cpuWorlds[port]);
       cpuSeed = r.seed;
       return r.input;
     });
   }
 
-  // The frame whose step produced the outcome on screen, or -1 while none is
-  // pending. See `isFinal`.
-  let outcomeFrame = -1;
-
   /**
-   * Online, an outcome reached on a predicted frame can still be rolled back:
-   * the KO may be undone by the input that arrives next. So the match ends
-   * once every input up to the frame that *produced* the outcome is confirmed.
+   * The result the match has really reached, or null.
    *
-   * Not "the frame just simulated is confirmed": under steady latency the peer
-   * running ahead is always at least one frame past confirmation when it
-   * checks, so that test never passes there, its match never ends, and the
-   * other machine's departure reads as a lost connection. `tick` clears the
-   * mark whenever a rollback might have moved or undone the outcome, and the
-   * next sighting records it afresh.
+   * Online, the state on screen may stand on guessed input, and so may its
+   * outcome: the KO can be undone or moved, and the clock can run out a frame
+   * later, once the real input lands. Only the state every input of which is
+   * confirmed is final, so its outcome, and nothing on screen, ends the match.
+   *
+   * Asking "is the frame just run confirmed" instead never passes on the peer
+   * running ahead, which under steady latency is a frame or more past
+   * confirmation on every tick: its match never ends, and the other machine
+   * leaving reads as a lost connection.
    */
-  function isFinal(): boolean {
-    if (session === null) return true;
-    if (outcomeFrame < 0) outcomeFrame = state.frame - 1;
-    return session.confirmedFrame >= outcomeFrame;
+  function finalOutcome(): MatchOutcome | null {
+    if (session === null) return state.outcome;
+    return session.confirmedState()?.outcome ?? null;
   }
 
   function tick(): void {
@@ -289,11 +297,15 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     if (session) {
       const result = session.advance(inputs);
       stalled = !result.advanced;
-      // A replay may have moved the outcome, or undone it — including on a
-      // tick that then stalls, whose rewind is already in the session's state.
-      if (result.rolledBackFrames > 0 || !result.state.outcome) outcomeFrame = -1;
-      // A refused frame ran nothing new: nothing to age, sound or report.
-      if (!result.advanced) return;
+      if (!result.advanced) {
+        // A refused frame ran nothing new: nothing to age, sound or report. The
+        // picture holds still instead of re-blending the last step, and this
+        // tick's presses wait for the next one.
+        previous = state;
+        carriedPresses = tickPresses;
+        return;
+      }
+      carriedPresses = noPresses;
       previous = state;
       state = result.state;
       events = result.events;
@@ -329,9 +341,10 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
 
     onFrame?.(state, events);
 
-    if (state.outcome && !ended && isFinal()) {
+    const outcome = ended ? null : finalOutcome();
+    if (outcome) {
       ended = true;
-      onEnd?.(state.outcome);
+      onEnd?.(outcome);
     }
   }
 

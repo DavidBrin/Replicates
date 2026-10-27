@@ -25,10 +25,18 @@ import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap
 import { meleeReachFromDef } from "@/ai/behaviours";
 import { hashState } from "@/engine/hash";
 import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engine/types";
+import { KeyboardInput } from "@/input/keyboard";
+import { CONFIG_ARROWS } from "@/input/schemes";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
+import { PacketType, decodePacket } from "@/net/packet";
 import { MAX_PREDICTION_FRAMES } from "@/net/rollback";
 import { ROLE_PORT } from "@/net/signalProtocol";
 import { createNullTransport, type Transport } from "@/net/transport";
+import { render } from "@/render/renderer";
+
+// Nothing in these tests paints a real canvas; the stub lets one test see what
+// the runner would have drawn.
+vi.mock("@/render/renderer", () => ({ render: vi.fn() }));
 
 const RULES: MatchRules = {
   mode: "stock",
@@ -316,84 +324,206 @@ describe("an online match runs through a RollbackSession", () => {
   });
 });
 
-/** Mario against Donkey Kong, both human, or both the CPU at `cpuLevel`. */
-function slots(cpuLevel: number | null): PlayerSlot[] {
-  return [
-    { selection: { defId: "mario" }, cpuLevel, label: "P1" },
-    { selection: { defId: "donkeyKong" }, cpuLevel, label: "P2" },
-  ];
+/** Mario against Donkey Kong, both human. */
+const HUMANS: PlayerSlot[] = [
+  { selection: { defId: "mario" }, cpuLevel: null, label: "P1" },
+  { selection: { defId: "donkeyKong" }, cpuLevel: null, label: "P2" },
+];
+
+/** A pad that drives `port` only, with whatever `read` says this tick. */
+function padOn(port: number, read: () => InputFrame) {
+  return {
+    poll(portCount = 4) {
+      const frames = new Array<InputFrame>(portCount).fill(0);
+      frames[port] = read();
+      const none = new Array<InputFrame>(portCount).fill(0);
+      return { frames, pressed: none, released: none, sticks: [], connectedPads: [0] };
+    },
+  };
 }
 
 describe("an online match ends once, on both machines", () => {
-  // Two seconds of a timed match: the clock runs out by itself, so the end
-  // does not wait on anybody landing a KO.
-  const SHORT_TIMED: MatchRules = { ...RULES, mode: "time", timeLimit: 120 };
+  /**
+   * What a player presses on frame `f`: a seeded stream that changes every
+   * `period` frames. Walking at the opponent, attacks, specials, jumps, shields
+   * and grabs, so the other side's guesses keep going wrong right up to the
+   * end, and fighters fall off the stage often enough to lose their last stock.
+   */
+  function scripted(port: number, f: number, seed: number, period: number): InputFrame {
+    if (f < 0) return 0;
+    const k = Math.floor(f / period);
+    let h = (Math.imul(k + 1, 2654435761) ^ Math.imul(port + 3, 97) ^ Math.imul(seed + 11, 7919)) >>> 0;
+    h ^= h >>> 13;
+    h = Math.imul(h, 0x5bd1e995) >>> 0;
+    h ^= h >>> 15;
+    const toward = port === 0 ? Btn.Right : Btn.Left;
+    const choices = [
+      toward, toward, toward | Btn.Attack, Btn.Attack, Btn.Special, toward | Btn.Special, Btn.Jump,
+      0, Btn.Shield, toward, Btn.Attack | Btn.Up, Btn.Grab, toward | Btn.Attack,
+    ];
+    return choices[h % choices.length];
+  }
+
+  interface Link {
+    readonly latencyMs: number;
+    readonly jitterMs: number;
+    /** Seeds both the script and the network's jitter. */
+    readonly seed: number;
+    readonly period: number;
+  }
+
+  // Fixed, so one machine can say what the result should be: a retuned delay
+  // moves inputs to other frames, and the match itself changes with them.
+  const INPUT_DELAY = 2;
+  const TIMED: MatchRules = { ...RULES, mode: "time", timeLimit: 180 };
+  const LAST_STOCK: MatchRules = { ...RULES, mode: "stock", stocks: 1 };
+
+  const TIMED_SWEEP = { latencies: [33, 50, 80, 120], seeds: [1, 2, 3, 4], periods: [1, 2, 4, 8] };
+  // [seed, period] pairs whose scripts lose a last stock within a few hundred
+  // frames on one machine; most scripts do, these are the quick ones.
+  const STOCK_SWEEP = {
+    latencies: [33, 80, 120],
+    scripts: [[1, 4], [1, 5], [2, 8], [4, 4], [4, 5], [4, 8], [7, 5], [7, 8], [8, 5], [8, 8]] as const,
+  };
+
+  /** One machine, no network, the same inputs on the same frames. */
+  function oneMachine(rules: MatchRules, link: Link, budget: number): MatchOutcome | null {
+    const runner: MatchRunner = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules,
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      gamepad: {
+        poll(portCount = 4) {
+          const f = runner.frame - INPUT_DELAY;
+          const frames = new Array<InputFrame>(portCount).fill(0);
+          frames[0] = scripted(0, f, link.seed, link.period);
+          frames[1] = scripted(1, f, link.seed, link.period);
+          const none = new Array<InputFrame>(portCount).fill(0);
+          return { frames, pressed: none, released: none, sticks: [], connectedPads: [0, 1] };
+        },
+      },
+    });
+    for (let i = 0; i < budget && !runner.state.outcome; i++) runner.advance(1);
+    return runner.state.outcome;
+  }
 
   /**
-   * Host and guest play `frames` ticks, half a frame out of phase as two real
-   * machines are, at the input delay production picks for itself. Returns
-   * every outcome each side's `onEnd` reported, and both runners.
+   * Host and guest, half a frame out of phase as two real machines are. A
+   * side that reports a result leaves on the spot, disposed and disconnected
+   * as the results screen takes a player out of the room, so the other side
+   * has to finish on what it had already been sent. Returns every outcome
+   * each side reported.
    */
-  function playOut(network: LoopbackNetwork, players: PlayerSlot[], rules: MatchRules, frames: number) {
+  function playOut(rules: MatchRules, link: Link, budget: number): [MatchOutcome[], MatchOutcome[]] {
+    const network = new LoopbackNetwork({ latencyMs: link.latencyMs, jitterMs: link.jitterMs, seed: link.seed });
     const ends: [MatchOutcome[], MatchOutcome[]] = [[], []];
-    const peers = (["host", "guest"] as const).map((role) => {
+    const roles = ["host", "guest"] as const;
+    const peers = roles.map((role) => {
       const port = ROLE_PORT[role];
-      return createMatchRunner({
+      const runner: MatchRunner = createMatchRunner({
         stage: getStageOrThrow("battlefield"),
-        players,
+        players: HUMANS,
         rules,
         seed: 0x5eed1e55,
         getFighter: getFighterOrThrow,
-        net: { transport: network.connect(role), localPorts: [port], now: () => network.now() },
+        gamepad: padOn(port, () => scripted(port, runner.frame, link.seed, link.period)),
+        net: {
+          transport: network.connect(role),
+          localPorts: [port],
+          inputDelay: INPUT_DELAY,
+          autoInputDelay: false,
+          now: () => network.now(),
+        },
         onEnd: (outcome) => ends[port].push(outcome),
       });
+      return runner;
     });
-    for (let i = 0; i < frames; i++) {
-      peers[0].advance(1);
-      network.advance(FRAME_MS / 2);
-      peers[1].advance(1);
-      network.advance(FRAME_MS / 2);
+    const gone = [false, false];
+    for (let i = 0; i < budget && !(gone[0] && gone[1]); i++) {
+      for (const role of roles) {
+        const port = ROLE_PORT[role];
+        if (!gone[port]) {
+          peers[port].advance(1);
+          if (ends[port].length > 0) {
+            gone[port] = true;
+            peers[port].dispose();
+            network.disconnect(role);
+          }
+        }
+        network.advance(FRAME_MS / 2);
+      }
     }
-    return { ends, peers };
+    return ends;
   }
 
-  // The peer running ahead is at least a frame past confirmation on every
-  // tick. Under "the frame just run is confirmed", its match never ended: at
-  // 80 ms the guest never reported a result, at 33 ms the host never did.
-  it.each([
-    { link: "80 ms", latencyMs: 80, jitterMs: 0 },
-    { link: "33 ms", latencyMs: 33, jitterMs: 0 },
-    { link: "80 ± 20 ms", latencyMs: 80, jitterMs: 20 },
-  ])("reports the result exactly once on each side over $link", ({ latencyMs, jitterMs }) => {
-    const network = new LoopbackNetwork({ latencyMs, jitterMs, seed: 11 });
-    const {
-      ends: [host, guest],
-    } = playOut(network, slots(null), SHORT_TIMED, 600);
-    expect(host).toHaveLength(1);
-    expect(guest).toHaveLength(1);
-    expect(host[0]).toEqual(guest[0]);
+  /** Empty when both sides reported once, the same result one machine reaches. */
+  function problems(rules: MatchRules, link: Link, budget: number): string[] {
+    const truth = oneMachine(rules, link, budget);
+    const [host, guest] = playOut(rules, link, budget);
+    const name = `${rules.mode} ${link.latencyMs}±${link.jitterMs} ms, seed ${link.seed}, period ${link.period}`;
+    if (truth === null) return [`${name}: one machine never finished; pick another script`];
+    const found: string[] = [];
+    for (const [side, ends] of [["host", host], ["guest", guest]] as const) {
+      if (ends.length !== 1) found.push(`${name}: ${side} reported ${ends.length} results`);
+      else if (JSON.stringify(ends[0]) !== JSON.stringify(truth)) {
+        found.push(`${name}: ${side} reported ${JSON.stringify(ends[0])}, one machine ${JSON.stringify(truth)}`);
+      }
+    }
+    return found;
+  }
+
+  it("finishes on both sides over the link that once stranded the guest", () => {
+    // The host saw time run out on a frame it had confirmed and left; the
+    // guest stalled at the prediction cap with the result still unreported.
+    expect(problems(TIMED, { latencyMs: 80, jitterMs: 0, seed: 1, period: 4 }, 900)).toEqual([]);
   });
 
-  it("agrees on the result of a fought match, through rollbacks", () => {
-    // Two CPUs stand in for the players. Each machine runs its own port's CPU
-    // and sends what it pressed, so the inputs change constantly and the
-    // other side's guesses are often wrong.
-    const network = new LoopbackNetwork({ latencyMs: 33 });
-    const {
-      ends: [host, guest],
-      peers,
-    } = playOut(network, slots(9), { ...RULES, mode: "time", timeLimit: 600 }, 900);
-    expect(peers.some((p) => (p.netStats?.rollbacks ?? 0) > 0)).toBe(true);
-    expect(host).toHaveLength(1);
-    expect(guest).toHaveLength(1);
-    expect(host[0]).toEqual(guest[0]);
+  it("finishes a timed match on both sides, on one machine's result, across a sweep of links", () => {
+    const found: string[] = [];
+    for (const latencyMs of TIMED_SWEEP.latencies) {
+      for (const jitterMs of [0, 15]) {
+        for (const seed of TIMED_SWEEP.seeds) {
+          for (const period of TIMED_SWEEP.periods) {
+            found.push(...problems(TIMED, { latencyMs, jitterMs, seed, period }, 900));
+          }
+        }
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("finishes on a last-stock KO on both sides, on one machine's result, across a sweep of links", () => {
+    const found: string[] = [];
+    for (const latencyMs of STOCK_SWEEP.latencies) {
+      for (const [seed, period] of STOCK_SWEEP.scripts) {
+        found.push(...problems(LAST_STOCK, { latencyMs, jitterMs: 0, seed, period }, 1200));
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("reports a result once, however long the match stays on screen", () => {
+    const onEnd = vi.fn();
+    const runner = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules: { ...RULES, mode: "time", timeLimit: 3 },
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      onEnd,
+    });
+    runner.advance(30);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    expect(onEnd).toHaveBeenCalledWith(runner.state.outcome);
   });
 
   it("does not end on an outcome it has only predicted", () => {
     const onEnd = vi.fn();
     const runner = createMatchRunner({
       stage: getStageOrThrow("battlefield"),
-      players: slots(null),
+      players: HUMANS,
       rules: { ...RULES, mode: "time", timeLimit: 3 },
       seed: 0x5eed1e55,
       getFighter: getFighterOrThrow,
@@ -407,6 +537,109 @@ describe("an online match ends once, on both machines", () => {
   });
 });
 
+describe("a tick the rollback session refuses", () => {
+  const INPUT_DELAY_FOR_STALLS = 2;
+
+  /** Host and guest with the host's keyboard; the guest is ticked by hand. */
+  function hostWithKeyboard() {
+    const network = new LoopbackNetwork({ latencyMs: 0 });
+    const keyboard = new KeyboardInput([{ port: 0, scheme: CONFIG_ARROWS }], { window, overlayHost: null });
+    keyboard.attach();
+    const sent: InputFrame[] = [];
+    const transport = network.connect("host");
+    const host = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules: RULES,
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      keyboard,
+      net: {
+        // Everything the host puts on the wire for its own port, in order.
+        transport: {
+          ...transport,
+          send(bytes) {
+            const packet = decodePacket(bytes);
+            if (packet?.type === PacketType.Input) {
+              packet.inputs.forEach((input, i) => (sent[packet.startFrame + i] = input));
+            }
+            transport.send(bytes);
+          },
+        },
+        localPorts: [0],
+        inputDelay: INPUT_DELAY_FOR_STALLS,
+        autoInputDelay: false,
+        now: () => network.now(),
+      },
+    });
+    const guest = createMatchRunner({
+      stage: getStageOrThrow("battlefield"),
+      players: HUMANS,
+      rules: RULES,
+      seed: 0x5eed1e55,
+      getFighter: getFighterOrThrow,
+      net: { transport: network.connect("guest"), localPorts: [1], now: () => network.now() },
+    });
+    return { network, keyboard, host, guest, sent };
+  }
+
+
+  it("keeps a key tapped during the stall for the next frame that runs", () => {
+    const { network, keyboard, host, guest, sent } = hostWithKeyboard();
+    try {
+      // The guest says nothing, so the host runs to the prediction cap and stops.
+      for (let i = 0; i < 20; i++) {
+        host.advance(1);
+        network.advance(FRAME_MS);
+      }
+      expect(host.stalled).toBe(true);
+      const stalledAt = host.frame;
+
+      // A tap, down and up between two ticks, while the host is refusing frames.
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: CONFIG_ARROWS.bindings.jump }));
+      window.dispatchEvent(new KeyboardEvent("keyup", { code: CONFIG_ARROWS.bindings.jump }));
+      host.advance(1);
+      expect(host.stalled).toBe(true);
+
+      // The guest catches up; the host's next frame runs, with the tap in it.
+      for (let i = 0; i < 30; i++) {
+        guest.advance(1);
+        host.advance(1);
+        network.advance(FRAME_MS);
+      }
+      expect(host.frame).toBeGreaterThan(stalledAt);
+      expect(sent[stalledAt + INPUT_DELAY_FOR_STALLS] ?? 0).toBe(Btn.Jump);
+      expect(sent.filter((input) => input & Btn.Jump)).toHaveLength(1);
+    } finally {
+      keyboard.detach();
+    }
+  });
+
+  it("holds the picture still instead of re-blending the last step", () => {
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    try {
+      const runner = createMatchRunner({
+        stage: getStageOrThrow("battlefield"),
+        players: HUMANS,
+        rules: RULES,
+        seed: 0x5eed1e55,
+        getFighter: getFighterOrThrow,
+        net: { transport: createNullTransport("alone"), localPorts: [0] },
+      });
+      runner.start({ getContext: () => ({}) } as unknown as HTMLCanvasElement);
+      // To the prediction cap, then refused: the last ticks ran nothing.
+      runner.advance(20);
+      expect(runner.stalled).toBe(true);
+      const drawn = vi.mocked(render).mock.lastCall?.[1];
+      expect(drawn?.previous).toBe(drawn?.current);
+      runner.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("dispose is final", () => {
   it("polls nothing and reports nothing afterwards", () => {
     const pad = fakePad(() => Btn.Right);
@@ -414,7 +647,7 @@ describe("dispose is final", () => {
     const onFrame = vi.fn();
     const runner = createMatchRunner({
       stage: getStageOrThrow("battlefield"),
-      players: slots(null),
+      players: HUMANS,
       rules: RULES,
       seed: 0x5eed1e55,
       getFighter: getFighterOrThrow,
@@ -438,7 +671,7 @@ describe("dispose is final", () => {
       const onFrame = vi.fn();
       const runner = createMatchRunner({
         stage: getStageOrThrow("battlefield"),
-        players: slots(null),
+        players: HUMANS,
         rules: RULES,
         seed: 0x5eed1e55,
         getFighter: getFighterOrThrow,
