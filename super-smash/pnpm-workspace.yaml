@@ -1,2 +1,8 @@
 allowBuilds:
   unrs-resolver: true
+  # wrangler bundles with esbuild and runs Workers locally in workerd; both
+  # ship platform binaries through install scripts.
+  esbuild: true
+  workerd: true
+  # Miniflare's optional image binding; nothing here uses it.
+  sharp: false

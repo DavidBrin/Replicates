@@ -21,3 +21,8 @@ blob-report/
 .env*.local
 .DS_Store
 .vercel
+
+# wrangler's local state and local secrets (TURN_KEY_ID / TURN_KEY_API_TOKEN for `wrangler dev`).
+.wrangler/
+.dev.vars
+.dev.vars.*

@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     // Playwright artifacts
     "playwright-report/**",
     "test-results/**",
+    ".wrangler/**",
   ]),
 ]);
 

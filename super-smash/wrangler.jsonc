@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // https://david-smash.leaders-game.workers.dev — David's existing free account
+  // (the one hosting leaders.leaders-game.workers.dev). Free plan only (spec §3.1).
+  "name": "david-smash",
+  "main": "worker/src/index.ts",
+  // On or after 2026-04-07, so the runtime auto-replies to WebSocket Close
+  // frames (web_socket_auto_reply_to_close).
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // `pnpm build` (output: "export") writes the whole game here.
+    "directory": "./out",
+    "binding": "ASSETS",
+    // Next's export writes out/404.html.
+    "not_found_handling": "404-page",
+    // The Worker runs only for the API and the room sockets; every page and
+    // chunk is served straight from the asset layer, which is free.
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "RoomDO" }]
+  },
+  // SQLite-backed: the only Durable Object storage on the Free plan.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomDO"] }]
+}
