@@ -1510,7 +1510,9 @@ an answer and some ICE candidates, then idles until somebody leaves.
   are only shown (the start carries the rules played), and the results state the rules the match
   was played under rather than the machine's own.
 - *The lobby tells a notice from an error.* A peer leaving is a non-sticky notice, so re-pairing
-  works; real errors stay until the player leaves. A real error (and a failed link) also leaves the
+  works; real errors stay until the player leaves. "The other player left the room." means the room
+  said they left; a lost channel with both players still seated shows as connecting again, with
+  both panels kept. A real error (and a failed link) also leaves the
   room at once, closing the room socket and the transport, so the code is not left joinable while
   a screen shows a dead error.
 - *A lobby channel lost with both players seated gets a fresh connection.* The channel can close
