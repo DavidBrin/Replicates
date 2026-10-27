@@ -30,6 +30,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
+import { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -50,9 +51,8 @@ export const HARD_PLATFORM_DEPTH = fx(60);
 /** Frames of the ordinary landing animation, before any move's landing lag. */
 export const LANDING_FRAMES = 4;
 
-/** Ground acceleration is a multiple of traction — the stat Ultimate publishes. */
-export const WALK_ACCEL_FACTOR = 2;
-export const RUN_ACCEL_FACTOR = 3;
+/** Ground acceleration is a multiple of traction (legacy; now defined in `kinetic.ts`). */
+export { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR };
 
 /** A top-blast KO faster than this reads as a screen KO rather than a star KO. */
 export const SCREEN_KO_SPEED = fx(2.4);

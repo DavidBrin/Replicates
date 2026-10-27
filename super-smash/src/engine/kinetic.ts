@@ -17,7 +17,9 @@
  * the strangler seam, and Task 4 closes it.
  */
 
-import type { FighterState } from "./types";
+import { approach } from "./fixed";
+import type { FighterParams } from "./params";
+import type { ActionState, FighterState } from "./types";
 
 /** skyline-smash `lua_const.rs`. The replica uses the five below. */
 export const FIGHTER_KINETIC_ENERGY_ID_MOTION = 0;
@@ -122,5 +124,177 @@ export function kineticClear(f: FighterState): void {
   k.fallFrames = 0;
   k.jumpInitial = 0;
   f.launchSpeed = 0;
+  kineticSum(f);
+}
+
+/* ---------------------------------------------------------- kinetic types -- */
+
+/**
+ * How a status drives the energies — the replica's `FIGHTER_KINETIC_TYPE_*`.
+ *
+ * Names follow skyline-smash where the game has a matching type (FALL 0x0,
+ * GROUND_STOP 0x6, DASH 0x1D, MOTION 0x10, AIR_ESCAPE 0xD, NONE 0xFFFFFFFF).
+ * WALK and RUN are replica names: the game drives both through the CONTROL
+ * energy of its ground statuses rather than through a named type.
+ */
+export type KineticType =
+  | "FALL"
+  | "GROUND_STOP"
+  | "WALK"
+  | "DASH"
+  | "RUN"
+  | "MOTION"
+  | "AIR_ESCAPE"
+  | "NONE";
+
+/**
+ * Each action's kinetic type, transcribed from the legacy `applyMovement`
+ * switch. The status objects (Tasks 6–11) declare the same values; this table
+ * is the fallback until they all exist and is deleted in Task 28.
+ */
+export const KINETIC_TYPE_OF_ACTION: Readonly<Record<ActionState, KineticType>> = {
+  stand: "GROUND_STOP",
+  walk: "WALK",
+  dashStart: "DASH",
+  run: "RUN",
+  runBrake: "GROUND_STOP",
+  turnaround: "GROUND_STOP",
+  crouchStart: "GROUND_STOP",
+  crouch: "GROUND_STOP",
+  crouchEnd: "GROUND_STOP",
+  jumpSquat: "GROUND_STOP",
+  jump: "FALL",
+  fall: "FALL",
+  land: "GROUND_STOP",
+  landingLag: "GROUND_STOP",
+  attack: "FALL",
+  special: "FALL",
+  grab: "FALL",
+  grabHold: "FALL",
+  pummel: "FALL",
+  throw: "FALL",
+  shieldStart: "GROUND_STOP",
+  shield: "GROUND_STOP",
+  shieldRelease: "GROUND_STOP",
+  shieldStun: "GROUND_STOP",
+  shieldBroken: "GROUND_STOP",
+  spotDodge: "GROUND_STOP",
+  roll: "MOTION",
+  airDodge: "AIR_ESCAPE",
+  hitstun: "GROUND_STOP",
+  tumble: "GROUND_STOP",
+  grabbed: "GROUND_STOP",
+  thrown: "GROUND_STOP",
+  downed: "GROUND_STOP",
+  getUp: "GROUND_STOP",
+  ledgeHang: "GROUND_STOP",
+  ledgeGetUp: "GROUND_STOP",
+  ledgeAttack: "GROUND_STOP",
+  ledgeRoll: "GROUND_STOP",
+  ledgeJump: "GROUND_STOP",
+  respawnPlatform: "NONE",
+  dead: "NONE",
+  entering: "FALL",
+};
+
+/**
+ * The horizontal energy a kinetic type drives. Exactly one of CONTROL and STOP
+ * holds horizontal speed at a time; `kineticTransfer` moves it across when the
+ * type changes, which is what keeps the split numerically identical to the
+ * single `vx` it replaced.
+ */
+export function carrierOf(type: KineticType): HorizontalCarrier {
+  return type === "WALK" || type === "DASH" || type === "RUN" || type === "FALL" || type === "AIR_ESCAPE"
+    ? "control"
+    : "stop";
+}
+
+export function kineticTransfer(f: FighterState, type: KineticType): void {
+  const k = f.kinetic;
+  if (carrierOf(type) === "control") {
+    if (k.stopX !== 0) {
+      k.controlX += k.stopX;
+      k.stopX = 0;
+    }
+  } else if (k.controlX !== 0) {
+    k.stopX += k.controlX;
+    k.controlX = 0;
+  }
+}
+
+/** Legacy ground acceleration: walking approaches at 2 × traction, running at 3 ×. */
+export const WALK_ACCEL_FACTOR = 2;
+export const RUN_ACCEL_FACTOR = 3;
+
+export interface KineticInput {
+  /** Horizontal stick, −1/0/1 from the keyboard. */
+  readonly stickX: number;
+  readonly params: FighterParams;
+  /** Air dodge only: its intangible window is open, so gravity waits. */
+  readonly holdVertical: boolean;
+}
+
+/** One frame of gravity toward `terminal`, which is a positive speed. */
+export function gravityStep(vy: number, g: number, terminal: number): number {
+  const next = vy - g;
+  return next < -terminal ? -terminal : next;
+}
+
+/**
+ * Air drift: base plus additional acceleration, capped at air speed — but only
+ * in the direction being held, so drifting back against a fast launch is
+ * allowed while drifting further out is not.
+ */
+export function airControlX(vx: number, stickX: number, p: FighterParams): number {
+  if (stickX === 0) return vx;
+  const accel = p.air_accel_x_add + p.air_accel_x_mul;
+  if (stickX > 0 && vx >= p.air_speed_x_stable) return vx;
+  if (stickX < 0 && vx <= -p.air_speed_x_stable) return vx;
+  return approach(vx, stickX > 0 ? p.air_speed_x_stable : -p.air_speed_x_stable, accel);
+}
+
+/**
+ * KineticModule exec for one frame of a non-reeling fighter: drive the
+ * energies the kinetic type names, then write their sum to `vx`/`vy`.
+ */
+export function kineticExec(f: FighterState, type: KineticType, input: KineticInput): void {
+  if (type === "NONE") {
+    kineticClear(f);
+    return;
+  }
+  const k = f.kinetic;
+  const p = input.params;
+  kineticTransfer(f, type);
+  switch (type) {
+    case "WALK":
+      k.controlX = approach(k.controlX, input.stickX * p.walk_speed_max, p.ground_brake * WALK_ACCEL_FACTOR);
+      break;
+    case "DASH":
+      k.controlX =
+        f.actionFrame <= 1
+          ? f.facing * p.dash_speed
+          : approach(k.controlX, f.facing * p.run_speed_max, p.ground_brake * RUN_ACCEL_FACTOR);
+      break;
+    case "RUN":
+      k.controlX = approach(k.controlX, f.facing * p.run_speed_max, p.ground_brake * RUN_ACCEL_FACTOR);
+      break;
+    case "FALL":
+    case "AIR_ESCAPE":
+      k.controlX = f.grounded ? approach(k.controlX, 0, p.ground_brake) : airControlX(k.controlX, input.stickX, p);
+      break;
+    case "GROUND_STOP":
+      if (f.grounded) k.stopX = approach(k.stopX, 0, p.ground_brake);
+      break;
+    case "MOTION":
+      break;
+  }
+  if (!f.grounded) {
+    if (!input.holdVertical) {
+      k.gravityY = gravityStep(k.gravityY, p.air_accel_y, f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
+    }
+  } else {
+    const sumY = kineticSumY(f);
+    if (sumY < 0) k.gravityY -= sumY;
+  }
   kineticSum(f);
 }

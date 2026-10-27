@@ -6,12 +6,22 @@ import {
   emptyKinetic,
   kineticAdopt,
   kineticClear,
+  kineticExec,
   kineticSum,
   kineticSumX,
   kineticSumY,
 } from "./kinetic";
-import type { KineticState } from "./kinetic";
-import type { FighterState } from "./types";
+import type { KineticState, KineticType } from "./kinetic";
+import { paramsFromAttributes } from "./params";
+import {
+  airDrift,
+  applyGravity,
+  applyTraction,
+  initialDashVelocity,
+  runVelocity,
+  walkVelocity,
+} from "./physics";
+import type { FighterAttributes, FighterState } from "./types";
 
 /** Only the fields the KineticModule touches; the rest of a fighter is irrelevant here. */
 function body(k: Partial<KineticState> = {}, over: Partial<FighterState> = {}): FighterState {
@@ -82,5 +92,94 @@ describe("clearing", () => {
     kineticClear(f);
     expect(f.kinetic).toEqual(emptyKinetic());
     expect([f.vx, f.vy, f.launchSpeed]).toEqual([0, 0, 0]);
+  });
+});
+
+/* ------------------------------------------- legacy equivalence (Task 3) -- */
+
+const ATTRS: FighterAttributes = {
+  weight: 98,
+  walkSpeed: fx(1.155),
+  initialDashSpeed: fx(1.936),
+  runSpeed: fx(1.76),
+  airSpeed: fx(1.208),
+  airAccelBase: fx(0.01),
+  airAccelAdditional: fx(0.07),
+  gravity: fx(0.087),
+  fallSpeed: fx(1.5),
+  fastFallSpeed: fx(2.4),
+  traction: fx(0.102),
+  fullHopVelocity: fx(2.514),
+  shortHopVelocity: fx(1.747),
+  airJumpVelocity: fx(2.514),
+  jumps: 2,
+  canWallJump: true,
+  width: fx(2),
+  height: fx(11),
+  jumpSquatFrames: 3,
+};
+const PARAMS = paramsFromAttributes(ATTRS);
+
+/** The pre-Plan-2 `applyMovement` switch and gravity block, on one vx/vy. */
+function legacy(type: KineticType, f: FighterState, stickX: number, holdVertical: boolean): [number, number] {
+  let vx = f.vx;
+  let vy = f.vy;
+  switch (type) {
+    case "WALK":
+      vx = walkVelocity(vx, stickX, ATTRS);
+      break;
+    case "DASH":
+      vx = f.actionFrame <= 1 ? initialDashVelocity(f.facing, ATTRS) : runVelocity(vx, f.facing, ATTRS);
+      break;
+    case "RUN":
+      vx = runVelocity(vx, f.facing, ATTRS);
+      break;
+    case "MOTION":
+      break;
+    case "NONE":
+      return [0, 0];
+    case "FALL":
+    case "AIR_ESCAPE":
+      vx = f.grounded ? applyTraction(vx, ATTRS) : airDrift(vx, stickX, ATTRS);
+      break;
+    case "GROUND_STOP":
+      if (f.grounded) vx = applyTraction(vx, ATTRS);
+      break;
+  }
+  if (!f.grounded) {
+    if (!holdVertical) vy = applyGravity(vy, ATTRS, { fastFalling: f.fastFalling });
+  } else if (vy < 0) {
+    vy = 0;
+  }
+  return [vx, vy];
+}
+
+describe("kineticExec reproduces the legacy single-velocity movement", () => {
+  const TYPES: KineticType[] = ["FALL", "GROUND_STOP", "WALK", "DASH", "RUN", "MOTION", "AIR_ESCAPE", "NONE"];
+  it("for every kinetic type, carrier split, stick and situation", () => {
+    const q12 = fc.integer({ min: -fx(6), max: fx(6) });
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...TYPES),
+        q12,
+        q12,
+        q12,
+        fc.boolean(),
+        fc.boolean(),
+        fc.constantFrom(-1, 0, 1),
+        fc.constantFrom(-1, 1),
+        fc.integer({ min: 0, max: 30 }),
+        fc.boolean(),
+        (type, a, b, gy, grounded, fastFalling, stickX, facing, actionFrame, holdVertical) => {
+          // Speed may sit on either horizontal carrier when the frame starts.
+          const f = body({ controlX: a, stopX: b, gravityY: gy }, { grounded, fastFalling, facing, actionFrame });
+          kineticSum(f);
+          const want = legacy(type, f, stickX, holdVertical);
+          kineticExec(f, type, { stickX, params: PARAMS, holdVertical });
+          return f.vx === want[0] && f.vy === want[1];
+        },
+      ),
+      { numRuns: 2000 },
+    );
   });
 });

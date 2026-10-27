@@ -54,19 +54,17 @@ import {
   TUMBLE_HITSTUN,
 } from "./constants";
 import {
-  airDrift,
   applyGravity,
   applyTraction,
   decayLaunch,
   dropThroughPlatform,
   fastFallVelocity,
   hitstunGravityOptions,
-  initialDashVelocity,
   platformCentreX,
-  runVelocity,
-  walkVelocity,
 } from "./physics";
 import { clearHitRecord, moveFrameOf } from "./hitbox";
+import { KINETIC_TYPE_OF_ACTION, carrierOf, kineticAdopt, kineticClear, kineticExec } from "./kinetic";
+import { fighterParams } from "./params";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type {
   ActionState,
@@ -1250,71 +1248,39 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
 
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
   const a = ctx.def.attributes;
+  const type = KINETIC_TYPE_OF_ACTION[f.action];
+  const carrier = carrierOf(type);
+  // Fold any direct write to vx/vy since the last frame into the energies.
+  kineticAdopt(f, carrier);
 
   if (f.ledge !== null) {
-    f.vx = 0;
-    f.vy = 0;
+    kineticClear(f);
     return;
   }
 
   // Scripted movement outranks everything below it — that is the point of a
   // move that carries its own — but only for as long as it is held.
-  if (f.hitstun <= 0 && applyMoveMomentum(f, ctx)) return;
+  if (f.hitstun <= 0 && applyMoveMomentum(f, ctx)) {
+    kineticAdopt(f, carrier);
+    return;
+  }
 
   if (f.hitstun > 0) {
     decayLaunch(f, LAUNCH_SPEED_DECAY);
     if (!f.grounded) f.vy = applyGravity(f.vy, a, hitstunGravityOptions(f));
     else f.vx = applyTraction(f.vx, a);
+    kineticAdopt(f, carrier);
     return;
   }
 
-  switch (f.action) {
-    case "walk":
-      f.vx = walkVelocity(f.vx, intent.x, a);
-      break;
-    case "dashStart":
-      f.vx = f.actionFrame <= 1 ? initialDashVelocity(f.facing, a) : runVelocity(f.vx, f.facing, a);
-      break;
-    case "run":
-      f.vx = runVelocity(f.vx, f.facing, a);
-      break;
-    case "roll":
-      // Velocity was set on entry; a roll travels a fixed distance.
-      break;
-    case "respawnPlatform":
-    case "dead":
-      f.vx = 0;
-      f.vy = 0;
-      return;
-    case "attack":
-    case "special":
-    case "grab":
-    case "grabHold":
-    case "pummel":
-    case "throw":
-    case "jump":
-    case "fall":
-    case "entering":
-    case "airDodge":
-      if (f.grounded) f.vx = applyTraction(f.vx, a);
-      else f.vx = airDrift(f.vx, intent.x, a);
-      break;
-    default:
-      if (f.grounded) f.vx = applyTraction(f.vx, a);
-      break;
-  }
-
-  if (!f.grounded) {
-    const w = dodgeWindow(f);
-    if (f.action === "airDodge" && w !== null && f.actionFrame <= w[1]) {
-      // An air dodge holds its own velocity outright; gravity resumes when the
-      // intangible window closes, which is what makes a missed one a free punish.
-      return;
-    }
-    f.vy = applyGravity(f.vy, a, { fastFalling: f.fastFalling });
-  } else if (f.vy < 0) {
-    f.vy = 0;
-  }
+  const w = dodgeWindow(f);
+  kineticExec(f, type, {
+    stickX: intent.x,
+    params: fighterParams(ctx.def),
+    // An air dodge holds its own velocity outright; gravity resumes when the
+    // intangible window closes, which is what makes a missed one a free punish.
+    holdVertical: f.action === "airDodge" && w !== null && f.actionFrame <= w[1],
+  });
 }
 
 /* -------------------------------------------------------------- landings -- */
