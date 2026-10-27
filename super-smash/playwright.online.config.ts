@@ -11,7 +11,8 @@ import { defineConfig, devices } from "@playwright/test";
  * contexts on one machine connect faster and more reliably with real ones.
  */
 const PORT = Number(process.env.PORT ?? 8787);
-const PUBLIC_URL = process.env.SMASH_URL;
+// `||`, not `??`: an empty SMASH_URL means unset, not a base URL of "".
+const PUBLIC_URL = process.env.SMASH_URL || undefined;
 const BASE_URL = PUBLIC_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({

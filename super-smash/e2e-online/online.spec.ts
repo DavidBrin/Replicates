@@ -1,5 +1,6 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
+import { SILENCE_LOST_MS } from "../src/net/online/watchdog";
 import { ROUTES, readFighters } from "../e2e/helpers";
 
 /**
@@ -14,18 +15,28 @@ const FORCE_RELAY = process.env.SMASH_FORCE_RELAY === "1";
 const LOBBY = FORCE_RELAY ? "/online?ice=relay" : "/online";
 
 /**
- * How long the play page's link monitor gives a silent peer before the match
- * is lost (`SILENCE_LOST_MS`, re-declared here for the reason `ROUTES` is),
- * plus a second for its 250 ms check and the hand-off to the results screen.
+ * How long the host may take to call a closed guest lost.
+ *
+ * A closed context sends nothing on its way out: the host's data channel does
+ * not close, and the room's `peer-left` is ignored once the channel is open,
+ * so it is the link monitor's silence watchdog that ends the match, ten
+ * seconds after the last packet, on a 250 ms check. The slack covers that
+ * tick, the hand-off to the results screen and a slow machine, and still
+ * proves the watchdog rather than a 30 s wait. Imported, not re-declared like
+ * `ROUTES`: this is a bound on the app's own timer, and must move with it.
  */
-const LINK_LOST_LIMIT_MS = 10_000 + 1_000;
+const LINK_LOST_LIMIT_MS = SILENCE_LOST_MS + 4_000;
 
 interface NetHandle {
   stats(): { peers: number; desyncs: number } | null;
 }
 
+/** Every context a test opened, closed after it so a failed test leaves no match running. */
+const contexts: BrowserContext[] = [];
+
 async function player(browser: Browser): Promise<Page> {
   const context = await browser.newContext();
+  contexts.push(context);
   return context.newPage();
 }
 
@@ -79,11 +90,17 @@ async function startOnlineMatch(host: Page, guest: Page): Promise<void> {
 // relay is a claim that the relay works, so its absence fails rather than skips.
 test.beforeEach(async ({ request }) => {
   if (!FORCE_RELAY) return;
-  const ice = (await (await request.get("/api/ice")).json()) as { turn?: unknown };
+  const res = await request.get("/api/ice");
+  expect(res.ok(), `SMASH_FORCE_RELAY=1: ${res.url()} answered ${res.status()}; is SMASH_URL the Worker?`).toBe(true);
+  const ice = (await res.json()) as { turn?: unknown };
   expect(
     ice.turn,
     "SMASH_FORCE_RELAY=1 needs a TURN relay, and /api/ice offered none: the Worker needs TURN_KEY_ID and TURN_KEY_API_TOKEN (secrets when deployed, .dev.vars under wrangler dev)",
   ).toBe(true);
+});
+
+test.afterEach(async () => {
+  await Promise.all(contexts.splice(0).map((context) => context.close()));
 });
 
 test("two browsers play a match through a room, and one leaving ends it for the other", async ({ browser }) => {
@@ -108,8 +125,8 @@ test("two browsers play a match through a room, and one leaving ends it for the 
   await expect.poll(async () => (await readFighters(host))[1].x, { timeout: 10_000 }).toBeGreaterThan(before + 5);
   await guest.keyboard.up("ArrowRight");
 
-  // The guest closes the tab: the host is told within the link monitor's
-  // limit, and nobody is crowned.
+  // The guest closes the tab: the host's link monitor calls it lost once the
+  // guest has been silent too long, and nobody is crowned.
   await guest.context().close();
   await host.waitForURL(`**${ROUTES.results}`, { timeout: LINK_LOST_LIMIT_MS });
   await expect(host.getByText("Connection Lost")).toBeVisible();
@@ -120,6 +137,8 @@ test("two browsers play a match to its result, and both see the same one", async
   const guest = await player(browser);
 
   await startOnlineMatch(host, guest);
+  // Running, so the keyboard is attached before the key goes down.
+  await expect.poll(() => frame(host), { timeout: 30_000 }).toBeGreaterThan(60);
 
   // The host walks off the left edge once per stock, away from the guest, who
   // spawns on the right. The match ends on its confirmed outcome, so both

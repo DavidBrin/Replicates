@@ -12,8 +12,11 @@ import { defineConfig, devices } from "@playwright/test";
  * so the two can never disagree.
  */
 const PORT = Number(process.env.PORT ?? 3000);
-/** Set to run the whole suite against a deployed copy instead of `next dev` (Plan 1, Task 24). */
-const PUBLIC_URL = process.env.SMASH_URL;
+/**
+ * Set to run the whole suite against a deployed copy instead of `next dev` (Plan 1, Task 24).
+ * `||`, not `??`: an empty SMASH_URL means unset, not a base URL of "".
+ */
+const PUBLIC_URL = process.env.SMASH_URL || undefined;
 const BASE_URL = PUBLIC_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
