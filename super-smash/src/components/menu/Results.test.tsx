@@ -1,10 +1,11 @@
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
 import { resetRosterCache, useMatchConfig, type MatchResult } from "@/lib/matchConfig";
-import { ONLINE_RESULT_LINGER_MS, leaveOnline } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
 import { Results } from "./Results";
@@ -44,6 +45,12 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  // Several tests end by unmounting under fake timers they never advance. The
+  // unmount's leave is module state (`pendingLeave`), so a dead timer left in
+  // it would read as a development remount to the next test's first mount:
+  // unmount now and run it, while the fake clock still holds it.
+  cleanup();
+  if (vi.isFakeTimers()) vi.runOnlyPendingTimers();
   vi.useRealTimers();
 });
 
@@ -246,6 +253,36 @@ describe("Results after an online match", () => {
     });
     unmount();
     expect(leaveOnline).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The development remount puts the start back for a screen that is still
+   * waiting out its grace. A screen that has already left the room has no
+   * start to put back: it would hand the play page a match that is over.
+   */
+  it("puts no start back after a lost connection left the room, under React's development remount", async () => {
+    vi.useFakeTimers();
+    const start: OnlineMatchConfig = {
+      seed: 1234,
+      stageId: "battlefield",
+      stageForm: "normal",
+      rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
+      fighters: ["mario", "fox"],
+      costumes: [0, 1],
+    };
+    const { session } = fakeSession("guest");
+    setActiveSession(session);
+    useOnlineStore.getState().patch({ config: start });
+    useMatchConfig.getState().setResult({ kind: "connectionLost", placings: [], stats: [], fighters: { 0: "mario", 1: "fox" }, online: true });
+    render(
+      <StrictMode>
+        <Results />
+      </StrictMode>,
+    );
+    await act(async () => {});
+
+    expect(leaveOnline).toHaveBeenCalledTimes(1);
+    expect(useOnlineStore.getState().config).toBeNull();
   });
 
   describe("lingering before it leaves", () => {

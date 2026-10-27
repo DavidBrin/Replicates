@@ -292,9 +292,9 @@ describe("CharacterSelect, online", () => {
   });
 
   /**
-   * Only the host's side of the lobby channel closes. The host clears the
-   * guest's panel and offers again; the guest's channel is replaced without
-   * ever reporting a loss. Each screen is driven by a real session over a fake
+   * Only the host's side of the lobby channel closes. Nobody left, so the host
+   * keeps the guest's panel and offers again; the guest's channel is replaced
+   * without ever reporting a loss. Each screen is driven by a real session over a fake
    * room, one machine per test (the stores are one per page).
    */
   describe("when only the host's side of the channel closed", () => {

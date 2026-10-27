@@ -93,10 +93,12 @@ export function Results() {
     if (!online) return;
     // React's development remount: the unmount just undone withdrew the start
     // and scheduled a leave, but this is the same screen, so neither stands.
+    // A screen that already left the room (a lost connection leaves at once)
+    // has no start to put back.
     if (pendingLeave !== null) {
       clearTimeout(pendingLeave);
       pendingLeave = null;
-      useOnlineStore.getState().patch({ config: startedWith });
+      if (!left.current) useOnlineStore.getState().patch({ config: startedWith });
     }
     if (leaveAtOnce) leaveRoom();
     const grace = leaveAtOnce ? undefined : setTimeout(leaveRoom, ONLINE_RESULT_LINGER_MS);
