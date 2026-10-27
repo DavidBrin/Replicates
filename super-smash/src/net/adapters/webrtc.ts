@@ -41,6 +41,7 @@
 import { joinRoom, selfId as trysteroSelfId } from "trystero";
 
 import { PRODUCT_SLUG } from "@/lib/brand";
+import { asBytes } from "../bytes";
 import { DEFAULT_UNRELIABLE_CHANNEL_ID, INPUT_CHANNEL_LABEL } from "../channel";
 import { normalizeRoomCode } from "../roomCode";
 import { createEmitter, type Transport } from "../transport";
@@ -262,12 +263,3 @@ export function createWebRtcTransport(options: WebRtcOptions): Transport {
  */
 const defaultJoinRoom: JoinRoomLike = (config, roomId) =>
   joinRoom(config, roomId) as unknown as RoomLike;
-
-function asBytes(data: unknown): Uint8Array | null {
-  if (data instanceof Uint8Array) return data;
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (ArrayBuffer.isView(data)) {
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  }
-  return null;
-}
