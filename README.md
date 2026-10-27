@@ -196,7 +196,7 @@ to peer over WebRTC, with Cloudflare TURN when no direct path exists — and on 
 prefers the LAN route on its own, so two laptops in one room get a sub-10ms path for free.
 
 Next.js · a pure fixed-point simulation with a test that fails the build on `Math.random` ·
-2,532 unit and property tests · 20 e2e, three of them two browsers playing online · rollback
+2,552 unit and property tests · 20 e2e, three of them two browsers playing online · rollback
 verified against a ground-truth run at six link conditions. Built from eight parallel research
 lanes, then six parallel build slices.
 

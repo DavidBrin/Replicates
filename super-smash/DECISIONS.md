@@ -1511,13 +1511,30 @@ an answer and some ICE candidates, then idles until somebody leaves.
   was played under rather than the machine's own.
 - *The lobby tells a notice from an error.* A peer leaving is a non-sticky notice, so re-pairing
   works; real errors stay until the player leaves.
+- *A lobby channel lost with both players seated gets a fresh connection.* The channel can close
+  while both room sockets stay open (an SCTP close, a network switch); nobody joins or leaves, so
+  nothing offered again and both screens waited for good. Now the host offers the guest the room
+  still seats a fresh peer connection after 1, 2 and 4 s (`REOFFER_DELAYS_MS`), and a guest
+  answers a new offer from its own host even while it holds a connection, replacing it. A channel
+  that opens resets the count. When the tries run out the host gets `room-lost`, and a guest that
+  hears no offer within 10 s (`GUEST_REOFFER_WAIT_MS`) does too, so both have the leave-and-rejoin
+  path rather than a silent wait. Once a start has gone out or arrived the channel is held: no
+  fresh offer is made or accepted mid-match, where the link monitor decides as before.
+- *A desync ends the match.* A confirmed-state hash mismatch used only to warn in the console, so
+  two machines could play on to different outcomes. Now it ends the match the way a lost
+  connection does, as a result of its own: "Out of Sync", no placings, "The two games went out of
+  sync, so this match can't count." The runner stops, and with it this side's inputs, so the
+  other side finds out by its own hash check or by its link monitor. The warning stays for
+  diagnosis. Mismatched builds are the likeliest cause; Plan 2 Task 27 adds a build fingerprint so
+  they refuse each other at the lobby instead.
 
 **Gamepads** are wired into every match. `InputFrame` stays a bitfield (SPEC §3) with one new
 bit, `Btn.Soft`, for a partial stick tilt: walk instead of dash, tilt instead of smash, a quarter
 of the DI. The quarter is `UNVERIFIED:` — the bit carries one level of magnitude where the real
 game reads the analog value. In a local match, pads map to the human ports by connection order
-and are frozen for the duration of a match; a spare connected pad takes a freed port. Online,
-each player is alone on their machine, so every connected pad drives their one port.
+and are frozen for the duration of a match; a spare connected pad takes a freed port. Ports follow
+the browser's pad slot order; a pad reconnected into a freed lower slot can take an earlier port.
+Online, each player is alone on their machine, so every connected pad drives their one port.
 
 **Known limits.** No online rematch: "Play online again" on the results leaves the room for the
 lobby, where the two players make a new one. A future in-room rematch must add a match id to the
@@ -1541,7 +1558,14 @@ without one, the worst case is TURN going dark for the month while STUN keeps wo
 per address, shared by `/api/ice` and the room-socket upgrade) answers 429 past it. It holds a
 script to a human's pace; two players behind one NAT, and the e2e suites with every browser on
 one address, stay far under it. The Worker serves everyone without the binding, so it comes out
-of `wrangler.jsonc` if the free plan refuses it.
+of `wrangler.jsonc` if the free plan refuses it, and fails open: a limiter that throws lets the
+request through, logging only the error's name. It runs in the Worker's fetch handler, before a
+room's Durable Object is reached.
+
+*Room requests are a residual risk too.* The room's per-socket message cap counts per connection,
+so it starts again on every reconnect. A hostile client can still spend the plan's daily request
+quota (Free plan: denial for the rest of the day, no charge); bounded by the per-IP upgrade limit
+when the binding is enabled.
 
 **Names.** The spec's `DurableObjectSignalling` is `adapters/doSignal.ts`, and the results
-heading for a lost match is "Connection Lost".
+heading for a lost match is "Connection Lost" (for a desync, "Out of Sync").

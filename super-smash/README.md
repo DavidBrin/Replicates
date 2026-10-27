@@ -188,7 +188,8 @@ always a *full* deflection, and a fully-deflected stick dashes. Micro-spacing co
 
 **A gamepad works too**, in local and online matches (W3C standard mapping: A attack, B special,
 X/Y jump, LB/LT/RT shield, RB grab). In a local match pad 1 is the first human and pad 2 the
-second; online, every connected pad drives your own fighter. The analog
+second; online, every connected pad drives your own fighter. Ports follow the browser's pad slot
+order; a pad reconnected into a freed lower slot can take an earlier port. The analog
 stick restores what keys cannot: a partial tilt walks, makes a tilt instead of a smash, and DIs a
 quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 
@@ -277,7 +278,7 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 | `out/` | `next build` with `output: "export"` — every route is a file |
 | `wrangler.jsonc` | Worker `david-smash`: serves `out/`, runs first only for `/api/*` and `/ws/*` |
 | `GET /api/ice` | Mints 1-hour Cloudflare TURN credentials for pages on this site; STUN-only without the two secrets |
-| `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets |
+| `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets; fails open |
 | `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, 2 peers, no timers |
 
 `pnpm run deploy` builds and runs `wrangler deploy`; it needs `wrangler login` on David's
