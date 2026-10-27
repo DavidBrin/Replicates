@@ -688,6 +688,8 @@ interface MatchConfigState {
   players: PlayerSlot[];
   bindings: Record<SchemeId, Bindings>;
   result: MatchResult | null;
+  /** Seated for an online match by `configureOnline`, until `leaveOnline` or `reset`. */
+  online: boolean;
 
   setMode(mode: MatchRules["mode"]): void;
   setStocks(stocks: number): void;
@@ -770,6 +772,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
     rightCluster: { ...DEFAULT_BINDINGS.rightCluster },
   },
   result: null,
+  online: false,
 
   setMode: (mode) => set((s) => ({ rules: { ...s.rules, mode } })),
 
@@ -855,7 +858,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   configureOnline: () =>
     set((s) => {
       const players = [onlinePlayer(0), onlinePlayer(1)];
-      return { players, rules: withDerivedRules(s.rules, players), result: null };
+      return { players, rules: withDerivedRules(s.rules, players), result: null, online: true };
     }),
 
   // `result` is kept: the results screen calls this on its way out, and
@@ -863,7 +866,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
   leaveOnline: () =>
     set((s) => {
       const players = initialPlayers();
-      return { players, rules: withDerivedRules(s.rules, players) };
+      return { players, rules: withDerivedRules(s.rules, players), online: false };
     }),
 
   /**
@@ -911,6 +914,7 @@ export const useMatchConfig = create<MatchConfigState>()((set, get) => ({
         rightCluster: { ...DEFAULT_BINDINGS.rightCluster },
       },
       result: null,
+      online: false,
     }),
 }));
 

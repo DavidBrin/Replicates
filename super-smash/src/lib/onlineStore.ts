@@ -122,7 +122,11 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   const fail = (reason: OnlineErrorReason) =>
     online().patch({ status: "error", errorReason: reason, error: roomErrorMessage(reason, session.roomCode), notice: null });
 
+  // The emitter calls every listener it had when an emit began, so a leave
+  // made by an earlier listener in the same pass would not stop this one.
+  let live = true;
   const off = session.on((event) => {
+    if (!live) return;
     // The session's own verdict always lands; it knows best why it cannot go on.
     if (event.type === "error") {
       fail(event.reason);
@@ -149,8 +153,16 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
           fail("link-failed");
         } else if (event.status === "waiting" && online().status === "connected") {
           // Not an error: the transport offers to whoever joins next, so the
-          // same code can pair again. Starting waits for `connected` meanwhile.
-          online().patch({ status: "waiting", config: null, notice: PEER_LEFT_NOTICE });
+          // same code can pair again. Starting waits for `connected` meanwhile,
+          // and whoever comes starts from an empty panel: a pick the last
+          // opponent left behind must not light up Ready before they choose.
+          const remote = remotePort(session);
+          if (remote !== null) {
+            match().setFighter(remote, null);
+            match().setCostume(remote, remote);
+          }
+          // Only the guest ever holds a `hostStage`; the host that sent it is gone.
+          online().patch({ status: "waiting", config: null, notice: PEER_LEFT_NOTICE, remoteAway: false, hostStage: null });
         }
         break;
       case "lobby":
@@ -159,6 +171,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     }
   });
   const release = () => {
+    live = false;
     off();
     if (unbind === release) unbind = null;
   };
@@ -166,13 +179,18 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   return release;
 }
 
-function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
+/** The opponent's port: the host is 0 and the guest 1 (`ROLE_PORT`). Null before the room has answered. */
+function remotePort(session: OnlineSessionLike): number | null {
   const local = session.localPort;
+  return local === null ? null : local === 0 ? 1 : 0;
+}
+
+function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
   const match = useMatchConfig.getState();
   switch (message.kind) {
     case "pick": {
-      if (local === null) return;
-      const remote = local === 0 ? 1 : 0;
+      const remote = remotePort(session);
+      if (remote === null) return;
       match.setFighter(remote, message.fighterId);
       match.setCostume(remote, message.costume);
       return;
@@ -197,10 +215,15 @@ export function sendLobby(message: LobbyMessage): boolean {
   return getActiveSession()?.sendLobby(message) ?? false;
 }
 
-/** Close the room, forget the online state, and seat the offline default again. */
+/**
+ * Close the room, forget the online state, and — if the match config was
+ * seated for one — seat the offline default again. A local setup is left
+ * alone: arriving at /online leaves first, before any room exists.
+ */
 export function leaveOnline(): void {
   unbind?.();
   setActiveSession(null);
   useOnlineStore.getState().reset();
-  useMatchConfig.getState().leaveOnline();
+  const match = useMatchConfig.getState();
+  if (match.online) match.leaveOnline();
 }

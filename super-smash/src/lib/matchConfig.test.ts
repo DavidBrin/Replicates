@@ -238,12 +238,21 @@ describe("online mode", () => {
       [1, "human", "arrows", null],
     ]);
     expect(rules.oneOnOne).toBe(true);
+    expect(useMatchConfig.getState().online).toBe(true);
   });
 
   it("goes back to one human and a CPU on leaving", () => {
     useMatchConfig.getState().configureOnline();
     useMatchConfig.getState().leaveOnline();
     expect(useMatchConfig.getState().players.map((p) => p.kind)).toEqual(["human", "cpu"]);
+    expect(useMatchConfig.getState().online).toBe(false);
+  });
+
+  it("is not online until seated for it, nor after a reset", () => {
+    expect(useMatchConfig.getState().online).toBe(false);
+    useMatchConfig.getState().configureOnline();
+    useMatchConfig.getState().reset();
+    expect(useMatchConfig.getState().online).toBe(false);
   });
 
   it("can record a match the connection ended", () => {

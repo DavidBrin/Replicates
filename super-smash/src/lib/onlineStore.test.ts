@@ -93,13 +93,33 @@ describe("binding a session to the stores", () => {
     bindSession(session);
     emit({ type: "joined", role: "host" });
     emit({ type: "link", status: "open" });
+    useMatchConfig.getState().setFighter(0, "mario");
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 3 } });
+    emit({ type: "lobby", message: { kind: "away", away: true } });
     emit({ type: "link", status: "waiting" });
     expect(useOnlineStore.getState()).toMatchObject({
       status: "waiting",
       notice: "The other player left the room.",
       error: null,
       errorReason: null,
+      remoteAway: false,
     });
+    // Whoever takes the seat next starts from an empty panel; this side's own pick stays.
+    const [own, theirs] = useMatchConfig.getState().players;
+    expect(own.fighterId).toBe("mario");
+    expect(theirs).toMatchObject({ fighterId: null, costume: 1 });
+  });
+
+  it("forgets the stage a departed host chose", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "guest" });
+    emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
+    emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
+    emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState().hostStage).toBeNull();
+    expect(useMatchConfig.getState().players[0]).toMatchObject({ fighterId: null, costume: 0 });
   });
 
   it("pairs again when somebody takes the empty seat", () => {
@@ -187,6 +207,16 @@ describe("an error, once recorded", () => {
     expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "room-lost" });
   });
 
+  it("seats nobody when the room answers after it", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "error", reason: "full" });
+    const players = useMatchConfig.getState().players;
+    emit({ type: "joined", role: "guest" });
+    expect(useOnlineStore.getState().role).toBeNull();
+    expect(useMatchConfig.getState().players).toBe(players);
+  });
+
   it("turns away a start that arrives after it", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
@@ -228,12 +258,48 @@ describe("sending and leaving", () => {
     bindSession(session);
     emit({ type: "joined", role: "host" });
     leaveOnline();
-    expect(session.close).toHaveBeenCalled();
+    expect(session.close).toHaveBeenCalledTimes(1);
     expect(getActiveSession()).toBeNull();
     expect(useOnlineStore.getState().status).toBe("idle");
     expect(useMatchConfig.getState().players.map((p) => p.kind)).toEqual(["human", "cpu"]);
     emit({ type: "joined", role: "guest" });
     expect(useOnlineStore.getState().role).toBeNull();
+    leaveOnline();
+    expect(session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("listens to the latest session only", () => {
+    const first = fakeSession();
+    const second = fakeSession();
+    bindSession(first.session);
+    bindSession(second.session);
+    first.emit({ type: "joined", role: "host" });
+    expect(useOnlineStore.getState().role).toBeNull();
+    second.emit({ type: "joined", role: "guest" });
+    expect(useOnlineStore.getState().role).toBe("guest");
+  });
+
+  it("hears nothing more once left, even from an event already being delivered", () => {
+    const { session, emit } = fakeSession();
+    setActiveSession(session);
+    // A listener ahead of the store's leaves on hearing the room answer.
+    session.on((event) => {
+      if (event.type === "joined") leaveOnline();
+    });
+    bindSession(session);
+    emit({ type: "joined", role: "host" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "idle", role: null });
+    expect(useMatchConfig.getState()).toMatchObject({ online: false });
+    expect(useMatchConfig.getState().players.map((p) => p.kind)).toEqual(["human", "cpu"]);
+  });
+
+  it("leaves a local setup alone when no room was ever opened", () => {
+    useMatchConfig.getState().addPlayer();
+    useMatchConfig.getState().setFighter(2, "fox");
+    leaveOnline();
+    const { players } = useMatchConfig.getState();
+    expect(players.map((p) => p.kind)).toEqual(["human", "cpu", "cpu"]);
+    expect(players[2].fighterId).toBe("fox");
   });
 
   it("has a sentence for every reason", () => {
