@@ -8,8 +8,9 @@
  * tabs goes silent while still connected — and says so first, with a lobby
  * `away` message. They get a minute.
  *
- * Wall-clock only, and outside the simulation (SPEC §3): nothing here feeds
- * `step()`.
+ * Times are monotonic milliseconds supplied by the caller (e.g.
+ * `performance.now()`), never `Date.now()`. This is outside the simulation
+ * (SPEC §3): nothing here feeds `step()`.
  */
 
 export const SILENCE_WAITING_MS = 1_000;
@@ -40,6 +41,11 @@ export class ConnectionWatchdog {
     this.lastHeard = now;
   }
 
+  /**
+   * Reports how long the peer has been quiet. It does not latch: a "lost" is
+   * only a reading, and a later `heard()` makes it "ok" again. Acting on the
+   * first "lost" (and ignoring any packet after it) belongs to the caller.
+   */
   check(now: number): LinkHealth {
     const silent = now - this.lastHeard;
     if (silent >= (this.away ? AWAY_LOST_MS : SILENCE_LOST_MS)) return "lost";
