@@ -12,7 +12,9 @@ import { defineConfig, devices } from "@playwright/test";
  * so the two can never disagree.
  */
 const PORT = Number(process.env.PORT ?? 3000);
-const BASE_URL = `http://localhost:${PORT}`;
+/** Set to run the whole suite against a deployed copy instead of `next dev` (Plan 1, Task 24). */
+const PUBLIC_URL = process.env.SMASH_URL;
+const BASE_URL = PUBLIC_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -43,12 +45,14 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
   },
   projects: [{ name: "desktop-chrome", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    // `pnpm run dev -- --port` passes the `--` through to Next under pnpm 11,
-    // which then reads "--port" as the project directory.
-    command: `pnpm exec next dev --port ${PORT}`,
-    url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: PUBLIC_URL
+    ? undefined
+    : {
+        // `pnpm run dev -- --port` passes the `--` through to Next under pnpm 11,
+        // which then reads "--port" as the project directory.
+        command: `pnpm exec next dev --port ${PORT}`,
+        url: BASE_URL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });
