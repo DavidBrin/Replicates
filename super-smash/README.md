@@ -44,6 +44,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/audio`](src/audio) | Every sound, synthesised — no audio files ship |
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
+| [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against `wrangler dev` or the deployed Worker |
 | [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame |
 | [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — swing arc, projectile, hit spark — by cranking a paused match by hand |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
@@ -186,7 +187,8 @@ On a keyboard, walking is not reachable, and that is correct rather than missing
 always a *full* deflection, and a fully-deflected stick dashes. Micro-spacing comes from tapping.
 
 **A gamepad works too**, in local and online matches (W3C standard mapping: A attack, B special,
-X/Y jump, LB/LT/RT shield, RB grab; pad 1 is the first human, pad 2 the second). The analog
+X/Y jump, LB/LT/RT shield, RB grab). In a local match pad 1 is the first human and pad 2 the
+second; online, every connected pad drives your own fighter. The analog
 stick restores what keys cannot: a partial tilt walks, makes a tilt instead of a smash, and DIs a
 quarter as far ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 
@@ -225,7 +227,7 @@ replay eight frames of explosions ([D4](DECISIONS.md#d4--cosmetic-state-lives-ou
 
 ## Multiplayer
 
-Rollback netcode, over WebRTC, with **2 frames of input delay** (adapting between 1 and 8 from
+Rollback netcode, over WebRTC, with **2 frames of input delay** to start (adapting up to 8 from
 the measured round trip) and an 8-frame prediction cap. Your own input is never delayed by the
 network; the opponent's is predicted and corrected. Smash Ultimate itself is delay-based, so
 this is the one axis on which the replica is deliberately better than the original.
@@ -250,7 +252,9 @@ each frame of input the other side has not yet acknowledged, so a dropped one he
 later, and a frame keeps going out until an ack says it landed. A resent input for frame N is
 worthless once the game is predicting frame N+5.
 
-Measured against a ground-truth single-machine run, not merely against the peer:
+Measured against a ground-truth single-machine run, not merely against the peer. These
+numbers were taken on protocol v1, whose packets carried a fixed window of the last 10 frames;
+the acknowledged window that replaced it (D54) has not been re-measured:
 
 | Link | Rollbacks | Max prediction | Converged |
 |---|---|---|---|
@@ -272,7 +276,8 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 |---|---|
 | `out/` | `next build` with `output: "export"` — every route is a file |
 | `wrangler.jsonc` | Worker `david-smash`: serves `out/`, runs first only for `/api/*` and `/ws/*` |
-| `GET /api/ice` | Mints 4-hour Cloudflare TURN credentials; STUN-only without the two secrets |
+| `GET /api/ice` | Mints 1-hour Cloudflare TURN credentials for pages on this site; STUN-only without the two secrets |
+| `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets |
 | `/ws/room/:code` | A SQLite-backed Durable Object per room — WebSocket Hibernation, 2 peers, no timers |
 
 `pnpm run deploy` builds and runs `wrangler deploy`; it needs `wrangler login` on David's
@@ -285,9 +290,9 @@ peer to peer.
 ## Known gaps
 
 1. **Online is two players, one match at a time.** A room holds two peers; four-player online,
-   spectating and an online rematch are not built — after a match both players go back through
-   the lobby. KO/fall/SD credit on an online results screen can be off after a rollback that
-   changed a hit; the placings are always right
+   spectating and an online rematch are not built — after a match, Play online again takes both
+   players back through the lobby to a new room. KO/fall/SD credit on an online results screen
+   can be off after a rollback that changed a hit; the placings are always right
    ([D54](DECISIONS.md#d54--david-smash-moves-to-cloudflare-and-gets-online-play)).
 2. **Fighters have no walk initial velocity.** Ultimate gives each fighter a small starting
    speed (Mario's is about 0.5) so the first walk frame is a step rather than a ramp from

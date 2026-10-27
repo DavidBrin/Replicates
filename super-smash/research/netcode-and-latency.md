@@ -106,10 +106,14 @@ completes, which is precisely the latency spike rollback exists to hide. Retrans
 also pointless here — a resent input for frame N is worthless once the game is predicting
 frame N+5.
 
-**Loss is handled at the application layer instead.** Every packet carries a **window of
-the last 10 frames** of input keyed by absolute frame number, so a dropped packet heals
-itself 16ms later when the next one arrives carrying the same frames again. Prediction is
-only needed if ten consecutive packets are lost. **HIGH** — this is GGPO's own convention.
+**Loss is handled at the application layer instead.** Every packet carries **every frame of
+input the receiver has not yet acknowledged** (up to 128), keyed by absolute frame number, plus
+an ack of the highest contiguous frame the sender holds of the receiver's input. A dropped
+packet heals itself 16ms later when the next one arrives carrying the same frames again, and a
+frame keeps going out until an ack says it landed, so no outage loses an input for good:
+prediction covers the gap while packets are missing, and the inputs arrive once the link comes
+back. (The first version sent a fixed window of the last 10 frames, which lost frames for good
+when an outage outlasted it; D54.) **HIGH** — this is GGPO's own convention.
 
 Measured DataChannel round trips are ~10–15ms on WiFi and can be under 10ms on a LAN.
 **MED** — [Mozilla's DataChannel latency test](https://mozilla.github.io/webrtc-landing/data_latency_test.html).

@@ -1,4 +1,4 @@
-# Super Smash — Decision Log
+# David-Smash — Decision Log
 
 Every non-obvious choice, with the reasoning that produced it. Written as the decisions
 were made, not reconstructed afterwards — so the later entries include things that shipped
@@ -1496,25 +1496,52 @@ an answer and some ICE candidates, then idles until somebody leaves.
   heartbeats kept flowing. `PROTOCOL_VERSION` is 2, so both players must reload after a deploy. A
   10 s backstop declares a match lost when confirmed frames stop advancing.
 - *A room-socket drop is silent while the channel is open.* Afterwards, a lobby send or the
-  channel closing yields `room-lost`. A drop before the channel opens is `room-lost` at once, or
+  channel closing yields `room-lost`. A drop before the welcome is `unreachable`: no room ever
+  answered. After the welcome and before the channel opens, a drop is `room-lost` at once, or
   after a 15 s grace if a negotiation is under way.
+- *A start needs the other player in the room, not just on the channel.* The guest's room socket
+  can drop alone (an idle proxy or NAT timeout) while the channel stays open; the room then drops
+  the host's start, and the host would play alone until the link monitor gave up. So the session
+  tracks whether the room says the peer is there (`welcome.peer`, `peer-joined`, `peer-left`),
+  and a start sent while it is not reports `room-lost` instead: the host stays on character
+  select with the error, and both need a new room. Picks and the stage are not held back — a
+  newcomer gets them repeated.
+- *The guest sees the host's rules.* The stage message carries them, read leniently since they
+  are only shown (the start carries the rules played), and the results state the rules the match
+  was played under rather than the machine's own.
 - *The lobby tells a notice from an error.* A peer leaving is a non-sticky notice, so re-pairing
   works; real errors stay until the player leaves.
 
 **Gamepads** are wired into every match. `InputFrame` stays a bitfield (SPEC §3) with one new
 bit, `Btn.Soft`, for a partial stick tilt: walk instead of dash, tilt instead of smash, a quarter
 of the DI. The quarter is `UNVERIFIED:` — the bit carries one level of magnitude where the real
-game reads the analog value. Pads map to ports by connection order and are frozen for the
-duration of a match; a spare connected pad takes a freed port.
+game reads the analog value. In a local match, pads map to the human ports by connection order
+and are frozen for the duration of a match; a spare connected pad takes a freed port. Online,
+each player is alone on their machine, so every connected pad drives their one port.
 
-**Known limits.** No online rematch: after a match both players go back through the lobby, and a
-future in-room rematch must add a match id to the packet header, because the ack latch trusts any
-packet on the transport. Online KO/fall/SD credit is counted from each frame's events as first
-shown, so a rollback that changes a hit after it was drawn can misattribute one; the placings come
-from the confirmed final state and are always right. After a room drop mid-match `away` cannot
-reach the peer, so a backgrounded tab is declared lost after 10 s instead of 60. Without a TURN
-key the Worker serves STUN only, which is the interim state if creating the key turns out to need
-a card.
+**Known limits.** No online rematch: "Play online again" on the results leaves the room for the
+lobby, where the two players make a new one. A future in-room rematch must add a match id to the
+packet header, because the ack latch trusts any packet on the transport. Online KO/fall/SD credit
+is counted from each frame's events as first shown, so a rollback that changes a hit after it was
+drawn can misattribute one; the placings come from the confirmed final state and are always right.
+After a room drop mid-match `away` cannot reach the peer, so a backgrounded tab is declared lost
+after 10 s instead of 60. The start guard above covers an asymmetric drop only in the lobby: a
+guest whose room socket drops mid-match plays on, since the match needs nothing from the room.
+Without a TURN key the Worker serves STUN only, which is the interim state if creating the key
+turns out to need a card.
+
+*TURN credentials are a residual risk.* `/api/ice` is not authenticated, and cannot be without
+accounts. It mints one-hour credentials (`TURN_TTL_SECONDS`), so a minted credential relays for an
+hour at most; it answers pages on other sites with a 403 and never sends a CORS header, but a
+script sends whatever headers it likes, so that check is hygiene only. What bounds the cost is the
+account's billing setup: with a payment method, a usage alert set before the TURN secrets go in;
+without one, the worst case is TURN going dark for the month while STUN keeps working.
+
+*The rate limit is optional.* A Workers `ratelimits` binding (`RATE_LIMITER`, 60 requests a minute
+per address, shared by `/api/ice` and the room-socket upgrade) answers 429 past it. It holds a
+script to a human's pace; two players behind one NAT, and the e2e suites with every browser on
+one address, stay far under it. The Worker serves everyone without the binding, so it comes out
+of `wrangler.jsonc` if the free plan refuses it.
 
 **Names.** The spec's `DurableObjectSignalling` is `adapters/doSignal.ts`, and the results
 heading for a lost match is "Connection Lost".

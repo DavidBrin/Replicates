@@ -1,4 +1,4 @@
-# Super Smash — Specification
+# David-Smash — Specification
 
 > **eight fighters, one keyboard, sixty frames a second**
 
@@ -144,9 +144,12 @@ animation, which is one of Ultimate's defining changes and is implemented as suc
 The simulation is deterministic by construction (§3), which buys rollback.
 
 - **Transport is a port.** `net/transport.ts` defines `send(bytes)` / `onMessage(cb)`.
-  Three adapters implement it: **WebRTC** (`trystero`, for real play), **BroadcastChannel**
-  (two tabs on one machine, for development and for a second local window), and **loopback**
-  (tests). The rollback session never learns which one it has.
+  Four adapters implement it: **doSignal** (`adapters/doSignal.ts`, for real play — a WebRTC
+  DataChannel whose offer, answer and ICE candidates a Cloudflare Durable Object room relays;
+  DECISIONS D54), **WebRTC over Trystero** (`adapters/webrtc.ts`, signalled through public
+  Nostr relays — a code-only alternate that no screen selects), **BroadcastChannel** (two tabs
+  on one machine, for development and for a second local window), and **loopback** (tests).
+  The rollback session never learns which one it has.
 - **Input packets** carry every frame of input the receiver has not yet acknowledged (at most
   `MAX_INPUT_WINDOW_FRAMES`, 128), keyed by absolute frame number, plus an `ack`: the highest
   contiguous frame of the receiver's input the sender holds. They travel over an *unreliable,
