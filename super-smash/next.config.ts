@@ -2,10 +2,14 @@ import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 /**
- * Intentionally minimal. Everything else is Next's default, which is also
- * what Vercel detects with zero configuration.
+ * A static export, served by the `david-smash` Cloudflare Worker's static
+ * assets (wrangler.jsonc). Every route already prerenders — there is no route
+ * handler, cookie, header, rewrite or image loader to lose (spec §3.3) — so
+ * the whole game is files, and the Worker only runs for /api/* and /ws/*.
  */
 const nextConfig: NextConfig = {
+  output: "export",
+
   reactStrictMode: true,
 
   // The dev badge floats over the bottom-left corner of the grid, which is
