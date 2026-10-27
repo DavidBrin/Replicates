@@ -38,15 +38,55 @@ describe("client messages, as the room reads them", () => {
     expect(parseClientMessage(JSON.stringify({ t: "lobby", payload }))).toEqual({ t: "lobby", payload });
   });
 
-  it("rejects binary frames, oversized frames, bad JSON and anything it does not know", () => {
+  it("rejects binary frames, bad JSON and anything it does not know", () => {
     expect(parseClientMessage(new ArrayBuffer(4))).toBeNull();
-    expect(parseClientMessage("x".repeat(MAX_MESSAGE_BYTES + 1))).toBeNull();
     expect(parseClientMessage("{nope")).toBeNull();
     expect(parseClientMessage(JSON.stringify({ t: "welcome" }))).toBeNull();
     expect(parseClientMessage(JSON.stringify({ t: "signal", payload: { kind: "offer" } }))).toBeNull();
     expect(parseClientMessage(JSON.stringify({ t: "signal", payload: { kind: "ice", candidate: {} } }))).toBeNull();
     expect(parseClientMessage(JSON.stringify({ t: "lobby", payload: "pick" }))).toBeNull();
     expect(parseClientMessage(JSON.stringify({ t: "lobby", payload: { kind: "k".repeat(33) } }))).toBeNull();
+  });
+});
+
+describe("the size cap on a client frame", () => {
+  const encoder = new TextEncoder();
+  const bytesOf = (frame: string): number => encoder.encode(frame).length;
+
+  /**
+   * A valid lobby frame whose UTF-8 size is exactly `bytes`. The padding is
+   * `wide` code units of "あ" (3 bytes, 1 code unit) topped up with ASCII, so a
+   * wide frame has far fewer code units than bytes.
+   */
+  function lobbyFrameOfBytes(bytes: number, wide: boolean): string {
+    const overhead = bytesOf(JSON.stringify({ t: "lobby", payload: { kind: "pad", pad: "" } }));
+    const room = bytes - overhead;
+    const cjk = wide ? Math.floor(room / 3) : 0;
+    const pad = "あ".repeat(cjk) + "x".repeat(room - cjk * 3);
+    const frame = JSON.stringify({ t: "lobby", payload: { kind: "pad", pad } });
+    expect(bytesOf(frame)).toBe(bytes);
+    return frame;
+  }
+
+  it("accepts a valid frame of exactly the cap, in ASCII or multibyte text", () => {
+    expect(parseClientMessage(lobbyFrameOfBytes(MAX_MESSAGE_BYTES, false))).not.toBeNull();
+    const wide = lobbyFrameOfBytes(MAX_MESSAGE_BYTES, true);
+    expect(wide.length).toBeLessThan(MAX_MESSAGE_BYTES / 2);
+    expect(parseClientMessage(wide)).not.toBeNull();
+  });
+
+  it("rejects a valid ASCII frame one byte over the cap", () => {
+    expect(parseClientMessage(lobbyFrameOfBytes(MAX_MESSAGE_BYTES + 1, false))).toBeNull();
+  });
+
+  it("rejects a valid multibyte frame whose code units fit but whose UTF-8 bytes do not", () => {
+    const wide = lobbyFrameOfBytes(MAX_MESSAGE_BYTES + 1, true);
+    expect(wide.length).toBeLessThan(MAX_MESSAGE_BYTES);
+    expect(parseClientMessage(wide)).toBeNull();
+    // The reviewer's case: well under the cap in code units, about three times it in bytes.
+    const heavy = JSON.stringify({ t: "lobby", payload: { kind: "pad", pad: "あ".repeat(16_000) } });
+    expect(heavy.length).toBeLessThan(MAX_MESSAGE_BYTES);
+    expect(parseClientMessage(heavy)).toBeNull();
   });
 });
 

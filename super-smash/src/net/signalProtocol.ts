@@ -85,9 +85,17 @@ export function parseRoomIntent(value: string | null): RoomIntent | null {
   return value === "create" || value === "join" ? value : null;
 }
 
-/** One raw WebSocket frame from a browser. Binary frames are never valid. */
+/**
+ * One raw WebSocket frame from a browser. Binary frames are never valid.
+ *
+ * The cap is in UTF-8 bytes, which is what the wire carries and the free tier
+ * bills. `raw.length` counts UTF-16 code units, and each takes one to three
+ * bytes (three for CJK), so it can only ever undercount: it is a cheap
+ * early-out, and a frame short in code units can still be too long in bytes.
+ */
 export function parseClientMessage(raw: string | ArrayBuffer): ClientMessage | null {
   if (typeof raw !== "string" || raw.length > MAX_MESSAGE_BYTES) return null;
+  if (new TextEncoder().encode(raw).length > MAX_MESSAGE_BYTES) return null;
   let value: unknown;
   try {
     value = JSON.parse(raw);
