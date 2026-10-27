@@ -303,7 +303,7 @@ export default function PlayPage() {
   const [online] = useState(onlineAtMount);
   // Seated for an online match with none to play: the start was withdrawn
   // (the opponent left) before this page mounted. The seats are two humans on
-  // one keyboard, not a local match, so this goes back to the lobby instead.
+  // one keyboard, not a local match, so this goes back to where the room is.
   const [stranded] = useState(() => online === null && useMatchConfig.getState().online);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -325,8 +325,16 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (!stranded) return;
-    leaveOnline();
-    router.replace("/online");
+    const session = getActiveSession();
+    if (session === null) {
+      // No room left to go back to: start again from the lobby.
+      leaveOnline();
+      router.replace("/online");
+      return;
+    }
+    // The room stays open to pair again. The select screens say why it is
+    // waiting (`error ?? notice`) and hold Ready until it is connected.
+    router.replace(session.role === "host" ? "/stage" : "/fighters");
   }, [stranded, router]);
 
   /* ------------------------------------------------------------ local match -- */

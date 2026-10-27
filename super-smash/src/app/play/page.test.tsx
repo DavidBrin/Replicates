@@ -317,15 +317,31 @@ describe("the play page, leaving online", () => {
     expect(routerMock.push).not.toHaveBeenCalledWith("/results");
   });
 
-  it("goes back to the lobby, not into a local match, when the start was withdrawn before it mounted", () => {
-    // Seated online, but the opponent left between the start and this page: no config.
-    const { fake } = goOnline("guest");
-    useOnlineStore.getState().patch({ config: null });
+  it.each([
+    ["host", "/stage"],
+    ["guest", "/fighters"],
+  ] as const)(
+    "sends the %s back to %s with the room kept, not into a local match, when the start was withdrawn before it mounted",
+    (role, screenPath) => {
+      // Seated online, but the opponent left between the start and this page: no config.
+      const { fake } = goOnline(role);
+      useOnlineStore.getState().patch({ config: null });
+      render(<PlayPage />);
+      expect(mocks.runners).toEqual([]);
+      expect(routerMock.replace).toHaveBeenCalledWith(screenPath);
+      // The room stays, so it can pair again; that screen shows why it is waiting.
+      flushTimers();
+      expect(getActiveSession()).toBe(fake.session);
+      expect(fake.session.close).not.toHaveBeenCalled();
+      expect(useMatchConfig.getState().online).toBe(true);
+    },
+  );
+
+  it("goes back to the lobby when it is seated online with no room at all", () => {
+    useMatchConfig.getState().configureOnline();
     render(<PlayPage />);
     expect(mocks.runners).toEqual([]);
     expect(routerMock.replace).toHaveBeenCalledWith("/online");
-    expect(getActiveSession()).toBeNull();
-    expect(fake.session.close).toHaveBeenCalled();
     expect(useMatchConfig.getState().online).toBe(false);
   });
 });
