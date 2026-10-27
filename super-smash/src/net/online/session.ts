@@ -21,7 +21,8 @@ import { parseLobbyMessage, type LobbyMessage } from "./lobby";
  * room ever answered; "room-lost" when the room's socket dropped while the
  * session still needed it (to negotiate, or to carry the lobby); "bad-start"
  * when this side built a `start` the other side would refuse or read
- * differently, so it was never sent.
+ * differently, so it was never sent. Every one of them, and a link that
+ * fails, is final: the session leaves the room right after reporting it.
  */
 export type SessionError = RoomError | "unreachable" | "room-lost" | "bad-start";
 
@@ -168,7 +169,7 @@ export class OnlineSession implements OnlineSessionLike {
           break;
         }
         case "error":
-          this.events.emit({ type: "error", reason: event.reason });
+          this.failWith(event.reason);
           break;
         case "closed":
           if (this.closed || this.roomGone) break;
@@ -179,7 +180,7 @@ export class OnlineSession implements OnlineSessionLike {
           // answered; after one, a drop is a Worker deploy restarting the room.
           if (roomErrorForCloseCode(event.code) !== null) break;
           if (this.welcomed) this.roomDropped();
-          else this.events.emit({ type: "error", reason: "unreachable" });
+          else this.failWith("unreachable");
           break;
         default:
           break;
@@ -216,7 +217,7 @@ export class OnlineSession implements OnlineSessionLike {
     // is this side's error rather than a silence or a desync on the other. A
     // refused pick, stage or away costs only a stale lobby screen.
     if (message.kind === "start" && !arrivesAsSent(message)) {
-      this.events.emit({ type: "error", reason: "bad-start" });
+      this.failWith("bad-start");
       return false;
     }
     // The room drops a message it has nobody to give to. A lost pick or stage
@@ -266,6 +267,8 @@ export class OnlineSession implements OnlineSessionLike {
     const before = this.link;
     this.link = status;
     this.events.emit({ type: "link", status });
+    // The direct connection could not be made: as final as any session error.
+    if (status === "failed") this.leaveSoon();
     if (!this.roomGone) this.reconnectAfter(before, status);
     if (!this.roomGone || this.closed || status === "negotiating") return;
     if (status === "open") this.endGrace();
@@ -333,9 +336,28 @@ export class OnlineSession implements OnlineSessionLike {
     this.cancelReconnect();
     if (this.roomLost) return;
     this.roomLost = true;
-    this.events.emit({ type: "error", reason: "room-lost" });
+    this.failWith("room-lost");
     // A negotiation left running could still open the channel and report "open" over the loss.
     if (this.transport.status === "negotiating") this.transport.close();
+  }
+
+  /**
+   * Say why the session cannot go on, then leave the room. Left open, the
+   * code would stay joinable, and a newcomer could pair with a screen that
+   * shows a dead error. The screens keep the error until the player leaves.
+   */
+  private failWith(reason: SessionError): void {
+    this.events.emit({ type: "error", reason });
+    this.leaveSoon();
+  }
+
+  /**
+   * Close once the current delivery is over, not in the middle of it: this
+   * can run inside the transport's own report of a lost channel, whose leave
+   * must still reach a match's link monitor. Idempotent, as `close` is.
+   */
+  private leaveSoon(): void {
+    queueMicrotask(() => this.close());
   }
 
   private endGrace(): void {

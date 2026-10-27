@@ -599,6 +599,80 @@ describe("OnlineSession", () => {
     });
   });
 
+  /**
+   * An error the room cannot recover from leaves it: left open, the code would
+   * stay joinable, and a newcomer could pair with a screen showing a dead
+   * error. Deferred past the current delivery, so a lost channel's leave still
+   * reaches a match's link monitor first.
+   */
+  describe("after an error the room cannot go on from", () => {
+    const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    it("closes the room socket and the transport after room-lost, so a newcomer pairs with nobody", async () => {
+      const { session, signalling, channel, events } = await negotiatingHost();
+      channel.open();
+      signalling.deliver({ t: "peer-left", peerId: "g1" });
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(false);
+      expect(errors(events)).toEqual([{ type: "error", reason: "room-lost" }]);
+      await flush();
+
+      expect(signalling.closed).toBe(true);
+      expect(session.transport.status).toBe("closed");
+      const sent = signalling.sent.length;
+      const heard = events.length;
+      signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      expect(signalling.sent).toHaveLength(sent);
+      expect(events).toHaveLength(heard);
+    });
+
+    it("closes after a start it would not send", async () => {
+      const { session, signalling, events } = await open();
+      expect(session.sendLobby({ kind: "start", config: { ...CONFIG, seed: 1.5 } })).toBe(false);
+      expect(errors(events)).toEqual([{ type: "error", reason: "bad-start" }]);
+      await flush();
+      expect(signalling.closed).toBe(true);
+    });
+
+    it("closes after the link fails", async () => {
+      const { session, signalling, events, fail } = await negotiatingHost();
+      fail();
+      expect(events).toContainEqual({ type: "link", status: "failed" });
+      await flush();
+      expect(signalling.closed).toBe(true);
+      expect(session.transport.status).toBe("closed");
+    });
+
+    it("closes after the room turns it away", async () => {
+      const { signalling } = await open("join");
+      signalling.deliver({ t: "error", reason: "bad-message" });
+      await flush();
+      expect(signalling.closed).toBe(true);
+    });
+
+    it("lets a lost channel's leave reach the match before it closes", async () => {
+      const { session, signalling, channel } = await negotiatingHost();
+      const left: string[] = [];
+      session.transport.onPeerLeave((id) => left.push(id));
+      channel.open();
+      expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      signalling.deliver(ROOM_DROP);
+      channel.drop();
+      expect(left).toEqual(["g1"]);
+      await flush();
+      expect(signalling.closed).toBe(true);
+    });
+
+    it("is closed once however many errors arrive", async () => {
+      const { session, signalling, events } = await open();
+      session.sendLobby({ kind: "start", config: { ...CONFIG, seed: 1.5 } });
+      session.sendLobby({ kind: "start", config: { ...CONFIG, seed: 2.5 } });
+      await flush();
+      expect(signalling.closed).toBe(true);
+      expect(errors(events)).toHaveLength(2);
+      session.close();
+    });
+  });
+
   it("sends lobby messages through the room", async () => {
     const { session, signalling } = await open();
     expect(session.sendLobby({ kind: "away", away: true })).toBe(true);
