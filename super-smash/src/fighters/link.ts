@@ -16,6 +16,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. Slightly taller than Mario
  * and about as wide, with the sword adding reach but no hurtbox. */
@@ -30,7 +31,7 @@ export const link: FighterDef = {
 
   attributes: {
     weight: 104,
-    walkSpeed: fx(1.237),
+    walkSpeed: fx(1.247),
     initialDashSpeed: fx(1.98),
     runSpeed: fx(1.534),
     // 0.924 air speed and a 3.04 fast fall: he commits to a jump, and he
@@ -52,6 +53,8 @@ export const link: FighterDef = {
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
   },
+
+  params: FIGHTER_PARAMS.link,
 
   moves: {
     jab1: {

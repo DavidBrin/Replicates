@@ -15,6 +15,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. The Power Suit is bulky —
  * wider than Link at a similar height. */
@@ -52,6 +53,8 @@ export const samus: FighterDef = {
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
   },
+
+  params: FIGHTER_PARAMS.samus,
 
   moves: {
     // Samus has a two-hit jab. SmashWiki records `neutralcount=2` and there is

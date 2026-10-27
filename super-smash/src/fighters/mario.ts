@@ -42,6 +42,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { FIGHTER_PARAMS } from "./params";
 
 /** Mario's hurtbox is about eleven units tall — a shade over a seventh of
  * Battlefield's width, which is the scale the whole game is drawn at.
@@ -82,6 +83,8 @@ export const mario: FighterDef = {
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
   },
+
+  params: FIGHTER_PARAMS.mario,
 
   moves: {
     jab1: {

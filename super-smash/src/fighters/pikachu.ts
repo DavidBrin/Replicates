@@ -17,6 +17,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { FIGHTER_PARAMS } from "./params";
 
 /**
  * UNVERIFIED: hurtbox dimensions are unpublished, as they are for everyone.
@@ -56,6 +57,8 @@ export const pikachu: FighterDef = {
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
   },
+
+  params: FIGHTER_PARAMS.pikachu,
 
   moves: {
     /**

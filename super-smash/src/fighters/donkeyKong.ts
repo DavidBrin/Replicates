@@ -14,6 +14,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. DK stands roughly half again
  * as tall as Mario and considerably wider, which is the shape his frame data
@@ -51,6 +52,8 @@ export const donkeyKong: FighterDef = {
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
   },
+
+  params: FIGHTER_PARAMS.donkeyKong,
 
   moves: {
     // DK's jab is a two-hit string. There is no jab 3 and no rapid jab — the

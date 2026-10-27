@@ -49,6 +49,7 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. Marth is tall and narrow —
  * the tallest of these eight bar Donkey Kong, and among the thinnest. The
@@ -96,6 +97,8 @@ export const marth: FighterDef = {
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
   },
+
+  params: FIGHTER_PARAMS.marth,
 
   moves: {
     jab1: {

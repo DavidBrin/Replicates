@@ -7,6 +7,8 @@
  * marked "frames" is a whole number of 60Hz simulation frames.
  */
 
+import type { FighterParams } from "./params";
+
 /* ------------------------------------------------------------------ input -- */
 
 /**
@@ -331,6 +333,12 @@ export interface FighterDef {
   /** Fighter number, which is what the CSS orders by. */
   readonly number: number;
   readonly attributes: FighterAttributes;
+  /**
+   * The fighter's `fighter_param.prc` numbers (see `params.ts`). Optional while
+   * the engine migrates off `attributes`: a definition without it — every
+   * engine test fixture — is read through `paramsFromAttributes`.
+   */
+  readonly params?: FighterParams;
   readonly moves: Readonly<Partial<Record<MoveSlot, MoveDef>>>;
   /** Palette used by the procedural renderer. See `render/characterArt.ts`. */
   readonly palette: FighterPalette;
