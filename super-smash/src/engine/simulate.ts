@@ -1227,6 +1227,9 @@ function applyHit(
 
   /* ---- the damage path ---- */
   victim.damage += damage;
+  // "Characters can only air dodge once until they land, get hit, or grab a
+  // ledge" (SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge). Plan 3, Task 7.
+  victim.airDodged = false;
 
   /* ---- the super-armour path ---- */
   //

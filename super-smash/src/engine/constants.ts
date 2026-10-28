@@ -56,6 +56,18 @@ export const LAUNCH_SPEED_RATIO = fx(0.03);
 export const LAUNCH_SPEED_DECAY = fx(0.051);
 
 /**
+ * Hitstun cancel: an airborne victim may air dodge from hitstun frame 41 while
+ * the launch is slower than 2.5, or attack from frame 46 while it is slower than
+ * 2. SmashWiki "Hitstun canceling" (https://www.ssbwiki.com/Hitstun_canceling):
+ * "after frame 40" / "after frame 45"; rubendal SSBU-Calculator
+ * `parameters.hitstunCancel` (frames 40/45, launch speeds 2.5/2).
+ */
+export const HITSTUN_CANCEL_AIR_DODGE_FRAME = 41;
+export const HITSTUN_CANCEL_AERIAL_FRAME = 46;
+export const HITSTUN_CANCEL_AIR_DODGE_SPEED = fx(2.5);
+export const HITSTUN_CANCEL_AERIAL_SPEED = fx(2);
+
+/**
  * A flinching hit's reaction frames never fall below 5, so hitstun never below
  * 4 (SmashWiki "Hitstun": "a minimum of 4 frames"; rubendal `Hitstun`).
  */

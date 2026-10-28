@@ -476,3 +476,84 @@ describe("tumble starts at 80 knockback (Plan 3, Task 6 addendum)", () => {
     expect(h.speedUpMax).toBeGreaterThan(ONE);
   });
 });
+
+/* ------------------------------------------- Task 7: hitstun cancel -- */
+
+describe("hitstun cancel (Plan 3, Task 7)", () => {
+  /** Fighter 1 tumbling in the air, `frame` frames into a long hitstun, launch speed `speed`. */
+  function tumbling(frame: number, speed: number): GameState {
+    const s = standing();
+    const v = s.fighters[1];
+    v.action = "tumble";
+    v.actionFrame = frame;
+    v.hitstun = 60;
+    v.grounded = false;
+    v.platform = -1;
+    v.y = fx(60);
+    v.kinetic.damageX = speed;
+    v.launchSpeed = speed;
+    v.vx = speed;
+    return s;
+  }
+  const press = (b: InputFrame) => (i: number): readonly InputFrame[] => [0, i === 0 ? b : 0];
+
+  // SmashWiki "Hitstun canceling" (https://www.ssbwiki.com/Hitstun_canceling):
+  // air dodge after frame 40 if launch speed is below 2.5; aerial after frame 45
+  // below 2. rubendal `parameters.hitstunCancel` agrees (frames 40/45, speeds 2.5/2).
+  it("air dodges out of hitstun from frame 41 when the launch is slower than 2.5", () => {
+    const after = play(tumbling(40, fx(2.4)), 1, press(Btn.Shield)).at(-1)!.state.fighters[1];
+    expect(after.action).toBe("airDodge");
+    expect(after.hitstun).toBe(0);
+  });
+
+  it("does not air dodge on frame 40", () => {
+    expect(play(tumbling(39, fx(2.4)), 1, press(Btn.Shield)).at(-1)!.state.fighters[1].action).toBe("tumble");
+  });
+
+  it("does not air dodge while the launch is still 2.5 or faster", () => {
+    expect(play(tumbling(40, fx(2.5)), 1, press(Btn.Shield)).at(-1)!.state.fighters[1].action).toBe("tumble");
+  });
+
+  it("attacks out of hitstun from frame 46 when the launch is slower than 2", () => {
+    const after = play(tumbling(45, fx(1.9)), 1, press(Btn.Attack)).at(-1)!.state.fighters[1];
+    expect(after.action).toBe("attack");
+    expect(after.move).toBe("nair");
+    expect(after.hitstun).toBe(0);
+  });
+
+  it("does not attack on frame 45, or at a launch of 2", () => {
+    expect(play(tumbling(44, fx(1.9)), 1, press(Btn.Attack)).at(-1)!.state.fighters[1].action).toBe("tumble");
+    expect(play(tumbling(45, fx(2)), 1, press(Btn.Attack)).at(-1)!.state.fighters[1].action).toBe("tumble");
+  });
+
+  it("stays in hitstun when the air dodge is already spent", () => {
+    const s = tumbling(40, fx(2.2));
+    s.fighters[1].airDodged = true;
+    const frames = play(s, 3, press(Btn.Shield));
+    expect(frames.map((f) => f.state.fighters[1].action)).toEqual(["tumble", "tumble", "tumble"]);
+    expect(frames.at(-1)!.state.fighters[1].hitstun).toBe(57);
+  });
+
+  // SmashWiki "Air dodge": "Characters can only air dodge once until they land,
+  // get hit, or grab a ledge."
+  it("gets the air dodge back from being hit", () => {
+    const s = standing();
+    s.fighters[1].airDodged = true;
+    const hit = play(s, 8, JAB).find((f) => f.events.hits.length > 0)!;
+    expect(hit.state.fighters[1].airDodged).toBe(false);
+  });
+
+  // A shield held since before the hit — for a ground tech (Task 12) — is not a press.
+  it("does not air dodge on a shield that is only held, not pressed", () => {
+    let s = tumbling(40, fx(2.2));
+    for (let i = 0; i < 3; i++) {
+      s = step(s, [0, Btn.Shield], { prevInputs: [0, Btn.Shield], ctx: ctxFor() }).state;
+    }
+    expect(s.fighters[1].action).toBe("tumble");
+  });
+
+  it("takes a press buffered a few frames early, when the window opens", () => {
+    const after = play(tumbling(37, fx(2)), 4, (i) => [0, i === 0 ? Btn.Shield : 0]).at(-1)!.state.fighters[1];
+    expect(after.action).toBe("airDodge");
+  });
+});
