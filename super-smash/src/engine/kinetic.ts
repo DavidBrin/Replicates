@@ -434,3 +434,33 @@ export function kineticLand(f: FighterState): void {
   f.launchSpeed = 0;
   kineticSum(f);
 }
+
+/* ------------------------------------------------------------ MOTION energy -- */
+
+/**
+ * A move's scripted velocity (`momentum` in its `game_` script): set, not
+ * added, so a Fox Illusion out of a run goes exactly as far as one from a
+ * standstill. Every other energy stops while it holds, the launch included.
+ */
+export function kineticMotion(f: FighterState, vx: number, vy: number): void {
+  const k = f.kinetic;
+  k.controlX = 0;
+  k.stopX = 0;
+  k.gravityY = 0;
+  k.damageX = 0;
+  k.damageY = 0;
+  f.launchSpeed = 0;
+  k.motionX = vx;
+  k.motionY = vy;
+  kineticSum(f);
+}
+
+/** The hold is over: the velocity it left becomes drift and gravity's to change. */
+export function kineticEndMotion(f: FighterState): void {
+  const k = f.kinetic;
+  k.controlX += k.motionX;
+  k.gravityY += k.motionY;
+  k.motionX = 0;
+  k.motionY = 0;
+  kineticSum(f);
+}

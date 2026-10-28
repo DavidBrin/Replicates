@@ -54,8 +54,10 @@ import {
   carrierOf,
   kineticAdopt,
   kineticClear,
+  kineticEndMotion,
   kineticExec,
   kineticJump,
+  kineticMotion,
   kineticReel,
   kineticSet,
   kineticSetX,
@@ -725,16 +727,14 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   const run = moveScriptFrame(ctx.def, f);
   const m = run?.state.momentum ?? null;
   if (run === null || m === null) return false;
-  f.vx = m.x * (f.facing >= 0 ? 1 : -1); // kinetic: legacy-write (Task 18 moves this to MOTION)
-  f.vy = m.y; // kinetic: legacy-write (Task 18 moves this to MOTION)
   // The floor still wins. A downward impulse on a grounded fighter drove
-  // them straight through the stage — a grounded Stone fell out of the world
-  // — because this branch returns before the clamp at the bottom of
-  // `applyMovement` that ordinarily stops that. A Stone used on the ground
-  // simply sits there, which is also what it does in the real game.
-  if (f.grounded && f.vy < 0) f.vy = 0; // kinetic: legacy-write (Task 18 moves this to MOTION)
-  f.launchSpeed = 0;
-  return run.gameFrame < m.until;
+  // them straight through the stage — a grounded Stone fell out of the world.
+  // A Stone used on the ground simply sits there, as it does in the real game.
+  kineticMotion(f, m.x * (f.facing >= 0 ? 1 : -1), f.grounded && m.y < 0 ? 0 : m.y);
+  const holding = run.gameFrame < m.until;
+  // On the last frame of the hold, drift and gravity take over this very frame.
+  if (!holding) kineticEndMotion(f);
+  return holding;
 }
 
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
@@ -750,10 +750,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
 
   // Scripted movement outranks everything below it — that is the point of a
   // move that carries its own — but only for as long as it is held.
-  if (f.hitstun <= 0 && applyMoveMomentum(f, ctx)) {
-    kineticAdopt(f, carrier);
-    return;
-  }
+  if (f.hitstun <= 0 && applyMoveMomentum(f, ctx)) return;
 
   if (f.hitstun > 0) {
     kineticReel(f, fighterParams(ctx.def), hitstunGravityOptions(f).balloon === true);

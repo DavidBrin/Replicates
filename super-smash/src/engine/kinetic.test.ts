@@ -7,10 +7,12 @@ import {
   emptyKinetic,
   kineticAdopt,
   kineticClear,
+  kineticEndMotion,
   kineticExec,
   kineticJump,
   kineticLand,
   kineticLaunch,
+  kineticMotion,
   kineticReel,
   kineticSet,
   kineticSetX,
@@ -29,7 +31,13 @@ import {
   runVelocity,
   walkVelocity,
 } from "./physics";
-import type { FighterAttributes, FighterState } from "./types";
+import { moveScriptFrame } from "./acmd/run";
+import { createInitialState, step } from "./simulate";
+import type { SimContext } from "./simulate";
+import { Btn } from "./types";
+import type { FighterAttributes, FighterState, InputFrame, MatchRules } from "./types";
+import { FIGHTERS } from "@/fighters";
+import { STAGES } from "@/stages";
 
 /** Only the fields the KineticModule touches; the rest of a fighter is irrelevant here. */
 function body(k: Partial<KineticState> = {}, over: Partial<FighterState> = {}): FighterState {
@@ -435,5 +443,101 @@ describe("the DAMAGE energy: a launch decays on its own", () => {
     expect(f.launchSpeed).toBe(fx(4));
     kineticSetY(f, 0);
     expect(f.launchSpeed).toBe(0);
+  });
+});
+
+/* ------------------------------------------------- MOTION energy (Task 18) -- */
+
+describe("the MOTION energy: a move's scripted velocity", () => {
+  it("replaces every other energy while it holds", () => {
+    const f = body({ controlX: fx(1), stopX: fx(1), gravityY: -fx(1), damageX: fx(2) }, { launchSpeed: fx(2) });
+    kineticMotion(f, fx(0.5), fx(2.9));
+    expect(f.kinetic).toMatchObject({ controlX: 0, stopX: 0, gravityY: 0, damageX: 0, motionX: fx(0.5), motionY: fx(2.9) });
+    expect([f.vx, f.vy, f.launchSpeed]).toEqual([fx(0.5), fx(2.9), 0]);
+  });
+
+  it("hands its velocity to drift and gravity when the hold ends, so the fighter carries on", () => {
+    const f = body({}, { grounded: false });
+    kineticMotion(f, fx(0.5), fx(2.9));
+    kineticEndMotion(f);
+    expect(f.kinetic).toMatchObject({ motionX: 0, motionY: 0, controlX: fx(0.5), gravityY: fx(2.9) });
+    expect([f.vx, f.vy]).toEqual([fx(0.5), fx(2.9)]);
+  });
+
+  it("ends a live launch instead of leaving it frozen underneath", () => {
+    // A launch outlives hitstun, so a move can start while one is still decaying.
+    // The old path wrote `launchSpeed = 0` and left the DAMAGE vector behind: it
+    // never decayed again and rode along until the fighter landed.
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, -fx(2), fx(1.5), fx(2.5));
+    for (let i = 0; i < 3; i++) kineticReel(f, PARAMS, false);
+    expect(f.launchSpeed).toBeGreaterThan(0); // the launch really is live
+    expect(f.kinetic.damageX).toBeLessThan(0);
+
+    kineticMotion(f, fx(0.35), fx(2.5));
+    expect(f.kinetic).toMatchObject({ damageX: 0, damageY: 0 });
+    expect(f.launchSpeed).toBe(0);
+
+    // Hold, hand over, then ten frames of ordinary air: nothing brings the launch back.
+    for (let i = 0; i < 3; i++) kineticMotion(f, fx(0.35), fx(2.5));
+    kineticEndMotion(f);
+    for (let i = 0; i < 10; i++) kineticExec(f, "FALL", { stickX: 0, params: PARAMS, holdVertical: false });
+    expect(f.kinetic).toMatchObject({ damageX: 0, damageY: 0 });
+    expect(f.launchSpeed).toBe(0);
+    expect(f.vx).toBe(f.kinetic.controlX);
+  });
+});
+
+describe("a scripted move started during a live launch (the engine, not the energy)", () => {
+  const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
+  const CTX: SimContext = {
+    fighter(id) {
+      const d = FIGHTERS.find((x) => x.id === id);
+      if (d === undefined) throw new Error(`unknown fighter ${id}`);
+      return d;
+    },
+    stage(id) {
+      const d = STAGES.find((x) => x.id === id);
+      if (d === undefined) throw new Error(`unknown stage ${id}`);
+      return d;
+    },
+  };
+
+  it("Link's up-special, pressed mid-launch, ends the launch when its momentum starts", () => {
+    let state = createInitialState("finalDestination", [{ defId: "link" }, { defId: "link" }], RULES, 0x7a18, CTX);
+    for (const f of state.fighters) f.x = fx(f === state.fighters[0] ? 0 : 150);
+    const f0 = state.fighters[0];
+    f0.action = "fall";
+    f0.actionFrame = 0;
+    f0.grounded = false;
+    f0.y = fx(70);
+    f0.hitstun = 0; // out of hitstun, still decaying: how a launch outlives it
+    kineticLaunch(f0, -fx(2), fx(1.5), fx(2.5));
+
+    const input: InputFrame = Btn.Up | Btn.Special;
+    let prev: InputFrame = 0;
+    let launchLiveBeforeMotion = false;
+    let motionFrames = 0;
+    for (let i = 0; i < 60; i++) {
+      const out = step(state, [input, 0], { prevInputs: [prev, 0], ctx: CTX });
+      state = out.state;
+      prev = input;
+      const f = state.fighters[0];
+      const k = f.kinetic;
+      // Ask the move's own script whether its momentum has begun, not the energies.
+      const begun = moveScriptFrame(CTX.fighter("link"), f)?.state.momentum != null;
+      if (!begun) {
+        if (k.damageX !== 0 || k.damageY !== 0) launchLiveBeforeMotion = true;
+        continue;
+      }
+      motionFrames++;
+      // From the script's first momentum frame to the end of the move the launch is gone, not parked.
+      expect([k.damageX, k.damageY, f.launchSpeed], `frame ${i} of the run`).toEqual([0, 0, 0]);
+      expect(f.vx, `frame ${i} of the run`).toBe(k.controlX + k.stopX + k.motionX);
+    }
+    // Guard against passing for the wrong reason: the launch was live when the move began,
+    // and the move did reach its momentum.
+    expect(launchLiveBeforeMotion).toBe(true);
+    expect(motionFrames).toBeGreaterThan(10);
   });
 });
