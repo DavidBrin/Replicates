@@ -346,6 +346,11 @@ describe("hitbox values", () => {
     for (const { slot, hitbox } of everyHitbox(fighter)) {
       expect(hitbox.baseKnockback, `${fighter.name} ${slot}`).toBeGreaterThanOrEqual(0);
       expect(hitbox.knockbackGrowth, `${fighter.name} ${slot}`).toBeGreaterThanOrEqual(0);
+      // A fixed knockback is a script's non-zero `fkb`; one of 0 would say set
+      // knockback while meaning none (Plan 3, Task 16b).
+      if (hitbox.fixedKnockback !== undefined) {
+        expect(hitbox.fixedKnockback, `${fighter.name} ${slot} hitbox ${hitbox.id}`).toBeGreaterThan(0);
+      }
     }
   });
 

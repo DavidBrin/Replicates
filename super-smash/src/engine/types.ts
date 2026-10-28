@@ -221,26 +221,21 @@ export interface Hitbox {
    * whether the victim is grounded or airborne.
    */
   readonly angle: number;
-  /** Base knockback; with `setKnockback`, the box's fixed knockback (the script's `fkb`) instead. */
+  /** Base knockback, the script's `bkb`, in either formula. */
   readonly baseKnockback: number;
   readonly knockbackGrowth: number;
   readonly effect?: HitEffect;
   /**
-   * Fixed ("set") knockback: the knockback formula with the victim's percent
-   * replaced, `((((1 + fkb/2) · (200/(w+100)) · 1.4) + 18) · kbg/100) + bkb`
-   * (rubendal SSBU-Calculator `WeightBasedKB`), `fkb` being `baseKnockback`.
-   * The victim's weight and the growth still count; its percent, the hit's
+   * Fixed ("set") knockback, the script's `fkb`. Above 0, the box is set
+   * knockback, as a script's is when its `fkb` is not 0 (rubendal
+   * SSBU-Calculator: `if (fkb == 0) VSKB(...) else WeightBasedKB(...)`): the
+   * knockback formula with the victim's percent replaced,
+   * `((((1 + fkb/2) · (200/(w+100)) · 1.4) + 18) · kbg/100) + bkb`. The victim's
+   * weight, the growth and `baseKnockback` still count; its percent, the hit's
    * damage, rage and crouch cancel do not (`computeKnockback`; Plan 3, Task 16b).
-   * A script marks set knockback by a non-zero `fkb`, so `baseKnockback` must be
-   * above 0 for a set-knockback box to compile as one (`attackFromHitbox`).
+   * Absent or 0: scaling knockback. It mirrors `AttackParams.fkb`.
    */
-  readonly setKnockback?: boolean;
-  /**
-   * A set-knockback box's own `bkb` (a script `ATTACK` with both `fkb` and
-   * `bkb`), added after the weight-based term. Absent is 0; ignored without
-   * `setKnockback`, where `baseKnockback` is the `bkb` (Plan 3, Task 16b).
-   */
-  readonly setKnockbackBase?: number;
+  readonly fixedKnockback?: number;
   /** Passes through opposing hitboxes rather than clanking with them. */
   readonly transcendent?: boolean;
   /** Per-move hitlag scaling. 1.0 (`ONE`) unless stated. */

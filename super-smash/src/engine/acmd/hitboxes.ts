@@ -12,9 +12,9 @@
  *
  * An ATTACK's `direct`, `set_weight`, ground/air mask, LR check and downward
  * angle reach the pipeline as `Hitbox` fields (Plan 3, Task 16), and so does a
- * CATCH's ground/air mask (Task 16b). A set-knockback attack (`fkb > 0`)
- * carries `fkb` as its `baseKnockback` and a `bkb` beside it as
- * `setKnockbackBase` (Task 16b).
+ * CATCH's ground/air mask (Task 16b). An attack's `bkb` is the box's
+ * `baseKnockback` and a non-zero `fkb` its `fixedKnockback`, field for field
+ * (Task 16b).
  *
  * One narrowing is NOT refused, because a `Hitbox` has no field for what is
  * dropped; Plan 3 owns it, by reading `AttackParams` directly: a
@@ -101,11 +101,10 @@ function attackHitbox(
     radius: a.size,
     damage: a.damage,
     angle: a.angle,
-    baseKnockback: a.fkb > 0 ? a.fkb : a.bkb,
+    baseKnockback: a.bkb,
     knockbackGrowth: a.kbg,
     ...(effect !== undefined && effect !== "normal" ? { effect } : {}),
-    ...(a.fkb > 0 ? { setKnockback: true } : {}),
-    ...(a.fkb > 0 && a.bkb !== 0 ? { setKnockbackBase: a.bkb } : {}),
+    ...(a.fkb > 0 ? { fixedKnockback: a.fkb } : {}),
     ...(a.clang === "ATTACK_SETOFF_KIND_THRU" ? { transcendent: true } : {}),
     ...(a.hitlag !== ONE ? { hitlagMultiplier: a.hitlag } : {}),
     ...(setoff !== undefined ? { shieldstunMultiplier: setoff } : {}),

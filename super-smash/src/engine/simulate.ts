@@ -1708,8 +1708,7 @@ function applyHit(
     knockbackGrowth: hb.knockbackGrowth,
     rage: computeRage(attacker.damage),
     crouchCancel,
-    setKnockback: hb.setKnockback,
-    setKnockbackBase: hb.setKnockbackBase,
+    fixedKnockback: hb.fixedKnockback,
     setWeight: hb.setWeight,
   });
 
@@ -1719,7 +1718,7 @@ function applyHit(
   // It is the hit's knockback: a grounded meteor's bounce comes after (below).
   const hitstun = computeHitstun(kb);
   const tumbles = hitstun >= TUMBLE_HITSTUN;
-  const speedUp = tumbles && hb.setKnockback !== true;
+  const speedUp = tumbles && (hb.fixedKnockback ?? 0) <= 0;
   // Crouch cancel shortens the freeze for *both* fighters (research §4), which
   // is why one `lag` is computed and handed to each of them below rather than
   // one each: crouching does not buy the defender a frame advantage, it makes

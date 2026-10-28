@@ -68,10 +68,8 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     damage: hb.damage,
     angle: hb.angle,
     kbg: hb.knockbackGrowth,
-    // A set-knockback box keeps its `fkb` in `baseKnockback` and any `bkb` beside
-    // it in `setKnockbackBase` (Plan 3, Task 16b).
-    fkb: hb.setKnockback ? hb.baseKnockback : 0,
-    bkb: hb.setKnockback ? (hb.setKnockbackBase ?? 0) : hb.baseKnockback,
+    fkb: hb.fixedKnockback ?? 0,
+    bkb: hb.baseKnockback,
     size: hb.radius,
     x: 0,
     y: hb.y,

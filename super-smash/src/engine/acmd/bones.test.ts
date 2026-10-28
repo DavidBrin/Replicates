@@ -187,7 +187,7 @@ describe("scriptHitboxes", () => {
 
   it("maps ATTACK's arguments onto the Hitbox the combat pipeline reads", () => {
     const [set, elec] = scriptHitboxes(runScript(s, 2), "mario", "attack_11", 2, LEGACY_BONE_TABLE);
-    expect(set).toMatchObject({ setKnockback: true, baseKnockback: fx(50), hitlagMultiplier: fx(1.5) });
+    expect(set).toMatchObject({ fixedKnockback: fx(50), baseKnockback: 0, hitlagMultiplier: fx(1.5) });
     expect(elec).toMatchObject({ effect: "electric", baseKnockback: fx(20), shieldstunMultiplier: fx(2) });
     expect(elec.hitlagMultiplier).toBeUndefined();
   });

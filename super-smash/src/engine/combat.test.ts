@@ -339,7 +339,7 @@ describe("flat launches (Plan 3, Task 3)", () => {
   function launchOf(airborne: boolean): { speed: number; kb: number } {
     const flat: FighterDef = {
       ...BASE_DEF,
-      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: fx(60), setKnockback: true })] }) },
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: 0, fixedKnockback: fx(60) })] }) },
     };
     const ctx = ctxFor(flat);
     const s = standing(ctx);
@@ -391,7 +391,7 @@ describe("DI needs a tumbling launch (Plan 3, Task 4)", () => {
   it("does not scale a tumbling launch straight ahead with LSI", () => {
     const flat: FighterDef = {
       ...BASE_DEF,
-      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: fx(100), setKnockback: true })] }) },
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: 0, fixedKnockback: fx(100) })] }) },
     };
     const speedHolding = (held: InputFrame): number => {
       let s = standing(ctxFor(flat));
@@ -417,9 +417,9 @@ describe("the balloon speed-up through a real hit (Plan 3, Task 6)", () => {
    * those up. 5°, not 0°: a flat launch of 120 or more is lifted to 32° (Task 3).
    * Exactly 150, as the growth box below: set knockback is weight-based (Task
    * 16b), and with no growth its formula is its own `bkb` and nothing else. The
-   * `fkb` (`baseKnockback`) must still be above 0, or it is not set knockback.
+   * `fixedKnockback` must still be above 0, or it is not set knockback.
    */
-  const setKb = hitbox({ angle: fx(5), baseKnockback: fx(1), knockbackGrowth: 0, setKnockbackBase: fx(150), setKnockback: true });
+  const setKb = hitbox({ angle: fx(5), baseKnockback: fx(150), knockbackGrowth: 0, fixedKnockback: fx(1) });
   const setKbDef: FighterDef = {
     ...BASE_DEF,
     moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [setKb] }), nair: move("nair", { hitboxes: [setKb] }) },
@@ -2596,7 +2596,7 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
         ...BASE_DEF.moves,
         pummel: move("pummel", {
           totalFrames: 10,
-          hitboxes: [hitbox({ startFrame: 1, endFrame: 1, x: fx(40), damage: fx(8), angle: fx(361), setKnockback: true })],
+          hitboxes: [hitbox({ startFrame: 1, endFrame: 1, x: fx(40), damage: fx(8), angle: fx(361), baseKnockback: 0, fixedKnockback: fx(40) })],
         }),
       },
     };
@@ -3345,17 +3345,18 @@ describe("set knockback is weight-based, and set weight launches as the game doe
   it("launches a script's set-knockback box by the weight-based formula", () => {
     const hit = firstHit(scripted([frame(4), box(), frame(7), clearAll()]));
     expect(hit.knockback).toBe(
-      computeKnockback({ percent: 0, damage: 0, weight: 98, baseKnockback: fx(60), knockbackGrowth: fx(100), setKnockback: true }),
+      computeKnockback({ percent: 0, damage: 0, weight: 98, baseKnockback: 0, knockbackGrowth: fx(100), fixedKnockback: fx(60) }),
     );
     expect(toFloat(hit.knockback)).toBeCloseTo(61.83838, 1);
   });
 
-  // A legacy set-knockback box holds the script's `fkb` in `baseKnockback` and its `kbg`
-  // in `knockbackGrowth` (`fighters/index.ts`); `attackFromHitbox` compiles it to both.
+  // A legacy set-knockback box holds the script's `fkb` in `fixedKnockback`, its `bkb` in
+  // `baseKnockback` and its `kbg` in `knockbackGrowth` (`fighters/index.ts`), which
+  // `attackFromHitbox` compiles field for field.
   it("launches a legacy set-knockback box by the same formula", () => {
     const legacy = ctxFor({
       ...BASE_DEF,
-      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ baseKnockback: fx(60), setKnockback: true })] }) },
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ baseKnockback: 0, fixedKnockback: fx(60) })] }) },
     });
     expect(firstHit(legacy).knockback).toBe(firstHit(scripted([frame(4), box(), frame(7), clearAll()])).knockback);
   });

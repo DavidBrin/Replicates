@@ -139,28 +139,20 @@ export interface KnockbackArgs {
    * `(w + 100) · ONE` exact. `setWeight` replaces it with 100.
    */
   readonly weight: number;
-  /**
-   * The formula's `b`. With `setKnockback`, the box's fixed value instead: the
-   * script's `fkb` (rubendal's `wbkb`), which is where `Hitbox.baseKnockback`
-   * keeps it for a set-knockback box.
-   */
+  /** The formula's `b`, the script's `bkb`, in either formula. */
   readonly baseKnockback: number;
   readonly knockbackGrowth: number;
   /**
-   * Set knockback only: the box's own `bkb`, added after the weight-based term
-   * (rubendal `WeightBasedKB`'s `bkb`; `Hitbox.setKnockbackBase`). Absent is 0.
+   * Fixed ("set") knockback, the script's `fkb` (rubendal's `wbkb`); above 0
+   * makes this set knockback: the formula with the victim's percent replaced
+   * (p = 10, d = `fixedKnockback`). Weight, growth and `baseKnockback` still
+   * count; the victim's percent, the hit's damage, rage and crouch cancel do not.
    */
-  readonly setKnockbackBase?: number;
+  readonly fixedKnockback?: number;
   /** Rage multiplier from `computeRage`. Defaults to 1. Set knockback ignores it. */
   readonly rage?: number;
   /** Set knockback ignores it. */
   readonly crouchCancel?: boolean;
-  /**
-   * Fixed ("set") knockback: the formula with the victim's percent replaced
-   * (p = 10, d = `baseKnockback`). Weight and growth still count; the victim's
-   * percent, the hit's damage, rage and crouch cancel do not.
-   */
-  readonly setKnockback?: boolean;
   /** smash-script `set_weight`: the victim weighs `SET_WEIGHT` (100), in either formula. */
   readonly setWeight?: boolean;
 }
@@ -203,8 +195,9 @@ export function computeKnockback(args: KnockbackArgs): number {
   // was removed altogether" (launch rates, and "rage, crouch cancelling, or smash
   // attack charging bonus"). rubendal's `WeightBasedKB` takes no rage either; it
   // does multiply its crouch-cancel `r`, which this follows the wiki in leaving off.
-  if (args.setKnockback) {
-    const kb = knockbackFormula(TEN, args.baseKnockback, weight, args.knockbackGrowth, args.setKnockbackBase ?? 0);
+  const fkb = args.fixedKnockback ?? 0;
+  if (fkb > 0) {
+    const kb = knockbackFormula(TEN, fkb, weight, args.knockbackGrowth, args.baseKnockback);
     return kb < 0 ? 0 : kb;
   }
 

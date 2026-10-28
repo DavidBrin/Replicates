@@ -536,9 +536,9 @@ const legacy: FighterDef = {
           angle: fx(95),
           // fkb 30 and growth 90, not the other way round: `game_specialhi` id 0 is
           // `kbg: 90, fkb: 30` (fighters/acmd/generated/donkeyKong.ts; Plan 3, Task 16b).
-          baseKnockback: fx(30),
+          baseKnockback: fx(0),
           knockbackGrowth: fx(90),
-          setKnockback: true,
+          fixedKnockback: fx(30),
         },
         {
           // The loop that drags the victim through the spin.
@@ -550,9 +550,9 @@ const legacy: FighterDef = {
           radius: fx(4.5),
           damage: fx(1.4),
           angle: fx(367),
-          baseKnockback: fx(90),
+          baseKnockback: fx(0),
           knockbackGrowth: fx(55),
-          setKnockback: true,
+          fixedKnockback: fx(90),
         },
         {
           id: 2,
@@ -648,9 +648,9 @@ const legacy: FighterDef = {
           radius: fx(5.0),
           damage: fx(1.6),
           angle: fx(361),
-          baseKnockback: fx(30),
+          baseKnockback: fx(0),
           knockbackGrowth: fx(100),
-          setKnockback: true,
+          fixedKnockback: fx(30),
         },
       ],
     },

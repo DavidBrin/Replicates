@@ -155,10 +155,9 @@ describe("set knockback is weight-based (Plan 3, Task 16b)", () => {
         percent: 0,
         damage: fx(1),
         weight,
-        baseKnockback: fx(fkb),
+        baseKnockback: fx(bkb),
         knockbackGrowth: fx(kbg),
-        setKnockback: true,
-        ...(bkb !== 0 ? { setKnockbackBase: fx(bkb) } : {}),
+        fixedKnockback: fx(fkb),
         ...more,
       }),
     );
