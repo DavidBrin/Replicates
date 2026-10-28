@@ -37,10 +37,16 @@ import { MAX_PREDICTION_FRAMES } from "@/net/rollback";
 import { ROLE_PORT } from "@/net/signalProtocol";
 import { createNullTransport, type Transport } from "@/net/transport";
 import { render } from "@/render/renderer";
+import { stepVfx } from "@/render/vfx";
 
 // Nothing in these tests paints a real canvas; the stub lets one test see what
 // the runner would have drawn.
 vi.mock("@/render/renderer", () => ({ render: vi.fn() }));
+// The real `stepVfx`, watched, so a test can see what the runner hands it.
+vi.mock("@/render/vfx", async (original) => {
+  const real = await original<typeof import("@/render/vfx")>();
+  return { ...real, stepVfx: vi.fn(real.stepVfx) };
+});
 
 const RULES: MatchRules = {
   mode: "stock",
@@ -101,6 +107,19 @@ describe("the runner drives its cosmetic state", () => {
     // all of which are authored in frames, wrong by that ratio.
     expect(runner.vfx.frame).toBe(30);
     expect(runner.frame).toBe(30);
+  });
+
+  /**
+   * The charge glow needs each port's fighter definition to know when a held
+   * smash has been let go (`trackChargeGlow`); without them every charge glows
+   * through the swing. Only the runner can hand them over, so this pins that it does.
+   */
+  it("hands the vfx each port's fighter definition", () => {
+    const runner = idleRunner();
+    vi.mocked(stepVfx).mockClear();
+    runner.advance(1);
+    expect(vi.mocked(stepVfx)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(stepVfx).mock.lastCall?.[3]).toEqual([getFighterOrThrow("mario"), getFighterOrThrow("donkeyKong")]);
   });
 
   it("clears the full-screen KO flash instead of leaving it on the screen", () => {
@@ -664,7 +683,6 @@ describe("a tick the rollback session refuses", () => {
     });
     return { network, keyboard, host, guest, sent };
   }
-
 
   it("keeps a key tapped during the stall for the next frame that runs", () => {
     const { network, keyboard, host, guest, sent } = hostWithKeyboard();

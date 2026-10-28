@@ -25,7 +25,11 @@
  * time (the DSL's `script()` does it when the script is built) and records the
  * game frame each command first runs on, plus the motion segments between rate
  * changes. `runScript` then compares plain integers against that table: no
- * BigInt, no division and no float at sim time.
+ * BigInt and no float at sim time. Its one division (`motionFrameAt`) is exact,
+ * a multiple of the segment's `num` divided by `num`, as long as
+ * `(g − from) · den` stays below 2^53, where integer doubles are exact. `den` is
+ * at most `MAX_RATE_TERM` (10^6), so that holds for any game frame below about
+ * 9 × 10^9.
  */
 
 import type { AcmdCommand, AcmdScript, AttackParams, CatchParams, HitStatus, Rate } from "./types";

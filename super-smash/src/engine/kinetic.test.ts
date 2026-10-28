@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 import { LAUNCH_SPEED_DECAY } from "./constants";
 import { fx } from "./fixed";
 import {
+  airControlX,
   emptyKinetic,
   kineticAdopt,
   kineticClear,
   kineticEndMotion,
-  airControlX,
   kineticExec,
   kineticJump,
   kineticLand,

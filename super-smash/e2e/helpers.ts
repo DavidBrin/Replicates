@@ -92,6 +92,27 @@ export async function readFighters(page: Page): Promise<DebugFighter[]> {
   });
 }
 
+/** The simulation frame the match is on (0 before one is running). */
+export async function simFrame(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.frame ?? 0);
+}
+
+/**
+ * Hold a key until the *simulation* has run `frames` more frames, however long
+ * that takes on the wall clock. `holdFor` counts wall-clock time, which a
+ * loaded machine stretches into fewer simulated frames than it asked for; a
+ * test that has to land a hit cannot afford that.
+ */
+export async function holdForFrames(page: Page, code: string, frames: number): Promise<void> {
+  const target = (await simFrame(page)) + frames;
+  await page.keyboard.down(code);
+  await page.waitForFunction(
+    (t) => ((window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.frame ?? 0) >= t,
+    target,
+  );
+  await page.keyboard.up(code);
+}
+
 /**
  * Walk the real menu path into a running match: one human on port 0 and a CPU
  * on port 1, which is the default configuration and the one a player meets

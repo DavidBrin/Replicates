@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { P1, holdFor, readFighters, startMatch } from "./helpers";
+import { P1, holdFor, holdForFrames, readFighters, simFrame, startMatch } from "./helpers";
 
 /**
  * Does pressing a key move your fighter?
@@ -109,6 +109,9 @@ test("the attack key puts the fighter into an attacking state", async ({ page })
 });
 
 test("the player can actually damage the CPU", async ({ page }) => {
+  // The budget below is simulated time; on a loaded machine it can take longer
+  // than the default timeout to run, and that must not fail the test.
+  test.setTimeout(120_000);
   await startMatch(page);
 
   // Specifically the CPU's percent, on port 1 — not "somebody's". A player
@@ -116,13 +119,16 @@ test("the player can actually damage the CPU", async ({ page }) => {
   // beats on them, so `fighters.some(f => f.damage > 0)` passes cleanly against
   // the exact bug this file exists to catch. The only honest claim is that the
   // *opponent* got hit.
-  const deadline = Date.now() + 20_000;
+  //
+  // Counted in simulation frames, not wall-clock time: under load a wall-clock
+  // deadline ran out with too few frames simulated, and the test flaked.
+  const budget = (await simFrame(page)) + 20 * 60;
   let cpuDamage = 0;
-  while (Date.now() < deadline && cpuDamage === 0) {
-    await holdFor(page, P1.right, 14);
-    await holdFor(page, P1.attack, 4);
-    await holdFor(page, P1.left, 14);
-    await holdFor(page, P1.attack, 4);
+  while (cpuDamage === 0 && (await simFrame(page)) < budget) {
+    await holdForFrames(page, P1.right, 14);
+    await holdForFrames(page, P1.attack, 4);
+    await holdForFrames(page, P1.left, 14);
+    await holdForFrames(page, P1.attack, 4);
     const fighters = await readFighters(page);
     cpuDamage = fighters.find((f) => f.port === 1)?.damage ?? 0;
   }

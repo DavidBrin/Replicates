@@ -8,8 +8,9 @@ import { LEDGE_HANG_MIN } from "@/engine/states";
 import { Btn, type FighterState, type GameState, type InputFrame, type MatchRules } from "@/engine/types";
 import { FIGHTERS, getFighter } from "@/fighters";
 import { STAGES } from "@/stages";
+import { clipFrameFor, createPoseBlends } from "../blend";
 import { makeFighter } from "../testFixtures";
-import { actionDurationFor, jumpTimingFor } from "./timing";
+import { actionDurationFor, jumpTimingFor, poseNameFor } from "./timing";
 
 describe("the jump clip's length comes from the engine's jump rule", () => {
   const fox = getFighter("fox")!;
@@ -115,5 +116,34 @@ describe("through step(), every frame of a jump is timed as the jump it is", () 
       expect(frames.length, `${kind}: the jump lasted`).toBe(rise.length);
       for (const f of frames) expect(actionDurationFor(f, t), `${kind}, frame ${f.actionFrame}`).toBe(rise.length);
     }
+  });
+
+  // The renderer does not time the clip by `actionFrame` but by its own clip clock
+  // (`clipFrameFor`, renderer.ts), and `isLedgeJump` compares this frame's speed with
+  // the ledge jump's speed on *that* frame. A clip clock a frame behind the action
+  // would misread every ledge jump as a full hop, so it is driven here as the
+  // renderer drives it: one `clipFrameFor` per simulation frame, from the hang on.
+  it.each(FIGHTERS.map((d) => d.id))("%s: a ledge jump, read on the renderer's clip clock, is a ledge jump", (id) => {
+    const def = getFighter(id)!;
+    const t = jumpTimingFor(def);
+    const ledge = jumpRiseSpeeds(fighterParams(def), "ledge").length;
+    const blends = createPoseBlends();
+    let s = hanging(id);
+    let prev: InputFrame = 0;
+    let jumped = 0;
+    for (const input of [Btn.Jump, ...hold(0, 120)]) {
+      s = step(s, [input], { prevInputs: [prev] }).state;
+      prev = input;
+      const f = s.fighters[0];
+      const clipFrame = clipFrameFor(blends, f, poseNameFor(f), s.frame);
+      if (f.action !== "jump") {
+        if (jumped > 0) break;
+        continue;
+      }
+      jumped += 1;
+      expect(clipFrame, "the clip clock lags the action").toBe(f.actionFrame);
+      expect(actionDurationFor({ ...f, actionFrame: clipFrame }, t), `frame ${f.actionFrame}`).toBe(ledge);
+    }
+    expect(jumped, "the ledge jump's rise").toBe(ledge);
   });
 });

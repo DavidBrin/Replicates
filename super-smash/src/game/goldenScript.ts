@@ -16,18 +16,26 @@
  * match with the Smash Ball on, so 2,400 frames also run the timer to a `timeUp`
  * outcome and a Smash Ball from its spawn on frame 900 to its decay.
  *
- * Some step lengths are tuned to the engine as it stood on 2026-10-27 (954ed97):
- * how far a walk carries Mario, and when he reaches a ledge. The coverage test in
- * `golden.test.ts` is what notices if they stop landing. A behaviour task that
- * moves the fighters (walk speed, traction, jump arcs) re-tunes them until it
- * passes again, then regenerates the trace. Task 21 (air friction) did so for
- * the walk to the right ledge on frame 1163. Task 22 (walking) halved every soft
- * walk (a soft stick is half deflection, so half the top speed), which
- * lengthened each of them; the idle waits around them were shortened by the same
- * frames, so the forward smash (732), the ledge jump (884) and everything
- * pressed after it keep their frames, except the short hop, nair, shields and
- * roll after Fox's longer walk-in (14 to 6 frames later, back on schedule from
- * the dash to the edge on 1759).
+ * Some step lengths are tuned to the engine: how far a walk carries Mario, and
+ * when he reaches a ledge. The pins in `golden.test.ts` are what notice if they
+ * stop landing: every action state, every soft-stick path, and `SCRIPT_HITS`,
+ * the kinds of hit this match must land. A behaviour task that moves the
+ * fighters (walk speed, traction, jump arcs) re-tunes the steps until the pins
+ * pass again, then regenerates the trace; it never drops a pin entry. Task 21
+ * (air friction) re-tuned the walk to the right ledge on frame 1163, and gave
+ * Fox the soft walk-in from 1602, because air friction had left him out of the
+ * short-hop neutral air's reach. Task 22 (walking) halved every soft walk (a
+ * soft stick is half deflection, so half the top speed), which lengthened each
+ * of them; the idle waits around them were shortened by the same frames, so the
+ * forward smash (732–733), the ledge jump (884) and everything pressed after it
+ * keep their frames, except the short hop, nair, shields and roll after Fox's
+ * longer walk-in (14 to 6 frames later, back on schedule from the dash to the
+ * edge on 1759).
+ *
+ * Each step's comment gives the frame it starts on, and the events it names
+ * (the shield break on 657, the hangs on 862, 1193, 1299 and 1400, the hits on
+ * 1006 and 1635, time up on 2014). Both were checked against a run after the
+ * Plan 2 final fix wave.
  */
 
 import { Btn } from "@/engine/types";

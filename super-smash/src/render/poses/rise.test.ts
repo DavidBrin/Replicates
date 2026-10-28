@@ -1,8 +1,10 @@
 /**
  * The two jumps, checked at the times the renderer actually asks for.
  *
- * `jump` has no fixed duration, so `poseTimeFor` runs both clips over thirty
- * frames and then holds — which is why everything below is sampled through
+ * `jump` lasts as long as the fighter's own rise, which the renderer passes to
+ * `poseTimeFor` as its `JumpTiming` (`jumpTimingFor`, from the engine's jump
+ * rule). These tests pass none, so `poseTimeFor` falls back to thirty frames
+ * and then holds — which is why everything below is sampled through
  * `poseTimeFor` on frames 0..30 rather than at round numbers of `t`. A property
  * that holds at a time no simulation frame lands on is not a property of the
  * animation.
@@ -209,12 +211,12 @@ describe("both clips", () => {
   });
 
   it("hand the rise over to the fall wherever the apex lands", () => {
-    // Nothing blends between clips: the frame vertical speed crosses zero, the
-    // renderer simply starts drawing `fall` instead, and whatever gap is left
-    // here is drawn as a jolt. Which frame that is, is the fighter's own
-    // rise (`jumpTimingFor`), which differs across the cast by a dozen frames —
-    // so the whole tail has to sit near `fall`'s opening drawing, not just the
-    // last key.
+    // The frame vertical speed crosses zero, the renderer starts drawing `fall`
+    // and fades into it over `BLEND_FRAMES` (four) from wherever the rise had
+    // got to, so a gap left here still shows as a lurch across those frames.
+    // Which frame that is, is the fighter's own rise (`jumpTimingFor`), which
+    // differs across the cast by a dozen frames — so the whole tail has to sit
+    // near `fall`'s opening drawing, not just the last key.
     const falling = samplePose(fall, 0);
     for (let f = 18; f <= 30; f++) {
       expect(biggestMove(first[f].angles, falling.angles), `frame ${f}`).toBeLessThan(15);
@@ -227,10 +229,10 @@ describe("both clips", () => {
 
   it("land the somersault on that same drawing, once the turn has finished", () => {
     // The flip has to be over before it can match anything, and being over is
-    // what the last quarter of the clip is for. A fighter whose air jump runs
-    // shorter than the clip is cut off mid-turn and hands `fall` a ball; that
-    // is not fixable here, because `poseSpinFor` divides by a flat thirty
-    // frames rather than by the rise the fighter actually has.
+    // what the last quarter of the clip is for. In a match the renderer plays
+    // the clip, and the turn (`poseSpinFor`), over the rise the fighter
+    // actually has (`JumpTiming`), so the turn ends as the rise does; here, at
+    // the thirty-frame fallback, it has to be over by frame 28.
     const falling = samplePose(fall, 0);
     for (let f = 28; f <= 30; f++) {
       expect(biggestMove(second[f].angles, falling.angles), `frame ${f}`).toBeLessThan(20);
