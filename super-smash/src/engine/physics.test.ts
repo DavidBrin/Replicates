@@ -10,6 +10,7 @@ import {
   applyGravity,
   applyTraction,
   blastZoneKO,
+  clampShiftToStage,
   dropThroughPlatform,
   ecbOf,
   ecbPoints,
@@ -360,6 +361,107 @@ describe("platform collision", () => {
     const drift = centre - platformCentreX(moving.platforms[0], 29);
     expect(f.x - centre).toBe(drift);
     expect(drift).not.toBe(0);
+  });
+});
+
+/*
+ * A shift that did not come through `resolveCollision` (SDI and ASDI move a
+ * fighter who is frozen in hitlag) must not carry the body into the stage.
+ */
+describe("clampShiftToStage", () => {
+  /** `f` moved from (`fromX`, `fromY`) to where it is now. */
+  function shifted(f: FighterState, fromX: number, fromY: number, stage: StageDef = STAGE, frame = 0): FighterState {
+    clampShiftToStage(f, fromX, fromY, stage, ATTRS, frame);
+    return f;
+  }
+
+  it("leaves a shift through open air alone", () => {
+    const f = shifted(fighter({ x: fx(118), y: fx(60) }), fx(120), fx(60));
+    expect([f.x, f.y]).toEqual([fx(118), fx(60)]);
+  });
+
+  it("does nothing for a fighter that did not move", () => {
+    const f = shifted(fighter({ x: fx(0), y: fx(-30) }), fx(0), fx(-30));
+    expect([f.x, f.y]).toEqual([fx(0), fx(-30)]);
+  });
+
+  it("holds a fighter that was above a hard surface on top of it", () => {
+    const f = shifted(fighter({ x: fx(10), y: fx(-5), vy: fx(-1), grounded: false }), fx(10), fx(1));
+    expect(f.y).toBe(0);
+    // Only the position: the fighter is frozen, so nothing about its motion changes.
+    expect(f.vy).toBe(fx(-1));
+    expect(f.grounded).toBe(false);
+  });
+
+  it("holds a standing fighter on the floor when the shift is straight down", () => {
+    const f = shifted(fighter({ x: 0, y: fx(-1), grounded: true, platform: 0 }), 0, 0);
+    expect(f.y).toBe(0);
+    expect(f.grounded).toBe(true);
+  });
+
+  it("holds a fighter that was above a soft platform on top of it, but lets one rise through from below", () => {
+    expect(shifted(fighter({ x: 0, y: fx(25) }), 0, fx(31)).y).toBe(fx(30));
+    expect(shifted(fighter({ x: 0, y: fx(35) }), 0, fx(25)).y).toBe(fx(35));
+  });
+
+  it("finds a moving soft platform where it is this frame", () => {
+    const moving: StageDef = {
+      ...STAGE,
+      platforms: [
+        { x: 0, y: fx(30), halfWidth: fx(20), soft: true, ledges: false, motion: { kind: "sweep", amplitude: fx(40), periodFrames: 240 } },
+      ],
+    };
+    // A quarter of the way round the sweep, the platform's centre is at x = 40.
+    expect(platformCentreX(moving.platforms[0], 60)).toBe(fx(40));
+    expect(shifted(fighter({ x: fx(40), y: fx(25) }), fx(40), fx(31), moving, 60).y).toBe(fx(30));
+  });
+
+  it("pushes a fighter that was beside the stage back out of its side", () => {
+    // The ECB's side point stops at the wall face, half a body out (as `resolveCollision` does).
+    const right = shifted(fighter({ x: fx(77), y: fx(-10) }), fx(87), fx(-10));
+    expect(right.x).toBe(fx(80) + ATTRS.width);
+    const left = shifted(fighter({ x: fx(-77), y: fx(-10) }), fx(-87), fx(-10));
+    expect(left.x).toBe(fx(-80) - ATTRS.width);
+  });
+
+  it("stops a fighter that was under the stage at its underside", () => {
+    const head = ATTRS.height;
+    const f = shifted(fighter({ x: 0, y: -HARD_PLATFORM_DEPTH - head + fx(9) }), 0, -HARD_PLATFORM_DEPTH - head - fx(1));
+    expect(f.y).toBe(-HARD_PLATFORM_DEPTH - head);
+  });
+
+  it("keeps a fighter at the ledge level when the shift is straight down", () => {
+    // Its origin is exactly at the edge: it is on the surface, not beside the wall.
+    const f = shifted(fighter({ x: fx(80), y: fx(-2) }), fx(80), 0);
+    expect([f.x, f.y]).toEqual([fx(80), 0]);
+  });
+
+  it("does not touch a fighter that was already inside the body", () => {
+    const f = shifted(fighter({ x: 0, y: fx(-31) }), 0, fx(-30));
+    expect([f.x, f.y]).toEqual([0, fx(-31)]);
+  });
+
+  it("never leaves a shifted fighter inside the body, whichever way it comes in", () => {
+    const reach = fx(80) + ATTRS.width;
+    const inside = (x: number, y: number): boolean =>
+      Math.abs(x) < reach && y < 0 && y + ATTRS.height > -HARD_PLATFORM_DEPTH;
+    // Every non-overlapping start on a grid around the stage, every stick direction, a few pulses.
+    for (let x = -100; x <= 100; x += 3) {
+      for (let y = -80; y <= 20; y += 3) {
+        if (inside(fx(x), fx(y))) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+          const f = fighter({ x: fx(x), y: fx(y) });
+          for (let pulse = 0; pulse < 5; pulse++) {
+            const fromX = f.x;
+            const fromY = f.y;
+            f.x += dx * fx(2.3);
+            f.y += dy * fx(2.3);
+            clampShiftToStage(f, fromX, fromY, STAGE, ATTRS, 0);
+            expect(inside(f.x, f.y)).toBe(false);
+          }
+        }
+      }
+    }
   });
 });
 

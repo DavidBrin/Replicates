@@ -415,3 +415,20 @@ export const LSI_DEAD_ZONE = [fx(65), fx(115)] as const;
 /** SDI moves the victim this far per input pulse, at most one per 4 frames. */
 export const SDI_DISTANCE = fx(2);
 export const SDI_INPUT_INTERVAL = 4;
+
+/**
+ * "For every five consecutive hits a character takes, the SDI distance for the
+ * next five hits is increased by 1.15×" (SmashWiki "Smash directional
+ * influence"). Whether the increase compounds past the tenth hit is not
+ * published; here it does not (UNVERIFIED): ×1.15 from the sixth hit on.
+ */
+export const SDI_COMBO_HITS = 5;
+export const SDI_COMBO_RATIO: Ratio = [23, 20];
+/**
+ * Automatic SDI: on the last frame of hitlag from an electric or paralyzing
+ * hit that does not launch between 70° and 110°, the victim shifts toward the
+ * held stick (SmashWiki "Smash directional influence", Ultimate). The wiki says
+ * only that it is shorter than an SDI pulse; half of one is UNVERIFIED.
+ */
+export const ASDI_DISTANCE = fx(1);
+export const ASDI_VERTICAL = [fx(70), fx(110)] as const;

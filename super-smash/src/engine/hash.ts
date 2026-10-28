@@ -168,6 +168,8 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.launchFaf);
   x = mixInt(x, c.launchSource);
   x = mixInt(x, c.mash);
+  x = mixInt(x, c.comboHits);
+  x = mixBool(x, c.asdi);
   return x;
 }
 

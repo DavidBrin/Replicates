@@ -17,6 +17,8 @@
 
 import { ONE, fx, mul, abs, byRatio, randomInt, nextRandom } from "./fixed";
 import {
+  ASDI_DISTANCE,
+  ASDI_VERTICAL,
   FINAL_SMASH_STANDBY,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
@@ -24,6 +26,8 @@ import {
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
   PERFECT_SHIELD_PUSHBACK_RATIO,
+  SDI_COMBO_HITS,
+  SDI_COMBO_RATIO,
   SDI_DISTANCE,
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
@@ -77,6 +81,7 @@ import {
 } from "./projectile";
 import {
   blastZoneKO,
+  clampShiftToStage,
   ecbOf,
   findLedgeGrab,
   integrate,
@@ -546,19 +551,27 @@ export function step(
       // mashing during the crunch works exactly as it does in the real game.
       f.hitlag -= 1;
       frozen[i] = true;
+      const shiftedFromX = f.x;
+      const shiftedFromY = f.y;
       if (intent.sdiX !== 0 || intent.sdiY !== 0) {
-        f.x += intent.sdiX * SDI_DISTANCE;
-        f.y += intent.sdiY * SDI_DISTANCE;
+        const pulse = sdiDistance(f);
+        f.x += intent.sdiX * pulse;
+        f.y += intent.sdiY * pulse;
       }
       // ...and then, on the frame the freeze ends, the launch it was holding
       // back finally happens — bent by whichever direction is held *now*. The
       // fighter stays frozen for the rest of this frame, so the velocity first
       // applies on the next one, exactly as it did when it was set on contact.
       if (f.hitlag === 0) releasePendingLaunch(f, intent);
+      // SDI and ASDI move a fighter who skips the collision phase below, so
+      // the shift is kept out of the stage's solid bodies here (Task 11).
+      clampShiftToStage(f, shiftedFromX, shiftedFromY, stage, defs[i].attributes, s.frame);
       continue;
     }
 
     if (f.hitstun > 0) f.hitstun -= 1;
+    // A string of hits is over once the fighter is out of hitstun (SDI ×1.15, Task 11).
+    if (f.hitstun === 0) f.combat.comboHits = 0;
     // The balloon classification belongs to one launch and dies with it, so the
     // next hit is free to classify itself. Clearing it here rather than leaving
     // it stale keeps the field honest in the desync hash.
@@ -1070,6 +1083,15 @@ function applyInvincibleHit(
  */
 function releasePendingLaunch(f: FighterState, intent: Intent): void {
   if (f.pendingFacing === 0) return;
+  // Automatic SDI: the freeze of an electric or paralyzing hit ends with a
+  // shift toward the held stick (Plan 3, Task 11; `ASDI_DISTANCE`).
+  if (f.combat.asdi && (intent.x !== 0 || intent.y !== 0)) {
+    const diagonal = intent.x !== 0 && intent.y !== 0;
+    const distance = diagonal ? mul(ASDI_DISTANCE, DIAGONAL) : ASDI_DISTANCE;
+    f.x += intent.x * distance;
+    f.y += intent.y * distance;
+  }
+  f.combat.asdi = false;
   const facing = f.pendingFacing;
   const relStick = intent.x * (facing >= 0 ? 1 : -1);
   // DI and LSI only act on a launch that tumbles and is not within 0.17 rad of
@@ -1121,11 +1143,20 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   clearPendingLaunch(f);
 }
 
+/** One SDI pulse: 2 units, ×1.15 from the sixth consecutive hit taken (Task 11). */
+function sdiDistance(f: FighterState): number {
+  return f.combat.comboHits > SDI_COMBO_HITS ? byRatio(SDI_DISTANCE, SDI_COMBO_RATIO) : SDI_DISTANCE;
+}
+
+/** 1/√2, so a diagonal automatic SDI shift is as long as a straight one. */
+const DIAGONAL = fx(0.7071067811865476);
+
 function clearPendingLaunch(f: FighterState): void {
   f.pendingKnockback = 0;
   f.pendingAngle = 0;
   f.pendingFacing = 0;
   f.combat.launchFaf = 0;
+  f.combat.asdi = false;
 }
 
 function applyHit(
@@ -1344,6 +1375,7 @@ function applyHit(
       const added = knockbackToVelocity(kb, resolveAngle(hb, victim.grounded, kb), sourceFacing);
       kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
     }
+    victim.combat.comboHits += 1;
     victim.hitlag = Math.max(victim.hitlag, lag);
     if (!fromProjectile) attacker.hitlag = lag;
     events.hits.push({
@@ -1359,6 +1391,7 @@ function applyHit(
     return;
   }
   victim.combat.launchSource = source;
+  victim.combat.comboHits += 1;
 
   // The launch is *parked*, not applied: Ultimate samples DI on the last frame
   // of hitlag, so the direction that bends this angle has not been chosen yet.
@@ -1373,6 +1406,10 @@ function applyHit(
   // A grounded victim launched flat slides out at 0.8 of the speed (rubendal
   // `groundedZeroAngle`); the hitstun is the hit's, already decided above.
   if (victim.grounded && victim.pendingAngle === 0) victim.pendingKnockback = byRatio(kb, GROUNDED_ZERO_LAUNCH_RATIO);
+  const vertical = victim.pendingAngle >= ASDI_VERTICAL[0] && victim.pendingAngle < ASDI_VERTICAL[1];
+  // Only a real freeze ends in a shift, and the shift is kept out of the stage
+  // where the freeze ends (`clampShiftToStage`); a hit with no freeze has neither.
+  victim.combat.asdi = lag > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
 
   victim.hitstun = effectiveHitstun(kb, speedUp);

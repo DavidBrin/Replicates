@@ -317,6 +317,56 @@ export function resolveCollision(
 }
 
 /**
+ * Keep a fighter that was *shifted* out of the stage's solid bodies.
+ *
+ * SDI and ASDI move a fighter who is frozen in hitlag, and a frozen fighter
+ * skips the collision phase, so nothing stopped a shift from carrying the body
+ * into the stage: down through a floor (after which nothing lands it, because
+ * "was already below the surface — no landing from under"), in through a wall
+ * (a fighter whose origin has crossed the edge "came from inside" and is never
+ * pushed), or up into an underside. This applies the rules of `resolveCollision`
+ * to the shift alone — `(prevX, prevY)` is where the fighter was before it, and
+ * only a shift that *newly* overlaps a body is undone, so a fighter already
+ * overlapping something is left as it was — and, unlike it, touches no
+ * velocity and no grounded state: the fighter is still frozen, and its launch
+ * has not happened yet.
+ *
+ * The way in decides the way out, as in `resolveCollision`: a fighter whose
+ * origin was beyond the platform's edge is pushed back out sideways; one whose
+ * origin was within its span stays on top of it (or, from below, under it).
+ * A soft platform only ever has the floor.
+ */
+export function clampShiftToStage(
+  f: FighterState,
+  prevX: number,
+  prevY: number,
+  stage: StageDef,
+  attrs: FighterAttributes,
+  frame: number,
+): void {
+  if (f.x === prevX && f.y === prevY) return;
+  const ecb = ecbOf(f, attrs);
+  for (const p of stage.platforms) {
+    const cx = platformCentreX(p, frame);
+    const reach = p.halfWidth;
+    // At or above the surface before the shift (the ECB's bottom point decides).
+    const wasAbove = prevY + ecb.bottom >= p.y;
+    if (p.soft) {
+      if (wasAbove && f.y + ecb.bottom < p.y && abs(f.x - cx) <= reach) f.y = p.y - ecb.bottom;
+      continue;
+    }
+    const body = reach + ecb.half;
+    const bottom = p.y - HARD_PLATFORM_DEPTH;
+    const inside = (x: number, y: number): boolean =>
+      abs(x - cx) < body && y + ecb.bottom < p.y && y + ecb.top > bottom;
+    if (inside(prevX, prevY) || !inside(f.x, f.y)) continue;
+    if (abs(prevX - cx) > reach) f.x = prevX <= cx ? cx - body : cx + body;
+    else if (wasAbove) f.y = p.y - ecb.bottom;
+    else f.y = bottom - ecb.top;
+  }
+}
+
+/**
  * Step a fighter off the platform it is standing on, downward through it.
  *
  * Placing it one fixed-point unit below the surface is what replaces the

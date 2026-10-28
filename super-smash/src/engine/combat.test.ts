@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { ONE, byRatio, fx, mul } from "./fixed";
 import {
+  ASDI_DISTANCE,
   FURAFURA_END_FRAMES,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
   PERFECT_SHIELD_PUSHBACK_RATIO,
+  SDI_DISTANCE,
   SHIELD_BREAK_RESET,
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
@@ -897,5 +899,163 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     expect(at.events.shieldHits).toHaveLength(1);
     expect(owner.hitlag).toBe(0);
     expect(defender.hitlag).toBe(pelletLag - 1);
+  });
+});
+
+/* --------------------------------------------- Task 11: SDI and ASDI -- */
+
+describe("SDI and ASDI (Plan 3, Task 11)", () => {
+  /** Fighter 1 frozen in hitlag with `hits` consecutive hits taken, pulsing SDI right. */
+  function pulse(hits: number): number {
+    const s = standing();
+    const v = s.fighters[1];
+    v.action = "hitstun";
+    v.hitstun = 20;
+    v.hitlag = 4;
+    v.combat.comboHits = hits;
+    const x0 = v.x;
+    return play(s, 1, () => [0, Btn.Right]).at(-1)!.state.fighters[1].x - x0;
+  }
+
+  // SmashWiki "Smash directional influence" (https://www.ssbwiki.com/Smash_directional_influence):
+  // 2 units a pulse in Ultimate, and "for every five consecutive hits a character
+  // takes, the SDI distance for the next five hits is increased by 1.15×".
+  it("moves 2 units a pulse for the first five hits of a string", () => {
+    expect(pulse(5)).toBe(SDI_DISTANCE);
+  });
+
+  it("moves 1.15 times as far from the sixth consecutive hit", () => {
+    expect(pulse(6)).toBe(Math.trunc((SDI_DISTANCE * 23) / 20));
+  });
+
+  it("counts each hit taken, and forgets the string once hitstun is over", () => {
+    const hit = play(standing(), 8, JAB);
+    const i = hit.findIndex((f) => f.events.hits.length > 0);
+    expect(hit[i].state.fighters[1].combat.comboHits).toBe(1);
+    const s = standing();
+    s.fighters[1].combat.comboHits = 7;
+    expect(play(s, 1, () => [0, 0]).at(-1)!.state.fighters[1].combat.comboHits).toBe(0);
+  });
+
+  /** Fighter 1's position change on the frame its hitlag from `hb` ends, holding `stick` (up by default). */
+  function asdi(hb: Hitbox, axis: "x" | "y" = "y", stick: number = Btn.Up): number {
+    const def: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hb] }) } };
+    let s = standing(ctxFor(def));
+    let prev: readonly InputFrame[] = [0, 0];
+    for (let i = 0; i < 30; i++) {
+      const v = s.fighters[1];
+      const now = [i === 0 ? Btn.Attack : 0, v.hitlag > 0 ? stick : 0];
+      const before = v[axis];
+      const wasFrozen = v.hitlag === 1;
+      s = step(s, now, { prevInputs: prev, ctx: ctxFor(def) }).state;
+      prev = now;
+      if (wasFrozen) return s.fighters[1][axis] - before;
+    }
+    throw new Error("never released");
+  }
+
+  // SmashWiki "Smash directional influence": in Ultimate ASDI is "only applicable
+  // on moves with an electric, paralyze, crumple, or autoshift effect", and not on
+  // a launch between 70° and just under 110°.
+  it("shifts the victim of an electric hit as the freeze ends", () => {
+    expect(asdi(hitbox({ effect: "electric", angle: fx(45) }))).toBe(ASDI_DISTANCE);
+  });
+
+  it("does not shift the victim of an ordinary hit", () => {
+    expect(asdi(hitbox({ angle: fx(45) }))).toBe(0);
+  });
+
+  it("does not shift the victim of a vertical electric hit", () => {
+    expect(asdi(hitbox({ effect: "electric", angle: fx(90) }))).toBe(0);
+  });
+
+  it("shifts the victim of an electric hit toward a sideways stick, by the same distance", () => {
+    expect(asdi(hitbox({ effect: "electric", angle: fx(45) }), "x", Btn.Left)).toBe(-ASDI_DISTANCE);
+  });
+
+  it("shifts a paralyzing hit's victim too", () => {
+    expect(asdi(hitbox({ effect: "paralyze", angle: fx(45) }))).toBe(ASDI_DISTANCE);
+  });
+
+  // A diagonal stick shifts 1/sqrt(2) of the distance along each axis, so the
+  // shift is as long as a straight one: 4096 * 0.7071 = 2896 per axis.
+  it("shortens each axis of a diagonal shift to 1/sqrt(2)", () => {
+    const hb = hitbox({ effect: "electric", angle: fx(45) });
+    const diagonal = Math.trunc((ASDI_DISTANCE * 2896) / ONE);
+    expect(asdi(hb, "x", Btn.Left | Btn.Up)).toBe(-diagonal);
+    expect(asdi(hb, "y", Btn.Left | Btn.Up)).toBe(diagonal);
+  });
+
+  // The victim stands on the stage, so a shift straight down would sink it a
+  // unit into the floor: the shift is kept out of the stage like SDI is (below).
+  it("keeps the automatic shift out of the floor", () => {
+    expect(asdi(hitbox({ effect: "electric", angle: fx(45) }), "y", Btn.Down)).toBe(0);
+  });
+});
+
+/*
+ * SDI and ASDI move a fighter who is frozen, and a frozen fighter skips the
+ * collision phase, so the shift must be kept out of the stage's solid bodies
+ * on its own (`clampShiftToStage`). Plan 2's final review noted the gap:
+ * "SDI during hitlag can leave a fighter inside a stage body".
+ */
+describe("SDI cannot push a fighter into the stage (Plan 3, Task 11)", () => {
+  /**
+   * Fighter 1, in hitstun and frozen for 20 frames at (`x`, `y`) with no launch
+   * parked, mashes `stick` on every other frame: five pulses (hitlag 20, 16, 12,
+   * 8, 4), 2 units each, ten in all. Returns where it is after the freeze and
+   * after `after` frames of play on top of that.
+   */
+  function mashed(x: number, y: number, stick: number, after = 0, ctx: SimContext = ctxFor()) {
+    const s = standing(ctx);
+    const v = s.fighters[1];
+    v.x = x;
+    v.y = y;
+    v.grounded = false;
+    v.platform = -1;
+    v.action = "hitstun";
+    v.hitstun = 20 + after;
+    v.hitlag = 20;
+    const frames = play(s, 20 + after, (i) => [0, i < 20 && i % 2 === 0 ? stick : 0], ctx);
+    return {
+      frozen: frames[19].state.fighters[1],
+      path: frames.map((f) => f.state.fighters[1]),
+    };
+  }
+
+  it("holds a fighter above the floor on the surface", () => {
+    const { frozen, path } = mashed(0, fx(3), Btn.Down, 40);
+    expect(frozen.y).toBe(0);
+    // ...and it is still on the stage afterwards, rather than falling through.
+    expect(Math.min(...path.map((f) => f.y))).toBe(0);
+  });
+
+  it("holds a fighter above a soft platform on top of it", () => {
+    const soft: StageDef = {
+      ...STAGE,
+      platforms: [...STAGE.platforms, { x: 0, y: fx(40), halfWidth: fx(20), soft: true, ledges: false }],
+    };
+    const { frozen, path } = mashed(0, fx(43), Btn.Down, 40, ctxFor(BASE_DEF, soft));
+    expect(frozen.y).toBe(fx(40));
+    expect(Math.min(...path.map((f) => f.y))).toBe(fx(40));
+  });
+
+  it("stops a fighter beside the stage at the wall instead of letting it in", () => {
+    // The stage reaches x = 80; the fighter's body is 4 wide, so it stops at 84.
+    const { frozen, path } = mashed(fx(87), fx(-10), Btn.Left, 40);
+    expect(frozen.x).toBe(fx(84));
+    expect(Math.min(...path.map((f) => f.x))).toBe(fx(84));
+  });
+
+  it("stops a fighter under the stage at its underside", () => {
+    // The body is 60 deep and the fighter 12 tall: it stops with its head at -60.
+    const { frozen, path } = mashed(0, fx(-73), Btn.Up, 40);
+    expect(frozen.y).toBe(fx(-72));
+    expect(Math.max(...path.map((f) => f.y))).toBeLessThanOrEqual(fx(-72));
+  });
+
+  it("leaves a fighter in open air to SDI as far as it likes", () => {
+    const { frozen } = mashed(fx(120), fx(60), Btn.Left);
+    expect(frozen.x).toBe(fx(110));
   });
 });
