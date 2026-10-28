@@ -375,6 +375,39 @@ describe("OnlineSession", () => {
       expect(errors(h.events)).toEqual([]);
     });
 
+    /**
+     * The old guest's room socket left while its channel was still open (codex
+     * P1): kept, that channel made the host ignore the newcomer, and the lobby
+     * sat in "linking" with Start disabled.
+     */
+    it("lets the departed guest's open channel go, and links the newcomer", async () => {
+      const h = await linkedHost();
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      expect(h.session.transport.status).toBe("waiting");
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.offers()).toBe(2);
+      h.channels[1].open();
+      expect(h.session.transport.status).toBe("open");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(2);
+      expect(errors(h.events)).toEqual([]);
+    });
+
+    /** Mid-match the link monitor owns the channel: the room's leave and join do not touch it. */
+    it("keeps the match's channel when the guest's socket leaves and a newcomer joins", async () => {
+      const h = await linkedHost();
+      expect(h.session.sendLobby({ kind: "start", config: CONFIG })).toBe(true);
+      h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+      h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.offers()).toBe(1);
+      expect(h.channels).toHaveLength(1);
+      expect(h.channels[0].readyState).toBe("open");
+      expect(h.session.transport.status).toBe("open");
+      expect(errors(h.events)).toEqual([]);
+    });
+
     it("never offers again after leaving", async () => {
       const h = await linkedHost();
       h.channels[0].drop();
@@ -707,13 +740,15 @@ describe("OnlineSession", () => {
    * The guest's room socket alone can drop (an idle proxy or NAT timeout)
    * while the channel stays open. The room then drops a start it has nobody
    * to give to, and the host would play alone until the link monitor gave up.
+   * In the lobby the transport lets that channel go too, so the link is down
+   * by the time a start could be tried.
    */
   describe("a start while the room says the other player is not there", () => {
-    it("is not sent, even with the channel open: the room is lost, and the host stays", async () => {
+    it("is not sent once the guest's socket has left: the room is lost", async () => {
       const { session, signalling, channel, events } = await negotiatingHost();
       channel.open();
       signalling.deliver({ t: "peer-left", peerId: "g1" });
-      expect(session.transport.status).toBe("open");
+      expect(session.transport.status).toBe("waiting");
       const written = signalling.sent.length;
 
       expect(session.sendLobby({ kind: "start", config: CONFIG })).toBe(false);

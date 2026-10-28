@@ -17,10 +17,14 @@
  * The data channel is the authority on whether the peer is there. The room
  * socket is not: every Worker deploy restarts every Durable Object and drops
  * its sockets (Cloudflare's WebSocket docs say so), and a match in progress
- * must shrug that off. So `peer-left` from the room only matters before the
- * channel opens, and so does a newcomer: the room's two-peer cap counts live
- * sockets, so after a drop it admits anyone else with the code, and an open
- * match ignores their `peer-joined` or offer rather than dropping its peer.
+ * must shrug that off. So once the match holds the channel, `peer-left` from
+ * the room means nothing, and neither does a newcomer: the room's two-peer cap
+ * counts live sockets, so after a drop it admits anyone else with the code,
+ * and an open match ignores their `peer-joined` or offer rather than dropping
+ * its peer. In the lobby it is the other way round. The lobby rides the room
+ * socket, so a peer the room no longer seats cannot be talked to, and the
+ * channel to it is let go: kept, it would make this side ignore the newcomer
+ * the room seats next, and the lobby would wait on a link that never comes.
  *
  * A lobby channel can also close with both room sockets still open, and then
  * nobody joins or leaves to start a new negotiation. So the host can offer the
@@ -381,7 +385,7 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
         if (role === "host" && event.peer) void offerTo(event.peer.id);
         break;
       case "peer-joined":
-        // Once the channel is open it decides (see the header): a newcomer does not replace the peer.
+        // While a channel is open it decides (see the header): a newcomer does not replace the peer.
         if (announced) break;
         if (role === "host") void offerTo(event.peer.id);
         // Before then, a host that left can be replaced: the room makes the next joiner host.
@@ -408,10 +412,15 @@ export function createDoSignalTransport(options: DoSignalOptions): DoSignalTrans
       case "peer-left":
         // Nothing it sent early can be used now.
         pendingIce.delete(event.peerId);
-        // Only meaningful before the channel is up; afterwards the channel decides (see the header).
-        if (event.peerId === remoteId && !announced) {
+        if (event.peerId !== remoteId) break;
+        if (!announced) {
           teardown();
           setStatus("waiting");
+        } else if (!held) {
+          // An open lobby channel to a peer the room no longer seats: let it go,
+          // so the next `peer-joined` is offered to. A match's channel stays,
+          // and its link monitor decides (see the header).
+          lose("waiting");
         }
         break;
       default:

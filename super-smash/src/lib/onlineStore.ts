@@ -157,6 +157,12 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   let peerBuildMatches = false;
   /** Whether the channel is open, as the session last reported. */
   let linkOpen = false;
+  /**
+   * A start this host sent to a player who has since left the room. It stays
+   * in the store (mid-match the channel decides), but nobody in the seat can
+   * be refusing it any more.
+   */
+  let withdrawnStart: OnlineMatchConfig | null = null;
   /** Runs out `HELLO_TIMEOUT_MS` after the channel opens with no matching hello in. */
   let helloTimer: ReturnType<typeof setTimeout> | null = null;
   const stopHelloTimer = () => {
@@ -235,10 +241,15 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
       case "hello":
         heardHello(message);
         return;
-      case "refuse":
-        // The guest could not play the start this host sent.
-        if (session.role === "host") refuseBuild();
+      case "refuse": {
+        // The guest could not play the start this host sent. Only a reply to a
+        // start still out to the player in the seat counts: with none out, or
+        // with the one out withdrawn by its guest leaving, it is a wrong-time
+        // packet and ends nothing.
+        const start = online().config;
+        if (session.role === "host" && start !== null && start !== withdrawnStart) refuseBuild();
         return;
+      }
       case "start":
       case "unreadable-start": {
         // Only the guest follows a start; the host built it. Its build first:
@@ -313,6 +324,9 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
           // They left the room, whatever the channel says, and in the lobby
           // that is news. Mid-match the channel decides (session.ts).
           seatEmptied();
+        } else {
+          // The start went to the player who left; the session withdraws it too.
+          withdrawnStart = online().config;
         }
         break;
       case "link":

@@ -442,6 +442,78 @@ describe("a fresh connection after the lobby channel was lost", () => {
   });
 });
 
+/**
+ * The old opponent's room socket can leave while its channel is still open. In
+ * the lobby that peer can no longer be talked to (the lobby rides the room), so
+ * its channel goes, and whoever the room seats next is offered a connection.
+ * A match's channel stays: its link monitor decides.
+ */
+describe("a replacement opponent while the old one's channel is still open", () => {
+  const offers = (t: ReturnType<typeof setup>) =>
+    t.signalling.sent.filter((m) => m.t === "signal" && m.payload.kind === "offer").length;
+
+  it("has the host let the departed guest's lobby channel go, and offer the newcomer", async () => {
+    const t = await linkedHost();
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+
+    expect(t.peers[0].channels[0].closed).toBe(true);
+    expect(t.peers[0].closed).toBe(true);
+    expect(t.transport.status).toBe("waiting");
+    expect(t.leaves).toEqual(["g1"]);
+
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    await settle();
+    expect(t.peers).toHaveLength(2);
+    expect(offers(t)).toBe(2);
+    t.signalling.deliver({ t: "signal", from: "g2", payload: { kind: "answer", sdp: "answer-sdp" } });
+    await settle();
+    expect(t.peers[1].remote).toEqual({ type: "answer", sdp: "answer-sdp" });
+    t.peers[1].channels[0].open();
+    expect(t.transport.status).toBe("open");
+    expect(t.joins).toEqual(["g1", "g2"]);
+  });
+
+  it("has the guest let the departed host's lobby channel go, and answer the room's next host", async () => {
+    const t = await linkedGuest();
+    t.signalling.deliver({ t: "peer-left", peerId: "h1" });
+    expect(t.peers[0].channels[0].closed).toBe(true);
+    expect(t.transport.status).toBe("waiting");
+    expect(t.leaves).toEqual(["h1"]);
+
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "h2", role: "host" } });
+    t.signalling.deliver({ t: "signal", from: "h2", payload: { kind: "offer", sdp: "second-sdp" } });
+    await settle();
+    expect(t.peers).toHaveLength(2);
+    expect(t.peers[1].remote).toEqual({ type: "offer", sdp: "second-sdp" });
+    t.peers[1].channels[0].open();
+    expect(t.transport.status).toBe("open");
+    expect(t.joins).toEqual(["h1", "h2"]);
+  });
+
+  it("keeps the match's channel, once the match holds it, through the same leave and join", async () => {
+    const t = await linkedHost();
+    t.transport.holdChannel();
+    t.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    t.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    await settle();
+
+    expect(t.peers).toHaveLength(1);
+    expect(t.peers[0].channels[0].closed).toBe(false);
+    expect(t.transport.status).toBe("open");
+    expect(t.leaves).toEqual([]);
+    expect(offers(t)).toBe(1);
+    t.transport.send(new Uint8Array([3]));
+    expect(t.peers[0].channels[0].sent).toEqual([new Uint8Array([3])]);
+  });
+
+  it("ignores the leave of anyone but the peer on the channel", async () => {
+    const t = await linkedHost();
+    t.signalling.deliver({ t: "peer-left", peerId: "stranger" });
+    expect(t.transport.status).toBe("open");
+    expect(t.peers[0].channels[0].closed).toBe(false);
+  });
+});
+
 describe("a negotiation's deadline", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -588,6 +660,7 @@ describe("a linked match", () => {
 
   it("keeps playing when the room's sockets drop mid-match (a Worker deploy restarts the Durable Object)", async () => {
     const t = await linkedHost();
+    t.transport.holdChannel();
     t.signalling.deliver({ t: "peer-left", peerId: "g1" });
     t.signalling.deliver({ t: "closed", code: 1006, reason: "" });
     expect(t.leaves).toEqual([]);

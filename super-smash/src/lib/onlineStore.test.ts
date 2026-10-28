@@ -177,6 +177,36 @@ describe("binding a session to the stores", () => {
     expect(host.session.close).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * A refusal answers a start. With none out, or with the one that went out
+   * withdrawn because its guest left the room, it is a wrong-time packet
+   * (codex P2): it must not end a room that is fine.
+   */
+  it("takes a refusal on the host only while a start is out to the player in the seat", async () => {
+    const host = fakeSession();
+    bindSession(host.session);
+    host.emit({ type: "joined", role: "host" });
+    host.emit({ type: "peer", present: true });
+    host.emit({ type: "link", status: "open" });
+    host.emit({ type: "lobby", message: HELLO });
+    host.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", errorReason: null, error: null });
+
+    // A start out to a guest who then left: the next guest never saw it.
+    useOnlineStore.getState().patch({ config: CONFIG });
+    host.emit({ type: "peer", present: false });
+    host.emit({ type: "peer", present: true });
+    host.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } });
+    expect(useOnlineStore.getState().errorReason).toBeNull();
+    await Promise.resolve();
+    expect(host.session.close).not.toHaveBeenCalled();
+
+    // A new start, to the guest now seated, can be refused again.
+    useOnlineStore.getState().patch({ config: { ...CONFIG, seed: 2 } });
+    host.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "engine-mismatch", config: null });
+  });
+
   /** Only a host sends a start, so only a host can be refused one; and only a guest refuses. */
   it("takes a refusal on the host only, and judges a start's build on the guest only", () => {
     const guest = fakeSession();
@@ -412,6 +442,25 @@ describe("with a real session, when the lobby channel is lost", () => {
     expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null, hostStage: { stageId: "smashville", form: "normal" } });
     expect(useMatchConfig.getState().players[0].fighterId).toBe("mario");
     expect(g.notices.every((notice) => notice === null)).toBe(true);
+  });
+
+  /**
+   * The old guest's room socket left while its channel was still open (codex
+   * P1). The host must let that channel go and pair the newcomer, not sit in
+   * "linking" with Start disabled.
+   */
+  it("pairs the host with a newcomer whose predecessor's socket left before its channel closed", async () => {
+    const h = await seated("host");
+    h.signalling.deliver({ t: "peer-left", peerId: "g1" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE });
+
+    h.signalling.deliver({ t: "peer-joined", peer: { id: "g2", role: "guest" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.channels).toHaveLength(2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+    h.channels[1].open();
+    h.signalling.deliver({ t: "lobby", from: "g2", payload: HELLO });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", error: null });
   });
 
   /**
