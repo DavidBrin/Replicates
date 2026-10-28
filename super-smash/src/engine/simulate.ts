@@ -519,6 +519,8 @@ export function step(
     const f = s.fighters[i];
     const intent = intents[i];
 
+    // Before the hitlag branch on purpose: these count down through a freeze,
+    // so a fighter hit off a ledge serves its lockout during the hitlag too.
     if (f.intangible > 0) f.intangible -= 1;
     if (f.invincible > 0) f.invincible -= 1;
     if (f.ledgeLockout > 0) f.ledgeLockout -= 1;

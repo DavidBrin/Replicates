@@ -60,7 +60,8 @@ function groundMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   }
   if (f.action === "run") return;
   /*
-   * Held three frames or less is a walk; past that it becomes a dash.
+   * Held at full deflection, three frames or less is a walk; past that it
+   * becomes a dash.
    *
    * This reads oddly against SPEC §6 — if any sustained hold becomes a dash,
    * when does anybody walk? — and the answer is that they do not, and should
@@ -72,7 +73,9 @@ function groundMain(f: FighterState, intent: Intent, ctx: StateContext): void {
    *
    * What the window buys is the other half of the analog stick's range. The
    * brief step before the dash commits is what a tap produces, and a tap is
-   * therefore the keyboard's micro-spacing tool.
+   * therefore the keyboard's micro-spacing tool. That is why the walk state
+   * exists at full deflection: to be tapped, not held (D24 records the tap
+   * distances).
    *
    * Do not "fix" this by inverting it.
    */

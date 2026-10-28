@@ -234,8 +234,9 @@ export const LEDGE_REGRAB_SCALING = [fx(1), fx(0.8), fx(0.5), fx(0)] as const;
  * lockout-all is the simpler rule). The window it has to sit in, measured with
  * the `simulate.test.ts` fighter (gravity 0.087, fall speed 1.5, air jump 2.85):
  * at least about 12 frames, so a drop falls out of the 6-unit grab box and does
- * not just regrab a few frames later; at most about 40, past which a fighter who
- * waits the lockout out has fallen too far for one double jump to reach back.
+ * not just regrab a few frames later; at most 43, past which a fighter who waits
+ * the lockout out has fallen too far for one double jump to reach back (the
+ * lockout tests there pass at 43 and fail at 44).
  */
 export const LEDGE_REGRAB_LOCKOUT_FRAMES = 29;
 

@@ -2,8 +2,8 @@
  * Registers every status object with the StatusModule.
  *
  * Imported for its side effect by `simulate.ts` (and by tests that drive the
- * state machine directly). Each status group adds itself here as it migrates
- * out of the legacy switch in `states.ts`.
+ * state machine directly). Every action's status is here, one per group file;
+ * `advanceFighter` throws for an action with none.
  */
 
 import { AIR_STATUSES } from "./air";

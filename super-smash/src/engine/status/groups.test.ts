@@ -4,7 +4,9 @@ import { RESPAWN_INVINCIBILITY_MAX } from "../constants";
 import { fx } from "../fixed";
 import { emptyKinetic } from "../kinetic";
 import type { KineticType } from "../kinetic";
-import type { ActionState, FighterState } from "../types";
+import { DEAD_FRAMES, advanceFighter } from "../states";
+import type { Intent, StateContext } from "../states";
+import type { ActionState, FighterState, StageDef } from "../types";
 import { ALL_STATUSES } from "./index";
 import { STATUS_KIND_OF_ACTION, STATUS_TABLE, changeStatus } from "./kind";
 
@@ -187,6 +189,36 @@ describe("REBIRTH", () => {
     const f = fighter({ action: "dead", invincible: 0 });
     changeStatus(f, "respawnPlatform");
     expect(f.invincible).toBe(RESPAWN_INVINCIBILITY_MAX);
+  });
+});
+
+describe("DEAD", () => {
+  const SPAWN = { x: fx(-30), y: fx(40) };
+  const CTX = { def: {}, stage: { spawns: [SPAWN] } as unknown as StageDef, frame: 1, fighters: [] } as unknown as StateContext;
+  const NEUTRAL = { x: 0, y: 0 } as Intent;
+
+  it("respawns a fighter with stocks left onto the platform, invincible, once its frames are up", () => {
+    const f = fighter({ action: "dead", actionFrame: DEAD_FRAMES - 2, stocks: 2, grounded: true, jumpsUsed: 2 });
+    advanceFighter(f, NEUTRAL, CTX);
+    expect([f.action, f.invincible]).toEqual(["dead", 0]);
+    advanceFighter(f, NEUTRAL, CTX);
+    expect(f).toMatchObject({ action: "respawnPlatform", invincible: RESPAWN_INVINCIBILITY_MAX, x: SPAWN.x, y: SPAWN.y });
+    expect(f).toMatchObject({ grounded: false, platform: -1, jumpsUsed: 1, vx: 0, vy: 0 });
+  });
+
+  it("never respawns a fighter with no stocks left", () => {
+    const f = fighter({ action: "dead", actionFrame: DEAD_FRAMES + 5, stocks: 0 });
+    advanceFighter(f, NEUTRAL, CTX);
+    expect([f.action, f.invincible]).toEqual(["dead", 0]);
+  });
+});
+
+describe("ESCAPE_F (the roll)", () => {
+  // The roll's stop is in `main`, not `end`, on purpose: `end` also runs when a
+  // hit interrupts the roll, and zeroing `vx` there changed what the CPU read
+  // during hitlag (guard.ts). This pins it, so an `end` cannot creep back in.
+  it("has no end", () => {
+    expect(STATUS_TABLE.roll?.end).toBeUndefined();
   });
 });
 

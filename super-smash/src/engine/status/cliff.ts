@@ -4,7 +4,7 @@
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim. The
  * four ledge options share one `main`, parameterised by their length, as the
- * legacy switch did.
+ * cases did when `advanceFighter` was one switch.
  */
 
 import { LEDGE_REGRAB_LIMIT, LEDGE_REGRAB_LOCKOUT_FRAMES } from "../constants";
@@ -55,7 +55,8 @@ export const STATUS_CLIFF_WAIT: FighterStatus = {
       startAction(f, "fall");
       return;
     }
-    // Six grabs and the game stops letting you hang.
+    // Six grabs and the game stops letting you hang: you get up whether you
+    // like it or not, which is what makes ledge-stalling a losing plan.
     if (f.ledgeRegrabs > LEDGE_REGRAB_LIMIT) startAction(f, "ledgeGetUp");
   },
 };

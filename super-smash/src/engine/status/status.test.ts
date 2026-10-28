@@ -123,25 +123,56 @@ describe("changeStatus", () => {
   });
 });
 
+describe("registerStatus", () => {
+  const entry = (over: Partial<FighterStatus> = {}): FighterStatus => ({
+    kind: "FIGHTER_STATUS_KIND_ENTRY",
+    action: "entering",
+    kineticType: "FALL",
+    main: () => undefined,
+    ...over,
+  });
+
+  it("files a status under its own action", () => {
+    const table: StatusTable = {};
+    const s = entry();
+    registerStatus(s, table);
+    expect(table.entering).toBe(s);
+  });
+
+  it("refuses a second status for the same action, rather than overwrite the first", () => {
+    const table: StatusTable = {};
+    const first = entry();
+    registerStatus(first, table);
+    expect(() => registerStatus(entry(), table)).toThrow(/a status for "entering" is already registered/);
+    expect(table.entering).toBe(first);
+  });
+
+  it("refuses a status whose kind is not the one the alias table names for its action", () => {
+    const table: StatusTable = {};
+    expect(() => registerStatus(entry({ kind: "FIGHTER_STATUS_KIND_WAIT" }), table)).toThrow(
+      /"entering" says FIGHTER_STATUS_KIND_WAIT, but the alias table says FIGHTER_STATUS_KIND_ENTRY/,
+    );
+    expect(table.entering).toBeUndefined();
+  });
+});
+
 describe("advanceFighter dispatch", () => {
   it("fails loudly for a status nobody registered", () => {
-    // This file never imports `status/index.ts`, so nothing but the test's own
-    // registration below exists here.
+    // This file never imports `status/index.ts`, so the engine's registry is empty here.
     const f = fighter({ action: "crouch" });
     expect(() => advanceFighter(f, {} as Intent, CTX)).toThrow(/no status registered for "crouch"/);
   });
 
-  it("runs a registered status's main instead of the legacy switch", () => {
+  it("runs the table's status main, after advancing the frame", () => {
     const seen: number[] = [];
-    registerStatus({
-      kind: "FIGHTER_STATUS_KIND_ENTRY",
-      action: "entering",
-      kineticType: "FALL",
-      main: (f) => seen.push(f.actionFrame),
-    });
+    const table: StatusTable = {};
+    registerStatus(
+      { kind: "FIGHTER_STATUS_KIND_ENTRY", action: "entering", kineticType: "FALL", main: (f) => seen.push(f.actionFrame) },
+      table,
+    );
     const f = fighter({ action: "entering", actionFrame: 0 });
-    advanceFighter(f, {} as Intent, CTX);
-    advanceFighter(f, {} as Intent, CTX);
+    advanceFighter(f, {} as Intent, CTX, table);
+    advanceFighter(f, {} as Intent, CTX, table);
     expect(seen).toEqual([1, 2]);
   });
 });

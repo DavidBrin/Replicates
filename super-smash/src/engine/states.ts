@@ -66,6 +66,7 @@ import {
 } from "./kinetic";
 import { fighterParams } from "./params";
 import { STATUS_TABLE, changeStatus } from "./status/kind";
+import type { StatusTable } from "./status/kind";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type {
   ActionState,
@@ -578,11 +579,11 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
  * here can assume the fighter is not frozen. Mutates in place: `step()` is
  * already working on its own clone by this point.
  */
-export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContext): void {
+export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContext, table: StatusTable = STATUS_TABLE): void {
   f.actionFrame += 1;
   updateDodgeIntangibility(f);
 
-  const status = STATUS_TABLE[f.action];
+  const status = table[f.action];
   if (status === undefined) {
     // Every status lives in `status/` and registers itself from
     // `status/index.ts`. Reaching here means that module was never imported.

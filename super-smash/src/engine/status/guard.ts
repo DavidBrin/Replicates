@@ -90,7 +90,8 @@ export const STATUS_GUARD_DAMAGE: FighterStatus = {
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
     // Shieldstun reuses the `hitstun` counter: a shielding fighter is never
-    // simultaneously in hitstun.
+    // simultaneously in hitstun, and the alternative is a field that exists to
+    // be zero 99% of the time and hashed on every frame regardless.
     if (f.hitstun > 0) {
       bufferPress(f, intent, ctx.frame);
       return;

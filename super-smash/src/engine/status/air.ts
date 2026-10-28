@@ -37,6 +37,8 @@ export const STATUS_JUMP_SQUAT: FighterStatus = {
     // Short hop vs. full hop is decided here and nowhere else: whether the
     // button is up on the frame jumpsquat ends — or whether an aerial is
     // already buffered, which forces the hop short whatever the jump key does.
+    // Ultimate's universal 3-frame jumpsquat is what makes that a real
+    // decision rather than a character-specific execution barrier.
     const short = !intent.jumpHeld || peekBuffer(f, ctx.frame) === "attack";
     kineticGroundJump(f, fighterParams(ctx.def), !short);
     // The 0.85× damage penalty rides on this flag for the whole airtime; see

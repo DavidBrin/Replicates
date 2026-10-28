@@ -497,7 +497,6 @@ describe("hits", () => {
   });
 });
 
-
 /* ---------------------------------------------- grab, pummel and throw -- */
 
 /**
@@ -664,7 +663,6 @@ describe("the four throws", () => {
     expect(ticks[ended].state.fighters[0]).toMatchObject({ move: null, grabbing: -1, grabTimer: 0 });
   });
 });
-
 
 /* ------------------------------------------------------------ short hop -- */
 
@@ -1185,13 +1183,16 @@ describe("the ledge-release lockout", () => {
     return state;
   }
 
+  // A press of Down, then the stick neutral: `run` starts each call from no
+  // input, so Down held through it would be a fresh press, and a fast fall,
+  // every frame.
   it.each([
-    ["holding away", AWAY],
-    ["pressing down", Btn.Down],
-  ])("lets a fighter who drops by %s fall clear of the ledge, with no regrab, for the whole lockout", (_how, button) => {
+    ["holding away", AWAY, AWAY],
+    ["pressing down", Btn.Down, 0],
+  ])("lets a fighter who drops by %s fall clear of the ledge, with no regrab, for the whole lockout", (_how, button, hold) => {
     const hung = hanging();
     const regrabs = hung.fighters[0].ledgeRegrabs;
-    const after = dropAndWatch(hung, button, button, LEDGE_REGRAB_LOCKOUT_FRAMES, (st, k) => {
+    const after = dropAndWatch(hung, button, hold, LEDGE_REGRAB_LOCKOUT_FRAMES, (st, k) => {
       const f = st.fighters[0];
       const at = `${k} frames after the drop`;
       expect(f.ledge, `${at}: hanging again`).toBeNull();
@@ -1209,9 +1210,12 @@ describe("the ledge-release lockout", () => {
     // so the lockout does not merely postpone the regrab by a few frames.
     expect(after.fighters[0].ledgeLockout).toBe(1);
     expect(after.fighters[0].y).toBeLessThan(-LEDGE_GRAB_RANGE_Y);
-    const lifted = run(after, [button, 0], 1);
+    // Stick neutral from here: a fresh Down would fast-fall the fighter out of
+    // the blast zone, and a KO'd fighter has no ledge either.
+    const lifted = run(after, [0, 0], 1);
     expect(lifted.fighters[0].ledgeLockout).toBe(0);
-    const later = run(lifted, [button, 0], 20);
+    const later = run(lifted, [0, 0], 20);
+    expect(later.fighters[0].stocks, "KO'd, which would pass the next line for the wrong reason").toBe(3);
     expect(later.fighters[0].ledge).toBeNull();
     expect(later.fighters[0].ledgeRegrabs).toBe(regrabs);
   });
@@ -1287,6 +1291,18 @@ describe("the ledge-release lockout", () => {
     ground.fighters[1].move = "jab1";
     const { at: struck } = until(ground, (st) => st.fighters[0].damage > 0, 12);
     expect(struck.fighters[0].ledgeLockout).toBe(0);
+  });
+
+  it("counts the lockout down through the hitlag freeze, as it does intangibility", () => {
+    const hung = hanging();
+    Object.assign(hung.fighters[1], { x: fx(74), facing: 1, action: "attack", move: "jab1", actionFrame: 0 });
+    hung.fighters[0].intangible = 0;
+    let s = until(hung, (st) => st.fighters[0].damage > 0, 12).at;
+    expect(s.fighters[0].hitlag, "frozen by the hit").toBeGreaterThan(0);
+    for (let k = 1; s.fighters[0].hitlag > 0; k++) {
+      s = run(s, [0, 0], 1);
+      expect(s.fighters[0].ledgeLockout, `${k} frames into the freeze`).toBe(LEDGE_REGRAB_LOCKOUT_FRAMES - k);
+    }
   });
 
   it("clears the lockout on the frame the fighter lands, and on the frame it is KO'd", () => {

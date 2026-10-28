@@ -2,7 +2,8 @@
  * StatusModule — one object per fighter status, in Ultimate's shape.
  *
  * Ultimate runs a fighter as a state machine whose states are *statuses*
- * (`FIGHTER_STATUS_KIND_*`, skyline-smash `lua_const.rs`), each a set of
+ * (`FIGHTER_STATUS_KIND_*`, skyline-smash `lua_const.rs`,
+ * https://github.com/ultimate-research/skyline-smash/blob/0c2e7189c46fecb07a3370f487e0e22585dad21e/src/lua_const.rs), each a set of
  * functions the engine calls at fixed moments: `pre` when it is entered,
  * `main` every frame, `exec` for per-frame physics, `end` when it is left
  * (HDR's `status/` tree is laid out the same way). The replica's statuses are
@@ -10,10 +11,12 @@
  * names stay what `FighterState.action` holds, and the table below maps each to
  * the SSBU kind it stands for.
  *
- * Three replica names aggregate several SSBU kinds and are marked so: `attack`
+ * Four replica names aggregate several SSBU kinds and are marked so: `attack`
  * (every ground attack and aerial — SSBU splits ATTACK, ATTACK_S3 … ATTACK_AIR),
  * `special` (SSBU: SPECIAL_N/S/HI/LW, no aggregate kind exists — the name
- * here is SSBU-*like*), and `roll` (ESCAPE_F and ESCAPE_B).
+ * here is SSBU-*like*), `roll` (ESCAPE_F and ESCAPE_B), and `landingLag`
+ * (named LANDING_ATTACK_AIR for an aerial's landing lag, but also the replica's
+ * landing from an air dodge, which is not an aerial's).
  */
 
 import type { Intent, StateContext } from "../states";
@@ -138,21 +141,35 @@ export interface FighterStatus {
   readonly pre?: (f: FighterState) => void;
   /** status_main: every frame the fighter is not frozen, after `actionFrame` advances. */
   readonly main: (f: FighterState, intent: Intent, ctx: StateContext) => void;
-  /** status_exec: per-frame extras after the kinetic type has run. Unused in Plan 2. */
+  /**
+   * status_exec: per-frame extras after the kinetic type has run. Unused in
+   * Plan 2. Not called on the frames `applyMovement` returns early: hanging on a
+   * ledge, under a live scripted-momentum hold, and in hitstun.
+   */
   readonly exec?: (f: FighterState, intent: Intent, ctx: StateContext) => void;
   /** status_end: once, on leaving, before the next status's `pre`. */
   readonly end?: (f: FighterState) => void;
 }
 
 export type StatusTable = { readonly [A in ActionState]?: FighterStatus };
+type MutableStatusTable = { [A in ActionState]?: FighterStatus };
 
-const REGISTRY: { [A in ActionState]?: FighterStatus } = {};
+const REGISTRY: MutableStatusTable = {};
 
 /** Every registered status. Filled by `status/index.ts` at module load. */
 export const STATUS_TABLE: StatusTable = REGISTRY;
 
-export function registerStatus(s: FighterStatus): void {
-  REGISTRY[s.action] = s;
+/**
+ * Add `s` to `table` (the engine's own registry unless a test passes one).
+ * Throws rather than overwrite a status already there, or file one under an
+ * action whose SSBU kind the alias table says is another: either is a typo
+ * that would otherwise swap a status's behaviour silently.
+ */
+export function registerStatus(s: FighterStatus, table: MutableStatusTable = REGISTRY): void {
+  const kind = STATUS_KIND_OF_ACTION[s.action];
+  if (s.kind !== kind) throw new Error(`the status for "${s.action}" says ${s.kind}, but the alias table says ${kind}`);
+  if (table[s.action] !== undefined) throw new Error(`a status for "${s.action}" is already registered`);
+  table[s.action] = s;
 }
 
 /**
