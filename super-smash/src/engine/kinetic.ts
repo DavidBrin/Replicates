@@ -130,6 +130,59 @@ export function kineticClear(f: FighterState): void {
   kineticSum(f);
 }
 
+/* --------------------------------------------- setting a velocity outright -- */
+
+/**
+ * Set the horizontal speed outright: every horizontal energy to zero, then
+ * `vx` on `carrier`. The KineticModule equivalent of `f.vx = vx`.
+ */
+export function kineticSetX(f: FighterState, vx: number, carrier: HorizontalCarrier = "control"): void {
+  const k = f.kinetic;
+  k.controlX = carrier === "control" ? vx : 0;
+  k.stopX = carrier === "stop" ? vx : 0;
+  k.motionX = 0;
+  k.damageX = 0;
+  kineticSum(f);
+}
+
+/** Set the vertical speed outright, on GRAVITY. The equivalent of `f.vy = vy`. */
+export function kineticSetY(f: FighterState, vy: number): void {
+  const k = f.kinetic;
+  k.gravityY = vy;
+  k.motionY = 0;
+  k.damageY = 0;
+  kineticSum(f);
+}
+
+/** Both at once. */
+export function kineticSet(f: FighterState, vx: number, vy: number, carrier: HorizontalCarrier = "control"): void {
+  kineticSetX(f, vx, carrier);
+  kineticSetY(f, vy);
+}
+
+/**
+ * A jump's vertical speed, which also ends any launch: the launch's horizontal
+ * part stays with the fighter as ordinary drift (CONTROL), its vertical part is
+ * replaced, and `launchSpeed` stops decaying anything.
+ */
+export function kineticJump(f: FighterState, vy: number): void {
+  const k = f.kinetic;
+  k.controlX += k.damageX;
+  k.damageX = 0;
+  f.launchSpeed = 0;
+  kineticSetY(f, vy);
+}
+
+/**
+ * A knockback launch. Until Task 17 gives it the DAMAGE energy this is the
+ * legacy behaviour: the launch *replaces* the velocity and `launchSpeed`
+ * carries its magnitude for the legacy decay.
+ */
+export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: number): void {
+  kineticSet(f, vx, vy);
+  f.launchSpeed = speed;
+}
+
 /* ---------------------------------------------------------- kinetic types -- */
 
 /**

@@ -30,7 +30,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
-import { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR } from "./kinetic";
+import { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR, kineticSetX, kineticSetY } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -170,8 +170,8 @@ export function decayLaunch(f: FighterState, decay: number): void {
     f.launchSpeed = 0;
     return;
   }
-  f.vx = Math.trunc((f.vx * next) / mag);
-  f.vy = Math.trunc((f.vy * next) / mag);
+  f.vx = Math.trunc((f.vx * next) / mag); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
+  f.vy = Math.trunc((f.vy * next) / mag); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
   f.launchSpeed = next;
 }
 
@@ -268,7 +268,7 @@ export function resolveCollision(
       // A moving platform carries its passenger; Smashville is unplayable otherwise.
       if (p.motion) f.x += cx - platformCentreX(p, frame - 1);
       f.y = p.y;
-      f.vy = 0;
+      kineticSetY(f, 0);
       return out;
     }
   }
@@ -291,13 +291,13 @@ export function resolveCollision(
     const cameFromOutside = abs(prevX - cx) >= reach;
     if (cameFromOutside && f.y < p.y && head > bottom && abs(f.x - cx) < reach) {
       f.x = prevX <= cx ? cx - reach : cx + reach;
-      f.vx = 0;
+      kineticSetX(f, 0);
       out.blocked = true;
     }
     // Ceiling: rising into the underside of a solid body.
     if (f.vy > 0 && abs(f.x - cx) < reach && prevY + attrs.height <= bottom && head > bottom) {
       f.y = bottom - attrs.height;
-      f.vy = 0;
+      kineticSetY(f, 0);
       out.blocked = true;
     }
   }
@@ -312,7 +312,7 @@ export function resolveCollision(
     if (prevY < p.y) continue; // was already below the surface — no landing from under
     if (f.y > p.y) continue; // still above it
     f.y = p.y;
-    f.vy = 0;
+    kineticSetY(f, 0);
     f.grounded = true;
     f.platform = i;
     f.fastFalling = false;
@@ -342,7 +342,7 @@ export function dropThroughPlatform(f: FighterState, stage: StageDef): boolean {
   f.y -= 1;
   f.grounded = false;
   f.platform = -1;
-  f.vy = 0;
+  kineticSetY(f, 0);
   return true;
 }
 

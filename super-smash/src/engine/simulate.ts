@@ -95,7 +95,14 @@ import {
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
-import { cloneKinetic, emptyKinetic } from "./kinetic";
+import {
+  cloneKinetic,
+  emptyKinetic,
+  kineticClear,
+  kineticLaunch,
+  kineticSet,
+  kineticSetX,
+} from "./kinetic";
 import { emptyEvents } from "./types";
 import type {
   ActionState,
@@ -622,11 +629,9 @@ export function step(
     events.kos.push({ port: f.port, x: f.x, y: f.y, kind: ko });
     f.stocks -= 1;
     f.damage = 0;
-    f.vx = 0;
-    f.vy = 0;
+    kineticClear(f);
     f.hitstun = 0;
     f.hitlag = 0;
-    f.launchSpeed = 0;
     f.balloon = false;
     clearPendingLaunch(f);
     f.grounded = false;
@@ -825,7 +830,7 @@ function loseClank(s: GameState, c: Candidate, destroyed: Set<number>): void {
   }
   // The rebound: the attack ends and the fighter is pushed back a little.
   const f = s.fighters[c.attacker];
-  f.vx = -f.facing * fx(0.5);
+  kineticSetX(f, -f.facing * fx(0.5));
   clearHitRecord(f);
   startAction(f, f.grounded ? "stand" : "fall");
 }
@@ -1031,13 +1036,15 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   f.balloon = launch.balloon;
 
   if (launch.speed > 0) {
-    f.vx = Math.trunc((launch.vx * speed) / launch.speed);
-    f.vy = Math.trunc((launch.vy * speed) / launch.speed);
+    kineticLaunch(
+      f,
+      Math.trunc((launch.vx * speed) / launch.speed),
+      Math.trunc((launch.vy * speed) / launch.speed),
+      speed,
+    );
   } else {
-    f.vx = 0;
-    f.vy = 0;
+    kineticLaunch(f, 0, 0, speed);
   }
-  f.launchSpeed = speed;
   // Whether the launch takes the victim off the ground is a DI question too: a
   // flat Sakurai-angle hit that gets DI'd upward leaves the floor, and the same
   // hit without DI slides along it.
@@ -1076,8 +1083,7 @@ function applyHit(
     releaseGrab(victim, s.fighters);
     attacker.grabbing = victim.port;
     victim.grabbedBy = attacker.port;
-    victim.vx = 0;
-    victim.vy = 0;
+    kineticSet(victim, 0, 0);
     // Being caught cancels a launch that had not fired yet: the victim is held,
     // not flying, and a pending launch would go off in their captor's hands.
     clearPendingLaunch(victim);
@@ -1140,7 +1146,7 @@ function applyHit(
     });
     victim.hitlag = lag;
     if (!fromProjectile) attacker.hitlag = lag;
-    victim.vx = (victim.x < c.x ? -1 : 1) * mul(damage, SHIELD_PUSHBACK);
+    kineticSetX(victim, (victim.x < c.x ? -1 : 1) * mul(damage, SHIELD_PUSHBACK), "stop");
     if (victim.shieldHealth <= 0) {
       victim.shieldHealth = 0;
       startAction(victim, "shieldBroken");

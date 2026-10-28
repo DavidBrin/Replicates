@@ -63,7 +63,17 @@ import {
   platformCentreX,
 } from "./physics";
 import { clearHitRecord, moveFrameOf } from "./hitbox";
-import { KINETIC_TYPE_OF_ACTION, carrierOf, kineticAdopt, kineticClear, kineticExec } from "./kinetic";
+import {
+  KINETIC_TYPE_OF_ACTION,
+  carrierOf,
+  kineticAdopt,
+  kineticClear,
+  kineticExec,
+  kineticJump,
+  kineticSet,
+  kineticSetX,
+  kineticSetY,
+} from "./kinetic";
 import { fighterParams } from "./params";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type {
@@ -485,9 +495,8 @@ function airJump(f: FighterState, ctx: StateContext): boolean {
   const a = ctx.def.attributes;
   if (f.jumpsUsed >= a.jumps) return false;
   f.jumpsUsed += 1;
-  f.vy = a.airJumpVelocity;
+  kineticJump(f, a.airJumpVelocity);
   f.fastFalling = false;
-  f.launchSpeed = 0;
   // An air jump is a full jump at full height: whatever the hop that got the
   // fighter here was, the short-hop penalty ends with it.
   f.shortHop = false;
@@ -509,11 +518,9 @@ function startAirDodge(f: FighterState, intent: Intent): boolean {
     const speed = diagonal
       ? Math.trunc((DIRECTIONAL_AIR_DODGE_SPEED * DIAGONAL) / ONE)
       : DIRECTIONAL_AIR_DODGE_SPEED;
-    f.vx = intent.x * speed;
-    f.vy = intent.y * speed;
+    kineticSet(f, intent.x * speed, intent.y * speed);
   } else {
-    f.vx = 0;
-    f.vy = 0;
+    kineticSet(f, 0, 0);
   }
   f.launchSpeed = 0;
   return true;
@@ -624,8 +631,7 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
         const spawn = spawns[f.port % spawns.length];
         f.x = spawn.x;
         f.y = spawn.y;
-        f.vx = 0;
-        f.vy = 0;
+        kineticClear(f);
         f.grounded = false;
         f.platform = -1;
         f.jumpsUsed = 0;
@@ -695,7 +701,7 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
       }
       if (intent.x !== 0) {
         startAction(f, "roll");
-        f.vx = intent.x * Math.trunc(ROLL_DISTANCE / ROLL_FRAMES);
+        kineticSetX(f, intent.x * Math.trunc(ROLL_DISTANCE / ROLL_FRAMES), "stop");
         return;
       }
       return;
@@ -733,7 +739,7 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
 
     case "roll": {
       if (f.actionFrame >= ROLL_FRAMES) {
-        f.vx = 0;
+        kineticSetX(f, 0, "stop");
         startAction(f, "stand");
       } else bufferPress(f, intent, ctx.frame);
       return;
@@ -940,7 +946,7 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
       // that a real decision rather than a character-specific execution barrier.
       const a = ctx.def.attributes;
       const short = !intent.jumpHeld || peekBuffer(f, ctx.frame) === "attack";
-      f.vy = short ? a.shortHopVelocity : a.fullHopVelocity;
+      kineticSetY(f, short ? a.shortHopVelocity : a.fullHopVelocity);
       // The 0.85× damage penalty rides on this flag for the whole airtime; see
       // `FighterState.shortHop` and SPEC §4.
       f.shortHop = short;
@@ -1072,7 +1078,7 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
       // defender rather than a free way to shorten every jump.
       if (intent.downPressed && !f.fastFalling && f.vy <= 0 && f.hitstun === 0) {
         f.fastFalling = true;
-        f.vy = fastFallVelocity(ctx.def.attributes);
+        kineticSetY(f, fastFallVelocity(ctx.def.attributes));
       }
       if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");
       return;
@@ -1092,7 +1098,7 @@ function finishLedgeOption(f: FighterState, ctx: StateContext): void {
   const ledge = f.ledge;
   f.ledge = null;
   if (f.action === "ledgeJump") {
-    f.vy = LEDGE_JUMP_VELOCITY;
+    kineticSetY(f, LEDGE_JUMP_VELOCITY);
     f.jumpsUsed = 1;
     startAction(f, "jump");
     return;
@@ -1106,8 +1112,7 @@ function finishLedgeOption(f: FighterState, ctx: StateContext): void {
   const distance = f.action === "ledgeRoll" ? LEDGE_ROLL_DISTANCE : LEDGE_GETUP_DISTANCE;
   f.x = platformCentreX(p, ctx.frame) + ledge.side * p.halfWidth + inward * distance;
   f.y = p.y;
-  f.vx = 0;
-  f.vy = 0;
+  kineticSet(f, 0, 0);
   f.grounded = true;
   f.platform = ledge.platform;
   f.jumpsUsed = 0;
@@ -1232,14 +1237,14 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   for (const m of impulses) {
     const until = m.frame + (m.hold ?? 0);
     if (frame < m.frame || frame > until) continue;
-    f.vx = m.x * (f.facing >= 0 ? 1 : -1);
-    f.vy = m.y;
+    f.vx = m.x * (f.facing >= 0 ? 1 : -1); // kinetic: legacy-write (Task 18 moves this to MOTION)
+    f.vy = m.y; // kinetic: legacy-write (Task 18 moves this to MOTION)
     // The floor still wins. A downward impulse on a grounded fighter drove
     // them straight through the stage — a grounded Stone fell out of the world
     // — because this branch returns before the clamp at the bottom of
     // `applyMovement` that ordinarily stops that. A Stone used on the ground
     // simply sits there, which is also what it does in the real game.
-    if (f.grounded && f.vy < 0) f.vy = 0;
+    if (f.grounded && f.vy < 0) f.vy = 0; // kinetic: legacy-write (Task 18 moves this to MOTION)
     f.launchSpeed = 0;
     return frame < until;
   }
@@ -1267,8 +1272,8 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
 
   if (f.hitstun > 0) {
     decayLaunch(f, LAUNCH_SPEED_DECAY);
-    if (!f.grounded) f.vy = applyGravity(f.vy, a, hitstunGravityOptions(f));
-    else f.vx = applyTraction(f.vx, a);
+    if (!f.grounded) f.vy = applyGravity(f.vy, a, hitstunGravityOptions(f)); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
+    else f.vx = applyTraction(f.vx, a); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
     kineticAdopt(f, carrier);
     return;
   }
@@ -1303,7 +1308,7 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
 
   if (f.action === "tumble") {
     f.hitstun = 0;
-    f.vx = 0;
+    kineticSetX(f, 0, "stop");
     startAction(f, "downed");
     return;
   }
@@ -1358,9 +1363,7 @@ export function grabLedge(
   f.ledge = { platform, side };
   f.x = x;
   f.y = y;
-  f.vx = 0;
-  f.vy = 0;
-  f.launchSpeed = 0;
+  kineticClear(f);
   f.facing = -side;
   f.jumpsUsed = 0;
   f.airDodged = false;
