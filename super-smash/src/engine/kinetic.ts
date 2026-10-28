@@ -20,7 +20,7 @@
  * the strangler seam, and Task 4 closes it.
  */
 
-import { LAUNCH_SPEED_DECAY } from "./constants";
+import { LAUNCH_SPEED_DECAY, LEDGE_JUMP_VELOCITY } from "./constants";
 import { ONE, abs, approach, mul, sqrt } from "./fixed";
 import type { FighterParams } from "./params";
 import type { ActionState, FighterState } from "./types";
@@ -568,7 +568,7 @@ export function runControlX(vx: number, dir: number, p: FighterParams, mag: numb
 
 /* ------------------------------------------------------------ rise timing -- */
 
-export type JumpKind = "full" | "short" | "air";
+export type JumpKind = "full" | "short" | "air" | "ledge";
 
 /**
  * The vertical speed on every frame of a jump's `jump` action — each rising
@@ -578,7 +578,8 @@ export type JumpKind = "full" | "short" | "air";
  * stateless, for the layers that time a clip by the rise: the renderer
  * (`jumpTimingFor`) and the animation lab. `airJump` indexes
  * `jump_aerial_y_list` (0 = the first midair jump), clamped at both ends the
- * way the midair jump itself (`airJump` in `states.ts`) clamps it.
+ * way the midair jump itself (`airJump` in `states.ts`) clamps it. A "ledge"
+ * jump is the one `finishLedgeOption` launches at `LEDGE_JUMP_VELOCITY`.
  */
 export function jumpRiseSpeeds(p: FighterParams, kind: JumpKind, airJump = 0): number[] {
   const out: number[] = [];
@@ -588,6 +589,8 @@ export function jumpRiseSpeeds(p: FighterParams, kind: JumpKind, airJump = 0): n
   if (kind === "full" && p.jump_initial_y > 0) {
     for (let n = 1; n <= 4; n++) out.push(initialRiseStep(p.jump_initial_y, n));
     v = jumpLaunchSpeed(g, p.jump_y - p.jump_initial_y);
+  } else if (kind === "ledge") {
+    v = LEDGE_JUMP_VELOCITY;
   } else {
     const list = p.jump_aerial_y_list;
     const air = list === undefined ? p.jump_aerial_y : list[Math.min(Math.max(airJump, 0), list.length - 1)];

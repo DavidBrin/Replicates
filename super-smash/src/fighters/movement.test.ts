@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { fx, toFloat } from "@/engine/fixed";
 import { emptyKinetic, initialRiseStep, jumpLaunchSpeed, jumpRiseSpeeds } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
-import { onLanded } from "@/engine/states";
+import { LEDGE_HANG_MIN, onLanded } from "@/engine/states";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { STAGES } from "@/stages";
@@ -622,5 +622,26 @@ describe("rise timing for the renderer (jumpRiseSpeeds)", () => {
     // Short hop, then a midair jump; its rise starts on the frame `jumpsUsed` becomes 2.
     const air = play(standing(id), [Btn.Jump, ...hold(0, 8), Btn.Jump, ...hold(0, 90)]);
     expect(risingSpeeds(air, air.findIndex((f) => f.jumpsUsed === 2))).toEqual(jumpRiseSpeeds(p, "air", 0));
+  });
+
+  /** Hanging from Final Destination's left ledge (x −80), facing the stage, past the hang's locked first frames. */
+  function hanging(id: RosterId): GameState {
+    let s = standing(id);
+    Object.assign(s.fighters[0], { action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(-82), y: fx(-5), facing: 1 });
+    for (let i = 0; i < 60 && s.fighters[0].ledge === null; i++) s = step(s, [0], { prevInputs: [0] }).state;
+    expect(s.fighters[0].action, "never caught the ledge").toBe("ledgeHang");
+    for (let i = 0; i < LEDGE_HANG_MIN; i++) s = step(s, [0], { prevInputs: [0] }).state;
+    return s;
+  }
+
+  it.each(IDS)("%s: a jump off the ledge (LEDGE_JUMP_VELOCITY), frame for frame", (id) => {
+    // `finishLedgeOption` enters `jump` with `jumpsUsed` 1 and no short hop, as a full hop does,
+    // but rises at its own speed, so it is a kind of its own.
+    const ledge = play(hanging(id), [Btn.Jump, ...hold(0, 120)]);
+    const from = ledge.findIndex((f) => f.action === "jump");
+    expect(from, "the ledge jump never left the ledge").toBeGreaterThan(0);
+    expect(ledge[from].jumpsUsed).toBe(1);
+    expect(ledge[from].shortHop).toBe(false);
+    expect(risingSpeeds(ledge, from)).toEqual(jumpRiseSpeeds(FIGHTER_PARAMS[id], "ledge"));
   });
 });

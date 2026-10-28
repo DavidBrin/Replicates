@@ -30,6 +30,7 @@ import {
   DASH_THRESHOLD_FRAMES,
   DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_SPEED,
+  LEDGE_JUMP_VELOCITY,
   PERFECT_SHIELD_WINDOW,
   RESPAWN_INVINCIBILITY_MAX,
   RESPAWN_INVINCIBILITY_MIN,
@@ -107,8 +108,6 @@ export const LEDGE_ATTACK_FRAMES = 55;
 export const ROLL_DISTANCE = fx(28);
 export const LEDGE_ROLL_DISTANCE = fx(20);
 export const LEDGE_GETUP_DISTANCE = fx(8);
-/** Upward velocity of a ledge jump. */
-export const LEDGE_JUMP_VELOCITY = fx(3.1);
 /** 1/√2, so a diagonal air dodge covers the same distance as a cardinal one. */
 const DIAGONAL = fx(0.7071067811865476);
 

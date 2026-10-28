@@ -8,9 +8,11 @@ import { P, type PoseClip } from "./clip";
  * rest of the rise gets, and short hops and air jumps get none of it. So the
  * whole extension is spent by t=0.15 and the remaining five sixths are a coast.
  * That is also the only honest way to author this. `jump` has no fixed length,
- * so `poseTimeFor` runs the clip over thirty frames and then holds; how much of
- * it a fighter actually sees is its rise (`jumpTimingFor`, from the engine's
- * own jump rule), which differs across the cast by more than a dozen frames.
+ * so `poseTimeFor` stretches the clip across the fighter's own rise
+ * (`actionDurationFor` with `jumpTimingFor`, the engine's jump rule): 13 frames
+ * for Fox's short hop, 17 to 26 for the cast's full hops, and up to 49 for a
+ * jump off the ledge (Kirby's). Asked with no jump timing, as the clip tests
+ * ask, it plays over thirty frames instead.
  *
  * The arms scissor rather than reach: the near one drives up in front, the far
  * one keeps going the way the jumpsquat had already swept it, back and over.
@@ -23,9 +25,12 @@ import { P, type PoseClip } from "./clip";
  * spends the last ten of them under half a degree a frame, and the rise turns
  * back into the frozen photograph it used to be.
  *
- * The last key *is* `fall`'s opening drawing. The rise cuts to `fall` the frame
- * vertical speed crosses zero and nothing blends the two clips, so the coast is
- * shaped to arrive there rather than to be a nice drawing in its own right.
+ * The last key *is* `fall`'s opening drawing. The rise's last frame is the one
+ * whose vertical speed first stops being positive, at t = (n−1)/n of an
+ * n-frame rise (0.92 or later for every jump on the roster), and `fall` takes
+ * over on the next. That handover fades over four frames (`blend.ts`), but from
+ * wherever the rise has got to, so the coast is shaped to arrive there rather
+ * than to be a nice drawing in its own right.
  */
 export const rise: PoseClip = {
   loop: false,
@@ -82,11 +87,11 @@ export const rise: PoseClip = {
       scaleY: 1.08,
       ease: "linear",
     },
-    // `fall`'s opening drawing, to the degree. Which frame of the coast the
-    // handover lands on is the fighter's rise (`jumpTimingFor`) and differs across the
-    // cast by thirteen frames, so the tail converges on that shape instead of
-    // meeting it at one point: the worst crossover in the roster is Fox's, at
-    // t=0.6, and even there no bone is more than a dozen degrees out.
+    // `fall`'s opening drawing, to the degree. The clip is stretched across the
+    // fighter's rise, so the handover lands within a frame of this key (t=0.92
+    // or later). The tail still converges on this shape rather than meeting it
+    // at one point: it was drawn when the clip ran over a fixed thirty frames
+    // and was cut short as early as t=0.6 (Fox's full hop).
     {
       t: 1,
       pose: P({

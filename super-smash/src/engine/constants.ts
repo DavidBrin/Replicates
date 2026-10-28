@@ -240,6 +240,14 @@ export const LEDGE_GRAB_RANGE_Y = fx(6);
 /** Grabbing a ledge from behind reaches 40% less far. */
 export const LEDGE_GRAB_BACK_PENALTY = fx(0.6);
 
+/**
+ * Upward velocity of a ledge jump. UNVERIFIED: no published source is cited for
+ * this value. It lives here rather than beside the ledge-option frame counts in
+ * `states.ts` because `kinetic.ts` replays it (`jumpRiseSpeeds`, for the
+ * renderer) and `kinetic.ts` cannot import `states.ts`, which imports it.
+ */
+export const LEDGE_JUMP_VELOCITY = fx(3.1);
+
 /* ------------------------------------------------------------------- misc -- */
 
 /** The respawn platform vanishes on its own after this long. */

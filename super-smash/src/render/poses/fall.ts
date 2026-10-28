@@ -17,13 +17,15 @@ import { P, type PoseClip } from "./clip";
  *
  * `t = 0` is the top of the arc, and it is reached exactly: `startAction` resets
  * `actionFrame` on the jump→fall transition, so frame 0 of this clip is always
- * the frame the fighter stopped rising. Nothing blends between clips, so that
- * key is not free to be a nice drawing — it has to be roughly where `rise` is
- * when vertical speed crosses zero, or the arms teleport on the apex frame. And
- * that is not `rise`'s *last* key: the rise is authored over thirty frames and
- * cut short by the fighter's rise (`jumpTimingFor`), so the crossover lands around three
- * fifths of the way through its coast for most of the cast. This key is matched
- * against that point, which is why it is a shallower gather than the drawing
+ * the frame the fighter stopped rising. The handover fades over four frames
+ * (`blend.ts`), but from wherever `rise` has got to, so that key is not free to
+ * be a nice drawing — it has to be roughly where `rise` is when vertical speed
+ * crosses zero, or the arms swing across the apex. That is within a frame of
+ * `rise`'s last key: `rise` is stretched across the fighter's own rise
+ * (`actionDurationFor` with `jumpTimingFor`), so it hands over at t=0.92 or
+ * later for every jump on the roster. This key was matched when the rise still
+ * ran over a fixed thirty frames and was cut short around three fifths of the
+ * way through its coast, which is why it is a shallower gather than the drawing
  * would want.
  *
  * `smooth` easing out of it then gives the hang for free: a smoothstep leaves a

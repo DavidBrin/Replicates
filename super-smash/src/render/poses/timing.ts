@@ -67,6 +67,7 @@ export type PosedFighter = Pick<
   | "fastFalling"
   | "hitstun"
   | "vx"
+  | "vy"
   | "shortHop"
 >;
 
@@ -85,6 +86,13 @@ export interface JumpTiming {
   readonly short: number;
   /** Per midair jump: `air[0]` is the first. One entry unless the fighter has a per-jump list. */
   readonly air: readonly number[];
+  /**
+   * A jump off the ledge: its vertical speed on each frame of its `jump` action
+   * (`jumpRiseSpeeds(p, "ledge")`), so its rise is `ledgeSpeeds.length`. Kept
+   * whole because the speed is how a ledge jump is told from a full hop; see
+   * `isLedgeJump`.
+   */
+  readonly ledgeSpeeds: readonly number[];
 }
 
 const jumpTimings = new WeakMap<FighterDef, JumpTiming>();
@@ -99,10 +107,27 @@ export function jumpTimingFor(def: FighterDef): JumpTiming {
       full: jumpRiseSpeeds(p, "full").length,
       short: jumpRiseSpeeds(p, "short").length,
       air: Array.from({ length: airs }, (_, i) => jumpRiseSpeeds(p, "air", i).length),
+      ledgeSpeeds: jumpRiseSpeeds(p, "ledge"),
     };
     jumpTimings.set(def, t);
   }
   return t;
+}
+
+/**
+ * Whether a first jump (`jumpsUsed` 1, no short hop) is a jump off the ledge
+ * rather than a full hop.
+ *
+ * Nothing in the fighter's state records which it was: `finishLedgeOption`
+ * enters `jump` with the same `jumpsUsed` and `shortHop` a full hop has. But
+ * both rise by rule, at different speeds, so this frame's vertical speed says:
+ * it is the ledge jump's own speed for this frame of the action only on a
+ * ledge jump. (No fighter's full hop matches it on any frame; the step-driven
+ * test in `jumpTiming.test.ts` holds every one to that.) A rise something else
+ * has changed, a ceiling say, reads as a full hop.
+ */
+function isLedgeJump(f: Pick<PosedFighter, "actionFrame" | "vy">, jump: JumpTiming): boolean {
+  return f.vy === jump.ledgeSpeeds[f.actionFrame];
 }
 
 const SLOT_POSE: Record<MoveSlot, PoseName> = {
@@ -265,7 +290,7 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
  * need one.
  */
 export function actionDurationFor(
-  f: Pick<PosedFighter, "action" | "actionFrame" | "charge" | "hitstun" | "jumpsUsed" | "shortHop">,
+  f: Pick<PosedFighter, "action" | "actionFrame" | "charge" | "hitstun" | "jumpsUsed" | "shortHop" | "vy">,
   jump?: JumpTiming,
 ): number | undefined {
   switch (f.action) {
@@ -277,7 +302,9 @@ export function actionDurationFor(
           ? jump.air[Math.min(f.jumpsUsed - 2, jump.air.length - 1)]
           : f.shortHop
             ? jump.short
-            : jump.full;
+            : isLedgeJump(f, jump)
+              ? jump.ledgeSpeeds.length
+              : jump.full;
       return Math.max(1, n);
     }
     case "entering":
