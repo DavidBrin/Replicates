@@ -425,6 +425,17 @@ export default function PlayPage() {
   useEffect(() => {
     if (!online) return;
     const { config, session, localPort } = online;
+    // The room went wrong between this page's render and now — the guest
+    // refused this start (another build), or the room failed — and the store
+    // has withdrawn the start and says why, for good. Leaving would wipe that,
+    // and so would a leave still pending from a remount: back to where the
+    // room is instead, as when stranded.
+    if (getActiveSession() === session && useOnlineStore.getState().errorReason !== null) {
+      if (pendingLeave !== null) clearTimeout(pendingLeave);
+      pendingLeave = null;
+      router.replace(session.role === "host" ? "/stage" : "/fighters");
+      return;
+    }
     // React's development remount: the unmount just undone withdrew the start
     // and scheduled a leave, but this is the same match, so neither stands.
     if (pendingLeave !== null) {

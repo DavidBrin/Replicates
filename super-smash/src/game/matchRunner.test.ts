@@ -24,6 +24,7 @@ import {
   type PlayerSlot,
 } from "./matchRunner";
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
+import { GAME_SIM_CONTEXT } from "./simContext";
 import { meleeReachFromDef } from "@/ai/behaviours";
 import { hashState } from "@/engine/hash";
 import { KO_FREEZE_FRAMES } from "@/engine/simulate";
@@ -173,6 +174,20 @@ describe("the runner drives its cosmetic state", () => {
 
     expect(runner.vfx.hitFlash[0]).toBe(0);
     expect(runner.vfx.parryFlash[1]).toBe(0);
+  });
+});
+
+describe("a local match", () => {
+  /** The same context online play steps with (rollbackDeps), so a bone bake reaches both. */
+  it("steps with the game's SimContext", () => {
+    const runner = idleRunner();
+    const fighter = vi.spyOn(GAME_SIM_CONTEXT, "fighter");
+    try {
+      runner.advance(1);
+      expect(fighter).toHaveBeenCalled();
+    } finally {
+      fighter.mockRestore();
+    }
   });
 });
 

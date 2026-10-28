@@ -5,7 +5,7 @@
  * hands them and what it does with what they report.
  */
 
-import { StrictMode } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -20,7 +20,7 @@ import type { MatchRunnerOptions } from "@/game/matchRunner";
 import { localBuild, runnerSlotsFor } from "@/game/onlineConfig";
 import type { GamepadOptions } from "@/input/gamepad";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
-import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, bindSession, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import type { DoSignalStatus } from "@/net/adapters/doSignal";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
@@ -289,6 +289,34 @@ describe("the play page, online", () => {
     fireEvent.click(screen.getByRole("button", { name: "BACK TO MENU" }));
     expect(routerMock.push).toHaveBeenCalledWith("/menu");
     expect(getActiveSession()).toBeNull();
+  });
+
+  /**
+   * The refusal can land after this page read the start while rendering but
+   * before its effect runs: the store has already withdrawn the start and
+   * recorded why. That is not a match left behind (which leaves the room), so
+   * it goes back to where the room is, as when stranded, keeping the sentence.
+   */
+  it("keeps a refusal that lands between its render and its effect on screen, back where the room is", () => {
+    const { fake } = goOnline("host");
+    bindSession(fake.session);
+    function RefusedMeanwhile() {
+      useLayoutEffect(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }), []);
+      return null;
+    }
+    render(
+      <>
+        <RefusedMeanwhile />
+        <PlayPage />
+      </>,
+    );
+    expect(mocks.runners).toHaveLength(0);
+    expect(routerMock.replace).toHaveBeenCalledWith("/stage");
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "engine-mismatch",
+      error: "The other player is running a different version. Both reload the page.",
+    });
   });
 
   /** Only a host's start can be refused: a refusal sent to the guest is nobody's to act on. */

@@ -192,6 +192,9 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * once `HELLO_TIMEOUT_MS` runs out.
    */
   const channelOpened = () => {
+    // Once a start is out the channel is the match's, and the builds were
+    // settled before it: nothing to say, and nothing to wait for.
+    if (online().config !== null) return;
     // First, ahead of anything a screen repeats on connecting.
     sayHello();
     // The send can find the room gone, which the session has just reported.
@@ -203,7 +206,8 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     online().patch({ status: "linking", notice: null });
     helloTimer ??= setTimeout(() => {
       helloTimer = null;
-      if (online().errorReason === null) refuseBuild();
+      // A start out since the channel opened is the match's to end, not this wait's.
+      if (online().errorReason === null && online().config === null) refuseBuild();
     }, HELLO_TIMEOUT_MS);
   };
 

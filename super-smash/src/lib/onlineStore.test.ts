@@ -552,6 +552,52 @@ describe("the build handshake", () => {
     expect(useOnlineStore.getState().errorReason).toBe("engine-mismatch");
   });
 
+  it("stops waiting for a hello when the other player leaves the room", () => {
+    vi.useFakeTimers();
+    const { emit } = opened("host");
+    emit({ type: "peer", present: false });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", notice: PEER_LEFT_NOTICE, error: null });
+  });
+
+  it("stops waiting for a hello when somebody new takes the seat, until their own channel opens", () => {
+    vi.useFakeTimers();
+    const { emit } = opened("host");
+    emit({ type: "peer", present: true });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
+    emit({ type: "link", status: "negotiating" });
+    emit({ type: "link", status: "open" });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState().errorReason).toBe("engine-mismatch");
+  });
+
+  /** The build was settled before the start; from then on the channel is the match's. */
+  it("never ends a start already out for want of a hello", async () => {
+    vi.useFakeTimers();
+    const fake = opened("guest");
+    fake.emit({ type: "lobby", message: { kind: "start", config: CONFIG } });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    await Promise.resolve();
+    expect(useOnlineStore.getState()).toMatchObject({ config: CONFIG, error: null });
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
+
+  it("says no hello and starts no wait when the channel reports open once a start is out", async () => {
+    vi.useFakeTimers();
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "guest" });
+    fake.emit({ type: "peer", present: true });
+    fake.emit({ type: "lobby", message: { kind: "start", config: CONFIG } });
+    fake.emit({ type: "link", status: "open" });
+    expect(fake.sent).toEqual([]);
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    await Promise.resolve();
+    expect(useOnlineStore.getState()).toMatchObject({ config: CONFIG, error: null });
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
+
   it("stops waiting for a hello on leaving", () => {
     vi.useFakeTimers();
     const fake = opened("host");
