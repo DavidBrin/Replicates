@@ -66,6 +66,15 @@ const MIGRATED = [
   "tumble",
   "downed",
   "getUp",
+  // Task 7
+  "shieldStart",
+  "shield",
+  "shieldRelease",
+  "shieldStun",
+  "shieldBroken",
+  "spotDodge",
+  "roll",
+  "airDodge",
 ];
 
 describe("migrated statuses", () => {

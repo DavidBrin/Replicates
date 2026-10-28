@@ -23,14 +23,12 @@
 
 import { ONE, fx, clamp } from "./fixed";
 import {
-  AIR_DODGE_FRAMES,
   AIR_DODGE_INTANGIBLE,
   AIR_DODGE_LANDING_LAG,
   DIRECTIONAL_AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
   DASH_INTERRUPT_FRAME,
   DASH_THRESHOLD_FRAMES,
-  DIRECTIONAL_AIR_DODGE_FRAMES,
   DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_SPEED,
   JUMP_SQUAT_FRAMES,
@@ -40,16 +38,12 @@ import {
   RESPAWN_INVINCIBILITY_MAX,
   RESPAWN_INVINCIBILITY_MIN,
   RESPAWN_PLATFORM_FRAMES,
-  ROLL_FRAMES,
   ROLL_INTANGIBLE,
   SDI_INPUT_INTERVAL,
-  SHIELD_MIN_HOLD,
-  SHIELD_RELEASE_FRAMES,
   SMASH_CHARGE_DAMAGE,
   SMASH_CHARGE_MAX,
   SMASH_INPUT_WINDOW,
   TAP_JUMP_FRAMES,
-  SPOT_DODGE_FRAMES,
   SPOT_DODGE_INTANGIBLE,
 } from "./constants";
 import {
@@ -596,89 +590,6 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
 
   // Legacy switch: each status group leaves it as it moves to `status/`.
   switch (f.action) {
-    /* --------------------------------------------------------- defence -- */
-    case "shieldStart": {
-      if (f.actionFrame >= SHIELD_START_FRAMES) startAction(f, "shield");
-      return;
-    }
-
-    case "shield": {
-      // The shield may not be dropped for its first 3 frames, which is what
-      // makes a perfect shield a commitment rather than something you mash.
-      if (!intent.shieldHeld && f.actionFrame >= SHIELD_MIN_HOLD) {
-        startAction(f, "shieldRelease");
-        return;
-      }
-      const p = presses(f, intent, ctx.frame);
-      if (p.jump) {
-        startAction(f, "jumpSquat");
-        return;
-      }
-      if (p.grab) {
-        startMove(f, "grab", "grab");
-        return;
-      }
-      if (p.attack && hasMove(ctx, "usmash")) {
-        startMove(f, "attack", "usmash");
-        return;
-      }
-      if (intent.y < 0) {
-        startAction(f, "spotDodge");
-        return;
-      }
-      if (intent.x !== 0) {
-        startAction(f, "roll");
-        kineticSetX(f, intent.x * Math.trunc(ROLL_DISTANCE / ROLL_FRAMES), "stop");
-        return;
-      }
-      return;
-    }
-
-    case "shieldRelease": {
-      if (f.actionFrame >= SHIELD_RELEASE_FRAMES) startAction(f, "stand");
-      else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "shieldStun": {
-      // Shieldstun reuses the `hitstun` counter: a shielding fighter is never
-      // simultaneously in hitstun, and the alternative is a field that exists to
-      // be zero 99% of the time and hashed on every frame regardless.
-      if (f.hitstun > 0) {
-        bufferPress(f, intent, ctx.frame);
-        return;
-      }
-      startAction(f, intent.shieldHeld ? "shield" : "shieldRelease");
-      return;
-    }
-
-    case "shieldBroken": {
-      if (f.hitstun > 0) return;
-      startAction(f, "stand");
-      return;
-    }
-
-    case "spotDodge": {
-      if (f.actionFrame >= SPOT_DODGE_FRAMES) startAction(f, "stand");
-      else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "roll": {
-      if (f.actionFrame >= ROLL_FRAMES) {
-        kineticSetX(f, 0, "stop");
-        startAction(f, "stand");
-      } else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "airDodge": {
-      const total = f.charge === 1 ? DIRECTIONAL_AIR_DODGE_FRAMES : AIR_DODGE_FRAMES;
-      if (f.actionFrame >= total) startAction(f, "fall");
-      else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
     /* ---------------------------------------------------------- offence -- */
     case "attack":
     case "special": {

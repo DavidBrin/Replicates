@@ -7,6 +7,7 @@
  */
 
 import { DAMAGE_STATUSES } from "./damage";
+import { GUARD_STATUSES } from "./guard";
 import { registerStatus } from "./kind";
 import type { FighterStatus } from "./kind";
 import { META_STATUSES } from "./meta";
@@ -14,6 +15,7 @@ import { META_STATUSES } from "./meta";
 export const ALL_STATUSES: readonly FighterStatus[] = [
   ...META_STATUSES,
   ...DAMAGE_STATUSES,
+  ...GUARD_STATUSES,
 ];
 
 for (const s of ALL_STATUSES) registerStatus(s);
