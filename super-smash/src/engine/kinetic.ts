@@ -174,11 +174,9 @@ export function kineticClear(f: FighterState): void {
   k.damageY = 0;
   k.fallFrames = 0;
   k.jumpInitial = 0;
-  k.speedUpFrame = 0;
-  k.speedUpFaf = 0;
-  k.speedUpMax = 0;
   k.stepX = 0;
   k.stepY = 0;
+  kineticDisarmSpeedUp(f);
   f.launchSpeed = 0;
   kineticSum(f);
 }

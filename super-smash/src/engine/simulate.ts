@@ -132,9 +132,11 @@ import {
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
 import "./status";
+import { struggleInGrab } from "./status/attack";
 import { emptyEvents } from "./types";
 import type {
   ActionState,
+  FighterAttributes,
   FighterDef,
   FighterState,
   GameState,
@@ -470,6 +472,14 @@ interface Candidate {
   /** Charge scaling already resolved: Samus's shot, or a charged smash. */
   readonly chargeScale: number;
   readonly destroyOnHit: boolean;
+  /**
+   * The only port this candidate may hit, or null for anyone it reaches. A
+   * pummel and the four throws hit the fighter their owner holds and nobody
+   * else, wherever that fighter is: the game's `set_catch_only_all` /
+   * `ATTACK_ABS` (Plan 5, Task 7 reads the script's own). `-1` is "the fighter
+   * held" when nobody is, which no port equals.
+   */
+  readonly onlyPort: number | null;
   suppressed: boolean;
 }
 
@@ -561,6 +571,11 @@ export function step(
       // mashing during the crunch works exactly as it does in the real game.
       f.hitlag -= 1;
       frozen[i] = true;
+      // A held fighter can still mash out of the grab during the freeze of a
+      // pummel (SmashWiki "Pummel": "opponents can still mash out of the
+      // attacker's grab during hitlag"). Only the mash counts: the frame itself
+      // does not, as nothing else in a freeze does (Plan 3, Task 14).
+      if (f.action === "grabbed" && f.grabbedBy >= 0) struggleInGrab(f, intent, stateCtx(i), false);
       const shiftedFromX = f.x;
       const shiftedFromY = f.y;
       if (intent.sdiX !== 0 || intent.sdiY !== 0) {
@@ -601,6 +616,8 @@ export function step(
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     if (frozen[i] || f.action === "dead") continue;
+    // A held fighter has no movement of its own: it is carried (5b below).
+    if (captorOf(s, f) !== null) continue;
     applyMovement(f, intents[i], stateCtx(i));
     preIntegrate[i] = { x: f.x, y: f.y };
     integrate(f);
@@ -612,6 +629,7 @@ export function step(
     const f = s.fighters[i];
     if (frozen[i] || f.action === "dead" || f.action === "respawnPlatform") continue;
     if (f.ledge !== null) continue; // hanging: the ledge holds you, not the floor
+    if (captorOf(s, f) !== null) continue; // held: the captor's floor is all it touches
 
     const before = launchBefore(f);
     const outcome = resolveCollision(
@@ -645,6 +663,17 @@ export function step(
         grabLedge(f, grab.platform, grab.side, pos.x, pos.y, frames);
       }
     }
+  }
+
+  /* -- 5b. a held fighter stays with its captor ------------------------------ */
+
+  // After phase 5, so the captor's position for the frame is final whatever the
+  // port order, and before the hit phase, so the box a pummel or a throw is
+  // measured from is where the victim is.
+  for (let i = 0; i < s.fighters.length; i++) {
+    const f = s.fighters[i];
+    const captor = f.action === "dead" ? null : captorOf(s, f);
+    if (captor !== null) holdAtCaptor(f, captor, defs[captor.port].attributes, defs[i].attributes);
   }
 
   /* -- 6. hitboxes: gather, clank, connect --------------------------------- */
@@ -728,6 +757,54 @@ export function step(
   return { state: s, events };
 }
 
+/* ---------------------------------------------------------------- holding -- */
+
+/**
+ * The fighter holding `f`, when the link is whole at both ends; null otherwise
+ * (not grabbed, or a stale index: `releaseGrab` guards the same way).
+ */
+function captorOf(s: GameState, f: FighterState): FighterState | null {
+  if (f.grabbedBy < 0) return null;
+  const captor = s.fighters[f.grabbedBy];
+  return captor !== undefined && captor.grabbing === f.port ? captor : null;
+}
+
+/**
+ * Put a held fighter at its captor, facing it, standing wherever the captor
+ * stands, with no motion of its own (Plan 3, Task 14).
+ *
+ * UNVERIFIED: where a held fighter stands. SmashWiki "Grab" says only that "the
+ * opponent is immobilized"; in the game the victim is pulled to the grabber's
+ * hand (CAPTURE_PULLED, then CAPTURE_WAIT attached to the `throw` joint), a bone
+ * position that arrives with Plan 4's bake. Until then: bodies touching, the two
+ * hurtbox radii apart, in front of the captor. The roster's legacy pummel and
+ * throw boxes were written for a victim about this close.
+ *
+ * Standing where the captor stands counts as touching the ground: a fighter
+ * caught in the air gets its ground jump and its air dodge back, as a landing
+ * gives them (UNVERIFIED for the air dodge: SmashWiki "Air dodge" lists "land").
+ * Positions are written, not velocities: `kineticSet` re-sums the energies.
+ */
+function holdAtCaptor(
+  f: FighterState,
+  captor: FighterState,
+  captorAttrs: FighterAttributes,
+  attrs: FighterAttributes,
+): void {
+  const ahead = captor.facing >= 0 ? 1 : -1;
+  f.x = captor.x + ahead * (captorAttrs.width + attrs.width);
+  f.y = captor.y;
+  f.grounded = captor.grounded;
+  f.platform = captor.platform;
+  f.ledge = null;
+  f.facing = -ahead;
+  kineticSet(f, 0, 0);
+  if (f.grounded) {
+    f.jumpsUsed = 0;
+    f.airDodged = false;
+  }
+}
+
 /* ------------------------------------------------------------- hit phases -- */
 
 function gatherHitboxes(
@@ -759,6 +836,7 @@ function gatherHitboxes(
         projectile: null,
         chargeScale: chargeMultiplier(f.charge),
         destroyOnHit: false,
+        onlyPort: f.action === "pummel" || f.action === "throw" ? f.grabbing : null,
         suppressed: false,
       });
     }
@@ -849,6 +927,7 @@ function appendProjectileCandidates(
       projectile: p,
       chargeScale: p.chargeScale,
       destroyOnHit: def.destroyOnHit === true,
+      onlyPort: null,
       suppressed: false,
     });
   }
@@ -946,19 +1025,26 @@ function resolveHits(
       if (c.suppressed || c.attacker === v) continue;
       if (c.projectile !== null && destroyed.has(c.projectile.instanceId)) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
-      if (!sweptHitboxOverlaps(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox)) continue;
-      // A box that only grazes the body — less than 0.1 deep — is a glancing
-      // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
-      // before the lowest-id pick, so it cannot shadow a deeper box of the same
-      // source. A grab and a hit that reaches a raised shield are not decided by
-      // the depth into the body (SmashWiki's glancing blow is hitbox on hurtbox),
-      // and keep the plain overlap test they always had.
-      if (
-        sweptHitboxPenetration(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
-        !c.hitbox.grabbing &&
-        !hitReachesShield(victim, defs[v], c)
-      ) {
-        continue;
+      if (c.onlyPort !== null) {
+        // Catch-only (a pummel, a throw): the fighter held, wherever the box is.
+        // Not geometry-tested: the game holds the victim at the box, and a legacy
+        // box sits there only for some of the roster (Plan 3, Task 14).
+        if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
+      } else {
+        if (!sweptHitboxOverlaps(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox)) continue;
+        // A box that only grazes the body — less than 0.1 deep — is a glancing
+        // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
+        // before the lowest-id pick, so it cannot shadow a deeper box of the same
+        // source. A grab and a hit that reaches a raised shield are not decided by
+        // the depth into the body (SmashWiki's glancing blow is hitbox on hurtbox),
+        // and keep the plain overlap test they always had.
+        if (
+          sweptHitboxPenetration(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
+          !c.hitbox.grabbing &&
+          !hitReachesShield(victim, defs[v], c)
+        ) {
+          continue;
+        }
       }
       const key = candidateKey(c);
       const incumbent = perSource.get(key);
@@ -986,6 +1072,7 @@ function resolveHits(
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
       if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, events);
+      else if (c.slot === "pummel" && c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, events);
       else applyHit(s, attacker, victim, defs[v], c, intents[v], events);
       if (c.destroyOnHit && c.projectile !== null) destroyed.add(c.projectile.instanceId);
     }
@@ -1197,6 +1284,69 @@ function hitReachesShield(victim: FighterState, victimDef: FighterDef, c: Candid
   return shieldCovers(victim, c.x) && circlesOverlap(c.x, c.y, c.hitbox.radius, bubble.x1, bubble.y1, bubble.r);
 }
 
+/** A move joins the staleness queue once per swing, on its first connection. */
+function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield: boolean): void {
+  if (slot === null || attacker.hitThisMove.length !== 1) return;
+  attacker.staleQueue.unshift(slot);
+  attacker.combat.staleShield.unshift(onShield);
+  if (attacker.staleQueue.length > STALE_QUEUE_LENGTH) attacker.staleQueue.length = STALE_QUEUE_LENGTH;
+  if (attacker.combat.staleShield.length > STALE_QUEUE_LENGTH) {
+    attacker.combat.staleShield.length = STALE_QUEUE_LENGTH;
+  }
+}
+
+/**
+ * A pummel: damage, a freeze for both fighters, and nothing else (Plan 3, Task
+ * 14; Plan 5, Task 7 keeps the name). The victim stays held: no knockback, no
+ * hitstun, no release and no status change, and the escape timer is untouched
+ * (SmashWiki "Grab": the grab time is "not affected by pummeling"; "Pummel":
+ * pummels "continue until the opponent is eventually thrown or breaks free"). It
+ * goes through the same staleness and 1v1 scaling as any hit, and joins the
+ * staleness queue (SmashWiki "Pummel": pummelling is how a stale move is
+ * restored). Being hit gives back the air dodge, as `applyHit` does.
+ */
+function applyHeldHit(
+  s: GameState,
+  attacker: FighterState,
+  victim: FighterState,
+  c: Candidate,
+  events: StepEvents,
+): void {
+  const hb = c.hitbox;
+  recordHit(c, attacker, victim.port);
+  const damage = effectiveDamage(s, attacker, c);
+  enterStaleQueue(attacker, c.slot, false);
+  victim.damage += damage;
+  victim.airDodged = false;
+  const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
+  victim.hitlag = lag;
+  attacker.hitlag = lag;
+  events.hits.push({
+    attacker: attacker.port,
+    victim: victim.port,
+    damage,
+    x: c.x,
+    y: c.y,
+    knockback: 0,
+    angle: 0,
+    hitboxId: hb.id,
+  });
+}
+
+/**
+ * The facing a launch is measured from. Everything launches the way its box
+ * points from the attacker's facing, except a back throw, which launches behind
+ * the thrower. UNVERIFIED: a stand-in for the game's `REVERSE_LR` (Plan 5, Task
+ * 7). The roster's legacy back-throw angles are mixed: Link's, Kirby's, Pikachu's
+ * and Marth's are authored behind already (over 90°), Mario's, Donkey Kong's,
+ * Samus's and Fox's point forward, so only a forward-pointing one is turned round.
+ */
+function launchFacing(c: Candidate, attacker: FighterState): number {
+  if (c.slot !== "bthrow") return attacker.facing;
+  const pointsForward = c.hitbox.angle < fx(90) || c.hitbox.angle > fx(270);
+  return pointsForward ? -attacker.facing : attacker.facing;
+}
+
 function applyHit(
   s: GameState,
   attacker: FighterState,
@@ -1247,14 +1397,15 @@ function applyHit(
     // and where "Double jump" restores jumps it names being grabbed outright,
     // which the air dodge list does not.
     //
-    // A hanging fighter is pulled off the ledge: `ledge` must not outlive the
-    // grab, or `applyMovement` would pin the released fighter in mid-air. As
-    // when a hit knocks one off, the ledge is locked out for a while, or the
-    // fighter would take it straight back, out of `grabbed`. UNVERIFIED: that
-    // being grabbed locks the ledge out (SmashWiki "Ledge" does not say whether
-    // a hanging fighter can be grabbed); `ledgeRegrabs` is left as it was: the
-    // wiki names hitstun and touching the ground as what resets that count, and
-    // being grabbed is neither.
+    // A hanging fighter is pulled off the ledge: it can be grabbed (SmashWiki
+    // "Grab", https://www.ssbwiki.com/Grab: "In Melee, characters hanging on
+    // ledges cannot be grabbed, but in every other game they can"), and `ledge`
+    // must not outlive the grab, or `applyMovement` would pin the released
+    // fighter in mid-air. As when a hit knocks one off, the ledge is locked out
+    // for a while, or the fighter would take it straight back. UNVERIFIED: that
+    // being grabbed locks the ledge out; `ledgeRegrabs` is left as it was: the
+    // wiki names hitstun and touching the ground as what resets that count
+    // (SmashWiki "Ledge"), and being grabbed is neither.
     if (victim.ledge !== null) victim.ledgeLockout = LEDGE_REGRAB_LOCKOUT_FRAMES;
     victim.ledge = null;
     startAction(victim, "grabbed");
@@ -1291,14 +1442,7 @@ function applyHit(
   // The hit must reach the shield bubble too: a worn shield shrinks to 15% of
   // its radius and a hit that misses it lands on the body — a shield poke.
   const onShield = hitReachesShield(victim, victimDef, c);
-  if (c.slot !== null && attacker.hitThisMove.length === 1) {
-    attacker.staleQueue.unshift(c.slot);
-    attacker.combat.staleShield.unshift(onShield);
-    if (attacker.staleQueue.length > STALE_QUEUE_LENGTH) attacker.staleQueue.length = STALE_QUEUE_LENGTH;
-    if (attacker.combat.staleShield.length > STALE_QUEUE_LENGTH) {
-      attacker.combat.staleShield.length = STALE_QUEUE_LENGTH;
-    }
-  }
+  enterStaleQueue(attacker, c.slot, onShield);
 
   /* ---- the shield path ---- */
   if (onShield) {
@@ -1422,7 +1566,7 @@ function applyHit(
   // A projectile launches along the way *it* is pointing, which is the facing its
   // thrower had when it left rather than whichever way they happen to be looking
   // now — the arrow does not turn round when Link does.
-  const sourceFacing = c.projectile !== null ? c.projectile.facing : attacker.facing;
+  const sourceFacing = c.projectile !== null ? c.projectile.facing : launchFacing(c, attacker);
 
   // Knockback stacking (Plan 3, Task 8): against a launch still live — in
   // hitstun, or parked in hitlag — from a *different* source, a weaker new
@@ -1585,7 +1729,8 @@ function resolveSmashBallHits(
   const ball = s.smashBall;
   const target = circle(ball.x, ball.y, SMASH_BALL_RADIUS);
   for (const c of candidates) {
-    if (c.suppressed) continue;
+    // A pummel or a throw hits the fighter held and nothing else.
+    if (c.suppressed || c.onlyPort !== null) continue;
     const attacker = s.fighters[c.attacker];
     if (alreadyHit(attacker, SMASH_BALL_TARGET)) continue;
     if (!sweptHitboxOverlaps(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, target)) continue;

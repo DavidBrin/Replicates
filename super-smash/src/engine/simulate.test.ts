@@ -609,8 +609,13 @@ function actionsFrom(ticks: readonly Tick[], from: number, port: number): string
   return seen;
 }
 
+// SmashWiki "Pummel" (https://www.ssbwiki.com/Pummel): pummels continue "until the
+// opponent is eventually thrown or breaks free from the grab"; "like other attacks,
+// pummels inflict hitlag". The Plan 2 characterization of this test pinned a pummel
+// that released the hold and launched the victim ("how the engine behaves, not a
+// claim about Ultimate"); Plan 3 Task 14 (fix round 1) replaced it.
 describe("a connecting pummel", () => {
-  it("hits the held fighter once: damage, a freeze on both, and the hold is let go", () => {
+  it("hits the held fighter once: damage, a freeze on both, and the hold stays", () => {
     const ticks = holdThen(Btn.Attack, 40);
 
     const holding = ticks[HOLD_INPUT_TICK - 1].state;
@@ -619,27 +624,30 @@ describe("a connecting pummel", () => {
 
     const hit = ticks[HOLD_INPUT_TICK];
     expect(hit.hits).toEqual([
-      { attacker: 0, victim: 1, damage: 5591, x: 24576, y: 24576, knockback: 122880, angle: 0, hitboxId: 0 },
+      { attacker: 0, victim: 1, damage: 5591, x: 24576, y: 24576, knockback: 0, angle: 0, hitboxId: 0 },
     ]);
     const [a, b] = hit.state.fighters;
-    expect(a).toMatchObject({ action: "pummel", move: "pummel", grabbing: -1, hitlag: 6, hitThisMove: [1] });
-    expect(b).toMatchObject({ action: "hitstun", grabbedBy: -1, damage: 5591, hitlag: 6, hitstun: 11 });
-    // Today a pummel is an ordinary hit, so it ends the hold (`applyHit` calls
-    // `releaseGrab`); that is how the engine behaves, not a claim about Ultimate.
+    expect(a).toMatchObject({ action: "pummel", move: "pummel", grabbing: 1, hitlag: 6, hitThisMove: [1] });
+    expect(b).toMatchObject({ action: "grabbed", grabbedBy: 0, damage: 5591, hitlag: 6, hitstun: 0 });
   });
 
-  it("launches the victim along the ground when the freeze ends, and the holder finishes the pummel", () => {
+  it("launches nobody when the freeze ends, and the holder finishes the pummel and holds on", () => {
     const ticks = holdThen(Btn.Attack, 40);
     const release = ticks.findIndex((t, i) => i > HOLD_INPUT_TICK && t.state.fighters[1].hitlag === 0);
     expect(release).toBe(HOLD_INPUT_TICK + 6);
-    // The pummel launches at 0° (30 knockback → 3690 at full speed); a grounded
-    // victim leaves a 0° launch at 0.8 of it (rubendal `groundedZeroAngle`): 2952.
-    expect(ticks[release].state.fighters[1]).toMatchObject({ vx: 2952, vy: 0, grounded: true, hitstun: 11 });
+    expect(ticks[release].state.fighters[1]).toMatchObject({
+      action: "grabbed",
+      grabbedBy: 0,
+      vx: 0,
+      vy: 0,
+      grounded: true,
+      hitstun: 0,
+    });
 
-    // The pummel's 10 frames, then the hold it came from, which is gone.
-    expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["pummel", "grabHold", "stand"]);
-    expect(ticks[39].state.fighters[0]).toMatchObject({ action: "stand", grabbing: -1, grabTimer: 0, move: null });
-    expect(ticks[39].state.fighters[1]).toMatchObject({ action: "stand", grabbedBy: -1 });
+    // The pummel's 10 frames, then the hold it came from, which is still there.
+    expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["pummel", "grabHold"]);
+    expect(ticks[39].state.fighters[0]).toMatchObject({ action: "grabHold", grabbing: 1 });
+    expect(ticks[39].state.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
   });
 });
 

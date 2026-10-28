@@ -30,10 +30,11 @@ import {
   shieldstunExact,
 } from "./knockback";
 import { attackerShieldPushback, shieldDamage, shieldPushback } from "./shield";
+import { kineticSetX } from "./kinetic";
 import { resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
-import { GRAB_MIN_FRAMES, GRAB_RELEASE_IMMUNITY, grabHoldFrames } from "./states";
+import { GRAB_MASH_BUTTON, GRAB_MIN_FRAMES, GRAB_RELEASE_IMMUNITY, grabHoldFrames } from "./states";
 import { Btn } from "./types";
 import type {
   FighterAttributes,
@@ -2031,9 +2032,10 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
     return s;
   }
 
-  // SmashWiki "Ledge" (https://www.ssbwiki.com/Ledge) says a hanging fighter is
-  // intangible for a while and does not say it cannot be grabbed: once that has
-  // passed, the grab connects, and the ledge must not outlive it.
+  // SmashWiki "Grab" (https://www.ssbwiki.com/Grab): "In Melee, characters hanging
+  // on ledges cannot be grabbed, but in every other game they can". A hanger is
+  // intangible for a while (SmashWiki "Ledge"); once that has passed the grab
+  // connects, and the ledge must not outlive it. The lockout is UNVERIFIED.
   it("pulls a hanging fighter off the ledge, locks the ledge out and keeps the regrab count", () => {
     const { before, at } = caught(hanging());
     expect(before.fighters[1].ledge).toEqual({ platform: 0, side: 1 });
@@ -2095,41 +2097,313 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
     });
   });
 
-  describe("the hold does not outlive the victim's struggle", () => {
-    // Nothing pins a caught fighter to its captor yet (there is no grab
-    // repositioning in the engine), so one caught in the air falls and lands.
-    // The escape timer only runs while the victim is `grabbed`: a victim who has
-    // left that status with the link intact would hold its captor in `grabHold`
-    // for ever, which the captor's own 60-frame timer used to prevent.
-    it("lets the captor go once a victim caught in the air has landed", () => {
-      const frames = play(airborne(2), 60, GRAB);
-      const landed = frames.findIndex((f) => f.state.fighters[1].grounded);
-      expect(landed).toBeGreaterThan(0);
-      const last = frames.at(-1)!.state;
-      expect(last.fighters[0]).toMatchObject({ action: "stand", grabbing: -1 });
-      expect(last.fighters[1].grabbedBy).toBe(-1);
+  /** Three fighters, as `standing()` places two: fighter 2 is 12 units behind fighter 0, facing it. */
+  function standing3(ctx: SimContext = ctxFor()): GameState {
+    const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+    for (const f of s.fighters) {
+      f.action = "stand";
+      f.actionFrame = 0;
+      f.grounded = true;
+      f.platform = 0;
+      f.y = 0;
+      f.intangible = 0;
+    }
+    s.fighters[0].x = 0;
+    s.fighters[0].facing = 1;
+    s.fighters[1].x = fx(8);
+    s.fighters[1].facing = -1;
+    s.fighters[2].x = fx(-12);
+    s.fighters[2].facing = 1;
+    return s;
+  }
+
+  /** Fighter 0 already holding fighter 1, whose escape timer reads `timer`, 30 frames into the hold. */
+  function holdingPair(s: GameState, timer: number): GameState {
+    const [a, v] = s.fighters;
+    a.action = "grabHold";
+    a.grabbing = 1;
+    v.action = "grabbed";
+    v.actionFrame = 30;
+    v.grabbedBy = 0;
+    v.grabTimer = timer;
+    return s;
+  }
+
+  // The two bodies touching: both are 4 wide in these fixtures (UNVERIFIED, see `holdAtCaptor`).
+  const REACH = fx(8);
+
+  describe("a held fighter stays at its captor (fix round 1)", () => {
+    function heldFrames(s: GameState, n: number): { at: number; frames: Frame[] } {
+      const frames = play(s, n, GRAB);
+      const at = frames.findIndex((f) => f.state.fighters[1].grabbedBy === 0);
+      expect(at, "the grab should connect").toBeGreaterThan(0);
+      return { at, frames };
+    }
+
+    it("holds a fighter caught in the air at the captor's side, standing, for the whole hold", () => {
+      const { at, frames } = heldFrames(airborne(2), 110);
+      expect(frames[at].state.fighters[1].grounded).toBe(false);
+      for (const f of frames.slice(at + 1, at + 90)) {
+        const [a, v] = f.state.fighters;
+        expect(v).toMatchObject({ action: "grabbed", grabbedBy: 0, grounded: true, y: a.y, facing: -a.facing });
+        expect(v.x).toBe(a.x + a.facing * REACH);
+        // Standing where the captor stands is touching the ground: the jumps and the air dodge are back.
+        expect(v).toMatchObject({ jumpsUsed: 0, airDodged: false });
+      }
+      // The whole 90 frames, as a fighter caught on the ground gets, and then it lets go.
+      expect(frames[at + 89].state.fighters[1].grabbedBy).toBe(0);
+      expect(frames[at + 90].state.fighters[1].grabbedBy).toBe(-1);
     });
-  });
 
-  describe("pummelling", () => {
-    const PUMMEL: FighterDef = {
-      ...BASE_DEF,
-      moves: { ...BASE_DEF.moves, pummel: move("pummel", { totalFrames: 10, hitboxes: [] }) },
-    };
+    it("lets the captor pummel and then throw a fighter caught in the air", () => {
+      const def: FighterDef = {
+        ...BASE_DEF,
+        moves: {
+          ...BASE_DEF.moves,
+          pummel: move("pummel", { totalFrames: 10, hitboxes: [hitbox({ startFrame: 1, endFrame: 1, x: fx(40), damage: fx(2) })] }),
+          fthrow: move("fthrow", { totalFrames: 20, hitboxes: [hitbox({ startFrame: 4, endFrame: 4, x: fx(4), damage: fx(6), baseKnockback: fx(60), knockbackGrowth: fx(70) })] }),
+        },
+      };
+      const ctx = ctxFor(def);
+      const at = play(airborne(2), 12, GRAB, ctx).findIndex((f) => f.state.fighters[1].grabbedBy === 0);
+      const inputs = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Grab : i === at + 4 ? Btn.Attack : i === at + 30 ? Btn.Right : 0, 0];
+      const frames = play(airborne(2), at + 80, inputs, ctx);
+      const hits = frames.flatMap((f) => f.events.hits);
+      // The pummel first (knockback 0), then the throw (it launches).
+      expect(hits).toHaveLength(2);
+      expect(hits[0].knockback).toBe(0);
+      expect(hits[1].knockback).toBeGreaterThan(0);
+      const v = frames.at(-1)!.state.fighters[1];
+      expect(v.grabbedBy).toBe(-1);
+      expect(v.damage).toBeGreaterThan(hits[0].damage);
+    });
 
-    // SmashWiki "Grab": the hold is "not affected by pummeling".
-    it("does not stop the escape timer", () => {
-      const ctx = ctxFor(PUMMEL);
-      const s = standing(ctx);
+    it("holds a ledge hanger at the captor rather than dropping it off the stage, and does not KO it", () => {
+      const { at, frames } = heldFrames(hanging(), 100);
+      for (const f of frames.slice(at + 1, at + 89)) {
+        const [a, v] = f.state.fighters;
+        expect(v).toMatchObject({ action: "grabbed", ledge: null, grounded: true, y: 0 });
+        expect(v.x).toBe(a.x + REACH);
+      }
+      expect(frames.flatMap((f) => f.events.kos)).toEqual([]);
+      expect(frames.at(-1)!.state.fighters[1].stocks).toBe(3);
+    });
+
+    it("follows a captor that slides, frame for frame", () => {
+      const held = caught(standing()).at;
+      kineticSetX(held.fighters[0], fx(1.5));
+      const frames = play(held, 10, () => [0, 0]);
+      for (const f of frames) {
+        const [a, v] = f.state.fighters;
+        expect(v.x).toBe(a.x + a.facing * REACH);
+        expect(v.vx).toBe(0);
+      }
+      expect(frames.at(-1)!.state.fighters[0].x).toBeGreaterThan(held.fighters[0].x + fx(3));
+    });
+
+    // The backstop: nothing leaves `grabbed` on its own now, but a hold must not depend on it.
+    it("still ends a hold whose victim has left `grabbed`, and that victim is immune to grabs", () => {
+      const s = standing();
       const [a, v] = s.fighters;
       a.action = "grabHold";
       a.grabbing = 1;
-      v.action = "grabbed";
       v.grabbedBy = 0;
-      v.grabTimer = 100;
-      const frames = play(s, 12, (i) => [i === 2 ? Btn.Attack : 0, 0], ctx);
-      expect(frames.map((f) => f.state.fighters[0].action)).toContain("pummel");
-      expect(frames.at(-1)!.state.fighters[1].grabTimer).toBe(100 - 12);
+      v.grabTimer = 50;
+      const [first] = play(s, 1, () => [0, 0]);
+      expect(first.state.fighters[0]).toMatchObject({ action: "stand", grabbing: -1 });
+      // The escape timer is the victim's and goes with the link.
+      expect(first.state.fighters[1]).toMatchObject({ grabbedBy: -1, grabTimer: 0 });
+      // It may already have ticked once in the frame it was granted.
+      expect(first.state.fighters[1].combat.grabImmune).toBeGreaterThan(GRAB_RELEASE_IMMUNITY - 3);
+    });
+  });
+
+  describe("which releases leave 60 frames of grab immunity (UNVERIFIED which kinds count)", () => {
+    const THROWS: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        // A throw with no box to land (the backstop), and one whose box lands.
+        fthrow: move("fthrow", { totalFrames: 5, hitboxes: [] }),
+        bthrow: move("bthrow", { totalFrames: 20, hitboxes: [hitbox({ startFrame: 4, endFrame: 4, x: fx(2) })] }),
+      },
+    };
+
+    it("is given when the thrower's animation ends without a hit (the throw backstop)", () => {
+      const ctx = ctxFor(THROWS);
+      const s = standing(ctx);
+      const [a, v] = s.fighters;
+      a.action = "throw";
+      a.move = "fthrow";
+      a.grabbing = 1;
+      v.action = "thrown";
+      v.grabbedBy = 0;
+      const after = play(s, 8, () => [0, 0], ctx).at(-1)!.state;
+      expect(after.fighters[1].grabbedBy).toBe(-1);
+      expect(after.fighters[1].combat.grabImmune).toBeGreaterThan(40);
+    });
+
+    it("is not given by a throw that hits: the victim is launched, and may be chain-grabbed", () => {
+      const ctx = ctxFor(THROWS);
+      const s = holdingPair(standing(ctx), 100);
+      const frames = play(s, 30, (i) => [i === 2 ? Btn.Left : 0, 0], ctx);
+      expect(frames.flatMap((f) => f.events.hits)).toHaveLength(1);
+      const v = frames.at(-1)!.state.fighters[1];
+      expect(v.grabbedBy).toBe(-1);
+      expect(v.combat.grabImmune).toBe(0);
+    });
+
+    it("is not given when the captor is hit: the victim is freed, not released", () => {
+      const s = holdingPair(standing3(), 100);
+      // Fighter 2 jabs fighter 0 from behind; the box reaches no one else.
+      const frames = play(s, 12, (i) => [0, 0, i === 0 ? Btn.Attack : 0]);
+      const last = frames.at(-1)!.state;
+      expect(last.fighters[0].hitstun).toBeGreaterThan(0);
+      expect(last.fighters[1]).toMatchObject({ grabbedBy: -1 });
+      expect(last.fighters[1].combat.grabImmune).toBe(0);
+    });
+  });
+
+  // SmashWiki "Grab" (https://www.ssbwiki.com/Grab): "From Brawl onward, the formula is
+  // changed to 90 + 1.7p rounded down", and the grab time is "not affected by pummeling".
+  it("lets a held fighter at 0% go exactly 90 frames after the catch, with 60 frames of immunity", () => {
+    const frames = play(standing(), 120, GRAB);
+    const at = frames.findIndex((f) => f.state.fighters[1].grabbedBy === 0);
+    expect(frames[at + 89].state.fighters[1]).toMatchObject({ grabbedBy: 0, action: "grabbed" });
+    const freed = frames[at + 90].state.fighters[1];
+    expect(freed).toMatchObject({ grabbedBy: -1, action: "stand" });
+    expect(freed.combat.grabImmune).toBe(GRAB_RELEASE_IMMUNITY);
+    expect(frames[at + 91].state.fighters[0]).toMatchObject({ action: "stand", grabbing: -1 });
+  });
+
+  describe("pummelling (SmashWiki \"Pummel\", https://www.ssbwiki.com/Pummel)", () => {
+    // The box is 40 units out: it can only land by being catch-only.
+    const PUMMEL: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        pummel: move("pummel", {
+          totalFrames: 10,
+          hitboxes: [hitbox({ startFrame: 1, endFrame: 1, x: fx(40), damage: fx(8), angle: fx(361), setKnockback: true })],
+        }),
+      },
+    };
+    const pummelCtx = ctxFor(PUMMEL);
+    /** Fighter 0 pummels on frame 2 (it lands on 3); fighter 1 presses attack on the frames `mash` names. */
+    const PUMMEL_INPUT = (mash: (i: number) => boolean) => (i: number) =>
+      [i === 2 ? Btn.Attack : 0, mash(i) ? Btn.Attack : 0] as const;
+    const NO_MASH = () => false;
+
+    function pummelled(timer: number, mash: (i: number) => boolean = NO_MASH, n = 30): { hit: number; frames: Frame[] } {
+      const frames = play(holdingPair(standing(pummelCtx), timer), n, PUMMEL_INPUT(mash), pummelCtx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      expect(hit, "the pummel should land").toBeGreaterThan(0);
+      return { hit, frames };
+    }
+
+    it("damages the held fighter and keeps it held: no knockback, no hitstun, no release", () => {
+      const { hit, frames } = pummelled(100);
+      expect(frames[hit].events.hits).toEqual([
+        expect.objectContaining({ attacker: 0, victim: 1, knockback: 0, angle: 0, hitboxId: 0 }),
+      ]);
+      const [a, v] = frames[hit].state.fighters;
+      expect(v.damage).toBe(frames[hit].events.hits[0].damage);
+      expect(v.damage).toBeGreaterThan(0);
+      expect(v).toMatchObject({ action: "grabbed", grabbedBy: 0, hitstun: 0 });
+      expect(a).toMatchObject({ action: "pummel", grabbing: 1 });
+      // "Like other attacks, pummels inflict hitlag": a shared freeze.
+      expect(v.hitlag).toBeGreaterThan(0);
+      expect(a.hitlag).toBe(v.hitlag);
+      // Nothing was launched, now or when the freeze ends.
+      const end = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+      expect(frames[end].state.fighters[1]).toMatchObject({ vx: 0, vy: 0, grounded: true, grabbedBy: 0 });
+    });
+
+    // SmashWiki "Grab": the grab time is "not affected by pummeling". The hit leaves
+    // the timer as the clock had it; the freeze, like everything in one, holds it.
+    it("leaves the escape timer to the clock: the hit does not touch it, and the freeze holds it", () => {
+      const { hit, frames } = pummelled(100);
+      const timer = (i: number): number => frames[i].state.fighters[1].grabTimer;
+      expect(timer(hit)).toBe(timer(hit - 1) - 1);
+      const lag = frames[hit].state.fighters[1].hitlag;
+      for (let i = hit + 1; i <= hit + lag; i++) expect(timer(i)).toBe(timer(hit));
+      expect(timer(hit + lag + 1)).toBe(timer(hit) - 1);
+    });
+
+    // SmashWiki "Pummel": "opponents can still mash out of the attacker's grab during hitlag".
+    it("counts a mash made during the freeze, and only the mash", () => {
+      const quiet = pummelled(100).frames;
+      const hit = quiet.findIndex((f) => f.events.hits.length > 0);
+      const lag = quiet[hit].state.fighters[1].hitlag;
+      // Presses on the freeze's even frames (a press needs a frame without it before).
+      const mashing = (i: number): boolean => i > hit && i <= hit + lag && i % 2 === 0;
+      const { frames } = pummelled(100, mashing, hit + lag + 2);
+      const presses = Array.from({ length: lag }, (_, k) => hit + 1 + k).filter(mashing).length;
+      expect(presses).toBeGreaterThan(0);
+      expect(frames[hit + lag].state.fighters[1].grabTimer).toBe(
+        quiet[hit].state.fighters[1].grabTimer - Math.floor((presses * GRAB_MASH_BUTTON) / 10),
+      );
+    });
+
+    it("joins the staleness queue, and the second pummel is staled", () => {
+      const s = holdingPair(standing(pummelCtx), 300);
+      const frames = play(s, 50, (i) => [i === 2 || i === 30 ? Btn.Attack : 0, 0], pummelCtx);
+      const hits = frames.flatMap((f) => f.events.hits);
+      expect(hits).toHaveLength(2);
+      expect(hits[1].damage).toBeLessThan(hits[0].damage);
+      expect(frames.at(-1)!.state.fighters[0].staleQueue).toEqual(["pummel", "pummel"]);
+    });
+
+    it("hits the fighter held and nobody standing in the box", () => {
+      const s = holdingPair(standing3(pummelCtx), 100);
+      // Fighter 2 stands where the box is (fighter 0 + 40), well clear of fighter 0.
+      s.fighters[2].x = fx(40);
+      s.fighters[2].facing = -1;
+      const frames = play(s, 8, (i) => [i === 2 ? Btn.Attack : 0, 0, 0], pummelCtx);
+      const hits = frames.flatMap((f) => f.events.hits);
+      expect(hits.map((h) => h.victim)).toEqual([1]);
+      expect(frames.at(-1)!.state.fighters[2].damage).toBe(0);
+    });
+  });
+
+  describe("throws land on the held fighter (SSBU throws are `ATTACK_ABS`: no collision)", () => {
+    const throwing = (slot: "fthrow" | "bthrow", angle: number, x: number): FighterDef => ({
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        [slot]: move(slot, { totalFrames: 20, hitboxes: [hitbox({ startFrame: 4, endFrame: 4, x, angle, damage: fx(6), baseKnockback: fx(60), knockbackGrowth: fx(70) })] }),
+      },
+    });
+
+    /** Fighter 0, facing right, throws fighter 1 with `button`; the launch's horizontal speed once the freeze ends. */
+    function launch(def: FighterDef, button: Btn): { hits: number; vx: number } {
+      const ctx = ctxFor(def);
+      const frames = play(holdingPair(standing(ctx), 100), 30, (i) => [i === 2 ? button : 0, 0], ctx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      expect(hit, "the throw should land").toBeGreaterThan(0);
+      const out = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+      return { hits: frames.flatMap((f) => f.events.hits).length, vx: frames[out].state.fighters[1].vx };
+    }
+
+    it("lands wherever its box is, once, and launches along the box's angle", () => {
+      const out = launch(throwing("fthrow", fx(45), fx(40)), Btn.Right);
+      expect(out.hits).toBe(1);
+      expect(out.vx).toBeGreaterThan(0);
+    });
+
+    // Plan 5, Task 7 replaces this with the game's `REVERSE_LR`; the roster's own
+    // back-throw angles are mixed (Mario's 45° points forward, Marth's 140° behind).
+    it.each([
+      ["a box authored pointing forward (45°)", 45],
+      ["a box authored pointing behind (135°)", 135],
+    ])("sends a back throw behind the thrower: %s", (_name, angle) => {
+      const out = launch(throwing("bthrow", fx(angle), fx(-4)), Btn.Left);
+      expect(out.hits).toBe(1);
+      expect(out.vx).toBeLessThan(0);
+    });
+
+    it("leaves a forward throw's direction alone when its box points forward", () => {
+      expect(launch(throwing("fthrow", fx(135), fx(4)), Btn.Right).vx).toBeLessThan(0);
     });
   });
 });

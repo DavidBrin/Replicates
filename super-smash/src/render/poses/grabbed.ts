@@ -6,14 +6,14 @@ import { deg } from "../skeleton";
  *
  * ## A grab is a timer, and this clip is its only clock face
  *
- * Ultimate holds a fighter for `90 + 1.7×damage` frames and takes about 14.4 of
- * them off per mashed input, floored at 19 (SmashWiki, *Grab*) — so the victim
- * is never passive, and the game says so: mashing draws wind-blade particles
- * around them that thicken with the mash rate, and the fighter flashes yellow in
- * the last three seconds of the hold (SmashWiki, *Mashing*, *Grab*). Neither cue
- * exists here (the sim has the hold, `grabHoldFrames`, and the mash, not the
- * look), so the struggle is the whole signal: it is the only thing on screen
- * that says this ends.
+ * Ultimate holds a fighter for `90 + 1.7×damage` frames and takes 14.4 of them
+ * off per mashed button press and 8 per stick input, floored at 19 (SmashWiki,
+ * *Grab*) — so the victim is never passive, and the game says so: mashing draws
+ * wind-blade particles around them that thicken with the mash rate, and the
+ * fighter flashes yellow in the last three seconds of the hold (SmashWiki,
+ * *Mashing*, *Grab*). Neither cue exists here (the sim has the hold,
+ * `grabHoldFrames`, and the mash, not the look), so the struggle is the whole
+ * signal: it is the only thing on screen that says this ends.
  *
  * ## Five uneven beats, nineteen frames
  *

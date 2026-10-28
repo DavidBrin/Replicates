@@ -35,6 +35,22 @@ import type { Intent, StateContext } from "../states";
 import type { FighterState, MoveSlot } from "../types";
 import type { FighterStatus } from "./kind";
 
+/**
+ * `f`'s own status ended the hold, not a hit: the victim goes free and is immune
+ * to grabs for 60 frames, as one that breaks out is (Plan 3, Task 14).
+ *
+ * UNVERIFIED which releases give the immunity: SmashWiki "Grab" says only
+ * "invulnerability to grabs for around one second after being released from
+ * them". Here: a break-out or the timer running out (`struggleInGrab`), and a
+ * hold its captor's status ends with the link intact (this); not a throw's hit
+ * (Ultimate has chain grabs) and not a captor that was hit or KO'd.
+ */
+function releaseHeld(f: FighterState, fighters: readonly FighterState[]): void {
+  const victim = f.grabbing >= 0 ? fighters[f.grabbing] : undefined;
+  if (victim !== undefined && victim.grabbedBy === f.port) victim.combat.grabImmune = GRAB_RELEASE_IMMUNITY;
+  releaseGrab(f, fighters);
+}
+
 /** ATTACK and SPECIAL run the same body: the move in `f.move` decides everything. */
 function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
@@ -102,13 +118,14 @@ export const STATUS_CATCH_WAIT: FighterStatus = {
   action: "grabHold",
   kineticType: "FALL",
   main(f, intent, ctx) {
-    // The hold is over when the link is broken, or when the victim has left
-    // `grabbed` with it intact (a fighter caught in the air lands: nothing pins
-    // a caught fighter to its captor). The escape timer is the victim's and only
-    // runs in `grabbed`, so with no one counting a hold nobody throws would
-    // never end; the captor's own timer used to be that backstop (Task 14).
+    // The hold is over when the link is broken, or, as a backstop, when the
+    // victim has left `grabbed` with it intact. The escape timer is the victim's
+    // and only runs in `grabbed`, so with no one counting a hold nobody throws
+    // would never end; the captor's own timer used to be that guarantee (Task
+    // 14). Nothing should leave a held fighter's status now that it is held at
+    // its captor, but a hold must not depend on that.
     if (f.grabbing < 0 || ctx.fighters[f.grabbing]?.action !== "grabbed") {
-      releaseGrab(f, ctx.fighters);
+      releaseHeld(f, ctx.fighters);
       startAction(f, "stand");
       return;
     }
@@ -165,11 +182,29 @@ export const STATUS_THROW: FighterStatus = {
       // victim was taken away mid-animation) would otherwise end with the
       // link still tying two fighters together. The animation finishing is
       // the backstop: nobody is held once the throw is over.
-      releaseGrab(f, ctx.fighters);
+      releaseHeld(f, ctx.fighters);
       startAction(f, f.grounded ? "stand" : "fall");
     }
   },
 };
+
+/**
+ * One frame of the struggle (Plan 3, Task 14): the timer runs down a frame at a
+ * time (`elapsed`) and faster for every press, pummels or not; no escape before
+ * frame 19. `elapsed` is false in a freeze, where mashing still counts and the
+ * frame does not (SmashWiki "Pummel": "opponents can still mash out of the
+ * attacker's grab during hitlag"; UNVERIFIED that the clock itself stops).
+ */
+export function struggleInGrab(f: FighterState, intent: Intent, ctx: StateContext, elapsed: boolean): void {
+  const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
+  f.grabTimer -= (elapsed ? 1 : 0) + mashFrames(f.combat, buttonPresses(intent), sticks, GRAB_MASH_BUTTON, GRAB_MASH_STICK);
+  if (f.grabTimer > 0 || f.actionFrame < GRAB_MIN_FRAMES) return;
+  // A grab release: the holder's own status sees `grabbing < 0` and stands.
+  releaseGrab(f, ctx.fighters);
+  f.combat.mash = 0;
+  f.combat.grabImmune = GRAB_RELEASE_IMMUNITY;
+  startAction(f, f.grounded ? "stand" : "fall");
+}
 
 export const STATUS_CAPTURE_WAIT: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_CAPTURE_WAIT",
@@ -180,16 +215,7 @@ export const STATUS_CAPTURE_WAIT: FighterStatus = {
       startAction(f, f.grounded ? "stand" : "fall");
       return;
     }
-    // The struggle (Plan 3, Task 14): the timer runs down a frame at a time and
-    // faster for every press, pummels or not; no escape before frame 19.
-    const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
-    f.grabTimer -= 1 + mashFrames(f.combat, buttonPresses(intent), sticks, GRAB_MASH_BUTTON, GRAB_MASH_STICK);
-    if (f.grabTimer > 0 || f.actionFrame < GRAB_MIN_FRAMES) return;
-    // A grab release: the holder's own status sees `grabbing < 0` and stands.
-    releaseGrab(f, ctx.fighters);
-    f.combat.mash = 0;
-    f.combat.grabImmune = GRAB_RELEASE_IMMUNITY;
-    startAction(f, f.grounded ? "stand" : "fall");
+    struggleInGrab(f, intent, ctx, true);
   },
 };
 

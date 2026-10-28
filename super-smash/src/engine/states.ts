@@ -707,14 +707,15 @@ export function finishLedgeOption(f: FighterState, ctx: StateContext): void {
 export function releaseGrab(f: FighterState, fighters: readonly FighterState[]): void {
   if (f.grabbing >= 0) {
     const victim = fighters[f.grabbing];
-    if (victim !== undefined && victim.grabbedBy === f.port) victim.grabbedBy = -1;
+    if (victim !== undefined && victim.grabbedBy === f.port) {
+      victim.grabbedBy = -1;
+      // The escape timer is the victim's (Plan 3, Task 14): it goes with the link.
+      victim.grabTimer = 0;
+    }
   }
   if (f.grabbedBy >= 0) {
     const holder = fighters[f.grabbedBy];
-    if (holder !== undefined && holder.grabbing === f.port) {
-      holder.grabbing = -1;
-      holder.grabTimer = 0;
-    }
+    if (holder !== undefined && holder.grabbing === f.port) holder.grabbing = -1;
   }
   f.grabbing = -1;
   f.grabbedBy = -1;

@@ -86,14 +86,30 @@
  * after it back by about 65. Fox mashes out instead: five button presses on
  * 122-130 take 5 x 14.4 = 72 frames off the 90, so the hold lets go on its 19th
  * frame (140), the shortest a hold can be. The immunity ends on 200 and the second
- * grab connects on 206, as it did. Nothing after 200 moved; the trace differs from
- * 117 on only because its digest is a running hash.
+ * grab connects on 206, as it did.
+ *
+ * Task 14's fix round 1 (a held fighter stays at its captor; a pummel and the
+ * throws are catch-only) moved the second hold. Fox is pulled to 4 units from Mario
+ * on every catch, so the throw launches him from 4 units out, not 8, and he lands
+ * about 3 units short of where he did. The pummel on 217 now lands (1.6%, and a
+ * 7-frame freeze for both): Mario is in the pummel until 234, so the forward throw is
+ * pressed on 235, not 233, and Fox's hitstun ends on 291, not 289. Fox's walk back
+ * toward the middle is therefore 3 frames shorter (it ends on 305, and he turns on
+ * 306, not 308), which leaves him where he was on 313 (x 38) and the jabs on his
+ * shield, the shield break (649), the smash (747) and the forward tilt (1006) on
+ * their frames. The extra 1.6% sends the smash's tumble 5 units further left (x -21,
+ * not -16, techs on 789, not 787, the hang on 864, not 863) and every Fox after it 5
+ * units behind where he was, so his step in ahead of the fireball is 12 frames, not
+ * 4, which puts the fireball (1578) and the short-hop nair (1635) back on their
+ * frames. The tumble after the nair lands on 1673 and Fox is up on 1743. The trace
+ * differs from frame 122 on (the catch now moves Fox), and its digest, a running
+ * hash, stays different after it.
  *
  * Each step's comment gives the frame it starts on, and the events it names
- * (Fox breaking free on 140, the shield break on 649, the techs on 787 and 1029,
- * the hangs on 863, 1193, 1299 and 1400, the hits on 747, 1006, 1578 and 1635,
- * Fox down on 1671, time up on 2014). All were checked against a run after Plan 3
- * Task 12's fix round.
+ * (Fox breaking free on 140, the pummel on 217, the throw on 247, the shield break
+ * on 649, the techs on 789 and 1029, the hangs on 864, 1193, 1299 and 1400, the hits
+ * on 747, 1006, 1578 and 1635, Fox down on 1673, time up on 2014). All were checked
+ * against a run after Plan 3 Task 14's fix round 1.
  */
 
 import { Btn } from "@/engine/types";
@@ -149,22 +165,23 @@ const STEPS: readonly ScriptStep[] = [
   [1, 0, A], //                   130: the fifth
   [1, 0, 0],
   [55, 0, 0], //                  132: Fox breaks free on 140, then both stand
-  [4, R | SOFT, 0], //            187: in to about 8: a throw reaches, a pummel does not
+  [4, R | SOFT, 0], //            187: in a little: Fox stands 4 from him, caught and held
   [10, 0, 0],
-  // Grab, pummel (it whiffs at this range), forward throw. Fox holds a soft up
+  // Grab, pummel, forward throw. The pummel lands on 217 and Fox stays held (Task
+  // 14, fix round 1): the freeze keeps Mario in it until 234. Fox holds a soft up
   // through the throw; it does not tumble, so (Task 4) the stick bends nothing.
   [1, G, 0], //                   201: grab
   [15, 0, 0],
-  [1, A, 0], //                   217: pummel, then back to grabHold
-  [15, 0, 0],
-  [1, R, SOFT | U], //            233: forward throw: Fox is thrown, then launched
-  [40, 0, SOFT | U],
+  [1, A, 0], //                   217: pummel (it lands), then back to grabHold on 234
+  [17, 0, 0],
+  [1, R, SOFT | U], //            235: forward throw: Fox is thrown, then launched
+  [38, 0, SOFT | U],
   // Task 3: the smash below launches a grounded Fox at 38°, so the fight moves to
   // the left of the stage. Mario still walks in to about 8 for the jabs, past Fox,
   // who walks back toward the middle and turns round to shield from him.
-  [34, R | SOFT, L | SOFT], //    274: Fox walks left (from 289, when his hitstun ends)
-  [1, R | SOFT, R | SOFT], //     308: Fox turns back to face Mario
-  [3, R | SOFT, 0],
+  [32, R | SOFT, L | SOFT], //    274: Fox walks left (from 291, when his hitstun ends)
+  [1, R | SOFT, R | SOFT], //     306: Fox turns back to face Mario
+  [5, R | SOFT, 0],
   [1, L | SOFT, 0], //            312: Mario turns round to face Fox
   [21, 0, 0],
   // Fox shields, then spot-dodges out of it.
@@ -185,12 +202,12 @@ const STEPS: readonly ScriptStep[] = [
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
   [46, 0, SOFT | U], //           734: tumble (747); Mario can walk again on 801
-  [1, 0, S | SOFT | U], //        780: Fox presses shield 7 frames before he lands...
-  [19, 0, SOFT | U], //           781: ...and techs in place on 787 (his launch is 2.16, under 3), then stands
+  [1, 0, S | SOFT | U], //        780: Fox presses shield 9 frames before he lands...
+  [19, 0, SOFT | U], //           781: ...and techs in place on 789 (his launch is slow enough, under 3), then stands
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
-  [65, R | SOFT, 0], //           800: ledgeHang on 863 (he turns from left to right first)
+  [65, R | SOFT, 0], //           800: ledgeHang on 864 (he turns from left to right first)
   [19, 0, 0],
   [1, J, 0], //                   884: ledgeJump, then jump
   [18, L, 0], //                  885: drift back over the stage
@@ -227,8 +244,8 @@ const STEPS: readonly ScriptStep[] = [
   [17, R | SOFT, 0], //          1385: back onto the ledge (the hang begins on 1400)
   [13, 0, 0],
   [1, S, 0], //                  1415: ledgeRoll
-  [4, 0, R | SOFT], //           1416: Fox steps in a little, ahead of the fireball
-  [46, 0, 0],
+  [12, 0, R | SOFT], //          1416: Fox steps in, ahead of the fireball (12 frames, not 4: he is further left)
+  [38, 0, 0],
   [1, J, 0], //                  1466: a tap is a short hop
   [6, 0, 0],
   [1, S, 0], //                  1473: airDodge, landing inside it: landingLag

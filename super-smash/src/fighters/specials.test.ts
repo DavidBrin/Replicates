@@ -24,7 +24,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn } from "@/engine/types";
-import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
+import type { FighterState, GameState, InputFrame, MatchRules, StepEvents } from "@/engine/types";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { FIGHTERS } from "./index";
 import { STAGES } from "@/stages";
@@ -289,5 +289,101 @@ describe("a thrown fighter is thrown", () => {
     expect(last.grabbedBy).toBe(-1);
     expect(last.action).not.toBe("thrown");
     expect(last.action).not.toBe("grabbed");
+  });
+});
+
+/**
+ * Every fighter's pummel and four throws, through the real roster (Plan 3, Task
+ * 14, fix round 1). Before it, a pummel landed only if the victim happened to be
+ * caught within about 5 units, and then released and launched the victim; a back
+ * throw never landed for anyone, Samus's throws never landed (she grabs from 10
+ * units out) and an up or down throw landed only within 4 to 6 units. SSBU's
+ * throws are `ATTACK_ABS` and its pummel is catch-only (`set_catch_only_all`):
+ * both hit the held fighter, with no collision test (SmashWiki "Pummel",
+ * https://www.ssbwiki.com/Pummel: pummels "continue until the opponent is
+ * eventually thrown or breaks free").
+ */
+describe("every fighter's pummel and throws land on the fighter held", () => {
+  /** `holder` holding `victim`, both on Final Destination's floor, the holder facing right. */
+  function holding(holder: string, victim: string): GameState {
+    const state = createInitialState("finalDestination", [{ defId: holder }, { defId: victim }], RULES, 0x70a1);
+    const [a, v] = state.fighters;
+    for (const f of state.fighters) {
+      f.action = "stand";
+      f.actionFrame = 0;
+      f.grounded = true;
+      f.platform = 0;
+      f.y = fx(0);
+      f.intangible = 0;
+      f.invincible = 0;
+    }
+    a.x = fx(0);
+    a.facing = 1;
+    a.action = "grabHold";
+    a.grabbing = v.port;
+    v.x = fx(5);
+    v.facing = -1;
+    v.action = "grabbed";
+    v.actionFrame = 30;
+    v.grabbedBy = a.port;
+    v.grabTimer = 400;
+    return state;
+  }
+
+  /** Fighter 0 presses `button` on tick 2; every tick is returned. */
+  function press(state: GameState, button: number, ticks: number): { state: GameState; events: StepEvents }[] {
+    let s = state;
+    let prev: [number, number] = [0, 0];
+    const out: { state: GameState; events: StepEvents }[] = [];
+    for (let i = 0; i < ticks; i++) {
+      const inputs: [number, number] = [i === 2 ? button : 0, 0];
+      const r = step(s, inputs, { prevInputs: prev });
+      s = r.state;
+      prev = inputs;
+      out.push(r);
+    }
+    return out;
+  }
+
+  const victimFor = (id: string): string => (id === "mario" ? "kirby" : "mario");
+
+  it.each(FIGHTERS.map((f) => f.id))("%s: the pummel damages the fighter held and does not release it", (id) => {
+    const ticks = press(holding(id, victimFor(id)), Btn.Attack, 30);
+    const hit = ticks.findIndex((t) => t.events.hits.length > 0);
+    expect(hit, "the pummel should land").toBeGreaterThan(0);
+    expect(ticks[hit].events.hits[0]).toMatchObject({ attacker: 0, victim: 1, knockback: 0 });
+    const v = ticks[hit].state.fighters[1];
+    expect(v.damage).toBeGreaterThan(0);
+    expect(v).toMatchObject({ action: "grabbed", grabbedBy: 0, hitstun: 0 });
+    expect(ticks.at(-1)!.state.fighters[1]).toMatchObject({ grabbedBy: 0, vx: 0 });
+  });
+
+  const THROWS = [
+    ["fthrow", Btn.Right],
+    ["bthrow", Btn.Left],
+    ["uthrow", Btn.Up],
+    ["dthrow", Btn.Down],
+  ] as const;
+
+  describe.each(FIGHTERS.map((f) => [f.id, f] as const))("%s", (id, def) => {
+    it.each(THROWS)("%s lands once and launches the way its box points (a back throw, behind)", (slot, button) => {
+      const ticks = press(holding(id, victimFor(id)), button, 140);
+      const hits = ticks.flatMap((t) => t.events.hits);
+      expect(hits, "the throw should land").toHaveLength(1);
+      const hit = ticks.findIndex((t) => t.events.hits.length > 0);
+      const box = def.moves[slot]!.hitboxes.find((h) => h.id === hits[0].hitboxId)!;
+      // The victim is no longer held, and is launched when the freeze ends.
+      const out = ticks.findIndex((t, i) => i > hit && t.state.fighters[1].hitlag === 0);
+      const v = ticks[out].state.fighters[1];
+      expect(v.grabbedBy).toBe(-1);
+      expect(v.hitstun).toBeGreaterThan(0);
+      // The holder faces right, so "forward" is +x.
+      const cos = Math.cos((toFloat(box.angle) * Math.PI) / 180);
+      if (slot === "bthrow") expect(v.vx).toBeLessThan(0);
+      else if (Math.abs(cos) < 0.05) expect(Math.abs(v.vx)).toBeLessThan(Math.abs(v.vy) * 0.2 + 1);
+      else expect(Math.sign(v.vx)).toBe(Math.sign(cos));
+      // The thrower finishes the throw and stands.
+      expect(ticks.at(-1)!.state.fighters[0]).toMatchObject({ action: "stand", grabbing: -1 });
+    });
   });
 });
