@@ -117,7 +117,7 @@ const MATCHES: readonly Match[] = [
 /**
  * Every `ActionState` the five matches must visit between them: all 42. A
  * `Record` rather than a list, so a new state is a compile error here until
- * somebody pins it. Measured 2026-10-27 at 954ed97: the CPU matches reach 33,
+ * somebody pins it. Measured 2026-10-27, again after Task 21: the CPU matches reach 33,
  * the script 41 — everything but `entering`, which Final Destination's floor-level
  * spawn turns into a landing on frame 1, and which the Battlefield match keeps.
  */
@@ -173,6 +173,14 @@ const MUST_VISIT: Record<ActionState, true> = {
  */
 type SoftPath = "walk" | "tilt" | "DI";
 const SOFT_PATHS: readonly SoftPath[] = ["walk", "tilt", "DI"];
+
+/**
+ * The kinds of hit the scripted match lands (`hitKind`), measured from a run
+ * after Task 21: the forward throw, a forward smash and a soft forward tilt, the
+ * neutral special's fireball (a projectile), and the short-hop neutral air that
+ * deals 0.85×. The jabs on Fox's shield and his KO are checked by count.
+ */
+const SCRIPT_HITS: readonly string[] = ["fthrow", "fsmash", "ftilt", "neutralB", "nair (short hop)"];
 const TILTS: readonly MoveSlot[] = ["ftilt", "utilt", "dtilt"];
 const DIRECTIONS = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
 
@@ -255,6 +263,16 @@ function softPaths(before: FighterState, after: FighterState, input: InputFrame,
   return out;
 }
 
+/**
+ * What landed a hit, named by the attacker's move slot. A short-hop aerial is its
+ * own kind (it deals 0.85×, SPEC §4), and a hit with no move left on the attacker
+ * is a projectile that outlived it.
+ */
+function hitKind(attacker: FighterState): string {
+  const move = attacker.move ?? "projectile";
+  return attacker.shortHop ? `${move} (short hop)` : move;
+}
+
 interface Played {
   readonly digests: number[];
   readonly hits: number;
@@ -262,6 +280,8 @@ interface Played {
   readonly kos: number;
   readonly actions: ReadonlySet<ActionState>;
   readonly soft: ReadonlySet<SoftPath>;
+  /** Every kind of hit landed, as `hitKind` names it. */
+  readonly hitKinds: ReadonlySet<string>;
 }
 
 function play(match: Match): Played {
@@ -278,6 +298,7 @@ function play(match: Match): Played {
   const digests: number[] = [];
   const actions = new Set<ActionState>();
   const soft = new Set<SoftPath>();
+  const hitKinds = new Set<string>();
   let hits = 0;
   let shieldHits = 0;
   let kos = 0;
@@ -292,12 +313,13 @@ function play(match: Match): Played {
     state = out.state;
     prev = inputs;
     hits += out.events.hits.length;
+    for (const h of out.events.hits) hitKinds.add(hitKind(out.state.fighters[h.attacker]));
     shieldHits += out.events.shieldHits.length;
     kos += out.events.kos.length;
     roll = mixInt(roll, digest(state));
     if (frame % EVERY === 0) digests.push(roll >>> 0);
   }
-  return { digests, hits, shieldHits, kos, actions, soft };
+  return { digests, hits, shieldHits, kos, actions, soft, hitKinds };
 }
 
 describe("engine golden trace", () => {
@@ -305,8 +327,8 @@ describe("engine golden trace", () => {
   const all = MATCHES.map((m) => played.get(m.name)!);
 
   // A trace of idle fighters would pass every refactor and prove nothing.
-  // Measured 2026-10-27 at 954ed97, CPU matches then the script: hits
-  // 16/14/12/20 and 4, shield hits 1/0/1/2 and 3, KOs 1/3/1/0 and 1.
+  // Measured 2026-10-27 after Task 21 (air friction), CPU matches then the script:
+  // hits 13/15/19/19 and 5, shield hits 2/0/0/2 and 3, KOs 1/4/0/1 and 1.
   function expectCombat(): void {
     const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);
     for (const p of cpu) expect(p.hits).toBeGreaterThan(5);
@@ -323,15 +345,28 @@ describe("engine golden trace", () => {
     expect(SOFT_PATHS.filter((p) => !soft.has(p)), "Btn.Soft paths no match takes").toEqual([]);
   }
 
-  // Both run when regenerating too, so a degenerate trace cannot be recorded.
+  // A re-tuned step can keep every state and still stop landing a hit: air
+  // friction (Task 21) left Fox out of the short-hop nair's reach while the
+  // script still reached `jump`, `attack` and `land`. So the script's hits are
+  // pinned by kind, from a run, not just its states.
+  function expectScriptHits(): void {
+    const script = played.get(SCRIPTED_MATCH.name)!;
+    expect(SCRIPT_HITS.filter((k) => !script.hitKinds.has(k)), "hits the scripted match no longer lands").toEqual([]);
+    expect(script.shieldHits, "the three jabs on Fox's shield").toBeGreaterThanOrEqual(3);
+    expect(script.kos, "Fox's self-destruct").toBeGreaterThanOrEqual(1);
+  }
+
+  // All run when regenerating too, so a degenerate trace cannot be recorded.
   it("exercises combat, not an idle screen", expectCombat);
   it("visits every action state and every soft-stick path", expectCoverage);
+  it("lands every kind of hit the scripted match lands", expectScriptHits);
 
   if (process.env.UPDATE_GOLDEN === "1") {
     it("writes the golden trace", () => {
       // A failed test above does not stop this one, so it checks again first.
       expectCombat();
       expectCoverage();
+      expectScriptHits();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;
       mkdirSync(dirname(FIXTURE), { recursive: true });

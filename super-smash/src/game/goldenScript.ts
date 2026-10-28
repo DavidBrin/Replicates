@@ -103,7 +103,7 @@ const STEPS: readonly ScriptStep[] = [
   [55, 0, 0], //                  946: ...that lands inside itself: landingLag
   // Soft turns a fresh direction plus attack into a tilt.
   [1, L | SOFT, 0], //           1001: facing left since the ledge
-  [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash
+  [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006
   [40, 0, 0],
   [12, D, 0], //                 1043: crouchStart, crouch
   [12, 0, 0], //                 1055: crouchEnd
@@ -132,10 +132,13 @@ const STEPS: readonly ScriptStep[] = [
   [1, S, 0], //                  1473: airDodge, landing inside it: landingLag
   [80, 0, 0],
   [1, B, 0], //                  1554: neutral special: a fireball that hits Fox
-  [60, 0, 0],
+  // Air friction left Fox at x 32 after the fireball, out of nair range, so he
+  // walks in: 13 frames of walk from 1602 put him at about x 54 when the nair lands.
+  [47, 0, 0],
+  [13, 0, R | SOFT], //          1602: Fox walks in toward Mario
   // Attack inside jumpsquat is a short-hop aerial, which deals 0.85× damage.
   [1, J, 0], //                  1615: jumpSquat...
-  [1, A, 0], //                  1616: ...short-hop neutral air, into Fox
+  [1, A, 0], //                  1616: ...short-hop neutral air: hits Fox on 1621
   [60, 0, 0],
   [5, S, 0], //                  1677: shield...
   [1, S | L, 0], //              1682: ...roll

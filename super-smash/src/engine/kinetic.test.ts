@@ -8,6 +8,7 @@ import {
   kineticAdopt,
   kineticClear,
   kineticEndMotion,
+  airControlX,
   kineticExec,
   kineticJump,
   kineticLand,
@@ -611,5 +612,88 @@ describe("a momentum hold cut short by a landing", () => {
       expect([f.kinetic.motionX, f.kinetic.motionY, f.vx], `${i} frames after settling`).toEqual([0, 0, 0]);
     }
     expect(state.fighters[0].x).toBe(x);
+  });
+});
+
+/* ------------------------------------------------- air friction (Task 21) -- */
+
+describe("air friction (SmashWiki Air friction, https://www.ssbwiki.com/Air_friction)", () => {
+  // "Air friction only applies when the player is not holding the Control Stick
+  // in a horizontal direction." `air_brake_x` is the calculator's AirFriction.
+  const P = { ...PARAMS, air_brake_x: fx(0.0075) };
+  const NEUTRAL = { stickX: 0, params: P, holdVertical: false };
+  const accel = P.air_accel_x_add + P.air_accel_x_mul;
+
+  describe("airControlX", () => {
+    it("bleeds a rightward drift by air_brake_x with the stick neutral", () => {
+      expect(airControlX(fx(1), 0, P)).toBe(fx(1) - P.air_brake_x);
+    });
+
+    it("bleeds a leftward drift by air_brake_x too, toward zero from below", () => {
+      expect(airControlX(-fx(1), 0, P)).toBe(-fx(1) + P.air_brake_x);
+    });
+
+    it("stops at zero rather than reversing", () => {
+      const small = P.air_brake_x - 1;
+      expect(airControlX(small, 0, P)).toBe(0);
+      expect(airControlX(-small, 0, P)).toBe(0);
+      expect(airControlX(0, 0, P)).toBe(0);
+    });
+
+    it("applies air acceleration, not friction, when the stick opposes the drift", () => {
+      // "If the player is attempting to slow down, air acceleration applies instead."
+      expect(airControlX(fx(0.5), -1, P)).toBe(fx(0.5) - accel);
+      expect(airControlX(-fx(0.5), 1, P)).toBe(-fx(0.5) + accel);
+    });
+
+    it("leaves a drift alone while the stick holds it at air speed", () => {
+      expect(airControlX(P.air_speed_x_stable, 1, P)).toBe(P.air_speed_x_stable);
+      expect(airControlX(-P.air_speed_x_stable, -1, P)).toBe(-P.air_speed_x_stable);
+    });
+
+    it("is the identity at air_brake_x 0, which is every legacy fighter", () => {
+      expect(PARAMS.air_brake_x).toBe(0);
+      expect(airControlX(fx(1), 0, PARAMS)).toBe(fx(1));
+      expect(airControlX(-fx(1), 0, PARAMS)).toBe(-fx(1));
+    });
+  });
+
+  describe("an airborne STOP carrier", () => {
+    const stop = (k: Partial<KineticState>, over: Partial<FighterState>): FighterState => {
+      const f = body(k, { grounded: false, ...over });
+      kineticExec(f, "GROUND_STOP", NEUTRAL);
+      return f;
+    };
+
+    it("bleeds by exactly air_brake_x and leaves DAMAGE and MOTION alone", () => {
+      const f = stop({ stopX: fx(1), damageX: fx(0.5), motionX: fx(0.25) }, {});
+      expect(f.kinetic.stopX).toBe(fx(1) - P.air_brake_x);
+      expect(f.kinetic.damageX).toBe(fx(0.5));
+      expect(f.kinetic.motionX).toBe(fx(0.25));
+    });
+
+    it("bleeds a leftward carrier toward zero and stops there", () => {
+      expect(stop({ stopX: -fx(1) }, {}).kinetic.stopX).toBe(-fx(1) + P.air_brake_x);
+      expect(stop({ stopX: P.air_brake_x - 1 }, {}).kinetic.stopX).toBe(0);
+    });
+
+    it("still brakes by ground_brake on the ground, not air_brake_x", () => {
+      const f = stop({ stopX: fx(1) }, { grounded: true });
+      expect(f.kinetic.stopX).toBe(fx(1) - P.ground_brake);
+      expect(P.ground_brake).not.toBe(P.air_brake_x);
+    });
+  });
+
+  it("a fighter in hitstun is not slowed: the launch decays on its own energy (SmashWiki Knockback)", () => {
+    // Deliberate: the Knockback page says air friction is disabled while a launch
+    // decays (see the DAMAGE energy's tests), so `kineticReel` bleeds neither
+    // carrier. The Air friction page's note on ignored input in hitstun can be
+    // read the other way; D55 records which page the engine follows.
+    const f = body({ controlX: fx(1), stopX: fx(0.5) }, { grounded: false });
+    kineticLaunch(f, fx(3), fx(4), fx(5));
+    f.kinetic.controlX = fx(1);
+    f.kinetic.stopX = fx(0.5);
+    kineticReel(f, P, false);
+    expect([f.kinetic.controlX, f.kinetic.stopX]).toEqual([fx(1), fx(0.5)]);
   });
 });

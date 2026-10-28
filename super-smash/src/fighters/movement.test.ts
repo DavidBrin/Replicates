@@ -175,8 +175,14 @@ describe("midair jumps (SmashWiki Midair jump, https://www.ssbwiki.com/Midair_ju
 
 describe("air friction (SmashWiki Air friction, https://www.ssbwiki.com/Air_friction)", () => {
   // "Air friction only applies when the player is not holding the Control Stick
-  // in a horizontal direction … If the player is attempting to slow down, air
+  // in a horizontal direction", and the page adds that input ignored in hitstun
+  // counts as not holding it. "If the player is attempting to slow down, air
   // acceleration applies instead." Values: calculator `AirFriction` (air_brake_x).
+  //
+  // The engine deliberately does NOT slow a fighter in hitstun: SmashWiki
+  // "Knockback" says air friction is disabled while a launch decays, so
+  // `kineticReel` bleeds only the launch (pinned in `kinetic.test.ts`). The two
+  // pages read differently on hitstun; D55 will record which one the engine follows.
 
   /** A full hop drifting right for 20 frames (17 of them airborne), then `input` for `n` frames. */
   function drift(id: RosterId, input: InputFrame, n: number): FighterState[] {
