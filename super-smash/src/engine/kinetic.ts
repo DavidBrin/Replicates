@@ -368,13 +368,12 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
       break;
     }
     case "DASH":
+      // UNVERIFIED: the initial dash speed is held for the dash's first frame only.
       k.controlX =
-        f.actionFrame <= 1
-          ? f.facing * p.dash_speed
-          : approach(k.controlX, f.facing * p.run_speed_max, p.ground_brake * RUN_ACCEL_FACTOR);
+        f.actionFrame <= 1 ? f.facing * p.dash_speed : runControlX(k.controlX, f.facing, p, input.stickMag ?? ONE);
       break;
     case "RUN":
-      k.controlX = approach(k.controlX, f.facing * p.run_speed_max, p.ground_brake * RUN_ACCEL_FACTOR);
+      k.controlX = runControlX(k.controlX, f.facing, p, input.stickMag ?? ONE);
       break;
     case "FALL":
     case "AIR_ESCAPE":
@@ -550,4 +549,15 @@ function jumpFrame(f: FighterState, p: FighterParams): boolean {
     k.jumpInitial = 0;
   }
   return false;
+}
+
+/**
+ * Dash and run acceleration (SmashWiki "Dash"): below run speed, accelerate by
+ * `run_accel_add` plus `run_accel_mul` scaled by deflection; above it (an
+ * initial dash faster than the run), brake by traction down to it.
+ */
+export function runControlX(vx: number, dir: number, p: FighterParams, mag: number): number {
+  const target = dir * p.run_speed_max;
+  if (vx * dir > 0 && abs(vx) > p.run_speed_max) return approach(vx, target, p.ground_brake);
+  return approach(vx, target, p.run_accel_add + mul(p.run_accel_mul, mag));
 }

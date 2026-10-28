@@ -485,3 +485,30 @@ describe("walking (calculator WalkBaseAcceleration / WalkAddAcceleration / WalkS
     expect(frames.at(-1)!.vx).toBe(Math.trunc(p.walk_speed_max / 2));
   });
 });
+
+describe("dash into run (SmashWiki Dash, https://www.ssbwiki.com/Dash)", () => {
+  // "there exist two acceleration values for each character's initial dash
+  // speed until it reaches their run speed: a base value … and an additional
+  // value that is scaled based on how much the control stick is tilted … if it
+  // is higher, the character's traction value is used to decrease it down to
+  // their run speed." Values: calculator DashInitialSpeed, RunBase/AddAcceleration,
+  // RunSpeed, GroundFriction. UNVERIFIED: that `dash_speed` is held for exactly one
+  // frame before the acceleration rule takes over (the page does not say how long).
+
+  it.each(IDS)("%s leaves its initial dash speed by the published rule, and settles at run speed", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    // Forty frames: long enough to reach run speed, short enough to stay on the stage.
+    const frames = play(standing(id), hold(Btn.Right, 40));
+    expect(frames.every((f) => f.grounded)).toBe(true);
+    const d = frames.findIndex((f) => f.action === "dashStart");
+    const v = frames.slice(d).map((f) => f.vx);
+    expect(v[0]).toBe(p.dash_speed);
+    const next = v.find((x) => x !== p.dash_speed)!;
+    const want =
+      p.dash_speed > p.run_speed_max
+        ? Math.max(p.dash_speed - p.ground_brake, p.run_speed_max)
+        : Math.min(p.dash_speed + p.run_accel_add + p.run_accel_mul, p.run_speed_max);
+    expect(next).toBe(want);
+    expect(v.at(-1)).toBe(p.run_speed_max);
+  });
+});

@@ -344,7 +344,9 @@ function legacy(type: KineticType, f: FighterState, stickX: number, holdVertical
 }
 
 describe("kineticExec reproduces the legacy single-velocity movement", () => {
-  const TYPES: KineticType[] = ["FALL", "GROUND_STOP", "WALK", "DASH", "RUN", "MOTION", "AIR_ESCAPE", "NONE"];
+  // DASH and RUN left the legacy rule in Task 23 (SmashWiki "Dash"; see
+  // fighters/movement.test.ts). The rest still match it exactly.
+  const TYPES: KineticType[] = ["FALL", "GROUND_STOP", "WALK", "MOTION", "AIR_ESCAPE", "NONE"];
   it("for every kinetic type, carrier split, stick and situation", () => {
     const q12 = fc.integer({ min: -fx(6), max: fx(6) });
     fc.assert(
