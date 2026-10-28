@@ -22,6 +22,12 @@ export interface CombatState {
    */
   launchFaf: number;
   /**
+   * The parked launch is from a set-weight hit, so it falls by set weight's
+   * own gravity for its first frames and is never balloon fall. Set on contact,
+   * handed to `kineticLaunch` when the freeze ends (Plan 3, Task 16b).
+   */
+  launchSetWeight: boolean;
+  /**
    * Who launched this fighter last: the attacker's port, or 1000 + a
    * projectile's instance id (`candidateKey` in `simulate.ts`), −1 for nobody.
    * Knockback stacks only between different sources (Plan 3, Task 8).
@@ -57,6 +63,7 @@ export function emptyCombat(): CombatState {
   return {
     staleShield: [],
     launchFaf: 0,
+    launchSetWeight: false,
     launchSource: -1,
     mash: 0,
     comboHits: 0,
@@ -73,6 +80,7 @@ export function cloneCombat(c: CombatState): CombatState {
   return {
     staleShield: c.staleShield.slice(),
     launchFaf: c.launchFaf,
+    launchSetWeight: c.launchSetWeight,
     launchSource: c.launchSource,
     mash: c.mash,
     comboHits: c.comboHits,

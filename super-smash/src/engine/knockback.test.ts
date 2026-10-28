@@ -87,15 +87,9 @@ describe("computeKnockback", () => {
     expect(toFloat(kb)).toBeCloseTo(47.64, 1);
   });
 
-  it("ignores percent, weight and rage for a set-knockback hitbox", () => {
-    const base = { damage: fx(12), baseKnockback: fx(60), knockbackGrowth: fx(100), setKnockback: true };
-    const low = computeKnockback({ ...base, percent: 0, weight: 68 });
-    const high = computeKnockback({ ...base, percent: fx(200), weight: 135, rage: fx(1.1) });
-    expect(low).toBe(fx(60));
-    expect(high).toBe(fx(60));
-  });
-
-  it("applies the crouch-cancel and grounded-meteor multipliers", () => {
+  // The grounded-meteor 0.8 is not a knockback multiplier: it is a bounce on the
+  // launch, after hitstun is decided (Plan 3, Task 16b; `combat.test.ts`).
+  it("applies the crouch-cancel multiplier", () => {
     const args = {
       percent: fx(50),
       damage: fx(12),
@@ -108,10 +102,14 @@ describe("computeKnockback", () => {
       toFloat(plain) * 0.85,
       1,
     );
-    expect(toFloat(computeKnockback({ ...args, groundedMeteor: true }))).toBeCloseTo(
-      toFloat(plain) * 0.8,
-      1,
-    );
+  });
+
+  it("weighs every victim as 100 for a set-weight hitbox", () => {
+    // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback, revision 2063895):
+    // `w` "is set to 100 if the attack is weight independent".
+    const args = { percent: fx(60), damage: fx(12), baseKnockback: fx(30), knockbackGrowth: fx(100) };
+    expect(computeKnockback({ ...args, weight: 135, setWeight: true })).toBe(computeKnockback({ ...args, weight: 100 }));
+    expect(computeKnockback({ ...args, weight: 68, setWeight: true })).toBe(computeKnockback({ ...args, weight: 100 }));
   });
 
   it("rises monotonically with the victim's percent", () => {
@@ -134,6 +132,97 @@ describe("computeKnockback", () => {
           const light = Math.min(a, b);
           const heavy = Math.max(a, b);
           return kbAgainst(light, percent) >= kbAgainst(heavy, percent);
+        },
+      ),
+    );
+  });
+});
+
+/* --------------------------------------- set (fixed) knockback, Task 16b -- */
+
+describe("set knockback is weight-based (Plan 3, Task 16b)", () => {
+  /**
+   * rubendal SSBU-Calculator `WeightBasedKB`
+   * (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L211-L213):
+   * `((((1 + wbkb/2) · (200/(weight+100)) · 1.4) + 18) · kbg/100) + bkb`, `wbkb` the
+   * script's `fkb`. Every number below is that function's output, run on these inputs.
+   * Q12 truncates `200/(w+100)` to 1/4096, about 0.03% of the result at worst, so the
+   * pinned values hold to 0.05 knockback and the sweep to 0.05%.
+   */
+  const fixed = (fkb: number, kbg: number, weight: number, bkb = 0, more: object = {}) =>
+    toFloat(
+      computeKnockback({
+        percent: 0,
+        damage: fx(1),
+        weight,
+        baseKnockback: fx(fkb),
+        knockbackGrowth: fx(kbg),
+        setKnockback: true,
+        ...(bkb !== 0 ? { setKnockbackBase: fx(bkb) } : {}),
+        ...more,
+      }),
+    );
+
+  it("is rubendal's WeightBasedKB: a pummel's fkb 30 against Mario, Bowser and a weight of 100", () => {
+    expect(fixed(30, 100, 98)).toBeCloseTo(40.62626, 1);
+    expect(fixed(30, 100, 135)).toBeCloseTo(37.06383, 1);
+    expect(fixed(30, 100, 100)).toBeCloseTo(40.4, 1);
+  });
+
+  it("scales by growth: Fox's up air (fkb 30, kbg 130) against Mario", () => {
+    expect(fixed(30, 130, 98)).toBeCloseTo(52.81414, 1);
+  });
+
+  // `bkb` beside a non-zero `fkb` is added after the weight-based term: Pikachu's
+  // neutral air (generated/pikachu.ts `game_attackairn`: fkb 45, bkb 15, kbg 80, set
+  // weight) and Thunder (rubendal/ssbu data, patch 13.0.1, `pikachu_kaminari` "Regular":
+  // FKB 125, BKB 55, KBG 60; https://github.com/rubendal/ssbu/blob/b97bd3370c13eb34f40aad208e3527a2935c13a9/data/patch/13.0.1/character/Pikachu/data.json).
+  it("adds the box's own bkb: Pikachu's neutral air and Thunder", () => {
+    expect(fixed(45, 80, 79, 15, { setWeight: true })).toBeCloseTo(55.72, 1);
+    expect(fixed(125, 60, 79, 55)).toBeCloseTo(125.39777, 1);
+    expect(fixed(125, 60, 135, 55)).toBeCloseTo(111.19574, 1);
+  });
+
+  // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback, revision 2063895),
+  // Formula: "If the move has a fixed knockback value set, then d is set to that
+  // value, and p is always 10 ... independent of current damage, damage dealt, and
+  // ignores stale-move negation's knockback modifiers"; Set knockback: "In Ultimate,
+  // the effect of both types of knockback modifiers on set knockback was removed
+  // altogether" (launch rates, and "rage, crouch cancelling, or smash attack
+  // charging bonus"). SmashWiki "Rage" (revision 2065362): rage "no longer applies
+  // to attacks that use set knockback".
+  it("ignores the victim's percent, the hit's damage, rage and crouch cancel", () => {
+    const one = fixed(60, 100, 98);
+    expect(fixed(60, 100, 98, 0, { percent: fx(150), damage: fx(25) })).toBe(one);
+    expect(fixed(60, 100, 98, 0, { rage: fx(1.1) })).toBe(one);
+    expect(fixed(60, 100, 98, 0, { crouchCancel: true })).toBe(one);
+  });
+
+  // SmashWiki "Knockback", Set knockback: "While damage is not a factor for set
+  // knockback, the character's weight still is".
+  it("still depends on the victim's weight and on the growth, which a flat value never did", () => {
+    expect(fixed(60, 100, 135)).toBeLessThan(fixed(60, 100, 98));
+    expect(fixed(60, 100, 68)).toBeGreaterThan(fixed(60, 100, 98));
+    expect(fixed(60, 50, 98)).toBeLessThan(fixed(60, 100, 98));
+    // Not the flat 60 the engine used to return.
+    expect(fixed(60, 100, 98)).toBeCloseTo(61.83838, 1);
+  });
+
+  it("weighs every victim as 100 under set weight", () => {
+    expect(fixed(150, 100, 135, 0, { setWeight: true })).toBe(fixed(150, 100, 100));
+    expect(fixed(150, 100, 135, 0, { setWeight: true })).toBeCloseTo(124.4, 1);
+  });
+
+  it("agrees with the reference port across fkb, bkb, growth and weight", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 250 }),
+        fc.integer({ min: 0, max: 100 }),
+        fc.integer({ min: 0, max: 200 }),
+        fc.integer({ min: 60, max: 140 }),
+        (fkb, bkb, kbg, weight) => {
+          const theirs = ref.knockback({ targetPercentBefore: 0, damage: 1, weight, kbg, bkb, fkb });
+          return Math.abs(fixed(fkb, kbg, weight, bkb) - theirs) <= theirs * 0.0005 + 0.001;
         },
       ),
     );

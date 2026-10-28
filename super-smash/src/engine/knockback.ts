@@ -62,6 +62,7 @@ import {
   LSI_DEAD_ZONE,
   BALLOON_ANGLE_MIN,
   BALLOON_ANGLE_MAX,
+  SET_WEIGHT,
 } from "./constants";
 import type { Hitbox, MoveSlot } from "./types";
 
@@ -88,7 +89,18 @@ const HUNDRED = fx(100);
 const RAGE_SPAN = RAGE_CAP - RAGE_START;
 /** A crouching victim takes 0.85× knockback. SPEC §4. Exact: see `Ratio`. */
 export const CROUCH_CANCEL_MULTIPLIER: Ratio = [17, 20];
-/** A meteor that connects with a grounded victim is cut to 0.8×. SPEC §4. */
+/**
+ * A meteor that connects with a grounded victim bounces off the floor, and its
+ * launch leaves at 0.8× the speed (SPEC §4; rubendal SSBU-Calculator
+ * `parameters.bounce` 0.8, which `Knockback.bounce` applies to the launch speeds,
+ * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L1122-L1127).
+ * It is not a knockback multiplier: "Because the bounce occurs after the hit, the
+ * amount of hitstun suffered is not reduced a corresponding amount" (SmashWiki
+ * "Knockback", https://www.ssbwiki.com/Knockback, revision 2063895), so the
+ * caller applies it to the launch and takes hitstun from the knockback before it
+ * (Plan 3, Task 16b). UNVERIFIED: the same page gives the reduction as "5% in
+ * Ultimate"; SPEC §4 and rubendal say 0.8, and this keeps 0.8.
+ */
 export const GROUNDED_METEOR_MULTIPLIER: Ratio = [4, 5];
 /** Full turn, in fixed degrees. */
 export const TURN = fx(360);
@@ -119,24 +131,49 @@ export interface KnockbackArgs {
    * is why a 0% victim of a 19.6% hit is launched as though at 19.6%.
    */
   readonly percent: number;
-  /** Damage this hitbox deals, fixed. Already staled/charged by the caller. */
+  /** Damage this hitbox deals, fixed. Already staled/charged by the caller. Set knockback does not read it. */
   readonly damage: number;
   /**
    * Ultimate's weight stat as a plain integer — Mario 98, Bowser 135. Not fixed:
    * it is a whole number in the game's own data and staying integral keeps
-   * `(w + 100) · ONE` exact. Weight-independent moves pass 100, which makes the
-   * `200/(w+100)` term exactly 1.
+   * `(w + 100) · ONE` exact. `setWeight` replaces it with 100.
    */
   readonly weight: number;
+  /**
+   * The formula's `b`. With `setKnockback`, the box's fixed value instead: the
+   * script's `fkb` (rubendal's `wbkb`), which is where `Hitbox.baseKnockback`
+   * keeps it for a set-knockback box.
+   */
   readonly baseKnockback: number;
   readonly knockbackGrowth: number;
-  /** Rage multiplier from `computeRage`. Defaults to 1. */
+  /**
+   * Set knockback only: the box's own `bkb`, added after the weight-based term
+   * (rubendal `WeightBasedKB`'s `bkb`; `Hitbox.setKnockbackBase`). Absent is 0.
+   */
+  readonly setKnockbackBase?: number;
+  /** Rage multiplier from `computeRage`. Defaults to 1. Set knockback ignores it. */
   readonly rage?: number;
+  /** Set knockback ignores it. */
   readonly crouchCancel?: boolean;
-  /** A meteor that hit a grounded opponent, which Ultimate cuts to 0.8×. */
-  readonly groundedMeteor?: boolean;
-  /** Knockback is a flat value: percent, weight and rage do not enter. */
+  /**
+   * Fixed ("set") knockback: the formula with the victim's percent replaced
+   * (p = 10, d = `baseKnockback`). Weight and growth still count; the victim's
+   * percent, the hit's damage, rage and crouch cancel do not.
+   */
   readonly setKnockback?: boolean;
+  /** smash-script `set_weight`: the victim weighs `SET_WEIGHT` (100), in either formula. */
+  readonly setWeight?: boolean;
+}
+
+/**
+ * `((((p/10 + p·d/20) · (200/(w+100)) · 1.4) + 18) · s) + b`, no modifiers.
+ * One truncation per step, in the order the published formula multiplies.
+ */
+function knockbackFormula(p: number, d: number, weight: number, growth: number, base: number): number {
+  const percentTerm = mulDiv(p, ONE, TEN) + mulDiv(p, d, TWENTY);
+  const weightTerm = mulDiv(TWO_HUNDRED, ONE, (weight + 100) * ONE);
+  const kb = byRatio(mulDiv(percentTerm, weightTerm, ONE), KB_MULTIPLIER) + KB_ADDEND;
+  return mulDiv(kb, growth, HUNDRED) + base;
 }
 
 /**
@@ -146,32 +183,34 @@ export interface KnockbackArgs {
  * against Bowser at 0% this is 72.63, against Jigglypuff 82.08, and against
  * Bowser at 60% it is 145.20. Those three numbers are the test for this function.
  *
+ * Set knockback is the same formula with the victim's percent replaced:
+ * `((((1 + fkb/2) · (200/(w+100)) · 1.4) + 18) · s) + bkb`, rubendal
+ * SSBU-Calculator `WeightBasedKB`
+ * (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L211-L213).
+ *
  * Returns knockback *units*, in fixed-point. They are not pixels: `LAUNCH_SPEED_RATIO`
  * turns them into a velocity and `HITSTUN_RATIO` turns them into frames.
  */
 export function computeKnockback(args: KnockbackArgs): number {
-  const rage = args.rage ?? ONE;
+  const weight = args.setWeight === true ? SET_WEIGHT : args.weight;
 
-  // "Set knockback is now immovable" — Ultimate removed *every* knockback
-  // modifier from a set-knockback hitbox, not merely the percent-derived ones.
-  // Rage, weight and the victim's percent are the obvious three; crouch cancel
-  // and the grounded-meteor penalty are the two that are easy to leave applied
-  // and would turn an authored 60 into 51 against a crouching victim.
-  // research/physics-and-knockback.md §1.
+  // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback, revision 2063895):
+  // "If the move has a fixed knockback value set, then d is set to that value,
+  // and p is always 10" — so `p/10 + p·d/20` is `1 + fkb/2`. "While damage is not
+  // a factor for set knockback, the character's weight still is", and growth
+  // multiplies it as ever. What Ultimate took off set knockback is the modifiers:
+  // "In Ultimate, the effect of both types of knockback modifiers on set knockback
+  // was removed altogether" (launch rates, and "rage, crouch cancelling, or smash
+  // attack charging bonus"). rubendal's `WeightBasedKB` takes no rage either; it
+  // does multiply its crouch-cancel `r`, which this follows the wiki in leaving off.
   if (args.setKnockback) {
-    const kb = args.baseKnockback;
+    const kb = knockbackFormula(TEN, args.baseKnockback, weight, args.knockbackGrowth, args.setKnockbackBase ?? 0);
     return kb < 0 ? 0 : kb;
   }
 
-  const percentTerm =
-    mulDiv(args.percent, ONE, TEN) + mulDiv(args.percent, args.damage, TWENTY);
-  const weightTerm = mulDiv(TWO_HUNDRED, ONE, (args.weight + 100) * ONE);
-  let kb = byRatio(mulDiv(percentTerm, weightTerm, ONE), KB_MULTIPLIER) + KB_ADDEND;
-  kb = mulDiv(kb, args.knockbackGrowth, HUNDRED) + args.baseKnockback;
-  kb = mulDiv(kb, rage, ONE);
-
+  let kb = knockbackFormula(args.percent, args.damage, weight, args.knockbackGrowth, args.baseKnockback);
+  kb = mulDiv(kb, args.rage ?? ONE, ONE);
   if (args.crouchCancel) kb = byRatio(kb, CROUCH_CANCEL_MULTIPLIER);
-  if (args.groundedMeteor) kb = byRatio(kb, GROUNDED_METEOR_MULTIPLIER);
   return kb < 0 ? 0 : kb;
 }
 

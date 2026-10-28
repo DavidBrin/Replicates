@@ -284,6 +284,8 @@ export const link: FighterDef = {
           baseKnockback: fx(55),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_attackhi4` (generated/link.ts; Plan 3, Task 16b).
+          setWeight: true,
           effect: "slash",
         },
         {
@@ -298,6 +300,8 @@ export const link: FighterDef = {
           baseKnockback: fx(55),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_attackhi4` (generated/link.ts; Plan 3, Task 16b).
+          setWeight: true,
           effect: "slash",
         },
         {
@@ -442,6 +446,8 @@ export const link: FighterDef = {
           baseKnockback: fx(50),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_attackairb` (generated/link.ts; Plan 3, Task 16b).
+          setWeight: true,
         },
         {
           id: 1,

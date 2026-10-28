@@ -505,7 +505,10 @@ export const mario: FighterDef = {
       hitboxes: [
         // A drill: five weak hits on odd frames that hold the victim in place
         // (the script marks them set-weight so they land the same on everyone),
-        // then one real hit on frame 23 that launches.
+        // then one real hit on frame 23 that launches. The five are base
+        // knockback 50 and growth 15 under set weight, not set knockback:
+        // `game_attackairlw` has `kbg: 15, bkb: 50, setWeight: true` and no `fkb`
+        // (fighters/acmd/generated/mario.ts; Plan 3, Task 16b).
         {
           id: 0,
           startFrame: 5,
@@ -517,7 +520,7 @@ export const mario: FighterDef = {
           angle: fx(94),
           baseKnockback: fx(50),
           knockbackGrowth: fx(15),
-          setKnockback: true,
+          setWeight: true,
         },
         {
           id: 1,
@@ -530,7 +533,7 @@ export const mario: FighterDef = {
           angle: fx(94),
           baseKnockback: fx(50),
           knockbackGrowth: fx(15),
-          setKnockback: true,
+          setWeight: true,
         },
         {
           id: 2,
@@ -543,7 +546,7 @@ export const mario: FighterDef = {
           angle: fx(94),
           baseKnockback: fx(50),
           knockbackGrowth: fx(15),
-          setKnockback: true,
+          setWeight: true,
         },
         {
           id: 3,
@@ -556,7 +559,7 @@ export const mario: FighterDef = {
           angle: fx(94),
           baseKnockback: fx(50),
           knockbackGrowth: fx(15),
-          setKnockback: true,
+          setWeight: true,
         },
         {
           id: 4,
@@ -569,7 +572,7 @@ export const mario: FighterDef = {
           angle: fx(94),
           baseKnockback: fx(50),
           knockbackGrowth: fx(15),
-          setKnockback: true,
+          setWeight: true,
         },
         {
           id: 5,
@@ -673,6 +676,8 @@ export const mario: FighterDef = {
           baseKnockback: fx(150),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight, as every coin hit of `game_specialhi` (generated/mario.ts; Plan 3, Task 16b).
+          setWeight: true,
           effect: "normal",
         },
         {
@@ -687,6 +692,8 @@ export const mario: FighterDef = {
           baseKnockback: fx(170),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight, as every coin hit of `game_specialhi` (generated/mario.ts; Plan 3, Task 16b).
+          setWeight: true,
         },
         {
           id: 2,

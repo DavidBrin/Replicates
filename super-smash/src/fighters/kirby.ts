@@ -713,6 +713,11 @@ export const kirby: FighterDef = {
           baseKnockback: fx(117),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: Final Cutter's `SpecialHi2` script, `FKB=117, BKB=0, KBG=100,
+          // SetWeight=true` (rubendal/ssbu data, patch 13.0.1,
+          // https://github.com/rubendal/ssbu/blob/b97bd3370c13eb34f40aad208e3527a2935c13a9/data/patch/13.0.1/character/Kirby/data.json;
+          // the generated `game_specialhi` has no ATTACK). Plan 3, Task 16b.
+          setWeight: true,
           effect: "slash",
         },
         {
@@ -728,6 +733,9 @@ export const kirby: FighterDef = {
           baseKnockback: fx(96),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `SpecialHi2`, `FKB=96, KBG=100, SetWeight=true` (rubendal/ssbu data,
+          // as the rising hit above). Plan 3, Task 16b.
+          setWeight: true,
           meteor: true,
           effect: "slash",
         },
@@ -832,6 +840,8 @@ export const kirby: FighterDef = {
           baseKnockback: fx(30),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_catchattack` (generated/kirby.ts; Plan 3, Task 16b).
+          setWeight: true,
         },
       ],
     },

@@ -27,8 +27,11 @@
  *
  * **Knockback.** `baseKnockback` and `knockbackGrowth` hold the game's raw
  * values — growth 99 means 99, and SPEC §4's formula divides it by 100. Where
- * `setKnockback` is true, `baseKnockback` holds the *fixed* knockback value
- * instead and percent, weight and rage are all ignored.
+ * `setKnockback` is true, `baseKnockback` holds the script's *fixed* knockback
+ * (`fkb`) instead, `knockbackGrowth` its `kbg`, and `setKnockbackBase` any `bkb`
+ * beside it: the formula runs with the victim's percent replaced, so weight and
+ * growth still count and percent, damage and rage do not (Plan 3, Task 16b).
+ * `setWeight` is the script's `set_weight`: every victim weighs 100.
  *
  * **Angles.** 361 is the Sakurai angle (`SAKURAI_ANGLE`), which resolves
  * differently for grounded and airborne victims. 365 and 367 are autolink

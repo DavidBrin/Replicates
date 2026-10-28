@@ -22,7 +22,13 @@
  * with none left in the engine it changes nothing.
  */
 
-import { LAUNCH_SPEED_DECAY, LEDGE_JUMP_VELOCITY } from "./constants";
+import {
+  LAUNCH_SPEED_DECAY,
+  LEDGE_JUMP_VELOCITY,
+  SET_WEIGHT_FALL_SPEED,
+  SET_WEIGHT_GRAVITY,
+  SET_WEIGHT_LAUNCH_FRAMES,
+} from "./constants";
 import { ONE, abs, approach, mul, sqrt } from "./fixed";
 import { damageSpeedUpMag, damageSpeedUpMaxMag } from "./knockback";
 import type { FighterParams } from "./params";
@@ -68,6 +74,12 @@ export interface KineticState {
   /** The first-frame multiplier, Q12 (`damage_speed_up_max_mag`); 0 when no speed-up is running. */
   speedUpMax: number;
   /**
+   * Set weight's launch (Plan 3, Task 16b): reaction frames left in which a
+   * set-weight launch falls by `SET_WEIGHT_GRAVITY` toward `SET_WEIGHT_FALL_SPEED`
+   * instead of the fighter's own (or balloon) gravity. 0 when none is running.
+   */
+  setWeightFrames: number;
+  /**
    * Where this frame's extra reaction frames moved the fighter, Q12: a sped-up
    * real frame plays several of the game's frames, and all but the last land
    * here for `integrate` to add (`kineticTakeStep`). Zero between frames.
@@ -90,6 +102,7 @@ export function emptyKinetic(): KineticState {
     speedUpFrame: 0,
     speedUpFaf: 0,
     speedUpMax: 0,
+    setWeightFrames: 0,
     stepX: 0,
     stepY: 0,
   };
@@ -109,6 +122,7 @@ export function cloneKinetic(k: KineticState): KineticState {
     speedUpFrame: k.speedUpFrame,
     speedUpFaf: k.speedUpFaf,
     speedUpMax: k.speedUpMax,
+    setWeightFrames: k.setWeightFrames,
     stepX: k.stepX,
     stepY: k.stepY,
   };
@@ -151,15 +165,17 @@ export function kineticAdopt(f: FighterState, carrier: HorizontalCarrier = "cont
 }
 
 /**
- * Disarm the balloon speed-up (Plan 3, Task 6) without touching any energy: a
- * status that ends a launch's hitstun outright, a grab, must not leave the
- * speed-up armed for whatever reels this fighter next.
+ * Disarm what a launch arms besides its velocity, the balloon speed-up (Plan 3,
+ * Task 6) and set weight's fall (Task 16b), without touching any energy: a
+ * status that ends a launch's hitstun outright, a grab, must not leave either
+ * armed for whatever reels this fighter next.
  */
-export function kineticDisarmSpeedUp(f: FighterState): void {
+export function kineticDisarmLaunch(f: FighterState): void {
   const k = f.kinetic;
   k.speedUpFrame = 0;
   k.speedUpFaf = 0;
   k.speedUpMax = 0;
+  k.setWeightFrames = 0;
 }
 
 /** Every energy to zero, the launch included: a ledge, a respawn, a KO. */
@@ -176,7 +192,7 @@ export function kineticClear(f: FighterState): void {
   k.jumpInitial = 0;
   k.stepX = 0;
   k.stepY = 0;
-  kineticDisarmSpeedUp(f);
+  kineticDisarmLaunch(f);
   f.launchSpeed = 0;
   kineticSum(f);
 }
@@ -237,6 +253,7 @@ export function kineticJump(f: FighterState, vy: number): void {
   k.controlX += k.damageX;
   k.damageX = 0;
   k.speedUpMax = 0;
+  k.setWeightFrames = 0;
   f.launchSpeed = 0;
   kineticSetY(f, vy);
 }
@@ -249,13 +266,24 @@ export function kineticJump(f: FighterState, vy: number): void {
  * `speedUpFaf` > 0 arms the balloon speed-up for a launch of that many
  * reaction frames (`computeHitstun + 1`): the caller passes 0 for a launch
  * that does not tumble or has set knockback (Plan 3, Task 6).
+ *
+ * `setWeight` arms set weight's own fall for the launch's first
+ * `SET_WEIGHT_LAUNCH_FRAMES` reaction frames (Plan 3, Task 16b; see `reelOnce`).
  */
-export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: number, speedUpFaf = 0): void {
+export function kineticLaunch(
+  f: FighterState,
+  vx: number,
+  vy: number,
+  speed: number,
+  speedUpFaf = 0,
+  setWeight = false,
+): void {
   const k = f.kinetic;
   const max = speedUpFaf > 0 ? damageSpeedUpMaxMag(speedUpFaf) : 0;
   k.speedUpFaf = speedUpFaf;
   k.speedUpFrame = speedUpFaf * ONE;
   k.speedUpMax = max > ONE ? max : 0;
+  k.setWeightFrames = setWeight ? SET_WEIGHT_LAUNCH_FRAMES : 0;
   k.stepX = 0;
   k.stepY = 0;
   k.controlX = 0;
@@ -278,9 +306,10 @@ export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: nu
  * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L136-L146).
  * The caller passes 0 for a floor and the gravity the fighter had before the
  * collision for the others (a ceiling stop has already zeroed it). The balloon
- * speed-up is disarmed, as in `kineticLaunch`; whether the game carries it
- * through a bounce is UNVERIFIED (`damage_fly_reflect_reaction_frame_mul`
- * shortens the hitstun, which the caller does).
+ * speed-up is disarmed, as in `kineticLaunch`, and so is set weight's fall
+ * (Task 16b); whether the game carries either through a bounce is UNVERIFIED
+ * (`damage_fly_reflect_reaction_frame_mul` shortens the hitstun, which the
+ * caller does).
  */
 export function kineticReflect(f: FighterState, vx: number, vy: number, speed: number, gravityY: number): void {
   kineticLaunch(f, vx, vy, speed);
@@ -397,8 +426,11 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
     return;
   }
   const k = f.kinetic;
-  // Out of hitstun nothing is sped up any more.
+  // Out of hitstun nothing is sped up any more, and set weight's fall is over:
+  // UNVERIFIED, the page counts "the first 10 frames of the launch" and does not
+  // say whether an earlier end to the hitstun ends them (Plan 3, Task 16b).
   k.speedUpMax = 0;
+  k.setWeightFrames = 0;
   const p = input.params;
   // A launch outlives its hitstun and keeps decaying while the fighter acts.
   if (f.launchSpeed > 0) kineticDecayDamage(f, launchDecay(f, p));
@@ -499,20 +531,31 @@ function speedUpSteps(f: FighterState): number {
 }
 
 /**
- * One reaction frame of reeling — Plan 2's `kineticReel` body, unchanged: the
- * launch decays, and gravity builds toward the fall speed. A vertical
- * ("balloon") launch falls by the fighter's `damage_fly_top_air_accel_y` toward
+ * One reaction frame of reeling — Plan 2's `kineticReel` body: the launch
+ * decays, and gravity builds toward the fall speed. A vertical ("balloon")
+ * launch falls by the fighter's `damage_fly_top_air_accel_y` toward
  * `damage_fly_top_speed_y_stable` (1.8 for every fighter on this roster: the
  * calculator's DamageFlyTopFallSpeed, https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/<fighter>/data.json).
  * On the ground the launch also loses `ground_brake` a frame (`launchDecay`).
+ *
+ * A set-weight launch falls by 0.087 toward 1.5 for its first 10 reaction
+ * frames, whatever the fighter and the angle (SmashWiki "Knockback",
+ * https://www.ssbwiki.com/Knockback, revision 2063895; `SET_WEIGHT_GRAVITY`),
+ * and by its own gravity after: the caller never marks one balloon. Each
+ * reaction frame counts one, a sped-up real frame several (UNVERIFIED: the page
+ * says "frames"; a set-weight launch with set knockback is never sped up).
  */
 function reelOnce(f: FighterState, p: FighterParams, balloon: boolean): void {
   const k = f.kinetic;
   kineticDecayDamage(f, launchDecay(f, p));
+  const setWeight = k.setWeightFrames > 0;
+  if (setWeight) k.setWeightFrames -= 1;
   if (!f.grounded) {
-    k.gravityY = balloon
-      ? gravityStep(k.gravityY, p.damage_fly_top_air_accel_y, p.damage_fly_top_speed_y_stable)
-      : gravityStep(k.gravityY, p.air_accel_y, p.air_speed_y_stable);
+    k.gravityY = setWeight
+      ? gravityStep(k.gravityY, SET_WEIGHT_GRAVITY, SET_WEIGHT_FALL_SPEED)
+      : balloon
+        ? gravityStep(k.gravityY, p.damage_fly_top_air_accel_y, p.damage_fly_top_speed_y_stable)
+        : gravityStep(k.gravityY, p.air_accel_y, p.air_speed_y_stable);
   } else {
     kineticTransfer(f, "GROUND_STOP");
     k.stopX = approach(k.stopX, 0, p.ground_brake);
@@ -562,6 +605,7 @@ export function kineticLand(f: FighterState): void {
   k.damageX = 0;
   k.damageY = 0;
   k.speedUpMax = 0;
+  k.setWeightFrames = 0;
   f.launchSpeed = 0;
   kineticSum(f);
 }
@@ -582,6 +626,7 @@ export function kineticMotion(f: FighterState, vx: number, vy: number): void {
   k.damageX = 0;
   k.damageY = 0;
   k.speedUpMax = 0;
+  k.setWeightFrames = 0;
   f.launchSpeed = 0;
   k.motionX = vx;
   k.motionY = vy;

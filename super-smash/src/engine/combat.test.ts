@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "./acmd/bones";
-import { ATTACK, CATCH, clearAll, frame } from "./acmd/dsl";
+import { ATTACK, CATCH, catchClearAll, clearAll, frame } from "./acmd/dsl";
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { runScript } from "./acmd/interpreter";
 import { attackFromHitbox } from "./acmd/legacy";
 import type { AcmdCommand, AttackParams } from "./acmd/types";
-import { ONE, byRatio, fx, mul } from "./fixed";
+import { ONE, byRatio, fx, mul, toFloat } from "./fixed";
 import {
   AIR_DODGE_TECH_FRAMES,
   ASDI_DISTANCE,
@@ -18,6 +18,9 @@ import {
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   LEDGE_TRUMPED_FRAMES,
   SDI_DISTANCE,
+  SET_WEIGHT_FALL_SPEED,
+  SET_WEIGHT_GRAVITY,
+  SET_WEIGHT_LAUNCH_FRAMES,
   SHIELD_BREAK_RESET,
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
@@ -412,8 +415,11 @@ describe("the balloon speed-up through a real hit (Plan 3, Task 6)", () => {
   /**
    * A jab (and neutral air) with fixed (set) knockback: Ultimate never speeds
    * those up. 5°, not 0°: a flat launch of 120 or more is lifted to 32° (Task 3).
+   * Exactly 150, as the growth box below: set knockback is weight-based (Task
+   * 16b), and with no growth its formula is its own `bkb` and nothing else. The
+   * `fkb` (`baseKnockback`) must still be above 0, or it is not set knockback.
    */
-  const setKb = hitbox({ angle: fx(5), baseKnockback: fx(150), setKnockback: true });
+  const setKb = hitbox({ angle: fx(5), baseKnockback: fx(1), knockbackGrowth: 0, setKnockbackBase: fx(150), setKnockback: true });
   const setKbDef: FighterDef = {
     ...BASE_DEF,
     moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [setKb] }), nair: move("nair", { hitboxes: [setKb] }) },
@@ -741,6 +747,8 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
       v.kinetic.speedUpFaf = 70;
       v.kinetic.speedUpFrame = 70 * ONE;
       v.kinetic.speedUpMax = damageSpeedUpMaxMag(70);
+      // ...and set weight's fall too (Task 16b).
+      v.kinetic.setWeightFrames = 7;
       v.balloon = true;
       v.combat.launchSource = 1005;
       return s;
@@ -766,6 +774,7 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
       expect(v.kinetic.speedUpMax).toBe(0);
       expect(v.kinetic.speedUpFaf).toBe(0);
       expect(v.combat.launchFaf).toBe(0);
+      expect(v.kinetic.setWeightFrames).toBe(0);
     });
 
     it("when it was still parked in hitlag: its reaction frames do not survive either", () => {
@@ -781,12 +790,15 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
       v.pendingAngle = fx(90);
       v.pendingFacing = 1;
       v.combat.launchFaf = 70;
+      v.combat.launchSetWeight = true;
       v.hitlag = 6;
       const after = released(s);
       expect(after.combat.launchSource).toBe(0);
       expect(after.launchSpeed).toBe(jabAlone);
       expect(after.kinetic.speedUpMax).toBe(0);
       expect(after.combat.launchFaf).toBe(0);
+      expect(after.kinetic.setWeightFrames).toBe(0);
+      expect(after.combat.launchSetWeight).toBe(false);
     });
   });
 });
@@ -2247,6 +2259,18 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       expect(at.fighters[1].balloon).toBe(false);
     });
 
+    // Plan 3, Task 16b: the same for a set-weight launch's own fall.
+    it("disarms set weight's fall", () => {
+      const s = standing();
+      const v = s.fighters[1];
+      v.action = "hitstun";
+      v.hitstun = 50;
+      v.kinetic.setWeightFrames = SET_WEIGHT_LAUNCH_FRAMES;
+      const { before, at } = caught(s);
+      expect(before.fighters[1].kinetic.setWeightFrames).toBeGreaterThan(0);
+      expect(at.fighters[1].kinetic.setWeightFrames).toBe(0);
+    });
+
     it("leaves the released fighter free to act, not still stunned", () => {
       const s = standing();
       const v = s.fighters[1];
@@ -2990,8 +3014,9 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
   };
 
   // SmashWiki "Knockback", https://www.ssbwiki.com/Knockback: in the formula, "w ...
-  // is set to 100 if the attack is weight independent"; rubendal SSBU-Calculator
-  // `js/formulas.js` `VSKB` takes `weight` the same way, as the `200 / (weight + 100)` term.
+  // is set to 100 if the attack is weight independent"; rubendal SSBU-Calculator passes
+  // `set_weight ? 100 : target.Attributes.Weight` to `VSKB` (js/worker/multiworker.js#L206,
+  // https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/worker/multiworker.js#L206).
   it("weighs every victim as 100 for a set-weight hitbox", () => {
     const heavy = (s: GameState) => {
       s.fighters[1].damage = fx(60);
@@ -3045,6 +3070,18 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
     expect(back.angle).toBe(fx(135));
   });
 
+  // UNVERIFIED (`launchSourceFacing`): origin to origin, and a victim level with the
+  // attacker launches the way the attacker faces (Task 16 review, Minor 9).
+  it("launches a victim level with the attacker the way the attacker faces, under ATTACK_LR_CHECK_POS", () => {
+    const level = (facing: number) => (s: GameState) => {
+      s.fighters[0].facing = facing;
+      s.fighters[1].x = s.fighters[0].x;
+    };
+    const pos = scripted([frame(4), box({ z: 0, facing: "ATTACK_LR_CHECK_POS" }), frame(7), clearAll()]);
+    expect(hits(pos, level(1))[0].angle).toBe(fx(45));
+    expect(hits(pos, level(-1))[0].angle).toBe(fx(135));
+  });
+
   it("re-arms a hitbox the script clears with clear_all, as a multi-hit does", () => {
     // Weightless hits (no knockback), so the victim stays inside the box.
     const pinned = (): void => {};
@@ -3052,7 +3089,9 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
     expect(twice).toHaveLength(2);
     // One swing stales once, and its second hit is no staler than its first.
     expect(twice[1].damage).toBe(twice[0].damage);
-    const once = hits(scripted([frame(4), still(), { op: "clear", id: 0 }, frame(9), still(), frame(10), clearAll()]), pinned, 40);
+    // The control: the first box is live on frame 4 and lands, then a clear *by id*
+    // on frame 5, which does not re-arm, so the second box finds the victim already hit.
+    const once = hits(scripted([frame(4), still(), frame(5), { op: "clear", id: 0 }, frame(9), still(), frame(10), clearAll()]), pinned, 40);
     expect(once).toHaveLength(1);
   });
 
@@ -3215,9 +3254,43 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
   });
 
   describe("a downward angle (rubendal SSBU-Calculator `js/knockback.js`: `spike = angle >= 230 && angle <= 310`)", () => {
-    it("is a meteor on a grounded victim when the script does not say", () => {
-      const spike = hits(scripted([frame(4), box({ angle: 270, bkb: 80, kbg: 0 }), frame(7), clearAll()]))[0];
-      expect(spike.knockback).toBe(byRatio(fx(80), GROUNDED_METEOR_MULTIPLIER));
+    /**
+     * The jab's contact, and the victim on the frame its launch fires: the hit's
+     * knockback, the hitstun it set, and the launch speed it left with.
+     */
+    function spiked(commands: readonly AcmdCommand[]): { knockback: number; hitstun: number; launchSpeed: number } {
+      const ctx = scripted(commands);
+      const frames = play(standing(ctx), 30, JAB, ctx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      const fired = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+      return {
+        knockback: frames[hit].events.hits[0].knockback,
+        hitstun: frames[hit].state.fighters[1].hitstun,
+        launchSpeed: frames[fired].state.fighters[1].launchSpeed,
+      };
+    }
+
+    // SmashWiki "Meteor smash" (https://www.ssbwiki.com/Meteor_smash, revision 2047089):
+    // "the amount of hitstun delivered by a meteor smash is not affected by the knockback
+    // reduction"; SmashWiki "Knockback" (revision 2063895): "Because the bounce occurs after
+    // the hit, the amount of hitstun suffered is not reduced a corresponding amount". The
+    // 0.8 is SPEC §4 and rubendal's `parameters.bounce` (Task 16 review, Minor 7).
+    it("is a meteor on a grounded victim when the script does not say: the launch bounces at 0.8, the hitstun is the hit's", () => {
+      const spike = spiked([frame(4), box({ angle: 270, bkb: 100, kbg: 0 }), frame(7), clearAll()]);
+      expect(spike.knockback).toBe(fx(100));
+      expect(spike.hitstun).toBe(effectiveHitstun(fx(100), true));
+      expect(spike.launchSpeed).toBe(mul(byRatio(fx(100), GROUNDED_METEOR_MULTIPLIER), LAUNCH_SPEED_RATIO));
+    });
+
+    // The bounce is not one of the modifiers Ultimate took off set knockback (SmashWiki
+    // "Knockback", Set knockback: rage, crouch cancelling, smash charge, launch rate); it
+    // happens to the launch after the hit (rubendal `Knockback.bounce` scales the launch
+    // speeds of either formula's `Knockback`).
+    it("bounces a set-knockback meteor too", () => {
+      const spike = spiked([frame(4), box({ angle: 270, fkb: 60, bkb: 0, kbg: 100 }), frame(7), clearAll()]);
+      expect(toFloat(spike.knockback)).toBeCloseTo(61.83838, 1);
+      expect(spike.hitstun).toBe(computeHitstun(spike.knockback));
+      expect(spike.launchSpeed).toBe(mul(byRatio(spike.knockback, GROUNDED_METEOR_MULTIPLIER), LAUNCH_SPEED_RATIO));
     });
 
     /** `meteor` of the hitbox a script makes of `params` at game frame 1. */
@@ -3232,6 +3305,13 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       expect([230, 270, 310].map((a) => meteorOf(scriptAt(a)))).toEqual([true, true, true]);
     });
 
+    // The DSL can say it either way (Task 16 report, concern 2; Plan 3, Task 16b).
+    it("is not a meteor when a hand-written script says `meteor: false`", () => {
+      const plain = (box({ angle: 270, meteor: false }) as { params: AttackParams }).params;
+      expect(plain.meteor).toBe(false);
+      expect(meteorOf(plain)).toBeUndefined();
+    });
+
     // A legacy move says outright, either way (`attackFromHitbox`), so the pipeline
     // never classifies its angle: a downward legacy hitbox that is not marked stays plain.
     it("is never applied to a legacy compilation, which states meteor either way", () => {
@@ -3241,6 +3321,145 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       const marked = attackFromHitbox(hitbox({ angle: fx(270), meteor: true }));
       expect(marked.meteor).toBe(true);
       expect(meteorOf(marked)).toBe(true);
+    });
+  });
+});
+
+/* -------------------- Task 16b: set knockback by weight; set weight's launch -- */
+
+describe("set knockback is weight-based, and set weight launches as the game does (Plan 3, Task 16b)", () => {
+  /** `def` with its jab replaced by `commands` (a `game_attack11` script). */
+  function scripted(commands: readonly AcmdCommand[], def: FighterDef = BASE_DEF): SimContext {
+    return ctxFor({ ...def, scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands } } });
+  }
+  const box = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
+    ATTACK({ id: 0, bone: "top", damage: 10, angle: 45, kbg: 100, bkb: 0, fkb: 60, size: 5, x: 0, y: 6, z: 8, ...over });
+  function firstHit(ctx: SimContext, prepare: (s: GameState) => void = () => {}): StepEvents["hits"][number] {
+    const s = standing(ctx);
+    prepare(s);
+    return play(s, 12, JAB, ctx).flatMap((f) => f.events.hits)[0];
+  }
+
+  // rubendal SSBU-Calculator `WeightBasedKB` (pinned in `knockback.test.ts`): fkb 60,
+  // kbg 100 against the tester's 98 is 61.838, not a flat 60.
+  it("launches a script's set-knockback box by the weight-based formula", () => {
+    const hit = firstHit(scripted([frame(4), box(), frame(7), clearAll()]));
+    expect(hit.knockback).toBe(
+      computeKnockback({ percent: 0, damage: 0, weight: 98, baseKnockback: fx(60), knockbackGrowth: fx(100), setKnockback: true }),
+    );
+    expect(toFloat(hit.knockback)).toBeCloseTo(61.83838, 1);
+  });
+
+  // A legacy set-knockback box holds the script's `fkb` in `baseKnockback` and its `kbg`
+  // in `knockbackGrowth` (`fighters/index.ts`); `attackFromHitbox` compiles it to both.
+  it("launches a legacy set-knockback box by the same formula", () => {
+    const legacy = ctxFor({
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ baseKnockback: fx(60), setKnockback: true })] }) },
+    });
+    expect(firstHit(legacy).knockback).toBe(firstHit(scripted([frame(4), box(), frame(7), clearAll()])).knockback);
+  });
+
+  it("does not move with the victim's percent or the attacker's rage", () => {
+    const ctx = scripted([frame(4), box(), frame(7), clearAll()]);
+    const fresh = firstHit(ctx).knockback;
+    expect(firstHit(ctx, (s) => {
+      s.fighters[1].damage = fx(150);
+      s.fighters[0].damage = fx(150);
+    }).knockback).toBe(fresh);
+  });
+
+  // Pikachu's neutral air (`generated/pikachu.ts` `game_attackairn`): fkb 45 with bkb 15,
+  // kbg 80, set weight. rubendal `WeightBasedKB(100, 15, 45, 80)` = 55.72.
+  it("adds a set-knockback box's own bkb, and weighs the victim as 100 under set weight", () => {
+    const hit = firstHit(scripted([frame(4), box({ fkb: 45, bkb: 15, kbg: 80, setWeight: true }), frame(7), clearAll()]));
+    expect(toFloat(hit.knockback)).toBeCloseTo(55.72, 1);
+  });
+
+  describe("set weight's launch", () => {
+    /**
+     * A tester that falls by other numbers than set weight's: gravity 0.12 and
+     * fall speed 2, so its balloon fall (`damage_fly_top`, from `paramsFromAttributes`)
+     * is gravity 0.12 toward 1.8.
+     */
+    const floaty: FighterDef = { ...BASE_DEF, attributes: { ...ATTRS, gravity: fx(0.12), fallSpeed: fx(2) } };
+    /**
+     * Fighter 1 from the frame a straight-up set-knockback jab's launch fires, for 14
+     * frames: 13 steps of gravity, short of any fall-speed cap (13 × 0.12 < 1.8).
+     */
+    function launched(setWeight: boolean): FighterState[] {
+      const ctx = scripted([frame(4), box({ angle: 90, fkb: 100, setWeight }), frame(7), clearAll()], floaty);
+      const frames = play(standing(ctx), 40, JAB, ctx);
+      const fired = frames.findIndex((f) => f.state.fighters[1].launchSpeed > 0);
+      return frames.slice(fired, fired + 14).map((f) => f.state.fighters[1]);
+    }
+    /** Each frame's change in the GRAVITY energy, from the frame after the launch fires. */
+    const gravitySteps = (v: FighterState[]): number[] => v.slice(1).map((f, i) => f.kinetic.gravityY - v[i].kinetic.gravityY);
+
+    // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback, revision 2063895),
+    // Weight-independent knockback: in Ultimate, a set-weight hit gives "a fall speed of
+    // 1.5 and gravity of 0.087 for the first 10 frames of the launch, before reverting
+    // back to a fighter's regular fall speed and gravity. Notably, this effect overrides
+    // the homogenised fall speed and gravity used by attacks which have an angle between
+    // 70˚ and 110˚."
+    it("falls by gravity 0.087 for the first 10 frames, then by the fighter's own, and is never balloon fall", () => {
+      const v = launched(true);
+      expect(v[0].kinetic.gravityY).toBe(0);
+      expect(v.every((f) => f.hitstun > 0 && !f.grounded)).toBe(true);
+      expect(gravitySteps(v)).toEqual([
+        ...Array<number>(SET_WEIGHT_LAUNCH_FRAMES).fill(-SET_WEIGHT_GRAVITY),
+        ...Array<number>(13 - SET_WEIGHT_LAUNCH_FRAMES).fill(-fx(0.12)),
+      ]);
+      expect(v.map((f) => f.balloon)).toEqual(Array<boolean>(14).fill(false));
+    });
+
+    it("leaves a launch without set weight to the balloon fall at the same angle", () => {
+      const v = launched(false);
+      expect(gravitySteps(v)).toEqual(Array<number>(13).fill(-fx(0.12)));
+      expect(v.map((f) => f.balloon)).toEqual(Array<boolean>(14).fill(true));
+    });
+
+    it("is pinned to SmashWiki's figures", () => {
+      expect([SET_WEIGHT_GRAVITY, SET_WEIGHT_FALL_SPEED, SET_WEIGHT_LAUNCH_FRAMES]).toEqual([fx(0.087), fx(1.5), 10]);
+    });
+  });
+
+  // `COLLISION_SITUATION_MASK_G`/`_A` on a CATCH (Task 16 review, Minor 1). Mario's
+  // generated grab has `CATCH id0 ... MASK_G` and `CATCH id1 ... MASK_A` live together
+  // (`fighters/acmd/generated/mario.ts`, `game_catch`).
+  describe("a grab whose two boxes are ground-only and air-only", () => {
+    const ctx = ctxFor({
+      ...BASE_DEF,
+      scripts: {
+        grab: {
+          name: "game_catch",
+          motion: "catch",
+          commands: [
+            frame(4),
+            CATCH({ id: 0, bone: "top", size: 3, x: 0, y: 6, z: 8, situation: "COLLISION_SITUATION_MASK_G" }),
+            CATCH({ id: 1, bone: "top", size: 3, x: 0, y: 6, z: 30, situation: "COLLISION_SITUATION_MASK_A" }),
+            frame(7),
+            catchClearAll(),
+          ],
+        },
+      },
+    });
+    /** Does fighter 0's grab catch fighter 1, standing at `x` (or 3 units up and falling)? */
+    function caught(x: number, airborne: boolean): boolean {
+      const s = standing(ctx);
+      s.fighters[1].x = fx(x);
+      if (airborne) Object.assign(s.fighters[1], { grounded: false, platform: -1, y: fx(3), action: "fall" });
+      return play(s, 10, (i) => [i === 0 ? Btn.Grab : 0, 0], ctx).some((f) => f.state.fighters[1].grabbedBy === 0);
+    }
+
+    it("catches a grounded victim with the ground box only", () => {
+      expect(caught(8, false)).toBe(true);
+      expect(caught(30, false)).toBe(false);
+    });
+
+    it("catches an airborne victim with the air box only", () => {
+      expect(caught(30, true)).toBe(true);
+      expect(caught(8, true)).toBe(false);
     });
   });
 });

@@ -531,8 +531,10 @@ export const donkeyKong: FighterDef = {
           radius: fx(5.0),
           damage: fx(5.0),
           angle: fx(95),
-          baseKnockback: fx(90),
-          knockbackGrowth: fx(30),
+          // fkb 30 and growth 90, not the other way round: `game_specialhi` id 0 is
+          // `kbg: 90, fkb: 30` (fighters/acmd/generated/donkeyKong.ts; Plan 3, Task 16b).
+          baseKnockback: fx(30),
+          knockbackGrowth: fx(90),
           setKnockback: true,
         },
         {

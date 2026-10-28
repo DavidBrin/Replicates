@@ -716,6 +716,8 @@ export const samus: FighterDef = {
           baseKnockback: fx(200),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_specialhi` (generated/samus.ts; Plan 3, Task 16b).
+          setWeight: true,
           effect: "electric",
         },
         {
@@ -730,6 +732,8 @@ export const samus: FighterDef = {
           baseKnockback: fx(180),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_specialhi` (generated/samus.ts; Plan 3, Task 16b).
+          setWeight: true,
           effect: "electric",
         },
         {

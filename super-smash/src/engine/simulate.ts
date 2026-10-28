@@ -41,6 +41,7 @@ import {
   TUMBLE_HITSTUN,
 } from "./constants";
 import {
+  GROUNDED_METEOR_MULTIPLIER,
   computeHitlag,
   computeHitstun,
   computeKnockback,
@@ -116,7 +117,7 @@ import {
   cloneKinetic,
   emptyKinetic,
   kineticClear,
-  kineticDisarmSpeedUp,
+  kineticDisarmLaunch,
   kineticLaunch,
   kineticTurnLaunch,
   kineticSet,
@@ -1319,8 +1320,11 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   // leads to this call never decrements `hitstun`. See `lsiApplies`.
   const speed = diAble ? applyLSI(launch.speed, intent.y, angle) : launch.speed;
   // The one moment the balloon question has an answer: the angle this launch
-  // actually goes out at, DI included. See `FighterState.balloon`.
-  f.balloon = launch.balloon;
+  // actually goes out at, DI included. See `FighterState.balloon`. A set-weight
+  // launch is never one: its own fall "overrides the homogenised fall speed and
+  // gravity" of a 70°-110° launch (SmashWiki "Knockback"; `SET_WEIGHT_GRAVITY`).
+  const setWeight = f.combat.launchSetWeight;
+  f.balloon = launch.balloon && !setWeight;
 
   if (launch.speed > 0) {
     kineticLaunch(
@@ -1329,9 +1333,10 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
       Math.trunc((launch.vy * speed) / launch.speed),
       speed,
       f.combat.launchFaf,
+      setWeight,
     );
   } else {
-    kineticLaunch(f, 0, 0, speed);
+    kineticLaunch(f, 0, 0, speed, 0, setWeight);
   }
   // Whether the launch takes the victim off the ground is a DI question too: a
   // flat Sakurai-angle hit that gets DI'd upward leaves the floor, and the same
@@ -1358,6 +1363,7 @@ function clearPendingLaunch(f: FighterState): void {
   f.pendingAngle = 0;
   f.pendingFacing = 0;
   f.combat.launchFaf = 0;
+  f.combat.launchSetWeight = false;
   f.combat.asdi = false;
 }
 
@@ -1441,13 +1447,6 @@ function launchFacing(c: Candidate, attacker: FighterState): number {
 }
 
 /**
- * The weight a set-weight hitbox (smash-script `set_weight`) gives every victim:
- * SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback) — `w` "is set to 100
- * if the attack is weight independent". Plan 3, Task 16.
- */
-const SET_WEIGHT = 100;
-
-/**
  * The facing a hit's launch is measured from. A box with no LR rule launches
  * forwards (`launchFacing`: the way its owner faces, or the way its projectile
  * points). `ATTACK_LR_CHECK_POS` launches away from the attacker by position,
@@ -1463,6 +1462,10 @@ function launchSourceFacing(c: Candidate, attacker: FighterState, victim: Fighte
   const forward = c.projectile !== null ? c.projectile.facing : attacker.facing;
   if (hb.lr === undefined) return c.projectile !== null ? forward : launchFacing(c, attacker);
   if (hb.lr === "back") return -forward;
+  // UNVERIFIED: origin to origin (the attacker's, or its projectile's, against the
+  // victim's), and a victim level with it launches the way the attacker faces;
+  // whether the game compares hitbox positions, and how it breaks a tie, is not
+  // published (Task 16 review, Minor 9).
   const fromX = c.projectile !== null ? c.projectile.x : attacker.x;
   return victim.x === fromX ? forward : victim.x > fromX ? 1 : -1;
 }
@@ -1501,11 +1504,11 @@ function applyHit(
     // the counter all of those share (shieldstun, shield-break stun, a launch's
     // hitstun). Left running, it would reel a held fighter (`applyMovement`
     // reels whenever it is positive) and leave the released one still stunned.
-    // The balloon speed-up goes with it: every other exit from a launch disarms
-    // it, and a stale arm would speed up the next reel.
+    // The balloon speed-up and set weight's fall go with it: every other exit
+    // from a launch disarms them, and a stale arm would act on the next reel.
     victim.hitstun = 0;
     victim.balloon = false;
-    kineticDisarmSpeedUp(victim);
+    kineticDisarmLaunch(victim);
     // Being grabbed restores the midair jumps (SmashWiki "Double jump",
     // https://www.ssbwiki.com/Double_jump: "A character's double jump(s) are
     // restored upon ... being grabbed by an opposing character"). A fighter in
@@ -1652,21 +1655,25 @@ function applyHit(
 
   const crouchCancel = isCrouching(victim);
 
+  // Set knockback runs the formula on the box's `fkb` with the victim's weight;
+  // set weight makes that weight 100, in either formula (Plan 3, Task 16b).
   const kb = computeKnockback({
     percent: victim.damage,
     damage: kbDamage,
-    weight: hb.setWeight === true ? SET_WEIGHT : victimDef.attributes.weight,
+    weight: victimDef.attributes.weight,
     baseKnockback: hb.baseKnockback,
     knockbackGrowth: hb.knockbackGrowth,
     rage: computeRage(attacker.damage),
     crouchCancel,
-    groundedMeteor: hb.meteor === true && victim.grounded,
     setKnockback: hb.setKnockback,
+    setKnockbackBase: hb.setKnockbackBase,
+    setWeight: hb.setWeight,
   });
 
   // The base decides tumble; a tumbling launch without set knockback is then
   // played back sped up, which shortens the hitstun in real frames (SmashWiki
   // "Hitstun"; rubendal `js/knockback.js`: `tumble && !isFKB`). Plan 3, Task 6.
+  // It is the hit's knockback: a grounded meteor's bounce comes after (below).
   const hitstun = computeHitstun(kb);
   const tumbles = hitstun >= TUMBLE_HITSTUN;
   const speedUp = tumbles && hb.setKnockback !== true;
@@ -1736,8 +1743,15 @@ function applyHit(
   victim.pendingKnockback = kb;
   victim.pendingAngle = resolveAngle(hb, victim.grounded, kb);
   // A grounded victim launched flat slides out at 0.8 of the speed (rubendal
-  // `groundedZeroAngle`); the hitstun is the hit's, already decided above.
+  // `groundedZeroAngle`), set knockback or not: `WeightBasedKB` builds the same
+  // `Knockback`, whose `calculate` applies it. The hitstun is the hit's, above.
   if (victim.grounded && victim.pendingAngle === 0) victim.pendingKnockback = byRatio(kb, GROUNDED_ZERO_LAUNCH_RATIO);
+  // A meteor on a grounded victim bounces off the floor at 0.8 of the launch:
+  // the hit's hitstun stands (SmashWiki "Meteor smash": "the amount of hitstun
+  // delivered by a meteor smash is not affected by the knockback reduction"),
+  // and set knockback bounces too, the bounce not being one of the modifiers
+  // Ultimate took off it (`GROUNDED_METEOR_MULTIPLIER`; Plan 3, Task 16b).
+  if (victim.grounded && hb.meteor === true) victim.pendingKnockback = byRatio(kb, GROUNDED_METEOR_MULTIPLIER);
   const vertical = victim.pendingAngle >= ASDI_VERTICAL[0] && victim.pendingAngle < ASDI_VERTICAL[1];
   // UNVERIFIED: SmashWiki "Smash directional influence" says ASDI also applies
   // to projectiles with a hitlag multiplier of 0, which have no freeze. Here it
@@ -1749,6 +1763,7 @@ function applyHit(
 
   victim.hitstun = effectiveHitstun(kb, speedUp);
   victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
+  victim.combat.launchSetWeight = hb.setWeight === true;
   victim.hitlag = lag;
   victim.intangible = 0;
   // A hit that knocks a hanging fighter off the ledge locks the ledge out, as

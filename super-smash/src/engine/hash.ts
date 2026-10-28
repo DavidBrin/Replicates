@@ -166,6 +166,7 @@ export function mixCombat(h: number, c: CombatState): number {
   let x = mixInt(h, c.staleShield.length);
   for (const onShield of c.staleShield) x = mixBool(x, onShield);
   x = mixInt(x, c.launchFaf);
+  x = mixBool(x, c.launchSetWeight);
   x = mixInt(x, c.launchSource);
   x = mixInt(x, c.mash);
   x = mixInt(x, c.comboHits);
@@ -192,6 +193,7 @@ export function mixKinetic(h: number, k: KineticState): number {
   x = mixInt(x, k.speedUpFrame);
   x = mixInt(x, k.speedUpFaf);
   x = mixInt(x, k.speedUpMax);
+  x = mixInt(x, k.setWeightFrames);
   x = mixInt(x, k.stepX);
   x = mixInt(x, k.stepY);
   return x;

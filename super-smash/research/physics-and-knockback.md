@@ -21,8 +21,17 @@ for staleness · `w` = the victim's weight (100 for weight-independent moves) ·
 `s` = knockback growth ÷ 100 · `b` = base knockback. **HIGH** —
 [Knockback](https://www.ssbwiki.com/Knockback).
 
-The result is then multiplied by rage, crouch cancel (0.85), and a grounded meteor
-penalty (0.8). The `1.4` and `+18` constants have not changed since Melee. **HIGH**
+The result is then multiplied by rage and crouch cancel (0.85). The `1.4` and `+18`
+constants have not changed since Melee. **HIGH**
+
+A meteor on a grounded victim is **not** a knockback multiplier: the victim bounces off
+the floor and the *launch* leaves at 0.8× its speed (SPEC §4; rubendal
+`parameters.bounce`), while hitstun is the hit's own. "Because the bounce occurs after the
+hit, the amount of hitstun suffered is not reduced a corresponding amount" ([Knockback](https://www.ssbwiki.com/Knockback),
+revision 2063895); "the amount of hitstun delivered by a meteor smash is not affected by
+the knockback reduction" ([Meteor smash](https://www.ssbwiki.com/Meteor_smash), revision
+2047089). Set knockback bounces too. The same Knockback page gives the bounce as "5% in
+*Ultimate*"; the engine keeps SPEC's 0.8 and marks it UNVERIFIED. **MED** (Plan 3, Task 16b)
 
 ### Worked examples, used as engine tests
 
@@ -42,8 +51,32 @@ identical hit is the property test.
 - **Staleness barely touches knockback.** The dampening factor is scaled to **0.3×** of
   its Smash 4 effect. A stale move still loses full damage; it keeps most of its launch
   power. **HIGH**
-- **Set knockback is now immovable.** Rage, crouch cancel and the rest no longer modify
-  set-knockback moves at all. **HIGH**
+- **Set knockback is harder to modify, not weightless.** Rage, crouch cancel, launch
+  rate and smash-charge bonuses no longer touch set-knockback moves: "In *Ultimate*, the
+  effect of both types of knockback modifiers on set knockback was removed altogether"
+  ([Knockback](https://www.ssbwiki.com/Knockback), Set knockback, revision 2063895), and
+  rage "no longer applies to attacks that use set knockback" ([Rage](https://www.ssbwiki.com/Rage),
+  revision 2065362). **HIGH** But the knockback is not a flat number: "If the move has a
+  fixed knockback value set, then **d** is set to that value, and **p** is always 10", and
+  "While damage is not a factor for set knockback, the character's weight still is" (same
+  page). The formula is therefore
+  `KB = ((((1 + fkb/2) · (200/(w+100)) · 1.4) + 18) · kbg/100) + bkb`, which is rubendal
+  SSBU-Calculator's `WeightBasedKB`
+  ([js/formulas.js](https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L211-L213)):
+  weight and growth count, the victim's percent and the hit's damage do not. A pummel's
+  fkb 30 / kbg 100 is 40.63 against Mario (98) and 37.06 against Bowser (135). rubendal
+  also multiplies its crouch-cancel factor into `WeightBasedKB`; the engine follows the
+  wiki and leaves it off. Set knockback never gets the balloon speed-up (rubendal
+  `tumble && !isFKB`; "Moves with set knockback retain traditional knockback physics").
+  **HIGH** (Plan 3, Task 16b)
+- **Set weight** (`set_weight`) makes every victim weigh 100 in either formula, and in
+  *Ultimate* its launch gets "a fall speed of 1.5 and gravity of 0.087 for the first 10
+  frames of the launch, before reverting back to a fighter's regular fall speed and
+  gravity. Notably, this effect overrides the homogenised fall speed and gravity used by
+  attacks which have an angle between 70˚ and 110˚" ([Knockback](https://www.ssbwiki.com/Knockback),
+  Weight-independent knockback). So a set-weight launch is never balloon fall. **HIGH**;
+  what ends those 10 frames early (the hitstun running out, a landing) is not published,
+  and the engine ends them with the launch (UNVERIFIED). (Plan 3, Task 16b)
 - **"Balloon knockback".** Launches between **70° and 110°** get a fixed falling speed of
   **1.8** during hitstun, and the old gravity-derived extra launch speed is not applied.
   Vertical launches therefore feel uniform across the cast regardless of individual
@@ -259,7 +292,8 @@ through. **HIGH** — [Priority](https://www.ssbwiki.com/Priority).
   [Hitstun](https://www.ssbwiki.com/Hitstun) ·
   [Tumbling](https://www.ssbwiki.com/Tumbling) ·
   [Rage](https://www.ssbwiki.com/Rage) ·
-  [Hitlag](https://www.ssbwiki.com/Hitlag)
+  [Hitlag](https://www.ssbwiki.com/Hitlag) ·
+  [Meteor smash](https://www.ssbwiki.com/Meteor_smash)
 - [Shield](https://www.ssbwiki.com/Shield) ·
   [Shieldstun](https://www.ssbwiki.com/Shieldstun) ·
   [Perfect shield](https://www.ssbwiki.com/Perfect_shield)

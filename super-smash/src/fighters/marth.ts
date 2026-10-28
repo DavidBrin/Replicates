@@ -425,6 +425,8 @@ export const marth: FighterDef = {
           baseKnockback: fx(155),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_attackhi4` id 0 (generated/marth.ts; Plan 3, Task 16b).
+          setWeight: true,
         },
       ],
     },
@@ -511,7 +513,9 @@ export const marth: FighterDef = {
           angle: fx(90),
           baseKnockback: fx(35),
           knockbackGrowth: fx(50),
-          setKnockback: true,
+          // Base knockback under set weight, not set knockback: `game_attackairn` id 2 is
+          // `kbg: 50, bkb: 35, setWeight: true` (generated/marth.ts; Plan 3, Task 16b).
+          setWeight: true,
           effect: "slash",
         },
         {
@@ -525,7 +529,8 @@ export const marth: FighterDef = {
           angle: fx(75),
           baseKnockback: fx(45),
           knockbackGrowth: fx(50),
-          setKnockback: true,
+          // As the tip: `game_attackairn` id 0 is `kbg: 50, bkb: 45, setWeight: true`.
+          setWeight: true,
           effect: "slash",
         },
         {

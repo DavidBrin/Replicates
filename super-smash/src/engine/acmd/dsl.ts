@@ -91,7 +91,8 @@ export function ATTACK(s: AttackSpec): AcmdCommand {
       situation: s.situation ?? "COLLISION_SITUATION_MASK_GA",
       collisionAttr: s.collisionAttr ?? "collision_attr_normal",
       region: s.region ?? "ATTACK_REGION_NONE",
-      ...(s.meteor ? { meteor: true } : {}),
+      // Either way, when stated: `meteor: false` keeps a downward angle plain.
+      ...(s.meteor !== undefined ? { meteor: s.meteor } : {}),
     },
   };
 }

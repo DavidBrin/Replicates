@@ -95,6 +95,30 @@ export const BALLOON_ANGLE_MAX = fx(110);
  */
 export const BALLOON_FALL_SPEED = fx(1.8);
 
+/**
+ * Set weight (smash-script `set_weight`): every victim weighs this in the
+ * knockback formula, the set-knockback one included. SmashWiki "Knockback"
+ * (https://www.ssbwiki.com/Knockback, revision 2063895): `w` "is set to 100 if
+ * the attack is weight independent"; rubendal SSBU-Calculator passes
+ * `set_weight ? 100 : weight` to `VSKB` and to `WeightBasedKB` alike
+ * (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/worker/multiworker.js#L206-L210).
+ */
+export const SET_WEIGHT = 100;
+/**
+ * A set-weight launch's own fall (same page, Weight-independent knockback): in
+ * Ultimate the victim gets "a fall speed of 1.5 and gravity of 0.087 for the
+ * first 10 frames of the launch, before reverting back to a fighter's regular
+ * fall speed and gravity. Notably, this effect overrides the homogenised fall
+ * speed and gravity used by attacks which have an angle between 70˚ and 110˚"
+ * — so a set-weight launch is never balloon fall ("weight-independent moves do
+ * not homogenize falling speeds", Formula). 0.087 is 356/4096 in Q12. The
+ * frames are counted as the launch's reaction frames in hitstun: UNVERIFIED,
+ * the page does not say what ends them early (`kinetic.ts`, `setWeightFrames`).
+ */
+export const SET_WEIGHT_GRAVITY = fx(0.087);
+export const SET_WEIGHT_FALL_SPEED = fx(1.5);
+export const SET_WEIGHT_LAUNCH_FRAMES = 10;
+
 /** Rage: 1 + ((percent - 35) / 115) * 0.1, applied to knockback only. */
 export const RAGE_START = fx(35);
 export const RAGE_CAP = fx(150);

@@ -23,6 +23,8 @@ function canonical(hb: Hitbox) {
     knockbackGrowth: hb.knockbackGrowth,
     effect: hb.effect ?? "normal",
     setKnockback: hb.setKnockback === true,
+    setKnockbackBase: hb.setKnockbackBase ?? 0,
+    setWeight: hb.setWeight === true,
     transcendent: hb.transcendent === true,
     hitlagMultiplier: hb.hitlagMultiplier ?? ONE,
     shieldstunMultiplier: hb.shieldstunMultiplier ?? ONE,

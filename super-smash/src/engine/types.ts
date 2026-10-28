@@ -218,18 +218,36 @@ export interface Hitbox {
    * whether the victim is grounded or airborne.
    */
   readonly angle: number;
+  /** Base knockback; with `setKnockback`, the box's fixed knockback (the script's `fkb`) instead. */
   readonly baseKnockback: number;
   readonly knockbackGrowth: number;
   readonly effect?: HitEffect;
-  /** Knockback is a fixed value, unaffected by percent, rage or weight. */
+  /**
+   * Fixed ("set") knockback: the knockback formula with the victim's percent
+   * replaced, `((((1 + fkb/2) · (200/(w+100)) · 1.4) + 18) · kbg/100) + bkb`
+   * (rubendal SSBU-Calculator `WeightBasedKB`), `fkb` being `baseKnockback`.
+   * The victim's weight and the growth still count; its percent, the hit's
+   * damage, rage and crouch cancel do not (`computeKnockback`; Plan 3, Task 16b).
+   * A script marks set knockback by a non-zero `fkb`, so `baseKnockback` must be
+   * above 0 for a set-knockback box to compile as one (`attackFromHitbox`).
+   */
   readonly setKnockback?: boolean;
+  /**
+   * A set-knockback box's own `bkb` (a script `ATTACK` with both `fkb` and
+   * `bkb`), added after the weight-based term. Absent is 0; ignored without
+   * `setKnockback`, where `baseKnockback` is the `bkb` (Plan 3, Task 16b).
+   */
+  readonly setKnockbackBase?: number;
   /** Passes through opposing hitboxes rather than clanking with them. */
   readonly transcendent?: boolean;
   /** Per-move hitlag scaling. 1.0 (`ONE`) unless stated. */
   readonly hitlagMultiplier?: number;
   /** Per-move shieldstun scaling. 1.0 (`ONE`) unless stated. */
   readonly shieldstunMultiplier?: number;
-  /** Drives downward regardless of the victim's position. */
+  /**
+   * A meteor: against a grounded victim the launch bounces off the floor at 0.8
+   * of its speed, and the hitstun stays the hit's (`GROUNDED_METEOR_MULTIPLIER`).
+   */
   readonly meteor?: boolean;
   /** This hitbox grabs rather than damages. */
   readonly grabbing?: boolean;
@@ -242,7 +260,9 @@ export interface Hitbox {
   /**
    * smash-script `set_weight`: knockback as if every victim weighed 100
    * (SmashWiki "Knockback", https://www.ssbwiki.com/Knockback: `w` "is set to 100
-   * if the attack is weight independent"). Plan 3, Task 16.
+   * if the attack is weight independent"). Plan 3, Task 16. Its launch falls by
+   * gravity 0.087 toward 1.5 for its first 10 frames and is never balloon fall
+   * (`SET_WEIGHT_GRAVITY`; Plan 3, Task 16b).
    */
   readonly setWeight?: boolean;
   /** `COLLISION_SITUATION_MASK_G`/`_A`: the box hits only grounded, or only airborne, victims. */

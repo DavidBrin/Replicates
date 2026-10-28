@@ -11,14 +11,15 @@
  * (Plan 3, Task 17).
  *
  * An ATTACK's `direct`, `set_weight`, ground/air mask, LR check and downward
- * angle reach the pipeline as `Hitbox` fields (Plan 3, Task 16).
+ * angle reach the pipeline as `Hitbox` fields (Plan 3, Task 16), and so does a
+ * CATCH's ground/air mask (Task 16b). A set-knockback attack (`fkb > 0`)
+ * carries `fkb` as its `baseKnockback` and a `bkb` beside it as
+ * `setKnockbackBase` (Task 16b).
  *
- * Two narrowings are NOT refused, because a `Hitbox` has no field for what is
- * dropped; Plan 3 owns both, by reading `AttackParams` directly:
- * - a `collisionAttr` with no `HitEffect` (not in `EFFECT_OF_ATTR`) becomes a
- *   plain normal hit;
- * - a set-knockback attack (`fkb > 0`) carries `fkb` as its one
- *   `baseKnockback` and its `bkb` is dropped.
+ * One narrowing is NOT refused, because a `Hitbox` has no field for what is
+ * dropped; Plan 3 owns it, by reading `AttackParams` directly: a
+ * `collisionAttr` with no `HitEffect` (not in `EFFECT_OF_ATTR`) becomes a plain
+ * normal hit.
  */
 
 import { ONE, fx } from "../fixed";
@@ -103,6 +104,7 @@ function attackHitbox(
     knockbackGrowth: a.kbg,
     ...(effect !== undefined && effect !== "normal" ? { effect } : {}),
     ...(a.fkb > 0 ? { setKnockback: true } : {}),
+    ...(a.fkb > 0 && a.bkb !== 0 ? { setKnockbackBase: a.bkb } : {}),
     ...(a.clang === "ATTACK_SETOFF_KIND_THRU" ? { transcendent: true } : {}),
     ...(a.hitlag !== ONE ? { hitlagMultiplier: a.hitlag } : {}),
     ...(setoff !== undefined ? { shieldstunMultiplier: setoff } : {}),
@@ -136,12 +138,13 @@ const LR: Readonly<Partial<Record<AttackParams["facing"], "position" | "back">>>
 };
 
 /**
- * A downward launch (230°–310°) is a meteor, cut to 0.8× against a grounded
- * victim — rubendal SSBU-Calculator `js/knockback.js`: `this.spike = this.angle
- * >= 230 && this.angle <= 310`
- * (https://github.com/rubendal/SSBU-Calculator/blob/master/js/knockback.js).
- * Legacy-compiled scripts say `meteor` outright, either way, so only a script
- * that does not say is classified by its angle.
+ * A downward launch (230°–310°) is a meteor: rubendal SSBU-Calculator
+ * `js/knockback.js`, `this.spike = this.angle >= 230 && this.angle <= 310`
+ * (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L1105).
+ * What a meteor does to a grounded victim, a bounce at 0.8 of the launch speed,
+ * is SPEC §4 and `GROUNDED_METEOR_MULTIPLIER`. Legacy-compiled scripts say
+ * `meteor` outright, either way, so only a script that does not say is
+ * classified by its angle.
  */
 function isSpikeAngle(angle: number): boolean {
   return angle >= SPIKE_ANGLE_MIN && angle <= SPIKE_ANGLE_MAX;
@@ -162,6 +165,10 @@ function catchHitbox(c: CatchParams, gameFrame: number, at: { x: number; y: numb
     baseKnockback: 0,
     knockbackGrowth: 0,
     grabbing: true,
+    // A grab's two boxes are often one ground-only and one air-only (Mario's
+    // `game_catch`: `CATCH` id 0 `_G`, id 1 `_A`), and the candidate filter that
+    // honours an ATTACK's mask honours this one the same way (Plan 3, Task 16b).
+    ...(SITUATION[c.situation] !== undefined ? { situation: SITUATION[c.situation] } : {}),
   };
 }
 

@@ -418,6 +418,10 @@ export const pikachu: FighterDef = {
           baseKnockback: fx(45),
           knockbackGrowth: fx(80),
           setKnockback: true,
+          // `game_attackairn` is `kbg: 80, fkb: 45, bkb: 15` with set weight: the 15 is
+          // added after the weight-based term (generated/pikachu.ts; Plan 3, Task 16b).
+          setKnockbackBase: fx(15),
+          setWeight: true,
           effect: "electric",
         },
         {
@@ -457,6 +461,8 @@ export const pikachu: FighterDef = {
           baseKnockback: fx(45),
           knockbackGrowth: fx(100),
           setKnockback: true,
+          // Set weight: `game_attackairf` id 1 (generated/pikachu.ts; Plan 3, Task 16b).
+          setWeight: true,
         },
         {
           id: 1,
@@ -730,6 +736,11 @@ export const pikachu: FighterDef = {
           baseKnockback: fx(125),
           knockbackGrowth: fx(60),
           setKnockback: true,
+          // The bolt's own `bkb`: `pikachu_kaminari` "Regular" is `KBG=60, FKB=125, BKB=55,
+          // SetWeight=false` (rubendal/ssbu data, patch 13.0.1,
+          // https://github.com/rubendal/ssbu/blob/b97bd3370c13eb34f40aad208e3527a2935c13a9/data/patch/13.0.1/character/Pikachu/data.json;
+          // the generated `game_speciallw` has no ATTACK). Plan 3, Task 16b.
+          setKnockbackBase: fx(55),
           meteor: true,
           effect: "electric",
         },

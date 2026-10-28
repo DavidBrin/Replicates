@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { LAUNCH_SPEED_DECAY } from "./constants";
+import { LAUNCH_SPEED_DECAY, SET_WEIGHT_FALL_SPEED, SET_WEIGHT_GRAVITY, SET_WEIGHT_LAUNCH_FRAMES } from "./constants";
 import { ONE, fx } from "./fixed";
 import {
   airControlX,
@@ -505,6 +505,62 @@ describe("the DAMAGE energy: a launch decays on its own", () => {
     expect(f.launchSpeed).toBe(fx(4));
     kineticSetY(f, 0);
     expect(f.launchSpeed).toBe(0);
+  });
+});
+
+/* ------------------------------------------- set weight's launch (Task 16b) -- */
+
+describe("the DAMAGE energy under set weight (Plan 3, Task 16b)", () => {
+  // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback, revision 2063895),
+  // Weight-independent knockback: "a fall speed of 1.5 and gravity of 0.087 for the
+  // first 10 frames of the launch, before reverting back to a fighter's regular fall
+  // speed and gravity".
+  const setWeightLaunch = (): FighterState => {
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, 0, fx(2), fx(2), 0, true);
+    return f;
+  };
+
+  it("arms its frames at launch, and a launch without it does not", () => {
+    expect(setWeightLaunch().kinetic.setWeightFrames).toBe(SET_WEIGHT_LAUNCH_FRAMES);
+    const plain = body({}, { grounded: false });
+    kineticLaunch(plain, 0, fx(2), fx(2));
+    expect(plain.kinetic.setWeightFrames).toBe(0);
+  });
+
+  it("falls by 0.087 for its frames, whatever the balloon flag says, then by the fighter's own gravity", () => {
+    const f = setWeightLaunch();
+    for (let frame = 1; frame <= SET_WEIGHT_LAUNCH_FRAMES; frame++) {
+      kineticReel(f, PARAMS, true);
+      expect(f.kinetic.gravityY).toBe(-frame * SET_WEIGHT_GRAVITY);
+    }
+    expect(f.kinetic.setWeightFrames).toBe(0);
+    kineticReel(f, PARAMS, false);
+    expect(f.kinetic.gravityY).toBe(-SET_WEIGHT_LAUNCH_FRAMES * SET_WEIGHT_GRAVITY - PARAMS.air_accel_y);
+    expect(f.vy).toBe(f.kinetic.damageY + f.kinetic.gravityY);
+  });
+
+  it("caps the fall at 1.5 during its frames", () => {
+    const f = setWeightLaunch();
+    f.kinetic.gravityY = -fx(1.45);
+    kineticSum(f);
+    kineticReel(f, PARAMS, false);
+    expect(f.kinetic.gravityY).toBe(-SET_WEIGHT_FALL_SPEED);
+  });
+
+  // UNVERIFIED: the page says "the first 10 frames of the launch"; here they are the
+  // launch's reaction frames in hitstun, so the override ends with the hitstun, a
+  // landing or anything else that ends the launch (as the balloon speed-up does).
+  it("ends with the launch: out of hitstun, on landing, or cleared", () => {
+    const acting = setWeightLaunch();
+    kineticExec(acting, "FALL", { stickX: 0, params: PARAMS, holdVertical: false });
+    expect(acting.kinetic.setWeightFrames).toBe(0);
+    const landed = setWeightLaunch();
+    kineticLand(landed);
+    expect(landed.kinetic.setWeightFrames).toBe(0);
+    const cleared = setWeightLaunch();
+    kineticClear(cleared);
+    expect(cleared.kinetic.setWeightFrames).toBe(0);
   });
 });
 

@@ -87,8 +87,10 @@ export interface AttackParams {
   /** `ATTACK_REGION_*`, e.g. "ATTACK_REGION_PUNCH". */
   readonly region: string;
   /**
-   * REPLICA: the legacy `Hitbox.meteor` flag (grounded-meteor knockback ×0.8),
-   * carried until Plan 3 derives it from the angle as the game does.
+   * REPLICA: whether the box is a meteor (against a grounded victim, a bounce
+   * at 0.8 of the launch speed; `Hitbox.meteor`). The game has no such flag: an
+   * explicit value wins, which is how a legacy compilation says it either way;
+   * absent, a 230°–310° angle is one (`scriptHitboxes`, Plan 3, Task 16).
    */
   readonly meteor?: boolean;
 }
