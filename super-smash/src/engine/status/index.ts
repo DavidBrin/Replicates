@@ -7,6 +7,7 @@
  */
 
 import { ATTACK_STATUSES } from "./attack";
+import { CLIFF_STATUSES } from "./cliff";
 import { DAMAGE_STATUSES } from "./damage";
 import { GUARD_STATUSES } from "./guard";
 import { registerStatus } from "./kind";
@@ -18,6 +19,7 @@ export const ALL_STATUSES: readonly FighterStatus[] = [
   ...DAMAGE_STATUSES,
   ...GUARD_STATUSES,
   ...ATTACK_STATUSES,
+  ...CLIFF_STATUSES,
 ];
 
 for (const s of ALL_STATUSES) registerStatus(s);

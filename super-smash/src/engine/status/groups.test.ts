@@ -84,6 +84,12 @@ const MIGRATED = [
   "throw",
   "grabbed",
   "thrown",
+  // Task 9
+  "ledgeHang",
+  "ledgeGetUp",
+  "ledgeAttack",
+  "ledgeRoll",
+  "ledgeJump",
 ];
 
 describe("migrated statuses", () => {

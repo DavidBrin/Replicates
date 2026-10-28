@@ -33,7 +33,6 @@ import {
   DIRECTIONAL_AIR_DODGE_SPEED,
   JUMP_SQUAT_FRAMES,
   LAUNCH_SPEED_DECAY,
-  LEDGE_REGRAB_LIMIT,
   PERFECT_SHIELD_WINDOW,
   RESPAWN_INVINCIBILITY_MAX,
   RESPAWN_INVINCIBILITY_MIN,
@@ -590,59 +589,6 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
 
   // Legacy switch: each status group leaves it as it moves to `status/`.
   switch (f.action) {
-    /* ------------------------------------------------------------ ledge -- */
-    case "ledgeHang": {
-      if (f.actionFrame < LEDGE_HANG_MIN) return;
-      const p = presses(f, intent, ctx.frame);
-      const inward = f.ledge !== null ? -f.ledge.side : f.facing;
-      if (p.jump) {
-        startAction(f, "ledgeJump");
-        return;
-      }
-      if (p.attack) {
-        startAction(f, "ledgeAttack");
-        return;
-      }
-      if (intent.shieldHeld) {
-        startAction(f, "ledgeRoll");
-        return;
-      }
-      if (intent.y > 0 || intent.x === inward) {
-        startAction(f, "ledgeGetUp");
-        return;
-      }
-      if (intent.y < 0 || intent.x === -inward) {
-        f.ledge = null;
-        f.intangible = 0;
-        startAction(f, "fall");
-        return;
-      }
-      // Six grabs and the game stops letting you hang: you get up whether you
-      // like it or not, which is what makes ledge-stalling a losing plan.
-      if (f.ledgeRegrabs > LEDGE_REGRAB_LIMIT) startAction(f, "ledgeGetUp");
-      return;
-    }
-
-    case "ledgeGetUp":
-    case "ledgeAttack":
-    case "ledgeRoll":
-    case "ledgeJump": {
-      const total =
-        f.action === "ledgeGetUp"
-          ? LEDGE_GETUP_FRAMES
-          : f.action === "ledgeAttack"
-            ? LEDGE_ATTACK_FRAMES
-            : f.action === "ledgeRoll"
-              ? LEDGE_ROLL_FRAMES
-              : LEDGE_JUMP_FRAMES;
-      if (f.actionFrame < total) {
-        bufferPress(f, intent, ctx.frame);
-        return;
-      }
-      finishLedgeOption(f, ctx);
-      return;
-    }
-
     /* ------------------------------------------------------- locomotion -- */
     case "jumpSquat": {
       if (f.actionFrame < JUMP_SQUAT_FRAMES) {
