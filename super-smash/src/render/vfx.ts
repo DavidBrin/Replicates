@@ -758,9 +758,16 @@ export function drawDizzyStars(
   ctx.restore();
 }
 
-/** Smash-charge motes, spiralling into the charging fighter. */
+/**
+ * Smash-charge motes, spiralling into the charging fighter.
+ *
+ * `charge` counts up only in an attack or special (`status/attack.ts`, a
+ * chargeable move held); everywhere else it is a length or a flag — a landing's
+ * frames (`onLanded`), an air dodge's "directional" bit — and must not glow.
+ */
 export function trackChargeGlow(v: VfxState, state: GameState): void {
   for (const f of state.fighters) {
+    if (f.action !== "attack" && f.action !== "special") continue;
     if (f.charge <= 0) continue;
     if (v.frame % 2 !== 0) continue;
     const a = rand(v) * Math.PI * 2;

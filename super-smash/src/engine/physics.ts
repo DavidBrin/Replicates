@@ -48,9 +48,6 @@ import type { FighterAttributes, FighterState, Platform, StageDef } from "./type
  */
 export const HARD_PLATFORM_DEPTH = fx(60);
 
-/** Frames of the ordinary landing animation, before any move's landing lag. */
-export const LANDING_FRAMES = 4;
-
 /** Ground acceleration is a multiple of traction (legacy; now defined in `kinetic.ts`). */
 export { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR };
 

@@ -390,7 +390,9 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
     if (!skip) {
       k.gravityY = gravityStep(k.gravityY, p.air_accel_y, f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
     }
-    // Frames at full fall speed (or faster: a fast fall) decide a heavy landing.
+    // Frames at full fall speed decide a heavy landing (SmashWiki "Lag").
+    // UNVERIFIED: that a fast fall's faster frames count too ("or faster"); the
+    // page says "maximum falling speed" and does not mention fast falling.
     k.fallFrames = kineticSumY(f) <= -p.air_speed_y_stable ? k.fallFrames + 1 : 0;
   } else {
     const sumY = kineticSumY(f);

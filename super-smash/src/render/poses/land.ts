@@ -3,13 +3,16 @@
  *
  * Ultimate has two of these and they are not the same animation at two
  * lengths. Touching down normally — or out of an aerial that auto-cancelled —
- * runs the fighter's ordinary landing, which SmashWiki puts at two to six
- * frames depending on the character; `LANDING_ANIMATION_FRAMES` is four, the
- * middle of that range. An aerial that did *not* auto-cancel runs the move's
- * own landing lag instead, which is per-move and per-fighter: six frames for
- * Mario's neutral air, thirty-eight for Donkey Kong's up special, and ten for
- * an air dodge. The short one is a bounce; the long one is the fighter being
- * *stuck*, and that is the thing the animation has to say.
+ * runs the fighter's ordinary landing, whose length the engine decides:
+ * `onLanded` stores a light landing's frames (`landing_frame_light`) or a heavy
+ * one's (`landing_frame`) in `charge`, and `actionDurationFor` reads it back.
+ * That is one to four frames on this roster; `LANDING_ANIMATION_FRAMES` (four)
+ * is only the length of a landing that did not come through `onLanded`. An
+ * aerial that did *not* auto-cancel runs the move's own landing lag instead,
+ * which is per-move and per-fighter: six frames for Mario's neutral air,
+ * thirty-eight for Donkey Kong's up special, and ten for an air dodge. The
+ * short one is a bounce; the long one is the fighter being *stuck*, and that
+ * is the thing the animation has to say.
  *
  * `squashFor()` in `characterArt.ts` already multiplies an impact squash onto
  * both — 1.22× wide, 0.8× tall on the contact frame, linearly gone by frame six
@@ -28,12 +31,15 @@
 import { P, type PoseClip } from "./clip";
 
 /**
- * The light landing: four frames, and they render as exactly four.
+ * The ordinary landing, drawn for four frames: the longest it runs on this
+ * roster, and the fallback length. At four it renders as exactly four. A
+ * shorter landing squeezes the same clip into fewer frames, so a one-frame
+ * landing shows only its first key.
  *
  * `actionFrame` runs 0..3 before the state machine hands over to `stand`, and
- * `poseTimeFor` divides it by four, so keys on the quarters are one key per
- * frame — each is a whole sixtieth of a second of screen time, and nothing is
- * ever interpolated. The first two spans are `hold` for the same reason: at
+ * `poseTimeFor` divides it by the length, four, so keys on the quarters are one
+ * key per frame — each is a whole sixtieth of a second of screen time, and
+ * nothing is ever interpolated. The first two spans are `hold` for the same reason: at
  * this length the beats have to be *drawn* rather than travelled through, and
  * the moment the clip is stretched (a fighter with a longer landing) it is the
  * contact and the fold that should sit still, not the recovery.

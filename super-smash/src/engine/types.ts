@@ -449,7 +449,11 @@ export interface FighterState {
   actionFrame: number;
   /** The move being performed, when `action` is attack/special/throw. */
   move: MoveSlot | null;
-  /** Frames a chargeable smash has been held. */
+  /**
+   * Frames a chargeable smash has been held. Reused outside an attack, where
+   * `startAction` has cleared it: the length of a landing (`land` and
+   * `landingLag`, set by `onLanded`) and an air dodge's "directional" flag.
+   */
   charge: number;
 
   damage: number;

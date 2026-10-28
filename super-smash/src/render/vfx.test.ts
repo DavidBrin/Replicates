@@ -388,9 +388,30 @@ describe("continuous effects", () => {
 
     const charging = createVfx();
     for (let i = 0; i < 4; i++) {
-      stepVfx(charging, null, makeState({ fighters: [makeFighter({ charge: 30 })] }));
+      stepVfx(charging, null, makeState({ fighters: [makeFighter({ action: "attack", move: "fsmash", charge: 30 })] }));
     }
     expect(charging.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
+  });
+
+  it("glows for a charged special too (Samus's Charge Shot, a chargeable special)", () => {
+    const v = createVfx();
+    for (let i = 0; i < 4; i++) {
+      stepVfx(v, null, makeState({ fighters: [makeFighter({ action: "special", move: "neutralB", charge: 30 })] }));
+    }
+    expect(v.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    // `charge` also carries a landing's length (ordinary and aerial: `onLanded`) and an air dodge's
+    // "directional" flag (1). None of those is a charge, so none of them glows.
+    ["a light or heavy landing", { action: "land", charge: 3 }],
+    ["an aerial's landing lag", { action: "landingLag", charge: 6 }],
+    ["a directional air dodge", { action: "airDodge", charge: 1 }],
+    ["an air dodge's landing lag", { action: "landingLag", charge: 10 }],
+  ] as const)("does not glow for %s, which keeps its length in `charge`", (_name, over) => {
+    const v = createVfx();
+    for (let i = 0; i < 8; i++) stepVfx(v, null, makeState({ fighters: [makeFighter(over)] }));
+    expect(v.particles.filter((p) => p.kind === "chargeMote")).toHaveLength(0);
   });
 
   it("smokes above 120% and not below", () => {

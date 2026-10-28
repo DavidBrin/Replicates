@@ -525,20 +525,32 @@ describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#L
   // that the threshold is "at least" (>=) rather than "more than"
   // landing_heavy_frame frames at full fall speed.
 
-  /** Drop a standing fighter from `height` units with no input; the frames that follow. */
-  function dropFrom(id: RosterId, height: number): FighterState[] {
+  /**
+   * Drop a standing fighter from `height` units; the frames that follow. With no
+   * input unless `fastFall`, which taps down on the second frame (the stick has
+   * to be pressed, not held, and fast fall needs the fighter past its apex).
+   */
+  function dropFrom(id: RosterId, height: number, fastFall = false): FighterState[] {
     const s = standing(id);
     const f = s.fighters[0];
     Object.assign(f, { y: f.y + fx(height), grounded: false, platform: -1, action: "fall", actionFrame: 0, vx: 0, vy: 0 });
     f.kinetic = emptyKinetic();
-    return play(s, hold(0, 200));
+    return play(s, fastFall ? [0, ...hold(Btn.Down, 199)] : hold(0, 200));
   }
 
   function landing(frames: readonly FighterState[]): { lag: number; frames: number } {
     const at = frames.findIndex((f) => f.action === "land");
+    expect(at, "the fighter never entered the land state").toBeGreaterThanOrEqual(0);
     let n = 0;
-    while (frames[at + n].action === "land") n += 1;
+    while (at + n < frames.length && frames[at + n].action === "land") n += 1;
     return { lag: frames[at].charge, frames: n };
+  }
+
+  /** What `onLanded` needs to know about `id` and its stage. */
+  function contextFor(id: RosterId, fighters: readonly FighterState[]) {
+    const def = FIGHTERS.find((d) => d.id === id);
+    expect(def, `${id} is on the roster`).toBeDefined();
+    return { def: def!, stage: finalDestination, frame: 1, fighters };
   }
 
   it.each(IDS)("%s lands lightly from a short drop", (id) => {
@@ -551,6 +563,32 @@ describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#L
     expect(landing(dropFrom(id, 80))).toEqual({ lag: p.landing_frame, frames: p.landing_frame });
   });
 
+  it.each(IDS)("%s: one frame short of landing_heavy_frame at full fall speed is light, that many is heavy", (id) => {
+    // Pins the `>=` (UNVERIFIED, above): the engine's choice, not a published one.
+    const p = FIGHTER_PARAMS[id];
+    const landedAfter = (fallFrames: number): [string, number] => {
+      const s = standing(id);
+      const f = s.fighters[0];
+      Object.assign(f, { action: "fall", actionFrame: 0 });
+      f.kinetic.fallFrames = fallFrames;
+      onLanded(f, contextFor(id, s.fighters));
+      return [f.action, f.charge];
+    };
+    expect(landedAfter(p.landing_heavy_frame - 1)).toEqual(["land", p.landing_frame_light]);
+    expect(landedAfter(p.landing_heavy_frame)).toEqual(["land", p.landing_frame]);
+  });
+
+  it("counts the frames of a fast fall as frames at full fall speed", () => {
+    // UNVERIFIED: that a fast fall counts at all; the Lag page says "maximum
+    // falling speed" and a fast fall is faster than that.
+    // Mario needs ~12.9 units to reach his 1.5 fall speed (1.5^2 / 2 / 0.087),
+    // so a plain fall from 14 spends about a frame at it and lands lightly,
+    // while a fast fall (2.4 a frame) spends five and lands heavily.
+    const p = FIGHTER_PARAMS.mario;
+    expect(landing(dropFrom("mario", 14)).lag).toBe(p.landing_frame_light);
+    expect(landing(dropFrom("mario", 14, true)).lag).toBe(p.landing_frame);
+  });
+
   it("makes an auto-cancelled aerial a heavy landing, as the Lag page says", () => {
     // "Any time a character lands while this flag is not activated, they will
     // enter their normal landing animation … landing during this window will
@@ -558,7 +596,7 @@ describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#L
     const s = standing("mario");
     const f = s.fighters[0];
     Object.assign(f, { action: "attack", move: "fair", actionFrame: 50, grounded: true });
-    onLanded(f, { def: FIGHTERS[0], stage: STAGES[0], frame: 1, fighters: s.fighters });
+    onLanded(f, contextFor("mario", s.fighters));
     expect([f.action, f.charge]).toEqual(["land", FIGHTER_PARAMS.mario.landing_frame]);
   });
 });

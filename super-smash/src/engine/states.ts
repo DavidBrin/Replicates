@@ -818,6 +818,8 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
       const late = move.autoCancelAfter !== undefined && f.actionFrame >= move.autoCancelAfter;
       if (early || late) {
         // An auto-cancelled aerial lands heavily (SmashWiki "Lag", aerial landing).
+        // UNVERIFIED: that this holds in Ultimate; the page's "landing in the
+        // auto-cancel window is a heavy landing" rule may describe an earlier game.
         startAction(f, "land");
         f.charge = p.landing_frame;
         return;
