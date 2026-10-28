@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { fx } from "./fixed";
+import { byRatio, fx, mul } from "./fixed";
+import { GROUNDED_ZERO_LAUNCH_RATIO, LAUNCH_SPEED_RATIO } from "./constants";
 import { hashState } from "./hash";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
@@ -240,5 +241,66 @@ describe("the stale queue remembers shield hits (Plan 3, Task 2)", () => {
     expect(after.action).toBe("dead");
     expect(after.staleQueue).toEqual([]);
     expect(after.combat.staleShield).toEqual([]);
+  });
+});
+
+/* ------------------------------------------- Task 3: Sakurai angle -- */
+
+describe("the Sakurai angle through a real hit (Plan 3, Task 3)", () => {
+  const sakuraiDef: FighterDef = {
+    ...BASE_DEF,
+    moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: fx(361), baseKnockback: fx(10) })] }) },
+  };
+  const ctx = ctxFor(sakuraiDef);
+
+  function angleAgainst(percent: number, airborne: boolean): number {
+    const s = standing(ctx);
+    s.fighters[1].damage = fx(percent);
+    if (airborne) {
+      s.fighters[1].grounded = false;
+      s.fighters[1].platform = -1;
+      s.fighters[1].y = fx(1);
+      s.fighters[1].action = "fall";
+    }
+    const hit = play(s, 8, JAB, ctx).flatMap((f) => f.events.hits)[0];
+    return hit.angle;
+  }
+
+  it("slides a lightly hit grounded victim along the floor", () => {
+    expect(angleAgainst(0, false)).toBe(0);
+  });
+
+  it("lifts a heavily hit grounded victim at 38 degrees", () => {
+    expect(angleAgainst(150, false)).toBe(fx(38));
+  });
+
+  it("sends an airborne victim at 38 degrees even from a light hit", () => {
+    expect(angleAgainst(0, true)).toBe(fx(38));
+  });
+});
+
+describe("flat launches (Plan 3, Task 3)", () => {
+  /** The launch speed fighter 1 leaves the freeze with, after a 0° jab of `bkb` set knockback. */
+  function launchOf(airborne: boolean): { speed: number; kb: number } {
+    const flat: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: fx(60), setKnockback: true })] }) },
+    };
+    const ctx = ctxFor(flat);
+    const s = standing(ctx);
+    if (airborne) Object.assign(s.fighters[1], { grounded: false, platform: -1, y: fx(1), action: "fall" });
+    const frames = play(s, 30, JAB, ctx);
+    const hit = frames.findIndex((f) => f.events.hits.length > 0);
+    const released = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+    return { speed: frames[released].state.fighters[1].launchSpeed, kb: frames[hit].events.hits[0].knockback };
+  }
+
+  // rubendal `js/knockback.js`: a grounded victim launched at 0° (`groundedZeroAngle`)
+  // leaves at 0.8 of the launch speed.
+  it("slides a grounded victim along 0° at 0.8 of the launch speed", () => {
+    const grounded = launchOf(false);
+    const airborne = launchOf(true);
+    expect(airborne.speed).toBe(mul(airborne.kb, LAUNCH_SPEED_RATIO));
+    expect(grounded.speed).toBe(mul(byRatio(grounded.kb, GROUNDED_ZERO_LAUNCH_RATIO), LAUNCH_SPEED_RATIO));
   });
 });

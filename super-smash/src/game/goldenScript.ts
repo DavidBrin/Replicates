@@ -32,10 +32,21 @@
  * longer walk-in (14 to 6 frames later, back on schedule from the dash to the
  * edge on 1759).
  *
+ * Plan 3 Task 3 (the Sakurai angle) re-tuned the forward smash and what hangs on
+ * it. A grounded victim hit for 88 knockback or more now leaves at 38°, not flat,
+ * so the smash that used to slide Fox three units sent him off the right side of
+ * Final Destination and the script lost him on 872. The two now fight on the left:
+ * after the throw Fox walks back toward the middle (274) and turns to face Mario
+ * (308), who walks past him and turns round (312), so the smash (732) goes to the
+ * left and Fox lands on the stage. Fox then walks back to Mario's side (903) for
+ * the forward tilt, and steps in a little ahead of the fireball (1416), which
+ * leaves the neutral air in reach on 1635. The walk to the right ledge is a frame
+ * longer, for the turn from left to right: the hang is on 863, not 862.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
- * (the shield break on 657, the hangs on 862, 1193, 1299 and 1400, the hits on
- * 1006 and 1635, time up on 2014). Both were checked against a run after the
- * Plan 2 final fix wave.
+ * (the shield break on 657, the hangs on 863, 1193, 1299 and 1400, the hits on
+ * 747, 1006, 1578 and 1635, time up on 2014). All were checked against a run
+ * after Plan 3 Task 3.
  */
 
 import { Btn } from "@/engine/types";
@@ -88,8 +99,14 @@ const STEPS: readonly ScriptStep[] = [
   [15, 0, 0],
   [1, R, SOFT | U], //            233: forward throw: Fox is thrown, then launched
   [40, 0, SOFT | U],
-  [38, R | SOFT, 0], //           274: in to about 8 again, for the jabs below
-  [22, 0, 0],
+  // Task 3: the smash below launches a grounded Fox at 38°, so the fight moves to
+  // the left of the stage. Mario still walks in to about 8 for the jabs, past Fox,
+  // who walks back toward the middle and turns round to shield from him.
+  [34, R | SOFT, L | SOFT], //    274: Fox walks left (from 289, when his hitstun ends)
+  [1, R | SOFT, R | SOFT], //     308: Fox turns back to face Mario
+  [3, R | SOFT, 0],
+  [1, L | SOFT, 0], //            312: Mario turns round to face Fox
+  [21, 0, 0],
   // Fox shields, then spot-dodges out of it.
   [10, 0, S], //                  334: shield
   [1, 0, S | D], //               344: spotDodge
@@ -102,20 +119,23 @@ const STEPS: readonly ScriptStep[] = [
   [30, 0, S],
   [1, A, S], //                   477: jab: shieldStun
   [254, 0, S], //                 478: the shield breaks on 657: shieldBroken
-  // Mario forward-smashes the stunned Fox, who holds a soft up through the launch.
-  [1, R, SOFT | U], //            732: a fresh right...
-  [1, R | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
-  [66, 0, SOFT | U], //           734: tumble, downed; Mario can walk again on 800
+  // Mario forward-smashes the stunned Fox, to the left, who holds a soft up through
+  // the launch: 38°, so Fox flies across the stage and lands on its left.
+  [1, L, SOFT | U], //            732: a fresh left...
+  [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
+  [66, 0, SOFT | U], //           734: tumble (747), downed (792), getUp (832); Mario can walk again on 800
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
-  [64, R | SOFT, 0], //           800: ledgeHang on 862
-  [20, 0, 0],
+  [65, R | SOFT, 0], //           800: ledgeHang on 863 (he turns from left to right first)
+  [19, 0, 0],
   [1, J, 0], //                   884: ledgeJump, then jump
-  [20, L, 0], //                  885: drift back over the stage
-  [40, 0, 0],
-  [1, L | A, 0], //               945: forward air on the way down...
-  [55, 0, 0], //                  946: ...that lands inside itself: landingLag
+  [18, L, 0], //                  885: drift back over the stage
+  [2, L, R | SOFT], //            903: Fox walks back from the left of the stage
+  [40, 0, R | SOFT],
+  [1, L | A, R | SOFT], //        945: forward air on the way down...
+  [51, 0, R | SOFT], //           946: ...that lands inside itself: landingLag
+  [4, 0, 0],
   // Soft turns a fresh direction plus attack into a tilt.
   [1, L | SOFT, 0], //           1001: facing left since the ledge
   [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006
@@ -142,7 +162,8 @@ const STEPS: readonly ScriptStep[] = [
   [17, R | SOFT, 0], //          1385: back onto the ledge (the hang begins on 1400)
   [13, 0, 0],
   [1, S, 0], //                  1415: ledgeRoll
-  [50, 0, 0],
+  [4, 0, R | SOFT], //           1416: Fox steps in a little, ahead of the fireball
+  [46, 0, 0],
   [1, J, 0], //                  1466: a tap is a short hop
   [6, 0, 0],
   [1, S, 0], //                  1473: airDodge, landing inside it: landingLag

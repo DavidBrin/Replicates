@@ -15,9 +15,10 @@
  * you were hit, not the one after).
  */
 
-import { ONE, fx, mul, abs, randomInt, nextRandom } from "./fixed";
+import { ONE, fx, mul, abs, byRatio, randomInt, nextRandom } from "./fixed";
 import {
   FINAL_SMASH_STANDBY,
+  GROUNDED_ZERO_LAUNCH_RATIO,
   LEDGE_REGRAB_LIMIT,
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
@@ -1279,7 +1280,10 @@ function applyHit(
   // now — the arrow does not turn round when Link does.
   const sourceFacing = c.projectile !== null ? c.projectile.facing : attacker.facing;
   victim.pendingKnockback = kb;
-  victim.pendingAngle = resolveAngle(hb, victim.grounded);
+  victim.pendingAngle = resolveAngle(hb, victim.grounded, kb);
+  // A grounded victim launched flat slides out at 0.8 of the speed (rubendal
+  // `groundedZeroAngle`); the hitstun is the hit's, already decided above.
+  if (victim.grounded && victim.pendingAngle === 0) victim.pendingKnockback = byRatio(kb, GROUNDED_ZERO_LAUNCH_RATIO);
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
 
   victim.hitstun = hitstun;

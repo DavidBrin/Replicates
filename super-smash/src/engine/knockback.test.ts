@@ -342,13 +342,50 @@ describe("applyLSI", () => {
 });
 
 describe("resolveAngle", () => {
-  it("sends a grounded victim flat and an airborne one at 44 degrees", () => {
-    expect(resolveAngle({ angle: SAKURAI_ANGLE }, true)).toBe(SAKURAI_GROUNDED);
-    expect(resolveAngle({ angle: SAKURAI_ANGLE }, false)).toBe(SAKURAI_AIRBORNE);
+  // SmashWiki "Sakurai angle" (https://www.ssbwiki.com/Sakurai_angle), Ultimate:
+  // aerial victims 38° at any knockback; grounded 0° up to 60 knockback, 38° from
+  // 88, linear between. rubendal SSBU-Calculator `SakuraiAngle` adds the 1°
+  // offset inside the ramp: min((kb − 60)/(88 − 60) × 38 + 1, 38).
+  it("sends an airborne victim at 38 degrees whatever the knockback", () => {
+    expect(SAKURAI_AIRBORNE).toBe(fx(38));
+    for (const kb of [0, 30, 60, 74, 88, 200]) {
+      expect(resolveAngle({ angle: SAKURAI_ANGLE }, false, fx(kb))).toBe(SAKURAI_AIRBORNE);
+    }
+  });
+
+  it("sends a grounded victim flat below 60 knockback and at 38 degrees from 88", () => {
+    expect(resolveAngle({ angle: SAKURAI_ANGLE }, true, fx(59.99))).toBe(SAKURAI_GROUNDED);
+    expect(resolveAngle({ angle: SAKURAI_ANGLE }, true, fx(88))).toBe(fx(38));
+    expect(resolveAngle({ angle: SAKURAI_ANGLE }, true, fx(150))).toBe(fx(38));
+  });
+
+  it("ramps a grounded victim's angle between 60 and 88 knockback, as the calculator does", () => {
+    fc.assert(
+      fc.property(fc.double({ min: 0, max: 200, noNaN: true }), fc.boolean(), (kb, grounded) => {
+        const ours = toFloat(resolveAngle({ angle: SAKURAI_ANGLE }, grounded, fx(kb)));
+        const theirs = ref.sakuraiAngle(toFloat(fx(kb)), !grounded);
+        expect(Math.abs(ours - theirs)).toBeLessThan(2 / ONE);
+      }),
+      { numRuns: 1000 },
+    );
+    // Worked: 74 knockback is halfway up the ramp, (74 − 60)/28 × 38 + 1 = 20°.
+    expect(toFloat(resolveAngle({ angle: SAKURAI_ANGLE }, true, fx(74)))).toBeCloseTo(20, 3);
   });
 
   it("leaves an ordinary angle alone", () => {
-    expect(resolveAngle({ angle: fx(45) }, true)).toBe(fx(45));
+    expect(resolveAngle({ angle: fx(45) }, true, fx(100))).toBe(fx(45));
+  });
+
+  // SmashWiki "Sakurai angle": "moves with a launch angle of 0 have been given the
+  // Sakurai angle-like property of changing to 32 degrees if they deal 120 units of
+  // knockback or more"; rubendal `js/knockback.js` applies it to 0 and 180.
+  it("lifts a flat launch to 32 degrees from 120 knockback, grounded or not", () => {
+    expect(resolveAngle({ angle: fx(0) }, true, fx(119.99))).toBe(fx(0));
+    expect(resolveAngle({ angle: fx(0) }, true, fx(120))).toBe(fx(32));
+    expect(resolveAngle({ angle: fx(0) }, false, fx(150))).toBe(fx(32));
+    // A backward flat launch stays backward: 180° becomes 148° (UNVERIFIED mirror of 32°).
+    expect(resolveAngle({ angle: fx(180) }, true, fx(120))).toBe(fx(148));
+    expect(resolveAngle({ angle: fx(180) }, true, fx(100))).toBe(fx(180));
   });
 });
 

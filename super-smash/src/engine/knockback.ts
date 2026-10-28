@@ -42,7 +42,11 @@ import {
   SHIELDSTUN_CAP,
   SAKURAI_ANGLE,
   SAKURAI_GROUNDED,
+  FLAT_LIFT_ANGLE,
+  FLAT_LIFT_KB,
   SAKURAI_AIRBORNE,
+  SAKURAI_KB_HIGH,
+  SAKURAI_KB_LOW,
   STALE_QUEUE_LENGTH,
   STALE_KNOCKBACK_DAMPING,
   DI_MAX_DEVIATION,
@@ -441,16 +445,24 @@ export function applyLSI(launchSpeed: number, stickY: number, angleFx: number): 
 /**
  * Resolve the Sakurai angle (361) against the victim's situation.
  *
- * 361 is not a direction, it is an instruction: launch a grounded victim flat
- * along the ground so they slide and can be followed up, and a airborne one at
- * 44° so they are actually sent somewhere. Jab and most tilts use it, which is
- * why the same move combos on the ground and edgeguards in the air.
+ * 361 is not a direction, it is an instruction: launch an airborne victim at
+ * 38°, and a grounded one flat when the hit is weak — so they slide and can be
+ * followed up — rising to the same 38° as the hit gets strong enough to kill.
+ * `kb` is the hit's knockback, fixed-point. See `SAKURAI_AIRBORNE`.
  */
-export function resolveAngle(hitbox: Pick<Hitbox, "angle">, victimGrounded: boolean): number {
-  if (hitbox.angle === SAKURAI_ANGLE) {
-    return victimGrounded ? SAKURAI_GROUNDED : SAKURAI_AIRBORNE;
+export function resolveAngle(hitbox: Pick<Hitbox, "angle">, victimGrounded: boolean, kb: number): number {
+  if (hitbox.angle !== SAKURAI_ANGLE) {
+    // A strong flat launch is lifted to 32° (mirrored for a backward one).
+    if (kb >= FLAT_LIFT_KB && hitbox.angle === 0) return FLAT_LIFT_ANGLE;
+    if (kb >= FLAT_LIFT_KB && hitbox.angle === fx(180)) return fx(180) - FLAT_LIFT_ANGLE;
+    return hitbox.angle;
   }
-  return hitbox.angle;
+  if (!victimGrounded) return SAKURAI_AIRBORNE;
+  if (kb < SAKURAI_KB_LOW) return SAKURAI_GROUNDED;
+  if (kb >= SAKURAI_KB_HIGH) return SAKURAI_AIRBORNE;
+  // (kb − 60)/28 × 38 + 1, one truncation, capped at 38.
+  const ramp = mulDiv(kb - SAKURAI_KB_LOW, SAKURAI_AIRBORNE, SAKURAI_KB_HIGH - SAKURAI_KB_LOW) + ONE;
+  return ramp > SAKURAI_AIRBORNE ? SAKURAI_AIRBORNE : ramp;
 }
 
 export interface LaunchVector {

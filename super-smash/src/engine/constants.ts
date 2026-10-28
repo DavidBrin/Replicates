@@ -88,9 +88,30 @@ export const HITLAG_CROUCH_CANCEL: Ratio = [67, 100];
 
 /** The angle value meaning "depends on whether the victim is grounded". */
 export const SAKURAI_ANGLE = fx(361);
-/** What the Sakurai angle resolves to, grounded and airborne. */
+/**
+ * What the Sakurai angle resolves to. SmashWiki "Sakurai angle"
+ * (https://www.ssbwiki.com/Sakurai_angle), Ultimate: an airborne victim always
+ * goes at 38°; a grounded one goes flat below 60 knockback, at 38° from 88, and
+ * on a linear ramp between — rubendal SSBU-Calculator `SakuraiAngle`:
+ * `min((kb − 60)/(88 − 60) × 38 + 1, 38)`.
+ */
 export const SAKURAI_GROUNDED = fx(0);
-export const SAKURAI_AIRBORNE = fx(44);
+export const SAKURAI_AIRBORNE = fx(38);
+export const SAKURAI_KB_LOW = fx(60);
+export const SAKURAI_KB_HIGH = fx(88);
+/**
+ * A flat launch (0°) of 120 knockback or more goes out at 32° instead
+ * (SmashWiki "Sakurai angle", Ultimate; rubendal `js/knockback.js`, which
+ * applies it to 0° and 180°). For 180° the replica uses the mirror, 148°, so a
+ * backward launch stays backward — UNVERIFIED: rubendal sets 32° for both.
+ */
+export const FLAT_LIFT_KB = fx(120);
+export const FLAT_LIFT_ANGLE = fx(32);
+/**
+ * A grounded victim launched at 0° leaves at 0.8 of the launch speed
+ * (rubendal `js/knockback.js`, `groundedZeroAngle`).
+ */
+export const GROUNDED_ZERO_LAUNCH_RATIO: Ratio = [4, 5];
 
 /** Two hitboxes within this damage difference clank instead of trading. */
 export const CLANK_RANGE = fx(9);

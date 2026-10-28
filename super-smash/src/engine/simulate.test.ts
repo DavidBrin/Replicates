@@ -632,7 +632,9 @@ describe("a connecting pummel", () => {
     const ticks = holdThen(Btn.Attack, 40);
     const release = ticks.findIndex((t, i) => i > HOLD_INPUT_TICK && t.state.fighters[1].hitlag === 0);
     expect(release).toBe(HOLD_INPUT_TICK + 6);
-    expect(ticks[release].state.fighters[1]).toMatchObject({ vx: 3690, vy: 0, grounded: true, hitstun: 11 });
+    // The pummel launches at 0° (30 knockback → 3690 at full speed); a grounded
+    // victim leaves a 0° launch at 0.8 of it (rubendal `groundedZeroAngle`): 2952.
+    expect(ticks[release].state.fighters[1]).toMatchObject({ vx: 2952, vy: 0, grounded: true, hitstun: 11 });
 
     // The pummel's 10 frames, then the hold it came from, which is gone.
     expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["pummel", "grabHold", "stand"]);
