@@ -31,7 +31,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
-import { kineticLand, kineticSetX, kineticSetY } from "./kinetic";
+import { kineticLand, kineticSetX, kineticSetY, kineticTakeStep } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -80,8 +80,11 @@ export function fastFallVelocity(attrs: FighterAttributes): number {
 
 /** Position integration. Velocities are units per frame, so this is an add. */
 export function integrate(f: FighterState): void {
-  f.x += f.vx;
-  f.y += f.vy;
+  // A sped-up launch frame plays several reaction frames; the extra ones'
+  // displacement rides along (Plan 3, Task 6).
+  const step = kineticTakeStep(f);
+  f.x += f.vx + step.x;
+  f.y += f.vy + step.y;
 }
 
 /**

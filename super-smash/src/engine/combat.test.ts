@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { byRatio, fx, mul } from "./fixed";
 import { GROUNDED_ZERO_LAUNCH_RATIO, LAUNCH_SPEED_RATIO } from "./constants";
 import { hashState } from "./hash";
+import { computeHitstun, effectiveHitstun } from "./knockback";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
 import { Btn } from "./types";
@@ -351,5 +352,73 @@ describe("DI needs a tumbling launch (Plan 3, Task 4)", () => {
       return s.fighters[1].launchSpeed;
     };
     expect(speedHolding(Btn.Up)).toBe(speedHolding(0));
+  });
+});
+
+/* ----------------------------------------- Task 6: balloon speed-up -- */
+
+describe("the balloon speed-up through a real hit (Plan 3, Task 6)", () => {
+  /**
+   * A jab (and neutral air) with fixed (set) knockback: Ultimate never speeds
+   * those up. 5°, not 0°: a flat launch of 120 or more is lifted to 32° (Task 3).
+   */
+  const setKb = hitbox({ angle: fx(5), baseKnockback: fx(150), setKnockback: true });
+  const setKbDef: FighterDef = {
+    ...BASE_DEF,
+    moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [setKb] }), nair: move("nair", { hitboxes: [setKb] }) },
+  };
+  /** The same launch, 150 knockback nearly straight ahead, from growth instead. */
+  const growth = hitbox({ angle: fx(5), baseKnockback: fx(150), knockbackGrowth: 0 });
+  const growthDef: FighterDef = {
+    ...BASE_DEF,
+    moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [growth] }), nair: move("nair", { hitboxes: [growth] }) },
+  };
+
+  function contact(def: FighterDef): { hitstun: number; knockback: number } {
+    const frames = play(standing(ctxFor(def)), 8, JAB, ctxFor(def));
+    const i = frames.findIndex((f) => f.events.hits.length > 0);
+    return { hitstun: frames[i].state.fighters[1].hitstun, knockback: frames[i].events.hits[0].knockback };
+  }
+
+  it("holds a tumbling victim in hitstun for the sped-up time, not the base", () => {
+    const c = contact(growthDef);
+    expect(c.hitstun).toBe(effectiveHitstun(c.knockback, true));
+    expect(c.hitstun).toBeLessThan(computeHitstun(c.knockback));
+  });
+
+  // rubendal SSBU-Calculator `js/knockback.js`: the speed-up runs only `if (tumble && !isFKB)`.
+  it("leaves a set-knockback launch at its base hitstun", () => {
+    const c = contact(setKbDef);
+    expect(c.hitstun).toBe(computeHitstun(c.knockback));
+  });
+
+  // Review Focus #5: the speed-up against the blast-zone check, which runs once
+  // per real frame. A sped-up frame jumps several reaction frames; the KO must
+  // come on the first real frame whose end lies past the line, once.
+  it("KOs on the first sped-up frame past the blast zone, and only once", () => {
+    function koFrame(def: FighterDef): { frame: number; kos: number; lastInside: number } {
+      const s = standing(ctxFor(def));
+      s.fighters[0].x = fx(60);
+      s.fighters[1].x = fx(68);
+      s.fighters[1].grounded = false;
+      s.fighters[1].platform = -1;
+      s.fighters[1].y = fx(30);
+      s.fighters[0].y = fx(30);
+      s.fighters[0].grounded = false;
+      s.fighters[0].platform = -1;
+      s.fighters[0].action = "fall";
+      s.fighters[1].action = "fall";
+      const frames = play(s, 120, JAB, ctxFor(def));
+      const at = frames.findIndex((f) => f.events.kos.some((k) => k.port === 1));
+      const kos = frames.flatMap((f) => f.events.kos).filter((k) => k.port === 1).length;
+      return { frame: at, kos, lastInside: frames[at - 1].state.fighters[1].x };
+    }
+    const sped = koFrame(growthDef);
+    const plain = koFrame(setKbDef);
+    expect(sped.frame).toBeGreaterThan(0);
+    expect(sped.kos).toBe(1);
+    expect(sped.lastInside).toBeLessThanOrEqual(STAGE.blastZone.right);
+    // Same 150 knockback and angle: the sped-up launch reaches the line sooner.
+    expect(sped.frame).toBeLessThan(plain.frame);
   });
 });

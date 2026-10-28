@@ -42,6 +42,7 @@ import {
   computeRage,
   computeShieldstun,
   computeStaleness,
+  effectiveHitstun,
   applyDI,
   applyLSI,
   launchDiAble,
@@ -1067,15 +1068,18 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   // "Conditions for DI: … the attack causes tumble; launch angle is greater than
   // 9.74°" — Ultimate "reuses the directional influence mechanics" of Smash 4,
   // SmashWiki "Directional influence"; rubendal SSBU-Calculator `js/knockback.js`
-  // computes LSI only inside `di_able`). `hitstun` still holds the hit's full value.
-  const diAble = lsiApplies(f.hitstun) && launchDiAble(f.pendingAngle);
+  // computes LSI only inside `di_able`). Tumble is the *base* hitstun's call: a
+  // sped-up launch's `hitstun` counts its shorter real time, so its base comes
+  // back from the parked reaction frames (Plan 3, Task 6).
+  const baseHitstun = f.combat.launchFaf > 0 ? f.combat.launchFaf - 1 : f.hitstun;
+  const diAble = lsiApplies(baseHitstun) && launchDiAble(f.pendingAngle);
   const angle = diAble ? applyDI(f.pendingAngle, relStick, intent.y, intent.soft) : f.pendingAngle;
   const launch = knockbackToVelocity(f.pendingKnockback, angle, facing);
   // LSI is a survival tool, not a damage buff: it only touches knockback heavy
   // enough to tumble. Without the gate, holding up scales *every* jab by 1.095×
   // and holding down shrinks it by 0.92×, which is a mechanic the game does not
-  // have. `hitstun` still holds the full value from the hit here — the hitlag
-  // branch that leads to this call never decrements it. See `lsiApplies`.
+  // have. `baseHitstun` is the hit's full value here — the hitlag branch that
+  // leads to this call never decrements `hitstun`. See `lsiApplies`.
   const speed = diAble ? applyLSI(launch.speed, intent.y, angle) : launch.speed;
   // The one moment the balloon question has an answer: the angle this launch
   // actually goes out at, DI included. See `FighterState.balloon`.
@@ -1087,6 +1091,7 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
       Math.trunc((launch.vx * speed) / launch.speed),
       Math.trunc((launch.vy * speed) / launch.speed),
       speed,
+      f.combat.launchFaf,
     );
   } else {
     kineticLaunch(f, 0, 0, speed);
@@ -1110,6 +1115,7 @@ function clearPendingLaunch(f: FighterState): void {
   f.pendingKnockback = 0;
   f.pendingAngle = 0;
   f.pendingFacing = 0;
+  f.combat.launchFaf = 0;
 }
 
 function applyHit(
@@ -1265,7 +1271,12 @@ function applyHit(
     setKnockback: hb.setKnockback,
   });
 
+  // The base decides tumble; a tumbling launch without set knockback is then
+  // played back sped up, which shortens the hitstun in real frames (SmashWiki
+  // "Hitstun"; rubendal `js/knockback.js`: `tumble && !isFKB`). Plan 3, Task 6.
   const hitstun = computeHitstun(kb);
+  const tumbles = hitstun >= TUMBLE_HITSTUN;
+  const speedUp = tumbles && hb.setKnockback !== true;
   // Crouch cancel shortens the freeze for *both* fighters (research §4), which
   // is why one `lag` is computed and handed to each of them below rather than
   // one each: crouching does not buy the defender a frame advantage, it makes
@@ -1295,7 +1306,8 @@ function applyHit(
   if (victim.grounded && victim.pendingAngle === 0) victim.pendingKnockback = byRatio(kb, GROUNDED_ZERO_LAUNCH_RATIO);
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
 
-  victim.hitstun = hitstun;
+  victim.hitstun = effectiveHitstun(kb, speedUp);
+  victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
   victim.hitlag = lag;
   victim.intangible = 0;
   // A hit that knocks a hanging fighter off the ledge locks the ledge out, as
@@ -1318,7 +1330,7 @@ function applyHit(
   // out of `grabHold`, and leaving their `grabbing` set would strand their
   // victim in `grabbed` — whose only exit is `grabbedBy < 0` — for good.
   releaseGrab(victim, s.fighters);
-  startAction(victim, hitstun >= TUMBLE_HITSTUN ? "tumble" : "hitstun");
+  startAction(victim, tumbles ? "tumble" : "hitstun");
 
   events.hits.push({
     attacker: attacker.port,

@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { LAUNCH_SPEED_DECAY } from "./constants";
-import { fx } from "./fixed";
+import { ONE, fx } from "./fixed";
 import {
   airControlX,
   emptyKinetic,
@@ -21,7 +21,9 @@ import {
   kineticSum,
   kineticSumX,
   kineticSumY,
+  kineticTakeStep,
 } from "./kinetic";
+import { damageSpeedUpMaxMag } from "./knockback";
 import type { KineticState, KineticType } from "./kinetic";
 import { paramsFromAttributes } from "./params";
 import {
@@ -143,7 +145,22 @@ describe("adopting a direct write", () => {
 describe("clearing", () => {
   it("zeroes every energy, the launch and the velocity", () => {
     const f = body(
-      { controlX: 1, stopX: 2, gravityY: 3, motionX: 4, motionY: 5, damageX: 6, damageY: 7, fallFrames: 8, jumpInitial: 2 },
+      {
+        controlX: 1,
+        stopX: 2,
+        gravityY: 3,
+        motionX: 4,
+        motionY: 5,
+        damageX: 6,
+        damageY: 7,
+        fallFrames: 8,
+        jumpInitial: 2,
+        speedUpFrame: 9,
+        speedUpFaf: 10,
+        speedUpMax: 11,
+        stepX: 12,
+        stepY: 13,
+      },
       { vx: 9, vy: 9, launchSpeed: 9 },
     );
     kineticClear(f);
@@ -725,5 +742,79 @@ describe("air friction (SmashWiki Air friction, https://www.ssbwiki.com/Air_fric
     f.kinetic.stopX = fx(0.5);
     kineticReel(f, P, false);
     expect([f.kinetic.controlX, f.kinetic.stopX]).toEqual([fx(1), fx(0.5)]);
+  });
+});
+
+/* ------------------------------------- the balloon speed-up (Plan 3, Task 6) -- */
+
+describe("the DAMAGE energy, sped up (init_damage_speed_up)", () => {
+  // rubendal SSBU-Calculator `js/knockback.js` plays a sped-up launch as the
+  // ordinary one, sampled: each real frame shows the position several of the
+  // game's reaction frames on. So a real frame must cover exactly the
+  // reaction frames it consumes, no more and no less.
+  const FAF = 80; // 6x on the first frame
+  const sped = (): FighterState => {
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, fx(3), fx(4), fx(5), FAF);
+    return f;
+  };
+  const plain = (): FighterState => {
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, fx(3), fx(4), fx(5));
+    return f;
+  };
+
+  it("arms the speed-up at launch: the reaction frames and the first-frame multiplier", () => {
+    const f = sped();
+    expect(f.kinetic).toMatchObject({ speedUpFrame: FAF * ONE, speedUpFaf: FAF, speedUpMax: damageSpeedUpMaxMag(FAF) });
+    expect(plain().kinetic.speedUpMax).toBe(0);
+  });
+
+  it("covers its first frame's six reaction frames in one real frame", () => {
+    const f = sped();
+    kineticReel(f, PARAMS, false);
+    const g = plain();
+    let dx = 0;
+    let dy = 0;
+    for (let i = 0; i < 6; i++) {
+      kineticReel(g, PARAMS, false);
+      dx += g.vx;
+      dy += g.vy;
+    }
+    expect(f.launchSpeed).toBe(g.launchSpeed);
+    expect(f.kinetic.gravityY).toBe(g.kinetic.gravityY);
+    // The last of the six is this frame's velocity; the other five ride as a step.
+    expect([f.vx + f.kinetic.stepX, f.vy + f.kinetic.stepY]).toEqual([dx, dy]);
+  });
+
+  it("hands the step to integrate once, and only once", () => {
+    const f = sped();
+    kineticReel(f, PARAMS, false);
+    const step = kineticTakeStep(f);
+    expect(step.x).not.toBe(0);
+    expect(kineticTakeStep(f)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("slows to one reaction frame a real frame once the multiplier is spent", () => {
+    const f = sped();
+    let frames = 0;
+    while (f.kinetic.speedUpMax > 0) {
+      kineticReel(f, PARAMS, false);
+      kineticTakeStep(f);
+      frames += 1;
+      expect(frames).toBeLessThan(FAF);
+    }
+    const g = { ...f, kinetic: { ...f.kinetic } } as FighterState;
+    kineticReel(f, PARAMS, false);
+    expect(f.kinetic.stepX).toBe(0);
+    expect(f.launchSpeed).toBe(g.launchSpeed - LAUNCH_SPEED_DECAY);
+  });
+
+  it("is disarmed by anything that ends the launch", () => {
+    for (const end of [kineticClear, kineticLand, (f: FighterState) => kineticMotion(f, 0, 0)]) {
+      const f = sped();
+      end(f);
+      expect(f.kinetic.speedUpMax).toBe(0);
+    }
   });
 });

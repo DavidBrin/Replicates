@@ -165,6 +165,7 @@ export function mixFighter(h: number, f: FighterState): number {
 export function mixCombat(h: number, c: CombatState): number {
   let x = mixInt(h, c.staleShield.length);
   for (const onShield of c.staleShield) x = mixBool(x, onShield);
+  x = mixInt(x, c.launchFaf);
   return x;
 }
 
@@ -179,6 +180,11 @@ export function mixKinetic(h: number, k: KineticState): number {
   x = mixInt(x, k.damageY);
   x = mixInt(x, k.fallFrames);
   x = mixInt(x, k.jumpInitial);
+  x = mixInt(x, k.speedUpFrame);
+  x = mixInt(x, k.speedUpFaf);
+  x = mixInt(x, k.speedUpMax);
+  x = mixInt(x, k.stepX);
+  x = mixInt(x, k.stepY);
   return x;
 }
 

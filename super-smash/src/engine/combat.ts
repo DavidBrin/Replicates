@@ -15,16 +15,24 @@ export interface CombatState {
    * the queue, never on its own.
    */
   staleShield: boolean[];
+  /**
+   * The parked launch's reaction frames (`computeHitstun + 1`) when it will be
+   * sped up — a tumbling launch without set knockback — else 0. Set on contact,
+   * handed to `kineticLaunch` when the freeze ends (Plan 3, Task 6).
+   */
+  launchFaf: number;
 }
 
 export function emptyCombat(): CombatState {
   return {
     staleShield: [],
+    launchFaf: 0,
   };
 }
 
 export function cloneCombat(c: CombatState): CombatState {
   return {
     staleShield: c.staleShield.slice(),
+    launchFaf: c.launchFaf,
   };
 }

@@ -24,6 +24,7 @@
 
 import { LAUNCH_SPEED_DECAY, LEDGE_JUMP_VELOCITY } from "./constants";
 import { ONE, abs, approach, mul, sqrt } from "./fixed";
+import { damageSpeedUpMag, damageSpeedUpMaxMag } from "./knockback";
 import type { FighterParams } from "./params";
 import type { FighterState } from "./types";
 
@@ -57,6 +58,22 @@ export interface KineticState {
   fallFrames: number;
   /** Full-hop initial rise (Task 19): 0 none; 1–4 the rise frame about to play; 5 hand over to gravity. */
   jumpInitial: number;
+  /**
+   * Balloon speed-up (Plan 3, Task 6): the launch's reaction frames still to
+   * play, Q12 — rubendal's `damage_reaction_frame`. Meaningful while `speedUpMax > 0`.
+   */
+  speedUpFrame: number;
+  /** The launch's reaction frames at the start (`damage_reaction_frame_last`), an integer. */
+  speedUpFaf: number;
+  /** The first-frame multiplier, Q12 (`damage_speed_up_max_mag`); 0 when no speed-up is running. */
+  speedUpMax: number;
+  /**
+   * Where this frame's extra reaction frames moved the fighter, Q12: a sped-up
+   * real frame plays several of the game's frames, and all but the last land
+   * here for `integrate` to add (`kineticTakeStep`). Zero between frames.
+   */
+  stepX: number;
+  stepY: number;
 }
 
 export function emptyKinetic(): KineticState {
@@ -70,6 +87,11 @@ export function emptyKinetic(): KineticState {
     damageY: 0,
     fallFrames: 0,
     jumpInitial: 0,
+    speedUpFrame: 0,
+    speedUpFaf: 0,
+    speedUpMax: 0,
+    stepX: 0,
+    stepY: 0,
   };
 }
 
@@ -84,6 +106,11 @@ export function cloneKinetic(k: KineticState): KineticState {
     damageY: k.damageY,
     fallFrames: k.fallFrames,
     jumpInitial: k.jumpInitial,
+    speedUpFrame: k.speedUpFrame,
+    speedUpFaf: k.speedUpFaf,
+    speedUpMax: k.speedUpMax,
+    stepX: k.stepX,
+    stepY: k.stepY,
   };
 }
 
@@ -135,6 +162,11 @@ export function kineticClear(f: FighterState): void {
   k.damageY = 0;
   k.fallFrames = 0;
   k.jumpInitial = 0;
+  k.speedUpFrame = 0;
+  k.speedUpFaf = 0;
+  k.speedUpMax = 0;
+  k.stepX = 0;
+  k.stepY = 0;
   f.launchSpeed = 0;
   kineticSum(f);
 }
@@ -194,6 +226,7 @@ export function kineticJump(f: FighterState, vy: number): void {
   const k = f.kinetic;
   k.controlX += k.damageX;
   k.damageX = 0;
+  k.speedUpMax = 0;
   f.launchSpeed = 0;
   kineticSetY(f, vy);
 }
@@ -202,9 +235,19 @@ export function kineticJump(f: FighterState, vy: number): void {
  * A knockback launch, on the DAMAGE energy. It replaces everything else the
  * fighter was doing — drift, a jump's rise, scripted motion — and decays on its
  * own from here (`kineticDecayDamage`); `launchSpeed` is its magnitude.
+ *
+ * `speedUpFaf` > 0 arms the balloon speed-up for a launch of that many
+ * reaction frames (`computeHitstun + 1`): the caller passes 0 for a launch
+ * that does not tumble or has set knockback (Plan 3, Task 6).
  */
-export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: number): void {
+export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: number, speedUpFaf = 0): void {
   const k = f.kinetic;
+  const max = speedUpFaf > 0 ? damageSpeedUpMaxMag(speedUpFaf) : 0;
+  k.speedUpFaf = speedUpFaf;
+  k.speedUpFrame = speedUpFaf * ONE;
+  k.speedUpMax = max > ONE ? max : 0;
+  k.stepX = 0;
+  k.stepY = 0;
   k.controlX = 0;
   k.stopX = 0;
   k.gravityY = 0;
@@ -313,6 +356,8 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
     return;
   }
   const k = f.kinetic;
+  // Out of hitstun nothing is sped up any more.
+  k.speedUpMax = 0;
   const p = input.params;
   // A launch outlives its hitstun and keeps decaying while the fighter acts.
   if (f.launchSpeed > 0) kineticDecayDamage(f, launchDecay(f, p));
@@ -396,14 +441,31 @@ export function kineticDecayDamage(f: FighterState, decay: number): void {
 }
 
 /**
- * One frame of a fighter in hitstun: the launch decays, gravity builds toward
- * the fall speed, and nothing the player holds moves them. A vertical
+ * How many of the game's reaction frames this real frame plays (Plan 3,
+ * Task 6): `damageSpeedUpMag` of them while the speed-up runs, at least one,
+ * rounded to whole frames by where the count crosses an integer (rubendal
+ * `DamageSpeedUpFrames` / `GetFrameWithSpeedUp`). One when nothing is sped up.
+ */
+function speedUpSteps(f: FighterState): number {
+  const k = f.kinetic;
+  if (k.speedUpMax <= 0) return 1;
+  const before = Math.ceil(k.speedUpFrame / ONE);
+  const mag = damageSpeedUpMag(k.speedUpFrame, k.speedUpFaf, k.speedUpMax);
+  k.speedUpFrame -= mag < ONE ? ONE : mag;
+  if (mag <= ONE) k.speedUpMax = 0;
+  const steps = before - Math.ceil(k.speedUpFrame / ONE);
+  return steps < 1 ? 1 : steps;
+}
+
+/**
+ * One reaction frame of reeling — Plan 2's `kineticReel` body, unchanged: the
+ * launch decays, and gravity builds toward the fall speed. A vertical
  * ("balloon") launch falls by the fighter's `damage_fly_top_air_accel_y` toward
  * `damage_fly_top_speed_y_stable` (1.8 for every fighter on this roster: the
  * calculator's DamageFlyTopFallSpeed, https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/<fighter>/data.json).
  * On the ground the launch also loses `ground_brake` a frame (`launchDecay`).
  */
-export function kineticReel(f: FighterState, p: FighterParams, balloon: boolean): void {
+function reelOnce(f: FighterState, p: FighterParams, balloon: boolean): void {
   const k = f.kinetic;
   kineticDecayDamage(f, launchDecay(f, p));
   if (!f.grounded) {
@@ -419,12 +481,46 @@ export function kineticReel(f: FighterState, p: FighterParams, balloon: boolean)
   kineticSum(f);
 }
 
+/**
+ * One frame of a fighter in hitstun: `reelOnce`, and nothing the player holds
+ * moves them.
+ *
+ * A tumbling launch plays several reaction frames per real frame at first —
+ * the balloon speed-up (SmashWiki "Launch": "the process of the character
+ * getting launched is sped up"). Each is a full reaction frame of decay and
+ * gravity; the displacement of all but the last is left in `stepX`/`stepY`
+ * for `integrate`, so the path is the same as the un-sped launch, sampled.
+ */
+export function kineticReel(f: FighterState, p: FighterParams, balloon: boolean): void {
+  const steps = speedUpSteps(f);
+  const k = f.kinetic;
+  for (let i = 1; i < steps; i++) {
+    reelOnce(f, p, balloon);
+    k.stepX += f.vx;
+    k.stepY += f.vy;
+  }
+  reelOnce(f, p, balloon);
+}
+
+/**
+ * The displacement of this frame's extra reaction frames, handed to
+ * `integrate` and zeroed, so it is added exactly once.
+ */
+export function kineticTakeStep(f: FighterState): { x: number; y: number } {
+  const k = f.kinetic;
+  const step = { x: k.stepX, y: k.stepY };
+  k.stepX = 0;
+  k.stepY = 0;
+  return step;
+}
+
 /** Touching down ends a launch: its horizontal part becomes ordinary sliding (STOP). */
 export function kineticLand(f: FighterState): void {
   const k = f.kinetic;
   k.stopX += k.damageX;
   k.damageX = 0;
   k.damageY = 0;
+  k.speedUpMax = 0;
   f.launchSpeed = 0;
   kineticSum(f);
 }
@@ -444,6 +540,7 @@ export function kineticMotion(f: FighterState, vx: number, vy: number): void {
   k.jumpInitial = 0; // a full hop's initial rise is gravity's, and stops with it
   k.damageX = 0;
   k.damageY = 0;
+  k.speedUpMax = 0;
   f.launchSpeed = 0;
   k.motionX = vx;
   k.motionY = vy;
