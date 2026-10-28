@@ -23,6 +23,10 @@ import { REFERENCE_SCRIPTS } from "./index";
  * a human looks at it. Regenerate after a deliberate change with
  *
  *   UPDATE_RECONCILE=1 pnpm vitest run src/fighters/acmd/reconcile.test.ts
+ *
+ * Throws are not genuinely reconciled yet: the parser does not read
+ * `ATTACK_ABS` (parse.ts), so about 51 of the entries, every throw, are its
+ * blind spot rather than real disagreements. Plan 5 Task 7 lifts it.
  */
 
 const ALLOW_FILE = join(process.cwd(), "src", "fighters", "acmd", "reconcile.allow.json");

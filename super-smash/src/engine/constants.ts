@@ -39,7 +39,13 @@ export const HITSTUN_RATIO: Ratio = [2, 5];
 /** A hit causing this much hitstun or more puts the victim into tumble. */
 export const TUMBLE_HITSTUN = 32;
 
-/** Launch speed starts at this fraction of knockback and decays per frame. */
+/**
+ * Launch speed starts at this fraction of knockback and decays per frame:
+ * SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback, Formula >
+ * Variables): launch speed is knockback × 0.03, and it "decays by 0.051 every
+ * frame". The page names no single game, so 0.051 is the series figure (D55,
+ * Open).
+ */
 export const LAUNCH_SPEED_RATIO = fx(0.03);
 export const LAUNCH_SPEED_DECAY = fx(0.051);
 

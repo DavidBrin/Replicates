@@ -21,7 +21,7 @@
  * plain integers; `weight` is the game's raw weight stat.
  */
 
-import { ONE, div, mul } from "./fixed";
+import { ONE, div, fx, mul } from "./fixed";
 import type { FighterAttributes, FighterDef } from "./types";
 
 export interface FighterParams {
@@ -90,13 +90,15 @@ export interface FighterParams {
   readonly landing_attack_air_frame_hi: number;
   readonly landing_attack_air_frame_lw: number;
   /**
-   * The struct's three landing fields, in its order: `landing_frame_light: f32`,
-   * `landing_frame: f32`, `landing_heavy_frame: i32`. The calculator publishes
-   * three landing values, `SoftLandingLag`, `HardLandingLag` and
-   * `FallingFrameToUseHardLandingLag`; pairing them by order and type (the one
-   * integer is the frame threshold) is this replica's reading — UNVERIFIED.
+   * Calculator `SoftLandingLag`. Frames of a light landing.
+   *
+   * The first of the struct's three landing fields, in its order:
+   * `landing_frame_light: f32`, `landing_frame: f32`, `landing_heavy_frame: i32`.
+   * The calculator publishes three landing values, `SoftLandingLag`,
+   * `HardLandingLag` and `FallingFrameToUseHardLandingLag`; pairing them by
+   * order and type (the one integer is the frame threshold) is this replica's
+   * reading — UNVERIFIED.
    */
-  /** Calculator `SoftLandingLag`. Frames of a light landing. */
   readonly landing_frame_light: number;
   /** Calculator `HardLandingLag`. Frames of a heavy landing. */
   readonly landing_frame: number;
@@ -149,7 +151,9 @@ export function paramsFromAttributes(a: FighterAttributes, def?: Pick<FighterDef
     air_speed_y_stable: a.fallSpeed,
     dive_speed_y: a.fastFallSpeed,
     damage_fly_top_air_accel_y: a.gravity,
-    damage_fly_top_speed_y_stable: 7373, // fx(1.8), every roster fighter's DamageFlyTopFallSpeed
+    // The legacy balloon fall (`BALLOON_FALL_SPEED`), and every roster fighter's
+    // calculator DamageFlyTopFallSpeed too (src/fighters/params.test.ts).
+    damage_fly_top_speed_y_stable: fx(1.8),
     weight: a.weight,
     landing_attack_air_frame_n: lag("nair"),
     landing_attack_air_frame_f: lag("fair"),
@@ -159,6 +163,8 @@ export function paramsFromAttributes(a: FighterAttributes, def?: Pick<FighterDef
     landing_frame_light: 4,
     landing_frame: 4,
     landing_heavy_frame: 1_000_000,
+    // UNVERIFIED placeholders: `FighterAttributes` has no counterpart for
+    // either, and nothing in the engine reads them yet.
     shield_radius: 10 * ONE,
     scale: ONE,
   };

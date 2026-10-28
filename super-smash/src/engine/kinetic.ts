@@ -3,7 +3,8 @@
  *
  * Ultimate does not keep one velocity per fighter. Its `KineticModule` keeps
  * several *energies*, each with its own rules, and moves the fighter by their
- * sum every frame (skyline-smash `FIGHTER_KINETIC_ENERGY_ID_*`). Which energies
+ * sum every frame (skyline-smash `FIGHTER_KINETIC_ENERGY_ID_*`,
+ * https://github.com/ultimate-research/skyline-smash/blob/0c2e7189c46fecb07a3370f487e0e22585dad21e/src/lua_const.rs). Which energies
  * run, and how, is chosen by the fighter's status through a *kinetic type*.
  * That separation is the mechanic: a launch (DAMAGE) decays at its own 0.051
  * per frame (SmashWiki Knockback, Formula > Variables: launch speed is
@@ -26,7 +27,7 @@ import { ONE, abs, approach, mul, sqrt } from "./fixed";
 import type { FighterParams } from "./params";
 import type { FighterState } from "./types";
 
-/** skyline-smash `lua_const.rs`. The replica uses the five below. */
+/** skyline-smash `lua_const.rs` (pinned in the header). The replica uses the five below. */
 export const FIGHTER_KINETIC_ENERGY_ID_MOTION = 0;
 export const FIGHTER_KINETIC_ENERGY_ID_GRAVITY = 1;
 export const FIGHTER_KINETIC_ENERGY_ID_CONTROL = 2;
@@ -46,7 +47,13 @@ export interface KineticState {
   /** DAMAGE — the launch vector. Its magnitude is `FighterState.launchSpeed`. Q12/frame. */
   damageX: number;
   damageY: number;
-  /** Consecutive airborne frames at or past `air_speed_y_stable`; decides a heavy landing (Task 24). */
+  /**
+   * Consecutive airborne frames at or past `air_speed_y_stable`; decides a
+   * heavy landing (Task 24). Only `kineticExec` counts it, so it holds still
+   * (stale) across frames that skip it: a live scripted-momentum hold and
+   * hitstun. A landing straight out of one reads the count from before it.
+   * Known and left as it is: the window is a few frames (Plan 2 final review).
+   */
   fallFrames: number;
   /** Full-hop initial rise (Task 19): 0 none; 1–4 the rise frame about to play; 5 hand over to gravity. */
   jumpInitial: number;
@@ -216,7 +223,8 @@ export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: nu
  * How a status drives the energies — the replica's `FIGHTER_KINETIC_TYPE_*`.
  *
  * Names follow skyline-smash where the game has a matching type (FALL 0x0,
- * GROUND_STOP 0x6, DASH 0x1D, MOTION 0x10, AIR_ESCAPE 0xD, NONE 0xFFFFFFFF).
+ * GROUND_STOP 0x6, DASH 0x1D, MOTION 0x10, AIR_ESCAPE 0xD, NONE 0xFFFFFFFF;
+ * `FIGHTER_KINETIC_TYPE_*`, https://github.com/ultimate-research/skyline-smash/blob/0c2e7189c46fecb07a3370f487e0e22585dad21e/src/lua_const.rs).
  * WALK and RUN are replica names: the game drives both through the CONTROL
  * energy of its ground statuses rather than through a named type.
  */
@@ -276,10 +284,16 @@ export function gravityStep(vy: number, g: number, terminal: number): number {
 }
 
 /**
- * Air drift: base plus additional acceleration, capped at air speed — but only
- * in the direction being held, so drifting back against a fast launch is
- * allowed while drifting further out is not. With the stick neutral, air
- * friction (`air_brake_x`) bleeds the drift instead (SmashWiki "Air friction").
+ * Air drift: base plus additional acceleration, capped at air speed in the
+ * direction being held. With the stick neutral, air friction (`air_brake_x`)
+ * bleeds the drift instead (SmashWiki "Air friction").
+ *
+ * The cap is on CONTROL alone. A launch lives on DAMAGE, which this cannot
+ * see, so once hitstun is over a fighter holding away from the stage adds up
+ * to its air speed on top of whatever is left of the launch: the launch decays
+ * on its own energy, which is Ultimate's model. The legacy single-velocity rule
+ * (`airDrift`) capped drift against the launch itself and never decayed a
+ * launch after hitstun, so this is a visible change from it (D55, Launches).
  */
 export function airControlX(vx: number, stickX: number, p: FighterParams): number {
   if (stickX === 0) return approach(vx, 0, p.air_brake_x);
@@ -301,7 +315,7 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
   const k = f.kinetic;
   const p = input.params;
   // A launch outlives its hitstun and keeps decaying while the fighter acts.
-  if (f.launchSpeed > 0) kineticDecayDamage(f, f.grounded ? LAUNCH_SPEED_DECAY + p.ground_brake : LAUNCH_SPEED_DECAY);
+  if (f.launchSpeed > 0) kineticDecayDamage(f, launchDecay(f, p));
   kineticTransfer(f, type);
   switch (type) {
     case "WALK": {
@@ -352,6 +366,16 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
 /* ------------------------------------------------------------ DAMAGE energy -- */
 
 /**
+ * How much launch speed a launch loses this frame: 0.051 (SmashWiki
+ * "Knockback"), plus `ground_brake` while grounded. UNVERIFIED: the grounded
+ * extra is kept for parity with the legacy engine, which braked a grounded
+ * launch by traction; no source says Ultimate does.
+ */
+function launchDecay(f: Pick<FighterState, "grounded">, p: FighterParams): number {
+  return f.grounded ? LAUNCH_SPEED_DECAY + p.ground_brake : LAUNCH_SPEED_DECAY;
+}
+
+/**
  * Bleed the launch by a flat `decay` along its own direction (SmashWiki
  * "Knockback": 0.051 per frame). Only the DAMAGE energy moves; gravity and
  * drift are separate energies and keep their own rules.
@@ -375,12 +399,13 @@ export function kineticDecayDamage(f: FighterState, decay: number): void {
  * One frame of a fighter in hitstun: the launch decays, gravity builds toward
  * the fall speed, and nothing the player holds moves them. A vertical
  * ("balloon") launch falls by the fighter's `damage_fly_top_air_accel_y` toward
- * `damage_fly_top_speed_y_stable` (1.8 for every fighter on this roster). On
- * the ground the launch also loses `ground_brake` a frame.
+ * `damage_fly_top_speed_y_stable` (1.8 for every fighter on this roster: the
+ * calculator's DamageFlyTopFallSpeed, https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/<fighter>/data.json).
+ * On the ground the launch also loses `ground_brake` a frame (`launchDecay`).
  */
 export function kineticReel(f: FighterState, p: FighterParams, balloon: boolean): void {
   const k = f.kinetic;
-  kineticDecayDamage(f, f.grounded ? LAUNCH_SPEED_DECAY + p.ground_brake : LAUNCH_SPEED_DECAY);
+  kineticDecayDamage(f, launchDecay(f, p));
   if (!f.grounded) {
     k.gravityY = balloon
       ? gravityStep(k.gravityY, p.damage_fly_top_air_accel_y, p.damage_fly_top_speed_y_stable)
@@ -507,6 +532,8 @@ function jumpFrame(f: FighterState, p: FighterParams): boolean {
  * Dash and run acceleration (SmashWiki "Dash"): below run speed, accelerate by
  * `run_accel_add` plus `run_accel_mul` scaled by deflection; above it (an
  * initial dash faster than the run), brake by traction down to it.
+ * UNVERIFIED for Ultimate: the page's wording of that rule is in its Melee
+ * section (D55, Walking and running).
  */
 export function runControlX(vx: number, dir: number, p: FighterParams, mag: number): number {
   const target = dir * p.run_speed_max;

@@ -83,14 +83,31 @@ describe("fighter_param values", () => {
     }
   });
 
-  it("pins the calculator-only fields for Mario (Data/mario/data.json)", () => {
-    // https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/mario/data.json
-    const m = FIGHTER_PARAMS.mario;
-    expect(m.walk_accel_add).toBe(fx(0.105)); // WalkBaseAcceleration
-    expect(m.walk_accel_mul).toBe(fx(0.105)); // WalkAddAcceleration
-    expect(m.jump_initial_y).toBe(fx(19.9815)); // JumpInitialSpeed
-    expect(m.landing_heavy_frame).toBe(4); // FallingFrameToUseHardLandingLag
-    expect(m.damage_fly_top_speed_y_stable).toBe(fx(1.8)); // DamageFlyTopFallSpeed
+  /**
+   * The fields the CSV has no column for, read off each fighter's own
+   * data.json: https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/<CSV_ROW id>/data.json
+   * (WalkBaseAcceleration, WalkAddAcceleration, JumpInitialSpeed,
+   * FallingFrameToUseHardLandingLag, DamageFlyTopFallSpeed), checked 2026-10-27.
+   */
+  const CALCULATOR_ONLY: Record<RosterId, readonly [number, number, number, number, number]> = {
+    mario: [0.105, 0.105, 19.9815, 4, 1.8],
+    donkeyKong: [0.105, 0.105, 18.7, 4, 1.8],
+    link: [0.105, 0.21, 15.29, 4, 1.8],
+    samus: [0.105, 0.315, 20.35, 7, 1.8],
+    kirby: [0.105, 0.168, 13.9535, 4, 1.8],
+    fox: [0.105, 0.21, 19.25, 4, 1.8],
+    pikachu: [0.105, 0.158, 19.525, 4, 1.8],
+    marth: [0, 0.189, 18.513, 4, 1.8],
+  };
+
+  it.each(IDS)("%s matches the calculator-only fields of its data.json", (id) => {
+    const [walkBase, walkAdd, jumpInitial, heavyFrame, flyTopFall] = CALCULATOR_ONLY[id];
+    const p = FIGHTER_PARAMS[id];
+    expect(p.walk_accel_add).toBe(fx(walkBase));
+    expect(p.walk_accel_mul).toBe(fx(walkAdd));
+    expect(p.jump_initial_y).toBe(fx(jumpInitial));
+    expect(p.landing_heavy_frame).toBe(heavyFrame);
+    expect(p.damage_fly_top_speed_y_stable).toBe(fx(flyTopFall));
   });
 
   it("gives Samus the one non-4 heavy-landing threshold on this roster", () => {

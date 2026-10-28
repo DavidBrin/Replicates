@@ -284,6 +284,12 @@ describe("setting a velocity outright", () => {
 
 /* ------------------------------------------- legacy equivalence (Task 3) -- */
 
+/**
+ * Mario's `FighterAttributes` (src/fighters/mario.ts; rubendal SSBU-Calculator
+ * at 233590e, https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/mario/data.json),
+ * with a test-only width and height. Any fighter would do: the property below
+ * compares two rules over the same numbers.
+ */
 const ATTRS: FighterAttributes = {
   weight: 98,
   walkSpeed: fx(1.155),
@@ -423,11 +429,36 @@ describe("the DAMAGE energy: a launch decays on its own", () => {
   it("keeps decaying after hitstun, while the stick drifts and gravity pulls", () => {
     const f = launch();
     for (let i = 0; i < 5; i++) kineticReel(f, PARAMS, false);
-    const before = { speed: f.launchSpeed, control: f.kinetic.controlX };
+    const before = { speed: f.launchSpeed, control: f.kinetic.controlX, gravity: f.kinetic.gravityY };
     kineticExec(f, "FALL", { stickX: -1, params: PARAMS, holdVertical: false });
     expect(f.launchSpeed).toBe(before.speed - LAUNCH_SPEED_DECAY);
     expect(f.kinetic.controlX).toBe(before.control - (PARAMS.air_accel_x_add + PARAMS.air_accel_x_mul));
+    expect(f.kinetic.gravityY).toBe(Math.max(before.gravity - PARAMS.air_accel_y, -PARAMS.air_speed_y_stable));
     expect(f.vx).toBe(f.kinetic.controlX + f.kinetic.damageX);
+    expect(f.vy).toBe(f.kinetic.gravityY + f.kinetic.damageY);
+  });
+
+  // UNVERIFIED: the grounded extra is legacy parity (see `launchDecay`), pinned so it changes on purpose.
+  it("loses ground_brake on top of 0.051 while grounded, reeling or acting", () => {
+    const reeling = body({}, { grounded: true });
+    kineticLaunch(reeling, fx(3), 0, fx(3));
+    kineticReel(reeling, PARAMS, false);
+    expect(reeling.launchSpeed).toBe(fx(3) - LAUNCH_SPEED_DECAY - PARAMS.ground_brake);
+
+    const acting = body({}, { grounded: true });
+    kineticLaunch(acting, fx(3), 0, fx(3));
+    kineticExec(acting, "GROUND_STOP", { stickX: 0, params: PARAMS, holdVertical: false });
+    expect(acting.launchSpeed).toBe(fx(3) - LAUNCH_SPEED_DECAY - PARAMS.ground_brake);
+  });
+
+  it("falls by ordinary gravity from a launch that is not vertical, whatever damage_fly_top says", () => {
+    const p = { ...PARAMS, damage_fly_top_air_accel_y: fx(0.05), damage_fly_top_speed_y_stable: fx(0.5) };
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, fx(1), fx(1), fx(1.4));
+    kineticReel(f, p, false);
+    expect(f.kinetic.gravityY).toBe(-PARAMS.air_accel_y);
+    for (let i = 0; i < 200; i++) kineticReel(f, p, false);
+    expect(f.kinetic.gravityY).toBe(-PARAMS.air_speed_y_stable);
   });
 
   it("ends on landing, leaving its horizontal part to brake on the ground", () => {
@@ -597,7 +628,7 @@ describe("a momentum hold cut short by a landing", () => {
     // Guards against passing for the wrong reason: he really landed in the middle of the hold.
     expect(landed, "Kirby never landed").not.toBeNull();
     expect(before.action).toBe("special");
-    expect(before.kinetic.motionX, "the hold was already over when he landed").not.toBe(0);
+    expect(before.kinetic.motionX, "the hold should still be live on the frame before he lands").not.toBe(0);
 
     // MOTION is handed back within a few frames of the landing, and stays handed back.
     let settled: FighterState | null = null;

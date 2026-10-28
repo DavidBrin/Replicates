@@ -250,36 +250,35 @@ describe("cloneState", () => {
    * A fighter's defaults are mostly 0, false and "", so a copy that maps one
    * field onto another (`stopX: k.controlX`) would still match them. The walk
    * therefore first gives every leaf its own value (numbers a running counter,
-   * booleans flipped, strings suffixed with their path), and only then compares
-   * the copy leaf by leaf. Nullable fields and arrays are filled in first, and a
-   * null or an empty array left in the fixture fails the walk by name: a copy
-   * of nothing proves nothing. (The same nullable list is in hash.test.ts.)
-   * Optional fields (`foo?: T`) that `createInitialState` leaves absent are not
-   * walked: assign one here, or this test cannot see it.
+   * strings suffixed with their path), and only then compares the copy leaf by
+   * leaf. A boolean has only two values, so one fill cannot set them all
+   * apart: each pass sets boolean number n to bit `pass` of n, and over the
+   * passes every two booleans differ at least once. Nullable fields and arrays
+   * are filled in first, and a null or an empty array left in the fixture fails
+   * the walk by name: a copy of nothing proves nothing. (The same nullable list
+   * is in hash.test.ts.) Optional fields (`foo?: T`) that `createInitialState`
+   * leaves absent are not walked: assign one here, or this test cannot see it.
+   *
+   * The whole state is walked, every fighter and the container around them, so
+   * a copy that handles port 0 and forgets port 1 is found too.
    */
-  it("copies every field of every fighter, and shares no object with the original", () => {
+  it("copies every field of the state and of every fighter, and shares no object with the original", () => {
     const s = newState();
-    const f = s.fighters[0];
-    f.move = "jab1";
-    f.ledge = { platform: 0, side: 1 };
-    f.bufferedAction = { kind: "jump", frame: 3 };
-    f.staleQueue = ["jab1", "fair"];
-    f.hitThisMove = [1, 2];
-    let counter = 0;
-    const distinct = (o: Record<string, unknown>, path: string): void => {
-      for (const k of Object.keys(o)) {
-        const v = o[k];
-        const here = `${path}.${k}`;
-        if (v === null) throw new Error(`${here} is null: give it a value before the walk`);
-        if (Array.isArray(v) && v.length === 0) throw new Error(`${here} is an empty array: give it elements before the walk`);
-        if (typeof v === "object") distinct(v as Record<string, unknown>, here);
-        else if (typeof v === "number") o[k] = ++counter;
-        else if (typeof v === "boolean") o[k] = !v;
-        else o[k] = `${String(v)}:${here}`;
-      }
-    };
-    distinct(f as unknown as Record<string, unknown>, "fighter");
-    const c = cloneState(s);
+    expect(s.fighters.length).toBeGreaterThan(1);
+    for (const f of s.fighters) {
+      f.move = "jab1";
+      f.ledge = { platform: 0, side: 1 };
+      f.bufferedAction = { kind: "jump", frame: 3 };
+      f.staleQueue = ["jab1", "fair"];
+      f.hitThisMove = [1, 2];
+    }
+    s.projectiles = [
+      {
+        instanceId: 1, defId: "pellet", owner: 0, x: 0, y: 0, vx: 0, vy: 0, facing: 1,
+        age: 0, bouncesLeft: 0, chargeScale: ONE, hitPorts: [1], returning: false,
+      },
+    ];
+    s.outcome = { kind: "stockOut", placings: [1, 0] };
     const check = (a: unknown, b: unknown, path: string): void => {
       if (a === null || typeof a !== "object") {
         expect(b, path).toBe(a);
@@ -291,7 +290,26 @@ describe("cloneState", () => {
         check((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`);
       }
     };
-    check(s.fighters[0], c.fighters[0], "fighter");
+    let booleans = 0;
+    for (let pass = 0; pass === 0 || 1 << pass < booleans; pass++) {
+      let counter = 0;
+      booleans = 0;
+      const distinct = (o: Record<string, unknown>, path: string): void => {
+        for (const k of Object.keys(o)) {
+          const v = o[k];
+          const here = `${path}.${k}`;
+          if (v === null) throw new Error(`${here} is null: give it a value before the walk`);
+          if (Array.isArray(v) && v.length === 0) throw new Error(`${here} is an empty array: give it elements before the walk`);
+          if (typeof v === "object") distinct(v as Record<string, unknown>, here);
+          else if (typeof v === "number") o[k] = ++counter;
+          else if (typeof v === "boolean") o[k] = ((booleans++ >> pass) & 1) === 1;
+          else o[k] = `${String(v)}:${here}`;
+        }
+      };
+      distinct(s as unknown as Record<string, unknown>, "state");
+      check(s, cloneState(s), `state (pass ${pass})`);
+    }
+    expect(booleans, "every fighter's flags and the state's own").toBeGreaterThan(10);
   });
 
   it("copies the rules and the Smash Ball rather than aliasing them", () => {

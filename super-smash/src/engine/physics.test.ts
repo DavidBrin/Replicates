@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fx, toFloat } from "./fixed";
 import { BALLOON_FALL_SPEED, LEDGE_GRAB_BACK_PENALTY, LEDGE_GRAB_RANGE_X } from "./constants";
-import { emptyKinetic } from "./kinetic";
+import { emptyKinetic, kineticLaunch } from "./kinetic";
 import {
   HARD_PLATFORM_DEPTH,
   airDrift,
@@ -222,6 +222,16 @@ describe("platform collision", () => {
     expect(f.y).toBe(0);
     expect(f.vy).toBe(0);
     expect(f.platform).toBe(0);
+  });
+
+  it("ends a launch on landing, its horizontal part sliding on as STOP (kineticLand)", () => {
+    const f = fighter({ x: 0, y: fx(-0.5) });
+    kineticLaunch(f, fx(2), -fx(1), fx(2.2));
+    const out = resolveCollision(f, 0, fx(0.5), STAGE, ATTRS, 0);
+    expect(out.landed).toBe(true);
+    expect(f.launchSpeed).toBe(0);
+    expect(f.kinetic).toMatchObject({ damageX: 0, damageY: 0, stopX: fx(2) });
+    expect([f.vx, f.vy]).toEqual([fx(2), 0]);
   });
 
   /**
@@ -494,6 +504,6 @@ describe("the environment collision box (ECB)", () => {
     expect(f.grounded).toBe(true);
     expect(f.platform).toBe(0);
     expect(f.y).toBe(0);
-    expect(f.x).toBe(fx(79.5)); // where it crossed the surface
+    expect(f.x).toBe(fx(79.5)); // the end-of-frame x: a landing does not move it back to where it crossed
   });
 });

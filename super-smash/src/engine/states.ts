@@ -682,14 +682,6 @@ export function respawnInvincibilityFrames(framesWaited: number): number {
 /* --------------------------------------------------------------- movement -- */
 
 /**
- * Turn the current action into this frame's velocity.
- *
- * Split from `advanceFighter` because the transition and the movement answer
- * different questions — "what am I doing" and "how fast am I going" — and because
- * a state that has just been entered should move on the frame it is entered,
- * which a single combined pass gets wrong half the time depending on branch order.
- */
-/**
  * Is this fighter inside a move's super-armour window?
  *
  * Read from the move's `game_` script on the frame the move is on, which is
@@ -710,16 +702,17 @@ export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
  * A move's own scripted movement, if it has one on this frame.
  *
  * This is what makes a Fox Illusion cross the stage, a Dolphin Slash rise, and
- * a Stone drop like a stone. `MoveDef.momentum` has been in the type since the
- * roster was written and nothing read it, so every special that is *supposed*
- * to move the fighter simply played its animation on the spot.
+ * a Stone drop like a stone. It is read from the move's `game_` script
+ * (`moveScriptFrame`: the `momentum` its commands have set by this frame, and
+ * the game frame it holds `until`), compiled from `MoveDef.momentum` for every
+ * legacy move (`acmd/legacy.ts`), so the script and the move cannot disagree.
  *
- * The velocity is **set**, not added: these are scripted movements with a
- * definite speed, and adding would make a Fox Illusion out of a run faster than
- * one from a standstill. `x` is facing-relative and `y` absolute, matching the
- * projectile convention.
+ * The velocity is **set**, not added (`kineticMotion` on the MOTION energy):
+ * these are scripted movements with a definite speed, and adding would make a
+ * Fox Illusion out of a run faster than one from a standstill. `x` is
+ * facing-relative and `y` absolute, matching the projectile convention.
  *
- * `hold` is what makes it a drop rather than a hop. Without it, gravity claws
+ * The hold is what makes it a drop rather than a hop. Without it, gravity claws
  * the velocity back to the fighter's ordinary fall speed on the very next
  * frame, and a stone falls at exactly the speed a puffball does.
  *
@@ -747,6 +740,14 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   return holding;
 }
 
+/**
+ * Turn the current action into this frame's velocity.
+ *
+ * Split from `advanceFighter` because the transition and the movement answer
+ * different questions — "what am I doing" and "how fast am I going" — and because
+ * a state that has just been entered should move on the frame it is entered,
+ * which a single combined pass gets wrong half the time depending on branch order.
+ */
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
   const status = STATUS_TABLE[f.action];
   if (status === undefined) {

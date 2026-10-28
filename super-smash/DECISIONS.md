@@ -1688,10 +1688,13 @@ so two CPU matches charged one frame earlier.
 
 **Behaviour that changed, each pinned by a test and sourced or marked UNVERIFIED:**
 - *Launches.* A launch decays on its own DAMAGE energy, 0.051 a frame (SmashWiki "Knockback"),
-  while gravity builds beside it. It keeps decaying after hitstun while the fighter drifts. A
-  vertical launch falls by the `damage_fly_top_*` params. A scripted move started while a launch
-  still decays ends the launch instead of carrying it frozen underneath, and a momentum hold cut
-  short by a landing hands its velocity back to drift and gravity.
+  while gravity builds beside it. It keeps decaying after hitstun while the fighter drifts. Drift
+  is capped on CONTROL alone, which cannot see the launch's DAMAGE, so holding away after hitstun
+  adds up to air speed on top of what is left of the launch. That is Ultimate's model and a
+  visible change: the legacy engine capped drift against the launch itself and never decayed a
+  launch after hitstun. A vertical launch falls by the `damage_fly_top_*` params. A scripted move
+  started while a launch still decays ends the launch instead of carrying it frozen underneath,
+  and a momentum hold cut short by a landing hands its velocity back to drift and gravity.
 - *Jumps.* Jumps launch at SmashWiki's `√(2gh) + g/2` and peak within g/8 of their published
   heights. A full hop first rises `jump_initial_y` over 4 frames. SmashWiki "Jump" says "for most
   characters the initial height is 0.55× their full hop height", and the calculator's values

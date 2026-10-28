@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { fx, toFloat } from "@/engine/fixed";
+import { ONE, fx, mul, toFloat } from "@/engine/fixed";
 import { emptyKinetic, initialRiseStep, jumpLaunchSpeed, jumpRiseSpeeds } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { LEDGE_HANG_MIN, onLanded } from "@/engine/states";
@@ -112,12 +112,30 @@ describe("jump arcs (SmashWiki Jump, https://www.ssbwiki.com/Jump)", () => {
     }
   });
 
+  it.each(IDS)("%s air jump inside the full hop's initial rise: it ends the rise, then rises the air jump's own height", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const s = standing(id);
+    const start = play(s, hold(Btn.Jump, 120)).findIndex((f) => !f.grounded);
+    // A full hop (jump held through jumpsquat), let go on the first airborne
+    // frame, and pressed again on the second: inside the 4-frame initial rise.
+    const frames = play(s, [...hold(Btn.Jump, start + 1), 0, Btn.Jump, ...hold(0, 90)]);
+    const jumpAt = start + 2;
+    expect(frames[jumpAt - 1].kinetic.jumpInitial, "still in the initial rise").toBeGreaterThan(0);
+    expect(frames[jumpAt].jumpsUsed).toBe(2);
+    expect(frames[jumpAt].kinetic.jumpInitial).toBe(0);
+    const from = toFloat(frames[jumpAt - 1].y);
+    const peak = Math.max(...frames.slice(jumpAt).map((f) => toFloat(f.y)));
+    const first = (p.jump_aerial_y_list ?? [p.jump_aerial_y])[0];
+    expectPeak(peak - from, first, p.air_accel_y, "air jump in the rise");
+  });
+
   it.each(IDS)("%s air jump: rises the published height of its first midair jump", (id) => {
     const p = FIGHTER_PARAMS[id];
     const s = standing(id);
-    // Short hop, then a fresh jump press on its sixth airborne frame, well before it lands.
+    // Short hop, then a fresh jump press on frame 9, airborne and well before it lands.
     const frames = play(s, [Btn.Jump, ...hold(0, 8), Btn.Jump, ...hold(0, 90)]);
     const jumpAt = 9;
+    expect(frames[jumpAt - 1].grounded).toBe(false);
     expect(frames[jumpAt].grounded).toBe(false);
     expect(frames[jumpAt].jumpsUsed).toBe(2);
     const from = toFloat(frames[jumpAt - 1].y);
@@ -485,6 +503,22 @@ describe("walking (calculator WalkBaseAcceleration / WalkAddAcceleration / WalkS
     expect(frames.at(-1)!.action).toBe("walk");
     expect(frames.at(-1)!.vx).toBe(Math.trunc(p.walk_speed_max / 2));
   });
+
+  it.each(IDS)("%s starts a soft walk at base + half the additional acceleration (UNVERIFIED half deflection)", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const [first] = play(standing(id), [Btn.Right | Btn.Soft]);
+    expect(first.action).toBe("walk");
+    expect(first.vx).toBe(p.walk_accel_add + mul(p.walk_accel_mul, ONE >> 1));
+  });
+
+  // Literal anchors, so a misread field cannot pass by being read the same way twice:
+  // Mario's data.json has WalkBaseAcceleration 0.105, WalkAddAcceleration 0.105 and
+  // WalkSpeed 1.155 (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/mario/data.json).
+  it("Mario, by the published numbers: 0.21 on a walk's first frame, 0.105 + 0.105 × ½ on a soft one, 1.155 ÷ 2 soft", () => {
+    expect(play(standing("mario"), [Btn.Right])[0].vx).toBe(fx(0.105) + fx(0.105));
+    expect(play(standing("mario"), [Btn.Right | Btn.Soft])[0].vx).toBe(fx(0.105) + (fx(0.105) >> 1));
+    expect(play(standing("mario"), hold(Btn.Right | Btn.Soft, 40)).at(-1)!.vx).toBe(Math.trunc(fx(1.155) / 2));
+  });
 });
 
 describe("dash into run (SmashWiki Dash, https://www.ssbwiki.com/Dash)", () => {
@@ -513,6 +547,53 @@ describe("dash into run (SmashWiki Dash, https://www.ssbwiki.com/Dash)", () => {
     expect(next).toBe(want);
     expect(v.at(-1)).toBe(p.run_speed_max);
   });
+
+  // Fox dashes slower than he runs (DashInitialSpeed 2.09 < RunSpeed 2.402), so he
+  // accelerates out of the dash, and a soft stick is "× deflection" at half.
+  // UNVERIFIED: the half-deflection reading of `Btn.Soft` (Plan 1).
+  it("Fox, eased to a soft stick mid-dash, accelerates by run_accel_add + run_accel_mul × ½, and still reaches run speed", () => {
+    const p = FIGHTER_PARAMS.fox;
+    const full = play(standing("fox"), hold(Btn.Right, 40));
+    const d = full.findIndex((f) => f.action === "dashStart");
+    // dash_speed holds for the dash's first two frames; ease the stick on the third.
+    const easeAt = d + 2;
+    const soft = play(standing("fox"), [...hold(Btn.Right, easeAt), ...hold(Btn.Right | Btn.Soft, 40)]);
+    expect(soft[easeAt - 1].vx).toBe(p.dash_speed);
+    expect(full[easeAt].vx).toBe(p.dash_speed + p.run_accel_add + p.run_accel_mul);
+    expect(soft[easeAt].vx).toBe(p.dash_speed + p.run_accel_add + mul(p.run_accel_mul, ONE >> 1));
+    expect(soft.at(-1)).toMatchObject({ action: "run", vx: p.run_speed_max });
+  });
+});
+
+describe("a ledge drop and a double jump back (the regrab lockout, LEDGE_REGRAB_LOCKOUT_FRAMES)", () => {
+  // The lockout (UNVERIFIED for Ultimate, constants.ts) must not cost a fighter who
+  // drops and jumps straight back its way home: within the lockout the regrab is
+  // refused, so the double jump has to carry the fighter onto the stage.
+  /** Walk off Final Destination's right ledge (x 80) and hang there past the minimum hang. */
+  function hangingRight(id: RosterId): GameState {
+    let s = standing(id);
+    s.fighters[0].x = fx(78);
+    let prev: InputFrame = 0;
+    for (let i = 0; i < 60 && s.fighters[0].action !== "ledgeHang"; i++) {
+      s = step(s, [Btn.Right], { prevInputs: [prev] }).state;
+      prev = Btn.Right;
+    }
+    expect(s.fighters[0].action, "never caught the ledge").toBe("ledgeHang");
+    for (let i = 0; i <= LEDGE_HANG_MIN; i++) s = step(s, [0], { prevInputs: [0] }).state;
+    expect(s.fighters[0].action).toBe("ledgeHang");
+    return s;
+  }
+
+  for (const delay of [1, 10, 20]) {
+    it.each(IDS)(`%s drops, waits ${delay} frames, double jumps toward the stage, and lands on it`, (id) => {
+      const frames = play(hangingRight(id), [Btn.Down, ...hold(0, delay - 1), Btn.Jump | Btn.Left, ...hold(Btn.Left, 150)]);
+      expect(frames[0].ledge, "the drop let go").toBeNull();
+      expect(frames[delay].jumpsUsed, "the double jump was taken").toBe(2);
+      const home = frames.findIndex((f) => f.grounded);
+      expect(home, "never landed").toBeGreaterThan(delay);
+      expect(frames[home]).toMatchObject({ platform: 0, stocks: 3 });
+    });
+  }
 });
 
 describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#Landing_lag)", () => {
@@ -590,7 +671,7 @@ describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#L
     expect(landing(dropFrom("mario", 14, true)).lag).toBe(p.landing_frame);
   });
 
-  it("makes an auto-cancelled aerial a heavy landing, as the Lag page says", () => {
+  it("makes an auto-cancelled aerial a heavy landing, as the Lag page says (UNVERIFIED for Ultimate: may be Brawl-era)", () => {
     // "Any time a character lands while this flag is not activated, they will
     // enter their normal landing animation … landing during this window will
     // result in a heavy landing."

@@ -36,10 +36,11 @@ import { P, type PoseClip } from "./clip";
  * shorter landing squeezes the same clip into fewer frames, so a one-frame
  * landing shows only its first key.
  *
- * `actionFrame` runs 0..3 before the state machine hands over to `stand`, and
- * `poseTimeFor` divides it by the length, four, so keys on the quarters are one
- * key per frame — each is a whole sixtieth of a second of screen time, and
- * nothing is ever interpolated. The first two spans are `hold` for the same reason: at
+ * `poseTimeFor` divides `actionFrame` by the landing's own length (the
+ * `charge` `onLanded` gives it). At four, `actionFrame` runs 0..3 before the
+ * state machine hands over to `stand`, so keys on the quarters are one key per
+ * frame — each is a whole sixtieth of a second of screen time, and nothing is
+ * ever interpolated. The first two spans are `hold` for the same reason: at
  * this length the beats have to be *drawn* rather than travelled through, and
  * the moment the clip is stretched (a fighter with a longer landing) it is the
  * contact and the fold that should sit still, not the recovery.
