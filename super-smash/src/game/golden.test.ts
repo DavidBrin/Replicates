@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { airBrakeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import { mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { createInitialState, step } from "@/engine/simulate";
@@ -96,7 +96,7 @@ function cpuMatch(name: string, stage: string, fighters: readonly [string, strin
       const view = stageViewFromDef(CTX.stage(stage));
       const worlds: CpuWorld[] = fighters.map((id) => {
         const def = CTX.fighter(id);
-        return { stage: view, jumps: def.attributes.jumps, meleeReach: meleeReachFromDef(def) };
+        return { stage: view, jumps: def.attributes.jumps, meleeReach: meleeReachFromDef(def), airBrake: airBrakeFromDef(def) };
       });
       let cpuSeed = seed ^ 0x1f2e3d4c;
       return (state) =>

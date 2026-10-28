@@ -58,6 +58,11 @@ export interface CpuWorld {
    * `MELEE_RANGE`, which is right for nobody in particular — supply it.
    */
   readonly meleeReach?: number;
+  /**
+   * This fighter's air friction, from `airBrakeFromDef`, for how far a neutral
+   * air dodge drifts it. Defaults to 0, which carries the drift on unslowed.
+   */
+  readonly airBrake?: number;
 }
 
 /**
@@ -151,6 +156,7 @@ export function decideCpu(
     tuning,
     jumps: world.jumps ?? DEFAULT_AIR_JUMPS,
     meleeReach: world.meleeReach ?? MELEE_RANGE,
+    airBrake: world.airBrake ?? 0,
     rolls,
   };
 

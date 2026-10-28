@@ -99,11 +99,27 @@ describe("jump arcs (SmashWiki Jump, https://www.ssbwiki.com/Jump)", () => {
     expectPeak(Math.max(...airborneHeights(frames, s.fighters[0].y)), p.mini_jump_y, p.air_accel_y, "short hop");
   });
 
-  it.each(IDS)("%s air dodge inside the initial rise: it ends the rise, and the dodge holds still", (id) => {
+  // SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge): Ultimate's neutral
+  // air dodge keeps the fighter's momentum, the hop's rise included (Plan 3, Task 20b).
+  it.each(IDS)("%s neutral air dodge inside the initial rise: the hop rises on under it, frame for frame", (id) => {
     const s = standing(id);
-    const start = play(s, hold(Btn.Jump, 120)).findIndex((f) => !f.grounded);
+    const hop = play(s, hold(Btn.Jump, 120));
+    const start = hop.findIndex((f) => !f.grounded);
     // Shield pressed on the third airborne frame, with the jump still held: mid-rise.
     const frames = play(s, [...hold(Btn.Jump, start + 2), ...hold(Btn.Jump | Btn.Shield, 8)]);
+    const dodge = frames.findIndex((f) => f.action === "airDodge");
+    expect(dodge, "the air dodge starts on the press").toBe(start + 2);
+    expect(frames[dodge - 1].kinetic.jumpInitial, "pressed inside the initial rise").toBeGreaterThan(0);
+    for (let n = 0; n <= 7; n++) {
+      expect(frames[dodge + n].action).toBe("airDodge");
+      expect(frames[dodge + n].y, `dodge frame ${n}`).toBe(hop[dodge + n].y);
+    }
+  });
+
+  it.each(IDS)("%s directional air dodge inside the initial rise: it ends the rise, and holds its height", (id) => {
+    const s = standing(id);
+    const start = play(s, hold(Btn.Jump, 120)).findIndex((f) => !f.grounded);
+    const frames = play(s, [...hold(Btn.Jump, start + 2), ...hold(Btn.Jump | Btn.Shield | Btn.Right, 8)]);
     const dodge = frames.findIndex((f) => f.action === "airDodge");
     expect(dodge, "the air dodge starts on the press").toBe(start + 2);
     for (let n = 0; n <= 5; n++) {

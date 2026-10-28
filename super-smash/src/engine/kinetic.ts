@@ -227,8 +227,8 @@ export function kineticSetY(f: FighterState, vy: number): void {
   const k = f.kinetic;
   k.gravityY = vy;
   k.motionY = 0;
-  // An outright vertical speed ends a full hop's initial rise: a jump, an air
-  // dodge's stillness, a grab, a landing or a ledge jump all replace it.
+  // An outright vertical speed ends a full hop's initial rise: a jump, a
+  // directional air dodge, a grab, a landing or a ledge jump all replace it.
   k.jumpInitial = 0;
   if (k.damageY !== 0) {
     k.damageY = 0;
@@ -386,7 +386,7 @@ export interface KineticInput {
    */
   readonly stickMag?: number;
   readonly params: FighterParams;
-  /** Air dodge only: its intangible window is open, so gravity waits. */
+  /** A directional air dodge only: its intangible window is open, so gravity waits. */
   readonly holdVertical: boolean;
 }
 

@@ -1700,8 +1700,9 @@ so two CPU matches charged one frame earlier.
   heights. A full hop first rises `jump_initial_y` over 4 frames. SmashWiki "Jump" says "for most
   characters the initial height is 0.55× their full hop height", and the calculator's values
   match that for all eight to within one Q12 unit. `kineticSetY` and `kineticMotion` clear
-  `jumpInitial` too, not only `kineticJump`, so an air dodge, a grab or an up special during the
-  rise ends it instead of the rise carrying on underneath.
+  `jumpInitial` too, not only `kineticJump`, so a directional air dodge, a grab or an up special
+  during the rise ends it instead of the rise carrying on underneath. A neutral air dodge keeps
+  it, as it keeps all momentum (Plan 3, Task 20b).
 - *Midair jumps* follow `jump_count_max`. Kirby's five follow SmashWiki's published Ultimate
   heights, and the index into them is clamped at both ends.
 - *The ground jump is spent.* Leaving the ground any way but a jump spends the ground jump, so

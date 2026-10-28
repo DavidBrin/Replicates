@@ -119,7 +119,14 @@ export function techOrBounce(
   // After the hitstun a wall or ceiling is a plain stop: nothing to tech
   // (SmashWiki "Tech": the character "must be in hitstun"), nothing to bounce.
   if (before.tumbleFall && !floor) return null;
-  // The air dodge is the tech input, and its own launch is nothing (it sets it to 0).
+  // The air dodge is the tech input, at any launch: a neutral dodge keeps the
+  // launch it began with (Task 20b), and the reimplementations of the vanilla
+  // air-dodge tech read the dodge's frame and no speed (HewDraw Remix
+  // `airdodge.rs` L399-420,
+  // https://github.com/HDR-Development/HewDraw-Remix/blob/a56075404c96853b260689a341d63fcb90a33f93/fighters/common/src/general_statuses/airdodge.rs#L399-L420;
+  // WuBor Patch `escape_air.rs` L154-189,
+  // https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L154-L189).
+  // UNVERIFIED: the vanilla function itself is not published.
   const techable = before.dodgeTech || before.speed <= (floor ? TECH_FLOOR_MAX_SPEED : TECH_SURFACE_MAX_SPEED);
   const input = before.dodgeTech || f.combat.techWindow > 0 || (floor && intent.shieldHeld);
   if (input && techable) {

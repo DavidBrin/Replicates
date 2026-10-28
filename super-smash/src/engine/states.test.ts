@@ -5,9 +5,12 @@ import {
   AIR_DODGE_FRAMES,
   AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
+  DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_LANDING_LAG,
   DIRECTIONAL_AIR_DODGE_FRAMES,
+  DIRECTIONAL_AIR_DODGE_SPEED,
   JUMP_SQUAT_FRAMES,
+  LAUNCH_SPEED_DECAY,
   PERFECT_SHIELD_WINDOW,
   ROLL_INTANGIBLE,
   SDI_DISTANCE,
@@ -32,7 +35,7 @@ import {
 } from "./states";
 import type { Intent, StateContext } from "./states";
 import { emptyCombat } from "./combat";
-import { emptyKinetic, jumpLaunchSpeed } from "./kinetic";
+import { emptyKinetic, jumpLaunchSpeed, kineticSumX, kineticSumY } from "./kinetic";
 import { paramsFromAttributes } from "./params";
 import "./status";
 import { Btn } from "./types";
@@ -692,6 +695,87 @@ describe("air dodge", () => {
     f.grounded = true;
     onLanded(f, ctx());
     expect(f.airDodged).toBe(false);
+  });
+
+  /* -- Plan 3, Task 20b: the neutral dodge keeps the fighter's momentum -- */
+
+  /** Airborne in `action`, moving at (vx, vy) on the energies that carry them. */
+  function airborne(action: FighterState["action"], vx: number, vy: number, over: Partial<FighterState> = {}): FighterState {
+    const f = fighter({ grounded: false, platform: -1, action, y: fx(100), ...over });
+    f.kinetic.controlX = fx(vx);
+    f.kinetic.gravityY = fx(vy);
+    f.vx = fx(vx);
+    f.vy = fx(vy);
+    return f;
+  }
+
+  // SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge), Ultimate: the
+  // neutral air dodge "behaves like air dodges in Brawl and Smash 4, preserving
+  // their momentum"; Brawl's "no longer halts the character's momentum ... it
+  // simply grants brief intangiblity along the character's current line of
+  // movement"; and "every character falls approximately the same distance when
+  // air dodging", so gravity acts through it.
+  it("keeps the fighter's momentum when neutral: it drifts and falls on exactly as a fall does", () => {
+    const dodging = airborne("fall", 0.8, 1.2);
+    const falling = airborne("fall", 0.8, 1.2);
+    for (let i = 0; i < AIR_DODGE_FRAMES; i++) {
+      tick(dodging, i === 0 ? Btn.Shield : 0, i === 1 ? Btn.Shield : 0);
+      tick(falling, 0, 0);
+      expect(dodging.action, `frame ${i}`).toBe("airDodge");
+      expect([dodging.vx, dodging.vy], `frame ${i}`).toEqual([falling.vx, falling.vy]);
+      expect([dodging.vx, dodging.vy], `frame ${i}: the energies' sum`).toEqual([kineticSumX(dodging), kineticSumY(dodging)]);
+    }
+    expect(falling.vy, "gravity acted").toBeLessThan(0);
+  });
+
+  it("carries a launch through a neutral dodge out of hitstun, still decaying", () => {
+    // Late in a slowing launch: the hitstun cancel is open (Task 7).
+    const f = airborne("tumble", 0, 0, { actionFrame: 40, hitstun: 20 });
+    f.kinetic.damageX = fx(1.2);
+    f.kinetic.damageY = -fx(0.9);
+    f.launchSpeed = fx(1.5);
+    f.vx = fx(1.2);
+    f.vy = -fx(0.9);
+    tick(f, Btn.Shield, 0);
+    expect(f.action).toBe("airDodge");
+    expect(f.launchSpeed).toBe(fx(1.5) - LAUNCH_SPEED_DECAY);
+    expect(f.kinetic.damageX).toBeGreaterThan(0);
+    expect(f.kinetic.damageY).toBeLessThan(0);
+    tick(f, 0, Btn.Shield);
+    expect(f.launchSpeed).toBe(fx(1.5) - 2 * LAUNCH_SPEED_DECAY);
+    expect([f.vx, f.vy]).toEqual([kineticSumX(f), kineticSumY(f)]);
+  });
+
+  // UNVERIFIED (see `startAirDodge`): SmashWiki "Air friction" has an air dodge
+  // end a fast fall "starting in Brawl", with falling friction then slowing the
+  // fall; the replica has no falling friction, so the fast fall carries on.
+  it("leaves a fast fall falling at its fast-fall speed through a neutral dodge", () => {
+    const f = airborne("fall", 0, 0, { fastFalling: true });
+    f.kinetic.gravityY = -PARAMS.dive_speed_y;
+    f.vy = -PARAMS.dive_speed_y;
+    for (let i = 0; i < AIR_DODGE_FRAMES; i++) {
+      tick(f, i === 0 ? Btn.Shield : 0, i === 1 ? Btn.Shield : 0);
+      expect(f.action).toBe("airDodge");
+      expect(f.vy, `frame ${i}`).toBe(-PARAMS.dive_speed_y);
+    }
+    expect(f.fastFalling).toBe(true);
+  });
+
+  // Unchanged by Task 20b: the directional dodge sets its own speed, ends the
+  // launch and holds its height through its intangible window.
+  it("still sets its own velocity when directional, and holds its height through the intangible window", () => {
+    const f = airborne("fall", 0.5, -1);
+    f.kinetic.damageX = fx(0.6);
+    f.launchSpeed = fx(0.6);
+    f.vx = fx(1.1);
+    tick(f, Btn.Shield | Btn.Right, 0);
+    expect([f.vx, f.vy, f.launchSpeed]).toEqual([DIRECTIONAL_AIR_DODGE_SPEED, 0, 0]);
+    for (let i = 1; i <= DIRECTIONAL_AIR_DODGE_INTANGIBLE[1]; i++) {
+      tick(f, 0, i === 1 ? Btn.Shield | Btn.Right : 0);
+      expect(f.vy, `frame ${i}`).toBe(0);
+    }
+    tick(f, 0, 0);
+    expect(f.vy, "gravity once the window closes").toBeLessThan(0);
   });
 });
 

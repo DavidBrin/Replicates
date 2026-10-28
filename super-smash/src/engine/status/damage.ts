@@ -40,9 +40,11 @@ import type { FighterStatus } from "./kind";
  * Only a *press* (fresh or buffered) cancels: a shield held for a ground tech
  * (Task 12) must not spend the air dodge. A fighter whose air dodge is spent
  * stays in hitstun — nothing is cleared before the dodge is known to start.
- * A buffered press is spent only by the cancel it fires. A tumbling fighter
- * with the floor inside the tech window below it is making a tech input, not
- * cancelling (`techInputNearFloor`).
+ * A buffered press is spent only by the cancel it fires. Near the floor a
+ * neutral press is still the air dodge: it keeps the tumble's momentum and techs
+ * the surface it meets in its first 15 frames (`startAirDodge`, `techOrBounce`;
+ * Plan 3, Task 20b). One with a direction held, with the floor inside the tech
+ * window below it, is a tech input instead (`techInputNearFloor`).
  */
 function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   if (f.grounded) return false;
@@ -115,8 +117,10 @@ export const STATUS_DAMAGE_FLY: FighterStatus = {
  * (`onLanded`: `downed`, at any speed; `techOrBounce` for the tech). The
  * reimplementations of the vanilla `DamageFall_Main` agree: HewDraw Remix
  * `damagefall.rs` and WuBor Patch `damage_fall.rs` (cited in the Task 12 review).
- * A press of shield is an air dodge, which ends it — unless the floor is inside
- * the tech window, when it is the tech (`techInputNearFloor`).
+ * A press of shield is an air dodge, which ends it. A neutral one keeps the
+ * tumble's momentum and techs a surface it meets in its first 15 frames
+ * (`startAirDodge`, `techOrBounce`; Plan 3, Task 20b); one with a direction held,
+ * with the floor inside the tech window, is the tech instead (`techInputNearFloor`).
  */
 export const STATUS_DAMAGE_FALL: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_DAMAGE_FALL",

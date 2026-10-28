@@ -40,7 +40,7 @@ import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
 import { render } from "@/render/renderer";
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { airBrakeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
 import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
 import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
@@ -265,6 +265,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // Per fighter, from its own move data. A shared constant here is what let a
     // CPU decide it was close enough to punch from further than its arm goes.
     meleeReach: defs[i] ? meleeReachFromDef(defs[i]) : undefined,
+    airBrake: defs[i] ? airBrakeFromDef(defs[i]) : undefined,
   }));
 
   const camera = createCamera(stage);

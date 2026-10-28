@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
+import { AIR_DODGE_FRAMES, SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
 import { emptyCombat } from "@/engine/combat";
@@ -18,6 +18,7 @@ import {
   canAct,
   diDirection,
   digitalDirection,
+  dodgeDrift,
   edgeguard,
   fullHopPulse,
   isOffstage,
@@ -121,6 +122,7 @@ function context(
     tuning,
     jumps: 1,
     meleeReach: MELEE_RANGE,
+    airBrake: 0,
     rolls,
   };
 }
@@ -365,6 +367,19 @@ describe("recover", () => {
   it("stays silent while safely on the stage", () => {
     expect(recover(context(gameState([fighter(0)]), L9)).score).toBe(0);
   });
+
+  // A fighter in an air dodge cannot act until it ends, and a neutral one keeps
+  // falling (Plan 3, Task 20b): chasing an opponent toward the ledge in one would
+  // drift it off the stage with no way back, so it steers back over the stage.
+  it("steers back over the stage while an air dodge's drift would carry it off", () => {
+    const dodging = (x: number, vx: number) =>
+      gameState([fighter(0, { x: fx(x), y: fx(15), vx: fx(vx), grounded: false, platform: -1, action: "airDodge" })]);
+    const result = recover(context(dodging(-70, -1), L9));
+    expect(result.score).toBeGreaterThan(0);
+    expect(result.input).toBe(Btn.Right);
+    expect(recover(context(dodging(-70, 1), L9)).score).toBe(0);
+    expect(recover(context(dodging(0, -1), L9)).score).toBe(0);
+  });
 });
 
 /* --------------------------------------------------------------- defence -- */
@@ -408,6 +423,46 @@ describe("shield", () => {
       fighter(1, { x: fx(20), action: "attack", actionFrame: 8 }),
     ]);
     expect(held(shield(context(state, L9)).input, Btn.Left)).toBe(true);
+  });
+
+  // In the air the shield is a neutral air dodge, which keeps the fighter's
+  // momentum (Plan 3, Task 20b): one drifting out past the ledge would dodge
+  // itself off the stage, so the CPU does not take it.
+  it("does not air-dodge when its drift would carry it off the stage during the dodge", () => {
+    const airborne = (x: number, vx: number) =>
+      gameState([
+        fighter(0, { x: fx(x), y: fx(15), vx: fx(vx), grounded: false, platform: -1, action: "fall" }),
+        fighter(1, { x: fx(x + 20), y: fx(15), action: "attack", actionFrame: 8 }),
+      ]);
+    expect(shield(context(airborne(-66, -1.2), L9)).score).toBe(0);
+    expect(held(shield(context(airborne(-66, 1.2), L9)).input, Btn.Shield)).toBe(true);
+    expect(held(shield(context(airborne(0, -1.2), L9)).input, Btn.Shield)).toBe(true);
+    // Air friction shortens the drift: 1.2 a frame bled by 0.015 a frame carries
+    // 40.9 over the dodge, not 60, so from x -30 it stays on the stage.
+    expect(shield(context(airborne(-30, -1.2), L9)).score).toBe(0);
+    const braked = { ...context(airborne(-30, -1.2), L9), airBrake: fx(0.015) };
+    expect(held(shield(braked).input, Btn.Shield)).toBe(true);
+  });
+});
+
+describe("dodgeDrift", () => {
+  it("is the drift that air friction leaves over the dodge, frame by frame", () => {
+    const cases: [number, number][] = [
+      [fx(1.2), fx(0.015)],
+      [-fx(0.3), fx(0.0038)],
+      [fx(2), fx(0.05)],
+      [-fx(0.9), 0],
+    ];
+    for (const [vx, brake] of cases) {
+      // The engine's neutral stick: `approach(controlX, 0, air_brake_x)`, then move.
+      let v = Math.abs(vx);
+      let x = 0;
+      for (let i = 0; i < AIR_DODGE_FRAMES; i++) {
+        v = Math.max(v - brake, 0);
+        x += v;
+      }
+      expect(dodgeDrift(vx, brake), `${toFloat(vx)} at ${toFloat(brake)}`).toBe(vx < 0 ? -x : x);
+    }
   });
 });
 

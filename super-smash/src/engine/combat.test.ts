@@ -1619,8 +1619,10 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     const k = touched(dry);
     const frames = until(falling(0, 6, 0, -2), (i) => (i === k ? Btn.Shield : 0));
     expect(frames[k].state.fighters[1].action).toBe("tech");
-    // Nor does a press a few frames earlier turn into an air dodge that hovers.
+    // A press a few frames earlier is an air dodge, which falls on with the
+    // tumble's momentum (Task 20b) and techs the floor it meets.
     const early = until(falling(0, 6, 0, -2), (i) => (i === k - 2 ? Btn.Shield : 0));
+    expect(early[k - 2].state.fighters[1].action).toBe("airDodge");
     expect(early[k].state.fighters[1].action).toBe("tech");
   });
 
@@ -1646,11 +1648,15 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(frames[touched(frames)].state.fighters[1].action).toBe("downed");
   });
 
-  // A press that could not tech is not read as the tech: with the dodge to spend
-  // it is the air dodge, not a swallowed press.
-  it("air-dodges a press whose landing is faster than 3, rather than swallowing it", () => {
-    const frames = until(falling(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0), 3);
+  // A press with the dodge to spend is the air dodge, and the dodge, which keeps
+  // the launch (Task 20b), techs the floor in its first 15 frames at any speed:
+  // the reimplementations of the vanilla air-dodge tech read no speed (`techOrBounce`).
+  it("air-dodges a press whose landing is faster than 3, and the dodge techs it", () => {
+    const frames = until(falling(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0), 6);
     expect(frames[0].state.fighters[1].action).toBe("airDodge");
+    const k = frames.findIndex((f) => f.state.fighters[1].action !== "airDodge");
+    expect(k).toBeGreaterThan(0);
+    expect(frames[k].state.fighters[1].action).toBe("tech");
   });
 
   // SmashWiki "Tech": the character "must be in hitstun" to tech a wall or ceiling.
@@ -1764,27 +1770,61 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(frames.at(-1)!.state.fighters[1].combat.tumbleDodge).toBe(false);
   });
 
-  // The replica's air dodge stops dead where it starts, so it could never reach a
-  // floor a few frames below: a press that close to landing is the tech (UNVERIFIED
-  // reading of SmashWiki "Lucario (SSBU)/Techs"; see `techInputNearFloor`).
-  it("reads a shield press with the floor inside the tech window as the tech, not a hitstun cancel", () => {
-    const s = flying(0, 6, 0, -0.6);
-    s.fighters[1].actionFrame = 40;
-    const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0), 20);
-    expect(frames.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
-    expect(frames[landing(frames)].state.fighters[1].action).toBe("tech");
-  });
+  /* -- Task 20b: the neutral air dodge keeps momentum, so a press near the floor is a dodge that techs -- */
 
-  /* -- fix round 2: the press is the tech only while a tech is live, and only if the landing is real -- */
+  // Task 12 read a press this close to the floor as the tech alone, because the
+  // replica's air dodge stopped dead and could not reach the floor; for a neutral
+  // press that reading (`techInputNearFloor`) is retired, and what stays of it,
+  // for a press with a direction held, is tested further down. Ultimate's
+  // neutral dodge keeps the fighter's momentum (SmashWiki "Air dodge",
+  // https://www.ssbwiki.com/Air_dodge: "preserving their momentum"), and one out
+  // of a tumble techs a surface it meets in its first 15 frames (SmashWiki
+  // "Lucario (SSBU)/Techs": "a neutral airdodge option within 15 frames of
+  // landing will also activate a tech option"; `AIR_DODGE_TECH_FRAMES`). These
+  // are the cases the reading was built for, on the real mechanism.
 
   /** `until`, on a stage of the caller's choosing. */
   const onStage = (s: GameState, stage: StageDef, input: (i: number) => InputFrame, n: number) =>
     play(s, n, (i) => [0, input(i)], ctxFor(BASE_DEF, stage));
   const actionAt = (frames: Frame[], i: number) => frames[i].state.fighters[1].action;
+  /** The first frame fighter 1 has left the air dodge it is in. */
+  const dodgeEnds = (frames: Frame[]) => frames.findIndex((f, i) => i > 0 && f.state.fighters[1].action !== "airDodge");
+
+  it("techs a press made 1 to 11 frames above the floor after the hitstun: the press air-dodges, and the dodge falls into a tech", () => {
+    const dry = until(falling(0, 20, 0, -0.6), () => 0);
+    const k = touched(dry);
+    expect(k).toBeGreaterThan(TECH_WINDOW);
+    for (let early = 1; early <= TECH_WINDOW; early++) {
+      const frames = until(falling(0, 20, 0, -0.6), (i) => (i === k - early ? Btn.Shield : 0));
+      expect(actionAt(frames, k - early), `${early} before`).toBe("airDodge");
+      expect(actionAt(frames, k - 1), `${early} before`).toBe("airDodge");
+      expect(actionAt(frames, k), `${early} before: it lands when the tumble would`).toBe("tech");
+    }
+  });
+
+  it("techs a hitstun-cancel press made 1 to 11 frames above the floor the same way", () => {
+    const late = () => {
+      const s = flying(0, 20, 0, -0.6);
+      s.fighters[1].actionFrame = 40; // the cancel is open from the first frame (Task 7)
+      return s;
+    };
+    const dry = until(late(), () => 0);
+    const k = landing(dry);
+    expect(k).toBeGreaterThan(TECH_WINDOW);
+    for (let early = 1; early <= TECH_WINDOW; early++) {
+      const frames = until(late(), (i) => (i === k - early ? Btn.Shield : 0));
+      expect(actionAt(frames, k - early), `${early} before`).toBe("airDodge");
+      expect(actionAt(frames, k), `${early} before`).toBe("tech");
+    }
+  });
 
   // `updateTechInput` opens no window inside the 40-frame lockout, so a second
-  // press there is no tech input: it air-dodges, as it did before this task.
-  it("air-dodges a press made inside the tech lockout, 2, 5 or 9 frames before landing", () => {
+  // press there is no tech input of its own: it air-dodges. The dodge out of the
+  // tumble then techs the floor it meets in its first 15 frames, as any dodge out
+  // of a tumble does. UNVERIFIED: that the lockout does not reach the dodge's
+  // tech; the reimplementations of the vanilla check read the dodge's frame and
+  // (WuBor Patch) the button's last press, and no lockout (`techOrBounce`).
+  it("air-dodges a press made inside the tech lockout, 2, 5 or 9 frames before landing, and the dodge techs the landing", () => {
     const hitstunOver = () => {
       // Its hitstun ends on frame 14, after the first press has left the 9-frame buffer.
       const s = flying(0, 45, 0, -0.6);
@@ -1799,44 +1839,52 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
       expect(actionAt(frames, k - early - 1), `${early} before`).toBe("tumbleFall");
       expect(actionAt(frames, k - early), `${early} before`).toBe("airDodge");
       expect(frames[k - early].state.fighters[1].combat.techWindow, `${early} before`).toBe(0);
+      expect(actionAt(frames, k), `${early} before`).toBe("tech");
     }
   });
 
-  it("reads the same press as the tech while the first press's window is still open at the landing", () => {
-    // Pressed on the way down at 0 and again at 6, the 11-frame window of the first
-    // still has 5 frames: a landing inside them techs, a landing outside them does not.
+  // A press made before the hitstun cancel opens waits in the buffer and
+  // air-dodges when it opens (Task 7). The dodge techs a landing anywhere in its
+  // first 15 frames, further out than the press's own 11-frame window reached.
+  it("techs a landing 9 or 13 frames out after a press buffered into the hitstun cancel", () => {
     const run = (y: number) => {
       const s = flying(0, y, 0, -0.6);
-      s.fighters[1].actionFrame = 38; // the cancel opens on 41, at frame 3
-      return until(s, (i) => (i === 0 || i === 6 ? Btn.Shield : 0), 30);
+      s.fighters[1].actionFrame = 38; // the cancel opens on 41, two frames in
+      return until(s, (i) => (i === 0 ? Btn.Shield : 0), 30);
     };
     const landsAt = (y: number) => landing(until(flying(0, y, 0, -0.6), () => 0, 30));
-    const near = [...Array(40).keys()].map((n) => 4 + n * 0.5).find((y) => landsAt(y) === 9)!;
-    const far = [...Array(40).keys()].map((n) => 4 + n * 0.5).find((y) => landsAt(y) === 13)!;
-    expect(run(near).some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
-    expect(run(near)[9].state.fighters[1].action).toBe("tech");
-    expect(actionAt(run(far), 6)).toBe("airDodge");
+    for (const at of [9, 13]) {
+      const y = [...Array(40).keys()].map((n) => 4 + n * 0.5).find((h) => landsAt(h) === at)!;
+      const frames = run(y);
+      const dodge = frames.findIndex((f) => f.state.fighters[1].action === "airDodge");
+      expect(dodge, `lands at ${at}`).toBe(2);
+      expect(actionAt(frames, at - 1), `lands at ${at}`).toBe("airDodge");
+      expect(actionAt(frames, at), `lands at ${at}`).toBe("tech");
+    }
   });
 
-  // `landsWithin` replays the frames with the step's own movement and collision.
-  // A soft platform the fighter is over now, and drifts off before it gets there:
-  it("air-dodges a press above a soft platform the fighter will drift off, rather than swallowing it", () => {
+  // The dodge drifts on with the launch as the tumble would: off a soft platform's
+  // span it misses the platform and lands on the floor below after its first 15
+  // frames, with the air dodge's landing lag; over the middle it techs the platform.
+  it("drifts off a soft platform in the dodge as the tumble would, and over its middle techs it", () => {
     const soft: StageDef = {
       ...STAGE,
       platforms: [...STAGE.platforms, { x: 0, y: fx(30), halfWidth: fx(20), soft: true, ledges: false }],
     };
     for (const x of [15, 18]) {
-      const frames = onStage(falling(x, 33, 1.5, -0.4), soft, (i) => (i === 0 ? Btn.Shield : 0), 40);
+      const frames = onStage(falling(x, 33, 1.5, -0.4), soft, (i) => (i === 0 ? Btn.Shield : 0), 60);
       expect(actionAt(frames, 0), `x ${x}`).toBe("airDodge");
+      const end = dodgeEnds(frames);
+      expect(end, `x ${x}`).toBeGreaterThanOrEqual(AIR_DODGE_TECH_FRAMES);
+      expect(frames[end].state.fighters[1], `x ${x}`).toMatchObject({ action: "landingLag", y: 0 });
     }
-    // ...and the same press over its middle is the tech, as it lands on it.
     const over = onStage(falling(0, 33, 0, -0.4), soft, (i) => (i === 0 ? Btn.Shield : 0), 40);
-    expect(over.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
-    expect(over[touched(over)].state.fighters[1].action).toBe("tech");
+    expect(actionAt(over, 0)).toBe("airDodge");
+    expect(over[dodgeEnds(over)].state.fighters[1]).toMatchObject({ action: "tech", y: fx(30) });
   });
 
-  // Smashville's platform moves: it is where it will be, by the frame number.
-  it("air-dodges a press above a soft platform that moves out from under the fighter", () => {
+  // Smashville's platform moves: the dodge meets it where it is, frame by frame.
+  it("misses a soft platform that moves out from under the dodge, as the tumble would", () => {
     const moving: StageDef = {
       ...STAGE,
       platforms: [
@@ -1844,13 +1892,18 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
         { x: 0, y: fx(30), halfWidth: fx(4), soft: true, ledges: false, motion: { kind: "sweep", amplitude: fx(40), periodFrames: 120 } },
       ],
     };
-    const frames = onStage(falling(0, 33, 0, -1), moving, (i) => (i === 0 ? Btn.Shield : 0), 6);
+    const dry = onStage(falling(0, 33, 0, -1), moving, () => 0, 60);
+    expect(dry[touched(dry)].state.fighters[1]).toMatchObject({ action: "downed", y: 0 });
+    const frames = onStage(falling(0, 33, 0, -1), moving, (i) => (i === 0 ? Btn.Shield : 0), 60);
     expect(actionAt(frames, 0)).toBe("airDodge");
+    expect(frames[dodgeEnds(frames)].state.fighters[1]).toMatchObject({ action: "landingLag", y: 0 });
   });
 
   // A launch still slowing while gravity holds the fall at its terminal speed: the
-  // fall is 2.5 a frame, less 0.051 more each frame, so 11 frames cover 24.13.
-  it("air-dodges a press above the floor by more than its slowing fall reaches in the window", () => {
+  // fall is 2.5 a frame, less 0.051 more each frame, so 11 frames cover 24.13 and
+  // 15 cover 31.38. The dodge falls on as the tumble would, so a press that far
+  // out techs too, not only one whose own 11-frame window reaches the floor.
+  it("techs a press above the floor by more than its slowing fall covers in the tech window, inside the dodge's 15 frames", () => {
     const slowing = (y: number) => {
       const s = falling(0, y, 0, -1);
       s.fighters[1].kinetic.gravityY = -fx(1.5);
@@ -1858,10 +1911,169 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
       return s;
     };
     const press = (y: number) => until(slowing(y), (i) => (i === 0 ? Btn.Shield : 0), 40);
+    for (const y of [24, 24.3, 25, 27, 30]) {
+      const frames = press(y);
+      expect(actionAt(frames, 0), `drop ${y}`).toBe("airDodge");
+      const end = dodgeEnds(frames);
+      expect(end, `drop ${y}`).toBeLessThan(AIR_DODGE_TECH_FRAMES);
+      expect(actionAt(frames, end), `drop ${y}`).toBe("tech");
+    }
+    // Past the dodge's first 15 frames the landing is the dodge's own, with its lag.
+    const far = press(40);
+    expect(dodgeEnds(far)).toBeGreaterThanOrEqual(AIR_DODGE_TECH_FRAMES);
+    expect(actionAt(far, dodgeEnds(far))).toBe("landingLag");
+  });
+
+  // SmashWiki "Tech" (Ultimate): "the shield button can be held for much longer
+  // than the 11 frame window and a tech can still be performed on the ground."
+  // Held as the hitstun runs out, the shield is an air dodge in `tumbleFall` (a
+  // fall's rule: a held input is buffered, SmashWiki "Buffer"), and the dodge techs
+  // the landing; with the dodge spent, the hold itself techs it.
+  it("techs a landing on a shield held from the hitstun into tumbleFall: through the dodge, or with it spent by the hold", () => {
+    const dry = until(flying(0, 30, 0, -0.6), () => 0, 60);
+    const k = landing(dry);
+    expect(k).toBeGreaterThan(TECH_WINDOW + 9);
+    const heldThrough = (spent: boolean) => {
+      const s = flying(0, 30, 0, -0.6);
+      s.fighters[1].hitstun = k - 3; // runs out on frame k - 4: `tumbleFall` from 4 frames before landing
+      s.fighters[1].airDodged = spent;
+      return until(s, () => Btn.Shield, 60);
+    };
+    const dodging = heldThrough(false);
+    expect(actionAt(dodging, k - 4)).toBe("tumbleFall");
+    expect(actionAt(dodging, k - 3)).toBe("airDodge");
+    expect(actionAt(dodging, k)).toBe("tech");
+    const spent = heldThrough(true);
+    expect(spent.slice(k - 4, k).every((f) => f.state.fighters[1].action === "tumbleFall")).toBe(true);
+    expect(actionAt(spent, k)).toBe("tech");
+  });
+
+  /* -- what stays of Task 12's reading: a press with a direction held (Task 20b) -- */
+
+  // A press with the stick held is a directional dodge, which still sets its own
+  // velocity and holds its height through its intangible window (`startAirDodge`):
+  // a sideways one never reaches a floor below it. So with the floor inside the
+  // tech window it is read as the tech (`techInputNearFloor`), and the stick held
+  // at the landing makes it a roll. UNVERIFIED reading, as in Task 12.
+  const R_PRESS = (at: number) => (i: number) => (i === at ? Btn.Shield | Btn.Right : i > at ? Btn.Right : 0);
+  const dodged = (frames: Frame[]) => frames.some((f) => f.state.fighters[1].action === "airDodge");
+
+  it("reads a press with the stick held sideways, with the landing inside the window, as the tech: a roll, and no dodge", () => {
+    const dry = until(falling(0, 20, 0, -0.6), () => 0);
+    const k = touched(dry);
+    expect(k).toBeGreaterThan(TECH_WINDOW);
+    // The press frame is the window's first: a landing up to 10 frames later is in it.
+    for (let early = 0; early < TECH_WINDOW; early++) {
+      const frames = until(falling(0, 20, 0, -0.6), R_PRESS(k - early));
+      expect(dodged(frames), `${early} before`).toBe(false);
+      expect(actionAt(frames, k), `${early} before`).toBe("techRoll");
+    }
+    // One frame further out the press is the directional dodge it asked for.
+    expect(actionAt(until(falling(0, 20, 0, -0.6), R_PRESS(k - TECH_WINDOW)), k - TECH_WINDOW)).toBe("airDodge");
+  });
+
+  it("reads a hitstun-cancel press with the stick held sideways the same way", () => {
+    const late = () => {
+      const s = flying(0, 20, 0, -0.6);
+      s.fighters[1].actionFrame = 40; // the cancel is open from the first frame (Task 7)
+      return s;
+    };
+    const k = landing(until(late(), () => 0));
+    for (const early of [0, 4, TECH_WINDOW - 1]) {
+      const frames = until(late(), R_PRESS(k - early));
+      expect(dodged(frames), `${early} before`).toBe(false);
+      expect(actionAt(frames, k), `${early} before`).toBe("techRoll");
+    }
+  });
+
+  // `updateTechInput` opens no window inside the 40-frame lockout, so a second
+  // press there is no tech input: it is the directional dodge it asked for.
+  it("air-dodges a press with the stick held made inside the tech lockout", () => {
+    const hitstunOver = () => {
+      const s = flying(0, 45, 0, -0.6);
+      s.fighters[1].hitstun = 14;
+      return s;
+    };
+    const k = until(hitstunOver(), (i) => (i === 0 ? Btn.Shield : 0), 60).findIndex((f) => f.state.fighters[1].action === "downed");
+    for (const early of [2, 5, 9]) {
+      const frames = until(hitstunOver(), (i) => (i === 0 ? Btn.Shield : i === k - early ? Btn.Shield | Btn.Right : 0), 60);
+      expect(actionAt(frames, k - early - 1), `${early} before`).toBe("tumbleFall");
+      expect(actionAt(frames, k - early), `${early} before`).toBe("airDodge");
+      expect(frames[k - early].state.fighters[1].charge, `${early} before: directional`).toBe(1);
+      expect(frames[k - early].state.fighters[1].combat.techWindow, `${early} before`).toBe(0);
+    }
+  });
+
+  // The horizon is what is left of a window already open, not a fresh 11.
+  it("reads a press with the stick held as the tech only if the landing is inside what is left of the window", () => {
+    // In tumbleFall, inside the lockout, with 2 frames of an earlier press's window
+    // left (1 after this frame's count) and nothing buffered.
+    const late = (y: number) => {
+      const s = falling(0, y, 0, -0.6);
+      Object.assign(s.fighters[1].combat, { techWindow: 2, techLockout: 30 });
+      return s;
+    };
+    const landsAt = (y: number) => touched(until(late(y), () => 0));
+    const heights = [...Array(60).keys()].map((n) => 0.5 + n * 0.5);
+    const now = heights.find((y) => landsAt(y) === 0)!;
+    const later = heights.find((y) => landsAt(y) === 6)!;
+    expect(actionAt(until(late(now), R_PRESS(0), 3), 0)).toBe("techRoll");
+    expect(actionAt(until(late(later), R_PRESS(0), 3), 0)).toBe("airDodge");
+  });
+
+  // `landsWithin` replays the frames with the step's own movement and collision.
+  it("reads a press with the stick held above a soft platform the fighter will drift off as the dodge, and over its middle as the tech", () => {
+    const soft: StageDef = {
+      ...STAGE,
+      platforms: [...STAGE.platforms, { x: 0, y: fx(30), halfWidth: fx(20), soft: true, ledges: false }],
+    };
+    const press = (i: number) => (i === 0 ? Btn.Shield | Btn.Right : 0);
+    for (const x of [15, 18]) {
+      expect(actionAt(onStage(falling(x, 33, 1.5, -0.4), soft, press, 40), 0), `x ${x}`).toBe("airDodge");
+    }
+    const over = onStage(falling(0, 33, 0, -0.4), soft, press, 40);
+    expect(dodged(over)).toBe(false);
+    expect(over[touched(over)].state.fighters[1]).toMatchObject({ action: "tech", y: fx(30) });
+  });
+
+  // Smashville's platform moves: it is where it will be, by the frame number.
+  it("reads a press with the stick held above a soft platform that moves out from under the fighter as the dodge", () => {
+    const moving: StageDef = {
+      ...STAGE,
+      platforms: [
+        ...STAGE.platforms,
+        { x: 0, y: fx(30), halfWidth: fx(4), soft: true, ledges: false, motion: { kind: "sweep", amplitude: fx(40), periodFrames: 120 } },
+      ],
+    };
+    const frames = onStage(falling(0, 33, 0, -1), moving, (i) => (i === 0 ? Btn.Shield | Btn.Right : 0), 6);
+    expect(actionAt(frames, 0)).toBe("airDodge");
+  });
+
+  // The slowing fall of the neutral test above: 11 frames cover 24.13.
+  it("reads a press with the stick held above the floor by more than its slowing fall covers in the window as the dodge", () => {
+    const slowing = (y: number) => {
+      const s = falling(0, y, 0, -1);
+      s.fighters[1].kinetic.gravityY = -fx(1.5);
+      s.fighters[1].vy = -fx(2.5);
+      return s;
+    };
+    const press = (y: number) => until(slowing(y), (i) => (i === 0 ? Btn.Shield | Btn.Right : 0), 40);
     for (const y of [24.3, 25, 26, 27]) expect(actionAt(press(y), 0), `drop ${y}`).toBe("airDodge");
     const reached = press(24);
-    expect(reached.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
+    expect(dodged(reached)).toBe(false);
     expect(reached[touched(reached)].state.fighters[1].action).toBe("tech");
+  });
+
+  // SmashWiki "Tech": a held shield techs the ground. Held with the stick into
+  // `tumbleFall` near the floor, it is the tech too, and the stick a roll.
+  it("techs a landing on a shield held with the stick held into tumbleFall: a roll, and no dodge", () => {
+    const k = landing(until(flying(0, 30, 0, -0.6), () => 0, 60));
+    const s = flying(0, 30, 0, -0.6);
+    s.fighters[1].hitstun = k - 3;
+    const frames = until(s, () => Btn.Shield | Btn.Right, 60);
+    expect(actionAt(frames, k - 4)).toBe("tumbleFall");
+    expect(dodged(frames)).toBe(false);
+    expect(actionAt(frames, k)).toBe("techRoll");
   });
 
   it("replays on a scratch copy: the fighter and its energies are left as they were", () => {
