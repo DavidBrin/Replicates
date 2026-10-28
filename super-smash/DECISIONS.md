@@ -1720,9 +1720,10 @@ so two CPU matches charged one frame earlier.
 - *Soft stick.* `Btn.Soft` reads as half deflection for walking and running (UNVERIFIED; the
   bitfield carries one bit of magnitude). A soft walk is half speed. A soft run is reachable by
   easing the stick mid-run, and only `run_accel_mul` halves for it. Soft DI stays a quarter
-  (`SOFT_DI_SHIFT`, D54). So no input reaches `walk_speed_max`: a keyboard key is a full
-  deflection, which walks for at most 3 frames and then dashes (D24), and a gamepad's soft band
-  walks at half speed.
+  (`SOFT_DI_SHIFT`, D54). So a walk rarely reaches `walk_speed_max`: a keyboard key is a full
+  deflection, which walks for 4 frames (the press frame and 3 more, D24) and then dashes, and only
+  Link, Samus and Kirby accelerate fast enough to touch their top walk speed in that time
+  (measured through `step()`); a gamepad's soft band walks at half speed.
 - *Landings* are light or heavy (SmashWiki "Lag"). A landing after `landing_heavy_frame` frames at
   full fall speed takes `landing_frame`, any other `landing_frame_light`, and the length rides in
   the `land` state's `charge`. Each of these is UNVERIFIED:
