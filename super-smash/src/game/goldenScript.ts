@@ -21,7 +21,13 @@
  * `golden.test.ts` is what notices if they stop landing. A behaviour task that
  * moves the fighters (walk speed, traction, jump arcs) re-tunes them until it
  * passes again, then regenerates the trace. Task 21 (air friction) did so for
- * the walk to the right ledge on frame 1163.
+ * the walk to the right ledge on frame 1163. Task 22 (walking) halved every soft
+ * walk (a soft stick is half deflection, so half the top speed), which
+ * lengthened each of them; the idle waits around them were shortened by the same
+ * frames, so the forward smash (732), the ledge jump (884) and everything
+ * pressed after it keep their frames, except the short hop, nair, shields and
+ * roll after Fox's longer walk-in (14 to 6 frames later, back on schedule from
+ * the dash to the edge on 1759).
  */
 
 import { Btn } from "@/engine/types";
@@ -57,45 +63,46 @@ const SOFT = Btn.Soft;
  */
 const STEPS: readonly ScriptStep[] = [
   [20, 0, 0], //                    1: both land from the entry drop
-  // A soft-stick walk: Soft keeps a held direction a walk instead of a dash.
-  [40, R | SOFT, 0], //            21: Mario walks to about 10 from Fox
+  // A soft-stick walk: Soft keeps a held direction a walk instead of a dash, and
+  // (Task 22) at half the top speed, so the walk to Fox takes 85 frames, not 40.
+  [85, R | SOFT, 0], //            21: Mario walks to about 10 from Fox
   [10, 0, 0],
   // Grab, and hold until the 60-frame hold lets go on its own.
-  [1, G, 0], //                    71: grab: Fox is grabbed
-  [70, 0, 0], //                   72: grabHold, then both stand
-  [3, R | SOFT, 0], //            142: in to about 8: a throw reaches, a pummel does not
+  [1, G, 0], //                   116: grab: Fox is grabbed
+  [70, 0, 0], //                  117: grabHold, then both stand
+  [4, R | SOFT, 0], //            187: in to about 8: a throw reaches, a pummel does not
   [10, 0, 0],
   // Grab, pummel (it whiffs at this range), forward throw. Fox holds a soft up
   // through the throw, so its launch takes soft DI.
-  [1, G, 0], //                   155: grab
+  [1, G, 0], //                   201: grab
   [15, 0, 0],
-  [1, A, 0], //                   171: pummel, then back to grabHold
+  [1, A, 0], //                   217: pummel, then back to grabHold
   [15, 0, 0],
-  [1, R, SOFT | U], //            187: forward throw: Fox is thrown, then launched
+  [1, R, SOFT | U], //            233: forward throw: Fox is thrown, then launched
   [40, 0, SOFT | U],
-  [17, R | SOFT, 0], //           228: in to about 8 again, for the jabs below
-  [43, 0, 0],
+  [38, R | SOFT, 0], //           274: in to about 8 again, for the jabs below
+  [22, 0, 0],
   // Fox shields, then spot-dodges out of it.
-  [10, 0, S], //                  288: shield
-  [1, 0, S | D], //               298: spotDodge
+  [10, 0, S], //                  334: shield
+  [1, 0, S | D], //               344: spotDodge
   [30, 0, 0],
   // Fox shields until it breaks; Mario jabs it three times on the way.
-  [40, 0, S], //                  329: shield
-  [1, A, S], //                   369: jab: shieldStun
+  [40, 0, S], //                  375: shield
+  [1, A, S], //                   415: jab: shieldStun
   [30, 0, S],
-  [1, A, S], //                   400: jab: shieldStun
+  [1, A, S], //                   446: jab: shieldStun
   [30, 0, S],
-  [1, A, S], //                   431: jab: shieldStun
-  [300, 0, S], //                 432: the shield breaks: shieldBroken
+  [1, A, S], //                   477: jab: shieldStun
+  [254, 0, S], //                 478: the shield breaks on 657: shieldBroken
   // Mario forward-smashes the stunned Fox, who holds a soft up through the launch.
   [1, R, SOFT | U], //            732: a fresh right...
   [1, R | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
-  [100, 0, SOFT | U], //          734: tumble, downed, getUp
+  [66, 0, SOFT | U], //           734: tumble, downed; Mario can walk again on 800
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
-  [33, R | SOFT, 0], //           834: ledgeHang
-  [17, 0, 0],
+  [64, R | SOFT, 0], //           800: ledgeHang on 862
+  [20, 0, 0],
   [1, J, 0], //                   884: ledgeJump, then jump
   [20, L, 0], //                  885: drift back over the stage
   [40, 0, 0],
@@ -113,18 +120,19 @@ const STEPS: readonly ScriptStep[] = [
   [30, R, 0], //                 1118: run
   [15, 0, 0], //                 1148: let go: runBrake
   // Air friction (Task 21) bleeds the ledge jump's drift, so Mario lands further
-  // right and the walk to this ledge is 16 frames, not 48. It stops inside the
-  // hang's first 4 frames (the hang begins on 1179) and he hangs until the 1243 press.
-  [18, R | SOFT, 0], //          1163: to the right ledge again
-  [62, 0, 0],
+  // right, and the soft walk (Task 22) is half speed: the walk to this ledge is 32
+  // frames. It stops inside the hang's first 4 frames (the hang begins on 1193) and
+  // he hangs until the 1243 press.
+  [32, R | SOFT, 0], //          1163: to the right ledge again
+  [48, 0, 0],
   [1, L, 0], //                  1243: toward the stage: ledgeGetUp
   [40, 0, 0],
-  [10, R | SOFT, 0], //          1284: back onto the ledge
-  [20, 0, 0],
+  [17, R | SOFT, 0], //          1284: back onto the ledge (the hang begins on 1299)
+  [13, 0, 0],
   [1, A, 0], //                  1314: ledgeAttack
   [70, 0, 0],
-  [10, R | SOFT, 0], //          1385: back onto the ledge
-  [20, 0, 0],
+  [17, R | SOFT, 0], //          1385: back onto the ledge (the hang begins on 1400)
+  [13, 0, 0],
   [1, S, 0], //                  1415: ledgeRoll
   [50, 0, 0],
   [1, J, 0], //                  1466: a tap is a short hop
@@ -133,18 +141,19 @@ const STEPS: readonly ScriptStep[] = [
   [80, 0, 0],
   [1, B, 0], //                  1554: neutral special: a fireball that hits Fox
   // Air friction left Fox at x 32 after the fireball, out of nair range, so he
-  // walks in: 13 frames of walk from 1602 put him at about x 54 when the nair lands.
+  // walks in: 27 frames of soft walk (half speed, Task 22) from 1602 put him at
+  // about x 54 when the nair lands.
   [47, 0, 0],
-  [13, 0, R | SOFT], //          1602: Fox walks in toward Mario
+  [27, 0, R | SOFT], //          1602: Fox walks in toward Mario
   // Attack inside jumpsquat is a short-hop aerial, which deals 0.85× damage.
-  [1, J, 0], //                  1615: jumpSquat...
-  [1, A, 0], //                  1616: ...short-hop neutral air: hits Fox on 1621
+  [1, J, 0], //                  1629: jumpSquat...
+  [1, A, 0], //                  1630: ...short-hop neutral air: hits Fox on 1635
   [60, 0, 0],
-  [5, S, 0], //                  1677: shield...
-  [1, S | L, 0], //              1682: ...roll
-  [40, 0, 0],
-  [6, S, 0], //                  1723: shield, held past its 3-frame minimum...
-  [30, 0, 0], //                 1729: ...and let go: shieldRelease
+  [5, S, 0], //                  1691: shield...
+  [1, S | L, 0], //              1696: ...roll
+  [32, 0, 0],
+  [6, S, 0], //                  1729: shield, held past its 3-frame minimum...
+  [24, 0, 0], //                 1735: ...and let go: shieldRelease
   // Fox jumps off the right side and drifts away from the ledge to his death.
   [10, 0, R], //                 1759: dash to the edge
   [1, 0, R | J], //              1769: full hop out

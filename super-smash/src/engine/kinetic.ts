@@ -21,7 +21,7 @@
  */
 
 import { LAUNCH_SPEED_DECAY } from "./constants";
-import { abs, approach, mul, sqrt } from "./fixed";
+import { ONE, abs, approach, mul, sqrt } from "./fixed";
 import type { FighterParams } from "./params";
 import type { ActionState, FighterState } from "./types";
 
@@ -311,6 +311,12 @@ export const RUN_ACCEL_FACTOR = 3;
 export interface KineticInput {
   /** Horizontal stick, −1/0/1 from the keyboard. */
   readonly stickX: number;
+  /**
+   * How far the stick is deflected, Q12: ONE for a key or a full tilt, ONE / 2
+   * for `Btn.Soft` (Plan 1's half-deflection reading — UNVERIFIED, the
+   * bitfield carries one bit of magnitude). Defaults to ONE.
+   */
+  readonly stickMag?: number;
   readonly params: FighterParams;
   /** Air dodge only: its intangible window is open, so gravity waits. */
   readonly holdVertical: boolean;
@@ -351,9 +357,16 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
   if (f.launchSpeed > 0) kineticDecayDamage(f, f.grounded ? LAUNCH_SPEED_DECAY + p.ground_brake : LAUNCH_SPEED_DECAY);
   kineticTransfer(f, type);
   switch (type) {
-    case "WALK":
-      k.controlX = approach(k.controlX, input.stickX * p.walk_speed_max, p.ground_brake * WALK_ACCEL_FACTOR);
+    case "WALK": {
+      // walk_accel_add at any deflection, walk_accel_mul scaled by it; the top
+      // speed scales with deflection too. UNVERIFIED: that scaling is linear
+      // here; the game's `walk_slow_speed_mul`, `walk_middle_ratio` and
+      // `walk_fast_ratio` (skyline-smash FighterParamTable) shape it, and no
+      // source used here publishes their values.
+      const mag = input.stickMag ?? ONE;
+      k.controlX = approach(k.controlX, input.stickX * mul(p.walk_speed_max, mag), p.walk_accel_add + mul(p.walk_accel_mul, mag));
       break;
+    }
     case "DASH":
       k.controlX =
         f.actionFrame <= 1

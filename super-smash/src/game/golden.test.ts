@@ -117,7 +117,7 @@ const MATCHES: readonly Match[] = [
 /**
  * Every `ActionState` the five matches must visit between them: all 42. A
  * `Record` rather than a list, so a new state is a compile error here until
- * somebody pins it. Measured 2026-10-27, again after Task 21: the CPU matches reach 33,
+ * somebody pins it. Measured 2026-10-27, again after Task 22: the CPU matches reach 32,
  * the script 41 — everything but `entering`, which Final Destination's floor-level
  * spawn turns into a landing on frame 1, and which the Battlefield match keeps.
  */
@@ -176,9 +176,10 @@ const SOFT_PATHS: readonly SoftPath[] = ["walk", "tilt", "DI"];
 
 /**
  * The kinds of hit the scripted match lands (`hitKind`), measured from a run
- * after Task 21: the forward throw, a forward smash and a soft forward tilt, the
- * neutral special's fireball (a projectile), and the short-hop neutral air that
- * deals 0.85×. The jabs on Fox's shield and his KO are checked by count.
+ * after Task 22 (the same five as after Task 21): the forward throw, a forward
+ * smash and a soft forward tilt, the neutral special's fireball (a projectile),
+ * and the short-hop neutral air that deals 0.85×. The jabs on Fox's shield and
+ * his KO are checked by count.
  */
 const SCRIPT_HITS: readonly string[] = ["fthrow", "fsmash", "ftilt", "neutralB", "nair (short hop)"];
 const TILTS: readonly MoveSlot[] = ["ftilt", "utilt", "dtilt"];
@@ -327,8 +328,8 @@ describe("engine golden trace", () => {
   const all = MATCHES.map((m) => played.get(m.name)!);
 
   // A trace of idle fighters would pass every refactor and prove nothing.
-  // Measured 2026-10-27 after Task 21 (air friction), CPU matches then the script:
-  // hits 13/15/19/19 and 5, shield hits 2/0/0/2 and 3, KOs 1/4/0/1 and 1.
+  // Measured 2026-10-27 after Task 22 (walking), CPU matches then the script:
+  // hits 11/24/10/18 and 5, shield hits 0/3/1/0 and 3, KOs 1/1/0/1 and 1.
   function expectCombat(): void {
     const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);
     for (const p of cpu) expect(p.hits).toBeGreaterThan(5);

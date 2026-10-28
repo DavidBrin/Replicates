@@ -462,3 +462,26 @@ describe("leaving the ground any way but a jump spends the ground jump (Task 20b
     expect(s.fighters[0].jumpsUsed).toBe(out);
   });
 });
+
+describe("walking (calculator WalkBaseAcceleration / WalkAddAcceleration / WalkSpeed)", () => {
+  // https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/Data/<fighter>/data.json.
+  // As with dash and air acceleration (SmashWiki "Dash", https://www.ssbwiki.com/Dash),
+  // a base value applies at any deflection and an additional one scales with it.
+  // UNVERIFIED: that the walk's top speed scales linearly with deflection. The game's
+  // struct also has walk_slow_speed_mul / walk_middle_ratio / walk_fast_ratio, which no
+  // source used here publishes for this roster.
+
+  it.each(IDS)("%s starts a walk at base + additional acceleration on its first frame", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const [first] = play(standing(id), [Btn.Right]);
+    expect(first.action).toBe("walk");
+    expect(first.vx).toBe(p.walk_accel_add + p.walk_accel_mul);
+  });
+
+  it.each(IDS)("%s walks at half its top speed on a soft stick (UNVERIFIED half-deflection reading, Plan 1)", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const frames = play(standing(id), hold(Btn.Right | Btn.Soft, 40));
+    expect(frames.at(-1)!.action).toBe("walk");
+    expect(frames.at(-1)!.vx).toBe(Math.trunc(p.walk_speed_max / 2));
+  });
+});

@@ -771,6 +771,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   const w = dodgeWindow(f);
   kineticExec(f, type, {
     stickX: intent.x,
+    stickMag: intent.soft ? ONE >> 1 : ONE,
     params: fighterParams(ctx.def),
     // An air dodge holds its own velocity outright; gravity resumes when the
     // intangible window closes, which is what makes a missed one a free punish.
