@@ -30,7 +30,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
-import { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR, kineticSetX, kineticSetY } from "./kinetic";
+import { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR, kineticLand, kineticSetX, kineticSetY } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -319,7 +319,7 @@ export function resolveCollision(
     f.jumpsUsed = 0;
     f.airDodged = false;
     f.airTime = 0;
-    f.launchSpeed = 0;
+    kineticLand(f);
     f.ledge = null;
     out.landed = true;
     return out;

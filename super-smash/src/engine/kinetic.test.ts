@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
+import { LAUNCH_SPEED_DECAY } from "./constants";
 import { fx } from "./fixed";
 import {
   emptyKinetic,
@@ -8,7 +9,9 @@ import {
   kineticClear,
   kineticExec,
   kineticJump,
+  kineticLand,
   kineticLaunch,
+  kineticReel,
   kineticSet,
   kineticSetX,
   kineticSetY,
@@ -169,7 +172,7 @@ describe("setting a velocity outright", () => {
     expect(f.vx).toBe(-fx(0.5));
   });
 
-  it("kineticSetX leaves every vertical energy, the launch speed and vy alone", () => {
+  it("kineticSetX leaves every vertical energy and vy alone, and the launch keeps its vertical part", () => {
     const f = loaded();
     const before = { ...f.kinetic };
     const vy = f.vy;
@@ -182,7 +185,7 @@ describe("setting a velocity outright", () => {
       jumpInitial: before.jumpInitial,
     });
     expect(f.vy).toBe(vy);
-    expect(f.launchSpeed).toBe(fx(5));
+    expect(f.launchSpeed).toBe(fx(4)); // |damageY|: Task 17 re-derives it when DAMAGE loses a component
   });
 
   it("kineticSetY puts vy on GRAVITY and zeroes MOTION and DAMAGE vertically", () => {
@@ -192,7 +195,7 @@ describe("setting a velocity outright", () => {
     expect(f.vy).toBe(fx(2.5));
   });
 
-  it("kineticSetY leaves every horizontal energy, the launch speed and vx alone", () => {
+  it("kineticSetY leaves every horizontal energy and vx alone, and the launch keeps its horizontal part", () => {
     const f = loaded();
     const before = { ...f.kinetic };
     const vx = f.vx;
@@ -204,7 +207,7 @@ describe("setting a velocity outright", () => {
       damageX: before.damageX,
     });
     expect(f.vx).toBe(vx);
-    expect(f.launchSpeed).toBe(fx(5));
+    expect(f.launchSpeed).toBe(fx(3)); // |damageX|
   });
 
   it("kineticSet sets both axes, on the carrier it is given", () => {
@@ -223,11 +226,11 @@ describe("setting a velocity outright", () => {
     expect([toStop.vx, toStop.vy]).toEqual([fx(1), -fx(1)]);
   });
 
-  it("kineticSet(0, 0) stops the fighter without ending the launch", () => {
+  it("kineticSet(0, 0) stops the fighter, which takes both launch components and so the launch speed", () => {
     const f = loaded();
     kineticSet(f, 0, 0);
     expect([f.vx, f.vy]).toEqual([0, 0]);
-    expect(f.launchSpeed).toBe(fx(5));
+    expect(f.launchSpeed).toBe(0);
   });
 
   it("kineticJump replaces the vertical speed and ends the launch, keeping its horizontal part as drift", () => {
@@ -256,10 +259,10 @@ describe("setting a velocity outright", () => {
     expect(f.launchSpeed).toBe(0);
   });
 
-  it("kineticLaunch replaces the whole velocity and records the launch's magnitude", () => {
+  it("kineticLaunch replaces the whole velocity on DAMAGE and records the launch's magnitude", () => {
     const f = loaded();
     kineticLaunch(f, -fx(1.5), fx(2), fx(2.5));
-    expect(f.kinetic).toEqual({ ...emptyKinetic(), controlX: -fx(1.5), gravityY: fx(2) });
+    expect(f.kinetic).toEqual({ ...emptyKinetic(), damageX: -fx(1.5), damageY: fx(2) });
     expect([f.vx, f.vy]).toEqual([-fx(1.5), fx(2)]);
     expect(f.launchSpeed).toBe(fx(2.5));
   });
@@ -358,5 +361,79 @@ describe("kineticExec reproduces the legacy single-velocity movement", () => {
       ),
       { numRuns: 2000 },
     );
+  });
+});
+
+/* ------------------------------------------------- DAMAGE energy (Task 17) -- */
+
+describe("the DAMAGE energy: a launch decays on its own", () => {
+  // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback): knockback × 0.03 is
+  // launch speed, which "then decays by 0.051 every frame … air friction [is]
+  // disabled; however, falling speed still takes effect".
+  const launch = (): FighterState => {
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, fx(3), fx(4), fx(5));
+    return f;
+  };
+
+  it("replaces every other energy at the moment of launch", () => {
+    const f = body({ controlX: fx(1), stopX: fx(1), gravityY: -fx(1), motionX: fx(1) }, { grounded: false });
+    kineticLaunch(f, fx(3), fx(4), fx(5));
+    expect(f.kinetic).toMatchObject({ controlX: 0, stopX: 0, gravityY: 0, motionX: 0, damageX: fx(3), damageY: fx(4) });
+    expect([f.vx, f.vy, f.launchSpeed]).toEqual([fx(3), fx(4), fx(5)]);
+  });
+
+  it("loses exactly 0.051 of launch speed per frame while gravity builds separately", () => {
+    const f = launch();
+    for (let frame = 1; frame <= 20; frame++) {
+      kineticReel(f, PARAMS, false);
+      expect(f.launchSpeed).toBe(fx(5) - frame * LAUNCH_SPEED_DECAY);
+      expect(f.kinetic.gravityY).toBe(-Math.min(frame * PARAMS.air_accel_y, PARAMS.air_speed_y_stable));
+      expect(f.vy).toBe(f.kinetic.damageY + f.kinetic.gravityY);
+    }
+  });
+
+  it("keeps the launch's direction as it shrinks", () => {
+    const f = launch();
+    for (let i = 0; i < 30; i++) kineticReel(f, PARAMS, false);
+    // 3:4 at every step, to within one Q12 unit of truncation per frame.
+    expect(Math.abs(f.kinetic.damageX * 4 - f.kinetic.damageY * 3)).toBeLessThan(4 * 30);
+  });
+
+  it("falls from a vertical launch by the damage_fly_top gravity and fall speed", () => {
+    // fighter_param.prc damage_fly_top_air_accel_y / damage_fly_top_speed_y_stable
+    // (calculator DamageFlyTopGravity / DamageFlyTopFallSpeed, 1.8 for the whole roster).
+    const p = { ...PARAMS, damage_fly_top_air_accel_y: fx(0.05), damage_fly_top_speed_y_stable: fx(1.5) };
+    const f = body({}, { grounded: false });
+    kineticLaunch(f, 0, fx(1), fx(1));
+    kineticReel(f, p, true);
+    expect(f.kinetic.gravityY).toBe(-fx(0.05));
+    for (let i = 0; i < 200; i++) kineticReel(f, p, true);
+    expect(f.kinetic.gravityY).toBe(-fx(1.5));
+  });
+
+  it("keeps decaying after hitstun, while the stick drifts and gravity pulls", () => {
+    const f = launch();
+    for (let i = 0; i < 5; i++) kineticReel(f, PARAMS, false);
+    const before = { speed: f.launchSpeed, control: f.kinetic.controlX };
+    kineticExec(f, "FALL", { stickX: -1, params: PARAMS, holdVertical: false });
+    expect(f.launchSpeed).toBe(before.speed - LAUNCH_SPEED_DECAY);
+    expect(f.kinetic.controlX).toBe(before.control - (PARAMS.air_accel_x_add + PARAMS.air_accel_x_mul));
+    expect(f.vx).toBe(f.kinetic.controlX + f.kinetic.damageX);
+  });
+
+  it("ends on landing, leaving its horizontal part to brake on the ground", () => {
+    const f = launch();
+    kineticLand(f);
+    expect(f.launchSpeed).toBe(0);
+    expect(f.kinetic).toMatchObject({ damageX: 0, damageY: 0, stopX: fx(3) });
+  });
+
+  it("loses the component a wall or a ceiling stops, and the speed with it", () => {
+    const f = launch();
+    kineticSetX(f, 0);
+    expect(f.launchSpeed).toBe(fx(4));
+    kineticSetY(f, 0);
+    expect(f.launchSpeed).toBe(0);
   });
 });

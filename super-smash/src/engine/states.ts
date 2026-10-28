@@ -30,7 +30,6 @@ import {
   DASH_THRESHOLD_FRAMES,
   DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_SPEED,
-  LAUNCH_SPEED_DECAY,
   PERFECT_SHIELD_WINDOW,
   RESPAWN_INVINCIBILITY_MAX,
   RESPAWN_INVINCIBILITY_MIN,
@@ -44,9 +43,6 @@ import {
   SPOT_DODGE_INTANGIBLE,
 } from "./constants";
 import {
-  applyGravity,
-  applyTraction,
-  decayLaunch,
   dropThroughPlatform,
   hitstunGravityOptions,
   platformCentreX,
@@ -60,6 +56,7 @@ import {
   kineticClear,
   kineticExec,
   kineticJump,
+  kineticReel,
   kineticSet,
   kineticSetX,
   kineticSetY,
@@ -741,7 +738,6 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
 }
 
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
-  const a = ctx.def.attributes;
   const type = STATUS_TABLE[f.action]?.kineticType ?? KINETIC_TYPE_OF_ACTION[f.action];
   const carrier = carrierOf(type);
   // Fold any direct write to vx/vy since the last frame into the energies.
@@ -760,10 +756,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
   }
 
   if (f.hitstun > 0) {
-    decayLaunch(f, LAUNCH_SPEED_DECAY);
-    if (!f.grounded) f.vy = applyGravity(f.vy, a, hitstunGravityOptions(f)); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
-    else f.vx = applyTraction(f.vx, a); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
-    kineticAdopt(f, carrier);
+    kineticReel(f, fighterParams(ctx.def), hitstunGravityOptions(f).balloon === true);
     return;
   }
 

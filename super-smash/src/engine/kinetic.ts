@@ -20,7 +20,8 @@
  * the strangler seam, and Task 4 closes it.
  */
 
-import { approach } from "./fixed";
+import { LAUNCH_SPEED_DECAY } from "./constants";
+import { abs, approach } from "./fixed";
 import type { FighterParams } from "./params";
 import type { ActionState, FighterState } from "./types";
 
@@ -144,7 +145,11 @@ export function kineticSetX(f: FighterState, vx: number, carrier: HorizontalCarr
   k.controlX = carrier === "control" ? vx : 0;
   k.stopX = carrier === "stop" ? vx : 0;
   k.motionX = 0;
-  k.damageX = 0;
+  if (k.damageX !== 0) {
+    // A launch stopped along one axis keeps only the other.
+    k.damageX = 0;
+    f.launchSpeed = abs(k.damageY);
+  }
   kineticSum(f);
 }
 
@@ -156,7 +161,10 @@ export function kineticSetY(f: FighterState, vy: number): void {
   const k = f.kinetic;
   k.gravityY = vy;
   k.motionY = 0;
-  k.damageY = 0;
+  if (k.damageY !== 0) {
+    k.damageY = 0;
+    f.launchSpeed = abs(k.damageX);
+  }
   kineticSum(f);
 }
 
@@ -180,13 +188,22 @@ export function kineticJump(f: FighterState, vy: number): void {
 }
 
 /**
- * A knockback launch. Until Task 17 gives it the DAMAGE energy this is the
- * legacy behaviour: the launch *replaces* the velocity and `launchSpeed`
- * carries its magnitude for the legacy decay.
+ * A knockback launch, on the DAMAGE energy. It replaces everything else the
+ * fighter was doing — drift, a jump's rise, scripted motion — and decays on its
+ * own from here (`kineticDecayDamage`); `launchSpeed` is its magnitude.
  */
 export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: number): void {
-  kineticSet(f, vx, vy);
+  const k = f.kinetic;
+  k.controlX = 0;
+  k.stopX = 0;
+  k.gravityY = 0;
+  k.motionX = 0;
+  k.motionY = 0;
+  k.jumpInitial = 0;
+  k.damageX = vx;
+  k.damageY = vy;
   f.launchSpeed = speed;
+  kineticSum(f);
 }
 
 /* ---------------------------------------------------------- kinetic types -- */
@@ -326,6 +343,8 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
   }
   const k = f.kinetic;
   const p = input.params;
+  // A launch outlives its hitstun and keeps decaying while the fighter acts.
+  if (f.launchSpeed > 0) kineticDecayDamage(f, f.grounded ? LAUNCH_SPEED_DECAY + p.ground_brake : LAUNCH_SPEED_DECAY);
   kineticTransfer(f, type);
   switch (type) {
     case "WALK":
@@ -358,5 +377,60 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
     const sumY = kineticSumY(f);
     if (sumY < 0) k.gravityY -= sumY;
   }
+  kineticSum(f);
+}
+
+/* ------------------------------------------------------------ DAMAGE energy -- */
+
+/**
+ * Bleed the launch by a flat `decay` along its own direction (SmashWiki
+ * "Knockback": 0.051 per frame). Only the DAMAGE energy moves; gravity and
+ * drift are separate energies and keep their own rules.
+ */
+export function kineticDecayDamage(f: FighterState, decay: number): void {
+  const k = f.kinetic;
+  const mag = f.launchSpeed;
+  const next = mag - decay;
+  if (mag <= 0 || next <= 0) {
+    k.damageX = 0;
+    k.damageY = 0;
+    f.launchSpeed = 0;
+    return;
+  }
+  k.damageX = Math.trunc((k.damageX * next) / mag);
+  k.damageY = Math.trunc((k.damageY * next) / mag);
+  f.launchSpeed = next;
+}
+
+/**
+ * One frame of a fighter in hitstun: the launch decays, gravity builds toward
+ * the fall speed, and nothing the player holds moves them. A vertical
+ * ("balloon") launch falls by the fighter's `damage_fly_top_air_accel_y` toward
+ * `damage_fly_top_speed_y_stable` (1.8 for every fighter on this roster). On
+ * the ground the launch also loses `ground_brake` a frame.
+ */
+export function kineticReel(f: FighterState, p: FighterParams, balloon: boolean): void {
+  const k = f.kinetic;
+  kineticDecayDamage(f, f.grounded ? LAUNCH_SPEED_DECAY + p.ground_brake : LAUNCH_SPEED_DECAY);
+  if (!f.grounded) {
+    k.gravityY = balloon
+      ? gravityStep(k.gravityY, p.damage_fly_top_air_accel_y, p.damage_fly_top_speed_y_stable)
+      : gravityStep(k.gravityY, p.air_accel_y, p.air_speed_y_stable);
+  } else {
+    kineticTransfer(f, "GROUND_STOP");
+    k.stopX = approach(k.stopX, 0, p.ground_brake);
+    const sumY = kineticSumY(f);
+    if (sumY < 0) k.gravityY -= sumY;
+  }
+  kineticSum(f);
+}
+
+/** Touching down ends a launch: its horizontal part becomes ordinary sliding (STOP). */
+export function kineticLand(f: FighterState): void {
+  const k = f.kinetic;
+  k.stopX += k.damageX;
+  k.damageX = 0;
+  k.damageY = 0;
+  f.launchSpeed = 0;
   kineticSum(f);
 }
