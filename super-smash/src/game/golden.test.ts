@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
 import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import { mixBool, mixInt, mixString } from "@/engine/hash";
+import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -274,6 +275,30 @@ function hitKind(attacker: FighterState): string {
   return attacker.shortHop ? `${move} (short hop)` : move;
 }
 
+/**
+ * What must hold on every frame, whatever the fighters do: `vx`/`vy` are
+ * exactly the energies' sum, and every number a fighter carries is an integer
+ * (Q12 or a count). The static guards cannot see every write
+ * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
+ * on every frame of all five matches.
+ */
+function invariantBreaks(f: FighterState, frame: number): string[] {
+  const at = `frame ${frame}, port ${f.port}`;
+  const out: string[] = [];
+  if (f.vx !== kineticSumX(f) || f.vy !== kineticSumY(f)) {
+    out.push(`${at}: vx/vy ${f.vx}/${f.vy}, energies ${kineticSumX(f)}/${kineticSumY(f)}`);
+  }
+  for (const leaf of nonIntegers(f, "fighter")) out.push(`${at}: ${leaf}`);
+  return out;
+}
+
+/** Every numeric leaf under `value` that is not an integer, as `path = value`. */
+function nonIntegers(value: unknown, path: string): string[] {
+  if (typeof value === "number") return Number.isInteger(value) ? [] : [`${path} = ${value}`];
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, v]) => nonIntegers(v, `${path}.${key}`));
+}
+
 interface Played {
   readonly digests: number[];
   readonly hits: number;
@@ -283,6 +308,8 @@ interface Played {
   readonly soft: ReadonlySet<SoftPath>;
   /** Every kind of hit landed, as `hitKind` names it. */
   readonly hitKinds: ReadonlySet<string>;
+  /** The first few frames that broke `invariantBreaks`, if any did. */
+  readonly invariantBreaks: readonly string[];
 }
 
 function play(match: Match): Played {
@@ -300,6 +327,7 @@ function play(match: Match): Played {
   const actions = new Set<ActionState>();
   const soft = new Set<SoftPath>();
   const hitKinds = new Set<string>();
+  const breaks: string[] = [];
   let hits = 0;
   let shieldHits = 0;
   let kos = 0;
@@ -310,6 +338,7 @@ function play(match: Match): Played {
       const after = out.state.fighters[port];
       actions.add(after.action);
       for (const p of softPaths(state.fighters[port], after, inputs[port], prev[port])) soft.add(p);
+      if (breaks.length < 5) breaks.push(...invariantBreaks(after, frame));
     }
     state = out.state;
     prev = inputs;
@@ -320,7 +349,7 @@ function play(match: Match): Played {
     roll = mixInt(roll, digest(state));
     if (frame % EVERY === 0) digests.push(roll >>> 0);
   }
-  return { digests, hits, shieldHits, kos, actions, soft, hitKinds };
+  return { digests, hits, shieldHits, kos, actions, soft, hitKinds, invariantBreaks: breaks };
 }
 
 describe("engine golden trace", () => {
@@ -357,10 +386,15 @@ describe("engine golden trace", () => {
     expect(script.kos, "Fox's self-destruct").toBeGreaterThanOrEqual(1);
   }
 
+  function expectInvariants(): void {
+    for (const m of MATCHES) expect(played.get(m.name)!.invariantBreaks, m.name).toEqual([]);
+  }
+
   // All run when regenerating too, so a degenerate trace cannot be recorded.
   it("exercises combat, not an idle screen", expectCombat);
   it("visits every action state and every soft-stick path", expectCoverage);
   it("lands every kind of hit the scripted match lands", expectScriptHits);
+  it("keeps vx/vy the energies' sum, and every fighter number an integer, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
     it("writes the golden trace", () => {
@@ -368,6 +402,7 @@ describe("engine golden trace", () => {
       expectCombat();
       expectCoverage();
       expectScriptHits();
+      expectInvariants();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;
       mkdirSync(dirname(FIXTURE), { recursive: true });

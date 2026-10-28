@@ -1636,7 +1636,7 @@ and hashed, which reflective tests check field by field.
     fingerprint.
     `registerFighters` prepares every script at load: its schedule is built, and every bone its
     hitboxes and grab boxes name is checked. So a script the sim could not run fails at load, not
-    mid-match. Capsule hitboxes are refused until Plan 3.
+    mid-match. Capsule hitboxes (`x2`/`y2`/`z2`) are refused there too, until Plan 3.
   - *Compiled and imported.* In Plan 2 every legacy move is *compiled* to a root-bone script that
     reproduces it exactly, proven on every frame of all 204 moves. The published scripts for all
     eight fighters are imported as reference (`src/fighters/acmd/generated`) and reconciled

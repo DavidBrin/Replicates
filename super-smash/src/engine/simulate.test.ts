@@ -4,6 +4,7 @@ import fc from "fast-check";
 import { ONE, fx, toFloat } from "./fixed";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { attackFromHitbox } from "./acmd/legacy";
+import type { AcmdCommand } from "./acmd/types";
 import {
   LEDGE_GRAB_RANGE_Y,
   LEDGE_REGRAB_LIMIT,
@@ -1021,6 +1022,45 @@ describe("registry", () => {
     };
     expect(() => registerFighters([handed])).toThrow(/tester jab1.*"handr"/);
     // Refused whole: nothing of the batch is left half-registered.
+    expect(() => registryContext.fighter("tester")).toThrow();
+  });
+
+  const CAPSULES: [string, AcmdCommand][] = [
+    ["an ATTACK", { op: "attack", params: { ...attackFromHitbox(DEF.moves.jab1!.hitboxes[0]), x2: 0, y2: fx(6), z2: fx(12) } }],
+    [
+      "a CATCH",
+      {
+        op: "catch",
+        params: {
+          id: 0,
+          bone: "top",
+          size: fx(3),
+          x: 0,
+          y: fx(6),
+          z: fx(6),
+          x2: 0,
+          y2: fx(6),
+          z2: fx(9),
+          status: "FIGHTER_STATUS_KIND_CAPTURE_PULLED",
+          situation: "COLLISION_SITUATION_MASK_GA",
+        },
+      },
+    ],
+  ];
+
+  it.each(CAPSULES)("refuses, at registration, %s with a capsule (x2/y2/z2), not the first frame it goes live", (_, command) => {
+    clearRegistry();
+    const capsule: FighterDef = {
+      ...DEF,
+      scripts: {
+        jab1: {
+          name: "game_attack11",
+          motion: "attack_11",
+          commands: [{ op: "frame", frame: 4 }, command],
+        },
+      },
+    };
+    expect(() => registerFighters([capsule])).toThrow(/tester jab1.*capsule/);
     expect(() => registryContext.fighter("tester")).toThrow();
   });
 

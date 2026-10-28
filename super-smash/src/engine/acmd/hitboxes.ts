@@ -8,7 +8,8 @@
  * pipeline to read `AttackParams` directly (capsules, SDI, set weight, trip…).
  * Until then an extended (capsule) ATTACK or CATCH — one with `x2/y2/z2` — is
  * refused loudly: the pipeline has only spheres, and dropping the far end
- * would quietly shrink the move.
+ * would quietly shrink the move. `prepareFighterScripts` refuses one at load
+ * (`isCapsule`); `resolve` refuses it again, for a context that skipped that.
  *
  * Two narrowings are NOT refused, because a `Hitbox` has no field for what is
  * dropped; Plan 3 owns both, by reading `AttackParams` directly:
@@ -61,6 +62,11 @@ function clearPose(p: BonePose): void {
   p.tx = p.ty = p.m00 = p.m01 = p.m02 = p.m10 = p.m11 = p.m12 = 0;
 }
 
+/** An extended ATTACK or CATCH: one with a far end (`x2`/`y2`/`z2`), which Plan 2 cannot collide. */
+export function isCapsule(p: Pick<AttackParams, "x2" | "y2" | "z2">): boolean {
+  return p.x2 !== undefined || p.y2 !== undefined || p.z2 !== undefined;
+}
+
 function resolve(
   bones: BoneTable,
   fighterId: string,
@@ -68,7 +74,7 @@ function resolve(
   frame: number,
   p: Pick<AttackParams, "id" | "bone" | "x" | "y" | "z" | "x2" | "y2" | "z2">,
 ): { x: number; y: number } {
-  if (p.x2 !== undefined || p.y2 !== undefined || p.z2 !== undefined) {
+  if (isCapsule(p)) {
     throw new Error(`capsule hitbox (x2/y2/z2) id ${p.id} of ${fighterId}/${motion}: not supported until Plan 3`);
   }
   clearPose(POSE);
