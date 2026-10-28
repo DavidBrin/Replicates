@@ -85,7 +85,9 @@ export const STATUS_LANDING: FighterStatus = {
   action: "land",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= LANDING_ANIMATION_FRAMES) startAction(f, "stand");
+    // `charge` holds the light or heavy landing's length (see `onLanded`); a
+    // landing that did not come through there plays the legacy four frames.
+    if (f.actionFrame >= (f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES)) startAction(f, "stand");
     else bufferPress(f, intent, ctx.frame);
   },
 };

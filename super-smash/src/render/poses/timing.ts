@@ -263,7 +263,7 @@ export function actionDurationFor(
     case "jumpSquat":
       return JUMP_SQUAT_FRAMES;
     case "land":
-      return LANDING_ANIMATION_FRAMES;
+      return f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES;
     // `charge` carries the remaining lag for a landing; see `onLanded`.
     case "landingLag":
       return f.charge > 0 ? f.charge : LANDING_ANIMATION_FRAMES;

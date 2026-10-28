@@ -790,6 +790,12 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
  * the reason a rising nair is safe while a falling one is not.
  */
 export function onLanded(f: FighterState, ctx: StateContext): void {
+  const p = fighterParams(ctx.def);
+  // Heavy if the fighter spent `landing_heavy_frame` frames at full fall
+  // speed (SmashWiki "Lag", normal landing); read before it is reset.
+  // UNVERIFIED: ">=" rather than ">" — the threshold's inclusivity is unpublished.
+  const heavy = f.kinetic.fallFrames >= p.landing_heavy_frame;
+  f.kinetic.fallFrames = 0;
   f.fastFalling = false;
   f.launchSpeed = 0;
   f.jumpsUsed = 0;
@@ -811,7 +817,9 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
       const early = move.autoCancelBefore !== undefined && f.actionFrame <= move.autoCancelBefore;
       const late = move.autoCancelAfter !== undefined && f.actionFrame >= move.autoCancelAfter;
       if (early || late) {
+        // An auto-cancelled aerial lands heavily (SmashWiki "Lag", aerial landing).
         startAction(f, "land");
+        f.charge = p.landing_frame;
         return;
       }
       startAction(f, "landingLag");
@@ -830,6 +838,9 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
     return;
   }
   startAction(f, "land");
+  // `charge` carries the landing's length, as it does for landingLag.
+  // UNVERIFIED: that the published lag is the number of frames spent in `land`.
+  f.charge = heavy ? p.landing_frame : p.landing_frame_light;
 }
 
 /**

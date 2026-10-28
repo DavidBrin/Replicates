@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { fx, toFloat } from "@/engine/fixed";
-import { initialRiseStep, jumpLaunchSpeed } from "@/engine/kinetic";
+import { emptyKinetic, initialRiseStep, jumpLaunchSpeed } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
+import { onLanded } from "@/engine/states";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { STAGES } from "@/stages";
@@ -510,5 +511,54 @@ describe("dash into run (SmashWiki Dash, https://www.ssbwiki.com/Dash)", () => {
         : Math.min(p.dash_speed + p.run_accel_add + p.run_accel_mul, p.run_speed_max);
     expect(next).toBe(want);
     expect(v.at(-1)).toBe(p.run_speed_max);
+  });
+});
+
+describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#Landing_lag)", () => {
+  // "a heavy landing occurs once a player has been falling at their maximum
+  // falling speed for a set amount of time (the amount of time is character
+  // dependent)". Values: calculator SoftLandingLag (landing_frame_light),
+  // HardLandingLag (landing_frame), FallingFrameToUseHardLandingLag
+  // (landing_heavy_frame). UNVERIFIED: that pairing of the calculator's three
+  // landing values with those prc names (see FighterParams). UNVERIFIED, both:
+  // that a landing's lag is exactly that many frames of the land state, and
+  // that the threshold is "at least" (>=) rather than "more than"
+  // landing_heavy_frame frames at full fall speed.
+
+  /** Drop a standing fighter from `height` units with no input; the frames that follow. */
+  function dropFrom(id: RosterId, height: number): FighterState[] {
+    const s = standing(id);
+    const f = s.fighters[0];
+    Object.assign(f, { y: f.y + fx(height), grounded: false, platform: -1, action: "fall", actionFrame: 0, vx: 0, vy: 0 });
+    f.kinetic = emptyKinetic();
+    return play(s, hold(0, 200));
+  }
+
+  function landing(frames: readonly FighterState[]): { lag: number; frames: number } {
+    const at = frames.findIndex((f) => f.action === "land");
+    let n = 0;
+    while (frames[at + n].action === "land") n += 1;
+    return { lag: frames[at].charge, frames: n };
+  }
+
+  it.each(IDS)("%s lands lightly from a short drop", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    expect(landing(dropFrom(id, 2))).toEqual({ lag: p.landing_frame_light, frames: p.landing_frame_light });
+  });
+
+  it.each(IDS)("%s lands heavily after falling at full speed long enough", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    expect(landing(dropFrom(id, 80))).toEqual({ lag: p.landing_frame, frames: p.landing_frame });
+  });
+
+  it("makes an auto-cancelled aerial a heavy landing, as the Lag page says", () => {
+    // "Any time a character lands while this flag is not activated, they will
+    // enter their normal landing animation … landing during this window will
+    // result in a heavy landing."
+    const s = standing("mario");
+    const f = s.fighters[0];
+    Object.assign(f, { action: "attack", move: "fair", actionFrame: 50, grounded: true });
+    onLanded(f, { def: FIGHTERS[0], stage: STAGES[0], frame: 1, fighters: s.fighters });
+    expect([f.action, f.charge]).toEqual(["land", FIGHTER_PARAMS.mario.landing_frame]);
   });
 });

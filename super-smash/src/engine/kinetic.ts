@@ -390,6 +390,8 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
     if (!skip) {
       k.gravityY = gravityStep(k.gravityY, p.air_accel_y, f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
     }
+    // Frames at full fall speed (or faster: a fast fall) decide a heavy landing.
+    k.fallFrames = kineticSumY(f) <= -p.air_speed_y_stable ? k.fallFrames + 1 : 0;
   } else {
     const sumY = kineticSumY(f);
     if (sumY < 0) k.gravityY -= sumY;
