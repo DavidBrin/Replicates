@@ -200,7 +200,7 @@ export interface CollisionOutcome {
   landed: boolean;
   /** The fighter walked off the surface it was standing on. */
   leftGround: boolean;
-  /** The fighter was stopped by a wall or a ceiling. */
+  /** A wall or a ceiling pushed the fighter clear (and stopped it, if it was moving into it). */
   blocked: boolean;
 }
 
@@ -271,8 +271,9 @@ export function resolveCollision(
     }
   }
 
-  // Walls and ceilings, before landing: a fighter shoved out of a wall may then
-  // land on the surface above it, which is the stage-side of a ledge trump.
+  // Walls and ceilings, before landing. A fighter that was above a surface last
+  // frame is a landing candidate, not a wall hit: the wall leaves it to the
+  // landing test below, so a fall onto the corner still lands.
   for (const p of stage.platforms) {
     if (p.soft) continue;
     const cx = platformCentreX(p, frame);
@@ -287,9 +288,15 @@ export function resolveCollision(
     // pushed out. Testing containment instead would shove anybody standing under
     // the stage sideways, and under the stage is where every edgeguard happens.
     const cameFromOutside = abs(prevX - cx) >= reach;
-    if (cameFromOutside && f.y + ecb.bottom < p.y && head > bottom && abs(f.x - cx) < body) {
-      f.x = prevX <= cx ? cx - body : cx + body;
-      kineticSetX(f, 0);
+    // Strictly above: a fighter level with the surface last frame (one stepping
+    // or dropping off it) is already at the wall, not landing on it.
+    const wasAbove = prevY + ecb.bottom > p.y;
+    if (cameFromOutside && !wasAbove && f.y + ecb.bottom < p.y && head > bottom && abs(f.x - cx) < body) {
+      const fromLeft = prevX <= cx;
+      f.x = fromLeft ? cx - body : cx + body;
+      // The push puts the body back outside; only motion *into* the wall is
+      // stopped. A fighter launched out from the lip keeps its knockback.
+      if (fromLeft ? f.vx > 0 : f.vx < 0) kineticSetX(f, 0);
       out.blocked = true;
     }
     // Ceiling: the ECB's top rising into the underside of a solid body.
@@ -484,10 +491,15 @@ export function ecbOf(_f: Pick<FighterState, "grounded">, attrs: FighterAttribut
   return { bottom: 0, top: attrs.height, half: attrs.width };
 }
 
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
 export function ecbPoints(
   f: Pick<FighterState, "x" | "y" | "grounded">,
   attrs: FighterAttributes,
-): { bottom: { x: number; y: number }; top: { x: number; y: number }; left: { x: number; y: number }; right: { x: number; y: number } } {
+): { bottom: Point; top: Point; left: Point; right: Point } {
   const e = ecbOf(f, attrs);
   const mid = f.y + Math.trunc((e.bottom + e.top) / 2);
   return {

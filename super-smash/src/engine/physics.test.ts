@@ -10,9 +10,9 @@ import {
   applyTraction,
   blastZoneKO,
   decayLaunch,
+  dropThroughPlatform,
   ecbOf,
   ecbPoints,
-  dropThroughPlatform,
   fastFallVelocity,
   findLedgeGrab,
   hitstunGravityOptions,
@@ -500,6 +500,32 @@ describe("the environment collision box (ECB)", () => {
     const f = fighter({ x: fx(81), y: fx(-1), vy: -fx(1), facing: 1, grounded: false, platform: -1 });
     resolveCollision(f, fx(80.5), 0, STAGE, ATTRS, 0);
     expect(f.x).toBe(fx(80) + ATTRS.width);
-    expect(findLedgeGrab({ ...f, facing: -1 }, STAGE, 0, ATTRS.width)).toEqual({ platform: 0, side: 1 });
+    // A fighter who walked off faces out, away from the ledge: the rear grab box reaches it.
+    expect(findLedgeGrab(f, STAGE, 0, ATTRS.width)).toEqual({ platform: 0, side: 1 });
+  });
+
+  it("pushes a body moving away from the wall clear without stopping it", () => {
+    // Launched outward from the lip: the body still overlaps the wall, the motion leaves it.
+    for (const side of [1, -1] as const) {
+      const out = fx(1) * side;
+      const f = fighter({ x: fx(81.5) * side, y: fx(-1), vx: out, kinetic: { ...emptyKinetic(), damageX: out } });
+      const res = resolveCollision(f, fx(80.5) * side, fx(-0.5), STAGE, ATTRS, 0);
+      expect(f.x, `side ${side}`).toBe((fx(80) + ATTRS.width) * side);
+      expect(f.vx, `side ${side}`).toBe(out);
+      expect(f.kinetic.damageX, `side ${side}`).toBe(out);
+      expect(res.landed, `side ${side}`).toBe(false);
+    }
+  });
+
+  it("lands a fighter that falls onto the corner from above, rather than shoving it off the wall", () => {
+    // Above the surface last frame and inside the span now: a landing, not a wall.
+    const f = fighter({ x: fx(79.5), y: fx(-0.3), vx: -fx(1), vy: -fx(0.8), facing: -1 });
+    const out = resolveCollision(f, fx(80.5), fx(0.5), STAGE, ATTRS, 0);
+    expect(out.landed).toBe(true);
+    expect(out.blocked).toBe(false);
+    expect(f.grounded).toBe(true);
+    expect(f.platform).toBe(0);
+    expect(f.y).toBe(0);
+    expect(f.x).toBe(fx(79.5)); // where it crossed the surface
   });
 });

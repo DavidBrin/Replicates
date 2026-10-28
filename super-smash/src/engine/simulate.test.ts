@@ -1264,6 +1264,96 @@ describe("the ledge-release lockout", () => {
   });
 });
 
+/* --------------------------------------------------- the ECB at the stage's edge -- */
+
+/**
+ * The ECB seam (Plan 2, Task 25) puts the wall at the body's side, not the
+ * origin. A fighter at the lip is therefore inside the wall's reach while it is
+ * still outside the stage, so the wall has to tell a body moving into it from
+ * one leaving it, and a fall onto the corner from a wall.
+ */
+describe("the ECB at the stage's edge, through step", () => {
+  /** Like `run`, under another context (the state does not record which fighter def made it). */
+  function runIn(ctx: SimContext, s: GameState, inputs: readonly InputFrame[], n: number): GameState {
+    let state = s;
+    let prev: readonly InputFrame[] = [0, 0];
+    for (let i = 0; i < n; i++) {
+      state = step(state, inputs, { prevInputs: prev, ctx }).state;
+      prev = inputs;
+    }
+    return state;
+  }
+
+  /** Fighter 0 walks off the right ledge (x = 80) and hangs there past the minimum hang. */
+  function hangingRight(): GameState {
+    let s = standing();
+    s.fighters[0].x = fx(79);
+    for (let i = 0; i < 30 && s.fighters[0].action !== "ledgeHang"; i++) s = run(s, [Btn.Right, 0], 1);
+    s = run(s, [0, 0], LEDGE_HANG_MIN);
+    expect(s.fighters[0].action).toBe("ledgeHang");
+    expect(s.fighters[0].x).toBe(fx(80));
+    return s;
+  }
+
+  it("lets a hit carry a hanging fighter out and away, rather than the wall stopping it dead", () => {
+    // A weak, flat jab from the stage: angle 0, base knockback 20, straight out past the lip.
+    const flat: FighterDef = {
+      ...DEF,
+      moves: {
+        ...DEF.moves,
+        jab1: move("jab1", {
+          hitboxes: [hitbox({ angle: 0, baseKnockback: fx(20), knockbackGrowth: 0, damage: fx(3) })],
+        }),
+      },
+    };
+    const ctx: SimContext = { fighter: () => flat, stage: () => STAGE };
+    let s = hangingRight();
+    Object.assign(s.fighters[1], { x: fx(74), facing: 1, action: "attack", move: "jab1", actionFrame: 0 });
+    s.fighters[0].intangible = 0;
+    for (let i = 0; i < 12 && s.fighters[0].damage === 0; i++) s = runIn(ctx, s, [0, 0], 1);
+    expect(s.fighters[0].damage, "the jab connected").toBeGreaterThan(0);
+    for (let i = 0; i < 30 && s.fighters[0].hitlag > 0; i++) s = runIn(ctx, s, [0, 0], 1);
+    let x = s.fighters[0].x;
+    for (let k = 0; k < 9; k++) {
+      s = runIn(ctx, s, [0, 0], 1);
+      const f = s.fighters[0];
+      expect(f.x, `${k} frames after the hitlag: moving out`).toBeGreaterThan(x);
+      expect(f.vx, `${k} frames after the hitlag: vx`).toBeGreaterThan(0);
+      expect(f.kinetic.damageX, `${k} frames after the hitlag: damageX`).toBeGreaterThan(0);
+      x = f.x;
+    }
+  });
+
+  it("lands a neutral ledge jump back on the stage, rather than regrabbing the ledge", () => {
+    let s = hangingRight();
+    const regrabs = s.fighters[0].ledgeRegrabs;
+    s = run(s, [Btn.Jump, 0], 1);
+    expect(s.fighters[0].action).toBe("ledgeJump");
+    for (let i = 0; i < 180 && !s.fighters[0].grounded && s.fighters[0].action !== "ledgeHang"; i++) {
+      s = run(s, [0, 0], 1);
+    }
+    const f = s.fighters[0];
+    expect(f.action).not.toBe("ledgeHang");
+    expect(f.grounded).toBe(true);
+    expect(f.platform).toBe(0);
+    expect(f.x).toBe(fx(80)); // on the lip it jumped from
+    expect(f.ledgeRegrabs).not.toBeGreaterThan(regrabs);
+  });
+
+  it("pushes a body that stepped off the edge clear of the wall, and still grabs the ledge from there", () => {
+    // One frame after stepping off the right edge: origin a unit outboard, body
+    // still over the wall, facing out. The wall pushes the body clear (origin
+    // 80 + 4), past the 1.92-unit rear reach of the origin, so only the reach
+    // from the body's side takes the ledge.
+    const s = standing();
+    Object.assign(s.fighters[0], { x: fx(81), y: fx(-1), grounded: false, platform: -1, action: "fall", facing: 1, jumpsUsed: 1 });
+    const after = run(s, [0, 0], 1);
+    expect(after.fighters[0].action).toBe("ledgeHang");
+    expect(after.fighters[0].ledge).toEqual({ platform: 0, side: 1 });
+    expect(after.fighters[0].x).toBe(fx(80));
+  });
+});
+
 describe("fixed-point sanity", () => {
   it("keeps every simulated quantity integral", () => {
     const s = simulate(120);
