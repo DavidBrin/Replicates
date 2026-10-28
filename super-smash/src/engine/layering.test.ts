@@ -321,3 +321,42 @@ describe("engine layering", () => {
     });
   });
 });
+
+/**
+ * The legacy movement oracles stay test-only (DECISIONS D55).
+ *
+ * `physics.ts` keeps four pre-Plan-2 single-velocity rules so that
+ * `kinetic.test.ts` can hold the KineticModule to them. Called from live code,
+ * one would be a second movement rule beside the energies, and nothing else
+ * would notice: it compiles, and it moves a fighter. So no non-test source
+ * under `src/` but `physics.ts` may name one outside a comment or a string.
+ */
+const SRC_DIR = join(process.cwd(), "src") + "/";
+const ORACLES = /\b(applyGravity|walkVelocity|applyTraction|airDrift)\b/;
+const ORACLE_HOME = "engine/physics.ts";
+
+describe("the legacy movement oracles", () => {
+  /** `file:line` for each line of live code that names an oracle. */
+  function oracleLines(file: string, src: string): string[] {
+    const out: string[] = [];
+    stripCommentsAndStrings(src)
+      .split("\n")
+      .forEach((line, n) => {
+        if (ORACLES.test(line)) out.push(`${file}:${n + 1}`);
+      });
+    return out;
+  }
+
+  it("are named in live code only in the file that defines them", () => {
+    const hits = walk(SRC_DIR)
+      .filter((file) => !/\.test\.tsx?$/.test(file))
+      .flatMap((file) => oracleLines(file.slice(SRC_DIR.length), readFileSync(file, "utf8")));
+    expect(hits.some((h) => h.startsWith(`${ORACLE_HOME}:`)), "the scan never reached physics.ts").toBe(true);
+    expect(hits.filter((h) => !h.startsWith(`${ORACLE_HOME}:`))).toEqual([]);
+  });
+
+  it("catches a call in live code, but not one named in a comment or a string", () => {
+    expect(oracleLines("x.ts", "f.vx = airDrift(f.vx, 1, attrs);")).toEqual(["x.ts:1"]);
+    expect(oracleLines("x.ts", '// the engine never calls applyTraction\nconst s = "walkVelocity";')).toEqual([]);
+  });
+});

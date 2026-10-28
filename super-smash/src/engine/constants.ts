@@ -50,6 +50,11 @@ export const HITSTUN_OVERFLOW_RATIO: Ratio = [1, 4];
 /** Vertical launches (70°-110°) get a fixed fall speed — "balloon knockback". */
 export const BALLOON_ANGLE_MIN = fx(70);
 export const BALLOON_ANGLE_MAX = fx(110);
+/**
+ * Read only by the legacy `applyGravity` test oracle (`physics.ts`). The
+ * engine's balloon fall is each fighter's `damage_fly_top_speed_y_stable`
+ * (`kineticReel`), which is also 1.8 for the whole roster.
+ */
 export const BALLOON_FALL_SPEED = fx(1.8);
 
 /** Rage: 1 + ((percent - 35) / 115) * 0.1, applied to knockback only. */

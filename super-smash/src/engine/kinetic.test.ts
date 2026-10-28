@@ -28,8 +28,6 @@ import {
   airDrift,
   applyGravity,
   applyTraction,
-  initialDashVelocity,
-  runVelocity,
   walkVelocity,
 } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
@@ -309,19 +307,21 @@ const ATTRS: FighterAttributes = {
 };
 const PARAMS = paramsFromAttributes(ATTRS);
 
+/**
+ * The kinetic types still on the legacy rule. DASH and RUN left it in Task 23
+ * (SmashWiki "Dash"; see fighters/movement.test.ts), and their legacy helpers
+ * went with it.
+ */
+type LegacyType = Exclude<KineticType, "DASH" | "RUN">;
+const TYPES: readonly LegacyType[] = ["FALL", "GROUND_STOP", "WALK", "MOTION", "AIR_ESCAPE", "NONE"];
+
 /** The pre-Plan-2 `applyMovement` switch and gravity block, on one vx/vy. */
-function legacy(type: KineticType, f: FighterState, stickX: number, holdVertical: boolean): [number, number] {
+function legacy(type: LegacyType, f: FighterState, stickX: number, holdVertical: boolean): [number, number] {
   let vx = f.vx;
   let vy = f.vy;
   switch (type) {
     case "WALK":
       vx = walkVelocity(vx, stickX, ATTRS);
-      break;
-    case "DASH":
-      vx = f.actionFrame <= 1 ? initialDashVelocity(f.facing, ATTRS) : runVelocity(vx, f.facing, ATTRS);
-      break;
-    case "RUN":
-      vx = runVelocity(vx, f.facing, ATTRS);
       break;
     case "MOTION":
       break;
@@ -344,9 +344,6 @@ function legacy(type: KineticType, f: FighterState, stickX: number, holdVertical
 }
 
 describe("kineticExec reproduces the legacy single-velocity movement", () => {
-  // DASH and RUN left the legacy rule in Task 23 (SmashWiki "Dash"; see
-  // fighters/movement.test.ts). The rest still match it exactly.
-  const TYPES: KineticType[] = ["FALL", "GROUND_STOP", "WALK", "MOTION", "AIR_ESCAPE", "NONE"];
   it("for every kinetic type, carrier split, stick and situation", () => {
     const q12 = fc.integer({ min: -fx(6), max: fx(6) });
     fc.assert(

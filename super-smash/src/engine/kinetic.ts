@@ -15,9 +15,10 @@
  * `FighterState.vx` / `vy` remain, as the **sum**, for every reader that only
  * wants to know how fast a fighter is going (renderer, CPU, blast-zone test).
  * Every energy mutator here ends by writing that sum back, so the two never
- * disagree. Code that still writes `vx`/`vy` directly is *adopted*: the
- * difference is folded into the carrier energy (see `kineticAdopt`) — that is
- * the strangler seam, and Task 4 closes it.
+ * disagree, and nothing outside this file writes them (`velocity-writes.test.ts`).
+ * The strangler seam's last trace is `kineticAdopt`, still called at the top of
+ * `applyMovement`: it would fold a direct write into the carrier energy, and
+ * with none left in the engine it changes nothing.
  */
 
 import { LAUNCH_SPEED_DECAY, LEDGE_JUMP_VELOCITY } from "./constants";

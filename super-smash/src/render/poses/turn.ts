@@ -23,8 +23,9 @@ import { P, type PoseClip } from "./clip";
  * beat: a turnaround dash has three frames of delay before the fighter
  * accelerates, against one for an ordinary dash. So frames 0-2 commit to nothing
  * at all. They are a brake, played over the top of the traction the engine is
- * still applying in the *old* direction, because `turnaround` falls through to
- * `applyTraction` and the fighter really is still sliding backwards under it.
+ * still applying in the *old* direction: `turnaround` is a GROUND_STOP status,
+ * whose STOP energy brakes by `ground_brake` (`kineticExec`), and the fighter
+ * really is still sliding backwards under it.
  *
  * `scaleX` is the turn. The rig mirrors but cannot rotate about its own vertical,
  * so a body caught part-way round has to be a body squeezed horizontally: full

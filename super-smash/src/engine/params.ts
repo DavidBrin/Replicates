@@ -119,7 +119,7 @@ export interface FighterParams {
  * `FighterParams` the two must describe the same fighter. Every field without
  * an attributes counterpart is set to the value that makes the new code behave
  * like the old: walk acceleration totals 2 × traction and run acceleration
- * 3 × traction (the legacy `WALK_ACCEL_FACTOR` / `RUN_ACCEL_FACTOR`), no air
+ * 3 × traction (the legacy walk and run rules' factors), no air
  * friction, no full-hop initial phase, a 4-frame landing either way, and jump
  * heights recovered from the legacy launch velocities by v² / 2g.
  */

@@ -13,11 +13,13 @@ import { P, type PoseClip } from "./clip";
  *
  * The other fact that shapes it: Ultimate raised initial-dash speeds across the
  * roster far enough that fox-trotting — spamming this animation and cancelling
- * the run — outruns actually running, and `initialDashSpeed` is duly above
- * `runSpeed` for all eight fighters here. `initialDashVelocity` grants all of it
- * on frame 1, so the burst is over before the first drawing and the animation's
- * job is a *settle*: the body is thrown out ahead of the feet at the start and
- * the legs spend the rest of the clip catching up to it.
+ * the run — outruns actually running, and `initialDashSpeed` is above
+ * `runSpeed` for six of the eight fighters here (Fox and Pikachu run faster
+ * than they dash). The engine sets all of it outright on the dash's first two
+ * frames (`kineticExec`'s DASH arm), so the burst is over before the first
+ * drawing and the animation's job is a *settle*: the body is thrown out ahead
+ * of the feet at the start and the legs spend the rest of the clip catching up
+ * to it.
  *
  * The lean is carried by `root`, which no other clip poses. Leaning the torso
  * cannot do it — that capsule is 3.2 long and 3.7 thick, so rotating it is

@@ -15,13 +15,11 @@ import {
   fastFallVelocity,
   findLedgeGrab,
   hitstunGravityOptions,
-  initialDashVelocity,
   integrate,
   ledgeIntangibilityFrames,
   ledgePosition,
   platformCentreX,
   resolveCollision,
-  runVelocity,
   walkVelocity,
 } from "./physics";
 import type { FighterAttributes, FighterState, StageDef } from "./types";
@@ -183,18 +181,6 @@ describe("legacy ground movement (a test oracle; the engine uses kineticExec)", 
     let vx = 0;
     for (let i = 0; i < 60; i++) vx = walkVelocity(vx, 1, ATTRS);
     expect(vx).toBe(ATTRS.walkSpeed);
-  });
-
-  it("gives the initial dash its whole speed on frame one", () => {
-    expect(initialDashVelocity(1, ATTRS)).toBe(ATTRS.initialDashSpeed);
-    expect(initialDashVelocity(-1, ATTRS)).toBe(-ATTRS.initialDashSpeed);
-  });
-
-  it("decays the initial dash down to run speed", () => {
-    let vx = initialDashVelocity(1, ATTRS);
-    expect(vx).toBeGreaterThan(ATTRS.runSpeed);
-    for (let i = 0; i < 60; i++) vx = runVelocity(vx, 1, ATTRS);
-    expect(vx).toBe(ATTRS.runSpeed);
   });
 
   it("brings a fighter to a stop at traction, symmetrically", () => {

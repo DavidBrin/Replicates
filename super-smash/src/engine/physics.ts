@@ -100,18 +100,19 @@ export function hitstunGravityOptions(f: FighterState): GravityOptions {
 /* ------------------------------------------ legacy movement (test oracles) -- */
 
 /*
- * The pre-Plan-2 movement rules, on one `vx`/`vy`: gravity, walking, the
- * initial dash, running, traction and air drift. **TEST-ONLY: the engine calls
- * none of them.** Its movement is the KineticModule's (`kinetic.ts`:
- * `gravityStep`, `airControlX`, `runControlX`, and the walk and stop brakes in
- * `kineticExec`), so one rule of each ships. These stay, frozen, as the oracle
- * `kinetic.test.ts` holds `kineticExec` to through `paramsFromAttributes`, and
- * `physics.test.ts` pins them (DECISIONS D55). Engine code must not call them.
+ * The pre-Plan-2 movement rules, on one `vx`/`vy`: gravity, walking, traction
+ * and air drift. **TEST-ONLY: the engine calls none of them.** Its movement is
+ * the KineticModule's (`kinetic.ts`: `gravityStep`, `airControlX`, and the
+ * walk and stop brakes in `kineticExec`), so one rule of each ships. These
+ * stay, frozen, as the oracle `kinetic.test.ts` holds `kineticExec` to through
+ * `paramsFromAttributes`, and `physics.test.ts` pins them (DECISIONS D55).
+ * Engine code must not call them, and `layering.test.ts` fails if any non-test
+ * source but this file names one. The dash and run helpers went once those
+ * kinetic types left the legacy rule (Task 23): nothing held them to anything.
  */
 
-/** Legacy ground acceleration (the helpers below): walking at 2 × traction, running at 3 ×. */
+/** Legacy walking acceleration (`walkVelocity`): 2 × traction. */
 const WALK_ACCEL_FACTOR = 2;
-const RUN_ACCEL_FACTOR = 3;
 
 /**
  * One frame of gravity, terminal velocity included. Test oracle; the engine's
@@ -137,22 +138,6 @@ export function applyGravity(
 /** Walking: approach the walk speed at twice traction. Test oracle. */
 export function walkVelocity(vx: number, dir: number, attrs: FighterAttributes): number {
   return approach(vx, dir * attrs.walkSpeed, attrs.traction * WALK_ACCEL_FACTOR);
-}
-
-/**
- * The initial dash is a velocity *set*, not a ramp. Test oracle.
- *
- * Ultimate gives every fighter its initial dash speed on frame 1 of the dash and
- * only then decays it toward the (usually lower) run speed. That instant burst is
- * what dash-dancing is made of.
- */
-export function initialDashVelocity(dir: number, attrs: FighterAttributes): number {
-  return dir * attrs.initialDashSpeed;
-}
-
-/** Running: approach the run speed at three times traction. Test oracle. */
-export function runVelocity(vx: number, dir: number, attrs: FighterAttributes): number {
-  return approach(vx, dir * attrs.runSpeed, attrs.traction * RUN_ACCEL_FACTOR);
 }
 
 /** Friction. The one primitive behind skidding, run-braking and standing still. Test oracle. */
@@ -489,6 +474,12 @@ export interface Point {
   readonly y: number;
 }
 
+/**
+ * The ECB's four points in world space, the seam Plan 4 fills from bones. The
+ * engine does not call it yet: collision (`resolveCollision`) and ledge grabs
+ * read `ecbOf`'s bottom, top and half-width as a rectangle, which these four
+ * points stand for.
+ */
 export function ecbPoints(
   f: Pick<FighterState, "x" | "y" | "grounded">,
   attrs: FighterAttributes,

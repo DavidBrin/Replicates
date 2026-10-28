@@ -493,8 +493,9 @@ describe("dash into run (SmashWiki Dash, https://www.ssbwiki.com/Dash)", () => {
   // value that is scaled based on how much the control stick is tilted … if it
   // is higher, the character's traction value is used to decrease it down to
   // their run speed." Values: calculator DashInitialSpeed, RunBase/AddAcceleration,
-  // RunSpeed, GroundFriction. UNVERIFIED: that `dash_speed` is held for exactly one
-  // frame before the acceleration rule takes over (the page does not say how long).
+  // RunSpeed, GroundFriction. UNVERIFIED: that `dash_speed` is held for exactly two
+  // frames (actionFrame 0 and 1) before the acceleration rule takes over (the page
+  // does not say how long).
 
   it.each(IDS)("%s leaves its initial dash speed by the published rule, and settles at run speed", (id) => {
     const p = FIGHTER_PARAMS[id];

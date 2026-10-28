@@ -1608,10 +1608,15 @@ and hashed, which reflective tests check field by field.
   it reads the syntax tree and asks the type checker whether a write's target is `FighterState`'s
   own `vx`/`vy` (any assignment operator, `++`/`--`, destructuring, `for…in/of`, `Object.assign`
   and its relatives), and pins the forms it cannot see. The last marked legacy write went with
-  `decayLaunch` in Task 28, and a test now fails on any marker left in the tree. The pre-Plan-2
-  single-velocity helpers (`applyGravity`, `airDrift`, `walkVelocity` …) stay in `physics.ts` only
-  as marked test oracles, so the engine ships one rule of each. `kinetic.test.ts` holds
-  `kineticExec`, given legacy-equivalent params, to them over 2,000 random cases.
+  `decayLaunch` in Task 28, and a test now fails on any marker left in the tree. Four pre-Plan-2
+  single-velocity helpers (`applyGravity`, `walkVelocity`, `applyTraction`, `airDrift`) stay in
+  `physics.ts` only as test oracles: `kinetic.test.ts` holds `kineticExec`, given legacy-equivalent
+  params, to them over 2,000 random cases, for every kinetic type but DASH and RUN. Those two left
+  the legacy rule in Task 23, and their helpers (`initialDashVelocity`, `runVelocity`) were deleted
+  in the final fix wave, since nothing held them to anything. A tripwire in `layering.test.ts`
+  fails if any non-test source but `physics.ts` names one of the four outside a comment, so the
+  engine ships one rule of each. `kineticAdopt`, still called at the top of `applyMovement`, is
+  the strangler seam's last trace: with no raw write left, it changes nothing.
 - **StatusModule.** The 42 actions are status objects with `pre`/`main`/`exec`/`end`, registered
   under SSBU-style `FIGHTER_STATUS_KIND_*` names. A status change is `changeStatus`: the old
   status's `end`, then the new one's `pre`. The legacy switch is gone, and Task 28 removed the
@@ -1634,21 +1639,33 @@ and hashed, which reflective tests check field by field.
     mid-match. Capsule hitboxes are refused until Plan 3.
   - *Compiled and imported.* In Plan 2 every legacy move is *compiled* to a root-bone script that
     reproduces it exactly, proven on every frame of all 204 moves. The published scripts for all
-    eight fighters are imported as reference (`src/fighters/acmd/generated`), self-checked
-    against the calculator, and reconciled against the legacy data in a ratchet
-    (`reconcile.allow.json`, 136 entries).
+    eight fighters are imported as reference (`src/fighters/acmd/generated`) and reconciled
+    against the legacy data in a ratchet (`reconcile.allow.json`, 136 entries). Five of the eight
+    are also self-checked against the calculator; it has no hitbox windows for Donkey Kong, Kirby
+    or Link, so theirs have no independent check yet.
 - **Online peers refuse another build.**
   - *The hello.* Each peer sends a lobby `hello { protocol, bones, build }` when the channel opens,
-    and again on every reconnect. `build` is the commit inlined at build time
+    and again each time it reopens while no start is out (once one is out, the channel is the
+    match's and the builds were settled before it). A channel that reopens to the same seated
+    player is taken back on that player's earlier hello, without waiting for a new one: the same
+    room seat is the same page, so the same build, and a reload is a new seat that says its build
+    afresh. `build` is the commit inlined at build time
     (`NEXT_PUBLIC_BUILD_ID`: `BUILD_ID` if set, else the git short SHA, else "dev"), so any two
     deploys refuse each other, not just two bone tables. This is the build fingerprint D54
     promised.
   - *A mismatch.* A mismatch, or no hello within 5 s (`HELLO_TIMEOUT_MS`; an older build never
     sends one), is a sticky error: "The other player is running a different version. Both reload
     the page." The side that detects it leaves the room.
-  - *The backstop.* The start carries the same stamp. A guest that receives a mismatched, missing
-    or unreadable one sends `refuse` and leaves, and the host's /play shows the sentence in its
-    "could not start" overlay.
+  - *The backstop.* The start carries the same stamp. A guest that receives a start whose stamp is
+    another build's, or missing, sends `refuse` and leaves, readable or not, and the host's /play
+    shows the sentence in its "could not start" overlay. An unreadable start whose stamp matches
+    this build is dropped, as it always was; a same-build host only sends starts its guest can
+    read, so that is practically unreachable. The host takes a `refuse` only while a start is out
+    to the player in the seat: with none out, or after that start's guest left, it ends nothing.
+  - *A replacement opponent.* In the lobby, a `peer-left` for the peer on an open channel lets that
+    channel go, so the next player the room seats is offered a connection. Before this, an old
+    opponent whose room socket left before its channel closed kept the host in "linking" with
+    Start disabled. A channel a match holds is untouched; its link monitor decides.
 
 **How it stayed safe.** A golden trace (`src/game/golden.test.ts`) plays four CPU-vs-CPU stock
 matches and a scripted fifth (`goldenScript.ts`, a timed match with the Smash Ball on).
@@ -1699,7 +1716,9 @@ so two CPU matches charged one frame earlier.
 - *Soft stick.* `Btn.Soft` reads as half deflection for walking and running (UNVERIFIED; the
   bitfield carries one bit of magnitude). A soft walk is half speed. A soft run is reachable by
   easing the stick mid-run, and only `run_accel_mul` halves for it. Soft DI stays a quarter
-  (`SOFT_DI_SHIFT`, D54).
+  (`SOFT_DI_SHIFT`, D54). So no input reaches `walk_speed_max`: a keyboard key is a full
+  deflection, which walks for at most 3 frames and then dashes (D24), and a gamepad's soft band
+  walks at half speed.
 - *Landings* are light or heavy (SmashWiki "Lag"). A landing after `landing_heavy_frame` frames at
   full fall speed takes `landing_frame`, any other `landing_frame_light`, and the length rides in
   the `land` state's `charge`. Each of these is UNVERIFIED:
@@ -1708,8 +1727,10 @@ so two CPU matches charged one frame earlier.
   - the `>=` threshold;
   - that fast-fall frames count toward it;
   - the rule that a landing in an aerial's auto-cancel window is heavy, which may be Brawl-era.
-- *The ECB seam.* Four points (bottom, top, left, right) serve walls, ceilings, landings and
-  ledges (`ecbPoints`).
+- *The ECB seam.* Collision and ledge grabs read `ecbOf`'s bottom, top and half-width as a
+  rectangle, for walls, ceilings, landings and ledges. `ecbPoints` names the four points that
+  rectangle stands for (bottom, top, left, right) as the seam Plan 4 derives from bones; the engine
+  does not call it yet.
   - The wall push stops only motion into the wall, so a fighter launched away from one keeps its
     launch.
   - A fighter strictly above a surface lands on it rather than being pushed off its corner.
