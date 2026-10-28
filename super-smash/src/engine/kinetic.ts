@@ -135,6 +135,9 @@ export function kineticClear(f: FighterState): void {
 /**
  * Set the horizontal speed outright: every horizontal energy to zero, then
  * `vx` on `carrier`. The KineticModule equivalent of `f.vx = vx`.
+ *
+ * `vx`/`vy` must already equal the energies' sum when this is called (it
+ * rewrites them from the energies); call `kineticAdopt` first if a raw write is pending.
  */
 export function kineticSetX(f: FighterState, vx: number, carrier: HorizontalCarrier = "control"): void {
   const k = f.kinetic;
@@ -145,7 +148,10 @@ export function kineticSetX(f: FighterState, vx: number, carrier: HorizontalCarr
   kineticSum(f);
 }
 
-/** Set the vertical speed outright, on GRAVITY. The equivalent of `f.vy = vy`. */
+/**
+ * Set the vertical speed outright, on GRAVITY. The equivalent of `f.vy = vy`.
+ * Like `kineticSetX`, it needs `vx`/`vy` to equal the sum already: `kineticAdopt` first if a raw write is pending.
+ */
 export function kineticSetY(f: FighterState, vy: number): void {
   const k = f.kinetic;
   k.gravityY = vy;
