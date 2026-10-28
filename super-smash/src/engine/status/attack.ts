@@ -45,7 +45,7 @@ import type { FighterStatus } from "./kind";
  * hold its captor's status ends with the link intact (this); not a throw's hit
  * (Ultimate has chain grabs) and not a captor that was hit or KO'd.
  */
-function releaseHeld(f: FighterState, fighters: readonly FighterState[]): void {
+export function releaseHeld(f: FighterState, fighters: readonly FighterState[]): void {
   const victim = f.grabbing >= 0 ? fighters[f.grabbing] : undefined;
   if (victim !== undefined && victim.grabbedBy === f.port) victim.combat.grabImmune = GRAB_RELEASE_IMMUNITY;
   releaseGrab(f, fighters);

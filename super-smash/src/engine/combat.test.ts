@@ -2341,6 +2341,99 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
     });
   });
 
+  describe("a captor that stops holding lets go (fix round 2)", () => {
+    // Anything but CATCH, CATCH_WAIT, CATCH_ATTACK and THROW with `grabbing` still set:
+    // a clank cancelled the pummel, a slide took the captor off the stage.
+    it.each(["stand", "fall", "ledgeHang", "attack", "shield"] as const)(
+      "frees the victim of a captor in %s, in place and unhurt, rather than carrying it",
+      (action) => {
+        const s = holdingPair(standing(), 100);
+        s.fighters[0].action = action;
+        s.fighters[0].x = fx(30);
+        const v = play(s, 1, () => [0, 0])[0].state.fighters[1];
+        expect(v.grabbedBy).toBe(-1);
+        expect(v.x).toBe(fx(8));
+        expect(v.combat.grabImmune).toBeGreaterThan(GRAB_RELEASE_IMMUNITY - 3);
+      },
+    );
+
+    it("does not clank a pummel with an opposing hitbox: the pummel lands and the hold stays", () => {
+      const clanking: FighterDef = {
+        ...BASE_DEF,
+        moves: {
+          ...BASE_DEF.moves,
+          // The pummel's box is 40 units out; fighter 2's jab (a box 8 out) meets it there.
+          pummel: move("pummel", { totalFrames: 10, hitboxes: [hitbox({ startFrame: 1, endFrame: 1, x: fx(40), damage: fx(2) })] }),
+        },
+      };
+      const ctx = ctxFor(clanking);
+      const s = holdingPair(standing3(ctx), 100);
+      s.fighters[2].x = fx(32);
+      s.fighters[2].facing = 1;
+      // Fighter 2 jabs on frame 1 (live 4-6); fighter 0 pummels on frame 5 (live 6).
+      const frames = play(s, 14, (i) => [i === 5 ? Btn.Attack : 0, 0, i === 1 ? Btn.Attack : 0], ctx);
+      expect(frames.flatMap((f) => f.events.clanks)).toEqual([]);
+      expect(frames.flatMap((f) => f.events.hits).filter((h) => h.victim === 1)).toHaveLength(1);
+      expect(frames.at(-1)!.state.fighters[0].grabbing).toBe(1);
+    });
+
+    // The catch statuses use GROUND_CLIFF_STOP in the game (UNVERIFIED that this is the
+    // param; the replica passes `cliffStop` to the collision).
+    it.each(["grab", "grabHold", "pummel", "throw"] as const)("%s stops at the platform's edge instead of walking off it", (action) => {
+      // Holding someone, as all four are (a hold with nobody in it ends).
+      const s = holdingPair(standing(), 200);
+      const a = s.fighters[0];
+      a.action = action;
+      a.x = fx(79);
+      kineticSetX(a, fx(2));
+      const frames = play(s, 3, () => [0, 0]);
+      for (const f of frames) expect(f.state.fighters[0]).toMatchObject({ grounded: true, platform: 0, x: fx(80), grabbing: 1 });
+    });
+
+    it("never carries a victim past the edge: a holder pushed at the lip stops there, still holding", () => {
+      const s = holdingPair(standing(), 200);
+      s.fighters[0].x = fx(77);
+      s.fighters[1].x = fx(85);
+      kineticSetX(s.fighters[0], fx(2));
+      const frames = play(s, 40, () => [0, 0]);
+      for (const f of frames) {
+        const [a, v] = f.state.fighters;
+        expect(a).toMatchObject({ grounded: true, grabbing: 1 });
+        expect(a.x).toBeLessThanOrEqual(fx(80));
+        expect(v.y).toBe(a.y);
+        expect(f.events.kos).toEqual([]);
+      }
+    });
+  });
+
+  describe("a victim held past the edge is held in the air (fix round 2)", () => {
+    function atTheLip(x: number): GameState {
+      const s = holdingPair(standing(), 100);
+      s.fighters[0].x = fx(x);
+      s.fighters[1].jumpsUsed = 2;
+      s.fighters[1].airDodged = true;
+      return s;
+    }
+
+    it("marks a victim over the platform grounded on it, with its jumps and air dodge back", () => {
+      const v = play(atTheLip(70), 1, () => [0, 0])[0].state.fighters[1];
+      expect(v).toMatchObject({ x: fx(78), grounded: true, platform: 0, jumpsUsed: 0, airDodged: false });
+    });
+
+    it("marks a victim held past the edge airborne: no ground, no restore, and it falls when released", () => {
+      const s = atTheLip(76);
+      s.fighters[1].grabTimer = 3;
+      const frames = play(s, 5, () => [0, 0]);
+      const held = frames[0].state.fighters[1];
+      expect(held).toMatchObject({ x: fx(84), y: 0, grounded: false, platform: -1, jumpsUsed: 2, airDodged: true, airTime: 0 });
+      // Let go at the lip: the victim is in the air rather than standing on nothing (and, being
+      // right at the ledge, may take it).
+      const freed = frames.find((f) => f.state.fighters[1].grabbedBy < 0)!.state.fighters[1];
+      expect(freed.grounded).toBe(false);
+      expect(["fall", "ledgeHang"]).toContain(freed.action);
+    });
+  });
+
   describe("which releases leave 60 frames of grab immunity (UNVERIFIED which kinds count)", () => {
     const THROWS: FighterDef = {
       ...BASE_DEF,

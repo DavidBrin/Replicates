@@ -203,6 +203,14 @@ export interface CollisionOptions {
    * catch it again. The flag exists for the frame of the drop itself.
    */
   readonly passThroughSoft?: boolean;
+  /**
+   * A grounded fighter that reaches the edge of its platform stops there rather
+   * than walking off it. UNVERIFIED: the game's catch statuses (CATCH, CATCH_WAIT,
+   * CATCH_ATTACK, THROW) use `GROUND_CORRECT_KIND_GROUND_CLIFF_STOP`; the replica
+   * has no per-status ground-correct kind, so the four statuses pass this flag
+   * (Plan 3, Task 14, fix round 2). Nothing else in the engine stops at a cliff.
+   */
+  readonly cliffStop?: boolean;
 }
 
 /**
@@ -230,6 +238,11 @@ export function resolveCollision(
   if (f.grounded && f.platform >= 0 && f.platform < stage.platforms.length) {
     const p = stage.platforms[f.platform];
     const cx = platformCentreX(p, frame);
+    if (opts.cliffStop === true && abs(f.x - cx) > p.halfWidth) {
+      // At the edge: stop on it, not over it, and stay grounded.
+      f.x = f.x > cx ? cx + p.halfWidth : cx - p.halfWidth;
+      kineticSetX(f, 0);
+    }
     if (abs(f.x - cx) > p.halfWidth) {
       f.grounded = false;
       f.platform = -1;

@@ -88,6 +88,7 @@ import {
   integrate,
   ledgeIntangibilityFrames,
   ledgePosition,
+  platformCentreX,
   resolveCollision,
 } from "./physics";
 import {
@@ -99,6 +100,7 @@ import {
   grabLedge,
   hasSuperArmour,
   interpretInput,
+  isHolding,
   isParrying,
   onLanded,
   onLeftGround,
@@ -133,7 +135,7 @@ import {
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
 import "./status";
-import { struggleInGrab } from "./status/attack";
+import { releaseHeld, struggleInGrab } from "./status/attack";
 import { emptyEvents } from "./types";
 import type {
   ActionState,
@@ -611,6 +613,13 @@ export function step(
     }
   }
 
+  // A fighter whose status is not a holding one has let go, whatever its link
+  // says: a clank cancels a pummel and leaves `grabbing` set, and carrying the
+  // victim from then on drags it off the stage with the captor (Plan 3, Task 14).
+  for (const f of s.fighters) {
+    if (f.grabbing >= 0 && f.action !== "dead" && !isHolding(f.action)) releaseHeld(f, s.fighters);
+  }
+
   /* -- 4. physics ---------------------------------------------------------- */
 
   const preIntegrate = s.fighters.map((f) => ({ x: f.x, y: f.y }));
@@ -640,6 +649,8 @@ export function step(
       stage,
       defs[i].attributes,
       s.frame,
+      // The catch statuses stop at the edge instead of walking off it.
+      { cliffStop: isHolding(f.action) },
     );
     // A tumbling body that meets a surface techs or bounces (Plan 3, Task 12);
     // otherwise a landing is a landing — a missed tech lies down in `onLanded`.
@@ -683,7 +694,7 @@ export function step(
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     const captor = f.action === "dead" ? null : captorOf(s, f);
-    if (captor !== null) holdAtCaptor(f, captor, defs[captor.port].attributes, defs[i].attributes);
+    if (captor !== null) holdAtCaptor(f, captor, defs[captor.port].attributes, defs[i].attributes, stage, s.frame);
   }
 
   /* -- 6. hitboxes: gather, clank, connect --------------------------------- */
@@ -790,26 +801,36 @@ function captorOf(s: GameState, f: FighterState): FighterState | null {
  * hurtbox radii apart, in front of the captor. The roster's legacy pummel and
  * throw boxes were written for a victim about this close.
  *
- * Standing where the captor stands counts as touching the ground: a fighter
- * caught in the air gets its ground jump and its air dodge back, as a landing
- * gives them (UNVERIFIED for the air dodge: SmashWiki "Air dodge" lists "land").
- * Positions are written, not velocities: `kineticSet` re-sums the energies.
+ * Standing where the captor stands counts as touching the ground, if there is
+ * ground there: a victim over the captor's platform is grounded on it, and a
+ * fighter caught in the air gets its ground jump and its air dodge back, as a
+ * landing gives them (UNVERIFIED for the air dodge: SmashWiki "Air dodge" lists
+ * "land"). A victim held past the edge (the captor at the lip, facing out) is
+ * held in the air: not grounded, so no restore, and a release leaves it to fall.
+ * It is placed, so gravity never moves it, and it is not "in the air" for the
+ * ledge's airtime bonus either. Positions are written, not velocities:
+ * `kineticSet` re-sums the energies.
  */
 function holdAtCaptor(
   f: FighterState,
   captor: FighterState,
   captorAttrs: FighterAttributes,
   attrs: FighterAttributes,
+  stage: StageDef,
+  frame: number,
 ): void {
   const ahead = captor.facing >= 0 ? 1 : -1;
   f.x = captor.x + ahead * (captorAttrs.width + attrs.width);
   f.y = captor.y;
-  f.grounded = captor.grounded;
-  f.platform = captor.platform;
+  const platform = captor.grounded ? stage.platforms[captor.platform] : undefined;
+  const over = platform !== undefined && Math.abs(f.x - platformCentreX(platform, frame)) <= platform.halfWidth;
+  f.grounded = over;
+  f.platform = over ? captor.platform : -1;
   f.ledge = null;
   f.facing = -ahead;
+  f.airTime = 0;
   kineticSet(f, 0, 0);
-  if (f.grounded) {
+  if (over) {
     f.jumpsUsed = 0;
     f.airDodged = false;
   }
@@ -961,6 +982,9 @@ function resolveClanks(
       const ca = candidates[a];
       const cb = candidates[b];
       if (ca.attacker === cb.attacker) continue;
+      // A pummel or a throw on a held fighter is not a hitbox in the world (SSBU's
+      // `ATTACK_ABS`, `set_catch_only_all`): nothing clanks with it.
+      if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
       if (ca.suppressed && cb.suppressed) continue;
       if (!circlesOverlap(ca.x, ca.y, ca.hitbox.radius, cb.x, cb.y, cb.hitbox.radius)) continue;
       const outcome = resolveClank(ca.hitbox, cb.hitbox);

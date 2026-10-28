@@ -387,3 +387,83 @@ describe("every fighter's pummel and throws land on the fighter held", () => {
     });
   });
 });
+
+/**
+ * A dash grab near the edge (Plan 3, Task 14, fix round 2). The catch statuses had
+ * no cliff stop, so the holder slid off the stage still holding, took the ledge,
+ * and carried the victim through every ledge option: at 150% a drop through the
+ * bottom blast zone was a double KO. SSBU's catch statuses stop at the cliff
+ * (`GROUND_CORRECT_KIND_GROUND_CLIFF_STOP`).
+ */
+describe("a dash grab near the edge never takes the holder off the stage", () => {
+  /**
+   * `holder` dashes right from the middle of FD and grabs on frame `at`; `victim` stands `gap` units
+   * short of the 80 edge. `later` is a button pressed once, on the frame given (a drop off the ledge).
+   */
+  function dashGrab(
+    holder: string,
+    victim: string,
+    gap: number,
+    at: number,
+    damage = 0,
+    later?: readonly [frame: number, button: number],
+  ): { states: GameState[]; kos: number } {
+    let s = createInitialState("finalDestination", [{ defId: holder }, { defId: victim }], RULES, 0x9a12);
+    for (const f of s.fighters) {
+      f.action = "stand";
+      f.actionFrame = 0;
+      f.grounded = true;
+      f.platform = 0;
+      f.y = fx(0);
+      f.intangible = 0;
+      f.invincible = 0;
+    }
+    s.fighters[0].x = fx(40);
+    s.fighters[0].facing = 1;
+    s.fighters[1].x = fx(80 - gap);
+    s.fighters[1].facing = -1;
+    s.fighters[1].damage = fx(damage);
+    let prev: [number, number] = [0, 0];
+    const states: GameState[] = [];
+    let kos = 0;
+    for (let i = 0; i < 180; i++) {
+      const press = later !== undefined && i === later[0] ? later[1] : 0;
+      const inputs: [number, number] = [i < at ? Btn.Right : i === at ? Btn.Grab | Btn.Right : press, 0];
+      const r = step(s, inputs, { prevInputs: prev });
+      s = r.state;
+      prev = inputs;
+      kos += r.events.kos.length;
+      states.push(s);
+    }
+    return { states, kos };
+  }
+
+  it("keeps a holder on the stage, grounded, for as long as it holds, whoever it grabs", () => {
+    let held = 0;
+    for (const holder of FIGHTERS.map((f) => f.id)) {
+      for (let at = 8; at <= 24; at++) {
+        // (A holder that has not grabbed yet and runs off the edge by itself is not what is tested.)
+        const { states } = dashGrab(holder, "mario", 1, at);
+        for (const s of states) {
+          const [a, v] = s.fighters;
+          if (a.grabbing < 0) continue;
+          held += 1;
+          expect(a.grounded, `${holder}, grab on ${at}`).toBe(true);
+          expect(Math.abs(toFloat(a.x)), `${holder}, grab on ${at}`).toBeLessThanOrEqual(80);
+          expect(v.y).toBe(a.y);
+        }
+      }
+    }
+    // It must have caught somebody, or this proves nothing.
+    expect(held).toBeGreaterThan(500);
+  });
+
+  // The holder pressed down on frame 40: it used to drop off the ledge with the victim, 345 frames
+  // of hold at 150%, and both went through the bottom blast zone on frame 141.
+  it("does not carry a victim at 150% through the blast zone: no stock is lost", () => {
+    const { states, kos } = dashGrab("mario", "mario", 0.5, 18, 150, [40, Btn.Down]);
+    expect(kos).toBe(0);
+    expect(states.some((s) => s.fighters[0].grabbing >= 0)).toBe(true);
+    expect(states.at(-1)!.fighters.map((f) => f.stocks)).toEqual([3, 3]);
+  });
+});

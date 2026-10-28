@@ -165,7 +165,7 @@ const STEPS: readonly ScriptStep[] = [
   [1, 0, A], //                   130: the fifth
   [1, 0, 0],
   [55, 0, 0], //                  132: Fox breaks free on 140, then both stand
-  [4, R | SOFT, 0], //            187: in a little: Fox stands 4 from him, caught and held
+  [4, R | SOFT, 0], //            187: in a little: the first hold left Fox 4 from him
   [10, 0, 0],
   // Grab, pummel, forward throw. The pummel lands on 217 and Fox stays held (Task
   // 14, fix round 1): the freeze keeps Mario in it until 234. Fox holds a soft up

@@ -774,6 +774,15 @@ export function finishLedgeOption(f: FighterState, ctx: StateContext): void {
 }
 
 /**
+ * The statuses a captor can be in and still be holding someone: CATCH, CATCH_WAIT,
+ * CATCH_ATTACK and THROW. A fighter in any other status with `grabbing` set has
+ * stopped holding (a clank cancelled the pummel, say), and the link ends there.
+ */
+export function isHolding(action: ActionState): boolean {
+  return action === "grab" || action === "grabHold" || action === "pummel" || action === "throw";
+}
+
+/**
  * Sever every grab this fighter is part of, from **both** ends.
  *
  * A grab is one relationship stored twice: `grabbing` on the holder and
