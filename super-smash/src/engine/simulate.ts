@@ -1202,9 +1202,9 @@ function applyHit(
   // the fighter simply refuses to be moved by it. That is the whole identity of
   // a move like Giant Punch — you walk through the jab and land the punch — and
   // it is why armour has to sit here, after damage and before knockback, rather
-  // than at the top with the intangibility checks.
+  // than at the top with the intangibility checks. The damage was added once,
+  // above; adding it again here doubled every armoured hit (Plan 3, Task 1).
   if (hasSuperArmour(victim, victimDef)) {
-    victim.damage += damage;
     // The attacker still freezes. Hitting armour should feel like hitting
     // something solid, and a hit that reports nothing back reads as a whiff.
     const lag = computeHitlag(damage, {
