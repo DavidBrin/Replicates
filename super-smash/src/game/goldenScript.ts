@@ -66,10 +66,23 @@
  * and what follows it keep their frames. The smash's longer hitlag puts the hang
  * on 863, not 862, and the fireball lands a frame later (1578).
  *
+ * Plan 3 Task 12 (teching and bouncing) re-tuned what Fox does after his first
+ * two tumbles. A tumbling landing too fast to tech now bounces instead of lying
+ * down, so Fox, who used to land on 787 and 1029 and lie there, skipped across the
+ * floor until his hitstun ran out and ended up about 20 units from where he lay: the
+ * forward tilt (1002) missed him and `ftilt` left the hits the script lands. Both
+ * launches are slow enough to tech (2.16 and 2.09, under 3), so Fox presses shield
+ * 7 and 5 frames before he lands (780, 1024) and techs in place on the same frames
+ * and the same spots as before (787 at x -16, 1029 at x 31): everything after them
+ * keeps its frame. The short-hop nair's tumble (1635) is left to bounce: Fox now
+ * lands at x 17 on 1673, not lying at x 37, and nothing after it needs him anywhere
+ * in particular. `downed` and `getUp`, which those three landings used to reach, are
+ * now the tech lab's (`goldenLab.ts`).
+ *
  * Each step's comment gives the frame it starts on, and the events it names
- * (the shield break on 649, the hangs on 863, 1193, 1299 and 1400, the hits on
- * 747, 1006, 1578 and 1635, time up on 2014). All were checked against a run
- * after Plan 3 Task 9.
+ * (the shield break on 649, the techs on 787 and 1029, the hangs on 863, 1193,
+ * 1299 and 1400, the hits on 747, 1006, 1578 and 1635, time up on 2014). All were
+ * checked against a run after Plan 3 Task 12.
  */
 
 import { Btn } from "@/engine/types";
@@ -147,7 +160,9 @@ const STEPS: readonly ScriptStep[] = [
   // stage and lands near its middle.
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
-  [66, 0, SOFT | U], //           734: tumble (747), downed (787), getUp (827); Mario can walk again on 801
+  [46, 0, SOFT | U], //           734: tumble (747); Mario can walk again on 801
+  [1, 0, S | SOFT | U], //        780: Fox presses shield 7 frames before he lands...
+  [19, 0, SOFT | U], //           781: ...and techs in place on 787 (his launch is 2.16, under 3), then stands
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
@@ -163,7 +178,9 @@ const STEPS: readonly ScriptStep[] = [
   // Soft turns a fresh direction plus attack into a tilt.
   [1, L | SOFT, 0], //           1001: facing left since the ledge
   [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006
-  [40, 0, 0],
+  [21, 0, 0],
+  [1, 0, S], //                  1024: Fox presses shield 5 frames before he lands...
+  [18, 0, 0], //                 1025: ...and techs in place on 1029 (a launch of 2.09), then stands
   [12, D, 0], //                 1043: crouchStart, crouch
   [12, 0, 0], //                 1055: crouchEnd
   [30, L, 0], //                 1067: walk, dashStart, run

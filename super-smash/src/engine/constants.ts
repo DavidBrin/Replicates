@@ -313,6 +313,56 @@ export const DIRECTIONAL_AIR_DODGE_FRAMES = 63;
 export const DIRECTIONAL_AIR_DODGE_INTANGIBLE = [3, 20] as const;
 export const DIRECTIONAL_AIR_DODGE_SPEED = fx(3.2);
 
+/* ------------------------------------------------------------------ tech -- */
+
+/**
+ * Teching (SmashWiki "Tech", https://www.ssbwiki.com/Tech): a shield press opens
+ * an 11-frame window ("8 frames and 11 frames" in Smash 4 and Ultimate), and
+ * no new window opens for 40 frames after a press ("a player won't be able to
+ * tech for 40 frames", the page's general rule; it gives no separate Ultimate
+ * figure).
+ */
+export const TECH_WINDOW = 11;
+export const TECH_LOCKOUT = 40;
+/**
+ * A surface can be teched only at a launch speed of 3 or less (floor) or 6 or
+ * less (wall, ceiling); a tumbling fighter bounces off at 0.8 or more (floor)
+ * or 1 or more (wall, ceiling). rubendal SSBU-Calculator `js/knockback.js`
+ * (`techable`, the bounce check: https://github.com/rubendal/SSBU-Calculator);
+ * SmashWiki "Tech" names the 6.
+ */
+export const TECH_FLOOR_MAX_SPEED = fx(3);
+export const TECH_SURFACE_MAX_SPEED = fx(6);
+export const BOUNCE_FLOOR_MIN_SPEED = fx(0.8);
+export const BOUNCE_SURFACE_MIN_SPEED = fx(1);
+/**
+ * A bounce keeps 0.95 of the launch — "5% in Ultimate" (SmashWiki "Knockback",
+ * https://www.ssbwiki.com/Knockback) — and 0.8 of the hitstun left (SmashWiki
+ * "Hitstun", https://www.ssbwiki.com/Hitstun: Ultimate keeps Smash 4's bounce
+ * reduction, "0.8× relative to the initial amount"; applied to what is left,
+ * UNVERIFIED). rubendal's calculator keeps the whole launch on a bounce (its
+ * 0.95 is commented out), so the wiki's figure is the one used.
+ */
+export const BOUNCE_LAUNCH_RATIO: Ratio = [19, 20];
+export const BOUNCE_HITSTUN_RATIO: Ratio = [4, 5];
+/**
+ * Tech animations, from SmashWiki "Lucario (SSBU)/Techs"
+ * (https://www.ssbwiki.com/Lucario_(SSBU)/Techs) — the one fighter with
+ * published tech frame data; used for all eight (UNVERIFIED per fighter):
+ * in place 26 frames (the page's first actionable frame is 27), roll 40
+ * (actionable 41), wall 26 (actionable from 6), ceiling 26; intangible on
+ * frames 1–20 (ceiling 1–17).
+ */
+export const TECH_FRAMES = 26;
+export const TECH_ROLL_FRAMES = 40;
+export const TECH_WALL_FRAMES = 26;
+export const TECH_WALL_INTERRUPT = 6;
+export const TECH_CEILING_FRAMES = 26;
+export const TECH_INTANGIBLE = [1, 20] as const;
+export const TECH_CEILING_INTANGIBLE = [1, 17] as const;
+/** How far a tech roll travels. UNVERIFIED: the ground roll's distance stands in. */
+export const TECH_ROLL_DISTANCE = fx(28);
+
 /* ----------------------------------------------------------------- ledge -- */
 
 /**

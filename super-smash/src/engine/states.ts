@@ -42,6 +42,8 @@ import {
   SMASH_INPUT_WINDOW,
   TAP_JUMP_FRAMES,
   SPOT_DODGE_INTANGIBLE,
+  TECH_CEILING_INTANGIBLE,
+  TECH_INTANGIBLE,
 } from "./constants";
 import {
   dropThroughPlatform,
@@ -366,6 +368,13 @@ export function dodgeWindow(f: FighterState): readonly [number, number] | null {
       return ROLL_INTANGIBLE;
     case "airDodge":
       return f.charge === 1 ? DIRECTIONAL_AIR_DODGE_INTANGIBLE : AIR_DODGE_INTANGIBLE;
+    // Teching (Plan 3, Task 12): SmashWiki "Lucario (SSBU)/Techs".
+    case "tech":
+    case "techRoll":
+    case "techWall":
+      return TECH_INTANGIBLE;
+    case "techCeiling":
+      return TECH_CEILING_INTANGIBLE;
     default:
       return null;
   }

@@ -14,16 +14,19 @@ import type { ActionState, FighterState, GameState, InputFrame, MatchRules, Move
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 
+import { TECH_LAB } from "./goldenLab";
 import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Five matches on the real roster and real stages: four CPU-vs-CPU stock
- * matches (levels 9 and 7) for 3,600 frames each, and one scripted timed match
+ * Six matches on the real roster and real stages: four CPU-vs-CPU stock
+ * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
- * CPU ever takes. Every frame's `digest` is folded into a running hash, and
+ * CPU ever takes, and a 200-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
+ * four fighters launched by hand into the floor, the wall and the underside.
+ * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
  * a status one frame longer) is still caught.
@@ -70,6 +73,8 @@ interface Match {
   readonly cpu: boolean;
   /** A fresh driver for one play-through, so a CPU's own seed starts over. */
   readonly driver: () => Driver;
+  /** Shape the initial state before the first step, for a match that starts mid-launch. */
+  readonly setup?: (state: GameState) => void;
 }
 
 const CPU_RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
@@ -113,14 +118,26 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => inputs(frame);
     },
   },
+  {
+    ...TECH_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => TECH_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the five matches must visit between them: all 42. A
+ * Every `ActionState` the six matches must visit between them: all 46. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
+ * Plan 3 Task 12 added the four tech states and took `downed` and `getUp` out of every
+ * match but one: a tumble that lands too fast to tech now bounces and never lies down
+ * (a missed tech needs a launch spent below 0.8 with hitstun still to run, which almost
+ * no hit makes), so the script techs Fox on two of its tumbling landings (`tech`) and the
+ * tech lab reaches `techRoll`, `techWall`, `techCeiling`, `downed` and `getUp`.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -157,6 +174,10 @@ const MUST_VISIT: Record<ActionState, true> = {
   thrown: true,
   downed: true,
   getUp: true,
+  tech: true,
+  techRoll: true,
+  techWall: true,
+  techCeiling: true,
   ledgeHang: true,
   ledgeGetUp: true,
   ledgeAttack: true,
@@ -320,6 +341,7 @@ function play(match: Match): Played {
     match.seed,
     CTX,
   );
+  match.setup?.(state);
   const inputsFor = match.driver();
   let prev: readonly InputFrame[] = match.fighters.map(() => 0);
   let roll = 0x811c9dc5;

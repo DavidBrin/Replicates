@@ -33,6 +33,10 @@ import {
   SHIELD_BREAK_STUN,
   SHIELD_RELEASE_FRAMES,
   SPOT_DODGE_FRAMES,
+  TECH_CEILING_FRAMES,
+  TECH_FRAMES,
+  TECH_ROLL_FRAMES,
+  TECH_WALL_FRAMES,
 } from "@/engine/constants";
 import {
   CROUCH_END_FRAMES,
@@ -221,6 +225,7 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "crouchEnd":
       return "crouchEnd";
     case "getUp":
+    case "tech":
       return "getUp";
     case "jumpSquat":
       return "jumpSquat";
@@ -256,12 +261,15 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
       return "spotDodge";
     case "roll":
     case "ledgeRoll":
+    case "techRoll":
       return "roll";
     case "airDodge":
       return "airDodge";
     case "hitstun":
       return "hitstun";
     case "tumble":
+    case "techWall":
+    case "techCeiling":
       return "tumble";
     case "grabbed":
       return "grabbed";
@@ -346,6 +354,15 @@ export function actionDurationFor(
       return DOWNED_FRAMES;
     case "getUp":
       return GETUP_FRAMES;
+    // Teching (Plan 3, Task 12): each clip plays across its own state.
+    case "tech":
+      return TECH_FRAMES;
+    case "techRoll":
+      return TECH_ROLL_FRAMES;
+    case "techWall":
+      return TECH_WALL_FRAMES;
+    case "techCeiling":
+      return TECH_CEILING_FRAMES;
     case "ledgeGetUp":
       return LEDGE_GETUP_FRAMES;
     case "ledgeJump":

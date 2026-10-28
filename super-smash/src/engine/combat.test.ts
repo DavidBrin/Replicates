@@ -11,6 +11,8 @@ import {
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
   SHIELD_REGEN_PER_FRAME,
+  TECH_LOCKOUT,
+  TECH_WINDOW,
 } from "./constants";
 import { hashState } from "./hash";
 import {
@@ -22,6 +24,7 @@ import {
   shieldstunExact,
 } from "./knockback";
 import { attackerShieldPushback, shieldDamage, shieldPushback } from "./shield";
+import { resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
 import { Btn } from "./types";
@@ -1097,5 +1100,250 @@ describe("SDI cannot push a fighter into the stage (Plan 3, Task 11)", () => {
   it("leaves a fighter in open air to SDI as far as it likes", () => {
     const { frozen } = mashed(fx(120), fx(60), Btn.Left);
     expect(frozen.x).toBe(fx(110));
+  });
+});
+
+/* -------------------------------------------- Task 12: tech and bounce -- */
+
+describe("tech and bounce (Plan 3, Task 12)", () => {
+  /**
+   * Fighter 1 tumbling at (x, y) along (vx, vy) — a launch of that speed — with
+   * 60 frames of hitstun left. Fighter 0 is parked out of the way. A launch
+   * under 0.8 lands; 0.8 or more bounces unless teched.
+   */
+  function flying(x: number, y: number, vx: number, vy: number): GameState {
+    const s = standing();
+    s.fighters[0].x = fx(-70);
+    const v = s.fighters[1];
+    Object.assign(v, { x: fx(x), y: fx(y), grounded: false, platform: -1, action: "tumble", actionFrame: 0, hitstun: 60 });
+    v.kinetic.damageX = fx(vx);
+    v.kinetic.damageY = fx(vy);
+    v.launchSpeed = Math.abs(fx(vx)) + Math.abs(fx(vy)); // every launch here is along one axis
+    v.vx = fx(vx);
+    v.vy = fx(vy);
+    return s;
+  }
+  /** Run until fighter 1 touches something; `input(i)` is fighter 1's input. */
+  function until(s: GameState, input: (i: number) => InputFrame, n = 40): Frame[] {
+    return play(s, n, (i) => [0, input(i)]);
+  }
+  const landing = (frames: Frame[]) => frames.findIndex((f) => f.state.fighters[1].action !== "tumble");
+
+  // SmashWiki "Tech" (https://www.ssbwiki.com/Tech): an 11-frame window, and no
+  // second try for 40 frames after an input.
+  it("opens an 11-frame window on a shield press, and locks out presses for 40", () => {
+    const s = standing();
+    const after = play(s, 1, () => [0, Btn.Shield]).at(-1)!.state.fighters[1].combat;
+    expect([after.techWindow, after.techLockout]).toEqual([TECH_WINDOW, TECH_LOCKOUT]);
+    const again = play(s, 6, (i) => [0, i === 0 || i === 5 ? Btn.Shield : 0]).at(-1)!.state.fighters[1].combat;
+    expect(again.techWindow).toBe(TECH_WINDOW - 5);
+  });
+
+  it("techs in place when shield was pressed within 11 frames of landing", () => {
+    const frames = until(flying(0, 6, 0, -2), (i) => (i === 0 ? Btn.Shield : 0));
+    const v = frames[landing(frames)].state.fighters[1];
+    expect(v.action).toBe("tech");
+    expect(v.hitstun).toBe(0);
+    expect(v.launchSpeed).toBe(0);
+  });
+
+  // Review Focus #1: the press on the very frame the fighter lands.
+  it("techs on a press made on the frame of landing itself", () => {
+    const dry = until(flying(0, 6, 0, -2), () => 0);
+    const k = landing(dry);
+
+    const frames = until(flying(0, 6, 0, -2), (i) => (i === k ? Btn.Shield : 0));
+    expect(frames[k].state.fighters[1].action).toBe("tech");
+  });
+
+  it("misses the tech when the press was 12 frames early, and lies down", () => {
+    const dry = until(flying(0, 20, 0, -0.6), () => 0);
+    const k = landing(dry);
+    const frames = until(flying(0, 20, 0, -0.6), (i) => (i === k - TECH_WINDOW ? Btn.Shield : 0));
+    expect(frames[k].state.fighters[1].action).toBe("downed");
+  });
+
+  it("misses the tech when a press 30 frames early locked the second one out", () => {
+    const dry = until(flying(0, 45, 0, -0.6), () => 0, 60);
+    const k = landing(dry);
+    expect(k).toBeGreaterThan(30);
+    const frames = until(flying(0, 45, 0, -0.6), (i) => (i === k - 30 || i === k - 2 ? Btn.Shield : 0), 60);
+    expect(frames[k].state.fighters[1].action).toBe("downed");
+  });
+
+  it("rolls when the stick is held as it techs", () => {
+    const frames = until(flying(0, 6, 0, -2), (i) => (i === 0 ? Btn.Shield | Btn.Right : Btn.Right));
+    const k = landing(frames);
+    expect(frames[k].state.fighters[1].action).toBe("techRoll");
+    expect(frames[k + 3].state.fighters[1].x).toBeGreaterThan(frames[k].state.fighters[1].x);
+  });
+
+  it("is intangible from the first frame of the tech", () => {
+    const frames = until(flying(0, 6, 0, -2), (i) => (i === 0 ? Btn.Shield : 0));
+    const k = landing(frames);
+    expect(frames[k + 1].state.fighters[1].intangible).toBeGreaterThan(0);
+  });
+
+  // rubendal SSBU-Calculator `js/knockback.js`: the floor is techable at a launch
+  // of 3 or less; a tumbling fighter bounces off at 0.8 or more. SmashWiki
+  // "Knockback": a bounce costs 5% in Ultimate; SmashWiki "Hitstun": hitstun
+  // after a bounce is 0.8× (the Smash 4 value Ultimate keeps).
+  it("bounces off the floor when too fast to tech, keeping 0.95 of the launch and 0.8 of the hitstun", () => {
+    const frames = until(flying(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0));
+    const k = frames.findIndex((f) => f.state.fighters[1].vy > 0);
+    const before = frames[k - 1].state.fighters[1];
+    const v = frames[k].state.fighters[1];
+    expect(v.action).toBe("tumble");
+    expect(v.grounded).toBe(false);
+    expect(v.hitstun).toBe(Math.floor(((before.hitstun - 1) * 4) / 5));
+    expect(v.launchSpeed).toBeLessThan(before.launchSpeed);
+  });
+
+  it("lies down after a slow tumbling landing with no tech", () => {
+    const frames = until(flying(0, 2, 0, -0.5), () => 0);
+    expect(frames[landing(frames)].state.fighters[1].action).toBe("downed");
+  });
+
+  // The stage's side is a wall: a hard platform 60 units deep.
+  it("techs off a wall at up to 6, and bounces off it otherwise", () => {
+    const tech = until(flying(92, -20, -4, 0), (i) => (i === 0 ? Btn.Shield : 0));
+    expect(tech[landing(tech)].state.fighters[1].action).toBe("techWall");
+    const bounce = until(flying(92, -20, -4, 0), () => 0);
+    const k = bounce.findIndex((f) => f.state.fighters[1].vx > 0);
+    expect(k).toBeGreaterThan(0);
+    expect(bounce[k].state.fighters[1].action).toBe("tumble");
+  });
+
+  // rubendal `js/knockback.js`: techable at a launch speed of 3 or less on the
+  // floor and 6 or less on a wall or ceiling. The launch decays 0.051 before it
+  // meets the surface, so each case starts 0.051 faster.
+  it.each([
+    [3, "tech"],
+    [3.1, "tumble"],
+  ])("techs the floor at a launch of %f, or not", (speed, action) => {
+    const frames = until(flying(0, 1, 0, -(speed + 0.051)), (i) => (i === 0 ? Btn.Shield : 0), 3);
+    expect(frames[0].state.fighters[1].action).toBe(action);
+  });
+
+  it.each([
+    [6, "techWall"],
+    [6.1, "tumble"],
+  ])("techs a wall at a launch of %f, or not", (speed, action) => {
+    const frames = until(flying(85, -20, -(speed + 0.051), 0), (i) => (i === 0 ? Btn.Shield : 0), 3);
+    expect(frames[0].state.fighters[1].action).toBe(action);
+    if (action === "tumble") expect(frames[0].state.fighters[1].vx).toBeGreaterThan(0);
+  });
+
+  // A tumbling body that meets the floor while its launch still points up a
+  // little (gravity carried it down) bounces *up* and leaves the floor — it may
+  // skip again later, but never bounces back into the floor frame after frame.
+  it("bounces up off the floor even when its launch still pointed upward", () => {
+    const s = flying(0, 1, 2, 0.3);
+    s.fighters[1].kinetic.gravityY = -fx(1.5);
+    s.fighters[1].vy = fx(0.3) - fx(1.5);
+    const frames = until(s, () => 0, 12);
+    const bounced = frames
+      .map((f, i) => (i > 0 && f.state.fighters[1].hitstun < frames[i - 1].state.fighters[1].hitstun - 1 ? i : -1))
+      .filter((i) => i >= 0);
+    expect(bounced.length).toBeGreaterThan(0);
+    for (const i of bounced) {
+      expect(frames[i].state.fighters[1].kinetic.damageY).toBeGreaterThan(0);
+      expect(frames[i + 1].state.fighters[1].y).toBeGreaterThan(0);
+      expect(bounced).not.toContain(i + 1);
+    }
+  });
+
+  // SmashWiki "Tech" (Ultimate): "the shield button can be held for much longer
+  // than the 11 frame window and a tech can still be performed on the ground."
+  it("techs the ground with a shield held long past the window", () => {
+    const dry = until(flying(0, 20, 0, -0.6), () => 0);
+    const k = landing(dry);
+    expect(k).toBeGreaterThan(TECH_WINDOW + 5);
+    const frames = until(flying(0, 20, 0, -0.6), () => Btn.Shield);
+    expect(frames[k].state.fighters[1].action).toBe("tech");
+  });
+
+  // …and the held shield is not a press: it does not spend the air dodge through
+  // hitstun cancel on the way down (Task 7), so the landing is still a tech.
+  it("holds shield through the hitstun-cancel window without air dodging, then techs", () => {
+    let s = flying(0, 30, 0, -0.6);
+    s.fighters[1].actionFrame = 38;
+    let prev: readonly InputFrame[] = [0, Btn.Shield];
+    const actions: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      s = step(s, [0, Btn.Shield], { prevInputs: prev, ctx: ctxFor() }).state;
+      prev = [0, Btn.Shield];
+      actions.push(s.fighters[1].action);
+      if (s.fighters[1].action !== "tumble") break;
+    }
+    expect(actions).not.toContain("airDodge");
+    expect(actions.at(-1)).toBe("tech");
+  });
+
+  // SmashWiki "Tech" (Ultimate): "Teching while reeling works on the ground once
+  // more." Reeling is a kind of tumble; the replica's `tumble` covers it.
+  it("techs a reeling landing (a tumble at 100% or more, along a low angle)", () => {
+    const s = flying(0, 3, 1.5, -1.5);
+    s.fighters[1].damage = fx(120);
+    const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0));
+    expect(frames[landing(frames)].state.fighters[1].action).toBe("tech");
+  });
+
+  it("techs off the stage's underside", () => {
+    const frames = until(flying(0, -78, 0, 4), (i) => (i === 0 ? Btn.Shield : 0));
+    expect(frames[landing(frames)].state.fighters[1].action).toBe("techCeiling");
+  });
+
+  /* -- the seam: what `resolveCollision` reports, and what a bounce is not -- */
+
+  // Plan 2's ECB rules: a body inside the wall is pushed clear, but only motion
+  // *into* the wall is stopped. Only a wall that stopped something is a wall to
+  // tech or bounce off; a launch sliding along its face is not.
+  it("reports the wall that stopped the fighter, and no wall when it only pushed it clear", () => {
+    const into = standing();
+    Object.assign(into.fighters[1], { x: fx(83.5), y: fx(-20), grounded: false, platform: -1 });
+    into.fighters[1].kinetic.damageX = -fx(2);
+    into.fighters[1].vx = -fx(2);
+    const hit = resolveCollision(into.fighters[1], fx(86.5), fx(-20), STAGE, ATTRS, 1);
+    expect([hit.wall, hit.ceiling, hit.landed]).toEqual([-1, false, false]);
+
+    const along = standing();
+    Object.assign(along.fighters[1], { x: fx(83), y: fx(-20), grounded: false, platform: -1 });
+    along.fighters[1].kinetic.damageY = fx(2);
+    along.fighters[1].vy = fx(2);
+    const slid = resolveCollision(along.fighters[1], fx(83), fx(-22), STAGE, ATTRS, 1);
+    expect([slid.blocked, slid.wall, slid.ceiling]).toEqual([true, 0, false]);
+    expect(along.fighters[1].x).toBe(fx(84));
+  });
+
+  it("does not bounce a tumbling fighter that slides up the wall without moving into it", () => {
+    // Inside the wall's reach and rising fast: pushed out, never stopped.
+    const frames = until(flying(83.5, -30, 0, 3), () => 0, 2);
+    const v = frames[0].state.fighters[1];
+    expect(v.hitstun).toBe(59);
+    expect(v.kinetic.damageX).toBe(0);
+  });
+
+  // SmashWiki "Double jump" (https://www.ssbwiki.com/Double_jump): double jumps
+  // come back on landing and are "not given back ... upon being put into
+  // hitstun". A bounce off the floor is not a landing; a tech is.
+  it("keeps the jumps spent through a bounce, and spends the ground jump of a fighter that had not", () => {
+    for (const [used, want] of [
+      [2, 2],
+      [0, 1],
+    ] as const) {
+      const s = flying(0, 6, 0, -3.5);
+      s.fighters[1].jumpsUsed = used;
+      const frames = until(s, () => 0);
+      const k = frames.findIndex((f) => f.state.fighters[1].vy > 0);
+      expect(frames[k].state.fighters[1].jumpsUsed, `jumpsUsed ${used}`).toBe(want);
+    }
+  });
+
+  it("gives the jumps back on a floor tech, which is a landing", () => {
+    const s = flying(0, 6, 0, -2);
+    s.fighters[1].jumpsUsed = 2;
+    const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0));
+    expect(frames[landing(frames)].state.fighters[1].jumpsUsed).toBe(0);
   });
 });

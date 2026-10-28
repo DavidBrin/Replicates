@@ -183,6 +183,15 @@ export interface CollisionOutcome {
   leftGround: boolean;
   /** A wall or a ceiling pushed the fighter clear (and stopped it, if it was moving into it). */
   blocked: boolean;
+  /**
+   * A wall stopped the fighter's motion into it, and which way from the
+   * fighter: 1 to its right, −1 to its left, 0 none (Plan 3, Task 12: a
+   * tumbling fighter techs or bounces off it). A body pushed clear while
+   * moving along or away from the wall was not stopped by it, so it is 0.
+   */
+  wall: number;
+  /** A hard platform's underside stopped the fighter rising into it. */
+  ceiling: boolean;
 }
 
 export interface CollisionOptions {
@@ -214,7 +223,7 @@ export function resolveCollision(
   frame: number,
   opts: CollisionOptions = {},
 ): CollisionOutcome {
-  const out: CollisionOutcome = { landed: false, leftGround: false, blocked: false };
+  const out: CollisionOutcome = { landed: false, leftGround: false, blocked: false, wall: 0, ceiling: false };
   const ecb = ecbOf(f, attrs);
 
   // Already standing on something: the only question is whether it is still there.
@@ -276,8 +285,12 @@ export function resolveCollision(
       const fromLeft = prevX <= cx;
       f.x = fromLeft ? cx - body : cx + body;
       // The push puts the body back outside; only motion *into* the wall is
-      // stopped. A fighter launched out from the lip keeps its knockback.
-      if (fromLeft ? f.vx > 0 : f.vx < 0) kineticSetX(f, 0);
+      // stopped. A fighter launched out from the lip keeps its knockback, and
+      // the wall is only reported (`wall`) when it actually stopped something.
+      if (fromLeft ? f.vx > 0 : f.vx < 0) {
+        kineticSetX(f, 0);
+        out.wall = fromLeft ? 1 : -1;
+      }
       out.blocked = true;
     }
     // Ceiling: the ECB's top rising into the underside of a solid body.
@@ -285,6 +298,7 @@ export function resolveCollision(
       f.y = bottom - ecb.top;
       kineticSetY(f, 0);
       out.blocked = true;
+      out.ceiling = true;
     }
   }
 

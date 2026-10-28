@@ -33,6 +33,10 @@ export interface CombatState {
   comboHits: number;
   /** The freeze now running is from a hit that grants automatic SDI when it ends (Task 11). */
   asdi: boolean;
+  /** Frames left of an open tech window: 11 from a shield press (Task 12). */
+  techWindow: number;
+  /** Frames before another shield press can open a tech window: 40 from the last (Task 12). */
+  techLockout: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -43,6 +47,8 @@ export function emptyCombat(): CombatState {
     mash: 0,
     comboHits: 0,
     asdi: false,
+    techWindow: 0,
+    techLockout: 0,
   };
 }
 
@@ -54,5 +60,7 @@ export function cloneCombat(c: CombatState): CombatState {
     mash: c.mash,
     comboHits: c.comboHits,
     asdi: c.asdi,
+    techWindow: c.techWindow,
+    techLockout: c.techLockout,
   };
 }

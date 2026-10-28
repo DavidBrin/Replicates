@@ -125,6 +125,11 @@ export type ActionState =
   | "thrown"
   | "downed"
   | "getUp"
+  // teching (Plan 3)
+  | "tech"
+  | "techRoll"
+  | "techWall"
+  | "techCeiling"
   // ledge
   | "ledgeHang"
   | "ledgeGetUp"

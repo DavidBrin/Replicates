@@ -115,6 +115,7 @@ import {
   kineticSetX,
 } from "./kinetic";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
+import { launchBefore, techOrBounce, updateTechInput } from "./tech";
 import { cloneCombat, emptyCombat } from "./combat";
 import {
   attackerShieldPushback,
@@ -538,6 +539,11 @@ export function step(
     const f = s.fighters[i];
     const intent = intents[i];
 
+    // Tech input counts on every frame, frozen or not, before anything else in
+    // this phase, so phase 5's collision sees a press made on the frame of
+    // landing itself (Plan 3, Task 12).
+    updateTechInput(f, intent);
+
     // Before the hitlag branch on purpose: these count down through a freeze,
     // so a fighter hit off a ledge serves its lockout during the hitlag too.
     if (f.intangible > 0) f.intangible -= 1;
@@ -602,6 +608,7 @@ export function step(
     if (frozen[i] || f.action === "dead" || f.action === "respawnPlatform") continue;
     if (f.ledge !== null) continue; // hanging: the ledge holds you, not the floor
 
+    const before = launchBefore(f);
     const outcome = resolveCollision(
       f,
       preIntegrate[i].x,
@@ -610,9 +617,14 @@ export function step(
       defs[i].attributes,
       s.frame,
     );
+    // A tumbling body that meets a surface techs or bounces (Plan 3, Task 12);
+    // otherwise a landing is a landing — a missed tech lies down in `onLanded`.
+    const surface = outcome.landed ? "floor" : outcome.ceiling ? "ceiling" : outcome.wall !== 0 ? "wall" : null;
+    const reaction = surface === null ? null : techOrBounce(f, surface, before, intents[i], outcome.wall);
     if (outcome.landed) {
-      onLanded(f, stateCtx(i));
-      events.lands.push({ port: f.port, x: f.x, y: f.y });
+      if (reaction === null) onLanded(f, stateCtx(i));
+      // A bounce leaves the floor again at once: it touched down, but did not land.
+      if (reaction !== "bounce") events.lands.push({ port: f.port, x: f.x, y: f.y });
     } else if (outcome.leftGround) {
       onLeftGround(f);
     }
