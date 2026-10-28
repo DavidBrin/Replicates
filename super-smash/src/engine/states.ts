@@ -56,6 +56,7 @@ import {
   kineticClear,
   kineticEndMotion,
   kineticExec,
+  jumpLaunchSpeed,
   kineticJump,
   kineticMotion,
   kineticReel,
@@ -482,10 +483,11 @@ export function presses(f: FighterState, intent: Intent, frame: number): Presses
 }
 
 export function airJump(f: FighterState, ctx: StateContext): boolean {
-  const a = ctx.def.attributes;
-  if (f.jumpsUsed >= a.jumps) return false;
+  const p = fighterParams(ctx.def);
+  if (f.jumpsUsed >= p.jump_count_max) return false;
   f.jumpsUsed += 1;
-  kineticJump(f, a.airJumpVelocity);
+  // Every midair jump rises the first midair jump's height (Task 20 indexes Kirby's list).
+  kineticJump(f, jumpLaunchSpeed(p.air_accel_y, (p.jump_aerial_y_list ?? [p.jump_aerial_y])[0]));
   f.fastFalling = false;
   // An air jump is a full jump at full height: whatever the hop that got the
   // fighter here was, the short-hop penalty ends with it.

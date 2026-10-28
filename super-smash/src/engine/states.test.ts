@@ -31,7 +31,8 @@ import {
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
-import { emptyKinetic } from "./kinetic";
+import { emptyKinetic, jumpLaunchSpeed } from "./kinetic";
+import { paramsFromAttributes } from "./params";
 import "./status";
 import { Btn } from "./types";
 import type {
@@ -124,6 +125,8 @@ const DEF: FighterDef = {
   },
   blurb: "test",
 };
+
+const PARAMS = paramsFromAttributes(ATTRS, DEF);
 
 const STAGE: StageDef = {
   id: "test",
@@ -464,8 +467,8 @@ describe("jumps", () => {
     tick(f, 0, 0);
     tick(f, 0, 0);
     expect(f.action).toBe("jump");
-    // Gravity has already been applied once, so compare against the initial value.
-    expect(f.vy).toBe(ATTRS.shortHopVelocity - ATTRS.gravity);
+    // The launch is the published-height formula's, and its first airborne frame has gravity.
+    expect(f.vy).toBe(jumpLaunchSpeed(PARAMS.air_accel_y, PARAMS.mini_jump_y) - PARAMS.air_accel_y);
     // ...and the hop is marked, because its aerials deal 0.85×.
     expect(f.shortHop).toBe(true);
   });
@@ -473,7 +476,8 @@ describe("jumps", () => {
   it("full hops when the button is still held", () => {
     const f = fighter();
     hold(f, Btn.Jump, JUMP_SQUAT_FRAMES + 1);
-    expect(f.vy).toBe(ATTRS.fullHopVelocity - ATTRS.gravity);
+    // The fixture has no published initial height, so its full hop launches at once.
+    expect(f.vy).toBe(jumpLaunchSpeed(PARAMS.air_accel_y, PARAMS.jump_y) - PARAMS.air_accel_y);
     expect(f.shortHop).toBe(false);
   });
 
@@ -500,7 +504,7 @@ describe("jumps", () => {
     // jumpsquat is Ultimate's short-hop aerial macro, and it is what the 0.85×
     // damage penalty is the price of.
     expect(f.shortHop).toBe(true);
-    expect(f.vy).toBe(ATTRS.shortHopVelocity - ATTRS.gravity);
+    expect(f.vy).toBe(jumpLaunchSpeed(PARAMS.air_accel_y, PARAMS.mini_jump_y) - PARAMS.air_accel_y);
     tick(f, Btn.Jump, Btn.Jump);
     expect(f.action).toBe("attack");
     expect(f.move).toBe("nair");

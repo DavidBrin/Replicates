@@ -21,7 +21,7 @@
  */
 
 import { LAUNCH_SPEED_DECAY } from "./constants";
-import { abs, approach } from "./fixed";
+import { abs, approach, mul, sqrt } from "./fixed";
 import type { FighterParams } from "./params";
 import type { ActionState, FighterState } from "./types";
 
@@ -161,6 +161,9 @@ export function kineticSetY(f: FighterState, vy: number): void {
   const k = f.kinetic;
   k.gravityY = vy;
   k.motionY = 0;
+  // An outright vertical speed ends a full hop's initial rise: a jump, an air
+  // dodge's stillness, a grab, a landing or a ledge jump all replace it.
+  k.jumpInitial = 0;
   if (k.damageY !== 0) {
     k.damageY = 0;
     f.launchSpeed = abs(k.damageX);
@@ -370,7 +373,8 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
       break;
   }
   if (!f.grounded) {
-    if (!input.holdVertical) {
+    const skip = jumpFrame(f, p) || input.holdVertical;
+    if (!skip) {
       k.gravityY = gravityStep(k.gravityY, p.air_accel_y, f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
     }
   } else {
@@ -463,4 +467,69 @@ export function kineticEndMotion(f: FighterState): void {
   k.motionX = 0;
   k.motionY = 0;
   kineticSum(f);
+}
+
+/* ------------------------------------------------------------------- jumps -- */
+
+/**
+ * SmashWiki "Jump" (https://www.ssbwiki.com/Jump): "In Smash 4 and Ultimate,
+ * the game encodes jump height, and works backwards using gravity to figure out
+ * the correct force to use." The page's source gives the force as
+ * `f = sqrt(2g*h) + g/2` (and `sqrt(2g*(h-i)) + g/2` for a full hop after its
+ * initial height i).
+ *
+ * That formula reaches h under one integration order: every airborne frame,
+ * the first included, applies gravity and then moves. The peak of a launch v is
+ * then v²/2g − v/2 + g·φ(1−φ)/2 (φ the fractional part of v/g), which for
+ * v = √(2gh) + g/2 is h − g/8 + g·φ(1−φ)/2 — between h − g/8 and h. Skipping
+ * gravity on the first frame instead would overshoot by about √(2gh), more than
+ * two units for every fighter here. So this engine applies gravity on every
+ * airborne frame, a jump's first one included (DECISIONS D55 records the
+ * SmashWiki sentence that says otherwise).
+ */
+export function jumpLaunchSpeed(g: number, h: number): number {
+  if (h <= 0) return 0;
+  return sqrt(2 * mul(g, h)) + (g >> 1);
+}
+
+/**
+ * The full hop's initial rise: `jump_initial_y` over its first 4 airborne
+ * frames (SmashWiki "Jump": "the height that a character will reach in the
+ * first 4 frames of a full hop"). UNVERIFIED: how that height is split across
+ * the 4 frames is not published; this rises it evenly, the remainder on the 4th.
+ */
+export function initialRiseStep(initial: number, frame: number): number {
+  const q = Math.trunc(initial / 4);
+  return frame < 4 ? q : initial - 3 * q;
+}
+
+/**
+ * Leave the ground. A full hop with a published initial height rises
+ * `jump_initial_y` over its first 4 frames and then flies as a jump of the
+ * remaining height; a short hop (and a full hop without an initial height)
+ * launches at once, at `jumpLaunchSpeed`.
+ */
+export function kineticGroundJump(f: FighterState, p: FighterParams, full: boolean): void {
+  if (full && p.jump_initial_y > 0) {
+    kineticJump(f, 0);
+    f.kinetic.jumpInitial = 1;
+    return;
+  }
+  kineticJump(f, jumpLaunchSpeed(p.air_accel_y, full ? p.jump_y : p.mini_jump_y));
+}
+
+/** The vertical half of a jump frame: true while the initial rise replaces gravity. */
+function jumpFrame(f: FighterState, p: FighterParams): boolean {
+  const k = f.kinetic;
+  if (k.jumpInitial >= 1 && k.jumpInitial <= 4) {
+    k.gravityY = initialRiseStep(p.jump_initial_y, k.jumpInitial);
+    k.jumpInitial += 1;
+    return true;
+  }
+  if (k.jumpInitial === 5) {
+    // The rest of the hop launches here, and this frame's gravity applies to it.
+    k.gravityY = jumpLaunchSpeed(p.air_accel_y, p.jump_y - p.jump_initial_y);
+    k.jumpInitial = 0;
+  }
+  return false;
 }
