@@ -46,6 +46,7 @@ import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
 import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
 import type { Transport } from "@/net/transport";
 import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
+import { GAME_SIM_CONTEXT } from "./simContext";
 
 /** 60Hz, expressed once. */
 export const FRAME_MS = 1000 / 60;
@@ -344,7 +345,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       events = result.events;
     } else {
       previous = state;
-      const result = step(state, inputs, { prevInputs });
+      const result = step(state, inputs, { prevInputs, ctx: GAME_SIM_CONTEXT });
       state = result.state;
       events = result.events;
       prevInputs = inputs;

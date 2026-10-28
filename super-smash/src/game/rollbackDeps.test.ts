@@ -1,10 +1,11 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { hashState } from "@/engine/hash";
 import { DEFAULT_SEED, createInitialState, step } from "@/engine/simulate";
 import { Btn, type GameState, type MatchRules } from "@/engine/types";
 import { bootstrapEngine } from "./bootstrap";
 import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
+import { GAME_SIM_CONTEXT } from "./simContext";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 60 * 60 * 7, smashBall: false, oneOnOne: true };
 
@@ -40,5 +41,13 @@ describe("the engine, as the rollback session sees it", () => {
     expect(copy).not.toBe(state);
     expect(copy.fighters).not.toBe(state.fighters);
     expect(ENGINE_ROLLBACK_DEPS.hashState(copy)).toBe(hashState(state));
+  });
+
+  it("steps with the game's SimContext, so a bone bake reaches online play too", () => {
+    const state = landed();
+    const spy = vi.spyOn(GAME_SIM_CONTEXT, "fighter");
+    ENGINE_ROLLBACK_DEPS.step(state, [0, 0], [0, 0]);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
