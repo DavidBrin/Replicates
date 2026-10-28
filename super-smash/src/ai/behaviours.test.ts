@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
+import { emptyCombat } from "@/engine/combat";
 import { emptyKinetic } from "@/engine/kinetic";
 import {
   BEHAVIOURS,
@@ -84,6 +85,7 @@ function fighter(port: number, over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }

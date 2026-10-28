@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { LEDGE_REGRAB_LIMIT, LEDGE_REGRAB_LOCKOUT_FRAMES } from "../constants";
 import { fx } from "../fixed";
+import { emptyCombat } from "../combat";
 import { emptyKinetic } from "../kinetic";
 import { LEDGE_HANG_MIN, advanceFighter, interpretInput, updateInputTracking } from "../states";
 import type { StateContext } from "../states";
@@ -63,6 +64,7 @@ function hanging(over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }

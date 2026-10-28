@@ -26,6 +26,7 @@ import {
   toWorldAngle,
 } from "./knockback";
 import type { MoveSlot } from "./types";
+import * as ref from "../../research/rebuild-2026-10/tools/ssbu_ref.mjs";
 
 /**
  * Mario's up smash, as the research records it: 19.6%, base knockback 32,
@@ -223,25 +224,57 @@ describe("computeStaleness", () => {
     expect(toFloat(s.damage)).toBeCloseTo(1.05, 3);
   });
 
-  it("takes 9% off for the most recent slot and 1% for the oldest", () => {
-    const recent = computeStaleness([slot], slot);
-    expect(toFloat(recent.damage)).toBeCloseTo(0.96, 3);
-
-    const oldest: MoveSlot[] = ["jab1", "jab1", "jab1", "jab1", "jab1", "jab1", "jab1", "jab1", slot];
-    expect(toFloat(computeStaleness(oldest, slot).damage)).toBeCloseTo(1.04, 3);
+  // SmashWiki "Stale-move negation" (https://www.ssbwiki.com/Stale-move_negation),
+  // Ultimate: 0.09, 0.08545, 0.07635, 0.0679, 0.05945, 0.05035, 0.04255, 0.03345,
+  // 0.025 — and the freshness bonus only for a move absent from the queue.
+  it.each([
+    [0, 0.09],
+    [1, 0.08545],
+    [2, 0.07635],
+    [3, 0.0679],
+    [4, 0.05945],
+    [5, 0.05035],
+    [6, 0.04255],
+    [7, 0.03345],
+    [8, 0.025],
+  ])("takes the published %i-th slot reduction off, with no freshness bonus", (i, reduction) => {
+    const queue = new Array<MoveSlot>(9).fill("jab1");
+    queue[i] = slot;
+    expect(toFloat(computeStaleness(queue, slot).damage)).toBeCloseTo(1 - reduction, 3);
   });
 
-  it("bottoms out at 0.6x with the whole queue full of one move", () => {
+  it("bottoms out at 1 − 0.5305 with the whole queue full of one move", () => {
     const queue = new Array<MoveSlot>(9).fill(slot);
-    expect(toFloat(computeStaleness(queue, slot).damage)).toBeCloseTo(0.6, 3);
+    expect(toFloat(computeStaleness(queue, slot).damage)).toBeCloseTo(0.4695, 3);
+  });
+
+  it("counts a slot that hit a shield at 0.85 of its reduction", () => {
+    const queue: MoveSlot[] = [slot];
+    expect(toFloat(computeStaleness(queue, slot, [true]).damage)).toBeCloseTo(1 - 0.09 * 0.85, 3);
+    expect(toFloat(computeStaleness(queue, slot, [false]).damage)).toBeCloseTo(0.91, 3);
+  });
+
+  it("matches the reference port for any queue and shield pattern", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(fc.boolean(), fc.boolean()), { maxLength: 9 }),
+        (entries) => {
+          const queue = entries.map(([mine]) => (mine ? slot : "jab1") as MoveSlot);
+          const shields = entries.map(([, onShield]) => onShield);
+          const ours = toFloat(computeStaleness(queue, slot, shields).damage);
+          const theirs = ref.staleMult(entries.map(([mine]) => mine), shields);
+          expect(Math.abs(ours - theirs)).toBeLessThan(2 / ONE);
+        },
+      ),
+      { numRuns: 500 },
+    );
   });
 
   it("damps the knockback effect to 0.3 of the damage effect", () => {
     const queue = new Array<MoveSlot>(9).fill(slot);
     const s = computeStaleness(queue, slot);
-    // Damage falls 40%; knockback should fall only 12%.
-    expect(toFloat(s.damage)).toBeCloseTo(0.6, 3);
-    expect(toFloat(s.knockback)).toBeCloseTo(0.88, 2);
+    // Damage falls 53.05%; the knockback formula's d falls only 0.3 of that.
+    expect(toFloat(s.knockback)).toBeCloseTo(1 - 0.5305 * 0.3, 3);
   });
 
   it("ignores anything past the ninth slot", () => {

@@ -31,6 +31,7 @@ import {
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
+import { emptyCombat } from "./combat";
 import { emptyKinetic, jumpLaunchSpeed } from "./kinetic";
 import { paramsFromAttributes } from "./params";
 import "./status";
@@ -187,6 +188,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }

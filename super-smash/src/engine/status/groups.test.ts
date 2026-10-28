@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { RESPAWN_INVINCIBILITY_MAX } from "../constants";
 import { fx } from "../fixed";
+import { emptyCombat } from "../combat";
 import { emptyKinetic } from "../kinetic";
 import type { KineticType } from "../kinetic";
 import { DEAD_FRAMES, advanceFighter } from "../states";
@@ -56,6 +57,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }

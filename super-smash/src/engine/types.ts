@@ -8,6 +8,7 @@
  */
 
 import type { AcmdScript } from "./acmd/types";
+import type { CombatState } from "./combat";
 import type { KineticState } from "./kinetic";
 import type { FighterParams } from "./params";
 
@@ -557,6 +558,8 @@ export interface FighterState {
    * kept for readers that only want a velocity.
    */
   kinetic: KineticState;
+  /** Plan 3's combat bookkeeping (see `combat.ts`): stale shield marks and more. */
+  combat: CombatState;
 }
 
 export type BufferedAction =

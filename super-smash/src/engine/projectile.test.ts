@@ -16,6 +16,7 @@ import {
   projectilesDueOnFrame,
   spawnProjectile,
 } from "./projectile";
+import { emptyCombat } from "./combat";
 import { emptyKinetic } from "./kinetic";
 import { Btn } from "./types";
 import type {
@@ -252,6 +253,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }

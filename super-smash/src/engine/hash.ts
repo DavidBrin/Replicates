@@ -23,6 +23,7 @@
  * state that collides with yours.
  */
 
+import type { CombatState } from "./combat";
 import type { KineticState } from "./kinetic";
 import type {
   GameState,
@@ -156,7 +157,15 @@ export function mixFighter(h: number, f: FighterState): number {
     x = mixString(x, f.bufferedAction.kind);
     x = mixInt(x, f.bufferedAction.frame);
   }
-  return mixKinetic(x, f.kinetic);
+  x = mixKinetic(x, f.kinetic);
+  return mixCombat(x, f.combat);
+}
+
+/** Plan 3's combat bookkeeping, in declaration order. */
+export function mixCombat(h: number, c: CombatState): number {
+  let x = mixInt(h, c.staleShield.length);
+  for (const onShield of c.staleShield) x = mixBool(x, onShield);
+  return x;
 }
 
 /** The KineticModule energies, in declaration order. */

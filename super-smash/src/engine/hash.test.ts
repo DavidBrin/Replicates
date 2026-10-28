@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
 import { fx } from "./fixed";
+import { emptyCombat } from "./combat";
 import { emptyKinetic } from "./kinetic";
 import { hashState, mixBool, mixInt, mixString } from "./hash";
 import type { FighterState, GameState, ProjectileState } from "./types";
@@ -52,6 +53,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }
@@ -207,6 +209,7 @@ describe("hashState", () => {
       ["fighter.kinetic.damageY", (s) => (s.fighters[0].kinetic.damageY += 1)],
       ["fighter.kinetic.fallFrames", (s) => (s.fighters[0].kinetic.fallFrames += 1)],
       ["fighter.kinetic.jumpInitial", (s) => (s.fighters[0].kinetic.jumpInitial += 1)],
+      ["fighter.combat.staleShield", (s) => s.fighters[0].combat.staleShield.push(true)],
       ["projectiles", (s) => s.projectiles.push(projectile())],
     ];
     for (const [name, mutate] of mutations) {
@@ -235,7 +238,7 @@ describe("hashState", () => {
       bufferedAction: { kind: "jump", frame: 3 },
     };
     /** Arrays `mixFighter` hashes element by element, each with an explicit case in the list above. */
-    const HANDLED_ARRAYS = new Set(["staleQueue", "hitThisMove"]);
+    const HANDLED_ARRAYS = new Set(["staleQueue", "hitThisMove", "combat.staleShield"]);
     const leaves: string[][] = [];
     const walk = (v: unknown, path: string[]): void => {
       if (v === null) throw new Error(`fighter.${path.join(".")} is null: give it a value in FULL`);

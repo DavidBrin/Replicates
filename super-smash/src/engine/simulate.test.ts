@@ -270,6 +270,7 @@ describe("cloneState", () => {
       f.ledge = { platform: 0, side: 1 };
       f.bufferedAction = { kind: "jump", frame: 3 };
       f.staleQueue = ["jab1", "fair"];
+      f.combat.staleShield = [true, false];
       f.hitThisMove = [1, 2];
     }
     s.projectiles = [

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fx } from "../fixed";
+import { emptyCombat } from "../combat";
 import { emptyKinetic } from "../kinetic";
 import { advanceFighter, applyMovement } from "../states";
 import type { Intent, StateContext } from "../states";
@@ -60,6 +61,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     lastDirPressed: 0,
     bufferedAction: null,
     kinetic: emptyKinetic(),
+    combat: emptyCombat(),
     ...over,
   };
 }

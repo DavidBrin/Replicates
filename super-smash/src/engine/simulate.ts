@@ -31,6 +31,7 @@ import {
   SMASH_BALL_DECAY_INTERVAL,
   SMASH_BALL_HEALTH,
   SMASH_BALL_SPAWN_INTERVAL,
+  STALE_QUEUE_LENGTH,
   TUMBLE_HITSTUN,
 } from "./constants";
 import {
@@ -103,6 +104,7 @@ import {
   kineticSetX,
 } from "./kinetic";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
+import { cloneCombat, emptyCombat } from "./combat";
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
 import "./status";
@@ -245,6 +247,7 @@ export function cloneState(state: GameState): GameState {
           ? null
           : ({ kind: f.bufferedAction.kind, frame: f.bufferedAction.frame } as FighterState["bufferedAction"]),
       kinetic: cloneKinetic(f.kinetic),
+      combat: cloneCombat(f.combat),
     };
   }
   const projectiles: ProjectileState[] = new Array(state.projectiles.length);
@@ -352,6 +355,7 @@ export function createInitialState(
       lastDirPressed: 0,
       bufferedAction: null,
       kinetic: emptyKinetic(),
+      combat: emptyCombat(),
     };
   });
 
@@ -666,6 +670,7 @@ export function step(
     releaseGrab(f, s.fighters);
     f.shieldHealth = SHIELD_MAX_HEALTH;
     f.staleQueue.length = 0;
+    f.combat.staleShield.length = 0;
     clearHitRecord(f);
     startAction(f, "dead");
     s.freezeFrames = KO_FREEZE_FRAMES;
@@ -984,7 +989,9 @@ function isCrouching(f: FighterState): boolean {
 
 function effectiveDamage(s: GameState, attacker: FighterState, c: Candidate): number {
   const staleness =
-    c.slot === null ? ONE : computeStaleness(attacker.staleQueue, c.slot).damage;
+    c.slot === null
+      ? ONE
+      : computeStaleness(attacker.staleQueue, c.slot, attacker.combat.staleShield).damage;
   const shortHopped = c.slot !== null && isAerialSlot(c.slot) && attacker.shortHop;
   const charged = mul(c.hitbox.damage, c.chargeScale);
   const base = shortHopped ? mul(charged, SHORT_HOP_DAMAGE) : charged;
@@ -1129,7 +1136,9 @@ function applyHit(
   // it still applies: its charge was baked in at launch, and it does not stale —
   // the staleness queue is keyed by move slot and an arrow has left its move.
   const staleness =
-    c.slot === null ? { damage: ONE, knockback: ONE } : computeStaleness(attacker.staleQueue, c.slot);
+    c.slot === null
+      ? { damage: ONE, knockback: ONE }
+      : computeStaleness(attacker.staleQueue, c.slot, attacker.combat.staleShield);
   // An aerial thrown out of a short hop deals 0.85×, and the reduction is
   // applied to the damage *before* knockback is computed rather than to the
   // knockback afterwards — the formula takes damage as an input twice over (the
@@ -1147,14 +1156,21 @@ function applyHit(
     kbDamage = mul(kbDamage, ONE_ON_ONE_MULTIPLIER);
   }
 
-  // A move joins the staleness queue once per swing, on its first connection.
+  // A move joins the staleness queue once per swing, on its first connection —
+  // a shield hit included, marked so it stales at 0.85 (SmashWiki "Stale-move
+  // negation": hitting a shield enters the queue in Ultimate, perfect shield too).
+  const onShield = shieldCovers(victim, c.x);
   if (c.slot !== null && attacker.hitThisMove.length === 1) {
     attacker.staleQueue.unshift(c.slot);
-    if (attacker.staleQueue.length > 9) attacker.staleQueue.length = 9;
+    attacker.combat.staleShield.unshift(onShield);
+    if (attacker.staleQueue.length > STALE_QUEUE_LENGTH) attacker.staleQueue.length = STALE_QUEUE_LENGTH;
+    if (attacker.combat.staleShield.length > STALE_QUEUE_LENGTH) {
+      attacker.combat.staleShield.length = STALE_QUEUE_LENGTH;
+    }
   }
 
   /* ---- the shield path ---- */
-  if (shieldCovers(victim, c.x)) {
+  if (onShield) {
     if (isParrying(victim)) {
       // Perfect shield: no shield damage, no shieldstun, and the attacker is the
       // one left standing there. This is the whole reward for shielding on

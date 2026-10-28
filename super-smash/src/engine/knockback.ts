@@ -310,30 +310,31 @@ export function computeShieldstun(damage: number, opts: ShieldstunOptions = {}):
 /* ------------------------------------------------------------ staleness -- */
 
 /**
- * How much each of the nine queue slots takes off a repeated move.
+ * How much each of the nine queue slots takes off a repeated move, in units of
+ * 1/100000 so the published values stay exact (Q12 cannot hold 0.08545).
  *
- * Index 0 is the move used most recently, and it costs the most: 9% of the
- * move's damage, tapering to 1% for the one that is about to fall off the end.
- * Spam every slot with the same move and you land 45% below fresh.
+ * SmashWiki "Stale-move negation" (https://www.ssbwiki.com/Stale-move_negation),
+ * Ultimate: 0.09, 0.08545, 0.07635, 0.0679, 0.05945, 0.05035, 0.04255,
+ * 0.03345, 0.025 — 0.5305 in all. Index 0 is the move used most recently.
+ * rubendal SSBU-Calculator `js/formulas.js` (`parameters.staling.factors`) agrees.
  */
-const STALE_SLOT_REDUCTION = [
-  fx(0.09),
-  fx(0.08),
-  fx(0.07),
-  fx(0.06),
-  fx(0.05),
-  fx(0.04),
-  fx(0.03),
-  fx(0.02),
-  fx(0.01),
-] as const;
+export const STALE_SLOT_REDUCTION_1E5 = [9000, 8545, 7635, 6790, 5945, 5035, 4255, 3345, 2500] as const;
+
+/**
+ * A slot whose hit landed on a shield takes off only 0.85 of its reduction
+ * ("including if perfect shielded"). SmashWiki "Stale-move negation"; rubendal
+ * `StaleNegation` (`S[i] * 0.85` for a shield entry).
+ */
+export const STALE_SHIELD_RATIO: Ratio = [17, 20];
 
 /**
  * A move absent from the queue entirely deals 105%, not 100%.
  *
  * The freshness bonus is why mixing up your kill options is worth doing rather
  * than merely not-harmful: rotating moves is a live 1.05× on the one you finally
- * commit to.
+ * commit to. It applies only to a move that is not in the queue at all — a
+ * move in the oldest slot is 0.975×, not 1.025× (rubendal `StaleNegation`:
+ * `if (s == 1) return 1.05`).
  */
 export const STALE_FRESH_BONUS = fx(1.05);
 
@@ -353,15 +354,28 @@ export interface Staleness {
  * percent it always killed at, so a fighter's kill confirm does not evaporate
  * because they used it twice in neutral.
  *
- * `queue[0]` is the most recently landed move.
+ * `queue[0]` is the most recently landed move; `shieldQueue[i]` says whether
+ * that entry's hit landed on a shield (`CombatState.staleShield`).
  */
-export function computeStaleness(queue: readonly MoveSlot[], slot: MoveSlot): Staleness {
+export function computeStaleness(
+  queue: readonly MoveSlot[],
+  slot: MoveSlot,
+  shieldQueue: readonly boolean[] = [],
+): Staleness {
+  // Summed over a common denominator of 100000 × 20, so the 0.85 shield factor
+  // (17/20) and the five-digit table stay exact until one final truncation.
   let reduction = 0;
+  let present = false;
   const n = Math.min(queue.length, STALE_QUEUE_LENGTH);
   for (let i = 0; i < n; i++) {
-    if (queue[i] === slot) reduction += STALE_SLOT_REDUCTION[i];
+    if (queue[i] !== slot) continue;
+    present = true;
+    const [num, den] = shieldQueue[i] === true ? STALE_SHIELD_RATIO : ([1, 1] as const);
+    reduction += (STALE_SLOT_REDUCTION_1E5[i] * num * STALE_SHIELD_RATIO[1]) / den;
   }
-  const damage = STALE_FRESH_BONUS - reduction;
+  const damage = present
+    ? ONE - Math.trunc((reduction * ONE) / (100_000 * STALE_SHIELD_RATIO[1]))
+    : STALE_FRESH_BONUS;
   const knockback = ONE + mulDiv(damage - ONE, STALE_KNOCKBACK_DAMPING, ONE);
   return { damage, knockback };
 }
