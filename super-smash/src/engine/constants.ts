@@ -304,14 +304,21 @@ export const SUDDEN_DEATH_DAMAGE = fx(300);
 export const OFFSCREEN_DAMAGE_PER_SECOND = fx(1);
 export const OFFSCREEN_DAMAGE_CEILING = fx(150);
 
-/** DI can deviate the launch angle by at most this much. */
+/**
+ * DI can deviate the launch angle by at most 0.17 rad (9.74°), and a launch
+ * within 0.17 rad of straight ahead cannot be DI'd. SmashWiki "Directional
+ * influence"; rubendal SSBU-Calculator `parameters.di = 0.17`.
+ */
 export const DI_MAX_DEVIATION = fx(9.74);
+/** Raw stick dead zone and full-throw value for DI/LSI (rubendal `StickSensibility`). */
+export const DI_STICK_DEAD_ZONE = 24;
+export const DI_STICK_FULL = 120;
 /**
  * How much a soft stick (`Btn.Soft`) shortens DI, as a right shift: a quarter.
  *
- * DI scales with the square of the stick's perpendicular component (applyDI),
- * and a soft stick is read as half deflection: 0.5² = 0.25.
- * UNVERIFIED: the half-deflection reading is tuned, not sourced — the bitfield
+ * DI is linear in the stick's perpendicular component (applyDI), so a quarter of
+ * the bend is a stick at a quarter of its throw.
+ * UNVERIFIED: the quarter-throw reading is tuned, not sourced — the bitfield
  * carries one bit of magnitude where the real game reads the analog value.
  */
 export const SOFT_DI_SHIFT = 2;

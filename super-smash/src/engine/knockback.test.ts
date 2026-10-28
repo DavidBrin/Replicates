@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
-import { ONE, fx, toFloat } from "./fixed";
+import { ONE, cosDeg, fx, sinDeg, toFloat } from "./fixed";
 import {
   BALLOON_ANGLE_MAX,
   BALLOON_ANGLE_MIN,
@@ -23,6 +23,7 @@ import {
   knockbackToVelocity,
   normalizeAngle,
   resolveAngle,
+  stickSensibility,
   toWorldAngle,
 } from "./knockback";
 import type { MoveSlot } from "./types";
@@ -296,12 +297,51 @@ describe("applyDI", () => {
   });
 
   it("bends the angle by the full 9.74 degrees at perpendicular", () => {
-    const bent = applyDI(fx(0), 0, 1);
-    expect(toFloat(bent - fx(0))).toBeCloseTo(toFloat(DI_MAX_DEVIATION), 2);
+    const bent = applyDI(fx(90), -1, 0);
+    expect(toFloat(bent - fx(90))).toBeCloseTo(toFloat(DI_MAX_DEVIATION), 2);
   });
 
   it("bends the other way for the opposite perpendicular", () => {
-    expect(applyDI(fx(0), 0, -1)).toBeLessThan(fx(0));
+    expect(applyDI(fx(90), 1, 0)).toBeLessThan(fx(90));
+  });
+
+  // rubendal SSBU-Calculator `DI`: "Cannot DI if launch angle is less than DI
+  // angle change param" — |atan2(ly, lx)| < 0.17 rad, so a launch straight ahead.
+  it("leaves a launch within 0.17 rad of straight ahead alone", () => {
+    expect(applyDI(fx(0), 0, 1)).toBe(fx(0));
+    expect(applyDI(fx(9), 0, -1)).toBe(fx(9));
+    expect(applyDI(fx(352), 0, 1)).toBe(fx(352));
+    // …but not straight behind: atan2 of a backward launch is near ±π.
+    expect(applyDI(fx(180), 0, 1)).not.toBe(fx(180));
+  });
+
+  // SmashWiki "Directional influence" (https://www.ssbwiki.com/Directional_influence):
+  // at most 0.17 rad, less as the stick is tilted less. rubendal `DI`:
+  // `variation = |X·ly − Y·lx| / |L|`, linear — not squared.
+  it("bends a diagonal stick linearly, by the sine of its angle to the launch", () => {
+    const bent = toFloat(applyDI(fx(90), -1, 1) - fx(90));
+    // 45° off the launch: sin 45° = 0.7071 of the full bend (squared would be 0.5).
+    expect(bent).toBeCloseTo(9.74 * 0.7071, 1);
+  });
+
+  it("matches the reference port for every launch angle and digital stick", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 359 }),
+        fc.integer({ min: -1, max: 1 }),
+        fc.integer({ min: -1, max: 1 }),
+        (deg, sx, sy) => {
+          const diag = sx !== 0 && sy !== 0 ? Math.SQRT1_2 : 1;
+          const lx = toFloat(cosDeg(fx(deg)));
+          const ly = toFloat(sinDeg(fx(deg)));
+          const theirs = (ref.di(lx, ly, sx * diag, sy * diag) * 180) / Math.PI;
+          const ours = toFloat(applyDI(fx(deg), sx, sy));
+          const d = ((((ours - theirs) % 360) + 540) % 360) - 180;
+          expect(Math.abs(d)).toBeLessThan(0.02);
+        },
+      ),
+      { numRuns: 2000 },
+    );
   });
 
   it("never deviates more than 9.74 degrees", () => {
@@ -320,6 +360,24 @@ describe("applyDI", () => {
   });
 });
 
+describe("stickSensibility", () => {
+  // rubendal SSBU-Calculator `StickSensibility`: |v| < 24 reads 0, beyond 120
+  // reads full, v/120 between — the 24/120 dead zone DI and LSI read through.
+  it.each([
+    [0, 0],
+    [23, 0],
+    [-23, 0],
+    [24, 0.2],
+    [60, 0.5],
+    [-60, -0.5],
+    [120, 1],
+    [127, 1],
+    [-128, -1],
+  ])("reads raw %i as %f", (raw, expected) => {
+    expect(toFloat(stickSensibility(raw))).toBeCloseTo(expected, 3);
+  });
+});
+
 describe("applyLSI", () => {
   it("scales a horizontal launch up by 1.095 and down by 0.92", () => {
     expect(toFloat(applyLSI(fx(10), 1, fx(0)))).toBeCloseTo(10.95, 1);
@@ -334,6 +392,17 @@ describe("applyLSI", () => {
 
   it("mirrors the dead zone for a straight-down launch", () => {
     expect(applyLSI(fx(10), 1, fx(270))).toBe(fx(10));
+  });
+
+  // SmashWiki "Directional influence": "LSI has no effect if the launch angle is
+  // between 65° and 115°, or between 245° and 295°"; rubendal `LSI` uses strict
+  // inequalities, so 65° and 115° themselves are still influenced.
+  it("still scales a launch at exactly 65 or 115 degrees, as the calculator does", () => {
+    for (const deg of [65, 115, 245, 295]) {
+      for (const sy of [-1, 1]) {
+        expect(toFloat(applyLSI(fx(10), sy, fx(deg)))).toBeCloseTo(10 * ref.lsi(sy, deg), 2);
+      }
+    }
   });
 
   it("does nothing with the stick at neutral", () => {
@@ -467,16 +536,19 @@ describe("truncating between multipliers crosses frame boundaries", () => {
 });
 
 describe("applyDI with a soft stick", () => {
+  // Plan 1 (D54): Btn.Soft quarters the DI. Under the linear rule a quarter of
+  // the bend is a stick at a quarter of its throw (UNVERIFIED, as D54 says).
+  // Straight up, because a launch straight ahead cannot be DI'd at all.
   it("bends a quarter as far as a full perpendicular push", () => {
-    const full = applyDI(fx(0), 0, 1) - fx(0);
-    const soft = applyDI(fx(0), 0, 1, true) - fx(0);
+    const full = applyDI(fx(90), -1, 0) - fx(90);
+    const soft = applyDI(fx(90), -1, 0, true) - fx(90);
     expect(SOFT_DI_SHIFT).toBe(2);
     expect(soft).toBe(full >> SOFT_DI_SHIFT);
     expect(soft).toBeGreaterThan(0);
   });
 
   it("bends the other way just as softly", () => {
-    expect(applyDI(fx(0), 0, -1, true) - fx(0)).toBe(-((applyDI(fx(0), 0, 1) - fx(0)) >> SOFT_DI_SHIFT));
+    expect(applyDI(fx(90), 1, 0, true) - fx(90)).toBe(-((applyDI(fx(90), -1, 0) - fx(90)) >> SOFT_DI_SHIFT));
   });
 
   it("does nothing at neutral", () => {

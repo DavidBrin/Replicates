@@ -749,6 +749,8 @@ describe("short-hop aerials", () => {
  */
 function launched(atContact: InputFrame, afterContact: InputFrame) {
   let s = standing();
+  // Heavy enough to tumble: DI and LSI only bend a tumbling launch (Plan 3, Task 4).
+  s.fighters[1].damage = fx(150);
   let prev: readonly InputFrame[] = [0, 0];
   let hitAt = -1;
   let velocityDuringFreeze: number[] = [];

@@ -304,3 +304,52 @@ describe("flat launches (Plan 3, Task 3)", () => {
     expect(grounded.speed).toBe(mul(byRatio(grounded.kb, GROUNDED_ZERO_LAUNCH_RATIO), LAUNCH_SPEED_RATIO));
   });
 });
+
+/* ------------------------------------------------------ Task 4: DI -- */
+
+describe("DI needs a tumbling launch (Plan 3, Task 4)", () => {
+  /** Fighter 1's launch velocity after fighter 0's jab, holding `held` once it is frozen in hitlag. */
+  function launchAfter(percent: number, held: InputFrame): { vx: number; vy: number } {
+    let s = standing();
+    s.fighters[1].damage = fx(percent);
+    let prev: readonly InputFrame[] = [0, 0];
+    for (let i = 0; i < 30; i++) {
+      const now = [i === 0 ? Btn.Attack : 0, s.fighters[1].hitlag > 0 ? held : 0];
+      s = step(s, now, { prevInputs: prev, ctx: ctxFor() }).state;
+      prev = now;
+      if (s.fighters[1].launchSpeed > 0) break;
+    }
+    return { vx: s.fighters[1].kinetic.damageX, vy: s.fighters[1].kinetic.damageY };
+  }
+
+  // rubendal SSBU-Calculator `js/knockback.js`: `di_able = tumble && |angle| ≥ 0.17`.
+  it("ignores the stick on a hit too weak to tumble", () => {
+    expect(launchAfter(0, Btn.Down)).toEqual(launchAfter(0, 0));
+  });
+
+  it("bends a tumbling launch", () => {
+    const none = launchAfter(150, 0);
+    const bent = launchAfter(150, Btn.Down);
+    expect(bent.vy).toBeLessThan(none.vy);
+  });
+  // LSI is computed inside `di_able` too: a tumbling launch straight ahead keeps its speed.
+  it("does not scale a tumbling launch straight ahead with LSI", () => {
+    const flat: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: fx(100), setKnockback: true })] }) },
+    };
+    const speedHolding = (held: InputFrame): number => {
+      let s = standing(ctxFor(flat));
+      Object.assign(s.fighters[1], { grounded: false, platform: -1, y: fx(1), action: "fall" });
+      let prev: readonly InputFrame[] = [0, 0];
+      for (let i = 0; i < 30; i++) {
+        const now = [i === 0 ? Btn.Attack : 0, s.fighters[1].hitlag > 0 ? held : 0];
+        s = step(s, now, { prevInputs: prev, ctx: ctxFor(flat) }).state;
+        prev = now;
+        if (s.fighters[1].launchSpeed > 0) break;
+      }
+      return s.fighters[1].launchSpeed;
+    };
+    expect(speedHolding(Btn.Up)).toBe(speedHolding(0));
+  });
+});

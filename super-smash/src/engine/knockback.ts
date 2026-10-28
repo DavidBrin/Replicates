@@ -50,6 +50,8 @@ import {
   STALE_QUEUE_LENGTH,
   STALE_KNOCKBACK_DAMPING,
   DI_MAX_DEVIATION,
+  DI_STICK_DEAD_ZONE,
+  DI_STICK_FULL,
   SOFT_DI_SHIFT,
   LSI_UP,
   LSI_DOWN,
@@ -398,13 +400,45 @@ function unitStick(sx: number, sy: number): { x: number; y: number } {
 }
 
 /**
- * Directional Influence: bend the launch angle by up to 9.74° toward perpendicular.
+ * A raw stick axis (−128…127) as the game reads it for DI and LSI: nothing
+ * inside ±24, full from ±120, linear between. rubendal SSBU-Calculator
+ * `StickSensibility`. The keyboard and Plan 1's gamepad bits only ever reach
+ * the engine as full (or `Btn.Soft`) deflection, so `applyDI` never needs it
+ * today; it is here for an analog stick value, should one reach `InputFrame`.
+ */
+export function stickSensibility(raw: number): number {
+  if (raw > -DI_STICK_DEAD_ZONE && raw < DI_STICK_DEAD_ZONE) return 0;
+  if (raw > DI_STICK_FULL) return ONE;
+  if (raw < -DI_STICK_FULL) return -ONE;
+  return Math.trunc((raw * ONE) / DI_STICK_FULL);
+}
+
+/**
+ * Whether a launch's angle admits DI and LSI at all: not within 0.17 rad of
+ * straight ahead, measured on the signed angle (rubendal: "Cannot DI if launch
+ * angle is less than DI angle change param"). Straight *behind* is DI-able.
+ */
+export function launchDiAble(angleFx: number): boolean {
+  const a = normalizeAngle(angleFx);
+  const signed = a > fx(180) ? a - TURN : a;
+  return signed <= -DI_MAX_DEVIATION || signed >= DI_MAX_DEVIATION;
+}
+
+/**
+ * Directional Influence: bend the launch angle by up to 0.17 rad (9.74°).
  *
- * The lever is the component of the stick *perpendicular* to the launch — pushing
- * along the launch direction does nothing at all, pushing square to it does
- * everything — and the game squares that component before scaling, so DI falls
- * off quickly as you drift off perpendicular. This is the single defensive
- * mechanic that decides whether a hit at 120% kills, so it has to be exact.
+ * The lever is the component of the stick *perpendicular* to the launch —
+ * pushing along the launch direction does nothing at all, pushing square to it
+ * does everything — and the bend is **linear** in that component (rubendal
+ * SSBU-Calculator `DI`: `variation = |X·ly − Y·lx| / |L|`; SmashWiki
+ * "Directional influence": a smaller tilt, a weaker deviation). A launch within
+ * 0.17 rad of straight ahead cannot be DI'd at all (rubendal: "Cannot DI if
+ * launch angle is less than DI angle change param") — measured on the signed
+ * angle, so a launch straight *behind* is not exempt.
+ *
+ * `soft` is Plan 1's `Btn.Soft` (D54): the bend is quartered
+ * (`SOFT_DI_SHIFT`), which under the linear rule is a stick at a quarter of its
+ * throw — UNVERIFIED, as D54 says: the bit carries one level of magnitude.
  *
  * `angleFx` and the stick must be in the same frame of reference; the simulation
  * mirrors the stick by the attacker's facing and works in attacker-relative space
@@ -412,14 +446,16 @@ function unitStick(sx: number, sy: number): { x: number; y: number } {
  */
 export function applyDI(angleFx: number, stickX: number, stickY: number, soft = false): number {
   if (stickX === 0 && stickY === 0) return angleFx;
+  if (!launchDiAble(angleFx)) return angleFx;
+  const a = normalizeAngle(angleFx);
   const u = unitStick(stickX, stickY);
   // Cross product of the launch direction with the stick: the signed sine of the
   // angle between them, which is exactly the perpendicular component.
-  const perp = mul(cosDeg(angleFx), u.y) - mul(sinDeg(angleFx), u.x);
-  const full = mul(DI_MAX_DEVIATION, mul(perp, perp));
-  // A partial tilt is a shorter stick vector, and DI goes with its square.
+  const perp = mul(cosDeg(a), u.y) - mul(sinDeg(a), u.x);
+  // A partial tilt is a shorter stick vector, and DI goes with it linearly.
+  const full = mul(DI_MAX_DEVIATION, perp < 0 ? -perp : perp);
   const deviation = soft ? full >> SOFT_DI_SHIFT : full;
-  return angleFx + (perp >= 0 ? deviation : -deviation);
+  return angleFx + (perp < 0 ? -deviation : deviation);
 }
 
 /**
@@ -427,15 +463,16 @@ export function applyDI(angleFx: number, stickX: number, stickY: number, soft = 
  *
  * Up is 1.095× and down 0.92×, which is why survival DI on a horizontal launch is
  * "away and down" rather than just "away". Near-vertical launches are exempt —
- * the 65°–115° dead zone, and its downward mirror — because otherwise every
- * up-throw kill would be decided by whether the victim happened to be holding
- * down, which is not a decision anybody could make in three frames.
+ * strictly between 65° and 115°, and its downward mirror 245°–295° (SmashWiki
+ * "Directional influence"; rubendal `LSI` uses strict inequalities) — because
+ * otherwise every up-throw kill would be decided by whether the victim happened
+ * to be holding down, which is not a decision anybody could make in three frames.
  */
 export function applyLSI(launchSpeed: number, stickY: number, angleFx: number): number {
   if (stickY === 0) return launchSpeed;
   const a = normalizeAngle(angleFx);
-  const inUpDeadZone = a >= LSI_DEAD_ZONE[0] && a <= LSI_DEAD_ZONE[1];
-  const inDownDeadZone = a >= TURN - LSI_DEAD_ZONE[1] && a <= TURN - LSI_DEAD_ZONE[0];
+  const inUpDeadZone = a > LSI_DEAD_ZONE[0] && a < LSI_DEAD_ZONE[1];
+  const inDownDeadZone = a > TURN - LSI_DEAD_ZONE[1] && a < TURN - LSI_DEAD_ZONE[0];
   if (inUpDeadZone || inDownDeadZone) return launchSpeed;
   return mul(launchSpeed, stickY > 0 ? LSI_UP : LSI_DOWN);
 }

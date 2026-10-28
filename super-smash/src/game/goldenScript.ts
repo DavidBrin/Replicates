@@ -43,10 +43,23 @@
  * leaves the neutral air in reach on 1635. The walk to the right ledge is a frame
  * longer, for the turn from left to right: the hang is on 863, not 862.
  *
+ * Plan 3 Task 4 (DI) re-tuned Fox's walk-in for the forward tilt. DI and LSI now
+ * act only on a launch that tumbles, so the forward throw (10% damage, no tumble)
+ * is no longer bent by Fox's soft up, and it leaves him 0.7 units further along.
+ * That puts him 0.7 units nearer Mario for the forward smash, so the smash's
+ * close hitbox (14.7%) wins over the far one (17.8%): a weaker hit, and a
+ * shorter hitlag for Mario (the hang is on 862 again, not 863). Fox now lands at
+ * x 3, not -15, so his soft walk back to Mario's side is 69 frames (903–971), not
+ * 94: the last step is 26 frames of walk and 29 of standing, not 51 of walk, and
+ * the forward tilt on 1002 and what follows it keep their frames. The fireball
+ * then lands a frame early (1577), the short-hop nair, at 52% not 56%, no longer
+ * tumbles Fox, so the script reaches `downed` and `getUp` twice, not three times,
+ * and his self-destruct is three frames later (1862).
+ *
  * Each step's comment gives the frame it starts on, and the events it names
- * (the shield break on 657, the hangs on 863, 1193, 1299 and 1400, the hits on
- * 747, 1006, 1578 and 1635, time up on 2014). All were checked against a run
- * after Plan 3 Task 3.
+ * (the shield break on 657, the hangs on 862, 1193, 1299 and 1400, the hits on
+ * 747, 1006, 1577 and 1635, time up on 2014). All were checked against a run
+ * after Plan 3 Task 4.
  */
 
 import { Btn } from "@/engine/types";
@@ -92,7 +105,7 @@ const STEPS: readonly ScriptStep[] = [
   [4, R | SOFT, 0], //            187: in to about 8: a throw reaches, a pummel does not
   [10, 0, 0],
   // Grab, pummel (it whiffs at this range), forward throw. Fox holds a soft up
-  // through the throw, so its launch takes soft DI.
+  // through the throw; it does not tumble, so (Task 4) the stick bends nothing.
   [1, G, 0], //                   201: grab
   [15, 0, 0],
   [1, A, 0], //                   217: pummel, then back to grabHold
@@ -120,22 +133,23 @@ const STEPS: readonly ScriptStep[] = [
   [1, A, S], //                   477: jab: shieldStun
   [254, 0, S], //                 478: the shield breaks on 657: shieldBroken
   // Mario forward-smashes the stunned Fox, to the left, who holds a soft up through
-  // the launch: 38°, so Fox flies across the stage and lands on its left.
+  // the launch: 38° and a tumble, so the soft DI bends it, and Fox flies across the
+  // stage and lands near its middle.
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
-  [66, 0, SOFT | U], //           734: tumble (747), downed (792), getUp (832); Mario can walk again on 800
+  [66, 0, SOFT | U], //           734: tumble (747), downed (783), getUp (823); Mario can walk again on 798
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
-  [65, R | SOFT, 0], //           800: ledgeHang on 863 (he turns from left to right first)
+  [65, R | SOFT, 0], //           800: ledgeHang on 862 (he turns from left to right first)
   [19, 0, 0],
   [1, J, 0], //                   884: ledgeJump, then jump
   [18, L, 0], //                  885: drift back over the stage
-  [2, L, R | SOFT], //            903: Fox walks back from the left of the stage
+  [2, L, R | SOFT], //            903: Fox walks back from the middle of the stage
   [40, 0, R | SOFT],
   [1, L | A, R | SOFT], //        945: forward air on the way down...
-  [51, 0, R | SOFT], //           946: ...that lands inside itself: landingLag
-  [4, 0, 0],
+  [26, 0, R | SOFT], //           946: ...that lands inside itself: landingLag; Fox stops on 972
+  [29, 0, 0],
   // Soft turns a fresh direction plus attack into a tilt.
   [1, L | SOFT, 0], //           1001: facing left since the ledge
   [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006

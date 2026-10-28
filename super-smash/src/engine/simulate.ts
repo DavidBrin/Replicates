@@ -44,6 +44,7 @@ import {
   computeStaleness,
   applyDI,
   applyLSI,
+  launchDiAble,
   lsiApplies,
   knockbackToVelocity,
   launchWorldAngle,
@@ -1060,14 +1061,22 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   if (f.pendingFacing === 0) return;
   const facing = f.pendingFacing;
   const relStick = intent.x * (facing >= 0 ? 1 : -1);
-  const angle = applyDI(f.pendingAngle, relStick, intent.y, intent.soft);
+  // DI and LSI only act on a launch that tumbles and is not within 0.17 rad of
+  // straight ahead (rubendal Sm4sh-Calculator wiki "DI and LSI calculation",
+  // https://github.com/rubendal/Sm4sh-Calculator/wiki/DI-and-LSI-calculation:
+  // "Conditions for DI: … the attack causes tumble; launch angle is greater than
+  // 9.74°" — Ultimate "reuses the directional influence mechanics" of Smash 4,
+  // SmashWiki "Directional influence"; rubendal SSBU-Calculator `js/knockback.js`
+  // computes LSI only inside `di_able`). `hitstun` still holds the hit's full value.
+  const diAble = lsiApplies(f.hitstun) && launchDiAble(f.pendingAngle);
+  const angle = diAble ? applyDI(f.pendingAngle, relStick, intent.y, intent.soft) : f.pendingAngle;
   const launch = knockbackToVelocity(f.pendingKnockback, angle, facing);
   // LSI is a survival tool, not a damage buff: it only touches knockback heavy
   // enough to tumble. Without the gate, holding up scales *every* jab by 1.095×
   // and holding down shrinks it by 0.92×, which is a mechanic the game does not
   // have. `hitstun` still holds the full value from the hit here — the hitlag
   // branch that leads to this call never decrements it. See `lsiApplies`.
-  const speed = lsiApplies(f.hitstun) ? applyLSI(launch.speed, intent.y, angle) : launch.speed;
+  const speed = diAble ? applyLSI(launch.speed, intent.y, angle) : launch.speed;
   // The one moment the balloon question has an answer: the angle this launch
   // actually goes out at, DI included. See `FighterState.balloon`.
   f.balloon = launch.balloon;
