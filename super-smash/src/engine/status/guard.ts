@@ -160,6 +160,10 @@ export const STATUS_ESCAPE_AIR: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_ESCAPE_AIR",
   action: "airDodge",
   kineticType: "AIR_ESCAPE",
+  // The tech trigger belongs to this air dodge alone (Plan 3, Task 12).
+  end(f) {
+    f.combat.tumbleDodge = false;
+  },
   main(f, intent, ctx) {
     // `charge` remembers a directional dodge: 63 frames rather than 50.
     const total = f.charge === 1 ? DIRECTIONAL_AIR_DODGE_FRAMES : AIR_DODGE_FRAMES;

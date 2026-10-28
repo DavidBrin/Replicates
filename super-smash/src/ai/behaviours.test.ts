@@ -236,6 +236,9 @@ describe("primitives", () => {
     expect(isOffstage(fighter(0, { x: fx(0) }), DEFAULT_STAGE_VIEW)).toBe(false);
     expect(isStunned(fighter(0, { hitstun: 12 }))).toBe(true);
     expect(isStunned(fighter(0, { action: "tumble" }))).toBe(true);
+    // Tumbling after the hitstun is free to act, like a fall (SmashWiki "Tumbling").
+    expect(isStunned(fighter(0, { action: "tumbleFall" }))).toBe(false);
+    expect(canAct(fighter(0, { action: "tumbleFall" }))).toBe(true);
     expect(canAct(fighter(0))).toBe(true);
     expect(canAct(fighter(0, { action: "dead" }))).toBe(false);
   });

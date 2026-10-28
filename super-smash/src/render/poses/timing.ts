@@ -268,6 +268,7 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "hitstun":
       return "hitstun";
     case "tumble":
+    case "tumbleFall":
     case "techWall":
     case "techCeiling":
       return "tumble";

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { ONE, byRatio, fx, mul } from "./fixed";
 import {
+  AIR_DODGE_TECH_FRAMES,
   ASDI_DISTANCE,
   FURAFURA_END_FRAMES,
   GLANCING_BLOW_DEPTH,
   GROUNDED_ZERO_LAUNCH_RATIO,
+  LAUNCH_SPEED_DECAY,
   LAUNCH_SPEED_RATIO,
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   SDI_DISTANCE,
@@ -14,6 +16,7 @@ import {
   SHIELD_MAX_HEALTH,
   SHIELD_REGEN_PER_FRAME,
   TECH_LOCKOUT,
+  TECH_WALL_HOLD,
   TECH_WINDOW,
 } from "./constants";
 import { hashState } from "./hash";
@@ -35,6 +38,7 @@ import { Btn } from "./types";
 import type {
   FighterAttributes,
   FighterDef,
+  FighterState,
   GameState,
   Hitbox,
   InputFrame,
@@ -1237,7 +1241,10 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(frames[k].state.fighters[1].action).toBe("tech");
   });
 
-  it("misses the tech when the press was 12 frames early, and lies down", () => {
+  // The press at k - 11 is the 12th frame back from the landing: its window ran
+  // out on the frame before. UNVERIFIED boundary: SmashWiki "Lucario (SSBU)/Techs"
+  // says 12 (see `TECH_WINDOW`).
+  it("misses the tech when its window had run out a frame before landing (the press 11 frames back), and lies down", () => {
     const dry = until(flying(0, 20, 0, -0.6), () => 0);
     const k = landing(dry);
     const frames = until(flying(0, 20, 0, -0.6), (i) => (i === k - TECH_WINDOW ? Btn.Shield : 0));
@@ -1269,7 +1276,7 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
   // of 3 or less; a tumbling fighter bounces off at 0.8 or more. SmashWiki
   // "Knockback": a bounce costs 5% in Ultimate; SmashWiki "Hitstun": hitstun
   // after a bounce is 0.8× (the Smash 4 value Ultimate keeps).
-  it("bounces off the floor when too fast to tech, keeping 0.95 of the launch and 0.8 of the hitstun", () => {
+  it("bounces off the floor when too fast to tech, keeping 0.9 of the launch and 0.8 of the hitstun", () => {
     const frames = until(flying(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0));
     const k = frames.findIndex((f) => f.state.fighters[1].vy > 0);
     const before = frames[k - 1].state.fighters[1];
@@ -1277,7 +1284,13 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(v.action).toBe("tumble");
     expect(v.grounded).toBe(false);
     expect(v.hitstun).toBe(Math.floor(((before.hitstun - 1) * 4) / 5));
-    expect(v.launchSpeed).toBeLessThan(before.launchSpeed);
+    // The launch the body met the floor with is the last frame's, less this
+    // frame's decay; the floor keeps 0.9 of it (`damage_fly_reflect_d_speed_mul`,
+    // rubendal `applyDecaySpeedUp`).
+    const met = before.launchSpeed - LAUNCH_SPEED_DECAY;
+    const metY = Math.abs(Math.trunc((before.kinetic.damageY * met) / before.launchSpeed));
+    expect(v.launchSpeed).toBe(Math.trunc((met * 9) / 10));
+    expect(v.kinetic.damageY).toBe(Math.trunc((metY * 9) / 10)); // up, away from the floor
   });
 
   it("lies down after a slow tumbling landing with no tech", () => {
@@ -1426,6 +1439,263 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     s.fighters[1].jumpsUsed = 2;
     const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0));
     expect(frames[landing(frames)].state.fighters[1].jumpsUsed).toBe(0);
+  });
+
+  /* -- fix round 1: the bounce ratios, gravity, the wall hold -- */
+
+  // The vanilla params (`damage_fly_reflect_d_speed_mul` 0.9, `damage_fly_reflect_speed_mul`
+  // 0.95) and rubendal `applyDecaySpeedUp`: see `BOUNCE_FLOOR_LAUNCH_RATIO`. The launch the
+  // body meets a surface with is the last frame's, less this frame's decay.
+  /** The launch of `before` after one frame's decay, as a (speed, x, y) it would meet a surface with. */
+  const met = (before: FighterState) => {
+    const speed = before.launchSpeed - LAUNCH_SPEED_DECAY;
+    const along = (c: number) => Math.abs(Math.trunc((c * speed) / before.launchSpeed));
+    return { speed, x: along(before.kinetic.damageX), y: along(before.kinetic.damageY) };
+  };
+
+  it("bounces off a wall keeping 0.95 of the launch and 0.8 of the hitstun, and keeps falling", () => {
+    const frames = until(flying(92, -20, -4, 0), () => 0);
+    const k = frames.findIndex((f) => f.state.fighters[1].vx > 0);
+    const before = frames[k - 1].state.fighters[1];
+    const v = frames[k].state.fighters[1];
+    const m = met(before);
+    expect(v.launchSpeed).toBe(Math.trunc((m.speed * 19) / 20));
+    expect(v.kinetic.damageX).toBe(Math.trunc((m.x * 19) / 20)); // back, away from the wall
+    expect(v.hitstun).toBe(Math.floor(((before.hitstun - 1) * 4) / 5));
+    // A wall bounce keeps gravity (rubendal `resetGravity` is false there): the
+    // fighter does not hang where it struck, and `vy` is still the energy sum.
+    expect(v.kinetic.gravityY).toBeLessThan(0);
+    expect(v.vy).toBe(v.kinetic.gravityY);
+  });
+
+  it("bounces off the stage's underside sent downward, keeping 0.95 and 0.8", () => {
+    const frames = until(flying(0, -78, 0, 4), () => 0);
+    const k = frames.findIndex((f) => f.state.fighters[1].kinetic.damageY < 0);
+    expect(k).toBeGreaterThan(0);
+    const before = frames[k - 1].state.fighters[1];
+    const v = frames[k].state.fighters[1];
+    const m = met(before);
+    expect(v.action).toBe("tumble");
+    expect(v.launchSpeed).toBe(Math.trunc((m.speed * 19) / 20));
+    expect(v.kinetic.damageY).toBe(-Math.trunc((m.y * 19) / 20));
+    expect(v.hitstun).toBe(Math.floor(((before.hitstun - 1) * 4) / 5));
+  });
+
+  it("resets gravity on a floor bounce", () => {
+    const s = flying(0, 6, 0, -3.5);
+    const frames = until(s, () => 0);
+    const k = frames.findIndex((f) => f.state.fighters[1].vy > 0);
+    expect(frames[k].state.fighters[1].kinetic.gravityY).toBe(0);
+  });
+
+  // `passive_wall_stop_frame` is 5 (see `TECH_WALL_HOLD`): UNVERIFIED as a hold.
+  it("holds on the wall for 5 frames after a wall tech, then falls", () => {
+    const frames = until(flying(92, -20, -4, 0), (i) => (i === 0 ? Btn.Shield : 0));
+    const t = frames.findIndex((f) => f.state.fighters[1].action === "techWall");
+    expect(t).toBeGreaterThan(0);
+    const y = frames[t].state.fighters[1].y;
+    for (let i = 1; i <= TECH_WALL_HOLD; i++) expect(frames[t + i].state.fighters[1].y, `frame +${i}`).toBe(y);
+    expect(frames[t + TECH_WALL_HOLD + 1].state.fighters[1].y).toBeLessThan(y);
+  });
+
+  /* -- fix round 1: tumbling after the hitstun (SSBU DAMAGE_FALL) -- */
+
+  /** `flying`, once the hitstun is over: tumbling in the air with the launch still going. */
+  function falling(x: number, y: number, vx: number, vy: number): GameState {
+    const s = flying(x, y, vx, vy);
+    Object.assign(s.fighters[1], { action: "tumbleFall", hitstun: 0 });
+    return s;
+  }
+  const touched = (frames: Frame[]) => frames.findIndex((f) => f.state.fighters[1].action !== "tumbleFall");
+
+  // SmashWiki "Tumbling" (https://www.ssbwiki.com/Tumbling): "Tumbling (or
+  // DamageFall internally ...)", "After hitstun ends, tumbling characters can
+  // carry out most normal airborne actions".
+  it("keeps tumbling when its hitstun ends in the air: tumbleFall, not fall", () => {
+    const s = flying(0, 40, 0, -0.6);
+    s.fighters[1].hitstun = 4;
+    const frames = until(s, () => 0, 8);
+    const k = frames.findIndex((f) => f.state.fighters[1].action !== "tumble");
+    expect(frames[k].state.fighters[1]).toMatchObject({ action: "tumbleFall", hitstun: 0, grounded: false });
+    expect(frames.at(-1)!.state.fighters[1].action).toBe("tumbleFall");
+  });
+
+  it("ends a reel that never tumbled as a plain fall", () => {
+    const s = flying(0, 40, 0, -0.6);
+    Object.assign(s.fighters[1], { action: "hitstun", hitstun: 4 });
+    const frames = until(s, () => 0, 8);
+    expect(frames.at(-1)!.state.fighters[1].action).toBe("fall");
+  });
+
+  // "If tumbling characters hit the ground without teching, they will land into a
+  // lying position" — DamageFall has no reflect check (HewDraw Remix
+  // `damagefall.rs`, WuBor Patch `damage_fall.rs`), so no speed bounces it.
+  it("lands lying down at a launch that bounces it in hitstun, and never bounces", () => {
+    const hitstun = until(flying(0, 6, 0, -2), () => 0);
+    expect(hitstun.some((f) => f.state.fighters[1].vy > 0)).toBe(true);
+
+    const frames = until(falling(0, 6, 0, -2), () => 0);
+    const v = frames[touched(frames)].state.fighters[1];
+    expect(v).toMatchObject({ action: "downed", grounded: true, hitstun: 0, launchSpeed: 0 });
+    expect(frames.every((f) => f.state.fighters[1].vy <= 0)).toBe(true);
+    expect(frames.at(-1)!.state.fighters[1].grounded).toBe(true);
+  });
+
+  it("gets up from the knockdown and stands", () => {
+    const frames = until(falling(0, 6, 0, -2), () => 0, 100);
+    const actions = frames.map((f) => f.state.fighters[1].action);
+    expect(actions).toContain("downed");
+    expect(actions).toContain("getUp");
+    expect(actions.at(-1)).toBe("stand");
+  });
+
+  it("techs a landing when shield is pressed on the frame of landing itself", () => {
+    const dry = until(falling(0, 6, 0, -2), () => 0);
+    const k = touched(dry);
+    const frames = until(falling(0, 6, 0, -2), (i) => (i === k ? Btn.Shield : 0));
+    expect(frames[k].state.fighters[1].action).toBe("tech");
+    // Nor does a press a few frames earlier turn into an air dodge that hovers.
+    const early = until(falling(0, 6, 0, -2), (i) => (i === k - 2 ? Btn.Shield : 0));
+    expect(early[k].state.fighters[1].action).toBe("tech");
+  });
+
+  it("rolls out of a landing when the stick is held as it techs", () => {
+    const frames = until(falling(0, 6, 0, -2), (i) => (i === 0 ? Btn.Shield | Btn.Right : Btn.Right));
+    expect(frames[touched(frames)].state.fighters[1].action).toBe("techRoll");
+  });
+
+  it("techs a landing on a held shield once the air dodge is spent", () => {
+    const s = falling(0, 20, 0, -0.6);
+    s.fighters[1].airDodged = true;
+    const dry = until(falling(0, 20, 0, -0.6), () => 0);
+    expect(touched(dry)).toBeGreaterThan(TECH_WINDOW + 5);
+    const frames = until(s, () => Btn.Shield);
+    expect(frames[touched(dry)].state.fighters[1].action).toBe("tech");
+  });
+
+  // Keeping the floor's cap of 3 after the hitstun is UNVERIFIED (`TECH_FLOOR_MAX_SPEED`).
+  it("lies down rather than techs a landing faster than 3", () => {
+    const frames = until(falling(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0));
+    expect(frames[touched(frames)].state.fighters[1].action).toBe("downed");
+  });
+
+  // SmashWiki "Tech": the character "must be in hitstun" to tech a wall or ceiling.
+  it("neither techs nor bounces off a wall or the underside after its hitstun", () => {
+    // The air dodge is spent, so the press can only open the tech window.
+    const spent = (s: GameState) => {
+      s.fighters[1].airDodged = true;
+      return s;
+    };
+    const wall = until(spent(falling(92, -20, -4, 0)), (i) => (i === 0 ? Btn.Shield : 0), 8);
+    expect(wall.every((f) => f.state.fighters[1].action === "tumbleFall")).toBe(true);
+    expect(wall.at(-1)!.state.fighters[1].vx).toBe(0);
+    const ceiling = until(spent(falling(0, -78, 0, 4)), (i) => (i === 0 ? Btn.Shield : 0), 8);
+    expect(ceiling.every((f) => f.state.fighters[1].action === "tumbleFall")).toBe(true);
+    expect(ceiling.at(-1)!.state.fighters[1].vy).toBeLessThanOrEqual(0);
+  });
+
+  it("is free to act: a jump, an aerial or an air dodge each end the tumble", () => {
+    const acts: [InputFrame, string][] = [
+      [Btn.Jump, "jump"],
+      [Btn.Attack, "attack"],
+      [Btn.Shield, "airDodge"],
+    ];
+    for (const [input, action] of acts) {
+      const frames = until(falling(0, 60, 0, -0.6), (i) => (i === 0 ? input : 0), 3);
+      expect(frames[0].state.fighters[1].action, action).toBe(action);
+    }
+  });
+
+  it("grabs a ledge as it falls past one", () => {
+    const s = falling(86, -3, 0, -0.5);
+    s.fighters[1].facing = -1;
+    const frames = until(s, () => 0, 6);
+    expect(frames.some((f) => f.state.fighters[1].action === "ledgeHang")).toBe(true);
+  });
+
+  /* -- fix round 1: an air dodge out of a tumble techs in its first 15 frames -- */
+
+  // SmashWiki "Lucario (SSBU)/Techs": "neutral and directional air dodges can be
+  // used for every form of teching during the first 15 frames"; "After 16 frames
+  // ... no longer able to tech against surfaces". Vanilla `air_escape_passive_trigger_frame` 15.
+  /**
+   * Fighter 1, tumbling at height `y` late in its hitstun, cancels it with a
+   * directional air dodge straight down (shield and down on the first frame).
+   * Returns the frames, and the air-dodge frame on which it met the floor.
+   */
+  function cancelDown(y: number) {
+    const s = flying(0, y, 0, -0.6);
+    s.fighters[1].actionFrame = 40; // the cancel opens on 41 (Task 7)
+    const frames = until(s, (i) => (i === 0 ? Btn.Shield | Btn.Down : 0), 40);
+    expect(frames[0].state.fighters[1].action).toBe("airDodge");
+    return { frames, met: frames.findIndex((f) => f.state.fighters[1].action !== "airDodge") };
+  }
+
+  it("techs a floor met on the 15th frame of the air dodge it cancelled hitstun with", () => {
+    const { frames, met } = cancelDown(51);
+    expect(met).toBe(AIR_DODGE_TECH_FRAMES);
+    expect(frames[met].state.fighters[1].action).toBe("tech");
+  });
+
+  it("lands with landing lag on the 16th frame of it", () => {
+    const { frames, met } = cancelDown(54);
+    expect(met).toBe(AIR_DODGE_TECH_FRAMES + 1);
+    expect(frames[met].state.fighters[1].action).toBe("landingLag");
+  });
+
+  it("techs after an air dodge out of tumbleFall too, and rolls with the stick held", () => {
+    const frames = until(falling(0, 30, 0, -0.6), (i) => (i === 0 ? Btn.Shield | Btn.Down : 0), 30);
+    const k = frames.findIndex((f) => f.state.fighters[1].action !== "airDodge");
+    expect(frames[k].state.fighters[1].action).toBe("tech");
+    expect(k).toBeLessThanOrEqual(AIR_DODGE_TECH_FRAMES);
+    // The same dodge with the stick across rolls (the floor tech's roll).
+    const roll = until(falling(0, 30, 0, -0.6), (i) => (i === 0 ? Btn.Shield | Btn.Down | Btn.Right : Btn.Right), 30);
+    const r = roll.findIndex((f) => f.state.fighters[1].action !== "airDodge");
+    expect(roll[r].state.fighters[1].action).toBe("techRoll");
+  });
+
+  it("techs a wall met inside it too", () => {
+    const s = flying(100, -20, -0.6, 0);
+    s.fighters[1].actionFrame = 40;
+    const frames = until(s, (i) => (i === 0 ? Btn.Shield | Btn.Left : 0), 20);
+    const k = frames.findIndex((f) => f.state.fighters[1].action !== "airDodge");
+    expect(frames[k].state.fighters[1].action).toBe("techWall");
+  });
+
+  // A normal air dodge keeps its landing lag, as wavelanding does (SmashWiki "Air
+  // dodge"); "only from a tumble" is UNVERIFIED (`AIR_DODGE_TECH_FRAMES`).
+  it("does not tech an ordinary air dodge: it lands with landing lag, and a wall just stops it", () => {
+    const fall = (x: number, y: number) => {
+      const s = standing();
+      s.fighters[0].x = fx(-70);
+      Object.assign(s.fighters[1], { x: fx(x), y: fx(y), grounded: false, platform: -1, action: "fall" });
+      s.fighters[1].kinetic.gravityY = -fx(0.6);
+      s.fighters[1].vy = -fx(0.6);
+      return s;
+    };
+    const floor = until(fall(0, 30), (i) => (i === 0 ? Btn.Shield | Btn.Down : 0), 30);
+    const k = floor.findIndex((f) => f.state.fighters[1].action !== "airDodge");
+    expect(k).toBeLessThanOrEqual(AIR_DODGE_TECH_FRAMES);
+    expect(floor[k].state.fighters[1].action).toBe("landingLag");
+    const wall = until(fall(100, -20), (i) => (i === 0 ? Btn.Shield | Btn.Left : 0), 12);
+    expect(wall.every((f) => f.state.fighters[1].action === "airDodge")).toBe(true);
+  });
+
+  it("clears the trigger when the air dodge ends", () => {
+    const { frames } = cancelDown(51);
+    expect(frames[0].state.fighters[1].combat.tumbleDodge).toBe(true);
+    expect(frames.at(-1)!.state.fighters[1].combat.tumbleDodge).toBe(false);
+  });
+
+  // The replica's air dodge stops dead where it starts, so it could never reach a
+  // floor a few frames below: a press that close to landing is the tech (UNVERIFIED
+  // reading of SmashWiki "Lucario (SSBU)/Techs"; see `techInputNearFloor`).
+  it("reads a shield press with the floor inside the tech window as the tech, not a hitstun cancel", () => {
+    const s = flying(0, 6, 0, -0.6);
+    s.fighters[1].actionFrame = 40;
+    const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0), 20);
+    expect(frames.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
+    expect(frames[landing(frames)].state.fighters[1].action).toBe("tech");
   });
 });
 

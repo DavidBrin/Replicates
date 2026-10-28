@@ -331,6 +331,33 @@ export function resolveCollision(
 }
 
 /**
+ * Would a fighter falling at its current speed touch a surface under it within
+ * `frames` frames? The ECB's bottom point is above (or on) a platform's top
+ * and no further above it than `frames` frames of its own fall speed, with the
+ * origin over the span. Soft platforms count: a falling body lands on them.
+ * A constant-speed estimate, which is the safe side of an accelerating fall:
+ * it never lands later than this says. Plan 3, Task 12: how close to landing a
+ * tumbling fighter's shield press is a tech input rather than an air dodge.
+ */
+export function landsWithin(
+  f: Pick<FighterState, "x" | "y" | "vy" | "grounded">,
+  stage: StageDef,
+  attrs: FighterAttributes,
+  frame: number,
+  frames: number,
+): boolean {
+  if (f.vy >= 0) return false;
+  const bottom = f.y + ecbOf(f, attrs).bottom;
+  const reach = -f.vy * frames;
+  for (const p of stage.platforms) {
+    if (abs(f.x - platformCentreX(p, frame)) > p.halfWidth) continue;
+    const drop = bottom - p.y;
+    if (drop >= 0 && drop <= reach) return true;
+  }
+  return false;
+}
+
+/**
  * Keep a fighter that was *shifted* out of the stage's solid bodies.
  *
  * SDI and ASDI move a fighter who is frozen in hitlag, and a frozen fighter

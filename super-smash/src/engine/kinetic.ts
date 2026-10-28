@@ -273,6 +273,24 @@ export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: nu
 }
 
 /**
+ * A launch bounced off a surface (Plan 3, Task 12): `kineticLaunch`, except
+ * that GRAVITY keeps `gravityY` instead of being zeroed. rubendal
+ * SSBU-Calculator `js/knockback.js` resets gravity on a floor bounce and keeps
+ * it on a wall or ceiling bounce (`resetGravity`, L136-146:
+ * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L136-L146).
+ * The caller passes 0 for a floor and the gravity the fighter had before the
+ * collision for the others (a ceiling stop has already zeroed it). The balloon
+ * speed-up is disarmed, as in `kineticLaunch`; whether the game carries it
+ * through a bounce is UNVERIFIED (`damage_fly_reflect_reaction_frame_mul`
+ * shortens the hitstun, which the caller does).
+ */
+export function kineticReflect(f: FighterState, vx: number, vy: number, speed: number, gravityY: number): void {
+  kineticLaunch(f, vx, vy, speed);
+  f.kinetic.gravityY = gravityY;
+  kineticSum(f);
+}
+
+/**
  * Point a live launch along (dx, dy) without changing its speed — knockback
  * stacking's kept launch (Plan 3, Task 8). A zero vector leaves it as it was.
  */

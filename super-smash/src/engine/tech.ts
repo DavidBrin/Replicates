@@ -3,13 +3,21 @@
  * frame its body meets a floor, a wall or a ceiling.
  *
  * Tech input is a shield press (SmashWiki "Tech"): it opens an 11-frame window
- * and blocks another window for 40 frames. A surface met inside the window,
- * slowly enough (3 for a floor, 6 for a wall or ceiling — rubendal
- * SSBU-Calculator `js/knockback.js` `techable`), is teched. One met too fast,
- * or with no tech input, bounces the fighter off it if the launch is at least
- * 0.8 (floor) or 1 (wall, ceiling) — keeping 0.95 of the launch and 0.8 of the
- * hitstun. A slow tumbling landing with no tech is the missed tech: `onLanded`
- * lays the fighter down (DOWN_WAIT), as before.
+ * and blocks another window for 40 frames. In hitstun (SSBU's DAMAGE_FLY, the
+ * replica's `tumble`), a surface met inside the window, slowly enough (3 for a
+ * floor, 6 for a wall or ceiling — rubendal SSBU-Calculator `js/knockback.js`
+ * `techable`), is teched. One met too fast, or with no tech input, bounces the
+ * fighter off it if the launch is at least 0.8 (floor) or 1 (wall, ceiling) —
+ * keeping 0.9 of the launch off a floor and 0.95 off a wall or ceiling, and 0.8
+ * of the hitstun. A floor met slower than 0.8 with no tech is the missed tech:
+ * `onLanded` lays the fighter down (DOWN_WAIT).
+ *
+ * After the hitstun (`tumbleFall`, DAMAGE_FALL) only the floor matters: a tech
+ * input techs it, and otherwise `onLanded` lays the fighter down at any speed.
+ * It never bounces, and a wall or ceiling is a plain stop (SmashWiki "Tech":
+ * "the character must be in hitstun" for those). An air dodge begun out of a
+ * tumble techs a surface it meets in its first 15 frames, with no other input
+ * (SmashWiki "Lucario (SSBU)/Techs").
  *
  * On the ground a *held* shield techs too: "the shield button can be held for
  * much longer than the 11 frame window and a tech can still be performed on
@@ -20,9 +28,11 @@
  */
 
 import {
+  AIR_DODGE_TECH_FRAMES,
+  BOUNCE_FLOOR_LAUNCH_RATIO,
   BOUNCE_FLOOR_MIN_SPEED,
   BOUNCE_HITSTUN_RATIO,
-  BOUNCE_LAUNCH_RATIO,
+  BOUNCE_SURFACE_LAUNCH_RATIO,
   BOUNCE_SURFACE_MIN_SPEED,
   TECH_FLOOR_MAX_SPEED,
   TECH_LOCKOUT,
@@ -32,7 +42,7 @@ import {
   TECH_WINDOW,
 } from "./constants";
 import { byRatio } from "./fixed";
-import { kineticLaunch, kineticSet, kineticSetX } from "./kinetic";
+import { kineticReflect, kineticSet, kineticSetX } from "./kinetic";
 import type { Intent } from "./states";
 import { startAction } from "./states";
 import type { FighterState } from "./types";
@@ -40,14 +50,22 @@ import type { FighterState } from "./types";
 export type Surface = "floor" | "wall" | "ceiling";
 
 /**
- * The launch as it was before collision touched it this frame — and the air
- * bookkeeping a landing would wipe, which a bounce (not a landing) gives back.
+ * The launch as it was before collision touched it this frame — the air
+ * bookkeeping a landing would wipe, which a bounce (not a landing) gives back
+ * — and which tumble the fighter is in.
  */
 export interface LaunchBefore {
   readonly x: number;
   readonly y: number;
   readonly speed: number;
+  /** GRAVITY's speed, kept through a wall or ceiling bounce. */
+  readonly gravity: number;
+  /** In `tumble`: hitstun may be left (`techOrBounce` checks). */
   readonly tumbling: boolean;
+  /** In `tumbleFall`: the hitstun is over. */
+  readonly tumbleFall: boolean;
+  /** In the first 15 frames of an air dodge that began out of a tumble. */
+  readonly dodgeTech: boolean;
   readonly jumpsUsed: number;
   readonly airTime: number;
   readonly ledgeLockout: number;
@@ -58,7 +76,10 @@ export function launchBefore(f: FighterState): LaunchBefore {
     x: f.kinetic.damageX,
     y: f.kinetic.damageY,
     speed: f.launchSpeed,
+    gravity: f.kinetic.gravityY,
     tumbling: f.action === "tumble",
+    tumbleFall: f.action === "tumbleFall",
+    dodgeTech: f.action === "airDodge" && f.combat.tumbleDodge && f.actionFrame <= AIR_DODGE_TECH_FRAMES,
     jumpsUsed: f.jumpsUsed,
     airTime: f.airTime,
     ledgeLockout: f.ledgeLockout,
@@ -92,12 +113,20 @@ export function techOrBounce(
   intent: Intent,
   wallSide = 0,
 ): "tech" | "bounce" | null {
-  if (!before.tumbling || f.hitstun <= 0) return null;
+  const reeling = before.tumbling && f.hitstun > 0;
+  if (!reeling && !before.tumbleFall && !before.dodgeTech) return null;
   const floor = surface === "floor";
-  const techable = before.speed <= (floor ? TECH_FLOOR_MAX_SPEED : TECH_SURFACE_MAX_SPEED);
-  const input = f.combat.techWindow > 0 || (floor && intent.shieldHeld);
+  // After the hitstun a wall or ceiling is a plain stop: nothing to tech
+  // (SmashWiki "Tech": the character "must be in hitstun"), nothing to bounce.
+  if (before.tumbleFall && !floor) return null;
+  // The air dodge is the tech input, and its own launch is nothing (it sets it to 0).
+  const techable = before.dodgeTech || before.speed <= (floor ? TECH_FLOOR_MAX_SPEED : TECH_SURFACE_MAX_SPEED);
+  const input = before.dodgeTech || f.combat.techWindow > 0 || (floor && intent.shieldHeld);
   if (input && techable) {
     f.combat.techWindow = 0;
+    // The press was the tech: it must not wait in the buffer to become an air
+    // dodge or a shield on the first actionable frame (a wall tech's is 6).
+    if (f.bufferedAction !== null && f.bufferedAction.kind === "shield") f.bufferedAction = null;
     f.hitstun = 0;
     f.balloon = false;
     kineticSet(f, 0, 0, "stop");
@@ -117,21 +146,20 @@ export function techOrBounce(
     }
     return "tech";
   }
+  // Only a fighter still in hitstun bounces: DAMAGE_FALL has no reflect check.
+  if (!reeling) return null;
   if (before.speed < (floor ? BOUNCE_FLOOR_MIN_SPEED : BOUNCE_SURFACE_MIN_SPEED)) return null;
   // Send the launch away from the surface — up off a floor, down off a ceiling,
   // back off a wall, whichever way its component pointed (rubendal
-  // `js/knockback.js` bounces with `Math.abs`) — 5% slower; hitstun to 0.8 of
-  // what is left.
+  // `js/knockback.js` bounces with `Math.abs`) — 0.9 of it off a floor, 0.95
+  // off a wall or ceiling; hitstun to 0.8 of what is left. A floor bounce
+  // resets gravity, the others keep theirs (`kineticReflect`).
+  const ratio = floor ? BOUNCE_FLOOR_LAUNCH_RATIO : BOUNCE_SURFACE_LAUNCH_RATIO;
   const ax = before.x < 0 ? -before.x : before.x;
   const ay = before.y < 0 ? -before.y : before.y;
   const x = surface === "wall" ? -wallSide * ax : before.x;
   const y = floor ? ay : surface === "ceiling" ? -ay : before.y;
-  kineticLaunch(
-    f,
-    byRatio(x, BOUNCE_LAUNCH_RATIO),
-    byRatio(y, BOUNCE_LAUNCH_RATIO),
-    byRatio(before.speed, BOUNCE_LAUNCH_RATIO),
-  );
+  kineticReflect(f, byRatio(x, ratio), byRatio(y, ratio), byRatio(before.speed, ratio), floor ? 0 : before.gravity);
   f.hitstun = byRatio(f.hitstun, BOUNCE_HITSTUN_RATIO);
   if (floor) {
     // Off the floor again without a jump or a landing: the fighter is still in

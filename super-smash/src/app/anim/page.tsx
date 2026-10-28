@@ -58,7 +58,8 @@ const GROUPS: ReadonlyArray<readonly [string, readonly ActionState[]]> = [
   ["crouch", ["crouchStart", "crouch", "crouchEnd"]],
   ["air", ["jumpSquat", "jump", "fall", "land", "landingLag"]],
   ["defence", ["shieldStart", "shield", "shieldRelease", "shieldBroken", "roll", "spotDodge", "airDodge"]],
-  ["reeling", ["hitstun", "tumble", "downed", "getUp", "grabbed", "thrown"]],
+  ["reeling", ["hitstun", "tumble", "tumbleFall", "downed", "getUp", "grabbed", "thrown"]],
+  ["tech", ["tech", "techRoll", "techWall", "techCeiling"]],
   ["ledge", ["ledgeHang", "ledgeGetUp", "ledgeJump"]],
   ["offence", ["attack", "special", "grab", "throw"]],
 ];
@@ -163,9 +164,14 @@ const AIRBORNE: ReadonlySet<ActionState> = new Set([
   "airDodge",
   "ledgeHang",
   "ledgeJump",
-  // A tumbling fighter who touches the ground becomes `downed` on that frame,
-  // so every frame that is still `tumble` is a frame in the air.
+  // A tumbling fighter who touches the ground becomes `downed` (or a tech) on
+  // that frame, so every frame that is still `tumble` or `tumbleFall` is a frame
+  // in the air. A wall or ceiling tech is in the air too; the floor techs
+  // (`tech`, `techRoll`) are on it.
   "tumble",
+  "tumbleFall",
+  "techWall",
+  "techCeiling",
 ]);
 
 /** Whether this action performs a move, and so has frame data of its own. */
@@ -210,7 +216,7 @@ function fighterAt(o: Options, frame: number): FighterState {
 export function verticalFor(o: Options, def: FighterDef | undefined, frame: number): number {
   if (!def) return 0;
   const p = fighterParams(def);
-  if (o.action === "fall") return -(o.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
+  if (o.action === "fall" || o.action === "tumbleFall") return -(o.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
   if (o.action === "jump") {
     // The second jump is a different rise — the lab offers the choice, so it
     // has to honour it. Past the apex the clip is over; the speed is 0.

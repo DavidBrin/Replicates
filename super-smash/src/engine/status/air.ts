@@ -52,8 +52,8 @@ export const STATUS_JUMP_SQUAT: FighterStatus = {
   },
 };
 
-/** Shared by JUMP and FALL: the airborne neutral state, rising or not. */
-function airMain(f: FighterState, intent: Intent, ctx: StateContext): void {
+/** Shared by JUMP, FALL and DAMAGE_FALL: the airborne neutral state, rising or not. */
+export function airMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.grounded) {
     startAction(f, "land");
     return;

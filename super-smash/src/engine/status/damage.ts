@@ -1,5 +1,6 @@
 /**
- * Reeling statuses: DAMAGE, DAMAGE_FLY, DOWN_WAIT, DOWN_STAND (Plan 2, Task 6).
+ * Reeling statuses: DAMAGE, DAMAGE_FLY, DAMAGE_FALL, DOWN_WAIT, DOWN_STAND
+ * (Plan 2, Task 6; DAMAGE_FALL Plan 3, Task 12).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim.
  */
@@ -21,9 +22,11 @@ import {
   startAction,
   startAirDodge,
   startMove,
+  techInputNearFloor,
 } from "../states";
 import type { Intent, StateContext } from "../states";
 import type { FighterState } from "../types";
+import { airMain } from "./air";
 import type { FighterStatus } from "./kind";
 
 /**
@@ -37,7 +40,9 @@ import type { FighterStatus } from "./kind";
  * Only a *press* (fresh or buffered) cancels: a shield held for a ground tech
  * (Task 12) must not spend the air dodge. A fighter whose air dodge is spent
  * stays in hitstun — nothing is cleared before the dodge is known to start.
- * A buffered press is spent only by the cancel it fires.
+ * A buffered press is spent only by the cancel it fires. A tumbling fighter
+ * with the floor inside the tech window below it is making a tech input, not
+ * cancelling (`techInputNearFloor`).
  */
 function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   if (f.grounded) return false;
@@ -45,7 +50,7 @@ function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): bool
   const aerial = f.actionFrame >= HITSTUN_CANCEL_AERIAL_FRAME && f.launchSpeed < HITSTUN_CANCEL_AERIAL_SPEED;
   if (!dodge && !aerial) return false;
   const buffered = peekBuffer(f, ctx.frame);
-  if (dodge && !f.airDodged && (intent.shieldPressed || buffered === "shield")) {
+  if (dodge && !f.airDodged && (intent.shieldPressed || buffered === "shield") && !techInputNearFloor(f, ctx)) {
     if (buffered === "shield") f.bufferedAction = null;
     f.hitstun = 0;
     f.balloon = false;
@@ -63,7 +68,13 @@ function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): bool
   return false;
 }
 
-/** Shared by DAMAGE and DAMAGE_FLY: tumble is hitstun of `TUMBLE_HITSTUN` frames or more, not a different thing. */
+/**
+ * Shared by DAMAGE and DAMAGE_FLY: tumble is hitstun of `TUMBLE_HITSTUN` frames or more, not a different thing.
+ *
+ * A tumble whose hitstun runs out in the air keeps tumbling (`tumbleFall`,
+ * SSBU's DAMAGE_FALL): it does not become a plain `fall`. A reel that never
+ * tumbled still does.
+ */
 function reelMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.hitstun > 0) {
     if (hitstunCancel(f, intent, ctx)) return;
@@ -71,7 +82,7 @@ function reelMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     bufferPress(f, intent, ctx.frame);
     return;
   }
-  startAction(f, f.grounded ? "stand" : "fall");
+  startAction(f, f.grounded ? "stand" : f.action === "tumble" ? "tumbleFall" : "fall");
 }
 
 export const STATUS_DAMAGE: FighterStatus = {
@@ -86,6 +97,39 @@ export const STATUS_DAMAGE_FLY: FighterStatus = {
   action: "tumble",
   kineticType: "GROUND_STOP",
   main: reelMain,
+};
+
+/**
+ * Tumbling after the hitstun (SSBU's DAMAGE_FALL, "DamageFall" in SmashWiki
+ * "Tumbling", https://www.ssbwiki.com/Tumbling). The fighter is free to act as
+ * in a fall: "They can move horizontally through the air as per normal", "They
+ * can perform aerial attacks, use any remaining jumps, and use any special
+ * moves, all of which end the tumbling state", air dodging "will end tumbling",
+ * and "They can still grab ledges as usual" (`findLedgeGrab` asks only that
+ * hitstun be over). So `main` is the fall's. Fast falling is the one thing the
+ * page leaves open for Ultimate (it names only Smash 64 and Melee): UNVERIFIED,
+ * kept as in a fall.
+ *
+ * What it does not do is land: it has no bounce, and "if tumbling characters
+ * hit the ground without teching, they will land into a lying position"
+ * (`onLanded`: `downed`, at any speed; `techOrBounce` for the tech). The
+ * reimplementations of the vanilla `DamageFall_Main` agree: HewDraw Remix
+ * `damagefall.rs` and WuBor Patch `damage_fall.rs` (cited in the Task 12 review).
+ * A press of shield is an air dodge, which ends it — unless the floor is inside
+ * the tech window, when it is the tech (`techInputNearFloor`).
+ */
+export const STATUS_DAMAGE_FALL: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_DAMAGE_FALL",
+  action: "tumbleFall",
+  kineticType: "FALL",
+  main(f, intent, ctx) {
+    // Never grounded here: touching the floor ends it (`onLanded`, `techOrBounce`).
+    if (f.grounded) {
+      startAction(f, "downed");
+      return;
+    }
+    airMain(f, intent, ctx);
+  },
 };
 
 export const STATUS_DOWN_WAIT: FighterStatus = {
@@ -111,6 +155,7 @@ export const STATUS_DOWN_STAND: FighterStatus = {
 export const DAMAGE_STATUSES: readonly FighterStatus[] = [
   STATUS_DAMAGE,
   STATUS_DAMAGE_FLY,
+  STATUS_DAMAGE_FALL,
   STATUS_DOWN_WAIT,
   STATUS_DOWN_STAND,
 ];

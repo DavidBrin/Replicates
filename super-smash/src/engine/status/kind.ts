@@ -54,6 +54,7 @@ export type StatusKind =
   | "FIGHTER_STATUS_KIND_ESCAPE_AIR"
   | "FIGHTER_STATUS_KIND_DAMAGE"
   | "FIGHTER_STATUS_KIND_DAMAGE_FLY"
+  | "FIGHTER_STATUS_KIND_DAMAGE_FALL"
   | "FIGHTER_STATUS_KIND_CAPTURE_WAIT"
   | "FIGHTER_STATUS_KIND_THROWN"
   | "FIGHTER_STATUS_KIND_DOWN_WAIT"
@@ -103,6 +104,7 @@ export const STATUS_KIND_OF_ACTION: Readonly<Record<ActionState, StatusKind>> = 
   airDodge: "FIGHTER_STATUS_KIND_ESCAPE_AIR",
   hitstun: "FIGHTER_STATUS_KIND_DAMAGE",
   tumble: "FIGHTER_STATUS_KIND_DAMAGE_FLY",
+  tumbleFall: "FIGHTER_STATUS_KIND_DAMAGE_FALL",
   grabbed: "FIGHTER_STATUS_KIND_CAPTURE_WAIT",
   thrown: "FIGHTER_STATUS_KIND_THROWN",
   downed: "FIGHTER_STATUS_KIND_DOWN_WAIT",
@@ -151,7 +153,8 @@ export interface FighterStatus {
   readonly main: (f: FighterState, intent: Intent, ctx: StateContext) => void;
   /**
    * status_exec: per-frame extras after the kinetic type has run. Unused in
-   * Plan 2. Not called on the frames `applyMovement` returns early: hanging on a
+   * Plan 2; the wall tech's hold is the one user (Plan 3, Task 12). Not called
+   * on the frames `applyMovement` returns early: hanging on a
    * ledge, under a live scripted-momentum hold, and in hitstun.
    */
   readonly exec?: (f: FighterState, intent: Intent, ctx: StateContext) => void;

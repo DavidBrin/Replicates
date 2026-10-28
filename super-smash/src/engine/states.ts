@@ -44,10 +44,12 @@ import {
   SPOT_DODGE_INTANGIBLE,
   TECH_CEILING_INTANGIBLE,
   TECH_INTANGIBLE,
+  TECH_WINDOW,
 } from "./constants";
 import {
   dropThroughPlatform,
   hitstunGravityOptions,
+  landsWithin,
   platformCentreX,
 } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
@@ -488,6 +490,7 @@ export function isActionable(f: FighterState): boolean {
     case "runBrake":
     case "crouch":
     case "fall":
+    case "tumbleFall":
     case "jump":
       return true;
     default:
@@ -535,11 +538,31 @@ export function airJump(f: FighterState, ctx: StateContext): boolean {
   return true;
 }
 
+/**
+ * A tumbling fighter pressing shield with the floor under it inside the tech
+ * window is making a tech input, not asking for an air dodge (Plan 3, Task 12).
+ * SmashWiki "Lucario (SSBU)/Techs": "a neutral airdodge option within 15 frames
+ * of landing will also activate a tech option": in the game the one press does
+ * both. The replica's air dodge stops dead where it starts and could not reach
+ * the floor, so a press that close to landing is read as the tech alone.
+ * UNVERIFIED: that reading, and `TECH_WINDOW` as how close "close" is.
+ * `tumble` is the hitstun cancel's side of it (`status/damage.ts`),
+ * `tumbleFall` the other (`handleActionable`).
+ */
+export function techInputNearFloor(f: FighterState, ctx: StateContext): boolean {
+  if (f.action !== "tumble" && f.action !== "tumbleFall") return false;
+  return landsWithin(f, ctx.stage, ctx.def.attributes, ctx.frame, TECH_WINDOW);
+}
+
 export function startAirDodge(f: FighterState, intent: Intent): boolean {
   if (f.airDodged) return false;
   f.airDodged = true;
+  // An air dodge begun out of a tumble techs on a surface in its first 15
+  // frames (Task 12); read before the status changes.
+  const fromTumble = f.action === "tumble" || f.action === "tumbleFall";
   const directional = intent.x !== 0 || intent.y !== 0;
   startAction(f, "airDodge");
+  f.combat.tumbleDodge = fromTumble;
   // `charge` is meaningless outside a smash, so an air dodge borrows it to
   // remember whether it was directional — which decides both its length (63
   // frames against 50) and its intangible window.
@@ -592,7 +615,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   }
 
   // Airborne.
-  if ((p.shield || intent.shieldHeld) && startAirDodge(f, intent)) return true;
+  if ((p.shield || intent.shieldHeld) && !techInputNearFloor(f, ctx) && startAirDodge(f, intent)) return true;
   if (p.special && beginSpecial(f, ctx, specialSlot(intent))) return true;
   if (p.attack) {
     const slot = aerialSlot(f, intent);
@@ -844,7 +867,10 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // The hop is over, so the next one decides its own height and its own damage.
   f.shortHop = false;
 
-  if (f.action === "tumble") {
+  // A tumble that reaches the floor lies down: in hitstun, one too slow to
+  // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
+  // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").
+  if (f.action === "tumble" || f.action === "tumbleFall") {
     f.hitstun = 0;
     kineticSetX(f, 0, "stop");
     startAction(f, "downed");

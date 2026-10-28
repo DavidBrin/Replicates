@@ -15,6 +15,7 @@ import {
   kineticLaunch,
   kineticMotion,
   kineticReel,
+  kineticReflect,
   kineticSet,
   kineticSetX,
   kineticSetY,
@@ -296,6 +297,19 @@ describe("setting a velocity outright", () => {
     kineticLaunch(f, 0, 0, fx(1));
     expect([f.vx, f.vy]).toEqual([0, 0]);
     expect(f.launchSpeed).toBe(fx(1));
+  });
+
+  // rubendal `js/knockback.js` L136-146: a floor bounce resets gravity, a wall or
+  // ceiling bounce keeps it. The caller says which gravity the launch carries.
+  it("kineticReflect is a launch that keeps the gravity it is given, and the sum holds", () => {
+    const f = loaded();
+    kineticReflect(f, fx(1.5), -fx(2), fx(2.5), -fx(0.6));
+    expect(f.kinetic).toEqual({ ...emptyKinetic(), damageX: fx(1.5), damageY: -fx(2), gravityY: -fx(0.6) });
+    expect([f.vx, f.vy]).toEqual([fx(1.5), -fx(2) - fx(0.6)]);
+    expect(f.launchSpeed).toBe(fx(2.5));
+    kineticReflect(f, 0, fx(2), fx(2), 0);
+    expect(f.kinetic.gravityY).toBe(0);
+    expect([f.vx, f.vy]).toEqual([0, fx(2)]);
   });
 });
 

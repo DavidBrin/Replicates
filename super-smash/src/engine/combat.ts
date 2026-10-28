@@ -39,6 +39,12 @@ export interface CombatState {
   techLockout: number;
   /** Frames during which a grab cannot catch this fighter: 60 after breaking out of one (Task 14). */
   grabImmune: number;
+  /**
+   * The air dodge now running began out of a tumble (the hitstun cancel, or
+   * `tumbleFall`): in its first 15 frames a surface is a tech (Task 12).
+   * Set by `startAirDodge`, cleared when the air dodge status ends.
+   */
+  tumbleDodge: boolean;
 }
 
 export function emptyCombat(): CombatState {
@@ -52,6 +58,7 @@ export function emptyCombat(): CombatState {
     techWindow: 0,
     techLockout: 0,
     grabImmune: 0,
+    tumbleDodge: false,
   };
 }
 
@@ -66,5 +73,6 @@ export function cloneCombat(c: CombatState): CombatState {
     techWindow: c.techWindow,
     techLockout: c.techLockout,
     grabImmune: c.grabImmune,
+    tumbleDodge: c.tumbleDodge,
   };
 }

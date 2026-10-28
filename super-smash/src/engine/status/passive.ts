@@ -13,9 +13,10 @@ import {
   TECH_FRAMES,
   TECH_ROLL_FRAMES,
   TECH_WALL_FRAMES,
+  TECH_WALL_HOLD,
   TECH_WALL_INTERRUPT,
 } from "../constants";
-import { kineticSetX } from "../kinetic";
+import { kineticSetX, kineticSetY } from "../kinetic";
 import { bufferPress, handleActionable, startAction } from "../states";
 import type { FighterStatus } from "./kind";
 
@@ -45,6 +46,10 @@ export const STATUS_PASSIVE_WALL: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_PASSIVE_WALL",
   action: "techWall",
   kineticType: "GROUND_STOP",
+  // Holds on the wall for `TECH_WALL_HOLD` frames before gravity takes it.
+  exec(f) {
+    if (f.actionFrame <= TECH_WALL_HOLD) kineticSetY(f, 0);
+  },
   main(f, intent, ctx) {
     if (f.actionFrame >= TECH_WALL_FRAMES) {
       startAction(f, "fall");

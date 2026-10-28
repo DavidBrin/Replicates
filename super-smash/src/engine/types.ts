@@ -121,6 +121,7 @@ export type ActionState =
   // reeling
   | "hitstun"
   | "tumble"
+  | "tumbleFall"
   | "grabbed"
   | "thrown"
   | "downed"

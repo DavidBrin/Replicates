@@ -74,10 +74,11 @@
  * launches are slow enough to tech (2.16 and 2.09, under 3), so Fox presses shield
  * 7 and 5 frames before he lands (780, 1024) and techs in place on the same frames
  * and the same spots as before (787 at x -16, 1029 at x 31): everything after them
- * keeps its frame. The short-hop nair's tumble (1635) is left to bounce: Fox now
- * lands at x 17 on 1673, not lying at x 37, and nothing after it needs him anywhere
- * in particular. `downed` and `getUp`, which those three landings used to reach, are
- * now the tech lab's (`goldenLab.ts`).
+ * keeps its frame. The short-hop nair's tumble (1635) is left alone: its hitstun
+ * runs out in the air on 1670 and Fox tumbles on (`tumbleFall`, SSBU's DAMAGE_FALL),
+ * lands lying down on 1671 (`downed`, at x 20, not 37), gets up from 1711 (`getUp`)
+ * and stands on 1741, in time for the dash on 1759. So `downed`, `getUp` and
+ * `tumbleFall` are still reached here, by a real hit and a real landing.
  *
  * Plan 3 Task 14 (grabs) re-tuned the first hold. A grab now holds floor(90 + 1.7p)
  * frames, not 60, and a fighter let go of cannot be grabbed again for 60 frames, so
@@ -91,7 +92,8 @@
  * Each step's comment gives the frame it starts on, and the events it names
  * (Fox breaking free on 140, the shield break on 649, the techs on 787 and 1029,
  * the hangs on 863, 1193, 1299 and 1400, the hits on 747, 1006, 1578 and 1635,
- * time up on 2014). All were checked against a run after Plan 3 Task 14.
+ * Fox down on 1671, time up on 2014). All were checked against a run after Plan 3
+ * Task 12's fix round.
  */
 
 import { Btn } from "@/engine/types";

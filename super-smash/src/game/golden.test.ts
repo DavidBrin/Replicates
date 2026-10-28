@@ -24,8 +24,8 @@ import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
- * CPU ever takes, and a 200-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
- * four fighters launched by hand into the floor, the wall and the underside.
+ * CPU ever takes, and a 100-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
+ * three fighters launched by hand into the floor, the wall and the underside.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -128,16 +128,17 @@ const MATCHES: readonly Match[] = [
 ];
 
 /**
- * Every `ActionState` the six matches must visit between them: all 46. A
+ * Every `ActionState` the six matches must visit between them: all 47. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
  * floor-level spawn turns into a landing on frame 1, and which the Battlefield match keeps.
- * Plan 3 Task 12 added the four tech states and took `downed` and `getUp` out of every
- * match but one: a tumble that lands too fast to tech now bounces and never lies down
- * (a missed tech needs a launch spent below 0.8 with hitstun still to run, which almost
- * no hit makes), so the script techs Fox on two of its tumbling landings (`tech`) and the
- * tech lab reaches `techRoll`, `techWall`, `techCeiling`, `downed` and `getUp`.
+ * Plan 3 Task 12 added the four tech states and `tumbleFall`. A tumble that lands in
+ * hitstun too fast to tech bounces; one whose hitstun runs out in the air becomes
+ * `tumbleFall` and lies down (`downed`, `getUp`) on landing unless it techs, so the CPU
+ * matches reach all three. The script techs Fox on two of its landings (`tech`) and the
+ * tech lab reaches `techRoll`, `techWall` and `techCeiling`, which no scripted fight gets
+ * to without off-stage play.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -174,6 +175,7 @@ const MUST_VISIT: Record<ActionState, true> = {
   thrown: true,
   downed: true,
   getUp: true,
+  tumbleFall: true,
   tech: true,
   techRoll: true,
   techWall: true,

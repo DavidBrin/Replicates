@@ -328,6 +328,14 @@ export const DIRECTIONAL_AIR_DODGE_SPEED = fx(3.2);
  * no new window opens for 40 frames after a press ("a player won't be able to
  * tech for 40 frames", the page's general rule; it gives no separate Ultimate
  * figure).
+ *
+ * UNVERIFIED boundary: SmashWiki "Lucario (SSBU)/Techs"
+ * (https://www.ssbwiki.com/Lucario_(SSBU)/Techs) says the window "is slightly
+ * increased to 12 frames", and the vanilla param `passive_trigger_frame` is 12
+ * (fudgepop01/amiibo_research `common.xml` L301,
+ * https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/common.xml#L301).
+ * That may be an inclusive/exclusive count of the same 11; the replica counts
+ * the press frame and the 10 after it (`updateTechInput`).
  */
 export const TECH_WINDOW = 11;
 export const TECH_LOCKOUT = 40;
@@ -335,23 +343,57 @@ export const TECH_LOCKOUT = 40;
  * A surface can be teched only at a launch speed of 3 or less (floor) or 6 or
  * less (wall, ceiling); a tumbling fighter bounces off at 0.8 or more (floor)
  * or 1 or more (wall, ceiling). rubendal SSBU-Calculator `js/knockback.js`
- * (`techable`, the bounce check: https://github.com/rubendal/SSBU-Calculator);
- * SmashWiki "Tech" names the 6.
+ * (`techable`, L79-80 and L148-149, and the bounce check, L133-134:
+ * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L133-L149);
+ * the vanilla params `damage_fly_reflect_d_speed` 0.8 (`common.xml` L364) and
+ * `damage_fly_reflect_speed` 1 (L360) agree on the bounce thresholds.
+ *
+ * UNVERIFIED boundary: rubendal tests `<= 6`, so a launch of exactly 6 techs a
+ * wall; SmashWiki "Tech" says "a current launch speed of 6 or higher" cannot
+ * (and the param `invalid_passive_speed` is 6, `common.xml` L307). The replica
+ * follows rubendal. The floor's 3 is rubendal's alone (SmashWiki only says
+ * ground techs are "much smaller"); a fighter tumbling after its hitstun
+ * (`tumbleFall`) keeps the same cap, UNVERIFIED, since its launch is nearly spent.
  */
 export const TECH_FLOOR_MAX_SPEED = fx(3);
 export const TECH_SURFACE_MAX_SPEED = fx(6);
 export const BOUNCE_FLOOR_MIN_SPEED = fx(0.8);
 export const BOUNCE_SURFACE_MIN_SPEED = fx(1);
 /**
- * A bounce keeps 0.95 of the launch — "5% in Ultimate" (SmashWiki "Knockback",
- * https://www.ssbwiki.com/Knockback) — and 0.8 of the hitstun left (SmashWiki
- * "Hitstun", https://www.ssbwiki.com/Hitstun: Ultimate keeps Smash 4's bounce
- * reduction, "0.8× relative to the initial amount"; applied to what is left,
- * UNVERIFIED). rubendal's calculator keeps the whole launch on a bounce (its
- * 0.95 is commented out), so the wiki's figure is the one used.
+ * A bounce keeps 0.9 of the launch off a floor and 0.95 off a wall or ceiling:
+ * the vanilla params `damage_fly_reflect_d_speed_mul` 0.9 (L365) and
+ * `damage_fly_reflect_speed_mul` 0.95 (L361) in the fudgepop01/amiibo_research
+ * dump,
+ * https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/common.xml#L356-L374
+ * (names from https://github.com/ultimate-research/param-labels). rubendal's
+ * `applyDecaySpeedUp` splits them the same way (`lsr` 0.95, 0.9 on a floor:
+ * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L69-L74;
+ * only the copy inside its bounce branch, where `lsr` is 1, is commented out).
+ * SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback) gives "5% in
+ * Ultimate", the wall and ceiling figure.
  */
-export const BOUNCE_LAUNCH_RATIO: Ratio = [19, 20];
+export const BOUNCE_FLOOR_LAUNCH_RATIO: Ratio = [9, 10];
+export const BOUNCE_SURFACE_LAUNCH_RATIO: Ratio = [19, 20];
+/**
+ * A bounce keeps 0.8 of the hitstun left: SmashWiki "Hitstun"
+ * (https://www.ssbwiki.com/Hitstun: Ultimate keeps Smash 4's bounce reduction,
+ * "0.8× relative to the initial amount") and the vanilla param
+ * `damage_fly_reflect_reaction_frame_mul` 0.8 (`common.xml` L366). Applied to
+ * what is left, UNVERIFIED.
+ */
 export const BOUNCE_HITSTUN_RATIO: Ratio = [4, 5];
+/**
+ * An air dodge begun out of a tumble that meets a surface in its first 15
+ * frames is a tech: SmashWiki "Lucario (SSBU)/Techs" ("neutral and directional
+ * air dodges can be used for every form of teching during the first 15
+ * frames", "After 16 frames ... no longer able to tech against surfaces") and
+ * the vanilla param `air_escape_passive_trigger_frame` 15 (`common.xml` L306).
+ * UNVERIFIED: that it is only an air dodge out of a tumble (the hitstun cancel
+ * or `tumbleFall`). The pages read as if any air dodge within 15 frames could,
+ * but SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge) says wavelanding
+ * is still possible in Ultimate, so an ordinary air dodge keeps its landing lag.
+ */
+export const AIR_DODGE_TECH_FRAMES = 15;
 /**
  * Tech animations, from SmashWiki "Lucario (SSBU)/Techs"
  * (https://www.ssbwiki.com/Lucario_(SSBU)/Techs) — the one fighter with
@@ -364,6 +406,13 @@ export const TECH_FRAMES = 26;
 export const TECH_ROLL_FRAMES = 40;
 export const TECH_WALL_FRAMES = 26;
 export const TECH_WALL_INTERRUPT = 6;
+/**
+ * A wall tech holds on the wall for 5 frames before gravity takes it: the vanilla
+ * param `passive_wall_stop_frame` 5 (`common.xml` L305). UNVERIFIED as applied
+ * (the param's use is not published; it is read as a hold). The ceiling tech
+ * falls at once: the dump has no ceiling counterpart.
+ */
+export const TECH_WALL_HOLD = 5;
 export const TECH_CEILING_FRAMES = 26;
 export const TECH_INTANGIBLE = [1, 20] as const;
 export const TECH_CEILING_INTANGIBLE = [1, 17] as const;
