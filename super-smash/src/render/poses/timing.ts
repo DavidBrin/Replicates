@@ -352,6 +352,14 @@ export interface MoveTiming {
   /** First frame any hitbox is live, or -1 for a move with none. */
   readonly firstActive: number;
   readonly lastActive: number;
+  /**
+   * A chargeable move's hold frame: the `actionFrame` a held charge pins it on
+   * (`attackMain` in `engine/status/attack.ts`: its first *listed* hitbox's
+   * frame less one, and at least 1). Not `firstActive`, which is the earliest
+   * hitbox: Pikachu's forward smash lists a later one first. Absent for a move
+   * that cannot charge.
+   */
+  readonly chargeHold?: number;
 }
 
 /** Read the timing of the move a fighter is currently performing. */
@@ -374,6 +382,7 @@ export function moveTimingFor(
     total: m.totalFrames,
     firstActive: first < 0 ? -1 : actionFrameOf(first),
     lastActive: last < 0 ? -1 : actionFrameOf(last),
+    ...(m.chargeable ? { chargeHold: Math.max(1, (m.hitboxes[0]?.startFrame ?? 1) - 1) } : {}),
   };
 }
 
@@ -416,8 +425,13 @@ export function poseTimeFor(
 
   const strike = clip?.strike;
   // A charging smash parks partway up its wind-up, so the charge glow has a
-  // coiled pose to sit behind rather than a finished one.
-  if (fighter.charge > 0 && (name === "fsmash" || name === "usmash" || name === "dsmash")) {
+  // coiled pose to sit behind rather than a finished one. Only while it is
+  // held: the engine keeps `charge` once the button comes up (frozen, for the
+  // swing's damage) until the move ends, so a smash with charge is still
+  // charging only while its frame sits on the hold. Past it, it swings. With
+  // no hold frame to go on (no move timing), any charge parks.
+  const charging = fighter.charge > 0 && fighter.actionFrame <= (timing?.chargeHold ?? Infinity);
+  if (charging && (name === "fsmash" || name === "usmash" || name === "dsmash")) {
     return (strike ?? 0.3) * 0.55;
   }
 
