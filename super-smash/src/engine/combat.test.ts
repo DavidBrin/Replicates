@@ -6,7 +6,7 @@ import { scriptHitboxes } from "./acmd/hitboxes";
 import { runScript } from "./acmd/interpreter";
 import { attackFromHitbox } from "./acmd/legacy";
 import type { AcmdCommand, AttackParams } from "./acmd/types";
-import { ONE, byRatio, fx, mul, toFloat } from "./fixed";
+import { ONE, byRatio, cosDeg, fx, mul, sinDeg, toFloat } from "./fixed";
 import {
   AIR_DODGE_TECH_FRAMES,
   ASDI_DISTANCE,
@@ -3781,5 +3781,349 @@ describe("capsule hitboxes through a real hit (Plan 3, Task 17)", () => {
     it("is hit by a far end that only grazes it", () => {
       expect(ballDamage(8 - 0.05)).toBeGreaterThanOrEqual(fx(5));
     });
+  });
+});
+
+/* --------------------------------------------- Task 19: autolink angles -- */
+
+describe("autolink angles (Plan 3, Task 19)", () => {
+  /**
+   * Fighter 0 jabs with `angle` (`over` sets more of the box's own fields; `inputs` is the
+   * pair's inputs per frame); returns the hit frame and the frame its freeze releases
+   * fighter 1.
+   */
+  function autolinked(
+    angle: number,
+    prepare: (s: GameState) => void,
+    over: Partial<Hitbox> = {},
+    inputs: (i: number) => readonly InputFrame[] = JAB,
+  ): { hit: Frame; released: Frame } {
+    const def: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        jab1: move("jab1", { hitboxes: [hitbox({ angle: fx(angle), damage: fx(2), ...over })] }),
+        nair: move("nair", { hitboxes: [hitbox({ angle: fx(angle), damage: fx(2), ...over })] }),
+      },
+    };
+    const ctx = ctxFor(def);
+    const s = standing(ctx);
+    prepare(s);
+    const frames = play(s, 30, inputs, ctx);
+    const h = frames.findIndex((f) => f.events.hits.length > 0);
+    const r = frames.findIndex((f, i) => i > h && f.state.fighters[1].hitlag === 0);
+    return { hit: frames[h], released: frames[r] };
+  }
+  const airborne = (s: GameState): void => {
+    Object.assign(s.fighters[1], { x: fx(12), y: fx(2), grounded: false, platform: -1, action: "fall" });
+  };
+  /** Airborne, and thrashing at 200%: the jab tumbles her. */
+  const airborneAt200 = (s: GameState): void => {
+    airborne(s);
+    s.fighters[1].damage = fx(200);
+  };
+  /**
+   * Both in the air at height `y`, the victim at x = 12 and the attacker at `x` moving at
+   * (`vx`, `vy`): the momentum its hit carries (it arrives a few frames later).
+   */
+  const attackerAt = (x: number, y: number, vx: number, vy: number) => (s: GameState): void => {
+    airborne(s);
+    s.fighters[1].y = fx(y);
+    Object.assign(s.fighters[0], { x: fx(x), y: fx(y), grounded: false, platform: -1, action: "fall" });
+    s.fighters[0].kinetic.controlX = vx;
+    s.fighters[0].kinetic.gravityY = vy;
+    s.fighters[0].vx = vx;
+    s.fighters[0].vy = vy;
+  };
+  /** A moving attacker and a victim at 200%: the jab tumbles her and the launch has a speed. */
+  const movingAt200 = (s: GameState): void => {
+    attackerAt(-6, 2, fx(2), 0)(s);
+    s.fighters[1].damage = fx(200);
+  };
+
+  // SmashWiki "Autolink angle": 367° sets "the opponent's launch speed to the
+  // attacker's momentum, plus 20% of the difference" between the hitbox and the
+  // opponent's position — pulling them into the hit.
+  it("pulls an airborne victim 20% of the way toward the hitbox (367)", () => {
+    const { hit, released } = autolinked(367, airborne);
+    const [a, at] = hit.state.fighters;
+    const v = released.state.fighters[1];
+    const hb = hit.events.hits[0];
+    expect(v.kinetic.damageX).toBe(a.vx + Math.trunc((hb.x - at.x) / 5));
+    expect(v.kinetic.damageY).toBe(a.vy + Math.trunc((hb.y - at.y) / 5));
+    expect(v.kinetic.damageX).toBeLessThan(0);
+  });
+
+  // "Against grounded opponents, it always uses an angle of 80°."
+  it("launches a grounded victim at 80 degrees instead (367)", () => {
+    const { hit } = autolinked(367, () => {});
+    expect(hit.events.hits[0].angle).toBe(fx(80));
+  });
+
+  // 365°: launch speed is "50% of the attacker's momentum", whatever the knockback.
+  it("carries the victim at half the attacker's momentum (365)", () => {
+    const { hit, released } = autolinked(365, (s) => {
+      airborne(s);
+      Object.assign(s.fighters[0], { grounded: false, platform: -1, action: "fall", y: fx(2) });
+      s.fighters[0].kinetic.controlX = fx(1);
+      s.fighters[0].vx = fx(1);
+    });
+    const a = hit.state.fighters[0];
+    expect(released.state.fighters[1].kinetic.damageX).toBe(Math.trunc(a.vx / 2));
+    expect(released.state.fighters[1].kinetic.damageY).toBe(Math.trunc(a.vy / 2));
+  });
+
+  // 365° "regardless of the knockback": a grounded victim is not sent at 80°, and the
+  // hit's own knockback does not size the launch (here, none: the attacker stands still).
+  it("launches a grounded victim of a standing attacker nowhere, whatever the knockback (365)", () => {
+    const { hit, released } = autolinked(365, () => {}, { baseKnockback: fx(90) });
+    expect(hit.events.hits[0].knockback).toBeGreaterThan(fx(90));
+    expect(released.state.fighters[1].kinetic.damageX).toBe(0);
+    expect(released.state.fighters[1].kinetic.damageY).toBe(0);
+    expect(released.state.fighters[1].launchSpeed).toBe(0);
+  });
+
+  // The page gives no formula for 366° or 368°: both run as 367° (UNVERIFIED), grounded or not.
+  describe.each([366, 368])("%i, which runs as 367 (UNVERIFIED)", (angle) => {
+    it("pulls an airborne victim exactly as 367 does", () => {
+      const same = autolinked(367, airborne).released.state.fighters[1].kinetic;
+      const k = autolinked(angle, airborne).released.state.fighters[1].kinetic;
+      expect([k.damageX, k.damageY]).toEqual([same.damageX, same.damageY]);
+      expect(k.damageX).toBeLessThan(0);
+    });
+
+    it("launches a grounded victim at 80 degrees", () => {
+      expect(autolinked(angle, () => {}).hit.events.hits[0].angle).toBe(fx(80));
+    });
+  });
+
+  // 367° is not 7°: its hit's spark goes the way the victim is pulled.
+  it("reports the direction the victim is pulled, not the angle read as degrees (367)", () => {
+    const { hit, released } = autolinked(367, airborne);
+    const { damageX: x, damageY: y } = released.state.fighters[1].kinetic;
+    const angle = hit.events.hits[0].angle;
+    // The pull is up and back toward the box: nowhere near 7 degrees.
+    expect(Math.abs(angle - fx(7))).toBeGreaterThan(fx(90));
+    // Along the vector, to a tenth of a degree: its cross product with the angle's unit vector is 0.
+    const cross = x * sinDeg(angle) - y * cosDeg(angle);
+    expect(Math.abs(cross) / Math.hypot(x, y)).toBeLessThan(0.0025 * ONE);
+    expect(x * cosDeg(angle) + y * sinDeg(angle)).toBeGreaterThan(0);
+  });
+
+  // The vector is in world space, so facing left changes where the box is and nothing else:
+  // the victim, in front of a box that faces left, is pulled toward +x.
+  it("reports the direction of a pull to the right of a box that faces left (367)", () => {
+    const mirrored = (s: GameState): void => {
+      airborne(s);
+      Object.assign(s.fighters[0], { x: fx(24), facing: -1 });
+      Object.assign(s.fighters[1], { x: fx(12), facing: 1 });
+    };
+    const { hit, released } = autolinked(367, mirrored);
+    const { damageX: x, damageY: y } = released.state.fighters[1].kinetic;
+    const angle = hit.events.hits[0].angle;
+    expect(x).toBeGreaterThan(0);
+    expect(Math.abs(x * sinDeg(angle) - y * cosDeg(angle)) / Math.hypot(x, y)).toBeLessThan(0.0025 * ONE);
+    expect(x * cosDeg(angle) + y * sinDeg(angle)).toBeGreaterThan(0);
+  });
+
+  // "its launch speed is capped at 3"; "vertical launch speed has a lower cap of -1".
+  describe("caps (367)", () => {
+    it("caps the launch speed at 3, keeping the direction", () => {
+      const { released } = autolinked(367, attackerAt(-8, 2, fx(5), 0));
+      const { damageX: x, damageY: y } = released.state.fighters[1].kinetic;
+      expect(released.state.fighters[1].launchSpeed).toBeLessThanOrEqual(fx(3));
+      expect(Math.abs(Math.hypot(x, y) - fx(3))).toBeLessThan(2);
+      expect(x).toBeGreaterThan(0);
+    });
+
+    it("floors the vertical speed at -1, before the speed cap", () => {
+      const { released } = autolinked(367, attackerAt(4, 40, 0, fx(-2.5)));
+      const v = released.state.fighters[1];
+      expect(v.kinetic.damageY).toBe(fx(-1));
+      expect(v.launchSpeed).toBeLessThan(fx(3));
+    });
+
+    it("does not cap 365, whose launch is half the momentum", () => {
+      const { hit, released } = autolinked(365, attackerAt(-24, 2, fx(7), 0));
+      expect(released.state.fighters[1].kinetic.damageX).toBe(Math.trunc(hit.state.fighters[0].vx / 2));
+      expect(released.state.fighters[1].kinetic.damageX).toBeGreaterThan(fx(3));
+    });
+  });
+
+  // The vector is fixed on contact and fires when the freeze ends, whole: no DI, no LSI.
+  // UNVERIFIED: the page names only SDI, which 365° "can be easily escaped with".
+  describe("DI and LSI", () => {
+    // The stick is held from the frame after the hit on, through the freeze: it can bend the
+    // launch and nothing before it (a stick held in the air lands her first).
+    const launched = (angle: number, btn: number) => {
+      const after = autolinked(angle, movingAt200).hit.state.frame;
+      const held = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Attack : 0, i >= after ? btn : 0];
+      const r = autolinked(angle, movingAt200, {}, held).released.state.fighters[1];
+      return [r.kinetic.damageX, r.kinetic.damageY, r.launchSpeed];
+    };
+
+    it("bends a tumbling ordinary launch, which is the control", () => {
+      expect(launched(45, Btn.Up)).not.toEqual(launched(45, 0));
+      expect(launched(45, Btn.Left)).not.toEqual(launched(45, 0));
+    });
+
+    it.each([365, 367])("leaves a tumbling %i launch as it was fixed, whatever the stick says", (angle) => {
+      const neutral = launched(angle, 0);
+      expect(neutral[2]).toBeGreaterThan(0);
+      for (const btn of [Btn.Up, Btn.Down, Btn.Left, Btn.Right]) expect(launched(angle, btn)).toEqual(neutral);
+    });
+  });
+
+  // What the hit decides, an autolink does not take from the angle: its hitstun is the
+  // knockback's ("hitstun is still determined by the numerical result of knockback").
+  it("has the hitstun and knockback of the same hit at an ordinary angle", () => {
+    const plain = autolinked(45, airborneAt200);
+    const link = autolinked(367, airborneAt200);
+    expect(link.hit.events.hits[0].knockback).toBe(plain.hit.events.hits[0].knockback);
+    expect(link.hit.state.fighters[1].hitstun).toBe(plain.hit.state.fighters[1].hitstun);
+    expect(link.hit.state.fighters[1].action).toBe("tumble");
+  });
+
+  // SmashWiki: "the knockback speed-up effect still applies to moves that use autolink
+  // angles if they do not have set knockback" — and its hitstun was shortened for it.
+  describe("the balloon speed-up", () => {
+    const speedUp = (angle: number, over: Partial<Hitbox>, at: (s: GameState) => void) => {
+      const k = autolinked(angle, at, over).released.state.fighters[1].kinetic;
+      return { faf: k.speedUpFaf, max: k.speedUpMax };
+    };
+
+    it.each([365, 367])("plays a tumbling %i launch sped up, as the plain hit does", (angle) => {
+      const plain = speedUp(45, {}, movingAt200);
+      expect(plain.max).toBeGreaterThan(ONE);
+      expect(speedUp(angle, {}, movingAt200)).toEqual(plain);
+    });
+
+    it("does not speed up a launch that does not tumble", () => {
+      expect(speedUp(367, {}, attackerAt(-6, 2, fx(2), 0))).toEqual({ faf: 0, max: 0 });
+    });
+
+    it("does not speed up set knockback", () => {
+      expect(speedUp(367, { fixedKnockback: fx(30) }, movingAt200)).toEqual({ faf: 0, max: 0 });
+    });
+  });
+
+  // `set_weight` falls by its own gravity "whatever the angle" (`reelOnce`); Kirby's and Link's
+  // forward airs and Pikachu's neutral air are set weight on an autolink angle.
+  it("gives a set-weight autolink set weight's fall", () => {
+    const set = autolinked(367, airborne, { setWeight: true }).released.state.fighters[1];
+    expect(set.kinetic.setWeightFrames).toBe(SET_WEIGHT_LAUNCH_FRAMES);
+    expect(autolinked(367, airborne).released.state.fighters[1].kinetic.setWeightFrames).toBe(0);
+  });
+
+  it("is never a balloon launch", () => {
+    expect(autolinked(367, airborneAt200).released.state.fighters[1].balloon).toBe(false);
+  });
+
+  // 365° on a grounded victim carries nothing; with momentum it can lift her off the floor.
+  it("takes a grounded victim off the floor when the launch rises (365)", () => {
+    const { released } = autolinked(365, (s) => {
+      Object.assign(s.fighters[0], { grounded: false, platform: -1, action: "fall", y: fx(3) });
+      s.fighters[0].kinetic.gravityY = fx(1);
+      s.fighters[0].vy = fx(1);
+    });
+    const v = released.state.fighters[1];
+    expect(v.kinetic.damageY).toBeGreaterThan(0);
+    expect(v.grounded).toBe(false);
+    expect(v.jumpsUsed).toBe(1);
+  });
+
+  describe("the parked vector", () => {
+    it("is parked for the freeze, then fired and cleared", () => {
+      const { hit, released } = autolinked(367, airborne);
+      const parked = hit.state.fighters[1].combat;
+      expect(parked.autolink).toBe(true);
+      expect([parked.autolinkX, parked.autolinkY]).toEqual([
+        released.state.fighters[1].kinetic.damageX,
+        released.state.fighters[1].kinetic.damageY,
+      ]);
+      expect(released.state.fighters[1].combat).toMatchObject({ autolink: false, autolinkX: 0, autolinkY: 0 });
+    });
+
+    it.each([45, 361, 360, 364])("is not parked for an ordinary angle (%i)", (angle) => {
+      const { hit, released } = autolinked(angle, airborne);
+      expect(hit.state.fighters[1].combat).toMatchObject({ autolink: false, autolinkX: 0, autolinkY: 0 });
+      expect(released.state.fighters[1].combat.autolink).toBe(false);
+    });
+
+    it("is not parked against a grounded victim, who is launched at 80 degrees (367)", () => {
+      expect(autolinked(367, () => {}).hit.state.fighters[1].combat.autolink).toBe(false);
+    });
+
+    it("is a state a rollback reproduces: cloned, and in the hash", () => {
+      const { hit } = autolinked(367, airborne);
+      const copy = cloneState(hit.state);
+      expect(copy.fighters[1].combat).toEqual(hit.state.fighters[1].combat);
+      expect(hashState(copy)).toBe(hashState(hit.state));
+      copy.fighters[1].combat.autolinkX += 1;
+      expect(hashState(copy)).not.toBe(hashState(hit.state));
+      copy.fighters[1].combat.autolinkX -= 1;
+      copy.fighters[1].combat.autolink = false;
+      expect(hashState(copy)).not.toBe(hashState(hit.state));
+    });
+  });
+
+  // A projectile launches with its own momentum, as a fist does with the fighter's.
+  it("carries a victim of a projectile at half the projectile's momentum (365)", () => {
+    const pellet = hitbox({ startFrame: 1, endFrame: 90, x: 0, y: 0, damage: fx(2), angle: fx(365) });
+    const shooter: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        neutralB: move("neutralB", {
+          totalFrames: 30,
+          hitboxes: [],
+          projectiles: [
+            { id: "pellet", spawnFrame: 6, offsetX: fx(6), offsetY: fx(6), vx: fx(4), vy: 0, gravity: 0, lifetime: 90, hitbox: pellet, destroyOnHit: true, visual: "energy" },
+          ],
+        }),
+      },
+    };
+    const ctx = ctxFor(shooter);
+    const s = standing(ctx);
+    s.fighters[1].x = fx(40);
+    const frames = play(s, 40, (i) => [i === 0 ? Btn.Special : 0, 0], ctx);
+    const h = frames.findIndex((f) => f.events.hits.length > 0);
+    const r = frames.findIndex((f, i) => i > h && f.state.fighters[1].hitlag === 0);
+    expect(h).toBeGreaterThan(0);
+    // The shooter is not frozen by its own pellet, and stands still: half of 4 is the pellet's.
+    expect(frames[r].state.fighters[1].kinetic.damageX).toBe(fx(2));
+    expect(frames[r].state.fighters[1].kinetic.damageY).toBe(0);
+  });
+
+  // A launch that is kept (Task 8) turns toward the sum of both vectors: an autolink adds the
+  // vector it would launch with, not a launch at its angle read as degrees (7°).
+  it("adds its own pull to a kept launch, not a launch at 7 degrees (367)", () => {
+    const quick: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        jab1: move("jab1", { hitboxes: [hitbox({ startFrame: 1, radius: fx(10), angle: fx(367) })] }),
+      },
+    };
+    const ctx = ctxFor(quick);
+    const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+    [{ x: fx(-60), facing: 1 }, { x: fx(12), facing: -1 }, { x: 0, facing: 1 }].forEach((place, i) => {
+      Object.assign(s.fighters[i], place, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
+    });
+    // Fighter 1 is flying straight up, from fighter 0, and the jab is far weaker than that.
+    const v = s.fighters[1];
+    Object.assign(v, { grounded: false, platform: -1, y: fx(1), action: "tumble", hitstun: 50 });
+    v.kinetic.damageY = fx(3);
+    v.launchSpeed = fx(3);
+    v.vy = fx(3);
+    v.combat.launchSource = 0;
+    const frames = play(s, 8, (i) => [0, 0, i === 0 ? Btn.Attack : 0], ctx);
+    const kept = frames[frames.findIndex((f) => f.events.hits.length > 0)].state.fighters[1];
+    expect(kept.pendingFacing).toBe(0);
+    expect(kept.hitstun).toBeGreaterThan(30);
+    // Up, and pulled back toward the box (it is 4 units behind the victim): not up and forward.
+    expect(kept.kinetic.damageX).toBeLessThan(0);
+    expect(kept.kinetic.damageY).toBeGreaterThan(0);
+    expect(Math.abs(Math.hypot(kept.kinetic.damageX, kept.kinetic.damageY) - kept.launchSpeed)).toBeLessThan(3);
   });
 });

@@ -63,6 +63,16 @@ export interface CombatState {
    * `startMove`, which every swing, pummel and throw begins with (Task 16).
    */
   swingQueued: boolean;
+  /**
+   * The parked launch is an autolink (Plan 3, Task 19): its vector was fixed on
+   * contact as (`autolinkX`, `autolinkY`), Q12, and `releasePendingLaunch` fires
+   * it as it stands, with no DI, LSI or balloon fall (the hit's speed-up and set
+   * weight still ride along: `launchFaf`, `launchSetWeight`). Both stay 0 when
+   * it is not.
+   */
+  autolink: boolean;
+  autolinkX: number;
+  autolinkY: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -80,6 +90,9 @@ export function emptyCombat(): CombatState {
     grabImmune: 0,
     tumbleDodge: false,
     swingQueued: false,
+    autolink: false,
+    autolinkX: 0,
+    autolinkY: 0,
   };
 }
 
@@ -98,5 +111,8 @@ export function cloneCombat(c: CombatState): CombatState {
     grabImmune: c.grabImmune,
     tumbleDodge: c.tumbleDodge,
     swingQueued: c.swingQueued,
+    autolink: c.autolink,
+    autolinkX: c.autolinkX,
+    autolinkY: c.autolinkY,
   };
 }

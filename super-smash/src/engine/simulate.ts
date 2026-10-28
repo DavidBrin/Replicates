@@ -15,10 +15,17 @@
  * you were hit, not the one after).
  */
 
-import { DIAGONAL, ONE, fx, mul, abs, byRatio, clamp, randomInt, nextRandom } from "./fixed";
+import { DIAGONAL, ONE, fx, mul, abs, byRatio, clamp, cosDeg, randomInt, nextRandom, sinDeg, sqrt } from "./fixed";
 import {
   ASDI_DISTANCE,
   ASDI_VERTICAL,
+  AUTOLINK_GROUNDED_ANGLE,
+  AUTOLINK_HALF_MOMENTUM,
+  AUTOLINK_MAX,
+  AUTOLINK_MIN,
+  AUTOLINK_MIN_VY,
+  AUTOLINK_PULL_RATIO,
+  AUTOLINK_SPEED_CAP,
   BOUNCE_FLOOR_LAUNCH_RATIO,
   BOUNCE_FLOOR_MIN_SPEED,
   FINAL_SMASH_STANDBY,
@@ -127,6 +134,7 @@ import {
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { launchBefore, techOrBounce, updateTechInput } from "./tech";
 import { cloneCombat, emptyCombat } from "./combat";
+import type { CombatState } from "./combat";
 import {
   attackerShieldPushback,
   perfectShieldHitlag,
@@ -1325,6 +1333,10 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
     f.y += intent.y * distance;
   }
   f.combat.asdi = false;
+  if (f.combat.autolink) {
+    releaseAutolink(f);
+    return;
+  }
   const facing = f.pendingFacing;
   const relStick = intent.x * (facing >= 0 ? 1 : -1);
   // DI and LSI only act on a launch that tumbles and is not within 0.17 rad of
@@ -1382,21 +1394,158 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   // Whether the launch takes the victim off the ground is a DI question too: a
   // flat Sakurai-angle hit that gets DI'd upward leaves the floor, and the same
   // hit without DI slides along it.
+  leaveGroundIfLifted(f);
+  clearPendingLaunch(f);
+}
+
+/**
+ * A launch that rises takes a grounded victim off the floor. Launched off the
+ * floor is leaving the ground without a jump: the ground jump is spent, the
+ * midair jumps are not (see `onLeftGround`). Being hit gives none back either:
+ * "double jumps are not given back to the player upon being put into hitstun"
+ * (SmashWiki Double jump).
+ */
+function leaveGroundIfLifted(f: FighterState): void {
   if (f.vy > 0 && f.grounded) {
     f.grounded = false;
     f.platform = -1;
-    // Launched off the floor is leaving the ground without a jump: the ground
-    // jump is spent, the midair jumps are not (see `onLeftGround`). Being hit
-    // gives none back either: "double jumps are not given back to the player
-    // upon being put into hitstun" (SmashWiki Double jump).
     f.jumpsUsed = Math.max(f.jumpsUsed, 1);
   }
+}
+
+/**
+ * Fire the autolink `parkAutolink` fixed on contact (Plan 3, Task 19): no DI, no
+ * LSI and no balloon fall, the vector as it stands. What is not the angle's is
+ * the hit's, as for any launch: the balloon speed-up of a tumbling hit without
+ * set knockback ("the knockback speed-up effect still applies to moves that use
+ * autolink angles if they do not have set knockback", SmashWiki "Autolink
+ * angle", https://www.ssbwiki.com/Autolink_angle; its hitstun was shortened for
+ * it on contact) and set weight's fall ("whatever the angle", `reelOnce`).
+ * UNVERIFIED: that DI and LSI do not act on it (the page names only SDI, which
+ * 365° "can be easily escaped with"), and that it is never balloon (the page
+ * does not say).
+ */
+function releaseAutolink(f: FighterState): void {
+  const x = f.combat.autolinkX;
+  const y = f.combat.autolinkY;
+  const speed = sqrt(mul(x, x) + mul(y, y));
+  f.balloon = false;
+  kineticLaunch(f, x, y, speed, speed > 0 ? f.combat.launchFaf : 0, f.combat.launchSetWeight);
+  leaveGroundIfLifted(f);
   clearPendingLaunch(f);
 }
 
 /** One SDI pulse: 2 units, ×1.15 from the sixth consecutive hit taken (Task 11). */
 function sdiDistance(f: FighterState): number {
   return f.combat.comboHits > SDI_COMBO_HITS ? byRatio(SDI_DISTANCE, SDI_COMBO_RATIO) : SDI_DISTANCE;
+}
+
+/** Is `angle` one of the autolink angles, 365° to 368°: not degrees at all (Plan 3, Task 19)? */
+function isAutolinkAngle(angle: number): boolean {
+  return angle >= AUTOLINK_MIN && angle <= AUTOLINK_MAX;
+}
+
+/**
+ * The launch angle a hit resolves to against this victim: `resolveAngle`, and an
+ * autolink angle's own rule for a grounded one. "When hitting an opponent on the
+ * ground, it always uses an angle of 80° and does not modify launch speed"
+ * (SmashWiki "Autolink angle", https://www.ssbwiki.com/Autolink_angle, of
+ * 367°); 365° is half the attacker's momentum whoever it hits, and has no angle
+ * to resolve. UNVERIFIED: that 366° and 368° do the same (they run as 367°).
+ */
+function hitAngle(hb: Hitbox, victimGrounded: boolean, kb: number): number {
+  if (victimGrounded && isAutolinkAngle(hb.angle) && hb.angle !== AUTOLINK_HALF_MOMENTUM) {
+    return AUTOLINK_GROUNDED_ANGLE;
+  }
+  return resolveAngle(hb, victimGrounded, kb);
+}
+
+/**
+ * The launch an autolink angle fixes against this victim, in world space; null
+ * for any other hit, and for a grounded victim of 366° to 368°, which `hitAngle`
+ * sends out at 80° like any launch.
+ *
+ * SmashWiki "Autolink angle" (https://www.ssbwiki.com/Autolink_angle). 365°:
+ * "it sets the opponent's launch speed to 50% of the attacker's momentum", "regardless
+ * of the knockback". 367°: "the attacker's momentum" plus "20% of the difference
+ * between the hitbox and opponent's positional coordinates", capped at a launch
+ * speed of 3, with "vertical launch speed ... a lower cap of -1". The page
+ * gives no formula for 366° or 368° (368° "appears to function as a mix between
+ * the 366° and 367° angles"; 366° has no cap and a five-frame pull): both run as
+ * 367° (UNVERIFIED). The cap holds at once, where the page has it "5 frames after
+ * the opponent is launched" (UNVERIFIED simplification).
+ *
+ * "Position" is the fighter's origin, and a hitbox's is its (first) end
+ * (UNVERIFIED). The momentum is the attacker's `vx`/`vy`, or a projectile's. It is
+ * read here, on contact in phase 6: after this frame's movement and collision,
+ * so it is the velocity the attacker ends the frame with, and a fighter in
+ * hitlag keeps it (the freeze skips movement), so it is the momentum the page's
+ * "calculated after hitlag is over" would read. The victim's position is not
+ * the same then: SDI and ASDI may move it during the freeze, and the vector
+ * here does not follow (UNVERIFIED).
+ */
+function autolinkVector(
+  victim: FighterState,
+  hb: Hitbox,
+  c: Candidate,
+  attacker: FighterState,
+): { vx: number; vy: number } | null {
+  if (!isAutolinkAngle(hb.angle)) return null;
+  const half = hb.angle === AUTOLINK_HALF_MOMENTUM;
+  if (!half && victim.grounded) return null;
+  const mx = c.projectile !== null ? c.projectile.vx : attacker.vx;
+  const my = c.projectile !== null ? c.projectile.vy : attacker.vy;
+  if (half) return { vx: Math.trunc(mx / 2), vy: Math.trunc(my / 2) };
+  let vx = mx + byRatio(c.x - victim.x, AUTOLINK_PULL_RATIO);
+  let vy = my + byRatio(c.y - victim.y, AUTOLINK_PULL_RATIO);
+  if (vy < AUTOLINK_MIN_VY) vy = AUTOLINK_MIN_VY;
+  const speed = sqrt(mul(vx, vx) + mul(vy, vy));
+  if (speed > AUTOLINK_SPEED_CAP) {
+    vx = Math.trunc((vx * AUTOLINK_SPEED_CAP) / speed);
+    vy = Math.trunc((vy * AUTOLINK_SPEED_CAP) / speed);
+  }
+  return { vx, vy };
+}
+
+/**
+ * Park an autolink's vector with the launch, fixed on contact (Plan 3, Task 19).
+ * Both fighters are frozen until it is used. Any other hit that replaces a parked
+ * launch clears it.
+ */
+function parkAutolink(victim: FighterState, hb: Hitbox, c: Candidate, attacker: FighterState): void {
+  const link = autolinkVector(victim, hb, c, attacker);
+  victim.combat.autolink = link !== null;
+  victim.combat.autolinkX = link === null ? 0 : link.vx;
+  victim.combat.autolinkY = link === null ? 0 : link.vy;
+}
+
+/**
+ * The world direction an autolink's parked vector points, in fixed degrees, for
+ * the hit event (`HitEvent.angle`): the tenth of a degree on the sine table whose
+ * unit vector the parked one lies along (the smallest cross product, on the
+ * side it points to; the dot product is too flat at its peak to tell a tenth of
+ * a degree apart in Q12). A vector of nothing points the way the attacker
+ * launches, straight ahead. An autolink's `Hitbox.angle` is not a direction
+ * (367° read as degrees is 7°), so the spark must not take it from there.
+ */
+function autolinkWorldAngle(c: CombatState, facing: number): number {
+  const x = c.autolinkX;
+  const y = c.autolinkY;
+  if (x === 0 && y === 0) return launchWorldAngle(0, facing);
+  let best = 0;
+  let bestCross = Infinity;
+  for (let tenth = 0; tenth < 3600; tenth++) {
+    const angle = Math.ceil((tenth * ONE) / 10);
+    const cos = cosDeg(angle);
+    const sin = sinDeg(angle);
+    if (x * cos + y * sin <= 0) continue;
+    const cross = abs(x * sin - y * cos);
+    if (cross < bestCross) {
+      bestCross = cross;
+      best = angle;
+    }
+  }
+  return best;
 }
 
 function clearPendingLaunch(f: FighterState): void {
@@ -1407,6 +1556,9 @@ function clearPendingLaunch(f: FighterState): void {
   f.combat.launchSetWeight = false;
   f.combat.launchBounce = false;
   f.combat.asdi = false;
+  f.combat.autolink = false;
+  f.combat.autolinkX = 0;
+  f.combat.autolinkY = 0;
 }
 
 /**
@@ -1768,8 +1920,11 @@ function applyHit(
     victim.combat.launchSource === source ? "replace" : knockbackStack(mul(kb, LAUNCH_SPEED_RATIO), current);
   if (verdict !== "replace") {
     if (verdict === "keep" && victim.pendingFacing === 0 && victim.launchSpeed > 0) {
-      // A parked launch has no vector yet; it keeps its own, as it was.
-      const added = knockbackToVelocity(kb, resolveAngle(hb, victim.grounded, kb), sourceFacing);
+      // A parked launch has no vector yet; it keeps its own, as it was. An
+      // autolink adds the vector it would launch with: its angle is not degrees.
+      const added =
+        autolinkVector(victim, hb, c, attacker) ??
+        knockbackToVelocity(kb, hitAngle(hb, victim.grounded, kb), sourceFacing);
       kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
     }
     victim.combat.comboHits += 1;
@@ -1799,7 +1954,7 @@ function applyHit(
   // the difference only shows up for the player who is *reacting*.
   // `sourceFacing` was decided above, with the stacking check.
   victim.pendingKnockback = kb;
-  victim.pendingAngle = resolveAngle(hb, victim.grounded, kb);
+  victim.pendingAngle = hitAngle(hb, victim.grounded, kb);
   // A grounded victim launched flat slides out at 0.8 of the speed (rubendal
   // `groundedZeroAngle`), set knockback or not: `WeightBasedKB` builds the same
   // `Knockback`, whose `calculate` applies it. The hitstun is the hit's, above.
@@ -1812,6 +1967,10 @@ function applyHit(
   // which has no stage to clamp against.
   victim.combat.asdi = lag > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
+  parkAutolink(victim, hb, c, attacker);
+  // Which way the launch goes, for the spark: fixed now, because a hit with no
+  // freeze fires (and clears) it below. An autolink points along its own vector.
+  const linkAngle = victim.combat.autolink ? autolinkWorldAngle(victim.combat, sourceFacing) : null;
 
   victim.hitstun = effectiveHitstun(kb, speedUp);
   victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
@@ -1856,7 +2015,7 @@ function applyHit(
     // The un-DI'd direction. DI has not been chosen yet — it is sampled on the
     // last frame of hitlag — so this is the launch as the *hit* set it, which
     // is the right thing for a graphic that fires on the contact frame.
-    angle: launchWorldAngle(victim.pendingAngle, victim.pendingFacing),
+    angle: linkAngle ?? launchWorldAngle(victim.pendingAngle, victim.pendingFacing),
     hitboxId: hb.id,
   });
 }

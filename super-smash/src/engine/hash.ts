@@ -177,6 +177,9 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.grabImmune);
   x = mixBool(x, c.tumbleDodge);
   x = mixBool(x, c.swingQueued);
+  x = mixBool(x, c.autolink);
+  x = mixInt(x, c.autolinkX);
+  x = mixInt(x, c.autolinkY);
   return x;
 }
 
