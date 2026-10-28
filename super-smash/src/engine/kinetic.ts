@@ -150,6 +150,18 @@ export function kineticAdopt(f: FighterState, carrier: HorizontalCarrier = "cont
   if (dy !== 0) f.kinetic.gravityY += dy;
 }
 
+/**
+ * Disarm the balloon speed-up (Plan 3, Task 6) without touching any energy: a
+ * status that ends a launch's hitstun outright, a grab, must not leave the
+ * speed-up armed for whatever reels this fighter next.
+ */
+export function kineticDisarmSpeedUp(f: FighterState): void {
+  const k = f.kinetic;
+  k.speedUpFrame = 0;
+  k.speedUpFaf = 0;
+  k.speedUpMax = 0;
+}
+
 /** Every energy to zero, the launch included: a ledge, a respawn, a KO. */
 export function kineticClear(f: FighterState): void {
   const k = f.kinetic;

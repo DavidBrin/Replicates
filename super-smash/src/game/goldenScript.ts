@@ -79,10 +79,19 @@
  * in particular. `downed` and `getUp`, which those three landings used to reach, are
  * now the tech lab's (`goldenLab.ts`).
  *
+ * Plan 3 Task 14 (grabs) re-tuned the first hold. A grab now holds floor(90 + 1.7p)
+ * frames, not 60, and a fighter let go of cannot be grabbed again for 60 frames, so
+ * waiting the hold out would have pushed the second grab (201) and every frame
+ * after it back by about 65. Fox mashes out instead: five button presses on
+ * 122-130 take 5 x 14.4 = 72 frames off the 90, so the hold lets go on its 19th
+ * frame (140), the shortest a hold can be. The immunity ends on 200 and the second
+ * grab connects on 206, as it did. Nothing after 200 moved; the trace differs from
+ * 117 on only because its digest is a running hash.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
- * (the shield break on 649, the techs on 787 and 1029, the hangs on 863, 1193,
- * 1299 and 1400, the hits on 747, 1006, 1578 and 1635, time up on 2014). All were
- * checked against a run after Plan 3 Task 12.
+ * (Fox breaking free on 140, the shield break on 649, the techs on 787 and 1029,
+ * the hangs on 863, 1193, 1299 and 1400, the hits on 747, 1006, 1578 and 1635,
+ * time up on 2014). All were checked against a run after Plan 3 Task 14.
  */
 
 import { Btn } from "@/engine/types";
@@ -122,9 +131,22 @@ const STEPS: readonly ScriptStep[] = [
   // (Task 22) at half the top speed, so the walk to Fox takes 85 frames, not 40.
   [85, R | SOFT, 0], //            21: Mario walks to about 10 from Fox
   [10, 0, 0],
-  // Grab, and hold until the 60-frame hold lets go on its own.
-  [1, G, 0], //                   116: grab: Fox is grabbed
-  [70, 0, 0], //                  117: grabHold, then both stand
+  // Grab, and Fox mashes out of it (Task 14): five button presses take 5 x 14.4 = 72
+  // frames off the 90-frame hold, so it lets go on the 19th frame, the shortest a
+  // hold can be, on 140. The 60 frames of grab immunity that follow are over on 200.
+  [1, G, 0], //                   116: grab: Fox is caught on 121
+  [5, 0, 0], //                   117: grabHold, from 122
+  [1, 0, A], //                   122: Fox's first press, the frame after he is caught
+  [1, 0, 0],
+  [1, 0, A],
+  [1, 0, 0],
+  [1, 0, A],
+  [1, 0, 0],
+  [1, 0, A],
+  [1, 0, 0],
+  [1, 0, A], //                   130: the fifth
+  [1, 0, 0],
+  [55, 0, 0], //                  132: Fox breaks free on 140, then both stand
   [4, R | SOFT, 0], //            187: in to about 8: a throw reaches, a pummel does not
   [10, 0, 0],
   // Grab, pummel (it whiffs at this range), forward throw. Fox holds a soft up

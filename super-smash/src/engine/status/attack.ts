@@ -15,11 +15,16 @@
 
 import { SMASH_CHARGE_MAX } from "../constants";
 import { chargeHoldFrame, clearHitRecord } from "../hitbox";
+import { mashFrames } from "../shield";
 import {
-  GRAB_HOLD_FRAMES,
+  GRAB_MASH_BUTTON,
+  GRAB_MASH_STICK,
+  GRAB_MIN_FRAMES,
+  GRAB_RELEASE_IMMUNITY,
   PUMMEL_FRAMES,
   THROW_FRAMES,
   bufferPress,
+  buttonPresses,
   hasMove,
   presses,
   releaseGrab,
@@ -81,8 +86,8 @@ export const STATUS_CATCH: FighterStatus = {
   pre: clearHitRecord,
   main(f, intent, ctx) {
     if (f.grabbing >= 0) {
+      // The escape timer is the victim's, set when the grab connected (Plan 3, Task 14).
       startAction(f, "grabHold");
-      f.grabTimer = GRAB_HOLD_FRAMES;
       return;
     }
     const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
@@ -97,13 +102,12 @@ export const STATUS_CATCH_WAIT: FighterStatus = {
   action: "grabHold",
   kineticType: "FALL",
   main(f, intent, ctx) {
-    if (f.grabbing < 0) {
-      releaseGrab(f, ctx.fighters);
-      startAction(f, "stand");
-      return;
-    }
-    f.grabTimer -= 1;
-    if (f.grabTimer <= 0) {
+    // The hold is over when the link is broken, or when the victim has left
+    // `grabbed` with it intact (a fighter caught in the air lands: nothing pins
+    // a caught fighter to its captor). The escape timer is the victim's and only
+    // runs in `grabbed`, so with no one counting a hold nobody throws would
+    // never end; the captor's own timer used to be that backstop (Task 14).
+    if (f.grabbing < 0 || ctx.fighters[f.grabbing]?.action !== "grabbed") {
       releaseGrab(f, ctx.fighters);
       startAction(f, "stand");
       return;
@@ -171,8 +175,21 @@ export const STATUS_CAPTURE_WAIT: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_CAPTURE_WAIT",
   action: "grabbed",
   kineticType: "GROUND_STOP",
-  main(f) {
-    if (f.grabbedBy < 0) startAction(f, f.grounded ? "stand" : "fall");
+  main(f, intent, ctx) {
+    if (f.grabbedBy < 0) {
+      startAction(f, f.grounded ? "stand" : "fall");
+      return;
+    }
+    // The struggle (Plan 3, Task 14): the timer runs down a frame at a time and
+    // faster for every press, pummels or not; no escape before frame 19.
+    const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
+    f.grabTimer -= 1 + mashFrames(f.combat, buttonPresses(intent), sticks, GRAB_MASH_BUTTON, GRAB_MASH_STICK);
+    if (f.grabTimer > 0 || f.actionFrame < GRAB_MIN_FRAMES) return;
+    // A grab release: the holder's own status sees `grabbing < 0` and stands.
+    releaseGrab(f, ctx.fighters);
+    f.combat.mash = 0;
+    f.combat.grabImmune = GRAB_RELEASE_IMMUNITY;
+    startAction(f, f.grounded ? "stand" : "fall");
   },
 };
 

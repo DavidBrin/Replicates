@@ -37,6 +37,8 @@ export interface CombatState {
   techWindow: number;
   /** Frames before another shield press can open a tech window: 40 from the last (Task 12). */
   techLockout: number;
+  /** Frames during which a grab cannot catch this fighter: 60 after breaking out of one (Task 14). */
+  grabImmune: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -49,6 +51,7 @@ export function emptyCombat(): CombatState {
     asdi: false,
     techWindow: 0,
     techLockout: 0,
+    grabImmune: 0,
   };
 }
 
@@ -62,5 +65,6 @@ export function cloneCombat(c: CombatState): CombatState {
     asdi: c.asdi,
     techWindow: c.techWindow,
     techLockout: c.techLockout,
+    grabImmune: c.grabImmune,
   };
 }

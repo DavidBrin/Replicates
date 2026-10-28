@@ -537,6 +537,7 @@ export interface FighterState {
   /** Port of the fighter holding this one, or -1. */
   grabbedBy: number;
   grabbing: number;
+  /** On a grabbed fighter: frames until it breaks free (`grabHoldFrames`, less mashing). Plan 3, Task 14. */
   grabTimer: number;
 
   /** Ledge currently hung from: platform index and side, or null. */

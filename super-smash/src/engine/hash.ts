@@ -172,6 +172,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.asdi);
   x = mixInt(x, c.techWindow);
   x = mixInt(x, c.techLockout);
+  x = mixInt(x, c.grabImmune);
   return x;
 }
 

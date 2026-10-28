@@ -11,8 +11,9 @@ import { deg } from "../skeleton";
  * is never passive, and the game says so: mashing draws wind-blade particles
  * around them that thicken with the mash rate, and the fighter flashes yellow in
  * the last three seconds of the hold (SmashWiki, *Mashing*, *Grab*). Neither cue
- * exists here and `GRAB_HOLD_FRAMES` is a flat 60, so the struggle is the whole
- * signal: it is the only thing on screen that says this ends.
+ * exists here (the sim has the hold, `grabHoldFrames`, and the mash, not the
+ * look), so the struggle is the whole signal: it is the only thing on screen
+ * that says this ends.
  *
  * ## Five uneven beats, nineteen frames
  *
@@ -33,8 +34,8 @@ import { deg } from "../skeleton";
  * pull fails, and they are what make the next one look like it cost something.
  *
  * Nineteen frames is a wrench about every 90ms, in the neighbourhood of the
- * 2-to-3-frame cadence a real mash registers at. It also does not divide 60, so
- * the hold times out mid-heave rather than tidily at the end of a cycle.
+ * 2-to-3-frame cadence a real mash registers at. It also does not divide 90, the
+ * hold at 0%, so a hold times out mid-heave rather than tidily at the end of a cycle.
  *
  * **The arms are the exception, and they look wrong in the source because of it.**
  * Bone angles are parent-relative, so an arm written as a constant swings with

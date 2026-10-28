@@ -7,6 +7,7 @@ import {
   GLANCING_BLOW_DEPTH,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
+  LEDGE_REGRAB_LOCKOUT_FRAMES,
   SDI_DISTANCE,
   SHIELD_BREAK_RESET,
   SHIELD_DECAY_PER_FRAME,
@@ -29,6 +30,7 @@ import { attackerShieldPushback, shieldDamage, shieldPushback } from "./shield";
 import { resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
+import { GRAB_MIN_FRAMES, GRAB_RELEASE_IMMUNITY, grabHoldFrames } from "./states";
 import { Btn } from "./types";
 import type {
   FighterAttributes,
@@ -1630,6 +1632,234 @@ describe("glancing blows (Plan 3, Task 13)", () => {
         }
       }
       expect(seen).toBeGreaterThan(100);
+    });
+  });
+});
+
+/* ------------------------------------------------------ Task 14: grabs -- */
+
+describe("grab hold, mash and release (Plan 3, Task 14)", () => {
+  /** Fighter 0 holding fighter 1, whose escape timer reads `timer`, `held` frames into the hold. */
+  function holding(timer: number, held: number): GameState {
+    const s = standing();
+    const [a, v] = s.fighters;
+    a.action = "grabHold";
+    a.grabbing = 1;
+    v.action = "grabbed";
+    v.actionFrame = held;
+    v.grabbedBy = 0;
+    v.grabTimer = timer;
+    return s;
+  }
+
+  // SmashWiki "Grab" (https://www.ssbwiki.com/Grab): from Brawl on a grab holds
+  // for floor(90 + 1.7p) frames, fixed when it connects.
+  it("holds a victim for floor(90 + 1.7 x percent) frames", () => {
+    const s = standing();
+    s.fighters[1].damage = fx(50);
+    const frames = play(s, 8, (i) => [i === 0 ? Btn.Grab : 0, 0]);
+    const i = frames.findIndex((f) => f.state.fighters[1].grabbedBy === 0);
+    expect(frames[i].state.fighters[1].grabTimer).toBe(175);
+    expect(grabHoldFrames(fx(50))).toBe(175);
+    expect(grabHoldFrames(fx(33.3))).toBe(146);
+  });
+
+  it("lets the victim go when the timer runs out, with 60 frames of grab immunity", () => {
+    const frames = play(holding(3, 30), 4, () => [0, 0]);
+    const at = frames.findIndex((f) => f.state.fighters[1].grabbedBy < 0);
+    expect(at).toBe(2);
+    const v = frames[at].state.fighters[1];
+    expect(v.action).toBe("stand");
+    expect(v.combat.grabImmune).toBe(GRAB_RELEASE_IMMUNITY);
+    expect(frames.at(-1)!.state.fighters[0].action).toBe("stand");
+  });
+
+  // "The grab time from Brawl onward cannot be lower than 19 frames."
+  it("never lets go before the 19th frame of the hold", () => {
+    const frames = play(holding(0, 5), 20, () => [0, 0]);
+    const at = frames.findIndex((f) => f.state.fighters[1].grabbedBy < 0);
+    expect(frames[at].state.fighters[1].actionFrame).toBe(0);
+    expect(frames[at - 1].state.fighters[1].actionFrame).toBe(GRAB_MIN_FRAMES - 1);
+  });
+
+  // SmashWiki "Grab": a button press takes 14.4 frames off in Ultimate, a stick input 8.
+  it("mashes 14.4 frames off a button press and 8 off a stick input", () => {
+    const buttons = play(holding(200, 30), 10, (i) => [0, i % 2 === 0 ? Btn.Attack : 0]).at(-1)!.state.fighters[1];
+    expect(buttons.grabTimer).toBe(200 - 10 - 72);
+    const sticks = play(holding(200, 30), 10, (i) => [0, i % 2 === 0 ? Btn.Left : 0]).at(-1)!.state.fighters[1];
+    expect(sticks.grabTimer).toBe(200 - 10 - 40);
+  });
+
+  it("whiffs a grab on a fighter who just escaped one, without spending it", () => {
+    const s = standing();
+    s.fighters[1].combat.grabImmune = 30;
+    const after = play(s, 8, (i) => [i === 0 ? Btn.Grab : 0, 0]).at(-1)!.state;
+    expect(after.fighters[1].grabbedBy).toBe(-1);
+    expect(after.fighters[0].hitThisMove).toEqual([]);
+  });
+});
+
+describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
+  const GRAB = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Grab : 0, 0];
+
+  /** The state the frame before fighter 1 is caught, and the frame it is. */
+  function caught(s: GameState, ctx: SimContext = ctxFor()): { before: GameState; at: GameState } {
+    const frames = play(s, 12, GRAB, ctx);
+    const i = frames.findIndex((f) => f.state.fighters[1].grabbedBy === 0);
+    expect(i, "the grab should connect").toBeGreaterThan(0);
+    return { before: frames[i - 1].state, at: frames[i].state };
+  }
+
+  /** Fighter 1 four units up, in the air, with `jumpsUsed` jumps spent. */
+  function airborne(jumpsUsed: number): GameState {
+    const s = standing();
+    const v = s.fighters[1];
+    v.grounded = false;
+    v.platform = -1;
+    v.y = fx(4);
+    v.action = "fall";
+    v.jumpsUsed = jumpsUsed;
+    return s;
+  }
+
+  // SmashWiki "Double jump" (https://www.ssbwiki.com/Double_jump): "A character's
+  // double jump(s) are restored upon landing, grabbing a ledge, being KO'd and
+  // respawning, or being grabbed by an opposing character".
+  it.each([
+    [2, 1],
+    [3, 1],
+    [1, 1],
+  ])("gives a fighter caught in the air its midair jumps back, not the ground jump (%i spent -> %i)", (spent, left) => {
+    const { before, at } = caught(airborne(spent));
+    expect(before.fighters[1].jumpsUsed).toBe(spent);
+    expect(at.fighters[1].grounded).toBe(false);
+    expect(at.fighters[1].jumpsUsed).toBe(left);
+  });
+
+  // SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge): "Characters can only
+  // air dodge once until they land, get hit, or grab a ledge." A grab is not a hit
+  // and the list does not name it. UNVERIFIED: that this is the whole list.
+  it("does not give the air dodge back: being grabbed is not being hit", () => {
+    const s = airborne(2);
+    s.fighters[1].airDodged = true;
+    expect(caught(s).at.fighters[1].airDodged).toBe(true);
+  });
+
+  /** Fighter 1 hanging from the right-hand ledge, past the end of its intangibility, fighter 0 on the stage beside it. */
+  function hanging(): GameState {
+    const s = standing();
+    const v = s.fighters[1];
+    v.x = fx(80);
+    v.y = 0;
+    v.grounded = false;
+    v.platform = -1;
+    v.facing = -1;
+    v.action = "ledgeHang";
+    v.ledge = { platform: 0, side: 1 };
+    v.ledgeRegrabs = 3;
+    s.fighters[0].x = fx(72);
+    return s;
+  }
+
+  // SmashWiki "Ledge" (https://www.ssbwiki.com/Ledge) says a hanging fighter is
+  // intangible for a while and does not say it cannot be grabbed: once that has
+  // passed, the grab connects, and the ledge must not outlive it.
+  it("pulls a hanging fighter off the ledge, locks the ledge out and keeps the regrab count", () => {
+    const { before, at } = caught(hanging());
+    expect(before.fighters[1].ledge).toEqual({ platform: 0, side: 1 });
+    const v = at.fighters[1];
+    expect(v.action).toBe("grabbed");
+    expect(v.ledge).toBeNull();
+    expect(v.ledgeLockout).toBe(LEDGE_REGRAB_LOCKOUT_FRAMES);
+    expect(v.ledgeRegrabs).toBe(3);
+  });
+
+  describe("ends the victim's hitstun and what rides on it", () => {
+    it.each([
+      ["hitstun", 50],
+      ["shieldStun", 20],
+      ["shieldBroken", 300],
+    ] as const)("%s", (action, stun) => {
+      const s = standing();
+      const v = s.fighters[1];
+      v.action = action;
+      v.hitstun = stun;
+      v.combat.mash = 7;
+      const { before, at } = caught(s);
+      expect(before.fighters[1].hitstun).toBeGreaterThan(0);
+      expect(at.fighters[1].action).toBe("grabbed");
+      expect(at.fighters[1].hitstun).toBe(0);
+      // The mash carry is the shield-break one's, not the struggle's (`mashFrames`).
+      expect(at.fighters[1].combat.mash).toBe(0);
+    });
+
+    it("disarms the balloon speed-up and drops the balloon fall", () => {
+      const s = standing();
+      const v = s.fighters[1];
+      v.action = "hitstun";
+      v.hitstun = 50;
+      v.balloon = true;
+      v.kinetic.speedUpFaf = 70;
+      v.kinetic.speedUpFrame = 70 * ONE;
+      v.kinetic.speedUpMax = damageSpeedUpMaxMag(70);
+      const { before, at } = caught(s);
+      expect(before.fighters[1].kinetic.speedUpMax).toBeGreaterThan(0);
+      expect(before.fighters[1].balloon).toBe(true);
+      expect(at.fighters[1].kinetic).toMatchObject({ speedUpMax: 0, speedUpFaf: 0, speedUpFrame: 0 });
+      expect(at.fighters[1].balloon).toBe(false);
+    });
+
+    it("leaves the released fighter free to act, not still stunned", () => {
+      const s = standing();
+      const v = s.fighters[1];
+      v.action = "shieldBroken";
+      v.hitstun = 300;
+      const held = caught(s).at;
+      // Skip to the end of the struggle, which the stun is not part of.
+      held.fighters[1].grabTimer = 1;
+      held.fighters[1].actionFrame = 30;
+      const after = play(held, 3, () => [0, 0]).at(-1)!.state.fighters[1];
+      expect(after.grabbedBy).toBe(-1);
+      expect(after.action).toBe("stand");
+      expect(after.hitstun).toBe(0);
+    });
+  });
+
+  describe("the hold does not outlive the victim's struggle", () => {
+    // Nothing pins a caught fighter to its captor yet (there is no grab
+    // repositioning in the engine), so one caught in the air falls and lands.
+    // The escape timer only runs while the victim is `grabbed`: a victim who has
+    // left that status with the link intact would hold its captor in `grabHold`
+    // for ever, which the captor's own 60-frame timer used to prevent.
+    it("lets the captor go once a victim caught in the air has landed", () => {
+      const frames = play(airborne(2), 60, GRAB);
+      const landed = frames.findIndex((f) => f.state.fighters[1].grounded);
+      expect(landed).toBeGreaterThan(0);
+      const last = frames.at(-1)!.state;
+      expect(last.fighters[0]).toMatchObject({ action: "stand", grabbing: -1 });
+      expect(last.fighters[1].grabbedBy).toBe(-1);
+    });
+  });
+
+  describe("pummelling", () => {
+    const PUMMEL: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, pummel: move("pummel", { totalFrames: 10, hitboxes: [] }) },
+    };
+
+    // SmashWiki "Grab": the hold is "not affected by pummeling".
+    it("does not stop the escape timer", () => {
+      const ctx = ctxFor(PUMMEL);
+      const s = standing(ctx);
+      const [a, v] = s.fighters;
+      a.action = "grabHold";
+      a.grabbing = 1;
+      v.action = "grabbed";
+      v.grabbedBy = 0;
+      v.grabTimer = 100;
+      const frames = play(s, 12, (i) => [i === 2 ? Btn.Attack : 0, 0], ctx);
+      expect(frames.map((f) => f.state.fighters[0].action)).toContain("pummel");
+      expect(frames.at(-1)!.state.fighters[1].grabTimer).toBe(100 - 12);
     });
   });
 });

@@ -79,8 +79,9 @@ export function shieldBreakStun(percent: number): number {
 /**
  * Whole frames a mash takes off a struggle this frame: `buttons` presses at
  * `perButton` and `sticks` at `perStick`, both in **tenths of a frame** so the
- * published 5.4 and 14.4 stay exact, with the remainder carried in
- * `CombatState.mash`.
+ * published fractions stay exact (5.4 a button in shield-break stun, 14.4 in a
+ * grab), with the remainder carried in `CombatState.mash`. That one carry serves
+ * both struggles, so whatever ends one zeroes it.
  */
 export function mashFrames(c: CombatState, buttons: number, sticks: number, perButton: number, perStick: number): number {
   c.mash += buttons * perButton + sticks * perStick;

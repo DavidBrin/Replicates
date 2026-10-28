@@ -95,6 +95,7 @@ import {
   advanceFighter,
   applyMovement,
   chargeMultiplier,
+  grabHoldFrames,
   grabLedge,
   hasSuperArmour,
   interpretInput,
@@ -111,6 +112,7 @@ import {
   cloneKinetic,
   emptyKinetic,
   kineticClear,
+  kineticDisarmSpeedUp,
   kineticLaunch,
   kineticTurnLaunch,
   kineticSet,
@@ -549,6 +551,7 @@ export function step(
     // Before the hitlag branch on purpose: these count down through a freeze,
     // so a fighter hit off a ledge serves its lockout during the hitlag too.
     if (f.intangible > 0) f.intangible -= 1;
+    if (f.combat.grabImmune > 0) f.combat.grabImmune -= 1;
     if (f.invincible > 0) f.invincible -= 1;
     if (f.ledgeLockout > 0) f.ledgeLockout -= 1;
 
@@ -978,6 +981,8 @@ function resolveHits(
       // 20, so "dodged the first frame, immune to the rest" is a reachable and
       // wrong outcome that makes dodging strictly better than the real game's.
       if (victim.intangible > 0) continue;
+      // Fresh out of a grab: grabs pass through, unspent, for 60 frames (Task 14).
+      if (c.hitbox.grabbing === true && victim.combat.grabImmune > 0) continue;
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
       if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, events);
@@ -1214,10 +1219,44 @@ function applyHit(
     releaseGrab(victim, s.fighters);
     attacker.grabbing = victim.port;
     victim.grabbedBy = attacker.port;
+    // The escape timer, fixed now, on the victim (Plan 3, Task 14).
+    victim.grabTimer = grabHoldFrames(victim.damage);
+    victim.combat.mash = 0;
     kineticSet(victim, 0, 0);
     // Being caught cancels a launch that had not fired yet: the victim is held,
     // not flying, and a pending launch would go off in their captor's hands.
     clearPendingLaunch(victim);
+    // ...and ends whatever reeling the victim was in. A grab goes through a
+    // shield, and nothing stops one landing on a fighter in stun; `hitstun` is
+    // the counter all of those share (shieldstun, shield-break stun, a launch's
+    // hitstun). Left running, it would reel a held fighter (`applyMovement`
+    // reels whenever it is positive) and leave the released one still stunned.
+    // The balloon speed-up goes with it: every other exit from a launch disarms
+    // it, and a stale arm would speed up the next reel.
+    victim.hitstun = 0;
+    victim.balloon = false;
+    kineticDisarmSpeedUp(victim);
+    // Being grabbed restores the midair jumps (SmashWiki "Double jump",
+    // https://www.ssbwiki.com/Double_jump: "A character's double jump(s) are
+    // restored upon ... being grabbed by an opposing character"). A fighter in
+    // the air keeps the ground jump spent, as a ledge grab does (`grabLedge`).
+    victim.jumpsUsed = Math.min(victim.jumpsUsed, 1);
+    // UNVERIFIED: the air dodge is NOT restored. SmashWiki "Air dodge"
+    // (https://www.ssbwiki.com/Air_dodge) lists "land, get hit, or grab a
+    // ledge"; a grab is not a hit (`airDodged` is cleared on the damage path),
+    // and where "Double jump" restores jumps it names being grabbed outright,
+    // which the air dodge list does not.
+    //
+    // A hanging fighter is pulled off the ledge: `ledge` must not outlive the
+    // grab, or `applyMovement` would pin the released fighter in mid-air. As
+    // when a hit knocks one off, the ledge is locked out for a while, or the
+    // fighter would take it straight back, out of `grabbed`. UNVERIFIED: that
+    // being grabbed locks the ledge out (SmashWiki "Ledge" does not say whether
+    // a hanging fighter can be grabbed); `ledgeRegrabs` is left as it was: the
+    // wiki names hitstun and touching the ground as what resets that count, and
+    // being grabbed is neither.
+    if (victim.ledge !== null) victim.ledgeLockout = LEDGE_REGRAB_LOCKOUT_FRAMES;
+    victim.ledge = null;
     startAction(victim, "grabbed");
     return;
   }

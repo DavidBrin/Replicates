@@ -96,8 +96,22 @@ export const LANDING_ANIMATION_FRAMES = 4;
 /** Lying on the floor after a tumble landing, and the get-up that follows. */
 export const DOWNED_FRAMES = 40;
 export const GETUP_FRAMES = 30;
-/** How long a grab holds before the victim escapes on their own. */
-export const GRAB_HOLD_FRAMES = 60;
+/**
+ * How long a grab holds before the victim escapes on their own: floor(90 + 1.7p)
+ * frames, fixed when the grab connects (SmashWiki "Grab",
+ * https://www.ssbwiki.com/Grab: "From Brawl onward, the formula is changed to
+ * 90 + 1.7p rounded down"). `percent` is Q12.
+ */
+export function grabHoldFrames(percent: number): number {
+  return Math.floor((900 * ONE + 17 * percent) / (10 * ONE));
+}
+/** No grab lets go sooner than this, however hard the victim mashes (SmashWiki "Grab"). */
+export const GRAB_MIN_FRAMES = 19;
+/** Mashing out of a grab, in tenths of a frame: 14.4 a button press, 8 a stick input (SmashWiki "Grab", Ultimate). */
+export const GRAB_MASH_BUTTON = 144;
+export const GRAB_MASH_STICK = 80;
+/** Frames a fighter who broke out of a grab cannot be grabbed again: "around one second" (SmashWiki "Grab", Ultimate). */
+export const GRAB_RELEASE_IMMUNITY = 60;
 export const PUMMEL_FRAMES = 10;
 export const THROW_FRAMES = 40;
 /** Ledge options are locked out for the first few frames of the hang. */
