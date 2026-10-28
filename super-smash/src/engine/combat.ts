@@ -28,6 +28,12 @@ export interface CombatState {
    */
   launchSetWeight: boolean;
   /**
+   * The parked launch is a meteor that tumbles a grounded victim: it bounces off
+   * the floor as it fires, once (Plan 3, Task 16b fix round 1). Set on contact,
+   * read when the freeze ends.
+   */
+  launchBounce: boolean;
+  /**
    * Who launched this fighter last: the attacker's port, or 1000 + a
    * projectile's instance id (`candidateKey` in `simulate.ts`), −1 for nobody.
    * Knockback stacks only between different sources (Plan 3, Task 8).
@@ -64,6 +70,7 @@ export function emptyCombat(): CombatState {
     staleShield: [],
     launchFaf: 0,
     launchSetWeight: false,
+    launchBounce: false,
     launchSource: -1,
     mash: 0,
     comboHits: 0,
@@ -81,6 +88,7 @@ export function cloneCombat(c: CombatState): CombatState {
     staleShield: c.staleShield.slice(),
     launchFaf: c.launchFaf,
     launchSetWeight: c.launchSetWeight,
+    launchBounce: c.launchBounce,
     launchSource: c.launchSource,
     mash: c.mash,
     comboHits: c.comboHits,

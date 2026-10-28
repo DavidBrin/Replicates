@@ -19,6 +19,8 @@ import { DIAGONAL, ONE, fx, mul, abs, byRatio, clamp, randomInt, nextRandom } fr
 import {
   ASDI_DISTANCE,
   ASDI_VERTICAL,
+  BOUNCE_FLOOR_LAUNCH_RATIO,
+  BOUNCE_FLOOR_MIN_SPEED,
   FINAL_SMASH_STANDBY,
   GLANCING_BLOW_DEPTH,
   GROUNDED_ZERO_LAUNCH_RATIO,
@@ -41,7 +43,6 @@ import {
   TUMBLE_HITSTUN,
 } from "./constants";
 import {
-  GROUNDED_METEOR_MULTIPLIER,
   computeHitlag,
   computeHitstun,
   computeKnockback,
@@ -1352,18 +1353,32 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   const setWeight = f.combat.launchSetWeight;
   f.balloon = launch.balloon && !setWeight;
 
-  if (launch.speed > 0) {
-    kineticLaunch(
-      f,
-      Math.trunc((launch.vx * speed) / launch.speed),
-      Math.trunc((launch.vy * speed) / launch.speed),
-      speed,
-      f.combat.launchFaf,
-      setWeight,
-    );
-  } else {
-    kineticLaunch(f, 0, 0, speed, 0, setWeight);
+  let vx = launch.speed > 0 ? Math.trunc((launch.vx * speed) / launch.speed) : 0;
+  let vy = launch.speed > 0 ? Math.trunc((launch.vy * speed) / launch.speed) : 0;
+  let launchSpeed = speed;
+  // A tumbling meteor on a grounded victim is a floor bounce, here, as it fires
+  // (Plan 3, Task 16b fix round 1): SmashWiki "Meteor smash"
+  // (https://www.ssbwiki.com/Meteor_smash, revision 2047089), grounded targets
+  // "immediately bounce off the ground they're standing on (as long as they deal
+  // enough knockback to put the opponent into tumble)"; SmashWiki "Knockback"
+  // (revision 2063895): "Landing a meteor smash or spike on a grounded opponent
+  // counts as a bounce". So it is Task 12's floor bounce (`techOrBounce`): the
+  // launch, DI'd, is sent back up at 0.9 (`BOUNCE_FLOOR_LAUNCH_RATIO`) if it is
+  // fast enough to bounce and still points into the floor. Not a tech: "meteor
+  // smashes done on grounded-standing characters can no longer be teched" (same
+  // page). The hitstun stays the hit's, from its whole knockback ("the amount of
+  // hitstun delivered by a meteor smash is not affected by the knockback
+  // reduction"; Task 16 review, Minor 7). UNVERIFIED: that the 0.8 a mid-flight
+  // bounce takes off the hitstun (`BOUNCE_HITSTUN_RATIO`, the param
+  // `damage_fly_reflect_reaction_frame_mul`) does not apply to this one, and
+  // that the bounced launch keeps the speed-up and set weight's fall a
+  // mid-flight bounce disarms (`kineticReflect`): it is the launch itself.
+  if (f.combat.launchBounce && f.grounded && vy < 0 && speed >= BOUNCE_FLOOR_MIN_SPEED) {
+    vx = byRatio(vx, BOUNCE_FLOOR_LAUNCH_RATIO);
+    vy = byRatio(-vy, BOUNCE_FLOOR_LAUNCH_RATIO);
+    launchSpeed = byRatio(speed, BOUNCE_FLOOR_LAUNCH_RATIO);
   }
+  kineticLaunch(f, vx, vy, launchSpeed, launch.speed > 0 ? f.combat.launchFaf : 0, setWeight);
   // Whether the launch takes the victim off the ground is a DI question too: a
   // flat Sakurai-angle hit that gets DI'd upward leaves the floor, and the same
   // hit without DI slides along it.
@@ -1390,6 +1405,7 @@ function clearPendingLaunch(f: FighterState): void {
   f.pendingFacing = 0;
   f.combat.launchFaf = 0;
   f.combat.launchSetWeight = false;
+  f.combat.launchBounce = false;
   f.combat.asdi = false;
 }
 
@@ -1788,12 +1804,6 @@ function applyHit(
   // `groundedZeroAngle`), set knockback or not: `WeightBasedKB` builds the same
   // `Knockback`, whose `calculate` applies it. The hitstun is the hit's, above.
   if (victim.grounded && victim.pendingAngle === 0) victim.pendingKnockback = byRatio(kb, GROUNDED_ZERO_LAUNCH_RATIO);
-  // A meteor on a grounded victim bounces off the floor at 0.8 of the launch:
-  // the hit's hitstun stands (SmashWiki "Meteor smash": "the amount of hitstun
-  // delivered by a meteor smash is not affected by the knockback reduction"),
-  // and set knockback bounces too, the bounce not being one of the modifiers
-  // Ultimate took off it (`GROUNDED_METEOR_MULTIPLIER`; Plan 3, Task 16b).
-  if (victim.grounded && hb.meteor === true) victim.pendingKnockback = byRatio(kb, GROUNDED_METEOR_MULTIPLIER);
   const vertical = victim.pendingAngle >= ASDI_VERTICAL[0] && victim.pendingAngle < ASDI_VERTICAL[1];
   // UNVERIFIED: SmashWiki "Smash directional influence" says ASDI also applies
   // to projectiles with a hitlag multiplier of 0, which have no freeze. Here it
@@ -1806,6 +1816,12 @@ function applyHit(
   victim.hitstun = effectiveHitstun(kb, speedUp);
   victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
   victim.combat.launchSetWeight = hb.setWeight === true;
+  // A meteor that tumbles a grounded victim bounces it off the floor as the
+  // launch fires (`releasePendingLaunch`), set knockback included: the bounce is
+  // the launch meeting the floor, not one of the knockback modifiers Ultimate
+  // took off set knockback. One too weak to tumble does not bounce: the victim
+  // flinches where it stands (SmashWiki "Meteor smash").
+  victim.combat.launchBounce = victim.grounded && hb.meteor === true && tumbles;
   victim.hitlag = lag;
   victim.intangible = 0;
   // A hit that knocks a hanging fighter off the ledge locks the ledge out, as

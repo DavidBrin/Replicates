@@ -111,7 +111,9 @@ KB = ((((p/10 + p·d/20) · (200/(w+100)) · 1.4) + 18) · s) + b
 
 `p` = victim's percent after the hit · `d` = damage dealt · `w` = victim's weight ·
 `s` = knockback growth ÷ 100 · `b` = base knockback. The result is then multiplied by
-rage, crouch-cancel (0.85), and the grounded-meteor penalty (0.8).
+rage and crouch-cancel (0.85). A grounded meteor that tumbles is a floor bounce at release
+(Task 12's ×0.9; SmashWiki's Ultimate figure is a 5% loss), not a knockback cut
+([Meteor smash](https://www.ssbwiki.com/Meteor_smash), [Knockback](https://www.ssbwiki.com/Knockback)).
 
 **Hitstun** `floor(KB × 0.4) − 1`. At ≥ 32 frames the victim tumbles.
 

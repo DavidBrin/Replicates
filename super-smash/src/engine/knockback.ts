@@ -89,19 +89,6 @@ const HUNDRED = fx(100);
 const RAGE_SPAN = RAGE_CAP - RAGE_START;
 /** A crouching victim takes 0.85× knockback. SPEC §4. Exact: see `Ratio`. */
 export const CROUCH_CANCEL_MULTIPLIER: Ratio = [17, 20];
-/**
- * A meteor that connects with a grounded victim bounces off the floor, and its
- * launch leaves at 0.8× the speed (SPEC §4; rubendal SSBU-Calculator
- * `parameters.bounce` 0.8, which `Knockback.bounce` applies to the launch speeds,
- * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L1122-L1127).
- * It is not a knockback multiplier: "Because the bounce occurs after the hit, the
- * amount of hitstun suffered is not reduced a corresponding amount" (SmashWiki
- * "Knockback", https://www.ssbwiki.com/Knockback, revision 2063895), so the
- * caller applies it to the launch and takes hitstun from the knockback before it
- * (Plan 3, Task 16b). UNVERIFIED: the same page gives the reduction as "5% in
- * Ultimate"; SPEC §4 and rubendal say 0.8, and this keeps 0.8.
- */
-export const GROUNDED_METEOR_MULTIPLIER: Ratio = [4, 5];
 /** Full turn, in fixed degrees. */
 export const TURN = fx(360);
 
@@ -151,7 +138,7 @@ export interface KnockbackArgs {
   readonly fixedKnockback?: number;
   /** Rage multiplier from `computeRage`. Defaults to 1. Set knockback ignores it. */
   readonly rage?: number;
-  /** Set knockback ignores it. */
+  /** Set knockback ignores it (UNVERIFIED, disputed: see `computeKnockback`). */
   readonly crouchCancel?: boolean;
   /** smash-script `set_weight`: the victim weighs `SET_WEIGHT` (100), in either formula. */
   readonly setWeight?: boolean;
@@ -193,8 +180,12 @@ export function computeKnockback(args: KnockbackArgs): number {
   // multiplies it as ever. What Ultimate took off set knockback is the modifiers:
   // "In Ultimate, the effect of both types of knockback modifiers on set knockback
   // was removed altogether" (launch rates, and "rage, crouch cancelling, or smash
-  // attack charging bonus"). rubendal's `WeightBasedKB` takes no rage either; it
-  // does multiply its crouch-cancel `r`, which this follows the wiki in leaving off.
+  // attack charging bonus"). rubendal's `WeightBasedKB` takes no rage either.
+  // UNVERIFIED (disputed): crouch cancel. The wiki says Ultimate removed it from
+  // set knockback; rubendal multiplies its generic knockback modifier `r`, which
+  // is `parameters.crouch_cancelling` 0.85 for a crouching target, into both
+  // formulas alike (`js/global.js` L645, L706). This follows the wiki and leaves
+  // it off (Task 16b review, Minor 1).
   const fkb = args.fixedKnockback ?? 0;
   if (fkb > 0) {
     const kb = knockbackFormula(TEN, fkb, weight, args.knockbackGrowth, args.baseKnockback);

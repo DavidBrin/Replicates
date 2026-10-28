@@ -13,7 +13,7 @@ export function knockback({targetPercentBefore, damage, weight, kbg, bkb, fkb=0,
   let kb;
   if (fkb>0) kb = (((1+fkb/2)*(200/(w+100))*1.4)+18)*(kbg/100)+bkb;   // fixed-KB moves: p=10, d=fkb
   else       kb = ((((p/10)+(p*d/20))*(200/(w+100))*1.4)+18)*(kbg/100)+bkb;
-  kb *= r*(fkb>0?1:rage(attackerPercent))*(crouchCancel?0.85:1);       // (rage/CC not applied to set KB in Ultimate)
+  kb *= r*(fkb>0?1:rage(attackerPercent)*(crouchCancel?0.85:1));       // rage/CC not applied to set KB in Ultimate (SmashWiki; rubendal applies CC to both: disputed)
   return kb;
 }
 export const launchSpeed = kb => kb*0.03;               // initial launch speed (units/frame)

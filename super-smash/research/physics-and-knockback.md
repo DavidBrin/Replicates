@@ -24,14 +24,24 @@ for staleness · `w` = the victim's weight (100 for weight-independent moves) ·
 The result is then multiplied by rage and crouch cancel (0.85). The `1.4` and `+18`
 constants have not changed since Melee. **HIGH**
 
-A meteor on a grounded victim is **not** a knockback multiplier: the victim bounces off
-the floor and the *launch* leaves at 0.8× its speed (SPEC §4; rubendal
-`parameters.bounce`), while hitstun is the hit's own. "Because the bounce occurs after the
-hit, the amount of hitstun suffered is not reduced a corresponding amount" ([Knockback](https://www.ssbwiki.com/Knockback),
-revision 2063895); "the amount of hitstun delivered by a meteor smash is not affected by
-the knockback reduction" ([Meteor smash](https://www.ssbwiki.com/Meteor_smash), revision
-2047089). Set knockback bounces too. The same Knockback page gives the bounce as "5% in
-*Ultimate*"; the engine keeps SPEC's 0.8 and marks it UNVERIFIED. **MED** (Plan 3, Task 16b)
+A meteor on a grounded victim is **not** a knockback multiplier: it is a floor bounce.
+Grounded targets "immediately bounce off the ground they're standing on (as long as they
+deal enough knockback to put the opponent into tumble), reducing the knockback received by
+20% [*Melee*, *Smash 4*]/15% [*Brawl*]/5% [*Ultimate*]" ([Meteor smash](https://www.ssbwiki.com/Meteor_smash),
+revision 2047089), and "Landing a meteor smash or spike on a grounded opponent counts as a
+bounce" ([Knockback](https://www.ssbwiki.com/Knockback), revision 2063895). So the old
+"0.8" is the *Melee* and *Smash 4* figure for the same bounce, and *Ultimate*'s is a 5%
+loss. The engine models it once, as the launch fires, and only for a tumbling launch: Task
+12's floor bounce, which keeps 0.9 (the param `damage_fly_reflect_d_speed_mul`; SmashWiki's
+95% is the disputed alternative). The hitstun is the hit's own: "the amount of hitstun
+delivered by a meteor smash is not affected by the knockback reduction" (Meteor smash). Set
+knockback bounces too; a meteor too weak to tumble does not bounce, and the victim flinches
+where it stands. No tech: "meteor smashes done on grounded-standing characters can no
+longer be teched" (Meteor smash). rubendal's `Knockback.bounce` / `parameters.bounce` 0.8 is
+dead code at the pinned commit (its only call, `multiworker.js:212`, is commented out); its
+live `Distance` sim bounces off a floor at 0.9 for a tumbling launch, as Task 12 does.
+UNVERIFIED: that this release bounce skips the 0.8 a mid-flight bounce takes off the
+hitstun. **MED** (Plan 3, Task 16b fix round 1)
 
 ### Worked examples, used as engine tests
 
@@ -64,11 +74,13 @@ identical hit is the property test.
   SSBU-Calculator's `WeightBasedKB`
   ([js/formulas.js](https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L211-L213)):
   weight and growth count, the victim's percent and the hit's damage do not. A pummel's
-  fkb 30 / kbg 100 is 40.63 against Mario (98) and 37.06 against Bowser (135). rubendal
-  also multiplies its crouch-cancel factor into `WeightBasedKB`; the engine follows the
-  wiki and leaves it off. Set knockback never gets the balloon speed-up (rubendal
-  `tumble && !isFKB`; "Moves with set knockback retain traditional knockback physics").
-  **HIGH** (Plan 3, Task 16b)
+  fkb 30 / kbg 100 is 40.63 against Mario (98) and 37.06 against Bowser (135). Set
+  knockback never gets the balloon speed-up (rubendal `tumble && !isFKB`; "Moves with set
+  knockback retain traditional knockback physics"). **HIGH** (Plan 3, Task 16b)
+  Crouch cancel on set knockback is disputed: the wiki sentence above says Ultimate removed
+  it, but rubendal multiplies its crouch-cancel factor into `WeightBasedKB` as into the
+  scaling formula. The engine follows the wiki and leaves it off. **MED** (see Open
+  questions)
 - **Set weight** (`set_weight`) makes every victim weigh 100 in either formula, and in
   *Ultimate* its launch gets "a fall speed of 1.5 and gravity of 0.087 for the first 10
   frames of the launch, before reverting back to a fighter's regular fall speed and
@@ -285,6 +297,22 @@ through. **HIGH** — [Priority](https://www.ssbwiki.com/Priority).
 | Sudden death | everyone set to 300% |
 
 ---
+
+## Open questions
+
+- **Crouch cancel on set knockback.** SmashWiki "Knockback" (Set knockback, revision
+  2063895) says Ultimate removed every knockback modifier from set knockback; rubendal
+  SSBU-Calculator applies its crouch-cancel factor (0.85) to `WeightBasedKB` too
+  (`js/global.js` L645, L706 at `233590e9`). The engine leaves it off. **MED**
+- **A grounded meteor's bounce and hitstun.** The bounce happens as the launch fires and
+  keeps the hit's whole hitstun (SmashWiki "Meteor smash"); whether the 0.8 that a
+  mid-flight bounce takes off the hitstun (`damage_fly_reflect_reaction_frame_mul`) applies
+  to it is not published. The engine does not apply it. **MED**
+- **The floor bounce's speed loss.** The param `damage_fly_reflect_d_speed_mul` and
+  rubendal keep 0.9; SmashWiki gives a 5% loss for Ultimate. The engine keeps 0.9. **MED**
+- **The end of set weight's 10 frames.** The engine ends them early with the launch (the
+  hitstun running out, a landing, a bounce, a grab); the wiki only says "the first 10
+  frames of the launch". **MED**
 
 ## Citations
 

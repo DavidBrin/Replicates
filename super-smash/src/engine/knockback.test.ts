@@ -87,8 +87,8 @@ describe("computeKnockback", () => {
     expect(toFloat(kb)).toBeCloseTo(47.64, 1);
   });
 
-  // The grounded-meteor 0.8 is not a knockback multiplier: it is a bounce on the
-  // launch, after hitstun is decided (Plan 3, Task 16b; `combat.test.ts`).
+  // A grounded meteor is not a knockback multiplier: it is a floor bounce as the
+  // launch fires, after hitstun is decided (Plan 3, Task 16b; `combat.test.ts`).
   it("applies the crouch-cancel multiplier", () => {
     const args = {
       percent: fx(50),
@@ -212,16 +212,19 @@ describe("set knockback is weight-based (Plan 3, Task 16b)", () => {
     expect(fixed(150, 100, 135, 0, { setWeight: true })).toBeCloseTo(124.4, 1);
   });
 
-  it("agrees with the reference port across fkb, bkb, growth and weight", () => {
+  // Crouch cancel included: both leave it off set knockback (UNVERIFIED, disputed:
+  // rubendal applies it; `computeKnockback`).
+  it("agrees with the reference port across fkb, bkb, growth, weight and crouch cancel", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 250 }),
         fc.integer({ min: 0, max: 100 }),
         fc.integer({ min: 0, max: 200 }),
         fc.integer({ min: 60, max: 140 }),
-        (fkb, bkb, kbg, weight) => {
-          const theirs = ref.knockback({ targetPercentBefore: 0, damage: 1, weight, kbg, bkb, fkb });
-          return Math.abs(fixed(fkb, kbg, weight, bkb) - theirs) <= theirs * 0.0005 + 0.001;
+        fc.boolean(),
+        (fkb, bkb, kbg, weight, crouchCancel) => {
+          const theirs = ref.knockback({ targetPercentBefore: 0, damage: 1, weight, kbg, bkb, fkb, crouchCancel });
+          return Math.abs(fixed(fkb, kbg, weight, bkb, { crouchCancel }) - theirs) <= theirs * 0.0005 + 0.001;
         },
       ),
     );

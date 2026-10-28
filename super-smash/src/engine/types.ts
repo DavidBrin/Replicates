@@ -243,8 +243,9 @@ export interface Hitbox {
   /** Per-move shieldstun scaling. 1.0 (`ONE`) unless stated. */
   readonly shieldstunMultiplier?: number;
   /**
-   * A meteor: against a grounded victim the launch bounces off the floor at 0.8
-   * of its speed, and the hitstun stays the hit's (`GROUNDED_METEOR_MULTIPLIER`).
+   * A meteor: one that tumbles a grounded victim bounces it off the floor as the
+   * launch fires, at Task 12's floor 0.9, and the hitstun stays the hit's
+   * (`releasePendingLaunch`; Plan 3, Task 16b).
    */
   readonly meteor?: boolean;
   /** This hitbox grabs rather than damages. */

@@ -16,7 +16,8 @@ import { REFERENCE_SCRIPTS } from "./index";
  * scripts they were transcribed from.
  *
  * For every move with both, four facts are compared — first active frame,
- * last active frame, the lowest-id hitbox's damage/angle/knockback on that
+ * last active frame, the lowest-id hitbox's damage/angle/knockback (its bkb,
+ * or its fkb and any bkb beside it, its growth and set weight) on that
  * first frame, and first actionable frame (`CancelFrame`, which is the
  * move's `totalFrames + 1`). "Runs" is `gameScriptFor`: the imported script
  * for a slot Plan 3 activated (`acmd/active.ts`), else the compiled legacy
@@ -56,11 +57,13 @@ function scriptFacts(s: AcmdScript, horizon: number): Omit<Facts, "faf"> | null 
   }
   if (first < 0) return null;
   const a = runScript(s, first).attacks[0];
-  const kb = a === undefined ? "" : a.fkb > 0 ? `fkb${fmt(a.fkb)}` : `bkb${fmt(a.bkb)}`;
+  // A `bkb` beside an `fkb` and set weight are knockback too (Plan 3, Task 16b):
+  // `+bkbN` after the fkb, `/sw` at the end.
+  const kb = a === undefined ? "" : a.fkb > 0 ? `fkb${fmt(a.fkb)}${a.bkb !== 0 ? `+bkb${fmt(a.bkb)}` : ""}` : `bkb${fmt(a.bkb)}`;
   return {
     first,
     last,
-    lead: a === undefined ? "grab" : `${fmt(a.damage)}%/${fmt(a.angle)}°/${kb}/kbg${fmt(a.kbg)}`,
+    lead: a === undefined ? "grab" : `${fmt(a.damage)}%/${fmt(a.angle)}°/${kb}/kbg${fmt(a.kbg)}${a.setWeight ? "/sw" : ""}`,
   };
 }
 

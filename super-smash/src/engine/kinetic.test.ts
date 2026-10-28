@@ -562,6 +562,20 @@ describe("the DAMAGE energy under set weight (Plan 3, Task 16b)", () => {
     kineticClear(cleared);
     expect(cleared.kinetic.setWeightFrames).toBe(0);
   });
+
+  // UNVERIFIED for a bounce, as for the speed-up (`kineticReflect`): a jump and a
+  // move's scripted motion end the launch, so they end its fall too.
+  it("ends at a bounce, a jump and a move's scripted motion", () => {
+    const bounced = setWeightLaunch();
+    kineticReflect(bounced, 0, fx(1), fx(1), 0);
+    expect(bounced.kinetic.setWeightFrames).toBe(0);
+    const jumped = setWeightLaunch();
+    kineticJump(jumped, fx(2));
+    expect(jumped.kinetic.setWeightFrames).toBe(0);
+    const moved = setWeightLaunch();
+    kineticMotion(moved, fx(1), 0);
+    expect(moved.kinetic.setWeightFrames).toBe(0);
+  });
 });
 
 /* ------------------------------------------------- MOTION energy (Task 18) -- */

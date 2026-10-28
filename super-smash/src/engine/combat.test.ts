@@ -10,6 +10,7 @@ import { ONE, byRatio, fx, mul, toFloat } from "./fixed";
 import {
   AIR_DODGE_TECH_FRAMES,
   ASDI_DISTANCE,
+  BOUNCE_FLOOR_LAUNCH_RATIO,
   FURAFURA_END_FRAMES,
   GLANCING_BLOW_DEPTH,
   GROUNDED_ZERO_LAUNCH_RATIO,
@@ -32,7 +33,6 @@ import {
 import { hashState } from "./hash";
 import { sweptHitboxOverlaps, sweptHitboxPenetration } from "./hitbox";
 import {
-  GROUNDED_METEOR_MULTIPLIER,
   STALE_FRESH_BONUS,
   computeHitlag,
   computeHitstun,
@@ -3255,42 +3255,77 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
 
   describe("a downward angle (rubendal SSBU-Calculator `js/knockback.js`: `spike = angle >= 230 && angle <= 310`)", () => {
     /**
-     * The jab's contact, and the victim on the frame its launch fires: the hit's
-     * knockback, the hitstun it set, and the launch speed it left with.
+     * The jab's contact, then fighter 1 from the frame its launch fires: the hit's
+     * knockback and the hitstun it set, and the victim on each frame from the release.
      */
-    function spiked(commands: readonly AcmdCommand[]): { knockback: number; hitstun: number; launchSpeed: number } {
+    function spiked(
+      commands: readonly AcmdCommand[],
+      prepare: (s: GameState) => void = () => {},
+    ): { knockback: number; hitstun: number; after: FighterState[] } {
       const ctx = scripted(commands);
-      const frames = play(standing(ctx), 30, JAB, ctx);
+      const s = standing(ctx);
+      prepare(s);
+      const frames = play(s, 40, JAB, ctx);
       const hit = frames.findIndex((f) => f.events.hits.length > 0);
       const fired = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
       return {
         knockback: frames[hit].events.hits[0].knockback,
         hitstun: frames[hit].state.fighters[1].hitstun,
-        launchSpeed: frames[fired].state.fighters[1].launchSpeed,
+        after: frames.slice(fired).map((f) => f.state.fighters[1]),
       };
     }
+    /** Each frame's hitstun has gone down by exactly one: no bounce cut it, over `n` frames. */
+    const countsDownByOne = (v: FighterState[], n: number): boolean =>
+      v.slice(1, n + 1).every((f, i) => f.hitstun === v[i].hitstun - 1);
 
-    // SmashWiki "Meteor smash" (https://www.ssbwiki.com/Meteor_smash, revision 2047089):
-    // "the amount of hitstun delivered by a meteor smash is not affected by the knockback
-    // reduction"; SmashWiki "Knockback" (revision 2063895): "Because the bounce occurs after
-    // the hit, the amount of hitstun suffered is not reduced a corresponding amount". The
-    // 0.8 is SPEC §4 and rubendal's `parameters.bounce` (Task 16 review, Minor 7).
-    it("is a meteor on a grounded victim when the script does not say: the launch bounces at 0.8, the hitstun is the hit's", () => {
+    // A grounded meteor that tumbles is one floor bounce, at release (Task 16b fix round
+    // 1): SmashWiki "Meteor smash" (https://www.ssbwiki.com/Meteor_smash, revision
+    // 2047089), grounded targets "immediately bounce off the ground they're standing on
+    // (as long as they deal enough knockback to put the opponent into tumble)", and "the
+    // amount of hitstun delivered by a meteor smash is not affected by the knockback
+    // reduction". The bounce keeps Task 12's floor 0.9 (`BOUNCE_FLOOR_LAUNCH_RATIO`).
+    it("bounces a grounded victim off the floor at release when it tumbles: 0.9 of the launch, the hit's full hitstun, once", () => {
       const spike = spiked([frame(4), box({ angle: 270, bkb: 100, kbg: 0 }), frame(7), clearAll()]);
       expect(spike.knockback).toBe(fx(100));
       expect(spike.hitstun).toBe(effectiveHitstun(fx(100), true));
-      expect(spike.launchSpeed).toBe(mul(byRatio(fx(100), GROUNDED_METEOR_MULTIPLIER), LAUNCH_SPEED_RATIO));
+      const [fired] = spike.after;
+      expect(fired.launchSpeed).toBe(byRatio(mul(fx(100), LAUNCH_SPEED_RATIO), BOUNCE_FLOOR_LAUNCH_RATIO));
+      expect(fired.kinetic.damageY).toBeGreaterThan(0);
+      expect(fired.grounded).toBe(false);
+      // Up and away for the next 12 frames: no second bounce, so no 0.8 cut of the hitstun.
+      expect(spike.after.slice(1, 13).every((f) => !f.grounded && f.y > 0)).toBe(true);
+      expect(countsDownByOne(spike.after, 12)).toBe(true);
     });
 
-    // The bounce is not one of the modifiers Ultimate took off set knockback (SmashWiki
-    // "Knockback", Set knockback: rage, crouch cancelling, smash charge, launch rate); it
-    // happens to the launch after the hit (rubendal `Knockback.bounce` scales the launch
-    // speeds of either formula's `Knockback`).
-    it("bounces a set-knockback meteor too", () => {
-      const spike = spiked([frame(4), box({ angle: 270, fkb: 60, bkb: 0, kbg: 100 }), frame(7), clearAll()]);
-      expect(toFloat(spike.knockback)).toBeCloseTo(61.83838, 1);
+    // Set knockback bounces as well: the bounce is the launch meeting the floor, not
+    // one of the modifiers Ultimate took off set knockback (SmashWiki "Knockback",
+    // revision 2063895, Set knockback: launch rates, rage, crouch cancelling, smash charge).
+    it("bounces a grounded set-knockback meteor up off the floor, rather than leaving it tumbling in place", () => {
+      const spike = spiked([frame(4), box({ angle: 270, fkb: 100, bkb: 0, kbg: 100 }), frame(7), clearAll()]);
       expect(spike.hitstun).toBe(computeHitstun(spike.knockback));
-      expect(spike.launchSpeed).toBe(mul(byRatio(spike.knockback, GROUNDED_METEOR_MULTIPLIER), LAUNCH_SPEED_RATIO));
+      const [fired] = spike.after;
+      expect(fired.launchSpeed).toBe(byRatio(mul(spike.knockback, LAUNCH_SPEED_RATIO), BOUNCE_FLOOR_LAUNCH_RATIO));
+      expect(fired.kinetic.damageY).toBeGreaterThan(0);
+      expect(spike.after.slice(1, 13).every((f) => !f.grounded && f.y > 0)).toBe(true);
+      expect(countsDownByOne(spike.after, 12)).toBe(true);
+    });
+
+    it("leaves a grounded victim of a meteor too weak to tumble on the ground: a flinch, not a bounce", () => {
+      const spike = spiked([frame(4), box({ angle: 270, bkb: 40, kbg: 0 }), frame(7), clearAll()]);
+      expect(spike.hitstun).toBe(computeHitstun(fx(40)));
+      expect(spike.after[0].launchSpeed).toBe(mul(fx(40), LAUNCH_SPEED_RATIO));
+      const reeling = spike.after.slice(0, spike.hitstun);
+      expect(reeling.every((f) => f.grounded && f.y === 0 && f.action === "hitstun")).toBe(true);
+    });
+
+    it("sends an airborne victim down at the whole launch", () => {
+      const airborne = (s: GameState) => {
+        Object.assign(s.fighters[1], { grounded: false, platform: -1, y: fx(3), action: "fall" });
+      };
+      const spike = spiked([frame(4), box({ angle: 270, bkb: 100, kbg: 0 }), frame(7), clearAll()], airborne);
+      const [fired] = spike.after;
+      expect(fired.launchSpeed).toBe(mul(fx(100), LAUNCH_SPEED_RATIO));
+      expect(fired.kinetic.damageY).toBeLessThan(0);
     });
 
     /** `meteor` of the hitbox a script makes of `params` at game frame 1. */
