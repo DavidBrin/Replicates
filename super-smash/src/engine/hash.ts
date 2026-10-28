@@ -138,6 +138,7 @@ export function mixFighter(h: number, f: FighterState): number {
     x = mixInt(x, f.ledge.side);
   }
   x = mixInt(x, f.ledgeRegrabs);
+  x = mixInt(x, f.ledgeLockout);
   x = mixInt(x, f.airTime);
 
   x = mixInt(x, f.finalSmashReady);

@@ -49,6 +49,7 @@ function fighter(port: number, over: Partial<FighterState> = {}): FighterState {
     grabTimer: 0,
     ledge: null,
     ledgeRegrabs: 0,
+    ledgeLockout: 0,
     airTime: 0,
     finalSmashReady: 0,
     staleQueue: [],

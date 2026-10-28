@@ -320,6 +320,7 @@ export function resolveCollision(
     f.airTime = 0;
     kineticLand(f);
     f.ledge = null;
+    f.ledgeLockout = 0;
     out.landed = true;
     return out;
   }
@@ -363,7 +364,9 @@ export interface LedgeGrab {
  * mechanic behind every "I turned around and dropped" recovery death: facing away
  * from the stage costs you almost half your reach. Hitstun disqualifies you
  * entirely — you cannot grab a ledge while you are still reeling, which is what
- * makes a low off-stage hit lethal rather than an inconvenience.
+ * makes a low off-stage hit lethal rather than an inconvenience. So does the
+ * lockout after letting go of a ledge or being hit off one (`ledgeLockout`),
+ * which stops a drop regrabbing on the frame it happens.
  */
 export function findLedgeGrab(
   f: FighterState,
@@ -373,6 +376,7 @@ export function findLedgeGrab(
 ): LedgeGrab | null {
   if (f.grounded || f.ledge !== null) return null;
   if (f.hitstun > 0 || f.hitlag > 0) return null;
+  if (f.ledgeLockout > 0) return null; // just let go of a ledge, or was hit off one
   if (f.vy > 0) return null; // rising past a ledge does not snap you onto it
 
   for (let i = 0; i < stage.platforms.length; i++) {

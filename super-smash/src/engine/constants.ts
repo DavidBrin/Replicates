@@ -207,6 +207,33 @@ export const LEDGE_REGRAB_LIMIT = 6;
 /** Intangibility multiplier after the 1st and 2nd regrab; zero from the 3rd. */
 export const LEDGE_REGRAB_SCALING = [fx(1), fx(0.8), fx(0.5), fx(0)] as const;
 
+/**
+ * Frames after letting go of a ledge (a drop by down or away) or being hit off
+ * one during which the fighter cannot grab ANY ledge. Counts down every frame,
+ * and landing clears it. Without it the wall that pushes a dropped body clear
+ * of the stage (the ECB) puts it straight back inside the grab box on the same
+ * frame, and a ledge drop regrabs forever.
+ *
+ * Sources, none of them for Ultimate:
+ * - Melee's "Disabled Regrab Period" starts at 29 frames "as soon as they drop
+ *   from the ledge" (SmashWiki Ledgestall, https://www.ssbwiki.com/Ledgestall).
+ * - Smash 4 stops a fighter who was hit from grabbing a ledge for 55 frames
+ *   (SmashWiki Edge, https://www.ssbwiki.com/Edge). That is the "roughly 55"
+ *   of the forum thread, and it is about being hit, not about a drop.
+ * - SmashWiki Edge's Ultimate sections (regrab penalties, the 6-grab limit)
+ *   give no delay after a release, and rubendal's data has no cliff param.
+ *
+ * UNVERIFIED: the value, 29 (Melee's, the only published drop figure), for
+ * Ultimate; that Ultimate has such a lockout at all; and that it covers every
+ * ledge rather than only the one released (no source says either way, and
+ * lockout-all is the simpler rule). The window it has to sit in, measured with
+ * the `simulate.test.ts` fighter (gravity 0.087, fall speed 1.5, air jump 2.85):
+ * at least about 12 frames, so a drop falls out of the 6-unit grab box and does
+ * not just regrab a few frames later; at most about 40, past which a fighter who
+ * waits the lockout out has fallen too far for one double jump to reach back.
+ */
+export const LEDGE_REGRAB_LOCKOUT_FRAMES = 29;
+
 /** How far from a ledge a fighter may be and still grab it. Fixed. */
 export const LEDGE_GRAB_RANGE_X = fx(3.2);
 export const LEDGE_GRAB_RANGE_Y = fx(6);

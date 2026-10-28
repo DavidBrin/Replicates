@@ -530,6 +530,13 @@ export interface FighterState {
   /** Ledge currently hung from: platform index and side, or null. */
   ledge: { platform: number; side: number } | null;
   ledgeRegrabs: number;
+  /**
+   * Frames left before this fighter may grab a ledge again after letting go of
+   * one (a drop by down or away) or being hit off one; 0 when free to grab.
+   * Locks out every ledge. A getup, roll, jump or attack from the ledge does not
+   * set it. Counts down each frame and is cleared by landing and by a KO.
+   */
+  ledgeLockout: number;
   airTime: number;
 
   /** Frames of Final Smash standby remaining, or 0. */

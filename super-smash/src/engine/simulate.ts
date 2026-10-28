@@ -19,6 +19,7 @@ import { ONE, fx, mul, abs, randomInt, nextRandom } from "./fixed";
 import {
   FINAL_SMASH_STANDBY,
   LEDGE_REGRAB_LIMIT,
+  LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
   SDI_DISTANCE,
   SHIELD_BREAK_STUN,
@@ -232,6 +233,7 @@ export function cloneState(state: GameState): GameState {
       grabTimer: f.grabTimer,
       ledge: f.ledge === null ? null : { platform: f.ledge.platform, side: f.ledge.side },
       ledgeRegrabs: f.ledgeRegrabs,
+      ledgeLockout: f.ledgeLockout,
       airTime: f.airTime,
       finalSmashReady: f.finalSmashReady,
       staleQueue: f.staleQueue.slice(),
@@ -341,6 +343,7 @@ export function createInitialState(
       grabTimer: 0,
       ledge: null,
       ledgeRegrabs: 0,
+      ledgeLockout: 0,
       airTime: 0,
       finalSmashReady: 0,
       staleQueue: [],
@@ -518,6 +521,7 @@ export function step(
 
     if (f.intangible > 0) f.intangible -= 1;
     if (f.invincible > 0) f.invincible -= 1;
+    if (f.ledgeLockout > 0) f.ledgeLockout -= 1;
 
     if (f.hitlag > 0) {
       // Frozen on contact. The only thing a victim may do is SDI — one pulse
@@ -653,6 +657,7 @@ export function step(
     f.platform = -1;
     f.ledge = null;
     f.ledgeRegrabs = 0;
+    f.ledgeLockout = 0;
     // Both ends, in both directions: a KO'd fighter may have been holding
     // someone *or* be held by someone, and clearing only its own half of the
     // link strands the other fighter in `grabbed` for the rest of the match.
@@ -1262,6 +1267,9 @@ function applyHit(
   victim.hitstun = hitstun;
   victim.hitlag = lag;
   victim.intangible = 0;
+  // A hit that knocks a hanging fighter off the ledge locks the ledge out, as
+  // letting go does; a hit anywhere else leaves the lockout alone.
+  if (victim.ledge !== null) victim.ledgeLockout = LEDGE_REGRAB_LOCKOUT_FRAMES;
   victim.ledge = null;
   victim.ledgeRegrabs = 0;
   victim.fastFalling = false;

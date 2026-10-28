@@ -7,7 +7,7 @@
  * legacy switch did.
  */
 
-import { LEDGE_REGRAB_LIMIT } from "../constants";
+import { LEDGE_REGRAB_LIMIT, LEDGE_REGRAB_LOCKOUT_FRAMES } from "../constants";
 import {
   LEDGE_ATTACK_FRAMES,
   LEDGE_GETUP_FRAMES,
@@ -50,6 +50,8 @@ export const STATUS_CLIFF_WAIT: FighterStatus = {
     if (intent.y < 0 || intent.x === -inward) {
       f.ledge = null;
       f.intangible = 0;
+      // Letting go is not an invitation to take the ledge straight back.
+      f.ledgeLockout = LEDGE_REGRAB_LOCKOUT_FRAMES;
       startAction(f, "fall");
       return;
     }

@@ -4,7 +4,12 @@ import fc from "fast-check";
 import { ONE, fx, toFloat } from "./fixed";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { attackFromHitbox } from "./acmd/legacy";
-import { SHIELD_MAX_HEALTH } from "./constants";
+import {
+  LEDGE_GRAB_RANGE_Y,
+  LEDGE_REGRAB_LIMIT,
+  LEDGE_REGRAB_LOCKOUT_FRAMES,
+  SHIELD_MAX_HEALTH,
+} from "./constants";
 import { hashState } from "./hash";
 import {
   DEFAULT_SEED,
@@ -18,6 +23,7 @@ import {
   step,
 } from "./simulate";
 import type { SimContext } from "./simulate";
+import { LEDGE_HANG_MIN } from "./states";
 import { Btn } from "./types";
 import type {
   FighterAttributes,
@@ -1087,6 +1093,174 @@ describe("movement through step", () => {
     expect(after.fighters[0].x).toBe(s.fighters[0].x);
     expect(after.fighters[0].y).toBe(0);
     expect(after.fighters[0].grounded).toBe(true);
+  });
+});
+
+/* ------------------------------------------------- the ledge-release lockout -- */
+
+/**
+ * A ledge drop used to be impossible: the ECB wall pushes the dropped body clear
+ * of the stage, which is inside the grab box, so the fighter regrabbed on the
+ * very frame it let go (and, holding away, looped every `LEDGE_HANG_MIN`
+ * frames until the 6-regrab limit forced a getup). `ledgeLockout` is the fix:
+ * UNVERIFIED for Ultimate, see `LEDGE_REGRAB_LOCKOUT_FRAMES`.
+ */
+describe("the ledge-release lockout", () => {
+  /** The ledge is on the right (x = 80), so away from the stage is Right and in is Left. */
+  const AWAY = Btn.Right;
+
+  /** Fighter 0 walks off the right ledge, hangs from it, and waits out the minimum hang. */
+  function hanging(): GameState {
+    let s = standing();
+    s.fighters[0].x = fx(79);
+    for (let i = 0; i < 30 && s.fighters[0].action !== "ledgeHang"; i++) s = run(s, [Btn.Right, 0], 1);
+    expect(s.fighters[0].action).toBe("ledgeHang");
+    s = run(s, [0, 0], LEDGE_HANG_MIN);
+    expect(s.fighters[0].action).toBe("ledgeHang");
+    return s;
+  }
+
+  /** Release the hang with `button` for one frame, then hold `after` for `n` more, handing each state to `each`. */
+  function dropAndWatch(
+    s: GameState,
+    button: Btn,
+    after: number,
+    n: number,
+    each: (st: GameState, k: number) => void,
+  ): GameState {
+    let state = s;
+    for (let k = 0; k < n; k++) {
+      state = run(state, [k === 0 ? button : after, 0], 1);
+      each(state, k);
+    }
+    return state;
+  }
+
+  /** Hang, drop with `button`, wait the lockout out in the air, double jump, and return the state once it hangs again. */
+  function dropWaitJumpRegrab(s: GameState): GameState {
+    let state = dropAndWatch(s, Btn.Down, 0, LEDGE_REGRAB_LOCKOUT_FRAMES, () => undefined);
+    expect(state.fighters[0].ledge).toBeNull();
+    state = run(state, [Btn.Jump, 0], 1);
+    for (let i = 0; i < 120 && state.fighters[0].ledge === null; i++) state = run(state, [0, 0], 1);
+    return state;
+  }
+
+  it.each([
+    ["holding away", AWAY],
+    ["pressing down", Btn.Down],
+  ])("lets a fighter who drops by %s fall clear of the ledge, with no regrab, for the whole lockout", (_how, button) => {
+    const hung = hanging();
+    const regrabs = hung.fighters[0].ledgeRegrabs;
+    const after = dropAndWatch(hung, button, button, LEDGE_REGRAB_LOCKOUT_FRAMES, (st, k) => {
+      const f = st.fighters[0];
+      const at = `${k} frames after the drop`;
+      expect(f.ledge, `${at}: hanging again`).toBeNull();
+      expect(f.action, `${at}: action`).not.toBe("ledgeHang");
+      expect(f.grounded, `${at}: landed`).toBe(false);
+      expect(f.ledgeRegrabs, `${at}: regrab count`).toBe(regrabs);
+      // The counter is set on the release and counts down one a frame.
+      expect(f.ledgeLockout, `${at}: lockout`).toBe(LEDGE_REGRAB_LOCKOUT_FRAMES - k);
+      if (k > 0) {
+        expect(f.y, `${at}: below the ledge`).toBeLessThan(0);
+        expect(f.vy, `${at}: falling`).toBeLessThan(0);
+      }
+    });
+    // The last locked frame: the fighter is already out of the 6-unit grab box,
+    // so the lockout does not merely postpone the regrab by a few frames.
+    expect(after.fighters[0].ledgeLockout).toBe(1);
+    expect(after.fighters[0].y).toBeLessThan(-LEDGE_GRAB_RANGE_Y);
+    const lifted = run(after, [button, 0], 1);
+    expect(lifted.fighters[0].ledgeLockout).toBe(0);
+    const later = run(lifted, [button, 0], 20);
+    expect(later.fighters[0].ledge).toBeNull();
+    expect(later.fighters[0].ledgeRegrabs).toBe(regrabs);
+  });
+
+  it("lets a fighter double jump back up and regrab once the lockout is over", () => {
+    const hung = hanging();
+    const regrabs = hung.fighters[0].ledgeRegrabs;
+    const after = dropWaitJumpRegrab(hung);
+    expect(after.fighters[0].action).toBe("ledgeHang");
+    expect(after.fighters[0].ledge).toEqual({ platform: 0, side: 1 });
+    expect(after.fighters[0].ledgeRegrabs).toBe(regrabs + 1);
+    expect(after.fighters[0].ledgeLockout).toBe(0);
+  });
+
+  it("does not touch the regrab limit: six hangs, and the seventh grab is a forced getup", () => {
+    let s = hanging();
+    expect(s.fighters[0].ledgeRegrabs).toBe(1);
+    for (let hang = 2; hang <= LEDGE_REGRAB_LIMIT; hang++) {
+      s = dropWaitJumpRegrab(s);
+      expect(s.fighters[0].ledgeRegrabs, `hang ${hang}`).toBe(hang);
+      expect(s.fighters[0].action, `hang ${hang}`).toBe("ledgeHang");
+      s = run(s, [0, 0], LEDGE_HANG_MIN);
+    }
+    // The sixth hang is allowed to stay.
+    expect(run(s, [0, 0], 10).fighters[0].action).toBe("ledgeHang");
+    s = dropWaitJumpRegrab(s);
+    expect(s.fighters[0].ledgeRegrabs).toBe(LEDGE_REGRAB_LIMIT + 1);
+    const forced = run(s, [0, 0], LEDGE_HANG_MIN + 1);
+    expect(forced.fighters[0].action).toBe("ledgeGetUp");
+    expect(forced.fighters[0].ledgeLockout).toBe(0);
+  });
+
+  it.each([
+    ["a getup", Btn.Up],
+    ["a roll", Btn.Shield],
+    ["a jump", Btn.Jump],
+    ["an attack", Btn.Attack],
+  ])("does not lock out the fighter who leaves the ledge with %s", (_what, button) => {
+    let s = hanging();
+    const first = s.fighters[0].action;
+    s = run(s, [button, 0], 1);
+    expect(s.fighters[0].action, "the option started").not.toBe(first);
+    for (let k = 0; k < 90; k++) {
+      s = run(s, [0, 0], 1);
+      expect(s.fighters[0].ledgeLockout, `frame ${k} of the option`).toBe(0);
+    }
+  });
+
+  /** Step frame by frame until `done`, returning the first state it holds for (and the one before). */
+  function until(s: GameState, done: (st: GameState) => boolean, limit: number): { prev: GameState; at: GameState } {
+    let prev = s;
+    let at = s;
+    for (let i = 0; i < limit && !done(at); i++) {
+      prev = at;
+      at = run(at, [0, 0], 1);
+    }
+    expect(done(at), "the event never happened").toBe(true);
+    return { prev, at };
+  }
+
+  it("locks out the fighter who is hit off the ledge, and not one who is hit anywhere else", () => {
+    const hung = hanging();
+    // Fighter 1 jabs from the stage: its hitbox (x 8, radius 5) reaches the lip.
+    Object.assign(hung.fighters[1], { x: fx(74), facing: 1, action: "attack", move: "jab1", actionFrame: 0 });
+    hung.fighters[0].intangible = 0;
+    const { at: hit } = until(hung, (st) => st.fighters[0].damage > 0, 12);
+    expect(hit.fighters[0].ledge).toBeNull();
+    // Set on the contact frame, after that frame's countdown.
+    expect(hit.fighters[0].ledgeLockout).toBe(LEDGE_REGRAB_LOCKOUT_FRAMES);
+
+    const ground = standing();
+    ground.fighters[1].action = "attack";
+    ground.fighters[1].move = "jab1";
+    const { at: struck } = until(ground, (st) => st.fighters[0].damage > 0, 12);
+    expect(struck.fighters[0].ledgeLockout).toBe(0);
+  });
+
+  it("clears the lockout on the frame the fighter lands, and on the frame it is KO'd", () => {
+    const s = standing();
+    Object.assign(s.fighters[0], { y: fx(10), grounded: false, platform: -1, action: "fall", ledgeLockout: 90 });
+    const land = until(s, (st) => st.fighters[0].grounded, 60);
+    expect(land.prev.fighters[0].ledgeLockout, "still locked the frame before").toBeGreaterThan(0);
+    expect(land.at.fighters[0].ledgeLockout).toBe(0);
+
+    const ko = standing();
+    Object.assign(ko.fighters[0], { x: fx(150), y: fx(-139), grounded: false, platform: -1, action: "fall", ledgeLockout: 90 });
+    const dead = until(ko, (st) => st.fighters[0].stocks < 3, 60);
+    expect(dead.prev.fighters[0].ledgeLockout, "still locked the frame before").toBeGreaterThan(0);
+    expect(dead.at.fighters[0].ledgeLockout).toBe(0);
   });
 });
 
