@@ -448,6 +448,7 @@ describe("the DAMAGE energy: a launch decays on its own", () => {
 
 /* ------------------------------------------------- MOTION energy (Task 18) -- */
 
+// The 0.5 / 2.9 and 0.35 / 2.5 velocities below are arbitrary test inputs, not published figures.
 describe("the MOTION energy: a move's scripted velocity", () => {
   it("replaces every other energy while it holds", () => {
     const f = body({ controlX: fx(1), stopX: fx(1), gravityY: -fx(1), damageX: fx(2) }, { launchSpeed: fx(2) });
@@ -517,7 +518,8 @@ describe("a scripted move started during a live launch (the engine, not the ener
     const input: InputFrame = Btn.Up | Btn.Special;
     let prev: InputFrame = 0;
     let launchLiveBeforeMotion = false;
-    let motionFrames = 0;
+    let momentumSeen = false;
+    let framesInWindow = 0;
     for (let i = 0; i < 60; i++) {
       const out = step(state, [input, 0], { prevInputs: [prev, 0], ctx: CTX });
       state = out.state;
@@ -525,19 +527,89 @@ describe("a scripted move started during a live launch (the engine, not the ener
       const f = state.fighters[0];
       const k = f.kinetic;
       // Ask the move's own script whether its momentum has begun, not the energies.
-      const begun = moveScriptFrame(CTX.fighter("link"), f)?.state.momentum != null;
-      if (!begun) {
+      const inWindow = moveScriptFrame(CTX.fighter("link"), f)?.state.momentum != null;
+      if (inWindow) framesInWindow++;
+      momentumSeen ||= inWindow;
+      if (!momentumSeen) {
         if (k.damageX !== 0 || k.damageY !== 0) launchLiveBeforeMotion = true;
         continue;
       }
-      motionFrames++;
-      // From the script's first momentum frame to the end of the move the launch is gone, not parked.
+      // From the script's first momentum frame onward, through the window and past its end,
+      // the launch is gone, not parked.
       expect([k.damageX, k.damageY, f.launchSpeed], `frame ${i} of the run`).toEqual([0, 0, 0]);
       expect(f.vx, `frame ${i} of the run`).toBe(k.controlX + k.stopX + k.motionX);
     }
     // Guard against passing for the wrong reason: the launch was live when the move began,
-    // and the move did reach its momentum.
+    // and the move did reach its momentum and run it out.
     expect(launchLiveBeforeMotion).toBe(true);
-    expect(motionFrames).toBeGreaterThan(10);
+    expect(framesInWindow).toBeGreaterThan(10);
+    const end = state.fighters[0].kinetic;
+    expect([end.damageX, end.damageY, state.fighters[0].launchSpeed]).toEqual([0, 0, 0]);
+  });
+});
+
+describe("a momentum hold cut short by a landing", () => {
+  const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
+  const CTX: SimContext = {
+    fighter(id) {
+      const d = FIGHTERS.find((x) => x.id === id);
+      if (d === undefined) throw new Error(`unknown fighter ${id}`);
+      return d;
+    },
+    stage(id) {
+      const d = STAGES.find((x) => x.id === id);
+      if (d === undefined) throw new Error(`unknown stage ${id}`);
+      return d;
+    },
+  };
+
+  it("Kirby's Final Cutter lands on Battlefield's lower platform mid-hold and does not slide forever", () => {
+    // From the main stage at x = -40, under the left lower platform: the second
+    // Final Cutter window carries him down onto the platform while it still holds.
+    // The landing clears `move`, so nothing ever ran the hold's last frame: MOTION
+    // kept its 0.2 a frame and he slid until he left the platform.
+    let state = createInitialState("battlefield", [{ defId: "kirby" }, { defId: "kirby" }], RULES, 0x7a19, CTX);
+    state.fighters[1].x = fx(150);
+    const f0 = state.fighters[0];
+    f0.x = fx(-40);
+    f0.y = fx(0.111);
+    f0.grounded = true;
+    f0.platform = 0;
+    f0.action = "stand";
+    f0.actionFrame = 0;
+    f0.facing = 1;
+
+    let prev: InputFrame = 0;
+    const go = (input: InputFrame): FighterState => {
+      state = step(state, [input, 0], { prevInputs: [prev, 0], ctx: CTX }).state;
+      prev = input;
+      return state.fighters[0];
+    };
+    for (let i = 0; i < 4; i++) go(0);
+    const cutter: InputFrame = Btn.Up | Btn.Special;
+    let before = go(cutter);
+    let landed: FighterState | null = null;
+    for (let i = 0; i < 80 && landed === null; i++) {
+      const f = go(cutter);
+      if (f.action === "land") landed = f;
+      else before = f;
+    }
+    // Guards against passing for the wrong reason: he really landed in the middle of the hold.
+    expect(landed, "Kirby never landed").not.toBeNull();
+    expect(before.action).toBe("special");
+    expect(before.kinetic.motionX, "the hold was already over when he landed").not.toBe(0);
+
+    // MOTION is handed back within a few frames of the landing, and stays handed back.
+    let settled: FighterState | null = null;
+    for (let i = 0; i < 4; i++) settled = go(0);
+    expect(settled!.kinetic.motionX).toBe(0);
+    expect(settled!.kinetic.motionY).toBe(0);
+    expect(settled!.vx).toBe(0);
+    const x = settled!.x;
+    for (let i = 0; i < 30; i++) {
+      const f = go(0);
+      expect([f.kinetic.motionX, f.kinetic.motionY, f.vx], `${i} frames after settling`).toEqual([0, 0, 0]);
+    }
+    expect(state.fighters[0].x).toBe(x);
   });
 });

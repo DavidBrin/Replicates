@@ -727,11 +727,16 @@ export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
  * air drift alone.
  */
 function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
-  if (f.move === null) return false;
-  if (f.action !== "attack" && f.action !== "special" && f.action !== "throw") return false;
-  const run = moveScriptFrame(ctx.def, f);
+  const live = f.move !== null && (f.action === "attack" || f.action === "special" || f.action === "throw");
+  const run = live ? moveScriptFrame(ctx.def, f) : null;
   const m = run?.state.momentum ?? null;
-  if (run === null || m === null) return false;
+  if (run === null || m === null) {
+    // No hold is live: the move ended, was cut short (a landing clears `move`
+    // mid-hold, so its last frame never ran) or has not reached its momentum.
+    // Whatever velocity a hold left becomes drift and gravity's; no-op if none.
+    kineticEndMotion(f);
+    return false;
+  }
   // The floor still wins. A downward impulse on a grounded fighter drove
   // them straight through the stage — a grounded Stone fell out of the world.
   // A Stone used on the ground simply sits there, as it does in the real game.

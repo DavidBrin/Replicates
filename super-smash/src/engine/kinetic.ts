@@ -452,6 +452,7 @@ export function kineticMotion(f: FighterState, vx: number, vy: number): void {
   k.controlX = 0;
   k.stopX = 0;
   k.gravityY = 0;
+  k.jumpInitial = 0; // a full hop's initial rise is gravity's, and stops with it
   k.damageX = 0;
   k.damageY = 0;
   f.launchSpeed = 0;
@@ -460,7 +461,10 @@ export function kineticMotion(f: FighterState, vx: number, vy: number): void {
   kineticSum(f);
 }
 
-/** The hold is over: the velocity it left becomes drift and gravity's to change. */
+/**
+ * The hold is over: the velocity it left becomes drift and gravity's to change.
+ * A no-op when MOTION is already zero, so it is safe to call whenever no hold is live.
+ */
 export function kineticEndMotion(f: FighterState): void {
   const k = f.kinetic;
   k.controlX += k.motionX;

@@ -199,3 +199,61 @@ describe("air friction (SmashWiki Air friction, https://www.ssbwiki.com/Air_fric
     expect(frames.every((f) => f.vx === FIGHTER_PARAMS.mario.air_speed_x_stable)).toBe(true);
   });
 });
+
+describe("scripted momentum after a full hop's initial rise (Task 18)", () => {
+  // A momentum hold replaces every other energy (`kineticMotion`), the full hop's
+  // initial rise included. Left running, its counter outlived the hold and its
+  // first `kineticExec` replaced the velocity the move had just handed over.
+  // The last test below is UNVERIFIED as a game measurement: it pins continuity
+  // (starting the move one frame later must not change what the move adds), not a
+  // published height.
+
+  const UP_B = Btn.Up | Btn.Special;
+
+  /** A full hop with Jump held for `n` frames, then up-special held. */
+  function hopThenUpB(id: RosterId, n: number): FighterState[] {
+    return play(standing(id), [...hold(Btn.Jump, n), ...hold(UP_B, 70)]);
+  }
+
+  /** The earliest jump-held length after which up-special starts on the very next frame, mid-rise. */
+  function firstPress(id: RosterId): number {
+    const start = play(standing(id), hold(Btn.Jump, 20)).findIndex((f) => !f.grounded);
+    for (let n = start; n < start + 8; n++) {
+      if (hopThenUpB(id, n)[n].action === "special") return n;
+    }
+    throw new Error(`${id} never starts up-special in the first airborne frames`);
+  }
+
+  it.each(["mario", "samus"] as const)("%s: up-special on the first actionable airborne frame ends the initial rise", (id) => {
+    const n = firstPress(id);
+    const frames = hopThenUpB(id, n);
+    const first = frames.findIndex((f) => f.kinetic.motionX !== 0 || f.kinetic.motionY !== 0);
+    expect(first, `${id}: the move reached its momentum`).toBeGreaterThan(n);
+    // The jump was still rising when the press came, or this proves nothing.
+    expect(frames[n - 1].kinetic.jumpInitial, `${id}: a rise in progress at the press`).toBeGreaterThan(0);
+    expect(frames[first].kinetic.jumpInitial).toBe(0);
+  });
+
+  it.each(["mario", "samus"] as const)("%s: the hold's velocity carries on into drift and gravity", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const frames = hopThenUpB(id, firstPress(id));
+    const first = frames.findIndex((f) => f.kinetic.motionY !== 0);
+    const over = frames.findIndex((f, i) => i > first && f.kinetic.motionY === 0);
+    expect(over, `${id}: the hold ended`).toBeGreaterThan(first);
+    // Handed to gravity on the hold's last frame, which gravity then acts on as well.
+    expect(frames[over].vy).toBe(frames[over - 1].kinetic.motionY - p.air_accel_y);
+  });
+
+  it.each(["mario", "samus"] as const)("%s: the height a hold gains does not depend on when in the hop it starts", (id) => {
+    // Height from the hold's first frame to the peak. The hop keeps rising a little
+    // while the move winds up, so a later press peaks higher; what the move itself
+    // adds must be the same.
+    const gain = (at: number) => {
+      const frames = hopThenUpB(id, at);
+      const first = frames.findIndex((f) => f.kinetic.motionY !== 0);
+      return Math.max(...frames.slice(first).map((f) => toFloat(f.y))) - toFloat(frames[first].y);
+    };
+    const n = firstPress(id);
+    expect(Math.abs(gain(n) - gain(n + 1)), `${id}`).toBeLessThan(0.1);
+  });
+});
