@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
 import { ONE, fx, toFloat } from "./fixed";
+import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
+import { attackFromHitbox } from "./acmd/legacy";
 import { SHIELD_MAX_HEALTH } from "./constants";
 import { hashState } from "./hash";
 import {
@@ -774,6 +776,96 @@ describe("DI on the last frame of hitlag", () => {
   });
 });
 
+describe("moves run from game_ scripts", () => {
+  it("takes a fighter's hitboxes from its script, not its legacy table", () => {
+    // The same jab, scripted with its only hitbox fifty units overhead: it must whiff.
+    const away: FighterDef = {
+      ...DEF,
+      scripts: {
+        jab1: {
+          name: "game_attack11",
+          motion: "attack_11",
+          commands: [
+            { op: "frame", frame: 4 },
+            { op: "attack", params: { ...attackFromHitbox(DEF.moves.jab1!.hitboxes[0]), y: fx(50) } },
+            { op: "frame", frame: 7 },
+            { op: "clearAll" },
+          ],
+        },
+      },
+    };
+    const ctx: SimContext = { fighter: () => away, stage: () => STAGE };
+    let s = standing();
+    let prev: readonly InputFrame[] = [0, 0];
+    for (let i = 0; i < 10; i++) {
+      const inputs = i === 0 ? [Btn.Attack, 0] : [0, 0];
+      s = step(s, inputs, { prevInputs: prev, ctx }).state;
+      prev = inputs;
+    }
+    expect(s.fighters[1].damage).toBe(0);
+    // …and the unmodified roster entry still lands, so the whiff is the script's doing.
+    expect(run(standing(), [Btn.Attack, 0], 8).fighters[1].damage).toBeGreaterThan(0);
+  });
+
+  it("places script hitboxes with the SimContext's bone table, not a global one", () => {
+    // A table that lifts the root bone fifty units: the same jab must whiff.
+    const lifted: BoneTable = {
+      fingerprint: "00000000",
+      pose(fighterId, motion, frame, bone, out) {
+        if (!LEGACY_BONE_TABLE.pose(fighterId, motion, frame, bone, out)) return false;
+        out.ty += fx(50);
+        return true;
+      },
+    };
+    const ctx: SimContext = { fighter: () => DEF, stage: () => STAGE, bones: lifted };
+    let s = standing();
+    let prev: readonly InputFrame[] = [0, 0];
+    for (let i = 0; i < 10; i++) {
+      const inputs = i === 0 ? [Btn.Attack, 0] : [0, 0];
+      s = step(s, inputs, { prevInputs: prev, ctx }).state;
+      prev = inputs;
+    }
+    expect(s.fighters[1].damage).toBe(0);
+  });
+
+  it("defaults to the root-bone table", () => {
+    expect(registryContext.bones).toBe(LEGACY_BONE_TABLE);
+  });
+
+  it("spawns a script's projectile once, though the hitlag freeze holds the frame it spawned on", () => {
+    // Hitbox and pellet on one frame: the hit freezes the attacker on the very
+    // frame whose `fired` list holds the spawn, and every frozen frame re-reads it.
+    const both: FighterDef = {
+      ...DEF,
+      scripts: {
+        neutralB: {
+          name: "game_specialn",
+          motion: "special_n",
+          commands: [
+            { op: "frame", frame: 4 },
+            { op: "attack", params: attackFromHitbox(DEF.moves.jab1!.hitboxes[0]) },
+            { op: "spawnProjectile", id: "pellet" },
+            { op: "frame", frame: 7 },
+            { op: "clearAll" },
+          ],
+        },
+      },
+    };
+    const ctx: SimContext = { fighter: () => both, stage: () => STAGE };
+    let s = standing();
+    let prev: readonly InputFrame[] = [0, 0];
+    let frozenAfterSpawn = 0;
+    for (let i = 0; i < 20; i++) {
+      const inputs = i === 0 ? [Btn.Special, 0] : [0, 0];
+      s = step(s, inputs, { prevInputs: prev, ctx }).state;
+      prev = inputs;
+      if (s.nextProjectileId > 1 && s.fighters[0].hitlag > 0) frozenAfterSpawn += 1;
+    }
+    expect(frozenAfterSpawn).toBeGreaterThan(1);
+    expect(s.nextProjectileId - 1).toBe(1);
+  });
+});
+
 describe("a status change during hitlag (Review Focus #2)", () => {
   it("enters the reeling status once and runs none of it while frozen", () => {
     let s = standing();
@@ -904,6 +996,36 @@ describe("registry", () => {
     expect(registryContext.stage("flat")).toBe(STAGE);
     expect(() => registryContext.fighter("nobody")).toThrow();
     clearRegistry();
+  });
+
+  it("refuses, at registration, a script naming a bone the context's table cannot place", () => {
+    clearRegistry();
+    const handed: FighterDef = {
+      ...DEF,
+      scripts: {
+        jab1: {
+          name: "game_attack11",
+          motion: "attack_11",
+          commands: [
+            { op: "frame", frame: 4 },
+            { op: "attack", params: { ...attackFromHitbox(DEF.moves.jab1!.hitboxes[0]), bone: "handr" } },
+          ],
+        },
+      },
+    };
+    expect(() => registerFighters([handed])).toThrow(/tester jab1.*"handr"/);
+    // Refused whole: nothing of the batch is left half-registered.
+    expect(() => registryContext.fighter("tester")).toThrow();
+  });
+
+  it("builds every script's fire-frame schedule at registration, so a script whose timing cannot compile is refused there", () => {
+    clearRegistry();
+    const broken: FighterDef = {
+      ...DEF,
+      scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [{ op: "frame", frame: 0 }] } },
+    };
+    expect(() => registerFighters([broken])).toThrow(/frame needs a whole number of at least 1/);
+    expect(() => registryContext.fighter("tester")).toThrow();
   });
 });
 

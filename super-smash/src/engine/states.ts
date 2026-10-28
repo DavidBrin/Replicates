@@ -51,7 +51,8 @@ import {
   hitstunGravityOptions,
   platformCentreX,
 } from "./physics";
-import { clearHitRecord, moveFrameOf } from "./hitbox";
+import { moveScriptFrame } from "./acmd/run";
+import { clearHitRecord } from "./hitbox";
 import {
   KINETIC_TYPE_OF_ACTION,
   carrierOf,
@@ -687,7 +688,8 @@ export function respawnInvincibilityFrames(framesWaited: number): number {
 /**
  * Is this fighter inside a move's super-armour window?
  *
- * Derived from `move` and `actionFrame`, both of which are already simulation
+ * Read from the move's `game_` script on the frame the move is on, which is
+ * derived from `move` and `actionFrame`, both of which are already simulation
  * state, so armour rolls back with everything else and needs no field of its
  * own. `superArmourFrames` has been in the type — and on Donkey Kong's Giant
  * Punch — since the roster was written, and until this was read it did nothing
@@ -697,15 +699,7 @@ export function respawnInvincibilityFrames(framesWaited: number): number {
 export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
   if (f.move === null) return false;
   if (f.action !== "attack" && f.action !== "special") return false;
-  // Not named `window`: `layering.test.ts` forbids that identifier anywhere in
-  // the engine, and it is right to — the check is a plain grep, because the
-  // rule it enforces is "no browser globals reachable from a simulation that
-  // has to run identically on both peers", and a grep cannot be fooled by a
-  // clever alias the way a type checker can.
-  const armour = def.moves[f.move]?.superArmourFrames;
-  if (!armour) return false;
-  const frame = moveFrameOf(f.actionFrame);
-  return frame >= armour[0] && frame <= armour[1];
+  return moveScriptFrame(def, f)?.state.superArmour === true;
 }
 
 /**
@@ -731,25 +725,19 @@ export function hasSuperArmour(f: FighterState, def: FighterDef): boolean {
 function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
   if (f.move === null) return false;
   if (f.action !== "attack" && f.action !== "special" && f.action !== "throw") return false;
-  const impulses = ctx.def.moves[f.move]?.momentum;
-  if (!impulses) return false;
-
-  const frame = moveFrameOf(f.actionFrame);
-  for (const m of impulses) {
-    const until = m.frame + (m.hold ?? 0);
-    if (frame < m.frame || frame > until) continue;
-    f.vx = m.x * (f.facing >= 0 ? 1 : -1); // kinetic: legacy-write (Task 18 moves this to MOTION)
-    f.vy = m.y; // kinetic: legacy-write (Task 18 moves this to MOTION)
-    // The floor still wins. A downward impulse on a grounded fighter drove
-    // them straight through the stage — a grounded Stone fell out of the world
-    // — because this branch returns before the clamp at the bottom of
-    // `applyMovement` that ordinarily stops that. A Stone used on the ground
-    // simply sits there, which is also what it does in the real game.
-    if (f.grounded && f.vy < 0) f.vy = 0; // kinetic: legacy-write (Task 18 moves this to MOTION)
-    f.launchSpeed = 0;
-    return frame < until;
-  }
-  return false;
+  const run = moveScriptFrame(ctx.def, f);
+  const m = run?.state.momentum ?? null;
+  if (run === null || m === null) return false;
+  f.vx = m.x * (f.facing >= 0 ? 1 : -1); // kinetic: legacy-write (Task 18 moves this to MOTION)
+  f.vy = m.y; // kinetic: legacy-write (Task 18 moves this to MOTION)
+  // The floor still wins. A downward impulse on a grounded fighter drove
+  // them straight through the stage — a grounded Stone fell out of the world
+  // — because this branch returns before the clamp at the bottom of
+  // `applyMovement` that ordinarily stops that. A Stone used on the ground
+  // simply sits there, which is also what it does in the real game.
+  if (f.grounded && f.vy < 0) f.vy = 0; // kinetic: legacy-write (Task 18 moves this to MOTION)
+  f.launchSpeed = 0;
+  return run.gameFrame < m.until;
 }
 
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {

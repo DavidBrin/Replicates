@@ -48,7 +48,6 @@ import {
 } from "./knockback";
 import {
   SMASH_BALL_TARGET,
-  activeHitboxes,
   alreadyHit,
   circle,
   circlesOverlap,
@@ -56,7 +55,6 @@ import {
   hitboxWorldPos,
   hurtboxCapsule,
   markHit,
-  moveFrameOf,
   resolveClank,
   sweptHitboxOverlaps,
 } from "./hitbox";
@@ -67,7 +65,6 @@ import {
   markProjectileHit,
   projectileAlreadyHit,
   projectileHitboxActive,
-  projectilesDueOnFrame,
   spawnProjectile,
 } from "./projectile";
 import {
@@ -103,6 +100,9 @@ import {
   kineticSet,
   kineticSetX,
 } from "./kinetic";
+import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
+import { scriptHitboxes } from "./acmd/hitboxes";
+import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
 import "./status";
 import { emptyEvents } from "./types";
 import type {
@@ -135,7 +135,14 @@ import type {
 const fighterRegistry = new Map<string, FighterDef>();
 const stageRegistry = new Map<string, StageDef>();
 
+/**
+ * Registering is `registryContext`'s load, so every script a fighter can run
+ * is made ready for that context's bone table here (`prepareFighterScripts`):
+ * a script the sim could not run is refused now, the whole batch with it,
+ * rather than inside `step()` mid-match.
+ */
 export function registerFighters(defs: readonly FighterDef[]): void {
+  for (const d of defs) prepareFighterScripts(d, registryContext.bones ?? LEGACY_BONE_TABLE);
   for (const d of defs) fighterRegistry.set(d.id, d);
 }
 
@@ -151,6 +158,11 @@ export function clearRegistry(): void {
 export interface SimContext {
   fighter(id: string): FighterDef;
   stage(id: string): StageDef;
+  /**
+   * Where fighters' bones are, for script hitboxes (`acmd/bones.ts`). Absent
+   * means the root-bone `LEGACY_BONE_TABLE`; Plan 4 passes its bake here.
+   */
+  readonly bones?: BoneTable;
 }
 
 export const registryContext: SimContext = {
@@ -164,6 +176,7 @@ export const registryContext: SimContext = {
     if (s === undefined) throw new Error(`unregistered stage: ${id}`);
     return s;
   },
+  bones: LEGACY_BONE_TABLE,
 };
 
 /* ---------------------------------------------------------------- clone -- */
@@ -591,7 +604,7 @@ export function step(
   spawnDueProjectiles(s, defs, beforeActionFrame, projectilePrev);
 
   const destroyed = new Set<number>();
-  const candidates = gatherHitboxes(s, defs, prevPos, frozen);
+  const candidates = gatherHitboxes(s, defs, prevPos, frozen, ctx.bones ?? LEGACY_BONE_TABLE);
   appendProjectileCandidates(s, defs, candidates, projectilePrev);
   resolveClanks(s, candidates, events, destroyed);
   resolveHits(s, defs, candidates, intents, events, destroyed);
@@ -667,15 +680,17 @@ function gatherHitboxes(
   defs: readonly FighterDef[],
   prevPos: readonly { x: number; y: number }[],
   frozen: readonly boolean[],
+  bones: BoneTable,
 ): Candidate[] {
   const out: Candidate[] = [];
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     if (frozen[i] || f.move === null) continue;
     if (!hasLiveMove(f.action)) continue;
-    const move = defs[i].moves[f.move];
-    if (move === undefined) continue;
-    for (const hb of activeHitboxes(move, moveFrameOf(f.actionFrame))) {
+    const run = moveScriptFrame(defs[i], f);
+    if (run === null) continue;
+    const live = scriptHitboxes(run.state, defs[i].id, run.script.motion, run.gameFrame, bones);
+    for (const hb of live) {
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
       const was = hitboxWorldPos(prevPos[i].x, prevPos[i].y, f.facing, hb);
       out.push({
@@ -736,12 +751,17 @@ function spawnDueProjectiles(
     const f = s.fighters[i];
     if (f.move === null) continue;
     if (!hasLiveMove(f.action)) continue;
-    // A held charge freezes the animation frame; nothing may spawn off a frame
-    // the move did not actually advance onto.
+    // A held charge freezes the animation frame, and so does hitlag, and the
+    // script lists the same `fired` spawns every time a held frame is re-run;
+    // nothing may spawn off a frame the move did not actually advance onto.
     if (f.actionFrame === beforeActionFrame[i]) continue;
-    const move = defs[i].moves[f.move];
-    if (move === undefined) continue;
-    for (const def of projectilesDueOnFrame(move, f.actionFrame + 1)) {
+    const run = moveScriptFrame(defs[i], f);
+    if (run === null) continue;
+    for (const cmd of run.state.fired) {
+      if (cmd.op !== "spawnProjectile") continue;
+      // The script says which and when; what flies is still the move's `ProjectileDef`.
+      const def = findProjectileDef(defs[i], cmd.id);
+      if (def === undefined) continue;
       const p = spawnProjectile(def, f, s.nextProjectileId);
       s.nextProjectileId += 1;
       s.projectiles.push(p);
