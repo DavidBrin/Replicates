@@ -25,9 +25,9 @@ beforeAll(() => {
   registerStages(STAGES);
 });
 
-/** One fighter standing still on Final Destination, actionable. */
-function standing(id: RosterId): GameState {
-  let s = createInitialState("finalDestination", [{ defId: id }], RULES, 7);
+/** One fighter standing still on a stage (Final Destination unless told otherwise), actionable. */
+function standing(id: RosterId, stage = "finalDestination"): GameState {
+  let s = createInitialState(stage, [{ defId: id }], RULES, 7);
   for (let i = 0; i < 80; i++) s = step(s, [0], { prevInputs: [0] }).state;
   const f = s.fighters[0];
   expect(f.grounded).toBe(true);
@@ -135,6 +135,7 @@ describe("midair jumps (SmashWiki Midair jump, https://www.ssbwiki.com/Midair_ju
     return play(standing(id), inputs);
   }
 
+  // Covers the ground-hop route only; the routes that leave the ground without a jump are Task 20b's.
   it.each(IDS)("%s gets exactly jump_count_max − 1 of them", (id) => {
     const p = FIGHTER_PARAMS[id];
     const frames = chain(id, p.jump_count_max + 1);
@@ -162,6 +163,8 @@ describe("midair jumps (SmashWiki Midair jump, https://www.ssbwiki.com/Midair_ju
     const s = standing("mario");
     // Short hop, fall past the apex, then down + jump together.
     const frames = play(s, [Btn.Jump, ...hold(0, 25), Btn.Down | Btn.Jump, 0]);
+    // Precondition: the fighter really is falling when the two arrive, so a fast fall was on offer.
+    expect(frames[25].vy).toBeLessThan(0);
     const f = frames[26];
     expect(f.jumpsUsed).toBe(2);
     expect(f.fastFalling).toBe(false);
@@ -255,5 +258,33 @@ describe("scripted momentum after a full hop's initial rise (Task 18)", () => {
     };
     const n = firstPress(id);
     expect(Math.abs(gain(n) - gain(n + 1)), `${id}`).toBeLessThan(0.1);
+  });
+});
+
+describe("a midair jump never reads before the start of Kirby's height list", () => {
+  // Kirby's air-jump list is indexed by `jumpsUsed − 2`; an airborne fighter that has
+  // not spent the ground jump would index −1 and launch with NaN (fix round 1 of Task 20).
+  const kirbyAfter = (frames: readonly FighterState[], jumpAt: number) => {
+    const f = frames[jumpAt];
+    expect(Number.isFinite(f.vy), "the launch speed is a number").toBe(true);
+    expect(f.vy, "and it rises").toBeGreaterThan(0);
+    const peak = Math.max(...frames.slice(jumpAt).map((g) => toFloat(g.y)));
+    expect(peak, "and the fighter really climbs").toBeGreaterThan(toFloat(frames[jumpAt - 1].y) + 1);
+  };
+
+  it("holds after a drop-through (Kirby on the Battlefield soft platform: Down, then Jump)", () => {
+    const s = standing("kirby", "battlefield");
+    expect(s.fighters[0].platform, "standing on a soft platform").toBeGreaterThanOrEqual(0);
+    const frames = play(s, [Btn.Down, ...hold(0, 7), Btn.Jump, ...hold(0, 40)]);
+    expect(frames[0].grounded, "the drop-through left the platform").toBe(false);
+    kirbyAfter(frames, 8);
+  });
+
+  it("holds for any airborne fighter whose jumpsUsed is 0", () => {
+    const s = standing("kirby", "battlefield");
+    const dropped = play(s, [Btn.Down])[0];
+    expect(dropped.grounded).toBe(false);
+    const forced: GameState = { ...s, fighters: [{ ...dropped, jumpsUsed: 0 }] };
+    kirbyAfter(play(forced, [0, 0, Btn.Jump, ...hold(0, 40)]), 2);
   });
 });

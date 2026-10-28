@@ -487,9 +487,10 @@ export function airJump(f: FighterState, ctx: StateContext): boolean {
   if (f.jumpsUsed >= p.jump_count_max) return false;
   f.jumpsUsed += 1;
   // A multi-jumper's midair jumps each have their own height; the first midair
-  // jump is the one whose `jumpsUsed` is now 2.
+  // jump is the one whose `jumpsUsed` is now 2. The index is clamped at both ends:
+  // an airborne fighter that never spent the ground jump would read before the list.
   const list = p.jump_aerial_y_list;
-  const height = list === undefined ? p.jump_aerial_y : list[Math.min(f.jumpsUsed - 2, list.length - 1)];
+  const height = list === undefined ? p.jump_aerial_y : list[Math.min(Math.max(f.jumpsUsed - 2, 0), list.length - 1)];
   kineticJump(f, jumpLaunchSpeed(p.air_accel_y, height));
   f.fastFalling = false;
   // An air jump is a full jump at full height: whatever the hop that got the
