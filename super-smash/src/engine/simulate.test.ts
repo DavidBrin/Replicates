@@ -1110,6 +1110,47 @@ describe("registry", () => {
     expect(() => registryContext.fighter("tester")).toThrow();
   });
 
+  // Plan 3, Task 17 fix round 1: a `MoveDef` hitbox and a projectile's are spheres (render, AI and
+  // the legacy compile all read them so), so a far end on one is refused, by fighter and move,
+  // rather than dropped.
+  describe("refuses, at registration, a far end (x2/y2) where a sphere is meant", () => {
+    const extended = (over: Partial<Hitbox>): Hitbox => hitbox({ ...over });
+
+    it("on a MoveDef hitbox, by fighter and move", () => {
+      clearRegistry();
+      const capsule: FighterDef = { ...DEF, moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [extended({ x2: fx(12), y2: fx(6) })] }) } };
+      expect(() => registerFighters([capsule])).toThrow(/tester jab1.*hitbox 0.*far end \(x2\/y2\)/);
+      expect(() => registryContext.fighter("tester")).toThrow();
+    });
+
+    it("on a MoveDef hitbox whose slot a script overrides too: render and AI still read the box", () => {
+      clearRegistry();
+      const capsule: FighterDef = {
+        ...DEF,
+        moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [extended({ y2: fx(9) })] }) },
+        scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [{ op: "frame", frame: 4 }] } },
+      };
+      expect(() => registerFighters([capsule])).toThrow(/tester jab1.*far end/);
+    });
+
+    it("on a projectile's hitbox, by fighter, move and projectile", () => {
+      clearRegistry();
+      const pellet = DEF.moves.neutralB!.projectiles![0];
+      const capsule: FighterDef = {
+        ...DEF,
+        moves: { ...DEF.moves, neutralB: move("neutralB", { totalFrames: 30, hitboxes: [], projectiles: [{ ...pellet, hitbox: extended({ x2: fx(3) }) }] }) },
+      };
+      expect(() => registerFighters([capsule])).toThrow(/tester neutralB.*"pellet".*far end \(x2\/y2\)/);
+      expect(() => registryContext.fighter("tester")).toThrow();
+    });
+
+    it("and still registers the ordinary fighter", () => {
+      clearRegistry();
+      expect(() => registerFighters([DEF])).not.toThrow();
+      clearRegistry();
+    });
+  });
+
   it("builds every script's fire-frame schedule at registration, so a script whose timing cannot compile is refused there", () => {
     clearRegistry();
     const broken: FighterDef = {

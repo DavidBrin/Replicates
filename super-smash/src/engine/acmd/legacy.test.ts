@@ -8,7 +8,7 @@ import type { Hitbox, MoveDef, MoveSlot } from "../types";
 import { LEGACY_BONE_TABLE } from "./bones";
 import { scriptHitboxes } from "./hitboxes";
 import { runScript } from "./interpreter";
-import { SLOT_MOTION, gameScriptFor, legacyGameScript } from "./legacy";
+import { SLOT_MOTION, attackFromHitbox, gameScriptFor, legacyGameScript } from "./legacy";
 
 /** A hitbox with its defaults spelled out, so "absent" and "explicitly the default" compare equal. */
 function canonical(hb: Hitbox) {
@@ -97,5 +97,33 @@ describe("legacy moves compiled to game_ scripts", () => {
     const own = { name: "game_attackairf", motion: "attack_air_f", commands: [] };
     expect(gameScriptFor({ ...mario, scripts: { fair: own } }, "fair")).toBe(own);
     expect(gameScriptFor(mario, "rapidJab")).toBeNull();
+  });
+});
+
+// Plan 3, Task 17 fix round 1: a legacy hitbox is a sphere, and a far end on one would be
+// dropped without a word and the move quietly shrunk. A capsule is scripted (`ATTACK(..., X2, Y2, Z2)`).
+describe("a legacy hitbox with a far end", () => {
+  const sphere: Hitbox = {
+    id: 3,
+    startFrame: 4,
+    endFrame: 6,
+    x: 0,
+    y: 0,
+    radius: ONE,
+    damage: ONE,
+    angle: 0,
+    baseKnockback: 0,
+    knockbackGrowth: 0,
+  };
+
+  it.each([
+    ["x2", { x2: ONE }],
+    ["y2", { y2: ONE }],
+  ])("is refused loudly for %s, naming the box", (_, far) => {
+    expect(() => attackFromHitbox({ ...sphere, ...far })).toThrow(/hitbox 3.*far end \(x2\/y2\)/);
+  });
+
+  it("compiles a sphere as it always did", () => {
+    expect(attackFromHitbox(sphere)).toMatchObject({ id: 3, size: ONE });
   });
 });

@@ -15,7 +15,7 @@
  * you were hit, not the one after).
  */
 
-import { DIAGONAL, ONE, fx, mul, abs, byRatio, randomInt, nextRandom } from "./fixed";
+import { DIAGONAL, ONE, fx, mul, abs, byRatio, clamp, randomInt, nextRandom } from "./fixed";
 import {
   ASDI_DISTANCE,
   ASDI_VERTICAL,
@@ -494,6 +494,16 @@ interface Candidate {
 /** Where a candidate's box is this frame: a capsule, or a circle when it has no length. */
 function capsuleOf(c: Candidate): Capsule {
   return { x1: c.x, y1: c.y, x2: c.x + c.dx, y2: c.y + c.dy, r: c.hitbox.radius };
+}
+
+/**
+ * The x of the candidate's spine nearest `x`: the box's own `x` for a sphere, and
+ * `x` itself when the spine spans it. Which end a script writes first is no
+ * part of where a capsule is, so the side of a shield a capsule reaches is read
+ * from here and not from `c.x` (Plan 3, Task 17).
+ */
+function nearestX(c: Candidate, x: number): number {
+  return clamp(x, Math.min(c.x, c.x + c.dx), Math.max(c.x, c.x + c.dx));
 }
 
 /** Key a candidate occupies when picking one winner per source, per victim. */
@@ -1374,7 +1384,7 @@ function clearPendingLaunch(f: FighterState): void {
  */
 function hitReachesShield(victim: FighterState, victimDef: FighterDef, c: Candidate): boolean {
   const bubble = shieldBubble(victim, victimDef);
-  return shieldCovers(victim, c.x) && capsulesOverlap(capsuleOf(c), bubble);
+  return shieldCovers(victim, nearestX(c, victim.x)) && capsulesOverlap(capsuleOf(c), bubble);
 }
 
 /**
@@ -1468,6 +1478,23 @@ function launchSourceFacing(c: Candidate, attacker: FighterState, victim: Fighte
   // published (Task 16 review, Minor 9).
   const fromX = c.projectile !== null ? c.projectile.x : attacker.x;
   return victim.x === fromX ? forward : victim.x > fromX ? 1 : -1;
+}
+
+/**
+ * Which way a hit on a raised shield pushes the defender: away from the nearest
+ * point of the box (a sphere: its centre, a defender level with it going +x).
+ * A capsule that spans the defender's centre has no side to be nearest on, so it
+ * pushes away from the attacker's body, and a defender level with the attacker
+ * goes the way the attacker faces, as `launchSourceFacing` breaks its tie.
+ * UNVERIFIED: SmashWiki "Shield" (https://www.ssbwiki.com/Shield) gives how far
+ * a shield is pushed (`(shieldstun + 1) * 0.09`, capped at 1.3), not which way.
+ */
+function shieldPushDirection(c: Candidate, attacker: FighterState, victim: FighterState): number {
+  const near = nearestX(c, victim.x);
+  if ((c.dx !== 0 || c.dy !== 0) && near === victim.x) {
+    return victim.x === attacker.x ? attacker.facing : victim.x > attacker.x ? 1 : -1;
+  }
+  return victim.x < near ? -1 : 1;
 }
 
 function applyHit(
@@ -1579,7 +1606,7 @@ function applyHit(
       projectile: fromProjectile,
       moveMultiplier: hb.shieldstunMultiplier,
     };
-    const away = victim.x < c.x ? -1 : 1;
+    const away = shieldPushDirection(c, attacker, victim);
     // Pushback reads the shieldstun *before* it is rounded (SmashWiki "Shield").
     const stunExact = shieldstunExact(damage, stunOpts);
     if (isParrying(victim)) {

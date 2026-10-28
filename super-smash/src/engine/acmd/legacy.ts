@@ -51,8 +51,16 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   finalSmash: "final",
 };
 
-/** A legacy hitbox as `ATTACK` arguments on the root bone. */
+/**
+ * A legacy hitbox as `ATTACK` arguments on the root bone. A legacy hitbox is a
+ * sphere: one with a far end (`x2`/`y2`) is refused rather than compiled to a
+ * sphere, which would quietly shrink the move; a capsule is scripted with
+ * `ATTACK(..., X2, Y2, Z2)` (Plan 3, Task 17).
+ */
 export function attackFromHitbox(hb: Hitbox): AttackParams {
+  if (hb.x2 !== undefined || hb.y2 !== undefined) {
+    throw new Error(`legacy hitbox ${hb.id} has a far end (x2/y2): a legacy hitbox is a sphere`);
+  }
   return {
     id: hb.id,
     part: 0,

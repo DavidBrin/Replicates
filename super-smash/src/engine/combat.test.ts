@@ -3596,6 +3596,81 @@ describe("capsule hitboxes through a real hit (Plan 3, Task 17)", () => {
     });
   });
 
+  // A capsule's side, for a shield, is the point of its spine nearest the victim, so
+  // the order the script writes its two ends in changes nothing (Plan 3, Task 17
+  // fix round 1). The shield covers the side it faces; a hit spanning the centre
+  // is covered. UNVERIFIED: which way a shield hit pushes (SmashWiki "Shield"
+  // gives how far, not which way).
+  describe("on a raised shield, from whichever end is written first", () => {
+    interface Outcome {
+      shieldHits: number;
+      hits: number;
+      damage: number;
+      /** The victim's speed away from the attacker once the shield hit lands, +: away. */
+      away: number;
+    }
+    /**
+     * Fighter 0 jabs `attack` at fighter 1, shielding and facing it, `victimX` units from
+     * it; `mirrored` stands the pair on the other side, fighter 0 facing left.
+     */
+    const shielded = (attack: ReturnType<typeof ATTACK>, victimX: number, mirrored = false): Outcome => {
+      const ctx = jabScript(attack);
+      const s = standing(ctx);
+      Object.assign(s.fighters[0], mirrored ? { x: fx(40), facing: -1 } : { x: 0, facing: 1 });
+      Object.assign(s.fighters[1], mirrored ? { x: fx(40 - victimX), facing: 1 } : { x: fx(victimX), facing: -1 });
+      const frames = play(s, 12, JAB_INTO_SHIELD, ctx);
+      const at = frames.findIndex((f) => f.events.shieldHits.length > 0);
+      return {
+        shieldHits: frames.flatMap((f) => f.events.shieldHits).length,
+        hits: frames.flatMap((f) => f.events.hits).length,
+        damage: frames.at(-1)!.state.fighters[1].damage,
+        away: at < 0 ? 0 : frames[at].state.fighters[1].vx * (mirrored ? -1 : 1),
+      };
+    };
+    const nearFirst = (): ReturnType<typeof ATTACK> => reaching();
+    const tipFirst = (): ReturnType<typeof ATTACK> => reaching({ z: 15, z2: 2 });
+
+    // 8 and 12 put the centre inside the spine's 2 to 15; 10 is the middle; 20 is past the tip.
+    it.each([8, 10, 12, 20])("is the same capsule at a victim %i units out, near-first or tip-first, from either side", (victimX) => {
+      for (const mirrored of [false, true]) {
+        const near = shielded(nearFirst(), victimX, mirrored);
+        expect(near).toMatchObject({ shieldHits: 1, hits: 0, damage: 0 });
+        expect(near.away).toBeGreaterThan(0);
+        expect(shielded(tipFirst(), victimX, mirrored)).toEqual(near);
+      }
+    });
+
+    it("takes a capsule spanning the shielder's centre on the shield, pushing it away from the attacker", () => {
+      for (const [mirrored, name] of [[false, "from the left"], [true, "from the right"]] as const) {
+        const hit = shielded(tipFirst(), 10, mirrored);
+        expect(hit, name).toMatchObject({ shieldHits: 1, hits: 0 });
+        expect(hit.away, name).toBeGreaterThan(0);
+      }
+    });
+
+    // Attacker and victim on one spot, the spine across both: no side to take, so the way
+    // the attacker faces decides (as `launchSourceFacing` breaks its own tie).
+    it("breaks a tie, a spine spanning a victim standing where the attacker stands, by the way the attacker faces", () => {
+      const across = reaching({ z: -5, z2: 15 });
+      const right = shielded(across, 0, false);
+      expect(right).toMatchObject({ shieldHits: 1, hits: 0 });
+      expect(right.away).toBeGreaterThan(0);
+      const left = shielded(across, 0, true);
+      expect(left).toMatchObject({ shieldHits: 1, hits: 0 });
+      expect(left.away).toBeGreaterThan(0);
+    });
+
+    // A sphere is its own nearest point: today's rule, tie and all (a sphere level with
+    // the victim pushes it +x whichever side the attacker is on).
+    it("leaves a sphere's rule alone", () => {
+      const sphere = ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 6, z: 10 });
+      expect(shielded(sphere, 10)).toMatchObject({ shieldHits: 1, hits: 0 });
+      expect(shielded(sphere, 10).away).toBeGreaterThan(0);
+      // Mirrored, the victim stands at x = 30 and the box at 30: level, so +x, toward the attacker.
+      expect(shielded(sphere, 10, true).away).toBeLessThan(0);
+    });
+  });
+
   describe("on a grab", () => {
     const grabScript = (far: number): SimContext =>
       ctxFor({
@@ -3645,6 +3720,25 @@ describe("capsule hitboxes through a real hit (Plan 3, Task 17)", () => {
     it("is hit by the far end", () => {
       expect(ballDamage(7.5)).toBeGreaterThanOrEqual(fx(5));
       expect(ballDamage(9)).toBeLessThan(fx(5));
+    });
+
+    // Overlap is the verdict, not depth: one Q12 unit out of reach reads 0 deep (the
+    // integer square root floors) but is a miss. Box 8 out, 5 wide, 6 up; the ball
+    // (radius 6) at its height, so reach is 11 and the centres are 11 units + 1 raw apart.
+    // `sweptCapsulePenetration(...) < 0` as the Smash Ball's test would call it a hit.
+    it("is not hit by a sphere one Q12 unit out of reach, though that reads 0 deep", () => {
+      const sphere = ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 5, x: 0, y: 6, z: 8 });
+      const damageAt = (ballX: number): number => {
+        const ctx = jabScript(sphere);
+        const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }], { ...RULES, smashBall: true }, 12345, ctx);
+        for (const f of s.fighters) Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
+        Object.assign(s.fighters[0], { x: 0, facing: 1 });
+        Object.assign(s.fighters[1], { x: fx(100), facing: -1 });
+        Object.assign(s.smashBall, { active: true, health: fx(40), x: ballX, y: fx(6), vx: 0, vy: 0, driftTimer: 1000 });
+        return fx(40) - play(s, 8, JAB, ctx).at(-1)!.state.smashBall.health;
+      };
+      expect(damageAt(fx(8 + 11))).toBeGreaterThanOrEqual(fx(5));
+      expect(damageAt(fx(8 + 11) + 1)).toBeLessThan(fx(5));
     });
 
     // The Smash Ball is outside the glancing gate (Task 13 left it out): a graze still counts.

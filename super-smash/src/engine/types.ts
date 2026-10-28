@@ -205,7 +205,7 @@ export interface Hitbox {
    * facing-relative like `x`/`y`: the box is the capsule between the two, `radius`
    * wide (Plan 3, Task 17). Absent for a sphere. Only a script's hitboxes
    * (`scriptHitboxes`) carry it: a legacy `MoveDef` hitbox and a projectile's
-   * `hitbox` are read as spheres.
+   * `hitbox` are spheres, and `registerFighters` refuses one with a far end.
    */
   readonly x2?: number;
   readonly y2?: number;
