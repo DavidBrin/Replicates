@@ -577,7 +577,9 @@ const NO_INPUT: Intent = {
  * Exact, not an estimate: it replays the frames on a scratch copy with the
  * movement and the collision the step itself runs (`applyMovement`,
  * `integrate`, `resolveCollision`, with the frame number, so a moving platform
- * is where it will be), and the ledge grab that would end the fall first. What
+ * is where it will be), and the ledge grab that would end the fall first (the
+ * same `findLedgeGrab`, with the others as they are now, so a ledge somebody is
+ * performing an option on is shut here as it is in the step). What
  * it assumes is that nothing else happens: this frame is played with the
  * `intent` it has, the later ones with no input, the hitstun runs down and a
  * tumble that runs out tumbles on (`tumbleFall`), and nobody else touches it.
@@ -610,7 +612,7 @@ export function landsWithin(f: FighterState, intent: Intent, ctx: StateContext, 
     const speed = g.launchSpeed;
     const frame = ctx.frame + k;
     if (resolveCollision(g, prevX, prevY, ctx.stage, attrs, frame).landed) return speed <= TECH_FLOOR_MAX_SPEED;
-    if (!g.grounded && findLedgeGrab(g, ctx.stage, frame, ecbOf(g, attrs).half) !== null) return false;
+    if (!g.grounded && findLedgeGrab(g, ctx.stage, frame, ecbOf(g, attrs).half, ctx.fighters) !== null) return false;
   }
   return false;
 }
@@ -1034,7 +1036,8 @@ export function onLeftGround(f: FighterState): void {
  * act for a moment (SmashWiki "Ledge trump", https://www.ssbwiki.com/Ledge_trump:
  * "grabbing onto a ledge that has already been grabbed by another player will
  * gently remove them from the ledge", who "cannot take any action for a
- * moment").
+ * moment"). `step` calls it for a hanging fighter only: one in a ledge option is
+ * not trumped (UNVERIFIED, see there).
  *
  * A hanging fighter stands on the ledge point, so it is set `clearance` outboard
  * first, or it would land on the stage it was just removed from (UNVERIFIED
@@ -1042,7 +1045,8 @@ export function onLeftGround(f: FighterState): void {
  * length of the lag: it is the one rule for "cannot grab a ledge" (`findLedgeGrab`),
  * so no other phase has to know the fighter is trumped. `ledgeRegrabs` is left
  * as it was: the wiki names hitstun and touching the ground as what resets that
- * count (SmashWiki "Ledge"), and a trump is neither.
+ * count (SmashWiki "Ledge"), and a trump is neither: a fighter trumped on the
+ * frame it grabbed (a same-frame tie) keeps the count that grab added.
  */
 export function trumpLedge(f: FighterState, clearance: number): void {
   if (f.ledge !== null) f.x += f.ledge.side * clearance;

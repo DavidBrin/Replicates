@@ -24,7 +24,7 @@ import {
   resolveCollision,
   walkVelocity,
 } from "./physics";
-import type { FighterAttributes, FighterState, StageDef } from "./types";
+import type { ActionState, FighterAttributes, FighterState, StageDef } from "./types";
 
 const ATTRS: FighterAttributes = {
   weight: 98,
@@ -519,6 +519,45 @@ describe("ledges", () => {
         0,
       ),
     ).toBeNull();
+  });
+
+  // Plan 3, Task 15 (fix round 1). SmashWiki "Ledge" (https://www.ssbwiki.com/Ledge): "Multiple
+  // characters cannot hold onto an edge at the same time". A ledge trump takes it from a hanging
+  // fighter (the grab succeeds; `step` trumps), but SmashWiki "Ledge trump" has buffering an
+  // option "the moment it is grabbed" avoid it, so a fighter in an option keeps its ledge.
+  // UNVERIFIED: that the ledge is refused for the whole option.
+  describe("a ledge another fighter is performing an option on", () => {
+    const asking = (): FighterState => fighter({ port: 0, x: fx(82), y: fx(-2), vy: -fx(1), facing: -1 });
+    const holding = (action: ActionState, over: Partial<FighterState> = {}): FighterState =>
+      fighter({ port: 1, x: fx(80), y: 0, action, ledge: { platform: 0, side: 1 }, intangible: 30, ...over });
+
+    it.each(["ledgeGetUp", "ledgeRoll", "ledgeAttack", "ledgeJump"] as const)("cannot be grabbed during %s", (action) => {
+      const me = asking();
+      expect(findLedgeGrab(me, STAGE, 0, 0, [me, holding(action)])).toBeNull();
+    });
+
+    it("can be grabbed while the fighter on it hangs: the grab trumps it", () => {
+      const me = asking();
+      expect(findLedgeGrab(me, STAGE, 0, 0, [me, holding("ledgeHang")])).toEqual({ platform: 0, side: 1 });
+    });
+
+    it("is free once the option has left it", () => {
+      const me = asking();
+      expect(findLedgeGrab(me, STAGE, 0, 0, [me, holding("ledgeJump", { ledge: null })])).toEqual({ platform: 0, side: 1 });
+    });
+
+    it("is that one ledge only", () => {
+      const me = asking();
+      const far = holding("ledgeRoll", { x: fx(-80), ledge: { platform: 0, side: -1 } });
+      expect(findLedgeGrab(me, STAGE, 0, 0, [me, far])).toEqual({ platform: 0, side: 1 });
+    });
+
+    // `landsWithin` replays a copy of the fighter, which the list knows by its port.
+    it("does not count the fighter asking, or a copy of it", () => {
+      const me = asking();
+      const mine = holding("ledgeJump", { port: 0 });
+      expect(findLedgeGrab(me, STAGE, 0, 0, [mine])).toEqual({ platform: 0, side: 1 });
+    });
   });
 
   it("refuses a ledge from above the surface", () => {

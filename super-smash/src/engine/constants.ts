@@ -442,8 +442,9 @@ export const LEDGE_REGRAB_LIMIT = 6;
 export const LEDGE_REGRAB_SCALING = [fx(1), fx(0.8), fx(0.5), fx(0)] as const;
 
 /**
- * Frames after letting go of a ledge (a drop by down or away) or being hit off
- * one during which the fighter cannot grab ANY ledge. Counts down every frame,
+ * Frames after letting go of a ledge (a drop by down or away) or being hit or
+ * grabbed off one during which the fighter cannot grab ANY ledge (a trump sets
+ * `LEDGE_TRUMPED_FRAMES` instead). Counts down every frame,
  * and landing clears it. Without it the wall that pushes a dropped body clear
  * of the stage (the ECB) puts it straight back inside the grab box on the same
  * frame, and a ledge drop regrabs forever.

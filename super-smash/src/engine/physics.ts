@@ -426,6 +426,13 @@ export interface LedgeGrab {
   readonly side: number;
 }
 
+/** Is a fighter other than `port` performing a ledge option (it holds `ledge` but is not hanging) on this ledge? */
+function inLedgeOption(fighters: readonly FighterState[], port: number, platform: number, side: number): boolean {
+  return fighters.some(
+    (o) => o.port !== port && o.ledge !== null && o.action !== "ledgeHang" && o.ledge.platform === platform && o.ledge.side === side,
+  );
+}
+
 /**
  * Can this fighter grab a ledge right now, and which one?
  *
@@ -434,18 +441,31 @@ export interface LedgeGrab {
  * from the stage costs you almost half your reach. Hitstun disqualifies you
  * entirely — you cannot grab a ledge while you are still reeling, which is what
  * makes a low off-stage hit lethal rather than an inconvenience. So does the
- * lockout after letting go of a ledge or being hit off one (`ledgeLockout`),
- * which stops a drop regrabbing on the frame it happens.
+ * lockout (`ledgeLockout`): after letting go of a ledge or being hit or grabbed
+ * off one it stops a drop regrabbing on the frame it happens, and after being
+ * trumped off one (Plan 3, Task 15) it keeps the fighter from taking it back.
+ *
+ * `fighters` is everybody in the match, for the one rule that is not a property
+ * of the fighter asking: a ledge cannot be shared (SmashWiki "Ledge": "Multiple
+ * characters cannot hold onto an edge at the same time"). A fighter hanging on
+ * it is trumped off by the grab (`step` does that), but one in the middle of a
+ * ledge option (anyone with `ledge` set who is not in `ledgeHang`) keeps it until
+ * the option has left it: SmashWiki "Ledge trump" has buffering an option "the
+ * moment it is grabbed" avoid the trump, and the ledge cannot be shared.
+ * UNVERIFIED: that the ledge is refused, rather than grabbed and trumped, for
+ * the whole of an option. The fighter asking is told by its port, because
+ * `landsWithin` replays a copy of it. Without the list nobody holds a ledge.
  */
 export function findLedgeGrab(
   f: FighterState,
   stage: StageDef,
   frame: number,
   ecbHalf = 0,
+  fighters: readonly FighterState[] = [],
 ): LedgeGrab | null {
   if (f.grounded || f.ledge !== null) return null;
   if (f.hitstun > 0 || f.hitlag > 0) return null;
-  if (f.ledgeLockout > 0) return null; // just let go of a ledge, or was hit off one
+  if (f.ledgeLockout > 0) return null; // just let go of a ledge, or was hit off one, or trumped off it
   if (f.vy > 0) return null; // rising past a ledge does not snap you onto it
 
   for (let i = 0; i < stage.platforms.length; i++) {
@@ -464,6 +484,7 @@ export function findLedgeGrab(
       if (outboard - ecbHalf > rangeX) continue;
       const drop = p.y - f.y;
       if (drop < 0 || drop > LEDGE_GRAB_RANGE_Y) continue;
+      if (inLedgeOption(fighters, f.port, i, side)) continue;
       return { platform: i, side };
     }
   }

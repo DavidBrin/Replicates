@@ -665,19 +665,31 @@ export function step(
     }
 
     if (!f.grounded) {
-      const grab = findLedgeGrab(f, stage, s.frame, ecbOf(f, defs[i].attributes).half);
+      const grab = findLedgeGrab(f, stage, s.frame, ecbOf(f, defs[i].attributes).half, s.fighters);
       if (grab !== null) {
         const pos = ledgePosition(stage, grab, s.frame);
         const frames =
           f.ledgeRegrabs >= LEDGE_REGRAB_LIMIT
             ? 0
             : ledgeIntangibilityFrames(f.airTime, f.damage, f.ledgeRegrabs);
-        // Somebody already on it is trumped off it (Plan 3, Task 15). Phase 6
-        // comes after, so a grab that reaches the fighter trumped here still
-        // lands on it, and then the held fighter is placed at its captor (5b).
+        // A fighter hanging on it is trumped off it (Plan 3, Task 15; SmashWiki "Ledge
+        // trump", https://www.ssbwiki.com/Ledge_trump). Phase 6 comes after, so a grab that
+        // reaches the fighter trumped here still lands on it, and then the held fighter is
+        // placed at its captor (5b).
+        //
+        // Only a HANGING fighter: one in a ledge option still has `ledge` set, but
+        // `findLedgeGrab` has already shut the ledge to us while it is, so the test below
+        // is that same rule stated where the trump decides its target (SmashWiki "Ledge
+        // trump": buffering an attack, a jump or a roll "the moment it is grabbed" avoids the
+        // trump). UNVERIFIED: that reading.
+        //
+        // UNVERIFIED: two fighters taking one free ledge on the same frame. The ports are
+        // handled in order, so the later one trumps the earlier, which hung for no frames. That
+        // grab's `ledgeRegrabs` count stays: a trump never touches it, however long the
+        // fighter hung.
         for (let j = 0; j < s.fighters.length; j++) {
           const other = s.fighters[j];
-          if (j === i || other.ledge === null) continue;
+          if (j === i || other.ledge === null || other.action !== "ledgeHang") continue;
           if (other.ledge.platform !== grab.platform || other.ledge.side !== grab.side) continue;
           trumpLedge(other, ecbOf(other, defs[j].attributes).half + ONE);
         }
