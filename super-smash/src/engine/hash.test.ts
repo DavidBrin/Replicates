@@ -219,6 +219,12 @@ describe("hashState", () => {
    * ones that do not exist yet — and requires each one to move the hash. Every
    * nullable field is given a value first, so the leaves behind it are walked
    * too; a new nullable field left null here fails the walk by name.
+   *
+   * Arrays are not walked, so each one must be named in HANDLED_ARRAYS (and
+   * have an explicit case above); an array field this test has not heard of
+   * fails by name rather than passing unseen. Optional fields (`foo?: T`) that
+   * the typed `fighter()` fixture leaves absent are not walked at all: give the
+   * fixture a value for one, or this walk cannot see it.
    */
   it("notices a mutation of every leaf of FighterState, found by walking it", () => {
     const FULL: Partial<FighterState> = {
@@ -226,10 +232,19 @@ describe("hashState", () => {
       ledge: { platform: 0, side: 1 },
       bufferedAction: { kind: "jump", frame: 3 },
     };
+    /** Arrays `mixFighter` hashes element by element, each with an explicit case in the list above. */
+    const HANDLED_ARRAYS = new Set(["staleQueue", "hitThisMove"]);
     const leaves: string[][] = [];
     const walk = (v: unknown, path: string[]): void => {
       if (v === null) throw new Error(`fighter.${path.join(".")} is null: give it a value in FULL`);
-      if (Array.isArray(v)) return; // arrays have explicit cases above
+      if (Array.isArray(v)) {
+        if (!HANDLED_ARRAYS.has(path.join("."))) {
+          throw new Error(
+            `fighter.${path.join(".")} is an array this walk does not cover: add an explicit case to the list above and name it in HANDLED_ARRAYS`,
+          );
+        }
+        return;
+      }
       if (typeof v === "object") {
         for (const k of Object.keys(v as object)) walk((v as Record<string, unknown>)[k], [...path, k]);
         return;

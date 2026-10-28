@@ -237,13 +237,39 @@ describe("cloneState", () => {
    * Review Focus #1 (rollback desync from a field `cloneState` forgets). A
    * forgotten field would be *missing* from the copy; a shallow-copied object
    * would be *shared* with it. Both are found by walking the original.
+   *
+   * A fighter's defaults are mostly 0, false and "", so a copy that maps one
+   * field onto another (`stopX: k.controlX`) would still match them. The walk
+   * therefore first gives every leaf its own value (numbers a running counter,
+   * booleans flipped, strings suffixed with their path), and only then compares
+   * the copy leaf by leaf. Nullable fields and arrays are filled in first, and a
+   * null or an empty array left in the fixture fails the walk by name: a copy
+   * of nothing proves nothing. (The same nullable list is in hash.test.ts.)
+   * Optional fields (`foo?: T`) that `createInitialState` leaves absent are not
+   * walked: assign one here, or this test cannot see it.
    */
   it("copies every field of every fighter, and shares no object with the original", () => {
     const s = newState();
     const f = s.fighters[0];
+    f.move = "jab1";
     f.ledge = { platform: 0, side: 1 };
     f.bufferedAction = { kind: "jump", frame: 3 };
-    f.kinetic.damageX = 7;
+    f.staleQueue = ["jab1", "fair"];
+    f.hitThisMove = [1, 2];
+    let counter = 0;
+    const distinct = (o: Record<string, unknown>, path: string): void => {
+      for (const k of Object.keys(o)) {
+        const v = o[k];
+        const here = `${path}.${k}`;
+        if (v === null) throw new Error(`${here} is null: give it a value before the walk`);
+        if (Array.isArray(v) && v.length === 0) throw new Error(`${here} is an empty array: give it elements before the walk`);
+        if (typeof v === "object") distinct(v as Record<string, unknown>, here);
+        else if (typeof v === "number") o[k] = ++counter;
+        else if (typeof v === "boolean") o[k] = !v;
+        else o[k] = `${String(v)}:${here}`;
+      }
+    };
+    distinct(f as unknown as Record<string, unknown>, "fighter");
     const c = cloneState(s);
     const check = (a: unknown, b: unknown, path: string): void => {
       if (a === null || typeof a !== "object") {
@@ -256,7 +282,7 @@ describe("cloneState", () => {
         check((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`);
       }
     };
-    check(s.fighters, c.fighters, "fighters");
+    check(s.fighters[0], c.fighters[0], "fighter");
   });
 
   it("copies the rules and the Smash Ball rather than aliasing them", () => {

@@ -59,25 +59,67 @@ describe("adopting a direct write", () => {
     expect(f.kinetic).toEqual({ ...emptyKinetic(), controlX: fx(1), gravityY: fx(2) });
   });
 
-  it("puts a horizontal write on the carrier it is told to", () => {
+  it("puts a horizontal write on the carrier it is told to, and on nothing else", () => {
     const toControl = body({}, { vx: fx(3) });
     kineticAdopt(toControl, "control");
-    expect(toControl.kinetic.controlX).toBe(fx(3));
+    expect(toControl.kinetic).toEqual({ ...emptyKinetic(), controlX: fx(3) });
     const toStop = body({}, { vx: fx(3) });
     kineticAdopt(toStop, "stop");
-    expect(toStop.kinetic.stopX).toBe(fx(3));
+    expect(toStop.kinetic).toEqual({ ...emptyKinetic(), stopX: fx(3) });
   });
 
-  it("always restores vx/vy == sum, whatever the energies held", () => {
+  it("defaults the horizontal carrier to CONTROL", () => {
+    const f = body({}, { vx: fx(3) });
+    kineticAdopt(f);
+    expect(f.kinetic).toEqual({ ...emptyKinetic(), controlX: fx(3) });
+  });
+
+  it("puts a vertical write on GRAVITY, and on nothing else", () => {
+    const f = body({}, { vy: -fx(2) });
+    kineticAdopt(f);
+    expect(f.kinetic).toEqual({ ...emptyKinetic(), gravityY: -fx(2) });
+  });
+
+  it("adds only the difference, leaving MOTION and DAMAGE where they were", () => {
+    const f = body(
+      { motionX: fx(1), damageX: fx(1), motionY: fx(1), damageY: fx(1) },
+      { vx: fx(4), vy: fx(5) },
+    );
+    kineticAdopt(f, "stop");
+    expect(f.kinetic).toEqual({
+      ...emptyKinetic(),
+      motionX: fx(1),
+      damageX: fx(1),
+      motionY: fx(1),
+      damageY: fx(1),
+      stopX: fx(2), // 4 - (1 + 1)
+      gravityY: fx(3), // 5 - (1 + 1)
+    });
+  });
+
+  it("always restores vx/vy == sum, landing the difference on exactly one carrier per axis", () => {
     const q12 = fc.integer({ min: -fx(50), max: fx(50) });
     fc.assert(
-      fc.property(q12, q12, q12, q12, q12, q12, q12, q12, q12, fc.boolean(), (cx, sx, gy, mx, my, dx, dy, vx, vy, stop) => {
+      fc.property(q12, q12, q12, q12, q12, q12, q12, q12, q12, fc.boolean(), (cx, sx, gy, mx, my, dmx, dmy, vx, vy, stop) => {
         const f = body(
-          { controlX: cx, stopX: sx, gravityY: gy, motionX: mx, motionY: my, damageX: dx, damageY: dy },
+          { controlX: cx, stopX: sx, gravityY: gy, motionX: mx, motionY: my, damageX: dmx, damageY: dmy },
           { vx, vy },
         );
+        const diffX = vx - (cx + sx + mx + dmx);
+        const diffY = vy - (gy + my + dmy);
         kineticAdopt(f, stop ? "stop" : "control");
-        return kineticSumX(f) === vx && kineticSumY(f) === vy && f.kinetic.motionX === mx && f.kinetic.damageY === dy;
+        expect(f.kinetic).toEqual({
+          ...emptyKinetic(),
+          controlX: cx + (stop ? 0 : diffX),
+          stopX: sx + (stop ? diffX : 0),
+          gravityY: gy + diffY,
+          motionX: mx,
+          motionY: my,
+          damageX: dmx,
+          damageY: dmy,
+        });
+        expect(kineticSumX(f)).toBe(vx);
+        expect(kineticSumY(f)).toBe(vy);
       }),
     );
   });

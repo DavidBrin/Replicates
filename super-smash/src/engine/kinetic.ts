@@ -6,8 +6,11 @@
  * sum every frame (skyline-smash `FIGHTER_KINETIC_ENERGY_ID_*`). Which energies
  * run, and how, is chosen by the fighter's status through a *kinetic type*.
  * That separation is the mechanic: a launch (DAMAGE) decays at its own 0.051
- * per frame while gravity (GRAVITY) and the player's drift (CONTROL) act
- * beside it, instead of all three fighting over one `vx`.
+ * per frame (SmashWiki Knockback, Formula > Variables: launch speed is
+ * knockback x 0.03 and "decays by 0.051 every frame"; the passage names no
+ * single game, so it is the series figure, not an Ultimate-only measurement,
+ * https://www.ssbwiki.com/Knockback) while gravity (GRAVITY) and the player's
+ * drift (CONTROL) act beside it, instead of all three fighting over one `vx`.
  *
  * `FighterState.vx` / `vy` remain, as the **sum**, for every reader that only
  * wants to know how fast a fighter is going (renderer, CPU, blast-zone test).
