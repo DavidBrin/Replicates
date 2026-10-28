@@ -56,10 +56,20 @@
  * tumbles Fox, so the script reaches `downed` and `getUp` twice, not three times,
  * and his self-destruct is three frames later (1862).
  *
+ * Plan 3 Task 9 (shields) re-tuned the walk back for the forward tilt. Shield
+ * damage is ×1.19 and each jab pushes Fox back a little, so the shield breaks on
+ * 649, not 657, into 400 − 10 = 389 frames of stun, not 240: Fox is still
+ * stunned when the smash comes on 733. He stands 2 units nearer Mario, so the
+ * smash's far hitbox wins (22.4%, not 18.5%) and sends him to x -16, not 3. His
+ * soft walk back to Mario's side is now 95 frames (903–997), not 69, and the
+ * wait before the forward tilt is 3 frames, not 29, so the forward tilt on 1002
+ * and what follows it keep their frames. The smash's longer hitlag puts the hang
+ * on 863, not 862, and the fireball lands a frame later (1578).
+ *
  * Each step's comment gives the frame it starts on, and the events it names
- * (the shield break on 657, the hangs on 862, 1193, 1299 and 1400, the hits on
- * 747, 1006, 1577 and 1635, time up on 2014). All were checked against a run
- * after Plan 3 Task 4.
+ * (the shield break on 649, the hangs on 863, 1193, 1299 and 1400, the hits on
+ * 747, 1006, 1578 and 1635, time up on 2014). All were checked against a run
+ * after Plan 3 Task 9.
  */
 
 import { Btn } from "@/engine/types";
@@ -131,25 +141,25 @@ const STEPS: readonly ScriptStep[] = [
   [1, A, S], //                   446: jab: shieldStun
   [30, 0, S],
   [1, A, S], //                   477: jab: shieldStun
-  [254, 0, S], //                 478: the shield breaks on 657: shieldBroken
+  [254, 0, S], //                 478: the shield breaks on 649: shieldBroken, stunned 389 frames
   // Mario forward-smashes the stunned Fox, to the left, who holds a soft up through
   // the launch: 38° and a tumble, so the soft DI bends it, and Fox flies across the
   // stage and lands near its middle.
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
-  [66, 0, SOFT | U], //           734: tumble (747), downed (783), getUp (823); Mario can walk again on 798
+  [66, 0, SOFT | U], //           734: tumble (747), downed (787), getUp (827); Mario can walk again on 801
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
-  [65, R | SOFT, 0], //           800: ledgeHang on 862 (he turns from left to right first)
+  [65, R | SOFT, 0], //           800: ledgeHang on 863 (he turns from left to right first)
   [19, 0, 0],
   [1, J, 0], //                   884: ledgeJump, then jump
   [18, L, 0], //                  885: drift back over the stage
   [2, L, R | SOFT], //            903: Fox walks back from the middle of the stage
   [40, 0, R | SOFT],
   [1, L | A, R | SOFT], //        945: forward air on the way down...
-  [26, 0, R | SOFT], //           946: ...that lands inside itself: landingLag; Fox stops on 972
-  [29, 0, 0],
+  [52, 0, R | SOFT], //           946: ...that lands inside itself: landingLag; Fox stops on 998
+  [3, 0, 0],
   // Soft turns a fresh direction plus attack into a tilt.
   [1, L | SOFT, 0], //           1001: facing left since the ledge
   [1, L | SOFT | A, 0], //       1002: forward tilt, not forward smash: it hits Fox on 1006
@@ -182,7 +192,7 @@ const STEPS: readonly ScriptStep[] = [
   [6, 0, 0],
   [1, S, 0], //                  1473: airDodge, landing inside it: landingLag
   [80, 0, 0],
-  [1, B, 0], //                  1554: neutral special: a fireball that hits Fox
+  [1, B, 0], //                  1554: neutral special: a fireball that hits Fox on 1578
   // Air friction left Fox at x 32 after the fireball, out of nair range, so he
   // walks in: 27 frames of soft walk (half speed, Task 22) from 1602 put him at
   // about x 54 when the nair lands.

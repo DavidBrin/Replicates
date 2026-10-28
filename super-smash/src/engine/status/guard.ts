@@ -13,16 +13,22 @@
 import {
   AIR_DODGE_FRAMES,
   DIRECTIONAL_AIR_DODGE_FRAMES,
+  FURAFURA_END_FRAMES,
   ROLL_FRAMES,
+  SHIELD_BREAK_MASH_BUTTON,
+  SHIELD_BREAK_MASH_STICK,
+  SHIELD_BREAK_RESET,
   SHIELD_MIN_HOLD,
   SHIELD_RELEASE_FRAMES,
   SPOT_DODGE_FRAMES,
 } from "../constants";
 import { kineticSetX } from "../kinetic";
+import { mashFrames } from "../shield";
 import {
   ROLL_DISTANCE,
   SHIELD_START_FRAMES,
   bufferPress,
+  buttonPresses,
   hasMove,
   presses,
   startAction,
@@ -104,8 +110,26 @@ export const STATUS_FURAFURA: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_FURAFURA",
   action: "shieldBroken",
   kineticType: "GROUND_STOP",
-  main(f) {
-    if (f.hitstun > 0) return;
+  main(f, intent) {
+    // `charge` is free in this status: 0 while stunned, 1 in FuraFuraEnd.
+    if (f.hitstun > 0) {
+      if (f.charge === 1) return;
+      // Mashing: 5.4 frames a button press, 3 a stick input (SmashWiki "Stun").
+      const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
+      const earned = mashFrames(f.combat, buttonPresses(intent), sticks, SHIELD_BREAK_MASH_BUTTON, SHIELD_BREAK_MASH_STICK);
+      f.hitstun = Math.max(0, f.hitstun - earned);
+      return;
+    }
+    if (f.charge === 0) {
+      // FuraFuraEnd: the fighter comes to for 33 frames, still unable to act
+      // (SmashWiki "Stun"), and mashing no longer helps.
+      f.charge = 1;
+      f.hitstun = FURAFURA_END_FRAMES;
+      f.combat.mash = 0;
+      return;
+    }
+    // The shield comes back at 75% (SmashWiki "Shield break"), not empty.
+    f.shieldHealth = SHIELD_BREAK_RESET;
     startAction(f, "stand");
   },
 };

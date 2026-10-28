@@ -184,8 +184,38 @@ export const SHIELDSTUN_PROJECTILE: Ratio = [29, 100];
 /** Ultimate is the only game in the series that caps shieldstun. */
 export const SHIELDSTUN_CAP = 60;
 
-/** Frames of stun on a shield break, before the mash-out reduction. */
+/**
+ * The shieldBroken clip's length in the renderer (`render/poses/timing.ts`).
+ * The engine's stun is `shieldBreakStun` (`shield.ts`): 400 − percent.
+ */
 export const SHIELD_BREAK_STUN = 240;
+
+/** Shield damage is the hit's ×1.19 (SmashWiki "Shield", Ultimate). */
+export const SHIELD_DAMAGE_RATIO: Ratio = [119, 100];
+/** Shield size `(HP/50) × 0.85 + 0.15` of the full radius (SmashWiki "Shield"). */
+export const SHIELD_SIZE_MIN = fx(0.15);
+/** Defender pushback `min((shieldstun + 1) × 0.09, 1.3)` (SmashWiki "Shield"). */
+export const SHIELD_PUSHBACK_RATIO: Ratio = [9, 100];
+export const SHIELD_PUSHBACK_MAX = fx(1.3);
+/** Attacker pushback `0.04 × damage + 0.025` (rubendal SSBU-Calculator `AttackerShieldPushback`). */
+export const SHIELD_ATTACKER_PUSHBACK_RATIO: Ratio = [1, 25];
+export const SHIELD_ATTACKER_PUSHBACK_ADD = fx(0.025);
+/** Shield-break stun `400 − percent` frames (SmashWiki "Stun"). */
+export const SHIELD_BREAK_STUN_BASE = 400;
+/** A broken shield comes back at 37.5 HP, 75% (SmashWiki "Shield break"). */
+export const SHIELD_BREAK_RESET = fx(37.5);
+/**
+ * Mashing out of shield-break stun, in tenths of a frame: 5.4 frames a button
+ * press, 3 a stick input (SmashWiki "Stun").
+ */
+export const SHIELD_BREAK_MASH_BUTTON = 54;
+export const SHIELD_BREAK_MASH_STICK = 30;
+/**
+ * After the stun, "every character has an animation for regaining
+ * consciousness … (known internally as FuraFuraEnd), which lasts … 33 frames
+ * from Smash 4 onward" (SmashWiki "Stun").
+ */
+export const FURAFURA_END_FRAMES = 33;
 
 /* ------------------------------------------------------------- movement -- */
 

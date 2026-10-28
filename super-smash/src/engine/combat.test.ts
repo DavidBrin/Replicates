@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import { ONE, byRatio, fx, mul } from "./fixed";
-import { GROUNDED_ZERO_LAUNCH_RATIO, LAUNCH_SPEED_RATIO } from "./constants";
+import {
+  FURAFURA_END_FRAMES,
+  GROUNDED_ZERO_LAUNCH_RATIO,
+  LAUNCH_SPEED_RATIO,
+  SHIELD_BREAK_RESET,
+  SHIELD_DECAY_PER_FRAME,
+  SHIELD_REGEN_PER_FRAME,
+} from "./constants";
 import { hashState } from "./hash";
-import { computeHitstun, damageSpeedUpMaxMag, effectiveHitstun } from "./knockback";
+import {
+  STALE_FRESH_BONUS,
+  computeHitstun,
+  damageSpeedUpMaxMag,
+  effectiveHitstun,
+  shieldstunExact,
+} from "./knockback";
+import { attackerShieldPushback, shieldDamage, shieldPushback } from "./shield";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
 import { Btn } from "./types";
@@ -730,5 +744,90 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
       expect(after.kinetic.speedUpMax).toBe(0);
       expect(after.combat.launchFaf).toBe(0);
     });
+  });
+});
+
+/* --------------------------------------------------- Task 9: shield -- */
+
+describe("shields (Plan 3, Task 9)", () => {
+  /** The frame fighter 1's shield took fighter 0's jab, and the frame before. */
+  function shieldHit(prepare: (s: GameState) => void = () => {}): { before: Frame; at: Frame } {
+    const s = standing();
+    prepare(s);
+    const frames = play(s, 12, JAB_INTO_SHIELD);
+    const i = frames.findIndex((f) => f.events.shieldHits.length > 0);
+    return { before: frames[i - 1], at: frames[i] };
+  }
+  const JAB_DAMAGE = mul(fx(10), STALE_FRESH_BONUS);
+
+  it("takes 1.19x the hit's damage off the shield", () => {
+    const { before, at } = shieldHit();
+    const lost = before.state.fighters[1].shieldHealth - at.state.fighters[1].shieldHealth;
+    expect(lost).toBe(shieldDamage(JAB_DAMAGE) + SHIELD_DECAY_PER_FRAME);
+  });
+
+  it("slides the defender (shieldstun + 1) x 0.09 and a grounded attacker 0.04 x damage + 0.025", () => {
+    const { at } = shieldHit();
+    const [attacker, defender] = at.state.fighters;
+    // Shieldstun *not* rounded down (SmashWiki "Shield", pushback table).
+    expect(defender.vx).toBe(shieldPushback(shieldstunExact(JAB_DAMAGE)));
+    expect(attacker.vx).toBe(-attackerShieldPushback(JAB_DAMAGE));
+  });
+
+  it("lets a hit past a worn-down shield: a shield poke", () => {
+    const s = standing();
+    s.fighters[1].shieldHealth = fx(2);
+    // A jab aimed at the feet, outside a shield shrunk to 15% of its radius.
+    const low: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ y: fx(0.5), radius: fx(1.5) })] }) },
+    };
+    const frames = play(s, 10, JAB_INTO_SHIELD, ctxFor(low));
+    expect(frames.flatMap((f) => f.events.shieldHits)).toEqual([]);
+    expect(frames.at(-1)!.state.fighters[1].damage).toBeGreaterThan(0);
+  });
+
+  it("breaks into 400 - percent frames of stun", () => {
+    const { at } = shieldHit((s) => {
+      s.fighters[1].shieldHealth = fx(1);
+      s.fighters[1].damage = fx(120);
+    });
+    const v = at.state.fighters[1];
+    expect(v.action).toBe("shieldBroken");
+    expect(v.hitstun).toBe(280);
+  });
+
+  // SmashWiki "Stun": after the stun, every character plays FuraFuraEnd, "33 frames
+  // from Smash 4 onward", before it can act; the shield comes back at 37.5.
+  it("regains consciousness for 33 frames, then stands with 37.5 HP of shield", () => {
+    const s = standing();
+    const v = s.fighters[1];
+    v.action = "shieldBroken";
+    v.hitstun = 1;
+    v.shieldHealth = 0;
+    // Frame 0 ends the stun and starts FuraFuraEnd; mashing no longer shortens it.
+    const frames = play(s, FURAFURA_END_FRAMES + 1, (i) => [0, i % 2 === 0 ? Btn.Attack : 0]);
+    expect(frames[FURAFURA_END_FRAMES - 1].state.fighters[1].action).toBe("shieldBroken");
+    const after = frames[FURAFURA_END_FRAMES].state.fighters[1];
+    expect(after.action).toBe("stand");
+    expect(after.shieldHealth).toBe(SHIELD_BREAK_RESET + SHIELD_REGEN_PER_FRAME);
+  });
+
+  it("does not regenerate while broken", () => {
+    const s = standing();
+    s.fighters[1].action = "shieldBroken";
+    s.fighters[1].hitstun = 100;
+    s.fighters[1].shieldHealth = 0;
+    expect(play(s, 10, () => [0, 0]).at(-1)!.state.fighters[1].shieldHealth).toBe(0);
+  });
+
+  it("mashes out 5.4 frames a button press faster", () => {
+    const s = standing();
+    s.fighters[1].action = "shieldBroken";
+    s.fighters[1].hitstun = 100;
+    const still = play(cloneState(s), 10, () => [0, 0]).at(-1)!.state.fighters[1].hitstun;
+    const mashed = play(s, 10, (i) => [0, i % 2 === 0 ? Btn.Attack : 0]).at(-1)!.state.fighters[1].hitstun;
+    // Five presses: 27 frames earned.
+    expect(still - mashed).toBe(27);
   });
 });

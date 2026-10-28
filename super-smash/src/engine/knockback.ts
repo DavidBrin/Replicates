@@ -348,6 +348,17 @@ export interface ShieldstunOptions {
  * not be able to freeze a shield from across the stage.
  */
 export function computeShieldstun(damage: number, opts: ShieldstunOptions = {}): number {
+  const frames = Math.floor(shieldstunExact(damage, opts) / ONE);
+  return clamp(frames, 0, SHIELDSTUN_CAP);
+}
+
+/**
+ * Shieldstun before it is rounded down or capped, Q12: `0.8 × damage × type ×
+ * move × projectile + 2`. Shield pushback reads this value — "shieldstun is
+ * not rounded down" (SmashWiki "Shield", pushback table) — as rubendal's
+ * `ShieldPushback` does.
+ */
+export function shieldstunExact(damage: number, opts: ShieldstunOptions = {}): number {
   // Every multiplier is gathered first and applied as a single exact rational,
   // because the formula has exactly **one** floor and truncating between the
   // multipliers can cross it. A per-multiplier `byRatio` chain reports 6 frames
@@ -361,9 +372,7 @@ export function computeShieldstun(damage: number, opts: ShieldstunOptions = {}):
   if (opts.moveMultiplier !== undefined) ratios.push([opts.moveMultiplier, ONE]);
   if (opts.projectile) ratios.push(SHIELDSTUN_PROJECTILE);
 
-  const v = byRatios(damage, ratios) + SHIELDSTUN_ADDEND;
-  const frames = Math.floor(v / ONE);
-  return clamp(frames, 0, SHIELDSTUN_CAP);
+  return byRatios(damage, ratios) + SHIELDSTUN_ADDEND;
 }
 
 /* ------------------------------------------------------------ staleness -- */

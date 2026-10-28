@@ -24,7 +24,6 @@ import {
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
   SDI_DISTANCE,
-  SHIELD_BREAK_STUN,
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
   SHIELD_REGEN_PER_FRAME,
@@ -44,6 +43,7 @@ import {
   computeShieldstun,
   computeStaleness,
   effectiveHitstun,
+  shieldstunExact,
   applyDI,
   applyLSI,
   launchDiAble,
@@ -111,6 +111,13 @@ import {
 } from "./kinetic";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { cloneCombat, emptyCombat } from "./combat";
+import {
+  attackerShieldPushback,
+  shieldBreakStun,
+  shieldBubble,
+  shieldDamage,
+  shieldPushback,
+} from "./shield";
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
 import "./status";
@@ -407,8 +414,6 @@ export interface StepOptions {
 export const KO_FREEZE_FRAMES = 14;
 /** Extra frames an attacker eats for having its move parried. */
 export const PARRY_PUNISH_FRAMES = 20;
-/** Pushback applied to a shielding fighter, per point of damage absorbed. */
-export const SHIELD_PUSHBACK = fx(0.06);
 /** The Smash Ball's radius, and how hard it drifts. */
 export const SMASH_BALL_RADIUS = fx(6);
 export const SMASH_BALL_SPEED = fx(1.4);
@@ -639,10 +644,12 @@ export function step(
       if (f.shieldHealth <= 0) {
         f.shieldHealth = 0;
         startAction(f, "shieldBroken");
-        f.hitstun = SHIELD_BREAK_STUN;
+        f.hitstun = shieldBreakStun(f.damage);
         events.shieldBreaks.push(f.port);
       }
-    } else if (f.shieldHealth < SHIELD_MAX_HEALTH) {
+    } else if (f.action !== "shieldBroken" && f.shieldHealth < SHIELD_MAX_HEALTH) {
+      // A broken shield does not regrow during the stun; it comes back at 37.5
+      // when the stun ends (FURAFURA, SmashWiki "Shield break").
       f.shieldHealth = Math.min(SHIELD_MAX_HEALTH, f.shieldHealth + SHIELD_REGEN_PER_FRAME);
     }
   }
@@ -1178,7 +1185,11 @@ function applyHit(
   // A move joins the staleness queue once per swing, on its first connection —
   // a shield hit included, marked so it stales at 0.85 (SmashWiki "Stale-move
   // negation": hitting a shield enters the queue in Ultimate, perfect shield too).
-  const onShield = shieldCovers(victim, c.x);
+  // The hit must reach the shield bubble too: a worn shield shrinks to 15% of
+  // its radius and a hit that misses it lands on the body — a shield poke.
+  const bubble = shieldBubble(victim, victimDef);
+  const onShield =
+    shieldCovers(victim, c.x) && circlesOverlap(c.x, c.y, hb.radius, bubble.x1, bubble.y1, bubble.r);
   if (c.slot !== null && attacker.hitThisMove.length === 1) {
     attacker.staleQueue.unshift(c.slot);
     attacker.combat.staleShield.unshift(onShield);
@@ -1204,22 +1215,28 @@ function applyHit(
       shielding: true,
       moveMultiplier: hb.hitlagMultiplier,
     });
-    victim.shieldHealth -= damage;
-    victim.hitstun = computeShieldstun(damage, {
+    victim.shieldHealth -= shieldDamage(damage);
+    const stunOpts = {
       smash: c.slot !== null && isSmashSlot(c.slot),
       aerial: c.slot !== null && isAerialSlot(c.slot),
       // A projectile takes a further 0.29 off shieldstun, so a zoner cannot
       // freeze a shield from across the stage.
       projectile: fromProjectile,
       moveMultiplier: hb.shieldstunMultiplier,
-    });
+    };
+    victim.hitstun = computeShieldstun(damage, stunOpts);
     victim.hitlag = lag;
     if (!fromProjectile) attacker.hitlag = lag;
-    kineticSetX(victim, (victim.x < c.x ? -1 : 1) * mul(damage, SHIELD_PUSHBACK), "stop");
+    const away = victim.x < c.x ? -1 : 1;
+    // Pushback reads the shieldstun *before* it is rounded (SmashWiki "Shield").
+    kineticSetX(victim, away * shieldPushback(shieldstunExact(damage, stunOpts)), "stop");
+    // A melee attacker on the ground slides back off the shield too; a
+    // projectile's owner is not there to be pushed (rubendal `AttackerShieldPushback`).
+    if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
     if (victim.shieldHealth <= 0) {
       victim.shieldHealth = 0;
       startAction(victim, "shieldBroken");
-      victim.hitstun = SHIELD_BREAK_STUN;
+      victim.hitstun = shieldBreakStun(victim.damage);
       events.shieldBreaks.push(victim.port);
     } else {
       startAction(victim, "shieldStun");

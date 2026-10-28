@@ -167,6 +167,7 @@ export function mixCombat(h: number, c: CombatState): number {
   for (const onShield of c.staleShield) x = mixBool(x, onShield);
   x = mixInt(x, c.launchFaf);
   x = mixInt(x, c.launchSource);
+  x = mixInt(x, c.mash);
   return x;
 }
 

@@ -258,6 +258,21 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
   };
 }
 
+/**
+ * Fresh button presses this frame, for a mash (shield-break stun, a grab):
+ * attack, special, jump, shield and grab each count once. A stick input is a
+ * fresh direction press: `framesSinceDirPress === 0` (Plan 3, Task 9).
+ */
+export function buttonPresses(intent: Intent): number {
+  let n = 0;
+  if (intent.attackPressed) n += 1;
+  if (intent.specialPressed) n += 1;
+  if (intent.jumpPressed) n += 1;
+  if (intent.shieldPressed) n += 1;
+  if (intent.grabPressed) n += 1;
+  return n;
+}
+
 /* ---------------------------------------------------------------- buffer -- */
 
 /**

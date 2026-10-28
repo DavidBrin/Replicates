@@ -27,6 +27,8 @@ export interface CombatState {
    * Knockback stacks only between different sources (Plan 3, Task 8).
    */
   launchSource: number;
+  /** Tenths of a frame mashing has earned but not yet spent (`mashFrames`). */
+  mash: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -34,6 +36,7 @@ export function emptyCombat(): CombatState {
     staleShield: [],
     launchFaf: 0,
     launchSource: -1,
+    mash: 0,
   };
 }
 
@@ -42,5 +45,6 @@ export function cloneCombat(c: CombatState): CombatState {
     staleShield: c.staleShield.slice(),
     launchFaf: c.launchFaf,
     launchSource: c.launchSource,
+    mash: c.mash,
   };
 }
