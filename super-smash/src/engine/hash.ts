@@ -33,7 +33,8 @@ import type {
   MatchRules,
 } from "./types";
 
-const FNV_OFFSET = 0x811c9dc5;
+/** FNV-1a's offset basis: where every hash here starts (`hashState`, and the online fingerprints in `game/simContext.ts`). */
+export const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 
 /**

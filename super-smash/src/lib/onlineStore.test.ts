@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi, type MockInstance } from "vitest";
 
+import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { localBuild } from "@/game/onlineConfig";
@@ -645,26 +646,45 @@ describe("the build handshake", () => {
   });
 
   /**
-   * A build from before the rules' part of the stamp: its hello and its start
-   * go through the real parser, which cannot read a stamp without it.
+   * The Plan 2 build, the one live before this stamp: it says `{ build, protocol,
+   * bones }` with its bone table's fingerprint, and nothing about rules. This
+   * build's parser reads no stamp without the rules' part, so the hello never
+   * reaches the store. That peer reads THIS build's hello fine (it ignores a
+   * field it does not know), finds another bones fingerprint (this one's holds
+   * the rules too) and another deploy, refuses, and leaves the room. So this
+   * side is never told a version: it hears the other player leave, which is
+   * true, and it is the stale tab that is told to reload.
    */
-  it("refuses a peer from before the rules' part of the stamp, cleanly: its hello is not read, so the wait runs out; its start is refused at once", async () => {
+  it("hears a Plan 2 peer only leave: its hello has no rules' part, so it is not read, and it refuses this build's and goes", () => {
     vi.useFakeTimers();
-    const oldHello = parseLobbyMessage({ kind: "hello", ...withoutRules(localBuild()) });
-    expect(oldHello).toBeNull();
-    const host = opened("host");
-    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
-    await expectRefused(host);
-    expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+    const planTwoHello = { kind: "hello", build: "0123456789ab", protocol: PROTOCOL_VERSION, bones: LEGACY_BONE_TABLE.fingerprint };
+    expect(parseLobbyMessage(JSON.parse(JSON.stringify(planTwoHello)))).toBeNull();
+    const fake = opened("host");
+    expect(fake.sent).toEqual([HELLO]);
+    fake.emit({ type: "peer", present: false });
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "waiting",
+      error: null,
+      errorReason: null,
+      notice: PEER_LEFT_NOTICE,
+    });
+    // The wait for its hello went with it: nothing is refused later.
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "waiting", errorReason: null });
+    expect(warn).not.toHaveBeenCalled();
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
 
-    leaveOnline();
-    warn.mockClear();
+  /** The same, from the guest's seat, and a Plan 2 host whose start is already out when this side hears it. */
+  it("refuses at once a start from a build before the rules' part of the stamp, which the parser reads as a start from an unknown build", async () => {
     const guest = fakeSession();
     bindSession(guest.session);
     guest.emit({ type: "joined", role: "guest" });
-    const oldStart = parseLobbyMessage({ kind: "start", config: withoutRules(CONFIG) });
-    expect(oldStart).toEqual({ kind: "unreadable-start", build: null });
-    guest.emit({ type: "lobby", message: oldStart! });
+    const planTwoStart = parseLobbyMessage(
+      JSON.parse(JSON.stringify({ kind: "start", config: { ...withoutRules(CONFIG), bones: LEGACY_BONE_TABLE.fingerprint } })),
+    );
+    expect(planTwoStart).toEqual({ kind: "unreadable-start", build: null });
+    guest.emit({ type: "lobby", message: planTwoStart! });
     expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
     await expectRefused(guest);
     expect(warn.mock.calls[0].join(" ")).toContain("no build stamp this build can read");
@@ -687,6 +707,7 @@ describe("the build handshake", () => {
     expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
     vi.advanceTimersByTime(1);
     await expectRefused(fake);
+    expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
   });
 
   it("stops waiting for a hello once the other side's matching one is in", () => {

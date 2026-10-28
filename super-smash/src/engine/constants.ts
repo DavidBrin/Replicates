@@ -18,11 +18,14 @@ export const TICK_RATE = 60;
  * The version of the engine's combat rules. Two online peers whose builds
  * differ here play different games and desync on the first hit, so the
  * version goes into `engineFingerprint` (`src/game/simContext.ts`). Plan 3
- * sets it to 3; every later change to what `step()` does bumps it.
+ * sets it to 3; each later plan that changes what `step()` does bumps it once,
+ * as its first engine task (Plan 4 sets 4, Plan 5 sets 5).
  *
- * A bump is not left to memory: a change to `step()` regenerates the golden
- * trace, and `src/game/rulesVersion.test.ts` pins the trace's digest to this
- * number, so the regenerated trace fails it until this is bumped.
+ * Inside a plan the rules move task by task and the version stays: a task that
+ * changes behaviour regenerates the golden trace, and
+ * `src/game/rulesVersion.test.ts` pins the trace's digest beside this number, so
+ * that task rewrites the digest in the pin and nothing else. Bumping this
+ * number fails the same test until the pin's version follows.
  */
 export const ENGINE_RULES_VERSION = 3;
 

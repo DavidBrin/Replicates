@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
 import { registryContext } from "@/engine/simulate";
+import { FIGHTERS } from "@/fighters";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { bootstrapEngine } from "./bootstrap";
 import { GAME_ENGINE_RULES, GAME_SIM_CONTEXT, engineFingerprint, rulesFingerprint } from "./simContext";
@@ -69,7 +70,19 @@ describe("the game's SimContext", () => {
     expect(engineFingerprint(GAME_SIM_CONTEXT, { version: ENGINE_RULES_VERSION, activeSlots: reversed })).toBe(engineFingerprint());
   });
 
-  it("plays this build with the version and the scripts it ships", () => {
-    expect(GAME_ENGINE_RULES).toEqual({ version: ENGINE_RULES_VERSION, activeSlots: ACTIVE_SCRIPT_SLOTS });
+  /**
+   * The slots the stamp names are the slots the registered fighters run from
+   * imported scripts: a fighter built with a script the table does not list, or
+   * the table naming one no fighter runs, would leave the fingerprint saying
+   * something the engine does not do.
+   */
+  it("names exactly the slots the roster runs from imported scripts", () => {
+    const running = Object.fromEntries(
+      FIGHTERS.map((def) => [def.id, Object.keys(def.scripts ?? {}).sort()] as const).filter(([, slots]) => slots.length > 0),
+    );
+    const named = Object.fromEntries(Object.entries(GAME_ENGINE_RULES.activeSlots).map(([id, slots]) => [id, [...slots].sort()]));
+    expect(Object.keys(running).length).toBeGreaterThan(0);
+    expect(named).toEqual(running);
+    expect(GAME_ENGINE_RULES.version).toBe(ENGINE_RULES_VERSION);
   });
 });

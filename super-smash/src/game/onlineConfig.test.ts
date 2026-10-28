@@ -9,7 +9,8 @@ import { parseLobbyMessage } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, STAGES, bootstrapEngine, resolveMatchStage } from "./bootstrap";
 import { buildMismatch, buildStartConfig, describeMismatch, localBuild, newMatchSeed, runnerSlotsFor } from "./onlineConfig";
-import { GAME_SIM_CONTEXT, engineFingerprint, rulesFingerprint, type EngineRules } from "./simContext";
+import type { SimContext } from "@/engine/simulate";
+import { GAME_ENGINE_RULES, GAME_SIM_CONTEXT, engineFingerprint, rulesFingerprint, type EngineRules } from "./simContext";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: true, oneOnOne: false };
 
@@ -105,6 +106,43 @@ describe("this build, as the other player sees it", () => {
   it("is the deploy, the wire format, the engine and its rules", () => {
     vi.stubEnv("NEXT_PUBLIC_BUILD_ID", "82267f71aab9");
     expect(localBuild()).toEqual({ build: "82267f71aab9", protocol: PROTOCOL_VERSION, bones: engineFingerprint(), engineRules: rulesFingerprint() });
+  });
+
+  /**
+   * The stamp is made when it is asked for, not when this module loaded: Plan 4
+   * installs its bake and its limb-bone scripts into `GAME_SIM_CONTEXT` and
+   * `GAME_ENGINE_RULES` after load, and the next hello must say so.
+   */
+  it("is made when asked for, so rules or bones installed after load show in the next stamp", () => {
+    const before = localBuild();
+    const rules = GAME_ENGINE_RULES as { activeSlots: EngineRules["activeSlots"] };
+    const context = GAME_SIM_CONTEXT as { bones?: SimContext["bones"] };
+    const { activeSlots } = GAME_ENGINE_RULES;
+    const { bones } = GAME_SIM_CONTEXT;
+    try {
+      rules.activeSlots = { ...activeSlots, mario: activeSlots.mario.slice(1) };
+      const fewer = localBuild();
+      expect(fewer.engineRules).not.toBe(before.engineRules);
+      expect(fewer.bones).not.toBe(before.bones);
+      rules.activeSlots = activeSlots;
+      context.bones = { ...LEGACY_BONE_TABLE, fingerprint: "0badf00d" };
+      const other = localBuild();
+      expect(other.engineRules).toBe(before.engineRules);
+      expect(other.bones).not.toBe(before.bones);
+    } finally {
+      rules.activeSlots = activeSlots;
+      context.bones = bones;
+    }
+    expect(localBuild()).toEqual(before);
+  });
+
+  /**
+   * A Plan 2 peer compares only `bones` (its bone table's fingerprint), `protocol`
+   * and `build`. This build's `bones` holds the rules too, so it is never a bare
+   * bone table's: that peer refuses this one on the same build id, and leaves.
+   */
+  it("says engine fingerprint bones that a Plan 2 peer, which knows only a bone table's, refuses", () => {
+    expect(localBuild().bones).not.toBe(LEGACY_BONE_TABLE.fingerprint);
   });
 
   /** Vitest, and anything else Next did not build: every one of them is the same "dev" build. */

@@ -39,8 +39,9 @@ import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
  *
  *   UPDATE_GOLDEN=1 pnpm vitest run src/game/golden.test.ts
  *
- * A regenerated trace also bumps `ENGINE_RULES_VERSION`, which online peers
- * compare: `rulesVersion.test.ts` fails until it is bumped and its pin rewritten.
+ * A regenerated trace also needs its digest rewritten in `rulesVersion.test.ts`
+ * (`RULES_PIN.golden`), which fails until it is. `ENGINE_RULES_VERSION` itself
+ * bumps once per plan, not per task.
  */
 
 const FIXTURE = join(import.meta.dirname, "__golden__", "engine-trace.json");

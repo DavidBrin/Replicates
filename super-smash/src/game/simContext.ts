@@ -16,7 +16,7 @@
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { ENGINE_RULES_VERSION } from "@/engine/constants";
-import { mixInt, mixString } from "@/engine/hash";
+import { FNV_OFFSET, mixInt, mixString } from "@/engine/hash";
 import { registryContext, type SimContext } from "@/engine/simulate";
 import type { MoveSlot } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
@@ -33,9 +33,6 @@ export interface EngineRules {
 
 export const GAME_ENGINE_RULES: EngineRules = { version: ENGINE_RULES_VERSION, activeSlots: ACTIVE_SCRIPT_SLOTS };
 
-/** FNV-1a's offset basis, as `hash.ts` starts every state hash. */
-const FNV_OFFSET = 0x811c9dc5;
-
 /** A 32-bit hash as the 8 lowercase hex digits the lobby reads (`FINGERPRINT`, net/online/lobby.ts). */
 function hex8(h: number): string {
   return (h >>> 0).toString(16).padStart(8, "0");
@@ -49,6 +46,15 @@ function hex8(h: number): string {
  *
  * It reads only `rules`, which are fixed when the build loads, never any
  * match's state, so both peers of one build get the same digits every time.
+ *
+ * What it does not cover, because it hashes names and a hand-kept version and
+ * not the data behind them: the contents of the imported scripts, the legacy
+ * `MoveDef` tables, fighter and stage parameters, and the constants. A change
+ * to any of those reaches it only through `ENGINE_RULES_VERSION`, which is
+ * bumped once per plan; `rulesVersion.test.ts` pins that version to the golden
+ * trace, and that sees only the behaviour its five matches exercise. Two
+ * builds of one commit with different uncommitted edits are told apart by the
+ * build id (`next.config.ts`), not by this.
  */
 export function rulesFingerprint(rules: EngineRules = GAME_ENGINE_RULES): string {
   let h = mixInt(FNV_OFFSET, rules.version);
@@ -71,7 +77,8 @@ export function rulesFingerprint(rules: EngineRules = GAME_ENGINE_RULES): string
  *
  * This is what the online stamp's `bones` carries; the stamp also carries
  * `rulesFingerprint` alone, which is how a refusal can say that the rules
- * differ rather than the bones (`buildMismatch`, game/onlineConfig.ts).
+ * differ rather than the bones (`buildMismatch`, game/onlineConfig.ts). What
+ * it cannot see is `rulesFingerprint`'s to say.
  */
 export function engineFingerprint(ctx: SimContext = GAME_SIM_CONTEXT, rules: EngineRules = GAME_ENGINE_RULES): string {
   const bones = (ctx.bones ?? LEGACY_BONE_TABLE).fingerprint;

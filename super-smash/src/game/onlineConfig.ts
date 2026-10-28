@@ -80,13 +80,15 @@ export function buildMismatch(theirs: BuildStamp | null, ours: BuildStamp = loca
   return null;
 }
 
+const NO_STAMP = "it sent no build stamp this build can read (a build from before the handshake, or before its rules' part)";
+
 /**
  * What a developer reads in the console when a peer is refused (the players
  * read one sentence whatever the cause): which part differs, and what each
  * side has.
  */
 export function describeMismatch(why: BuildMismatch, theirs: BuildStamp | null, ours: BuildStamp = localBuild()): string {
-  if (theirs === null) return "it sent no build stamp this build can read (one from before the handshake, or before its rules' part)";
+  if (theirs === null || why === "missing") return NO_STAMP;
   switch (why) {
     case "protocol":
       return `its wire format is ${theirs.protocol}, this build's is ${ours.protocol}`;
@@ -96,8 +98,6 @@ export function describeMismatch(why: BuildMismatch, theirs: BuildStamp | null, 
       return `its engine is ${theirs.bones}, this build's is ${ours.bones} (the bone table, as the rules agree)`;
     case "build":
       return `it is build ${theirs.build}, this one is ${ours.build}`;
-    case "missing":
-      return "it sent no build stamp this build can read";
   }
 }
 
