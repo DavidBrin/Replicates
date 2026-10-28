@@ -31,6 +31,7 @@ import { describe, expect, it } from "vitest";
 import { marth as def } from "@/fighters/marth";
 import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import { toFloat } from "@/engine/fixed";
+import { chargeHoldFrame } from "@/engine/hitbox";
 import { resolve, type PoseAngles } from "../../skeleton";
 import { samplePose, type Keyframe, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
@@ -552,13 +553,12 @@ describe("the effects are wired to moves that exist", () => {
   /**
    * A charging smash must not flash its tipper.
    *
-   * `states.ts` pins a chargeable move's `actionFrame` one frame short of its
-   * first hitbox while the button is held, so the effect sees `frame ===
-   * startFrame` for the whole charge — sixty frames of a graphic that means
-   * "the tip is live right now" on frames where the engine has stopped the
-   * clock and nothing can be hit. A capture of a held Shield Breaker is what
-   * found it: a fixed sheen on the point next to a charge glow that was
-   * supposed to be the only thing changing.
+   * The engine pins a chargeable move on `chargeHoldFrame` while the button is
+   * held, the frame before its earliest hitbox, for up to sixty frames. A
+   * capture of a held Shield Breaker, back when the hold sat on the first live
+   * frame, showed a fixed sheen on the point next to a charge glow that was
+   * supposed to be the only thing changing. The released swing keeps its
+   * frozen `charge`, and its first live frame flashes like any other.
    */
   it("does not flash the tip through a held charge", () => {
     const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
@@ -586,7 +586,8 @@ describe("the effects are wired to moves that exist", () => {
       ).length;
     };
     expect(onTheTip(0, opens - 1), "the tipper does not paint on the first live frame at all").toBeGreaterThan(0);
-    expect(onTheTip(40, opens - 1), "the tipper flashes through a held charge").toBe(0);
+    expect(onTheTip(40, chargeHoldFrame(move)), "the tipper flashes through a held charge").toBe(0);
+    expect(onTheTip(40, opens - 1), "a released charged swing lost its first-frame flash").toBeGreaterThan(0);
   });
 
   /**

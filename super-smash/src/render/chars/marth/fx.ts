@@ -319,26 +319,11 @@ const tipper: FxFn = (c) => {
   const move = c.f.move ? c.def.moves[c.f.move] : undefined;
   if (!move) return NOTHING;
 
-  // A charging smash is parked on its own first live frame, and its hitbox is
-  // not live at all.
-  //
-  // `states.ts` holds a chargeable move at `startFrame − 1` while the button is
-  // down, so `c.frame` reads as the first live frame for as long as the charge
-  // lasts — up to sixty frames. A capture of a held Shield Breaker showed the
-  // result: a fixed cyan sheen sitting on the point for a full second next to a
-  // charge glow that was supposed to be the only thing growing, and telling the
-  // opponent the tip could hit them when the engine had frozen the clock.
-  //
-  // There is no field that says "pinned", so the test is the pin's own
-  // signature: a chargeable move, a charge in progress, and the clock sitting
-  // exactly on the first live frame. It costs the flash on the genuine first
-  // active frame of a *released* charged smash, one frame of a four-frame
-  // window, because on that frame the two states are not distinguishable from
-  // here. That is the cheaper of the two errors.
-  const live = move.hitboxes.filter((hb) => !hb.grabbing);
-  if (live.length === 0) return NOTHING;
-  const opens = Math.min(...live.map((hb) => hb.startFrame));
-  if (move.chargeable && c.f.charge > 0 && c.frame === opens) return NOTHING;
+  // A charging move needs no case of its own: the engine parks it the frame
+  // before its earliest hitbox (`chargeHoldFrame`), where `strengthFor` is zero
+  // for every box, so a held Shield Breaker shows no sheen on the point, and the
+  // released swing flashes from its first live frame like any other.
+  if (!move.hitboxes.some((hb) => !hb.grabbing)) return NOTHING;
 
   const shoulder = c.height * 0.55;
   // Every window, not only the live one: Down Smash's back hit and Neutral Air's

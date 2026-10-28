@@ -1665,7 +1665,9 @@ matches and a scripted fifth (`goldenScript.ts`, a timed match with the Smash Ba
   steps (Tasks 21 and 22 did). It never drops a pin entry.
 
 Every refactor task left the trace byte-identical, Task 28 included. The behaviour tasks that moved
-it (1, 17–19, 20b, 21–25) regenerated it on purpose and said why in their commits.
+it (1, 17–19, 20b, 21–25) regenerated it on purpose and said why in their commits, and so did the
+final fix wave's charge hold: the CPUs keep attack held for a few frames after some smash inputs,
+so two CPU matches charged one frame earlier.
 
 **Behaviour that changed, each pinned by a test and sourced or marked UNVERIFIED:**
 - *Launches.* A launch decays on its own DAMAGE energy, 0.051 a frame (SmashWiki "Knockback"),
@@ -1724,6 +1726,11 @@ it (1, 17–19, 20b, 21–25) regenerated it on purpose and said why in their co
   (`jumpRiseSpeeds`), and time ledge jumps from their own rise. One engine helper,
   `chargeHoldFrame`, says where a smash charge holds, for both `attackMain` and the renderer. So a
   released smash swings instead of holding its wind-up pose, and only a held smash glows.
+- *A held smash hits nothing.* The charge holds on the `actionFrame` before the move's earliest
+  hitbox goes live, never before frame 1, so the release swings the first live frame scaled by the
+  charge. A `step()` test over all 24 smashes pins both halves. The chargeable specials with a
+  hitbox (Giant Punch, Hammer, Skull Bash, Shield Breaker) hold a frame earlier too; the ones with
+  none (the bow, Charge Shot) still hold on frame 1.
 
 **Gravity on a jump's first frame.** SmashWiki's Jump page states the Smash 4/Ultimate force as
 `sqrt(2g*h) + g/2`. That reaches h only if gravity applies on every airborne frame, the first
@@ -1745,7 +1752,12 @@ in `main`. Each of these others is fixed and now pinned by a test:
   him to the floor;
 - a golden re-tune silently stopped a hit landing, hence `SCRIPT_HITS`;
 - the wall push yanked a fighter launched away from a wall back onto it;
-- a released smash held its wind-up pose on screen.
+- a released smash held its wind-up pose on screen;
+- a held smash charged *on* its first live frame, so it was a hitbox for up to 60 frames: anyone in
+  reach was hit at about 1.0× while the button was held, and the swing was spent before the
+  release. Frame data counts from 1 and `actionFrame` from 0, and the hold forgot the difference.
+  Pikachu's forward smash, which lists a later hitbox first, even hit before it began to charge.
+  This predated Plan 2; Plan 2 made it the shared rule, and the final review caught it.
 
 **Open (UNVERIFIED), besides those above.**
 - the even split of the full hop's initial rise across its 4 frames;
@@ -1763,8 +1775,6 @@ The calculator disagrees with our script reading in five places, each documented
   launches forward (it takes the thrower's facing). Task 8's characterization tests pin both as
   they are, and Plan 5 Task 7 changes them on purpose.
 - `applyHit`'s grab branch never clears the victim's `ledge`: Plan 3 Task 14.
-- Pikachu's forward smash lists hitbox 0 (frames 17–19) before hitbox 1 (15–16), so its charge
-  holds after its earliest hitbox. That is a data question for Plan 3.
 - The imported Mario `game_specialhi` ends where a decompiler marker truncated it (`last 300`;
   Ultimate Frame Data ends it at 18): Plan 3 Task 18.
 - About 51 of the 136 reconcile entries, all throws, come from the parser not reading

@@ -18,7 +18,7 @@ import { clipFor } from "../chars/poses";
 import { moveTimingFor, poseNameFor, poseTimeFor } from "./timing";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false };
-/** Long enough to reach the latest hold frame on the roster (Donkey Kong's forward smash, 21) and charge well past it. */
+/** Long enough to reach the latest hold frame on the roster (Donkey Kong's forward smash, 20) and charge well past it. */
 const HELD = 40;
 const SMASHES = [
   ["fsmash", Btn.Right],
@@ -67,6 +67,9 @@ describe("a charged smash attack's pose", () => {
       expect(charging.length, "the smash never charged").toBeGreaterThan(1);
       expect(released.length, "nothing of the swing was left after the charge").toBeGreaterThan(1);
 
+      // It parks on the engine's hold frame, which is before any hitbox is live.
+      expect(charging[0].actionFrame, "parked on the hold frame").toBe(timing?.chargeHold);
+      expect(charging[0].actionFrame, "parked on a live hitbox frame").toBeLessThan(timing?.firstActive ?? -1);
       const parked = time(charging[0]);
       expect(parked, "parked on the wind-up").toBe((clipFor(def.id, poseNameFor(charging[0]))?.strike ?? 0.3) * 0.55);
       for (const f of charging) expect(time(f), `charging, frame ${f.actionFrame}`).toBe(parked);

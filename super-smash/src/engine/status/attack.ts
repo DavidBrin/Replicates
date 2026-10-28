@@ -37,7 +37,8 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     startAction(f, f.grounded ? "stand" : "fall");
     return;
   }
-  // Charging a smash holds the animation one frame short of its first hitbox.
+  // Charging a smash holds the animation on the frame before its earliest
+  // hitbox goes live (`chargeHoldFrame`), so nothing can be hit while it charges.
   if (move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
     const holdFrame = chargeHoldFrame(move);
     if (f.actionFrame >= holdFrame) {

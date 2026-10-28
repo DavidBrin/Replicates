@@ -381,9 +381,9 @@ export interface MoveTiming {
   readonly lastActive: number;
   /**
    * A chargeable move's hold frame, the `actionFrame` a held charge pins it on
-   * (`chargeHoldFrame`, the engine's own rule). Not `firstActive`: the hold
-   * follows the first *listed* hitbox, and Pikachu's forward smash lists a
-   * later one first. Absent for a move that cannot charge.
+   * (`chargeHoldFrame`, the engine's own rule): the frame before `firstActive`,
+   * and never before frame 1, so no hitbox is live while it charges. Absent
+   * for a move that cannot charge.
    */
   readonly chargeHold?: number;
 }
