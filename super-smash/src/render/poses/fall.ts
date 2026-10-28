@@ -21,7 +21,7 @@ import { P, type PoseClip } from "./clip";
  * key is not free to be a nice drawing — it has to be roughly where `rise` is
  * when vertical speed crosses zero, or the arms teleport on the apex frame. And
  * that is not `rise`'s *last* key: the rise is authored over thirty frames and
- * cut short by `fullHopVelocity / gravity`, so the crossover lands around three
+ * cut short by the fighter's rise (`jumpTimingFor`), so the crossover lands around three
  * fifths of the way through its coast for most of the cast. This key is matched
  * against that point, which is why it is a shallower gather than the drawing
  * would want.

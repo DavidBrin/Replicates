@@ -49,7 +49,7 @@ import {
   type CharacterRig,
 } from "./characterArt";
 import { drawHud, updateHud, type HudFighterInfo, type HudState } from "./hud";
-import { moveTimingFor, poseNameFor, poseSpinFor, samplePoseForFighter, type PoseSample } from "./poses";
+import { jumpTimingFor, moveTimingFor, poseNameFor, poseSpinFor, samplePoseForFighter, type PoseSample } from "./poses";
 import { blendedPose, clipFrameFor } from "./blend";
 import { rigHeight, type RigTransform } from "./skeleton";
 import { drawBackground, drawBlastZone, drawPlatforms } from "./stageArt";
@@ -337,7 +337,7 @@ function drawOneFighter(
   // Clips are sampled on their own clock and faded out of whatever was on
   // screen last frame, so that a change of clip is a transition and not a cut.
   // See `blend.ts` — `clipFrameFor` must run before `blendedPose`.
-  const attrs = d.def?.attributes;
+  const jump = d.def ? jumpTimingFor(d.def) : undefined;
   const clipFrame = clipFrameFor(state.vfx.poseBlend, f, name, frame);
   const posed = { ...f, actionFrame: clipFrame };
   // The spin is folded into the sample *before* the fade, not added after it.
@@ -345,12 +345,12 @@ function drawOneFighter(
   // read from the clip they are in — so acting out of tumble used to drop the
   // whole turn in one frame. Inside the fade it unwinds over four, taking the
   // short way round, which reads as completing the turn rather than snapping.
-  const sample = samplePoseForFighter(posed, frame, timing, attrs);
+  const sample = samplePoseForFighter(posed, frame, timing, jump);
   const pose = blendedPose(
     state.vfx.poseBlend,
     f,
     name,
-    { ...sample, rotation: sample.rotation + poseSpinFor(posed, frame, timing, attrs) },
+    { ...sample, rotation: sample.rotation + poseSpinFor(posed, frame, timing, jump) },
     frame,
   );
   const squash = squashFor(f);

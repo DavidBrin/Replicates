@@ -9,8 +9,8 @@ import { P, type PoseClip } from "./clip";
  * whole extension is spent by t=0.15 and the remaining five sixths are a coast.
  * That is also the only honest way to author this. `jump` has no fixed length,
  * so `poseTimeFor` runs the clip over thirty frames and then holds; how much of
- * it a fighter actually sees is `fullHopVelocity / gravity`, which is eighteen
- * frames for Fox and thirty-one for Samus.
+ * it a fighter actually sees is its rise (`jumpTimingFor`, from the engine's
+ * own jump rule), which differs across the cast by more than a dozen frames.
  *
  * The arms scissor rather than reach: the near one drives up in front, the far
  * one keeps going the way the jumpsquat had already swept it, back and over.
@@ -83,7 +83,7 @@ export const rise: PoseClip = {
       ease: "linear",
     },
     // `fall`'s opening drawing, to the degree. Which frame of the coast the
-    // handover lands on is `fullHopVelocity / gravity` and differs across the
+    // handover lands on is the fighter's rise (`jumpTimingFor`) and differs across the
     // cast by thirteen frames, so the tail converges on that shape instead of
     // meeting it at one point: the worst crossover in the roster is Fox's, at
     // t=0.6, and even there no bone is more than a dozen degrees out.

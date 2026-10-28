@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { fx, toFloat } from "@/engine/fixed";
-import { emptyKinetic, initialRiseStep, jumpLaunchSpeed } from "@/engine/kinetic";
+import { emptyKinetic, initialRiseStep, jumpLaunchSpeed, jumpRiseSpeeds } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { onLanded } from "@/engine/states";
 import { Btn } from "@/engine/types";
@@ -598,5 +598,29 @@ describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#L
     Object.assign(f, { action: "attack", move: "fair", actionFrame: 50, grounded: true });
     onLanded(f, contextFor("mario", s.fighters));
     expect([f.action, f.charge]).toEqual(["land", FIGHTER_PARAMS.mario.landing_frame]);
+  });
+});
+
+describe("rise timing for the renderer (jumpRiseSpeeds)", () => {
+  // The renderer and the animation lab time the `jump` clip by how long the
+  // `jump` action lasts. They read it from `jumpRiseSpeeds`, so it must be
+  // exactly the vertical speed `step()` gives each frame of that action — the
+  // rise, plus the frame the speed stops being positive.
+
+  function risingSpeeds(frames: readonly FighterState[], from: number): number[] {
+    const out: number[] = [];
+    for (let i = from; i < frames.length && frames[i].action === "jump"; i++) out.push(frames[i].vy);
+    return out;
+  }
+
+  it.each(IDS)("%s: full hop, short hop and first air jump, frame for frame", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const full = play(standing(id), hold(Btn.Jump, 120));
+    expect(risingSpeeds(full, full.findIndex((f) => f.action === "jump"))).toEqual(jumpRiseSpeeds(p, "full"));
+    const short = play(standing(id), [Btn.Jump, ...hold(0, 120)]);
+    expect(risingSpeeds(short, short.findIndex((f) => f.action === "jump"))).toEqual(jumpRiseSpeeds(p, "short"));
+    // Short hop, then a midair jump; its rise starts on the frame `jumpsUsed` becomes 2.
+    const air = play(standing(id), [Btn.Jump, ...hold(0, 8), Btn.Jump, ...hold(0, 90)]);
+    expect(risingSpeeds(air, air.findIndex((f) => f.jumpsUsed === 2))).toEqual(jumpRiseSpeeds(p, "air", 0));
   });
 });

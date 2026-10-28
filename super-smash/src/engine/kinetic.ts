@@ -565,3 +565,37 @@ export function runControlX(vx: number, dir: number, p: FighterParams, mag: numb
   if (vx * dir > 0 && abs(vx) > p.run_speed_max) return approach(vx, target, p.ground_brake);
   return approach(vx, target, p.run_accel_add + mul(p.run_accel_mul, mag));
 }
+
+/* ------------------------------------------------------------ rise timing -- */
+
+export type JumpKind = "full" | "short" | "air";
+
+/**
+ * The vertical speed on every frame of a jump's `jump` action — each rising
+ * frame, then the frame whose speed first stops being positive (the status
+ * turns to FALL on the frame after) — by exactly the rule `kineticExec` applies
+ * (the initial rise, then `jumpLaunchSpeed` with gravity on every frame). Pure and
+ * stateless, for the layers that time a clip by the rise: the renderer
+ * (`jumpTimingFor`) and the animation lab. `airJump` indexes
+ * `jump_aerial_y_list` (0 = the first midair jump), clamped at both ends the
+ * way the midair jump itself (`airJump` in `states.ts`) clamps it.
+ */
+export function jumpRiseSpeeds(p: FighterParams, kind: JumpKind, airJump = 0): number[] {
+  const out: number[] = [];
+  const g = p.air_accel_y;
+  if (g <= 0) return out;
+  let v: number;
+  if (kind === "full" && p.jump_initial_y > 0) {
+    for (let n = 1; n <= 4; n++) out.push(initialRiseStep(p.jump_initial_y, n));
+    v = jumpLaunchSpeed(g, p.jump_y - p.jump_initial_y);
+  } else {
+    const list = p.jump_aerial_y_list;
+    const air = list === undefined ? p.jump_aerial_y : list[Math.min(Math.max(airJump, 0), list.length - 1)];
+    v = jumpLaunchSpeed(g, kind === "full" ? p.jump_y : kind === "short" ? p.mini_jump_y : air);
+  }
+  for (;;) {
+    v = gravityStep(v, g, p.air_speed_y_stable);
+    out.push(v);
+    if (v <= 0) return out;
+  }
+}

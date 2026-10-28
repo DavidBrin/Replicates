@@ -39,8 +39,11 @@ import {
   poseSpinFor,
   poseTimeFor,
   samplePoseForFighter,
-  type JumpAttributes,
+  jumpTimingFor,
+  type JumpTiming,
 } from "@/render/poses";
+import { jumpRiseSpeeds } from "@/engine/kinetic";
+import { fighterParams } from "@/engine/params";
 import { makeFighter, makeStage } from "@/render/testFixtures";
 import { clipFor } from "@/render/chars";
 import { drawMoveFx } from "@/render/specialFx";
@@ -72,7 +75,7 @@ const OPEN_ENDED = 40;
 /**
  * How many frames of this action the sheet should draw.
  *
- * `moveFrames` is separate from `attrs` because an attack's length is not a
+ * `moveFrames` is separate from `jump` because an attack's length is not a
  * property of the *state* — `actionDurationFor` reads the state machine's own
  * constants and an attack has none, since it lasts exactly as long as the move
  * being thrown. Without it the lab quietly fell back to forty cells for every
@@ -80,11 +83,11 @@ const OPEN_ENDED = 40;
  * whatever happened after frame 40 was authored blind. The recovery of a slow
  * move is not a detail: it is most of what a stuffed attack looks like.
  */
-function lengthOf(f: FighterState, attrs?: JumpAttributes, moveFrames?: number): number {
+function lengthOf(f: FighterState, jump?: JumpTiming, moveFrames?: number): number {
   const name = poseNameFor(f);
   const clip = clipFor(f.defId, name);
   if (!clip.loop) {
-    return actionDurationFor(f, attrs) ?? (moveFrames && moveFrames > 0 ? moveFrames : OPEN_ENDED);
+    return actionDurationFor(f, jump) ?? (moveFrames && moveFrames > 0 ? moveFrames : OPEN_ENDED);
   }
   // A speed-paced cycle has no fixed frame count — find the frame the clip
   // comes back round to its start, so the sheet shows exactly one cycle.
@@ -186,7 +189,7 @@ function fighterAt(o: Options, frame: number): FighterState {
     // so a fighter standing still freezes mid-step. Give them their own speed
     // or the lab shows one motionless drawing for the cycles that move most.
     vx: speedFor(o),
-    vy: verticalFor(o, getFighter(o.fighterId)?.attributes, frame),
+    vy: verticalFor(o, getFighter(o.fighterId), frame),
   });
 }
 
@@ -200,23 +203,19 @@ function fighterAt(o: Options, frame: number): FighterState {
  *
  * An approximation, and deliberately a coarse one: the lab has no simulation
  * and inventing an arc here would be inventing physics. A fall gets the
- * fighter's own terminal speed, a jump gets its initial velocity decayed by
- * gravity and clamped at that terminal, and everything else stays at zero
- * because everything else genuinely is.
+ * fighter's own terminal speed, a jump the engine's own rise for that frame
+ * (`jumpRiseSpeeds`, the same numbers `step()` produces), and everything else
+ * stays at zero because everything else genuinely is.
  */
-export function verticalFor(
-  o: Options,
-  attrs: FighterDef["attributes"] | undefined,
-  frame: number,
-): number {
-  if (!attrs) return 0;
-  const terminal = -(o.fastFalling ? attrs.fastFallSpeed : attrs.fallSpeed);
-  if (o.action === "fall") return terminal;
+export function verticalFor(o: Options, def: FighterDef | undefined, frame: number): number {
+  if (!def) return 0;
+  const p = fighterParams(def);
+  if (o.action === "fall") return -(o.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
   if (o.action === "jump") {
-    // The second jump is a different number, and markedly so for DK, Fox and
-    // Kirby — the lab offers the choice, so it has to honour it.
-    const launch = o.jumpsUsed >= 2 ? attrs.airJumpVelocity : attrs.fullHopVelocity;
-    return Math.max(terminal, launch - attrs.gravity * frame);
+    // The second jump is a different rise — the lab offers the choice, so it
+    // has to honour it. Past the apex the clip is over; the speed is 0.
+    const rise = o.jumpsUsed >= 2 ? jumpRiseSpeeds(p, "air", o.jumpsUsed - 2) : jumpRiseSpeeds(p, "full");
+    return rise[frame] ?? 0;
   }
   return 0;
 }
@@ -279,8 +278,8 @@ export function drawCell(
       }
     : undefined;
   const usesMove = usesMoveFor(o.action);
-  const attrs = def?.attributes;
-  const pose = samplePoseForFighter(f, frame, usesMove ? timing : undefined, attrs);
+  const jump = def ? jumpTimingFor(def) : undefined;
+  const pose = samplePoseForFighter(f, frame, usesMove ? timing : undefined, jump);
   const squash = squashFor(f);
 
   const transform = {
@@ -290,7 +289,7 @@ export function drawCell(
     scaleX: squash.scaleX * pose.scaleX,
     scaleY: squash.scaleY * pose.scaleY,
     facing: 1 as const,
-    rotation: pose.rotation + poseSpinFor(f, frame, usesMove ? timing : undefined, attrs),
+    rotation: pose.rotation + poseSpinFor(f, frame, usesMove ? timing : undefined, jump),
     pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
   };
   // The same `anim` a match would give, from the same function, because the lab
@@ -387,7 +386,7 @@ export default function AnimLab() {
     const def = getFighter(o.fighterId);
     return lengthOf(
       fighterAt(o, 0),
-      def?.attributes,
+      def ? jumpTimingFor(def) : undefined,
       usesMoveFor(o.action) ? def?.moves?.[moveFor(o)]?.totalFrames : undefined,
     );
   }, [o]);

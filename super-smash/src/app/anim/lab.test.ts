@@ -16,6 +16,8 @@ import { FIGHTERS } from "@/fighters";
 import type { ActionState } from "@/engine/types";
 import { drawCell, groundedFor, moveFor, usesMoveFor, verticalFor, type Options } from "./page";
 import { getFighter } from "@/fighters";
+import { jumpRiseSpeeds } from "@/engine/kinetic";
+import { fighterParams } from "@/engine/params";
 import { CHARACTER_RIGS } from "@/render/characterArt";
 import { createMockContext } from "@/render/mockContext";
 import type { MoveSlot } from "@/engine/types";
@@ -168,28 +170,31 @@ describe("whether the lab thinks a fighter is on the ground", () => {
     expect(groundedFor(opts({ action: "tumble" }))).toBe(false);
   });
 
-  it("uses the second jump's own velocity when the second jump is selected", () => {
-    // `airJumpVelocity` differs from `fullHopVelocity` for DK, Fox and Kirby,
-    // and the lab offers the choice — so taking the first jump's number for
-    // both made the option a lie for exactly the fighters it matters to.
-    const fox = getFighter("fox")!.attributes;
-    expect(fox.airJumpVelocity, "Fox's two jumps are the same speed").not.toBe(fox.fullHopVelocity);
+  it("uses the second jump's own rise when the second jump is selected", () => {
+    // A full hop and a midair jump rise differently for every fighter (a full
+    // hop has its initial height) — the lab offers the choice, so it has to
+    // honour it, and with the engine's own numbers (`jumpRiseSpeeds`).
+    const fox = getFighter("fox")!;
+    const p = fighterParams(fox);
     const first = verticalFor(opts({ action: "jump", jumpsUsed: 1 }), fox, 0);
     const second = verticalFor(opts({ action: "jump", jumpsUsed: 2 }), fox, 0);
-    expect(second, "the second jump borrowed the first's velocity").not.toBe(first);
-    expect(second).toBe(fox.airJumpVelocity - fox.gravity * 0);
+    expect(second, "the second jump borrowed the first's speed").not.toBe(first);
+    expect(first).toBe(jumpRiseSpeeds(p, "full")[0]);
+    expect(second).toBe(jumpRiseSpeeds(p, "air", 0)[0]);
+    expect(verticalFor(opts({ action: "jump", jumpsUsed: 2 }), fox, 5)).toBe(jumpRiseSpeeds(p, "air", 0)[5]);
   });
 
   it("falls at the fighter's own terminal speed, faster when fast-falling", () => {
-    const fox = getFighter("fox")!.attributes;
+    const fox = getFighter("fox")!;
+    const p = fighterParams(fox);
     const normal = verticalFor(opts({ action: "fall" }), fox, 10);
     const fast = verticalFor(opts({ action: "fall", fastFalling: true }), fox, 10);
-    expect(normal, "a fall is not downward").toBeLessThan(0);
-    expect(fast, "fast-falling is not faster").toBeLessThan(normal);
+    expect(normal).toBe(-p.air_speed_y_stable);
+    expect(fast).toBe(-p.dive_speed_y);
   });
 
   it("leaves a grounded state at rest", () => {
-    expect(verticalFor(opts({ action: "stand" }), getFighter("fox")!.attributes, 5)).toBe(0);
+    expect(verticalFor(opts({ action: "stand" }), getFighter("fox")!, 5)).toBe(0);
   });
 
   it("keeps a grounded attack on the ground", () => {

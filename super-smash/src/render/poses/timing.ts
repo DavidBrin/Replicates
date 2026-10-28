@@ -21,6 +21,8 @@
  */
 
 import { toFloat } from "@/engine/fixed";
+import { jumpRiseSpeeds } from "@/engine/kinetic";
+import { fighterParams } from "@/engine/params";
 import { actionFrameOf } from "@/engine/hitbox";
 import {
   AIR_DODGE_FRAMES,
@@ -69,18 +71,39 @@ export type PosedFighter = Pick<
 >;
 
 /**
- * What the pose layer needs from a fighter's attributes.
+ * How long each kind of jump rises, in frames, for one fighter.
  *
- * Only the jump needs any, and it needs them because a jump's length is not a
- * constant: it lasts until the rise runs out, which is the launch velocity
- * divided by the fighter's own gravity. Fox is airborne for 18 frames and Samus
- * for 31. Played over a fixed thirty, Fox's somersault reached 216 degrees
- * before the fall cut in and handed the renderer a fighter tucked on his side.
+ * Only the jump needs this, because a jump's length is not a constant: it
+ * lasts until the rise runs out, and how long that is depends on the
+ * fighter's published heights and gravity. Played over a fixed thirty, Fox's
+ * somersault reached 216 degrees before the fall cut in and handed the
+ * renderer a fighter tucked on his side. The numbers come from the engine's
+ * own rule (`jumpRiseSpeeds`), so the clip and the simulation cannot drift.
  */
-export type JumpAttributes = Pick<
-  FighterDef["attributes"],
-  "gravity" | "fullHopVelocity" | "shortHopVelocity" | "airJumpVelocity"
->;
+export interface JumpTiming {
+  readonly full: number;
+  readonly short: number;
+  /** Per midair jump: `air[0]` is the first. One entry unless the fighter has a per-jump list. */
+  readonly air: readonly number[];
+}
+
+const jumpTimings = new WeakMap<FighterDef, JumpTiming>();
+
+/** The fighter's jump timing, from its `FighterParams`; cached per definition. */
+export function jumpTimingFor(def: FighterDef): JumpTiming {
+  let t = jumpTimings.get(def);
+  if (t === undefined) {
+    const p = fighterParams(def);
+    const airs = p.jump_aerial_y_list?.length ?? 1;
+    t = {
+      full: jumpRiseSpeeds(p, "full").length,
+      short: jumpRiseSpeeds(p, "short").length,
+      air: Array.from({ length: airs }, (_, i) => jumpRiseSpeeds(p, "air", i).length),
+    };
+    jumpTimings.set(def, t);
+  }
+  return t;
+}
 
 const SLOT_POSE: Record<MoveSlot, PoseName> = {
   jab1: "jab",
@@ -243,20 +266,19 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
  */
 export function actionDurationFor(
   f: Pick<PosedFighter, "action" | "actionFrame" | "charge" | "hitstun" | "jumpsUsed" | "shortHop">,
-  attrs?: JumpAttributes,
+  jump?: JumpTiming,
 ): number | undefined {
   switch (f.action) {
-    // Frames until the rise runs out. The ratio of two Q12 values is a plain
-    // number, so no conversion is needed.
+    // Frames until the rise runs out (`jumpTimingFor`).
     case "jump": {
-      if (!attrs || attrs.gravity <= 0) return undefined;
-      const v =
+      if (!jump) return undefined;
+      const n =
         f.jumpsUsed >= 2
-          ? attrs.airJumpVelocity
+          ? jump.air[Math.min(f.jumpsUsed - 2, jump.air.length - 1)]
           : f.shortHop
-            ? attrs.shortHopVelocity
-            : attrs.fullHopVelocity;
-      return Math.max(1, Math.round(v / attrs.gravity));
+            ? jump.short
+            : jump.full;
+      return Math.max(1, n);
     }
     case "entering":
       return ENTRY_FRAMES;
@@ -378,7 +400,7 @@ export function poseTimeFor(
   fighter: PosedFighter,
   frame: number,
   timing?: MoveTiming,
-  attrs?: JumpAttributes,
+  jump?: JumpTiming,
 ): number {
   const clip = clipFor(fighter.defId, name);
   if (clip?.loop) {
@@ -399,7 +421,7 @@ export function poseTimeFor(
     return (strike ?? 0.3) * 0.55;
   }
 
-  const stateFrames = actionDurationFor(fighter, attrs);
+  const stateFrames = actionDurationFor(fighter, jump);
   const total = timing && timing.total > 0 ? timing.total : (stateFrames ?? 30);
   const f = fighter.actionFrame;
   const first = timing?.firstActive ?? -1;
@@ -425,12 +447,12 @@ export function poseSpinFor(
   fighter: PosedFighter,
   frame: number,
   timing?: MoveTiming,
-  attrs?: JumpAttributes,
+  jump?: JumpTiming,
 ): number {
   const name = poseNameFor(fighter);
   const spin = clipFor(fighter.defId, name)?.spin;
   if (!spin) return 0;
-  return poseTimeFor(name, fighter, frame, timing, attrs) * spin * Math.PI * 2;
+  return poseTimeFor(name, fighter, frame, timing, jump) * spin * Math.PI * 2;
 }
 
 /** The pose a fighter is in this frame, ready to hand to `resolve()`. */
@@ -438,8 +460,8 @@ export function samplePoseForFighter(
   fighter: PosedFighter,
   frame: number,
   timing?: MoveTiming,
-  attrs?: JumpAttributes,
+  jump?: JumpTiming,
 ): PoseSample {
   const name = poseNameFor(fighter);
-  return samplePose(clipFor(fighter.defId, name), poseTimeFor(name, fighter, frame, timing, attrs));
+  return samplePose(clipFor(fighter.defId, name), poseTimeFor(name, fighter, frame, timing, jump));
 }

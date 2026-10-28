@@ -212,7 +212,7 @@ describe("both clips", () => {
     // Nothing blends between clips: the frame vertical speed crosses zero, the
     // renderer simply starts drawing `fall` instead, and whatever gap is left
     // here is drawn as a jolt. Which frame that is, is the fighter's own
-    // `fullHopVelocity / gravity` — frame 18 for Fox and frame 31 for Samus —
+    // rise (`jumpTimingFor`), which differs across the cast by a dozen frames —
     // so the whole tail has to sit near `fall`'s opening drawing, not just the
     // last key.
     const falling = samplePose(fall, 0);
