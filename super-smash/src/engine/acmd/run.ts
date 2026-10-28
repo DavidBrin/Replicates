@@ -7,6 +7,8 @@
  */
 
 import { moveFrameOf } from "../hitbox";
+import { ONE } from "../fixed";
+import { isUnmodelledAutolink } from "../knockback";
 import type { FighterDef, FighterState, MoveSlot } from "../types";
 import { newBonePose } from "./bones";
 import type { BoneTable } from "./bones";
@@ -58,16 +60,21 @@ export function moveScriptFrame(def: FighterDef, f: Pick<FighterState, "move" | 
  *   Task 18).
  * - A projectile's hitbox with a far end throws whatever runs the slot: a
  *   projectile is a sphere.
+ * - A hitbox with an autolink angle the engine does not model (363°, 366°,
+ *   368°) throws, in whatever runs the slot: a script's boxes, the compiled
+ *   legacy move's, or a projectile's (Plan 3, Task 19; `AUTOLINK_UNMODELLED`).
  */
 export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
   const slots = new Set([...Object.keys(def.moves), ...Object.keys(def.scripts ?? {})] as MoveSlot[]);
   const scratch = newBonePose();
   for (const slot of slots) {
     refuseFarEnds(def, slot);
+    refuseUnmodelledProjectileAngles(def, slot);
     const script = gameScriptFor(def, slot);
     if (script === null) continue;
     scheduleOf(script);
     for (const c of flatten(script)) {
+      if (c.op === "attack") refuseUnmodelledAngle(def, slot, `hitbox ${c.params.id}`, c.params.angle);
       if (c.op !== "attack" && c.op !== "catch") continue;
       if (!bones.pose(def.id, script.motion, 1, c.params.bone, scratch)) {
         throw new Error(
@@ -75,6 +82,26 @@ export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
         );
       }
     }
+  }
+}
+
+/**
+ * Throw for an autolink angle the engine does not model (363°, 366°, 368°),
+ * naming the fighter, the move and the angle. The sim would launch such a box as
+ * something else (`isUnmodelledAutolink`), so it fails here, at load, and not in
+ * a match.
+ */
+function refuseUnmodelledAngle(def: FighterDef, slot: MoveSlot, what: string, angle: number): void {
+  if (!isUnmodelledAutolink(angle)) return;
+  throw new Error(
+    `${def.id} ${slot}: ${what} has angle ${angle / ONE}°, an autolink angle the engine does not model (only 365° and 367° are)`,
+  );
+}
+
+/** The same refusal for the hitboxes of the projectiles `slot` throws, whatever runs the slot. */
+function refuseUnmodelledProjectileAngles(def: FighterDef, slot: MoveSlot): void {
+  for (const p of def.moves[slot]?.projectiles ?? []) {
+    refuseUnmodelledAngle(def, slot, `projectile "${p.id}" hitbox`, p.hitbox.angle);
   }
 }
 

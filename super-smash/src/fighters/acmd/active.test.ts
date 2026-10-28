@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { moveReach } from "@/ai/behaviours";
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
+import { ATTACK, clearAll, frame, loop } from "@/engine/acmd/dsl";
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
+import { prepareFighterScripts } from "@/engine/acmd/run";
 import { fx, toFloat } from "@/engine/fixed";
 import { activeHitboxes, chargeHoldFrame } from "@/engine/hitbox";
 import { createInitialState, step } from "@/engine/simulate";
@@ -71,6 +73,31 @@ describe("which imported scripts run (Plan 3, Task 18)", () => {
         expect(ACTIVE_SCRIPT_SLOTS[def.id]).not.toContain(slot);
       }
     }
+  });
+});
+
+// Plan 3, Task 19 fix round 1: the engine models autolink angles 365 and 367 and no others
+// (`AUTOLINK_UNMODELLED`: 363, 366, 368), so a script that carries one stays on its legacy move.
+describe("autolink angles the engine does not model (Plan 3, Task 19)", () => {
+  const jab = FIGHTERS.find((f) => f.id === "mario")!.moves.jab1;
+  const scriptAt = (angle: number, inLoop = false): AcmdScript => {
+    const box = ATTACK({ id: 0, bone: "top", damage: 2, angle, kbg: 100, bkb: 40, size: 4, x: 0, y: 6, z: 6 });
+    return { name: "game_attack11", motion: "attack_11", commands: [frame(4), ...(inLoop ? [loop(2, [box])] : [box]), frame(7), clearAll()] };
+  };
+
+  it.each([365, 367, 361, 45])("admits a root-bone script with a box at %i, as the control", (angle) => {
+    expect(activatable("jab1", jab, scriptAt(angle))).toBe(true);
+  });
+
+  it.each([363, 366, 368])("refuses a script with a box at %i, in a loop too", (angle) => {
+    expect(activatable("jab1", jab, scriptAt(angle))).toBe(false);
+    expect(activatable("jab1", jab, scriptAt(angle, true))).toBe(false);
+  });
+
+  // None is live today: every script the roster runs, and every compiled move and projectile,
+  // loads through the same refusal registration applies.
+  it("is met by no move the roster runs", () => {
+    for (const def of FIGHTERS) expect(() => prepareFighterScripts(def, LEGACY_BONE_TABLE), def.id).not.toThrow();
   });
 });
 

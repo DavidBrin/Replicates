@@ -1225,6 +1225,62 @@ describe("registry", () => {
     });
   });
 
+  // Plan 3, Task 19 fix round 1: SmashWiki "Autolink angle" (https://www.ssbwiki.com/Autolink_angle)
+  // describes 363° ("without launch speed modifications"), 366° ("does not reduce the launch speed
+  // obtained from knockback", no cap, no fixed angle on grounded opponents) and 368° ("a mix between
+  // the 366° and 367° angles") as unlike 367°, and the sim does not model them: they are refused at
+  // load, wherever the box runs from, by fighter, move and angle. 365° and 367° are modelled.
+  describe("refuses, at registration, an autolink angle the engine does not model", () => {
+    const scripted = (angle: number): FighterDef => ({
+      ...DEF,
+      scripts: {
+        jab1: {
+          name: "game_attack11",
+          motion: "attack_11",
+          commands: [
+            { op: "frame", frame: 4 },
+            { op: "loop", count: 2, body: [{ op: "attack", params: { ...attackFromHitbox(DEF.moves.jab1!.hitboxes[0]), angle: fx(angle) } }] },
+          ],
+        },
+      },
+    });
+    const compiled = (angle: number): FighterDef => ({
+      ...DEF,
+      moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: fx(angle) })] }) },
+    });
+    const projectile = (angle: number): FighterDef => {
+      const pellet = DEF.moves.neutralB!.projectiles![0];
+      return {
+        ...DEF,
+        moves: { ...DEF.moves, neutralB: move("neutralB", { totalFrames: 30, hitboxes: [], projectiles: [{ ...pellet, hitbox: hitbox({ ...pellet.hitbox, angle: fx(angle) }) }] }) },
+        // A script overrides the slot, and the projectile's box is refused all the same.
+        scripts: { neutralB: { name: "game_specialn", motion: "special_n", commands: [{ op: "frame", frame: 4 }] } },
+      };
+    };
+    const SHAPES: [string, (angle: number) => FighterDef, RegExp][] = [
+      ["a script's box (in a loop)", scripted, /tester jab1: hitbox 0 has angle %d°/],
+      ["a legacy MoveDef box", compiled, /tester jab1: hitbox 0 has angle %d°/],
+      ["a projectile's box", projectile, /tester neutralB: projectile "pellet" hitbox has angle %d°/],
+    ];
+
+    describe.each([363, 366, 368])("%i", (angle) => {
+      it.each(SHAPES)("on %s, naming the fighter, the move and the angle", (_, build, pattern) => {
+        clearRegistry();
+        expect(() => registerFighters([build(angle)])).toThrow(new RegExp(pattern.source.replace("%d", String(angle))));
+        // Refused whole: nothing of the batch is left half-registered.
+        expect(() => registryContext.fighter("tester")).toThrow();
+      });
+    });
+
+    it.each([365, 367, 361, 45])("registers a box at %i", (angle) => {
+      for (const [, build] of SHAPES) {
+        clearRegistry();
+        expect(() => registerFighters([build(angle)])).not.toThrow();
+        clearRegistry();
+      }
+    });
+  });
+
   it("builds every script's fire-frame schedule at registration, so a script whose timing cannot compile is refused there", () => {
     clearRegistry();
     const broken: FighterDef = {

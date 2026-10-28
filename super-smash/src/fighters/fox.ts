@@ -398,8 +398,9 @@ const legacy: FighterDef = {
       totalFrames: 43,
       landingLag: 18,
       hitboxes: [
-        // Five kicks on an autolink angle, then a finisher. The autolink (365)
-        // is what drags the victim along instead of popping them out early.
+        // Five kicks on an autolink angle, then a finisher. The autolink (367, as
+        // `game_attackairf` has it) is what drags the victim along instead of popping
+        // them out early.
         {
           id: 0,
           startFrame: 7,
@@ -408,7 +409,7 @@ const legacy: FighterDef = {
           y: fx(6.0),
           radius: fx(3.0),
           damage: fx(1.8),
-          angle: fx(365),
+          angle: fx(367),
           baseKnockback: fx(0),
           knockbackGrowth: fx(100),
           fixedKnockback: fx(120),
@@ -421,7 +422,7 @@ const legacy: FighterDef = {
           y: fx(6.0),
           radius: fx(3.0),
           damage: fx(1.3),
-          angle: fx(365),
+          angle: fx(367),
           baseKnockback: fx(0),
           knockbackGrowth: fx(100),
           fixedKnockback: fx(120),
@@ -434,7 +435,7 @@ const legacy: FighterDef = {
           y: fx(6.0),
           radius: fx(3.0),
           damage: fx(1.8),
-          angle: fx(365),
+          angle: fx(367),
           baseKnockback: fx(0),
           knockbackGrowth: fx(100),
           fixedKnockback: fx(120),
@@ -447,7 +448,7 @@ const legacy: FighterDef = {
           y: fx(6.0),
           radius: fx(3.0),
           damage: fx(2.8),
-          angle: fx(365),
+          angle: fx(367),
           baseKnockback: fx(0),
           knockbackGrowth: fx(100),
           fixedKnockback: fx(120),

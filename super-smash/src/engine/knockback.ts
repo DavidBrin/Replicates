@@ -53,6 +53,7 @@ import {
   SAKURAI_KB_LOW,
   STALE_QUEUE_LENGTH,
   STALE_KNOCKBACK_DAMPING,
+  AUTOLINK_UNMODELLED,
   DI_MAX_DEVIATION,
   DI_STICK_DEAD_ZONE,
   DI_STICK_FULL,
@@ -582,6 +583,16 @@ export function resolveAngle(hitbox: Pick<Hitbox, "angle">, victimGrounded: bool
   // (kb − 60)/28 × 38 + 1, one truncation, capped at 38.
   const ramp = mulDiv(kb - SAKURAI_KB_LOW, SAKURAI_AIRBORNE, SAKURAI_KB_HIGH - SAKURAI_KB_LOW) + ONE;
   return ramp > SAKURAI_AIRBORNE ? SAKURAI_AIRBORNE : ramp;
+}
+
+/**
+ * Is `angle` an autolink angle the engine does not model (363°, 366°, 368°)?
+ * A hitbox carrying one is refused at load, because the sim would launch it as
+ * something else: 363° as a 3° launch, 366° and 368° by 367°'s rule, which the
+ * page shows them not to follow (`AUTOLINK_UNMODELLED`).
+ */
+export function isUnmodelledAutolink(angle: number): boolean {
+  return AUTOLINK_UNMODELLED.includes(angle);
 }
 
 export interface LaunchVector {

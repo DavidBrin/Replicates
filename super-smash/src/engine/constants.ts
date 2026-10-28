@@ -200,9 +200,9 @@ export const GLANCING_BLOW_DEPTH = fx(0.1);
  * Autolink angles (SmashWiki "Autolink angle", https://www.ssbwiki.com/Autolink_angle):
  * 365° launches at half the attacker's momentum; 367° at the attacker's
  * momentum plus 20% of the hitbox-to-victim difference, 80° against a grounded
- * victim, launch speed capped at 3 and vertical speed at −1. 366°/368° have no
- * published formula and run as 367° (UNVERIFIED). Autolink angles are above the
- * 0-360 range of real angles, so they are told apart by value.
+ * victim, launch speed capped at 3 and vertical speed at −1. Autolink angles
+ * are above the 0-360 range of real angles, so they are told apart by value.
+ * 363°, 366° and 368° are not modelled (`AUTOLINK_UNMODELLED`).
  */
 export const AUTOLINK_MIN = fx(365);
 export const AUTOLINK_MAX = fx(368);
@@ -211,6 +211,20 @@ export const AUTOLINK_PULL_RATIO: Ratio = [1, 5];
 export const AUTOLINK_GROUNDED_ANGLE = fx(80);
 export const AUTOLINK_SPEED_CAP = fx(3);
 export const AUTOLINK_MIN_VY = fx(-1);
+
+/**
+ * The autolink angles the engine does not model, and refuses at load
+ * (`prepareFighterScripts`, `activatable`; Plan 3, Task 19 fix round 1). The
+ * page describes each as unlike 367°: 363° launches "in the direction the
+ * attacker is moving into, albeit without launch speed modifications"; 366°
+ * "does not reduce the launch speed obtained from knockback", "does not have
+ * any caps for launch speed, nor it launches grounded opponents at a fixed
+ * angle", and its pull "only lasts for 5 frames"; 368° "appears to function as
+ * a mix between the 366° and 367° angles", with position vectors (SmashWiki
+ * "Autolink angle", https://www.ssbwiki.com/Autolink_angle). 364° is on no
+ * page and is no angle.
+ */
+export const AUTOLINK_UNMODELLED: readonly number[] = [fx(363), fx(366), fx(368)];
 
 /** Two hitboxes within this damage difference clank instead of trading. */
 export const CLANK_RANGE = fx(9);

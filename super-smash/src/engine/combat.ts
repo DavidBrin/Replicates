@@ -64,15 +64,22 @@ export interface CombatState {
    */
   swingQueued: boolean;
   /**
-   * The parked launch is an autolink (Plan 3, Task 19): its vector was fixed on
-   * contact as (`autolinkX`, `autolinkY`), Q12, and `releasePendingLaunch` fires
-   * it as it stands, with no DI, LSI or balloon fall (the hit's speed-up and set
-   * weight still ride along: `launchFaf`, `launchSetWeight`). Both stay 0 when
-   * it is not.
+   * The parked launch is an autolink (Plan 3, Task 19): what its vector needs is
+   * parked on contact, and `releasePendingLaunch` computes the vector from it
+   * when the freeze ends ("calculated after hitlag is over", so the victim's
+   * position is where SDI left it), with no DI, LSI or balloon fall (the hit's
+   * speed-up and set weight still ride along: `launchFaf`, `launchSetWeight`).
+   * Every field below stays false or 0 when it is not.
    */
   autolink: boolean;
-  autolinkX: number;
-  autolinkY: number;
+  /** The 367 rule (a pull toward the hit point); false is 365, half the momentum. */
+  autolinkPull: boolean;
+  /** The attacker's momentum at contact (a projectile's, for one), Q12. */
+  autolinkMomentumX: number;
+  autolinkMomentumY: number;
+  /** The hit point at contact, world, Q12: the centre of the hitbox. 0 for 365. */
+  autolinkPointX: number;
+  autolinkPointY: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -91,8 +98,11 @@ export function emptyCombat(): CombatState {
     tumbleDodge: false,
     swingQueued: false,
     autolink: false,
-    autolinkX: 0,
-    autolinkY: 0,
+    autolinkPull: false,
+    autolinkMomentumX: 0,
+    autolinkMomentumY: 0,
+    autolinkPointX: 0,
+    autolinkPointY: 0,
   };
 }
 
@@ -112,7 +122,10 @@ export function cloneCombat(c: CombatState): CombatState {
     tumbleDodge: c.tumbleDodge,
     swingQueued: c.swingQueued,
     autolink: c.autolink,
-    autolinkX: c.autolinkX,
-    autolinkY: c.autolinkY,
+    autolinkPull: c.autolinkPull,
+    autolinkMomentumX: c.autolinkMomentumX,
+    autolinkMomentumY: c.autolinkMomentumY,
+    autolinkPointX: c.autolinkPointX,
+    autolinkPointY: c.autolinkPointY,
   };
 }

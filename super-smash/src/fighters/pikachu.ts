@@ -417,7 +417,7 @@ const legacy: FighterDef = {
           y: fx(3.2),
           radius: fx(3.4),
           damage: fx(1.8),
-          angle: fx(365),
+          angle: fx(367),
           // `game_attackairn` is `kbg: 80, fkb: 45, bkb: 15` with set weight: the 15 is
           // added after the weight-based term (generated/pikachu.ts; Plan 3, Task 16b).
           baseKnockback: fx(15),
@@ -495,7 +495,7 @@ const legacy: FighterDef = {
           y: fx(3.2),
           radius: fx(2.6),
           damage: fx(1.0),
-          angle: fx(365),
+          angle: fx(367),
           baseKnockback: fx(0),
           knockbackGrowth: fx(100),
           fixedKnockback: fx(40),

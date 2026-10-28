@@ -14,7 +14,10 @@
  *   compiled legacy script until the energies and the charge read the script);
  * - every command is one the interpreter runs, or a cosmetic one listed below;
  * - the script clears its own boxes — one that leaves them for its status to
- *   clear (Fox's Reflector) would keep them live for the whole move here.
+ *   clear (Fox's Reflector) would keep them live for the whole move here;
+ * - no box carries an autolink angle the engine does not model (363°, 366°,
+ *   368°; `AUTOLINK_UNMODELLED`, Plan 3, Task 19): `prepareFighterScripts`
+ *   would refuse it at load, and the rule says so first.
  *
  * `ACTIVE_SCRIPT_SLOTS` is the rule's output written out, so a reviewer sees
  * the list and `active.test.ts` proves it is exactly the rule's output.
@@ -23,6 +26,7 @@
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
 import { scriptHitboxTable } from "@/engine/acmd/hitboxes";
 import { runScript } from "@/engine/acmd/interpreter";
+import { isUnmodelledAutolink } from "@/engine/knockback";
 import type { AcmdCommand, AcmdScript } from "@/engine/acmd/types";
 import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import type { ReferenceFighter } from "./reference";
@@ -62,6 +66,7 @@ const STATUS_DRIVEN: ReadonlySet<MoveSlot> = new Set(["pummel", "fthrow", "bthro
 function runnable(commands: readonly AcmdCommand[], bones: Set<string>): boolean {
   for (const c of commands) {
     if (c.op === "attack" || c.op === "catch") bones.add(c.params.bone);
+    if (c.op === "attack" && isUnmodelledAutolink(c.params.angle)) return false;
     if (c.op === "loop") {
       if (!runnable(c.body, bones)) return false;
       continue;

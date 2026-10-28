@@ -178,8 +178,11 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.tumbleDodge);
   x = mixBool(x, c.swingQueued);
   x = mixBool(x, c.autolink);
-  x = mixInt(x, c.autolinkX);
-  x = mixInt(x, c.autolinkY);
+  x = mixBool(x, c.autolinkPull);
+  x = mixInt(x, c.autolinkMomentumX);
+  x = mixInt(x, c.autolinkMomentumY);
+  x = mixInt(x, c.autolinkPointX);
+  x = mixInt(x, c.autolinkPointY);
   return x;
 }
 

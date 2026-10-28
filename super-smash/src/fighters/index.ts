@@ -37,7 +37,9 @@
  * differently for grounded and airborne victims. 365 and 367 are autolink
  * angles, which drag a victim along with the attacker rather than launching
  * them — they appear on multi-hit moves and are what stops the victim falling
- * out between hits. 180 launches straight backwards, into the attacker.
+ * out between hits. 363, 366 and 368 are autolink angles too, which the engine
+ * does not model and refuses at load (`AUTOLINK_UNMODELLED`). 180 launches
+ * straight backwards, into the attacker.
  *
  * **Damage is base damage**, the four-player value. Ultimate's 1v1 bonus is a
  * property of the match, not of the move, and the engine applies

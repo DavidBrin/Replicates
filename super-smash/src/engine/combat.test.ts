@@ -3797,7 +3797,7 @@ describe("autolink angles (Plan 3, Task 19)", () => {
     prepare: (s: GameState) => void,
     over: Partial<Hitbox> = {},
     inputs: (i: number) => readonly InputFrame[] = JAB,
-  ): { hit: Frame; released: Frame } {
+  ): { hit: Frame; released: Frame; frames: Frame[] } {
     const def: FighterDef = {
       ...BASE_DEF,
       moves: {
@@ -3812,7 +3812,7 @@ describe("autolink angles (Plan 3, Task 19)", () => {
     const frames = play(s, 30, inputs, ctx);
     const h = frames.findIndex((f) => f.events.hits.length > 0);
     const r = frames.findIndex((f, i) => i > h && f.state.fighters[1].hitlag === 0);
-    return { hit: frames[h], released: frames[r] };
+    return { hit: frames[h], released: frames[r], frames };
   }
   const airborne = (s: GameState): void => {
     Object.assign(s.fighters[1], { x: fx(12), y: fx(2), grounded: false, platform: -1, action: "fall" });
@@ -3883,8 +3883,10 @@ describe("autolink angles (Plan 3, Task 19)", () => {
     expect(released.state.fighters[1].launchSpeed).toBe(0);
   });
 
-  // The page gives no formula for 366° or 368°: both run as 367° (UNVERIFIED), grounded or not.
-  describe.each([366, 368])("%i, which runs as 367 (UNVERIFIED)", (angle) => {
+  // 366° and 368° are not modelled and `registerFighters` refuses them (`AUTOLINK_UNMODELLED`, below).
+  // A hand-built context that skips it gets 367°'s rules here (UNVERIFIED, known not to be the page's),
+  // rather than a launch at 6 or 8 degrees.
+  describe.each([366, 368])("%i, which a context that skips the load refusal gets as 367", (angle) => {
     it("pulls an airborne victim exactly as 367 does", () => {
       const same = autolinked(367, airborne).released.state.fighters[1].kinetic;
       const k = autolinked(angle, airborne).released.state.fighters[1].kinetic;
@@ -3907,6 +3909,20 @@ describe("autolink angles (Plan 3, Task 19)", () => {
     // Along the vector, to a tenth of a degree: its cross product with the angle's unit vector is 0.
     const cross = x * sinDeg(angle) - y * cosDeg(angle);
     expect(Math.abs(cross) / Math.hypot(x, y)).toBeLessThan(0.0025 * ONE);
+    expect(x * cosDeg(angle) + y * sinDeg(angle)).toBeGreaterThan(0);
+  });
+
+  // A hit with no freeze fires the launch (and clears the parked autolink) inside the hit itself;
+  // its event still reports where the launch goes.
+  it("reports the direction of a launch fired on contact, with no freeze (367)", () => {
+    const { hit } = autolinked(367, airborne, { hitlagMultiplier: 0 });
+    const v = hit.state.fighters[1];
+    expect(v.hitlag).toBe(0);
+    expect(v.combat.autolink).toBe(false);
+    const { damageX: x, damageY: y } = v.kinetic;
+    expect(x).toBeLessThan(0);
+    const angle = hit.events.hits[0].angle;
+    expect(Math.abs(x * sinDeg(angle) - y * cosDeg(angle)) / Math.hypot(x, y)).toBeLessThan(0.0025 * ONE);
     expect(x * cosDeg(angle) + y * sinDeg(angle)).toBeGreaterThan(0);
   });
 
@@ -4033,20 +4049,47 @@ describe("autolink angles (Plan 3, Task 19)", () => {
   });
 
   describe("the parked vector", () => {
-    it("is parked for the freeze, then fired and cleared", () => {
+    const NOT_PARKED = {
+      autolink: false,
+      autolinkPull: false,
+      autolinkMomentumX: 0,
+      autolinkMomentumY: 0,
+      autolinkPointX: 0,
+      autolinkPointY: 0,
+    };
+
+    // What the vector needs, not the vector: it is computed when the freeze ends (I2).
+    it("parks the momentum and the hit point for the freeze, then fires and clears them (367)", () => {
       const { hit, released } = autolinked(367, airborne);
-      const parked = hit.state.fighters[1].combat;
-      expect(parked.autolink).toBe(true);
-      expect([parked.autolinkX, parked.autolinkY]).toEqual([
-        released.state.fighters[1].kinetic.damageX,
-        released.state.fighters[1].kinetic.damageY,
-      ]);
-      expect(released.state.fighters[1].combat).toMatchObject({ autolink: false, autolinkX: 0, autolinkY: 0 });
+      const [a] = hit.state.fighters;
+      const hb = hit.events.hits[0];
+      expect(hit.state.fighters[1].combat).toMatchObject({
+        autolink: true,
+        autolinkPull: true,
+        autolinkMomentumX: a.vx,
+        autolinkMomentumY: a.vy,
+        autolinkPointX: hb.x,
+        autolinkPointY: hb.y,
+      });
+      expect(released.state.fighters[1].combat).toMatchObject(NOT_PARKED);
+    });
+
+    it("parks only the momentum for 365, which ignores where the victim is", () => {
+      const { hit, released } = autolinked(365, attackerAt(-6, 2, fx(2), 0));
+      expect(hit.state.fighters[1].combat).toMatchObject({
+        autolink: true,
+        autolinkPull: false,
+        autolinkMomentumX: hit.state.fighters[0].vx,
+        autolinkMomentumY: hit.state.fighters[0].vy,
+        autolinkPointX: 0,
+        autolinkPointY: 0,
+      });
+      expect(released.state.fighters[1].combat).toMatchObject(NOT_PARKED);
     });
 
     it.each([45, 361, 360, 364])("is not parked for an ordinary angle (%i)", (angle) => {
       const { hit, released } = autolinked(angle, airborne);
-      expect(hit.state.fighters[1].combat).toMatchObject({ autolink: false, autolinkX: 0, autolinkY: 0 });
+      expect(hit.state.fighters[1].combat).toMatchObject(NOT_PARKED);
       expect(released.state.fighters[1].combat.autolink).toBe(false);
     });
 
@@ -4059,11 +4102,105 @@ describe("autolink angles (Plan 3, Task 19)", () => {
       const copy = cloneState(hit.state);
       expect(copy.fighters[1].combat).toEqual(hit.state.fighters[1].combat);
       expect(hashState(copy)).toBe(hashState(hit.state));
-      copy.fighters[1].combat.autolinkX += 1;
-      expect(hashState(copy)).not.toBe(hashState(hit.state));
-      copy.fighters[1].combat.autolinkX -= 1;
-      copy.fighters[1].combat.autolink = false;
-      expect(hashState(copy)).not.toBe(hashState(hit.state));
+      // Every parked field is in the hash.
+      const numbers = ["autolinkMomentumX", "autolinkMomentumY", "autolinkPointX", "autolinkPointY"] as const;
+      for (const key of numbers) {
+        const changed = cloneState(hit.state);
+        changed.fighters[1].combat[key] += 1;
+        expect(hashState(changed), key).not.toBe(hashState(hit.state));
+      }
+      for (const key of ["autolink", "autolinkPull"] as const) {
+        const changed = cloneState(hit.state);
+        changed.fighters[1].combat[key] = !changed.fighters[1].combat[key];
+        expect(hashState(changed), key).not.toBe(hashState(hit.state));
+      }
+      // ...and the copy shares nothing with the original.
+      copy.fighters[1].combat.autolinkPointX += 1;
+      expect(hit.state.fighters[1].combat.autolinkPointX).not.toBe(copy.fighters[1].combat.autolinkPointX);
+    });
+  });
+
+  // SmashWiki "Autolink angle": the pull is "toward the center of the hitbox". A capsule's centre is
+  // its midpoint, whichever end the script writes first (Plan 3, Task 19 fix round 1).
+  describe("aims at the centre of the hitbox (367)", () => {
+    /** Fighter 0 jabs a 367 capsule from (`y`, `z`) to (`y2`, `z2`); fighter 1 hangs in the air at x = 12. */
+    const capsule = (y: number, z: number, y2: number, z2: number) => {
+      const ctx = ctxFor({
+        ...BASE_DEF,
+        scripts: {
+          jab1: {
+            name: "game_attack11",
+            motion: "attack_11",
+            commands: [frame(4), ATTACK({ id: 0, bone: "top", damage: 2, angle: 367, kbg: 100, bkb: 40, size: 5, x: 0, y, z, y2, z2, x2: 0 }), frame(7), clearAll()],
+          },
+        },
+      });
+      const s = standing(ctx);
+      airborne(s);
+      const frames = play(s, 30, JAB, ctx);
+      const h = frames.findIndex((f) => f.events.hits.length > 0);
+      const r = frames.findIndex((f, i) => i > h && f.state.fighters[1].hitlag === 0);
+      return { hit: frames[h], v: frames[r].state.fighters[1].kinetic };
+    };
+    // From (y 2, z 2) to (y 10, z 14): the centre is 8 out and 6 up.
+    const nearFirst = capsule(2, 2, 10, 14);
+    const farFirst = capsule(10, 14, 2, 2);
+
+    it("pulls toward the midpoint of the capsule", () => {
+      const [a, victim] = nearFirst.hit.state.fighters;
+      expect(nearFirst.v.damageX).toBe(a.vx + byRatio(a.x + fx(8) - victim.x, [1, 5]));
+      expect(nearFirst.v.damageY).toBe(a.vy + byRatio(a.y + fx(6) - victim.y, [1, 5]));
+      // The victim is 4 units past the centre and 4 below it: pulled back and up.
+      expect(nearFirst.v.damageX).toBeLessThan(0);
+      expect(nearFirst.v.damageY).toBeGreaterThan(0);
+    });
+
+    it("is the same launch whichever end the script writes first", () => {
+      expect([farFirst.v.damageX, farFirst.v.damageY]).toEqual([nearFirst.v.damageX, nearFirst.v.damageY]);
+    });
+  });
+
+  // SmashWiki: "this is calculated after hitlag is over", which with "the weakening of SDI" is why 367
+  // is "impossible to escape", where 365 "can be easily escaped with SDI". So the vector reads the
+  // victim where SDI left her (Plan 3, Task 19 fix round 1).
+  describe("is computed when the freeze ends, after SDI", () => {
+    /**
+     * The pair's launch with fighter 1 pressing `stick` once, on the first frozen frame an SDI pulse
+     * can fire on (a fresh press while her freeze count is a multiple of 4), and where she ended up.
+     */
+    const launched = (angle: number, prepare: (s: GameState) => void, stick: number) => {
+      const dry = autolinked(angle, prepare);
+      const h = dry.frames.indexOf(dry.hit);
+      const pulse = dry.frames.findIndex((_, i) => i > h && dry.frames[i - 1].state.fighters[1].hitlag % 4 === 0 && dry.frames[i - 1].state.fighters[1].hitlag > 0);
+      expect(pulse, "a freeze long enough to pulse in").toBeGreaterThan(h);
+      const held = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Attack : 0, i === pulse ? stick : 0];
+      const { hit, released } = autolinked(angle, prepare, {}, held);
+      const v = released.state.fighters[1];
+      return { hit, x: v.x, contactX: hit.state.fighters[1].x, damageX: v.kinetic.damageX, damageY: v.kinetic.damageY };
+    };
+
+    it("pulls a victim who SDIs away from the box harder, by 20% of the shift (367)", () => {
+      const still = launched(367, airborne, 0);
+      const away = launched(367, airborne, Btn.Right);
+      // She did SDI: the box is behind her, and she moved forward of it.
+      expect(away.x).toBeGreaterThan(away.contactX);
+      expect(still.x).toBe(still.contactX);
+      // The pull is 20% of the distance from the box centre at the end of the freeze, not at contact.
+      const [a] = away.hit.state.fighters;
+      const hb = away.hit.events.hits[0];
+      expect(away.damageX).toBe(a.vx + byRatio(hb.x - away.x, [1, 5]));
+      // One pulse is 2 units, so the pull is 0.4 stronger (to the unit the truncation can move).
+      expect(away.x - away.contactX).toBe(SDI_DISTANCE);
+      expect(Math.abs(still.damageX - away.damageX - byRatio(SDI_DISTANCE, [1, 5]))).toBeLessThanOrEqual(1);
+      expect(away.damageX).toBeLessThan(still.damageX);
+    });
+
+    it("does not follow it for 365, which ignores where the victim is", () => {
+      const prepare = attackerAt(-6, 2, fx(2), 0);
+      const still = launched(365, prepare, 0);
+      const away = launched(365, prepare, Btn.Right);
+      expect(away.x).toBeGreaterThan(away.contactX);
+      expect([away.damageX, away.damageY]).toEqual([still.damageX, still.damageY]);
     });
   });
 
