@@ -269,6 +269,7 @@ describe("Results after an online match", () => {
       rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
       fighters: ["mario", "fox"],
       costumes: [0, 1],
+      build: "0123456789ab",
       protocol: 2,
       bones: "0123abcd",
     };

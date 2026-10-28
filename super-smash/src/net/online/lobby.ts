@@ -41,6 +41,11 @@ import { isRecord } from "../signalProtocol";
  * between them: each side says its own in a `hello` as its channel opens.
  */
 export interface BuildStamp {
+  /**
+   * The deploy: the commit it was built from (next.config.ts), or "dev". Any
+   * change to the simulation is another game, and most change nothing else here.
+   */
+  readonly build: string;
   /** The wire format (`PROTOCOL_VERSION`, net/packet.ts). A peer on another cannot read this one's packets. */
   readonly protocol: number;
   /** The bone-table fingerprint (`engineFingerprint`): another table puts hitboxes elsewhere. */
@@ -67,7 +72,7 @@ export type LobbyMessage =
   | { readonly kind: "start"; readonly config: OnlineMatchConfig }
   | { readonly kind: "away"; readonly away: boolean }
   /** This side's `BuildStamp`, said each time its channel opens. Nothing starts until the other side's matches. */
-  | { readonly kind: "hello"; readonly protocol: number; readonly bones: string }
+  | { readonly kind: "hello"; readonly build: string; readonly protocol: number; readonly bones: string }
   /** The guest cannot play the host's start: the host runs another build. */
   | { readonly kind: "refuse"; readonly reason: "engine-mismatch" };
 
@@ -90,6 +95,8 @@ export type ReceivedLobbyMessage = LobbyMessage | UnreadableStart;
 const MAX_COSTUME = 15;
 const MIN_SEED = -0x8000_0000;
 const MAX_SEED = 0x7fff_ffff;
+/** A commit id as git abbreviates it, or "dev" for a build Next did not stamp (next.config.ts checks the same). */
+const BUILD_ID = /^([0-9a-f]{7,40}|dev)$/;
 /** The packet header carries the protocol version in one byte (net/packet.ts). */
 const MAX_PROTOCOL = 0xff;
 /** `BoneTable.fingerprint`: 8 lowercase hex digits. */
@@ -121,17 +128,17 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
       if (!isRecord(raw)) return null;
       // The build before anything else: another build's start may name a
       // fighter or a stage this one lacks, and must still be told apart.
-      const build = parseBuild(raw);
-      const config = build && parseConfig(raw, build);
-      return config ? { kind: "start", config } : { kind: "unreadable-start", build };
+      const stamp = parseBuild(raw);
+      const config = stamp && parseConfig(raw, stamp);
+      return config ? { kind: "start", config } : { kind: "unreadable-start", build: stamp };
     }
     case "away": {
       const away = payload.away;
       return typeof away === "boolean" ? { kind: "away", away } : null;
     }
     case "hello": {
-      const build = parseBuild(payload);
-      return build ? { kind: "hello", protocol: build.protocol, bones: build.bones } : null;
+      const stamp = parseBuild(payload);
+      return stamp ? { kind: "hello", build: stamp.build, protocol: stamp.protocol, bones: stamp.bones } : null;
     }
     case "refuse":
       return payload.reason === "engine-mismatch" ? { kind: "refuse", reason: "engine-mismatch" } : null;
@@ -140,7 +147,7 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
   }
 }
 
-function parseConfig(value: Record<string, unknown>, build: BuildStamp): OnlineMatchConfig | null {
+function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineMatchConfig | null {
   const { seed, stageId, stageForm, rules, fighters, costumes } = value;
   if (!isInRange(seed, MIN_SEED, MAX_SEED)) return null;
   if (!isStageId(stageId) || !isStageForm(stageForm)) return null;
@@ -159,16 +166,18 @@ function parseConfig(value: Record<string, unknown>, build: BuildStamp): OnlineM
     rules: parsedRules,
     fighters: [f0, f1],
     costumes: [c0, c1],
-    protocol: build.protocol,
-    bones: build.bones,
+    build: stamp.build,
+    protocol: stamp.protocol,
+    bones: stamp.bones,
   };
 }
 
 function parseBuild(value: Record<string, unknown>): BuildStamp | null {
-  const { protocol, bones } = value;
+  const { build, protocol, bones } = value;
+  if (typeof build !== "string" || !BUILD_ID.test(build)) return null;
   if (!isInRange(protocol, 0, MAX_PROTOCOL)) return null;
   if (typeof bones !== "string" || !FINGERPRINT.test(bones)) return null;
-  return { protocol, bones };
+  return { build, protocol, bones };
 }
 
 function parseRules(value: unknown): MatchRules | null {

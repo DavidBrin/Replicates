@@ -1,8 +1,12 @@
 // @vitest-environment node
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+
+import { parseLobbyMessage } from "@/net/online/lobby";
+import nextConfig from "../../next.config";
 
 const ROOT = process.cwd();
 
@@ -25,8 +29,23 @@ describe(".env.example", () => {
     for (const name of names) expect(env).toContain(name);
   });
 
-  it("is right that the browser code reads no environment at all", () => {
-    const offenders = sources(join(ROOT, "src")).filter((file) => readFileSync(file, "utf8").includes("process.env"));
-    expect(offenders).toEqual([]);
+  /**
+   * Save one constant Next inlines at build time: the deploy's id, which
+   * next.config.ts stamps itself (from the commit), for online peers to
+   * compare. Nothing to configure, so nothing for .env.example to name.
+   */
+  it("is right that the browser code reads no environment but the build id Next stamps", () => {
+    const reads = sources(join(ROOT, "src")).flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(/process\.env(?:\.[A-Za-z0-9_]+)?/g)].map((m) => `${file.slice(ROOT.length + 1)}: ${m[0]}`),
+    );
+    expect(reads).toEqual(["src/game/onlineConfig.ts: process.env.NEXT_PUBLIC_BUILD_ID"]);
+  });
+
+  /** Every build Next makes, `next dev` and the deploy's `next build` alike, carries the commit it was built from. */
+  it("has next.config.ts stamp the build with this checkout's commit, in a form the lobby reads", () => {
+    const stamped = nextConfig.env?.NEXT_PUBLIC_BUILD_ID;
+    expect(stamped).toBe(execFileSync("git", ["rev-parse", "--short=12", "HEAD"], { encoding: "utf8" }).trim());
+    const hello = { kind: "hello", build: stamped, protocol: 2, bones: "0123abcd" };
+    expect(parseLobbyMessage(hello)).toEqual(hello);
   });
 });

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { MatchRules } from "@/engine/types";
 import { RANDOM_FIGHTER, RANDOM_STAGE, type PlayerSlot } from "@/lib/matchConfig";
@@ -72,7 +72,7 @@ describe("the host's start config", () => {
 
   it("carries this build's stamp, so the guest can check it before playing", () => {
     const config = buildStartConfig({ players: players("mario", "fox"), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
-    expect({ protocol: config.protocol, bones: config.bones }).toEqual(localBuild());
+    expect({ build: config.build, protocol: config.protocol, bones: config.bones }).toEqual(localBuild());
     expect(config.bones).toBe(engineFingerprint());
     expect(buildMismatch(config)).toBeNull();
     expect(buildMismatch({ ...config, bones: "0badf00d" })).toBe("bones");
@@ -93,13 +93,24 @@ describe("the host's start config", () => {
 });
 
 describe("this build, as the other player sees it", () => {
-  it("is the wire format and the bone table", () => {
-    expect(localBuild()).toEqual({ protocol: PROTOCOL_VERSION, bones: engineFingerprint() });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("is the deploy, the wire format and the bone table", () => {
+    vi.stubEnv("NEXT_PUBLIC_BUILD_ID", "82267f71aab9");
+    expect(localBuild()).toEqual({ build: "82267f71aab9", protocol: PROTOCOL_VERSION, bones: engineFingerprint() });
+  });
+
+  /** Vitest, and anything else Next did not build: every one of them is the same "dev" build. */
+  it("is the dev build when Next did not stamp one", () => {
+    vi.stubEnv("NEXT_PUBLIC_BUILD_ID", undefined);
+    expect(localBuild().build).toBe("dev");
   });
 
   it("plays a peer on the same build", () => {
     expect(buildMismatch(localBuild())).toBeNull();
-    expect(buildMismatch({ protocol: 7, bones: "0badf00d" }, { protocol: 7, bones: "0badf00d" })).toBeNull();
+    expect(buildMismatch({ build: "0123456789ab", protocol: 7, bones: "0badf00d" }, { build: "0123456789ab", protocol: 7, bones: "0badf00d" })).toBeNull();
   });
 
   it("refuses a peer on another wire format, whose packets it could not read", () => {
@@ -108,6 +119,12 @@ describe("this build, as the other player sees it", () => {
 
   it("refuses a peer with other bone tables, whose hitboxes would land elsewhere", () => {
     expect(buildMismatch({ ...localBuild(), bones: "0badf00d" })).toBe("bones");
+  });
+
+  /** Any change to the simulation is a different game, and only the deploy's id sees most of them. */
+  it("refuses a peer on another deploy, even with the same wire format and bone tables", () => {
+    expect(buildMismatch({ ...localBuild(), build: "fedcba987654" })).toBe("build");
+    expect(buildMismatch({ build: "0123456789ab", protocol: 7, bones: "0badf00d" }, { build: "fedcba987654", protocol: 7, bones: "0badf00d" })).toBe("build");
   });
 
   it("refuses a peer that never said, which is a build from before the handshake", () => {

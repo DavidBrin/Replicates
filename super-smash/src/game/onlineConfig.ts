@@ -39,23 +39,31 @@ export function buildStartConfig(input: StartConfigInput): OnlineMatchConfig {
   };
 }
 
-/** This build, as the other player's sees it (Plan 2 Task 27). */
+/**
+ * This build, as the other player sees it (Plan 2 Task 27). The deploy's id is
+ * the one thing the browser code reads from the environment: next.config.ts
+ * stamps it, and Next inlines it at build time. Vitest, and anything else Next
+ * did not build, is "dev".
+ */
 export function localBuild(): BuildStamp {
-  return { protocol: PROTOCOL_VERSION, bones: engineFingerprint() };
+  return { build: process.env.NEXT_PUBLIC_BUILD_ID || "dev", protocol: PROTOCOL_VERSION, bones: engineFingerprint() };
 }
 
 /**
  * Why a peer's build cannot play this one: it never said (a build from before
- * the handshake), its packets are another wire format, or its bone tables put
- * hitboxes elsewhere — rollback would desync on the first hit.
+ * the handshake), its packets are another wire format, its bone tables put
+ * hitboxes elsewhere, or it is another deploy — whose simulation, changed in
+ * ways neither of the others shows, would desync. The most telling first; the
+ * screens say the same sentence for each.
  */
-export type BuildMismatch = "missing" | "protocol" | "bones";
+export type BuildMismatch = "missing" | "protocol" | "bones" | "build";
 
 /** Null when the two builds can play each other. */
 export function buildMismatch(theirs: BuildStamp | null, ours: BuildStamp = localBuild()): BuildMismatch | null {
   if (theirs === null) return "missing";
   if (theirs.protocol !== ours.protocol) return "protocol";
   if (theirs.bones !== ours.bones) return "bones";
+  if (theirs.build !== ours.build) return "build";
   return null;
 }
 

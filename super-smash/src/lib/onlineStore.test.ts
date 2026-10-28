@@ -118,6 +118,7 @@ describe("binding a session to the stores", () => {
   });
 
   it.each([
+    ["deploy", { ...CONFIG, build: "fedcba987654" }],
     ["bone table", { ...CONFIG, bones: "0badf00d" }],
     ["wire format", { ...CONFIG, protocol: PROTOCOL_VERSION + 1 }],
   ] as const)("refuses a start from a peer on another %s: tells the host, says why, and leaves", async (_, config) => {
@@ -495,6 +496,7 @@ describe("the build handshake", () => {
   });
 
   it.each([
+    ["deploy", { ...HELLO, build: "fedcba987654" }],
     ["wire format", { ...HELLO, protocol: PROTOCOL_VERSION + 1 }],
     ["bone table", { ...HELLO, bones: "0badf00d" }],
   ] as const)("refuses a peer on another %s, for good, and leaves the room", async (_, theirs) => {
