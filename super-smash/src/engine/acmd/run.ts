@@ -50,10 +50,14 @@ export function moveScriptFrame(def: FighterDef, f: Pick<FighterState, "move" | 
  * - An extended (capsule) ATTACK or CATCH loads like any other (Plan 3, Task
  *   17): its far end is on the same bone as its near end, so the bone check
  *   above covers both.
- * - A `MoveDef` hitbox or a projectile's hitbox with a far end (`x2`/`y2`)
- *   throws: both are spheres (the legacy compile, the renderer and the AI read
- *   them so), and a capsule is scripted instead. A script overriding the slot
- *   does not excuse its `MoveDef`.
+ * - A `MoveDef` hitbox with a far end (`x2`/`y2`) throws where the `MoveDef`
+ *   is what runs: the legacy compile reads a sphere, and a capsule is scripted
+ *   instead. Where a script overrides the slot the compile never reads it, and
+ *   the table may be the script's own boxes, capsules included
+ *   (`withReferenceScripts`; the renderer and the CPU read far ends, Plan 3,
+ *   Task 18).
+ * - A projectile's hitbox with a far end throws whatever runs the slot: a
+ *   projectile is a sphere.
  */
 export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
   const slots = new Set([...Object.keys(def.moves), ...Object.keys(def.scripts ?? {})] as MoveSlot[]);
@@ -74,11 +78,16 @@ export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
   }
 }
 
-/** Throw for a far end (`x2`/`y2`) on a hitbox of the legacy `MoveDef` in `slot`, or of one of its projectiles. */
+/**
+ * Throw for a far end (`x2`/`y2`) on a hitbox of the legacy `MoveDef` in `slot`
+ * that the legacy compile would read (no script overrides the slot), or on one
+ * of its projectiles.
+ */
 function refuseFarEnds(def: FighterDef, slot: MoveSlot): void {
   const move = def.moves[slot];
   if (move === undefined) return;
-  for (const hb of move.hitboxes) {
+  const compiled = def.scripts?.[slot] === undefined;
+  for (const hb of compiled ? move.hitboxes : []) {
     if (hb.x2 !== undefined || hb.y2 !== undefined) {
       throw new Error(`${def.id} ${slot}: hitbox ${hb.id} has a far end (x2/y2): a MoveDef hitbox is a sphere, script a capsule`);
     }

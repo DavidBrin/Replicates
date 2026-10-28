@@ -182,18 +182,23 @@ function activeWindows(slot: MoveSlot, strike: number): Window[] {
   for (const hb of boxes) {
     const a = hb.startFrame - 1;
     const b = hb.endFrame - 1;
+    // Where the box is: its centre, which for an extended box (an imported
+    // script's capsule, Plan 3 Task 18) is the middle of its two ends — Burning's
+    // runs the length of his body, and either end alone points the wrong way.
+    const x = (hb.x + (hb.x2 ?? hb.x)) / 2;
+    const y = (hb.y + (hb.y2 ?? hb.y)) / 2;
     const last = runs[runs.length - 1];
     // Adjacent frames alone do not make one window: Final Cutter's meteor ends
     // on frame 49 and its ground shockwave opens on 50, and they point in
     // different directions. Same *place*, touching frames — that is an early
     // and a late hit on one shape, and only that gets merged.
-    const samePlace = last && last.xs[0] === hb.x && last.ys[0] === hb.y;
+    const samePlace = last && last.xs[0] === x && last.ys[0] === y;
     if (last && samePlace && a <= last.b + 1) {
       last.b = Math.max(last.b, b);
-      last.xs.push(hb.x);
-      last.ys.push(hb.y);
+      last.xs.push(x);
+      last.ys.push(y);
     } else {
-      runs.push({ a, b, xs: [hb.x], ys: [hb.y] });
+      runs.push({ a, b, xs: [x], ys: [y] });
     }
   }
   return runs.map((r) => {

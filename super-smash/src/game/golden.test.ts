@@ -138,8 +138,10 @@ const MATCHES: readonly Match[] = [
  * `tumbleFall` and lies down (`downed`, `getUp`) on landing unless it techs, so the CPU
  * matches reach all three. The script techs Fox on two of its landings (`tech`) and the
  * tech lab reaches `techRoll`, `techWall` and `techCeiling`, which no scripted fight gets
- * to without off-stage play. Task 15 added `ledgeTrumped`: all four CPU matches reach it
- * (measured 2026-10-28), two fighters going for one ledge being what recovering CPUs do.
+ * to without off-stage play. Task 15 added `ledgeTrumped`: all four CPU matches reached it
+ * then (measured 2026-10-28), two fighters going for one ledge being what recovering CPUs
+ * do. After Task 18 none does (the CPUs space by the imported scripts' reach), so the
+ * script trumps Mario on 1788 (`goldenScript.ts`).
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,

@@ -32,6 +32,7 @@ import {
   type FighterState,
   type GameState,
   type InputFrame,
+  type MoveDef,
   type MoveSlot,
   type StageDef,
 } from "@/engine/types";
@@ -343,10 +344,7 @@ export function meleeReachFromDef(def: FighterDef): number {
     const move = def.moves[slot];
     if (!move) continue;
 
-    let furthest = 0;
-    for (const hitbox of move.hitboxes) {
-      furthest = Math.max(furthest, hitbox.x + hitbox.radius);
-    }
+    const furthest = moveReach(move);
     if (furthest <= 0) continue;
 
     reach = found ? Math.min(reach, furthest) : furthest;
@@ -355,6 +353,22 @@ export function meleeReachFromDef(def: FighterDef): number {
 
   return found ? reach : MELEE_RANGE;
 }
+
+/**
+ * How far in front of the fighter one move's hitboxes reach, in world units:
+ * the furthest box's centre plus its radius, 0 for a move that reaches nothing
+ * in front. An extended box reaches from whichever of its two ends is further
+ * (`Hitbox.x2`): a grab's capsule runs out from the body, and its far end is
+ * the reach (Plan 3, Task 18).
+ */
+export function moveReach(move: MoveDef): number {
+  let furthest = 0;
+  for (const hitbox of move.hitboxes) {
+    furthest = Math.max(furthest, Math.max(hitbox.x, hitbox.x2 ?? hitbox.x) + hitbox.radius);
+  }
+  return furthest;
+}
+
 export const VERTICAL_REACH = fx(13);
 
 export function isStunned(f: FighterState): boolean {

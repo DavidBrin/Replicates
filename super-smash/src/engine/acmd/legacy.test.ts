@@ -33,8 +33,16 @@ function canonical(hb: Hitbox) {
   };
 }
 
+/**
+ * Every move the compiled legacy script runs: every defined move but those an
+ * imported script overrides (Plan 3, Task 18). An overridden slot's table is
+ * the script's own boxes, proven against the script in `acmd/active.test.ts`,
+ * and nothing compiles it.
+ */
 const MOVES: [string, MoveSlot, MoveDef][] = FIGHTERS.flatMap((f) =>
-  (Object.keys(f.moves) as MoveSlot[]).map((slot): [string, MoveSlot, MoveDef] => [f.id, slot, f.moves[slot]!]),
+  (Object.keys(f.moves) as MoveSlot[])
+    .filter((slot) => f.scripts?.[slot] === undefined)
+    .map((slot): [string, MoveSlot, MoveDef] => [f.id, slot, f.moves[slot]!]),
 );
 
 /** The legacy momentum rule (`applyMoveMomentum` before Task 15): first entry whose window holds. */
@@ -49,8 +57,10 @@ function legacyMomentum(move: MoveDef, frame: number) {
 describe("legacy moves compiled to game_ scripts", () => {
   it("covers the whole roster", () => {
     expect(MOVES.length).toBeGreaterThan(150);
-    // No sampling: every defined move of every fighter is a case below, filed under its own slot.
-    expect(MOVES.length).toBe(FIGHTERS.reduce((n, f) => n + Object.values(f.moves).length, 0));
+    // No sampling: every defined move of every fighter is a case below, filed under its own
+    // slot, or runs a script of its own.
+    const overridden = FIGHTERS.reduce((n, f) => n + Object.keys(f.scripts ?? {}).length, 0);
+    expect(MOVES.length + overridden).toBe(FIGHTERS.reduce((n, f) => n + Object.values(f.moves).length, 0));
     for (const [id, slot, move] of MOVES) {
       expect(move.slot, `${id} ${slot}`).toBe(slot);
       // ...and the frames the cases below walk (1 to totalFrames + 10) hold every frame the move mentions.

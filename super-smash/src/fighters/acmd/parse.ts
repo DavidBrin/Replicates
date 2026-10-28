@@ -121,6 +121,34 @@ export function parseLine(line: string): RawCommand {
   }
 }
 
+/** Where the decompiler starts printing the alternative branch's copy of a script. */
+const DUPLICATE_MARKER = "methodlib::L2CValue::operatorbool()const(is_excute)";
+
+/**
+ * What the decompiler's duplicate holds beyond the first copy: the commands
+ * both copies run after their branch, printed once, at the duplicate's end
+ * (Plan 3, Task 18). Mario's up special is the case: both copies end
+ * `wait(Frames=2)`, and the `clear_all` after it is printed only in the
+ * duplicate, so stopping at the marker left the move's last boxes live forever.
+ *
+ * The duplicate mirrors the first copy command for command — by op; arguments
+ * may differ, as Mario's runs `frame(1)` where the first copy runs `frame(3)` —
+ * after whatever the first copy ran before its branch, which may only be engine
+ * queries (`unknown`, e.g. `WorkModule::is_flag`). The longest such mirror is
+ * taken and the rest of the duplicate is the tail. A duplicate that mirrors no
+ * such run is refused: a tail guessed from copies that do not line up would
+ * invent commands or lose them.
+ */
+function sharedTail(first: readonly RawCommand[], duplicate: readonly RawCommand[]): RawCommand[] {
+  for (let m = Math.min(first.length, duplicate.length); m >= 0; m--) {
+    const before = first.slice(0, first.length - m);
+    // A shorter mirror only lengthens what comes before it.
+    if (!before.every((c) => c.op === "unknown")) break;
+    if (first.slice(first.length - m).every((c, k) => c.op === duplicate[k].op)) return duplicate.slice(m);
+  }
+  throw new Error("the decompiler's duplicate does not mirror the first copy, so its shared tail cannot be told apart");
+}
+
 interface Block {
   /** What closes with the next `}`. */
   readonly kind: "excute" | "loop" | "taken" | "skipped";
@@ -140,7 +168,9 @@ interface Block {
  *   model. Its body is taken unless the condition names `FIGHTER_KIND_KIRBY`
  *   (a copy-ability branch), and a following `else{ … }` takes the other side.
  * - A top-level `methodlib::L2CValue::operatorbool()const(is_excute)` marks the
- *   decompiler's duplicate of the alternative branch; parsing stops there.
+ *   decompiler's duplicate of the alternative branch. The first copy is the
+ *   move; of the duplicate, only the tail both copies share is kept
+ *   (`sharedTail`).
  */
 export function parseScript(text: string): RawCommand[] {
   const root: RawCommand[] = [];
@@ -150,8 +180,9 @@ export function parseScript(text: string): RawCommand[] {
     for (let i = stack.length - 1; i >= 0; i--) if (stack[i].kind === "skipped") return null;
     return stack.length === 0 ? root : stack[stack.length - 1].body;
   };
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     if (line === "") continue;
     if (line === "}") {
       const b = stack.pop();
@@ -183,7 +214,10 @@ export function parseScript(text: string): RawCommand[] {
       stack.push({ kind: kirbyOnly ? "skipped" : "taken", count: 0, body: [], elseTaken: kirbyOnly });
       continue;
     }
-    if (line.startsWith("methodlib::L2CValue::operatorbool()const(is_excute)") && stack.length === 0) break;
+    if (line.startsWith(DUPLICATE_MARKER) && stack.length === 0) {
+      root.push(...sharedTail(root, parseScript(lines.slice(i + 1).join("\n"))));
+      break;
+    }
     const out = target();
     if (out === null) continue;
     out.push(parseLine(line));

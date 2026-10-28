@@ -289,6 +289,7 @@ export const MARIO: ReferenceFighter = {
       ATTACK({ id: 0, bone: "top", damage: 3, angle: 60, kbg: 145, bkb: 50, size: 9, x: 0, y: 11.5, z: 8, collisionAttr: "collision_attr_mario_local_coin", region: "ATTACK_REGION_PUNCH" }),
       ATTACK({ id: 1, bone: "top", damage: 3, angle: 60, kbg: 145, bkb: 50, size: 9, x: 0, y: 11.5, z: 2.5, collisionAttr: "collision_attr_mario_local_coin", region: "ATTACK_REGION_PUNCH" }),
       wait(2),
+      clearAll(),
     ]),
     game_catch: script("game_catch", "catch", [
       frame(5),

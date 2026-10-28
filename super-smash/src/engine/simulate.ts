@@ -569,7 +569,8 @@ export function step(
   const frozen: boolean[] = new Array(s.fighters.length).fill(false);
   // The animation frame each move was on before this tick. A charging smash
   // *holds* its frame, so without this a move whose projectile spawns on the
-  // charge frame would launch one every frame of the charge.
+  // charge frame would launch one every frame of the charge. A move *entered*
+  // this tick is told apart from a held frame by `frozen` (see `spawnDueProjectiles`).
   const beforeActionFrame = s.fighters.map((f) => f.actionFrame);
 
   for (let i = 0; i < s.fighters.length; i++) {
@@ -734,7 +735,7 @@ export function step(
   // Projectiles fly, then this frame's launches join them, then everything —
   // fists and arrows alike — goes through one clank pass and one hit pass.
   const projectilePrev = advanceProjectiles(s, defs, stage);
-  spawnDueProjectiles(s, defs, beforeActionFrame, projectilePrev);
+  spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev);
 
   const destroyed = new Set<number>();
   const candidates = gatherHitboxes(s, defs, prevPos, frozen, ctx.bones ?? LEGACY_BONE_TABLE);
@@ -947,11 +948,24 @@ function advanceProjectiles(
   return prev;
 }
 
+/**
+ * Whether `f`'s status was entered this tick, so its `actionFrame` 0 is a first
+ * frame rather than a held one. `advanceFighter` counts `actionFrame` up before a
+ * status runs, a held charge pins it at 1 or later (`chargeHoldFrame`), and only
+ * `changeStatus` writes 0: so a fighter that was not frozen this tick and is on
+ * frame 0 entered its status this tick, whatever frame it left — including 0,
+ * for a status entered the tick before (Plan 3, Task 18).
+ */
+function enteredThisTick(f: FighterState, frozen: boolean): boolean {
+  return !frozen && f.actionFrame === 0;
+}
+
 /** Launch anything whose move reached its spawn frame this tick. */
 function spawnDueProjectiles(
   s: GameState,
   defs: readonly FighterDef[],
   beforeActionFrame: readonly number[],
+  frozen: readonly boolean[],
   prev: PrevPositions,
 ): void {
   for (let i = 0; i < s.fighters.length; i++) {
@@ -960,8 +974,10 @@ function spawnDueProjectiles(
     if (!hasLiveMove(f.action)) continue;
     // A held charge freezes the animation frame, and so does hitlag, and the
     // script lists the same `fired` spawns every time a held frame is re-run;
-    // nothing may spawn off a frame the move did not actually advance onto.
-    if (f.actionFrame === beforeActionFrame[i]) continue;
+    // nothing may spawn off a frame the move did not actually advance onto. A
+    // move entered this tick is on a new frame even when the status it left was
+    // also on frame 0, so entry is asked separately from the frame comparison.
+    if (f.actionFrame === beforeActionFrame[i] && !enteredThisTick(f, frozen[i])) continue;
     const run = moveScriptFrame(defs[i], f);
     if (run === null) continue;
     for (const cmd of run.state.fired) {

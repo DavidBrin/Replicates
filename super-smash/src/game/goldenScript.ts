@@ -105,11 +105,25 @@
  * differs from frame 122 on (the catch now moves Fox), and its digest, a running
  * hash, stays different after it.
  *
+ * Plan 3 Task 18 (the root-bone moves run their imported scripts) gave the script a
+ * ledge trump. Before it, all four CPU matches trumped a ledge on their own; with the
+ * CPUs spacing and swinging by the scripts' boxes, none does, and `ledgeTrumped` left
+ * the states the trace reaches. So the end changes, and nothing before 1752 does:
+ * Mario, standing on the stage after his shield (1746), runs off the right edge onto
+ * the ledge (the hang begins on 1781), and Fox, who used to dash to that edge and
+ * full-hop off it, runs after him and takes the ledge on 1788, which trumps Mario
+ * (`ledgeTrumped`, 1788-1817). Fox, still holding right, lets go on 1792 and drifts
+ * away to the same KO, on the same frame (1862); Mario air-jumps back on 1819 (a
+ * press on 1818, the frame the trump ends, goes to the trump) and lands on 1857. The
+ * respawn (1936), the step off the platform (1960) and time up (2014) keep their
+ * frames. Mario's jab and grab are the imported scripts now (four boxes, two-box
+ * capsule grabs), and every hit and event above keeps its frame.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
  * (Fox breaking free on 140, the pummel on 217, the throw on 247, the shield break
- * on 649, the techs on 789 and 1029, the hangs on 864, 1193, 1299 and 1400, the hits
- * on 747, 1006, 1578 and 1635, Fox down on 1673, time up on 2014). All were checked
- * against a run after Plan 3 Task 14's fix round 1.
+ * on 649, the techs on 789 and 1029, the hangs on 864, 1193, 1299, 1400 and 1781,
+ * the trump on 1788, the hits on 747, 1006, 1578 and 1635, Fox down on 1673, time
+ * up on 2014). All were checked against a run after Plan 3 Task 18.
  */
 
 import { Btn } from "@/engine/types";
@@ -264,12 +278,16 @@ const STEPS: readonly ScriptStep[] = [
   [1, S | L, 0], //              1696: ...roll
   [32, 0, 0],
   [6, S, 0], //                  1729: shield, held past its 3-frame minimum...
-  [24, 0, 0], //                 1735: ...and let go: shieldRelease
-  // Fox jumps off the right side and drifts away from the ledge to his death.
-  [10, 0, R], //                 1759: dash to the edge
-  [1, 0, R | J], //              1769: full hop out
-  [90, 0, R], //                 1770: a KO through the bottom: dead
-  [100, 0, 0], //                       respawnPlatform
+  [17, 0, 0], //                 1735: ...and let go: shieldRelease, then stand from 1746
+  // A ledge trump (Task 18): Mario runs off the right edge onto the ledge, and
+  // Fox, running after him, takes it from him, then lets go and drifts away to
+  // his death, as he used to after a full hop.
+  [8, R, 0], //                  1752: Mario runs right...
+  [22, R, R], //                 1760: ...and Fox after him; Mario hangs on 1781
+  [37, 0, R], //                 1782: Fox takes the ledge on 1788: Mario is ledgeTrumped; Fox lets go on 1792
+  [1, J | L, R], //              1819: Mario, falling since 1818, jumps back...
+  [40, L, R], //                 1820: ...and lands on the stage (1857); Fox, a KO through the bottom on 1862: dead
+  [100, 0, 0], //                1860: respawnPlatform from 1936
   [1, 0, D], //                  1960: step off the platform
   [60, 0, 0],
 ];

@@ -73,19 +73,40 @@ describe("parseScript control flow", () => {
     ]);
   });
 
-  it("takes the first copy of a costume-flagged move and stops at the decompiler's duplicate — Mario's up special", () => {
+  // The duplicate mirrors the first copy command for command, then prints the tail both copies
+  // share: Mario's up special ends `wait(Frames=2)` and a `clear_all` only the duplicate carries.
+  // Stopping at the marker lost that `clear_all`, and the move's boxes never closed (Plan 3,
+  // Task 18, carried from Plan 2 Task 16).
+  it("takes the first copy of a costume-flagged move, and from the decompiler's duplicate only the tail both share — Mario's up special", () => {
     const text = [
       "WorkModule::is_flag(FIGHTER_MARIO_STATUS_SPECIAL_HI_FLAG_CAPPY)",
       "if(0xe1ba0(false, true)){",
       "\tframe(Frame=3)",
       "}",
-      "wait(Frames=3)",
+      "wait(Frames=2)",
       "methodlib::L2CValue::operatorbool()const(is_excute)",
       "frame(Frame=1)",
+      "wait(Frames=2)",
+      "if(is_excute){",
+      "\tAttackModule::clear_all()",
+      "}",
     ].join("\n");
-    const out = parseScript(text);
-    expect(out.filter((c) => c.op === "frame")).toEqual([{ op: "frame", frame: 3 }]);
-    expect(out.at(-1)).toEqual({ op: "wait", frames: 3 });
+    expect(parseScript(text)).toEqual([
+      { op: "unknown", raw: "WorkModule::is_flag(FIGHTER_MARIO_STATUS_SPECIAL_HI_FLAG_CAPPY)" },
+      { op: "frame", frame: 3 },
+      { op: "wait", frames: 2 },
+      { op: "clearAll" },
+    ]);
+  });
+
+  it("refuses a duplicate that does not mirror the first copy, rather than guess which of it is the shared tail", () => {
+    const text = [
+      "frame(Frame=3)",
+      "wait(Frames=2)",
+      "methodlib::L2CValue::operatorbool()const(is_excute)",
+      "AttackModule::clear_all()",
+    ].join("\n");
+    expect(() => parseScript(text)).toThrow(/duplicate does not mirror/);
   });
 
   it("skips a Kirby-copy branch and takes its else — Marth's Shield Breaker", () => {

@@ -23,6 +23,7 @@ import {
   isOffstage,
   isStunned,
   meleeReachFromDef,
+  moveReach,
   observe,
   platformMove,
   pulse,
@@ -626,5 +627,14 @@ describe("the approach/attack threshold", () => {
   it("falls back to the constant for a fighter with no pokes at all", () => {
     const def = { moves: {} } as unknown as Parameters<typeof meleeReachFromDef>[0];
     expect(meleeReachFromDef(def)).toBe(MELEE_RANGE);
+  });
+
+  // Plan 3, Task 18: an activated script's box can be a capsule, and the sim hits
+  // with all of it, so its reach is whichever end is further out.
+  it("reads an extended box's reach off its further end, whichever that is", () => {
+    const out = { hitboxes: [{ x: fx(4), x2: fx(10), radius: fx(2) }] } as unknown as Parameters<typeof moveReach>[0];
+    const back = { hitboxes: [{ x: fx(10), x2: fx(7), radius: fx(2) }] } as unknown as Parameters<typeof moveReach>[0];
+    expect(toFloat(moveReach(out))).toBeCloseTo(12, 6);
+    expect(toFloat(moveReach(back))).toBeCloseTo(12, 6);
   });
 });

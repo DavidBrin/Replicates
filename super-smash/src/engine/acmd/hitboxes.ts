@@ -26,8 +26,9 @@ import { ONE, fx } from "../fixed";
 import type { HitEffect, Hitbox } from "../types";
 import { bonePoint, newBonePose } from "./bones";
 import type { BonePose, BoneTable } from "./bones";
+import { runScript, scheduleOf } from "./interpreter";
 import type { ScriptFrameState } from "./interpreter";
-import type { AttackParams, CatchParams, MotionKind } from "./types";
+import type { AcmdScript, AttackParams, CatchParams, MotionKind } from "./types";
 
 /** `collision_attr_*` ↔ the replica's `HitEffect`. */
 export const EFFECT_OF_ATTR: Readonly<Record<string, HitEffect>> = {
@@ -212,4 +213,56 @@ function farEnd(
 
 function withFarEnd(hb: Hitbox, far: { x: number; y: number } | null): Hitbox {
   return far === null ? hb : { ...hb, x2: far.x, y2: far.y };
+}
+
+/**
+ * A script's boxes as a `MoveDef` hitbox table (Plan 3, Task 18): one entry per
+ * stretch of game frames over which a box is live, unchanged and not issued
+ * again, each exactly as `scriptHitboxes` builds it for the sim on those frames
+ * — so `activeHitboxes(table, g)` lists, frame for frame and in the same order,
+ * the boxes the sim hits with on game frame `g`.
+ *
+ * It is what keeps the readers of `MoveDef.hitboxes` — the renderer's swing and
+ * timing, the CPU's reach, the charge hold — on the frames and boxes the sim
+ * runs once a script overrides a slot (`withReferenceScripts`). A box issued
+ * again (a multi-hit after `clear_all`) starts a new entry, as a new swing. A
+ * slot reused in two windows (Mario's down-air drill) keeps its id in both: ids
+ * are what the sim's lowest-id priority reads, so they are never renumbered.
+ * Entries are by attacks, then catches, then id, then first frame.
+ *
+ * The boxes are placed through `bones` on the frame each window opens; a box
+ * the table moves while it stays live is split into one entry per position. A
+ * script that leaves a box live after its last command never clears it, and a
+ * table cannot say "until the move ends": that is refused.
+ */
+export function scriptHitboxTable(script: AcmdScript, fighterId: string, bones: BoneTable): Hitbox[] {
+  const { fire } = scheduleOf(script);
+  let last = 1;
+  for (const e of fire) if (e > last) last = e;
+  const out: Hitbox[] = [];
+  const open = new Map<string, { box: Hitbox; key: string }>();
+  for (let g = 1; g <= last; g++) {
+    const st = runScript(script, g);
+    const issued = new Set(
+      st.fired.flatMap((c) => (c.op === "attack" ? [`a${c.params.id}`] : c.op === "catch" ? [`c${c.params.id}`] : [])),
+    );
+    const live = new Map<string, Hitbox>();
+    for (const hb of scriptHitboxes(st, fighterId, script.motion, g, bones)) live.set(`${hb.grabbing ? "c" : "a"}${hb.id}`, hb);
+    for (const [slot, was] of [...open]) {
+      const now = live.get(slot);
+      if (now !== undefined && !issued.has(slot) && boxKey(now) === was.key) continue;
+      out.push({ ...was.box, endFrame: g - 1 });
+      open.delete(slot);
+    }
+    for (const [slot, hb] of live) if (!open.has(slot)) open.set(slot, { box: hb, key: boxKey(hb) });
+  }
+  if (open.size > 0) {
+    throw new Error(`${fighterId} ${script.name}: a box is still live after the script's last command, so its script never clears it`);
+  }
+  return out.sort((a, b) => Number(a.grabbing === true) - Number(b.grabbing === true) || a.id - b.id || a.startFrame - b.startFrame);
+}
+
+/** Everything about a box but the frames it is live on, as a comparable string. */
+function boxKey(hb: Hitbox): string {
+  return JSON.stringify({ ...hb, startFrame: 0, endFrame: 0 });
 }

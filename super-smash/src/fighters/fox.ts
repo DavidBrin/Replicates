@@ -23,6 +23,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { FOX } from "./acmd/generated/fox";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. About Mario's height and a
@@ -30,7 +32,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 11.0;
 const HALF_WIDTH = 2.0;
 
-export const fox: FighterDef = {
+/** The hand-authored moveset; `fox` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "fox",
   name: "Fox",
   series: "Star Fox",
@@ -948,3 +951,6 @@ export const fox: FighterDef = {
 
   blurb: "The highest gravity and the fastest fall in the game. Everything happens to him quickly, including dying.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const fox: FighterDef = withReferenceScripts(legacy, FOX, ACTIVE_SCRIPT_SLOTS.fox);

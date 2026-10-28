@@ -902,6 +902,66 @@ describe("moves run from game_ scripts", () => {
     expect(frozenAfterSpawn).toBeGreaterThan(1);
     expect(s.nextProjectileId - 1).toBe(1);
   });
+
+  // Plan 3, Task 18 (carried from Plan 2's codex review): a move entered on the tick after
+  // another status was entered goes from `actionFrame` 0 to 0, and the spawn gate, which
+  // compared the two, read that entry as a held frame, so a frame-1 spawn never flew. No
+  // roster move spawns on frame 1 (the earliest is 3) and no activated script spawns at all
+  // (`acmd/active.ts`), so these are fixtures.
+  describe("a projectile on the move's first frame", () => {
+    const pellet = DEF.moves.neutralB!.projectiles![0];
+
+    it("spawns on the entry frame, though the status it left was on frame 0 too", () => {
+      const quick: FighterDef = {
+        ...DEF,
+        moves: { ...DEF.moves, neutralB: { ...DEF.moves.neutralB!, projectiles: [{ ...pellet, spawnFrame: 1 }] } },
+      };
+      const ctx: SimContext = { fighter: () => quick, stage: () => STAGE };
+      let s = standing(); // standing on its frame 0: entered last tick
+      let prev: readonly InputFrame[] = [0, 0];
+      const spawnedOn: number[] = [];
+      for (let i = 0; i < 12; i++) {
+        const inputs = i === 0 ? [Btn.Special, 0] : [0, 0];
+        const before = s.nextProjectileId;
+        s = step(s, inputs, { prevInputs: prev, ctx }).state;
+        prev = inputs;
+        if (s.nextProjectileId > before) spawnedOn.push(i);
+      }
+      expect(spawnedOn).toEqual([0]);
+    });
+
+    it("spawns once when the entry frame's own hit then freezes the attacker on it", () => {
+      const both: FighterDef = {
+        ...DEF,
+        scripts: {
+          neutralB: {
+            name: "game_specialn",
+            motion: "special_n",
+            commands: [
+              { op: "frame", frame: 1 },
+              { op: "attack", params: attackFromHitbox(DEF.moves.jab1!.hitboxes[0]) },
+              { op: "spawnProjectile", id: "pellet" },
+              { op: "frame", frame: 4 },
+              { op: "clearAll" },
+            ],
+          },
+        },
+      };
+      const ctx: SimContext = { fighter: () => both, stage: () => STAGE };
+      let s = standing();
+      let prev: readonly InputFrame[] = [0, 0];
+      let frozenOnEntry = 0;
+      for (let i = 0; i < 20; i++) {
+        const inputs = i === 0 ? [Btn.Special, 0] : [0, 0];
+        s = step(s, inputs, { prevInputs: prev, ctx }).state;
+        prev = inputs;
+        const f = s.fighters[0];
+        if (f.hitlag > 0 && f.move === "neutralB" && f.actionFrame === 0) frozenOnEntry += 1;
+      }
+      expect(frozenOnEntry).toBeGreaterThan(1);
+      expect(s.nextProjectileId - 1).toBe(1);
+    });
+  });
 });
 
 describe("a status change during hitlag (Review Focus #2)", () => {
@@ -1110,9 +1170,10 @@ describe("registry", () => {
     expect(() => registryContext.fighter("tester")).toThrow();
   });
 
-  // Plan 3, Task 17 fix round 1: a `MoveDef` hitbox and a projectile's are spheres (render, AI and
-  // the legacy compile all read them so), so a far end on one is refused, by fighter and move,
-  // rather than dropped.
+  // Plan 3, Task 17 fix round 1: a `MoveDef` hitbox the legacy compile reads and a projectile's
+  // are spheres, so a far end on one is refused, by fighter and move, rather than dropped. Plan 3,
+  // Task 18: a slot a script overrides is not compiled, and its table may be the script's own boxes
+  // (`withReferenceScripts`), whose far ends the renderer and the CPU read.
   describe("refuses, at registration, a far end (x2/y2) where a sphere is meant", () => {
     const extended = (over: Partial<Hitbox>): Hitbox => hitbox({ ...over });
 
@@ -1123,14 +1184,27 @@ describe("registry", () => {
       expect(() => registryContext.fighter("tester")).toThrow();
     });
 
-    it("on a MoveDef hitbox whose slot a script overrides too: render and AI still read the box", () => {
+    it("but not on a MoveDef hitbox whose slot a script overrides: nothing compiles it", () => {
       clearRegistry();
       const capsule: FighterDef = {
         ...DEF,
         moves: { ...DEF.moves, jab1: move("jab1", { hitboxes: [extended({ y2: fx(9) })] }) },
         scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [{ op: "frame", frame: 4 }] } },
       };
-      expect(() => registerFighters([capsule])).toThrow(/tester jab1.*far end/);
+      expect(() => registerFighters([capsule])).not.toThrow();
+      clearRegistry();
+    });
+
+    it("on a projectile's hitbox, though a script overrides its slot", () => {
+      clearRegistry();
+      const pellet = DEF.moves.neutralB!.projectiles![0];
+      const capsule: FighterDef = {
+        ...DEF,
+        moves: { ...DEF.moves, neutralB: move("neutralB", { totalFrames: 30, hitboxes: [], projectiles: [{ ...pellet, hitbox: extended({ x2: fx(3) }) }] }) },
+        scripts: { neutralB: { name: "game_specialn", motion: "special_n", commands: [{ op: "frame", frame: 4 }] } },
+      };
+      expect(() => registerFighters([capsule])).toThrow(/tester neutralB.*"pellet".*far end \(x2\/y2\)/);
+      clearRegistry();
     });
 
     it("on a projectile's hitbox, by fighter, move and projectile", () => {

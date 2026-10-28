@@ -16,6 +16,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { LINK } from "./acmd/generated/link";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. Slightly taller than Mario
@@ -23,7 +25,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 12.4;
 const HALF_WIDTH = 2.1;
 
-export const link: FighterDef = {
+/** The hand-authored moveset; `link` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "link",
   name: "Link",
   series: "The Legend of Zelda",
@@ -889,3 +892,6 @@ export const link: FighterDef = {
 
   blurb: "An arrow, a boomerang and a bomb, all in the air at once. Owns the ground he can see.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const link: FighterDef = withReferenceScripts(legacy, LINK, ACTIVE_SCRIPT_SLOTS.link);

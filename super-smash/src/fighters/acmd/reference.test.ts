@@ -72,3 +72,18 @@ describe("the ACMD importer reads scripts as the calculator does", () => {
     expect(disagree.sort()).toEqual([...KNOWN_DISAGREEMENTS].sort());
   });
 });
+
+// Plan 3, Task 18 (carried from Plan 2 Task 16): the parser used to stop at the decompiler's
+// duplicate and drop the `clear_all` both copies share, so the imported Super Jump Punch kept
+// its launcher live to the horizon. Ultimate Frame Data: active 3-6/7-16/17-18
+// (https://ultimateframedata.com/mario, Super Jump Punch).
+describe("Mario's imported up special", () => {
+  const upB = REFERENCE_SCRIPTS.mario.scripts.game_specialhi;
+
+  it("is live from frame 3 to frame 18, and clears its boxes after", () => {
+    const live = Array.from({ length: 40 }, (_, i) => i + 1).filter((g) => runScript(upB, g).attacks.length > 0);
+    expect(live[0]).toBe(3);
+    expect(live.at(-1)).toBe(18);
+    expect(runScript(upB, HORIZON).attacks).toEqual([]);
+  });
+});

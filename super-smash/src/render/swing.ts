@@ -133,23 +133,32 @@ export function swingArcFor(
   const pivotX = toFloat(f.x);
   const pivotY = toFloat(f.y) + height * 0.55;
 
+  // An extended box is a capsule, and either end of it can be the furthest
+  // point (a grab's or a sword's far end usually is): both are measured.
   let far: Hitbox | null = null;
+  let farX = 0;
+  let farY = 0;
   let farDist = -1;
   let damage = 0;
   for (const hb of window.boxes) {
-    const dx = toFloat(hb.x);
-    const dy = toFloat(hb.y) - height * 0.55;
-    const d = Math.hypot(dx, dy) + toFloat(hb.radius);
     damage = Math.max(damage, toFloat(hb.damage));
-    if (d > farDist) {
-      farDist = d;
-      far = hb;
+    for (const [x, y] of [
+      [hb.x, hb.y],
+      [hb.x2 ?? hb.x, hb.y2 ?? hb.y],
+    ]) {
+      const d = Math.hypot(toFloat(x), toFloat(y) - height * 0.55) + toFloat(hb.radius);
+      if (d > farDist) {
+        farDist = d;
+        far = hb;
+        farX = x;
+        farY = y;
+      }
     }
   }
   if (!far || farDist <= 0) return null;
 
-  const dx = toFloat(far.x) * (f.facing >= 0 ? 1 : -1);
-  const dy = toFloat(far.y) - height * 0.55;
+  const dx = toFloat(farX) * (f.facing >= 0 ? 1 : -1);
+  const dy = toFloat(farY) - height * 0.55;
   const direction = Math.atan2(dy, dx);
 
   const span = window.end - window.start + 1;

@@ -49,6 +49,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { MARTH } from "./acmd/generated/marth";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. Marth is tall and narrow —
@@ -68,7 +70,8 @@ const HALF_WIDTH = 2.0;
 const TIP_REACH = 11.0;
 const BODY_REACH = 6.0;
 
-export const marth: FighterDef = {
+/** The hand-authored moveset; `marth` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "marth",
   name: "Marth",
   series: "Fire Emblem",
@@ -1058,3 +1061,6 @@ export const marth: FighterDef = {
 
   blurb: "The blade's point does markedly more than the rest of it. Every decision he makes is about distance.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const marth: FighterDef = withReferenceScripts(legacy, MARTH, ACTIVE_SCRIPT_SLOTS.marth);

@@ -42,6 +42,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { MARIO } from "./acmd/generated/mario";
 import { FIGHTER_PARAMS } from "./params";
 
 /** Mario's hurtbox is about eleven units tall — a shade over a seventh of
@@ -53,7 +55,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 11.0;
 const HALF_WIDTH = 2.0;
 
-export const mario: FighterDef = {
+/** The hand-authored moveset; `mario` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "mario",
   name: "Mario",
   series: "Super Mario",
@@ -886,3 +889,6 @@ export const mario: FighterDef = {
 
   blurb: "The baseline. Nothing he does is the best in the game, which is why everything he does works.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const mario: FighterDef = withReferenceScripts(legacy, MARIO, ACTIVE_SCRIPT_SLOTS.mario);

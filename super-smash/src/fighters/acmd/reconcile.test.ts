@@ -4,20 +4,23 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { runScript } from "@/engine/acmd/interpreter";
+import { gameScriptFor } from "@/engine/acmd/legacy";
+import type { AcmdScript } from "@/engine/acmd/types";
 import { toFloat } from "@/engine/fixed";
-import { activeHitboxes } from "@/engine/hitbox";
-import type { MoveDef, MoveSlot } from "@/engine/types";
+import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import { FIGHTERS } from "../index";
 import { REFERENCE_SCRIPTS } from "./index";
 
 /**
- * DECISIONS D17, kept honest: the roster's hand-authored moves against the
+ * DECISIONS D17, kept honest: the moves the roster actually runs against the
  * scripts they were transcribed from.
  *
  * For every move with both, four facts are compared — first active frame,
  * last active frame, the lowest-id hitbox's damage/angle/knockback on that
- * first frame, and first actionable frame (`CancelFrame`, which is the legacy
- * `totalFrames + 1`). Every disagreement is listed in `reconcile.allow.json`
+ * first frame, and first actionable frame (`CancelFrame`, which is the
+ * move's `totalFrames + 1`). "Runs" is `gameScriptFor`: the imported script
+ * for a slot Plan 3 activated (`acmd/active.ts`), else the compiled legacy
+ * move — which `legacy.test.ts` proves frame-identical to its table. Every disagreement is listed in `reconcile.allow.json`
  * with its value on each side. The list is a ratchet: it may shrink (Plan 3
  * adopts the scripts and deletes entries) but a new entry fails this test until
  * a human looks at it. Regenerate after a deliberate change with
@@ -41,31 +44,11 @@ interface Facts {
 
 const fmt = (n: number): string => String(Math.round(toFloat(n) * 1000) / 1000);
 
-function legacyFacts(move: MoveDef): Facts | null {
+/** The facts of a script, run until `horizon`. */
+function scriptFacts(s: AcmdScript, horizon: number): Omit<Facts, "faf"> | null {
   let first = -1;
   let last = -1;
-  for (let g = 1; g <= move.totalFrames + 1; g++) {
-    if (activeHitboxes(move, g).length === 0) continue;
-    if (first < 0) first = g;
-    last = g;
-  }
-  if (first < 0) return null;
-  const lead = activeHitboxes(move, first).sort((a, b) => a.id - b.id)[0];
-  const kb = lead.setKnockback ? `fkb${fmt(lead.baseKnockback)}` : `bkb${fmt(lead.baseKnockback)}`;
-  return {
-    first,
-    last,
-    lead: lead.grabbing ? "grab" : `${fmt(lead.damage)}%/${fmt(lead.angle)}°/${kb}/kbg${fmt(lead.knockbackGrowth)}`,
-    faf: move.totalFrames + 1,
-  };
-}
-
-function referenceFacts(fighter: string, key: string): Facts | null {
-  const ref = REFERENCE_SCRIPTS[fighter];
-  const s = ref.scripts[key];
-  let first = -1;
-  let last = -1;
-  for (let g = 1; g <= HORIZON; g++) {
+  for (let g = 1; g <= horizon; g++) {
     const st = runScript(s, g);
     if (st.attacks.length + st.catches.length === 0) continue;
     if (first < 0) first = g;
@@ -78,8 +61,20 @@ function referenceFacts(fighter: string, key: string): Facts | null {
     first,
     last,
     lead: a === undefined ? "grab" : `${fmt(a.damage)}%/${fmt(a.angle)}°/${kb}/kbg${fmt(a.kbg)}`,
-    faf: ref.faf[key] ?? -1,
   };
+}
+
+/** What the roster runs for `slot`: its script, until the move ends. */
+function runningFacts(def: FighterDef, slot: MoveSlot, move: MoveDef): Facts | null {
+  const script = gameScriptFor(def, slot);
+  const facts = script === null ? null : scriptFacts(script, move.totalFrames + 1);
+  return facts === null ? null : { ...facts, faf: move.totalFrames + 1 };
+}
+
+function referenceFacts(fighter: string, key: string): Facts | null {
+  const ref = REFERENCE_SCRIPTS[fighter];
+  const facts = scriptFacts(ref.scripts[key], HORIZON);
+  return facts === null ? null : { ...facts, faf: ref.faf[key] ?? -1 };
 }
 
 function disagreements(): Record<string, string> {
@@ -90,7 +85,7 @@ function disagreements(): Record<string, string> {
       const key = ref.slots[slot];
       const move = def.moves[slot];
       if (key === undefined || move === undefined) continue;
-      const mine = legacyFacts(move);
+      const mine = runningFacts(def, slot, move);
       const theirs = referenceFacts(def.id, key);
       if (mine === null || theirs === null) {
         if (mine !== theirs) {

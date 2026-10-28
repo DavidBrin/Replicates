@@ -14,6 +14,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { DONKEY_KONG } from "./acmd/generated/donkeyKong";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. DK stands roughly half again
@@ -22,7 +24,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 15.0;
 const HALF_WIDTH = 3.2;
 
-export const donkeyKong: FighterDef = {
+/** The hand-authored moveset; `donkeyKong` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "donkeyKong",
   name: "Donkey Kong",
   series: "Donkey Kong",
@@ -772,3 +775,6 @@ export const donkeyKong: FighterDef = {
 
   blurb: "Weight 127 and arms that arrive before he does. Survives everything, gets hit by everything.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const donkeyKong: FighterDef = withReferenceScripts(legacy, DONKEY_KONG, ACTIVE_SCRIPT_SLOTS.donkeyKong);

@@ -17,6 +17,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { PIKACHU } from "./acmd/generated/pikachu";
 import { FIGHTER_PARAMS } from "./params";
 
 /**
@@ -28,7 +30,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 6.9;
 const HALF_WIDTH = 1.8;
 
-export const pikachu: FighterDef = {
+/** The hand-authored moveset; `pikachu` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "pikachu",
   name: "Pikachu",
   series: "Pokémon",
@@ -940,3 +943,6 @@ export const pikachu: FighterDef = {
 
   blurb: "A hurtbox that half the roster's attacks pass straight over, moving at speed.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const pikachu: FighterDef = withReferenceScripts(legacy, PIKACHU, ACTIVE_SCRIPT_SLOTS.pikachu);

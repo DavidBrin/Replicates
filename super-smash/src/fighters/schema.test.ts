@@ -359,13 +359,21 @@ describe("hitbox values", () => {
     }
   });
 
-  it.each(each)("%s gives each move's hitboxes distinct ids", (_name, fighter) => {
+  // Distinct among the boxes live on any one frame, which is what lowest-id
+  // priority reads. A move run from its imported script (Plan 3, Task 18) reuses
+  // a slot from one window to the next — Mario's down-air drill is slot 0 five
+  // times — and its table keeps the script's ids (`scriptHitboxTable`).
+  it.each(each)("%s gives the hitboxes live on any one frame of a move distinct ids", (_name, fighter) => {
     for (const { slot, move } of moves(fighter)) {
-      const ids = move.hitboxes.map((h) => h.id);
-      expect(
-        new Set(ids).size,
-        `${fighter.name}'s ${slot} reuses a hitbox id: ${ids.join(", ")}`
-      ).toBe(ids.length);
+      for (let frame = 1; frame <= move.totalFrames + 1; frame++) {
+        const ids = move.hitboxes
+          .filter((h) => frame >= h.startFrame && frame <= h.endFrame)
+          .map((h) => `${h.grabbing ? "grab " : ""}${h.id}`);
+        expect(
+          new Set(ids).size,
+          `${fighter.name}'s ${slot} reuses a hitbox id on frame ${frame}: ${ids.join(", ")}`
+        ).toBe(ids.length);
+      }
     }
   });
 

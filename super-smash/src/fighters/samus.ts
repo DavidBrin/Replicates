@@ -15,6 +15,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { SAMUS } from "./acmd/generated/samus";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. The Power Suit is bulky —
@@ -22,7 +24,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 12.2;
 const HALF_WIDTH = 2.3;
 
-export const samus: FighterDef = {
+/** The hand-authored moveset; `samus` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "samus",
   name: "Samus",
   series: "Metroid",
@@ -963,3 +966,6 @@ export const samus: FighterDef = {
 
   blurb: "A bar the opponent cannot see, filling. Everything else she does is buying time for it.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const samus: FighterDef = withReferenceScripts(legacy, SAMUS, ACTIVE_SCRIPT_SLOTS.samus);

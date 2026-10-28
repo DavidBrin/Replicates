@@ -142,6 +142,31 @@ describe("where the arc points", () => {
   });
 });
 
+// Plan 3, Task 18: an activated script's box can be a capsule (`Hitbox.x2`/`y2`), and
+// the sim hits with all of it, so the swoosh reaches, and points at, its further end.
+describe("an extended hitbox", () => {
+  const near = Math.hypot(4, 7 - HEIGHT * 0.55) + 3;
+  const far = Math.hypot(14, 7 - HEIGHT * 0.55) + 3;
+
+  it("reaches as far as its far end", () => {
+    const arc = swingArcFor(def({ hitboxes: [hitbox({ x: fx(4), x2: fx(14), y2: fx(7) })] }), attacker(), HEIGHT)!;
+    expect(arc.outerRadius).toBeCloseTo(far, 3);
+    expect(arc.outerRadius).toBeGreaterThan(near + 1);
+  });
+
+  it("and no further when the far end is the nearer one", () => {
+    const arc = swingArcFor(def({ hitboxes: [hitbox({ x: fx(14), x2: fx(4), y2: fx(7) })] }), attacker(), HEIGHT)!;
+    expect(arc.outerRadius).toBeCloseTo(far, 3);
+  });
+
+  it("points the same way whichever end it is listed from", () => {
+    const out = swingArcFor(def({ hitboxes: [hitbox({ x: fx(4), x2: fx(14), y2: fx(7) })] }), attacker(), HEIGHT)!;
+    const back = swingArcFor(def({ hitboxes: [hitbox({ x: fx(14), x2: fx(4), y2: fx(7) })] }), attacker(), HEIGHT)!;
+    expect(out.toAngle).toBeCloseTo(back.toAngle, 9);
+    expect(out.tipX).toBeCloseTo(back.tipX, 9);
+  });
+});
+
 /**
  * The honesty check, against the real roster rather than a fixture. Every
  * attack every fighter has, on every frame it is drawn, must reach no further
@@ -157,9 +182,15 @@ describe("the arc never promises reach the move does not have", () => {
         if (live.length === 0) continue;
 
         // The furthest any hitbox of this move reaches from the fighter's
-        // origin — the most the arc could honestly claim.
+        // origin — the most the arc could honestly claim. An extended box
+        // (an activated script's capsule, Plan 3 Task 18) reaches from either end.
         const furthest = Math.max(
-          ...live.map((h) => Math.hypot(toFloat(h.x), toFloat(h.y) - HEIGHT * 0.55) + toFloat(h.radius)),
+          ...live.flatMap((h) =>
+            [
+              [h.x, h.y],
+              [h.x2 ?? h.x, h.y2 ?? h.y],
+            ].map(([x, y]) => Math.hypot(toFloat(x), toFloat(y) - HEIGHT * 0.55) + toFloat(h.radius)),
+          ),
         );
 
         for (let frame = 0; frame <= move.totalFrames; frame++) {

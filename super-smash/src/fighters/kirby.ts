@@ -19,6 +19,8 @@
 
 import { fx } from "@/engine/fixed";
 import type { FighterDef } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS, withReferenceScripts } from "./acmd/active";
+import { KIRBY } from "./acmd/generated/kirby";
 import { FIGHTER_PARAMS } from "./params";
 
 /** UNVERIFIED: hurtbox dimensions are unpublished. Kirby is a sphere a little
@@ -27,7 +29,8 @@ import { FIGHTER_PARAMS } from "./params";
 const HEIGHT = 6.6;
 const HALF_WIDTH = 1.9;
 
-export const kirby: FighterDef = {
+/** The hand-authored moveset; `kirby` below runs its root-bone moves from the imported scripts. */
+const legacy: FighterDef = {
   id: "kirby",
   name: "Kirby",
   series: "Kirby",
@@ -961,3 +964,6 @@ export const kirby: FighterDef = {
 
   blurb: "Six jumps and a back air that ends stocks. Getting him offstage is not the same as killing him.",
 };
+
+/** Root-bone moves run their imported `game_` scripts (Plan 3, Task 18; `acmd/active.ts`). */
+export const kirby: FighterDef = withReferenceScripts(legacy, KIRBY, ACTIVE_SCRIPT_SLOTS.kirby);

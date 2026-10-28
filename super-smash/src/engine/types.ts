@@ -204,8 +204,11 @@ export interface Hitbox {
    * The far end of an extended hitbox (smash-script `ATTACK`/`CATCH` `X2, Y2, Z2`),
    * facing-relative like `x`/`y`: the box is the capsule between the two, `radius`
    * wide (Plan 3, Task 17). Absent for a sphere. Only a script's hitboxes
-   * (`scriptHitboxes`) carry it: a legacy `MoveDef` hitbox and a projectile's
-   * `hitbox` are spheres, and `registerFighters` refuses one with a far end.
+   * (`scriptHitboxes`) carry it, and so does a `MoveDef` table that is a
+   * script's own boxes (`withReferenceScripts`, Plan 3, Task 18), which the
+   * renderer and the CPU read with their far ends. A hand-authored `MoveDef`
+   * hitbox the legacy compile reads and a projectile's `hitbox` are spheres,
+   * and `registerFighters` refuses one with a far end.
    */
   readonly x2?: number;
   readonly y2?: number;
@@ -400,7 +403,9 @@ export interface FighterDef {
   readonly moves: Readonly<Partial<Record<MoveSlot, MoveDef>>>;
   /**
    * `game_` scripts that replace a slot's compiled legacy move (see
-   * `acmd/legacy.ts`). Empty for the whole roster in Plan 2.
+   * `acmd/legacy.ts`). Empty for the whole roster in Plan 2; Plan 3 Task 18
+   * fills the slots whose imported script hangs every box off the root bone
+   * (`fighters/acmd/active.ts`).
    */
   readonly scripts?: Readonly<Partial<Record<MoveSlot, AcmdScript>>>;
   /** Palette used by the procedural renderer. See `render/characterArt.ts`. */
