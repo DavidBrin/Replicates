@@ -36,8 +36,14 @@ export const KB_ADDEND = fx(18);
 /** Hitstun = floor(knockback * 0.4) - 1. Ultimate subtracts the extra frame. */
 export const HITSTUN_RATIO: Ratio = [2, 5];
 
-/** A hit causing this much hitstun or more puts the victim into tumble. */
-export const TUMBLE_HITSTUN = 32;
+/**
+ * A hit causing this much hitstun or more puts the victim into tumble. Tumble
+ * is the reaction frames (hitstun + 1) reaching 32, which is knockback 80:
+ * rubendal SSBU-Calculator (https://github.com/rubendal/SSBU-Calculator), whose
+ * `Hitstun` is `floor(kb × 0.4) − 1`, and `ssbu_ref.mjs` `isTumble`
+ * (`floor(kb × 0.4) − 1 + 1 ≥ 32`). In hitstun frames that is 31.
+ */
+export const TUMBLE_HITSTUN = 31;
 
 /**
  * Launch speed starts at this fraction of knockback and decays per frame:

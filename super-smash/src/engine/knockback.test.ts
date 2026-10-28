@@ -10,6 +10,7 @@ import {
   SAKURAI_ANGLE,
   SAKURAI_GROUNDED,
   SOFT_DI_SHIFT,
+  TUMBLE_HITSTUN,
 } from "./constants";
 import {
   applyDI,
@@ -160,10 +161,17 @@ describe("computeHitstun", () => {
     expect(computeHitstun(fx(15))).toBe(5);
   });
 
-  it("crosses into tumble at 32 frames, which is just past 82 knockback", () => {
-    // 82.5 * 0.4 - 1 is exactly 32, so anything above it tumbles.
-    expect(computeHitstun(fx(85))).toBeGreaterThanOrEqual(32);
-    expect(computeHitstun(fx(82))).toBeLessThan(32);
+  // ssbu_ref.mjs `isTumble`: `floor(kb × 0.4) − 1 + 1 ≥ 32`, i.e. kb ≥ 80 —
+  // tumble is the reaction frames (hitstun + 1) reaching 32, as in rubendal
+  // SSBU-Calculator (https://github.com/rubendal/SSBU-Calculator), whose
+  // `Hitstun` is `floor(kb × 0.4) − 1`. In hitstun frames that is 31.
+  it("crosses into tumble at 80 knockback: 31 frames of hitstun, 32 reaction frames", () => {
+    expect(computeHitstun(fx(79.9))).toBeLessThan(TUMBLE_HITSTUN);
+    expect(computeHitstun(fx(80))).toBeGreaterThanOrEqual(TUMBLE_HITSTUN);
+    expect(computeHitstun(fx(82.4))).toBeGreaterThanOrEqual(TUMBLE_HITSTUN);
+    for (let q = 0; q <= 2000; q++) {
+      expect(computeHitstun(fx(q / 4)) >= TUMBLE_HITSTUN, `kb ${q / 4}`).toBe(ref.isTumble(q / 4));
+    }
   });
 
   it("applies 0.4 exactly, not the Q12 approximation of it", () => {
@@ -213,8 +221,9 @@ describe("the balloon speed-up (init_damage_speed_up)", () => {
   });
 
   it("never takes a tumbling hit below tumble", () => {
-    for (let q = 330; q <= 2000; q++) {
-      expect(effectiveHitstun(fx(q / 4), true)).toBeGreaterThanOrEqual(32);
+    // Tumble starts at 80 knockback (ssbu_ref.mjs `isTumble`), so the sweep does too.
+    for (let q = 320; q <= 2000; q++) {
+      expect(effectiveHitstun(fx(q / 4), true), `kb ${q / 4}`).toBeGreaterThanOrEqual(TUMBLE_HITSTUN);
     }
   });
 

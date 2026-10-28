@@ -10,7 +10,7 @@ import type { Intent, StateContext } from "../states";
 import type { FighterState } from "../types";
 import type { FighterStatus } from "./kind";
 
-/** Shared by DAMAGE and DAMAGE_FLY: tumble is hitstun past 32 frames, not a different thing. */
+/** Shared by DAMAGE and DAMAGE_FLY: tumble is hitstun of `TUMBLE_HITSTUN` frames or more, not a different thing. */
 function reelMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.hitstun > 0) {
     if (f.hitstun >= TUMBLE_HITSTUN && f.action !== "tumble") startAction(f, "tumble");

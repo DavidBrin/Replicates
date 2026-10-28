@@ -247,8 +247,9 @@ export function effectiveHitstun(kb: number, speedUp: boolean): number {
  * Is this hit heavy enough for LSI to do anything?
  *
  * "LSI … does nothing to knockback that does not cause tumble"
- * (research/physics-and-knockback.md §6), and tumble is the 32-hitstun-frame
- * threshold rather than a knockback number. So a jab cannot be made to launch
+ * (research/physics-and-knockback.md §6), and tumble is a hitstun threshold
+ * (`TUMBLE_HITSTUN`: 32 reaction frames, knockback 80) rather than a knockback
+ * number. So a jab cannot be made to launch
  * 1.095× further by holding up: the mechanic exists to let a victim survive a
  * kill move, and a hit that does not tumble is not one.
  */

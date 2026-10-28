@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { byRatio, fx, mul } from "./fixed";
+import { ONE, byRatio, fx, mul } from "./fixed";
 import { GROUNDED_ZERO_LAUNCH_RATIO, LAUNCH_SPEED_RATIO } from "./constants";
 import { hashState } from "./hash";
-import { computeHitstun, effectiveHitstun } from "./knockback";
+import { computeHitstun, damageSpeedUpMaxMag, effectiveHitstun } from "./knockback";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
 import { Btn } from "./types";
@@ -420,5 +420,59 @@ describe("the balloon speed-up through a real hit (Plan 3, Task 6)", () => {
     expect(sped.lastInside).toBeLessThanOrEqual(STAGE.blastZone.right);
     // Same 150 knockback and angle: the sped-up launch reaches the line sooner.
     expect(sped.frame).toBeLessThan(plain.frame);
+  });
+});
+
+/* ------------------------------ Task 6 addendum: the tumble threshold -- */
+
+describe("tumble starts at 80 knockback (Plan 3, Task 6 addendum)", () => {
+  // ssbu_ref.mjs `isTumble`: `floor(kb × 0.4) − 1 + 1 ≥ 32`, i.e. knockback 80 —
+  // tumble is the reaction frames (hitstun + 1) reaching 32, as in rubendal
+  // SSBU-Calculator (https://github.com/rubendal/SSBU-Calculator), whose
+  // `Hitstun` is `floor(kb × 0.4) − 1`.
+
+  /** Fighter 1 jabbed with exactly `kb` knockback (no growth): at contact, and once the launch fires. */
+  function hitAt(kb: number): { knockback: number; action: string; hitstun: number; launchFaf: number; speedUpMax: number } {
+    const def: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ baseKnockback: fx(kb), knockbackGrowth: 0 })] }) },
+    };
+    const frames = play(standing(ctxFor(def)), 30, JAB, ctxFor(def));
+    const i = frames.findIndex((f) => f.events.hits.length > 0);
+    const launched = frames.find((f) => f.state.fighters[1].launchSpeed > 0);
+    const victim = frames[i].state.fighters[1];
+    return {
+      knockback: frames[i].events.hits[0].knockback,
+      action: victim.action,
+      hitstun: victim.hitstun,
+      launchFaf: victim.combat.launchFaf,
+      speedUpMax: launched === undefined ? -1 : launched.state.fighters[1].kinetic.speedUpMax,
+    };
+  }
+
+  it("does not tumble at 79.9 knockback", () => {
+    const h = hitAt(79.9);
+    expect(h.knockback).toBe(fx(79.9));
+    expect(h.action).toBe("hitstun");
+    expect(h.hitstun).toBe(computeHitstun(h.knockback));
+    expect(h.launchFaf).toBe(0);
+  });
+
+  it("tumbles at 80 knockback", () => {
+    const h = hitAt(80);
+    expect(h.knockback).toBe(fx(80));
+    expect(h.action).toBe("tumble");
+  });
+
+  // 32 reaction frames start the speed-up at 1.2× (`damageSpeedUpMaxMag`,
+  // rubendal `InitDamageSpeedUp`): too little to save a real frame here, but armed.
+  it("tumbles at 82.4 knockback, with the balloon speed-up applied", () => {
+    const h = hitAt(82.4);
+    expect(h.knockback).toBe(fx(82.4));
+    expect(h.action).toBe("tumble");
+    expect(h.launchFaf).toBe(32);
+    expect(h.hitstun).toBe(effectiveHitstun(h.knockback, true));
+    expect(h.speedUpMax).toBe(damageSpeedUpMaxMag(32));
+    expect(h.speedUpMax).toBeGreaterThan(ONE);
   });
 });
