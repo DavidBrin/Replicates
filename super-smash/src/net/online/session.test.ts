@@ -27,6 +27,7 @@ const CONFIG: OnlineMatchConfig = {
   build: "0123456789ab",
   protocol: PROTOCOL_VERSION,
   bones: "0123abcd",
+  engineRules: "4567ef01",
 };
 
 async function open(intent: RoomIntent = "create", createPeerConnection: () => PeerConnectionLike = inertPeer) {
@@ -132,7 +133,7 @@ describe("OnlineSession", () => {
     signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: newer } });
     expect(events.at(-1)).toEqual({
       type: "lobby",
-      message: { kind: "unreadable-start", build: { build: CONFIG.build, protocol: PROTOCOL_VERSION + 1, bones: CONFIG.bones } },
+      message: { kind: "unreadable-start", build: { build: CONFIG.build, protocol: PROTOCOL_VERSION + 1, bones: CONFIG.bones, engineRules: CONFIG.engineRules } },
     });
   });
 

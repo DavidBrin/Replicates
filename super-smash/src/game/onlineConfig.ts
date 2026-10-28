@@ -13,7 +13,7 @@ import type { BuildStamp, OnlineMatchConfig } from "@/net/online/lobby";
 import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, resolveFighterId, resolveMatchStage } from "./bootstrap";
 import type { PlayerSlot as RunnerSlot } from "./matchRunner";
-import { engineFingerprint } from "./simContext";
+import { engineFingerprint, rulesFingerprint } from "./simContext";
 
 export interface StartConfigInput {
   readonly players: readonly PlayerSlot[];
@@ -46,25 +46,59 @@ export function buildStartConfig(input: StartConfigInput): OnlineMatchConfig {
  * did not build, is "dev".
  */
 export function localBuild(): BuildStamp {
-  return { build: process.env.NEXT_PUBLIC_BUILD_ID || "dev", protocol: PROTOCOL_VERSION, bones: engineFingerprint() };
+  return {
+    build: process.env.NEXT_PUBLIC_BUILD_ID || "dev",
+    protocol: PROTOCOL_VERSION,
+    bones: engineFingerprint(),
+    engineRules: rulesFingerprint(),
+  };
 }
 
 /**
  * Why a peer's build cannot play this one: it never said (a build from before
- * the handshake), its packets are another wire format, its bone tables put
- * hitboxes elsewhere, or it is another deploy — whose simulation, changed in
- * ways neither of the others shows, would desync. The most telling first; the
- * screens say the same sentence for each.
+ * the handshake, or before the rules' part of the stamp), its packets are
+ * another wire format, its combat rules differ (the rules version, or which
+ * imported scripts run: Plan 3 Task 20), its bone tables put hitboxes
+ * elsewhere, or it is another deploy — whose simulation, changed in ways none
+ * of the others shows, would desync. The most telling first; the screens say
+ * the same sentence for each, and `describeMismatch` says which, for a
+ * developer.
  */
-export type BuildMismatch = "missing" | "protocol" | "bones" | "build";
+export type BuildMismatch = "missing" | "protocol" | "rules" | "bones" | "build";
 
-/** Null when the two builds can play each other. */
+/**
+ * Null when the two builds can play each other. `bones` is the whole engine
+ * fingerprint, the rules included, so it is read after `engineRules`: by then
+ * a difference in it can only be the bone table's.
+ */
 export function buildMismatch(theirs: BuildStamp | null, ours: BuildStamp = localBuild()): BuildMismatch | null {
   if (theirs === null) return "missing";
   if (theirs.protocol !== ours.protocol) return "protocol";
+  if (theirs.engineRules !== ours.engineRules) return "rules";
   if (theirs.bones !== ours.bones) return "bones";
   if (theirs.build !== ours.build) return "build";
   return null;
+}
+
+/**
+ * What a developer reads in the console when a peer is refused (the players
+ * read one sentence whatever the cause): which part differs, and what each
+ * side has.
+ */
+export function describeMismatch(why: BuildMismatch, theirs: BuildStamp | null, ours: BuildStamp = localBuild()): string {
+  if (theirs === null) return "it sent no build stamp this build can read (one from before the handshake, or before its rules' part)";
+  switch (why) {
+    case "protocol":
+      return `its wire format is ${theirs.protocol}, this build's is ${ours.protocol}`;
+    case "rules":
+      return `its engine rules are ${theirs.engineRules}, this build's are ${ours.engineRules}`;
+    case "bones":
+      return `its engine is ${theirs.bones}, this build's is ${ours.bones} (the bone table, as the rules agree)`;
+    case "build":
+      return `it is build ${theirs.build}, this one is ${ours.build}`;
+    case "missing":
+      return "it sent no build stamp this build can read";
+  }
 }
 
 /** Outside the simulation, so `Math.random` is allowed; the result enters it only as data. */

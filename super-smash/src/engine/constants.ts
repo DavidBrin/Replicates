@@ -14,6 +14,18 @@ import type { Ratio } from "./fixed";
 /** The simulation runs at a fixed 60Hz. Every "frame" in this codebase is 1/60s. */
 export const TICK_RATE = 60;
 
+/**
+ * The version of the engine's combat rules. Two online peers whose builds
+ * differ here play different games and desync on the first hit, so the
+ * version goes into `engineFingerprint` (`src/game/simContext.ts`). Plan 3
+ * sets it to 3; every later change to what `step()` does bumps it.
+ *
+ * A bump is not left to memory: a change to `step()` regenerates the golden
+ * trace, and `src/game/rulesVersion.test.ts` pins the trace's digest to this
+ * number, so the regenerated trace fails it until this is bumped.
+ */
+export const ENGINE_RULES_VERSION = 3;
+
 /* ------------------------------------------------------------------ combat -- */
 
 /**

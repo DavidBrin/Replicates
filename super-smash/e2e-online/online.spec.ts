@@ -154,6 +154,48 @@ test("two browsers play a match to its result, and both see the same one", async
   }
 });
 
+/**
+ * What a guest on this very build, but with another version of the combat
+ * rules, would say (Plan 3 Task 20): its hello with the rules' fingerprint and
+ * the engine fingerprint (which holds the rules) other than this build's. One
+ * deploy can only be one set of rules, so the rewrite stands in for the second
+ * build, on the wire where a real one would speak.
+ */
+const OTHER_RULES = "00000000";
+
+function withOtherRules(message: string | Buffer): string | Buffer {
+  if (typeof message !== "string") return message;
+  const frame = JSON.parse(message) as { t?: unknown; payload?: { kind?: unknown } };
+  if (frame.t !== "lobby" || frame.payload?.kind !== "hello") return message;
+  return JSON.stringify({ ...frame, payload: { ...frame.payload, bones: OTHER_RULES, engineRules: OTHER_RULES } });
+}
+
+test("a peer on the same build with other combat rules is refused at the hello, with the one sentence", async ({ browser }) => {
+  const host = await player(browser);
+  const guest = await player(browser);
+  const consoleLines: string[] = [];
+  host.on("console", (message) => consoleLines.push(message.text()));
+
+  await guest.routeWebSocket(/\/ws\/room\//, (socket) => {
+    const room = socket.connectToServer();
+    socket.onMessage((message) => room.send(withOtherRules(message)));
+    room.onMessage((message) => socket.send(message));
+  });
+  const code = await createRoom(host);
+  await joinRoom(guest, code);
+
+  // The host stays in the lobby: it goes on to the stage screen only once the guest's hello matches.
+  await expect(host.getByRole("alert").filter({ hasText: "running a different version" })).toHaveText(
+    "The other player is running a different version. Both reload the page.",
+    { timeout: 30_000 },
+  );
+  // For a developer, the console says which part differs; the player is told only the sentence.
+  await expect
+    .poll(() => consoleLines.some((line) => line.includes(`its engine rules are ${OTHER_RULES}`)), { timeout: 10_000 })
+    .toBe(true);
+  await expect(host).not.toHaveURL(new RegExp(`${ROUTES.stage}$`));
+});
+
 test("a third browser is turned away from a full room", async ({ browser }) => {
   const host = await player(browser);
   const guest = await player(browser);

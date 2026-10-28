@@ -1,9 +1,18 @@
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi, type MockInstance } from "vitest";
 
+import { ENGINE_RULES_VERSION } from "@/engine/constants";
+import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { localBuild } from "@/game/onlineConfig";
+import { GAME_SIM_CONTEXT, engineFingerprint, rulesFingerprint } from "@/game/simContext";
 import { NEGOTIATION_TIMEOUT_MS } from "@/net/adapters/doSignal";
 import { STUN_ONLY } from "@/net/iceConfig";
-import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
+import {
+  parseLobbyMessage,
+  type BuildStamp,
+  type LobbyMessage,
+  type OnlineMatchConfig,
+  type ReceivedLobbyMessage,
+} from "@/net/online/lobby";
 import { GUEST_REOFFER_WAIT_MS, OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
 import { PROTOCOL_VERSION } from "@/net/packet";
@@ -35,10 +44,45 @@ const CONFIG: OnlineMatchConfig = {
 /** This build's hello: what each side says as its channel opens, and the other side's when it runs the same build. */
 const HELLO: LobbyMessage = { kind: "hello", ...localBuild() };
 
+/**
+ * What a developer reads when a peer is refused goes to the console. The tests
+ * that refuse one read it here rather than print it.
+ */
+let warn: MockInstance<typeof console.warn>;
+
 beforeEach(() => {
+  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   leaveOnline();
   useMatchConfig.getState().reset();
 });
+
+afterEach(() => {
+  warn.mockRestore();
+});
+
+/** `stamp` as a build from before the rules' part of the stamp sent it: without it. */
+function withoutRules(stamp: BuildStamp): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(stamp).filter(([key]) => key !== "engineRules"));
+}
+
+/** A lobby message as the other side's room delivers it: through JSON and this build's parser. */
+function overTheWire(message: LobbyMessage): ReceivedLobbyMessage {
+  const received = parseLobbyMessage(JSON.parse(JSON.stringify(message)));
+  if (received === null) throw new Error(`the lobby cannot read ${message.kind}`);
+  return received;
+}
+
+/**
+ * The stamp of a build on this very commit whose combat rules are another
+ * version's (Plan 3 Task 20): the deploy and the bone table are this build's,
+ * and only the rules, in the engine fingerprint and on their own, differ.
+ */
+const OTHER_RULES = { version: ENGINE_RULES_VERSION + 1, activeSlots: ACTIVE_SCRIPT_SLOTS };
+const RULES_STAMP = {
+  ...localBuild(),
+  bones: engineFingerprint(GAME_SIM_CONTEXT, OTHER_RULES),
+  engineRules: rulesFingerprint(OTHER_RULES),
+};
 
 describe("binding a session to the stores", () => {
   it("seats the players and records the role once the room answers", () => {
@@ -121,6 +165,7 @@ describe("binding a session to the stores", () => {
     ["deploy", { ...CONFIG, build: "fedcba987654" }],
     ["bone table", { ...CONFIG, bones: "0badf00d" }],
     ["wire format", { ...CONFIG, protocol: PROTOCOL_VERSION + 1 }],
+    ["rules, on the same deploy", { ...CONFIG, ...RULES_STAMP }],
   ] as const)("refuses a start from a peer on another %s: tells the host, says why, and leaves", async (_, config) => {
     const guest = fakeSession();
     bindSession(guest.session);
@@ -548,6 +593,7 @@ describe("the build handshake", () => {
     ["deploy", { ...HELLO, build: "fedcba987654" }],
     ["wire format", { ...HELLO, protocol: PROTOCOL_VERSION + 1 }],
     ["bone table", { ...HELLO, bones: "0badf00d" }],
+    ["rules, on the same deploy", { ...HELLO, ...RULES_STAMP }],
   ] as const)("refuses a peer on another %s, for good, and leaves the room", async (_, theirs) => {
     const fake = opened("guest");
     fake.emit({ type: "lobby", message: theirs });
@@ -556,6 +602,72 @@ describe("the build handshake", () => {
     fake.emit({ type: "lobby", message: HELLO });
     fake.emit({ type: "link", status: "open" });
     expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "engine-mismatch" });
+  });
+
+  /**
+   * The case this check was extended for (Plan 3 Task 20): the same deploy
+   * (a dev build, or any two builds sharing an id), another version of the
+   * combat rules. Everything else about the two stamps agrees.
+   */
+  it("refuses a peer on this very build whose rules differ: the same sentence, and the console says the rules", async () => {
+    expect(RULES_STAMP.build).toBe(HELLO.build);
+    expect(RULES_STAMP.protocol).toBe(HELLO.protocol);
+    const fake = opened("host");
+    fake.emit({ type: "lobby", message: overTheWire({ kind: "hello", ...RULES_STAMP }) });
+    await expectRefused(fake);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0].join(" ")).toContain(`its engine rules are ${RULES_STAMP.engineRules}, this build's are ${localBuild().engineRules}`);
+  });
+
+  it("refuses the start of a host on this very build whose rules differ: told to the host, the same sentence, the console says the rules", async () => {
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "guest" });
+    fake.emit({ type: "lobby", message: overTheWire({ kind: "start", config: { ...CONFIG, ...RULES_STAMP } }) });
+    expect(fake.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
+    await expectRefused(fake);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0].join(" ")).toContain("its engine rules are");
+  });
+
+  it.each([
+    ["deploy", { ...HELLO, build: "fedcba987654" }, "it is build fedcba987654"],
+    ["wire format", { ...HELLO, protocol: PROTOCOL_VERSION + 1 }, `its wire format is ${PROTOCOL_VERSION + 1}`],
+    ["bone table", { ...HELLO, bones: "0badf00d" }, "its engine is 0badf00d"],
+    ["rules", { ...HELLO, ...RULES_STAMP }, "its engine rules are"],
+  ] as const)("says to the console which part differs when the %s does, and to the player only the one sentence", (_, theirs, fragment) => {
+    const fake = opened("guest");
+    fake.emit({ type: "lobby", message: theirs });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toBe("David-Smash: not playing the other player's build:");
+    expect(warn.mock.calls[0][1]).toContain(fragment);
+    expect(useOnlineStore.getState().error).toBe("The other player is running a different version. Both reload the page.");
+  });
+
+  /**
+   * A build from before the rules' part of the stamp: its hello and its start
+   * go through the real parser, which cannot read a stamp without it.
+   */
+  it("refuses a peer from before the rules' part of the stamp, cleanly: its hello is not read, so the wait runs out; its start is refused at once", async () => {
+    vi.useFakeTimers();
+    const oldHello = parseLobbyMessage({ kind: "hello", ...withoutRules(localBuild()) });
+    expect(oldHello).toBeNull();
+    const host = opened("host");
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    await expectRefused(host);
+    expect(warn.mock.calls[0].join(" ")).toContain("no hello within");
+
+    leaveOnline();
+    warn.mockClear();
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    const oldStart = parseLobbyMessage({ kind: "start", config: withoutRules(CONFIG) });
+    expect(oldStart).toEqual({ kind: "unreadable-start", build: null });
+    guest.emit({ type: "lobby", message: oldStart! });
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
+    await expectRefused(guest);
+    expect(warn.mock.calls[0].join(" ")).toContain("no build stamp this build can read");
   });
 
   it("says its own hello on the way out, so the other side refuses too, even before its channel opened", async () => {

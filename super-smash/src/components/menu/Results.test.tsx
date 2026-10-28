@@ -272,6 +272,7 @@ describe("Results after an online match", () => {
       build: "0123456789ab",
       protocol: 2,
       bones: "0123abcd",
+      engineRules: "4567ef01",
     };
     const { session } = fakeSession("guest");
     setActiveSession(session);

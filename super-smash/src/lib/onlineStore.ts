@@ -10,7 +10,7 @@
 import { create } from "zustand";
 
 import type { MatchRules } from "@/engine/types";
-import { buildMismatch, localBuild } from "@/game/onlineConfig";
+import { buildMismatch, describeMismatch, localBuild } from "@/game/onlineConfig";
 import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
@@ -181,8 +181,12 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * game, so nothing starts. Said for good, like any room error, and like the
    * session's own (`failWith`) the room is left, so the code cannot pair a
    * newcomer with this screen. A start not yet played is withdrawn.
+   *
+   * The player reads one sentence whatever differs; `why` is what a developer
+   * reads in the console (`describeMismatch`).
    */
-  const refuseBuild = () => {
+  const refuseBuild = (why: string) => {
+    console.warn("David-Smash: not playing the other player's build:", why);
     fail("engine-mismatch");
     online().patch({ config: null });
     // Once this delivery is over, not in the middle of it (session.ts, `leaveSoon`).
@@ -213,18 +217,21 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     helloTimer ??= setTimeout(() => {
       helloTimer = null;
       // A start out since the channel opened is the match's to end, not this wait's.
-      if (online().errorReason === null && online().config === null) refuseBuild();
+      if (online().errorReason === null && online().config === null) {
+        refuseBuild(`it sent no hello within ${HELLO_TIMEOUT_MS} ms (a build from before the handshake sends none)`);
+      }
     }, HELLO_TIMEOUT_MS);
   };
 
   /** The other side's hello: the build it runs. */
   const heardHello = (theirs: BuildStamp) => {
-    if (buildMismatch(theirs) !== null) {
+    const why = buildMismatch(theirs);
+    if (why !== null) {
       // Said again on the way out, in case this side's channel had not opened
       // to say it yet: the other side then refuses too, rather than only
       // seeing this one leave.
       sayHello();
-      refuseBuild();
+      refuseBuild(describeMismatch(why, theirs));
       return;
     }
     peerBuildMatches = true;
@@ -247,7 +254,9 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         // with the one out withdrawn by its guest leaving, it is a wrong-time
         // packet and ends nothing.
         const start = online().config;
-        if (session.role === "host" && start !== null && start !== withdrawnStart) refuseBuild();
+        if (session.role === "host" && start !== null && start !== withdrawnStart) {
+          refuseBuild("it refused this build's start (its own console says why)");
+        }
         return;
       }
       case "start":
@@ -257,9 +266,10 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         // all, so the host is told why, and this side refuses as for a hello.
         if (session.role !== "guest") return;
         const build = message.kind === "start" ? message.config : message.build;
-        if (buildMismatch(build) !== null) {
+        const why = buildMismatch(build);
+        if (why !== null) {
           session.sendLobby({ kind: "refuse", reason: "engine-mismatch" });
-          refuseBuild();
+          refuseBuild(describeMismatch(why, build));
         } else if (message.kind === "start") {
           online().patch({ config: message.config });
         }

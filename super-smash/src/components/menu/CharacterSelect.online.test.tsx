@@ -203,6 +203,7 @@ describe("CharacterSelect, online", () => {
   });
 
   it("says the two versions differ, holds Ready shut and leaves, when the guest runs another build", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fake = fakeSession();
     setActiveSession(fake.session);
     bindSession(fake.session);
@@ -219,6 +220,8 @@ describe("CharacterSelect, online", () => {
     expect(readyButton()).toBeDisabled();
     expect(fake.session.close).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Leave the room" })).toBeInTheDocument();
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 
   it("holds Ready shut once the room is lost, picks and all", async () => {

@@ -65,7 +65,7 @@ describe(".env.example", () => {
     if (process.env.BUILD_ID) expect(stamped).toBe(process.env.BUILD_ID);
     else if (head !== null) expect(stamped).toMatch(new RegExp(`^${head}(-[0-9a-f]{8}|-${DIRTY_UNKNOWN})?$`));
     else expect(stamped).toBe("dev");
-    const hello = { kind: "hello", build: stamped, protocol: 2, bones: "0123abcd" };
+    const hello = { kind: "hello", build: stamped, protocol: 2, bones: "0123abcd", engineRules: "4567ef01" };
     expect(parseLobbyMessage(hello)).toEqual(hello);
   });
 });
@@ -98,7 +98,7 @@ describe("the build id (next.config.ts)", () => {
     expect(resolveBuildId({ BUILD_ID: "fedcba987654" }, true, unknown)).toBe("fedcba987654");
     // Both regexes take what the config emits, or every hello would be dropped.
     const build = resolveBuildId({}, false, unknown);
-    const hello = { kind: "hello", build, protocol: 2, bones: "0123abcd" };
+    const hello = { kind: "hello", build, protocol: 2, bones: "0123abcd", engineRules: "4567ef01" };
     expect(parseLobbyMessage(hello)).toEqual(hello);
   });
 });

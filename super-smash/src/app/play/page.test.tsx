@@ -298,6 +298,8 @@ describe("the play page, online", () => {
    * it goes back to where the room is, as when stranded, keeping the sentence.
    */
   it("keeps a refusal that lands between its render and its effect on screen, back where the room is", () => {
+    // The host's console says the guest refused; the guest's says why.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { fake } = goOnline("host");
     bindSession(fake.session);
     function RefusedMeanwhile() {
@@ -317,6 +319,8 @@ describe("the play page, online", () => {
       errorReason: "engine-mismatch",
       error: "The other player is running a different version. Both reload the page.",
     });
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 
   /** Only a host's start can be refused: a refusal sent to the guest is nobody's to act on. */

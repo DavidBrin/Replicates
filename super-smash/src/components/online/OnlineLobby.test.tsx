@@ -139,6 +139,7 @@ describe("OnlineLobby", () => {
   });
 
   it("stays in the lobby, and says the versions differ, when the other player runs another build", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { opened } = harness();
     await join("ABCD");
     await act(async () => {
@@ -149,6 +150,8 @@ describe("OnlineLobby", () => {
     expect(routerMock.push).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
     expect(opened[0].session.close).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 
   it("does not bounce back into a room left open earlier", async () => {

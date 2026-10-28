@@ -38,6 +38,9 @@ import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
  * regenerates it on purpose and says so in its commit message:
  *
  *   UPDATE_GOLDEN=1 pnpm vitest run src/game/golden.test.ts
+ *
+ * A regenerated trace also bumps `ENGINE_RULES_VERSION`, which online peers
+ * compare: `rulesVersion.test.ts` fails until it is bumped and its pin rewritten.
  */
 
 const FIXTURE = join(import.meta.dirname, "__golden__", "engine-trace.json");

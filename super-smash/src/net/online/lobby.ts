@@ -49,8 +49,20 @@ export interface BuildStamp {
   readonly build: string;
   /** The wire format (`PROTOCOL_VERSION`, net/packet.ts). A peer on another cannot read this one's packets. */
   readonly protocol: number;
-  /** The bone-table fingerprint (`engineFingerprint`): another table puts hitboxes elsewhere. */
+  /**
+   * The engine fingerprint (`engineFingerprint`: the bone table, Plan 2 Task
+   * 27, and the rules version and running scripts, Plan 3 Task 20). Another
+   * table puts hitboxes elsewhere, and other rules play another game. The
+   * name is Plan 2's.
+   */
   readonly bones: string;
+  /**
+   * The rules' half of `bones` on its own (`rulesFingerprint`), so a refusal
+   * can say which half differs. A peer from before it says none, which is a
+   * stamp this build cannot read, and is refused as a build from before the
+   * handshake is.
+   */
+  readonly engineRules: string;
 }
 
 /** The host's `BuildStamp` rides with it: a guest on another build refuses the start (`refuse`). */
@@ -73,7 +85,7 @@ export type LobbyMessage =
   | { readonly kind: "start"; readonly config: OnlineMatchConfig }
   | { readonly kind: "away"; readonly away: boolean }
   /** This side's `BuildStamp`, said each time its channel opens. Nothing starts until the other side's matches. */
-  | { readonly kind: "hello"; readonly build: string; readonly protocol: number; readonly bones: string }
+  | { readonly kind: "hello"; readonly build: string; readonly protocol: number; readonly bones: string; readonly engineRules: string }
   /** The guest cannot play the host's start: the host runs another build. */
   | { readonly kind: "refuse"; readonly reason: "engine-mismatch" };
 
@@ -105,7 +117,7 @@ const MAX_SEED = 0x7fff_ffff;
 const BUILD_ID = /^([0-9a-f]{7,40}(-([0-9a-f]{8}|dirty-unknown))?|dev)$/;
 /** The packet header carries the protocol version in one byte (net/packet.ts). */
 const MAX_PROTOCOL = 0xff;
-/** `BoneTable.fingerprint`: 8 lowercase hex digits. */
+/** `BoneTable.fingerprint`, `engineFingerprint` and `rulesFingerprint`: 8 lowercase hex digits. */
 const FINGERPRINT = /^[0-9a-f]{8}$/;
 
 export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null {
@@ -144,7 +156,9 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
     }
     case "hello": {
       const stamp = parseBuild(payload);
-      return stamp ? { kind: "hello", build: stamp.build, protocol: stamp.protocol, bones: stamp.bones } : null;
+      return stamp
+        ? { kind: "hello", build: stamp.build, protocol: stamp.protocol, bones: stamp.bones, engineRules: stamp.engineRules }
+        : null;
     }
     case "refuse":
       return payload.reason === "engine-mismatch" ? { kind: "refuse", reason: "engine-mismatch" } : null;
@@ -175,15 +189,17 @@ function parseConfig(value: Record<string, unknown>, stamp: BuildStamp): OnlineM
     build: stamp.build,
     protocol: stamp.protocol,
     bones: stamp.bones,
+    engineRules: stamp.engineRules,
   };
 }
 
 function parseBuild(value: Record<string, unknown>): BuildStamp | null {
-  const { build, protocol, bones } = value;
+  const { build, protocol, bones, engineRules } = value;
   if (typeof build !== "string" || !BUILD_ID.test(build)) return null;
   if (!isInRange(protocol, 0, MAX_PROTOCOL)) return null;
   if (typeof bones !== "string" || !FINGERPRINT.test(bones)) return null;
-  return { build, protocol, bones };
+  if (typeof engineRules !== "string" || !FINGERPRINT.test(engineRules)) return null;
+  return { build, protocol, bones, engineRules };
 }
 
 function parseRules(value: unknown): MatchRules | null {
