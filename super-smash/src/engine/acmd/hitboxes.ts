@@ -5,11 +5,10 @@
  * Plan 2 keeps one combat pipeline: a script hitbox is resolved through the
  * bone table to a facing-relative point and handed on as a `Hitbox`, so
  * clanks, priority, shields and knockback are untouched. Plan 3 extends the
- * pipeline to read `AttackParams` directly (capsules, SDI, set weight, trip…).
- * Until then an extended (capsule) ATTACK or CATCH — one with `x2/y2/z2` — is
- * refused loudly: the pipeline has only spheres, and dropping the far end
- * would quietly shrink the move. `prepareFighterScripts` refuses one at load
- * (`isCapsule`); `resolve` refuses it again, for a context that skipped that.
+ * pipeline to read `AttackParams` directly (SDI, set weight, trip…).
+ * An extended (capsule) ATTACK or CATCH — one with `x2/y2/z2` — resolves both
+ * ends through the bone table, and the pipeline tests the capsule between them
+ * (Plan 3, Task 17).
  *
  * An ATTACK's `direct`, `set_weight`, ground/air mask, LR check and downward
  * angle reach the pipeline as `Hitbox` fields (Plan 3, Task 16).
@@ -65,8 +64,8 @@ function clearPose(p: BonePose): void {
   p.tx = p.ty = p.m00 = p.m01 = p.m02 = p.m10 = p.m11 = p.m12 = 0;
 }
 
-/** An extended ATTACK or CATCH: one with a far end (`x2`/`y2`/`z2`), which Plan 2 cannot collide. */
-export function isCapsule(p: Pick<AttackParams, "x2" | "y2" | "z2">): boolean {
+/** An extended ATTACK or CATCH: one with a far end (`x2`/`y2`/`z2`). */
+function isCapsule(p: Pick<AttackParams, "x2" | "y2" | "z2">): boolean {
   return p.x2 !== undefined || p.y2 !== undefined || p.z2 !== undefined;
 }
 
@@ -75,11 +74,8 @@ function resolve(
   fighterId: string,
   motion: MotionKind,
   frame: number,
-  p: Pick<AttackParams, "id" | "bone" | "x" | "y" | "z" | "x2" | "y2" | "z2">,
+  p: Pick<AttackParams, "bone" | "x" | "y" | "z">,
 ): { x: number; y: number } {
-  if (isCapsule(p)) {
-    throw new Error(`capsule hitbox (x2/y2/z2) id ${p.id} of ${fighterId}/${motion}: not supported until Plan 3`);
-  }
   clearPose(POSE);
   if (!bones.pose(fighterId, motion, frame, p.bone, POSE)) {
     throw new Error(`no pose for bone "${p.bone}" of ${fighterId}/${motion} frame ${frame}`);
@@ -180,10 +176,33 @@ export function scriptHitboxes(
   const out: Hitbox[] = [];
   for (const a of state.attacks) {
     const at = resolve(bones, fighterId, motion, state.motionFrame, a);
-    out.push(attackHitbox(a, gameFrame, at, state.shieldSetoff.get(a.id)));
+    const far = farEnd(bones, fighterId, motion, state.motionFrame, a);
+    out.push(withFarEnd(attackHitbox(a, gameFrame, at, state.shieldSetoff.get(a.id)), far));
   }
   for (const c of state.catches) {
-    out.push(catchHitbox(c, gameFrame, resolve(bones, fighterId, motion, state.motionFrame, c)));
+    const at = resolve(bones, fighterId, motion, state.motionFrame, c);
+    out.push(withFarEnd(catchHitbox(c, gameFrame, at), farEnd(bones, fighterId, motion, state.motionFrame, c)));
   }
   return out;
+}
+
+/**
+ * The far end of an extended hitbox — `X2, Y2, Z2` on the same bone, an axis
+ * left out taking the near end's value — or null for a sphere (Plan 3, Task 17).
+ * Both ends sit on one bone, so a bone the table can place for one it can place
+ * for the other.
+ */
+function farEnd(
+  bones: BoneTable,
+  fighterId: string,
+  motion: MotionKind,
+  frame: number,
+  p: Pick<AttackParams, "bone" | "x" | "y" | "z" | "x2" | "y2" | "z2">,
+): { x: number; y: number } | null {
+  if (!isCapsule(p)) return null;
+  return resolve(bones, fighterId, motion, frame, { bone: p.bone, x: p.x2 ?? p.x, y: p.y2 ?? p.y, z: p.z2 ?? p.z });
+}
+
+function withFarEnd(hb: Hitbox, far: { x: number; y: number } | null): Hitbox {
+  return far === null ? hb : { ...hb, x2: far.x, y2: far.y };
 }

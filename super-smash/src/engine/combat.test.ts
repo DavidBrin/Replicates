@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "./acmd/bones";
-import { ATTACK, clearAll, frame } from "./acmd/dsl";
+import { ATTACK, CATCH, clearAll, frame } from "./acmd/dsl";
 import { scriptHitboxes } from "./acmd/hitboxes";
 import { runScript } from "./acmd/interpreter";
 import { attackFromHitbox } from "./acmd/legacy";
@@ -39,7 +39,7 @@ import {
   effectiveHitstun,
   shieldstunExact,
 } from "./knockback";
-import { attackerShieldPushback, shieldDamage, shieldPushback } from "./shield";
+import { attackerShieldPushback, shieldBubble, shieldDamage, shieldPushback } from "./shield";
 import { kineticSetX } from "./kinetic";
 import { findLedgeGrab, resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
@@ -2420,6 +2420,35 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       expect(frames.at(-1)!.state.fighters[0].grabbing).toBe(1);
     });
 
+    // Plan 3, Task 17: the same with a capsule pummel box, which spans 38 to 42 units
+    // out: a capsule is geometry only for what has geometry, and a catch-only box has none.
+    it("does not clank a capsule pummel with an opposing hitbox either", () => {
+      const clanking: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, pummel: move("pummel", { totalFrames: 10, hitboxes: [] }) },
+        scripts: {
+          pummel: {
+            name: "game_catchattack",
+            motion: "catch_attack",
+            commands: [
+              frame(1),
+              ATTACK({ id: 0, bone: "top", damage: 2, angle: 361, kbg: 0, bkb: 0, size: 5, x: 0, y: 6, z: 38, z2: 42 }),
+              frame(2),
+              clearAll(),
+            ],
+          },
+        },
+      };
+      const ctx = ctxFor(clanking);
+      const s = holdingPair(standing3(ctx), 100);
+      s.fighters[2].x = fx(32);
+      s.fighters[2].facing = 1;
+      const frames = play(s, 14, (i) => [i === 5 ? Btn.Attack : 0, 0, i === 1 ? Btn.Attack : 0], ctx);
+      expect(frames.flatMap((f) => f.events.clanks)).toEqual([]);
+      expect(frames.flatMap((f) => f.events.hits).filter((h) => h.victim === 1)).toHaveLength(1);
+      expect(frames.at(-1)!.state.fighters[0].grabbing).toBe(1);
+    });
+
     // The catch statuses use GROUND_CLIFF_STOP in the game (UNVERIFIED that this is the
     // param; the replica passes `cliffStop` to the collision).
     it.each(["grab", "grabHold", "pummel", "throw"] as const)("%s stops at the platform's edge instead of walking off it", (action) => {
@@ -3140,6 +3169,13 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       expect(back("bthrow", Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
     });
 
+    // Plan 3, Task 17: a capsule changes nothing here. A throw box is still not
+    // geometry-tested against the fighter held, whatever its two ends say.
+    it("lands a capsule throw box on the fighter held, wherever its ends are", () => {
+      expect(thrown(throwWith("fthrow", { z: 40, z2: 60 }), Btn.Right).hits).toBe(1);
+      expect(thrown(throwWith("fthrow", { z: -30, z2: -45 }), Btn.Right).hits).toBe(1);
+    });
+
     // A held victim is grounded only over its captor's platform (`holdAtCaptor`); the
     // captor at the lip, facing out, holds it in the air.
     describe("and the situation mask", () => {
@@ -3205,6 +3241,196 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       const marked = attackFromHitbox(hitbox({ angle: fx(270), meteor: true }));
       expect(marked.meteor).toBe(true);
       expect(meteorOf(marked)).toBe(true);
+    });
+  });
+});
+
+/* ------------------------------------------ Task 17: capsule hitboxes -- */
+
+describe("capsule hitboxes through a real hit (Plan 3, Task 17)", () => {
+  function hitsWith(attack: ReturnType<typeof ATTACK>): StepEvents["hits"] {
+    const def: FighterDef = {
+      ...BASE_DEF,
+      scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [frame(4), attack, frame(7), clearAll()] } },
+    };
+    const s = standing(ctxFor(def));
+    s.fighters[1].x = fx(20);
+    return play(s, 8, JAB, ctxFor(def)).flatMap((f) => f.events.hits);
+  }
+
+  // smash-script `ATTACK(…, X, Y, Z, X2, Y2, Z2, …)`: an extended hitbox is the
+  // capsule between the two points, not a sphere at the first.
+  it("hits with the far end of an extended hitbox", () => {
+    expect(hitsWith(ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 6, z: 2, z2: 15 }))).toHaveLength(1);
+  });
+
+  it("misses with the same box as a sphere at its first point", () => {
+    expect(hitsWith(ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 6, z: 2 }))).toEqual([]);
+  });
+
+  /** A jab that is the capsule from 2 to 15 units out at 6 up, 2 wide, in a two-fighter match `prepare` arranges. */
+  const reaching = (extra: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
+    ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 6, z: 2, z2: 15, ...extra });
+  const jabScript = (attack: ReturnType<typeof ATTACK>): SimContext =>
+    ctxFor({
+      ...BASE_DEF,
+      scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [frame(4), attack, frame(7), clearAll()] } },
+    });
+
+  // A far end flips with its fighter, as the near end does: the box reaches the
+  // side the fighter is facing and not the other.
+  describe("mirrors its far end with the fighter's facing", () => {
+    const facingLeft = (victimX: number): Frame[] => {
+      const ctx = jabScript(reaching());
+      const s = standing(ctx);
+      Object.assign(s.fighters[0], { x: fx(40), facing: -1 });
+      Object.assign(s.fighters[1], { x: fx(victimX), facing: 1 });
+      return play(s, 8, JAB, ctx);
+    };
+
+    it("hits a victim on the side it faces, by the far end", () => {
+      // Facing left from 40, the box runs from 38 to 25: its far end is 5 from a body at 20.
+      expect(facingLeft(20).flatMap((f) => f.events.hits)).toHaveLength(1);
+    });
+
+    it("misses one on the side it does not", () => {
+      expect(facingLeft(60).flatMap((f) => f.events.hits)).toEqual([]);
+    });
+  });
+
+  // A hit less than 0.1 deep is a glancing blow (Task 13), and how deep a capsule
+  // reaches is measured to its whole length, from whichever end touches.
+  describe("is a glancing blow by its own depth", () => {
+    /** The body 4 wide and the box 2: the far end, 15 out, touches at 21; `deep` is how far inside it. */
+    const withDepth = (deep: number): Frame[] => {
+      const ctx = jabScript(reaching());
+      const s = standing(ctx);
+      s.fighters[1].x = fx(15 + 2 + 4 - deep);
+      return play(s, 8, JAB, ctx);
+    };
+
+    it("is no hit, and spends nothing, when the far end only grazes", () => {
+      const frames = withDepth(0.05);
+      expect(frames.flatMap((f) => f.events.hits)).toEqual([]);
+      expect(frames.at(-1)!.state.fighters[0].hitThisMove).toEqual([]);
+    });
+
+    it("hits when the far end is deeper than 0.1", () => {
+      expect(withDepth(0.2).flatMap((f) => f.events.hits)).toHaveLength(1);
+    });
+
+    it("is not rescued by a near end that is nowhere near", () => {
+      // The same graze against a body the near end could never reach: still no hit.
+      const ctx = jabScript(reaching({ z: -20 }));
+      const s = standing(ctx);
+      s.fighters[1].x = fx(15 + 2 + 4 - 0.05);
+      expect(play(s, 8, JAB, ctx).flatMap((f) => f.events.hits)).toEqual([]);
+    });
+  });
+
+  describe("clanks by its whole length", () => {
+    /** Both fighters jab the same capsule at once, `victimX` units apart; the clanks of eight frames. */
+    const clanksAt = (apartX: number): number => {
+      const ctx = jabScript(reaching({ damage: 5 }));
+      const s = standing(ctx);
+      s.fighters[1].x = fx(apartX);
+      return play(s, 8, () => [Btn.Attack, Btn.Attack], ctx).flatMap((f) => f.events.clanks).length;
+    };
+
+    // Fighter 0's box runs from 2 to 15; fighter 1's, facing left from x, from x - 2 to x - 15.
+    it("clanks when the tips of two capsules meet, with the near ends 29 units apart", () => {
+      // From 33: 31 to 18. The tips are 3 apart, inside 2 + 2.
+      expect(clanksAt(33)).toBeGreaterThan(0);
+    });
+
+    it("does not clank when the tips are 5 apart", () => {
+      // From 35: 33 to 20. Neither body is reached either (15 + 2 + 4 = 21 < 35 - 4).
+      expect(clanksAt(35)).toBe(0);
+    });
+  });
+
+  describe("against a worn shield", () => {
+    // A shield worn to 2 of 50 is 18% of its radius: the bubble sits in the body, and a
+    // box that reaches the body but not the bubble is a poke that lands on the body.
+    const wornShield = (gap: number): { shieldHits: number; hits: number } => {
+      const ctx = jabScript(reaching());
+      const s = standing(ctx);
+      s.fighters[1].shieldHealth = fx(2);
+      // The far end is 15 out, `gap` units from the victim's centre line, at the bubble's height.
+      s.fighters[1].x = fx(15 + gap);
+      const frames = play(s, 12, JAB_INTO_SHIELD, ctx);
+      return { shieldHits: frames.flatMap((f) => f.events.shieldHits).length, hits: frames.flatMap((f) => f.events.hits).length };
+    };
+
+    it("sets the bubble where the test below assumes", () => {
+      const r = shieldBubble({ x: 0, y: 0, shieldHealth: fx(2) }, BASE_DEF).r;
+      expect(r).toBeGreaterThan(fx(1.5));
+      expect(r).toBeLessThan(fx(2));
+    });
+
+    it("lands on the shield when the far end reaches the bubble (3 away: 2 + 1.84 is reach)", () => {
+      expect(wornShield(3.5)).toEqual({ shieldHits: 1, hits: 0 });
+    });
+
+    it("pokes through to the body when the far end reaches the body but not the bubble", () => {
+      expect(wornShield(5)).toEqual({ shieldHits: 0, hits: 1 });
+    });
+  });
+
+  describe("on a grab", () => {
+    const grabScript = (far: number): SimContext =>
+      ctxFor({
+        ...BASE_DEF,
+        scripts: {
+          grab: {
+            name: "game_catch",
+            motion: "catch",
+            commands: [frame(4), CATCH({ id: 0, bone: "top", size: 2, x: 0, y: 6, z: 2, z2: far }), frame(7), { op: "catchClear", id: 0 }],
+          },
+        },
+      });
+    const grabs = (ctx: SimContext, victimX: number): boolean => {
+      const s = standing(ctx);
+      s.fighters[1].x = fx(victimX);
+      return play(s, 12, (i) => [i === 0 ? Btn.Grab : 0, 0], ctx).at(-1)!.state.fighters[0].grabbing === 1;
+    };
+
+    it("reaches a victim with the far end, and not a sphere at the near end", () => {
+      expect(grabs(grabScript(15), 20)).toBe(true);
+      expect(grabs(grabScript(2), 20)).toBe(false);
+    });
+
+    it("grabs by plain overlap, not depth: a far end that only grazes still grabs", () => {
+      expect(grabs(grabScript(15), 15 + 2 + 4 - 0.05)).toBe(true);
+    });
+
+    it("misses a victim past the far end", () => {
+      expect(grabs(grabScript(15), 25)).toBe(false);
+    });
+  });
+
+  describe("on the Smash Ball", () => {
+    /** The ball `gap` units past the far end, still; the damage it has taken after a jab. */
+    const ballDamage = (gap: number): number => {
+      const ctx = jabScript(reaching());
+      const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }], { ...RULES, smashBall: true }, 12345, ctx);
+      for (const f of s.fighters) Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
+      Object.assign(s.fighters[0], { x: 0, facing: 1 });
+      Object.assign(s.fighters[1], { x: fx(100), facing: -1 });
+      Object.assign(s.smashBall, { active: true, health: fx(40), x: fx(15 + gap), y: fx(6), vx: 0, vy: 0, driftTimer: 1000 });
+      const after = play(s, 8, JAB, ctx).at(-1)!.state;
+      return fx(40) - after.smashBall.health;
+    };
+
+    // `SMASH_BALL_RADIUS` (6) and the box (2): the far end at 15 reaches a ball 8 past it.
+    it("is hit by the far end", () => {
+      expect(ballDamage(7.5)).toBeGreaterThanOrEqual(fx(5));
+      expect(ballDamage(9)).toBeLessThan(fx(5));
+    });
+
+    // The Smash Ball is outside the glancing gate (Task 13 left it out): a graze still counts.
+    it("is hit by a far end that only grazes it", () => {
+      expect(ballDamage(8 - 0.05)).toBeGreaterThanOrEqual(fx(5));
     });
   });
 });

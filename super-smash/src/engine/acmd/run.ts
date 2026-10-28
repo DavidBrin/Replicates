@@ -10,7 +10,6 @@ import { moveFrameOf } from "../hitbox";
 import type { FighterDef, FighterState, MoveSlot } from "../types";
 import { newBonePose } from "./bones";
 import type { BoneTable } from "./bones";
-import { isCapsule } from "./hitboxes";
 import { flatten, runScript, scheduleOf } from "./interpreter";
 import type { ScriptFrameState } from "./interpreter";
 import { gameScriptFor } from "./legacy";
@@ -48,8 +47,9 @@ export function moveScriptFrame(def: FighterDef, f: Pick<FighterState, "move" | 
  *   `step()`, the first frame that hitbox went live. Motion frame 1 is asked:
  *   a table answers every frame of a motion it knows, clamping the rest
  *   (`BoneTable.pose`), so a bone it places on one frame it places on all.
- * - An extended (capsule) ATTACK or CATCH throws here too, for the same
- *   reason: `scriptHitboxes` cannot collide one before Plan 3 (`isCapsule`).
+ * - An extended (capsule) ATTACK or CATCH loads like any other (Plan 3, Task
+ *   17): its far end is on the same bone as its near end, so the bone check
+ *   above covers both.
  */
 export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
   const slots = new Set([...Object.keys(def.moves), ...Object.keys(def.scripts ?? {})] as MoveSlot[]);
@@ -60,11 +60,6 @@ export function prepareFighterScripts(def: FighterDef, bones: BoneTable): void {
     scheduleOf(script);
     for (const c of flatten(script)) {
       if (c.op !== "attack" && c.op !== "catch") continue;
-      if (isCapsule(c.params)) {
-        throw new Error(
-          `${def.id} ${slot} (${script.name}): capsule hitbox (x2/y2/z2) id ${c.params.id}: not supported until Plan 3`,
-        );
-      }
       if (!bones.pose(def.id, script.motion, 1, c.params.bone, scratch)) {
         throw new Error(
           `${def.id} ${slot} (${script.name}): no pose for bone "${c.params.bone}" of motion ${script.motion} in bone table ${bones.fingerprint}`,

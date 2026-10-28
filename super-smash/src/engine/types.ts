@@ -200,6 +200,15 @@ export interface Hitbox {
   /** Offset from the fighter's origin, facing-relative. Fixed. */
   readonly x: number;
   readonly y: number;
+  /**
+   * The far end of an extended hitbox (smash-script `ATTACK`/`CATCH` `X2, Y2, Z2`),
+   * facing-relative like `x`/`y`: the box is the capsule between the two, `radius`
+   * wide (Plan 3, Task 17). Absent for a sphere. Only a script's hitboxes
+   * (`scriptHitboxes`) carry it: a legacy `MoveDef` hitbox and a projectile's
+   * `hitbox` are read as spheres.
+   */
+  readonly x2?: number;
+  readonly y2?: number;
   readonly radius: number;
   /** Percent, fixed. */
   readonly damage: number;

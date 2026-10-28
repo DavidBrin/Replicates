@@ -61,16 +61,17 @@ import {
 import {
   SMASH_BALL_TARGET,
   alreadyHit,
+  capsulesOverlap,
   circle,
-  circlesOverlap,
   clearHitRecord,
   hitboxWorldPos,
   hurtboxCapsule,
   markHit,
   resolveClank,
-  sweptHitboxOverlaps,
-  sweptHitboxPenetration,
+  sweptCapsuleOverlaps,
+  sweptCapsulePenetration,
 } from "./hitbox";
+import type { Capsule } from "./hitbox";
 import {
   advanceProjectile,
   cloneProjectile,
@@ -469,6 +470,9 @@ interface Candidate {
   readonly y: number;
   readonly prevX: number;
   readonly prevY: number;
+  /** Far end of an extended hitbox, relative to (x, y); 0, 0 for a sphere (Plan 3, Task 17). */
+  readonly dx: number;
+  readonly dy: number;
   /** The move this came from, or null when the source is a projectile. */
   readonly slot: MoveSlot | null;
   readonly projectile: ProjectileState | null;
@@ -484,6 +488,11 @@ interface Candidate {
    */
   readonly onlyPort: number | null;
   suppressed: boolean;
+}
+
+/** Where a candidate's box is this frame: a capsule, or a circle when it has no length. */
+function capsuleOf(c: Candidate): Capsule {
+  return { x1: c.x, y1: c.y, x2: c.x + c.dx, y2: c.y + c.dy, r: c.hitbox.radius };
 }
 
 /** Key a candidate occupies when picking one winner per source, per victim. */
@@ -872,6 +881,11 @@ function gatherHitboxes(
     for (const hb of live) {
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
       const was = hitboxWorldPos(prevPos[i].x, prevPos[i].y, f.facing, hb);
+      // The far end mirrors with facing exactly as the near end does.
+      const far =
+        hb.x2 === undefined || hb.y2 === undefined
+          ? now
+          : hitboxWorldPos(f.x, f.y, f.facing, { x: hb.x2, y: hb.y2 });
       out.push({
         attacker: i,
         hitbox: hb,
@@ -879,6 +893,8 @@ function gatherHitboxes(
         y: now.y,
         prevX: was.x,
         prevY: was.y,
+        dx: far.x - now.x,
+        dy: far.y - now.y,
         slot: f.move,
         projectile: null,
         chargeScale: chargeMultiplier(f.charge),
@@ -970,6 +986,8 @@ function appendProjectileCandidates(
       y: p.y + def.hitbox.y,
       prevX: was.x + offsetX,
       prevY: was.y + def.hitbox.y,
+      dx: 0,
+      dy: 0,
       slot: null,
       projectile: p,
       chargeScale: p.chargeScale,
@@ -1002,7 +1020,7 @@ function resolveClanks(
       // `ATTACK_ABS`, `set_catch_only_all`): nothing clanks with it.
       if (ca.onlyPort !== null || cb.onlyPort !== null) continue;
       if (ca.suppressed && cb.suppressed) continue;
-      if (!circlesOverlap(ca.x, ca.y, ca.hitbox.radius, cb.x, cb.y, cb.hitbox.radius)) continue;
+      if (!capsulesOverlap(capsuleOf(ca), capsuleOf(cb))) continue;
       const outcome = resolveClank(ca.hitbox, cb.hitbox);
       if (outcome === "none") continue;
 
@@ -1086,7 +1104,7 @@ function resolveHits(
         // box sits there only for some of the roster (Plan 3, Task 14).
         if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
       } else {
-        if (!sweptHitboxOverlaps(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox)) continue;
+        if (!sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtbox)) continue;
         // A box that only grazes the body — less than 0.1 deep — is a glancing
         // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
         // before the lowest-id pick, so it cannot shadow a deeper box of the same
@@ -1094,7 +1112,7 @@ function resolveHits(
         // the depth into the body (SmashWiki's glancing blow is hitbox on hurtbox),
         // and keep the plain overlap test they always had.
         if (
-          sweptHitboxPenetration(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
+          sweptCapsulePenetration(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
           !c.hitbox.grabbing &&
           !hitReachesShield(victim, defs[v], c)
         ) {
@@ -1350,7 +1368,7 @@ function clearPendingLaunch(f: FighterState): void {
  */
 function hitReachesShield(victim: FighterState, victimDef: FighterDef, c: Candidate): boolean {
   const bubble = shieldBubble(victim, victimDef);
-  return shieldCovers(victim, c.x) && circlesOverlap(c.x, c.y, c.hitbox.radius, bubble.x1, bubble.y1, bubble.r);
+  return shieldCovers(victim, c.x) && capsulesOverlap(capsuleOf(c), bubble);
 }
 
 /**
@@ -1832,7 +1850,7 @@ function resolveSmashBallHits(
     if (c.suppressed || c.onlyPort !== null) continue;
     const attacker = s.fighters[c.attacker];
     if (alreadyHit(attacker, SMASH_BALL_TARGET)) continue;
-    if (!sweptHitboxOverlaps(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, target)) continue;
+    if (!sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, target)) continue;
     markHit(attacker, SMASH_BALL_TARGET);
     ball.health -= c.hitbox.damage;
     // Knocked along by the hit, so it stays hard to corner.

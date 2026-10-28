@@ -5,8 +5,9 @@
  * Two decisions here are load-bearing rather than incidental.
  *
  * **Everything is a capsule.** A hurtbox is a segment with a radius, a hitbox is
- * a point with a radius, and both reduce to the same distance-between-segments
- * test — one function, no special cases, and no polygon clipping in fixed-point.
+ * a point with a radius (a segment with one, when it is extended: Plan 3, Task
+ * 17), and all reduce to the same distance-between-segments test — one
+ * function, no special cases, and no polygon clipping in fixed-point.
  *
  * **Hitboxes are swept, not sampled.** Ultimate interpolates a hitbox between its
  * position last frame and this frame and tests the whole line, because a hitbox
@@ -200,6 +201,104 @@ export function sweptHitboxPenetration(
   target: Capsule,
 ): number {
   return radius + target.r - sqrt(segmentSegmentDistSq(sweptHitboxCapsule(prevX, prevY, x, y, radius), target));
+}
+
+/**
+ * Does an extended (capsule) hitbox — its far end `dx, dy` from its near end —
+ * swept from its previous position, reach the target? A capsule moving without
+ * turning sweeps a parallelogram (with rounded edges), so it does when any of the
+ * four edges does — the near end's sweep, the far end's sweep, the capsule where
+ * it was and where it is now — or when the target's spine lies inside the
+ * parallelogram (Plan 3, Task 17). With no length it is exactly
+ * `sweptHitboxOverlaps`, the verdict a sphere always had: who is hit is decided
+ * here, and `sweptCapsulePenetration` only says how deep.
+ */
+export function sweptCapsuleOverlaps(
+  prevX: number,
+  prevY: number,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  radius: number,
+  target: Capsule,
+): boolean {
+  if (sweptHitboxOverlaps(prevX, prevY, x, y, radius, target)) return true;
+  if (dx === 0 && dy === 0) return false;
+  return (
+    sweptHitboxOverlaps(prevX + dx, prevY + dy, x + dx, y + dy, radius, target) ||
+    sweptHitboxOverlaps(x, y, x + dx, y + dy, radius, target) ||
+    sweptHitboxOverlaps(prevX, prevY, prevX + dx, prevY + dy, radius, target) ||
+    spineInsideSweep(prevX, prevY, x, y, dx, dy, target)
+  );
+}
+
+/**
+ * The same depth as `sweptHitboxPenetration` for an extended (capsule) hitbox
+ * whose far end sits `dx, dy` from its near end, swept from its previous
+ * position: the deepest of the parallelogram's four edges (see
+ * `sweptCapsuleOverlaps`), or the full reach — the sum of the radii — when the
+ * target's spine lies inside it (Plan 3, Task 17). With no length it is exactly
+ * `sweptHitboxPenetration`.
+ */
+export function sweptCapsulePenetration(
+  prevX: number,
+  prevY: number,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  radius: number,
+  target: Capsule,
+): number {
+  const near = sweptHitboxPenetration(prevX, prevY, x, y, radius, target);
+  if (dx === 0 && dy === 0) return near;
+  if (spineInsideSweep(prevX, prevY, x, y, dx, dy, target)) return radius + target.r;
+  const far = sweptHitboxPenetration(prevX + dx, prevY + dy, x + dx, y + dy, radius, target);
+  const now = sweptHitboxPenetration(x, y, x + dx, y + dy, radius, target);
+  const was = sweptHitboxPenetration(prevX, prevY, prevX + dx, prevY + dy, radius, target);
+  return Math.max(near, far, now, was);
+}
+
+/** Does either end of the target's spine lie inside the parallelogram a capsule's spine sweeps? */
+function spineInsideSweep(
+  prevX: number,
+  prevY: number,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  target: Capsule,
+): boolean {
+  return (
+    insideParallelogram(prevX, prevY, x, y, dx, dy, target.x1, target.y1) ||
+    insideParallelogram(prevX, prevY, x, y, dx, dy, target.x2, target.y2)
+  );
+}
+
+/**
+ * Is (px, py) inside the parallelogram with corners prev, now, now + d,
+ * prev + d, the border included? Sign tests only, no division. A flat one — the
+ * box moved along its own length, or not at all — has no inside: its area is
+ * the segment its edges already cover.
+ */
+function insideParallelogram(
+  prevX: number,
+  prevY: number,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  px: number,
+  py: number,
+): boolean {
+  if (orientation(prevX, prevY, x, y, prevX + dx, prevY + dy) === 0) return false;
+  const o1 = orientation(prevX, prevY, x, y, px, py);
+  const o2 = orientation(x, y, x + dx, y + dy, px, py);
+  const o3 = orientation(x + dx, y + dy, prevX + dx, prevY + dy, px, py);
+  const o4 = orientation(prevX + dx, prevY + dy, prevX, prevY, px, py);
+  // On every edge's left, or on every edge's right (a zero is on the line): never both.
+  return !((o1 > 0 || o2 > 0 || o3 > 0 || o4 > 0) && (o1 < 0 || o2 < 0 || o3 < 0 || o4 < 0));
 }
 
 /* -------------------------------------------------------------- fighters -- */

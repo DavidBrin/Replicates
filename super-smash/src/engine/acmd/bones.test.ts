@@ -227,16 +227,59 @@ describe("scriptHitboxes", () => {
     expect([h.x, h.y]).toEqual([0, 0]);
   });
 
-  it("refuses an extended (capsule) hitbox until Plan 3 can collide one", () => {
+  // Plan 3, Task 17: an extended hitbox resolves both ends through the bone table.
+  it("resolves both ends of an extended (capsule) hitbox", () => {
     const capsule = script("game_test", "attack_s3_s", [
       ATTACK({ id: 2, bone: "top", damage: 9, angle: 361, kbg: 100, bkb: 20, size: 3, x: 0, y: 6, z: 4, x2: 0, y2: 6, z2: 12 }),
     ]);
-    expect(() => scriptHitboxes(runScript(capsule, 1), "mario", "attack_s3_s", 1, LEGACY_BONE_TABLE)).toThrow(/capsule/);
+    const [hb] = scriptHitboxes(runScript(capsule, 1), "mario", "attack_s3_s", 1, LEGACY_BONE_TABLE);
+    expect([hb.x, hb.y, hb.x2, hb.y2]).toEqual([fx(4), fx(6), fx(12), fx(6)]);
   });
 
-  it("refuses an extended (capsule) CATCH too", () => {
+  it("resolves both ends of an extended (capsule) CATCH too, and keeps it a grab", () => {
     const grab = script("game_test", "catch", [CATCH({ id: 0, bone: "top", size: 3.3, x: 0, y: 6.6, z: 6.4, x2: 0, y2: 6.6, z2: 9 })]);
-    expect(() => scriptHitboxes(runScript(grab, 1), "mario", "catch", 1, LEGACY_BONE_TABLE)).toThrow(/capsule/);
+    const [hb] = scriptHitboxes(runScript(grab, 1), "mario", "catch", 1, LEGACY_BONE_TABLE);
+    expect([hb.x, hb.y, hb.x2, hb.y2, hb.grabbing]).toEqual([fx(6.4), fx(6.6), fx(9), fx(6.6), true]);
+  });
+
+  // `ATTACK(..., X, Y, Z, X2, Y2, Z2, ...)`: an axis the script leaves out is the near end's.
+  it("gives a far end the near end's value on any axis the script leaves out", () => {
+    const only = (end: Partial<{ x2: number; y2: number; z2: number }>) => {
+      const s = script("game_test", "attack_s3_s", [
+        ATTACK({ id: 0, bone: "top", damage: 9, angle: 361, kbg: 100, bkb: 20, size: 3, x: 0, y: 6, z: 4, ...end }),
+      ]);
+      const [hb] = scriptHitboxes(runScript(s, 1), "mario", "attack_s3_s", 1, LEGACY_BONE_TABLE);
+      return [hb.x2, hb.y2];
+    };
+    expect(only({ z2: 12 })).toEqual([fx(12), fx(6)]);
+    expect(only({ y2: 2 })).toEqual([fx(4), fx(2)]);
+    expect(only({ x2: 5 })).toEqual([fx(4), fx(6)]);
+  });
+
+  it("leaves a sphere with no far end at all", () => {
+    const sphere = script("game_test", "attack_s3_s", [
+      ATTACK({ id: 0, bone: "top", damage: 9, angle: 361, kbg: 100, bkb: 20, size: 3, x: 0, y: 6, z: 4 }),
+    ]);
+    const [hb] = scriptHitboxes(runScript(sphere, 1), "mario", "attack_s3_s", 1, LEGACY_BONE_TABLE);
+    expect("x2" in hb || "y2" in hb).toBe(false);
+  });
+
+  it("carries a capsule's far end through a non-identity baked pose, frame by frame", () => {
+    // Synthetic bake, not real fighter values: "handl" rides forward 2 units per motion frame, 5 up.
+    const frames = 3;
+    const data = new Int32Array(frames * 2 * BONE_POSE_STRIDE);
+    for (let f = 1; f <= frames; f++) {
+      data.set([0, 0, 0, 0, ONE, 0, ONE, 0], bakedPoseIndex(f, 0, 2));
+      data.set([fx(2 * f), fx(5), 0, 0, ONE, 0, ONE, 0], bakedPoseIndex(f, 1, 2));
+    }
+    const baked = bakedBoneTable([{ fighter: "mario", bones: ["top", "handl"], motions: { attack_11: { frames, data } } }]);
+    const arm = script("game_test", "attack_11", [
+      frame(1),
+      ATTACK({ id: 0, bone: "handl", damage: 3, angle: 361, kbg: 30, bkb: 20, size: 1.5, x: 0, y: 1, z: 3, z2: 9, y2: 4 }),
+    ]);
+    const at = (g: number) => scriptHitboxes(runScript(arm, g), "mario", "attack_11", g, baked).map((h) => [h.x, h.y, h.x2, h.y2]);
+    expect(at(1)).toEqual([[fx(5), fx(6), fx(11), fx(9)]]);
+    expect(at(3)).toEqual([[fx(9), fx(6), fx(15), fx(9)]]);
   });
 });
 

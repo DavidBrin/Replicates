@@ -3,6 +3,8 @@ import fc from "fast-check";
 
 import { ONE, fx, toFloat } from "./fixed";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
+import { scriptHitboxes } from "./acmd/hitboxes";
+import { runScript } from "./acmd/interpreter";
 import { attackFromHitbox } from "./acmd/legacy";
 import type { AcmdCommand } from "./acmd/types";
 import {
@@ -1054,8 +1056,15 @@ describe("registry", () => {
     expect(() => registryContext.fighter("tester")).toThrow();
   });
 
-  const CAPSULES: [string, AcmdCommand][] = [
-    ["an ATTACK", { op: "attack", params: { ...attackFromHitbox(DEF.moves.jab1!.hitboxes[0]), x2: 0, y2: fx(6), z2: fx(12) } }],
+  // Plan 3, Task 17: a capsule (x2/y2/z2) is a box the pipeline collides, so
+  // registration lets it through. Each case: the command, and where its two ends
+  // land (x, y, x2, y2) through the context's bone table; the script's Z is forward.
+  const CAPSULES: [string, AcmdCommand, number[]][] = [
+    [
+      "an ATTACK",
+      { op: "attack", params: { ...attackFromHitbox(DEF.moves.jab1!.hitboxes[0]), x2: 0, y2: fx(6), z2: fx(12) } },
+      [fx(8), fx(6), fx(12), fx(6)],
+    ],
     [
       "a CATCH",
       {
@@ -1074,22 +1083,30 @@ describe("registry", () => {
           situation: "COLLISION_SITUATION_MASK_GA",
         },
       },
+      [fx(6), fx(6), fx(9), fx(6)],
     ],
   ];
 
-  it.each(CAPSULES)("refuses, at registration, %s with a capsule (x2/y2/z2), not the first frame it goes live", (_, command) => {
+  const withJab = (command: AcmdCommand): FighterDef => ({
+    ...DEF,
+    scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [{ op: "frame", frame: 4 }, command] } },
+  });
+
+  it.each(CAPSULES)("loads %s with a capsule (x2/y2/z2) at registration, and resolves both ends through the context's bone table", (_, command, ends) => {
     clearRegistry();
-    const capsule: FighterDef = {
-      ...DEF,
-      scripts: {
-        jab1: {
-          name: "game_attack11",
-          motion: "attack_11",
-          commands: [{ op: "frame", frame: 4 }, command],
-        },
-      },
-    };
-    expect(() => registerFighters([capsule])).toThrow(/tester jab1.*capsule/);
+    const capsule = withJab(command);
+    expect(() => registerFighters([capsule])).not.toThrow();
+    expect(registryContext.fighter("tester")).toBe(capsule);
+    const [hb] = scriptHitboxes(runScript(capsule.scripts!.jab1!, 4), "tester", "attack_11", 4, registryContext.bones ?? LEGACY_BONE_TABLE);
+    expect([hb.x, hb.y, hb.x2, hb.y2]).toEqual(ends);
+    clearRegistry();
+  });
+
+  // Both ends sit on the one bone, so the load-time bone check covers the far end.
+  it.each(CAPSULES)("still refuses %s with a capsule on a bone the table cannot place", (_, command) => {
+    clearRegistry();
+    const params = { ...(command as { params: object }).params, bone: "handr" };
+    expect(() => registerFighters([withJab({ ...command, params } as AcmdCommand)])).toThrow(/tester jab1.*"handr"/);
     expect(() => registryContext.fighter("tester")).toThrow();
   });
 
