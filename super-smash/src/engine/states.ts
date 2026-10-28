@@ -30,7 +30,6 @@ import {
   DASH_THRESHOLD_FRAMES,
   DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_SPEED,
-  JUMP_SQUAT_FRAMES,
   LAUNCH_SPEED_DECAY,
   PERFECT_SHIELD_WINDOW,
   RESPAWN_INVINCIBILITY_MAX,
@@ -49,7 +48,6 @@ import {
   applyTraction,
   decayLaunch,
   dropThroughPlatform,
-  fastFallVelocity,
   hitstunGravityOptions,
   platformCentreX,
 } from "./physics";
@@ -581,75 +579,12 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
   updateDodgeIntangibility(f);
 
   const status = STATUS_TABLE[f.action];
-  if (status !== undefined) {
-    status.main(f, intent, ctx);
-    return;
+  if (status === undefined) {
+    // Every status lives in `status/` and registers itself from
+    // `status/index.ts`. Reaching here means that module was never imported.
+    throw new Error(`no status registered for "${f.action}"; import "@/engine/status"`);
   }
-
-  // Legacy switch: each status group leaves it as it moves to `status/`.
-  switch (f.action) {
-    /* ------------------------------------------------------- locomotion -- */
-    case "jumpSquat": {
-      if (f.actionFrame < JUMP_SQUAT_FRAMES) {
-        // An attack pressed inside jumpsquat is Ultimate's short-hop aerial
-        // macro: you cannot buffer a *full*-hop aerial, and an attack during
-        // jumpsquat always produces a short hop. Buffering it directly rather
-        // than through `bufferPress` because that would prefer a jump press on
-        // the same frame, and it is the attack that decides the hop's height.
-        if (intent.attackPressed) f.bufferedAction = { kind: "attack", frame: ctx.frame };
-        return;
-      }
-      // Short hop vs. full hop is decided here and nowhere else: whether the
-      // button is up on the frame jumpsquat ends is the whole test — or whether
-      // an aerial is already buffered, which forces the hop short whatever the
-      // jump key is doing. Ultimate's universal 3-frame jumpsquat is what makes
-      // that a real decision rather than a character-specific execution barrier.
-      const a = ctx.def.attributes;
-      const short = !intent.jumpHeld || peekBuffer(f, ctx.frame) === "attack";
-      kineticSetY(f, short ? a.shortHopVelocity : a.fullHopVelocity);
-      // The 0.85× damage penalty rides on this flag for the whole airtime; see
-      // `FighterState.shortHop` and SPEC §4.
-      f.shortHop = short;
-      f.grounded = false;
-      f.platform = -1;
-      f.jumpsUsed = 1;
-      f.fastFalling = false;
-      startAction(f, "jump");
-      return;
-    }
-
-    case "land": {
-      if (f.actionFrame >= LANDING_ANIMATION_FRAMES) startAction(f, "stand");
-      else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "landingLag": {
-      // `charge` carries the remaining lag; see `onLanded`.
-      if (f.actionFrame >= f.charge) {
-        f.charge = 0;
-        startAction(f, "stand");
-      } else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "jump":
-    case "fall": {
-      if (f.grounded) {
-        startAction(f, "land");
-        return;
-      }
-      if (handleActionable(f, intent, ctx)) return;
-      // Fast fall is only available after the apex, which makes it a read on the
-      // defender rather than a free way to shorten every jump.
-      if (intent.downPressed && !f.fastFalling && f.vy <= 0 && f.hitstun === 0) {
-        f.fastFalling = true;
-        kineticSetY(f, fastFallVelocity(ctx.def.attributes));
-      }
-      if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");
-      return;
-    }
-  }
+  status.main(f, intent, ctx);
 }
 
 /**

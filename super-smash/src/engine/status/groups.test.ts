@@ -100,6 +100,12 @@ const MIGRATED = [
   "crouchStart",
   "crouch",
   "crouchEnd",
+  // Task 11
+  "jumpSquat",
+  "jump",
+  "fall",
+  "land",
+  "landingLag",
 ];
 
 describe("migrated statuses", () => {
@@ -116,6 +122,10 @@ describe("migrated statuses", () => {
       expect(s.kind, s.action).toBe(STATUS_KIND_OF_ACTION[s.action]);
       expect(s.kineticType, s.action).toBe(KINETIC_TYPE_OF_ACTION[s.action]);
     }
+  });
+
+  it("cover every action the engine has, so the legacy switch is gone for good", () => {
+    expect(ALL_STATUSES.map((s) => s.action).sort()).toEqual((Object.keys(STATUS_KIND_OF_ACTION) as string[]).sort());
   });
 
   it("are each registered once", () => {

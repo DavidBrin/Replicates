@@ -123,6 +123,13 @@ describe("changeStatus", () => {
 });
 
 describe("advanceFighter dispatch", () => {
+  it("fails loudly for a status nobody registered", () => {
+    // This file never imports `status/index.ts`, so nothing but the test's own
+    // registration below exists here.
+    const f = fighter({ action: "crouch" });
+    expect(() => advanceFighter(f, {} as Intent, CTX)).toThrow(/no status registered for "crouch"/);
+  });
+
   it("runs a registered status's main instead of the legacy switch", () => {
     const seen: number[] = [];
     registerStatus({
