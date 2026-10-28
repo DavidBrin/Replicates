@@ -17,7 +17,14 @@ import { beforeAll, describe, expect, it } from "vitest";
  *
  *   f.vy = m.y; // kinetic: legacy-write (Task 18 moves this to MOTION)
  *
- * The marker may sit on the write's own lines or on the line above.
+ * The marker covers the write it is on: a comment on any line of the write
+ * (the whole expression for an assignment or `++`/`--`; just the target for a
+ * `for…in/of`; the call's first line through its first argument for
+ * `Object.assign` and friends, so a marker inside a loop body or an object
+ * literal's payload covers nothing), or a comment standing alone on the line
+ * just above it. A *trailing* marker never reaches the next line:
+ * `f.vx = 0; // kinetic: legacy-write (Task 18)` does not excuse an unmarked
+ * `f.vy = 0;` below it.
  *
  * **How it looks.** A line regex cannot see `s.fighters[0].vx = 0`,
  * `(f as FighterState).vx >>= 1`, `[f.vx, f.vy] = …`, `Object.assign(f, { vx })`
@@ -40,8 +47,17 @@ import { beforeAll, describe, expect, it } from "vitest";
  * something that carries `vx`/`vy`, `Object.defineProperty` and `Reflect.set`
  * of `"vx"`/`"vy"`.
  *
- * Not caught: a fighter replaced wholesale (`s.fighters[0] = {…}`), and a write
- * through an `any`-typed *callee* such as `const set: Function = Object.assign`.
+ * **Not caught** (each pinned under "does not see" below, so closing one fails
+ * a test and the list gets updated; do not over-trust this guard):
+ * - a fighter replaced wholesale (`s.fighters[0] = {…}`);
+ * - a receiver whose *type* no longer says fighter: a structural alias or helper
+ *   parameter (`const g: { vx: number } = f; g.vx = 0`,
+ *   `function z(o: { vx: number }) { o.vx = 0 } z(f)`) or a double cast
+ *   (`(f as unknown as { vx: number }).vx = 0`);
+ * - a dynamic key through `any` or `string` (`(f as any)[name] = 0`);
+ * - a call the scanner cannot read as `Object.assign(…)`/`Reflect.set(…)`:
+ *   `Object["assign"](f, …)`, a destructured `const { assign } = Object`, or
+ *   `const set: Function = Object.assign`.
  */
 
 const SRC = join(process.cwd(), "src");
@@ -155,9 +171,9 @@ function createScanner(files: string[], virtual: ReadonlyMap<string, string>) {
     return sf;
   }
 
-  /** The lines of every comment in `sf` that carries the legacy marker. */
-  function markerLines(sf: ts.SourceFile): Set<number> {
-    const lines = new Set<number>();
+  /** Every comment in `sf` that carries the legacy marker: its lines, and whether nothing else is on them. */
+  function markerComments(sf: ts.SourceFile): { start: number; end: number; own: boolean }[] {
+    const markers: { start: number; end: number; own: boolean }[] = [];
     const seen = new Set<number>();
     const visit = (node: ts.Node): void => {
       const ranges = [
@@ -167,32 +183,45 @@ function createScanner(files: string[], virtual: ReadonlyMap<string, string>) {
       for (const r of ranges) {
         if (seen.has(r.pos)) continue;
         seen.add(r.pos);
-        if (MARKER.test(sf.text.slice(r.pos, r.end))) lines.add(sf.getLineAndCharacterOfPosition(r.pos).line);
+        if (!MARKER.test(sf.text.slice(r.pos, r.end))) continue;
+        const start = sf.getLineAndCharacterOfPosition(r.pos).line;
+        const end = sf.getLineAndCharacterOfPosition(r.end).line;
+        const before = sf.text.slice(sf.getLineStarts()[start], r.pos);
+        const after = sf.text.slice(r.end, sf.getLineEndOfPosition(r.end));
+        markers.push({ start, end, own: before.trim() === "" && after.trim() === "" });
       }
       node.getChildren(sf).forEach(visit);
     };
     visit(sf);
-    return lines;
+    return markers;
   }
 
   /** Every write to a fighter's `vx`/`vy` in `file`, marked or not. */
   function scan(file: string): Write[] {
     const sf = sourceOf(file);
-    const found: { node: ts.Node; start: number; end: number }[] = [];
+    /** What a marker may cover: the lines of `show`'s source text from `from` to `to`. */
+    interface Extent {
+      show: ts.Node;
+      from: number;
+      to: number;
+    }
+    const whole = (node: ts.Node): Extent => ({ show: node, from: node.getStart(sf), to: node.getEnd() });
+
+    const found: { show: ts.Node; start: number; end: number }[] = [];
     const flagged = new Set<ts.Node>();
 
-    const flag = (node: ts.Node, at: ts.Node = node): void => {
+    const flag = (extent: Extent, at: ts.Node): void => {
       if (flagged.has(at)) return;
       flagged.add(at);
       found.push({
-        node,
-        start: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line,
-        end: sf.getLineAndCharacterOfPosition(node.getEnd()).line,
+        show: extent.show,
+        start: sf.getLineAndCharacterOfPosition(extent.from).line,
+        end: sf.getLineAndCharacterOfPosition(extent.to).line,
       });
     };
 
-    /** `target` is being written: flag it if it is a fighter's `vx`/`vy`, or look inside a destructuring pattern. */
-    const target = (raw: ts.Node, write: ts.Node): void => {
+    /** `raw` is being written: flag it if it is a fighter's `vx`/`vy`, or look inside a destructuring pattern. */
+    const target = (raw: ts.Node, write: Extent): void => {
       const t = strip(raw);
       if (ts.isArrayLiteralExpression(t)) {
         for (const el of t.elements) {
@@ -241,26 +270,28 @@ function createScanner(files: string[], virtual: ReadonlyMap<string, string>) {
       const name = `${callee.expression.text}.${callee.name.text}`;
       const [subject, second] = node.arguments;
       if (subject === undefined) return;
+      // The write is the call's head, through the fighter it names; the payload is not the write.
+      const head: Extent = { show: node, from: node.getStart(sf), to: subject.getEnd() };
       if (name === "Object.assign" || name === "Object.defineProperties") {
-        if (isFighter(subject) && node.arguments.slice(1).some(carriesVelocity)) flag(node);
+        if (isFighter(subject) && node.arguments.slice(1).some(carriesVelocity)) flag(head, node);
       } else if (name === "Object.defineProperty" || name === "Reflect.set" || name === "Reflect.defineProperty") {
-        if (second !== undefined && keysOf(second).length > 0 && isFighter(subject)) flag(node);
+        if (second !== undefined && keysOf(second).length > 0 && isFighter(subject)) flag(head, node);
       }
     };
 
     const visit = (node: ts.Node): void => {
       if (ts.isBinaryExpression(node) && isAssignment(node.operatorToken.kind)) {
-        target(node.left, node);
+        target(node.left, whole(node));
       } else if (
         (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
         (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)
       ) {
-        target(node.operand, node);
+        target(node.operand, whole(node));
       } else if (
         (ts.isForOfStatement(node) || ts.isForInStatement(node)) &&
         !ts.isVariableDeclarationList(node.initializer)
       ) {
-        target(node.initializer, node);
+        target(node.initializer, whole(node.initializer)); // the header's target, not the loop body
       } else if (ts.isCallExpression(node)) {
         call(node);
       }
@@ -269,14 +300,19 @@ function createScanner(files: string[], virtual: ReadonlyMap<string, string>) {
     visit(sf);
 
     if (found.length === 0) return [];
-    const markers = markerLines(sf);
+    const markers = markerComments(sf);
     return found
       .sort((a, b) => a.start - b.start)
-      .map(({ node, start, end }) => ({
+      .map(({ show, start, end }) => ({
         line: start + 1,
-        text: node.getText(sf).split("\n")[0].trim(),
-        // On the write's own lines, or the line above it.
-        marked: [...markers].some((m) => m >= start - 1 && m <= end),
+        text: show.getText(sf).split("\n")[0].trim(),
+        marked: markers.some(
+          (m) =>
+            // A comment on one of the write's own lines...
+            (m.start >= start && m.start <= end) ||
+            // ...or one standing alone on the line just above it: a trailing marker covers its own statement only.
+            (m.own && m.end === start - 1),
+        ),
       }));
   }
 
@@ -360,6 +396,18 @@ const MUST_FLAG: [string, string, number][] = [
   ["a marker below the write", "f.vx = 0;\n// kinetic: legacy-write (Task 18)\nconst a = 1;", 1],
   ["a marker only in a string", `const m = "kinetic: legacy-write (Task 18)"; f.vx = 0;`, 1],
   ["a marker covering one of two writes", "// kinetic: legacy-write (Task 18)\nf.vx = 0;\nf.vy = 0;", 1],
+  // A trailing marker excuses its own write and nothing after it (physics.ts and states.ts have adjacent marked pairs).
+  ["a trailing marker does not cover the next line", "f.vx = 0; // kinetic: legacy-write (Task 18)\nf.vy = 0;", 1],
+  [
+    "a trailing marker on a wrapped write does not cover the next line",
+    "f.vx = Math.trunc(\n  (f.vx * 2) / 3,\n); // kinetic: legacy-write (Task 17)\nf.vy = 0;",
+    1,
+  ],
+  ["a marker with code after it does not cover the next line", "/* kinetic: legacy-write (Task 18) */ const a = 1;\nf.vx = a;", 1],
+  // The marker belongs to the write's target, not to the statement or call around it.
+  ["a marker in a for-of body does not cover its header", "for (f.vx of [1, 2]) {\n  // kinetic: legacy-write (Task 18)\n  void 0;\n}", 1],
+  ["a marker in a for-in body does not cover its header", "for (f.vy in { a: 1 }) {\n  void 0; // kinetic: legacy-write (Task 18)\n}", 1],
+  ["a marker in an Object.assign payload does not cover the call", "Object.assign(f, {\n  vx: 0, // kinetic: legacy-write (Task 18)\n});", 1],
 ];
 
 const MUST_ALLOW: [string, string][] = [
@@ -367,6 +415,11 @@ const MUST_ALLOW: [string, string][] = [
   ["a marker on the line above", "// kinetic: legacy-write (Task 17 moves this to DAMAGE)\nf.vy = 0;"],
   ["a marker in a block comment above", "/* kinetic: legacy-write (Task 17) */\nf.vy -= 1;"],
   ["a marker after a wrapped write", "f.vx = Math.trunc(\n  (f.vx * 2) / 3,\n); // kinetic: legacy-write (Task 17)"],
+  ["a marker on a for-of header", "for (f.vx of [1, 2]) { // kinetic: legacy-write (Task 18)\n  void 0;\n}"],
+  ["a marker above a for-of header", "// kinetic: legacy-write (Task 18)\nfor (f.vy of [1]) { void 0; }"],
+  ["a marker on the first line of an Object.assign", "Object.assign(f, { // kinetic: legacy-write (Task 18)\n  vx: 0,\n});"],
+  ["a marker above an Object.assign", "// kinetic: legacy-write (Task 18)\nObject.assign(f, { vx: 0 });"],
+  ["a block marker of several lines directly above", "/* kinetic: legacy-write (Task 17)\n * the explanation */\nf.vx = 0;"],
   ["a marker on both of two lines", "f.vx = 0; // kinetic: legacy-write (Task 18)\nf.vy = 0; // kinetic: legacy-write (Task 18)"],
   ["a projectile write", "p.vx = -p.vx; p.vy -= 1; p.vx++;"],
   ["a Smash Ball write", "ball.vx += 1; ball.vy = 0;"],
@@ -386,10 +439,22 @@ const MUST_ALLOW: [string, string][] = [
   ["a read through element access", `const v = f["vx"]; void v;`],
 ];
 
+/** Writes the guard cannot see: pinned so the header's "Not caught" list is true, and so closing a gap fails a test. */
+const KNOWN_GAPS: [string, string][] = [
+  ["a fighter replaced wholesale", "s.fighters[0] = { ...s.fighters[0], vx: 0 };"],
+  ["a structural alias", "const g: { vx: number } = f; g.vx = 0;"],
+  ["a helper parameter typed { vx: number }", "function z(o: { vx: number }): void { o.vx = 0; }\n  z(f);"],
+  ["a double cast to { vx: number }", "(f as unknown as { vx: number }).vx = 0;"],
+  ["a dynamic key through any", "const name: string = k; (f as any)[name] = 0;"],
+  ["Object[\"assign\"]", `Object["assign"](f, { vx: 0 });`],
+  ["a destructured assign", "const { assign } = Object; assign(f, { vx: 0 });"],
+  ["an any-typed alias of Object.assign", "const set: Function = Object.assign; set(f, { vx: 0 });"],
+];
+
 const SNIPPET_DIR = join(SRC, "engine", "__snippets__");
 const snippetPath = (i: number): string => join(SNIPPET_DIR, `case${i}.ts`);
 const SNIPPETS = new Map<string, string>(
-  [...MUST_FLAG.map(([, body]) => body), ...MUST_ALLOW.map(([, body]) => body)].map((body, i) => [
+  [...MUST_FLAG.map(([, body]) => body), ...MUST_ALLOW.map(([, body]) => body), ...KNOWN_GAPS.map(([, body]) => body)].map((body, i) => [
     snippetPath(i),
     PRELUDE + body + POSTLUDE,
   ]),
@@ -444,6 +509,12 @@ describe("fighter velocity writes", () => {
     it.each(MUST_ALLOW.map(([name], i) => [name, i + MUST_FLAG.length] as const))("%s", (_name, i) => {
       const writes = scanner.scan(snippetPath(i)).filter((w) => !w.marked);
       expect(writes.map((w) => w.text)).toEqual([]);
+    });
+  });
+
+  describe("does not see (known gaps)", () => {
+    it.each(KNOWN_GAPS.map(([name], i) => [name, i + MUST_FLAG.length + MUST_ALLOW.length] as const))("%s", (_name, i) => {
+      expect(scanner.scan(snippetPath(i)).filter((w) => !w.marked)).toEqual([]);
     });
   });
 
