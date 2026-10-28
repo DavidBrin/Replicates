@@ -39,15 +39,15 @@ export interface AttackParams {
   readonly id: number;
   readonly part: number;
   readonly bone: BoneName;
-  /** Percent. */
+  /** Percent, Q12. */
   readonly damage: number;
-  /** Degrees; 361 is the Sakurai angle. */
+  /** Degrees, Q12; 361 is the Sakurai angle. */
   readonly angle: number;
-  /** Knockback growth, raw (100 means 100). */
+  /** Knockback growth: Q12 of the raw value (raw 100 is `fx(100)`). */
   readonly kbg: number;
-  /** Fixed ("set") knockback, raw; 0 when the move uses `bkb`. */
+  /** Fixed ("set") knockback: Q12 of the raw value; 0 when the move uses `bkb`. */
   readonly fkb: number;
-  /** Base knockback, raw. */
+  /** Base knockback: Q12 of the raw value. */
   readonly bkb: number;
   /** Radius. */
   readonly size: number;
@@ -66,6 +66,11 @@ export interface AttackParams {
   readonly clang: AttackSetoff;
   readonly facing: AttackLr;
   readonly setWeight: boolean;
+  /**
+   * Extra damage the hitbox does to a shield, on top of `damage` (`shield_damage`
+   * in `ATTACK`'s signature): percent, Q12. The shield code does not read it yet
+   * (UNVERIFIED against the game; carried so imported scripts keep the number).
+   */
   readonly shieldDamage: number;
   /** Trip chance, ONE = certain. */
   readonly trip: number;
@@ -123,7 +128,11 @@ export type AcmdCommand =
   | { readonly op: "catchClear"; readonly id: number }
   /** `ATK_POWER(id, damage)`: a live hitbox's damage changes, the hitbox does not. */
   | { readonly op: "atkPower"; readonly id: number; readonly damage: number }
-  /** `ATK_SET_SHIELD_SETOFF_MUL(ID, ShieldstunMul)`. */
+  /**
+   * `ATK_SET_SHIELD_SETOFF_MUL(ID, ShieldstunMul)`: Q12 multiplier on the live hitbox
+   * of slot `id`. UNVERIFIED: the replica ends it with that hitbox (a `clear` or a new
+   * `ATTACK` in the slot drops it); the game's own behaviour is undocumented.
+   */
   | { readonly op: "shieldSetoffMul"; readonly id: number; readonly mul: number }
   /** `FT_MOTION_RATE(FSM=r)`. */
   | { readonly op: "motionRate"; readonly rate: Rate }
