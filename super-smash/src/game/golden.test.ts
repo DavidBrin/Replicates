@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -8,17 +8,24 @@ import { meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import { mixBool, mixInt, mixString } from "@/engine/hash";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
-import type { GameState, InputFrame, MatchRules } from "@/engine/types";
+import { Btn } from "@/engine/types";
+import type { ActionState, FighterState, GameState, InputFrame, MatchRules, MoveSlot } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 
+import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
+
 /**
- * The strangler's safety net (Plan 2, Task 0).
+ * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Four real matches — real roster, real stages, two real CPUs (levels 9 and 7)
- * — for 3,600 frames each. Every 100 frames the test folds the
- * *presentation-visible* fields (the ones the renderer, the CPU and the HUD
- * read) into a digest and compares it with the committed one.
+ * Five matches on the real roster and real stages: four CPU-vs-CPU stock
+ * matches (levels 9 and 7) for 3,600 frames each, and one scripted timed match
+ * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
+ * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
+ * CPU ever takes. Every frame's `digest` is folded into a running hash, and
+ * every 100 frames that hash is compared with the committed one — so a
+ * difference that heals before the next sample (a projectile one unit faster,
+ * a status one frame longer) is still caught.
  *
  * Deliberately not `hashState`: Plan 2 adds fields to `FighterState`, and
  * `hashState` must cover them (that is its job), so its value changes on every
@@ -29,8 +36,7 @@ import { STAGES } from "@/stages";
  *   UPDATE_GOLDEN=1 pnpm vitest run src/game/golden.test.ts
  */
 
-const FIXTURE = join(process.cwd(), "src", "game", "__golden__", "engine-trace.json");
-const FRAMES = 3600;
+const FIXTURE = join(import.meta.dirname, "__golden__", "engine-trace.json");
 const EVERY = 100;
 const LEVELS = [9, 7] as const;
 
@@ -49,20 +55,148 @@ const CTX: SimContext = {
   },
 };
 
-const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
+/** One frame's keys for every port, given the state they will be applied to. */
+type Driver = (state: GameState, frame: number) => readonly InputFrame[];
 
-const MATCHES = [
-  { name: "mario-fox-battlefield", stage: "battlefield", fighters: ["mario", "fox"], seed: 101 },
-  { name: "donkeyKong-pikachu-finalDestination", stage: "finalDestination", fighters: ["donkeyKong", "pikachu"], seed: 202 },
-  { name: "link-samus-smashville", stage: "smashville", fighters: ["link", "samus"], seed: 303 },
-  { name: "kirby-marth-pokemonStadium2", stage: "pokemonStadium2", fighters: ["kirby", "marth"], seed: 404 },
-] as const;
+interface Match {
+  readonly name: string;
+  readonly stage: string;
+  readonly fighters: readonly string[];
+  readonly seed: number;
+  readonly rules: MatchRules;
+  readonly frames: number;
+  /** Only the CPU matches are held to the combat floor; the script's coverage is pinned instead. */
+  readonly cpu: boolean;
+  /** A fresh driver for one play-through, so a CPU's own seed starts over. */
+  readonly driver: () => Driver;
+}
 
-/** Everything a presentation layer reads, and nothing Plan 2 adds. */
+const CPU_RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
+
+function cpuMatch(name: string, stage: string, fighters: readonly [string, string], seed: number): Match {
+  return {
+    name,
+    stage,
+    fighters,
+    seed,
+    rules: CPU_RULES,
+    frames: 3600,
+    cpu: true,
+    driver() {
+      const view = stageViewFromDef(CTX.stage(stage));
+      const worlds: CpuWorld[] = fighters.map((id) => {
+        const def = CTX.fighter(id);
+        return { stage: view, jumps: def.attributes.jumps, meleeReach: meleeReachFromDef(def) };
+      });
+      let cpuSeed = seed ^ 0x1f2e3d4c;
+      return (state) =>
+        fighters.map((_, port) => {
+          const r = cpuInput(state, port, LEVELS[port], cpuSeed, worlds[port]);
+          cpuSeed = r.seed;
+          return r.input;
+        });
+    },
+  };
+}
+
+const MATCHES: readonly Match[] = [
+  cpuMatch("mario-fox-battlefield", "battlefield", ["mario", "fox"], 101),
+  cpuMatch("donkeyKong-pikachu-finalDestination", "finalDestination", ["donkeyKong", "pikachu"], 202),
+  cpuMatch("link-samus-smashville", "smashville", ["link", "samus"], 303),
+  cpuMatch("kirby-marth-pokemonStadium2", "pokemonStadium2", ["kirby", "marth"], 404),
+  {
+    ...SCRIPTED_MATCH,
+    cpu: false,
+    driver() {
+      const inputs = scriptedInputs(SCRIPTED_MATCH.steps);
+      return (_state, frame) => inputs(frame);
+    },
+  },
+];
+
+/**
+ * Every `ActionState` the five matches must visit between them: all 42. A
+ * `Record` rather than a list, so a new state is a compile error here until
+ * somebody pins it. Measured 2026-10-27 at 954ed97: the CPU matches reach 33,
+ * the script 41 — everything but `entering`, which Final Destination's floor-level
+ * spawn turns into a landing on frame 1, and which the Battlefield match keeps.
+ */
+const MUST_VISIT: Record<ActionState, true> = {
+  stand: true,
+  walk: true,
+  dashStart: true,
+  run: true,
+  runBrake: true,
+  turnaround: true,
+  crouchStart: true,
+  crouch: true,
+  crouchEnd: true,
+  jumpSquat: true,
+  jump: true,
+  fall: true,
+  land: true,
+  landingLag: true,
+  attack: true,
+  special: true,
+  grab: true,
+  grabHold: true,
+  pummel: true,
+  throw: true,
+  shieldStart: true,
+  shield: true,
+  shieldRelease: true,
+  shieldStun: true,
+  shieldBroken: true,
+  spotDodge: true,
+  roll: true,
+  airDodge: true,
+  hitstun: true,
+  tumble: true,
+  grabbed: true,
+  thrown: true,
+  downed: true,
+  getUp: true,
+  ledgeHang: true,
+  ledgeGetUp: true,
+  ledgeAttack: true,
+  ledgeRoll: true,
+  ledgeJump: true,
+  respawnPlatform: true,
+  dead: true,
+  entering: true,
+};
+
+/**
+ * What `Btn.Soft` changes, each of which some frame must exercise: a held
+ * direction that walks instead of dashing, a fresh direction plus attack that
+ * tilts instead of smashing, and DI bent a quarter as far.
+ */
+type SoftPath = "walk" | "tilt" | "DI";
+const SOFT_PATHS: readonly SoftPath[] = ["walk", "tilt", "DI"];
+const TILTS: readonly MoveSlot[] = ["ftilt", "utilt", "dtilt"];
+const DIRECTIONS = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
+
+/**
+ * Everything a presentation layer (the renderer, the CPU, the HUD) reads, and
+ * nothing Plan 2 adds. Exactly:
+ * - the frame, the RNG seed, the global freeze, the timer and the outcome;
+ * - per fighter: position, velocity, facing, grounded, action, action frame,
+ *   move, charge, damage, stocks, hitstun, hitlag, shield, jumps used,
+ *   intangible, invincible, fast fall, short hop, who it is grabbing, Final
+ *   Smash standby, costume and frames since a direction press;
+ * - the Smash Ball: active, position, velocity, health and drift timer;
+ * - each projectile's position.
+ */
 function digest(s: GameState): number {
   let x = mixInt(0x811c9dc5, s.frame);
   x = mixInt(x, s.rngSeed);
   x = mixInt(x, s.freezeFrames);
+  x = mixInt(x, s.timeRemaining);
+  if (s.outcome === null) x = mixInt(x, 0);
+  else {
+    x = mixString(x, s.outcome.kind);
+    for (const port of s.outcome.placings) x = mixInt(x, port);
+  }
   for (const f of s.fighters) {
     x = mixInt(x, f.x);
     x = mixInt(x, f.y);
@@ -82,7 +216,21 @@ function digest(s: GameState): number {
     x = mixInt(x, f.jumpsUsed);
     x = mixInt(x, f.intangible);
     x = mixInt(x, f.invincible);
+    x = mixBool(x, f.fastFalling);
+    x = mixBool(x, f.shortHop);
+    x = mixInt(x, f.grabbing);
+    x = mixInt(x, f.finalSmashReady);
+    x = mixInt(x, f.costume);
+    x = mixInt(x, f.framesSinceDirPress);
   }
+  const ball = s.smashBall;
+  x = mixBool(x, ball.active);
+  x = mixInt(x, ball.x);
+  x = mixInt(x, ball.y);
+  x = mixInt(x, ball.vx);
+  x = mixInt(x, ball.vy);
+  x = mixInt(x, ball.health);
+  x = mixInt(x, ball.driftTimer);
   x = mixInt(x, s.projectiles.length);
   for (const p of s.projectiles) {
     x = mixInt(x, p.x);
@@ -91,79 +239,119 @@ function digest(s: GameState): number {
   return x >>> 0;
 }
 
+/** Which soft-stick paths one fighter took on one frame, from its state either side of it. */
+function softPaths(before: FighterState, after: FighterState, input: InputFrame, prev: InputFrame): SoftPath[] {
+  if ((input & Btn.Soft) === 0 || (input & DIRECTIONS) === 0) return [];
+  const out: SoftPath[] = [];
+  if (after.action === "walk") out.push("walk");
+  const attackPressed = (input & Btn.Attack) !== 0 && (prev & Btn.Attack) === 0;
+  if (attackPressed && after.action === "attack" && after.move !== null && TILTS.includes(after.move)) {
+    out.push("tilt");
+  }
+  // A launch parked by a hit fires on the last frame of hitlag, bent by the
+  // direction held then. Being grabbed or KO'd also clears it, but launches nothing.
+  const launched = before.pendingFacing !== 0 && after.pendingFacing === 0;
+  if (launched && after.action !== "grabbed" && after.action !== "dead") out.push("DI");
+  return out;
+}
+
 interface Played {
   readonly digests: number[];
   readonly hits: number;
   readonly shieldHits: number;
   readonly kos: number;
+  readonly actions: ReadonlySet<ActionState>;
+  readonly soft: ReadonlySet<SoftPath>;
 }
 
-function play(match: (typeof MATCHES)[number]): Played {
-  const stage = CTX.stage(match.stage);
+function play(match: Match): Played {
   let state = createInitialState(
     match.stage,
     match.fighters.map((defId) => ({ defId })),
-    RULES,
+    match.rules,
     match.seed,
     CTX,
   );
-  const worlds: CpuWorld[] = match.fighters.map((id) => {
-    const def = CTX.fighter(id);
-    return { stage: stageViewFromDef(stage), jumps: def.attributes.jumps, meleeReach: meleeReachFromDef(def) };
-  });
-  let cpuSeed = match.seed ^ 0x1f2e3d4c;
-  let prev: InputFrame[] = match.fighters.map(() => 0);
+  const inputsFor = match.driver();
+  let prev: readonly InputFrame[] = match.fighters.map(() => 0);
+  let roll = 0x811c9dc5;
   const digests: number[] = [];
+  const actions = new Set<ActionState>();
+  const soft = new Set<SoftPath>();
   let hits = 0;
   let shieldHits = 0;
   let kos = 0;
-  for (let frame = 1; frame <= FRAMES; frame++) {
-    const inputs = match.fighters.map((_, port) => {
-      const r = cpuInput(state, port, LEVELS[port], cpuSeed, worlds[port]);
-      cpuSeed = r.seed;
-      return r.input;
-    });
+  for (let frame = 1; frame <= match.frames; frame++) {
+    const inputs = inputsFor(state, frame);
     const out = step(state, inputs, { prevInputs: prev, ctx: CTX });
+    for (let port = 0; port < out.state.fighters.length; port++) {
+      const after = out.state.fighters[port];
+      actions.add(after.action);
+      for (const p of softPaths(state.fighters[port], after, inputs[port], prev[port])) soft.add(p);
+    }
     state = out.state;
     prev = inputs;
     hits += out.events.hits.length;
     shieldHits += out.events.shieldHits.length;
     kos += out.events.kos.length;
-    if (frame % EVERY === 0) digests.push(digest(state));
+    roll = mixInt(roll, digest(state));
+    if (frame % EVERY === 0) digests.push(roll >>> 0);
   }
-  return { digests, hits, shieldHits, kos };
+  return { digests, hits, shieldHits, kos, actions, soft };
 }
 
 describe("engine golden trace", () => {
   const played = new Map(MATCHES.map((m) => [m.name, play(m)]));
+  const all = MATCHES.map((m) => played.get(m.name)!);
+
+  // A trace of idle fighters would pass every refactor and prove nothing.
+  // Measured 2026-10-27 at 954ed97, CPU matches then the script: hits
+  // 16/14/12/20 and 4, shield hits 1/0/1/2 and 3, KOs 1/3/1/0 and 1.
+  function expectCombat(): void {
+    const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);
+    for (const p of cpu) expect(p.hits).toBeGreaterThan(5);
+    expect(cpu.reduce((n, p) => n + p.shieldHits + p.kos, 0)).toBeGreaterThan(2);
+  }
+
+  // The code a refactor moves is only guarded if a match runs it, so the
+  // states and soft-stick paths visited are pinned, not just counted.
+  function expectCoverage(): void {
+    const actions = new Set(all.flatMap((p) => [...p.actions]));
+    const unvisited = (Object.keys(MUST_VISIT) as ActionState[]).filter((a) => !actions.has(a));
+    expect(unvisited, "action states no match reaches").toEqual([]);
+    const soft = new Set(all.flatMap((p) => [...p.soft]));
+    expect(SOFT_PATHS.filter((p) => !soft.has(p)), "Btn.Soft paths no match takes").toEqual([]);
+  }
+
+  // Both run when regenerating too, so a degenerate trace cannot be recorded.
+  it("exercises combat, not an idle screen", expectCombat);
+  it("visits every action state and every soft-stick path", expectCoverage);
 
   if (process.env.UPDATE_GOLDEN === "1") {
     it("writes the golden trace", () => {
+      // A failed test above does not stop this one, so it checks again first.
+      expectCombat();
+      expectCoverage();
       const out: Record<string, number[]> = {};
       for (const m of MATCHES) out[m.name] = played.get(m.name)!.digests;
-      if (!existsSync(dirname(FIXTURE))) mkdirSync(dirname(FIXTURE), { recursive: true });
+      mkdirSync(dirname(FIXTURE), { recursive: true });
       writeFileSync(FIXTURE, JSON.stringify(out, null, 2) + "\n");
-      expect(existsSync(FIXTURE)).toBe(true);
     });
     return;
   }
 
-  const expected = JSON.parse(readFileSync(FIXTURE, "utf8")) as Record<string, number[]>;
+  const expected = JSON.parse(readFileSync(FIXTURE, "utf8")) as Record<string, number[] | undefined>;
   for (const m of MATCHES) {
     it(`replays ${m.name} exactly`, () => {
       const want = expected[m.name];
+      if (want === undefined) {
+        expect.fail(`no golden trace for ${m.name}: regenerate with UPDATE_GOLDEN=1`);
+      }
       const got = played.get(m.name)!.digests;
       expect(got.length).toBe(want.length);
       const firstDiff = got.findIndex((v, i) => v !== want[i]);
-      expect(firstDiff, `first divergence by frame ${(firstDiff + 1) * EVERY}`).toBe(-1);
+      const span = `frames ${firstDiff * EVERY + 1}-${(firstDiff + 1) * EVERY}`;
+      expect(firstDiff, `first divergence in ${span}`).toBe(-1);
     });
   }
-
-  it("exercises combat, not an idle screen", () => {
-    // A trace of idle fighters would pass every refactor and prove nothing.
-    // Measured when written: hits 16/14/12/20, shield hits 1/0/1/2, KOs 1/3/1/0.
-    const all = MATCHES.map((m) => played.get(m.name)!);
-    for (const p of all) expect(p.hits).toBeGreaterThan(5);
-    expect(all.reduce((n, p) => n + p.shieldHits + p.kos, 0)).toBeGreaterThan(2);
-  });
 });
