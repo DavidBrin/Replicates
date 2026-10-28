@@ -3,8 +3,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { MatchRules } from "@/engine/types";
 import { RANDOM_FIGHTER, RANDOM_STAGE, type PlayerSlot } from "@/lib/matchConfig";
 import { parseLobbyMessage } from "@/net/online/lobby";
+import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, STAGES, bootstrapEngine, resolveMatchStage } from "./bootstrap";
-import { buildStartConfig, newMatchSeed, runnerSlotsFor } from "./onlineConfig";
+import { buildMismatch, buildStartConfig, localBuild, newMatchSeed, runnerSlotsFor } from "./onlineConfig";
+import { engineFingerprint } from "./simContext";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: true, oneOnOne: false };
 
@@ -79,5 +81,28 @@ describe("the host's start config", () => {
       { selection: { defId: "mario", costume: 0 }, cpuLevel: null, label: "P1" },
       { selection: { defId: "fox", costume: 1 }, cpuLevel: null, label: "P2" },
     ]);
+  });
+});
+
+describe("this build, as the other player sees it", () => {
+  it("is the wire format and the bone table", () => {
+    expect(localBuild()).toEqual({ protocol: PROTOCOL_VERSION, bones: engineFingerprint() });
+  });
+
+  it("plays a peer on the same build", () => {
+    expect(buildMismatch(localBuild())).toBeNull();
+    expect(buildMismatch({ protocol: 7, bones: "0badf00d" }, { protocol: 7, bones: "0badf00d" })).toBeNull();
+  });
+
+  it("refuses a peer on another wire format, whose packets it could not read", () => {
+    expect(buildMismatch({ ...localBuild(), protocol: PROTOCOL_VERSION + 1 })).toBe("protocol");
+  });
+
+  it("refuses a peer with other bone tables, whose hitboxes would land elsewhere", () => {
+    expect(buildMismatch({ ...localBuild(), bones: "0badf00d" })).toBe("bones");
+  });
+
+  it("refuses a peer that never said, which is a build from before the handshake", () => {
+    expect(buildMismatch(null)).toBe("missing");
   });
 });

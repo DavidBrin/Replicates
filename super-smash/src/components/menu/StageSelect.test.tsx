@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
+import { localBuild } from "@/game/onlineConfig";
 import { RANDOM_STAGE, resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession, setActiveSession } from "@/net/online/session";
@@ -177,7 +178,12 @@ describe("StageSelect, hosting online", () => {
     act(() => fake.emit({ type: "link", status: "waiting" }));
     act(() => fake.emit({ type: "peer", present: true }));
     act(() => fake.emit({ type: "link", status: "open" }));
+    // The newcomer says it runs this build, as this side did on opening.
+    act(() => fake.emit({ type: "lobby", message: { kind: "hello", ...localBuild() } }));
     // The stage is still being chosen; it goes with Choose Fighters, as the first time.
-    expect(fake.sent).toEqual([{ kind: "pick", fighterId: "mario", costume: 0 }]);
+    expect(fake.sent).toEqual([
+      { kind: "hello", ...localBuild() },
+      { kind: "pick", fighterId: "mario", costume: 0 },
+    ]);
   });
 });

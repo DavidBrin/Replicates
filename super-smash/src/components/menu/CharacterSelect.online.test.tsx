@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { routerMock } from "../../../vitest.setup";
+import { localBuild } from "@/game/onlineConfig";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, bindSession, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { STUN_ONLY } from "@/net/iceConfig";
-import type { OnlineMatchConfig } from "@/net/online/lobby";
+import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession, type FakeSession } from "@/net/online/testing";
 import { ROLE_PORT, type Role } from "@/net/signalProtocol";
@@ -24,6 +25,9 @@ const CONFIG: OnlineMatchConfig = {
   fighters: ["mario", "fox"],
   costumes: [0, 1],
 };
+
+/** This build's hello, which the other side says too when it runs the same build. */
+const HELLO: LobbyMessage = { kind: "hello", ...localBuild() };
 
 /** Both players in the room, as the lobby hands it to the select screens: seated, bound and connected. */
 function goOnline(role: Role): FakeSession {
@@ -178,6 +182,44 @@ describe("CharacterSelect, online", () => {
     expect(readyButton()).toBeDisabled();
   });
 
+  it("holds Ready shut, saying it is connecting, until the guest says it runs this build", async () => {
+    const fake = fakeSession();
+    setActiveSession(fake.session);
+    bindSession(fake.session);
+    act(() => {
+      fake.emit({ type: "joined", role: "host" });
+      fake.emit({ type: "peer", present: true });
+      fake.emit({ type: "link", status: "open" });
+    });
+    useMatchConfig.getState().setFighter(0, "mario");
+    useMatchConfig.getState().setFighter(1, "fox");
+    await renderSelect();
+    expect(readyButton()).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting to the other player…");
+    act(() => fake.emit({ type: "lobby", message: HELLO }));
+    expect(readyButton()).toBeEnabled();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  it("says the two versions differ, holds Ready shut and leaves, when the guest runs another build", async () => {
+    const fake = fakeSession();
+    setActiveSession(fake.session);
+    bindSession(fake.session);
+    act(() => {
+      fake.emit({ type: "joined", role: "host" });
+      fake.emit({ type: "peer", present: true });
+      fake.emit({ type: "link", status: "open" });
+    });
+    useMatchConfig.getState().setFighter(0, "mario");
+    useMatchConfig.getState().setFighter(1, "fox");
+    await renderSelect();
+    await act(async () => fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" } }));
+    expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
+    expect(readyButton()).toBeDisabled();
+    expect(fake.session.close).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Leave the room" })).toBeInTheDocument();
+  });
+
   it("holds Ready shut once the room is lost, picks and all", async () => {
     const fake = goOnline("host");
     useMatchConfig.getState().setFighter(0, "mario");
@@ -208,6 +250,7 @@ describe("CharacterSelect, online", () => {
     act(() => {
       signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
       channel.open();
+      signalling.deliver({ t: "lobby", from: "g1", payload: HELLO });
     });
     expect(useOnlineStore.getState().status).toBe("connected");
     useMatchConfig.getState().setFighter(0, "mario");
@@ -219,7 +262,7 @@ describe("CharacterSelect, online", () => {
     expect(readyButton()).toBeDisabled();
     fireEvent.click(readyButton());
 
-    expect(signalling.sent.some((m) => m.t === "lobby")).toBe(false);
+    expect(signalling.sent.some((m) => m.t === "lobby" && m.payload.kind === "start")).toBe(false);
     expect(routerMock.push).not.toHaveBeenCalled();
     expect(useOnlineStore.getState().config).toBeNull();
   });
@@ -328,13 +371,14 @@ describe("CharacterSelect, online", () => {
         g.signalling.deliver({ t: "signal", from: "h1", payload: { kind: "offer", sdp: "o" } });
         await vi.advanceTimersByTimeAsync(0);
         g.channels[0].open();
+        g.signalling.deliver({ t: "lobby", from: "h1", payload: HELLO });
         g.signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "stage", stageId: "smashville", form: "normal" } });
       });
       render(<CharacterSelect />);
       await act(async () => {});
       fireEvent.click(portraits()[0]);
       const mine = useMatchConfig.getState().players[ROLE_PORT.guest];
-      expect(g.lobby()).toEqual([{ kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
+      expect(g.lobby()).toEqual([HELLO, { kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
 
       // The host's side died; it offers again, and this side's channel is replaced.
       await act(async () => {
@@ -347,8 +391,11 @@ describe("CharacterSelect, online", () => {
       act(() => g.channels[1].open());
 
       expect(useOnlineStore.getState().status).toBe("connected");
+      // The replaced channel says this build again, then the pick.
       expect(g.lobby()).toEqual([
+        HELLO,
         { kind: "pick", fighterId: mine.fighterId, costume: mine.costume },
+        HELLO,
         { kind: "pick", fighterId: mine.fighterId, costume: mine.costume },
       ]);
     });
@@ -360,6 +407,7 @@ describe("CharacterSelect, online", () => {
         h.signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
         await vi.advanceTimersByTimeAsync(0);
         h.channels[0].open();
+        h.signalling.deliver({ t: "lobby", from: "g1", payload: HELLO });
       });
       useMatchConfig.getState().setFighter(0, "mario");
       render(<CharacterSelect />);
@@ -396,11 +444,12 @@ describe("CharacterSelect, online", () => {
   });
 
   describe("when somebody takes the empty seat", () => {
-    /** The opponent leaves, a newcomer takes the seat, and the channel opens again. */
+    /** The opponent leaves, a newcomer takes the seat, the channel opens again, and the newcomer says it runs this build. */
     function rejoin(fake: FakeSession) {
       act(() => fake.emit({ type: "link", status: "waiting" }));
       act(() => fake.emit({ type: "peer", present: true }));
       act(() => fake.emit({ type: "link", status: "open" }));
+      act(() => fake.emit({ type: "lobby", message: HELLO }));
     }
 
     it("has the host repeat its pick and its stage, since the newcomer's page starts empty", async () => {
@@ -417,6 +466,7 @@ describe("CharacterSelect, online", () => {
       rejoin(fake);
 
       expect(fake.sent).toEqual([
+        HELLO,
         { kind: "pick", fighterId: mine.fighterId, costume: mine.costume },
         { kind: "stage", stageId: "smashville", form: "omega", rules: useMatchConfig.getState().rules },
       ]);
@@ -431,7 +481,7 @@ describe("CharacterSelect, online", () => {
 
       rejoin(fake);
 
-      expect(fake.sent).toEqual([{ kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
+      expect(fake.sent).toEqual([HELLO, { kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
     });
   });
 });

@@ -60,6 +60,10 @@ describe("lobby messages", () => {
     expect(parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config: CONFIG })))).toEqual({ kind: "start", config: CONFIG });
   });
 
+  it("reads a hello: the build the other side runs", () => {
+    expect(parseLobbyMessage({ kind: "hello", protocol: 2, bones: "0123abcd" })).toEqual({ kind: "hello", protocol: 2, bones: "0123abcd" });
+  });
+
   it("reads an away flag", () => {
     expect(parseLobbyMessage({ kind: "away", away: true })).toEqual({ kind: "away", away: true });
   });
@@ -77,6 +81,12 @@ describe("lobby messages", () => {
       { kind: "start", config: { ...CONFIG, rules: { ...CONFIG.rules, mode: "coin" } } },
       { kind: "start", config: { ...CONFIG, seed: 1.5 } },
       { kind: "away", away: "yes" },
+      { kind: "hello", protocol: 2, bones: "not-hex!" },
+      { kind: "hello", protocol: 2, bones: "0123ABCD" },
+      { kind: "hello", protocol: 1.5, bones: "0123abcd" },
+      { kind: "hello", protocol: 256, bones: "0123abcd" },
+      { kind: "hello", bones: "0123abcd" },
+      { kind: "hello", protocol: 2 },
       { kind: "explode" },
     ];
     for (const payload of bad) expect(parseLobbyMessage(payload)).toBeNull();
@@ -167,13 +177,15 @@ describe("lobby messages from a hostile or mismatched peer", () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
-  it("copies nothing extra out of a pick, a stage or an away either", () => {
+  it("copies nothing extra out of a pick, a stage, an away or a hello either", () => {
     const pick = parseLobbyMessage(JSON.parse('{"kind":"pick","fighterId":"fox","costume":1,"__proto__":{"x":1},"extra":true}'));
     expect(Object.keys(pick ?? {}).sort()).toEqual(["costume", "fighterId", "kind"]);
     const stage = parseLobbyMessage(JSON.parse('{"kind":"stage","stageId":"battlefield","form":"normal","__proto__":{"x":1}}'));
     expect(Object.keys(stage ?? {}).sort()).toEqual(["form", "kind", "stageId"]);
     const away = parseLobbyMessage(JSON.parse('{"kind":"away","away":false,"__proto__":{"x":1}}'));
     expect(Object.keys(away ?? {}).sort()).toEqual(["away", "kind"]);
+    const hello = parseLobbyMessage(JSON.parse('{"kind":"hello","protocol":2,"bones":"0123abcd","__proto__":{"x":1},"extra":true}'));
+    expect(Object.keys(hello ?? {}).sort()).toEqual(["bones", "kind", "protocol"]);
   });
 
   it("reads the config's arrays as exactly two entries, not by prototype or length tricks", () => {

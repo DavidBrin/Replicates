@@ -29,6 +29,18 @@ import {
 import { getStage } from "@/stages";
 import { isRecord } from "../signalProtocol";
 
+/**
+ * Which build a peer runs, as far as playing each other goes (Plan 2 Task 27).
+ * Two builds that differ here are two different games, so nothing starts
+ * between them: each side says its own in a `hello` as its channel opens.
+ */
+export interface BuildStamp {
+  /** The wire format (`PROTOCOL_VERSION`, net/packet.ts). A peer on another cannot read this one's packets. */
+  readonly protocol: number;
+  /** The bone-table fingerprint (`engineFingerprint`): another table puts hitboxes elsewhere. */
+  readonly bones: string;
+}
+
 export interface OnlineMatchConfig {
   /** A 32-bit integer: `buildStartConfig` truncates the host's draw to one. */
   readonly seed: number;
@@ -46,12 +58,18 @@ export type LobbyMessage =
   /** `rules` are the host's, for the guest to see before it starts; the start carries the ones played. */
   | { readonly kind: "stage"; readonly stageId: string; readonly form: StageForm; readonly rules?: MatchRules }
   | { readonly kind: "start"; readonly config: OnlineMatchConfig }
-  | { readonly kind: "away"; readonly away: boolean };
+  | { readonly kind: "away"; readonly away: boolean }
+  /** This side's `BuildStamp`, said each time its channel opens. Nothing starts until the other side's matches. */
+  | { readonly kind: "hello"; readonly protocol: number; readonly bones: string };
 
 /** A sanity bound, not a roster fact: the renderer falls back to the default colours past a fighter's alts. */
 const MAX_COSTUME = 15;
 const MIN_SEED = -0x8000_0000;
 const MAX_SEED = 0x7fff_ffff;
+/** The packet header carries the protocol version in one byte (net/packet.ts). */
+const MAX_PROTOCOL = 0xff;
+/** `BoneTable.fingerprint`: 8 lowercase hex digits. */
+const FINGERPRINT = /^[0-9a-f]{8}$/;
 
 export function parseLobbyMessage(payload: unknown): LobbyMessage | null {
   if (!isRecord(payload)) return null;
@@ -82,6 +100,10 @@ export function parseLobbyMessage(payload: unknown): LobbyMessage | null {
       const away = payload.away;
       return typeof away === "boolean" ? { kind: "away", away } : null;
     }
+    case "hello": {
+      const build = parseBuild(payload);
+      return build ? { kind: "hello", protocol: build.protocol, bones: build.bones } : null;
+    }
     default:
       return null;
   }
@@ -101,6 +123,13 @@ function parseConfig(value: unknown): OnlineMatchConfig | null {
   const [c0, c1] = costumes as unknown[];
   if (!isCostume(c0) || !isCostume(c1)) return null;
   return { seed, stageId, stageForm, rules: parsedRules, fighters: [f0, f1], costumes: [c0, c1] };
+}
+
+function parseBuild(value: Record<string, unknown>): BuildStamp | null {
+  const { protocol, bones } = value;
+  if (!isInRange(protocol, 0, MAX_PROTOCOL)) return null;
+  if (typeof bones !== "string" || !FINGERPRINT.test(bones)) return null;
+  return { protocol, bones };
 }
 
 function parseRules(value: unknown): MatchRules | null {

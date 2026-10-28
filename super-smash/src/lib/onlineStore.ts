@@ -10,24 +10,36 @@
 import { create } from "zustand";
 
 import type { MatchRules } from "@/engine/types";
-import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
+import { buildMismatch, localBuild } from "@/game/onlineConfig";
+import type { BuildStamp, LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
 import type { Unsubscribe } from "@/net/transport";
 import { useMatchConfig, type StageForm } from "./matchConfig";
 
 /**
- * `connected` means the channel is open and nothing has gone wrong. It is the
- * only status a match may start from, so the select screens gate on it.
+ * `connected` means the channel is open, the other side has said it runs this
+ * build, and nothing has gone wrong. It is the only status a match may start
+ * from, so the select screens gate on it.
  */
 export type OnlineStatus = "idle" | "connecting" | "waiting" | "linking" | "connected" | "error";
-export type OnlineErrorReason = SessionError | "link-failed";
+/** "engine-mismatch": the other player runs another build (Plan 2 Task 27). */
+export type OnlineErrorReason = SessionError | "link-failed" | "engine-mismatch";
 
 /** Shown while the seat the opponent left stands empty. */
 export const PEER_LEFT_NOTICE = "The other player left the room.";
 
 /** The select screens' status line while a newcomer's direct connection opens. */
 export const LINKING_STATUS = "Connecting to the other player…";
+
+/**
+ * How long, once the channel is open, the other side has to say which build
+ * it runs (`hello`, Plan 2 Task 27). A build from before the handshake never
+ * says, and is refused when this runs out. A hello rides the room and takes a
+ * round trip at most; until it lands, the screens show the connecting status,
+ * so a quick one goes unnoticed.
+ */
+export const HELLO_TIMEOUT_MS = 5_000;
 
 /**
  * How long an online result keeps the room open before leaving it. The peer
@@ -117,6 +129,8 @@ function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
       return "The match could not be sent to the other player. Leave the room and start again.";
     case "link-failed":
       return "The direct connection could not be opened. Try again; strict networks need the TURN relay.";
+    case "engine-mismatch":
+      return "The other player is running a different version. Both reload the page.";
     case "bad-message":
     case "too-many-messages":
       return "The room closed the connection.";
@@ -134,9 +148,79 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   unbind?.();
   const online = useOnlineStore.getState;
   const match = useMatchConfig.getState;
+
+  /**
+   * The other side said it runs this build (`hello`). That belongs to whoever
+   * the room seats: a newcomer, or the same player back from a reload, says it
+   * again before anything can start.
+   */
+  let peerBuildMatches = false;
+  /** Whether the channel is open, as the session last reported. */
+  let linkOpen = false;
+  /** Runs out `HELLO_TIMEOUT_MS` after the channel opens with no matching hello in. */
+  let helloTimer: ReturnType<typeof setTimeout> | null = null;
+  const stopHelloTimer = () => {
+    if (helloTimer !== null) clearTimeout(helloTimer);
+    helloTimer = null;
+  };
+
   // An error outranks a notice: the screens have one thing to say.
-  const fail = (reason: OnlineErrorReason) =>
+  const fail = (reason: OnlineErrorReason) => {
+    stopHelloTimer();
     online().patch({ status: "error", errorReason: reason, error: roomErrorMessage(reason, session.roomCode), notice: null });
+  };
+
+  /**
+   * The other player runs another build: the two would not be playing the same
+   * game, so nothing starts. Said for good, like any room error, and like the
+   * session's own (`failWith`) the room is left, so the code cannot pair a
+   * newcomer with this screen. A start not yet played is withdrawn.
+   */
+  const refuseBuild = () => {
+    fail("engine-mismatch");
+    online().patch({ config: null });
+    // Once this delivery is over, not in the middle of it (session.ts, `leaveSoon`).
+    queueMicrotask(() => session.close());
+  };
+
+  const sayHello = () => session.sendLobby({ kind: "hello", ...localBuild() });
+
+  /**
+   * The channel is open: say which build this is, on the first opening and on
+   * every reconnect. Nothing starts until the other side's hello matches; the
+   * connecting status covers the wait, and a build that never says is refused
+   * once `HELLO_TIMEOUT_MS` runs out.
+   */
+  const channelOpened = () => {
+    // First, ahead of anything a screen repeats on connecting.
+    sayHello();
+    // The send can find the room gone, which the session has just reported.
+    if (online().errorReason !== null) return;
+    if (peerBuildMatches) {
+      online().patch({ status: "connected", notice: null });
+      return;
+    }
+    online().patch({ status: "linking", notice: null });
+    helloTimer ??= setTimeout(() => {
+      helloTimer = null;
+      if (online().errorReason === null) refuseBuild();
+    }, HELLO_TIMEOUT_MS);
+  };
+
+  /** The other side's hello: the build it runs. */
+  const heardHello = (theirs: BuildStamp) => {
+    if (buildMismatch(theirs) !== null) {
+      // Said again on the way out, in case this side's channel had not opened
+      // to say it yet: the other side then refuses too, rather than only
+      // seeing this one leave.
+      sayHello();
+      refuseBuild();
+      return;
+    }
+    peerBuildMatches = true;
+    stopHelloTimer();
+    if (linkOpen && online().status === "linking") online().patch({ status: "connected", notice: null });
+  };
 
   /**
    * The other player's seat emptied: whoever takes it next starts from an
@@ -145,6 +229,8 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * error: the room offers to whoever joins next, so the same code pairs again.
    */
   const seatEmptied = () => {
+    peerBuildMatches = false;
+    stopHelloTimer();
     const remote = remotePort(session);
     if (remote !== null) {
       match().setFighter(remote, null);
@@ -178,6 +264,9 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         break;
       case "peer":
         peerSeated = event.present;
+        // Somebody arrived or left: whoever sits there next says its build afresh.
+        peerBuildMatches = false;
+        stopHelloTimer();
         if (event.present) {
           if (online().status === "connected") break;
           // Somebody took the empty seat: that the last opponent left is no longer news.
@@ -189,8 +278,11 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         }
         break;
       case "link":
+        linkOpen = event.status === "open";
+        // The wait for a hello runs only while the channel is open.
+        if (!linkOpen) stopHelloTimer();
         if (event.status === "open") {
-          online().patch({ status: "connected", notice: null });
+          channelOpened();
         } else if (event.status === "negotiating" && (online().status === "waiting" || online().status === "connected")) {
           // A fresh connection to whoever the room seats: a newcomer, or the
           // same player again after the channel was lost (session.ts). From
@@ -210,12 +302,14 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         }
         break;
       case "lobby":
-        applyLobby(event.message, session);
+        if (event.message.kind === "hello") heardHello(event.message);
+        else applyLobby(event.message, session);
         break;
     }
   });
   const release = () => {
     live = false;
+    stopHelloTimer();
     off();
     if (unbind === release) unbind = null;
   };

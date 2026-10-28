@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { routerMock } from "../../../vitest.setup";
+import { localBuild } from "@/game/onlineConfig";
 import { useMatchConfig } from "@/lib/matchConfig";
 import { PEER_LEFT_NOTICE, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import { getActiveSession } from "@/net/online/session";
@@ -113,7 +114,7 @@ describe("OnlineLobby", () => {
     expect(screen.getByRole("button", { name: /create room/i })).toBeInTheDocument();
   });
 
-  it("sends the host to the stage select once the direct link is open", async () => {
+  it("sends the host to the stage select once the direct link is open and the guest runs this build", async () => {
     const { opened } = harness();
     await create();
     act(() => {
@@ -121,17 +122,33 @@ describe("OnlineLobby", () => {
       opened[0].emit({ type: "peer", present: true });
       opened[0].emit({ type: "link", status: "open" });
     });
+    expect(routerMock.push).not.toHaveBeenCalled();
+    act(() => opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() } }));
     expect(routerMock.push).toHaveBeenCalledWith("/stage");
   });
 
-  it("sends the guest to the character select once the direct link is open", async () => {
+  it("sends the guest to the character select once the direct link is open and the host runs this build", async () => {
     const { opened } = harness();
     await join("ABCD");
     act(() => {
       opened[0].emit({ type: "joined", role: "guest" });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() } });
       opened[0].emit({ type: "link", status: "open" });
     });
     expect(routerMock.push).toHaveBeenCalledWith("/fighters");
+  });
+
+  it("stays in the lobby, and says the versions differ, when the other player runs another build", async () => {
+    const { opened } = harness();
+    await join("ABCD");
+    await act(async () => {
+      opened[0].emit({ type: "joined", role: "guest" });
+      opened[0].emit({ type: "link", status: "open" });
+      opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild(), bones: "0badf00d" } });
+    });
+    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("The other player is running a different version. Both reload the page.");
+    expect(opened[0].session.close).toHaveBeenCalled();
   });
 
   it("does not bounce back into a room left open earlier", async () => {
@@ -299,6 +316,7 @@ describe("OnlineLobby", () => {
       act(() => {
         opened[0].emit({ type: "joined", role });
         opened[0].emit({ type: "link", status: "open" });
+        opened[0].emit({ type: "lobby", message: { kind: "hello", ...localBuild() } });
       });
       expect(routerMock.push).toHaveBeenCalledWith(role === "host" ? "/stage" : "/fighters");
 

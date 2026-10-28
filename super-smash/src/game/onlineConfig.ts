@@ -9,9 +9,11 @@
 
 import type { MatchRules } from "@/engine/types";
 import { RANDOM_FIGHTER, type PlayerSlot, type StageForm } from "@/lib/matchConfig";
-import type { OnlineMatchConfig } from "@/net/online/lobby";
+import type { BuildStamp, OnlineMatchConfig } from "@/net/online/lobby";
+import { PROTOCOL_VERSION } from "@/net/packet";
 import { FIGHTERS, resolveFighterId, resolveMatchStage } from "./bootstrap";
 import type { PlayerSlot as RunnerSlot } from "./matchRunner";
+import { engineFingerprint } from "./simContext";
 
 export interface StartConfigInput {
   readonly players: readonly PlayerSlot[];
@@ -34,6 +36,26 @@ export function buildStartConfig(input: StartConfigInput): OnlineMatchConfig {
     fighters: [resolveFighterId(known(p0.fighterId), seed, 0), resolveFighterId(known(p1.fighterId), seed, 1)],
     costumes: [p0.costume, p1.costume],
   };
+}
+
+/** This build, as the other player's sees it (Plan 2 Task 27). */
+export function localBuild(): BuildStamp {
+  return { protocol: PROTOCOL_VERSION, bones: engineFingerprint() };
+}
+
+/**
+ * Why a peer's build cannot play this one: it never said (a build from before
+ * the handshake), its packets are another wire format, or its bone tables put
+ * hitboxes elsewhere — rollback would desync on the first hit.
+ */
+export type BuildMismatch = "missing" | "protocol" | "bones";
+
+/** Null when the two builds can play each other. */
+export function buildMismatch(theirs: BuildStamp | null, ours: BuildStamp = localBuild()): BuildMismatch | null {
+  if (theirs === null) return "missing";
+  if (theirs.protocol !== ours.protocol) return "protocol";
+  if (theirs.bones !== ours.bones) return "bones";
+  return null;
 }
 
 /** Outside the simulation, so `Math.random` is allowed; the result enters it only as data. */

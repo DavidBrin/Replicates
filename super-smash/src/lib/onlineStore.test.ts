@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
+import { localBuild } from "@/game/onlineConfig";
 import { NEGOTIATION_TIMEOUT_MS } from "@/net/adapters/doSignal";
 import { STUN_ONLY } from "@/net/iceConfig";
-import type { OnlineMatchConfig } from "@/net/online/lobby";
+import type { LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
 import { GUEST_REOFFER_WAIT_MS, OnlineSession, REOFFER_DELAYS_MS, getActiveSession, setActiveSession } from "@/net/online/session";
 import { fakeSession } from "@/net/online/testing";
+import { PROTOCOL_VERSION } from "@/net/packet";
 import type { Role } from "@/net/signalProtocol";
 import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
 import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { useMatchConfig } from "./matchConfig";
 import {
+  HELLO_TIMEOUT_MS,
   PEER_LEFT_NOTICE,
   bindSession,
   leaveOnline,
@@ -28,6 +31,9 @@ const CONFIG: OnlineMatchConfig = {
   costumes: [0, 1],
 };
 
+/** This build's hello: what each side says as its channel opens, and the other side's when it runs the same build. */
+const HELLO: LobbyMessage = { kind: "hello", ...localBuild() };
+
 beforeEach(() => {
   leaveOnline();
   useMatchConfig.getState().reset();
@@ -42,13 +48,15 @@ describe("binding a session to the stores", () => {
     expect(useMatchConfig.getState().players.every((p) => p.kind === "human")).toBe(true);
   });
 
-  it("goes from waiting to linking to connected", () => {
+  it("goes from waiting to linking to connected, once the other side says it runs this build", () => {
     const { session, emit } = fakeSession();
     bindSession(session);
     emit({ type: "joined", role: "host" });
     emit({ type: "peer", present: true });
     expect(useOnlineStore.getState().status).toBe("linking");
     emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState().status).toBe("linking");
+    emit({ type: "lobby", message: HELLO });
     expect(useOnlineStore.getState().status).toBe("connected");
   });
 
@@ -120,6 +128,7 @@ describe("binding a session to the stores", () => {
     bindSession(session);
     emit({ type: "joined", role: "host" });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     useMatchConfig.getState().setFighter(0, "mario");
     emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 3 } });
     emit({ type: "lobby", message: { kind: "away", away: true } });
@@ -142,6 +151,7 @@ describe("binding a session to the stores", () => {
     bindSession(session);
     emit({ type: "joined", role: "guest" });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
     emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
     emit({ type: "link", status: "waiting" });
@@ -155,15 +165,18 @@ describe("binding a session to the stores", () => {
     emit({ type: "joined", role: "host" });
     emit({ type: "peer", present: true });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     emit({ type: "peer", present: false });
     emit({ type: "link", status: "waiting" });
     expect(useOnlineStore.getState().notice).toBe(PEER_LEFT_NOTICE);
 
-    // The same friend, back from a refresh with the same code.
+    // The same friend, back from a refresh with the same code: a reload, so
+    // they say which build they now run before anything can start.
     emit({ type: "peer", present: true });
     expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
     emit({ type: "link", status: "negotiating" });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null, error: null });
   });
 
@@ -174,6 +187,7 @@ describe("binding a session to the stores", () => {
     emit({ type: "joined", role: "host" });
     emit({ type: "peer", present: true });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 3 } });
     emit({ type: "link", status: "waiting" });
     expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
@@ -191,6 +205,7 @@ describe("binding a session to the stores", () => {
     emit({ type: "joined", role: "guest" });
     emit({ type: "peer", present: true });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
     emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
     if (status === "linking") emit({ type: "link", status: "waiting" });
@@ -212,6 +227,7 @@ describe("binding a session to the stores", () => {
     bindSession(session);
     emit({ type: "joined", role: "guest" });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     emit({ type: "lobby", message: { kind: "stage", stageId: "smashville", form: "omega" } });
     emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 2 } });
     emit({ type: "link", status: "negotiating" });
@@ -226,8 +242,13 @@ describe("binding a session to the stores", () => {
     bindSession(session);
     emit({ type: "joined", role: "guest" });
     emit({ type: "link", status: "open" });
+    emit({ type: "lobby", message: HELLO });
     emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState().notice).toBe(PEER_LEFT_NOTICE);
     emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", notice: null });
+    // Whoever the seat holds now says its build too.
+    emit({ type: "lobby", message: HELLO });
     expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
   });
 
@@ -271,6 +292,7 @@ describe("with a real session, when the lobby channel is lost", () => {
     }
     await vi.advanceTimersByTimeAsync(0);
     channels[0].open();
+    signalling.deliver({ t: "lobby", from: role === "host" ? "g1" : "h1", payload: HELLO });
     expect(useOnlineStore.getState().status).toBe("connected");
     const notices: (string | null)[] = [];
     useOnlineStore.subscribe((now) => notices.push(now.notice));
@@ -288,6 +310,11 @@ describe("with a real session, when the lobby channel is lost", () => {
     h.channels[1].open();
 
     expect(useOnlineStore.getState()).toMatchObject({ status: "connected", notice: null });
+    // The fresh connection says this build again, through the room.
+    expect(h.signalling.sent.filter((m) => m.t === "lobby" && m.payload.kind === "hello")).toEqual([
+      { t: "lobby", payload: HELLO },
+      { t: "lobby", payload: HELLO },
+    ]);
     expect(useMatchConfig.getState().players.map((p) => p.fighterId)).toEqual(["mario", "fox"]);
     expect(h.notices.every((notice) => notice === null)).toBe(true);
   });
@@ -334,6 +361,175 @@ describe("with a real session, when the lobby channel is lost", () => {
   });
 });
 
+/**
+ * Two builds that differ are two different games (Plan 2 Task 27): another
+ * wire format cannot read this one's packets, and another bone table puts
+ * hitboxes elsewhere, so the match would desync on the first hit. Each side
+ * says its build as the channel opens; nothing starts until the other's
+ * matches, and a mismatch is said in the lobby, for good, before anyone plays.
+ */
+describe("the build handshake", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Both players in the room, and this side's channel open: the moment it says hello. */
+  function opened(role: Role) {
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role });
+    fake.emit({ type: "peer", present: true });
+    fake.emit({ type: "link", status: "open" });
+    return fake;
+  }
+
+  /** What a mismatch leaves: the sentence, for good, and the room left once the delivery is over. */
+  async function expectRefused(fake: ReturnType<typeof fakeSession>) {
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "engine-mismatch",
+      error: "The other player is running a different version. Both reload the page.",
+      notice: null,
+      config: null,
+    });
+    expect(fake.session.close).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(fake.session.close).toHaveBeenCalledTimes(1);
+  }
+
+  it("says this build's hello as the channel opens, and is connected only once the other side's matching one is in", () => {
+    const { sent, emit } = opened("host");
+    expect(sent).toEqual([HELLO]);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
+    emit({ type: "lobby", message: HELLO });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", error: null });
+  });
+
+  it("is connected as its channel opens when the other side's hello came first", () => {
+    const { session, emit } = fakeSession();
+    bindSession(session);
+    emit({ type: "joined", role: "guest" });
+    emit({ type: "peer", present: true });
+    emit({ type: "lobby", message: HELLO });
+    expect(useOnlineStore.getState().status).toBe("linking");
+    emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState().status).toBe("connected");
+  });
+
+  it.each([
+    ["wire format", { ...HELLO, protocol: PROTOCOL_VERSION + 1 }],
+    ["bone table", { ...HELLO, bones: "0badf00d" }],
+  ] as const)("refuses a peer on another %s, for good, and leaves the room", async (_, theirs) => {
+    const fake = opened("guest");
+    fake.emit({ type: "lobby", message: theirs });
+    await expectRefused(fake);
+    // Nothing the session reports afterwards undoes it.
+    fake.emit({ type: "lobby", message: HELLO });
+    fake.emit({ type: "link", status: "open" });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "engine-mismatch" });
+  });
+
+  it("says its own hello on the way out, so the other side refuses too, even before its channel opened", async () => {
+    const fake = fakeSession();
+    bindSession(fake.session);
+    fake.emit({ type: "joined", role: "host" });
+    fake.emit({ type: "peer", present: true });
+    fake.emit({ type: "lobby", message: { ...HELLO, bones: "0badf00d" } });
+    expect(fake.sent).toEqual([HELLO]);
+    await expectRefused(fake);
+  });
+
+  it("refuses a build that never says hello, five seconds after the channel opens", async () => {
+    vi.useFakeTimers();
+    const fake = opened("host");
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
+    vi.advanceTimersByTime(1);
+    await expectRefused(fake);
+  });
+
+  it("stops waiting for a hello once the other side's matching one is in", () => {
+    vi.useFakeTimers();
+    const { emit } = opened("guest");
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    emit({ type: "lobby", message: HELLO });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "connected", error: null });
+  });
+
+  it("waits for a hello only while the channel is open, and afresh each time it opens", () => {
+    vi.useFakeTimers();
+    const { emit } = opened("host");
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    emit({ type: "link", status: "waiting" });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState().error).toBeNull();
+    emit({ type: "link", status: "negotiating" });
+    emit({ type: "link", status: "open" });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS - 1);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "linking", error: null });
+    vi.advanceTimersByTime(1);
+    expect(useOnlineStore.getState().errorReason).toBe("engine-mismatch");
+  });
+
+  it("stops waiting for a hello on leaving", () => {
+    vi.useFakeTimers();
+    const fake = opened("host");
+    leaveOnline();
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    expect(useOnlineStore.getState()).toMatchObject({ status: "idle", error: null });
+    expect(fake.session.close).not.toHaveBeenCalled();
+  });
+
+  it("says hello again on every reconnect, and takes the same player back without a new one", () => {
+    const fake = opened("guest");
+    fake.emit({ type: "lobby", message: HELLO });
+    // The channel lost with the host still in the room: the session is getting it back.
+    fake.emit({ type: "link", status: "waiting" });
+    expect(useOnlineStore.getState().status).toBe("linking");
+    fake.emit({ type: "link", status: "negotiating" });
+    fake.emit({ type: "link", status: "open" });
+    expect(fake.sent).toEqual([HELLO, HELLO]);
+    expect(useOnlineStore.getState().status).toBe("connected");
+  });
+
+  /** The hello rides the room: with the room gone the lobby cannot go on, and that is what it says. */
+  it("says the room is lost, not the version, when the channel opens after the room dropped", async () => {
+    vi.useFakeTimers();
+    const signalling = new FakeSignalling();
+    const channel = new OpenableChannel();
+    const session = await OnlineSession.open("ABCD", "create", {
+      fetchIce: async () => STUN_ONLY,
+      openSignalling: () => signalling,
+      createPeerConnection: () => ({ ...inertPeer(), createDataChannel: () => channel }),
+    });
+    setActiveSession(session);
+    bindSession(session);
+    signalling.deliver({ t: "welcome", self: { id: "h1", role: "host" }, peer: { id: "g1", role: "guest" } });
+    // A Worker deploy drops the room mid-negotiation, and the channel opens within the session's grace.
+    signalling.deliver({ t: "closed", code: 1006, reason: "" });
+    channel.open();
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "room-lost" });
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS);
+    expect(useOnlineStore.getState().errorReason).toBe("room-lost");
+  });
+
+  it("has whoever takes the empty seat say its build before anything can start, and refuses another one", async () => {
+    const fake = opened("host");
+    fake.emit({ type: "lobby", message: HELLO });
+    fake.emit({ type: "peer", present: false });
+    fake.emit({ type: "link", status: "waiting" });
+    fake.emit({ type: "peer", present: true });
+    fake.emit({ type: "link", status: "negotiating" });
+    fake.emit({ type: "link", status: "open" });
+    expect(fake.sent).toEqual([HELLO, HELLO]);
+    expect(useOnlineStore.getState().status).toBe("linking");
+    // The newcomer runs another build.
+    fake.emit({ type: "lobby", message: { ...HELLO, protocol: PROTOCOL_VERSION + 1 } });
+    await expectRefused(fake);
+  });
+});
+
 describe("an error, once recorded", () => {
   function connectedHost() {
     const fake = fakeSession();
@@ -341,6 +537,7 @@ describe("an error, once recorded", () => {
     fake.emit({ type: "joined", role: "host" });
     fake.emit({ type: "peer", present: true });
     fake.emit({ type: "link", status: "open" });
+    fake.emit({ type: "lobby", message: HELLO });
     return fake;
   }
 
@@ -489,6 +686,7 @@ describe("sending and leaving", () => {
       "room-lost",
       "bad-start",
       "link-failed",
+      "engine-mismatch",
     ] as const;
     // The list is hand-written; tsc fails here when a reason is added without it.
     expectTypeOf<Exclude<OnlineErrorReason, (typeof reasons)[number]>>().toBeNever();
