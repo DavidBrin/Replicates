@@ -32,6 +32,7 @@ import {
 } from "./states";
 import type { Intent, StateContext } from "./states";
 import { emptyKinetic } from "./kinetic";
+import "./status";
 import { Btn } from "./types";
 import type {
   FighterAttributes,

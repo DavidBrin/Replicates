@@ -51,7 +51,6 @@ import {
   TAP_JUMP_FRAMES,
   SPOT_DODGE_FRAMES,
   SPOT_DODGE_INTANGIBLE,
-  TUMBLE_HITSTUN,
 } from "./constants";
 import {
   applyGravity,
@@ -597,86 +596,6 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
 
   // Legacy switch: each status group leaves it as it moves to `status/`.
   switch (f.action) {
-    /* ---------------------------------------------------------- reeling -- */
-    case "hitstun":
-    case "tumble": {
-      if (f.hitstun > 0) {
-        // Tumble is not a different kind of hitstun, it is hitstun past 32
-        // frames — the point at which the victim stops being able to land and
-        // instantly act, and starts having to survive.
-        if (f.hitstun >= TUMBLE_HITSTUN && f.action !== "tumble") startAction(f, "tumble");
-        bufferPress(f, intent, ctx.frame);
-        return;
-      }
-      startAction(f, f.grounded ? "stand" : "fall");
-      return;
-    }
-
-    case "downed": {
-      if (f.actionFrame >= DOWNED_FRAMES) startAction(f, "getUp");
-      else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "getUp": {
-      if (f.actionFrame >= GETUP_FRAMES) startAction(f, "stand");
-      else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    /* ------------------------------------------------------------ meta -- */
-    case "entering": {
-      if (f.actionFrame >= ENTRY_FRAMES) startAction(f, f.grounded ? "stand" : "fall");
-      return;
-    }
-
-    case "dead": {
-      // Out of stocks is a terminal state: no respawn, and the match-end check
-      // in `step` reads it rather than a separate "eliminated" flag.
-      if (f.stocks <= 0) return;
-      if (f.actionFrame >= DEAD_FRAMES) {
-        const spawns = ctx.stage.spawns;
-        const spawn = spawns[f.port % spawns.length];
-        f.x = spawn.x;
-        f.y = spawn.y;
-        kineticClear(f);
-        f.grounded = false;
-        f.platform = -1;
-        f.jumpsUsed = 0;
-        f.airDodged = false;
-        f.shortHop = false;
-        f.ledgeRegrabs = 0;
-        startAction(f, "respawnPlatform");
-        // Covers the transition frame; the platform then holds it up itself and
-        // the departure grant replaces it on the way out.
-        f.invincible = RESPAWN_INVINCIBILITY_MAX;
-      }
-      return;
-    }
-
-    case "respawnPlatform": {
-      const leaving =
-        f.actionFrame >= RESPAWN_PLATFORM_FRAMES ||
-        intent.jumpPressed ||
-        intent.attackPressed ||
-        intent.x !== 0 ||
-        intent.y !== 0;
-      if (leaving) {
-        // The grant is decided on the way *out*, from how long the fighter
-        // stayed, which is the whole point of it: a player who drops straight
-        // back into the fight is protected while they re-enter, and one who
-        // waits out the platform's 300 frames gets the 60-frame floor.
-        f.invincible = respawnInvincibilityFrames(f.actionFrame);
-        startAction(f, "fall");
-        return;
-      }
-      // Standing on the platform is safe for as long as the platform lasts,
-      // which is longer than any departure grant — so it is held up a frame at
-      // a time (as the dodge windows are) rather than counted down from one.
-      f.invincible = Math.max(f.invincible, 1);
-      return;
-    }
-
     /* --------------------------------------------------------- defence -- */
     case "shieldStart": {
       if (f.actionFrame >= SHIELD_START_FRAMES) startAction(f, "shield");

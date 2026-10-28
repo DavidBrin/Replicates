@@ -6,9 +6,14 @@
  * out of the legacy switch in `states.ts`.
  */
 
+import { DAMAGE_STATUSES } from "./damage";
 import { registerStatus } from "./kind";
 import type { FighterStatus } from "./kind";
+import { META_STATUSES } from "./meta";
 
-export const ALL_STATUSES: readonly FighterStatus[] = [];
+export const ALL_STATUSES: readonly FighterStatus[] = [
+  ...META_STATUSES,
+  ...DAMAGE_STATUSES,
+];
 
 for (const s of ALL_STATUSES) registerStatus(s);

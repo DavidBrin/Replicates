@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+
+import { RESPAWN_INVINCIBILITY_MAX } from "../constants";
+import { fx } from "../fixed";
+import { KINETIC_TYPE_OF_ACTION, emptyKinetic } from "../kinetic";
+import type { FighterState } from "../types";
+import { ALL_STATUSES } from "./index";
+import { STATUS_KIND_OF_ACTION, STATUS_TABLE, changeStatus } from "./kind";
+
+function fighter(over: Partial<FighterState> = {}): FighterState {
+  return {
+    port: 0,
+    defId: "t",
+    costume: 0,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    facing: 1,
+    grounded: true,
+    platform: 0,
+    action: "stand",
+    actionFrame: 0,
+    move: null,
+    charge: 0,
+    damage: 0,
+    stocks: 3,
+    jumpsUsed: 0,
+    airDodged: false,
+    fastFalling: false,
+    shortHop: false,
+    shieldHealth: fx(50),
+    hitstun: 0,
+    hitlag: 0,
+    launchSpeed: 0,
+    pendingKnockback: 0,
+    pendingAngle: 0,
+    pendingFacing: 0,
+    balloon: false,
+    intangible: 0,
+    invincible: 0,
+    grabbedBy: -1,
+    grabbing: -1,
+    grabTimer: 0,
+    ledge: null,
+    ledgeRegrabs: 0,
+    airTime: 0,
+    finalSmashReady: 0,
+    staleQueue: [],
+    hitThisMove: [],
+    framesSinceDirPress: 999,
+    lastDirPressed: 0,
+    bufferedAction: null,
+    kinetic: emptyKinetic(),
+    ...over,
+  };
+}
+
+/** Every action migrated so far; each status-group task extends this list first. */
+const MIGRATED = [
+  // Task 6
+  "entering",
+  "dead",
+  "respawnPlatform",
+  "hitstun",
+  "tumble",
+  "downed",
+  "getUp",
+];
+
+describe("migrated statuses", () => {
+  it("are exactly the groups migrated so far", () => {
+    expect(ALL_STATUSES.map((s) => s.action).sort()).toEqual([...MIGRATED].sort());
+  });
+
+  it("are registered under their own action", () => {
+    for (const s of ALL_STATUSES) expect(STATUS_TABLE[s.action]).toBe(s);
+  });
+
+  it("carry the SSBU kind the alias table names, and the legacy kinetic type", () => {
+    for (const s of ALL_STATUSES) {
+      expect(s.kind, s.action).toBe(STATUS_KIND_OF_ACTION[s.action]);
+      expect(s.kineticType, s.action).toBe(KINETIC_TYPE_OF_ACTION[s.action]);
+    }
+  });
+
+  it("are each registered once", () => {
+    const actions = ALL_STATUSES.map((s) => s.action);
+    expect(new Set(actions).size).toBe(actions.length);
+  });
+});
+
+describe("REBIRTH", () => {
+  it("grants the full respawn invincibility on entry, in pre", () => {
+    const f = fighter({ action: "dead", invincible: 0 });
+    changeStatus(f, "respawnPlatform");
+    expect(f.invincible).toBe(RESPAWN_INVINCIBILITY_MAX);
+  });
+});

@@ -605,6 +605,30 @@ describe("DI on the last frame of hitlag", () => {
   });
 });
 
+describe("a status change during hitlag (Review Focus #2)", () => {
+  it("enters the reeling status once and runs none of it while frozen", () => {
+    let s = standing();
+    let prev: readonly InputFrame[] = [0, 0];
+    let atContact = -1;
+    let frozen = 0;
+    for (let i = 0; i < 14; i++) {
+      const inputs = i === 0 ? [Btn.Attack, 0] : [0, 0];
+      s = step(s, inputs, { prevInputs: prev, ctx: CTX }).state;
+      prev = inputs;
+      const v = s.fighters[1];
+      if (v.hitlag > 0) {
+        if (atContact < 0) atContact = v.hitstun;
+        // Frozen: the status was changed by the hit, and its main has not run.
+        expect(["hitstun", "tumble"]).toContain(v.action);
+        expect(v.actionFrame).toBe(0);
+        expect(v.hitstun).toBe(atContact);
+        frozen += 1;
+      }
+    }
+    expect(frozen).toBeGreaterThan(1);
+  });
+});
+
 describe("shields", () => {
   it("absorbs a hit into shield health and shieldstun", () => {
     let s = standing();
