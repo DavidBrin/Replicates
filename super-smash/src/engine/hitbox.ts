@@ -16,7 +16,7 @@
  * the far end of the segment.
  */
 
-import { ONE, mul, div, clamp } from "./fixed";
+import { ONE, mul, div, clamp, sqrt } from "./fixed";
 import { CLANK_RANGE } from "./constants";
 import type { ActiveHit, FighterAttributes, FighterState, Hitbox, MoveDef } from "./types";
 
@@ -178,6 +178,28 @@ export function sweptHitboxOverlaps(
   target: Capsule,
 ): boolean {
   return capsulesOverlap(sweptHitboxCapsule(prevX, prevY, x, y, radius), target);
+}
+
+/**
+ * How deep a hitbox, swept from its previous position, reaches into the target
+ * at its deepest, Q12: the sum of the radii less the closest distance between
+ * the two spines. Negative when they do not touch. A hit less than 0.1 deep is a
+ * glancing blow (Plan 3, Task 13; `GLANCING_BLOW_DEPTH`).
+ *
+ * The same swept capsule and the same spine distance as `sweptHitboxOverlaps`,
+ * so the two cannot disagree about whether a box touches: a box that overlaps is
+ * never negative. The integer square root floors, so the depth is within one Q12
+ * unit (0.00024) of the exact one, on the deep side.
+ */
+export function sweptHitboxPenetration(
+  prevX: number,
+  prevY: number,
+  x: number,
+  y: number,
+  radius: number,
+  target: Capsule,
+): number {
+  return radius + target.r - sqrt(segmentSegmentDistSq(sweptHitboxCapsule(prevX, prevY, x, y, radius), target));
 }
 
 /* -------------------------------------------------------------- fighters -- */

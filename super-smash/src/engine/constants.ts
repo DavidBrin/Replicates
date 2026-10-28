@@ -153,6 +153,13 @@ export const GROUNDED_ZERO_LAUNCH_RATIO: Ratio = [4, 5];
 export const KB_STACK_ARMOUR: Ratio = [1, 2];
 export const KB_STACK_KEEP: Ratio = [9, 10];
 
+/**
+ * A hitbox that reaches less than 0.1 units into a hurtbox is a glancing blow and
+ * does not hit (SmashWiki "Glancing blow", https://www.ssbwiki.com/Glancing_blow:
+ * "less than 0.1 units through a hurtbox"; unchanged from Brawl into Ultimate).
+ */
+export const GLANCING_BLOW_DEPTH = fx(0.1);
+
 /** Two hitboxes within this damage difference clank instead of trading. */
 export const CLANK_RANGE = fx(9);
 

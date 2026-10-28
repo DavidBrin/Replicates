@@ -20,6 +20,7 @@ import {
   ASDI_DISTANCE,
   ASDI_VERTICAL,
   FINAL_SMASH_STANDBY,
+  GLANCING_BLOW_DEPTH,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
   LEDGE_REGRAB_LIMIT,
@@ -68,6 +69,7 @@ import {
   markHit,
   resolveClank,
   sweptHitboxOverlaps,
+  sweptHitboxPenetration,
 } from "./hitbox";
 import {
   advanceProjectile,
@@ -942,6 +944,19 @@ function resolveHits(
       if (c.projectile !== null && destroyed.has(c.projectile.instanceId)) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
       if (!sweptHitboxOverlaps(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox)) continue;
+      // A box that only grazes the body — less than 0.1 deep — is a glancing
+      // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
+      // before the lowest-id pick, so it cannot shadow a deeper box of the same
+      // source. A grab and a hit that reaches a raised shield are not decided by
+      // the depth into the body (SmashWiki's glancing blow is hitbox on hurtbox),
+      // and keep the plain overlap test they always had.
+      if (
+        sweptHitboxPenetration(c.prevX, c.prevY, c.x, c.y, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
+        !c.hitbox.grabbing &&
+        !hitReachesShield(victim, defs[v], c)
+      ) {
+        continue;
+      }
       const key = candidateKey(c);
       const incumbent = perSource.get(key);
       if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
@@ -1167,6 +1182,16 @@ function clearPendingLaunch(f: FighterState): void {
   f.combat.asdi = false;
 }
 
+/**
+ * Does this hit land on the victim's raised shield rather than on the body? The
+ * shield must face the hit and the box must reach the bubble — a worn shield
+ * shrinks to 15% of its radius, and a hit that misses it is a shield poke.
+ */
+function hitReachesShield(victim: FighterState, victimDef: FighterDef, c: Candidate): boolean {
+  const bubble = shieldBubble(victim, victimDef);
+  return shieldCovers(victim, c.x) && circlesOverlap(c.x, c.y, c.hitbox.radius, bubble.x1, bubble.y1, bubble.r);
+}
+
 function applyHit(
   s: GameState,
   attacker: FighterState,
@@ -1226,9 +1251,7 @@ function applyHit(
   // negation": hitting a shield enters the queue in Ultimate, perfect shield too).
   // The hit must reach the shield bubble too: a worn shield shrinks to 15% of
   // its radius and a hit that misses it lands on the body — a shield poke.
-  const bubble = shieldBubble(victim, victimDef);
-  const onShield =
-    shieldCovers(victim, c.x) && circlesOverlap(c.x, c.y, hb.radius, bubble.x1, bubble.y1, bubble.r);
+  const onShield = hitReachesShield(victim, victimDef, c);
   if (c.slot !== null && attacker.hitThisMove.length === 1) {
     attacker.staleQueue.unshift(c.slot);
     attacker.combat.staleShield.unshift(onShield);

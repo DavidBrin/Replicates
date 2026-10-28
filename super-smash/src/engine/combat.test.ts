@@ -4,6 +4,7 @@ import { ONE, byRatio, fx, mul } from "./fixed";
 import {
   ASDI_DISTANCE,
   FURAFURA_END_FRAMES,
+  GLANCING_BLOW_DEPTH,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
   SDI_DISTANCE,
@@ -15,6 +16,7 @@ import {
   TECH_WINDOW,
 } from "./constants";
 import { hashState } from "./hash";
+import { sweptHitboxOverlaps, sweptHitboxPenetration } from "./hitbox";
 import {
   STALE_FRESH_BONUS,
   computeHitlag,
@@ -1422,5 +1424,212 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     s.fighters[1].jumpsUsed = 2;
     const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0));
     expect(frames[landing(frames)].state.fighters[1].jumpsUsed).toBe(0);
+  });
+});
+
+/* ------------------------------------------- Task 13: glancing blows -- */
+
+describe("glancing blows (Plan 3, Task 13)", () => {
+  /** Fighter 1 placed so the jab's box (reach 5 + 4) overlaps its body by `overlap`. */
+  function jabWithOverlap(overlap: number): Frame[] {
+    const s = standing();
+    s.fighters[1].x = fx(8 + 5 + 4 - overlap);
+    return play(s, 8, JAB);
+  }
+
+  // SmashWiki "Glancing blow" (https://www.ssbwiki.com/Glancing_blow): a hitbox
+  // that connects "less than 0.1 units through a hurtbox" is a glancing blow —
+  // "the attack not hitting" — unchanged from Brawl into Ultimate.
+  it("does not hit when the box only grazes the body", () => {
+    const frames = jabWithOverlap(0.05);
+    expect(frames.flatMap((f) => f.events.hits)).toEqual([]);
+    expect(frames.at(-1)!.state.fighters[1].damage).toBe(0);
+    // Not spent: the swing may still land if the bodies close in.
+    expect(frames.at(-1)!.state.fighters[0].hitThisMove).toEqual([]);
+  });
+
+  it("hits once the box is more than 0.1 into the body", () => {
+    expect(jabWithOverlap(0.2).flatMap((f) => f.events.hits)).toHaveLength(1);
+  });
+
+  it("puts the line at 0.1: 0.09 deep is a graze, 0.11 deep is a hit", () => {
+    expect(jabWithOverlap(0.09).flatMap((f) => f.events.hits)).toEqual([]);
+    expect(jabWithOverlap(0.11).flatMap((f) => f.events.hits)).toHaveLength(1);
+  });
+
+  it("does not spend the swing: the same jab lands once the bodies close in", () => {
+    // A box that stays out for nine frames, so there is time to step into it.
+    const long: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ startFrame: 4, endFrame: 12 })] }) },
+    };
+    const ctx = ctxFor(long);
+    const s = standing(ctx);
+    s.fighters[1].x = fx(8 + 5 + 4 - 0.05);
+    const grazing = play(s, 8, JAB, ctx);
+    expect(grazing.flatMap((f) => f.events.hits)).toEqual([]);
+    expect(grazing.at(-1)!.state.fighters[0].action).toBe("attack");
+
+    // The victim is carried a unit in; the same swing, still live, connects.
+    const closer = cloneState(grazing.at(-1)!.state);
+    closer.fighters[1].x -= fx(1);
+    const after = play(closer, 3, () => [0, 0], ctx);
+    expect(after.flatMap((f) => f.events.hits)).toHaveLength(1);
+    expect(after.at(-1)!.state.fighters[0].hitThisMove).toEqual([1]);
+  });
+
+  describe("among one source's boxes", () => {
+    /** A jab of two boxes on the same frames: id 0 reaches to 8, id 1 to 10 (both radius 5). */
+    const TWO: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        jab1: move("jab1", { hitboxes: [hitbox({ id: 0, x: fx(8) }), hitbox({ id: 1, x: fx(10) })] }),
+      },
+    };
+    function twoBoxes(victimX: number): Frame[] {
+      const ctx = ctxFor(TWO);
+      const s = standing(ctx);
+      s.fighters[1].x = victimX;
+      return play(s, 8, JAB, ctx);
+    }
+
+    // The glancing box is "the attack not hitting", so it is no incumbent: a
+    // deeper box of the same swing that connects on the same frame still lands.
+    it("lets a deeper box land when the lower-id box only grazes", () => {
+      // Box 0 is 0.05 deep; box 1, two units further in, is 2.05 deep.
+      const hits = twoBoxes(fx(8 + 5 + 4 - 0.05)).flatMap((f) => f.events.hits);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].hitboxId).toBe(1);
+    });
+
+    it("still takes the lowest id when both reach in", () => {
+      const hits = twoBoxes(fx(14)).flatMap((f) => f.events.hits);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].hitboxId).toBe(0);
+    });
+
+    it("does not hit when every box only grazes", () => {
+      // Box 1 grazes at 0.05 from a victim 2 further out; box 0 is out of reach.
+      expect(twoBoxes(fx(10 + 5 + 4 - 0.05)).flatMap((f) => f.events.hits)).toEqual([]);
+    });
+  });
+
+  // A projectile's box meets a hurtbox through the same candidate list as a fist.
+  it("gives a projectile the same graze: no hit, not destroyed, and it lands a frame later", () => {
+    const pellet = hitbox({ startFrame: 1, endFrame: 90, x: 0, y: 0, damage: fx(6) });
+    const shooter: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        neutralB: move("neutralB", {
+          totalFrames: 30,
+          hitboxes: [],
+          projectiles: [
+            { id: "pellet", spawnFrame: 6, offsetX: fx(6), offsetY: fx(6), vx: fx(4), vy: 0, gravity: 0, lifetime: 90, hitbox: pellet, destroyOnHit: true, visual: "energy" },
+          ],
+        }),
+      },
+    };
+    const ctx = ctxFor(shooter);
+    const shoot = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Special : 0, 0];
+    const field = standing(ctx);
+    field.fighters[1].x = fx(75);
+    // Where the pellet is on its third frame in the air, with nobody in its way.
+    const free = play(field, 20, shoot, ctx);
+    const born = free.findIndex((f) => f.state.projectiles.length > 0);
+    const k = born + 2;
+    const pelletX = free[k].state.projectiles[0].x;
+
+    // The victim stands so that frame k's pellet reaches 0.05 into the body.
+    const s = standing(ctx);
+    s.fighters[1].x = pelletX + fx(5 + 4 - 0.05);
+    const frames = play(s, k + 3, shoot, ctx);
+    expect(frames.slice(0, k + 1).flatMap((f) => f.events.hits)).toEqual([]);
+    expect(frames[k].state.projectiles).toHaveLength(1);
+    // The next frame it is 4 units closer and 4.05 deep.
+    expect(frames.findIndex((f) => f.events.hits.length > 0)).toBe(k + 1);
+  });
+
+  // SmashWiki's glancing blow is a hitbox meeting a hurtbox. Grabs and a raised
+  // shield are not decided by the depth of the hit, so both keep the plain test.
+  it("leaves a grab box that only grazes the body able to grab", () => {
+    const s = standing();
+    s.fighters[1].x = fx(8 + 5 + 4 - 0.05);
+    const frames = play(s, 10, (i) => [i === 0 ? Btn.Grab : 0, 0]);
+    expect(frames.at(-1)!.state.fighters[1].action).toBe("grabbed");
+    expect(frames.at(-1)!.state.fighters[0].grabbing).toBe(1);
+  });
+
+  it("leaves a hit that reaches a raised shield a shield hit however shallow the body graze", () => {
+    const s = standing();
+    s.fighters[1].x = fx(8 + 5 + 4 - 0.05);
+    const frames = play(s, 12, JAB_INTO_SHIELD);
+    expect(frames.flatMap((f) => f.events.shieldHits)).toHaveLength(1);
+    expect(frames.flatMap((f) => f.events.hits)).toEqual([]);
+  });
+
+  it("still skips a graze that misses the shield and would land on the body", () => {
+    // A shield worn to 15% of its radius (the Task 9 poke), and a low box that
+    // reaches only 0.05 into the body, nowhere near the shield.
+    const low: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ y: fx(0.5), radius: fx(1.5) })] }) },
+    };
+    const ctx = ctxFor(low);
+    const s = standing(ctx);
+    s.fighters[1].shieldHealth = fx(2);
+    // 4.177 across and 3.5 up from the box: 5.45 from the spine's lower end, 5.5 reach.
+    s.fighters[1].x = fx(8 + 4.177);
+    const frames = play(s, 10, JAB_INTO_SHIELD, ctx);
+    expect(frames.flatMap((f) => f.events.shieldHits)).toEqual([]);
+    expect(frames.flatMap((f) => f.events.hits)).toEqual([]);
+    expect(frames.at(-1)!.state.fighters[1].damage).toBe(0);
+  });
+
+  describe("sweptHitboxPenetration", () => {
+    /** A fighter-shaped hurtbox on `x`: spine 4 to 8 up, radius 4. */
+    const body = (x: number) => ({ x1: x, y1: fx(4), x2: x, y2: fx(8), r: fx(4) });
+
+    it("is the sum of the radii less the spine distance", () => {
+      // Box (0, 6) radius 5 and a body whose spine is 36416 Q12 away: 9 - 8.890625.
+      // The distance is a multiple of 64, so the integer square root is exact.
+      expect(sweptHitboxPenetration(0, fx(6), 0, fx(6), fx(5), body(36416))).toBe(fx(9) - 36416);
+      expect(sweptHitboxPenetration(0, fx(6), 0, fx(6), fx(5), body(fx(20)))).toBe(-fx(11));
+    });
+
+    it("puts 0.109375 on the hitting side of 0.1 and 0.09375 on the glancing one", () => {
+      expect(sweptHitboxPenetration(0, fx(6), 0, fx(6), fx(5), body(fx(9) - 448))).toBeGreaterThanOrEqual(GLANCING_BLOW_DEPTH);
+      expect(sweptHitboxPenetration(0, fx(6), 0, fx(6), fx(5), body(fx(9) - 384))).toBeLessThan(GLANCING_BLOW_DEPTH);
+    });
+
+    it("is the full sum of radii for a box swept through the spine", () => {
+      expect(sweptHitboxPenetration(0, fx(6), fx(40), fx(6), fx(5), body(fx(20)))).toBe(fx(9));
+    });
+
+    it("is measured to the nearest point of the sweep, not to where the box ends", () => {
+      // Swept from 8 back to 0, away from a body 36416 Q12 (8.890625) past the
+      // start: the end is far out of reach, the start is 0.109375 inside it.
+      expect(sweptHitboxPenetration(fx(8), fx(6), 0, fx(6), fx(5), body(fx(8) + 36416))).toBe(fx(9) - 36416);
+    });
+
+    it("agrees with sweptHitboxOverlaps: touching is not negative, and 0.1 deep is touching", () => {
+      let seen = 0;
+      for (const prevX of [0, fx(3), fx(-6)]) {
+        for (const x of [0, fx(2.5), fx(7)]) {
+          for (let bx = fx(-14); bx <= fx(14); bx += fx(0.25)) {
+            for (const y of [fx(-2), fx(0.5), fx(6), fx(11)]) {
+              const depth = sweptHitboxPenetration(prevX, y, x, y, fx(3), body(bx));
+              const overlaps = sweptHitboxOverlaps(prevX, y, x, y, fx(3), body(bx));
+              if (overlaps) expect(depth).toBeGreaterThanOrEqual(0);
+              if (depth >= GLANCING_BLOW_DEPTH) expect(overlaps).toBe(true);
+              if (!overlaps) expect(depth).toBeLessThan(GLANCING_BLOW_DEPTH);
+              if (overlaps) seen += 1;
+            }
+          }
+        }
+      }
+      expect(seen).toBeGreaterThan(100);
+    });
   });
 });
