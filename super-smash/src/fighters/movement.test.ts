@@ -124,3 +124,47 @@ describe("jump arcs (SmashWiki Jump, https://www.ssbwiki.com/Jump)", () => {
     expectPeak(peak - from, first, p.air_accel_y, "air jump");
   });
 });
+
+describe("midair jumps (SmashWiki Midair jump, https://www.ssbwiki.com/Midair_jump)", () => {
+  const PRESS_EVERY = 30;
+
+  /** A full hop, then a jump press every 30 frames; the fighter after each frame. */
+  function chain(id: RosterId, presses: number): FighterState[] {
+    const inputs: InputFrame[] = [...hold(Btn.Jump, 6), ...hold(0, 9)];
+    for (let i = 0; i < presses; i++) inputs.push(Btn.Jump, ...hold(0, PRESS_EVERY - 1));
+    return play(standing(id), inputs);
+  }
+
+  it.each(IDS)("%s gets exactly jump_count_max − 1 of them", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const frames = chain(id, p.jump_count_max + 1);
+    expect(Math.max(...frames.map((f) => f.jumpsUsed))).toBe(p.jump_count_max);
+  });
+
+  it("gives Kirby five, each rising its own published height (SmashWiki Jump, Ultimate table)", () => {
+    // https://www.ssbwiki.com/Jump, Kirby, Air Jump: "21.06378125, 18.528125, 15.931125,
+    // 13.34569531, 10.82288281 for each air jump." Each peaks between h − g/8 and h (Task 19).
+    const p = FIGHTER_PARAMS.kirby;
+    const list = p.jump_aerial_y_list!;
+    const g = toFloat(p.air_accel_y);
+    const frames = chain("kirby", list.length);
+    for (let i = 0; i < list.length; i++) {
+      const at = 15 + i * PRESS_EVERY;
+      expect(frames[at].jumpsUsed, `jump ${i + 1} taken`).toBe(i + 2);
+      const from = toFloat(frames[at - 1].y);
+      const gain = Math.max(...frames.slice(at, at + PRESS_EVERY).map((f) => toFloat(f.y))) - from;
+      expect(gain, `jump ${i + 1}`).toBeGreaterThanOrEqual(toFloat(list[i]) - g / 8 - 0.01);
+      expect(gain, `jump ${i + 1}`).toBeLessThanOrEqual(toFloat(list[i]));
+    }
+  });
+
+  it("takes the jump, not a fast fall, when down and jump arrive on one frame (Review Focus #4)", () => {
+    const s = standing("mario");
+    // Short hop, fall past the apex, then down + jump together.
+    const frames = play(s, [Btn.Jump, ...hold(0, 25), Btn.Down | Btn.Jump, 0]);
+    const f = frames[26];
+    expect(f.jumpsUsed).toBe(2);
+    expect(f.fastFalling).toBe(false);
+    expect(f.vy).toBeGreaterThan(0);
+  });
+});

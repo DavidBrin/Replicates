@@ -486,8 +486,11 @@ export function airJump(f: FighterState, ctx: StateContext): boolean {
   const p = fighterParams(ctx.def);
   if (f.jumpsUsed >= p.jump_count_max) return false;
   f.jumpsUsed += 1;
-  // Every midair jump rises the first midair jump's height (Task 20 indexes Kirby's list).
-  kineticJump(f, jumpLaunchSpeed(p.air_accel_y, (p.jump_aerial_y_list ?? [p.jump_aerial_y])[0]));
+  // A multi-jumper's midair jumps each have their own height; the first midair
+  // jump is the one whose `jumpsUsed` is now 2.
+  const list = p.jump_aerial_y_list;
+  const height = list === undefined ? p.jump_aerial_y : list[Math.min(f.jumpsUsed - 2, list.length - 1)];
+  kineticJump(f, jumpLaunchSpeed(p.air_accel_y, height));
   f.fastFalling = false;
   // An air jump is a full jump at full height: whatever the hop that got the
   // fighter here was, the short-hop penalty ends with it.
