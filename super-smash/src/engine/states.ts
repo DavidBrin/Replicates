@@ -27,7 +27,6 @@ import {
   AIR_DODGE_LANDING_LAG,
   DIRECTIONAL_AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
-  DASH_INTERRUPT_FRAME,
   DASH_THRESHOLD_FRAMES,
   DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_SPEED,
@@ -631,100 +630,6 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
         f.charge = 0;
         startAction(f, "stand");
       } else bufferPress(f, intent, ctx.frame);
-      return;
-    }
-
-    case "crouchStart": {
-      if (f.actionFrame >= CROUCH_START_FRAMES) startAction(f, "crouch");
-      return;
-    }
-
-    case "crouch": {
-      if (handleActionable(f, intent, ctx)) return;
-      if (intent.y >= 0) startAction(f, "crouchEnd");
-      return;
-    }
-
-    case "crouchEnd": {
-      if (f.actionFrame >= CROUCH_END_FRAMES) startAction(f, "stand");
-      return;
-    }
-
-    case "turnaround": {
-      if (f.actionFrame >= TURNAROUND_FRAMES) startAction(f, "stand");
-      return;
-    }
-
-    case "runBrake": {
-      if (handleActionable(f, intent, ctx)) return;
-      if (f.actionFrame >= RUN_BRAKE_FRAMES) startAction(f, "stand");
-      return;
-    }
-
-    case "stand":
-    case "walk":
-    case "dashStart":
-    case "run": {
-      if (!f.grounded) {
-        startAction(f, "fall");
-        return;
-      }
-      if (handleActionable(f, intent, ctx)) return;
-      if (intent.y < 0 && f.action === "stand") {
-        startAction(f, "crouchStart");
-        return;
-      }
-      if (intent.x === 0) {
-        if (f.action === "run") startAction(f, "runBrake");
-        else if (f.action !== "stand") startAction(f, "stand");
-        return;
-      }
-      if (intent.x !== f.facing) {
-        f.facing = intent.x;
-        // Reversing out of a run costs a turnaround; reversing out of an initial
-        // dash does not, and that asymmetry is exactly what dash-dancing is.
-        if (f.action === "run") {
-          startAction(f, "turnaround");
-          return;
-        }
-        if (f.action === "dashStart") {
-          startAction(f, "dashStart");
-          return;
-        }
-        // From a standstill or a walk, though, a reversal is just a fresh
-        // direction press and takes the same walk-then-dash path as any other,
-        // below. Committing it to `dashStart` here instead would hand a
-        // one-frame tap the full initial-dash burst — around 19 units of slide
-        // for Mario, a quarter of Battlefield — and there would be no way at all
-        // to make a small movement away from the way you happen to be facing.
-      }
-      if (f.action === "dashStart") {
-        if (f.actionFrame >= DASH_INTERRUPT_FRAME) startAction(f, "run");
-        return;
-      }
-      if (f.action === "run") return;
-      /*
-       * Held three frames or less is a walk; past that it becomes a dash.
-       *
-       * This reads oddly against SPEC §6 — if any sustained hold becomes a dash,
-       * when does anybody walk? — and the answer is that they do not, and should
-       * not. **A key is always a full deflection.** In Ultimate a fully deflected
-       * stick dashes and then runs; walking requires a *partial* tilt, which is a
-       * distinction a keyboard has no way to express at all. So "hold = dash" is
-       * the faithful translation of a held key, not a missing feature, and making
-       * walking the default would be the actual infidelity: it would make the
-       * fastest ground movement in the game unreachable from a keyboard.
-       *
-       * What the window buys is the other half of the analog stick's range. The
-       * brief step before the dash commits is what a tap produces, and a tap is
-       * therefore the keyboard's micro-spacing tool: one frame moves Mario 0.31
-       * units, two 1.23, three 2.76, and a hold from there is a dash. That ladder
-       * is why the walk state exists here — not to be held, but to be tapped.
-       *
-       * Do not "fix" this by inverting it.
-       */
-      if (intent.wantsDash) startAction(f, "dashStart");
-      else if (f.action !== "walk") startAction(f, "walk");
       return;
     }
 

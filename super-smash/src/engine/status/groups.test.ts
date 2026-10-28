@@ -90,6 +90,16 @@ const MIGRATED = [
   "ledgeAttack",
   "ledgeRoll",
   "ledgeJump",
+  // Task 10
+  "stand",
+  "walk",
+  "dashStart",
+  "run",
+  "runBrake",
+  "turnaround",
+  "crouchStart",
+  "crouch",
+  "crouchEnd",
 ];
 
 describe("migrated statuses", () => {
