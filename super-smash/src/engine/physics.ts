@@ -345,8 +345,9 @@ export function resolveCollision(
  * velocity and no grounded state: the fighter is still frozen, and its launch
  * has not happened yet.
  *
- * The way in decides the way out, as in `resolveCollision`: a fighter whose
- * origin was beyond the platform's edge is pushed back out sideways; one whose
+ * The way in decides the way out, as in `resolveCollision`: a fighter that was
+ * above the surface and is over the span now lands on it; one whose origin was
+ * beyond the platform's edge is otherwise pushed back out sideways; one whose
  * origin was within its span stays on top of it (or, from below, under it).
  * A soft platform only ever has the floor.
  */
@@ -374,7 +375,10 @@ export function clampShiftToStage(
     const inside = (x: number, y: number): boolean =>
       abs(x - cx) < body && y + ecb.bottom < p.y && y + ecb.top > bottom;
     if (inside(prevX, prevY) || !inside(f.x, f.y)) continue;
-    if (abs(prevX - cx) > reach) f.x = prevX <= cx ? cx - body : cx + body;
+    // From above and now over the span: it lands, as `resolveCollision`'s landing
+    // test lands it, even if its origin started past the edge (the lip).
+    if (wasAbove && abs(f.x - cx) <= reach) f.y = p.y - ecb.bottom;
+    else if (abs(prevX - cx) > reach) f.x = prevX <= cx ? cx - body : cx + body;
     else if (wasAbove) f.y = p.y - ecb.bottom;
     else f.y = bottom - ecb.top;
   }

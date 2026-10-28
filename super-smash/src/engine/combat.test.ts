@@ -686,6 +686,13 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
     expect(victim.combat.launchSource).toBe(2);
   });
 
+  // Task 11: SDI counts every hit taken in a string, a kept or armoured-through
+  // one included (the fighter is hit either way and freezes).
+  it("counts a kept hit, and an armoured-through one, in the string", () => {
+    expect(stacked(0.7).victim.combat.comboHits).toBe(1);
+    expect(stacked(0.4).victim.combat.comboHits).toBe(1);
+  });
+
   // A launch that is replaced leaves nothing of itself behind: not its DAMAGE
   // direction, not its speed-up, not its parked reaction frames.
   describe("a replaced launch leaves no residue", () => {
@@ -980,6 +987,64 @@ describe("SDI and ASDI (Plan 3, Task 11)", () => {
     expect(play(s, 1, () => [0, 0]).at(-1)!.state.fighters[1].combat.comboHits).toBe(0);
   });
 
+  // The count is what the *next* hit reads, so it has to survive the frames
+  // between hits and go only when the hitstun does.
+  it("keeps the count through hitstun, and drops it when the hitstun runs out", () => {
+    const s = standing();
+    const v = s.fighters[1];
+    v.action = "hitstun";
+    v.hitstun = 10;
+    v.hitlag = 0;
+    v.combat.comboHits = 7;
+    const path = play(s, 14, () => [0, 0]).map((f) => f.state.fighters[1]);
+    const over = path.findIndex((f) => f.hitstun === 0);
+    expect(over).toBeGreaterThan(0);
+    expect(path[0].combat.comboHits).toBe(7);
+    for (const f of path.slice(0, over)) expect(f.combat.comboHits).toBe(7);
+    expect(path[over].combat.comboHits).toBe(0);
+  });
+
+  // A string through step(): the same fast jab thrown again and again, each a
+  // separate swing (a swing hits a target once), with the victim still in hitstun
+  // when each next one lands. The sixth hit's freeze is where the x1.15 shows:
+  // 2 units is 8192 in Q12, 9420 with the 1.15.
+  it("counts a real string of six hits, and the next SDI pulse is 1.15 times as long", () => {
+    const quickJab: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        jab1: move("jab1", {
+          totalFrames: 8,
+          hitboxes: [hitbox({ startFrame: 4, endFrame: 5, radius: fx(40), damage: fx(2), baseKnockback: fx(45), knockbackGrowth: 0, angle: 0 })],
+        }),
+      },
+    };
+    const ctx = ctxFor(quickJab);
+    let s = standing(ctx);
+    let prev: readonly InputFrame[] = [0, 0];
+    let hits = 0;
+    let pulse: number | undefined;
+    let countAtSixth: number | undefined;
+    for (let i = 0; i < 200; i++) {
+      const v = s.fighters[1];
+      // Mash only on the sixth hit's freeze, on a frame that can pulse, so the
+      // victim stays where the next swings reach it until then.
+      const mashing = v.combat.comboHits >= 6 && v.hitlag > 0 && v.hitlag % 4 === 0;
+      const now = [i % 2 === 0 && hits < 6 ? Btn.Attack : 0, mashing ? Btn.Right : 0];
+      const x0 = v.x;
+      const r = step(s, now, { prevInputs: prev, ctx });
+      hits += r.events.hits.length;
+      if (hits === 6 && countAtSixth === undefined) countAtSixth = r.state.fighters[1].combat.comboHits;
+      if (mashing && pulse === undefined) pulse = r.state.fighters[1].x - x0;
+      s = r.state;
+      prev = now;
+    }
+    expect(hits).toBe(6);
+    expect(countAtSixth).toBe(6);
+    expect(pulse).toBe(9420);
+    expect(pulse).toBe(byRatio(SDI_DISTANCE, [23, 20]));
+  });
+
   /** Fighter 1's position change on the frame its hitlag from `hb` ends, holding `stick` (up by default). */
   function asdi(hb: Hitbox, axis: "x" | "y" = "y", stick: number = Btn.Up): number {
     const def: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hb] }) } };
@@ -1011,6 +1076,18 @@ describe("SDI and ASDI (Plan 3, Task 11)", () => {
   it("does not shift the victim of a vertical electric hit", () => {
     expect(asdi(hitbox({ effect: "electric", angle: fx(90) }))).toBe(0);
   });
+
+  // "Any angle between 70° and just under 110°" is vertical: 70 is in, 110 is out.
+  for (const [degrees, shifts] of [
+    [69, true],
+    [70, false],
+    [109, false],
+    [110, true],
+  ] as const) {
+    it(`${shifts ? "shifts" : "does not shift"} the victim of an electric hit launched at ${degrees} degrees`, () => {
+      expect(asdi(hitbox({ effect: "electric", angle: fx(degrees) }))).toBe(shifts ? ASDI_DISTANCE : 0);
+    });
+  }
 
   it("shifts the victim of an electric hit toward a sideways stick, by the same distance", () => {
     expect(asdi(hitbox({ effect: "electric", angle: fx(45) }), "x", Btn.Left)).toBe(-ASDI_DISTANCE);

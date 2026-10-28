@@ -15,7 +15,7 @@
  * you were hit, not the one after).
  */
 
-import { ONE, fx, mul, abs, byRatio, randomInt, nextRandom } from "./fixed";
+import { DIAGONAL, ONE, fx, mul, abs, byRatio, randomInt, nextRandom } from "./fixed";
 import {
   ASDI_DISTANCE,
   ASDI_VERTICAL,
@@ -1159,9 +1159,6 @@ function sdiDistance(f: FighterState): number {
   return f.combat.comboHits > SDI_COMBO_HITS ? byRatio(SDI_DISTANCE, SDI_COMBO_RATIO) : SDI_DISTANCE;
 }
 
-/** 1/√2, so a diagonal automatic SDI shift is as long as a straight one. */
-const DIAGONAL = fx(0.7071067811865476);
-
 function clearPendingLaunch(f: FighterState): void {
   f.pendingKnockback = 0;
   f.pendingAngle = 0;
@@ -1419,8 +1416,11 @@ function applyHit(
   // `groundedZeroAngle`); the hitstun is the hit's, already decided above.
   if (victim.grounded && victim.pendingAngle === 0) victim.pendingKnockback = byRatio(kb, GROUNDED_ZERO_LAUNCH_RATIO);
   const vertical = victim.pendingAngle >= ASDI_VERTICAL[0] && victim.pendingAngle < ASDI_VERTICAL[1];
-  // Only a real freeze ends in a shift, and the shift is kept out of the stage
-  // where the freeze ends (`clampShiftToStage`); a hit with no freeze has neither.
+  // UNVERIFIED: SmashWiki "Smash directional influence" says ASDI also applies
+  // to projectiles with a hitlag multiplier of 0, which have no freeze. Here it
+  // takes a freeze: the shift is clamped to the stage where the freeze ends
+  // (`clampShiftToStage`), and a zero-lag release happens in this function,
+  // which has no stage to clamp against.
   victim.combat.asdi = lag > 0 && (hb.effect === "electric" || hb.effect === "paralyze") && !vertical;
   victim.pendingFacing = sourceFacing >= 0 ? 1 : -1;
 

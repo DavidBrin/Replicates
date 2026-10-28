@@ -424,6 +424,24 @@ describe("clampShiftToStage", () => {
     expect(left.x).toBe(fx(-80) - ATTRS.width);
   });
 
+  // The lip: the origin is just past the edge but the fighter is above the
+  // surface, and the shift carries it back over the span. `resolveCollision`
+  // lands that fighter ("strictly above last frame lands rather than being
+  // pushed"), so the shift does too, instead of throwing it out sideways.
+  // Battlefield's main platform reaches 79.99; the fighter starts 1.51 beyond it.
+  it("lands a fighter above the surface on a diagonal shift back over the lip, not out sideways", () => {
+    const battlefield: StageDef = {
+      ...STAGE,
+      platforms: [{ x: 0, y: 0, halfWidth: fx(79.99), soft: false, ledges: true }],
+    };
+    const f = shifted(fighter({ x: fx(-79.5), y: fx(-1) }), fx(-81.5), fx(1), battlefield);
+    expect([f.x, f.y]).toEqual([fx(-79.5), 0]);
+    // ...as the collision phase does for the same move.
+    const g = fighter({ x: fx(-79.5), y: fx(-1) });
+    expect(resolveCollision(g, fx(-81.5), fx(1), battlefield, ATTRS, 0).landed).toBe(true);
+    expect(g.x).toBe(fx(-79.5));
+  });
+
   it("stops a fighter that was under the stage at its underside", () => {
     const head = ATTRS.height;
     const f = shifted(fighter({ x: 0, y: -HARD_PLATFORM_DEPTH - head + fx(9) }), 0, -HARD_PLATFORM_DEPTH - head - fx(1));

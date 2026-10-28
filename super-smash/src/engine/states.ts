@@ -21,7 +21,7 @@
  * SPEC §6 is the contract for the interpretation half; §4 for the frame counts.
  */
 
-import { ONE, fx, clamp } from "./fixed";
+import { DIAGONAL, ONE, fx, clamp } from "./fixed";
 import {
   AIR_DODGE_INTANGIBLE,
   AIR_DODGE_LANDING_LAG,
@@ -110,8 +110,6 @@ export const LEDGE_ATTACK_FRAMES = 55;
 export const ROLL_DISTANCE = fx(28);
 export const LEDGE_ROLL_DISTANCE = fx(20);
 export const LEDGE_GETUP_DISTANCE = fx(8);
-/** 1/√2, so a diagonal air dodge covers the same distance as a cardinal one. */
-const DIAGONAL = fx(0.7071067811865476);
 
 /* ------------------------------------------------------------- the intent -- */
 

@@ -15,7 +15,7 @@
  * why each step can be tested alone.
  */
 
-import { ONE, fx, mul, clamp, byRatio, byRatios, sinDeg, cosDeg } from "./fixed";
+import { DIAGONAL, ONE, fx, mul, clamp, byRatio, byRatios, sinDeg, cosDeg } from "./fixed";
 import type { Ratio } from "./fixed";
 import {
   KB_MULTIPLIER,
@@ -449,9 +449,6 @@ export function computeStaleness(
 }
 
 /* ------------------------------------------------------------------- DI -- */
-
-/** 1/√2, for the diagonal of a digital stick. Authoring-time constant. */
-const DIAGONAL = fx(0.7071067811865476);
 
 /** Unit vector for a digital direction pair, in fixed-point. */
 function unitStick(sx: number, sy: number): { x: number; y: number } {

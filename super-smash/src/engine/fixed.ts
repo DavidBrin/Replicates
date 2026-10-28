@@ -187,6 +187,13 @@ export function magnitude(x: number, y: number): number {
   return sqrt(mul(x, x) + mul(y, y));
 }
 
+/**
+ * 1/√2 in fixed-point: what a digital stick's diagonal scales each axis of a
+ * cardinal length by, so the diagonal is as long as the straight one. An
+ * authoring-time constant, like `fx`.
+ */
+export const DIAGONAL = fx(0.7071067811865476);
+
 /* -------------------------------------------------------------------- rng -- */
 
 /**
