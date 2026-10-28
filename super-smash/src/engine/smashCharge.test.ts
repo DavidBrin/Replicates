@@ -9,16 +9,21 @@
  * held, the hit uses up the swing, and the release whiffs. Nothing else pins
  * that, because the golden script releases its smash at once and the CPU never
  * holds one.
+ *
+ * The second half is the rule itself, read off every chargeable move on the
+ * roster (smashes and specials alike, not just the smashes the step() tests
+ * above drive): the hold frame comes before the move's earliest live frame.
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { mul } from "./fixed";
+import { actionFrameOf, chargeHoldFrame } from "./hitbox";
 import { computeStaleness } from "./knockback";
 import { createInitialState, registerFighters, registerStages, step } from "./simulate";
 import { chargeMultiplier } from "./states";
 import { Btn } from "./types";
-import type { FighterDef, GameState, Hitbox, InputFrame, MatchRules, MoveSlot } from "./types";
+import type { FighterDef, GameState, Hitbox, InputFrame, MatchRules, MoveDef, MoveSlot } from "./types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 
@@ -105,4 +110,24 @@ describe("a held smash attack", () => {
       expect(hit.damage).toBe(mul(mul((hb as Hitbox).damage, chargeMultiplier(charge)), fresh));
     });
   }
+});
+
+describe("chargeHoldFrame, for every chargeable move on the roster", () => {
+  const chargeable = FIGHTERS.flatMap((def) =>
+    (Object.entries(def.moves) as [MoveSlot, MoveDef | undefined][]).flatMap(([slot, move]) =>
+      move?.chargeable ? [{ name: `${def.id} ${slot}`, slot, move }] : [],
+    ),
+  );
+
+  it("covers the 24 smashes and the chargeable specials, so the rule below is not vacuous", () => {
+    const smashes = chargeable.filter(({ slot }) => SMASHES.some(([smash]) => smash === slot));
+    expect(smashes).toHaveLength(FIGHTERS.length * SMASHES.length);
+    expect(chargeable.length, "no chargeable special on the roster").toBeGreaterThan(smashes.length);
+  });
+
+  it.each(chargeable.map((c) => [c.name, c.move] as const))("%s holds before its earliest live frame", (_name, move) => {
+    if (move.hitboxes.length === 0) return; // nothing live to hold before
+    const earliestLive = actionFrameOf(Math.min(...move.hitboxes.map((h) => h.startFrame)));
+    expect(chargeHoldFrame(move)).toBeLessThan(earliestLive);
+  });
 });

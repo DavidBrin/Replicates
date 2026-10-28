@@ -296,7 +296,9 @@ deploy restarts every room, which drops lobby sockets but not matches in progres
 peer to peer. Each build is stamped with an id that online players compare, so two different
 deploys refuse each other in the lobby: the commit, plus a hash of any uncommitted changes in
 `super-smash/`. Set `BUILD_ID` to name a build yourself; a build with no git checkout must set
-it (`BUILD_ID=dev` only on purpose, since every such build would pair with every other).
+it (`BUILD_ID=dev` only on purpose, since every such build would pair with every other). The id
+fails closed: if git cannot say what the uncommitted changes are, a production build refuses
+(`next dev` marks the id `-dirty-unknown`), and it never calls such a tree clean.
 
 ---
 

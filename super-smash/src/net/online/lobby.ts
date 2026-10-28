@@ -98,10 +98,11 @@ const MIN_SEED = -0x8000_0000;
 const MAX_SEED = 0x7fff_ffff;
 /**
  * A commit id as git abbreviates it, optionally with `-` and 8 hex digits of
- * the uncommitted changes it was built with, or "dev" for a build git could not
- * name. next.config.ts checks the same form.
+ * the uncommitted changes it was built with (or `-dirty-unknown`, for changes
+ * `next dev` could not read), or "dev" for a build git could not name.
+ * next.config.ts checks the same form.
  */
-const BUILD_ID = /^([0-9a-f]{7,40}(-[0-9a-f]{8})?|dev)$/;
+const BUILD_ID = /^([0-9a-f]{7,40}(-([0-9a-f]{8}|dirty-unknown))?|dev)$/;
 /** The packet header carries the protocol version in one byte (net/packet.ts). */
 const MAX_PROTOCOL = 0xff;
 /** `BoneTable.fingerprint`: 8 lowercase hex digits. */
