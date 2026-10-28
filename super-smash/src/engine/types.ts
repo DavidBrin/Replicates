@@ -7,6 +7,7 @@
  * marked "frames" is a whole number of 60Hz simulation frames.
  */
 
+import type { AcmdScript } from "./acmd/types";
 import type { KineticState } from "./kinetic";
 import type { FighterParams } from "./params";
 
@@ -341,6 +342,11 @@ export interface FighterDef {
    */
   readonly params?: FighterParams;
   readonly moves: Readonly<Partial<Record<MoveSlot, MoveDef>>>;
+  /**
+   * `game_` scripts that replace a slot's compiled legacy move (see
+   * `acmd/legacy.ts`). Empty for the whole roster in Plan 2.
+   */
+  readonly scripts?: Readonly<Partial<Record<MoveSlot, AcmdScript>>>;
   /** Palette used by the procedural renderer. See `render/characterArt.ts`. */
   readonly palette: FighterPalette;
   /** One-line description shown on the character select screen. */
