@@ -1649,10 +1649,11 @@ and hashed, which reflective tests check field by field.
     match's and the builds were settled before it). A channel that reopens to the same seated
     player is taken back on that player's earlier hello, without waiting for a new one: the same
     room seat is the same page, so the same build, and a reload is a new seat that says its build
-    afresh. `build` is the commit inlined at build time
-    (`NEXT_PUBLIC_BUILD_ID`: `BUILD_ID` if set, else the git short SHA, else "dev"), so any two
-    deploys refuse each other, not just two bone tables. This is the build fingerprint D54
-    promised.
+    afresh. `build` is the deploy's id, inlined at build time (`NEXT_PUBLIC_BUILD_ID`):
+    `BUILD_ID` if set, else the git short SHA, with `-` and 8 hex digits of a hash of any
+    uncommitted changes in the package, else "dev", which a production build refuses unless
+    `BUILD_ID=dev` asks for it. So any two deploys refuse each other, a local deploy with edits
+    included, not just two bone tables. This is the build fingerprint D54 promised.
   - *A mismatch.* A mismatch, or no hello within 5 s (`HELLO_TIMEOUT_MS`; an older build never
     sends one), is a sticky error: "The other player is running a different version. Both reload
     the page." The side that detects it leaves the room.

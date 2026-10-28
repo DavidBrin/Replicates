@@ -293,7 +293,10 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 `pnpm run deploy` builds and runs `wrangler deploy`; it needs `wrangler login` on David's
 account, and the TURN secrets are set once with `wrangler secret put` (see `.env.example`). A
 deploy restarts every room, which drops lobby sockets but not matches in progress — those are
-peer to peer.
+peer to peer. Each build is stamped with an id that online players compare, so two different
+deploys refuse each other in the lobby: the commit, plus a hash of any uncommitted changes in
+`super-smash/`. Set `BUILD_ID` to name a build yourself; a build with no git checkout must set
+it (`BUILD_ID=dev` only on purpose, since every such build would pair with every other).
 
 ---
 

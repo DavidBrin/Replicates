@@ -77,9 +77,11 @@ describe("lobby messages", () => {
   it("reads a hello: the build the other side runs", () => {
     const hello = { kind: "hello", build: "0123456789ab", protocol: 2, bones: "0123abcd" };
     expect(parseLobbyMessage(hello)).toEqual(hello);
-    // A build Next did not stamp, and the longest commit id git prints.
+    // A build git could not name, the longest commit id git prints, and one
+    // built with uncommitted changes (next.config.ts marks it).
     expect(parseLobbyMessage({ ...hello, build: "dev" })).toEqual({ ...hello, build: "dev" });
     expect(parseLobbyMessage({ ...hello, build: "0".repeat(40) })).toEqual({ ...hello, build: "0".repeat(40) });
+    expect(parseLobbyMessage({ ...hello, build: "0123456789ab-89abcdef" })).toEqual({ ...hello, build: "0123456789ab-89abcdef" });
   });
 
   it("reads a refusal, so a host learns why its start was not played", () => {
@@ -112,6 +114,9 @@ describe("lobby messages", () => {
       { kind: "hello", build: "0".repeat(41), protocol: 2, bones: "0123abcd" },
       { kind: "hello", build: "0123456789AB", protocol: 2, bones: "0123abcd" },
       { kind: "hello", build: "v1.2.3", protocol: 2, bones: "0123abcd" },
+      { kind: "hello", build: "0123456789ab-dirty", protocol: 2, bones: "0123abcd" },
+      { kind: "hello", build: "0123456789ab-89abcde", protocol: 2, bones: "0123abcd" },
+      { kind: "hello", build: "dev-89abcdef", protocol: 2, bones: "0123abcd" },
       { kind: "hello", build: 123456789, protocol: 2, bones: "0123abcd" },
       { kind: "explode" },
     ];

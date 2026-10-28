@@ -42,8 +42,9 @@ import { isRecord } from "../signalProtocol";
  */
 export interface BuildStamp {
   /**
-   * The deploy: the commit it was built from (next.config.ts), or "dev". Any
-   * change to the simulation is another game, and most change nothing else here.
+   * The deploy: the commit it was built from, marked when the tree had
+   * uncommitted changes (next.config.ts), or "dev". Any change to the
+   * simulation is another game, and most change nothing else here.
    */
   readonly build: string;
   /** The wire format (`PROTOCOL_VERSION`, net/packet.ts). A peer on another cannot read this one's packets. */
@@ -95,8 +96,12 @@ export type ReceivedLobbyMessage = LobbyMessage | UnreadableStart;
 const MAX_COSTUME = 15;
 const MIN_SEED = -0x8000_0000;
 const MAX_SEED = 0x7fff_ffff;
-/** A commit id as git abbreviates it, or "dev" for a build Next did not stamp (next.config.ts checks the same). */
-const BUILD_ID = /^([0-9a-f]{7,40}|dev)$/;
+/**
+ * A commit id as git abbreviates it, optionally with `-` and 8 hex digits of
+ * the uncommitted changes it was built with, or "dev" for a build git could not
+ * name. next.config.ts checks the same form.
+ */
+const BUILD_ID = /^([0-9a-f]{7,40}(-[0-9a-f]{8})?|dev)$/;
 /** The packet header carries the protocol version in one byte (net/packet.ts). */
 const MAX_PROTOCOL = 0xff;
 /** `BoneTable.fingerprint`: 8 lowercase hex digits. */
