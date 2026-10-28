@@ -1072,6 +1072,11 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   if (f.vy > 0 && f.grounded) {
     f.grounded = false;
     f.platform = -1;
+    // Launched off the floor is leaving the ground without a jump: the ground
+    // jump is spent, the midair jumps are not (see `onLeftGround`). Being hit
+    // gives none back either: "double jumps are not given back to the player
+    // upon being put into hitstun" (SmashWiki Double jump).
+    f.jumpsUsed = Math.max(f.jumpsUsed, 1);
   }
   clearPendingLaunch(f);
 }

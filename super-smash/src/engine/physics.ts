@@ -342,6 +342,9 @@ export function dropThroughPlatform(f: FighterState, stage: StageDef): boolean {
   f.y -= 1;
   f.grounded = false;
   f.platform = -1;
+  // Dropping through is leaving the ground without a jump: the ground jump is
+  // spent, the midair jumps are not (see `onLeftGround`).
+  f.jumpsUsed = Math.max(f.jumpsUsed, 1);
   kineticSetY(f, 0);
   return true;
 }

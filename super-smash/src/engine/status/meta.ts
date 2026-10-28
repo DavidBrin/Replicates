@@ -16,7 +16,12 @@ export const STATUS_ENTRY: FighterStatus = {
   action: "entering",
   kineticType: "FALL",
   main(f) {
-    if (f.actionFrame >= ENTRY_FRAMES) startAction(f, f.grounded ? "stand" : "fall");
+    if (f.actionFrame >= ENTRY_FRAMES) {
+      // Still in the air at the end of the entry drop: the ground jump was never
+      // taken and is not owed (see `onLeftGround`).
+      if (!f.grounded) f.jumpsUsed = Math.max(f.jumpsUsed, 1);
+      startAction(f, f.grounded ? "stand" : "fall");
+    }
   },
 };
 
@@ -36,7 +41,9 @@ export const STATUS_DEAD: FighterStatus = {
       kineticClear(f);
       f.grounded = false;
       f.platform = -1;
-      f.jumpsUsed = 0;
+      // Respawning restores the midair jumps (SmashWiki Double jump: "restored upon ...
+      // being KO'd and respawning"); the fighter is in the air, so the ground jump is spent.
+      f.jumpsUsed = 1;
       f.airDodged = false;
       f.shortHop = false;
       f.ledgeRegrabs = 0;

@@ -831,15 +831,22 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   startAction(f, "land");
 }
 
-/** A fighter left the ground without jumping — walked off an edge. */
+/**
+ * A fighter left the ground without jumping: walked off an edge, or a move of its
+ * own (a rising special) lifted it.
+ *
+ * Leaving the ground any way but a jump spends the ground jump: the fighter has
+ * `jump_count_max − 1` midair jumps, not one more. SmashWiki Double jump
+ * (https://www.ssbwiki.com/Double_jump): "Most characters can only jump once
+ * while airborne"; SmashWiki Jump (https://www.ssbwiki.com/Jump): "Kirby, Meta
+ * Knight, and Jigglypuff can do a midair jump five times." The spend does not
+ * depend on the fighter being actionable: a special that carries it off the
+ * edge, or up off the floor, is still a way of leaving the ground.
+ */
 export function onLeftGround(f: FighterState): void {
   if (f.action === "jumpSquat") return;
-  if (isActionable(f)) {
-    // Walking off spends the grounded jump: Ultimate gives you your air jumps,
-    // not a full-height one you never took.
-    f.jumpsUsed = Math.max(f.jumpsUsed, 1);
-    startAction(f, "fall");
-  }
+  f.jumpsUsed = Math.max(f.jumpsUsed, 1);
+  if (isActionable(f)) startAction(f, "fall");
 }
 
 /** Snap a fighter onto a ledge it just grabbed. */
@@ -856,7 +863,11 @@ export function grabLedge(
   f.y = y;
   kineticClear(f);
   f.facing = -side;
-  f.jumpsUsed = 0;
+  // A ledge grab restores the midair jumps (SmashWiki Double jump, https://www.ssbwiki.com/Double_jump:
+  // "A character's double jump(s) are restored upon landing, grabbing a ledge, being KO'd and
+  // respawning, or being grabbed by an opposing character"). The fighter is still in the air,
+  // so the ground jump stays spent: a drop or a hit off the ledge leaves jump_count_max − 1.
+  f.jumpsUsed = 1;
   f.airDodged = false;
   f.fastFalling = false;
   f.shortHop = false;

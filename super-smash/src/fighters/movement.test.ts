@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { toFloat } from "@/engine/fixed";
+import { fx, toFloat } from "@/engine/fixed";
 import { initialRiseStep, jumpLaunchSpeed } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { STAGES } from "@/stages";
+import { finalDestination } from "@/stages/finalDestination";
 import { FIGHTERS } from "./index";
 import { FIGHTER_PARAMS, type RosterId } from "./params";
 
@@ -286,5 +287,172 @@ describe("a midair jump never reads before the start of Kirby's height list", ()
     expect(dropped.grounded).toBe(false);
     const forced: GameState = { ...s, fighters: [{ ...dropped, jumpsUsed: 0 }] };
     kirbyAfter(play(forced, [0, 0, Btn.Jump, ...hold(0, 40)]), 2);
+  });
+});
+
+describe("leaving the ground any way but a jump spends the ground jump (Task 20b)", () => {
+  // SmashWiki Double jump (https://www.ssbwiki.com/Double_jump; "Midair jump" redirects there):
+  // "Most characters can only jump once while airborne; however, some characters can jump
+  // multiple times without touching the ground." SmashWiki Jump (https://www.ssbwiki.com/Jump):
+  // "Kirby, Meta Knight, and Jigglypuff can do a midair jump five times." So a fighter in the
+  // air has jump_count_max − 1 midair jumps, however it got there.
+  //
+  // Restoration, same Double jump page: "A character's double jump(s) are restored upon
+  // landing, grabbing a ledge, being KO'd and respawning, or being grabbed by an opposing
+  // character", and "double jumps are not given back to the player upon being put into
+  // hitstun".
+  //
+  // UNVERIFIED: neither page names the routes this file tests (walking off, drop-through, a
+  // hit launch, a ledge drop, respawn, entry, a rising special) one by one. They only say
+  // "airborne", so each route takes the walk-off rule: the ground jump is spent, the midair
+  // jumps are not.
+  const SPACING = 20;
+  const TWO_AND_SIX: RosterId[] = ["mario", "kirby"];
+
+  /** A stage whose spawns hang well above the floor, so entry and respawn end in the air. */
+  const HIGH_SPAWN = { ...finalDestination, id: "highSpawn", spawns: finalDestination.spawns.map((p) => ({ x: p.x, y: fx(60) })) };
+  registerStages([HIGH_SPAWN]);
+
+  /** One input for port 0, nothing for anybody else. */
+  const only = (s: GameState, input: InputFrame): InputFrame[] => s.fighters.map((_, i) => (i === 0 ? input : 0));
+
+  /** Hold `input` on port 0 from the start until `done` holds for it; at most `limit` frames. */
+  function holdUntil(s0: GameState, input: InputFrame, done: (f: FighterState) => boolean, limit = 400): GameState {
+    let s = s0;
+    let prev: InputFrame = 0;
+    for (let i = 0; i < limit; i++) {
+      s = step(s, only(s, input), { prevInputs: only(s, prev) }).state;
+      prev = input;
+      if (done(s.fighters[0])) return s;
+    }
+    throw new Error(`never reached the condition within ${limit} frames`);
+  }
+
+  /**
+   * From `s0`, press jump every SPACING frames (two more presses than the fighter can use) and
+   * count the midair jumps it takes before it lands or is KO'd.
+   */
+  function midairJumps(s0: GameState): number {
+    const need = FIGHTER_PARAMS[s0.fighters[0].defId as RosterId].jump_count_max;
+    let s = s0;
+    let prev: InputFrame = 0;
+    let taken = 0;
+    for (let i = 0; i < (need + 2) * SPACING; i++) {
+      const input = i % SPACING === 0 ? Btn.Jump : 0;
+      const before = s.fighters[0];
+      s = step(s, only(s, input), { prevInputs: only(s, prev) }).state;
+      prev = input;
+      const after = s.fighters[0];
+      if (after.grounded || after.action === "dead") break;
+      if (!before.grounded && after.jumpsUsed > before.jumpsUsed) taken += 1;
+    }
+    return taken;
+  }
+
+  const expected = (id: RosterId) => FIGHTER_PARAMS[id].jump_count_max - 1;
+
+  /** The fighter and a Mario beside it, both settled on Final Destination. */
+  function withMario(id: RosterId): GameState {
+    let s = createInitialState("finalDestination", [{ defId: id }, { defId: "mario" }], RULES, 7);
+    for (let i = 0; i < 80; i++) s = step(s, [0, 0], { prevInputs: [0, 0] }).state;
+    return s;
+  }
+
+  /**
+   * Mario (port 1) throws an up smash at port 0, which must be inside its reach; then nothing
+   * until the victim has been launched and its hitstun is over.
+   */
+  function upSmashed(s0: GameState): GameState {
+    let s = step(s0, [0, Btn.Up | Btn.Attack], { prevInputs: [0, 0] }).state;
+    let launched = false;
+    for (let i = 0; i < 120 && !(launched && s.fighters[0].hitstun === 0); i++) {
+      s = step(s, [0, 0], { prevInputs: [0, 0] }).state;
+      launched ||= !s.fighters[0].grounded && s.fighters[0].hitstun > 0;
+    }
+    expect(launched, "the up smash launched the victim").toBe(true);
+    return s;
+  }
+
+  it.each(TWO_AND_SIX)("%s walking off a platform keeps its midair jumps, and no extra", (id) => {
+    const s = holdUntil(standing(id, "battlefield"), Btn.Left, (f) => !f.grounded);
+    expect(midairJumps(s)).toBe(expected(id));
+  });
+
+  it.each(TWO_AND_SIX)("%s dropping through a soft platform keeps its midair jumps, and no extra", (id) => {
+    const s = holdUntil(standing(id, "battlefield"), Btn.Down, (f) => !f.grounded);
+    expect(midairJumps(s)).toBe(expected(id));
+  });
+
+  it.each(TWO_AND_SIX)("%s rising off the ground on a special spends the ground jump", (id) => {
+    // Final Cutter and Super Jump Punch lift the fighter themselves; no jump is taken.
+    const s = holdUntil(standing(id), Btn.Up | Btn.Special, (f) => !f.grounded);
+    expect(s.fighters[0].action).toBe("special");
+    expect(s.fighters[0].jumpsUsed).toBe(1);
+  });
+
+  it("Mario, once his rising special is over, has his midair jump and no extra", () => {
+    // Kirby's Final Cutter ends on the floor, so only Mario is still airborne to count.
+    const s = holdUntil(standing("mario"), Btn.Up | Btn.Special, (f) => !f.grounded);
+    const over = holdUntil(s, 0, (f) => f.action !== "special", 200);
+    expect(over.fighters[0].grounded, "still airborne when the special ends").toBe(false);
+    expect(midairJumps(over)).toBe(expected("mario"));
+  });
+
+  it.each(TWO_AND_SIX)("%s launched off the ground by a hit keeps its midair jumps, and no extra", (id) => {
+    const s = withMario(id);
+    const [victim, attacker] = s.fighters;
+    victim.x = fx(0);
+    victim.facing = -1;
+    attacker.x = fx(-3);
+    attacker.facing = 1;
+    expect(midairJumps(upSmashed(s))).toBe(expected(id));
+  });
+
+  it.each(TWO_AND_SIX)("%s grabbing a ledge gets every midair jump back, and a hit off it adds no extra", (id) => {
+    // Out of jumps, just outboard of Final Destination's left ledge (x −80), facing the stage.
+    let s = withMario(id);
+    Object.assign(s.fighters[0], {
+      action: "fall", actionFrame: 0, grounded: false, platform: -1, x: fx(-82), y: fx(-5),
+      intangible: 0, jumpsUsed: FIGHTER_PARAMS[id].jump_count_max, facing: 1,
+    });
+    s = holdUntil(s, 0, (f) => f.ledge !== null, 60);
+    expect(s.fighters[0].jumpsUsed, "the grab restores them: the ground jump stays spent").toBe(1);
+    // Mario on the stage, in reach of the hanging fighter, which is past its grab invulnerability.
+    Object.assign(s.fighters[1], { x: fx(-76), facing: -1 });
+    s.fighters[0].intangible = 0;
+    expect(midairJumps(upSmashed(s))).toBe(expected(id));
+  });
+
+  it.each(TWO_AND_SIX)("%s leaving the respawn platform keeps its midair jumps, and no extra", (id) => {
+    let s = createInitialState("highSpawn", [{ defId: id }], RULES, 7);
+    s.fighters[0].y = fx(-150); // under the blast zone: KO'd, then respawned
+    s = holdUntil(s, 0, (f) => f.action === "respawnPlatform", 200);
+    s = holdUntil(s, Btn.Right, (f) => f.action === "fall", 20);
+    expect(s.fighters[0].grounded).toBe(false);
+    expect(midairJumps(s)).toBe(expected(id));
+  });
+
+  it.each(TWO_AND_SIX)("%s entering from above keeps its midair jumps, and no extra", (id) => {
+    const s = holdUntil(createInitialState("highSpawn", [{ defId: id }], RULES, 7), 0, (f) => f.action === "fall");
+    expect(midairJumps(s)).toBe(expected(id));
+  });
+
+  it.each(TWO_AND_SIX)("%s is not given a midair jump back by a hit", (id) => {
+    // Out of jumps, high above the stage, struck by Mario's neutral air: the page says hitstun
+    // does not restore them.
+    let s = withMario(id);
+    const [victim, attacker] = s.fighters;
+    const out = FIGHTER_PARAMS[id].jump_count_max;
+    Object.assign(victim, { action: "fall", grounded: false, platform: -1, x: fx(0), y: fx(80), intangible: 0, jumpsUsed: out });
+    Object.assign(attacker, { action: "fall", grounded: false, platform: -1, x: fx(-3), y: fx(80), intangible: 0, jumpsUsed: 1, facing: 1 });
+    s = step(s, [0, Btn.Attack], { prevInputs: [0, 0] }).state;
+    let hit = false;
+    for (let i = 0; i < 60 && !hit; i++) {
+      const r = step(s, [0, 0], { prevInputs: [0, 0] });
+      s = r.state;
+      hit = r.events.hits.length > 0;
+    }
+    expect(hit, "the neutral air connected").toBe(true);
+    expect(s.fighters[0].jumpsUsed).toBe(out);
   });
 });
