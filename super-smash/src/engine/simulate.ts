@@ -103,6 +103,7 @@ import {
   kineticSet,
   kineticSetX,
 } from "./kinetic";
+import "./status";
 import { emptyEvents } from "./types";
 import type {
   ActionState,

@@ -75,6 +75,7 @@ import {
   kineticSetY,
 } from "./kinetic";
 import { fighterParams } from "./params";
+import { STATUS_TABLE, changeStatus } from "./status/kind";
 import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type {
   ActionState,
@@ -318,18 +319,18 @@ export interface StateContext {
   readonly fighters: readonly FighterState[];
 }
 
+/** Change status through the StatusModule (`status/kind.ts`): end, reset, pre. */
 export function startAction(f: FighterState, action: ActionState): void {
-  f.action = action;
-  f.actionFrame = 0;
-  if (action !== "attack" && action !== "special" && action !== "throw" && action !== "pummel") {
-    f.move = null;
-    f.charge = 0;
-  }
+  changeStatus(f, action);
 }
 
-function startMove(f: FighterState, action: ActionState, slot: MoveSlot): void {
-  f.action = action;
-  f.actionFrame = 0;
+/**
+ * Enter a swinging status with `slot` as its move. Task 8 also resets the hit
+ * record in those statuses' `pre`; it is reset here too so a status not yet
+ * registered — a test that skips the registry — behaves the same.
+ */
+export function startMove(f: FighterState, action: ActionState, slot: MoveSlot): void {
+  changeStatus(f, action);
   f.move = slot;
   f.charge = 0;
   clearHitRecord(f);
@@ -353,7 +354,7 @@ export function chargeMultiplier(charge: number): number {
  * re-asserted one frame at a time from inside it, which reproduces `[3, 20]`
  * exactly and leaves a longer grant (a ledge grab, a respawn) untouched.
  */
-function dodgeWindow(f: FighterState): readonly [number, number] | null {
+export function dodgeWindow(f: FighterState): readonly [number, number] | null {
   switch (f.action) {
     case "spotDodge":
       return SPOT_DODGE_INTANGIBLE;
@@ -413,7 +414,7 @@ export function specialSlot(intent: Intent): MoveSlot {
   return "neutralB";
 }
 
-function hasMove(ctx: StateContext, slot: MoveSlot): boolean {
+export function hasMove(ctx: StateContext, slot: MoveSlot): boolean {
   return ctx.def.moves[slot] !== undefined;
 }
 
@@ -425,7 +426,7 @@ function hasMove(ctx: StateContext, slot: MoveSlot): boolean {
  * half-finished fighter is playable rather than a crash, and keeps the engine
  * usable by the fighter author before their file is complete.
  */
-function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot): boolean {
+export function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot): boolean {
   if (hasMove(ctx, slot)) {
     startMove(f, "attack", slot);
     return true;
@@ -444,7 +445,7 @@ function beginAttack(f: FighterState, ctx: StateContext, slot: MoveSlot): boolea
   return false;
 }
 
-function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot): boolean {
+export function beginSpecial(f: FighterState, ctx: StateContext, slot: MoveSlot): boolean {
   if (!hasMove(ctx, slot)) return false;
   startMove(f, "special", slot);
   return true;
@@ -469,7 +470,7 @@ export function isActionable(f: FighterState): boolean {
   }
 }
 
-interface Presses {
+export interface Presses {
   jump: boolean;
   attack: boolean;
   special: boolean;
@@ -478,7 +479,7 @@ interface Presses {
 }
 
 /** This frame's presses, with a still-valid buffered press folded in. */
-function presses(f: FighterState, intent: Intent, frame: number): Presses {
+export function presses(f: FighterState, intent: Intent, frame: number): Presses {
   const b = peekBuffer(f, frame);
   const p: Presses = {
     jump: intent.jumpPressed || b === "jump",
@@ -491,7 +492,7 @@ function presses(f: FighterState, intent: Intent, frame: number): Presses {
   return p;
 }
 
-function airJump(f: FighterState, ctx: StateContext): boolean {
+export function airJump(f: FighterState, ctx: StateContext): boolean {
   const a = ctx.def.attributes;
   if (f.jumpsUsed >= a.jumps) return false;
   f.jumpsUsed += 1;
@@ -504,7 +505,7 @@ function airJump(f: FighterState, ctx: StateContext): boolean {
   return true;
 }
 
-function startAirDodge(f: FighterState, intent: Intent): boolean {
+export function startAirDodge(f: FighterState, intent: Intent): boolean {
   if (f.airDodged) return false;
   f.airDodged = true;
   const directional = intent.x !== 0 || intent.y !== 0;
@@ -534,7 +535,7 @@ function startAirDodge(f: FighterState, intent: Intent): boolean {
  * one. Returns true if a new action started, so the caller knows not to run the
  * ordinary movement branch.
  */
-function handleActionable(f: FighterState, intent: Intent, ctx: StateContext): boolean {
+export function handleActionable(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   const p = presses(f, intent, ctx.frame);
 
   if (f.grounded) {
@@ -588,6 +589,13 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
   f.actionFrame += 1;
   updateDodgeIntangibility(f);
 
+  const status = STATUS_TABLE[f.action];
+  if (status !== undefined) {
+    status.main(f, intent, ctx);
+    return;
+  }
+
+  // Legacy switch: each status group leaves it as it moves to `status/`.
   switch (f.action) {
     /* ---------------------------------------------------------- reeling -- */
     case "hitstun":
@@ -1094,7 +1102,7 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
  * against the very ledge the fighter is climbing over, which lands it back on
  * the ledge it is trying to leave on the first frame of every getup.
  */
-function finishLedgeOption(f: FighterState, ctx: StateContext): void {
+export function finishLedgeOption(f: FighterState, ctx: StateContext): void {
   const ledge = f.ledge;
   f.ledge = null;
   if (f.action === "ledgeJump") {
@@ -1253,7 +1261,7 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
 
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
   const a = ctx.def.attributes;
-  const type = KINETIC_TYPE_OF_ACTION[f.action];
+  const type = STATUS_TABLE[f.action]?.kineticType ?? KINETIC_TYPE_OF_ACTION[f.action];
   const carrier = carrierOf(type);
   // Fold any direct write to vx/vy since the last frame into the energies.
   kineticAdopt(f, carrier);
@@ -1286,6 +1294,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     // intangible window closes, which is what makes a missed one a free punish.
     holdVertical: f.action === "airDodge" && w !== null && f.actionFrame <= w[1],
   });
+  STATUS_TABLE[f.action]?.exec?.(f, intent, ctx);
 }
 
 /* -------------------------------------------------------------- landings -- */
