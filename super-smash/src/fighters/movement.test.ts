@@ -168,3 +168,34 @@ describe("midair jumps (SmashWiki Midair jump, https://www.ssbwiki.com/Midair_ju
     expect(f.vy).toBeGreaterThan(0);
   });
 });
+
+describe("air friction (SmashWiki Air friction, https://www.ssbwiki.com/Air_friction)", () => {
+  // "Air friction only applies when the player is not holding the Control Stick
+  // in a horizontal direction … If the player is attempting to slow down, air
+  // acceleration applies instead." Values: calculator `AirFriction` (air_brake_x).
+
+  /** A full hop drifting right for 20 frames (17 of them airborne), then `input` for `n` frames. */
+  function drift(id: RosterId, input: InputFrame, n: number): FighterState[] {
+    const frames = play(standing(id), [...hold(Btn.Jump | Btn.Right, 20), ...hold(input, n)]);
+    expect(frames[19].grounded, `${id} is airborne when the drift ends`).toBe(false);
+    expect(frames[19].vx, `${id} is drifting right`).toBeGreaterThan(0);
+    return frames.slice(19);
+  }
+
+  it.each(IDS)("%s slows by air_brake_x a frame with the stick neutral", (id) => {
+    const p = FIGHTER_PARAMS[id];
+    const frames = drift(id, Btn.Jump, 15);
+    let checked = 0;
+    for (let i = 1; i < frames.length && !frames[i].grounded; i++) {
+      expect(frames[i - 1].vx - frames[i].vx, `${id} neutral frame ${i}`).toBe(Math.min(p.air_brake_x, frames[i - 1].vx));
+      checked += 1;
+    }
+    expect(checked, `${id}: airborne neutral frames measured`).toBeGreaterThanOrEqual(10);
+  });
+
+  it("does not slow a fighter who is holding the way they drift", () => {
+    const frames = play(standing("mario"), hold(Btn.Jump | Btn.Right, 40)).slice(20, 40);
+    expect(frames.every((f) => !f.grounded)).toBe(true);
+    expect(frames.every((f) => f.vx === FIGHTER_PARAMS.mario.air_speed_x_stable)).toBe(true);
+  });
+});

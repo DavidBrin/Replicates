@@ -325,10 +325,11 @@ export function gravityStep(vy: number, g: number, terminal: number): number {
 /**
  * Air drift: base plus additional acceleration, capped at air speed — but only
  * in the direction being held, so drifting back against a fast launch is
- * allowed while drifting further out is not.
+ * allowed while drifting further out is not. With the stick neutral, air
+ * friction (`air_brake_x`) bleeds the drift instead (SmashWiki "Air friction").
  */
 export function airControlX(vx: number, stickX: number, p: FighterParams): number {
-  if (stickX === 0) return vx;
+  if (stickX === 0) return approach(vx, 0, p.air_brake_x);
   const accel = p.air_accel_x_add + p.air_accel_x_mul;
   if (stickX > 0 && vx >= p.air_speed_x_stable) return vx;
   if (stickX < 0 && vx <= -p.air_speed_x_stable) return vx;
@@ -367,7 +368,7 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
       k.controlX = f.grounded ? approach(k.controlX, 0, p.ground_brake) : airControlX(k.controlX, input.stickX, p);
       break;
     case "GROUND_STOP":
-      if (f.grounded) k.stopX = approach(k.stopX, 0, p.ground_brake);
+      k.stopX = approach(k.stopX, 0, f.grounded ? p.ground_brake : p.air_brake_x);
       break;
     case "MOTION":
       break;

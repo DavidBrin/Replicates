@@ -20,7 +20,8 @@
  * how far a walk carries Mario, and when he reaches a ledge. The coverage test in
  * `golden.test.ts` is what notices if they stop landing. A behaviour task that
  * moves the fighters (walk speed, traction, jump arcs) re-tunes them until it
- * passes again, then regenerates the trace.
+ * passes again, then regenerates the trace. Task 21 (air friction) did so for
+ * the walk to the right ledge on frame 1163.
  */
 
 import { Btn } from "@/engine/types";
@@ -111,8 +112,11 @@ const STEPS: readonly ScriptStep[] = [
   [20, 0, 0],
   [30, R, 0], //                 1118: run
   [15, 0, 0], //                 1148: let go: runBrake
-  [50, R | SOFT, 0], //          1163: to the right ledge again
-  [30, 0, 0],
+  // Air friction (Task 21) bleeds the ledge jump's drift, so Mario lands further
+  // right and the walk to this ledge is 16 frames, not 48. It stops inside the
+  // hang's first 4 frames (the hang begins on 1179) and he hangs until the 1243 press.
+  [18, R | SOFT, 0], //          1163: to the right ledge again
+  [62, 0, 0],
   [1, L, 0], //                  1243: toward the stage: ledgeGetUp
   [40, 0, 0],
   [10, R | SOFT, 0], //          1284: back onto the ledge
