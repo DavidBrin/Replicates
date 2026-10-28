@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ONE, fx } from "../fixed";
+import type { HitEffect } from "../types";
 import {
   BONE_POSE_STRIDE,
   LEGACY_BONE_TABLE,
@@ -13,10 +14,13 @@ import {
 } from "./bones";
 import type { BakedFighterBones, BonePose, BoneTable } from "./bones";
 import { ATTACK, CATCH, frame, script, shieldSetoffMul } from "./dsl";
-import { scriptHitboxes } from "./hitboxes";
+import { ATTR_OF_EFFECT, EFFECT_OF_ATTR, scriptHitboxes } from "./hitboxes";
 import { runScript } from "./interpreter";
 
-/** Two bones, three frames; each Int32 encodes where it sits so a wrong index is obvious. */
+/**
+ * Two bones, three frames; each Int32 encodes where it sits so a wrong index is obvious.
+ * Synthetic fixture: these numbers are not real fighter values, only index markers.
+ */
 function synthetic(): BakedFighterBones {
   const bones = ["top", "kneer"];
   const frames = 3;
@@ -70,6 +74,44 @@ describe("baked bone tables (the layout Plan 4 produces)", () => {
     const layered = layeredBoneTable(table, LEGACY_BONE_TABLE);
     expect(poseOf(layered, "fox", "attack_11", 7, "top")).toEqual(TOP_POSE);
   });
+
+  it("prefers the first table where both answer", () => {
+    const layered = layeredBoneTable(table, LEGACY_BONE_TABLE);
+    expect(poseOf(layered, "mario", "attack_air_n", 1, "top")!.tx).toBe(1000);
+    expect(poseOf(layered, "mario", "attack_air_n", 1, "top")).not.toEqual(TOP_POSE);
+  });
+});
+
+describe("a malformed bake is refused when the table is built", () => {
+  it("rejects data whose length is not frames x bones x stride", () => {
+    const short: BakedFighterBones = { fighter: "mario", bones: ["top"], motions: { attack_11: { frames: 3, data: new Int32Array(BONE_POSE_STRIDE) } } };
+    expect(() => bakedBoneTable([short])).toThrow(/mario\/attack_11.*24 Int32s, got 8/);
+    const long: BakedFighterBones = { fighter: "mario", bones: ["top"], motions: { attack_11: { frames: 1, data: new Int32Array(2 * BONE_POSE_STRIDE) } } };
+    expect(() => bakedBoneTable([long])).toThrow(/mario\/attack_11.*8 Int32s, got 16/);
+  });
+
+  it("rejects a frame count that is not a whole number of at least 1", () => {
+    for (const frames of [2.5, 0, -1, Number.NaN]) {
+      const bad: BakedFighterBones = { fighter: "mario", bones: ["top"], motions: { attack_11: { frames, data: new Int32Array(0) } } };
+      expect(() => bakedBoneTable([bad])).toThrow(/mario\/attack_11.*frames/);
+    }
+  });
+
+  it("rejects a fighter with no bones", () => {
+    expect(() => bakedBoneTable([{ fighter: "mario", bones: [], motions: {} }])).toThrow(/mario.*no bones/);
+  });
+
+  it("rejects a bone listed twice", () => {
+    expect(() => bakedBoneTable([{ fighter: "mario", bones: ["top", "hip", "top"], motions: {} }])).toThrow(/mario.*twice/);
+  });
+
+  it("rejects a fighter listed twice", () => {
+    expect(() => bakedBoneTable([synthetic(), synthetic()])).toThrow(/"mario" is listed twice/);
+  });
+
+  it("does not mistake an inherited property for a motion", () => {
+    expect(poseOf(bakedBoneTable([synthetic()]), "mario", "constructor", 1, "top")).toBeNull();
+  });
 });
 
 describe("bone-table fingerprints (compared by online peers, Task 27)", () => {
@@ -104,8 +146,19 @@ describe("the legacy (Plan 2) bone table", () => {
     expect(poseOf(LEGACY_BONE_TABLE, "mario", "attack_11", 1, "kneer")).toBeNull();
   });
 
+  it("has a fingerprint that covers its pose, pinned so a change to either is seen", () => {
+    expect(LEGACY_BONE_TABLE.fingerprint).toBe("8e0cab2b");
+  });
+
   it("puts script Z forward and script Y up, as D17 reads the root bone", () => {
     expect(bonePoint(TOP_POSE, fx(9), fx(6.3), fx(6))).toEqual({ x: fx(6), y: fx(6.3) });
+  });
+
+  it("rounds a negative, non-exact product toward zero, as fixed.ts mul does", () => {
+    // m00 = 0.5, lx = -3 raw units: -1.5 raw units -> -1 (floor would give -2).
+    const half = { tx: 0, ty: 0, m00: ONE / 2, m01: 0, m02: 0, m10: ONE / 2, m11: 0, m12: 0 };
+    expect(bonePoint(half, -3, 0, 0)).toEqual({ x: -1, y: -1 });
+    expect(bonePoint(half, 3, 0, 0)).toEqual({ x: 1, y: 1 });
   });
 
   it("applies a general pose as matrix then translation", () => {
@@ -146,10 +199,70 @@ describe("scriptHitboxes", () => {
     expect(() => scriptHitboxes(runScript(limb, 1), "mario", "attack_air_n", 1, LEGACY_BONE_TABLE)).toThrow(/kneer/);
   });
 
+  it("resolves a non-identity baked pose, frame by frame, end to end", () => {
+    // Synthetic bake, not real fighter values: "handl" rides forward 2 units per motion frame, 5 up.
+    const frames = 3;
+    const data = new Int32Array(frames * 2 * BONE_POSE_STRIDE);
+    for (let f = 1; f <= frames; f++) {
+      data.set([0, 0, 0, 0, ONE, 0, ONE, 0], bakedPoseIndex(f, 0, 2));
+      data.set([fx(2 * f), fx(5), 0, 0, ONE, 0, ONE, 0], bakedPoseIndex(f, 1, 2));
+    }
+    const baked = bakedBoneTable([{ fighter: "mario", bones: ["top", "handl"], motions: { attack_11: { frames, data } } }]);
+    const hand = script("game_test", "attack_11", [
+      frame(1),
+      ATTACK({ id: 0, bone: "handl", damage: 3, angle: 361, kbg: 30, bkb: 20, size: 1.5, x: 0, y: 1, z: 3 }),
+    ]);
+    const at = (g: number) => scriptHitboxes(runScript(hand, g), "mario", "attack_11", g, baked).map((h) => [h.x, h.y]);
+    expect(at(1)).toEqual([[fx(5), fx(6)]]);
+    expect(at(3)).toEqual([[fx(9), fx(6)]]);
+  });
+
+  it("does not let a table that writes nothing leak the last lookup's pose", () => {
+    const lazy: BoneTable = { fingerprint: "00000000", pose: () => true };
+    const hand = script("game_test", "attack_11", [
+      ATTACK({ id: 0, bone: "top", damage: 3, angle: 361, kbg: 30, bkb: 20, size: 1.5, x: 0, y: 6.3, z: 6 }),
+    ]);
+    scriptHitboxes(runScript(hand, 1), "mario", "attack_11", 1, LEGACY_BONE_TABLE);
+    const [h] = scriptHitboxes(runScript(hand, 1), "mario", "attack_11", 1, lazy);
+    expect([h.x, h.y]).toEqual([0, 0]);
+  });
+
   it("refuses an extended (capsule) hitbox until Plan 3 can collide one", () => {
     const capsule = script("game_test", "attack_s3_s", [
       ATTACK({ id: 2, bone: "top", damage: 9, angle: 361, kbg: 100, bkb: 20, size: 3, x: 0, y: 6, z: 4, x2: 0, y2: 6, z2: 12 }),
     ]);
     expect(() => scriptHitboxes(runScript(capsule, 1), "mario", "attack_s3_s", 1, LEGACY_BONE_TABLE)).toThrow(/capsule/);
+  });
+
+  it("refuses an extended (capsule) CATCH too", () => {
+    const grab = script("game_test", "catch", [CATCH({ id: 0, bone: "top", size: 3.3, x: 0, y: 6.6, z: 6.4, x2: 0, y2: 6.6, z2: 9 })]);
+    expect(() => scriptHitboxes(runScript(grab, 1), "mario", "catch", 1, LEGACY_BONE_TABLE)).toThrow(/capsule/);
+  });
+});
+
+describe("collision_attr <-> HitEffect", () => {
+  // Compile-time exhaustive: a new HitEffect member fails typecheck here until it is listed.
+  const EFFECTS: Record<HitEffect, true> = {
+    normal: true,
+    electric: true,
+    fire: true,
+    slash: true,
+    stab: true,
+    darkness: true,
+    aura: true,
+    freeze: true,
+    bury: true,
+    paralyze: true,
+  };
+
+  it.each(Object.keys(EFFECTS) as HitEffect[])("%s has a collision_attr_* name that maps back to it", (effect) => {
+    const attr = ATTR_OF_EFFECT[effect];
+    expect(attr).toMatch(/^collision_attr_[a-z]+$/);
+    expect(EFFECT_OF_ATTR[attr]).toBe(effect);
+  });
+
+  it("has no collision_attr_* name that maps to a different effect than its inverse", () => {
+    for (const [attr, effect] of Object.entries(EFFECT_OF_ATTR)) expect(ATTR_OF_EFFECT[effect]).toBe(attr);
+    expect(Object.keys(EFFECT_OF_ATTR)).toHaveLength(Object.keys(EFFECTS).length);
   });
 });

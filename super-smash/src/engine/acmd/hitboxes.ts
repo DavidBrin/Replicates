@@ -9,12 +9,19 @@
  * Until then an extended (capsule) ATTACK or CATCH — one with `x2/y2/z2` — is
  * refused loudly: the pipeline has only spheres, and dropping the far end
  * would quietly shrink the move.
+ *
+ * Two narrowings are NOT refused, because a `Hitbox` has no field for what is
+ * dropped; Plan 3 owns both, by reading `AttackParams` directly:
+ * - a `collisionAttr` with no `HitEffect` (not in `EFFECT_OF_ATTR`) becomes a
+ *   plain normal hit;
+ * - a set-knockback attack (`fkb > 0`) carries `fkb` as its one
+ *   `baseKnockback` and its `bkb` is dropped.
  */
 
 import { ONE } from "../fixed";
 import type { HitEffect, Hitbox } from "../types";
 import { bonePoint, newBonePose } from "./bones";
-import type { BoneTable } from "./bones";
+import type { BonePose, BoneTable } from "./bones";
 import type { ScriptFrameState } from "./interpreter";
 import type { AttackParams, CatchParams, MotionKind } from "./types";
 
@@ -32,12 +39,27 @@ export const EFFECT_OF_ATTR: Readonly<Record<string, HitEffect>> = {
   collision_attr_paralyze: "paralyze",
 };
 
-export const ATTR_OF_EFFECT: Readonly<Record<HitEffect, string>> = Object.fromEntries(
-  Object.entries(EFFECT_OF_ATTR).map(([attr, effect]) => [effect, attr]),
-) as Record<HitEffect, string>;
+/** The inverse of `EFFECT_OF_ATTR`; a literal over every `HitEffect`, so a new effect cannot be left out. */
+export const ATTR_OF_EFFECT: Readonly<Record<HitEffect, string>> = {
+  normal: "collision_attr_normal",
+  electric: "collision_attr_elec",
+  fire: "collision_attr_fire",
+  slash: "collision_attr_cutup",
+  stab: "collision_attr_sting",
+  darkness: "collision_attr_purple",
+  aura: "collision_attr_aura",
+  freeze: "collision_attr_ice",
+  bury: "collision_attr_bury",
+  paralyze: "collision_attr_paralyze",
+};
 
 /** Scratch for `BoneTable.pose`, reused so resolving a hitbox allocates no pose. Not state. */
 const POSE = newBonePose();
+
+/** Zero the scratch, so a table that returns true without writing a field cannot leak the last lookup's. */
+function clearPose(p: BonePose): void {
+  p.tx = p.ty = p.m00 = p.m01 = p.m02 = p.m10 = p.m11 = p.m12 = 0;
+}
 
 function resolve(
   bones: BoneTable,
@@ -49,6 +71,7 @@ function resolve(
   if (p.x2 !== undefined || p.y2 !== undefined || p.z2 !== undefined) {
     throw new Error(`capsule hitbox (x2/y2/z2) id ${p.id} of ${fighterId}/${motion}: not supported until Plan 3`);
   }
+  clearPose(POSE);
   if (!bones.pose(fighterId, motion, frame, p.bone, POSE)) {
     throw new Error(`no pose for bone "${p.bone}" of ${fighterId}/${motion} frame ${frame}`);
   }

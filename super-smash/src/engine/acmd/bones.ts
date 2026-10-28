@@ -57,7 +57,9 @@ export interface BoneTable {
   /**
    * Write the pose of `bone` on motion frame `frame` (1-based, integer — the
    * interpreter's floored `motionFrame`) of `motion`, for `fighterId`, into
-   * `out` and return true. Frames outside the motion clamp to its first or
+   * `out` and return true. A true return must write all eight fields of `out`:
+   * a caller reuses one `BonePose`, so a field left unwritten is a stale value
+   * from the last lookup. Frames outside the motion clamp to its first or
    * last. Return false, leaving `out` untouched, when the table does not know
    * that fighter, motion or bone. Allocates nothing.
    */
@@ -117,17 +119,52 @@ function bakeFingerprint(fighters: readonly BakedFighterBones[]): string {
   return hex(h);
 }
 
-/** A `BoneTable` over Plan 4's baked data. */
+/**
+ * Refuse a bake that cannot be indexed, once, where it is built: a short or
+ * oddly-sized `data` would otherwise answer `pose()` with `undefined` writes,
+ * `bonePoint` would return NaN and the hitbox would silently never connect.
+ */
+function assertWellFormed(f: BakedFighterBones): void {
+  if (f.bones.length === 0) throw new Error(`bone bake for "${f.fighter}": no bones`);
+  if (new Set(f.bones).size !== f.bones.length) {
+    throw new Error(`bone bake for "${f.fighter}": a bone is listed twice`);
+  }
+  for (const [name, m] of Object.entries(f.motions)) {
+    if (!Number.isInteger(m.frames) || m.frames < 1) {
+      throw new Error(`bone bake for "${f.fighter}/${name}": frames must be a whole number of at least 1, got ${m.frames}`);
+    }
+    const want = m.frames * f.bones.length * BONE_POSE_STRIDE;
+    if (m.data.length !== want) {
+      throw new Error(
+        `bone bake for "${f.fighter}/${name}": ${m.frames} frames × ${f.bones.length} bones × ${BONE_POSE_STRIDE} needs ${want} Int32s, got ${m.data.length}`,
+      );
+    }
+  }
+}
+
+/**
+ * A `BoneTable` over Plan 4's baked data. Throws on a malformed bake (see
+ * `assertWellFormed`) or a fighter listed twice.
+ */
 export function bakedBoneTable(fighters: readonly BakedFighterBones[]): BoneTable {
-  const byId = new Map(fighters.map((f) => [f.fighter, { f, index: new Map(f.bones.map((b, i) => [b, i])) }]));
+  const byId = new Map<string, { f: BakedFighterBones; index: Map<BoneName, number>; motions: Map<string, BakedMotion> }>();
+  for (const f of fighters) {
+    if (byId.has(f.fighter)) throw new Error(`bone bake: fighter "${f.fighter}" is listed twice`);
+    assertWellFormed(f);
+    byId.set(f.fighter, {
+      f,
+      index: new Map(f.bones.map((b, i) => [b, i])),
+      motions: new Map(Object.entries(f.motions)),
+    });
+  }
   return {
     fingerprint: bakeFingerprint(fighters),
     pose(fighterId, motion, frame, bone, out) {
       const entry = byId.get(fighterId);
       if (entry === undefined) return false;
-      const m = entry.f.motions[motion];
+      const m = entry.motions.get(motion);
       const b = entry.index.get(bone);
-      if (m === undefined || b === undefined || m.frames <= 0) return false;
+      if (m === undefined || b === undefined) return false;
       const fr = frame < 1 ? 1 : frame > m.frames ? m.frames : frame;
       const i = bakedPoseIndex(fr, b, entry.f.bones.length);
       const d = m.data;
@@ -147,9 +184,18 @@ export function bakedBoneTable(fighters: readonly BakedFighterBones[]): BoneTabl
 /** The root bone: script Z is forward, script Y is up, script X is depth (dropped). */
 export const TOP_POSE: Readonly<BonePose> = { tx: 0, ty: 0, m00: 0, m01: 0, m02: ONE, m10: 0, m11: ONE, m12: 0 };
 
+/** The label and the eight pose Int32s, so a changed `TOP_POSE` is a changed table. */
+function legacyFingerprint(): string {
+  let h = mixString(FINGERPRINT_SEED, "legacy:top");
+  for (const v of [TOP_POSE.tx, TOP_POSE.ty, TOP_POSE.m00, TOP_POSE.m01, TOP_POSE.m02, TOP_POSE.m10, TOP_POSE.m11, TOP_POSE.m12]) {
+    h = mixInt(h, v);
+  }
+  return hex(h);
+}
+
 /** Plan 2's provider: the root bone only, identical on every frame of every motion. */
 export const LEGACY_BONE_TABLE: BoneTable = {
-  fingerprint: hex(mixString(FINGERPRINT_SEED, "legacy:top")),
+  fingerprint: legacyFingerprint(),
   pose(_fighterId, _motion, _frame, bone, out) {
     if (bone !== "top") return false;
     Object.assign(out, TOP_POSE);
