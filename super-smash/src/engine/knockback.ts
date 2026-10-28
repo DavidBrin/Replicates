@@ -21,9 +21,11 @@ import {
   KB_MULTIPLIER,
   KB_ADDEND,
   HITSTUN_RATIO,
-  LAUNCH_SPEED_CAP_KB,
+  HITSTUN_MIN_FAF,
   LAUNCH_SPEED_RATIO,
-  HITSTUN_OVERFLOW_RATIO,
+  SPEED_UP_FAF_MAX,
+  SPEED_UP_FAF_MIN,
+  SPEED_UP_MAX_MAG,
   RAGE_START,
   RAGE_CAP,
   RAGE_MAX_BONUS,
@@ -172,25 +174,73 @@ export function computeKnockback(args: KnockbackArgs): number {
 }
 
 /**
- * `hitstun = floor(KB × 0.4) − 1`, with Ultimate's shallower slope above 200.
+ * `hitstun = floor(max(KB × 0.4, 5)) − 1` — the *base* hitstun, in the game's
+ * own reaction frames.
  *
  * The subtracted frame is Ultimate's own change and is the reason combos are
- * tighter than in Smash 4. Past 200 knockback the victim is dying anyway, so the
- * game stops paying out the full 0.4 frames per unit and grows at 0.25 instead —
- * without that, a 400-unit launch would freeze the victim for over two seconds
- * of screen time they cannot influence.
+ * tighter than in Smash 4. A flinching hit always inflicts at least 4 frames
+ * (SmashWiki "Hitstun", https://www.ssbwiki.com/Hitstun; rubendal
+ * SSBU-Calculator `Hitstun`: `if (hitstun < 5) hitstun = 5`). The base keeps
+ * its 0.4 slope at any knockback: the real-time length of a tumbling launch is
+ * `effectiveHitstun`, which is where the shallower slope past 200 comes from.
  */
 export function computeHitstun(kb: number): number {
-  let stunFx: number;
-  if (kb <= LAUNCH_SPEED_CAP_KB) {
-    stunFx = byRatio(kb, HITSTUN_RATIO);
-  } else {
-    stunFx =
-      byRatio(LAUNCH_SPEED_CAP_KB, HITSTUN_RATIO) +
-      byRatio(kb - LAUNCH_SPEED_CAP_KB, HITSTUN_OVERFLOW_RATIO);
+  const stunFx = byRatio(kb < 0 ? 0 : kb, HITSTUN_RATIO);
+  const frames = Math.floor(stunFx / ONE);
+  return (frames < HITSTUN_MIN_FAF ? HITSTUN_MIN_FAF : frames) - 1;
+}
+
+/**
+ * The balloon speed-up's first-frame multiplier, Q12, for a launch whose base
+ * FAF (`computeHitstun + 1`) is `faf`: 1× at 30 frames, 6× at 80, linear
+ * between (rubendal SSBU-Calculator `InitDamageSpeedUp`, ported from
+ * `L2CFighterCommon::FighterStatusDamage_init_damage_speed_up`:
+ * `damage_fly_speed_up_reaction_frame_min/max` 30/80, `max_mag` 6). The angle
+ * term there is a no-op (`damage_fly_speed_up_angle_rate` 100).
+ */
+export function damageSpeedUpMaxMag(faf: number): number {
+  const over = clamp(faf - SPEED_UP_FAF_MIN, 0, SPEED_UP_FAF_MAX - SPEED_UP_FAF_MIN);
+  return ONE + Math.trunc((ONE * (SPEED_UP_MAX_MAG - 1) * over) / (SPEED_UP_FAF_MAX - SPEED_UP_FAF_MIN));
+}
+
+/**
+ * The speed-up multiplier, Q12, while `frame` (Q12) reaction frames remain of a
+ * launch that started at `faf`: rubendal `ReactionFrameMulSpeedUp`,
+ * `clamp((faf × 0.3 − frame) / (faf × 0.3 − faf), 0, 1) × maxMag` — full at
+ * the start, falling to nothing once 70% of the reaction frames are spent
+ * (`damage_fly_speed_up_end_rate` 70). One truncation.
+ */
+export function damageSpeedUpMag(frame: number, faf: number, maxMag: number): number {
+  const num = 10 * frame - 3 * faf * ONE;
+  if (num <= 0) return 0;
+  const mag = Math.trunc((maxMag * num) / (7 * faf * ONE));
+  return mag > maxMag ? maxMag : mag;
+}
+
+/**
+ * The real frames a launch keeps its victim in hitstun — SmashWiki "Hitstun":
+ * 90 and 145 knockback give 33 and 41 frames in Ultimate, not 36 and 58.
+ *
+ * A tumbling launch is played back faster for its first frames (the "balloon
+ * knockback"): each real frame consumes `damageSpeedUpMag` reaction frames, at
+ * least one, until the multiplier drops to 1×. `speedUp` is false for a hit
+ * that does not tumble or has set knockback (rubendal `js/knockback.js` applies
+ * the speed-up only when `tumble && !isFKB`); its hitstun is the base.
+ */
+export function effectiveHitstun(kb: number, speedUp: boolean): number {
+  const base = computeHitstun(kb);
+  if (!speedUp) return base;
+  const faf = base + 1;
+  const maxMag = damageSpeedUpMaxMag(faf);
+  let frame = faf * ONE;
+  let mag = maxMag;
+  let real = 0;
+  while (mag > ONE) {
+    mag = damageSpeedUpMag(frame, faf, maxMag);
+    frame -= mag < ONE ? ONE : mag;
+    real += 1;
   }
-  const frames = Math.floor(stunFx / ONE) - 1;
-  return frames < 0 ? 0 : frames;
+  return real + Math.ceil(frame / ONE) - 1;
 }
 
 /**

@@ -20,6 +20,9 @@ import {
   computeRage,
   computeShieldstun,
   computeStaleness,
+  damageSpeedUpMag,
+  damageSpeedUpMaxMag,
+  effectiveHitstun,
   knockbackToVelocity,
   normalizeAngle,
   resolveAngle,
@@ -141,14 +144,20 @@ describe("computeHitstun", () => {
     expect(computeHitstun(fx(50))).toBe(19);
   });
 
-  it("grows at 0.25 per unit past 200 knockback", () => {
-    // 200*0.4 = 80, then (300-200)*0.25 = 25, minus Ultimate's extra frame.
-    expect(computeHitstun(fx(300))).toBe(104);
+  // rubendal SSBU-Calculator `Hitstun`: the base is floor(kb × 0.4) − 1 at any
+  // knockback. The shallower slope past 200 is what the balloon speed-up does to
+  // it (`effectiveHitstun`), not part of the base.
+  it("keeps the 0.4 slope past 200 knockback", () => {
+    expect(computeHitstun(fx(300))).toBe(119);
   });
 
-  it("never goes negative", () => {
-    expect(computeHitstun(0)).toBe(0);
-    expect(computeHitstun(fx(1))).toBe(0);
+  // SmashWiki "Hitstun" (https://www.ssbwiki.com/Hitstun): flinching attacks
+  // "always inflict a minimum of 4 frames of hitstun"; rubendal: `if (hitstun < 5) hitstun = 5`.
+  it("never inflicts fewer than 4 frames", () => {
+    expect(computeHitstun(0)).toBe(4);
+    expect(computeHitstun(fx(1))).toBe(4);
+    expect(computeHitstun(fx(12.5))).toBe(4);
+    expect(computeHitstun(fx(15))).toBe(5);
   });
 
   it("crosses into tumble at 32 frames, which is just past 82 knockback", () => {
@@ -161,6 +170,73 @@ describe("computeHitstun", () => {
     // fx(0.4) is 0.39990, which would floor 100 knockback to 38 frames.
     expect(computeHitstun(fx(100))).toBe(39);
     expect(computeHitstun(fx(200))).toBe(79);
+  });
+});
+
+describe("the balloon speed-up (init_damage_speed_up)", () => {
+  // rubendal SSBU-Calculator `InitDamageSpeedUp`: 1× at 30 frames of FAF, 6× at 80, linear between.
+  it("scales its first-frame multiplier from 1x at 30 FAF to 6x at 80", () => {
+    expect(damageSpeedUpMaxMag(30)).toBe(ONE);
+    expect(damageSpeedUpMaxMag(55)).toBe(fx(3.5));
+    expect(damageSpeedUpMaxMag(80)).toBe(fx(6));
+    expect(damageSpeedUpMaxMag(200)).toBe(fx(6));
+  });
+
+  // SmashWiki "Hitstun": 90 and 145 knockback give 33 and 41 frames in
+  // Ultimate (36 and 58 in Smash 4); rubendal's port gives 49 at 200 and 61 at 250.
+  it.each([
+    [90, 33],
+    [145, 41],
+    [200, 49],
+    [250, 61],
+  ])("turns %i knockback into %i real frames of hitstun", (kb, frames) => {
+    expect(effectiveHitstun(fx(kb), true)).toBe(frames);
+  });
+
+  it("matches the reference port at every knockback up to 500", () => {
+    for (let q = 0; q <= 2000; q++) {
+      const kb = fx(q / 4);
+      expect(effectiveHitstun(kb, true), `kb ${q / 4}`).toBe(
+        Math.max(4, ref.speedUp(toFloat(kb)).framesWithSpeedUp - 1),
+      );
+    }
+  });
+
+  // SmashWiki "Hitstun": past 200 the effect stops scaling and hitstun grows at
+  // (kb − 200) × 0.25 — which falls out of the 6× cap, within a frame.
+  it("grows by (kb - 200) x 0.25 past 200, within a frame", () => {
+    const at200 = effectiveHitstun(fx(200), true);
+    for (let kb = 200; kb <= 500; kb += 0.25) {
+      const extra = effectiveHitstun(fx(kb), true) - at200;
+      expect(Math.abs(extra - Math.floor((kb - 200) * 0.25)), `kb ${kb}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("never takes a tumbling hit below tumble", () => {
+    for (let q = 330; q <= 2000; q++) {
+      expect(effectiveHitstun(fx(q / 4), true)).toBeGreaterThanOrEqual(32);
+    }
+  });
+
+  it("is the plain base when the hit is not sped up (set knockback, no tumble)", () => {
+    expect(effectiveHitstun(fx(145), false)).toBe(computeHitstun(fx(145)));
+  });
+
+  it("walks the same schedule one real frame at a time", () => {
+    for (const kb of [90, 145, 200, 250]) {
+      const faf = computeHitstun(fx(kb)) + 1;
+      const max = damageSpeedUpMaxMag(faf);
+      let frame = faf * ONE;
+      let real = 0;
+      let mag = max;
+      while (mag > ONE) {
+        mag = damageSpeedUpMag(frame, faf, max);
+        frame -= mag < ONE ? ONE : mag;
+        real += 1;
+      }
+      real += Math.ceil(frame / ONE);
+      expect(real - 1).toBe(effectiveHitstun(fx(kb), true));
+    }
   });
 });
 

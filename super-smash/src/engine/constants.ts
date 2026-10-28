@@ -49,9 +49,23 @@ export const TUMBLE_HITSTUN = 32;
 export const LAUNCH_SPEED_RATIO = fx(0.03);
 export const LAUNCH_SPEED_DECAY = fx(0.051);
 
-/** Above this knockback, hitstun grows by (kb - 200) * 0.25 instead. */
-export const LAUNCH_SPEED_CAP_KB = fx(200);
-export const HITSTUN_OVERFLOW_RATIO: Ratio = [1, 4];
+/**
+ * A flinching hit's reaction frames never fall below 5, so hitstun never below
+ * 4 (SmashWiki "Hitstun": "a minimum of 4 frames"; rubendal `Hitstun`).
+ */
+export const HITSTUN_MIN_FAF = 5;
+
+/**
+ * The balloon speed-up (`init_damage_speed_up`; rubendal SSBU-Calculator
+ * `InitDamageSpeedUp`/`ReactionFrameMulSpeedUp`): a launch of 30 reaction
+ * frames or fewer is not sped up, one of 80 or more starts at 6×, and the
+ * multiplier falls to nothing once 70% of the reaction frames have passed.
+ * The ">200 knockback adds (kb − 200) × 0.25" of SmashWiki "Hitstun" is this
+ * schedule's 6× cap, not a separate rule.
+ */
+export const SPEED_UP_FAF_MIN = 30;
+export const SPEED_UP_FAF_MAX = 80;
+export const SPEED_UP_MAX_MAG = 6;
 
 /** Vertical launches (70°-110°) get a fixed fall speed — "balloon knockback". */
 export const BALLOON_ANGLE_MIN = fx(70);
