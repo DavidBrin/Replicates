@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { LEGACY_BONE_TABLE } from "./acmd/bones";
+import { ATTACK, clearAll, frame } from "./acmd/dsl";
+import { scriptHitboxes } from "./acmd/hitboxes";
+import { runScript } from "./acmd/interpreter";
+import { attackFromHitbox } from "./acmd/legacy";
+import type { AcmdCommand, AttackParams } from "./acmd/types";
 import { ONE, byRatio, fx, mul } from "./fixed";
 import {
   AIR_DODGE_TECH_FRAMES,
@@ -23,9 +29,12 @@ import {
 import { hashState } from "./hash";
 import { sweptHitboxOverlaps, sweptHitboxPenetration } from "./hitbox";
 import {
+  GROUNDED_METEOR_MULTIPLIER,
   STALE_FRESH_BONUS,
   computeHitlag,
   computeHitstun,
+  computeKnockback,
+  computeStaleness,
   damageSpeedUpMaxMag,
   effectiveHitstun,
   shieldstunExact,
@@ -937,11 +946,9 @@ describe("perfect shield (Plan 3, Task 10)", () => {
   // The direct/indirect split through `step()`. A fighter's own move is direct
   // and a projectile indirect unless `Hitbox.direct` says otherwise (the melee
   // test above and the pellet above are the two defaults); a projectile marked
-  // direct takes the +8 branch, one marked `direct: false` is the default.
-  // Not reachable for melee yet: a MoveDef hitbox reaches the sim through
-  // `attackFromHitbox` (always `direct: true`) and `attackHitbox` (which drops it),
-  // so an indirect *melee* hit cannot be built through `step()` until a producer
-  // writes `direct` (Plan 3, Task 16); `perfectShieldHitlag`'s own tests pin its row.
+  // direct takes the +8 branch, one marked `direct: false` is the default. A
+  // *melee* hit says it through a script's `ATTACK(... direct ...)`: `attackHitbox`
+  // carries it into the hitbox (Plan 3, Task 16), pinned below.
   it("reads Hitbox.direct over its default: a direct projectile is +8, an explicit indirect one the default", () => {
     const direct = parried(shooterOf({ direct: true }), (i) => (i === 0 ? Btn.Special : 0), 40);
     expect(direct.events.shieldHits).toHaveLength(1);
@@ -953,6 +960,38 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     expect(indirect.state.fighters[0].hitlag).toBe(0);
     expect(indirect.state.fighters[1].hitlag).toBe(PELLET_LAG - 1);
     expect(indirect.state.fighters[1].hitstun).toBe(0);
+  });
+
+  // Task 16 wires `direct` through for melee: a script's `ATTACK(... direct=false ...)`
+  // reaches the parry branch, where the indirect melee row is +14 / +2 and the direct
+  // one +14 / +11 (`PARRY_MELEE_*`, UNVERIFIED against the game: rubendal's
+  // `ParryHitlag` and SmashWiki "Perfect shield" disagree on them, see constants.ts).
+  it("reads a script's direct flag for a melee box: indirect is +14 / +2, direct +14 / +11", () => {
+    const jabOf = (direct: boolean): FighterDef => ({
+      ...BASE_DEF,
+      scripts: {
+        jab1: {
+          name: "game_attack11",
+          motion: "attack_11",
+          commands: [
+            frame(4),
+            ATTACK({ id: 0, bone: "top", damage: 10, angle: 45, kbg: 100, bkb: 40, size: 5, x: 0, y: 6, z: 8, direct }),
+            frame(7),
+            clearAll(),
+          ],
+        },
+      },
+    });
+    const attack = (i: number): InputFrame => (i === 0 ? Btn.Attack : 0);
+
+    const indirect = parried(jabOf(false), attack, 8);
+    expect(indirect.events.shieldHits).toHaveLength(1);
+    expect(indirect.state.fighters[0].hitlag).toBe(JAB_LAG + 14);
+    expect(indirect.state.fighters[1].hitlag).toBe(JAB_LAG + 2);
+
+    const direct = parried(jabOf(true), attack, 8);
+    expect(direct.state.fighters[0].hitlag).toBe(JAB_LAG + 14);
+    expect(direct.state.fighters[1].hitlag).toBe(JAB_LAG + 11);
   });
 
   // A hit with no hitlag of its own (0× multiplier) freezes neither fighter, so
@@ -2799,6 +2838,276 @@ describe("ledge trump (Plan 3, Task 15)", () => {
         expect(f.state.fighters[1].action).toBe("grabbed");
         expect(f.state.fighters[2].action).toBe("ledgeHang");
       }
+    });
+  });
+});
+
+/* ------------------------------------ Task 16: what a script hitbox says -- */
+
+describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
+  /** The tester with its jab replaced by `commands` (a `game_attack11` script). */
+  function scripted(commands: readonly AcmdCommand[]): SimContext {
+    const def: FighterDef = { ...BASE_DEF, scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands } } };
+    return ctxFor(def);
+  }
+  const box = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
+    ATTACK({ id: 0, bone: "top", damage: 10, angle: 45, kbg: 100, bkb: 40, size: 5, x: 0, y: 6, z: 8, ...over });
+  function hits(ctx: SimContext, prepare: (s: GameState) => void = () => {}, n = 12): StepEvents["hits"] {
+    const s = standing(ctx);
+    prepare(s);
+    return play(s, n, JAB, ctx).flatMap((f) => f.events.hits);
+  }
+  /** A box that does no knockback, so its victim stays where it is, inside it. */
+  const still = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) => box({ bkb: 0, kbg: 0, ...over });
+  const airborne = (s: GameState): void => {
+    Object.assign(s.fighters[1], { grounded: false, platform: -1, y: fx(3), action: "fall" });
+  };
+
+  // SmashWiki "Knockback", https://www.ssbwiki.com/Knockback: in the formula, "w ...
+  // is set to 100 if the attack is weight independent"; rubendal SSBU-Calculator
+  // `js/formulas.js` `VSKB` takes `weight` the same way, as the `200 / (weight + 100)` term.
+  it("weighs every victim as 100 for a set-weight hitbox", () => {
+    const heavy = (s: GameState) => {
+      s.fighters[1].damage = fx(60);
+    };
+    const set = hits(scripted([frame(4), box({ setWeight: true }), frame(7), clearAll()]), heavy)[0];
+    const plain = hits(scripted([frame(4), box(), frame(7), clearAll()]), heavy)[0];
+    // The tester weighs 98: set weight treats it as 100, so a little less knockback.
+    expect(set.knockback).toBe(
+      computeKnockback({
+        percent: fx(60) + set.damage,
+        damage: mul(fx(10), computeStaleness([], "jab1").knockback),
+        weight: 100,
+        baseKnockback: fx(40),
+        knockbackGrowth: fx(100),
+      }),
+    );
+    expect(set.knockback).toBeLessThan(plain.knockback);
+  });
+
+  // `COLLISION_SITUATION_MASK_G` / `_A` (smash-script `ATTACK`'s `ground_air`).
+  it("misses a grounded victim with an air-only hitbox, and an airborne one with a ground-only hitbox", () => {
+    const air = scripted([frame(4), box({ situation: "COLLISION_SITUATION_MASK_A" }), frame(7), clearAll()]);
+    expect(hits(air)).toEqual([]);
+    expect(hits(air, airborne)).toHaveLength(1);
+    const ground = scripted([frame(4), box({ situation: "COLLISION_SITUATION_MASK_G" }), frame(7), clearAll()]);
+    expect(hits(ground)).toHaveLength(1);
+    expect(hits(ground, airborne)).toEqual([]);
+  });
+
+  it("hits grounded and airborne victims alike when the mask is GA, and the legacy default is GA", () => {
+    const both = scripted([frame(4), box({ situation: "COLLISION_SITUATION_MASK_GA" }), frame(7), clearAll()]);
+    expect(hits(both)).toHaveLength(1);
+    expect(hits(both, airborne)).toHaveLength(1);
+    expect(hits(ctxFor())).toHaveLength(1);
+    expect(hits(ctxFor(), airborne)).toHaveLength(1);
+  });
+
+  it("launches away from the attacker with ATTACK_LR_CHECK_POS, even from behind", () => {
+    const behind = (s: GameState) => {
+      s.fighters[1].x = fx(-8);
+    };
+    const pos = hits(scripted([frame(4), box({ z: -8, facing: "ATTACK_LR_CHECK_POS" }), frame(7), clearAll()]), behind)[0];
+    // World angle: a 45° launch to the left is 135°.
+    expect(pos.angle).toBe(fx(135));
+    const ahead = hits(scripted([frame(4), box({ z: -8 }), frame(7), clearAll()]), behind)[0];
+    expect(ahead.angle).toBe(fx(45));
+  });
+
+  it("launches backwards with ATTACK_LR_CHECK_B", () => {
+    const back = hits(scripted([frame(4), box({ facing: "ATTACK_LR_CHECK_B" }), frame(7), clearAll()]))[0];
+    expect(back.angle).toBe(fx(135));
+  });
+
+  it("re-arms a hitbox the script clears with clear_all, as a multi-hit does", () => {
+    // Weightless hits (no knockback), so the victim stays inside the box.
+    const pinned = (): void => {};
+    const twice = hits(scripted([frame(4), still(), frame(5), clearAll(), frame(9), still(), frame(10), clearAll()]), pinned, 40);
+    expect(twice).toHaveLength(2);
+    // One swing stales once, and its second hit is no staler than its first.
+    expect(twice[1].damage).toBe(twice[0].damage);
+    const once = hits(scripted([frame(4), still(), { op: "clear", id: 0 }, frame(9), still(), frame(10), clearAll()]), pinned, 40);
+    expect(once).toHaveLength(1);
+  });
+
+  // SmashWiki "Stale Moves": from Brawl on, later hitboxes of a multi-hit move are
+  // not staled by its earlier ones while the move is in progress.
+  it("queues a multi-hit swing once, however many times it re-arms", () => {
+    const ctx = scripted([frame(4), still(), frame(5), clearAll(), frame(9), still(), frame(10), clearAll()]);
+    const after = play(standing(ctx), 40, JAB, ctx).at(-1)!.state.fighters[0];
+    expect(after.staleQueue).toEqual(["jab1"]);
+    expect(after.combat.staleShield).toEqual([false]);
+    expect(after.combat.swingQueued).toBe(true);
+  });
+
+  it("queues a swing once for a second victim too, and queues the next swing again", () => {
+    const ctx = scripted([frame(4), still(), frame(7), clearAll()]);
+    const s = standing(ctx);
+    // A third fighter in the box as well: one swing, two victims, one queue entry.
+    const three = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+    for (const [i, f] of three.fighters.entries()) {
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0, x: s.fighters[Math.min(i, 1)].x, facing: s.fighters[Math.min(i, 1)].facing });
+    }
+    const frames = play(three, 12, (i) => [i === 0 ? Btn.Attack : 0, 0, 0], ctx);
+    const swing = frames.flatMap((f) => f.events.hits);
+    expect(swing.map((h) => h.victim).sort()).toEqual([1, 2]);
+    expect(swing[1].damage).toBe(swing[0].damage);
+    const a = frames.at(-1)!.state.fighters[0];
+    expect(a.staleQueue).toEqual(["jab1"]);
+    // The next press is a new swing: it queues again, and is staled by the first.
+    const next = play(frames.at(-1)!.state, 40, (i) => [i === 20 ? Btn.Attack : 0, 0, 0], ctx);
+    const second = next.flatMap((f) => f.events.hits);
+    expect(next.at(-1)!.state.fighters[0].staleQueue).toEqual(["jab1", "jab1"]);
+    expect(second[0].damage).toBeLessThan(swing[0].damage);
+  });
+
+  // Glancing blows (Task 13) are no hit: a re-armed box that only grazes does not
+  // spend the swing or join the queue, and the same swing lands once the box is deeper.
+  describe("with a re-armed box that grazes", () => {
+    const ctx = scripted([frame(4), still(), frame(5), clearAll(), frame(6), still(), frame(7), clearAll()]);
+    /** Fighter 1 placed so the jab's box (reach 8 + 5, and the body's 4) overlaps its body by `overlap`. */
+    const jabWithOverlap = (overlap: number): Frame[] => {
+      const s = standing(ctx);
+      s.fighters[1].x = fx(8 + 5 + 4 - overlap);
+      return play(s, 40, JAB, ctx);
+    };
+
+    it("is no hit, spends nothing and queues nothing", () => {
+      const grazing = jabWithOverlap(0.05);
+      expect(grazing.flatMap((f) => f.events.hits)).toEqual([]);
+      const a = grazing.at(-1)!.state.fighters[0];
+      expect(a.hitThisMove).toEqual([]);
+      expect(a.staleQueue).toEqual([]);
+      expect(a.combat.swingQueued).toBe(false);
+    });
+
+    it("hits twice, and queues once, when the box is deeper", () => {
+      const deep = jabWithOverlap(0.2);
+      expect(deep.flatMap((f) => f.events.hits)).toHaveLength(2);
+      expect(deep.at(-1)!.state.fighters[0].staleQueue).toEqual(["jab1"]);
+    });
+  });
+
+  // Knockback stacking keys on the source (Task 8): every hit of one multi-hit move
+  // is the same source, the attacker's port.
+  it("keeps every hit of a re-armed move on one knockback source", () => {
+    const ctx = scripted([frame(4), still(), frame(5), clearAll(), frame(9), still(), frame(10), clearAll()]);
+    const frames = play(standing(ctx), 40, JAB, ctx);
+    expect(frames.flatMap((f) => f.events.hits)).toHaveLength(2);
+    expect(frames.at(-1)!.state.fighters[1].combat.launchSource).toBe(0);
+  });
+
+  describe("with a catch-only box (a pummel, a throw: Task 14)", () => {
+    /** Fighter 0 already holding fighter 1, 100 frames from letting go. */
+    function holding(ctx: SimContext, prepare: (s: GameState) => void = () => {}): GameState {
+      const s = standing(ctx);
+      const [a, v] = s.fighters;
+      Object.assign(a, { action: "grabHold", grabbing: 1 });
+      Object.assign(v, { action: "grabbed", actionFrame: 30, grabbedBy: 0, grabTimer: 100 });
+      prepare(s);
+      return s;
+    }
+    /** The tester with `slot` scripted by `commands`; its legacy move is empty, so only the script's boxes exist. */
+    function slotScripted(slot: "fthrow" | "bthrow" | "pummel", commands: readonly AcmdCommand[]): SimContext {
+      const motion = { fthrow: "throw_f", bthrow: "throw_b", pummel: "catch_attack" }[slot];
+      return ctxFor({
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, [slot]: move(slot, { totalFrames: 20, hitboxes: [] }) },
+        scripts: { [slot]: { name: `game_${motion.replace(/_/g, "")}`, motion, commands } },
+      });
+    }
+    /** A throw box with 60 base knockback; where it sits does not matter, a catch-only box has no geometry. */
+    const throwBox = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) => box({ angle: 45, damage: 6, bkb: 60, kbg: 70, z: 40, ...over });
+    /** Fighter 0 (facing right) presses `button` on frame 2; the throw hits, if it does, and this is the launch's horizontal speed once the freeze ends. */
+    function thrown(ctx: SimContext, button: Btn, prepare?: (s: GameState) => void): { hits: number; vx: number } {
+      const frames = play(holding(ctx, prepare), 40, (i) => [i === 2 ? button : 0, 0], ctx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      if (hit < 0) return { hits: 0, vx: 0 };
+      const out = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+      return { hits: frames.flatMap((f) => f.events.hits).length, vx: frames[out].state.fighters[1].vx };
+    }
+    const throwWith = (slot: "fthrow" | "bthrow", over: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
+      slotScripted(slot, [frame(4), throwBox(over), frame(5), clearAll()]);
+
+    it("leaves a throw's launch direction alone unless its script says otherwise", () => {
+      expect(thrown(throwWith("fthrow"), Btn.Right)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v > 0) });
+      // The legacy stand-in for REVERSE_LR still turns a back throw round.
+      expect(thrown(throwWith("bthrow"), Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
+    });
+
+    it("launches a throw backwards when its script says ATTACK_LR_CHECK_B, and a back throw only once", () => {
+      const back = (slot: "fthrow" | "bthrow", button: Btn) =>
+        thrown(throwWith(slot, { facing: "ATTACK_LR_CHECK_B" }), button);
+      expect(back("fthrow", Btn.Right)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
+      // Not turned by the stand-in as well: a second turn would send it forwards again.
+      expect(back("bthrow", Btn.Left)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v < 0) });
+    });
+
+    // A held victim is grounded only over its captor's platform (`holdAtCaptor`); the
+    // captor at the lip, facing out, holds it in the air.
+    describe("and the situation mask", () => {
+      const atLip = (s: GameState) => {
+        s.fighters[0].x = fx(78);
+      };
+      const mask = (situation: "COLLISION_SITUATION_MASK_G" | "COLLISION_SITUATION_MASK_A") => throwWith("fthrow", { situation });
+
+      it("lands a ground-only throw on a victim held over the stage, not past its edge", () => {
+        expect(thrown(mask("COLLISION_SITUATION_MASK_G"), Btn.Right).hits).toBe(1);
+        expect(thrown(mask("COLLISION_SITUATION_MASK_G"), Btn.Right, atLip).hits).toBe(0);
+      });
+
+      it("lands an air-only throw on a victim held past the stage's edge, not over it", () => {
+        expect(thrown(mask("COLLISION_SITUATION_MASK_A"), Btn.Right).hits).toBe(0);
+        expect(thrown(mask("COLLISION_SITUATION_MASK_A"), Btn.Right, atLip).hits).toBe(1);
+      });
+    });
+
+    describe("and a pummel that re-arms", () => {
+      // Two 2% hits a press, the second a `clear_all` re-arm of the first.
+      const hit = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) => box({ damage: 2, angle: 361, bkb: 0, kbg: 0, z: 40, ...over });
+      const ctx = slotScripted("pummel", [frame(1), hit(), frame(2), clearAll(), frame(3), hit(), frame(4), clearAll()]);
+
+      it("stales once a press, not once a hit; the next press is staled by the first", () => {
+        const frames = play(holding(ctx), 80, (i) => [i === 2 || i === 40 ? Btn.Attack : 0, 0], ctx);
+        const hits = frames.flatMap((f) => f.events.hits);
+        expect(hits).toHaveLength(4);
+        expect(hits[1].damage).toBe(hits[0].damage);
+        expect(hits[3].damage).toBe(hits[2].damage);
+        expect(hits[2].damage).toBeLessThan(hits[0].damage);
+        expect(frames.at(-1)!.state.fighters[0].staleQueue).toEqual(["pummel", "pummel"]);
+        // The held fighter is still held: a pummel is damage and a freeze, nothing more.
+        expect(frames.at(-1)!.state.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
+      });
+    });
+  });
+
+  describe("a downward angle (rubendal SSBU-Calculator `js/knockback.js`: `spike = angle >= 230 && angle <= 310`)", () => {
+    it("is a meteor on a grounded victim when the script does not say", () => {
+      const spike = hits(scripted([frame(4), box({ angle: 270, bkb: 80, kbg: 0 }), frame(7), clearAll()]))[0];
+      expect(spike.knockback).toBe(byRatio(fx(80), GROUNDED_METEOR_MULTIPLIER));
+    });
+
+    /** `meteor` of the hitbox a script makes of `params` at game frame 1. */
+    const meteorOf = (params: AttackParams): boolean | undefined => {
+      const script = { name: "game_attack11", motion: "attack_11", commands: [frame(1), { op: "attack", params } as AcmdCommand] };
+      return scriptHitboxes(runScript(script, 1), "tester", "attack_11", 1, LEGACY_BONE_TABLE)[0].meteor;
+    };
+    const scriptAt = (angle: number): AttackParams => (box({ angle }) as { params: AttackParams }).params;
+
+    it("takes 230 and 310 inclusive, and nothing outside", () => {
+      expect([229, 229.9, 311, 361].map((a) => meteorOf(scriptAt(a)))).toEqual([undefined, undefined, undefined, undefined]);
+      expect([230, 270, 310].map((a) => meteorOf(scriptAt(a)))).toEqual([true, true, true]);
+    });
+
+    // A legacy move says outright, either way (`attackFromHitbox`), so the pipeline
+    // never classifies its angle: a downward legacy hitbox that is not marked stays plain.
+    it("is never applied to a legacy compilation, which states meteor either way", () => {
+      const plain = attackFromHitbox(hitbox({ angle: fx(270) }));
+      expect(plain.meteor).toBe(false);
+      expect(meteorOf(plain)).toBeUndefined();
+      const marked = attackFromHitbox(hitbox({ angle: fx(270), meteor: true }));
+      expect(marked.meteor).toBe(true);
+      expect(meteorOf(marked)).toBe(true);
     });
   });
 });

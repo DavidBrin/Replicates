@@ -11,6 +11,9 @@
  * would quietly shrink the move. `prepareFighterScripts` refuses one at load
  * (`isCapsule`); `resolve` refuses it again, for a context that skipped that.
  *
+ * An ATTACK's `direct`, `set_weight`, ground/air mask, LR check and downward
+ * angle reach the pipeline as `Hitbox` fields (Plan 3, Task 16).
+ *
  * Two narrowings are NOT refused, because a `Hitbox` has no field for what is
  * dropped; Plan 3 owns both, by reading `AttackParams` directly:
  * - a `collisionAttr` with no `HitEffect` (not in `EFFECT_OF_ATTR`) becomes a
@@ -19,7 +22,7 @@
  *   `baseKnockback` and its `bkb` is dropped.
  */
 
-import { ONE } from "../fixed";
+import { ONE, fx } from "../fixed";
 import type { HitEffect, Hitbox } from "../types";
 import { bonePoint, newBonePose } from "./bones";
 import type { BonePose, BoneTable } from "./bones";
@@ -107,9 +110,48 @@ function attackHitbox(
     ...(a.clang === "ATTACK_SETOFF_KIND_THRU" ? { transcendent: true } : {}),
     ...(a.hitlag !== ONE ? { hitlagMultiplier: a.hitlag } : {}),
     ...(setoff !== undefined ? { shieldstunMultiplier: setoff } : {}),
-    ...(a.meteor ? { meteor: true } : {}),
+    ...((a.meteor ?? isSpikeAngle(a.angle)) ? { meteor: true } : {}),
+    ...(a.direct ? {} : { direct: false }),
+    ...(a.setWeight ? { setWeight: true } : {}),
+    ...(SITUATION[a.situation] !== undefined ? { situation: SITUATION[a.situation] } : {}),
+    ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
   };
 }
+
+/**
+ * Which victims a `COLLISION_SITUATION_MASK_*` restricts a box to; GA (both)
+ * is no restriction. UNVERIFIED: that `_G_d` (the "_d" variants) restricts like
+ * `_G` and not otherwise.
+ */
+const SITUATION: Readonly<Partial<Record<AttackParams["situation"], "ground" | "air">>> = {
+  COLLISION_SITUATION_MASK_G: "ground",
+  COLLISION_SITUATION_MASK_G_d: "ground",
+  COLLISION_SITUATION_MASK_A: "air",
+};
+
+/**
+ * `ATTACK_LR_CHECK_*` → the launch direction rule; F (forward) is the default.
+ * UNVERIFIED: `_SPEED` (launch by the attacker's speed) is not modelled and
+ * reads as forward.
+ */
+const LR: Readonly<Partial<Record<AttackParams["facing"], "position" | "back">>> = {
+  ATTACK_LR_CHECK_POS: "position",
+  ATTACK_LR_CHECK_B: "back",
+};
+
+/**
+ * A downward launch (230°–310°) is a meteor, cut to 0.8× against a grounded
+ * victim — rubendal SSBU-Calculator `js/knockback.js`: `this.spike = this.angle
+ * >= 230 && this.angle <= 310`
+ * (https://github.com/rubendal/SSBU-Calculator/blob/master/js/knockback.js).
+ * Legacy-compiled scripts say `meteor` outright, either way, so only a script
+ * that does not say is classified by its angle.
+ */
+function isSpikeAngle(angle: number): boolean {
+  return angle >= SPIKE_ANGLE_MIN && angle <= SPIKE_ANGLE_MAX;
+}
+const SPIKE_ANGLE_MIN = fx(230);
+const SPIKE_ANGLE_MAX = fx(310);
 
 function catchHitbox(c: CatchParams, gameFrame: number, at: { x: number; y: number }): Hitbox {
   return {

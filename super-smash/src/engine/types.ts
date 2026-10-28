@@ -230,6 +230,19 @@ export interface Hitbox {
    * perfect shield's hitlag depends on (Plan 3, Task 10).
    */
   readonly direct?: boolean;
+  /**
+   * smash-script `set_weight`: knockback as if every victim weighed 100
+   * (SmashWiki "Knockback", https://www.ssbwiki.com/Knockback: `w` "is set to 100
+   * if the attack is weight independent"). Plan 3, Task 16.
+   */
+  readonly setWeight?: boolean;
+  /** `COLLISION_SITUATION_MASK_G`/`_A`: the box hits only grounded, or only airborne, victims. */
+  readonly situation?: "ground" | "air";
+  /**
+   * `ATTACK_LR_CHECK_POS`: launch away from the attacker whichever side the
+   * victim is on; `ATTACK_LR_CHECK_B`: launch backwards. Absent: forwards.
+   */
+  readonly lr?: "position" | "back";
 }
 
 /**

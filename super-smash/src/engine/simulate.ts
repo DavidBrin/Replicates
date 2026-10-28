@@ -852,6 +852,10 @@ function gatherHitboxes(
     if (!hasLiveMove(f.action)) continue;
     const run = moveScriptFrame(defs[i], f);
     if (run === null) continue;
+    // `AttackModule::clear_all` ends the swing's hit record with its boxes, so a
+    // box the script issues again can hit again — how a multi-hit works. Legacy
+    // moves only ever clear by id, and keep one hit per swing (Plan 3, Task 16).
+    if (run.state.fired.some((cmd) => cmd.op === "clearAll")) clearHitRecord(f);
     const live = scriptHitboxes(run.state, defs[i].id, run.script.motion, run.gameFrame, bones);
     for (const hb of live) {
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
@@ -1057,6 +1061,11 @@ function resolveHits(
     const perSource = new Map<number, Candidate>();
     for (const c of candidates) {
       if (c.suppressed || c.attacker === v) continue;
+      // Ground-only and air-only boxes (`COLLISION_SITUATION_MASK_G`/`_A`). A held
+      // victim is grounded only over its captor's platform (`holdAtCaptor`), so a
+      // throw's mask reads that.
+      if (c.hitbox.situation === "ground" && !victim.grounded) continue;
+      if (c.hitbox.situation === "air" && victim.grounded) continue;
       if (c.projectile !== null && destroyed.has(c.projectile.instanceId)) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
       if (c.onlyPort !== null) {
@@ -1165,11 +1174,25 @@ function isCrouching(f: FighterState): boolean {
   return f.action === "crouch" || f.action === "crouchStart";
 }
 
+/**
+ * How stale this swing is. A move joins the queue once per swing (Plan 3,
+ * Task 16): its later hits — a multi-hit re-armed by `clear_all`, or a second
+ * victim — are as stale as its first was, not one level more (SmashWiki "Stale
+ * Moves": from Brawl on, "later hitboxes of multi-hit moves" are protected
+ * "from being staled while the move is in progress"). So once the swing has
+ * queued itself, its own entry — the newest, at the front — is left out.
+ */
+function swingStaleness(attacker: FighterState, slot: MoveSlot) {
+  const queued = attacker.combat.swingQueued;
+  return computeStaleness(
+    queued ? attacker.staleQueue.slice(1) : attacker.staleQueue,
+    slot,
+    queued ? attacker.combat.staleShield.slice(1) : attacker.combat.staleShield,
+  );
+}
+
 function effectiveDamage(s: GameState, attacker: FighterState, c: Candidate): number {
-  const staleness =
-    c.slot === null
-      ? ONE
-      : computeStaleness(attacker.staleQueue, c.slot, attacker.combat.staleShield).damage;
+  const staleness = c.slot === null ? ONE : swingStaleness(attacker, c.slot).damage;
   const shortHopped = c.slot !== null && isAerialSlot(c.slot) && attacker.shortHop;
   const charged = mul(c.hitbox.damage, c.chargeScale);
   const base = shortHopped ? mul(charged, SHORT_HOP_DAMAGE) : charged;
@@ -1318,9 +1341,15 @@ function hitReachesShield(victim: FighterState, victimDef: FighterDef, c: Candid
   return shieldCovers(victim, c.x) && circlesOverlap(c.x, c.y, c.hitbox.radius, bubble.x1, bubble.y1, bubble.r);
 }
 
-/** A move joins the staleness queue once per swing, on its first connection. */
+/**
+ * A move joins the staleness queue once per swing, on its first connection.
+ * The swing's own flag says so (`swingQueued`), not its hit record: `clear_all`
+ * empties the record to re-arm a box, and a record of one would queue a
+ * five-hit drill five times.
+ */
 function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield: boolean): void {
-  if (slot === null || attacker.hitThisMove.length !== 1) return;
+  if (slot === null || attacker.combat.swingQueued) return;
+  attacker.combat.swingQueued = true;
   attacker.staleQueue.unshift(slot);
   attacker.combat.staleShield.unshift(onShield);
   if (attacker.staleQueue.length > STALE_QUEUE_LENGTH) attacker.staleQueue.length = STALE_QUEUE_LENGTH;
@@ -1379,6 +1408,33 @@ function launchFacing(c: Candidate, attacker: FighterState): number {
   if (c.slot !== "bthrow") return attacker.facing;
   const pointsForward = c.hitbox.angle < fx(90) || c.hitbox.angle > fx(270);
   return pointsForward ? -attacker.facing : attacker.facing;
+}
+
+/**
+ * The weight a set-weight hitbox (smash-script `set_weight`) gives every victim:
+ * SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback) — `w` "is set to 100
+ * if the attack is weight independent". Plan 3, Task 16.
+ */
+const SET_WEIGHT = 100;
+
+/**
+ * The facing a hit's launch is measured from. A box with no LR rule launches
+ * forwards (`launchFacing`: the way its owner faces, or the way its projectile
+ * points). `ATTACK_LR_CHECK_POS` launches away from the attacker by position,
+ * and `ATTACK_LR_CHECK_B` backwards (Plan 3, Task 16).
+ *
+ * A box that carries its own rule replaces `launchFacing`'s back-throw
+ * stand-in, which exists for the legacy tables, whose angles say nothing (a
+ * back throw that said `_B` would otherwise be turned round twice). UNVERIFIED:
+ * that reading; Plan 5, Task 7 replaces the stand-in with `REVERSE_LR`.
+ */
+function launchSourceFacing(c: Candidate, attacker: FighterState, victim: FighterState): number {
+  const hb = c.hitbox;
+  const forward = c.projectile !== null ? c.projectile.facing : attacker.facing;
+  if (hb.lr === undefined) return c.projectile !== null ? forward : launchFacing(c, attacker);
+  if (hb.lr === "back") return -forward;
+  const fromX = c.projectile !== null ? c.projectile.x : attacker.x;
+  return victim.x === fromX ? forward : victim.x > fromX ? 1 : -1;
 }
 
 function applyHit(
@@ -1449,10 +1505,7 @@ function applyHit(
   // A projectile is already in the air, so nothing about the swing that launched
   // it still applies: its charge was baked in at launch, and it does not stale —
   // the staleness queue is keyed by move slot and an arrow has left its move.
-  const staleness =
-    c.slot === null
-      ? { damage: ONE, knockback: ONE }
-      : computeStaleness(attacker.staleQueue, c.slot, attacker.combat.staleShield);
+  const staleness = c.slot === null ? { damage: ONE, knockback: ONE } : swingStaleness(attacker, c.slot);
   // An aerial thrown out of a short hop deals 0.85×, and the reduction is
   // applied to the damage *before* knockback is computed rather than to the
   // knockback afterwards — the formula takes damage as an input twice over (the
@@ -1572,7 +1625,7 @@ function applyHit(
   const kb = computeKnockback({
     percent: victim.damage,
     damage: kbDamage,
-    weight: victimDef.attributes.weight,
+    weight: hb.setWeight === true ? SET_WEIGHT : victimDef.attributes.weight,
     baseKnockback: hb.baseKnockback,
     knockbackGrowth: hb.knockbackGrowth,
     rage: computeRage(attacker.damage),
@@ -1600,7 +1653,7 @@ function applyHit(
   // A projectile launches along the way *it* is pointing, which is the facing its
   // thrower had when it left rather than whichever way they happen to be looking
   // now — the arrow does not turn round when Link does.
-  const sourceFacing = c.projectile !== null ? c.projectile.facing : launchFacing(c, attacker);
+  const sourceFacing = launchSourceFacing(c, attacker, victim);
 
   // Knockback stacking (Plan 3, Task 8): against a launch still live — in
   // hitstun, or parked in hitlag — from a *different* source, a weaker new

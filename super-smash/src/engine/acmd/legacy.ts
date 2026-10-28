@@ -82,7 +82,9 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     situation: "COLLISION_SITUATION_MASK_GA",
     collisionAttr: ATTR_OF_EFFECT[hb.effect ?? "normal"],
     region: "ATTACK_REGION_NONE",
-    ...(hb.meteor ? { meteor: true } : {}),
+    // Explicit either way, so the hitbox pipeline never classifies a legacy
+    // move's angle as a meteor on its own (Plan 3, Task 16).
+    meteor: hb.meteor === true,
   };
 }
 

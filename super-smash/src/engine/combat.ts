@@ -45,6 +45,12 @@ export interface CombatState {
    * Set by `startAirDodge`, cleared when the air dodge status ends.
    */
   tumbleDodge: boolean;
+  /**
+   * The current swing has already joined the stale queue, so its later hits (a
+   * box `clear_all` re-armed, a second victim) do not queue it again. Reset by
+   * `startMove`, which every swing, pummel and throw begins with (Task 16).
+   */
+  swingQueued: boolean;
 }
 
 export function emptyCombat(): CombatState {
@@ -59,6 +65,7 @@ export function emptyCombat(): CombatState {
     techLockout: 0,
     grabImmune: 0,
     tumbleDodge: false,
+    swingQueued: false,
   };
 }
 
@@ -74,5 +81,6 @@ export function cloneCombat(c: CombatState): CombatState {
     techLockout: c.techLockout,
     grabImmune: c.grabImmune,
     tumbleDodge: c.tumbleDodge,
+    swingQueued: c.swingQueued,
   };
 }

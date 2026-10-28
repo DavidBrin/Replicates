@@ -361,6 +361,8 @@ export function startMove(f: FighterState, action: ActionState, slot: MoveSlot):
   f.move = slot;
   f.charge = 0;
   clearHitRecord(f);
+  // A new swing: it will join the stale queue on its first hit (Plan 3, Task 16).
+  f.combat.swingQueued = false;
 }
 
 /** Damage multiplier from a held smash charge: 1.0 fresh, 1.4 at 60 frames. */
