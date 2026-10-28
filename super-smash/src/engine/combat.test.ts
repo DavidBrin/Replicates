@@ -557,3 +557,178 @@ describe("hitstun cancel (Plan 3, Task 7)", () => {
     expect(after.action).toBe("airDodge");
   });
 });
+
+/* --------------------------------------- Task 8: knockback stacking -- */
+
+describe("knockback stacking (Plan 3, Task 8)", () => {
+  /** A jab live from its first frame with a wide box, so it reaches a victim already flying. */
+  const quick: FighterDef = {
+    ...BASE_DEF,
+    moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ startFrame: 1, radius: fx(10) })] }) },
+  };
+  const ctx = ctxFor(quick);
+  /**
+   * Three fighters: 0 far away, 2 jabs 1, and 1 is already flying from a launch
+   * that fighter 0 (or 2 itself, `sameSource`) gave it, `ratio` times as fast as
+   * the jab's own launch would be.
+   */
+  function stacked(
+    ratio: number,
+    sameSource = false,
+    hitstun = 50,
+  ): { victim: GameState["fighters"][number]; untouched: number } {
+    const fresh = (): GameState => {
+      const s = createInitialState(
+        "flat",
+        [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }],
+        RULES,
+        12345,
+        ctx,
+      );
+      const place = [
+        { x: fx(-60), facing: 1 },
+        { x: fx(8), facing: -1 },
+        { x: 0, facing: 1 },
+      ];
+      s.fighters.forEach((f, i) => {
+        Object.assign(f, place[i], { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
+      });
+      return s;
+    };
+    const jab = (i: number): readonly InputFrame[] => [0, 0, i === 0 ? Btn.Attack : 0];
+    // The jab's own launch speed, against a victim standing still.
+    const dry = play(fresh(), 8, jab, ctx).find((f) => f.events.hits.length > 0)!;
+    const jabSpeed = Math.trunc((dry.events.hits[0].knockback * 3) / 100); // knockback × 0.03
+
+    const s = fresh();
+    const v = s.fighters[1];
+    v.grounded = false;
+    v.platform = -1;
+    v.y = fx(1);
+    v.action = hitstun > 0 ? "tumble" : "fall";
+    v.hitstun = hitstun;
+    const current = Math.trunc(jabSpeed / ratio);
+    // Straight up, so the victim stays in front of the jab while it flies.
+    v.kinetic.damageY = current;
+    v.launchSpeed = current;
+    v.vy = current;
+    v.combat.launchSource = sameSource ? 2 : 0;
+    const frames = play(s, 8, jab, ctx);
+    const hit = frames.findIndex((f) => f.events.hits.length > 0);
+    // What the first launch's hitstun reads on the hit frame if nothing touched it.
+    return { victim: frames[hit].state.fighters[1], untouched: 50 - (hit + 1) };
+  }
+
+  it("keeps the first launch when the new one is 0.5x to 0.9x of it", () => {
+    const { victim, untouched } = stacked(0.7);
+    expect(victim.hitstun).toBe(untouched);
+    expect(victim.pendingFacing).toBe(0);
+    expect(victim.damage).toBeGreaterThan(0);
+  });
+
+  // SmashWiki "Knockback", stacking: "The resulting angle … is determined by the
+  // inverse tangent of both hits' added knockback vectors"; the first hit's launch
+  // speed is retained, and the resulting angle cannot be DI'd.
+  it("turns a kept launch toward the sum of both launches, at its own speed", () => {
+    const { victim } = stacked(0.7);
+    const k = victim.kinetic;
+    // Straight up, plus the jab's 45° to the right: now up and to the right.
+    expect(k.damageX).toBeGreaterThan(0);
+    expect(k.damageY).toBeGreaterThan(k.damageX);
+    expect(Math.abs(Math.hypot(k.damageX, k.damageY) - victim.launchSpeed)).toBeLessThan(3);
+  });
+
+  it("replaces a launch whose hitstun is over, however fast it still drifts", () => {
+    const { victim } = stacked(0.4, false, 0);
+    expect(victim.pendingFacing).not.toBe(0);
+    expect(victim.combat.launchSource).toBe(2);
+  });
+
+  it("armours through a hit under 0.5x of the live launch", () => {
+    const { victim, untouched } = stacked(0.4);
+    expect(victim.hitstun).toBe(untouched);
+    expect(victim.pendingFacing).toBe(0);
+    expect(victim.damage).toBeGreaterThan(0);
+  });
+
+  it("lets a stronger hit take over", () => {
+    const { victim, untouched } = stacked(0.95);
+    expect(victim.pendingFacing).not.toBe(0);
+    expect(victim.hitstun).not.toBe(untouched);
+  });
+
+  // Review Focus #4: a multi-hit move is one source, so each of its hits takes
+  // over from the last, however weak — it never "stacks" with itself.
+  it("never stacks a source with itself: a multi-hit's every hit takes over", () => {
+    const { victim } = stacked(0.4, true);
+    expect(victim.pendingFacing).not.toBe(0);
+    expect(victim.combat.launchSource).toBe(2);
+  });
+
+  // A launch that is replaced leaves nothing of itself behind: not its DAMAGE
+  // direction, not its speed-up, not its parked reaction frames.
+  describe("a replaced launch leaves no residue", () => {
+    /** Fighter 1 is flying straight up from source 1005 with its balloon speed-up armed; 0 jabs it. */
+    function flying(): GameState {
+      const s = standing(ctx);
+      const v = s.fighters[1];
+      v.grounded = false;
+      v.platform = -1;
+      v.y = fx(1);
+      v.action = "tumble";
+      v.hitstun = 50;
+      v.kinetic.damageY = fx(0.5);
+      v.launchSpeed = fx(0.5);
+      v.vy = fx(0.5);
+      v.kinetic.speedUpFaf = 70;
+      v.kinetic.speedUpFrame = 70 * ONE;
+      v.kinetic.speedUpMax = damageSpeedUpMaxMag(70);
+      v.balloon = true;
+      v.combat.launchSource = 1005;
+      return s;
+    }
+    /** The first frame at which the jab's launch has been released. */
+    function released(s: GameState): GameState["fighters"][number] {
+      const frames = play(s, 20, JAB, ctx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      return frames.slice(hit).find((f) => f.state.fighters[1].hitlag === 0)!.state.fighters[1];
+    }
+    /** What the jab alone does to a victim standing still. */
+    const jabAlone = (() => {
+      const hit = play(standing(ctx), 8, JAB, ctx).find((f) => f.events.hits.length > 0)!;
+      return mul(hit.events.hits[0].knockback, LAUNCH_SPEED_RATIO);
+    })();
+
+    it("when it was flying: the new launch is the whole DAMAGE energy, with no speed-up", () => {
+      const v = released(flying());
+      expect(v.combat.launchSource).toBe(0);
+      expect(v.launchSpeed).toBe(jabAlone);
+      expect(v.kinetic.damageX).toBeGreaterThan(0);
+      expect(Math.abs(Math.hypot(v.kinetic.damageX, v.kinetic.damageY) - jabAlone)).toBeLessThan(3);
+      expect(v.kinetic.speedUpMax).toBe(0);
+      expect(v.kinetic.speedUpFaf).toBe(0);
+      expect(v.combat.launchFaf).toBe(0);
+    });
+
+    it("when it was still parked in hitlag: its reaction frames do not survive either", () => {
+      const s = flying();
+      const v = s.fighters[1];
+      v.kinetic.damageY = 0;
+      v.launchSpeed = 0;
+      v.vy = 0;
+      v.kinetic.speedUpMax = 0;
+      v.kinetic.speedUpFaf = 0;
+      v.kinetic.speedUpFrame = 0;
+      v.pendingKnockback = fx(10);
+      v.pendingAngle = fx(90);
+      v.pendingFacing = 1;
+      v.combat.launchFaf = 70;
+      v.hitlag = 6;
+      const after = released(s);
+      expect(after.combat.launchSource).toBe(0);
+      expect(after.launchSpeed).toBe(jabAlone);
+      expect(after.kinetic.speedUpMax).toBe(0);
+      expect(after.combat.launchFaf).toBe(0);
+    });
+  });
+});

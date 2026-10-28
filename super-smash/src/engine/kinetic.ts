@@ -260,6 +260,19 @@ export function kineticLaunch(f: FighterState, vx: number, vy: number, speed: nu
   kineticSum(f);
 }
 
+/**
+ * Point a live launch along (dx, dy) without changing its speed — knockback
+ * stacking's kept launch (Plan 3, Task 8). A zero vector leaves it as it was.
+ */
+export function kineticTurnLaunch(f: FighterState, dx: number, dy: number): void {
+  const len = sqrt(mul(dx, dx) + mul(dy, dy));
+  if (len <= 0) return;
+  const k = f.kinetic;
+  k.damageX = Math.trunc((dx * f.launchSpeed) / len);
+  k.damageY = Math.trunc((dy * f.launchSpeed) / len);
+  kineticSum(f);
+}
+
 /* ---------------------------------------------------------- kinetic types -- */
 
 /**

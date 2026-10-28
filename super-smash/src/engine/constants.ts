@@ -145,6 +145,14 @@ export const FLAT_LIFT_ANGLE = fx(32);
  */
 export const GROUNDED_ZERO_LAUNCH_RATIO: Ratio = [4, 5];
 
+/**
+ * Knockback stacking (SmashWiki "Knockback", stacking, Ultimate): a new launch
+ * from another source at 0.5×–0.9× of the live one keeps the live one; under
+ * 0.5× the target armours through it.
+ */
+export const KB_STACK_ARMOUR: Ratio = [1, 2];
+export const KB_STACK_KEEP: Ratio = [9, 10];
+
 /** Two hitboxes within this damage difference clank instead of trading. */
 export const CLANK_RANGE = fx(9);
 

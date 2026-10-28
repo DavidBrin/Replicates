@@ -19,6 +19,7 @@ import { ONE, fx, mul, abs, byRatio, randomInt, nextRandom } from "./fixed";
 import {
   FINAL_SMASH_STANDBY,
   GROUNDED_ZERO_LAUNCH_RATIO,
+  LAUNCH_SPEED_RATIO,
   LEDGE_REGRAB_LIMIT,
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
@@ -47,6 +48,7 @@ import {
   applyLSI,
   launchDiAble,
   lsiApplies,
+  knockbackStack,
   knockbackToVelocity,
   launchWorldAngle,
   resolveAngle,
@@ -103,6 +105,7 @@ import {
   emptyKinetic,
   kineticClear,
   kineticLaunch,
+  kineticTurnLaunch,
   kineticSet,
   kineticSetX,
 } from "./kinetic";
@@ -1290,6 +1293,49 @@ function applyHit(
     moveMultiplier: hb.hitlagMultiplier,
   });
 
+  // A projectile launches along the way *it* is pointing, which is the facing its
+  // thrower had when it left rather than whichever way they happen to be looking
+  // now — the arrow does not turn round when Link does.
+  const sourceFacing = c.projectile !== null ? c.projectile.facing : attacker.facing;
+
+  // Knockback stacking (Plan 3, Task 8): against a launch still live — in
+  // hitstun, or parked in hitlag — from a *different* source, a weaker new
+  // launch either keeps the first (0.5×–0.9×) or is armoured through (< 0.5×).
+  // A launch whose hitstun is over is not "live": what is left of it is drift,
+  // and any hit replaces it. Either way the damage lands and both fighters
+  // freeze. A kept launch keeps its speed and hitstun, but turns toward the sum
+  // of both launch vectors, and is not DI'd (SmashWiki "Knockback", stacking).
+  const source = candidateKey(c);
+  const live = victim.hitstun > 0 || victim.pendingFacing !== 0;
+  const current = !live
+    ? 0
+    : victim.pendingFacing !== 0
+      ? mul(victim.pendingKnockback, LAUNCH_SPEED_RATIO)
+      : victim.launchSpeed;
+  const verdict =
+    victim.combat.launchSource === source ? "replace" : knockbackStack(mul(kb, LAUNCH_SPEED_RATIO), current);
+  if (verdict !== "replace") {
+    if (verdict === "keep" && victim.pendingFacing === 0 && victim.launchSpeed > 0) {
+      // A parked launch has no vector yet; it keeps its own, as it was.
+      const added = knockbackToVelocity(kb, resolveAngle(hb, victim.grounded, kb), sourceFacing);
+      kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
+    }
+    victim.hitlag = Math.max(victim.hitlag, lag);
+    if (!fromProjectile) attacker.hitlag = lag;
+    events.hits.push({
+      attacker: attacker.port,
+      victim: victim.port,
+      damage,
+      x: c.x,
+      y: c.y,
+      knockback: verdict === "keep" ? kb : 0,
+      angle: 0,
+      hitboxId: hb.id,
+    });
+    return;
+  }
+  victim.combat.launchSource = source;
+
   // The launch is *parked*, not applied: Ultimate samples DI on the last frame
   // of hitlag, so the direction that bends this angle has not been chosen yet.
   // Everything the hit itself already fixes — the launch's magnitude and its
@@ -1297,11 +1343,7 @@ function applyHit(
   // `releasePendingLaunch` when the freeze ends. A player who was already
   // holding a direction gets the same answer either way, which is exactly why
   // the difference only shows up for the player who is *reacting*.
-  //
-  // A projectile launches along the way *it* is pointing, which is the facing its
-  // thrower had when it left rather than whichever way they happen to be looking
-  // now — the arrow does not turn round when Link does.
-  const sourceFacing = c.projectile !== null ? c.projectile.facing : attacker.facing;
+  // `sourceFacing` was decided above, with the stacking check.
   victim.pendingKnockback = kb;
   victim.pendingAngle = resolveAngle(hb, victim.grounded, kb);
   // A grounded victim launched flat slides out at 0.8 of the speed (rubendal

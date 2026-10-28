@@ -24,6 +24,7 @@ import {
   damageSpeedUpMag,
   damageSpeedUpMaxMag,
   effectiveHitstun,
+  knockbackStack,
   knockbackToVelocity,
   normalizeAngle,
   resolveAngle,
@@ -638,5 +639,23 @@ describe("applyDI with a soft stick", () => {
 
   it("does nothing at neutral", () => {
     expect(applyDI(fx(45), 0, 0, true)).toBe(fx(45));
+  });
+});
+
+describe("knockbackStack", () => {
+  // SmashWiki "Knockback" (https://www.ssbwiki.com/Knockback), stacking: in
+  // Ultimate a new launch between 0.5× and 0.9× of the target's launch speed
+  // keeps the first launch; below 0.5× the target "armors through" the hit;
+  // otherwise the new launch overrides. Different sources only.
+  it.each([
+    [1, 4, "armour"],
+    [1.99, 4, "armour"],
+    [2, 4, "keep"],
+    [3.59, 4, "keep"],
+    [3.61, 4, "replace"],
+    [5, 4, "replace"],
+    [1, 0, "replace"],
+  ])("a new launch of %f against a live one of %f: %s", (fresh, current, verdict) => {
+    expect(knockbackStack(fx(fresh), fx(current))).toBe(verdict);
   });
 });

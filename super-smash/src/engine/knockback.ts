@@ -22,6 +22,8 @@ import {
   KB_ADDEND,
   HITSTUN_RATIO,
   HITSTUN_MIN_FAF,
+  KB_STACK_ARMOUR,
+  KB_STACK_KEEP,
   LAUNCH_SPEED_RATIO,
   SPEED_UP_FAF_MAX,
   SPEED_UP_FAF_MIN,
@@ -604,4 +606,21 @@ export function knockbackToVelocity(kb: number, angleFx: number, facing: number)
     speed,
     balloon,
   };
+}
+
+/* ------------------------------------------------------------- stacking -- */
+
+/**
+ * Knockback stacking: what a new launch does to one already flying, from a
+ * *different* source (SmashWiki "Knockback", https://www.ssbwiki.com/Knockback):
+ * in Ultimate a new launch speed between 0.5× and 0.9× of the target's keeps
+ * the first launch — its speed, direction and hitstun — and one under 0.5×
+ * is armoured through; anything faster takes over. Speeds are Q12; a target
+ * with no live launch (`current` 0) is simply launched.
+ */
+export function knockbackStack(fresh: number, current: number): "replace" | "keep" | "armour" {
+  if (current <= 0) return "replace";
+  if (fresh * KB_STACK_ARMOUR[1] < current * KB_STACK_ARMOUR[0]) return "armour";
+  if (fresh * KB_STACK_KEEP[1] <= current * KB_STACK_KEEP[0]) return "keep";
+  return "replace";
 }

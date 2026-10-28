@@ -21,12 +21,19 @@ export interface CombatState {
    * handed to `kineticLaunch` when the freeze ends (Plan 3, Task 6).
    */
   launchFaf: number;
+  /**
+   * Who launched this fighter last: the attacker's port, or 1000 + a
+   * projectile's instance id (`candidateKey` in `simulate.ts`), −1 for nobody.
+   * Knockback stacks only between different sources (Plan 3, Task 8).
+   */
+  launchSource: number;
 }
 
 export function emptyCombat(): CombatState {
   return {
     staleShield: [],
     launchFaf: 0,
+    launchSource: -1,
   };
 }
 
@@ -34,5 +41,6 @@ export function cloneCombat(c: CombatState): CombatState {
   return {
     staleShield: c.staleShield.slice(),
     launchFaf: c.launchFaf,
+    launchSource: c.launchSource,
   };
 }
