@@ -237,6 +237,7 @@ export function resolveCollision(
   opts: CollisionOptions = {},
 ): CollisionOutcome {
   const out: CollisionOutcome = { landed: false, leftGround: false, blocked: false };
+  const ecb = ecbOf(f, attrs);
 
   // Already standing on something: the only question is whether it is still there.
   if (f.grounded && f.platform >= 0 && f.platform < stage.platforms.length) {
@@ -278,25 +279,25 @@ export function resolveCollision(
   for (const p of stage.platforms) {
     if (p.soft) continue;
     const cx = platformCentreX(p, frame);
-    // The wall stops the fighter's *origin*, not its whole body. Pushing the
-    // body out instead would eject a fighter who walked off the edge to a full
-    // half-width clear of the stage — past the 3.2-unit ledge grab box, so it
-    // could never grab the ledge it just stepped off.
+    // The wall stops the ECB's side point: the body, not the middle of it.
+    // The ledge grab box is measured from the same side point (`findLedgeGrab`),
+    // so a fighter pushed clear of the wall is still at the ledge it left.
     const reach = p.halfWidth;
+    const body = reach + ecb.half;
     const bottom = p.y - HARD_PLATFORM_DEPTH;
-    const head = f.y + attrs.height;
-    // Only a fighter that *crossed* a wall face this frame is pushed out. Testing
-    // containment instead would shove anybody standing under the stage sideways,
-    // and under the stage is where every edgeguard in the game takes place.
+    const head = f.y + ecb.top;
+    // Only a fighter whose origin was outside the platform's span last frame is
+    // pushed out. Testing containment instead would shove anybody standing under
+    // the stage sideways, and under the stage is where every edgeguard happens.
     const cameFromOutside = abs(prevX - cx) >= reach;
-    if (cameFromOutside && f.y < p.y && head > bottom && abs(f.x - cx) < reach) {
-      f.x = prevX <= cx ? cx - reach : cx + reach;
+    if (cameFromOutside && f.y + ecb.bottom < p.y && head > bottom && abs(f.x - cx) < body) {
+      f.x = prevX <= cx ? cx - body : cx + body;
       kineticSetX(f, 0);
       out.blocked = true;
     }
-    // Ceiling: rising into the underside of a solid body.
-    if (f.vy > 0 && abs(f.x - cx) < reach && prevY + attrs.height <= bottom && head > bottom) {
-      f.y = bottom - attrs.height;
+    // Ceiling: the ECB's top rising into the underside of a solid body.
+    if (f.vy > 0 && abs(f.x - cx) < reach && prevY + ecb.top <= bottom && head > bottom) {
+      f.y = bottom - ecb.top;
       kineticSetY(f, 0);
       out.blocked = true;
     }
@@ -309,9 +310,10 @@ export function resolveCollision(
     if (p.soft && opts.passThroughSoft) continue;
     const cx = platformCentreX(p, frame);
     if (abs(f.x - cx) > p.halfWidth) continue;
-    if (prevY < p.y) continue; // was already below the surface — no landing from under
-    if (f.y > p.y) continue; // still above it
-    f.y = p.y;
+    // The ECB's bottom point does the landing.
+    if (prevY + ecb.bottom < p.y) continue; // was already below the surface — no landing from under
+    if (f.y + ecb.bottom > p.y) continue; // still above it
+    f.y = p.y - ecb.bottom;
     kineticSetY(f, 0);
     f.grounded = true;
     f.platform = i;
@@ -370,6 +372,7 @@ export function findLedgeGrab(
   f: FighterState,
   stage: StageDef,
   frame: number,
+  ecbHalf = 0,
 ): LedgeGrab | null {
   if (f.grounded || f.ledge !== null) return null;
   if (f.hitstun > 0 || f.hitlag > 0) return null;
@@ -382,11 +385,13 @@ export function findLedgeGrab(
     for (const side of [-1, 1] as const) {
       const lx = cx + side * p.halfWidth;
       // Only reachable from outboard of the ledge.
-      if ((f.x - lx) * side < 0) continue;
+      const outboard = (f.x - lx) * side;
+      if (outboard < 0) continue;
       // Facing the ledge means facing back toward the stage: the opposite of the side.
       const facingLedge = f.facing === -side;
       const rangeX = facingLedge ? LEDGE_GRAB_RANGE_X : mul(LEDGE_GRAB_RANGE_X, LEDGE_GRAB_BACK_PENALTY);
-      if (abs(f.x - lx) > rangeX) continue;
+      // Measured from the ECB's near side point (`ecbHalf` in from the origin).
+      if (outboard - ecbHalf > rangeX) continue;
       const drop = p.y - f.y;
       if (drop < 0 || drop > LEDGE_GRAB_RANGE_Y) continue;
       return { platform: i, side };
@@ -451,4 +456,43 @@ export function blastZoneKO(f: FighterState, stage: StageDef): KOKind | null {
   if (f.y < b.bottom) return "blast";
   if (f.x < b.left || f.x > b.right) return "blast";
   return null;
+}
+
+/* -------------------------------------------------------------------- ECB -- */
+
+/**
+ * The environment collision box: four points relative to the origin — bottom
+ * (0, bottom), top (0, top), left (−half, mid) and right (+half, mid), mid
+ * halfway up. Ultimate derives it from bones each frame and locks the bottom
+ * to the feet on the ground (research/rebuild-2026-10/README.md §3, "ECB").
+ *
+ * A partial seam, UNVERIFIED as a rule: nothing public gives the sizes per
+ * fighter or per animation, so until Plan 4 bakes bones the diamond is the
+ * hurtbox's height and half-width with its bottom at the feet in the air as
+ * well; `resolveCollision` tests the side points against a platform's span as
+ * a rectangle (no slanted diamond edges) and keeps the platform's own reach
+ * for ceilings. Plan 4 completes it from bones.
+ */
+export interface Ecb {
+  readonly bottom: number;
+  readonly top: number;
+  readonly half: number;
+}
+
+export function ecbOf(_f: Pick<FighterState, "grounded">, attrs: FighterAttributes): Ecb {
+  return { bottom: 0, top: attrs.height, half: attrs.width };
+}
+
+export function ecbPoints(
+  f: Pick<FighterState, "x" | "y" | "grounded">,
+  attrs: FighterAttributes,
+): { bottom: { x: number; y: number }; top: { x: number; y: number }; left: { x: number; y: number }; right: { x: number; y: number } } {
+  const e = ecbOf(f, attrs);
+  const mid = f.y + Math.trunc((e.bottom + e.top) / 2);
+  return {
+    bottom: { x: f.x, y: f.y + e.bottom },
+    top: { x: f.x, y: f.y + e.top },
+    left: { x: f.x - e.half, y: mid },
+    right: { x: f.x + e.half, y: mid },
+  };
 }

@@ -10,6 +10,8 @@ import {
   applyTraction,
   blastZoneKO,
   decayLaunch,
+  ecbOf,
+  ecbPoints,
   dropThroughPlatform,
   fastFallVelocity,
   findLedgeGrab,
@@ -344,7 +346,8 @@ describe("platform collision", () => {
     const f = fighter({ x: fx(78), y: fx(-10), vx: -fx(2) });
     const out = resolveCollision(f, fx(82), fx(-10), STAGE, ATTRS, 0);
     expect(out.blocked).toBe(true);
-    expect(f.x).toBe(fx(80));
+    // The ECB's left point stops at the wall face, so the origin rests half a body out.
+    expect(f.x).toBe(fx(80) + ATTRS.width);
     expect(f.vx).toBe(0);
   });
 
@@ -458,5 +461,44 @@ describe("blast zones", () => {
 
   it("leaves a fighter inside the rectangle alone", () => {
     expect(blastZoneKO(fighter({ x: fx(100), y: fx(100) }), STAGE)).toBeNull();
+  });
+});
+
+describe("the environment collision box (ECB)", () => {
+  // Ultimate collides a fighter with the stage through a four-point diamond —
+  // bottom, top, left, right — whose bottom is locked to the feet on the ground
+  // (research/rebuild-2026-10/README.md §3, "ECB"). This is a partial seam, and
+  // its rule is UNVERIFIED: the size is the hurtbox's, the bottom stays at the
+  // feet in the air too, walls test the side points against the platform's
+  // span (a rectangle, not the diamond's slanted edges), and ceilings still use
+  // the platform's reach. Plan 4 derives the diamond from bones and completes it.
+
+  it("is a diamond on the hurtbox, its bottom at the feet", () => {
+    const e = ecbOf(fighter({ grounded: true }), ATTRS);
+    expect(e).toEqual({ bottom: 0, top: ATTRS.height, half: ATTRS.width });
+    const pts = ecbPoints(fighter({ x: fx(10), y: fx(5) }), ATTRS);
+    expect(pts.left).toEqual({ x: fx(10) - ATTRS.width, y: fx(5) + ATTRS.height / 2 });
+    expect(pts.right).toEqual({ x: fx(10) + ATTRS.width, y: fx(5) + ATTRS.height / 2 });
+    expect(pts.bottom).toEqual({ x: fx(10), y: fx(5) });
+    expect(pts.top).toEqual({ x: fx(10), y: fx(5) + ATTRS.height });
+  });
+
+  it("reaches a ledge from the side of the body, not the middle of it (Review Focus #5)", () => {
+    const half = ATTRS.width;
+    const reach = LEDGE_GRAB_RANGE_X;
+    // Origin just inside 3.2 + half from the ledge at x = 80: the body's side is within 3.2.
+    const near = fighter({ x: fx(80) + reach + half - fx(0.05), y: fx(-2), vy: -fx(1), facing: -1 });
+    expect(findLedgeGrab(near, STAGE, 0, half)).toEqual({ platform: 0, side: 1 });
+    expect(findLedgeGrab(near, STAGE, 0)).toBeNull(); // the legacy origin rule would not reach
+    const far = fighter({ x: fx(80) + reach + half + fx(0.05), y: fx(-2), vy: -fx(1), facing: -1 });
+    expect(findLedgeGrab(far, STAGE, 0, half)).toBeNull();
+  });
+
+  it("still takes the ledge a fighter walked off, after the wall pushes the body clear", () => {
+    // Origin left the platform last frame, body still overlapping the wall.
+    const f = fighter({ x: fx(81), y: fx(-1), vy: -fx(1), facing: 1, grounded: false, platform: -1 });
+    resolveCollision(f, fx(80.5), 0, STAGE, ATTRS, 0);
+    expect(f.x).toBe(fx(80) + ATTRS.width);
+    expect(findLedgeGrab({ ...f, facing: -1 }, STAGE, 0, ATTRS.width)).toEqual({ platform: 0, side: 1 });
   });
 });

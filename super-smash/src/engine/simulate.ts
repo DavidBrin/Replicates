@@ -69,6 +69,7 @@ import {
 } from "./projectile";
 import {
   blastZoneKO,
+  ecbOf,
   findLedgeGrab,
   integrate,
   ledgeIntangibilityFrames,
@@ -584,7 +585,7 @@ export function step(
     }
 
     if (!f.grounded) {
-      const grab = findLedgeGrab(f, stage, s.frame);
+      const grab = findLedgeGrab(f, stage, s.frame, ecbOf(f, defs[i].attributes).half);
       if (grab !== null) {
         const pos = ledgePosition(stage, grab, s.frame);
         const frames =
