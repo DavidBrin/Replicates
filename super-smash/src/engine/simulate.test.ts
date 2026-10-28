@@ -488,6 +488,175 @@ describe("hits", () => {
   });
 });
 
+
+/* ---------------------------------------------- grab, pummel and throw -- */
+
+/**
+ * The grab follow-ups through `step()`: a pummel that connects, and all four
+ * throws. Written against the engine as it stood before the grab statuses moved
+ * into `status/attack.ts` (Plan 2, Task 8) and run unchanged after it, because
+ * the golden trace only ever runs the forward throw and a pummel that whiffs.
+ *
+ * Both swings can only connect if the hit record was reset when they began: the
+ * grab that started the hold left `hitThisMove` at `[1]`, and a swing never hits
+ * a target already in the record.
+ *
+ * UNVERIFIED: the hitboxes are invented, not any fighter's frame data, and each
+ * pinned number is what the engine produced at 5e5d1a2 (Q12 raw). They are here
+ * to catch a *change* in behaviour, not to claim a number is right.
+ */
+
+/** A throw's hitbox, in reach of a victim standing 8 units in front of the thrower. */
+function throwBox(over: Partial<Hitbox>): Hitbox {
+  return hitbox({
+    startFrame: 6,
+    endFrame: 6,
+    x: fx(6),
+    y: fx(6),
+    radius: fx(4),
+    damage: fx(7),
+    baseKnockback: fx(60),
+    knockbackGrowth: fx(70),
+    ...over,
+  });
+}
+
+const GRAB_DEF: FighterDef = {
+  ...DEF,
+  moves: {
+    ...DEF.moves,
+    pummel: move("pummel", {
+      totalFrames: 19,
+      hitboxes: [
+        hitbox({
+          startFrame: 1,
+          endFrame: 1,
+          x: fx(6),
+          damage: fx(1.3),
+          angle: fx(361),
+          baseKnockback: fx(30),
+          knockbackGrowth: fx(100),
+          setKnockback: true,
+        }),
+      ],
+    }),
+    fthrow: move("fthrow", { totalFrames: 27, hitboxes: [throwBox({ angle: fx(45) })] }),
+    bthrow: move("bthrow", { totalFrames: 30, hitboxes: [throwBox({ angle: fx(135) })] }),
+    uthrow: move("uthrow", { totalFrames: 33, hitboxes: [throwBox({ angle: fx(90) })] }),
+    dthrow: move("dthrow", { totalFrames: 36, hitboxes: [throwBox({ angle: fx(68) })] }),
+  },
+};
+
+const GRAB_CTX: SimContext = { fighter: () => GRAB_DEF, stage: () => STAGE };
+
+/** The tick the holder presses the pummel or a throw direction: well inside the hold. */
+const HOLD_INPUT_TICK = 12;
+
+interface Tick {
+  readonly state: GameState;
+  readonly hits: ReturnType<typeof step>["events"]["hits"];
+}
+
+/** Fighter 0 grabs fighter 1 on tick 0 and presses `button` on tick 12. One `Tick` per step. */
+function holdThen(button: Btn, ticks: number): Tick[] {
+  let s = standing();
+  let prev: readonly InputFrame[] = [0, 0];
+  const out: Tick[] = [];
+  for (let i = 0; i < ticks; i++) {
+    const inputs = [i === 0 ? Btn.Grab : i === HOLD_INPUT_TICK ? button : 0, 0];
+    const o = step(s, inputs, { prevInputs: prev, ctx: GRAB_CTX });
+    prev = inputs;
+    s = o.state;
+    out.push({ state: s, hits: o.events.hits });
+  }
+  return out;
+}
+
+/** The actions a fighter passes through from tick `from` on, consecutive repeats collapsed. */
+function actionsFrom(ticks: readonly Tick[], from: number, port: number): string[] {
+  const seen: string[] = [];
+  for (const t of ticks.slice(from)) {
+    const a = t.state.fighters[port].action;
+    if (seen[seen.length - 1] !== a) seen.push(a);
+  }
+  return seen;
+}
+
+describe("a connecting pummel", () => {
+  it("hits the held fighter once: damage, a freeze on both, and the hold is let go", () => {
+    const ticks = holdThen(Btn.Attack, 40);
+
+    const holding = ticks[HOLD_INPUT_TICK - 1].state;
+    expect(holding.fighters[0]).toMatchObject({ action: "grabHold", grabbing: 1, hitThisMove: [1] });
+    expect(holding.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
+
+    const hit = ticks[HOLD_INPUT_TICK];
+    expect(hit.hits).toEqual([
+      { attacker: 0, victim: 1, damage: 5591, x: 24576, y: 24576, knockback: 122880, angle: 0, hitboxId: 0 },
+    ]);
+    const [a, b] = hit.state.fighters;
+    expect(a).toMatchObject({ action: "pummel", move: "pummel", grabbing: -1, hitlag: 6, hitThisMove: [1] });
+    expect(b).toMatchObject({ action: "hitstun", grabbedBy: -1, damage: 5591, hitlag: 6, hitstun: 11 });
+    // Today a pummel is an ordinary hit, so it ends the hold (`applyHit` calls
+    // `releaseGrab`); that is how the engine behaves, not a claim about Ultimate.
+  });
+
+  it("launches the victim along the ground when the freeze ends, and the holder finishes the pummel", () => {
+    const ticks = holdThen(Btn.Attack, 40);
+    const release = ticks.findIndex((t, i) => i > HOLD_INPUT_TICK && t.state.fighters[1].hitlag === 0);
+    expect(release).toBe(HOLD_INPUT_TICK + 6);
+    expect(ticks[release].state.fighters[1]).toMatchObject({ vx: 3690, vy: 0, grounded: true, hitstun: 11 });
+
+    // The pummel's 10 frames, then the hold it came from, which is gone.
+    expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["pummel", "grabHold", "stand"]);
+    expect(ticks[39].state.fighters[0]).toMatchObject({ action: "stand", grabbing: -1, grabTimer: 0, move: null });
+    expect(ticks[39].state.fighters[1]).toMatchObject({ action: "stand", grabbedBy: -1 });
+  });
+});
+
+describe("the four throws", () => {
+  // The stick direction that picks each throw, relative to the thrower's facing (+1).
+  // Launch velocities are what `releasePendingLaunch` sets on the last frame of hitlag.
+  const THROWS = [
+    { slot: "fthrow", button: Btn.Right, totalFrames: 27, angle: fx(45), vx: 6601, vy: 6601 },
+    { slot: "bthrow", button: Btn.Left, totalFrames: 30, angle: fx(135), vx: -6601, vy: 6601 },
+    { slot: "uthrow", button: Btn.Up, totalFrames: 33, angle: fx(90), vx: 0, vy: 9337 },
+    { slot: "dthrow", button: Btn.Down, totalFrames: 36, angle: fx(68), vx: 3496, vy: 8657 },
+  ] as const;
+
+  it.each(THROWS)("$slot: carries the victim, hits once, launches on release, frees the thrower", (t) => {
+    const ticks = holdThen(t.button, 60);
+
+    // The press starts the throw and the victim is carried, not held.
+    const started = ticks[HOLD_INPUT_TICK].state;
+    expect(started.fighters[0]).toMatchObject({ action: "throw", move: t.slot, grabbing: 1, hitThisMove: [] });
+    expect(started.fighters[1]).toMatchObject({ action: "thrown", grabbedBy: 0 });
+
+    // The throw's hitbox connects: the one hit, a shared freeze, and the link is cut.
+    const connected = ticks.findIndex((k) => k.hits.length > 0);
+    expect(connected).toBe(HOLD_INPUT_TICK + 5);
+    expect(ticks[connected].hits).toEqual([
+      { attacker: 0, victim: 1, damage: 30107, x: 24576, y: 24576, knockback: 310933, angle: t.angle, hitboxId: 0 },
+    ]);
+    expect(ticks.filter((k) => k.hits.length > 0)).toHaveLength(1);
+    const [a, b] = ticks[connected].state.fighters;
+    expect(a).toMatchObject({ action: "throw", move: t.slot, grabbing: -1, hitlag: 10, hitThisMove: [1] });
+    expect(b).toMatchObject({ action: "hitstun", grabbedBy: -1, damage: 30107, hitlag: 10, hitstun: 29 });
+
+    // The launch fires on the last frame of the freeze.
+    const release = ticks.findIndex((k, i) => i > connected && k.state.fighters[1].hitlag === 0);
+    expect(release).toBe(connected + 10);
+    expect(ticks[release].state.fighters[1]).toMatchObject({ vx: t.vx, vy: t.vy, grounded: false, hitstun: 29 });
+
+    // The thrower finishes the animation after the freeze, then stands.
+    expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["throw", "stand"]);
+    const ended = ticks.findIndex((k, i) => i > HOLD_INPUT_TICK && k.state.fighters[0].action === "stand");
+    expect(ended).toBe(HOLD_INPUT_TICK + t.totalFrames + 10);
+    expect(ticks[ended].state.fighters[0]).toMatchObject({ move: null, grabbing: -1, grabTimer: 0 });
+  });
+});
+
+
 /* ------------------------------------------------------------ short hop -- */
 
 /**

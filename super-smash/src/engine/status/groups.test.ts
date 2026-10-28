@@ -75,6 +75,15 @@ const MIGRATED = [
   "spotDodge",
   "roll",
   "airDodge",
+  // Task 8
+  "attack",
+  "special",
+  "grab",
+  "grabHold",
+  "pummel",
+  "throw",
+  "grabbed",
+  "thrown",
 ];
 
 describe("migrated statuses", () => {
@@ -104,5 +113,22 @@ describe("REBIRTH", () => {
     const f = fighter({ action: "dead", invincible: 0 });
     changeStatus(f, "respawnPlatform");
     expect(f.invincible).toBe(RESPAWN_INVINCIBILITY_MAX);
+  });
+});
+
+describe("swinging statuses", () => {
+  it.each(["attack", "special", "grab", "pummel", "throw"] as const)(
+    "%s resets the one-swing-one-hit record in pre",
+    (action) => {
+      const f = fighter({ action: "stand", hitThisMove: [1, 8] });
+      changeStatus(f, action);
+      expect(f.hitThisMove).toEqual([]);
+    },
+  );
+
+  it("leaves the record alone when the hold resumes after a pummel", () => {
+    const f = fighter({ action: "pummel", hitThisMove: [1] });
+    changeStatus(f, "grabHold");
+    expect(f.hitThisMove).toEqual([1]);
   });
 });
