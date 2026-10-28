@@ -9,7 +9,6 @@ import {
   applyGravity,
   applyTraction,
   blastZoneKO,
-  decayLaunch,
   dropThroughPlatform,
   ecbOf,
   ecbPoints,
@@ -116,7 +115,7 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
   };
 }
 
-describe("gravity", () => {
+describe("legacy gravity (a test oracle; the engine uses gravityStep)", () => {
   it("accelerates downward one gravity per frame", () => {
     expect(applyGravity(0, ATTRS)).toBe(-ATTRS.gravity);
     expect(applyGravity(fx(1), ATTRS)).toBe(fx(1) - ATTRS.gravity);
@@ -179,7 +178,7 @@ describe("fast fall", () => {
   });
 });
 
-describe("ground movement", () => {
+describe("legacy ground movement (a test oracle; the engine uses kineticExec)", () => {
   it("ramps toward walk speed and stops there", () => {
     let vx = 0;
     for (let i = 0; i < 60; i++) vx = walkVelocity(vx, 1, ATTRS);
@@ -205,7 +204,7 @@ describe("ground movement", () => {
   });
 });
 
-describe("air movement", () => {
+describe("legacy air movement (a test oracle; the engine uses airControlX)", () => {
   it("accelerates at base plus additional and caps at air speed", () => {
     let vx = 0;
     expect(airDrift(vx, 1, ATTRS)).toBe(ATTRS.airAccelBase + ATTRS.airAccelAdditional);
@@ -213,7 +212,7 @@ describe("air movement", () => {
     expect(vx).toBe(ATTRS.airSpeed);
   });
 
-  it("keeps momentum when the stick is released — there is no air friction", () => {
+  it("keeps momentum when the stick is released — the legacy rule has no air friction", () => {
     expect(airDrift(fx(5), 0, ATTRS)).toBe(fx(5));
   });
 
@@ -225,23 +224,6 @@ describe("air movement", () => {
   it("still lets a launched fighter drift back against the launch", () => {
     const launched = fx(8);
     expect(airDrift(launched, -1, ATTRS)).toBeLessThan(launched);
-  });
-});
-
-describe("launch decay", () => {
-  it("bleeds the magnitude at a flat rate and keeps the direction", () => {
-    const f = fighter({ vx: fx(3), vy: fx(4), launchSpeed: fx(5) });
-    decayLaunch(f, fx(1));
-    expect(f.launchSpeed).toBe(fx(4));
-    // 3:4 preserved at four fifths of the original magnitude.
-    expect(toFloat(f.vx)).toBeCloseTo(2.4, 1);
-    expect(toFloat(f.vy)).toBeCloseTo(3.2, 1);
-  });
-
-  it("stops rather than reversing", () => {
-    const f = fighter({ vx: fx(1), vy: 0, launchSpeed: fx(0.5) });
-    decayLaunch(f, fx(1));
-    expect(f.launchSpeed).toBe(0);
   });
 });
 

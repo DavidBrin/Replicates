@@ -8,12 +8,13 @@
  * gravity subtracts from `vy`, falling means `vy < 0`, and landing means crossing
  * a surface downward.
  *
- * The functions come in two shapes. The small ones (`applyGravity`, `airDrift`)
- * are pure: value in, value out, so a single rule can be tested without building
- * a stage. The big ones (`resolveCollision`) mutate the `FighterState` handed to
- * them, because by the time they run `step()` is already working on its clone and
- * copying a fighter twice per frame to preserve a purity that nobody can observe
- * would cost the rollback budget for nothing.
+ * The functions come in two shapes. The small ones (`fastFallVelocity`,
+ * `platformCentreX`) are pure: value in, value out, so a single rule can be
+ * tested without building a stage. The big ones (`resolveCollision`) mutate the
+ * `FighterState` handed to them, because by the time they run `step()` is
+ * already working on its clone and copying a fighter twice per frame to
+ * preserve a purity that nobody can observe would cost the rollback budget for
+ * nothing.
  */
 
 import { ONE, fx, mul, abs, clamp, approach, sinDeg } from "./fixed";
@@ -30,7 +31,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
-import { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR, kineticLand, kineticSetX, kineticSetY } from "./kinetic";
+import { kineticLand, kineticSetX, kineticSetY } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -48,26 +49,73 @@ import type { FighterAttributes, FighterState, Platform, StageDef } from "./type
  */
 export const HARD_PLATFORM_DEPTH = fx(60);
 
-/** Ground acceleration is a multiple of traction (legacy; now defined in `kinetic.ts`). */
-export { RUN_ACCEL_FACTOR, WALK_ACCEL_FACTOR };
-
 /** A top-blast KO faster than this reads as a screen KO rather than a star KO. */
 export const SCREEN_KO_SPEED = fx(2.4);
 
 /* ---------------------------------------------------------------- motion -- */
 
 export interface GravityOptions {
+  /** Read by the legacy `applyGravity` oracle only; the engine's fast fall is `FighterState.fastFalling`. */
   readonly fastFalling?: boolean;
   /**
-   * The fighter is in hitstun from a near-vertical launch, so its downward speed
-   * is pinned to a flat 1.8 instead of accelerating — Ultimate's "balloon
-   * knockback", the reason a vertical kill move hangs at the top of the screen.
+   * The fighter is in hitstun from a near-vertical launch, so it falls by its
+   * `damage_fly_top_*` params (`kineticReel`) instead of its ordinary gravity —
+   * Ultimate's "balloon knockback", the reason a vertical kill move hangs at
+   * the top of the screen.
    */
   readonly balloon?: boolean;
 }
 
 /**
- * One frame of gravity, terminal velocity included.
+ * Fast-falling snaps the fall speed; it does not add acceleration.
+ *
+ * This is why a fast fall is instant and irreversible: pressing down replaces the
+ * velocity outright, and there is no way back to the slower fall until the
+ * fighter lands. Fox's 3.68 fast fall against his 2.3 normal is a step change on
+ * one frame, which is exactly what makes his landings hard to read.
+ */
+export function fastFallVelocity(attrs: FighterAttributes): number {
+  return -attrs.fastFallSpeed;
+}
+
+/** Position integration. Velocities are units per frame, so this is an add. */
+export function integrate(f: FighterState): void {
+  f.x += f.vx;
+  f.y += f.vy;
+}
+
+/**
+ * Terminal velocity for a fighter currently reeling from a hit.
+ *
+ * `balloon` is *read*, never recomputed. The launch angle at contact decided it
+ * (`knockbackToVelocity`), and the current velocity is no longer evidence of it:
+ * gravity and the flat launch decay rotate the trajectory every frame, so a 45°
+ * launch passes through the 70°–110° cone on the way down and a test against
+ * `vx`/`vy` would switch the victim to balloon fall halfway through its hitstun.
+ */
+export function hitstunGravityOptions(f: FighterState): GravityOptions {
+  return { balloon: f.hitstun > 0 && f.balloon };
+}
+
+/* ------------------------------------------ legacy movement (test oracles) -- */
+
+/*
+ * The pre-Plan-2 movement rules, on one `vx`/`vy`: gravity, walking, the
+ * initial dash, running, traction and air drift. **TEST-ONLY: the engine calls
+ * none of them.** Its movement is the KineticModule's (`kinetic.ts`:
+ * `gravityStep`, `airControlX`, `runControlX`, and the walk and stop brakes in
+ * `kineticExec`), so one rule of each ships. These stay, frozen, as the oracle
+ * `kinetic.test.ts` holds `kineticExec` to through `paramsFromAttributes`, and
+ * `physics.test.ts` pins them (DECISIONS D55). Engine code must not call them.
+ */
+
+/** Legacy ground acceleration (the helpers below): walking at 2 × traction, running at 3 ×. */
+const WALK_ACCEL_FACTOR = 2;
+const RUN_ACCEL_FACTOR = 3;
+
+/**
+ * One frame of gravity, terminal velocity included. Test oracle; the engine's
+ * is `gravityStep`.
  *
  * Fast-falling is a *set*, not an acceleration — see `fastFallVelocity` — so all
  * this does is lower the floor the terminal velocity clamps to.
@@ -86,25 +134,13 @@ export function applyGravity(
   return next < -terminal ? -terminal : next;
 }
 
-/**
- * Fast-falling snaps the fall speed; it does not add acceleration.
- *
- * This is why a fast fall is instant and irreversible: pressing down replaces the
- * velocity outright, and there is no way back to the slower fall until the
- * fighter lands. Fox's 3.68 fast fall against his 2.3 normal is a step change on
- * one frame, which is exactly what makes his landings hard to read.
- */
-export function fastFallVelocity(attrs: FighterAttributes): number {
-  return -attrs.fastFallSpeed;
-}
-
-/** Walking: approach the walk speed at twice traction. */
+/** Walking: approach the walk speed at twice traction. Test oracle. */
 export function walkVelocity(vx: number, dir: number, attrs: FighterAttributes): number {
   return approach(vx, dir * attrs.walkSpeed, attrs.traction * WALK_ACCEL_FACTOR);
 }
 
 /**
- * The initial dash is a velocity *set*, not a ramp.
+ * The initial dash is a velocity *set*, not a ramp. Test oracle.
  *
  * Ultimate gives every fighter its initial dash speed on frame 1 of the dash and
  * only then decays it toward the (usually lower) run speed. That instant burst is
@@ -114,24 +150,25 @@ export function initialDashVelocity(dir: number, attrs: FighterAttributes): numb
   return dir * attrs.initialDashSpeed;
 }
 
-/** Running: approach the run speed at three times traction. */
+/** Running: approach the run speed at three times traction. Test oracle. */
 export function runVelocity(vx: number, dir: number, attrs: FighterAttributes): number {
   return approach(vx, dir * attrs.runSpeed, attrs.traction * RUN_ACCEL_FACTOR);
 }
 
-/** Friction. The one primitive behind skidding, run-braking and standing still. */
+/** Friction. The one primitive behind skidding, run-braking and standing still. Test oracle. */
 export function applyTraction(vx: number, attrs: FighterAttributes): number {
   return approach(vx, 0, attrs.traction);
 }
 
 /**
- * Air drift: base plus additional acceleration, capped at the fighter's air speed.
+ * Air drift: base plus additional acceleration, capped at the fighter's air
+ * speed. Test oracle; the engine's is `airControlX`.
  *
  * The cap is one-directional on purpose. A fighter launched at eight units a
  * frame is well past its own air speed, and drifting *back* is allowed while
  * drifting further out is not — otherwise DI'ing away from the stage would add
  * to the launch instead of merely failing to fight it. Releasing the stick keeps
- * the momentum: Ultimate has no air friction.
+ * the momentum: this legacy rule has no air friction (the engine's has, D55).
  */
 export function airDrift(vx: number, stickX: number, attrs: FighterAttributes): number {
   if (stickX === 0) return vx;
@@ -139,50 +176,6 @@ export function airDrift(vx: number, stickX: number, attrs: FighterAttributes): 
   if (stickX > 0 && vx >= attrs.airSpeed) return vx;
   if (stickX < 0 && vx <= -attrs.airSpeed) return vx;
   return approach(vx, stickX > 0 ? attrs.airSpeed : -attrs.airSpeed, accel);
-}
-
-/** Position integration. Velocities are units per frame, so this is an add. */
-export function integrate(f: FighterState): void {
-  f.x += f.vx;
-  f.y += f.vy;
-}
-
-/**
- * Bleed a launch velocity by a flat amount per frame, keeping its direction.
- *
- * Knockback in Ultimate decays linearly rather than exponentially — 0.051 units
- * off the *magnitude* every frame regardless of how fast the victim is going —
- * which is why survival is about the total distance travelled, not about a
- * half-life. Scaling both components by the same ratio keeps the launch angle
- * intact while gravity bends it separately.
- */
-export function decayLaunch(f: FighterState, decay: number): void {
-  const mag = f.launchSpeed;
-  if (mag <= 0) {
-    f.launchSpeed = 0;
-    return;
-  }
-  const next = mag - decay <= 0 ? 0 : mag - decay;
-  if (next === 0) {
-    f.launchSpeed = 0;
-    return;
-  }
-  f.vx = Math.trunc((f.vx * next) / mag); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
-  f.vy = Math.trunc((f.vy * next) / mag); // kinetic: legacy-write (Task 17 moves this to DAMAGE)
-  f.launchSpeed = next;
-}
-
-/**
- * Terminal velocity for a fighter currently reeling from a hit.
- *
- * `balloon` is *read*, never recomputed. The launch angle at contact decided it
- * (`knockbackToVelocity`), and the current velocity is no longer evidence of it:
- * gravity and the flat launch decay rotate the trajectory every frame, so a 45°
- * launch passes through the 70°–110° cone on the way down and a test against
- * `vx`/`vy` would switch the victim to balloon fall halfway through its hitstun.
- */
-export function hitstunGravityOptions(f: FighterState): GravityOptions {
-  return { balloon: f.hitstun > 0 && f.balloon };
 }
 
 /* -------------------------------------------------------------- platforms -- */

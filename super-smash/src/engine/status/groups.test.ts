@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { RESPAWN_INVINCIBILITY_MAX } from "../constants";
 import { fx } from "../fixed";
-import { KINETIC_TYPE_OF_ACTION, emptyKinetic } from "../kinetic";
-import type { FighterState } from "../types";
+import { emptyKinetic } from "../kinetic";
+import type { KineticType } from "../kinetic";
+import type { ActionState, FighterState } from "../types";
 import { ALL_STATUSES } from "./index";
 import { STATUS_KIND_OF_ACTION, STATUS_TABLE, changeStatus } from "./kind";
 
@@ -56,6 +57,52 @@ function fighter(over: Partial<FighterState> = {}): FighterState {
     ...over,
   };
 }
+
+/** The pre-Plan-2 `applyMovement` switch, as a table: what every status must still declare. */
+const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
+  stand: "GROUND_STOP",
+  walk: "WALK",
+  dashStart: "DASH",
+  run: "RUN",
+  runBrake: "GROUND_STOP",
+  turnaround: "GROUND_STOP",
+  crouchStart: "GROUND_STOP",
+  crouch: "GROUND_STOP",
+  crouchEnd: "GROUND_STOP",
+  jumpSquat: "GROUND_STOP",
+  jump: "FALL",
+  fall: "FALL",
+  land: "GROUND_STOP",
+  landingLag: "GROUND_STOP",
+  attack: "FALL",
+  special: "FALL",
+  grab: "FALL",
+  grabHold: "FALL",
+  pummel: "FALL",
+  throw: "FALL",
+  shieldStart: "GROUND_STOP",
+  shield: "GROUND_STOP",
+  shieldRelease: "GROUND_STOP",
+  shieldStun: "GROUND_STOP",
+  shieldBroken: "GROUND_STOP",
+  spotDodge: "GROUND_STOP",
+  roll: "MOTION",
+  airDodge: "AIR_ESCAPE",
+  hitstun: "GROUND_STOP",
+  tumble: "GROUND_STOP",
+  grabbed: "GROUND_STOP",
+  thrown: "GROUND_STOP",
+  downed: "GROUND_STOP",
+  getUp: "GROUND_STOP",
+  ledgeHang: "GROUND_STOP",
+  ledgeGetUp: "GROUND_STOP",
+  ledgeAttack: "GROUND_STOP",
+  ledgeRoll: "GROUND_STOP",
+  ledgeJump: "GROUND_STOP",
+  respawnPlatform: "NONE",
+  dead: "NONE",
+  entering: "FALL",
+};
 
 /** Every action migrated so far; each status-group task extends this list first. */
 const MIGRATED = [
@@ -121,7 +168,7 @@ describe("migrated statuses", () => {
   it("carry the SSBU kind the alias table names, and the legacy kinetic type", () => {
     for (const s of ALL_STATUSES) {
       expect(s.kind, s.action).toBe(STATUS_KIND_OF_ACTION[s.action]);
-      expect(s.kineticType, s.action).toBe(KINETIC_TYPE_OF_ACTION[s.action]);
+      expect(s.kineticType, s.action).toBe(LEGACY_KINETIC[s.action]);
     }
   });
 

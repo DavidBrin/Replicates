@@ -23,7 +23,7 @@
 import { LAUNCH_SPEED_DECAY, LEDGE_JUMP_VELOCITY } from "./constants";
 import { ONE, abs, approach, mul, sqrt } from "./fixed";
 import type { FighterParams } from "./params";
-import type { ActionState, FighterState } from "./types";
+import type { FighterState } from "./types";
 
 /** skyline-smash `lua_const.rs`. The replica uses the five below. */
 export const FIGHTER_KINETIC_ENERGY_ID_MOTION = 0;
@@ -230,56 +230,6 @@ export type KineticType =
   | "NONE";
 
 /**
- * Each action's kinetic type, transcribed from the legacy `applyMovement`
- * switch. The status objects (Tasks 6–11) declare the same values; this table
- * is the fallback until they all exist and is deleted in Task 28.
- */
-export const KINETIC_TYPE_OF_ACTION: Readonly<Record<ActionState, KineticType>> = {
-  stand: "GROUND_STOP",
-  walk: "WALK",
-  dashStart: "DASH",
-  run: "RUN",
-  runBrake: "GROUND_STOP",
-  turnaround: "GROUND_STOP",
-  crouchStart: "GROUND_STOP",
-  crouch: "GROUND_STOP",
-  crouchEnd: "GROUND_STOP",
-  jumpSquat: "GROUND_STOP",
-  jump: "FALL",
-  fall: "FALL",
-  land: "GROUND_STOP",
-  landingLag: "GROUND_STOP",
-  attack: "FALL",
-  special: "FALL",
-  grab: "FALL",
-  grabHold: "FALL",
-  pummel: "FALL",
-  throw: "FALL",
-  shieldStart: "GROUND_STOP",
-  shield: "GROUND_STOP",
-  shieldRelease: "GROUND_STOP",
-  shieldStun: "GROUND_STOP",
-  shieldBroken: "GROUND_STOP",
-  spotDodge: "GROUND_STOP",
-  roll: "MOTION",
-  airDodge: "AIR_ESCAPE",
-  hitstun: "GROUND_STOP",
-  tumble: "GROUND_STOP",
-  grabbed: "GROUND_STOP",
-  thrown: "GROUND_STOP",
-  downed: "GROUND_STOP",
-  getUp: "GROUND_STOP",
-  ledgeHang: "GROUND_STOP",
-  ledgeGetUp: "GROUND_STOP",
-  ledgeAttack: "GROUND_STOP",
-  ledgeRoll: "GROUND_STOP",
-  ledgeJump: "GROUND_STOP",
-  respawnPlatform: "NONE",
-  dead: "NONE",
-  entering: "FALL",
-};
-
-/**
  * The horizontal energy a kinetic type drives. Exactly one of CONTROL and STOP
  * holds horizontal speed at a time; `kineticTransfer` moves it across when the
  * type changes, which is what keeps the split numerically identical to the
@@ -303,10 +253,6 @@ export function kineticTransfer(f: FighterState, type: KineticType): void {
     k.controlX = 0;
   }
 }
-
-/** Legacy ground acceleration: walking approaches at 2 × traction, running at 3 ×. */
-export const WALK_ACCEL_FACTOR = 2;
-export const RUN_ACCEL_FACTOR = 3;
 
 export interface KineticInput {
   /** Horizontal stick, −1/0/1 from the keyboard. */
@@ -368,7 +314,8 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
       break;
     }
     case "DASH":
-      // UNVERIFIED: the initial dash speed is held for the dash's first frame only.
+      // UNVERIFIED: the initial dash speed is held for the dash's first two frames
+      // (actionFrame 0, the frame it starts, and 1); SmashWiki "Dash" does not say how long.
       k.controlX =
         f.actionFrame <= 1 ? f.facing * p.dash_speed : runControlX(k.controlX, f.facing, p, input.stickMag ?? ONE);
       break;

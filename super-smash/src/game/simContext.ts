@@ -4,10 +4,14 @@
  *
  * It is the registry context plus the bone table script hitboxes resolve
  * through (`SimContext.bones`, DECISIONS D55). Plan 2 has only the root bone
- * (`LEGACY_BONE_TABLE`); Plan 4 replaces that one value with its bake
- * (`layeredBoneTable(bakedBoneTable(…), LEGACY_BONE_TABLE)`) and nothing else
- * changes. The table is never a module global inside the engine: a caller that
- * wants a different one passes a different context.
+ * (`LEGACY_BONE_TABLE`); Plan 4 replaces that value with its bake
+ * (`layeredBoneTable(bakedBoneTable(…), LEGACY_BONE_TABLE)`). That alone is not
+ * enough: `registerFighters` prepares and checks every script against
+ * `registryContext.bones`, not this context's `bones`, so Plan 4 must also
+ * prepare the scripts against the bake (`prepareFighterScripts`), or a bone the
+ * bake cannot place fails mid-match instead of at load. The table is never a
+ * module global inside the engine: a caller that wants a different one passes
+ * a different context.
  */
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";

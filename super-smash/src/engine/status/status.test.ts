@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fx } from "../fixed";
 import { emptyKinetic } from "../kinetic";
-import { advanceFighter } from "../states";
+import { advanceFighter, applyMovement } from "../states";
 import type { Intent, StateContext } from "../states";
 import type { ActionState, FighterDef, FighterState } from "../types";
 import {
@@ -143,5 +143,12 @@ describe("advanceFighter dispatch", () => {
     advanceFighter(f, {} as Intent, CTX);
     advanceFighter(f, {} as Intent, CTX);
     expect(seen).toEqual([1, 2]);
+  });
+});
+
+describe("applyMovement dispatch", () => {
+  it("fails as loudly: a status's kinetic type has no fallback table any more", () => {
+    const f = fighter({ action: "crouch" });
+    expect(() => applyMovement(f, {} as Intent, CTX)).toThrow(/no status registered for "crouch"/);
   });
 });

@@ -224,6 +224,15 @@ Cosmetic state — particles, screen shake, sound — lives *outside* `GameState
 by the events `step()` returns, so re-simulating eight frames after a rollback does not
 replay eight frames of explosions ([D4](DECISIONS.md#d4--cosmetic-state-lives-outside-gamestate)).
 
+Inside `engine/` the simulation is laid out the way Super Smash Bros. Ultimate's own engine is,
+as far as the public modding projects show it ([D55](DECISIONS.md#d55--the-engine-takes-ultimates-shape-params-energies-statuses-scripts)):
+fighter numbers are `FighterParams` with `fighter_param.prc` names (`params.ts`); a fighter's
+velocity is a sum of KineticModule energies — control, stop, gravity, motion, damage (`kinetic.ts`);
+each action is a status object with `pre`/`main`/`exec`/`end` under a `FIGHTER_STATUS_KIND_*` name
+(`status/`); and every move runs as an ACMD `game_` script whose hitboxes hang off bones through a
+`BoneTable` (`acmd/`). The published scripts for all eight fighters are imported by
+`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`.
+
 ---
 
 ## Multiplayer

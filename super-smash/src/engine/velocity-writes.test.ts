@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import ts from "typescript";
@@ -16,6 +16,10 @@ import { beforeAll, describe, expect, it } from "vitest";
  * says it is legacy and names the task that removes it:
  *
  *   f.vy = m.y; // kinetic: legacy-write (Task 18 moves this to MOTION)
+ *
+ * Plan 2 removed the last of those writes (Task 28), and a test below now fails
+ * on any marker left in the tree, so a new legacy write means changing that
+ * test on purpose.
  *
  * The marker covers the write it is on: a comment on any line of the write
  * (the whole expression for an assignment or `++`/`--`; just the target for a
@@ -396,7 +400,7 @@ const MUST_FLAG: [string, string, number][] = [
   ["a marker below the write", "f.vx = 0;\n// kinetic: legacy-write (Task 18)\nconst a = 1;", 1],
   ["a marker only in a string", `const m = "kinetic: legacy-write (Task 18)"; f.vx = 0;`, 1],
   ["a marker covering one of two writes", "// kinetic: legacy-write (Task 18)\nf.vx = 0;\nf.vy = 0;", 1],
-  // A trailing marker excuses its own write and nothing after it (physics.ts and states.ts have adjacent marked pairs).
+  // A trailing marker excuses its own write and nothing after it.
   ["a trailing marker does not cover the next line", "f.vx = 0; // kinetic: legacy-write (Task 18)\nf.vy = 0;", 1],
   [
     "a trailing marker on a wrapped write does not cover the next line",
@@ -490,6 +494,15 @@ describe("fighter velocity writes", () => {
     expect(names).toContain("ai/behaviours.ts");
     expect(names.filter((name) => name.startsWith("render/"))).toEqual([]);
     expect(names.filter((name) => /\.test\.tsx?$/.test(name))).toEqual([]);
+  });
+
+  it("has no legacy write left to excuse (Plan 2 is done with them)", () => {
+    const marked = files.flatMap((file) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .flatMap((line, i) => (MARKER.test(line) ? [`${file.slice(SRC.length + 1)}:${i + 1}`] : [])),
+    );
+    expect(marked).toEqual([]);
   });
 
   it("sees the raw writes in kinetic.ts, which is exempt by file and not by blindness", () => {

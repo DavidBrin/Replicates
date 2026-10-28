@@ -51,7 +51,6 @@ import {
 import { moveScriptFrame } from "./acmd/run";
 import { clearHitRecord } from "./hitbox";
 import {
-  KINETIC_TYPE_OF_ACTION,
   carrierOf,
   kineticAdopt,
   kineticClear,
@@ -748,7 +747,11 @@ function applyMoveMomentum(f: FighterState, ctx: StateContext): boolean {
 }
 
 export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext): void {
-  const type = STATUS_TABLE[f.action]?.kineticType ?? KINETIC_TYPE_OF_ACTION[f.action];
+  const status = STATUS_TABLE[f.action];
+  if (status === undefined) {
+    throw new Error(`no status registered for "${f.action}"; import "@/engine/status"`);
+  }
+  const type = status.kineticType;
   const carrier = carrierOf(type);
   // Fold any direct write to vx/vy since the last frame into the energies.
   kineticAdopt(f, carrier);
@@ -776,7 +779,7 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     // intangible window closes, which is what makes a missed one a free punish.
     holdVertical: f.action === "airDodge" && w !== null && f.actionFrame <= w[1],
   });
-  STATUS_TABLE[f.action]?.exec?.(f, intent, ctx);
+  status.exec?.(f, intent, ctx);
 }
 
 /* -------------------------------------------------------------- landings -- */

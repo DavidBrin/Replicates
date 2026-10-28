@@ -1583,3 +1583,198 @@ when the binding is enabled.
 
 **Names.** The spec's `DurableObjectSignalling` is `adapters/doSignal.ts`, and the results
 heading for a lost match is "Connection Lost" (for a desync, "Out of Sync").
+
+---
+
+## D55 — The engine takes Ultimate's shape: params, energies, statuses, scripts
+
+**Decision.** Plan 2 restructured `src/engine` toward the engine visible through HDR,
+skyline-smash and the recomp projects, without changing what `step()` is: its signature,
+`StepEvents`, `cloneState` and `hashState` keep their shapes, and every new state field is cloned
+and hashed, which reflective tests check field by field.
+
+- **`FighterParams`** carry `fighter_param.prc` names and types as skyline-smash's
+  `FighterParamTable` declares them (`walk_speed_max`, `jump_initial_y`, `air_brake_x`,
+  `landing_frame_light`/`landing_frame`/`landing_heavy_frame` …), with rubendal SSBU-Calculator
+  values pinned by test against `research/rebuild-2026-10/ssbu_fighter_params.csv`. Pairing the
+  calculator's three landing values with the struct's three landing fields by order and type is
+  our reading (UNVERIFIED). One field is the replica's own: `jump_aerial_y_list`. Engine test
+  fixtures that have only `FighterAttributes` go through `paramsFromAttributes`, whose values
+  reproduce the legacy rules.
+- **KineticModule.** Velocity is the sum of CONTROL, STOP, GRAVITY, MOTION and DAMAGE energies
+  (`FIGHTER_KINETIC_ENERGY_ID_*`), driven by the kinetic type of the fighter's status. `vx`/`vy`
+  stay, as the sum, for every reader, and nothing outside `kinetic.ts` writes them.
+  `velocity-writes.test.ts` enforces that over every non-test source in `src/` except `render/`:
+  it reads the syntax tree and asks the type checker whether a write's target is `FighterState`'s
+  own `vx`/`vy` (any assignment operator, `++`/`--`, destructuring, `for…in/of`, `Object.assign`
+  and its relatives), and pins the forms it cannot see. The last marked legacy write went with
+  `decayLaunch` in Task 28, and a test now fails on any marker left in the tree. The pre-Plan-2
+  single-velocity helpers (`applyGravity`, `airDrift`, `walkVelocity` …) stay in `physics.ts` only
+  as marked test oracles, so the engine ships one rule of each. `kinetic.test.ts` holds
+  `kineticExec`, given legacy-equivalent params, to them over 2,000 random cases.
+- **StatusModule.** The 42 actions are status objects with `pre`/`main`/`exec`/`end`, registered
+  under SSBU-style `FIGHTER_STATUS_KIND_*` names. A status change is `changeStatus`: the old
+  status's `end`, then the new one's `pre`. The legacy switch is gone, and Task 28 removed the
+  fallback kinetic-type table too: each status declares its own type, and `advanceFighter` and
+  `applyMovement` both throw for an action with no registered status. The old switch lives on as a
+  table in `status/groups.test.ts` that every status must still match.
+- **ACMD `game_` scripts.** Every move runs as a script (`frame`/`wait`/`ATTACK`/`clear_all` …)
+  through a pure interpreter.
+  - *Timing.* Fire frames under `FT_MOTION_RATE` are exact rationals, worked out once per script in
+    BigInt (`scheduleOf`), so `runScript` is integer-only at sim time and never fires a frame
+    late. `motionRate` takes a decimal of at most six digits after the point, or a `[p, q]` pair
+    with terms up to 10⁶, and refuses anything else. A shield-damage multiplier
+    (`ATK_SET_SHIELD_SETOFF_MUL`) ends with its hitbox (UNVERIFIED).
+  - *Bones.* Hitboxes resolve through a `BoneTable`, which reaches `step()` only through
+    `SimContext.bones`; the game's context is `GAME_SIM_CONTEXT`. A baked table is checked when it
+    is built; every table writes poses into the caller's object and has an FNV-1a content
+    fingerprint.
+    `registerFighters` prepares every script at load: its schedule is built, and every bone its
+    hitboxes and grab boxes name is checked. So a script the sim could not run fails at load, not
+    mid-match. Capsule hitboxes are refused until Plan 3.
+  - *Compiled and imported.* In Plan 2 every legacy move is *compiled* to a root-bone script that
+    reproduces it exactly, proven on every frame of all 204 moves. The published scripts for all
+    eight fighters are imported as reference (`src/fighters/acmd/generated`), self-checked
+    against the calculator, and reconciled against the legacy data in a ratchet
+    (`reconcile.allow.json`, 136 entries).
+- **Online peers refuse another build.**
+  - *The hello.* Each peer sends a lobby `hello { protocol, bones, build }` when the channel opens,
+    and again on every reconnect. `build` is the commit inlined at build time
+    (`NEXT_PUBLIC_BUILD_ID`: `BUILD_ID` if set, else the git short SHA, else "dev"), so any two
+    deploys refuse each other, not just two bone tables. This is the build fingerprint D54
+    promised.
+  - *A mismatch.* A mismatch, or no hello within 5 s (`HELLO_TIMEOUT_MS`; an older build never
+    sends one), is a sticky error: "The other player is running a different version. Both reload
+    the page." The side that detects it leaves the room.
+  - *The backstop.* The start carries the same stamp. A guest that receives a mismatched, missing
+    or unreadable one sends `refuse` and leaves, and the host's /play shows the sentence in its
+    "could not start" overlay.
+
+**How it stayed safe.** A golden trace (`src/game/golden.test.ts`) plays four CPU-vs-CPU stock
+matches and a scripted fifth (`goldenScript.ts`, a timed match with the Smash Ball on).
+- *A rolling digest.* It folds a digest of everything the presentation layers read into a rolling
+  hash on *every* frame, and compares that hash every 100 frames, so even a one-frame change that
+  heals itself fails.
+- *The scripted match.* It walks both ports through what no CPU does: grabs and throws, a shield
+  break, a spot dodge, a ledge jump, and soft walk, tilt and DI.
+- *Three pins.* Every one of the 42 action states is visited, and every soft-stick path is taken.
+  `SCRIPT_HITS` names the hits the script must land: the forward throw, a forward smash, a soft
+  forward tilt, the fireball and a short-hop neutral air, with three jabs on a shield and a KO
+  counted.
+- *Re-tuning.* A fidelity task that knocks the script off a state or a hit re-tunes the script's
+  steps (Tasks 21 and 22 did). It never drops a pin entry.
+
+Every refactor task left the trace byte-identical, Task 28 included. The behaviour tasks that moved
+it (1, 17–19, 20b, 21–25) regenerated it on purpose and said why in their commits.
+
+**Behaviour that changed, each pinned by a test and sourced or marked UNVERIFIED:**
+- *Launches.* A launch decays on its own DAMAGE energy, 0.051 a frame (SmashWiki "Knockback"),
+  while gravity builds beside it. It keeps decaying after hitstun while the fighter drifts. A
+  vertical launch falls by the `damage_fly_top_*` params. A scripted move started while a launch
+  still decays ends the launch instead of carrying it frozen underneath, and a momentum hold cut
+  short by a landing hands its velocity back to drift and gravity.
+- *Jumps.* Jumps launch at SmashWiki's `√(2gh) + g/2` and peak within g/8 of their published
+  heights. A full hop first rises `jump_initial_y` over 4 frames. SmashWiki "Jump" says "for most
+  characters the initial height is 0.55× their full hop height", and the calculator's values
+  match that for all eight to within one Q12 unit. `kineticSetY` and `kineticMotion` clear
+  `jumpInitial` too, not only `kineticJump`, so an air dodge, a grab or an up special during the
+  rise ends it instead of the rise carrying on underneath.
+- *Midair jumps* follow `jump_count_max`. Kirby's five follow SmashWiki's published Ultimate
+  heights, and the index into them is clamped at both ends.
+- *The ground jump is spent.* Leaving the ground any way but a jump spends the ground jump, so
+  nobody gets an extra midair jump (SmashWiki "Double jump"). The ways are walking off, dropping
+  through a platform, a launch, letting go of a ledge, the respawn platform and the entry; that
+  each of those counts is UNVERIFIED. SmashWiki also says being grabbed restores midair jumps.
+  That is not implemented, and goes to Plan 3 Task 14.
+- *Air friction.* With the stick neutral, `air_brake_x` bleeds air drift. It is off during
+  hitstun, following SmashWiki "Knockback" ("air friction [is] disabled"). SmashWiki "Air
+  friction" says it applies in hitstun, so the engine chooses between the two pages, deliberately.
+- *Walking and running.* They accelerate by the calculator's base and additional values:
+  `walk_accel_add` + `walk_accel_mul` × deflection, and `run_accel_add` + `run_accel_mul` ×
+  deflection, braking by traction above run speed (SmashWiki "Dash"). That rule's wording comes
+  from the page's Melee section, so it is UNVERIFIED for Ultimate. The initial `dash_speed` holds
+  for 2 frames (`actionFrame <= 1`), also UNVERIFIED. Link walks at 1.247, not 1.237.
+- *Soft stick.* `Btn.Soft` reads as half deflection for walking and running (UNVERIFIED; the
+  bitfield carries one bit of magnitude). A soft walk is half speed. A soft run is reachable by
+  easing the stick mid-run, and only `run_accel_mul` halves for it. Soft DI stays a quarter
+  (`SOFT_DI_SHIFT`, D54).
+- *Landings* are light or heavy (SmashWiki "Lag"). A landing after `landing_heavy_frame` frames at
+  full fall speed takes `landing_frame`, any other `landing_frame_light`, and the length rides in
+  the `land` state's `charge`. Each of these is UNVERIFIED:
+  - the pairing of those fields with the calculator's values;
+  - the lag as frames of `land`;
+  - the `>=` threshold;
+  - that fast-fall frames count toward it;
+  - the rule that a landing in an aerial's auto-cancel window is heavy, which may be Brawl-era.
+- *The ECB seam.* Four points (bottom, top, left, right) serve walls, ceilings, landings and
+  ledges (`ecbPoints`).
+  - The wall push stops only motion into the wall, so a fighter launched away from one keeps its
+    launch.
+  - A fighter strictly above a surface lands on it rather than being pushed off its corner.
+  - A ledge is reachable from the body's side.
+
+  The seam is partial until Plan 4 derives it from bones. UNVERIFIED: the sizes, the bottom at the
+  feet in the air, a rectangular wall test, and the platform's own reach for ceilings.
+- *Ledge drops drop.* With the ECB, a fighter who let go of a ledge regrabbed it the same frame.
+  `LEDGE_REGRAB_LOCKOUT_FRAMES` = 29 is Melee's Disabled Regrab Period (SmashWiki "Ledgestall"),
+  UNVERIFIED for Ultimate. So is the rule that it locks every ledge rather than the one released.
+  It counts down through hitlag. A hit off the ledge sets it too, usually for less time than the
+  hitstun that follows.
+- *Presentation.* The renderer and the animation lab time jump clips from the engine's own rule
+  (`jumpRiseSpeeds`), and time ledge jumps from their own rise. One engine helper,
+  `chargeHoldFrame`, says where a smash charge holds, for both `attackMain` and the renderer. So a
+  released smash swings instead of holding its wind-up pose, and only a held smash glows.
+
+**Gravity on a jump's first frame.** SmashWiki's Jump page states the Smash 4/Ultimate force as
+`sqrt(2g*h) + g/2`. That reaches h only if gravity applies on every airborne frame, the first
+included (the peak is then h − g/8 + g·φ(1−φ)/2); without gravity on the first frame it would
+overshoot by about √(2gh). The same page's general section says "gravity applies to the first frame
+of an aerial but not to the first frame of a jump", without naming a game. We follow the formula:
+it is the only reading under which the published heights are the heights reached.
+
+**What the reviews caught.** Moving the roll's stop into ESCAPE_F's `end` looked equivalent and
+was not. `end` also runs when a hit interrupts the roll, which zeroed `vx` during hitlag. Nothing
+moved, but the CPU reads `vx`, so the golden trace diverged within 200 frames, and the stop stayed
+in `main`. Each of these others is fixed and now pinned by a test:
+- the first velocity guard was a line regex that missed casts, indexed receivers, destructuring
+  and `Object.assign`;
+- a float `FT_MOTION_RATE` could fire a frame late;
+- a malformed bone bake was accepted, and gave NaN hitboxes that never connected;
+- a momentum hold cut short by a landing left MOTION sliding the fighter forever;
+- an airborne Kirby with no jumps used read his height list at index −1, and his jump teleported
+  him to the floor;
+- a golden re-tune silently stopped a hit landing, hence `SCRIPT_HITS`;
+- the wall push yanked a fighter launched away from a wall back onto it;
+- a released smash held its wind-up pose on screen.
+
+**Open (UNVERIFIED), besides those above.**
+- the even split of the full hop's initial rise across its 4 frames;
+- walk speed linear in deflection (the game's `walk_slow_speed_mul`/`walk_*_ratio` have no
+  published values here);
+- the extra `ground_brake` a grounded launch loses each frame, kept for parity with the legacy
+  engine;
+- that 0.051 is Ultimate's own decay rather than the series figure the Knockback page gives.
+
+The calculator disagrees with our script reading in five places, each documented in
+`reference.test.ts`.
+
+**Found and carried, not fixed in Plan 2.**
+- A connecting pummel ends the hold (`applyHit` releases the grab), and Mario's back throw
+  launches forward (it takes the thrower's facing). Task 8's characterization tests pin both as
+  they are, and Plan 5 Task 7 changes them on purpose.
+- `applyHit`'s grab branch never clears the victim's `ledge`: Plan 3 Task 14.
+- Pikachu's forward smash lists hitbox 0 (frames 17–19) before hitbox 1 (15–16), so its charge
+  holds after its earliest hitbox. That is a data question for Plan 3.
+- The imported Mario `game_specialhi` ends where a decompiler marker truncated it (`last 300`;
+  Ultimate Frame Data ends it at 18): Plan 3 Task 18.
+- About 51 of the 136 reconcile entries, all throws, come from the parser not reading
+  `ATTACK_ABS`, so throws are not yet genuinely reconciled: Plan 5 Task 7.
+
+**Next.**
+- *Plan 3* adopts the imported scripts move by move, starting with root-bone moves. `step()` runs
+  each slot's script, but the renderer, the CPU and `chargeHoldFrame` still read its `MoveDef`.
+  They agree today because every script is compiled from that `MoveDef`, so replacing a slot's
+  script means moving those readers too.
+- *Plan 4* bakes the bone table and completes the ECB. Setting `GAME_SIM_CONTEXT.bones` to the bake
+  is not enough on its own: `registerFighters` checks scripts against `registryContext.bones`, so
+  Plan 4 must also prepare them against the bake (`src/game/simContext.ts` says so).
