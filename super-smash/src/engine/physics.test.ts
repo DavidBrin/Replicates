@@ -18,7 +18,6 @@ import {
   findLedgeGrab,
   hitstunGravityOptions,
   integrate,
-  landsWithin,
   ledgeIntangibilityFrames,
   ledgePosition,
   platformCentreX,
@@ -481,30 +480,6 @@ describe("clampShiftToStage", () => {
         }
       }
     }
-  });
-});
-
-describe("landsWithin (Plan 3, Task 12: how close to landing a shield press is a tech)", () => {
-  // The ECB's bottom is the feet here; the main platform's top is y 0 and the
-  // soft platform's y 30, over x -20..20.
-  it("is true for a fighter whose fall reaches the floor inside the frames, false beyond them", () => {
-    const f = fighter({ x: 0, y: fx(5), vy: -fx(1) });
-    expect(landsWithin(f, STAGE, ATTRS, 0, 5)).toBe(true);
-    expect(landsWithin(f, STAGE, ATTRS, 0, 4)).toBe(false);
-    expect(landsWithin(fighter({ x: 0, y: fx(5), vy: -fx(2) }), STAGE, ATTRS, 0, 4)).toBe(true);
-  });
-
-  it("is false for a fighter that is rising, level, or below the surface", () => {
-    expect(landsWithin(fighter({ x: 0, y: fx(5), vy: fx(1) }), STAGE, ATTRS, 0, 60)).toBe(false);
-    expect(landsWithin(fighter({ x: 0, y: fx(5), vy: 0 }), STAGE, ATTRS, 0, 60)).toBe(false);
-    expect(landsWithin(fighter({ x: 0, y: -fx(5), vy: -fx(1) }), STAGE, ATTRS, 0, 60)).toBe(false);
-  });
-
-  it("needs the origin over the platform's span, and counts a soft platform", () => {
-    expect(landsWithin(fighter({ x: fx(81), y: fx(5), vy: -fx(1) }), STAGE, ATTRS, 0, 60)).toBe(false);
-    // Over the soft platform (top 30), 3 above it: it lands there long before the floor.
-    expect(landsWithin(fighter({ x: 0, y: fx(33), vy: -fx(1) }), STAGE, ATTRS, 0, 3)).toBe(true);
-    expect(landsWithin(fighter({ x: fx(40), y: fx(33), vy: -fx(1) }), STAGE, ATTRS, 0, 3)).toBe(false);
   });
 });
 

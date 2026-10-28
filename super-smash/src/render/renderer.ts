@@ -457,6 +457,9 @@ export function drawDepth(f: FighterState): number {
     // Being hit, held or floored: you are the thing being done to.
     case "hitstun":
     case "tumble":
+    // Tumbling on after the hitstun is still the same body in the same flight:
+    // it stays behind its attacker instead of jumping in front when hitstun ends.
+    case "tumbleFall":
     case "grabbed":
     case "thrown":
     case "downed":

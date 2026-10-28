@@ -64,7 +64,7 @@ export interface LaunchBefore {
   readonly tumbling: boolean;
   /** In `tumbleFall`: the hitstun is over. */
   readonly tumbleFall: boolean;
-  /** In the first 15 frames of an air dodge that began out of a tumble. */
+  /** In the first 15 frames (0-14) of an air dodge that began out of a tumble. */
   readonly dodgeTech: boolean;
   readonly jumpsUsed: number;
   readonly airTime: number;
@@ -79,7 +79,7 @@ export function launchBefore(f: FighterState): LaunchBefore {
     gravity: f.kinetic.gravityY,
     tumbling: f.action === "tumble",
     tumbleFall: f.action === "tumbleFall",
-    dodgeTech: f.action === "airDodge" && f.combat.tumbleDodge && f.actionFrame <= AIR_DODGE_TECH_FRAMES,
+    dodgeTech: f.action === "airDodge" && f.combat.tumbleDodge && f.actionFrame < AIR_DODGE_TECH_FRAMES,
     jumpsUsed: f.jumpsUsed,
     airTime: f.airTime,
     ledgeLockout: f.ledgeLockout,
@@ -126,6 +126,8 @@ export function techOrBounce(
     f.combat.techWindow = 0;
     // The press was the tech: it must not wait in the buffer to become an air
     // dodge or a shield on the first actionable frame (a wall tech's is 6).
+    // UNVERIFIED: that the game spends it; one press making one action is the
+    // reading, as `presses` spends a buffered press when it fires.
     if (f.bufferedAction !== null && f.bufferedAction.kind === "shield") f.bufferedAction = null;
     f.hitstun = 0;
     f.balloon = false;

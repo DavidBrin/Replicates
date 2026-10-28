@@ -43,19 +43,25 @@ import {
   TAP_JUMP_FRAMES,
   SPOT_DODGE_INTANGIBLE,
   TECH_CEILING_INTANGIBLE,
+  TECH_FLOOR_MAX_SPEED,
   TECH_INTANGIBLE,
   TECH_WINDOW,
 } from "./constants";
+import { cloneCombat } from "./combat";
 import {
   dropThroughPlatform,
+  ecbOf,
+  findLedgeGrab,
   hitstunGravityOptions,
-  landsWithin,
+  integrate,
   platformCentreX,
+  resolveCollision,
 } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
 import { clearHitRecord } from "./hitbox";
 import {
   carrierOf,
+  cloneKinetic,
   kineticAdopt,
   kineticClear,
   kineticEndMotion,
@@ -538,20 +544,100 @@ export function airJump(f: FighterState, ctx: StateContext): boolean {
   return true;
 }
 
+/** What a fighter pressing nothing means, for the frames `landsWithin` imagines. */
+const NO_INPUT: Intent = {
+  x: 0,
+  y: 0,
+  jumpPressed: false,
+  jumpHeld: false,
+  attackPressed: false,
+  attackHeld: false,
+  specialPressed: false,
+  shieldHeld: false,
+  shieldPressed: false,
+  shieldReleased: false,
+  grabPressed: false,
+  downPressed: false,
+  wantsDash: false,
+  smash: false,
+  smashX: 0,
+  smashY: 0,
+  sdiX: 0,
+  sdiY: 0,
+  soft: false,
+};
+
 /**
- * A tumbling fighter pressing shield with the floor under it inside the tech
- * window is making a tech input, not asking for an air dodge (Plan 3, Task 12).
+ * Would this airborne tumbling fighter, left alone, land on a floor within the
+ * next `frames` frames (this one included), at a launch the floor tech takes?
+ *
+ * Exact, not an estimate: it replays the frames on a scratch copy with the
+ * movement and the collision the step itself runs (`applyMovement`,
+ * `integrate`, `resolveCollision`, with the frame number, so a moving platform
+ * is where it will be), and the ledge grab that would end the fall first. What
+ * it assumes is that nothing else happens: this frame is played with the
+ * `intent` it has, the later ones with no input, the hitstun runs down and a
+ * tumble that runs out tumbles on (`tumbleFall`), and nobody else touches it.
+ * It does not run the status's `main`, which could ask this very question again;
+ * so a fast fall pressed on this frame, which lands it sooner, is not seen
+ * (that errs towards "no", never towards a landing that does not happen).
+ *
+ * Pure: the fighter and the state are not touched. `kinetic` and `combat` are
+ * the two sub-objects the replay writes, and are copied; the arrays and the
+ * buffered action it only reads. Integer arithmetic, and only the state, the
+ * stage and the frame. Plan 3, Task 12.
+ */
+export function landsWithin(f: FighterState, intent: Intent, ctx: StateContext, frames: number): boolean {
+  const g: FighterState = { ...f, kinetic: cloneKinetic(f.kinetic), combat: cloneCombat(f.combat) };
+  const attrs = ctx.def.attributes;
+  for (let k = 0; k < frames; k++) {
+    if (k > 0) {
+      // Phase 3 for a fighter nobody touches: the hitstun runs down, and a tumble
+      // whose hitstun is over in the air tumbles on (`reelMain`).
+      if (g.hitstun > 0) g.hitstun -= 1;
+      if (g.hitstun === 0) {
+        g.balloon = false;
+        if (g.action === "tumble") startAction(g, "tumbleFall");
+      }
+    }
+    applyMovement(g, k === 0 ? intent : NO_INPUT, ctx);
+    const prevX = g.x;
+    const prevY = g.y;
+    integrate(g);
+    const speed = g.launchSpeed;
+    const frame = ctx.frame + k;
+    if (resolveCollision(g, prevX, prevY, ctx.stage, attrs, frame).landed) return speed <= TECH_FLOOR_MAX_SPEED;
+    if (!g.grounded && findLedgeGrab(g, ctx.stage, frame, ecbOf(g, attrs).half) !== null) return false;
+  }
+  return false;
+}
+
+/**
+ * A tumbling fighter pressing shield (or holding it) with the floor under it
+ * inside the tech window, and a tech input live, is making a tech input, not
+ * asking for an air dodge (Plan 3, Task 12).
  * SmashWiki "Lucario (SSBU)/Techs": "a neutral airdodge option within 15 frames
  * of landing will also activate a tech option": in the game the one press does
  * both. The replica's air dodge stops dead where it starts and could not reach
  * the floor, so a press that close to landing is read as the tech alone.
+ *
+ * Only while the tech is real: `updateTechInput` has already run, so
+ * `techWindow` is what this frame's collision will see (a press inside the
+ * 40-frame lockout opens none, and then it is an air dodge, as it was); and
+ * only if the landing falls inside what is left of it (`landsWithin`), or a
+ * shield held from an earlier frame, which techs a floor, is keeping it live
+ * (on the frame it is pressed a shield is held too, but that is the press).
  * UNVERIFIED: that reading, and `TECH_WINDOW` as how close "close" is.
  * `tumble` is the hitstun cancel's side of it (`status/damage.ts`),
  * `tumbleFall` the other (`handleActionable`).
  */
-export function techInputNearFloor(f: FighterState, ctx: StateContext): boolean {
+export function techInputNearFloor(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   if (f.action !== "tumble" && f.action !== "tumbleFall") return false;
-  return landsWithin(f, ctx.stage, ctx.def.attributes, ctx.frame, TECH_WINDOW);
+  // A shield held from before this frame keeps the floor tech live; the frame a
+  // press is made it is "held" too, which is no reason to read it as one.
+  const held = intent.shieldHeld && !intent.shieldPressed;
+  const live = Math.max(f.combat.techWindow, held ? TECH_WINDOW : 0);
+  return live > 0 && landsWithin(f, intent, ctx, live);
 }
 
 export function startAirDodge(f: FighterState, intent: Intent): boolean {
@@ -615,7 +701,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
   }
 
   // Airborne.
-  if ((p.shield || intent.shieldHeld) && !techInputNearFloor(f, ctx) && startAirDodge(f, intent)) return true;
+  if ((p.shield || intent.shieldHeld) && !techInputNearFloor(f, intent, ctx) && startAirDodge(f, intent)) return true;
   if (p.special && beginSpecial(f, ctx, specialSlot(intent))) return true;
   if (p.attack) {
     const slot = aerialSlot(f, intent);

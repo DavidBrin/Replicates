@@ -34,7 +34,14 @@ import { kineticSetX } from "./kinetic";
 import { resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
-import { GRAB_MASH_BUTTON, GRAB_MIN_FRAMES, GRAB_RELEASE_IMMUNITY, grabHoldFrames } from "./states";
+import {
+  GRAB_MASH_BUTTON,
+  GRAB_MIN_FRAMES,
+  GRAB_RELEASE_IMMUNITY,
+  grabHoldFrames,
+  interpretInput,
+  landsWithin,
+} from "./states";
 import { Btn } from "./types";
 import type {
   FighterAttributes,
@@ -1274,9 +1281,10 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
   });
 
   // rubendal SSBU-Calculator `js/knockback.js`: the floor is techable at a launch
-  // of 3 or less; a tumbling fighter bounces off at 0.8 or more. SmashWiki
-  // "Knockback": a bounce costs 5% in Ultimate; SmashWiki "Hitstun": hitstun
-  // after a bounce is 0.8× (the Smash 4 value Ultimate keeps).
+  // of 3 or less; a tumbling fighter bounces off at 0.8 or more, keeping 0.9 of
+  // the launch off a floor (`damage_fly_reflect_d_speed_mul`; the wall and the
+  // ceiling keep 0.95, below). SmashWiki "Hitstun": hitstun after a bounce is
+  // 0.8× (the Smash 4 value Ultimate keeps).
   it("bounces off the floor when too fast to tech, keeping 0.9 of the launch and 0.8 of the hitstun", () => {
     const frames = until(flying(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0));
     const k = frames.findIndex((f) => f.state.fighters[1].vy > 0);
@@ -1575,9 +1583,18 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
   });
 
   // Keeping the floor's cap of 3 after the hitstun is UNVERIFIED (`TECH_FLOOR_MAX_SPEED`).
-  it("lies down rather than techs a landing faster than 3", () => {
-    const frames = until(falling(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0));
+  it("lies down rather than techs a landing faster than 3 (with the air dodge spent)", () => {
+    const s = falling(0, 6, 0, -3.5);
+    s.fighters[1].airDodged = true;
+    const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0));
     expect(frames[touched(frames)].state.fighters[1].action).toBe("downed");
+  });
+
+  // A press that could not tech is not read as the tech: with the dodge to spend
+  // it is the air dodge, not a swallowed press.
+  it("air-dodges a press whose landing is faster than 3, rather than swallowing it", () => {
+    const frames = until(falling(0, 6, 0, -3.5), (i) => (i === 0 ? Btn.Shield : 0), 3);
+    expect(frames[0].state.fighters[1].action).toBe("airDodge");
   });
 
   // SmashWiki "Tech": the character "must be in hitstun" to tech a wall or ceiling.
@@ -1632,15 +1649,18 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     return { frames, met: frames.findIndex((f) => f.state.fighters[1].action !== "airDodge") };
   }
 
+  // The dodge's starting frame is its frame 0, and it already moves: a floor met on
+  // `actionFrame` 14 is the 15th frame (height 47.9 is 15 steps of the dodge's 3.2),
+  // `actionFrame` 15 the 16th (48.5 is 16 steps).
   it("techs a floor met on the 15th frame of the air dodge it cancelled hitstun with", () => {
-    const { frames, met } = cancelDown(51);
-    expect(met).toBe(AIR_DODGE_TECH_FRAMES);
+    const { frames, met } = cancelDown(47.9);
+    expect(met).toBe(AIR_DODGE_TECH_FRAMES - 1);
     expect(frames[met].state.fighters[1].action).toBe("tech");
   });
 
   it("lands with landing lag on the 16th frame of it", () => {
-    const { frames, met } = cancelDown(54);
-    expect(met).toBe(AIR_DODGE_TECH_FRAMES + 1);
+    const { frames, met } = cancelDown(48.5);
+    expect(met).toBe(AIR_DODGE_TECH_FRAMES);
     expect(frames[met].state.fighters[1].action).toBe("landingLag");
   });
 
@@ -1648,7 +1668,7 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     const frames = until(falling(0, 30, 0, -0.6), (i) => (i === 0 ? Btn.Shield | Btn.Down : 0), 30);
     const k = frames.findIndex((f) => f.state.fighters[1].action !== "airDodge");
     expect(frames[k].state.fighters[1].action).toBe("tech");
-    expect(k).toBeLessThanOrEqual(AIR_DODGE_TECH_FRAMES);
+    expect(k).toBeLessThan(AIR_DODGE_TECH_FRAMES);
     // The same dodge with the stick across rolls (the floor tech's roll).
     const roll = until(falling(0, 30, 0, -0.6), (i) => (i === 0 ? Btn.Shield | Btn.Down | Btn.Right : Btn.Right), 30);
     const r = roll.findIndex((f) => f.state.fighters[1].action !== "airDodge");
@@ -1676,14 +1696,14 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     };
     const floor = until(fall(0, 30), (i) => (i === 0 ? Btn.Shield | Btn.Down : 0), 30);
     const k = floor.findIndex((f) => f.state.fighters[1].action !== "airDodge");
-    expect(k).toBeLessThanOrEqual(AIR_DODGE_TECH_FRAMES);
+    expect(k).toBeLessThan(AIR_DODGE_TECH_FRAMES);
     expect(floor[k].state.fighters[1].action).toBe("landingLag");
     const wall = until(fall(100, -20), (i) => (i === 0 ? Btn.Shield | Btn.Left : 0), 12);
     expect(wall.every((f) => f.state.fighters[1].action === "airDodge")).toBe(true);
   });
 
   it("clears the trigger when the air dodge ends", () => {
-    const { frames } = cancelDown(51);
+    const { frames } = cancelDown(47.9);
     expect(frames[0].state.fighters[1].combat.tumbleDodge).toBe(true);
     expect(frames.at(-1)!.state.fighters[1].combat.tumbleDodge).toBe(false);
   });
@@ -1697,6 +1717,108 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     const frames = until(s, (i) => (i === 0 ? Btn.Shield : 0), 20);
     expect(frames.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
     expect(frames[landing(frames)].state.fighters[1].action).toBe("tech");
+  });
+
+  /* -- fix round 2: the press is the tech only while a tech is live, and only if the landing is real -- */
+
+  /** `until`, on a stage of the caller's choosing. */
+  const onStage = (s: GameState, stage: StageDef, input: (i: number) => InputFrame, n: number) =>
+    play(s, n, (i) => [0, input(i)], ctxFor(BASE_DEF, stage));
+  const actionAt = (frames: Frame[], i: number) => frames[i].state.fighters[1].action;
+
+  // `updateTechInput` opens no window inside the 40-frame lockout, so a second
+  // press there is no tech input: it air-dodges, as it did before this task.
+  it("air-dodges a press made inside the tech lockout, 2, 5 or 9 frames before landing", () => {
+    const hitstunOver = () => {
+      // Its hitstun ends on frame 14, after the first press has left the 9-frame buffer.
+      const s = flying(0, 45, 0, -0.6);
+      s.fighters[1].hitstun = 14;
+      return s;
+    };
+    const dry = until(hitstunOver(), (i) => (i === 0 ? Btn.Shield : 0), 60);
+    const k = dry.findIndex((f) => f.state.fighters[1].action === "downed");
+    expect(k).toBeGreaterThan(TECH_WINDOW + 9);
+    for (const early of [2, 5, 9]) {
+      const frames = until(hitstunOver(), (i) => (i === 0 || i === k - early ? Btn.Shield : 0), 60);
+      expect(actionAt(frames, k - early - 1), `${early} before`).toBe("tumbleFall");
+      expect(actionAt(frames, k - early), `${early} before`).toBe("airDodge");
+      expect(frames[k - early].state.fighters[1].combat.techWindow, `${early} before`).toBe(0);
+    }
+  });
+
+  it("reads the same press as the tech while the first press's window is still open at the landing", () => {
+    // Pressed on the way down at 0 and again at 6, the 11-frame window of the first
+    // still has 5 frames: a landing inside them techs, a landing outside them does not.
+    const run = (y: number) => {
+      const s = flying(0, y, 0, -0.6);
+      s.fighters[1].actionFrame = 38; // the cancel opens on 41, at frame 3
+      return until(s, (i) => (i === 0 || i === 6 ? Btn.Shield : 0), 30);
+    };
+    const landsAt = (y: number) => landing(until(flying(0, y, 0, -0.6), () => 0, 30));
+    const near = [...Array(40).keys()].map((n) => 4 + n * 0.5).find((y) => landsAt(y) === 9)!;
+    const far = [...Array(40).keys()].map((n) => 4 + n * 0.5).find((y) => landsAt(y) === 13)!;
+    expect(run(near).some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
+    expect(run(near)[9].state.fighters[1].action).toBe("tech");
+    expect(actionAt(run(far), 6)).toBe("airDodge");
+  });
+
+  // `landsWithin` replays the frames with the step's own movement and collision.
+  // A soft platform the fighter is over now, and drifts off before it gets there:
+  it("air-dodges a press above a soft platform the fighter will drift off, rather than swallowing it", () => {
+    const soft: StageDef = {
+      ...STAGE,
+      platforms: [...STAGE.platforms, { x: 0, y: fx(30), halfWidth: fx(20), soft: true, ledges: false }],
+    };
+    for (const x of [15, 18]) {
+      const frames = onStage(falling(x, 33, 1.5, -0.4), soft, (i) => (i === 0 ? Btn.Shield : 0), 40);
+      expect(actionAt(frames, 0), `x ${x}`).toBe("airDodge");
+    }
+    // ...and the same press over its middle is the tech, as it lands on it.
+    const over = onStage(falling(0, 33, 0, -0.4), soft, (i) => (i === 0 ? Btn.Shield : 0), 40);
+    expect(over.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
+    expect(over[touched(over)].state.fighters[1].action).toBe("tech");
+  });
+
+  // Smashville's platform moves: it is where it will be, by the frame number.
+  it("air-dodges a press above a soft platform that moves out from under the fighter", () => {
+    const moving: StageDef = {
+      ...STAGE,
+      platforms: [
+        ...STAGE.platforms,
+        { x: 0, y: fx(30), halfWidth: fx(4), soft: true, ledges: false, motion: { kind: "sweep", amplitude: fx(40), periodFrames: 120 } },
+      ],
+    };
+    const frames = onStage(falling(0, 33, 0, -1), moving, (i) => (i === 0 ? Btn.Shield : 0), 6);
+    expect(actionAt(frames, 0)).toBe("airDodge");
+  });
+
+  // A launch still slowing while gravity holds the fall at its terminal speed: the
+  // fall is 2.5 a frame, less 0.051 more each frame, so 11 frames cover 24.13.
+  it("air-dodges a press above the floor by more than its slowing fall reaches in the window", () => {
+    const slowing = (y: number) => {
+      const s = falling(0, y, 0, -1);
+      s.fighters[1].kinetic.gravityY = -fx(1.5);
+      s.fighters[1].vy = -fx(2.5);
+      return s;
+    };
+    const press = (y: number) => until(slowing(y), (i) => (i === 0 ? Btn.Shield : 0), 40);
+    for (const y of [24.3, 25, 26, 27]) expect(actionAt(press(y), 0), `drop ${y}`).toBe("airDodge");
+    const reached = press(24);
+    expect(reached.some((f) => f.state.fighters[1].action === "airDodge")).toBe(false);
+    expect(reached[touched(reached)].state.fighters[1].action).toBe("tech");
+  });
+
+  it("replays on a scratch copy: the fighter and its energies are left as they were", () => {
+    const s = falling(0, 20, 0, -1);
+    const v = s.fighters[1];
+    v.combat.techWindow = 5;
+    v.bufferedAction = { kind: "shield", frame: 1 } as FighterState["bufferedAction"];
+    const ctx = { def: BASE_DEF, stage: STAGE, frame: 1, fighters: s.fighters };
+    const before = JSON.stringify(v);
+    const intent = interpretInput(v, 0, 0);
+    expect(landsWithin(v, intent, ctx, 11)).toBe(false);
+    expect(landsWithin(v, intent, ctx, 40)).toBe(true);
+    expect(JSON.stringify(v)).toBe(before);
   });
 });
 

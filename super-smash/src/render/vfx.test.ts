@@ -197,6 +197,16 @@ describe("launch trails", () => {
     expect(v.particles).toHaveLength(0);
   });
 
+  it("goes on while a fighter tumbles on after its hitstun, as long as the launch is that fast", () => {
+    const flying = createVfx();
+    trackLaunchTrails(flying, launched({ action: "tumbleFall", launchSpeed: fx(2) }));
+    expect(flying.particles.length).toBeGreaterThan(0);
+    // A plain fall's speed is not a launch: the launch has to be what is fast.
+    const falling = createVfx();
+    trackLaunchTrails(falling, launched({ action: "tumbleFall", vx: 0, vy: -fx(2.4), launchSpeed: fx(0.3) }));
+    expect(falling.particles).toHaveLength(0);
+  });
+
   it("stays quiet for a fighter who is barely moving, and for one not in hitstun", () => {
     const slow = createVfx();
     trackLaunchTrails(slow, launched({ vx: fx(0.3), vy: 0 }));

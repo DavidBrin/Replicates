@@ -9,6 +9,7 @@ import {
   INTERNAL_WIDTH,
   INTERPOLATION_SNAP_UNITS,
   computeLetterbox,
+  drawDepth,
   drawScene,
   interpolatePosition,
   projectileVisual,
@@ -243,6 +244,16 @@ describe("draw order", () => {
     drawScene(on, renderState({ showBlastZone: true }), null, createCamera(stage), 1);
     expect(countOf(off, "setLineDash")).toBe(0);
     expect(countOf(on, "setLineDash")).toBeGreaterThan(0);
+  });
+});
+
+describe("draw depth", () => {
+  it("draws a fighter being hit or floored behind, and keeps a tumble behind when its hitstun ends", () => {
+    for (const action of ["hitstun", "tumble", "tumbleFall", "downed"] as const) {
+      expect(drawDepth(makeFighter({ action })), action).toBe(0);
+    }
+    expect(drawDepth(makeFighter({ action: "fall" }))).toBe(1);
+    expect(drawDepth(makeFighter({ action: "attack" }))).toBe(2);
   });
 });
 

@@ -76,6 +76,9 @@ export function createPoseBlends(ports = 4): PoseBlend[] {
 /**
  * Whether arriving in this clip is something the fighter did, or something that
  * was done to them.
+ *
+ * `tumbleFall` is not here: it is entered from `tumble`, which is the same clip,
+ * so nothing arrives, and a fighter in it is free to act.
  */
 function isImposed(action: FighterState["action"]): boolean {
   switch (action) {

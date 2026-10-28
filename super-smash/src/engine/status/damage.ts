@@ -50,7 +50,7 @@ function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): bool
   const aerial = f.actionFrame >= HITSTUN_CANCEL_AERIAL_FRAME && f.launchSpeed < HITSTUN_CANCEL_AERIAL_SPEED;
   if (!dodge && !aerial) return false;
   const buffered = peekBuffer(f, ctx.frame);
-  if (dodge && !f.airDodged && (intent.shieldPressed || buffered === "shield") && !techInputNearFloor(f, ctx)) {
+  if (dodge && !f.airDodged && (intent.shieldPressed || buffered === "shield") && !techInputNearFloor(f, intent, ctx)) {
     if (buffered === "shield") f.bufferedAction = null;
     f.hitstun = 0;
     f.balloon = false;

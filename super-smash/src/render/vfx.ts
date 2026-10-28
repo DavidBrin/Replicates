@@ -364,7 +364,11 @@ export const LAUNCH_TRAIL_SPEED = 1.6;
 
 export function trackLaunchTrails(v: VfxState, state: GameState): void {
   for (const f of state.fighters) {
-    if (f.action !== "hitstun" && f.action !== "tumble" && f.action !== "thrown") continue;
+    // A fighter whose hitstun ran out mid-flight tumbles on (`tumbleFall`): the
+    // streak goes on for as long as the launch itself is still that fast, which
+    // is not `vx`/`vy` there (a plain fall is as fast as 2.4).
+    const tumblingOn = f.action === "tumbleFall" && toFloat(f.launchSpeed) >= LAUNCH_TRAIL_SPEED;
+    if (f.action !== "hitstun" && f.action !== "tumble" && f.action !== "thrown" && !tumblingOn) continue;
     // Hitlag is the freeze *before* the launch. A trail during it would be a
     // streak coming off a fighter who has not moved yet.
     if (f.hitlag > 0) continue;

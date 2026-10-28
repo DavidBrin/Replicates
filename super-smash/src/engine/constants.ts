@@ -384,7 +384,8 @@ export const BOUNCE_SURFACE_LAUNCH_RATIO: Ratio = [19, 20];
 export const BOUNCE_HITSTUN_RATIO: Ratio = [4, 5];
 /**
  * An air dodge begun out of a tumble that meets a surface in its first 15
- * frames is a tech: SmashWiki "Lucario (SSBU)/Techs" ("neutral and directional
+ * frames is a tech (`actionFrame` 0-14: the dodge's starting frame is its frame
+ * 0, and it already moves and collides, so 0-14 are the first 15): SmashWiki "Lucario (SSBU)/Techs" ("neutral and directional
  * air dodges can be used for every form of teching during the first 15
  * frames", "After 16 frames ... no longer able to tech against surfaces") and
  * the vanilla param `air_escape_passive_trigger_frame` 15 (`common.xml` L306).
