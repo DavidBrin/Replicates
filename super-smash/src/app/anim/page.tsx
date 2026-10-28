@@ -60,7 +60,7 @@ const GROUPS: ReadonlyArray<readonly [string, readonly ActionState[]]> = [
   ["defence", ["shieldStart", "shield", "shieldRelease", "shieldBroken", "roll", "spotDodge", "airDodge"]],
   ["reeling", ["hitstun", "tumble", "tumbleFall", "downed", "getUp", "grabbed", "thrown"]],
   ["tech", ["tech", "techRoll", "techWall", "techCeiling"]],
-  ["ledge", ["ledgeHang", "ledgeGetUp", "ledgeJump"]],
+  ["ledge", ["ledgeHang", "ledgeGetUp", "ledgeJump", "ledgeTrumped"]],
   ["offence", ["attack", "special", "grab", "throw"]],
 ];
 
@@ -152,7 +152,7 @@ export function groundedFor(o: Options): boolean {
  * air and nothing re-grounds the fighter while they hang — `grabLedge` never
  * touches `grounded`, and `applyMovement` returns early for anyone on a ledge.
  * They were missing because the first version of this listed the three states
- * whose names say airborne.
+ * whose names say airborne. `ledgeTrumped` is the fall that follows losing it.
  *
  * `ledgeGetUp` is deliberately absent: it starts off the stage and finishes on
  * it, so either answer is wrong for half the clip, and "on the ground" is right
@@ -164,6 +164,7 @@ const AIRBORNE: ReadonlySet<ActionState> = new Set([
   "airDodge",
   "ledgeHang",
   "ledgeJump",
+  "ledgeTrumped",
   // A tumbling fighter who touches the ground becomes `downed` (or a tech) on
   // that frame, so every frame that is still `tumble` or `tumbleFall` is a frame
   // in the air. A wall or ceiling tech is in the air too; the floor techs

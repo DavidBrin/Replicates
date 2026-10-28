@@ -265,6 +265,12 @@ describe("state to pose", () => {
     }
   });
 
+  // Plan 3, Task 15: a fighter whose ledge was taken falls from it (no clip of its own).
+  it("draws a trumped fighter falling, and diving once it fast falls", () => {
+    expect(poseNameFor({ action: "ledgeTrumped", move: "jab1", jumpsUsed: 1, fastFalling: false })).toBe("fall");
+    expect(poseNameFor({ action: "ledgeTrumped", move: "jab1", jumpsUsed: 1, fastFalling: true })).toBe("fastFall");
+  });
+
   const SLOTS: MoveSlot[] = [
     "jab1", "jab2", "jab3", "rapidJab", "ftilt", "utilt", "dtilt", "dashAttack",
     "fsmash", "usmash", "dsmash", "nair", "fair", "bair", "uair", "dair",

@@ -158,8 +158,9 @@ describe("whether the lab thinks a fighter is on the ground", () => {
   });
 
   it("treats hanging off a ledge as being in the air", () => {
-    // A ledge is grabbed from the air and nothing re-grounds a hanging fighter.
-    for (const action of ["ledgeHang", "ledgeJump"] as const) {
+    // A ledge is grabbed from the air and nothing re-grounds a hanging fighter;
+    // one whose ledge was taken falls from it (Plan 3, Task 15).
+    for (const action of ["ledgeHang", "ledgeJump", "ledgeTrumped"] as const) {
       expect(groundedFor(opts({ action })), `${action} is on the floor`).toBe(false);
     }
   });

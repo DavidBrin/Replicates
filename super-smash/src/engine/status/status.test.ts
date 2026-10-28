@@ -71,7 +71,7 @@ const CTX = { def: {} as FighterDef, stage: { platforms: [] }, frame: 1, fighter
 describe("the status alias table", () => {
   it("names an SSBU-style kind for every replica action, one-to-one", () => {
     const actions = Object.keys(STATUS_KIND_OF_ACTION) as ActionState[];
-    expect(actions).toHaveLength(47);
+    expect(actions).toHaveLength(48);
     const kinds = new Set(actions.map((a) => STATUS_KIND_OF_ACTION[a]));
     expect(kinds.size).toBe(actions.length);
     for (const a of actions) expect(ACTION_OF_STATUS_KIND[STATUS_KIND_OF_ACTION[a]]).toBe(a);
@@ -88,6 +88,7 @@ describe("the status alias table", () => {
     expect(statusKindOf({ action: "techWall" })).toBe("FIGHTER_STATUS_KIND_PASSIVE_WALL");
     expect(statusKindOf({ action: "techCeiling" })).toBe("FIGHTER_STATUS_KIND_PASSIVE_CEIL");
     expect(statusKindOf({ action: "tumbleFall" })).toBe("FIGHTER_STATUS_KIND_DAMAGE_FALL");
+    expect(statusKindOf({ action: "ledgeTrumped" })).toBe("FIGHTER_STATUS_KIND_CLIFF_ROBBED");
   });
 });
 

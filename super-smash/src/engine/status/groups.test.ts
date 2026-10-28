@@ -106,7 +106,8 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   respawnPlatform: "NONE",
   dead: "NONE",
   entering: "FALL",
-  // Plan 3, Task 12: new statuses, no legacy counterpart.
+  // Plan 3, Tasks 12 and 15: new statuses, no legacy counterpart.
+  ledgeTrumped: "GROUND_STOP",
   tech: "GROUND_STOP",
   techRoll: "MOTION",
   techWall: "GROUND_STOP",
@@ -165,6 +166,8 @@ const MIGRATED = [
   "fall",
   "land",
   "landingLag",
+  // Plan 3, Task 15
+  "ledgeTrumped",
   // Plan 3, Task 12
   "tech",
   "techRoll",

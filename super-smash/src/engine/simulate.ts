@@ -105,6 +105,7 @@ import {
   releaseGrab,
   shieldCovers,
   startAction,
+  trumpLedge,
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
@@ -660,6 +661,15 @@ export function step(
           f.ledgeRegrabs >= LEDGE_REGRAB_LIMIT
             ? 0
             : ledgeIntangibilityFrames(f.airTime, f.damage, f.ledgeRegrabs);
+        // Somebody already on it is trumped off it (Plan 3, Task 15). Phase 6
+        // comes after, so a grab that reaches the fighter trumped here still
+        // lands on it, and then the held fighter is placed at its captor (5b).
+        for (let j = 0; j < s.fighters.length; j++) {
+          const other = s.fighters[j];
+          if (j === i || other.ledge === null) continue;
+          if (other.ledge.platform !== grab.platform || other.ledge.side !== grab.side) continue;
+          trumpLedge(other, ecbOf(other, defs[j].attributes).half + ONE);
+        }
         grabLedge(f, grab.platform, grab.side, pos.x, pos.y, frames);
       }
     }

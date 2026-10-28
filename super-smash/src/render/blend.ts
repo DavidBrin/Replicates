@@ -88,6 +88,8 @@ function isImposed(action: FighterState["action"]): boolean {
     case "thrown":
     case "downed":
     case "shieldBroken":
+    // The ledge taken from under it (Plan 3, Task 15): done to the fighter.
+    case "ledgeTrumped":
     case "dead":
       return true;
     default:

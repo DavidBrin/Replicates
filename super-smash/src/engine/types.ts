@@ -137,6 +137,7 @@ export type ActionState =
   | "ledgeAttack"
   | "ledgeRoll"
   | "ledgeJump"
+  | "ledgeTrumped"
   // meta
   | "respawnPlatform"
   | "dead"

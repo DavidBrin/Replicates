@@ -1,13 +1,13 @@
 /**
  * Ledge statuses: CLIFF_WAIT, CLIFF_CLIMB, CLIFF_ATTACK, CLIFF_ESCAPE,
- * CLIFF_JUMP1 (Plan 2, Task 9).
+ * CLIFF_JUMP1 (Plan 2, Task 9) and CLIFF_ROBBED (Plan 3, Task 15).
  *
  * `main` bodies are the legacy `advanceFighter` cases, moved verbatim. The
  * four ledge options share one `main`, parameterised by their length, as the
  * cases did when `advanceFighter` was one switch.
  */
 
-import { LEDGE_REGRAB_LIMIT, LEDGE_REGRAB_LOCKOUT_FRAMES } from "../constants";
+import { LEDGE_REGRAB_LIMIT, LEDGE_REGRAB_LOCKOUT_FRAMES, LEDGE_TRUMPED_FRAMES } from "../constants";
 import {
   LEDGE_ATTACK_FRAMES,
   LEDGE_GETUP_FRAMES,
@@ -99,10 +99,27 @@ export const STATUS_CLIFF_JUMP1: FighterStatus = {
   main: ledgeOption(LEDGE_JUMP_FRAMES),
 };
 
+/**
+ * CLIFF_ROBBED (Plan 3, Task 15): the ledge was taken from under this fighter
+ * (`trumpLedge`). It falls, with no say in where, and may not act until the lag
+ * is over: no `handleActionable`, no buffering, and no ledge (`ledgeLockout`,
+ * set for the same length). GROUND_STOP in the air is exactly that: gravity, air
+ * friction, no air control.
+ */
+export const STATUS_CLIFF_ROBBED: FighterStatus = {
+  kind: "FIGHTER_STATUS_KIND_CLIFF_ROBBED",
+  action: "ledgeTrumped",
+  kineticType: "GROUND_STOP",
+  main(f) {
+    if (f.actionFrame >= LEDGE_TRUMPED_FRAMES) startAction(f, "fall");
+  },
+};
+
 export const CLIFF_STATUSES: readonly FighterStatus[] = [
   STATUS_CLIFF_WAIT,
   STATUS_CLIFF_CLIMB,
   STATUS_CLIFF_ATTACK,
   STATUS_CLIFF_ESCAPE,
   STATUS_CLIFF_JUMP1,
+  STATUS_CLIFF_ROBBED,
 ];

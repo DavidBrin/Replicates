@@ -10,6 +10,7 @@ import {
   LAUNCH_SPEED_DECAY,
   LAUNCH_SPEED_RATIO,
   LEDGE_REGRAB_LOCKOUT_FRAMES,
+  LEDGE_TRUMPED_FRAMES,
   SDI_DISTANCE,
   SHIELD_BREAK_RESET,
   SHIELD_DECAY_PER_FRAME,
@@ -31,7 +32,7 @@ import {
 } from "./knockback";
 import { attackerShieldPushback, shieldDamage, shieldPushback } from "./shield";
 import { kineticSetX } from "./kinetic";
-import { resolveCollision } from "./physics";
+import { findLedgeGrab, resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
 import {
@@ -2526,6 +2527,185 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
 
     it("leaves a forward throw's direction alone when its box points forward", () => {
       expect(launch(throwing("fthrow", fx(135), fx(4)), Btn.Right).vx).toBeLessThan(0);
+    });
+  });
+});
+
+/* ------------------------------------------------ Task 15: ledge trump -- */
+
+describe("ledge trump (Plan 3, Task 15)", () => {
+  const HANG_X = fx(80);
+
+  /** Put `f` on a ledge of the stage (the right-hand one unless told), hanging, past its grab's intangibility. */
+  function hang(f: FighterState, side: 1 | -1 = 1, intangible = 50): void {
+    Object.assign(f, { x: side * HANG_X, y: 0, grounded: false, platform: -1, action: "ledgeHang", actionFrame: 5, intangible });
+    f.ledge = { platform: 0, side };
+    f.facing = -side;
+  }
+
+  /** `f` drops onto the right-hand ledge from `above` units over it, beside the stage and facing it. */
+  function dropOnto(f: FighterState, above = 0): void {
+    Object.assign(f, { x: fx(84), y: fx(-2) + fx(above), grounded: false, platform: -1, action: "fall", actionFrame: 3, facing: -1 });
+    f.kinetic.gravityY = -fx(1);
+    f.vy = -fx(1);
+  }
+
+  /** Three fighters, all standing on the stage. */
+  function three(): GameState {
+    const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctxFor());
+    for (const f of s.fighters) Object.assign(f, { grounded: true, platform: 0, y: 0, action: "stand", intangible: 0 });
+    return s;
+  }
+
+  // SmashWiki "Ledge trump" (https://www.ssbwiki.com/Ledge_trump): grabbing an
+  // occupied ledge removes the fighter on it, who "cannot take any action for a
+  // moment" — and loses the ledge's intangibility. The port order decides which of
+  // the two the step loop reaches first, and the trump must not care.
+  describe.each([1, 0] as const)("fighter %i hangs on the right ledge, the other drops onto it", (hanger) => {
+    const trumper = 1 - hanger;
+
+    /** `n` frames of it; `inputs(i)` gives frame i's keys. `at` is the frame the ledge is taken. */
+    function trump(
+      n = LEDGE_TRUMPED_FRAMES + 2,
+      inputs: (i: number) => readonly InputFrame[] = () => [0, 0],
+    ): { frames: Frame[]; at: number } {
+      const s = standing();
+      hang(s.fighters[hanger]);
+      dropOnto(s.fighters[trumper]);
+      const frames = play(s, n, inputs);
+      const at = frames.findIndex((f) => f.state.fighters[trumper].ledge !== null);
+      expect(at, "the ledge should be taken").toBeGreaterThanOrEqual(0);
+      return { frames, at };
+    }
+
+    it("takes the ledge from the fighter on it, who drops off without intangibility", () => {
+      const { frames, at } = trump();
+      const after = frames[at].state.fighters;
+      expect(after[trumper].ledge).toEqual({ platform: 0, side: 1 });
+      expect(after[hanger]).toMatchObject({ ledge: null, action: "ledgeTrumped", actionFrame: 0, intangible: 0 });
+    });
+
+    it("gives control back after the trump's lag", () => {
+      expect(trump().frames.at(-1)!.state.fighters[hanger].action).toBe("fall");
+    });
+
+    // "No frame count is published" (UNVERIFIED): exactly `LEDGE_TRUMPED_FRAMES` frames, the one it
+    // starts on included, and then a fall.
+    it("lasts exactly LEDGE_TRUMPED_FRAMES frames", () => {
+      const { frames, at } = trump();
+      const lag = frames.filter((f) => f.state.fighters[hanger].action === "ledgeTrumped");
+      expect(lag).toHaveLength(LEDGE_TRUMPED_FRAMES);
+      expect(frames[at + LEDGE_TRUMPED_FRAMES - 1].state.fighters[hanger].action).toBe("ledgeTrumped");
+      expect(frames[at + LEDGE_TRUMPED_FRAMES].state.fighters[hanger].action).toBe("fall");
+    });
+
+    it("cannot take the ledge back while it cannot act, and the fighter who took it keeps it", () => {
+      const { frames, at } = trump();
+      for (const f of frames.slice(at, at + LEDGE_TRUMPED_FRAMES)) {
+        expect(f.state.fighters[hanger].ledge, `frame ${f.state.frame}`).toBeNull();
+        expect(f.state.fighters[trumper].ledge).toEqual({ platform: 0, side: 1 });
+      }
+    });
+
+    // The fall takes the fighter out of the grab box within a dozen frames, so a lockout
+    // that ran short would not show above: ask `findLedgeGrab` at the ledge instead.
+    it("is kept off every ledge for the whole lag, wherever it is", () => {
+      const { frames, at } = trump();
+      for (const f of frames.slice(at, at + LEDGE_TRUMPED_FRAMES)) {
+        const h: FighterState = { ...f.state.fighters[hanger], x: fx(84), y: fx(-2), vy: -fx(1), grounded: false };
+        expect(h.action).toBe("ledgeTrumped");
+        expect(findLedgeGrab(h, STAGE, f.state.frame, ATTRS.width), `frame ${f.state.frame}`).toBeNull();
+      }
+    });
+
+    it("cannot act: no key does anything, and the stick does not steer the fall", () => {
+      const quiet = trump();
+      const everyKey = Btn.Left | Btn.Attack | Btn.Special | Btn.Shield | Btn.Jump | Btn.Grab;
+      // Pressed afresh on every other frame, so each is a press, not a hold.
+      const mashing = trump(LEDGE_TRUMPED_FRAMES + 2, (i) => (hanger === 0 ? [i % 2 === 0 ? everyKey : 0, 0] : [0, i % 2 === 0 ? everyKey : 0]));
+      expect(mashing.at).toBe(quiet.at);
+      for (let i = quiet.at; i < quiet.at + LEDGE_TRUMPED_FRAMES; i++) {
+        const h = mashing.frames[i].state.fighters[hanger];
+        expect(h, `frame ${i}`).toMatchObject({ action: "ledgeTrumped", actionFrame: i - quiet.at });
+        expect(h.x).toBe(quiet.frames[i].state.fighters[hanger].x);
+      }
+    });
+
+    // The trumped fighter stands on the ledge point while it hangs, so it is set
+    // outboard by its body's reach (UNVERIFIED placement until Plan 4's ECB) and
+    // then falls.
+    it("is set clear of the stage and falls", () => {
+      const { frames, at } = trump();
+      const h = frames[at].state.fighters[hanger];
+      expect(h.x).toBe(HANG_X + ATTRS.width + ONE);
+      expect(h.y).toBe(0);
+      expect(h.vx).toBe(0);
+      expect(h.grounded).toBe(false);
+      const ys = frames.slice(at, at + LEDGE_TRUMPED_FRAMES).map((f) => f.state.fighters[hanger].y);
+      for (let i = 1; i < ys.length; i++) expect(ys[i], `frame ${at + i}`).toBeLessThan(ys[i - 1]);
+      // Outboard of the stage the whole way down: it neither lands nor is pushed.
+      expect(frames[at + LEDGE_TRUMPED_FRAMES - 1].state.fighters[hanger].x).toBeGreaterThan(HANG_X);
+    });
+  });
+
+  it("takes the ledge from the fighter on that side only", () => {
+    const s = three();
+    dropOnto(s.fighters[0]);
+    hang(s.fighters[1]);
+    hang(s.fighters[2], -1, 100);
+    const frames = play(s, LEDGE_TRUMPED_FRAMES + 2, () => [0, 0, 0]);
+    expect(frames.at(-1)!.state.fighters[1].action).toBe("fall");
+    // The one on the far ledge is where it was, intangibility counting down as usual.
+    for (const f of frames) {
+      expect(f.state.fighters[2], `frame ${f.state.frame}`).toMatchObject({
+        action: "ledgeHang",
+        ledge: { platform: 0, side: -1 },
+        intangible: 100 - f.state.frame,
+      });
+    }
+  });
+
+  describe("and a grab (Task 14), on the one frame", () => {
+    /**
+     * Fighter 0 stands on the stage and has its grab out on the ledge (the grab's
+     * first live frame is the first step); fighter 1 hangs there; fighter 2 drops
+     * onto the ledge from `above` units over it: none, and it is there on that
+     * frame; enough to be out of the grab's reach, and it arrives later.
+     */
+    function grabAndTrump(above: number): Frame[] {
+      const s = three();
+      const [a, h, t] = s.fighters;
+      Object.assign(a, { x: fx(72), facing: 1, action: "grab", move: "grab", actionFrame: 3 });
+      // Past its ledge intangibility, which a grab cannot touch: it is the trump
+      // that ends it, in the first case.
+      hang(h, 1, above === 0 ? 50 : 0);
+      dropOnto(t, above);
+      return play(s, 40, () => [0, 0, 0]);
+    }
+
+    // Phase 5 (the trump) runs before phase 6 (hits), so the hanger is trumped
+    // off the ledge and then, if the grab still reaches it, grabbed: the grab
+    // wins, and a held fighter is placed at its captor.
+    it("trumps first and then grabs: the fighter ends up held, and the ledge is the trumper's", () => {
+      const frames = grabAndTrump(0);
+      const first = frames[0].state.fighters;
+      expect(first[2].ledge).toEqual({ platform: 0, side: 1 });
+      expect(first[1]).toMatchObject({ action: "grabbed", grabbedBy: 0, ledge: null });
+      expect(frames[1].state.fighters[1]).toMatchObject({ action: "grabbed", ledge: null, grounded: true, y: 0 });
+    });
+
+    // A grabbed hanger has already left the ledge, so a fighter taking it later
+    // trumps nobody.
+    it("grabs first: a fighter taking the ledge a frame later finds it free", () => {
+      const frames = grabAndTrump(16);
+      expect(frames[0].state.fighters[1]).toMatchObject({ action: "grabbed", ledge: null });
+      expect(frames[0].state.fighters[2].ledge).toBeNull();
+      const at = frames.findIndex((f) => f.state.fighters[2].ledge !== null);
+      expect(at).toBeGreaterThan(0);
+      for (const f of frames.slice(at)) {
+        expect(f.state.fighters[1].action).toBe("grabbed");
+        expect(f.state.fighters[2].action).toBe("ledgeHang");
+      }
     });
   });
 });

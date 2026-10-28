@@ -31,6 +31,7 @@ import {
   DIRECTIONAL_AIR_DODGE_INTANGIBLE,
   DIRECTIONAL_AIR_DODGE_SPEED,
   LEDGE_JUMP_VELOCITY,
+  LEDGE_TRUMPED_FRAMES,
   PERFECT_SHIELD_WINDOW,
   RESPAWN_INVINCIBILITY_MAX,
   RESPAWN_INVINCIBILITY_MIN,
@@ -1014,6 +1015,31 @@ export function onLeftGround(f: FighterState): void {
   if (f.action === "jumpSquat") return;
   f.jumpsUsed = Math.max(f.jumpsUsed, 1);
   if (isActionable(f)) startAction(f, "fall");
+}
+
+/**
+ * Ledge trump (Plan 3, Task 15): another fighter grabbed the ledge `f` was
+ * hanging on, so `f` lets go — losing the ledge's intangibility — and cannot
+ * act for a moment (SmashWiki "Ledge trump", https://www.ssbwiki.com/Ledge_trump:
+ * "grabbing onto a ledge that has already been grabbed by another player will
+ * gently remove them from the ledge", who "cannot take any action for a
+ * moment").
+ *
+ * A hanging fighter stands on the ledge point, so it is set `clearance` outboard
+ * first, or it would land on the stage it was just removed from (UNVERIFIED
+ * placement until Plan 4's ECB). `ledgeLockout` keeps it off every ledge for the
+ * length of the lag: it is the one rule for "cannot grab a ledge" (`findLedgeGrab`),
+ * so no other phase has to know the fighter is trumped. `ledgeRegrabs` is left
+ * as it was: the wiki names hitstun and touching the ground as what resets that
+ * count (SmashWiki "Ledge"), and a trump is neither.
+ */
+export function trumpLedge(f: FighterState, clearance: number): void {
+  if (f.ledge !== null) f.x += f.ledge.side * clearance;
+  f.ledge = null;
+  f.intangible = 0;
+  f.ledgeLockout = LEDGE_TRUMPED_FRAMES;
+  kineticClear(f);
+  startAction(f, "ledgeTrumped");
 }
 
 /** Snap a fighter onto a ledge it just grabbed. */

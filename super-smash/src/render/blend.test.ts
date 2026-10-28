@@ -78,6 +78,14 @@ describe("cross-fading between clips", () => {
     expect(distance(first, at("hitstun"))).toBeCloseTo(0, 6);
   });
 
+  // Plan 3, Task 15: the ledge taken from under a fighter is done to it, like a hit.
+  it("snaps into the fall of a fighter whose ledge was taken", () => {
+    const b = createPoseBlends();
+    play(b, "ledgeHang", [0, 1, 2], who({ action: "ledgeHang" }));
+    const [first] = play(b, "fall", [3], who({ action: "ledgeTrumped" }));
+    expect(distance(first, at("fall"))).toBeCloseTo(0, 6);
+  });
+
   it("does not advance when the same simulation frame is drawn twice", () => {
     const b = createPoseBlends();
     play(b, "idle", [0]);

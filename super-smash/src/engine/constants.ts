@@ -469,6 +469,15 @@ export const LEDGE_REGRAB_SCALING = [fx(1), fx(0.8), fx(0.5), fx(0)] as const;
  */
 export const LEDGE_REGRAB_LOCKOUT_FRAMES = 29;
 
+/**
+ * How long a fighter whose ledge was taken from under it (ledge trump) cannot
+ * act: SmashWiki "Ledge trump" (https://www.ssbwiki.com/Ledge_trump) says it
+ * "cannot take any action for a moment" and publishes no frame count.
+ * UNVERIFIED: 30. It is also how long `ledgeLockout` keeps it off every ledge
+ * (`trumpLedge`), so that it cannot take the ledge straight back.
+ */
+export const LEDGE_TRUMPED_FRAMES = 30;
+
 /** How far from a ledge a fighter may be and still grab it. Fixed. */
 export const LEDGE_GRAB_RANGE_X = fx(3.2);
 export const LEDGE_GRAB_RANGE_Y = fx(6);

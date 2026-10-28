@@ -236,6 +236,7 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
       return f.jumpsUsed >= 2 ? "doubleJump" : "rise";
     case "fall":
     case "dead":
+    case "ledgeTrumped":
       return f.fastFalling ? "fastFall" : "fall";
     case "land":
       return "land";

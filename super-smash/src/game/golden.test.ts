@@ -128,7 +128,7 @@ const MATCHES: readonly Match[] = [
 ];
 
 /**
- * Every `ActionState` the six matches must visit between them: all 47. A
+ * Every `ActionState` the six matches must visit between them: all 48. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
@@ -138,7 +138,8 @@ const MATCHES: readonly Match[] = [
  * `tumbleFall` and lies down (`downed`, `getUp`) on landing unless it techs, so the CPU
  * matches reach all three. The script techs Fox on two of its landings (`tech`) and the
  * tech lab reaches `techRoll`, `techWall` and `techCeiling`, which no scripted fight gets
- * to without off-stage play.
+ * to without off-stage play. Task 15 added `ledgeTrumped`: all four CPU matches reach it
+ * (measured 2026-10-28), two fighters going for one ledge being what recovering CPUs do.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -185,6 +186,7 @@ const MUST_VISIT: Record<ActionState, true> = {
   ledgeAttack: true,
   ledgeRoll: true,
   ledgeJump: true,
+  ledgeTrumped: true,
   respawnPlatform: true,
   dead: true,
   entering: true,
