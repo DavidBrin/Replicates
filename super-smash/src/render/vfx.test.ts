@@ -25,7 +25,7 @@ import {
   trackLaunchTrails,
   updateVfx,
 } from "./vfx";
-import { makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
+import { makeDef, makeEvents, makeFighter, makeStage, makeState } from "./testFixtures";
 
 const stage = makeStage();
 const cam = createCamera(stage);
@@ -391,6 +391,24 @@ describe("continuous effects", () => {
       stepVfx(charging, null, makeState({ fighters: [makeFighter({ action: "attack", move: "fsmash", charge: 30 })] }));
     }
     expect(charging.particles.filter((p) => p.kind === "chargeMote").length).toBeGreaterThan(0);
+  });
+
+  it("emits no new motes once the smash is let go, though `charge` stays set through the swing", () => {
+    // The engine keeps `charge`, frozen, from the release until the move ends (the swing's
+    // damage reads it). A smash is still charging only while its frame sits on the hold
+    // (`chargeHoldFrame`: frame 1 for `makeDef`'s forward smash, which lists no hitboxes).
+    const defs = [makeDef()];
+    const at = (actionFrame: number, charge: number) =>
+      makeState({ fighters: [makeFighter({ action: "attack", move: "fsmash", actionFrame, charge })] });
+    const v = createVfx();
+    const motes = () => v.particles.filter((p) => p.kind === "chargeMote").length;
+    for (let held = 1; held <= 8; held++) stepVfx(v, null, at(1, held), defs);
+    expect(motes(), "no motes while the smash was held").toBeGreaterThan(0);
+    for (let frame = 2; frame <= 12; frame++) {
+      const before = motes();
+      stepVfx(v, null, at(frame, 8), defs);
+      expect(motes(), `a new mote on swing frame ${frame}`).toBeLessThanOrEqual(before);
+    }
   });
 
   it("glows for a charged special too (Samus's Charge Shot, a chargeable special)", () => {

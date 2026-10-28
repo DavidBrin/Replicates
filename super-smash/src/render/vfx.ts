@@ -19,9 +19,9 @@
 
 import { toFloat } from "@/engine/fixed";
 import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES, PERFECT_SHIELD_WINDOW } from "@/engine/constants";
-import type { FighterState, GameState, StepEvents } from "@/engine/types";
+import type { FighterDef, FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
-import { poseTimeFor, type PosedFighter } from "./poses";
+import { moveTimingFor, poseTimeFor, type PosedFighter } from "./poses";
 import { PORT_COLOURS, mixHex, withAlpha } from "./rigKit";
 import type { ProjectilePainter } from "./fxKit";
 import { worldToScreen, type Camera } from "./camera";
@@ -758,17 +758,27 @@ export function drawDizzyStars(
   ctx.restore();
 }
 
+/** Each port's fighter definition, for the trackers that need its moves. */
+export type ChargeDefs = readonly (Pick<FighterDef, "moves"> | null | undefined)[];
+
 /**
  * Smash-charge motes, spiralling into the charging fighter.
  *
  * `charge` counts up only in an attack or special (`status/attack.ts`, a
  * chargeable move held); everywhere else it is a length or a flag — a landing's
  * frames (`onLanded`), an air dodge's "directional" bit — and must not glow.
+ *
+ * Nor does it stop when the button comes up: the engine keeps it, frozen, until
+ * the move ends. So with the fighters' definitions to hand (`defs`, by port), a
+ * move whose frame has passed its hold (`MoveTiming.chargeHold`) is swinging,
+ * not charging, and glows no more. Without them, any charge glows.
  */
-export function trackChargeGlow(v: VfxState, state: GameState): void {
+export function trackChargeGlow(v: VfxState, state: GameState, defs?: ChargeDefs): void {
   for (const f of state.fighters) {
     if (f.action !== "attack" && f.action !== "special") continue;
     if (f.charge <= 0) continue;
+    const hold = moveTimingFor(defs?.[f.port], f.move)?.chargeHold;
+    if (hold !== undefined && f.actionFrame > hold) continue;
     if (v.frame % 2 !== 0) continue;
     const a = rand(v) * Math.PI * 2;
     const r = 9 + rand(v) * 5;
@@ -901,13 +911,13 @@ export function trackSwings(v: VfxState, state: GameState): void {
   }
 }
 
-export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState): void {
+export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState, defs?: ChargeDefs): void {
   trackSwings(v, state);
   if (events) ingestEvents(v, events, state);
   trackAfterimages(v, state);
   trackGroundFx(v, state);
   trackLaunchTrails(v, state);
-  trackChargeGlow(v, state);
+  trackChargeGlow(v, state, defs);
   trackDamageSmoke(v, state);
   updateVfx(v);
 }

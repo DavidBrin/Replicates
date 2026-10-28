@@ -23,7 +23,7 @@
 import { toFloat } from "@/engine/fixed";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
-import { actionFrameOf } from "@/engine/hitbox";
+import { actionFrameOf, chargeHoldFrame } from "@/engine/hitbox";
 import {
   AIR_DODGE_FRAMES,
   DASH_INTERRUPT_FRAME,
@@ -353,11 +353,10 @@ export interface MoveTiming {
   readonly firstActive: number;
   readonly lastActive: number;
   /**
-   * A chargeable move's hold frame: the `actionFrame` a held charge pins it on
-   * (`attackMain` in `engine/status/attack.ts`: its first *listed* hitbox's
-   * frame less one, and at least 1). Not `firstActive`, which is the earliest
-   * hitbox: Pikachu's forward smash lists a later one first. Absent for a move
-   * that cannot charge.
+   * A chargeable move's hold frame, the `actionFrame` a held charge pins it on
+   * (`chargeHoldFrame`, the engine's own rule). Not `firstActive`: the hold
+   * follows the first *listed* hitbox, and Pikachu's forward smash lists a
+   * later one first. Absent for a move that cannot charge.
    */
   readonly chargeHold?: number;
 }
@@ -382,7 +381,7 @@ export function moveTimingFor(
     total: m.totalFrames,
     firstActive: first < 0 ? -1 : actionFrameOf(first),
     lastActive: last < 0 ? -1 : actionFrameOf(last),
-    ...(m.chargeable ? { chargeHold: Math.max(1, (m.hitboxes[0]?.startFrame ?? 1) - 1) } : {}),
+    ...(m.chargeable ? { chargeHold: chargeHoldFrame(m) } : {}),
   };
 }
 

@@ -14,6 +14,7 @@ import { createInitialState, registerFighters, registerStages, step } from "@/en
 import { Btn, type FighterState, type GameState, type InputFrame, type MatchRules } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
+import { clipFor } from "../chars/poses";
 import { moveTimingFor, poseNameFor, poseTimeFor } from "./timing";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false };
@@ -67,6 +68,7 @@ describe("a charged smash attack's pose", () => {
       expect(released.length, "nothing of the swing was left after the charge").toBeGreaterThan(1);
 
       const parked = time(charging[0]);
+      expect(parked, "parked on the wind-up").toBe((clipFor(def.id, poseNameFor(charging[0]))?.strike ?? 0.3) * 0.55);
       for (const f of charging) expect(time(f), `charging, frame ${f.actionFrame}`).toBe(parked);
       // Once let go, the swing plays exactly as an uncharged one does on the same frame.
       for (const f of released) {

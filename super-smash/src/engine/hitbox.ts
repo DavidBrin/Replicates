@@ -234,6 +234,20 @@ export function actionFrameOf(moveFrame: number): number {
   return moveFrame - 1;
 }
 
+/**
+ * The `actionFrame` a held charge pins a chargeable move on: one short of its
+ * first *listed* hitbox's quoted frame, and never before frame 1.
+ *
+ * Listed, not earliest: Pikachu's forward smash lists a later hitbox first. One
+ * rule for the two readers that must agree on it: `attackMain`, which holds the
+ * move there while the attack is held, and the renderer, which parks the pose
+ * there and plays the swing once the frame moves past it (the engine keeps
+ * `charge` after the release, so `charge` alone cannot say which).
+ */
+export function chargeHoldFrame(move: Pick<MoveDef, "hitboxes">): number {
+  return Math.max(1, (move.hitboxes[0]?.startFrame ?? 1) - 1);
+}
+
 /** The hitboxes of `move` that are live on `frame` (0-based within the move). */
 export function activeHitboxes(move: MoveDef, frame: number): Hitbox[] {
   const out: Hitbox[] = [];

@@ -14,7 +14,7 @@
  */
 
 import { SMASH_CHARGE_MAX } from "../constants";
-import { clearHitRecord } from "../hitbox";
+import { chargeHoldFrame, clearHitRecord } from "../hitbox";
 import {
   GRAB_HOLD_FRAMES,
   PUMMEL_FRAMES,
@@ -39,7 +39,7 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   }
   // Charging a smash holds the animation one frame short of its first hitbox.
   if (move.chargeable && f.charge < SMASH_CHARGE_MAX && intent.attackHeld) {
-    const holdFrame = Math.max(1, (move.hitboxes[0]?.startFrame ?? 1) - 1);
+    const holdFrame = chargeHoldFrame(move);
     if (f.actionFrame >= holdFrame) {
       f.actionFrame = holdFrame;
       f.charge += 1;

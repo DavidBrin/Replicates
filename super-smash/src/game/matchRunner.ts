@@ -360,7 +360,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // the three trackers that read cosmetic state off the fighters directly
     // (dodge afterimages, charge motes, damage smoke) and which nothing else
     // calls at all.
-    stepVfx(vfx, events, state);
+    stepVfx(vfx, events, state, defs);
     updateHud(hud, state);
     updateCamera(camera, state, stage, events);
 
