@@ -24,6 +24,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  ...localBuild(),
 };
 
 /** This build's hello, which the other side says too when it runs the same build. */

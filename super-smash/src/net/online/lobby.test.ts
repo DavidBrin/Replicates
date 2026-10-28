@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseLobbyMessage, type OnlineMatchConfig } from "./lobby";
+import { parseLobbyMessage, type BuildStamp, type OnlineMatchConfig } from "./lobby";
 
 const CONFIG: OnlineMatchConfig = {
   seed: 1234,
@@ -9,7 +9,20 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  protocol: 2,
+  bones: "0123abcd",
 };
+
+const BUILD: BuildStamp = { protocol: CONFIG.protocol, bones: CONFIG.bones };
+
+/**
+ * A start this build cannot play is never read as one. Only the build it
+ * claims comes through, read before anything else, so the guest can refuse
+ * another build's start rather than drop it in silence (Plan 2 Task 27).
+ */
+function expectUnplayable(config: unknown, build: BuildStamp | null = BUILD) {
+  expect(parseLobbyMessage({ kind: "start", config })).toEqual({ kind: "unreadable-start", build });
+}
 
 describe("lobby messages", () => {
   it("reads a pick, including clearing one", () => {
@@ -64,6 +77,10 @@ describe("lobby messages", () => {
     expect(parseLobbyMessage({ kind: "hello", protocol: 2, bones: "0123abcd" })).toEqual({ kind: "hello", protocol: 2, bones: "0123abcd" });
   });
 
+  it("reads a refusal, so a host learns why its start was not played", () => {
+    expect(parseLobbyMessage({ kind: "refuse", reason: "engine-mismatch" })).toEqual({ kind: "refuse", reason: "engine-mismatch" });
+  });
+
   it("reads an away flag", () => {
     expect(parseLobbyMessage({ kind: "away", away: true })).toEqual({ kind: "away", away: true });
   });
@@ -76,11 +93,9 @@ describe("lobby messages", () => {
       { kind: "pick", fighterId: "fox", costume: 99 },
       { kind: "pick", fighterId: "fox", costume: 1.5 },
       { kind: "stage", stageId: "battlefield", form: "mirror" },
-      { kind: "start", config: { ...CONFIG, fighters: ["mario"] } },
-      { kind: "start", config: { ...CONFIG, rules: { ...CONFIG.rules, stocks: 0 } } },
-      { kind: "start", config: { ...CONFIG, rules: { ...CONFIG.rules, mode: "coin" } } },
-      { kind: "start", config: { ...CONFIG, seed: 1.5 } },
       { kind: "away", away: "yes" },
+      { kind: "refuse", reason: "bored" },
+      { kind: "refuse" },
       { kind: "hello", protocol: 2, bones: "not-hex!" },
       { kind: "hello", protocol: 2, bones: "0123ABCD" },
       { kind: "hello", protocol: 1.5, bones: "0123abcd" },
@@ -90,6 +105,10 @@ describe("lobby messages", () => {
       { kind: "explode" },
     ];
     for (const payload of bad) expect(parseLobbyMessage(payload)).toBeNull();
+    expectUnplayable({ ...CONFIG, fighters: ["mario"] });
+    expectUnplayable({ ...CONFIG, rules: { ...CONFIG.rules, stocks: 0 } });
+    expectUnplayable({ ...CONFIG, rules: { ...CONFIG.rules, mode: "coin" } });
+    expectUnplayable({ ...CONFIG, seed: 1.5 });
   });
 });
 
@@ -101,30 +120,30 @@ describe("lobby messages", () => {
 describe("lobby messages from a hostile or mismatched peer", () => {
   it("refuses a fighter this build does not have, so the match is never built from it", () => {
     expect(parseLobbyMessage({ kind: "pick", fighterId: "mewtwo-from-the-future", costume: 0 })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, fighters: ["mario", "nobody"] } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, fighters: ["random", "fox"] } })).toBeNull();
+    expectUnplayable({ ...CONFIG, fighters: ["mario", "nobody"] });
+    expectUnplayable({ ...CONFIG, fighters: ["random", "fox"] });
   });
 
   it("refuses a stage this build does not have, and a stage form passed off as a stage", () => {
     expect(parseLobbyMessage({ kind: "stage", stageId: "no-such-stage", form: "normal" })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, stageId: "no-such-stage" } })).toBeNull();
+    expectUnplayable({ ...CONFIG, stageId: "no-such-stage" });
     // A form id is registered with the engine but is not a base stage: the form travels separately.
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, stageId: "battlefield-omega" } })).toBeNull();
+    expectUnplayable({ ...CONFIG, stageId: "battlefield-omega" });
   });
 
   it("refuses a start that still says Random, which only the host may resolve", () => {
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, stageId: "random" } })).toBeNull();
+    expectUnplayable({ ...CONFIG, stageId: "random" });
   });
 
   it("refuses numbers that are not finite or are outside what the menus can produce", () => {
     const seeds = [Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31, -(2 ** 31) - 1, 1e300];
-    for (const seed of seeds) expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, seed } })).toBeNull();
+    for (const seed of seeds) expectUnplayable({ ...CONFIG, seed });
     const timeLimits = [Number.NaN, Number.POSITIVE_INFINITY, -1, 1e300, 99 * 60 * 60 + 1];
     for (const timeLimit of timeLimits) {
-      expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, rules: { ...CONFIG.rules, timeLimit } } })).toBeNull();
+      expectUnplayable({ ...CONFIG, rules: { ...CONFIG.rules, timeLimit } });
     }
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, rules: { ...CONFIG.rules, stocks: 100 } } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, costumes: [0, -1] } })).toBeNull();
+    expectUnplayable({ ...CONFIG, rules: { ...CONFIG.rules, stocks: 100 } });
+    expectUnplayable({ ...CONFIG, costumes: [0, -1] });
     expect(parseLobbyMessage({ kind: "pick", fighterId: "fox", costume: Number.NaN })).toBeNull();
     expect(parseLobbyMessage({ kind: "pick", fighterId: "fox", costume: -1 })).toBeNull();
   });
@@ -139,11 +158,11 @@ describe("lobby messages from a hostile or mismatched peer", () => {
   });
 
   it("refuses fields of the wrong type rather than coercing them", () => {
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, seed: "1234" } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, fighters: "mariofox" } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, costumes: ["0", "1"] } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, rules: { ...CONFIG.rules, smashBall: 1 } } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, rules: [] } })).toBeNull();
+    expectUnplayable({ ...CONFIG, seed: "1234" });
+    expectUnplayable({ ...CONFIG, fighters: "mariofox" });
+    expectUnplayable({ ...CONFIG, costumes: ["0", "1"] });
+    expectUnplayable({ ...CONFIG, rules: { ...CONFIG.rules, smashBall: 1 } });
+    expectUnplayable({ ...CONFIG, rules: [] });
     expect(parseLobbyMessage({ kind: "start", config: [] })).toBeNull();
     expect(parseLobbyMessage({ kind: "start" })).toBeNull();
   });
@@ -157,7 +176,7 @@ describe("lobby messages from a hostile or mismatched peer", () => {
       "extra": 1,
       "config": {
         "seed": 1234, "stageId": "battlefield", "stageForm": "omega",
-        "fighters": ["mario", "fox"], "costumes": [0, 1],
+        "fighters": ["mario", "fox"], "costumes": [0, 1], "protocol": 2, "bones": "0123abcd",
         "__proto__": { "polluted": true }, "extra": 2,
         "rules": {
           "mode": "stock", "stocks": 3, "timeLimit": 9000, "smashBall": false, "oneOnOne": true,
@@ -169,7 +188,7 @@ describe("lobby messages from a hostile or mismatched peer", () => {
     expect(parsed).toEqual({ kind: "start", config: CONFIG });
     if (parsed?.kind !== "start") throw new Error("expected a start");
     expect(Object.keys(parsed).sort()).toEqual(["config", "kind"]);
-    expect(Object.keys(parsed.config).sort()).toEqual(["costumes", "fighters", "rules", "seed", "stageForm", "stageId"]);
+    expect(Object.keys(parsed.config).sort()).toEqual(["bones", "costumes", "fighters", "protocol", "rules", "seed", "stageForm", "stageId"]);
     expect(Object.keys(parsed.config.rules).sort()).toEqual(["mode", "oneOnOne", "smashBall", "stocks", "timeLimit"]);
     expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
     expect(Object.getPrototypeOf(parsed.config)).toBe(Object.prototype);
@@ -188,11 +207,45 @@ describe("lobby messages from a hostile or mismatched peer", () => {
     expect(Object.keys(hello ?? {}).sort()).toEqual(["bones", "kind", "protocol"]);
   });
 
+  it("reads a start's build before anything else, so another build's start comes through for the guest to refuse", () => {
+    // Readable here, so the guest compares the build itself.
+    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, bones: "0badf00d" } })).toEqual({
+      kind: "start",
+      config: { ...CONFIG, bones: "0badf00d" },
+    });
+    // A newer build's start can name a fighter this one lacks: its build still comes through.
+    expectUnplayable({ ...CONFIG, protocol: 3, fighters: ["mario", "mewtwo-from-the-future"] }, { protocol: 3, bones: CONFIG.bones });
+  });
+
+  it("reads a start without a build it can read as a start from an unknown build, never as a start", () => {
+    expectUnplayable({ ...CONFIG, bones: undefined }, null);
+    expectUnplayable({ ...CONFIG, protocol: undefined }, null);
+    expectUnplayable({ ...CONFIG, bones: "not-hex!" }, null);
+    expectUnplayable({ ...CONFIG, protocol: "2" }, null);
+    // A start from before the handshake: everything else this build can read.
+    const before: Record<string, unknown> = { ...CONFIG };
+    delete before.protocol;
+    delete before.bones;
+    expectUnplayable(before, null);
+  });
+
+  it("copies nothing extra out of a start it cannot play, or out of a refusal", () => {
+    const unplayable = parseLobbyMessage(
+      JSON.parse('{"kind":"start","config":{"protocol":3,"bones":"0123abcd","__proto__":{"x":1},"extra":1},"__proto__":{"x":1}}'),
+    );
+    expect(unplayable).toEqual({ kind: "unreadable-start", build: { protocol: 3, bones: "0123abcd" } });
+    if (unplayable?.kind !== "unreadable-start" || unplayable.build === null) throw new Error("expected a build");
+    expect(Object.keys(unplayable).sort()).toEqual(["build", "kind"]);
+    expect(Object.keys(unplayable.build).sort()).toEqual(["bones", "protocol"]);
+    const refuse = parseLobbyMessage(JSON.parse('{"kind":"refuse","reason":"engine-mismatch","__proto__":{"x":1},"extra":true}'));
+    expect(Object.keys(refuse ?? {}).sort()).toEqual(["kind", "reason"]);
+  });
+
   it("reads the config's arrays as exactly two entries, not by prototype or length tricks", () => {
     const sparse: unknown[] = [];
     sparse[1] = "fox";
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, fighters: sparse } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, fighters: ["mario", "fox", "mario"] } })).toBeNull();
-    expect(parseLobbyMessage({ kind: "start", config: { ...CONFIG, costumes: [0] } })).toBeNull();
+    expectUnplayable({ ...CONFIG, fighters: sparse });
+    expectUnplayable({ ...CONFIG, fighters: ["mario", "fox", "mario"] });
+    expectUnplayable({ ...CONFIG, costumes: [0] });
   });
 });

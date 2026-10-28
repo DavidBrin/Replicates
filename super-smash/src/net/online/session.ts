@@ -14,7 +14,7 @@ import { fetchIceServers, toRtcIceServers } from "../iceServers";
 import { createSignallingClient, type SignallingClient } from "../signalling";
 import { ROLE_PORT, isRecord, roomErrorForCloseCode, type Role, type RoomError, type RoomIntent } from "../signalProtocol";
 import { createEmitter, type Emitter, type Unsubscribe } from "../transport";
-import { parseLobbyMessage, type LobbyMessage } from "./lobby";
+import { parseLobbyMessage, type LobbyMessage, type ReceivedLobbyMessage } from "./lobby";
 
 /**
  * Why the session cannot go on. The room's refusals; "unreachable" when no
@@ -54,7 +54,7 @@ export type SessionEvent =
   | { readonly type: "joined"; readonly role: Role }
   | { readonly type: "peer"; readonly present: boolean }
   | { readonly type: "link"; readonly status: DoSignalStatus }
-  | { readonly type: "lobby"; readonly message: LobbyMessage }
+  | { readonly type: "lobby"; readonly message: ReceivedLobbyMessage }
   | { readonly type: "error"; readonly reason: SessionError };
 
 export interface OnlineSessionLike {

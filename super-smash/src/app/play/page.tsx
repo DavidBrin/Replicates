@@ -35,7 +35,7 @@ import { createGamepadInput, padPortMap, type GamepadInput } from "@/input/gamep
 import { AudioEngine } from "@/audio";
 import { conflictFreeSelection } from "@/input/schemes";
 import { useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
-import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
+import { ONLINE_RESULT_LINGER_MS, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { NetHud } from "@/components/match/NetHud";
 import type { OnlineMatchConfig } from "@/net/online/lobby";
 import { getActiveSession, type OnlineSessionLike } from "@/net/online/session";
@@ -475,6 +475,21 @@ export default function PlayPage() {
         0,
       );
     };
+    /**
+     * The guest could not play this host's start: it runs another build (Plan
+     * 2 Task 27). Nothing was played, so there are no results either: the
+     * match stops, and the overlay says why; its way out leaves the room.
+     */
+    const refused = () => {
+      if (finished) return;
+      finished = true;
+      stopMonitor?.();
+      mounted?.runner.stop();
+      setError(roomErrorMessage("engine-mismatch", session.roomCode));
+    };
+    const offRefusal = session.on((event) => {
+      if (event.type === "lobby" && event.message.kind === "refuse" && session.role === "host") refused();
+    });
     // Each player is on their own machine, so each gets Config 1 (with their
     // own rebinding) and every pad, on their own port.
     const keyboard = createKeyboardInput([{ port: localPort, scheme: schemeForMenuId("arrows", bindings.arrows) }]);
@@ -554,6 +569,7 @@ export default function PlayPage() {
     }
 
     return () => {
+      offRefusal();
       window.clearInterval(statsTimer);
       window.clearTimeout(resultTimer);
       cancelResultRef.current = null;

@@ -35,6 +35,7 @@ export function buildStartConfig(input: StartConfigInput): OnlineMatchConfig {
     rules: { ...input.rules, oneOnOne: true },
     fighters: [resolveFighterId(known(p0.fighterId), seed, 0), resolveFighterId(known(p1.fighterId), seed, 1)],
     costumes: [p0.costume, p1.costume],
+    ...localBuild(),
   };
 }
 

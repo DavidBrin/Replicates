@@ -29,6 +29,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  ...localBuild(),
 };
 
 /** This build's hello: what each side says as its channel opens, and the other side's when it runs the same build. */
@@ -114,6 +115,83 @@ describe("binding a session to the stores", () => {
     host.emit({ type: "joined", role: "host" });
     host.emit({ type: "lobby", message: { kind: "start", config: CONFIG } });
     expect(useOnlineStore.getState().config).toBeNull();
+  });
+
+  it.each([
+    ["bone table", { ...CONFIG, bones: "0badf00d" }],
+    ["wire format", { ...CONFIG, protocol: PROTOCOL_VERSION + 1 }],
+  ] as const)("refuses a start from a peer on another %s: tells the host, says why, and leaves", async (_, config) => {
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    guest.emit({ type: "lobby", message: { kind: "start", config } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "engine-mismatch" });
+    expect(useOnlineStore.getState().error).toBe("The other player is running a different version. Both reload the page.");
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
+    await Promise.resolve();
+    expect(guest.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a start with no build in it, as from a build before the handshake", async () => {
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    guest.emit({ type: "lobby", message: { kind: "unreadable-start", build: null } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "engine-mismatch" });
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
+    await Promise.resolve();
+    expect(guest.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a start from another build that it cannot read at all", () => {
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    guest.emit({ type: "lobby", message: { kind: "unreadable-start", build: { ...localBuild(), protocol: PROTOCOL_VERSION + 1 } } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, errorReason: "engine-mismatch" });
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
+  });
+
+  /** This build's own start, unreadable here, is not another version: dropped, as any unreadable start always was. */
+  it("drops an unreadable start that says it is this build, refusing nothing", () => {
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    guest.emit({ type: "lobby", message: { kind: "unreadable-start", build: localBuild() } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, error: null, errorReason: null });
+    expect(guest.sent).toEqual([]);
+    expect(guest.session.close).not.toHaveBeenCalled();
+  });
+
+  it("shows the host the same reason when the guest refuses its start, withdraws the start, and leaves", async () => {
+    const host = fakeSession();
+    bindSession(host.session);
+    host.emit({ type: "joined", role: "host" });
+    useOnlineStore.getState().patch({ config: CONFIG });
+    host.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "engine-mismatch" });
+    expect(useOnlineStore.getState().error).toBe("The other player is running a different version. Both reload the page.");
+    expect(host.sent).toEqual([]);
+    await Promise.resolve();
+    expect(host.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  /** Only a host sends a start, so only a host can be refused one; and only a guest refuses. */
+  it("takes a refusal on the host only, and judges a start's build on the guest only", () => {
+    const guest = fakeSession();
+    bindSession(guest.session);
+    guest.emit({ type: "joined", role: "guest" });
+    guest.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } });
+    expect(useOnlineStore.getState().errorReason).toBeNull();
+
+    leaveOnline();
+    const host = fakeSession();
+    bindSession(host.session);
+    host.emit({ type: "joined", role: "host" });
+    host.emit({ type: "lobby", message: { kind: "start", config: { ...CONFIG, bones: "0badf00d" } } });
+    host.emit({ type: "lobby", message: { kind: "unreadable-start", build: null } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, errorReason: null });
+    expect(host.sent).toEqual([]);
   });
 
   it("explains a full room in words", () => {

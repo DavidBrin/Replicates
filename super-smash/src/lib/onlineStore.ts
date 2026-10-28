@@ -11,7 +11,7 @@ import { create } from "zustand";
 
 import type { MatchRules } from "@/engine/types";
 import { buildMismatch, localBuild } from "@/game/onlineConfig";
-import type { BuildStamp, LobbyMessage, OnlineMatchConfig } from "@/net/online/lobby";
+import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
 import type { Unsubscribe } from "@/net/transport";
@@ -223,6 +223,40 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
   };
 
   /**
+   * The lobby talk. The hello settles the lobby; the start's own stamp is the
+   * backstop, for a host that got past it (one from before the handshake).
+   */
+  const onLobby = (message: ReceivedLobbyMessage) => {
+    switch (message.kind) {
+      case "hello":
+        heardHello(message);
+        return;
+      case "refuse":
+        // The guest could not play the start this host sent.
+        if (session.role === "host") refuseBuild();
+        return;
+      case "start":
+      case "unreadable-start": {
+        // Only the guest follows a start; the host built it. Its build first:
+        // another build's start would desync on the first hit, or not load at
+        // all, so the host is told why, and this side refuses as for a hello.
+        if (session.role !== "guest") return;
+        const build = message.kind === "start" ? message.config : message.build;
+        if (buildMismatch(build) !== null) {
+          session.sendLobby({ kind: "refuse", reason: "engine-mismatch" });
+          refuseBuild();
+        } else if (message.kind === "start") {
+          online().patch({ config: message.config });
+        }
+        // An unreadable start from this very build is dropped, as it always was.
+        return;
+      }
+      default:
+        applyLobby(message, session);
+    }
+  };
+
+  /**
    * The other player's seat emptied: whoever takes it next starts from an
    * empty panel (a pick the last opponent left behind must not light up Ready
    * before they choose), and a start not yet played is withdrawn. Not an
@@ -302,8 +336,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         }
         break;
       case "lobby":
-        if (event.message.kind === "hello") heardHello(event.message);
-        else applyLobby(event.message, session);
+        onLobby(event.message);
         break;
     }
   });
@@ -323,7 +356,8 @@ function remotePort(session: OnlineSessionLike): number | null {
   return local === null ? null : local === 0 ? 1 : 0;
 }
 
-function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
+/** The lobby talk that only fills in the screens. */
+function applyLobby(message: Extract<LobbyMessage, { kind: "pick" | "stage" | "away" }>, session: OnlineSessionLike): void {
   const match = useMatchConfig.getState();
   switch (message.kind) {
     case "pick": {
@@ -343,10 +377,6 @@ function applyLobby(message: LobbyMessage, session: OnlineSessionLike): void {
       useOnlineStore.getState().patch({ hostStage: rules ? { stageId, form, rules } : { stageId, form } });
       return;
     }
-    case "start":
-      // Only the guest follows a start; the host built it.
-      if (session.role === "guest") useOnlineStore.getState().patch({ config: message.config });
-      return;
     case "away":
       useOnlineStore.getState().patch({ remoteAway: message.away });
       return;

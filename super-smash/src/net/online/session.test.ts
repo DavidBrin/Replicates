@@ -4,6 +4,7 @@ import { NEGOTIATION_TIMEOUT_MS, type PeerConnectionLike } from "../adapters/doS
 import { STUN_ONLY } from "../iceConfig";
 import type { RoomIntent } from "../signalProtocol";
 import { OpenableChannel, inertPeer } from "../testing/fakePeer";
+import { PROTOCOL_VERSION } from "../packet";
 import { FakeSignalling } from "../testing/fakeSignalling";
 import type { OnlineMatchConfig } from "./lobby";
 import {
@@ -23,6 +24,8 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 3, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [0, 1],
+  protocol: PROTOCOL_VERSION,
+  bones: "0123abcd",
 };
 
 async function open(intent: RoomIntent = "create", createPeerConnection: () => PeerConnectionLike = inertPeer) {
@@ -118,6 +121,18 @@ describe("OnlineSession", () => {
     signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "pick", fighterId: "fox", costume: 1 } });
     signalling.deliver({ t: "lobby", from: "g1", payload: { kind: "explode" } });
     expect(events).toEqual([{ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 1 } }]);
+  });
+
+  /** Dropped, it would leave the guest waiting while the host played alone; passed on, the guest refuses it (Plan 2 Task 27). */
+  it("passes on a start it cannot read, with the build it claims, for the guest to refuse", async () => {
+    const { signalling, events } = await open("join");
+    signalling.deliver({ t: "welcome", self: { id: "g1", role: "guest" }, peer: { id: "h1", role: "host" } });
+    const newer = { ...CONFIG, protocol: PROTOCOL_VERSION + 1, fighters: ["mario", "mewtwo-from-the-future"] };
+    signalling.deliver({ t: "lobby", from: "h1", payload: { kind: "start", config: newer } });
+    expect(events.at(-1)).toEqual({
+      type: "lobby",
+      message: { kind: "unreadable-start", build: { protocol: PROTOCOL_VERSION + 1, bones: CONFIG.bones } },
+    });
   });
 
   it("says why the room refused it, once", async () => {

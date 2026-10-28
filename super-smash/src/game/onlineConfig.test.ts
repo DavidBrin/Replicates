@@ -70,6 +70,14 @@ describe("the host's start config", () => {
     expect(parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config })))).toEqual({ kind: "start", config });
   });
 
+  it("carries this build's stamp, so the guest can check it before playing", () => {
+    const config = buildStartConfig({ players: players("mario", "fox"), stageId: "battlefield", stageForm: "normal", rules: RULES, seed: 5 });
+    expect({ protocol: config.protocol, bones: config.bones }).toEqual(localBuild());
+    expect(config.bones).toBe(engineFingerprint());
+    expect(buildMismatch(config)).toBeNull();
+    expect(buildMismatch({ ...config, bones: "0badf00d" })).toBe("bones");
+  });
+
   it("makes a positive 31-bit seed", () => {
     expect(newMatchSeed(() => 0.5)).toBe(Math.floor(0.5 * 0x7fff_ffff));
     expect(newMatchSeed(() => 0)).toBe(0);

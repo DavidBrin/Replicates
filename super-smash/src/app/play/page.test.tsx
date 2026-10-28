@@ -17,7 +17,7 @@ import { Results } from "@/components/menu/Results";
 import { resolveMatchStage } from "@/game/bootstrap";
 import type { LinkMonitorOptions } from "@/game/linkMonitor";
 import type { MatchRunnerOptions } from "@/game/matchRunner";
-import { runnerSlotsFor } from "@/game/onlineConfig";
+import { localBuild, runnerSlotsFor } from "@/game/onlineConfig";
 import type { GamepadOptions } from "@/input/gamepad";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
@@ -87,6 +87,7 @@ const CONFIG: OnlineMatchConfig = {
   rules: { mode: "stock", stocks: 2, timeLimit: 9000, smashBall: false, oneOnOne: true },
   fighters: ["mario", "fox"],
   costumes: [3, 1],
+  ...localBuild(),
 };
 
 const STATS = { rttMs: 41.6, inputDelay: 3, rollbacks: 12 } as NetStats;
@@ -260,6 +261,45 @@ describe("the play page, online", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  /**
+   * The guest could not play this host's start: it runs another build (Plan 2
+   * Task 27). Nothing was played, so nobody wins and there are no results: the
+   * page stops, says why, and its way out leaves the room.
+   */
+  it("stops the match and says why, without results, when the guest refuses this host's start", () => {
+    const { fake } = goOnline("host");
+    render(<PlayPage />);
+    const { runner } = only(mocks.runners);
+    const monitor = only(mocks.monitors);
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
+
+    expect(runner.stop).toHaveBeenCalled();
+    expect(monitor.stop).toHaveBeenCalled();
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("THE MATCH COULD NOT START");
+    expect(alert).toHaveTextContent("The other player is running a different version. Both reload the page.");
+    // The guest leaving next, as it does after refusing, ends nothing a second time.
+    act(() => monitor.options.onLost());
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(useMatchConfig.getState().result).toBeNull();
+    expect(routerMock.push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "BACK TO MENU" }));
+    expect(routerMock.push).toHaveBeenCalledWith("/menu");
+    expect(getActiveSession()).toBeNull();
+  });
+
+  /** Only a host's start can be refused: a refusal sent to the guest is nobody's to act on. */
+  it("plays on as the guest when a refusal arrives", () => {
+    const { fake } = goOnline("guest");
+    render(<PlayPage />);
+    const { runner } = only(mocks.runners);
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
+    expect(runner.stop).not.toHaveBeenCalled();
+    expect(only(mocks.monitors).stop).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("has the link monitor watch the match's confirmed frame, so a match stuck with packets still arriving is lost", () => {

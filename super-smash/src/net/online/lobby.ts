@@ -13,6 +13,12 @@
  * against this build's roster and stages, and the result is built fresh from
  * those reads. Nothing is spread or assigned from the payload, so extra keys
  * (a `__proto__` among them) never reach what the lobby holds.
+ *
+ * Two builds that differ can still talk here (Plan 2 Task 27). Each side says
+ * its build in a `hello`, and a start carries the host's; both are read
+ * before anything else, so another build's start is told apart even when the
+ * rest of it names what this build lacks. Kinds this build does not know are
+ * dropped, as older builds drop the ones added since.
  */
 
 import type { MatchRules } from "@/engine/types";
@@ -41,7 +47,8 @@ export interface BuildStamp {
   readonly bones: string;
 }
 
-export interface OnlineMatchConfig {
+/** The host's `BuildStamp` rides with it: a guest on another build refuses the start (`refuse`). */
+export interface OnlineMatchConfig extends BuildStamp {
   /** A 32-bit integer: `buildStartConfig` truncates the host's draw to one. */
   readonly seed: number;
   /** A concrete base stage id; Random is resolved by the host. */
@@ -60,7 +67,24 @@ export type LobbyMessage =
   | { readonly kind: "start"; readonly config: OnlineMatchConfig }
   | { readonly kind: "away"; readonly away: boolean }
   /** This side's `BuildStamp`, said each time its channel opens. Nothing starts until the other side's matches. */
-  | { readonly kind: "hello"; readonly protocol: number; readonly bones: string };
+  | { readonly kind: "hello"; readonly protocol: number; readonly bones: string }
+  /** The guest cannot play the host's start: the host runs another build. */
+  | { readonly kind: "refuse"; readonly reason: "engine-mismatch" };
+
+/**
+ * A start this build cannot play as sent. `build` is the stamp it carries,
+ * read before anything else, or null when it has none this build can read (a
+ * build from before the stamp): the guest refuses another build's start
+ * rather than drop it, which would leave the host playing alone. Only
+ * `parseLobbyMessage` makes one; nothing sends it.
+ */
+export interface UnreadableStart {
+  readonly kind: "unreadable-start";
+  readonly build: BuildStamp | null;
+}
+
+/** A lobby message as it arrives: one that can be sent, or a start this build cannot read. */
+export type ReceivedLobbyMessage = LobbyMessage | UnreadableStart;
 
 /** A sanity bound, not a roster fact: the renderer falls back to the default colours past a fighter's alts. */
 const MAX_COSTUME = 15;
@@ -71,7 +95,7 @@ const MAX_PROTOCOL = 0xff;
 /** `BoneTable.fingerprint`: 8 lowercase hex digits. */
 const FINGERPRINT = /^[0-9a-f]{8}$/;
 
-export function parseLobbyMessage(payload: unknown): LobbyMessage | null {
+export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null {
   if (!isRecord(payload)) return null;
   switch (payload.kind) {
     case "pick": {
@@ -93,8 +117,13 @@ export function parseLobbyMessage(payload: unknown): LobbyMessage | null {
       return rules ? { kind: "stage", stageId, form, rules } : { kind: "stage", stageId, form };
     }
     case "start": {
-      const config = parseConfig(payload.config);
-      return config ? { kind: "start", config } : null;
+      const raw = payload.config;
+      if (!isRecord(raw)) return null;
+      // The build before anything else: another build's start may name a
+      // fighter or a stage this one lacks, and must still be told apart.
+      const build = parseBuild(raw);
+      const config = build && parseConfig(raw, build);
+      return config ? { kind: "start", config } : { kind: "unreadable-start", build };
     }
     case "away": {
       const away = payload.away;
@@ -104,13 +133,14 @@ export function parseLobbyMessage(payload: unknown): LobbyMessage | null {
       const build = parseBuild(payload);
       return build ? { kind: "hello", protocol: build.protocol, bones: build.bones } : null;
     }
+    case "refuse":
+      return payload.reason === "engine-mismatch" ? { kind: "refuse", reason: "engine-mismatch" } : null;
     default:
       return null;
   }
 }
 
-function parseConfig(value: unknown): OnlineMatchConfig | null {
-  if (!isRecord(value)) return null;
+function parseConfig(value: Record<string, unknown>, build: BuildStamp): OnlineMatchConfig | null {
   const { seed, stageId, stageForm, rules, fighters, costumes } = value;
   if (!isInRange(seed, MIN_SEED, MAX_SEED)) return null;
   if (!isStageId(stageId) || !isStageForm(stageForm)) return null;
@@ -122,7 +152,16 @@ function parseConfig(value: unknown): OnlineMatchConfig | null {
   if (!Array.isArray(costumes) || costumes.length !== 2) return null;
   const [c0, c1] = costumes as unknown[];
   if (!isCostume(c0) || !isCostume(c1)) return null;
-  return { seed, stageId, stageForm, rules: parsedRules, fighters: [f0, f1], costumes: [c0, c1] };
+  return {
+    seed,
+    stageId,
+    stageForm,
+    rules: parsedRules,
+    fighters: [f0, f1],
+    costumes: [c0, c1],
+    protocol: build.protocol,
+    bones: build.bones,
+  };
 }
 
 function parseBuild(value: Record<string, unknown>): BuildStamp | null {
