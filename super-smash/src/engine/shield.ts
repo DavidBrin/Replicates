@@ -12,6 +12,7 @@ import {
   PARRY_MELEE_INDIRECT,
   PARRY_PROJECTILE_DIRECT,
   PARRY_PROJECTILE_INDIRECT,
+  PERFECT_SHIELD_PUSHBACK_RATIO,
   SHIELD_ATTACKER_PUSHBACK_ADD,
   SHIELD_ATTACKER_PUSHBACK_RATIO,
   SHIELD_BREAK_STUN_BASE,
@@ -21,7 +22,7 @@ import {
   SHIELD_PUSHBACK_RATIO,
   SHIELD_SIZE_MIN,
 } from "./constants";
-import { ONE, byRatio, mul } from "./fixed";
+import { ONE, byRatio, byRatios, mul } from "./fixed";
 import type { Capsule } from "./hitbox";
 import { circle } from "./hitbox";
 import { fighterParams } from "./params";
@@ -44,12 +45,19 @@ export function shieldScale(health: number): number {
 
 /**
  * How far a shielding defender slides, Q12 units a frame:
- * `min((shieldstun + 1) × 0.09, 1.3)` on the shieldstun *before* rounding,
- * Q12 (`shieldstunExact`) — SmashWiki "Shield" (pushback table); rubendal
- * SSBU-Calculator `ShieldPushback`.
+ * `min((shieldstun + 1) × 0.09 × (0.15 if perfect), 1.3)` on the shieldstun
+ * *before* rounding, Q12 (`shieldstunExact`). The perfect-shield factor sits
+ * inside the formula and the 1.3 cap comes last, so a hard-hit parry slides
+ * 0.15 of the *uncapped* push, not 0.15 of 1.3 — SmashWiki "Shield (SSBU)"
+ * (https://www.ssbwiki.com/Shield_(SSBU), pushback table), rubendal
+ * SSBU-Calculator `ShieldPushback` (`js/formulas.js`: `… × 0.09 × perfectshieldMult2`
+ * then `if (pushback > 1.3)`), and `research/rebuild-2026-10/tools/ssbu_ref.mjs`.
  */
-export function shieldPushback(shieldstun: number): number {
-  const push = byRatio(shieldstun + ONE, SHIELD_PUSHBACK_RATIO);
+export function shieldPushback(shieldstun: number, perfect = false): number {
+  const push = byRatios(
+    shieldstun + ONE,
+    perfect ? [SHIELD_PUSHBACK_RATIO, PERFECT_SHIELD_PUSHBACK_RATIO] : [SHIELD_PUSHBACK_RATIO],
+  );
   return push > SHIELD_PUSHBACK_MAX ? SHIELD_PUSHBACK_MAX : push;
 }
 
@@ -96,9 +104,20 @@ export function shieldBubble(f: Pick<FighterState, "x" | "y" | "shieldHealth">, 
 /**
  * Hitlag on a perfect shield (SmashWiki "Perfect shield",
  * https://www.ssbwiki.com/Perfect_shield, Ultimate): on top of the hit's
- * shield hitlag `lag` (`computeHitlag(…, { shielding: true })`), a direct melee hit freezes the attacker 14 more frames
- * and the defender 11; an indirect melee hit 14 and 2; a projectile freezes its
- * thrower not at all and the defender 8 more (direct) or 1 fewer (indirect).
+ * shield hitlag `lag` (`computeHitlag(…, { shielding: true })`), a direct melee
+ * hit freezes the attacker 14 more frames and the defender 11; an indirect melee
+ * hit 14 and 2; a projectile freezes its thrower not at all and the defender 8
+ * more (direct) or 1 fewer (indirect).
+ *
+ * A melee hit whose hitlag came to nothing (a 0× `Hitbox.hitlagMultiplier`,
+ * `lag === 0`) freezes nobody, parried or not: the table's additions belong to a
+ * hit that freezes. UNVERIFIED: no source says what a parry of a hitlag-free
+ * melee hit does; this is the reading that keeps a 0× multi-hit from stalling
+ * both fighters.
+ *
+ * UNVERIFIED: no cap is applied to the sum. `lag` carries `computeHitlag`'s cap
+ * of 30 before the additions go on; SmashWiki states no cap for parries, and
+ * rubendal's `ParryHitlag` does cap them (at 33 defender, 34 attacker).
  */
 export function perfectShieldHitlag(
   lag: number,
@@ -112,6 +131,7 @@ export function perfectShieldHitlag(
     : direct
       ? PARRY_MELEE_DIRECT
       : PARRY_MELEE_INDIRECT;
+  if (lag === 0 && !projectile) return { attacker: 0, defender: 0 };
   const attacker = projectile ? 0 : lag + a;
   const defender = lag + d;
   return { attacker: attacker < 0 ? 0 : attacker, defender: defender < 0 ? 0 : defender };

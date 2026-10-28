@@ -177,16 +177,27 @@ export const PERFECT_SHIELD_WINDOW = 5;
 
 /**
  * Extra hitlag on a perfect shield, [attacker, defender], added to the hit's
- * *shield* hitlag (×0.67) — SmashWiki "Perfect shield" (Ultimate): direct
- * non-projectile +14/+11 ("the defender can act 3 frames earlier than shielding
- * the attack normally"), indirect non-projectile +14/+2, direct projectile
- * 0/+8, indirect projectile 0/−1.
+ * *shield* hitlag (×0.67) — SmashWiki "Perfect shield"
+ * (https://www.ssbwiki.com/Perfect_shield), Ultimate: direct non-projectile
+ * +14/+11 ("the defender can act 3 frames earlier than shielding the attack
+ * normally"), indirect non-projectile +14/+2, direct projectile 0/+8, indirect
+ * projectile 0/−1. The values are the wiki's.
+ *
+ * UNVERIFIED (`PARRY_MELEE_*`): rubendal SSBU-Calculator's `ParryHitlag` and
+ * `AttackerParryHitlag` (`js/formulas.js`) disagree on the melee rows. They add
+ * to the plain, unshielded hitlag, not the ×0.67 one, and give attacker/defender
+ * +11/+8 direct and +8/−1 indirect. The two sources contradict each other, so
+ * these two rows are a choice, recorded as an open question; the projectile rows
+ * (defender +8 direct, −1 indirect; thrower 0) agree on their offsets.
  */
 export const PARRY_MELEE_DIRECT = [14, 11] as const;
 export const PARRY_MELEE_INDIRECT = [14, 2] as const;
 export const PARRY_PROJECTILE_DIRECT = [0, 8] as const;
 export const PARRY_PROJECTILE_INDIRECT = [0, -1] as const;
-/** A perfect shield's pushback is 0.15 of a normal shield's (SmashWiki "Shield", pushback table: "0.15 for a perfect shield"). */
+/**
+ * A perfect shield's pushback factor (SmashWiki "Shield (SSBU)", pushback table: "0.15 for a perfect
+ * shield"). It multiplies inside the formula, before the 1.3 cap (`shieldPushback`).
+ */
 export const PERFECT_SHIELD_PUSHBACK_RATIO: Ratio = [3, 20];
 
 /** shieldstun = floor(0.8 * damage * typeMult * moveMult * projMult + 2). */

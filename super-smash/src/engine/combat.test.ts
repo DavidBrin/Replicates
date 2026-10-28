@@ -6,7 +6,6 @@ import {
   FURAFURA_END_FRAMES,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
-  PERFECT_SHIELD_PUSHBACK_RATIO,
   SDI_DISTANCE,
   SHIELD_BREAK_RESET,
   SHIELD_DECAY_PER_FRAME,
@@ -871,16 +870,17 @@ describe("perfect shield (Plan 3, Task 10)", () => {
     expect(at.events.shieldHits).toHaveLength(1);
     expect(attacker.hitlag).toBe(JAB_LAG + 14);
     expect(defender.hitlag).toBe(JAB_LAG + 11);
-    // 0.15 of a normal shield's pushback, away from the attacker.
-    expect(defender.vx).toBe(byRatio(shieldPushback(shieldstunExact(JAB_DMG)), PERFECT_SHIELD_PUSHBACK_RATIO));
+    // 0.15 inside the pushback formula, away from the attacker.
+    expect(defender.vx).toBe(shieldPushback(shieldstunExact(JAB_DMG), true));
+    // No shield damage and no shieldstun.
     expect(defender.shieldHealth).toBe(SHIELD_MAX_HEALTH);
+    expect(defender.hitstun).toBe(0);
   });
 
-  // Review Focus #2: a parried projectile freezes nobody far away and costs the
-  // defender a frame, not eleven.
-  it("parries a projectile without freezing its thrower, 1 frame short for the defender", () => {
-    const pellet = hitbox({ startFrame: 1, endFrame: 90, x: 0, y: 0, damage: fx(6) });
-    const shooter: FighterDef = {
+  /** A fighter whose neutral B throws one 6% pellet; `over` sets the pellet hitbox's own fields. */
+  function shooterOf(over: Partial<Hitbox> = {}): FighterDef {
+    const pellet = hitbox({ startFrame: 1, endFrame: 90, x: 0, y: 0, damage: fx(6), ...over });
+    return {
       ...BASE_DEF,
       moves: {
         ...BASE_DEF.moves,
@@ -893,12 +893,52 @@ describe("perfect shield (Plan 3, Task 10)", () => {
         }),
       },
     };
-    const at = parried(shooter, (i) => (i === 0 ? Btn.Special : 0), 40);
+  }
+  const PELLET_LAG = computeHitlag(fx(6), { shielding: true });
+
+  // Review Focus #2: a parried projectile freezes nobody far away and costs the
+  // defender a frame, not eleven.
+  it("parries a projectile without freezing its thrower, 1 frame short for the defender", () => {
+    const at = parried(shooterOf(), (i) => (i === 0 ? Btn.Special : 0), 40);
     const [owner, defender] = at.state.fighters;
-    const pelletLag = computeHitlag(fx(6), { shielding: true });
     expect(at.events.shieldHits).toHaveLength(1);
     expect(owner.hitlag).toBe(0);
-    expect(defender.hitlag).toBe(pelletLag - 1);
+    expect(defender.hitlag).toBe(PELLET_LAG - 1);
+    expect(defender.hitstun).toBe(0);
+  });
+
+  // The direct/indirect split through `step()`. A fighter's own move is direct
+  // and a projectile indirect unless `Hitbox.direct` says otherwise (the melee
+  // test above and the pellet above are the two defaults); a projectile marked
+  // direct takes the +8 branch, one marked `direct: false` is the default.
+  // Not reachable for melee yet: a MoveDef hitbox reaches the sim through
+  // `attackFromHitbox` (always `direct: true`) and `attackHitbox` (which drops it),
+  // so an indirect *melee* hit cannot be built through `step()` until a producer
+  // writes `direct` (Plan 3, Task 16); `perfectShieldHitlag`'s own tests pin its row.
+  it("reads Hitbox.direct over its default: a direct projectile is +8, an explicit indirect one the default", () => {
+    const direct = parried(shooterOf({ direct: true }), (i) => (i === 0 ? Btn.Special : 0), 40);
+    expect(direct.events.shieldHits).toHaveLength(1);
+    expect(direct.state.fighters[0].hitlag).toBe(0);
+    expect(direct.state.fighters[1].hitlag).toBe(PELLET_LAG + 8);
+    expect(direct.state.fighters[1].hitstun).toBe(0);
+
+    const indirect = parried(shooterOf({ direct: false }), (i) => (i === 0 ? Btn.Special : 0), 40);
+    expect(indirect.state.fighters[0].hitlag).toBe(0);
+    expect(indirect.state.fighters[1].hitlag).toBe(PELLET_LAG - 1);
+    expect(indirect.state.fighters[1].hitstun).toBe(0);
+  });
+
+  // A hit with no hitlag of its own (0× multiplier) freezes neither fighter, so
+  // the parry adds nothing to either: no table constants on top of zero.
+  it("freezes nobody when a melee hit has no hitlag of its own", () => {
+    const noLag: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ hitlagMultiplier: 0 })] }) },
+    };
+    const at = parried(noLag, (i) => (i === 0 ? Btn.Attack : 0), 8);
+    expect(at.events.shieldHits).toHaveLength(1);
+    expect(at.state.fighters[0].hitlag).toBe(0);
+    expect(at.state.fighters[1].hitlag).toBe(0);
   });
 });
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
-import { ONE, fx, toFloat } from "./fixed";
+import { ONE, byRatio, fx, toFloat } from "./fixed";
+import { PERFECT_SHIELD_PUSHBACK_RATIO } from "./constants";
 import {
   attackerShieldPushback,
   mashFrames,
@@ -47,6 +48,8 @@ describe("shield arithmetic (Plan 3, Task 9)", () => {
       expect(toFloat(shieldPushback(shieldstunExact(fx(d))))).toBeCloseTo((d * 0.8 + 3) * 0.09, 3);
     }
     expect(shieldPushback(60 * ONE)).toBe(fx(1.3));
+    // A hard smash overflows the cap on the plain path: (40 × 0.8 × 0.725 + 3) × 0.09 = 2.358.
+    expect(shieldPushback(shieldstunExact(fx(40), { smash: true }))).toBe(fx(1.3));
   });
 
   it("pushes a melee attacker back 0.04 x damage + 0.025", () => {
@@ -89,5 +92,40 @@ describe("perfect shield hitlag (Plan 3, Task 10)", () => {
 
   it("never freezes anyone for a negative time", () => {
     expect(perfectShieldHitlag(0, true, false)).toEqual({ attacker: 0, defender: 0 });
+  });
+
+  // A melee hit with no hitlag of its own (a 0× multiplier) freezes nobody, so
+  // the table's +14/+11 and +14/+2 have nothing to be added to. UNVERIFIED: no
+  // source rules on it.
+  it.each([true, false])("freezes nobody for a melee hit with no hitlag (direct %s)", (direct) => {
+    expect(perfectShieldHitlag(0, false, direct)).toEqual({ attacker: 0, defender: 0 });
+  });
+});
+
+describe("perfect shield pushback (Plan 3, Task 10 fix round 1)", () => {
+  // The 0.15 sits inside the formula and the 1.3 cap comes last — SmashWiki
+  // "Shield (SSBU)" (https://www.ssbwiki.com/Shield_(SSBU)), pushback table;
+  // rubendal SSBU-Calculator `ShieldPushback`
+  // (https://github.com/rubendal/SSBU-Calculator/blob/master/js/formulas.js):
+  // `((… + 3) × 0.09 × perfectshieldMult2)`, then `if (pushback > 1.3)`; and
+  // `research/rebuild-2026-10/tools/ssbu_ref.mjs`.
+  it("takes 0.15 of (shieldstun + 1) x 0.09 and caps afterwards", () => {
+    for (let ss = 0; ss <= 30; ss++) {
+      expect(toFloat(shieldPushback(ss * ONE, true))).toBeCloseTo(ref.shieldPushback(ss, true), 3);
+    }
+    // Far past the cap: (120 + 1) × 0.09 × 0.15 = 1.6335 is still capped at 1.3.
+    expect(shieldPushback(120 * ONE, true)).toBe(fx(1.3));
+  });
+
+  // Where the order matters: a 40% smash is (40 × 0.8 × 0.725 + 3) × 0.09 = 2.358
+  // before the cap. Capping first (1.3) and then taking 0.15 gave 0.195 (798 in
+  // Q12); the published order gives 2.358 × 0.15 = 0.3537, which is 1448 in Q12
+  // (26.2 × 4096 × 0.09 × 0.15 = 1448.75, truncated once).
+  it("applies the factor before the cap: a 40% smash slides 0.354, not 0.195", () => {
+    const stun = shieldstunExact(fx(40), { smash: true });
+    expect(shieldPushback(stun, true)).toBe(1448);
+    expect(toFloat(shieldPushback(stun, true))).toBeCloseTo(ref.shieldPushback(40 * 0.8 * 0.725 + 2, true), 3);
+    // The old order, for the record: cap first, then the factor.
+    expect(byRatio(shieldPushback(stun), PERFECT_SHIELD_PUSHBACK_RATIO)).toBe(798);
   });
 });

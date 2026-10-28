@@ -25,7 +25,6 @@ import {
   LEDGE_REGRAB_LIMIT,
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
-  PERFECT_SHIELD_PUSHBACK_RATIO,
   SDI_COMBO_HITS,
   SDI_COMBO_RATIO,
   SDI_DISTANCE,
@@ -908,8 +907,8 @@ function isAerialSlot(slot: MoveSlot): boolean {
  *
  * One swing hits one target once (`hitThisMove`), the lowest-id hitbox wins among
  * an attacker's own overlapping ones, and a hit that reaches a raised shield goes
- * down the shield path instead, where a parry costs the attacker rather than the
- * defender.
+ * down the shield path instead, where a parry freezes the attacker longer than
+ * the defender (`perfectShieldHitlag`).
  */
 function resolveHits(
   s: GameState,
@@ -1247,18 +1246,19 @@ function applyHit(
     };
     const away = victim.x < c.x ? -1 : 1;
     // Pushback reads the shieldstun *before* it is rounded (SmashWiki "Shield").
-    const pushback = shieldPushback(shieldstunExact(damage, stunOpts));
+    const stunExact = shieldstunExact(damage, stunOpts);
     if (isParrying(victim)) {
       // Perfect shield: no shield damage, no shieldstun, and the attacker is the
       // one left standing there — frozen longer than the defender, by the
       // published amounts on top of the *shield* hitlag (SmashWiki "Perfect
       // shield": the defender "can act 3 frames earlier than shielding the attack
-      // normally"; rubendal `ParryHitlag`). Pushback is 0.15 of a normal shield's.
-      // A parried projectile freezes nobody a stage away.
+      // normally"; rubendal's `ParryHitlag` disagrees on the melee rows, see
+      // `PARRY_MELEE_*`). Pushback carries the 0.15 inside its formula, before the
+      // 1.3 cap. A parried projectile freezes nobody a stage away.
       const parry = perfectShieldHitlag(lag, fromProjectile, hb.direct ?? !fromProjectile);
       victim.hitlag = parry.defender;
       if (!fromProjectile) attacker.hitlag = parry.attacker;
-      kineticSetX(victim, away * byRatio(pushback, PERFECT_SHIELD_PUSHBACK_RATIO), "stop");
+      kineticSetX(victim, away * shieldPushback(stunExact, true), "stop");
       if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
       events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
       return;
@@ -1267,7 +1267,7 @@ function applyHit(
     victim.hitstun = computeShieldstun(damage, stunOpts);
     victim.hitlag = lag;
     if (!fromProjectile) attacker.hitlag = lag;
-    kineticSetX(victim, away * pushback, "stop");
+    kineticSetX(victim, away * shieldPushback(stunExact), "stop");
     // A melee attacker on the ground slides back off the shield too; a
     // projectile's owner is not there to be pushed (rubendal `AttackerShieldPushback`).
     if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
