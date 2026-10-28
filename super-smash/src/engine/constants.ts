@@ -175,6 +175,20 @@ export const SHIELD_MIN_HOLD = 3;
  */
 export const PERFECT_SHIELD_WINDOW = 5;
 
+/**
+ * Extra hitlag on a perfect shield, [attacker, defender], added to the hit's
+ * *shield* hitlag (×0.67) — SmashWiki "Perfect shield" (Ultimate): direct
+ * non-projectile +14/+11 ("the defender can act 3 frames earlier than shielding
+ * the attack normally"), indirect non-projectile +14/+2, direct projectile
+ * 0/+8, indirect projectile 0/−1.
+ */
+export const PARRY_MELEE_DIRECT = [14, 11] as const;
+export const PARRY_MELEE_INDIRECT = [14, 2] as const;
+export const PARRY_PROJECTILE_DIRECT = [0, 8] as const;
+export const PARRY_PROJECTILE_INDIRECT = [0, -1] as const;
+/** A perfect shield's pushback is 0.15 of a normal shield's (SmashWiki "Shield", pushback table: "0.15 for a perfect shield"). */
+export const PERFECT_SHIELD_PUSHBACK_RATIO: Ratio = [3, 20];
+
 /** shieldstun = floor(0.8 * damage * typeMult * moveMult * projMult + 2). */
 export const SHIELDSTUN_RATIO: Ratio = [4, 5];
 export const SHIELDSTUN_ADDEND = fx(2);

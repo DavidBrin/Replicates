@@ -5,13 +5,16 @@ import {
   FURAFURA_END_FRAMES,
   GROUNDED_ZERO_LAUNCH_RATIO,
   LAUNCH_SPEED_RATIO,
+  PERFECT_SHIELD_PUSHBACK_RATIO,
   SHIELD_BREAK_RESET,
   SHIELD_DECAY_PER_FRAME,
+  SHIELD_MAX_HEALTH,
   SHIELD_REGEN_PER_FRAME,
 } from "./constants";
 import { hashState } from "./hash";
 import {
   STALE_FRESH_BONUS,
+  computeHitlag,
   computeHitstun,
   damageSpeedUpMaxMag,
   effectiveHitstun,
@@ -829,5 +832,70 @@ describe("shields (Plan 3, Task 9)", () => {
     const mashed = play(s, 10, (i) => [0, i % 2 === 0 ? Btn.Attack : 0]).at(-1)!.state.fighters[1].hitstun;
     // Five presses: 27 frames earned.
     expect(still - mashed).toBe(27);
+  });
+});
+
+/* ------------------------------------------- Task 10: perfect shield -- */
+
+describe("perfect shield (Plan 3, Task 10)", () => {
+  /**
+   * Fighter 0 attacks with `attack`; fighter 1 shields and lets go so that the
+   * hit lands on frame 2 of the drop — inside the 5-frame parry window.
+   */
+  function parried(def: FighterDef, attack: (i: number) => InputFrame, gap: number): Frame {
+    const ctx = ctxFor(def);
+    const setup = (): GameState => {
+      const s = standing(ctx);
+      s.fighters[1].x = fx(gap);
+      // Shield already up long enough to be dropped (SHIELD_MIN_HOLD).
+      s.fighters[1].action = "shield";
+      s.fighters[1].actionFrame = 10;
+      return s;
+    };
+    // Where a held shield takes the hit…
+    const held = play(setup(), 40, (i) => [attack(i), Btn.Shield], ctx);
+    const k = held.findIndex((f) => f.events.shieldHits.length > 0);
+    // …and the same exchange with the shield dropped two frames before it.
+    return play(setup(), k + 1, (i) => [attack(i), i < k - 2 ? Btn.Shield : 0], ctx)[k];
+  }
+  // The extra hitlag rides on the *shield* hitlag (×0.67).
+  const JAB_DMG = mul(fx(10), STALE_FRESH_BONUS);
+  const JAB_LAG = computeHitlag(JAB_DMG, { shielding: true });
+
+  it("freezes a direct melee attacker 14 frames and the defender 11 beyond the hit", () => {
+    const at = parried(BASE_DEF, (i) => (i === 0 ? Btn.Attack : 0), 8);
+    const [attacker, defender] = at.state.fighters;
+    expect(defender.action).toBe("shieldRelease");
+    expect(at.events.shieldHits).toHaveLength(1);
+    expect(attacker.hitlag).toBe(JAB_LAG + 14);
+    expect(defender.hitlag).toBe(JAB_LAG + 11);
+    // 0.15 of a normal shield's pushback, away from the attacker.
+    expect(defender.vx).toBe(byRatio(shieldPushback(shieldstunExact(JAB_DMG)), PERFECT_SHIELD_PUSHBACK_RATIO));
+    expect(defender.shieldHealth).toBe(SHIELD_MAX_HEALTH);
+  });
+
+  // Review Focus #2: a parried projectile freezes nobody far away and costs the
+  // defender a frame, not eleven.
+  it("parries a projectile without freezing its thrower, 1 frame short for the defender", () => {
+    const pellet = hitbox({ startFrame: 1, endFrame: 90, x: 0, y: 0, damage: fx(6) });
+    const shooter: FighterDef = {
+      ...BASE_DEF,
+      moves: {
+        ...BASE_DEF.moves,
+        neutralB: move("neutralB", {
+          totalFrames: 30,
+          hitboxes: [],
+          projectiles: [
+            { id: "pellet", spawnFrame: 6, offsetX: fx(6), offsetY: fx(6), vx: fx(4), vy: 0, gravity: 0, lifetime: 90, hitbox: pellet, destroyOnHit: true, visual: "energy" },
+          ],
+        }),
+      },
+    };
+    const at = parried(shooter, (i) => (i === 0 ? Btn.Special : 0), 40);
+    const [owner, defender] = at.state.fighters;
+    const pelletLag = computeHitlag(fx(6), { shielding: true });
+    expect(at.events.shieldHits).toHaveLength(1);
+    expect(owner.hitlag).toBe(0);
+    expect(defender.hitlag).toBe(pelletLag - 1);
   });
 });

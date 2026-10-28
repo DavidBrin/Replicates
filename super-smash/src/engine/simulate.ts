@@ -23,6 +23,7 @@ import {
   LEDGE_REGRAB_LIMIT,
   LEDGE_REGRAB_LOCKOUT_FRAMES,
   ONE_ON_ONE_MULTIPLIER,
+  PERFECT_SHIELD_PUSHBACK_RATIO,
   SDI_DISTANCE,
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
@@ -113,6 +114,7 @@ import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
 import { cloneCombat, emptyCombat } from "./combat";
 import {
   attackerShieldPushback,
+  perfectShieldHitlag,
   shieldBreakStun,
   shieldBubble,
   shieldDamage,
@@ -412,8 +414,6 @@ export interface StepOptions {
 
 /** Frames the whole game freezes for on a KO, for the drama. */
 export const KO_FREEZE_FRAMES = 14;
-/** Extra frames an attacker eats for having its move parried. */
-export const PARRY_PUNISH_FRAMES = 20;
 /** The Smash Ball's radius, and how hard it drifts. */
 export const SMASH_BALL_RADIUS = fx(6);
 export const SMASH_BALL_SPEED = fx(1.4);
@@ -1201,21 +1201,11 @@ function applyHit(
 
   /* ---- the shield path ---- */
   if (onShield) {
-    if (isParrying(victim)) {
-      // Perfect shield: no shield damage, no shieldstun, and the attacker is the
-      // one left standing there. This is the whole reward for shielding on
-      // release rather than on press — though parrying a projectile punishes
-      // nobody, since the fighter who threw it is a stage away.
-      if (!fromProjectile) attacker.hitlag = Math.max(attacker.hitlag, PARRY_PUNISH_FRAMES);
-      events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
-      return;
-    }
     const lag = computeHitlag(damage, {
       electric: hb.effect === "electric",
       shielding: true,
       moveMultiplier: hb.hitlagMultiplier,
     });
-    victim.shieldHealth -= shieldDamage(damage);
     const stunOpts = {
       smash: c.slot !== null && isSmashSlot(c.slot),
       aerial: c.slot !== null && isAerialSlot(c.slot),
@@ -1224,12 +1214,29 @@ function applyHit(
       projectile: fromProjectile,
       moveMultiplier: hb.shieldstunMultiplier,
     };
+    const away = victim.x < c.x ? -1 : 1;
+    // Pushback reads the shieldstun *before* it is rounded (SmashWiki "Shield").
+    const pushback = shieldPushback(shieldstunExact(damage, stunOpts));
+    if (isParrying(victim)) {
+      // Perfect shield: no shield damage, no shieldstun, and the attacker is the
+      // one left standing there — frozen longer than the defender, by the
+      // published amounts on top of the *shield* hitlag (SmashWiki "Perfect
+      // shield": the defender "can act 3 frames earlier than shielding the attack
+      // normally"; rubendal `ParryHitlag`). Pushback is 0.15 of a normal shield's.
+      // A parried projectile freezes nobody a stage away.
+      const parry = perfectShieldHitlag(lag, fromProjectile, hb.direct ?? !fromProjectile);
+      victim.hitlag = parry.defender;
+      if (!fromProjectile) attacker.hitlag = parry.attacker;
+      kineticSetX(victim, away * byRatio(pushback, PERFECT_SHIELD_PUSHBACK_RATIO), "stop");
+      if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
+      events.shieldHits.push({ victim: victim.port, x: c.x, y: c.y });
+      return;
+    }
+    victim.shieldHealth -= shieldDamage(damage);
     victim.hitstun = computeShieldstun(damage, stunOpts);
     victim.hitlag = lag;
     if (!fromProjectile) attacker.hitlag = lag;
-    const away = victim.x < c.x ? -1 : 1;
-    // Pushback reads the shieldstun *before* it is rounded (SmashWiki "Shield").
-    kineticSetX(victim, away * shieldPushback(shieldstunExact(damage, stunOpts)), "stop");
+    kineticSetX(victim, away * pushback, "stop");
     // A melee attacker on the ground slides back off the shield too; a
     // projectile's owner is not there to be pushed (rubendal `AttackerShieldPushback`).
     if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));

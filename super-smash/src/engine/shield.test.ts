@@ -5,6 +5,7 @@ import { ONE, fx, toFloat } from "./fixed";
 import {
   attackerShieldPushback,
   mashFrames,
+  perfectShieldHitlag,
   shieldBreakStun,
   shieldDamage,
   shieldPushback,
@@ -70,5 +71,23 @@ describe("shield arithmetic (Plan 3, Task 9)", () => {
     expect(mashFrames(c, 1, 0, 54, 30)).toBe(6);
     expect(mashFrames(c, 0, 1, 54, 30)).toBe(3);
     expect(mashFrames(c, 0, 0, 54, 30)).toBe(0);
+  });
+});
+
+describe("perfect shield hitlag (Plan 3, Task 10)", () => {
+  // SmashWiki "Perfect shield" (https://www.ssbwiki.com/Perfect_shield), Ultimate,
+  // extra hitlag attacker/defender: direct non-projectile +14/+11, indirect
+  // non-projectile +14/+2, direct projectile 0/+8, indirect projectile 0/−1.
+  it.each([
+    [false, true, 24, 21],
+    [false, false, 24, 12],
+    [true, true, 0, 18],
+    [true, false, 0, 9],
+  ])("projectile %s, direct %s: attacker %i, defender %i on a 10-frame hit", (projectile, direct, attacker, defender) => {
+    expect(perfectShieldHitlag(10, projectile, direct)).toEqual({ attacker, defender });
+  });
+
+  it("never freezes anyone for a negative time", () => {
+    expect(perfectShieldHitlag(0, true, false)).toEqual({ attacker: 0, defender: 0 });
   });
 });

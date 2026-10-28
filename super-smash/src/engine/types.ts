@@ -217,6 +217,12 @@ export interface Hitbox {
   readonly meteor?: boolean;
   /** This hitbox grabs rather than damages. */
   readonly grabbing?: boolean;
+  /**
+   * smash-script `direct`: the hit comes from the fighter's own body. Absent
+   * means direct for a fighter's move and indirect for a projectile — what a
+   * perfect shield's hitlag depends on (Plan 3, Task 10).
+   */
+  readonly direct?: boolean;
 }
 
 /**

@@ -8,6 +8,10 @@
 
 import type { CombatState } from "./combat";
 import {
+  PARRY_MELEE_DIRECT,
+  PARRY_MELEE_INDIRECT,
+  PARRY_PROJECTILE_DIRECT,
+  PARRY_PROJECTILE_INDIRECT,
   SHIELD_ATTACKER_PUSHBACK_ADD,
   SHIELD_ATTACKER_PUSHBACK_RATIO,
   SHIELD_BREAK_STUN_BASE,
@@ -87,4 +91,28 @@ export function shieldBubble(f: Pick<FighterState, "x" | "y" | "shieldHealth">, 
   const p = fighterParams(def);
   const r = mul(mul(p.shield_radius, p.scale), shieldScale(f.shieldHealth));
   return circle(f.x, f.y + Math.trunc(def.attributes.height / 2), r);
+}
+
+/**
+ * Hitlag on a perfect shield (SmashWiki "Perfect shield",
+ * https://www.ssbwiki.com/Perfect_shield, Ultimate): on top of the hit's
+ * shield hitlag `lag` (`computeHitlag(…, { shielding: true })`), a direct melee hit freezes the attacker 14 more frames
+ * and the defender 11; an indirect melee hit 14 and 2; a projectile freezes its
+ * thrower not at all and the defender 8 more (direct) or 1 fewer (indirect).
+ */
+export function perfectShieldHitlag(
+  lag: number,
+  projectile: boolean,
+  direct: boolean,
+): { attacker: number; defender: number } {
+  const [a, d] = projectile
+    ? direct
+      ? PARRY_PROJECTILE_DIRECT
+      : PARRY_PROJECTILE_INDIRECT
+    : direct
+      ? PARRY_MELEE_DIRECT
+      : PARRY_MELEE_INDIRECT;
+  const attacker = projectile ? 0 : lag + a;
+  const defender = lag + d;
+  return { attacker: attacker < 0 ? 0 : attacker, defender: defender < 0 ? 0 : defender };
 }
