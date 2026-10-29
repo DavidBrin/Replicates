@@ -1,17 +1,19 @@
 /**
  * Deploy guard (Plan 4): refuse to build a deploy whose models are missing,
- * changed since they were built, over Cloudflare's 25 MiB per-file limit, or
- * built against a different skeleton than the committed bake — or whose
- * `public/models/` git would commit (not ignored, or a file in it tracked or
- * staged): the ripped models are deployed from local disk, never pushed to the
- * public repo (spec §3.1).
+ * changed since they were built, over Cloudflare's 25 MiB per-file limit,
+ * built against a different skeleton than the committed bake (or with
+ * `--allow-skeleton-drift`), or joined by a file `index.json` doesn't name
+ * (`next build` copies all of `public/models/` into the deploy) — or whose
+ * `public/models/` git would commit: anything in it that `git add` would take
+ * or that is already tracked or staged. The ripped models are deployed from
+ * local disk, never pushed to the public repo (spec §3.1).
  *
  *   node scripts/models/check.mjs     # run by `pnpm run deploy` before `next build`
  */
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -20,17 +22,21 @@ const MAX = 25 * 1024 * 1024;
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 const problems = [];
 
-const git = (args) => spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });
-// The rules alone (`--no-index`; a staged file is caught below): exit 0 ignored, 1 not.
-const ignored = git(["check-ignore", "--no-index", "-q", "--", "public/models/index.json"]);
-if (ignored.status === 1) problems.push("public/models/ is not git-ignored — `git add` would commit the ripped models (super-smash/.gitignore)");
-else if (ignored.status !== 0) problems.push(`cannot ask git whether public/models/ is ignored: ${ignored.error?.message ?? ignored.stderr.trim()}`);
-const tracked = git(["ls-files", "--cached", "-z", "--", "public/models"]);
-if (tracked.status !== 0) problems.push(`cannot list git's index for public/models/: ${tracked.error?.message ?? tracked.stderr.trim()}`);
-else {
-  const paths = tracked.stdout.split("\0").filter(Boolean);
-  if (paths.length > 0) problems.push(`public/models/ has ${paths.length} tracked or staged file(s) (${paths.slice(0, 4).join(", ")}) — \`git rm --cached\` them; a ripped model must never be committed`);
+/** The NUL-separated paths a `git ls-files` lists, or null (and a problem) when git cannot answer. */
+function gitList(args) {
+  const r = spawnSync("git", ["ls-files", ...args, "-z", "--", "public/models"], { cwd: ROOT, encoding: "utf8" });
+  if (r.status !== 0) {
+    problems.push(`cannot ask git what it would commit from public/models/: ${r.error?.message ?? r.stderr.trim()}`);
+    return null;
+  }
+  return r.stdout.split("\0").filter(Boolean);
 }
+// Every file `git add` would take (untracked and not ignored): checking one
+// file's ignore status misses a rule like `!/public/models/*.glb`.
+const addable = gitList(["--others", "--exclude-standard"]);
+if (addable?.length) problems.push(`public/models/ has ${addable.length} file(s) git would commit (${addable.slice(0, 4).join(", ")}) — the folder must stay git-ignored (super-smash/.gitignore)`);
+const tracked = addable === null ? null : gitList(["--cached"]);
+if (tracked?.length) problems.push(`public/models/ has ${tracked.length} tracked or staged file(s) (${tracked.slice(0, 4).join(", ")}) — \`git rm --cached\` them; a ripped model must never be committed`);
 
 const indexFile = join(ROOT, "public", "models", "index.json");
 if (!existsSync(indexFile)) {
@@ -52,8 +58,12 @@ if (!existsSync(indexFile)) {
     if (bytes.length > MAX) problems.push(`${id}: ${e.file} is ${bytes.length} bytes, over 25 MiB`);
     if (sha256(bytes) !== e.sha256) problems.push(`${id}: ${e.file} changed since it was built`);
     const skeleton = readFileSync(join(ROOT, "src", "render3d", "skeletons", `${id}.json`));
-    if (e.skeleton !== sha256(skeleton)) problems.push(`${id}: built against another skeleton than the committed one — run \`pnpm models\``);
+    if (e.skeleton === null) problems.push(`${id}: built with --allow-skeleton-drift or without a committed skeleton — not deployable, run \`pnpm models\``);
+    else if (e.skeleton !== sha256(skeleton)) problems.push(`${id}: built against another skeleton than the committed one — run \`pnpm models\``);
   }
+  const named = new Set(["index.json", ...Object.values(index.models ?? {}).map((e) => e.file)]);
+  const stray = readdirSync(join(ROOT, "public", "models")).filter((f) => !named.has(f));
+  if (stray.length > 0) problems.push(`public/models/ holds file(s) index.json does not name (${stray.join(", ")}) — next build would deploy them; delete them`);
 }
 
 if (problems.length > 0) {

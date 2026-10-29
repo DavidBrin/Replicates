@@ -4,11 +4,7 @@ allowBuilds:
   # ship platform binaries through install scripts.
   esbuild: true
   workerd: true
-  # Miniflare's optional image binding; nothing here uses it.
+  # sharp (one copy, 0.35.4: Next's, miniflare's, gltf-transform's and
+  # scripts/models/glb.mjs's) ships prebuilt @img/* binaries; its install
+  # script never needs to run.
   sharp: false
-overrides:
-  # Plan 4's model pipeline loads gltf-transform's ndarray-pixels and its own
-  # sharp in one process; two sharps there load two libvips builds (macOS warns
-  # of duplicate classes). Point ndarray-pixels (^0.35.0) at the 0.35.3 that
-  # Next and scripts/models/glb.mjs use. Miniflare keeps its own copy.
-  ndarray-pixels>sharp: 0.35.3

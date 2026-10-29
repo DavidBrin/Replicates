@@ -9,8 +9,9 @@
  *
  * Blender: `$BLENDER`, else the portable copy Task 7 installs in
  * `.model-cache/tools/Blender.app`. Each glb records the SHA-256 of the
- * committed skeleton it matches, so `check.mjs` can refuse to deploy models
- * built against different bones than the committed bake.
+ * committed skeleton it matches (null when its bones drifted, under
+ * `--allow-skeleton-drift`), so `check.mjs` can refuse to deploy models built
+ * against different bones than the committed bake.
  */
 
 import { spawnSync } from "node:child_process";
@@ -18,7 +19,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { optimizeGlb, verifyGlb } from "./glb.mjs";
+import { optimizeGlb, skeletonRecord, verifyGlb } from "./glb.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const CACHE = join(ROOT, ".model-cache");
@@ -73,21 +74,14 @@ for (const id of fighters) {
   if (report.problems.length > 0) die(report.problems.join("\n"));
 
   const skeletonFile = join(ROOT, "src", "render3d", "skeletons", `${id}.json`);
-  let skeletonSha = null;
-  if (existsSync(skeletonFile)) {
-    const committed = JSON.parse(readFileSync(skeletonFile, "utf8"));
-    const byName = new Map(dump.bones.map((b) => [b.name, b]));
-    const drift = committed.bones.filter((b) => {
-      const d = byName.get(b.name);
-      return !d || d.world.some((v, i) => Math.abs(v - b.world[i]) > 1e-4);
-    });
-    if (drift.length > 0 && !allowDrift) {
-      die(`${id}: ${drift.length} bones differ from src/render3d/skeletons/${id}.json (${drift.slice(0, 4).map((b) => b.name).join(", ")}…). Re-run UPDATE_SKELETONS=1 then UPDATE_BAKE=1 (Plan 4 Tasks 6 and 10).`);
-    }
-    skeletonSha = sha256(readFileSync(skeletonFile));
-  } else if (!allowDrift) {
-    die(`no committed skeleton for ${id} — during the spike pass --allow-skeleton-drift`);
+  // The committed skeleton's SHA-256, or null when the bones drifted (or none is
+  // committed): models:check refuses null, so a spike build never deploys.
+  const { sha: skeletonSha, drift } = skeletonRecord(existsSync(skeletonFile) ? readFileSync(skeletonFile) : null, dump);
+  if (drift === null && !allowDrift) die(`no committed skeleton for ${id} — during the spike pass --allow-skeleton-drift`);
+  if (drift !== null && drift.length > 0 && !allowDrift) {
+    die(`${id}: ${drift.length} bones differ from src/render3d/skeletons/${id}.json (${drift.slice(0, 4).join(", ")}…). Re-run UPDATE_SKELETONS=1 then UPDATE_BAKE=1 (Plan 4 Tasks 6 and 10).`);
   }
+  if (skeletonSha === null) console.warn(`${id}: built with --allow-skeleton-drift — recorded with skeleton null, which models:check refuses to deploy`);
 
   const bytes = readFileSync(opt);
   const hash = sha256(bytes);

@@ -24,7 +24,7 @@ Run by scripts/models/build.mjs for each fighter (Plan 4 Task 8). What it does:
    `dump.test.ts` cross-checks.
 4. Joins the kept meshes into one object, so the glb has one primitive per
    texture (at most `MAX_PRIMITIVES` in glb.mjs) instead of one per part:
-   Link's 13 kept parts are 8 draw calls, not 44.
+   Link's 13 kept parts are 7 draw calls (7 textures), not 44.
 5. Exports armature + the joined mesh as GLB (skins on, animations and morphs off).
 
 Prints the kept and dropped meshes. Fails loudly (exit 1, a message naming the
@@ -35,6 +35,7 @@ an option. Schema of the dump: src/render3d/pipeline/dump.ts.
 
 import json
 import math
+import os
 import re
 import sys
 
@@ -94,6 +95,15 @@ def rebuild_material(fighter, material):
     image, image_node = colour_image(material)
     if image is None:
         fail(fighter, f"material {material.name} has no colour texture")
+    # The .blend is downloaded data: an image path it stores could point anywhere
+    # on this machine, and the texture ends up in a public glb. Only the fighter's
+    # own pinned files (beside the .blend) may be read; a packed image is the
+    # pinned .blend's own bytes.
+    if image.packed_file is None:
+        own = os.path.realpath(os.path.dirname(bpy.data.filepath))
+        path = os.path.realpath(bpy.path.abspath(image.filepath))
+        if os.path.commonpath([own, path]) != own:
+            fail(fighter, f"texture {image.filepath} for {material.name} is outside {own}")
     image.reload()
     if image.size[0] == 0:
         fail(fighter, f"texture {image.filepath} for {material.name} did not load (is it in .model-cache/src/{fighter}/?)")
