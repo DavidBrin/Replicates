@@ -51,6 +51,7 @@ export function parseModelIndex(json: unknown): ModelIndex | null {
 
 /** Where models come from: the network in the browser, a fake in tests. */
 export interface ModelSource {
+  /** The index; null when there is none (a 404: the checkout never ran `pnpm models`); rejects, saying why, when it could not be read. */
   index(): Promise<ModelIndex | null>;
   /** The glb's scene, ready to clone; rejects if the bytes are not the entry's. */
   load(entry: ModelIndexEntry): Promise<Object3D>;
@@ -59,7 +60,11 @@ export interface ModelSource {
 /** Resolves when `bytes` are exactly what `entry` lists; rejects naming what differs. */
 export async function verifyModelBytes(bytes: ArrayBuffer, entry: ModelIndexEntry): Promise<void> {
   if (bytes.byteLength !== entry.bytes) throw new Error(`${entry.file}: ${bytes.byteLength} bytes, index says ${entry.bytes}`);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  // `crypto.subtle` exists only on https and localhost. Without it a length-only pass would let a stale or
+  // tampered file through, so refuse: this page can not vouch for the bytes.
+  const subtle = globalThis.crypto?.subtle as SubtleCrypto | undefined;
+  if (subtle === undefined) throw new Error(`${entry.file}: cannot verify it: SHA-256 needs a secure context (https or localhost)`);
+  const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
   const hex = Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
   if (hex !== entry.sha256) throw new Error(`${entry.file}: SHA-256 does not match the model index`);
 }
@@ -79,6 +84,8 @@ export interface ModelCache {
 /** How long a model may take before the match starts with its stand-in. */
 export const MODEL_TIMEOUT_MS = 20_000;
 
+const reasonOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
 function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
@@ -89,10 +96,14 @@ function timeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   });
 }
 
+/** What asking for the index came to: the index, or why there is none. */
+type IndexRead = { readonly found: ModelIndex } | { readonly problem: string };
+
 export function createModelCache(source: ModelSource, warn: (msg: string) => void = console.warn, ms = MODEL_TIMEOUT_MS): ModelCache {
-  let index: Promise<ModelIndex | null> | null = null;
+  let index: Promise<IndexRead> | null = null;
   const models = new Map<string, Promise<LoadedModel>>();
-  const state: Record<string, "loading" | "glb" | "standIn"> = {};
+  // No prototype: an id like `__proto__` is then a plain key, and shows in `status()`.
+  const state: Record<string, "loading" | "glb" | "standIn"> = Object.create(null);
   const standIn = (id: string, reason: string): LoadedModel => {
     warn(`David-Smash: drawing ${id} as a stand-in — ${reason}`);
     state[id] = "standIn";
@@ -100,24 +111,34 @@ export function createModelCache(source: ModelSource, warn: (msg: string) => voi
     models.delete(id);
     return { kind: "standIn", reason };
   };
+  // The request is bounded like a download: a stalled one must not hold every get and preload, and a late
+  // answer is discarded. It never rejects; a thrown `index()` (sync or async) is a reason, like a 404 is.
+  const readIndex = (): Promise<IndexRead> =>
+    timeout(new Promise<ModelIndex | null>((resolve) => resolve(source.index())), ms, "request").then(
+      (found): IndexRead => (found === null ? { problem: "no model index (run pnpm models)" } : { found }),
+      (e: unknown): IndexRead => ({ problem: `model index: ${reasonOf(e)}` }),
+    );
   const get = (id: string): Promise<LoadedModel> => {
     let m = models.get(id);
     if (m === undefined) {
       state[id] = "loading";
-      const idx = (index ??= source.index().catch(() => null));
-      m = idx.then(async (found) => {
-        if (found === null) {
+      const idx = (index ??= readIndex());
+      m = idx.then(async (read) => {
+        if (!("found" in read)) {
           if (index === idx) index = null;
-          return standIn(id, "no model index (run pnpm models)");
+          return standIn(id, read.problem);
         }
-        const entry = found.models[id];
-        if (entry === undefined) return standIn(id, "not in the model index");
+        // Own properties only: `constructor` or `toString` is not a model.
+        if (!Object.hasOwn(read.found.models, id)) return standIn(id, "not in the model index");
+        const entry = read.found.models[id];
         try {
-          const scene = await timeout(source.load(entry), ms, entry.file);
+          const scene = await timeout(source.load(entry), ms, "download");
           state[id] = "glb";
           return { kind: "glb", scene } as const;
         } catch (e) {
-          return standIn(id, `${entry.file}: ${e instanceof Error ? e.message : String(e)}`);
+          // The index may be what is out of date (a deploy renamed the glbs): read it again next match.
+          if (index === idx) index = null;
+          return standIn(id, `${entry.file}: ${reasonOf(e)}`);
         }
       });
       models.set(id, m);
@@ -138,9 +159,12 @@ export function browserModelSource(fetchFn: typeof fetch = (u, init) => fetch(u,
   return {
     async index() {
       const res = await fetchFn(MODEL_INDEX_URL, { cache: "no-cache" });
-      // A missing index is a 404 with the site's HTML page as its body (Workers' `404-page`): never parsed.
-      if (!res.ok) return null;
-      return parseModelIndex(await res.json());
+      // A missing index is a 404 with the site's HTML page as its body (Workers' `404-page`): null, never parsed.
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const index = parseModelIndex(await res.json());
+      if (index === null) throw new Error(`not a schema ${MODEL_INDEX_SCHEMA} model index (files named <id>.<8 hex>.glb)`);
+      return index;
     },
     async load(entry) {
       const res = await fetchFn(`/models/${entry.file}`);
