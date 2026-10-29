@@ -2,9 +2,9 @@
  * Photograph a move as it is actually played, frame by frame.
  *
  * `animsheet.mjs` draws a pose in the lab, which is the right tool for the
- * *pose* and blind to everything around it: the swing arc, the projectile, the
- * hit spark, the dust, the opponent flinching. Those are drawn by the match and
- * only by the match, so this drives a real one.
+ * *pose* and blind to everything around it: the move's effects, the
+ * projectile, the hit spark, the dust, the opponent flinching. Those are drawn
+ * by the match and only by the match, so this drives a real one.
  *
  * The trick that makes it possible is `window.__smashDebug.pause()` and
  * `.step()`. A screenshot costs about a quarter of a second — fifteen

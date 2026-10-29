@@ -870,25 +870,34 @@ function drawProp(
 /* ------------------------------------------------------- squash & stretch -- */
 
 /**
- * Landing and taking a hit both squash the root for a few frames.
+ * Height about which the 2D figure turned a whole-body rotation, in rig units.
  *
- * Ultimate does this with the model rig; here it is two numbers multiplied into
- * the transform. It is worth the eight lines: without it a landing is a
- * position change and reads as a stutter, and with it a landing is an impact.
- * Volume is roughly preserved — squashing x by k stretches y by about 1/k — so
- * the fighter does not appear to gain or lose mass.
- */
-/**
- * Height about which a whole-body rotation turns, in rig units.
- *
- * Exported because tests that measure what the game draws have to use the same
- * pivot, and the alternative is each of them re-deriving the expression and
- * silently drifting the day it changes.
+ * The game draws the model now (Plan 4), which turns about SSBU's pelvis
+ * (`render3d/retarget`), so nothing in the game reads this. It stays for the
+ * clip tests that measure a turned pose (a roll's tuck, a spinning special):
+ * the clips were authored about this pivot, and the alternative is each test
+ * re-deriving the expression and silently drifting.
  */
 export function rotationPivot(rig: CharacterRig): number {
   return rigHeight(rig.bones, rig.headRadius) * 0.45;
 }
 
+/**
+ * The impact squash the 2D figure multiplied onto its root for a few frames: a
+ * landing, a hit's freeze, a jump's crouch.
+ *
+ * Ultimate does this with the model rig; the 2D figure did it with two numbers
+ * multiplied into the transform: without it a landing is a position change and
+ * reads as a stutter, and with it a landing is an impact. Volume is roughly
+ * preserved — squashing x by k stretches y by about 1/k — so the fighter does
+ * not appear to gain or lose mass.
+ *
+ * Plan 4 dropped it with the 2D figure: the model takes only the clip's own
+ * scale (`render3d/bake/bake.ts`), and putting the squash back on the model's
+ * root is a polish item. It stays for the clip tests: the landing and
+ * jump-squat clips were authored with it multiplied in, and `land.test.ts` and
+ * `jumpSquat.test.ts` measure them so.
+ */
 export function squashFor(fighter: Pick<FighterState, "action" | "actionFrame" | "hitlag">): {
   scaleX: number;
   scaleY: number;

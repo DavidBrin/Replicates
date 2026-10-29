@@ -11,9 +11,7 @@
  * of the graph.
  */
 
-import { toFloat } from "@/engine/fixed";
-import { moveFrameOf } from "@/engine/hitbox";
-import type { FighterDef, FighterPalette, FighterState } from "@/engine/types";
+import type { FighterDef, FighterPalette } from "@/engine/types";
 import { BASE_RIG, type Bone, type BoneName, type Rig } from "./skeleton";
 
 /* --------------------------------------------------------------- colours -- */
@@ -300,68 +298,6 @@ export interface PropAnim {
  * two portraits of the same fighter differ for no reason a reader could see.
  */
 export const PROP_STILL: PropAnim = { frame: 0, t: 0, vx: 0, vy: 0, airborne: false };
-
-/**
- * How thick a fighter's outline is, in screen pixels.
- *
- * Proportional to the rig, because a flat screen-space width gave a small
- * fighter a proportionally enormous one: measured at zoom 12 against head
- * radius, Fox 30% and Pikachu 29% against Kirby's 16%, and a third of Pikachu's
- * painted pixels were outline.
- *
- * The scale multiplies the **whole** expression including the floor, which is
- * the part the first version got wrong. Written as `Math.max(2.5, zoom * 0.55 *
- * scale)` the floor is a flat 2.5 for everybody, and at `MIN_ZOOM` — 3.6, where
- * `zoom * 0.55` is 1.98 — the floor wins for every rig on the roster. So the
- * proportionality quietly disappeared at exactly the zoom where four fighters
- * are on screen and readability matters most.
- *
- * One function because the renderer and the animation lab both need it and had
- * already drifted apart once: the lab kept sizing from zoom alone while the
- * match scaled by the rig, so the authoring view disagreed with the game for
- * every fighter whose scale is not 1. That is the same failure `propAnimFor`
- * exists to prevent, made twice in one day.
- */
-export function rimWidthFor(rigScale: number, zoom: number, base = 0.55, floor = 2.5): number {
-  return rigScale * Math.max(floor, zoom * base);
-}
-
-/**
- * Build a `PropAnim` from a fighter. The one definition, on purpose.
- *
- * The renderer and the animation lab both draw fighters, and the lab is only
- * worth looking at while it agrees with the match — an author who tunes a tail
- * against a lab that computes its inputs differently is tuning against a
- * fiction. The lab shipped not passing `anim` at all, so the tool built for
- * reviewing motion was the one place prop motion could not be seen; had it
- * instead grown its own copy of this arithmetic, the disagreement would have
- * been quieter and worse.
- *
- * `toFloat` is the whole reason this is a function rather than an object
- * literal at each call site. See `PropAnim.vx`.
- */
-export function propAnimFor(
-  f: Pick<FighterState, "vx" | "vy" | "facing" | "grounded" | "actionFrame">,
-  frame: number,
-  /** The current move's length, or 0 when the fighter is not performing one. */
-  totalFrames: number,
-): PropAnim {
-  return {
-    frame,
-    // One-based, matching the frame-data convention everywhere else, so the
-    // *first* frame of a move is not `t: 0`.
-    //
-    // `actionFrame` starts at 0 and that frame is drawn, so dividing it
-    // directly made the opening frame of every move indistinguishable from
-    // "no move on" — which is exactly what `t` is used to test. Fox damps his
-    // tail on `anim.t > 0` and Kirby suppresses his blink on it, so both spent
-    // the first frame of every attack in their idle behaviour.
-    t: totalFrames > 0 ? Math.min(1, moveFrameOf(f.actionFrame) / totalFrames) : 0,
-    vx: toFloat(f.vx) * (f.facing >= 0 ? 1 : -1),
-    vy: toFloat(f.vy),
-    airborne: !f.grounded,
-  };
-}
 
 /** What a prop painter paints with. See `PropDef.draw`. */
 export interface Brush {

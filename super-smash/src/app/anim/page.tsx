@@ -157,12 +157,11 @@ const AERIALS: ReadonlySet<MoveSlot> = new Set(["nair", "fair", "bair", "uair", 
  * behaves differently.
  *
  * It used to list the three states whose *names* say airborne, which drew a
- * neutral air as a fighter standing on the floor. That was invisible until
- * `propAnimFor` began reading `grounded`, at which point every
+ * neutral air as a fighter standing on the floor. That was invisible until the
+ * 2D figure's prop timing began reading `grounded`, at which point every
  * airborne-dependent prop — Pikachu's tail, Marth's cape — behaved in the
- * authoring view as it never would in a match. That is the third time in one
- * pass the lab and the renderer have been caught disagreeing, which is why the
- * velocity and the rim both went through a single shared function.
+ * authoring view as it never would in a match. (That timing, and the outline
+ * width the lab and the match once shared, went with the 2D figure in Plan 4.)
  */
 export function groundedFor(o: Options): boolean {
   if (AIRBORNE.has(o.action)) return false;

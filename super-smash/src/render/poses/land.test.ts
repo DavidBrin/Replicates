@@ -3,12 +3,15 @@
  * written with.
  *
  * Everything here goes through `samplePose` and then through `resolve` on the
- * reference rig, with `squashFor` multiplied in exactly as `drawOneFighter`
- * multiplies it — so these are measurements of the silhouette the screen shows,
- * not a restatement of the keyframes. That matters most for the heights: the
- * external squash and the clip's own `offsetY`/`scaleY` pull in opposite
- * directions, and whether the fighter ends up *lower* on the frame after impact
- * is not something you can read off either one alone.
+ * reference rig, with `squashFor` multiplied in as the 2D figure multiplied it
+ * until Plan 4 — so these are measurements of the silhouette the clips were
+ * authored to make, not a restatement of the keyframes. The 3D model draws the
+ * clip's own scale and offsets but not that impact squash (Plan 4 dropped it
+ * with the 2D figure; restoring it on the model is a polish item), so on screen
+ * today the landing is that much less squashed. That matters most for the
+ * heights: the external squash and the clip's own `offsetY`/`scaleY` pull in
+ * opposite directions, and whether the fighter ends up *lower* on the frame
+ * after impact is not something you can read off either one alone.
  *
  * Lag lengths are swept rather than sampled at one value, because `landingLag`
  * is the only clip in the library whose duration is chosen by the move: six
@@ -39,7 +42,7 @@ interface Silhouette {
   readonly angles: Partial<Record<BoneName, number>>;
 }
 
-/** One simulation frame of an action, measured the way the renderer draws it. */
+/** One simulation frame of an action, measured the way the 2D figure drew it. */
 function frameOf(
   clip: PoseClip,
   action: "land" | "landingLag",

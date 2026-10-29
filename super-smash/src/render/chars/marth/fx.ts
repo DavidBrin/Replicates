@@ -175,8 +175,9 @@ function liveOn(boxes: readonly Hitbox[], frame: number): Hitbox[] {
  * The window `frame` is inside, or has just left, for a given sweetspot.
  *
  * Returned as a strength 0..1 so the flash is full while the hitbox is live and
- * fades over the tail — the same contract the swing arc uses, and for the same
- * reason: the graphic has to answer "can this still hit me?" honestly.
+ * fades over the tail — the contract the 2D swing arc kept until Plan 4, and
+ * for the same reason: the graphic has to answer "can this still hit me?"
+ * honestly.
  */
 function strengthFor(hb: Hitbox, frame: number): number {
   if (frame < hb.startFrame) return 0;

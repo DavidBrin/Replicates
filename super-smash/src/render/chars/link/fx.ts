@@ -2,10 +2,10 @@
  * Link: what his moves paint on top of the figure, and how his three
  * projectiles are drawn.
  *
- * Keyed by move slot. A slot with no entry paints nothing, which is right for
- * every one of his sword moves: the engine already derives a swing arc from the
- * move's own hitboxes, and a second glow laid over it only muddies the one
- * graphic that is guaranteed to agree with where the move actually reaches.
+ * Keyed by move slot. A slot with no entry paints nothing, and that is every
+ * one of his sword moves: their graphic was the 2D swing arc, drawn from the
+ * move's own hitboxes, which went with the 2D figure in Plan 4. The model's
+ * sword shows the swing now; a trail for it would be the 3D layer's to draw.
  *
  * Only the four specials are here, because only they carry something the rig
  * cannot: a bow, a boomerang, a Sheikah rune. Two things constrain all of them.
@@ -715,9 +715,9 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
   /**
    * Spin Attack's ring.
    *
-   * The engine already derives a swing arc from the move's hitboxes, and that
-   * arc is a *sector* — right for a chop, wrong for the one move on the roster
-   * whose hitbox goes all the way round. This adds what only this move has: a
+   * The 2D swing arc (drawn from a move's hitboxes until Plan 4) was a
+   * *sector* — right for a chop, wrong for the one move on the roster whose
+   * hitbox goes all the way round. This draws what only this move has: a
    * closed band at blade height, sweeping, with a bright leading edge where the
    * blade actually is, so the ring reads as a rotation rather than as a halo.
    */

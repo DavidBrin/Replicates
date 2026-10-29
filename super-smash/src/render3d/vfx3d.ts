@@ -10,9 +10,10 @@
  *
  * A spark is drawn over everything, as the 2D overlay always drew it: the sprites
  * take no depth test, so neither the stage's front face nor a fat fighter's own
- * body (Donkey Kong's bust is 6.09 across) can hide the one frame a player most
- * needs to read. The shield bubble keeps the depth test: the floor clipping its
- * lower half is natural, and the fighter inside shows through its front.
+ * body (Donkey Kong's bust capsule has a radius of 6.09) can hide the one frame
+ * a player most needs to read. The shield bubble keeps the depth test: the floor
+ * clipping its lower half is natural, and the fighter inside shows through its
+ * front.
  *
  * Shapes and timings are the 2D ones (D36: a spark is a third of a fighter and
  * gone in a tenth of a second); only the drawing moved. Where they spawn is
@@ -20,17 +21,19 @@
  * touched the body (`HitEvent.contactX/Y`, ruling R9), so a sword's spark is on
  * the victim and not a blade's length away at the box's near end.
  *
- * Nothing here makes an object, a string or a buffer once it is running. The
- * instances are two fixed buffers written in place (`count` says how many are
- * live, so a quiet frame is a smaller draw, not a smaller array); the
- * geometries, materials and the star texture are made once; the maths objects
- * are reused; and a colour is read off its `#rrggbb` string a character at a
- * time, because three's own parser makes a regular expression match for every
- * call and a busy frame has hundreds of sparks. (What V8 boxes for a double
- * while the code is still in its middle tier is its own business and not ours
- * to test: it measured from nothing to 11 KB a frame with 340 sparks up.)
- * `shieldLook` makes one small object per shielding fighter, plus the capsule
- * `shieldBubble` itself returns, which is the sim's call to make.
+ * Once V8 has optimised it, an update allocates about 0.45 KB a frame
+ * (measured with 322 sprites up, Task 18 review): nothing here makes an
+ * object, a string or a buffer once it is running. The instances are two fixed
+ * buffers written in place (`count` says how many are live, so a quiet frame is
+ * a smaller draw, not a smaller array); the geometries, materials and the star
+ * texture are made once; the maths objects are reused; and a colour is read off
+ * its `#rrggbb` string a character at a time, because three's own parser makes
+ * a regular expression match for every call and a busy frame has hundreds of
+ * sparks. (What V8 boxes for a double while the code is still in its middle
+ * tier is its own business and not ours to test: it measured from nothing to
+ * 11 KB a frame with 340 sparks up.) `shieldLook` makes one small object per
+ * shielding fighter, plus the capsule `shieldBubble` itself returns, which is
+ * the sim's call to make.
  */
 
 import {

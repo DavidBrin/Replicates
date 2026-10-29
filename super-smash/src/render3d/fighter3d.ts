@@ -21,6 +21,8 @@
  * fields. An update still allocates, measured (Task 17 fix round):
  * - the clip sample it starts from, the 2D clip sampler's fresh `PoseSample`
  *   each frame, which the clip fade (D42) keeps hold of: about 3 KB;
+ * - while a clip fades out of the last one, the D42 blend's own blended pose:
+ *   about 0.3–0.6 KB a frame more (Task 17 re-review);
  * - the engine clock's `PoseIndex` (and a move's script run): about 0.7 KB;
  * - about 200–250 B of numbers V8 boxes as `retargetInto` reads that sample's
  *   name-keyed angles.

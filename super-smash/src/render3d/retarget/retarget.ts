@@ -248,9 +248,8 @@ export interface LocalPose {
 /**
  * A `LocalPose` its owner refills (`retargetInto`): the renderer keeps one per
  * fighter and poses it sixty times a second without making a new array or
- * quaternion. `worldQ` and
- * `acc` are the posing's own scratch: each bone's world rotation and the 2D
- * rig's accumulated angles.
+ * quaternion. `worldQ` and `acc` are the posing's own scratch: each bone's
+ * world rotation and the 2D rig's accumulated angles.
  */
 export interface PoseBuffer extends LocalPose {
   readonly q: readonly QuatOut[];

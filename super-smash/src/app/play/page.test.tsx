@@ -1109,11 +1109,6 @@ describe("the play page in 3D (Plan 4)", () => {
   });
 
   /**
-   * Ruling R3(a): online, a match waits for its models at most five seconds,
-   * then plays the rest as stand-ins; and its link monitor starts with the
-   * match, not at mount, so a slow download is never read as a dead link.
-   */
-  /**
    * DISPATCH-NOTES 20.6: the room's guards run before the page waits for the
    * bake and the 3D world. A refusal recorded while they load still sends the
    * host back to where the room is, rather than leaving it on a loading screen.
@@ -1127,6 +1122,11 @@ describe("the play page in 3D (Plan 4)", () => {
     expect(mocks.runners).toEqual([]);
   });
 
+  /**
+   * Ruling R3(a): online, a match waits for its models at most five seconds,
+   * then plays the rest as stand-ins; and its link monitor starts with the
+   * match, not at mount, so a slow download is never read as a dead link.
+   */
   it("caps the wait for models online, and watches the link only once the match starts", async () => {
     mocks.holdModels.next = true;
     goOnline("host");

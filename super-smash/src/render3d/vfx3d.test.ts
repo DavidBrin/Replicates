@@ -331,7 +331,7 @@ describe("3D sparks, KO blasts and shields as instances", () => {
     it("is hidden by nothing: sprites take no depth test and write no depth, and are drawn after the bubbles", () => {
       // The 2D overlay draws a spark over every fighter, projectile and platform, and a
       // side view has no depth to hide one behind: not the stage's front face (z +18) and
-      // not a fat fighter's own bust (Donkey Kong's is 6.09 across).
+      // not a fat fighter's own bust (Donkey Kong's bust capsule has a radius of 6.09).
       const layer = createVfx3D();
       const sprites = mesh(layer, "sparks").material as MeshBasicMaterial;
       expect(sprites.depthTest).toBe(false);

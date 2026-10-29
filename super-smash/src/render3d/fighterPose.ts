@@ -44,7 +44,11 @@ export interface FighterPoseInputs {
   readonly samplers: ReadonlyMap<MotionKind, MotionSampler>;
   readonly def: FighterDef;
   readonly bake: BakeTables;
-  /** `drawnPose`'s output, reused frame after frame so drawing allocates no pose. */
+  /**
+   * `drawnPose`'s output, reused frame after frame: the drawn pose is written
+   * here, not made anew. The clip sample it is drawn from still is, each frame
+   * (`fighter3d.ts` lists what an update allocates).
+   */
   readonly drawn: DrawnPoseBuffer;
 }
 

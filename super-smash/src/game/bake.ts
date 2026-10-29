@@ -235,10 +235,10 @@ let installing: Promise<BakeTables> | null = null;
  * `hello` sent before this resolves says the legacy bones and Plan 3's slots,
  * and the peer refuses it for good (`engine-mismatch`).
  *
- * Task 20 attaches here (ruling R2): `OnlineLobby.tsx`'s `connect()` awaits
- * `ensureBakeInstalled()` before `openSession`, in its "connecting" status, and
- * shows a rejection's message as the lobby's error, so the first `hello` already
- * carries the bake. Nothing in the lobby or the online store awaits it yet.
+ * So the online lobby waits for it (ruling R2, Task 20): `OnlineLobby.tsx`'s
+ * `connect()` awaits `ensureBakeInstalled()` before `openSession`, in its
+ * "connecting" status, and shows a rejection's message as the lobby's error,
+ * so the first `hello` already carries the bake.
  */
 export function ensureBakeInstalled(fetchFn?: FetchLike): Promise<BakeTables> {
   if (installing === null) {
