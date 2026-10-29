@@ -7,9 +7,10 @@ import { LoopbackNetwork } from "@/net/adapters/loopback";
 import { createNullTransport } from "@/net/transport";
 import { VIEW_HEIGHT, VIEW_WIDTH, createCamera } from "@/render/camera";
 import * as characterArt from "@/render/characterArt";
-import { createMockContext } from "@/render/mockContext";
+import { countCapsules, createMockContext } from "@/render/mockContext";
 import { INTERPOLATION_SNAP_UNITS, interpolatePosition, type RenderState } from "@/render/renderer";
 import { overlayAnchor } from "@/render3d/anchors";
+import { claimContext } from "@/render3d/fakeContext";
 import { createModelCache } from "@/render3d/models/loader";
 import { createRenderer3D, type GLLike } from "@/render3d/renderer3d";
 import { SKELETONS } from "@/render3d/skeletons";
@@ -69,7 +70,13 @@ describe("the match runner with a 3D presenter", () => {
     expect(background.calls.some((c) => c.method === "fillRect")).toBe(true);
   });
 
-  /** Plan 4, Task 23: the overlay is the only 2D mode. Without a presenter (a unit test, no GPU) there is no world under it. */
+  /**
+   * Plan 4, Task 23: the overlay is the only 2D mode. Without a presenter (a
+   * unit test, no GPU) there is no world under it, and no figure on it either:
+   * the 2D figure's mark is the capsule (`countCapsules`), which the HUD's
+   * portraits draw too, so the frame with both fighters standing draws exactly
+   * as many as the same frame with both dead (as `renderer.test.ts` measures).
+   */
   it("draws only the overlay with no presenter: cleared, no sky and no fighter", () => {
     const overlay = createMockContext();
     const runner = createMatchRunner({
@@ -88,6 +95,13 @@ describe("the match runner with a 3D presenter", () => {
     expect(overlay.calls.some((c) => c.method === "fillRect" && c.args[2] === 1920 && c.args[3] === 1080)).toBe(false);
     // The HUD is still drawn.
     expect(overlay.calls.some((c) => c.method === "fillText")).toBe(true);
+    // No fighter: the same frame with nobody alive draws no fewer capsules.
+    const standing = countCapsules(overlay);
+    expect(standing, "the portraits' capsules: the count can see one").toBeGreaterThan(0);
+    expect(runner.state.fighters.map((f) => f.action)).not.toContain("dead");
+    for (const f of runner.state.fighters) (f as { action: string }).action = "dead";
+    runner.redraw();
+    expect(countCapsules(overlay) - standing).toBe(standing);
     runner.dispose();
   });
 
@@ -187,8 +201,9 @@ describe("the overlay's anchors over the 3D world", () => {
     const stage = getStageOrThrow("battlefield");
     const defs = ["donkeyKong", "marth"].map((id) => GAME_SIM_CONTEXT.fighter(id));
     let seen: PerspectiveCamera | null = null;
-    const gl: GLLike = {
-      domElement: document.createElement("canvas"),
+    // On the canvas's modelled context (`fakeContext.ts`): a presenter that forced it lost would leave no next match a renderer.
+    const glFor = (canvas: HTMLCanvasElement): GLLike => ({
+      domElement: canvas,
       info: { render: { calls: 0, triangles: 0 } },
       setPixelRatio: () => {},
       setSize: () => {},
@@ -197,7 +212,9 @@ describe("the overlay's anchors over the 3D world", () => {
         seen = camera as PerspectiveCamera;
       },
       dispose: () => {},
-    };
+      ...claimContext(canvas),
+    });
+    const gl = glFor(document.createElement("canvas"));
     // No model index: both fighters are stand-ins, which hang off the same bones.
     const models = createModelCache({ index: async () => null, load: async () => Promise.reject(new Error("unused")) }, () => {});
     const real = createRenderer3D({ canvas: gl.domElement, stage, defs, bake: GAME_SIM_CONTEXT.bake!, skeletons: SKELETONS, models, makeGL: () => gl });
@@ -253,5 +270,8 @@ describe("the overlay's anchors over the 3D world", () => {
     expect([runner.camera.x, runner.camera.y, runner.camera.zoom]).not.toEqual([first.x, first.y, first.zoom]);
     runner.dispose();
     expect(presenter.dispose).toHaveBeenCalledOnce();
+    // The runner's dispose left the canvas to the next match: a renderer builds on it.
+    const next = createRenderer3D({ canvas: gl.domElement, stage, defs, bake: GAME_SIM_CONTEXT.bake!, skeletons: SKELETONS, models, makeGL: glFor });
+    next.dispose();
   });
 });

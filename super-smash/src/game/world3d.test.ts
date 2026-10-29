@@ -5,6 +5,7 @@ import { readBakeFromDisk } from "./bakeNode";
 import { FIGHTERS } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
 import { MODEL_TIMEOUT_MS, type LoadedModel, type ModelCache } from "@/render3d/models/loader";
+import { claimContext } from "@/render3d/fakeContext";
 import type { GLLike } from "@/render3d/renderer3d";
 import { createWorld, followSize, preloadModels, sharedModels, withModelWait } from "./world3d";
 
@@ -17,6 +18,7 @@ afterEach(() => {
 const bake = readBakeFromDisk();
 const gameDef = (id: string) => withLimbScripts(FIGHTERS.find((f) => f.id === id)!, bake.bones);
 
+/** The slice of `WebGLRenderer` a world uses, on its canvas's modelled context (`fakeContext.ts`): forced lost, no renderer is built there again. */
 function fakeGL(canvas: HTMLCanvasElement): GLLike {
   return {
     domElement: canvas,
@@ -26,6 +28,7 @@ function fakeGL(canvas: HTMLCanvasElement): GLLike {
     setClearColor: () => {},
     render: () => {},
     dispose: () => {},
+    ...claimContext(canvas),
   };
 }
 
@@ -117,6 +120,21 @@ describe("the page's model cache", () => {
     world.dispose();
     // Let the cache's own timeouts run out, so nothing is left pending for the next test.
     await vi.advanceTimersByTimeAsync(MODEL_TIMEOUT_MS);
+  });
+
+  /** Task 20 carry 14, through the page's own constructor: a world gone leaves its canvas to the next match's. */
+  it("builds the next match's world on the canvas a disposed one drew on", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+    bootstrapEngine();
+    const shared = layers();
+    const first = createWorld(shared, getStageOrThrow("battlefield"), [gameDef("mario"), gameDef("fox")], bake, { makeGL: fakeGL });
+    await first.ready;
+    first.dispose();
+    const second = createWorld(shared, getStageOrThrow("battlefield"), [gameDef("mario"), gameDef("fox")], bake, { makeGL: fakeGL });
+    await second.ready;
+    expect(second.info()).toMatchObject({ lost: false, fighters: ["standIn", "standIn"] });
+    second.dispose();
   });
 
   /** The Task 20 review: a player who leaves an online match while its models load hears nothing more of it. */

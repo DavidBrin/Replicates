@@ -188,6 +188,19 @@ describe("the shield bubble is the sim's own", () => {
     expect(shieldLook(f, mario, 0)!.colour).not.toBe("#FFFFFF");
   });
 
+  // Task 18 review, carried (B8): a perfect shield flashes in whichever shielding
+  // action it lands, not only the release: the raise's fade-in and the stun's
+  // steady alpha give way to the flash, which is what shows the parry.
+  it.each(["shieldStart", "shieldStun"] as const)("flashes white on a perfect shield in %s too, over that action's own alpha", (action) => {
+    const f = makeFighter({ action, actionFrame: 0 });
+    for (const [flash, alpha] of [[10, 0.95], [5, 0.65], [1, 0.41]] as const) {
+      const look = shieldLook(f, mario, flash)!;
+      expect(look.colour, `${action} flash ${flash}`).toBe("#FFFFFF");
+      expect(look.alpha, `${action} flash ${flash}`).toBeCloseTo(alpha, 9);
+    }
+    expect(shieldLook(f, mario, 0)!.colour).not.toBe("#FFFFFF");
+  });
+
   describe("what is drawn is what blocks", () => {
     for (const id of ["mario", "donkeyKong"]) {
       it(`${id}: the drawn sphere's surface is the edge of the sim's bubble, at every health`, () => {

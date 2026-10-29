@@ -94,7 +94,15 @@ describe("the face-turn table", () => {
       expect(bones.some((b) => b.name === t.bone), `${id} has ${t.bone}`).toBe(true);
       const below = bones.filter((b) => b.parent === t.bone).map((b) => b.name);
       expect(below, `${id} ${t.bone}`).toEqual([]);
-      expect([...capsules].filter((c) => below.some((b) => b.toLowerCase() === c))).toEqual([]);
+      // The same fact from the other end, not through `below`: no capsule bone has the turned bone among its
+      // ancestors, walking each capsule's own chain of parents up to the root.
+      const parentOf = new Map(bones.map((b) => [b.name.toLowerCase(), b.parent?.toLowerCase() ?? null]));
+      const turned = t.bone.toLowerCase();
+      const carried = [...capsules].filter((c) => {
+        for (let p = parentOf.get(c) ?? null; p !== null; p = parentOf.get(p) ?? null) if (p === turned) return true;
+        return false;
+      });
+      expect(carried, `${id}: capsules a turn of ${t.bone} would carry`).toEqual([]);
     }
   });
 });

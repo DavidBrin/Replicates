@@ -177,6 +177,66 @@ describe("loading fighter models (never fatal)", () => {
     expect(index).toHaveBeenCalledTimes(2); // and a good index is kept
   });
 
+  /**
+   * Task 16 re-review, Minor 1 (mutant S2): a failed load forgets the index it
+   * used only if that index is still the cache's. Two loads fail on one index;
+   * the first failure's next `get` has already asked for a newer index by the
+   * time the second fails, and that second failure must not throw the newer
+   * one away too, or a third request goes out for nothing.
+   */
+  it("keeps a newer index when a second load fails on the older one: two concurrent failures read the index twice, not three times", async () => {
+    const both = { schema: 1, models: { mario: { file: "mario.0123abcd.glb", bytes: 1, sha256: "x" }, fox: { file: "fox.0123abcd.glb", bytes: 1, sha256: "x" } } };
+    const index = vi.fn(async () => parseModelIndex(both));
+    const pending = new Map<string, { reject: (e: Error) => void }>();
+    const load = vi.fn((entry: { file: string }) =>
+      entry.file.endsWith("0123abcd.glb") && !pending.has(entry.file)
+        ? new Promise<Group>((_, reject) => pending.set(entry.file, { reject }))
+        : Promise.resolve(new Group()),
+    );
+    const cache = createModelCache(source({ index, load }), () => {});
+    const mario = cache.get("mario");
+    const fox = cache.get("fox");
+    await vi.waitFor(() => expect(pending.size).toBe(2));
+    expect(index).toHaveBeenCalledOnce();
+    // Mario's load fails: the index it used is forgotten, and his next get reads a new one, still loading.
+    pending.get("mario.0123abcd.glb")!.reject(new Error("HTTP 404"));
+    expect((await mario).kind).toBe("standIn");
+    const marioAgain = cache.get("mario");
+    expect(index).toHaveBeenCalledTimes(2);
+    // Fox's load, on the first index, fails now: the newer index is not his to forget.
+    pending.get("fox.0123abcd.glb")!.reject(new Error("HTTP 404"));
+    expect((await fox).kind).toBe("standIn");
+    expect((await marioAgain).kind).toBe("glb");
+    expect((await cache.get("fox")).kind).toBe("glb");
+    expect(index).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Task 16 re-review, Minor 2 (mutant IL2): the index's analog of a late glb.
+   * An index request that answers after its timeout is discarded: the next
+   * match asks again and uses the answer to that, never the late one.
+   */
+  it("discards an index that arrives after its timeout: the next get asks again and uses the new answer", async () => {
+    vi.useFakeTimers();
+    const late = { schema: 1, models: { mario: { file: "mario.0123abcd.glb", bytes: 1, sha256: "x" } } };
+    const fresh = { schema: 1, models: { mario: { file: "mario.89abcdef.glb", bytes: 1, sha256: "y" } } };
+    let deliver: (i: ReturnType<typeof parseModelIndex>) => void = () => {};
+    const index = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((r) => (deliver = r)))
+      .mockResolvedValue(parseModelIndex(fresh));
+    const load = vi.fn<ModelSource["load"]>(async () => new Group());
+    const cache = createModelCache(source({ index, load }), () => {}, 1000);
+    const first = cache.get("mario");
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(await first).toEqual({ kind: "standIn", reason: "model index: request timed out after 1000 ms" });
+    deliver(parseModelIndex(late)); // the stalled request finally answers
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await cache.get("mario")).kind).toBe("glb");
+    expect(index).toHaveBeenCalledTimes(2);
+    expect(load.mock.calls.map(([e]) => e.file)).toEqual(["mario.89abcdef.glb"]);
+  });
+
   it("stands in an id that is only a property of every object, without fetching anything", async () => {
     const load = vi.fn(async () => new Group());
     const cache = createModelCache(source({ load }), () => {});
