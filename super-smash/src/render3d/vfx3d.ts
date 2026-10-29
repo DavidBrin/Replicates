@@ -8,6 +8,12 @@
  * budget. Every other particle kind (dust, rings, smoke, motes) stays on the 2D
  * overlay, drawn by `drawParticles` with the 3D kinds excluded.
  *
+ * A spark is drawn over everything, as the 2D overlay always drew it: the sprites
+ * take no depth test, so neither the stage's front face nor a fat fighter's own
+ * body (Donkey Kong's bust is 6.09 across) can hide the one frame a player most
+ * needs to read. The shield bubble keeps the depth test: the floor clipping its
+ * lower half is natural, and the fighter inside shows through its front.
+ *
  * Shapes and timings are the 2D ones (D36: a spark is a third of a fighter and
  * gone in a tenth of a second); only the drawing moved. Where they spawn is
  * not this file's: `ingestEvents` puts a hit's sparks at the point the box
@@ -58,10 +64,20 @@ export const SPRITE_KINDS: ReadonlySet<ParticleKind> = new Set<ParticleKind>(["s
 export const MAX_SPRITES = 640;
 export const MAX_SHIELDS = 4;
 /**
- * Sprites sit just in front of the fighters' plane so a spark lands on the
- * victim. UNVERIFIED (cosmetic): by eye.
+ * Sprites sit in the fighters' own plane, z = 0: the one plane where the side
+ * camera puts a point exactly where the 2D overlay's `worldToScreen` does. Any z in
+ * front of it is a perspective shift, about 1.7 units at the screen's edge for z = 4,
+ * where a KO's blast is. Nothing hides a sprite (`depthTest` is off), so it needs no
+ * depth to get in front.
  */
-export const SPRITE_Z = 4;
+export const SPRITE_Z = 0;
+/**
+ * Drawn after everything else that is sorted by depth. All of it is at the same depth
+ * in the fighters' plane, so without this a spark would be drawn under a translucent
+ * fighter or shadow whenever that mesh happened to be made after it. UNVERIFIED
+ * (cosmetic): any number above the bubbles' 0 would do.
+ */
+const SPRITE_RENDER_ORDER = 1;
 /**
  * The longest a spark's streak gets, in units: the 2D overlay's 30 px cap at the
  * 6 px a unit a match opens at. UNVERIFIED (cosmetic): by eye.
@@ -203,8 +219,9 @@ export function createVfx3D(): Vfx3D {
   const group = new Group();
   group.name = "vfx";
   const texture = starTexture();
-  const spriteMaterial = new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: AdditiveBlending });
+  const spriteMaterial = new MeshBasicMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false, blending: AdditiveBlending });
   const sprites = instanced("sparks", new PlaneGeometry(1, 1), spriteMaterial, MAX_SPRITES);
+  sprites.renderOrder = SPRITE_RENDER_ORDER;
   const shieldMaterial = new MeshBasicMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending });
   const bubbles = instanced("shields", new SphereGeometry(1, 24, 16), shieldMaterial, MAX_SHIELDS);
   group.add(sprites, bubbles);
@@ -223,6 +240,8 @@ export function createVfx3D(): Vfx3D {
     update(v, shields) {
       spriteCount = 0;
       const particles = v.particles;
+      // Past the cap this stops at the first 640, dropping the newest; the 2D pool's `push` drops the
+      // oldest. Unreachable today: the pool holds every kind of particle to the same 640.
       for (let i = 0; i < particles.length && spriteCount < MAX_SPRITES; i++) {
         const part = particles[i];
         if (!SPRITE_KINDS.has(part.kind)) continue;

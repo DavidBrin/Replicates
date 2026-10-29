@@ -1,15 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
-import { Color, InstancedMesh, Matrix4, Quaternion, Vector3 } from "three";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AdditiveBlending, Color, InstancedMesh, Matrix4, Quaternion, Vector3, type MeshBasicMaterial } from "three";
 
 import { ATTACK, clearAll, frame } from "@/engine/acmd/dsl";
-import { SHIELD_MAX_HEALTH } from "@/engine/constants";
+import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES } from "@/engine/constants";
 import { fx, toFloat } from "@/engine/fixed";
 import { capsulesOverlap, circle } from "@/engine/hitbox";
 import { shieldBubble } from "@/engine/shield";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
+import { STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
 import { Btn } from "@/engine/types";
 import type {
+  ActionState,
   FighterDef,
   FighterState,
   GameState,
@@ -20,8 +22,10 @@ import type {
 } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { readBakeFromDisk } from "@/game/bakeNode";
+import { MAX_ZOOM, MIN_ZOOM, VIEW_HEIGHT, VIEW_WIDTH, createCamera, worldToScreen } from "@/render/camera";
 import { makeEvents, makeFighter, makeState } from "@/render/testFixtures";
-import { createVfx, ingestEvents, spawnBurst, spawnDust, spawnHitSpark, updateVfx } from "@/render/vfx";
+import { BURST_MAX_GROWTH, createVfx, ingestEvents, spawnBurst, spawnDust, spawnHitSpark, updateVfx, type Particle, type VfxState } from "@/render/vfx";
+import { applySideCamera, createSideCamera } from "./camera3d";
 import { MAX_SHIELDS, MAX_SPRITES, SPRITE_KINDS, SPRITE_Z, createVfx3D, shieldLook, type Vfx3D } from "./vfx3d";
 
 const roster = (id: string): FighterDef => FIGHTERS.find((f) => f.id === id)!;
@@ -142,17 +146,46 @@ describe("the shield bubble is the sim's own", () => {
     }
   });
 
-  it("is absent unless the fighter is shielding, and flashes white on a perfect shield", () => {
-    expect(shieldLook(makeFighter({ action: "stand" }), mario, 0)).toBeNull();
-    expect(shieldLook(makeFighter({ action: "shieldRelease", actionFrame: 1 }), mario, 6)!.colour).toBe("#FFFFFF");
+  const SHIELDING: readonly ActionState[] = ["shieldStart", "shield", "shieldStun", "shieldRelease"];
+
+  it("is absent unless the fighter is shielding: not in any other of the 48 actions, a broken shield included", () => {
+    const actions = Object.keys(STATUS_KIND_OF_ACTION) as ActionState[];
+    expect(actions).toHaveLength(48);
+    for (const action of actions) {
+      const look = shieldLook(makeFighter({ action }), mario, 0);
+      if (SHIELDING.includes(action)) expect(look, action).not.toBeNull();
+      else expect(look, action).toBeNull();
+    }
   });
 
-  it("fades in on raise and out on release, in the fighter's port colour", () => {
-    const at = (action: "shieldStart" | "shield" | "shieldRelease", actionFrame: number) =>
-      shieldLook(makeFighter({ action, actionFrame, port: 2 }), mario, 0)!;
-    expect(at("shieldStart", 0).alpha).toBeLessThan(at("shield", 0).alpha);
-    expect(at("shieldRelease", 8).alpha).toBeLessThan(at("shieldRelease", 1).alpha);
+  it("fades in on raise and out on release, in the fighter's port colour, as the 2D bubble does", () => {
+    const at = (action: ActionState, actionFrame: number) => shieldLook(makeFighter({ action, actionFrame, port: 2 }), mario, 0)!;
+    // Up at 0.42; rising from 0.35 of it over the first three frames; falling to nothing over the release.
+    expect(at("shield", 0).alpha).toBeCloseTo(0.42, 9);
+    expect(at("shieldStun", 0).alpha).toBeCloseTo(0.42, 9);
+    expect(at("shieldStart", 0).alpha).toBeCloseTo(0.42 * 0.35, 9);
+    expect(at("shieldStart", 1).alpha).toBeCloseTo(0.42 * (1 / 3 + 0.35), 9);
+    expect(at("shieldStart", 3).alpha).toBeCloseTo(0.42, 9);
+    expect(at("shieldRelease", 0).alpha).toBeCloseTo(0.42, 9);
+    expect(at("shieldRelease", 4).alpha).toBeCloseTo(0.42 * (1 - 4 / SHIELD_RELEASE_FRAMES), 9);
+    expect(at("shieldRelease", SHIELD_RELEASE_FRAMES).alpha).toBe(0);
     expect(at("shield", 0).colour).toBe("#FFC61E");
+  });
+
+  it("flashes white on a perfect shield, from 0.95 as bright down to 0.41, in the geometry and the colour the layer draws", () => {
+    const f = makeFighter({ action: "shieldRelease", actionFrame: 1 });
+    for (const [flash, alpha] of [[10, 0.95], [5, 0.65], [1, 0.41]] as const) {
+      const look = shieldLook(f, mario, flash)!;
+      expect(look.colour).toBe("#FFFFFF");
+      expect(look.alpha).toBeCloseTo(alpha, 9);
+      const layer = createVfx3D();
+      layer.update(createVfx(), [look]);
+      const got = instanceColour(layer, "shields", 0);
+      expect([got.r, got.g, got.b]).toEqual([alpha, alpha, alpha].map((c) => expect.closeTo(c, 6)));
+      layer.dispose();
+    }
+    // And none once the flash is out: the port's own colour, at the release's fade.
+    expect(shieldLook(f, mario, 0)!.colour).not.toBe("#FFFFFF");
   });
 
   describe("what is drawn is what blocks", () => {
@@ -279,8 +312,69 @@ describe("3D sparks, KO blasts and shields as instances", () => {
     expect(v.particles).toHaveLength(MAX_SPRITES);
   });
 
-  it("puts the sprites between the fighters' plane and the camera, which looks down −Z", () => {
-    expect(SPRITE_Z).toBeGreaterThan(0);
+  describe("draws over everything, in the fighters' own plane", () => {
+    const mesh = (layer: Vfx3D, name: "sparks" | "shields") => layer.group.getObjectByName(name) as InstancedMesh;
+
+    it("is hidden by nothing: sprites take no depth test and write no depth, and are drawn after the bubbles", () => {
+      // The 2D overlay draws a spark over every fighter, projectile and platform, and a
+      // side view has no depth to hide one behind: not the stage's front face (z +18) and
+      // not a fat fighter's own bust (Donkey Kong's is 6.09 across).
+      const layer = createVfx3D();
+      const sprites = mesh(layer, "sparks").material as MeshBasicMaterial;
+      expect(sprites.depthTest).toBe(false);
+      expect(sprites.depthWrite).toBe(false);
+      expect(sprites.transparent).toBe(true);
+      expect(sprites.blending).toBe(AdditiveBlending);
+      // Among the transparent things three sorts by depth, the sprites go last: at the same depth as
+      // everything else in the plane their order would otherwise be whichever mesh was made last.
+      expect(mesh(layer, "sparks").renderOrder).toBeGreaterThan(0);
+      expect(mesh(layer, "sparks").renderOrder).toBeGreaterThan(mesh(layer, "shields").renderOrder);
+      layer.dispose();
+    });
+
+    it("keeps a bubble in the scene's depth, so the floor clips its lower half and the fighter shows through", () => {
+      const layer = createVfx3D();
+      const bubble = mesh(layer, "shields").material as MeshBasicMaterial;
+      expect(bubble.depthTest).toBe(true);
+      expect(bubble.depthWrite).toBe(false);
+      expect(bubble.transparent).toBe(true);
+      expect(bubble.blending).toBe(AdditiveBlending);
+      layer.dispose();
+    });
+
+    it("lands every sprite on the pixel the 2D overlay draws it at, at every zoom and shake, out to the screen's edge", () => {
+      expect(SPRITE_Z).toBe(0);
+      const point = (x: number, y: number): Particle => ({ kind: "burst", x, y, vx: 0, vy: 0, life: 6, maxLife: 6, size: 1, colour: "#FFFFFF", rotation: 0, spin: 0, gravity: 0, drag: 1 });
+      for (const zoom of [MIN_ZOOM, 7.5, MAX_ZOOM * 1.6]) {
+        for (const [shakeX, shakeY] of [[0, 0], [14, -9]]) {
+          const cam = { ...createCamera(null), x: 12, y: 30, zoom, shakeX, shakeY };
+          const three = createSideCamera();
+          applySideCamera(three, cam);
+          const halfW = (0.48 * VIEW_WIDTH) / zoom;
+          const halfH = (0.48 * VIEW_HEIGHT) / zoom;
+          const spots = [[cam.x, cam.y], [cam.x - halfW, cam.y + halfH], [cam.x + halfW, cam.y - halfH], [240, 200], [-200, -100]];
+          const v = createVfx();
+          for (const [x, y] of spots) {
+            v.particles.push(point(x, y));
+            // A spark at rest has no streak, so its middle is where it is.
+            v.particles.push({ ...point(x, y), kind: "spark" });
+          }
+          const layer = createVfx3D();
+          layer.update(v, []);
+          expect(layer.counts().sprites).toBe(spots.length * 2);
+          spots.forEach(([x, y], k) => {
+            const want = worldToScreen(cam, x, y);
+            for (const i of [2 * k, 2 * k + 1]) {
+              const { position } = instance(layer, "sparks", i);
+              const ndc = position.clone().project(three);
+              expect(((ndc.x + 1) / 2) * VIEW_WIDTH).toBeCloseTo(want.x, 2);
+              expect(((1 - ndc.y) / 2) * VIEW_HEIGHT).toBeCloseTo(want.y, 2);
+            }
+          });
+          layer.dispose();
+        }
+      }
+    });
   });
 
   it("places one bubble per shielding fighter, and no more than four", () => {
@@ -344,6 +438,66 @@ describe("3D sparks, KO blasts and shields as instances", () => {
       layer.dispose();
     });
 
+    /** One spark, from (10, 20), as the layer draws it: how long, how thick, where its middle is, which way it points. */
+    function drawnSpark(speed: number, size: number, heading = 0) {
+      const v: VfxState = createVfx();
+      v.particles.push({ kind: "spark", x: 10, y: 20, vx: speed * Math.cos(heading), vy: speed * Math.sin(heading), life: 6, maxLife: 6, size, colour: "#FFFFFF", rotation: 0, spin: 0, gravity: 0, drag: 1 });
+      const layer = createVfx3D();
+      layer.update(v, []);
+      const { position, scale, rotation } = instance(layer, "sparks", 0);
+      const axis = new Vector3(1, 0, 0).applyQuaternion(rotation);
+      layer.dispose();
+      return { length: scale.x, thickness: scale.y, middle: position, points: Math.atan2(axis.y, axis.x) };
+    }
+
+    it("draws a spark as a streak back along its velocity: 2.2 times its speed long, five at most, never shorter than the spark", () => {
+      // (The 2D overlay's streak: `speed x 2.2`, capped at 30 px, which is 5 units at the zoom a match opens at.)
+      const slow = drawnSpark(0.5, 0.4);
+      expect(slow.length).toBeCloseTo(1.1, 5);
+      expect(slow.middle.x).toBeCloseTo(10 - 0.55, 5);
+      expect(slow.middle.y).toBeCloseTo(20, 5);
+      const fast = drawnSpark(4, 0.4);
+      expect(fast.length).toBeCloseTo(5, 5);
+      expect(fast.middle.x).toBeCloseTo(10 - 2.5, 5);
+      // A big spark that barely moves is as long as it is big.
+      expect(drawnSpark(0.1, 1).length).toBeCloseTo(1, 5);
+      expect(drawnSpark(0.1, 0.1).length).toBeCloseTo(0.22, 5);
+      // And it trails behind whichever way it goes.
+      const up = drawnSpark(1, 0.4, Math.PI / 2);
+      expect(up.length).toBeCloseTo(2.2, 5);
+      expect(up.middle.x).toBeCloseTo(10, 5);
+      expect(up.middle.y).toBeCloseTo(20 - 1.1, 5);
+      expect(up.points).toBeCloseTo(Math.PI / 2, 5);
+    });
+
+    it("draws a spark 0.7 of its size thick, never under 0.15", () => {
+      expect(drawnSpark(1, 0.4).thickness).toBeCloseTo(0.28, 5);
+      expect(drawnSpark(1, 1).thickness).toBeCloseTo(0.7, 5);
+      expect(drawnSpark(1, 0.1).thickness).toBeCloseTo(0.15, 5);
+    });
+
+    it("draws a burst twice its size across, turned as the particle is turned, swelling to 1.7 times that as it dies", () => {
+      const burst = (life: number) => {
+        const v = createVfx();
+        v.particles.push({ kind: "burst", x: 3, y: 4, vx: 0, vy: 0, life, maxLife: 8, size: 1.5, colour: "#FFFFFF", rotation: 0.7, spin: 0, gravity: 0, drag: 1 });
+        const layer = createVfx3D();
+        layer.update(v, []);
+        const { position, scale, rotation } = instance(layer, "sparks", 0);
+        const axis = new Vector3(1, 0, 0).applyQuaternion(rotation);
+        layer.dispose();
+        return { position, scale, points: Math.atan2(axis.y, axis.x) };
+      };
+      const born = burst(8);
+      expect([born.scale.x, born.scale.y, born.scale.z]).toEqual([3, 3, 3].map((c) => expect.closeTo(c, 5)));
+      expect(born.points).toBeCloseTo(0.7, 5);
+      expect([born.position.x, born.position.y]).toEqual([3, 4]);
+      for (const life of [6, 4, 2, 1]) {
+        const grow = 1 + (1 - life / 8) * (BURST_MAX_GROWTH - 1);
+        expect(burst(life).scale.x).toBeCloseTo(3 * grow, 5);
+      }
+      expect(BURST_MAX_GROWTH).toBeCloseTo(1.7, 9);
+    });
+
     it("hands the shader the sRGB colour the 2D overlay fills with, dimmed as it fades", () => {
       const v = createVfx();
       spawnHitSpark(v, 0, 0, 14, 120, 0);
@@ -405,6 +559,13 @@ describe("3D sparks, KO blasts and shields as instances", () => {
       layer.dispose();
     });
 
+    // The spies below are put back after every test, a failing one included.
+    afterEach(() => {
+      vi.restoreAllMocks();
+      expect(vi.isMockFunction(Color.prototype.set)).toBe(false);
+      expect(vi.isMockFunction(Color.prototype.setStyle)).toBe(false);
+    });
+
     it("never parses a colour string on the frame path", () => {
       const layer = createVfx3D();
       const v = busy();
@@ -414,8 +575,34 @@ describe("3D sparks, KO blasts and shields as instances", () => {
       for (let i = 0; i < 10; i++) layer.update(v, shields);
       expect(set).not.toHaveBeenCalled();
       expect(style).not.toHaveBeenCalled();
-      set.mockRestore();
-      style.mockRestore();
+      layer.dispose();
+    });
+
+    const meshes = (layer: Vfx3D) => ["sparks", "shields"].map((name) => layer.group.getObjectByName(name) as InstancedMesh);
+
+    it("starts with nothing to draw, and can never be culled", () => {
+      // Drawn before its first update it would be 640 unit quads at the origin; and three
+      // measures an instanced mesh's bounding sphere once, from the instances live then, so
+      // a layer that may be culled can be culled for good.
+      const layer = createVfx3D();
+      for (const mesh of meshes(layer)) {
+        expect(mesh.count, mesh.name).toBe(0);
+        expect(mesh.frustumCulled, mesh.name).toBe(false);
+      }
+      layer.dispose();
+    });
+
+    it("tells three to upload both buffers of both meshes on every update", () => {
+      const layer = createVfx3D();
+      const v = busy();
+      const versions = () => meshes(layer).flatMap((m) => [m.instanceMatrix.version, m.instanceColor!.version]);
+      for (let frame = 0; frame < 3; frame++) {
+        const before = versions();
+        layer.update(v, shields);
+        const after = versions();
+        expect(before).toHaveLength(4);
+        after.forEach((version, i) => expect(version, `buffer ${i}, frame ${frame}`).toBeGreaterThan(before[i]));
+      }
       layer.dispose();
     });
 
