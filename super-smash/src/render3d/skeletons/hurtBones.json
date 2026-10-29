@@ -1,0 +1,31 @@
+{
+  "//": "Bones each fighter's hurt capsules hang on, and which of them is the head the overlay anchors to (Plan 4). A vertex belongs to the nearest listed ancestor of the bone it is most weighted to (held items, swords, tails and Throw excluded). Kirby is weighted differently from the humanoids: his round body to Body (a child of Head), his feet to FootL/R and ToeL/R under KneeL/R, so he has one body capsule, two per arm and one per leg. UNVERIFIED: no public source lists SSBU's hurtboxes.",
+  "default": {
+    "head": "Head",
+    "bones": [
+      "Head",
+      "Bust",
+      "Hip",
+      "ShoulderL",
+      "ArmL",
+      "ShoulderR",
+      "ArmR",
+      "LegL",
+      "KneeL",
+      "LegR",
+      "KneeR"
+    ]
+  },
+  "kirby": {
+    "head": "Body",
+    "bones": [
+      "Body",
+      "ShoulderL",
+      "ArmL",
+      "ShoulderR",
+      "ArmR",
+      "KneeL",
+      "KneeR"
+    ]
+  }
+}

@@ -14,7 +14,8 @@
     "test:e2e:online": "playwright test -c playwright.online.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json",
-    "models:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/models/fetch.mjs"
+    "models:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/models/fetch.mjs",
+    "models:skeletons": "node scripts/models/skeletons.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

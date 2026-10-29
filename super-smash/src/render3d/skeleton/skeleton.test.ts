@@ -56,6 +56,11 @@ function withWorld(name: string, edit: (w: number[]) => number[]): SkeletonFile 
   return withBone(s, name, { world: edit([...s.bones.find((b) => b.name === name)!.world]) });
 }
 
+/** Lean a frame's Z axis toward its X axis by `s`: X·Z becomes `s`, every length moves by under s²/2, det is unchanged. */
+const shearXZ = (s: number) => (w: number[]) => w.map((v, i) => (i >= 8 && i < 11 ? v + s * w[i - 8] : v));
+/** Reverse a frame's Z axis: a mirror image, determinant −1. */
+const mirrorZ = (w: number[]) => w.map((v, i) => (i >= 8 && i < 11 ? -v : v));
+
 describe("the skeleton file", () => {
   it("accepts the shape the Blender dump produces", () => {
     expect(parseSkeletonFile(testSkeleton()).bones).toHaveLength(28);
@@ -147,20 +152,36 @@ describe("the skeleton file", () => {
       // Two parallel axes: X and Y both point along +Y (Head's own frame is X up, Y forward).
       expect(() => parseSkeletonFile(withWorld("Head", (w) => [w[0], w[1], w[2], 0, w[0], w[1], w[2], 0, w[8], w[9], w[10], 0, w[12], w[13], w[14], 1]))).toThrow(/is sheared: its X and Y axes are not perpendicular/);
       // A mirror image: Z reversed, so the frame is left-handed.
-      expect(() => parseSkeletonFile(withWorld("Head", (w) => w.map((v, i) => (i >= 8 && i < 11 ? -v : v))))).toThrow(/bone "Head" world matrix is a mirror image \(determinant -1/);
+      expect(() => parseSkeletonFile(withWorld("Head", mirrorZ))).toThrow(/bone "Head" world matrix is a mirror image \(determinant -1/);
       // Mirroring in the only way a hand-built matrix can hide it: swap two axes.
       expect(() => parseSkeletonFile(withWorld("Head", (w) => [...w.slice(4, 8), ...w.slice(0, 4), ...w.slice(8)]))).toThrow(/mirror image/);
     });
 
-    it("tolerates the rounding the dump does, and not much more", () => {
+    it("tolerates SSBU's authored bind residue and the dump's rounding, and not much more", () => {
       const scale = (f: number) => (w: number[]) => w.map((v, i) => (i < 12 && i % 4 !== 3 ? v * f : v));
-      expect(RIGID_TOLERANCE).toBe(1e-4);
+      expect(RIGID_TOLERANCE).toBe(2e-3);
       expect(() => parseSkeletonFile(withWorld("Head", scale(1 + RIGID_TOLERANCE / 2)))).not.toThrow();
       expect(() => parseSkeletonFile(withWorld("Head", scale(1 - RIGID_TOLERANCE / 2)))).not.toThrow();
       expect(() => parseSkeletonFile(withWorld("Head", scale(1 + 2 * RIGID_TOLERANCE)))).toThrow(/scaled/);
       expect(() => parseSkeletonFile(withWorld("Head", scale(1 - 2 * RIGID_TOLERANCE)))).toThrow(/scaled/);
       // A real rotation, rounded to five decimals, is accepted as it comes out of the dump.
       for (let seed = 1; seed <= 20; seed++) expect(() => parseSkeletonFile(obliqueSkeleton(seed))).not.toThrow();
+    });
+
+    it("accepts a shear the size of Link's sword bind (1.08e-3, measured) and refuses one past the tolerance", () => {
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(1.08e-3)))).not.toThrow();
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(1.5e-3)))).not.toThrow();
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(3e-3)))).toThrow(/bone "Head" world matrix is sheared: its X and Z axes are not perpendicular/);
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(-3e-3)))).toThrow(/is sheared/);
+    });
+
+    it("loosens only when the caller asks (the raw dump's path), and never for a mirror or a bottom row", () => {
+      const dumpPath = { rigidTolerance: 5e-3 };
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(4.5e-3)))).toThrow(/is sheared/);
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(4.5e-3)), dumpPath)).not.toThrow();
+      expect(() => parseSkeletonFile(withWorld("Head", shearXZ(6e-3)), dumpPath)).toThrow(/is sheared/);
+      expect(() => parseSkeletonFile(withWorld("Head", mirrorZ), dumpPath)).toThrow(/bone "Head" world matrix is a mirror image \(determinant -1/);
+      expect(() => parseSkeletonFile(withWorld("Head", (w) => w.map((v, i) => (i === 7 ? 1e-3 : v))), dumpPath)).toThrow(/bottom row/);
     });
 
     it("is not fooled into accepting a matrix with a NaN that every comparison would let past", () => {
@@ -295,7 +316,7 @@ describe("buildRig", () => {
       rig.names.forEach((name, i) => {
         const m = rig.restWorld[i];
         const ax = [0, 4, 8].map((c) => [m[c], m[c + 1], m[c + 2]]);
-        // Orthonormal to machine precision, where the dump's frame is only within 1e-4.
+        // Orthonormal to machine precision, where the dump's frame is only rounded to five decimals.
         ax.forEach((a, k) => {
           expect(Math.hypot(a[0], a[1], a[2])).toBeCloseTo(1, 12);
           ax.slice(k + 1).forEach((b) => expect(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]).toBeCloseTo(0, 12));
@@ -307,6 +328,22 @@ describe("buildRig", () => {
         expect(x[0] * (y[1] * z[2] - y[2] * z[1]) + x[1] * (y[2] * z[0] - y[0] * z[2]) + x[2] * (y[0] * z[1] - y[1] * z[0])).toBeCloseTo(1, 12);
       });
     }
+  });
+
+  it("rebuilds a frame carrying SSBU's authored residue as exactly rigid, keeping its X direction and its position", () => {
+    // Mario's KneeL: the down-pointing X axis 0.999668 long; plus Link's sword shear, 1.08e-3.
+    const file = withWorld("KneeL", (w) => shearXZ(1.08e-3)(w.map((v, i) => (i < 3 ? v * 0.999668 : v))));
+    const raw = file.bones.find((b) => b.name === "KneeL")!.world;
+    const rig = buildRig(parseSkeletonFile(file));
+    const m = rig.restWorld[rig.byLower.get("kneel")!];
+    const ax = [0, 4, 8].map((c) => [m[c], m[c + 1], m[c + 2]]);
+    ax.forEach((a, k) => {
+      expect(Math.hypot(a[0], a[1], a[2])).toBeCloseTo(1, 12);
+      ax.slice(k + 1).forEach((b) => expect(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]).toBeCloseTo(0, 12));
+    });
+    const len = Math.hypot(raw[0], raw[1], raw[2]);
+    near(ax[0], [raw[0] / len, raw[1] / len, raw[2] / len], 12);
+    near([m[12], m[13], m[14], m[15]], [raw[12], raw[13], raw[14], 1], 12);
   });
 });
 

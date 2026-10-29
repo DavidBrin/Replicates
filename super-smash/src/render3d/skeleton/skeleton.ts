@@ -71,17 +71,34 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 const FIGHTER_ID = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 /**
- * How far a bind frame may miss rigid: axis lengths from 1 and axis dot products
- * from 0 (which together hold the determinant within 3e-4 of ±1; its sign is
- * checked on its own). The dump rounds every entry to five decimals (error at
- * most 5e-6), which moves a rigid frame's lengths and dot products by under
- * 2e-5, so 1e-4 passes a rounded rigid frame with margin and rejects any real
- * scale or shear.
+ * How far a committed skeleton's bind frame may miss rigid: axis lengths from 1
+ * and axis dot products from 0 (to first order that holds the determinant within
+ * three tolerances of ±1). The determinant's sign is checked on its own, so a
+ * mirror is always refused, and the bottom row must be exactly 0 0 0 1.
+ *
+ * SSBU's binds are not exactly rigid. Measured on the eight .blend files (Plan 4
+ * Task 6), the largest residue on a committed bone is Link's `Sword1`/`Sword2`: a
+ * 1.08e-3 shear between X and Z (X also 5.8e-4 long). Next is Mario's leg chain
+ * `LegL`…`ToeR`, whose down-pointing axis is 3.3e-4 short. That residue is
+ * authored in SSBU's stored bind matrices, not reader error: the same reader
+ * gives every bone of Donkey Kong, Samus, Kirby, Fox and Marth within 8e-5.
+ *
+ * 2e-3 admits it with about 2× margin, plus the dump's five-decimal rounding
+ * (under 2e-5), and refuses any scale or shear beyond 0.2%. `buildRig` rebuilds
+ * every frame orthonormal before use, so the residue never reaches the maths.
+ * A raw dump, which still holds the helper bones that trimming drops, is checked
+ * against its own wider `RIGID_TOLERANCE_DUMP` (`pipeline/dump.ts`), passed in
+ * through `ParseSkeletonOptions`.
  */
-export const RIGID_TOLERANCE = 1e-4;
+export const RIGID_TOLERANCE = 2e-3;
 
-/** Why a bind matrix is not a rigid transform, or `null` if it is one. */
-function notRigid(m: readonly number[]): string | null {
+export interface ParseSkeletonOptions {
+  /** How far a bind frame may miss rigid. `RIGID_TOLERANCE` unless the caller is validating a raw dump. */
+  readonly rigidTolerance?: number;
+}
+
+/** Why a bind matrix is not a rigid transform within `tolerance`, or `null` if it is one. */
+function notRigid(m: readonly number[], tolerance: number): string | null {
   if (m[3] !== 0 || m[7] !== 0 || m[11] !== 0 || m[15] !== 1) return "has a bottom row other than 0 0 0 1";
   const axes: Vec3[] = [
     [m[0], m[1], m[2]],
@@ -91,10 +108,10 @@ function notRigid(m: readonly number[]): string | null {
   const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   for (const [i, axis] of axes.entries()) {
     const length = Math.hypot(axis[0], axis[1], axis[2]);
-    if (!(Math.abs(length - 1) <= RIGID_TOLERANCE)) return `is scaled: its ${"XYZ"[i]} axis has length ${length}`;
+    if (!(Math.abs(length - 1) <= tolerance)) return `is scaled: its ${"XYZ"[i]} axis has length ${length}`;
   }
   for (const [i, j] of [[0, 1], [0, 2], [1, 2]] as const) {
-    if (!(Math.abs(dot(axes[i], axes[j])) <= RIGID_TOLERANCE)) return `is sheared: its ${"XYZ"[i]} and ${"XYZ"[j]} axes are not perpendicular`;
+    if (!(Math.abs(dot(axes[i], axes[j])) <= tolerance)) return `is sheared: its ${"XYZ"[i]} and ${"XYZ"[j]} axes are not perpendicular`;
   }
   const [x, y, z] = axes;
   const det = dot(x, [y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0]]);
@@ -111,8 +128,12 @@ function notRigid(m: readonly number[]): string | null {
  * back always spells them exactly as the bone is named, and everything after
  * this (`buildRig`, `trimSkeleton`, the bake) compares names exactly. Two bones
  * that differ only by case are refused as ambiguous.
+ *
+ * Bind frames are held to `RIGID_TOLERANCE`; only the dump's own validation
+ * (`parseBoneDump`) passes a wider `options.rigidTolerance`.
  */
-export function parseSkeletonFile(json: unknown): SkeletonFile {
+export function parseSkeletonFile(json: unknown, options: ParseSkeletonOptions = {}): SkeletonFile {
+  const tolerance = options.rigidTolerance ?? RIGID_TOLERANCE;
   const o: Record<string, unknown> | null = isRecord(json) ? json : null;
   const fighter = typeof o?.fighter === "string" && o.fighter !== "" ? o.fighter : "?";
   if (o === null) fail(fighter, "not an object");
@@ -134,7 +155,7 @@ export function parseSkeletonFile(json: unknown): SkeletonFile {
     for (let k = 0; k < 16; k++) {
       if (typeof world[k] !== "number" || !Number.isFinite(world[k])) fail(fighter, `bone "${b.name}" has no 16-number world matrix`);
     }
-    const why = notRigid(world as number[]);
+    const why = notRigid(world as number[], tolerance);
     if (why !== null) fail(fighter, `bone "${b.name}" world matrix ${why}`);
   }
 
@@ -178,9 +199,10 @@ export function parseSkeletonFile(json: unknown): SkeletonFile {
 
 /**
  * Rebuild a bind frame from its X and Y axes (Gram-Schmidt), so the frames the
- * rig keeps are orthonormal to rounding error. The dump rounds to five decimals
- * and `parseSkeletonFile` accepts a frame within `RIGID_TOLERANCE` of rigid;
- * this removes that residue before anything inverts a frame as rigid. A parsed
+ * rig keeps are orthonormal to rounding error. SSBU's binds carry a small
+ * authored residue, the dump rounds to five decimals, and `parseSkeletonFile`
+ * accepts a frame within `RIGID_TOLERANCE` of rigid; this removes all of that
+ * before anything inverts a frame as rigid. It keeps the X axis's direction. A parsed
  * frame has determinant +1, so the rebuilt one never flips handedness.
  */
 function orthonormal(m: readonly number[]): number[] {
