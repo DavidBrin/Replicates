@@ -12,11 +12,16 @@
  * download, a timeout) is drawn as its own hurtbox capsules on the same bones,
  * in its port's colour, and plays on.
  *
- * The 3D work of an update allocates nothing: the pose is retargeted into a
- * buffer made here once (`poseInputs`, `retargetInto`) and written into the
- * bones' and groups' own transforms and the materials' own fields. The clip
- * sample it starts from is the 2D clip sampler's, a fresh `PoseSample` each
- * frame that the clip fade (D42) keeps hold of.
+ * Per frame, nothing here makes an array, matrix, quaternion or pose: the pose
+ * is retargeted into a buffer made here once (`poseInputs`, `retargetInto`) and
+ * written into the bones' and groups' own transforms and the materials' own
+ * fields. An update still allocates, measured (Task 17 fix round):
+ * - the clip sample it starts from, the 2D clip sampler's fresh `PoseSample`
+ *   each frame, which the clip fade (D42) keeps hold of: about 3 KB;
+ * - the engine clock's `PoseIndex` (and a move's script run): about 0.7 KB;
+ * - about 200–250 B of numbers V8 boxes as `retargetInto` reads that sample's
+ *   name-keyed angles.
+ * The fade and the flash box numbers only until V8 has optimised them.
  */
 
 import { CapsuleGeometry, Group, Mesh, type Material, type Object3D, type SkinnedMesh, type Vector3 } from "three";

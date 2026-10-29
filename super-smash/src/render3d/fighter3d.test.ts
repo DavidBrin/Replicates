@@ -17,6 +17,7 @@ import {
   SkinnedMesh,
   Uint16BufferAttribute,
   Vector3,
+  type Bone,
   type Material,
 } from "three";
 
@@ -170,6 +171,74 @@ describe("a fighter in the 3D scene", () => {
     fighter.dispose();
     expect(disposed).toHaveBeenCalledTimes(skeleton.hurt.length);
     expect(fighter.placement.children).toHaveLength(0);
+  });
+});
+
+describe("facing", () => {
+  const link = withLimbScripts(FIGHTERS.find((f) => f.id === "link")!, bake.bones);
+  const linkPoser = fighterPoser(link, parseSkeletonFile(JSON.parse(readFileSync(join(process.cwd(), "src", "render3d", "skeletons", "link.json"), "utf8"))));
+  /** World z of each named bone, and every bone's world determinant, at one facing. */
+  function at(fighter: Fighter3D, facing: 1 | -1, names: readonly string[]) {
+    fighter.update(frameOf(makeFighter({ x: fx(4), y: fx(2), facing, action: "attack", move: "fsmash", actionFrame: 14 })));
+    const z = names.map((n) => {
+      const p = new Vector3();
+      expect(fighter.bonePosition(n, p), n).toBe(true);
+      return p.z;
+    });
+    const determinants: number[] = [];
+    fighter.placement.traverse((o) => {
+      if ((o as Bone).isBone) determinants.push(o.matrixWorld.determinant());
+    });
+    return { z, determinants };
+  }
+
+  it("turns the fighter round, never mirrors it: the hands trade depth, the blade stays in its hand, no bone is a reflection", () => {
+    // SSBU turns its fighters, so a left-facing Link holds his sword in the same hand (brief, Task 17).
+    // A mirror (a fixed turn and scale.z = facing) draws the same silhouette with every hitbox in place,
+    // but leaves each hand where it was in depth and flips every bone's handedness.
+    for (const [label, fighter, names] of [
+      ["Mario, stand-in", createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "standIn", reason: "test" } }), ["handl", "handr"]],
+      ["Mario, glb", createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene: armatureModel(poser.rig3, gltfMaterials()) } }), ["handl", "handr"]],
+      ["Link, stand-in", createFighter3D({ def: link, port: 0, poser: linkPoser, bake, model: { kind: "standIn", reason: "test" } }), ["handl", "handr", "sword1", "sword2"]],
+    ] as const) {
+      const right = at(fighter, 1, names);
+      const left = at(fighter, -1, names);
+      // The fighter's left side (+X in model space) is away from the camera facing right, and toward it facing left.
+      expect(right.z[0], `${label}: left hand facing right`).toBeLessThan(right.z[1]);
+      names.forEach((n, k) => {
+        expect(Math.abs(right.z[k]), `${label}: ${n} off the play plane`).toBeGreaterThan(0.1);
+        expect(left.z[k], `${label}: ${n} trades depth`).toBeCloseTo(-right.z[k], 9);
+      });
+      for (const d of [...right.determinants, ...left.determinants]) expect(d, `${label}: a bone's world handedness`).toBeGreaterThan(0);
+      fighter.dispose();
+    }
+  });
+});
+
+describe("the clock", () => {
+  it("draws the frame it is handed: an idle fighter on frame k is the bake's pose for k, not k + 1", () => {
+    // Idle is the one status whose clock runs on the global frame (`poseIndexOf` "idle").
+    const f = makeFighter({ action: "stand", actionFrame: 0 });
+    const fighter = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "standIn", reason: "test" } });
+    const baked = (frame: number) => {
+      const index = poseIndexOf(mario, f, frame, bake.clock)!;
+      expect(bake.clock("mario", index.motion)!.kind).toBe("idle");
+      const pose = newBonePose();
+      expect(bake.bones.pose("mario", index.motion, index.frame, "head", pose)).toBe(true);
+      const local = bonePoint(pose, 0, 0, 0);
+      return { x: simWorldX(f, toFloat(local.x)), y: toFloat(f.y) + toFloat(local.y) };
+    };
+    // Frames where the head moves between k and k + 1 by more than the test can confuse.
+    const moving = Array.from({ length: 120 }, (_, k) => k).filter((k) => Math.hypot(baked(k + 1).x - baked(k).x, baked(k + 1).y - baked(k).y) > 0.03);
+    expect(moving.length).toBeGreaterThan(5);
+    const p = new Vector3();
+    for (const k of moving) {
+      fighter.update({ ...frameOf(f), frame: k });
+      fighter.bonePosition("head", p);
+      const want = baked(k);
+      expect(Math.hypot(p.x - want.x, p.y - want.y), `frame ${k}`).toBeLessThan(0.01);
+    }
+    fighter.dispose();
   });
 });
 

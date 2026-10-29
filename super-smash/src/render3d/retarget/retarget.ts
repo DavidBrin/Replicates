@@ -35,8 +35,8 @@
  * Pure: `Math` only, no three.js, so `bake/bake.ts` runs it at build time and
  * the renderer runs it per frame, and `fighter3d.test.ts` proves they agree.
  * Both run one body of arithmetic: `retargetInto` writes into a `PoseBuffer` the
- * caller keeps, so the renderer allocates nothing per frame, and `retarget` is
- * that on a fresh buffer (the bake's form).
+ * caller keeps, so the renderer makes no array, quaternion or pose per frame,
+ * and `retarget` is that on a fresh buffer (the bake's form).
  */
 
 import { BONE_NAMES, type BoneName, type PoseAngles, type Rig } from "@/render/skeleton";
@@ -207,11 +207,13 @@ export function accumulatedAngles(rig2d: Rig, angles: PoseAngles, rotation: numb
 
 /**
  * `accumulatedAngles` by place in `BONE_NAMES`, written into `out`: the same
- * sums, shaped so that posing allocates nothing. Every number lives in a typed
- * array (the rotation too, at `ROTATION_AT`), never in a record keyed by name,
- * and each branch adds and stores its own term: merging a property read with
- * an unboxed number (`angles[name] ?? rest`, `parent ? out[p] : rotation`)
- * makes V8 box one number per bone.
+ * sums, shaped so that V8 boxes no number of its own. Every number lives in a
+ * typed array (the rotation too, at `ROTATION_AT`), never in a record keyed by
+ * name, and each branch adds and stores its own term: merging a property read
+ * with an unboxed number (`angles[name] ?? rest`, `parent ? out[p] : rotation`)
+ * boxes one number per bone. What is left is reading `angles`, the clip
+ * sample's own record keyed by name: V8 boxes each angle read out of it, about
+ * 200–250 B a frame (measured, Task 17 fix round).
  */
 function accumulatedAnglesInto(rig2d: Rig, angles: PoseAngles, rotation: number, out: Float64Array): Float64Array {
   const { parent, rest } = rigByPlace(rig2d);
@@ -233,7 +235,8 @@ export interface LocalPose {
 
 /**
  * A `LocalPose` its owner refills (`retargetInto`): the renderer keeps one per
- * fighter and poses it sixty times a second without allocating. `worldQ` and
+ * fighter and poses it sixty times a second without making a new array or
+ * quaternion. `worldQ` and
  * `acc` are the posing's own scratch: each bone's world rotation and the 2D
  * rig's accumulated angles.
  */
@@ -267,7 +270,7 @@ export function retarget(cal: Calibration, rig2d: Rig, angles: PoseAngles, rotat
   return retargetInto(cal, rig2d, angles, rotation, newPoseBuffer(cal.rig));
 }
 
-/** `retarget`, written into `out`: every entry of `out.q` and `out.t` is rewritten, nothing allocated. */
+/** `retarget`, written into `out`: every entry of `out.q` and `out.t` is rewritten; no array, quaternion or pose is made. */
 export function retargetInto(cal: Calibration, rig2d: Rig, angles: PoseAngles, rotation: number, out: PoseBuffer): PoseBuffer {
   const { rig } = cal;
   const n = rig.names.length;

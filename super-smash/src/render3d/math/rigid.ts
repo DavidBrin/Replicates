@@ -27,7 +27,7 @@ export function qMul(a: Quat, b: Quat): Quat {
 
 /** `a · b` written into `out` (which may be `a` or `b`); the one formula `qMul` also runs. */
 export function qMulInto(out: QuatOut, a: Quat, b: Quat): QuatOut {
-  // Indexed reads, not destructuring: no iterator, so nothing is allocated even before V8 optimises this.
+  // Indexed reads, not destructuring: no iterator object per call.
   const ax = a[0], ay = a[1], az = a[2], aw = a[3];
   const bx = b[0], by = b[1], bz = b[2], bw = b[3];
   out[0] = aw * bx + ax * bw + ay * bz - az * by;
