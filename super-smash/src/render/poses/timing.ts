@@ -52,6 +52,7 @@ import {
   TURNAROUND_FRAMES,
 } from "@/engine/states";
 import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttributes, MoveSlot } from "@/engine/types";
+import { STRIDE_UNITS } from "@/engine/acmd/poseClock";
 import { clipFor } from "../chars/poses";
 import { airDodgeClipTime } from "./airDodge";
 import { samplePose, type PoseSample } from "./clip";
@@ -144,7 +145,7 @@ function isLedgeJump(f: Pick<PosedFighter, "actionFrame" | "vy">, jump: JumpTimi
   return f.vy === jump.ledgeSpeeds[f.actionFrame];
 }
 
-const SLOT_POSE: Record<MoveSlot, PoseName> = {
+export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   jab1: "jab",
   // Each hit of the string gets its own name. They alias the first hit's clip
   // in the shared library, so nothing changes until a fighter overrides one.
@@ -201,10 +202,10 @@ const DEFAULT_PERIOD = 30;
  * A fighter held at zero speed — walking into a wall — freezes mid-step, which
  * is correct: feet stop when the fighter stops.
  */
-const STRIDE = 36;
+const STRIDE = STRIDE_UNITS;
 
 /** Cycles are paced by distance covered, not by frames elapsed. */
-const PACED_BY_SPEED: Partial<Record<PoseName, true>> = { walk: true, run: true };
+export const PACED_BY_SPEED: Partial<Record<PoseName, true>> = { walk: true, run: true };
 
 /** Normalised position within a cycle, for any real number of cycles. */
 function wrap(cycles: number): number {
