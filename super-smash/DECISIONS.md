@@ -1663,9 +1663,9 @@ and hashed, which reflective tests check field by field.
   - *The backstop.* The start carries the same stamp. A guest that receives a start whose stamp is
     another build's, or missing, sends `refuse` and leaves, readable or not, and the host's /play
     shows the sentence in its "could not start" overlay. An unreadable start whose stamp matches
-    this build is dropped, as it always was; a same-build host only sends starts its guest can
-    read, so that is practically unreachable. The host takes a `refuse` only while a start is out
-    to the player in the seat: with none out, or after that start's guest left, it ends nothing.
+    this build was dropped, as it always was, until Plan 3's final wave, which refuses it with
+    its own reason (D56). The host takes a `refuse` only while a start is out to the player in
+    the seat: with none out, or after that start's guest left, it ends nothing.
   - *A replacement opponent.* In the lobby, a `peer-left` for the peer on an open channel lets that
     channel go, so the next player the room seats is offered a connection. Before this, an old
     opponent whose room socket left before its channel closed kept the host in "linking" with
@@ -1823,7 +1823,9 @@ The calculator disagrees with our script reading in five places, each documented
 - *Plan 3* adopts the imported scripts move by move, starting with root-bone moves. `step()` runs
   each slot's script, but the renderer, the CPU and `chargeHoldFrame` still read its `MoveDef`.
   They agree today because every script is compiled from that `MoveDef`, so replacing a slot's
-  script means moving those readers too.
+  script means moving those readers too. (Done for the 38 root-bone slots it activated: an
+  activated slot's `MoveDef` hitbox table is rebuilt from its script, so those readers see what
+  the sim runs. D56, Which scripts run.)
 - *Plan 4* bakes the bone table and completes the ECB. Setting `GAME_SIM_CONTEXT.bones` to the bake
   is not enough on its own: `registerFighters` checks scripts against `registryContext.bones`, so
   Plan 4 must also prepare them against the bake (`src/game/simContext.ts` says so).
@@ -1837,6 +1839,8 @@ rules, each pinned by a test against a public source. Where no source settles a 
 says `UNVERIFIED:` and the rule is listed under **Open questions** below. The sources, as the
 code cites them:
 - SmashWiki, `https://www.ssbwiki.com/<Page>`, a few pages at a pinned revision;
+- Ultimate Frame Data, `https://ultimateframedata.com/<fighter>`, the "Dodges / Rolls" table on
+  each fighter's page, for the spot dodge and the rolls;
 - rubendal [SSBU-Calculator](https://github.com/rubendal/SSBU-Calculator) (MIT) at
   `233590e94bc4bd8813f2d1a2af45c8c46648f351` (`js/formulas.js`, `js/knockback.js`,
   `js/worker/multiworker.js`, `js/global.js`), and its Sm4sh-Calculator wiki page
@@ -1855,6 +1859,12 @@ code cites them:
 Three tasks were inserted when a review found a gap the plan had not: **16b** (fixed knockback
 is weight-based), **20b** (the neutral air dodge keeps momentum) and **20c** (air dodges follow
 the published params).
+
+After the tasks, a whole-branch review and a codex seam pass found what they had not, and a
+final wave fixed it: the frame a timed status hands off on and each fighter's own spot dodge
+and roll, the order a freeze's release runs in, who can SDI, the mash credit, a malformed start
+online, and the gaps in this entry. Its changes are marked *final wave* below, and its rulings
+are in the list with the others.
 
 **Knockback and hitstun** (Tasks 1, 5, 6, 16b)
 - *Super armour counts a hit's damage once.* It counted it twice.
@@ -1906,10 +1916,44 @@ rubendal's `Knockback.bounce` is dead code at the pinned commit (its one call,
 `multiworker.js:212`, is commented out). So the launch, DI'd, bounces once as it fires: 0.9
 of it is sent back up (Task 12's floor bounce) when it still points into the floor and is
 fast enough to bounce, set knockback included. The hitstun is the hit's whole ("not affected
-by the knockback reduction", Meteor smash), and there is no tech ("can no longer be teched").
-A meteor too weak to tumble does not bounce: the victim flinches where it stands. A meteor is
-an explicit `meteor`, or a script angle of 230°–310° (rubendal `js/knockback.js` L1105).
-Ruled on David's behalf and reported to him.
+by the knockback reduction", Meteor smash), and SmashWiki "Hitstun" gives the mid-flight
+bounce's 0.8 an exception for it: "Characters bouncing off surfaces due to knockback have
+their hitstun reduced by 0.8× relative to the initial amount, with the exception of grounded
+meteor smashes." There is no tech ("can no longer be teched"). A meteor too weak to tumble
+does not bounce: the victim flinches where it stands. A meteor is an explicit `meteor`, or a
+script angle of 230°–310° (rubendal `js/knockback.js` L1105). Since the final wave the
+bounce is not the meteor's alone: every tumbling launch into the floor on a grounded victim
+takes it (**The release of a launch**, below), and SPEC §4's sentence about a meteor stays
+true of that case.
+Ruled on David's behalf; to be reported to him, together with the two other SPEC edits this
+plan made: the glossary's tumble line ("entered at 31 frames of hitstun or more (knockback
+80)") and §4's hitstun line (`floor(max(KB × 0.4, 5)) − 1`, never under 4 frames, tumbling
+from knockback 80, and a sped-up launch's hitstun shorter in real frames).
+
+**The release of a launch** (final wave). A hit's launch is parked in the freeze and fires on
+the frame the freeze ends. On that frame phase 3 runs four steps, in this order: ASDI
+(`applyAsdi`); the stage clamp (`clampShiftToStage`); a ground re-check
+(`leaveGroundIfShiftedOff`); and the launch (`releasePendingLaunch`). The re-check asks what
+`resolveCollision` asks of a fighter already standing on something: is its origin still over
+its platform's span? If not, the fighter has left the ground without a jump, and its ground
+jump is spent as walking off spends it. So the launch reads where the victim really is. A 367°
+pull aims from the clamped position (it took the unclamped one, so a release-frame SDI or ASDI
+reached it past the stage), and a downward launch bounces off the floor only if the victim
+still stands on one: a grounded meteor whose victim SDI'd off the lip was bounced up off thin
+air, and is spiked now (the final review, Important 1).
+- *Every tumbling launch into the floor bounces a grounded victim once.* `launchBounce` is
+  grounded and tumbling, with no meteor gate: `Hitbox.meteor` gates nothing now. It is Task
+  12's floor bounce at release, 0.9 of the launch sent back up and the hitstun uncut.
+  SmashWiki "Knockback": "Landing a meteor smash or spike on a grounded opponent counts as a
+  bounce". Before, only a box marked a meteor did, and a tumbling 270° box that was not one
+  lifted its victim and then bounced it, cutting its hitstun (Donkey Kong's Headbutt at 130%:
+  lifted for 6 frames, hitstun 28 to 22; the final review, Important 2). UNVERIFIED: that
+  SmashWiki "Hitstun"'s exception, which names grounded meteor smashes, covers every such
+  launch.
+- *Headbutt is a meteor* (`meteor: true`). SmashWiki "Headbutt": "This attack can meteor smash
+  an opponent if used in mid-air", and "Donkey Kong (SSBU)/Side special" is filed under
+  "Meteor smashes (SSBU)". A grounded victim takes the release bounce as a stand-in for bury,
+  UNVERIFIED, until Plan 5.
 
 **Angles** (Tasks 3, 19)
 - *The Sakurai angle* (361) is 38° in the air; on the ground it is 0° below 60 knockback, 38°
@@ -1921,10 +1965,11 @@ Ruled on David's behalf and reported to him.
   its hitstun is the hit's.
 - *Autolink angles* (SmashWiki "Autolink angle"). 365° launches at half the attacker's
   momentum, "regardless of the knockback". 367° launches at the attacker's momentum plus 20%
-  of the way from the victim to the hitbox's centre (a capsule's midpoint), its speed capped
-  at 3 and its vertical speed floored at −1; against a grounded victim it is 80° at the hit's
-  own launch speed. The vector is computed when the freeze ends, from where SDI and ASDI left
-  the victim ("calculated after hitlag is over"); the momentum is read on contact, and a
+  of the way from the victim to the hitbox's centre (a capsule's midpoint, `trunc((2c + d) / 2)`
+  on each axis, so it is the same whichever end comes first), its speed capped at 3 and its
+  vertical speed floored at −1; against a grounded victim it is 80° at the hit's own launch
+  speed. The vector is computed when the freeze ends, from where SDI, ASDI and the stage clamp
+  left the victim ("calculated after hitlag is over"); the momentum is read on contact, and a
   projectile's hit uses the projectile's velocity. The balloon speed-up still applies ("the
   knockback speed-up effect still applies to moves that use autolink angles if they do not
   have set knockback", the 367° section); DI, LSI and balloon fall do not. 363°, 366° and 368°
@@ -1947,16 +1992,28 @@ Ruled on David's behalf and reported to him.
 - *SDI* pulses grow ×1.15 from the sixth consecutive hit (SmashWiki "Smash directional
   influence"); a hit kept or armoured through by stacking counts. *ASDI* exists only for
   electric and paralyzing hits not launched between 70° and 110°: as the freeze ends, the
-  victim shifts toward the held stick, 1 unit for now (a stand-in; see the rulings). A frozen
+  victim shifts toward the held stick by 1.33 units (`ASDI_DISTANCE`: the page gives Smash 4's
+  as "1.33 units with ASDI (down from 3)" and says Ultimate's SDI "retains its shorter
+  distance from Smash 4"; UNVERIFIED for Ultimate's ASDI itself, final wave). A frozen
   fighter skips collision, so `clampShiftToStage` keeps an SDI or ASDI shift out of the
   stage's solid bodies; Task 11 found a pulse could sink a fighter through Final Destination.
+- *Only the fighter hit SDIs and ASDIs* (final wave). `CombatState.victimFreeze` is set
+  wherever a hit freezes the fighter it landed on (`freezeVictim`): the damage path, a kept
+  or armoured hit included, a hit on a shield, the defender of a parry (UNVERIFIED) and a
+  pummel's victim (UNVERIFIED; the hold placement overwrites its shift anyway). It is cleared
+  when the freeze ends and on a KO, and SDI and ASDI act only with it set. Before, any frozen
+  fighter pulsed: an attacker slid up to 6 units over its own 12-frame freeze on the stick it
+  already held for its next move, and a parried attacker could drift out of the punish
+  (SmashWiki gives SDI to the fighter hit; the final review, Important 3). The level-9 CPU
+  still mashes directions in its own hitlag, now to no effect.
 
 **Hitstun cancel** (Task 7). An airborne victim may air dodge from real frame 41 of its
 hitstun while its launch is slower than 2.5, or attack from frame 46 below 2 (SmashWiki
 "Hitstun canceling"; rubendal `parameters.hitstunCancel`). The windows count real frames:
 they "do not account for the speed-up" (SmashWiki "Hitstun"). Only a press cancels, never a
 held shield, and the air dodge needs one left. Being hit gives the air dodge back ("land, get
-hit, or grab a ledge", SmashWiki "Air dodge").
+hit, or grab a ledge", SmashWiki "Air dodge"), but a hit that super armour takes does not
+(UNVERIFIED: that this is the "get hit" the page means; final wave).
 
 **Shields** (Tasks 9, 10, 17)
 - *Damage and size.* A hit takes ×1.19 of its damage off a shield (SmashWiki "Shield"), which
@@ -1964,18 +2021,30 @@ hit, or grab a ledge", SmashWiki "Air dodge").
   shield can be poked. The bubble is `shield_radius` × the fighter's scale, centred half-way
   up the body.
 - *Pushback.* The defender slides `min((shieldstun + 1) × 0.09, 1.3)` on the unrounded
-  shieldstun (SmashWiki "Shield (SSBU)", pushback table: "shieldstun is not rounded down";
+  shieldstun (SmashWiki "Shield", pushback table: "shieldstun is not rounded down";
   rubendal `ShieldPushback`), and a grounded melee attacker slides `0.04 × damage + 0.025`
   back (rubendal `AttackerShieldPushback`). Both decay by traction.
 - *Breaking.* A break stuns for `400 − percent` frames, none from 400% (SmashWiki "Stun"),
   mashed down 5.4 frames a button press and 3 a stick input, then 33 frames of FuraFuraEnd
   (same page); the shield comes back at 37.5 (SmashWiki "Shield break") and does not regrow
   during the stun. The 240-frame stand-in this replaces is now only the renderer's clip length.
+  Since the final wave: the mash counts the jump button's own press (`Intent.jumpButtonPressed`),
+  so a held Up is the one stick input it is (3 frames) and tap jump no longer counts it again
+  as a button press (5.4 more; a grab struggle shares the count); a new break starts its mash
+  at zero; and the shield comes back at 37.5 however the stun ends, a hit or a grab included
+  ("Any attack that causes a stunned fighter to flinch ends the stunned state", SmashWiki
+  "Shield break"). UNVERIFIED: that an early end resets it, since the page gives the reset only
+  for the stun's end; that two buttons pressed on one frame each count; the floored percent in
+  `400 − p`; and the attacker's pushback being for a grounded attacker only.
+- *Hitlag on a shield ignores multipliers below 1×* (final wave). A move's own hitlag
+  multiplier under 1× counts as 1× when the hit lands on a shield, a parry included; 0× stays
+  0× (SmashWiki "Hitlag": "Hitlag multipliers less than 1× are ignored if shielding", and "moves
+  with a hitlag multiplier of 0× will still cause no hitlag, even when perfect shielded").
 - *Perfect shield* adds the published hitlag to the hit's *shield* hitlag (×0.67), SmashWiki
   "Perfect shield": direct melee +14 attacker / +11 defender, indirect melee +14 / +2, and a
   projectile's thrower 0 with its defender +8 direct or −1 indirect. A script's `direct` flag
   says which (Task 16). A melee hit with no hitlag of its own freezes nobody. The pushback
-  takes ×0.15 inside the formula, before the 1.3 cap (SmashWiki "Shield (SSBU)", rubendal
+  takes ×0.15 inside the formula, before the 1.3 cap (SmashWiki "Shield", rubendal
   `ShieldPushback`, `ssbu_ref.mjs`).
 - *A capsule reaches a shield from its nearest point.* Whether the shield covers a hit, and
   which way it pushes, read the x of the hitbox's spine nearest the defender. A capsule that
@@ -1996,7 +2065,9 @@ from a *different* source, a new launch at 0.5×–0.9× of its speed keeps the 
 and hitstun, and turns it, if it has already fired, toward the sum of both vectors, with no
 DI; under 0.5× the hit is armoured through; a faster one replaces it (SmashWiki "Knockback",
 stacking). The damage lands either way. The hits of one move are one source and always
-replace each other.
+replace each other. The hit event of a kept launch reports the kept launch's direction, turned
+by the hit if it was in flight and its own if it is still parked in the freeze; an armoured
+hit reports 0, as nothing new launches (final wave; it reported 0 for both).
 
 **Teching, bouncing and the tumble after hitstun** (Task 12 and two fix rounds)
 - *Tech input* is a shield press. It opens an 11-frame window, and no new one opens for 40
@@ -2046,11 +2117,19 @@ grazing one survives. Grab boxes, hits that reach a raised shield, and the Smash
   attacker's grab during hitlag", SmashWiki "Pummel"); the frame itself does not. A fighter
   who breaks out, whose hold runs out, or whose captor's own status ends the hold cannot be
   grabbed for 60 frames ("around one second", SmashWiki "Grab"). A throw that hits, and a
-  captor that is hit or KO'd, grant none.
+  captor that is hit or KO'd, grant none. Every release zeroes the held fighter's mash credit
+  with its escape timer (final wave): a break-out, a throw's hit, a captor that is hit, KO'd or
+  no longer holding.
 - *The victim is held at its captor*, two hurtbox radii in front of it, every frame, with no
   physics of its own, and is grounded only over the captor's platform. A captor that leaves
   its four catch statuses lets go, and those statuses stop at a cliff instead of walking off
   it. Before, nothing held a grabbed fighter: one caught in the air fell while "held".
+- *Inhale is a stand-in* (final wave). Kirby's neutral special catches with a box inside a
+  `special`, which the captor guard let go of one frame after the catch. `isHolding` now
+  counts a `special` as holding while its move owns a catch box, so the victim is held for
+  the whole inhale and let go when it ends, with the 60 frames of immunity. It does not stop
+  at a cliff: that stays the four catch statuses' alone (`isCatchStatus`). UNVERIFIED; Plan 5
+  Task 9 builds the real Inhale and replaces it.
 - *Pummels and throws hit only the fighter held* (`Candidate.onlyPort`, as the game's
   `set_catch_only_all` and `ATTACK_ABS` do): no geometry test, no clank, no Smash Ball. A
   pummel deals damage and a freeze and nothing else: no knockback and no release (SmashWiki
@@ -2070,9 +2149,13 @@ off it (CLIFF_ROBBED, the `ledgeTrumped` action; SmashWiki "Ledge trump": "grabb
 ledge that has already been grabbed by another player will gently remove them from the
 ledge", who "cannot take any action for a moment"). Their intangibility goes, they are set
 clear of the ledge by the ECB's half-width and a unit, and for 30 frames they can neither act
-nor grab a ledge. Only a hanging fighter is trumped; a ledge held by a fighter in a ledge
-option is refused to a newcomer until the option ends. Two fighters taking one free ledge on
-one frame: the later port keeps it.
+nor grab a ledge (the lockout is `LEDGE_TRUMPED_FRAMES` + 1, since it counts down from the
+frame after the trump: the ledge is refused on the lag's last frame, `actionFrame` 30, and
+free on 31; it was free a frame early before the final wave). Only a hanging fighter is
+trumped; a ledge held by a fighter in a ledge option is refused to a newcomer until the option
+ends. Two fighters taking one free ledge on one frame: the later port keeps it. UNVERIFIED:
+that a regular getup is as safe from a trump as the attack, jump and roll SmashWiki names (it
+"cannot be buffered, making it much easier to trump someone attempting these ledge options").
 
 **Script hitboxes** (Tasks 16, 17)
 - *What a script's `ATTACK` now carries:* set weight; a ground- or air-only mask
@@ -2104,6 +2187,66 @@ rule's output.
 - Mario's down air lands its drill as a multi-hit; before, only its first hit landed.
 - `reconcile.allow.json` went from 136 entries to 119.
 
+**Timed statuses and the frame they hand off on** (final wave)
+- *The rule.* A status the fighter enters itself in phase 3 counts its entry frame as frame 1
+  (`actionFrame` 0), so a length T (UFD's "Total frames", P's `stiff_frame`) ends it on
+  `actionFrame` T, frame T + 1, and the next status's `main` reads input on that frame
+  (`handOff`). Mario's 52-frame neutral air dodge acts on frame 53, a 24-frame jab on 25, the
+  11-frame shield drop on 12. Statuses entered on contact (landing, tech, hitstun, shieldstun)
+  count from the frame after and act on L + 1, as before. `MoveDef.totalFrames` is that T; it
+  was documented as the first actionable frame. Before, a timed status changed status on
+  `actionFrame` T but read no input until the next frame: a jab acted on 26, Mario's dodge on
+  54, the shield drop on 13, while every stun was right, so every advantage tilted a frame
+  toward the defender (the final review, Important 4).
+- *What it covers.* Every phase-3 timed status, each pinned through `step()`: moves (attacks,
+  specials, a whiffed grab, throws), the shield drop and the shield start, the spot dodge, the
+  roll, the air dodge, the four ledge options, crouch start and end, the run turnaround, and a
+  pummel into the grab hold. A jump out of shield is possible on its frame 2, not 3; the 3-frame
+  minimum hold before a drop is unchanged.
+- *What it leaves.* Statuses entered on contact or on another status's last frame, which
+  already end on their first actionable frame (landing and landing lag, the four techs, the
+  trump, hitstun, tumble, shieldstun, a broken shield, downed and the get-up); `runBrake`,
+  `dashStart` and `jumpSquat`, which act on every frame; and `entering`, `dead` and the respawn
+  platform, which are not the fighter's own action.
+- *A press on the last frame of a contact status is not lost* (`endStatus`, the counterpart of
+  `handOff`). Those statuses changed status on their last frame without buffering, and on the
+  next frame the key is held, not pressed, so a fresh press made on exactly that frame was
+  dropped where every earlier one fired on L + 1. Landing, landing lag, hitstun and tumble,
+  shieldstun, downed, the get-up and the techs now buffer it, and a wall tech, actionable from
+  frame 6, reads input before its last frame's change. The trump, a broken shield, being
+  grabbed or thrown and `entering` are left as they were.
+- *The spot dodge and the rolls are each fighter's own* (UFD "Dodges / Rolls";
+  `FighterAttributes.groundDodge`, `src/engine/groundDodge.ts`), under the air dodge's
+  convention: a published frame N is `actionFrame` N − 1, for the length and for the
+  intangibility. Mario's 25-frame spot dodge, intangible on published frames 3-17, is
+  `actionFrame` 0-24 with 2-16 intangible, and he acts on frame 26. Each entry is total frames,
+  then intangible published frames; UFD gives every fighter's back roll separately:
+
+  | Fighter | Spot dodge | Forward roll | Back roll |
+  |---|---|---|---|
+  | Mario, Marth | 25, 3-17 | 29, 4-15 | 34, 5-16 |
+  | Donkey Kong, Link, Kirby | 26, 3-17 | 30, 4-15 | 35, 5-16 |
+  | Samus | 26, 3-17 | 34, 4-18 | 39, 5-20 |
+  | Fox | 23, 3-14 | 26, 4-12 | 32, 4-14 |
+  | Pikachu | 24, 3-16 | 28, 4-14 | 33, 4-15 |
+
+  A roll keeps its way in `charge` (0 forward, 1 back) and travels `ROLL_DISTANCE` (28, still
+  shared and UNVERIFIED) over its own length. Before, every fighter had a shared, unsourced
+  24-frame spot dodge intangible on `actionFrame` 3-20 and a 31-frame roll on 4-20, read the
+  opposite way round to the air dodge's (the final review, Minor 1). `dodgeWindow` now reads
+  one convention for every dodge; the techs keep theirs, as they enter in phase 5.
+
+**Smaller rules** (final wave)
+- *A KO clears* `mash`, `launchSource`, `swingQueued` and `victimFreeze` (phase 9), and
+  entering a shield break zeroes the mash: a stale credit had shortened the next break's stun
+  by a frame (codex P2-1).
+- *A short hop ends when a launch fires*, so an aerial out of hitstun deals 1×, not the short
+  hop's 0.85× (the final review, Minor 3). It is cleared at release, not on contact: on contact
+  a trade of two hits made the result depend on port order. Two hits with no hitlag still launch
+  on contact, and a trade of those still depends on it.
+- *`clampShiftToStage` lands a lip shift only from strictly above*, as `resolveCollision`'s wall
+  test does.
+
 **Air dodges** (Tasks 20b and 20c, inserted)
 - *A neutral air dodge keeps the fighter's momentum*, gravity included: it "behaves like air
   dodges in Brawl and Smash 4, preserving their momentum" (SmashWiki "Air dodge"). It stopped
@@ -2127,12 +2270,16 @@ rule's output.
 - *Air-dodge frames* count the entry frame, `actionFrame` 0, as the dodge's frame 1, since it
   already moves and collides: `actionFrame` N is frame N + 1, and a published frame N is
   `actionFrame` N − 1, for every air-dodge rule (the length, the slingshot and slide, the
-  landing lag, the intangibility, the ledge gate and the tech's first 15 frames).
+  landing lag, the intangibility, the ledge gate and the tech's first 15 frames). The length is
+  the hand-off's: a dodge of N frames ends on `actionFrame` N and acts on frame N + 1.
 - *Each fighter's own lengths and intangibility* (`FighterAttributes.airDodge`) come from its
-  entry in the same dump and reproduce SmashWiki's Ultimate table: Fox's neutral dodge lasts
-  38 frames, intangible on published frames 2–26; Mario's lasts 52, intangible on published
-  frames 3–29 (`actionFrame` one less). A diagonal takes the midpoint of its sideways and
-  vertical lengths, rounded up.
+  entry in the same dump and reproduce SmashWiki's Ultimate table for the neutral dodge: Fox's
+  lasts 38 frames, intangible on published frames 2–26; Mario's lasts 52, intangible on
+  published frames 3–29 (`actionFrame` one less). The directional lengths are the dump's and
+  sit one frame under the table in places: Mario's side dodge is 86 and his up dodge 115,
+  where SmashWiki has 87 and 116, and Fox's side dodge is 63 against 64 (the down dodges and
+  Fox's up dodge agree). A diagonal takes the midpoint of its sideways and vertical lengths,
+  rounded up.
 - *Task 12's near-floor reading is gone.* It read a shield press near a floor as the tech
   alone (`techInputNearFloor`, `landsWithin`), because a dead-stop dodge would hover past the
   landing. With momentum kept, the press is the air dodge again, and the dodge techs. A press
@@ -2157,12 +2304,23 @@ whose stamp has no `engineRules` is refused as a build from before the handshake
 `rulesVersion.test.ts` pins `ENGINE_RULES_VERSION` beside the golden trace's digest: inside a
 plan a behaviour change rewrites only the digest, and the version moves once per plan.
 
+A start that carries this build's own stamp and still cannot be read (final wave) is refused,
+where D55 had it dropped. An honest host never sends one, since it reads its start as the
+guest will before it goes (`OnlineSession.sendLobby`), so this is a corrupted or tampered
+message, or a bug; but a guest that dropped it sat connected with no match, for good, while the
+host waited (codex P2-2). "A different version" would be false when the stamps agree, so the
+refusal has its own reason, `unreadable-start`: the guest sends `refuse` with it, both players
+read "The match settings could not be read, so leave the room and start again.", the room is
+left, and the host's /play shows the sentence in its overlay. `refuse` carries one of two
+reasons now, and a test drives the guest's path through the parser a guest really has.
+
 **Where it lives.** `CombatState` (`combat.ts`) is one sub-object on `FighterState`, cloned,
-hashed (`mixCombat`) and walked by the reflective tests like `kinetic`; it has nineteen fields
-by the end. `KineticState` gained the speed-up's `speedUpFrame`, `speedUpFaf`, `speedUpMax`,
-`stepX` and `stepY`, and set weight's `setWeightFrames`. New modules: `shield.ts`, `tech.ts`,
-`airDodge.ts`, `status/passive.ts` and `fighters/acmd/active.ts`. `ActionState` gains `tech`,
-`techRoll`, `techWall`, `techCeiling`, `tumbleFall` and `ledgeTrumped`, 48 in all; the
+hashed (`mixCombat`) and walked by the reflective tests like `kinetic`; it has twenty fields
+by the end, the last being `victimFreeze`. `KineticState` gained the speed-up's `speedUpFrame`,
+`speedUpFaf`, `speedUpMax`, `stepX` and `stepY`, and set weight's `setWeightFrames`. New
+modules: `shield.ts`, `tech.ts`, `airDodge.ts`, `groundDodge.ts`, `status/passive.ts` and
+`fighters/acmd/active.ts`; `handOff` and `endStatus` are in `states.ts`. `ActionState` gains
+`tech`, `techRoll`, `techWall`, `techCeiling`, `tumbleFall` and `ledgeTrumped`, 48 in all; the
 renderer lends them existing clips until Plan 4 draws their own. `Hitbox` gains `x2`/`y2`,
 `fixedKnockback`, `direct`, `setWeight`, `situation` and `lr`. The combat tests are in
 `src/engine/combat.test.ts`, beside each module's own.
@@ -2172,7 +2330,16 @@ behaviour, each commit saying why. Task 12 added a sixth match, `goldenLab.ts`: 
 launched by hand into a floor, a wall and a ceiling, for the tech roll, wall tech and ceiling
 tech that no other match reaches without off-stage play. The coverage pin names all 48 action
 states. Tasks 3, 4, 9, 12, 14 and 18 re-tuned the scripted match (`goldenScript.ts`'s header
-says how), and no pin entry was dropped.
+says how), and no pin entry was dropped. The final wave regenerated the trace four times (the
+hand-off, SDI for the victim alone, the mash input, and the buffered last-frame press), each
+with `RULES_PIN.golden` and the version unmoved, and re-tuned nothing, as no pin tripped. The
+release order, the release bounce, the KO clears, hitlag on a shield and its smaller fixes left
+the trace byte-identical. The end-to-end test "the player can actually damage the CPU" failed
+about one run in eight, because a blind back-and-forth pattern ran the player off the stage in
+some fights and the wall clock decided which frame each key landed on. It now starts a stepped
+match (`startMatch(page, { stepped: true })`: the clock stops as the match mounts, and the test
+runs it with `stepFrames`), so the same keys play the same match on any machine, and it plays
+the player a frame at a time; the other gameplay and rebinding specs are stepped the same way.
 
 **What the reviews caught.** Each is fixed and pinned by a test:
 - knockdowns had all but vanished, because a missed tech bounced until the hitstun ran out
@@ -2189,7 +2356,16 @@ says how), and no pin entry was dropped.
   367°;
 - the rules version would have bumped on every golden regeneration;
 - the near-floor reading hid a dead-stop neutral air dodge, and the directional dodge
-  contradicted six of the seven published points (hence 20b and 20c).
+  contradicted six of the seven published points (hence 20b and 20c);
+- the whole-branch review: every timed status the fighter started handed over a frame late; a
+  grounded meteor whose victim SDI'd off the lip bounced up off thin air; Donkey Kong's Headbutt
+  lifted and then bounced a grounded victim, which this entry had said no roster box did;
+  attackers SDI'd their own hitlag; the spot dodge and roll were unsourced and counted the
+  other way round from the air dodge;
+- the codex seam pass: a stale mash credit survived a KO and shortened the next shield break by
+  a frame, and a start from this build that the guest could not read left it waiting for good;
+- and two older bugs the wave picked up: a fresh press on the last frame of a landing, a
+  reel or a tech was dropped, and a held Up counted twice in a mash.
 
 **Rulings made on David's behalf that change behaviour.** Each with why, then what it costs.
 - *Tumble at knockback 80* (Task 6): rubendal and `ssbu_ref.mjs` tumble at `kb >= 80`. Cost: a
@@ -2228,7 +2404,8 @@ says how), and no pin entry was dropped.
   (Task 17). Cost: none; the golden was unchanged.
 - *A grounded meteor is one floor bounce at release*, the SPEC change above (Task 16b): 0.8
   is Melee's and Smash 4's, and rubendal's 0.8 is dead code. Cost: grounded meteors launch
-  about 12% further than under 0.8; the bounce ratio is one constant.
+  about 12% further than under 0.8; the bounce ratio is one constant. (The final wave widened
+  it to every tumbling launch into the floor: below.)
 - *`Hitbox.fixedKnockback` split from `baseKnockback` now* (Task 16b): it removes a trap where
   a set-knockback box with `bkb` 0 compiled as scaling. Cost: a mechanical migration of 40
   boxes; behaviour unchanged.
@@ -2240,7 +2417,8 @@ says how), and no pin entry was dropped.
   367°. Cost: a golden regeneration, and two moves that cannot run their scripts yet.
 - *`ENGINE_RULES_VERSION` bumps once per plan* (Task 20): nothing ships mid-plan, and the build
   id already separates deploys. Cost: two dev builds of one plan with different goldens share a
-  version number (their fingerprints and build ids still differ).
+  version number and a fingerprint; only their build ids tell them apart, and two `dev` builds,
+  or two `-dirty-unknown` ones of one commit, share that too (`rulesFingerprint`'s doc).
 - *A Plan 2 peer gets "The other player left the room."* (Task 20): the stale Plan 2 tab is the
   one told to reload, and a fresh tab must not be. Cost: the fresh tab is not told why.
 - *Insert Task 20b*: the dead-stop neutral dodge was unfaithful and was why the near-floor
@@ -2250,11 +2428,64 @@ says how), and no pin entry was dropped.
   the params made it implementable. Cost: a task, a golden regeneration, and the shapes between
   the published ends (below).
 
-Two more rulings land in the plan-final wave, after this entry: `ASDI_DISTANCE` becomes 1.33
-(5448), the one published ASDI distance (Smash 4's; Ultimate keeps Smash 4's SDI distance), at
-the cost of one line, UNVERIFIED either way; and, as an interim until Plan 5 Task 9 builds
-Inhale, a `special` that owns a catch box counts as holding, since the captor guard made
-Inhale release its victim one frame after the catch.
+And the rulings made after this entry's first draft, in the final wave:
+- *The slingshot does not land* (Task 20c fix round 1): an up or up-diagonal dodge just above a
+  floor landed in its slingshot with 19 frames of lag, and an up-right one slid backwards.
+  Both mods turn landing off until the slide, and SmashWiki "Air dodge" agrees ("prevent
+  characters from landing with them immediately after leaving the ground"). Cost: a floor the
+  slingshot meets holds the fighter in the air, still in the dodge, until the slide lifts it;
+  the mods' reading, not a published number.
+- *One frame convention for every dodge rule* (Task 20c fix round 2): `actionFrame` 0 is the
+  dodge's frame 1, so a published frame N is `actionFrame` N − 1, for the length, the
+  intangibility, the ledge gate and the tech's 15 frames. The first fix read "frame N" as
+  `actionFrame` N for two of them and was a frame off. Cost: the ledge gate is a frame earlier
+  than that fix had it (`actionFrame` 24).
+- *Option A: a timed status's last frame runs the next status's `main`* (the final review,
+  Important 4): Plan 3 is combat fidelity, and every frame advantage was tilted a frame toward
+  the defender. Cost: every golden match moved, and the digest with it.
+- *The hand-off covers every phase-3 timed status*, not only the moves, the shield drop, the
+  dodges and the ledge options the ruling named: one rule, each pinned. Cost: two CPU matches
+  diverge earlier than they otherwise would (a shield start and a turnaround hand off a frame
+  sooner), and a jump out of shield is possible a frame sooner.
+- *The spot dodge and the rolls come from UFD, per fighter, under the air dodge's convention*
+  (the final review, Minor 1); dodge staling is an open question. Cost: their animations still
+  run on Plan 1's 24- and 31-frame timing and drift from the new lengths (a Plan 4 render
+  re-time, as 20c did for the air dodge), and the spot dodge's cancel is not modelled.
+- *The release runs ASDI, the clamp, a ground re-check, then the launch* (Important 1 and the
+  Task 19 re-review's N2). Cost: a clamp tie at an origin exactly on a platform's edge still
+  differs (`clampShiftToStage` uses `> reach`, `resolveCollision` `>= reach`); `physics.test.ts`
+  pins the clamp's reading on purpose, and only the landing tie was aligned.
+- *Every tumbling launch into the floor bounces a grounded victim, and Headbutt is a meteor*
+  (Important 2): floor physics, and SmashWiki's "a meteor smash or spike". Cost: the grounded
+  Headbutt bounce is a stand-in for bury (Plan 5), UNVERIFIED, and the Hitstun page's
+  exception names meteor smashes only.
+- *SDI and ASDI act only in a freeze dealt to the fighter as a hit's victim* (Important 3).
+  Cost: a parry's defender and a pummel's victim count as victims (both UNVERIFIED; the
+  pummel's shift is overwritten by the hold anyway), and a CPU mashing in its own hitlag now
+  does nothing.
+- *A KO clears the mash, the launch source and the queued swing; a new break and every grab
+  release zero the mash* (codex P2-1 and Task 9). Cost: none; the credit was under a frame.
+- *A held Up mashes once, and a broken shield returns at 37.5 however the stun ends* (Task 9).
+  Cost: the reset is UNVERIFIED for an early end (the page gives it only for the stun's end),
+  and the golden's scripted match moved: Fox's held Up stopped counting twice, so his stun ran
+  5 frames longer, and the smash that ended it brought his shield back at 37.5, not 0.
+- *A hitlag multiplier under 1× counts as 1× on a shield* (the Task 10 review): SmashWiki
+  "Hitlag". Cost: none.
+- *`ASDI_DISTANCE` is 1.33* (the Task 11 ruling): the one published ASDI distance (Smash 4's;
+  Ultimate keeps Smash 4's SDI distance). Cost: one constant, UNVERIFIED either way.
+- *Inhale holds its victim for the move, as a stand-in* (the Task 14 re-review's ruling): the
+  captor guard made Inhale release its victim a frame after the catch. Cost: a stand-in Plan
+  5 Task 9 replaces, with no cliff stop.
+- *A hit that armour takes does not give the air dodge back* (the Task 7 review). Cost:
+  UNVERIFIED reading of "get hit".
+- *A short hop ends as the launch fires, not on contact* (the final review, Minor 3): on
+  contact a trade depended on port order. Cost: two hits with no hitlag that trade still do.
+- *The trump's lockout is `LEDGE_TRUMPED_FRAMES` + 1* (the final review, Minor 2). Cost: none.
+- *A fresh press on the last frame of a contact status is buffered* (part 1's report, concern
+  5). Cost: a golden regeneration (a jump pressed on a landing's last frame now fires, where
+  the fighter used to dash instead).
+- *A start from this build that the guest cannot read is refused, in its own words* (codex
+  P2-2): "a different version" would be false. Cost: a second reason on the `refuse` message.
 
 **Open questions.** Each is marked `UNVERIFIED:` in the code named, or is a known gap.
 
@@ -2268,12 +2499,16 @@ Inhale release its victim one frame after the catch.
   grab), and whether a sped-up real frame counts several. `kinetic.ts` `reelOnce`.
 - A 180° launch of 120 knockback or more goes out at 148° here; rubendal writes 32° for 0° and
   180° alike. `FLAT_LIFT_ANGLE`.
-- A grounded meteor's release bounce: whether the 0.8 a mid-flight bounce takes off hitstun
-  applies, whether the bounced launch keeps the speed-up and set weight's fall, and the param's
-  0.9 against SmashWiki's 5%. `releasePendingLaunch`; `research/physics-and-knockback.md`.
-- A tumbling downward launch outside 230°–310° on a grounded victim lifts it 0.075 and takes a
-  floor bounce 3 frames later (hitstun 33 to 25). No roster box does it today. Task 16b
-  re-review.
+- The release bounce of a grounded victim: whether the bounced launch keeps the speed-up and
+  set weight's fall (it does here, as the launch itself), the param's 0.9 against SmashWiki's
+  5%, and whether the Hitstun page's exception to the 0.8, "grounded meteor smashes", covers
+  every tumbling launch into the floor, as the replica bounces them all (a spike counts as a
+  bounce, SmashWiki "Knockback", but a 315° box is neither). `releasePendingLaunch`;
+  `research/physics-and-knockback.md`.
+- Headbutt's real hitbox table. SmashWiki's "Donkey Kong (SSBU)/Side special" gives the
+  grounded Headbutt's 270° boxes to grounded opponents only, and a 70° box to aerial ones; the
+  replica's single legacy 270° box meteors an airborne victim, which is the aerial Headbutt's
+  behaviour, and bounces a grounded one as a stand-in for bury (Plan 5). `donkeyKong.ts`.
 - A bounce cuts the hitstun *left* to 0.8; SmashWiki "Hitstun" says "relative to the initial
   amount". `BOUNCE_HITSTUN_RATIO`.
 - Electric hits' extra frame on the hitstun-cancel windows is not modelled. Task 7 review.
@@ -2286,21 +2521,30 @@ Inhale release its victim one frame after the catch.
   launched", and the page does not order the cap and the −1 floor. `autolinkVector`.
 - The speed-up on 365° (the page states it for 367°), and no DI, LSI or balloon fall on any
   autolink. `releaseAutolink`.
-- 367° reads the victim's position before `clampShiftToStage`, so a release-frame SDI or ASDI
-  shift reaches it unclamped: a real bug the Task 19 re-review found, to be fixed in the
-  plan-final wave (ASDI, then the clamp, then the launch). Which point of a capsule the pull
-  aims at (here its midpoint), and "position" as the fighter's origin, are readings.
+- Which point of a capsule the 367° pull aims at (here its midpoint), and "position" as the
+  fighter's origin, are readings. (It read the position before the stage clamp until the final
+  wave.)
 - Stacking compares a fresh autolink by its knockback's speed (`kb × 0.03`), as its vector does
   not exist until the freeze ends. Task 19 report.
 - Whether a victim is grounded (80° or the pull, and the ground- and air-only masks) is decided
-  on contact, so a victim SDI'd onto the ground keeps the airborne reading. Task 19 report.
+  on contact, so a victim SDI'd onto the ground keeps the airborne reading. The release bounce
+  is the exception, which asks again after the freeze's shifts. Task 19 report.
 - `ATTACK_LR_CHECK_POS` compares the attacker's origin (or its projectile's) with the victim's,
   and a victim level with it goes the way the attacker faces; what the game compares, and how
   it breaks the tie, is unpublished. `launchSourceFacing`.
 
 *DI, SDI and ASDI*
-- ASDI's Ultimate distance: 1 unit here, half an SDI pulse; 1.33 is Smash 4's (SmashWiki "Smash
-  directional influence"), and a ruling moves it there in the plan-final wave. `ASDI_DISTANCE`.
+- ASDI's Ultimate distance: 1.33 here, which is Smash 4's (SmashWiki "Smash directional
+  influence"); the page gives Ultimate no ASDI number. `ASDI_DISTANCE`.
+- DI's other condition. The Sm4sh wiki's list for DI asks that "the opponent's kinetic handler
+  is in the air (the opponent doesn't slide on the ground after hitlag)" as well as tumble and
+  an angle over 9.74°. Only tumble and the angle are modelled: `releasePendingLaunch` has no
+  grounded test, and a flat hit that a grounded victim DI's upward leaves the floor.
+- Shield SDI is horizontal-only in Ultimate (SmashWiki: "shield SDI can only be applied
+  horizontally"). The replica pulses it in any direction, and a vertical shift is put back on
+  the floor after the freeze.
+- Whether a parry's freeze can be SDI'd: the page's shield SDI says nothing of perfect shields.
+  A parry's defender counts as a victim here, and so does a pummel's victim. `freezeVictim`.
 - ASDI "now applies twice against moves with these effects" (same page, Ultimate): not
   modelled.
 - ASDI on projectiles with a hitlag multiplier of 0 (same page; Fox's laser): not modelled.
@@ -2331,8 +2575,9 @@ Inhale release its victim one frame after the catch.
 - The bubble's centre, half-way up the hurtbox, until Plan 4's shield bone. `shieldBubble`.
 - The shield-break "shield jump" launch (SmashWiki "Shield break") has no published Ultimate
   speed and is not modelled.
-- SmashWiki "Hitlag" ignores hitlag multipliers under 1× on a shield; `computeHitlag` applies
-  them. Pre-existing; logged for the plan-final wave.
+- A perfect shield's radius. SmashWiki "Perfect shield": it "does not shrink in proportion to
+  the character's shield, and instead always matches the size of a full shield". `shieldBubble`
+  reads the shield's current size for a parry too.
 
 *Teching*
 - Lucario's tech data for all eight fighters, and the ground roll's 28 for a tech roll.
@@ -2382,13 +2627,23 @@ Inhale release its victim one frame after the catch.
   `knockbackStack`.
 - The grounded-flat 0.8 is not applied to a fresh launch's speed in the stacking comparison,
   and a kept launch keeps its balloon classification after it turns. Task 8 review.
+- `clampShiftToStage` and `resolveCollision` still differ when a fighter's origin is exactly at
+  a platform's edge: the clamp tests `> reach`, `resolveCollision` `>= reach`.
+  `physics.test.ts` ("keeps a fighter at the ledge level when the shift is straight down")
+  pins the clamp's reading on purpose.
+- Two hits with no hitlag that trade on one frame still launch on contact, so a short hop's
+  0.85× in such a trade depends on port order. `releasePendingLaunch`.
 
 *Air dodges* (Task 20c's shapes between the published ends)
 - The slingshot's curve (a cubic Bezier from WuBor Patch's commented-out back phase,
-  `escape_air.rs` L343-366), the slide's constant brake over 7 frames, the hand-off on frame 11
-  for everyone, and the landing lag's straight line from 19 to 10.
+  `escape_air.rs` L343-366), the slide's constant brake over 7 frames, the hand-off on
+  `actionFrame` 11 (frame 12) for everyone, and the landing lag's straight line from 19 to 10.
 - A diagonal's length rounds the midpoint up: Mario 101 up and 79 down, where SmashWiki's
-  table gives 102 and 77.
+  table gives 102 and 77. The side and up lengths themselves sit a frame under SmashWiki's
+  table for some fighters (Mario 86 and 115 against 87 and 116; Fox's side 63 against 64).
+- UFD and the params disagree on four neutral dodge lengths, and the engine uses the params:
+  Donkey Kong 48 (UFD) against 49, Samus 56 against 57, Kirby 62 against 61, Marth 52 against
+  51. Mario, Link, Fox and Pikachu agree. `airDodge` in each fighter file.
 - The launch is cleared at the slide (WuBor Patch); HewDraw Remix keeps it until the landing.
 - A neutral dodge's first frames (an unpublished kinetic type, and `escape_air_brake` 1 of
   unpublished effect) are not modelled.
@@ -2406,6 +2661,19 @@ Inhale release its victim one frame after the catch.
 - A fast fall ends with a neutral dodge and the fall speed returns to normal the next frame,
   with no falling friction (SmashWiki "Air friction").
 
+*Spot dodges and rolls*
+- Dodge staling is not modelled. SmashWiki "Spot dodge": a staleness mechanic "reduces their
+  intangibility frames and lengthens their duration if they are performed repeatedly", shared
+  with rolls and air dodges; five spot dodges in a row fully stale them (Fox's goes from
+  intangible on 3-14 and 23 frames to 6-15 and 30). `groundDodge.ts`.
+- The spot dodge's cancel is not modelled. SmashWiki "Spot dodge": "all characters' spot dodges
+  can now be canceled 5 frames earlier than usual into any ground attack (including special
+  moves, but excluding grabs and dash attacks)", with totals given as "23 (18)" for Fox. UFD's
+  two numbers for Mario, 20/25, are that pair; here every spot dodge runs its full length, 25
+  (Fox's 23). `groundDodge.ts`.
+- The roll's distance, `ROLL_DISTANCE` (28), is one number for every fighter and has no
+  source. `states.ts`.
+
 *Online and the build*
 - The fingerprints hash names and a hand-kept version, not data: the imported scripts'
   contents, the legacy `MoveDef` tables, fighter and stage params and the constants reach them
@@ -2414,17 +2682,37 @@ Inhale release its victim one frame after the catch.
 - The activated scripts bring `src/fighters/acmd/generated/` into the game bundle, about 270 KB
   of source before minifying.
 
-**Found and carried.**
-- *Plan 4:* the shield bone, the `throw` joint and the ECB from the bake; re-deriving the
-  synced hitbox tables if the bake animates the root bone (they are placed through
-  `LEGACY_BONE_TABLE` at load); clips of their own for the six new actions; the shield-break
-  clip's 240 frames against a stun of up to 400 frames plus 33; sparks placed at a capsule's
-  first point.
-- *Plan 5:* `REVERSE_LR` and `ATTACK_ABS` throws (Kirby's down throw lands only its first box
-  and frees its victim long before the animation ends), real Inhale, and `localBuild()` tests
-  that need `engineRules`.
+**Found and carried.** Each later plan's own list is the `CARRIES-FROM-PLAN-3.md` in its folder
+under `.superpowers/sdd/` (`2026-10-24-plan-4-3d-renderer`,
+`2026-10-24-plan-5-specials-final-smash-cpu`); this is the summary.
+- *Plan 4:*
+  - the shield bone, the `throw` joint and the ECB from the bake; clips of their own for the six
+    new actions; the shield-break clip's 240 frames against a stun of up to 400 plus 33;
+  - the spot dodge and roll animations, which still run on Plan 1's 24- and 31-frame timing and
+    drift from each fighter's own lengths (Mario's spot dodge crouches to about frame 21 and is
+    intangible to 17): a render re-time, as Task 20c did for the air dodge;
+  - sparks, placed at a capsule's first point, and a glancing blow's missing "chik" event;
+  - re-deriving the synced hitbox tables if the bake animates the root bone (they are placed
+    through `LEGACY_BONE_TABLE` at load), and `active.test.ts`'s per-frame proof, which places
+    through it on both sides and so would not notice the swap;
+  - render readers that take only a box's near end (Samus's grab tether, `render/chars/samus/fx.ts`
+    ~875; Marth's `sweetspotOf`, `render/chars/marth/fx.ts` ~338), which the bake's capsules on
+    the `throw` bone would reach;
+  - `simContext.test.ts`'s roster and slots test, which must follow `mergeSlots`, and Plan 4's
+    text, which anchors on the rules-version test this plan removed and on the
+    `DIRECTIONAL_AIR_DODGE_*` constants it replaced.
+- *Plan 5:*
+  - `REVERSE_LR` and `ATTACK_ABS` throws (Kirby's down throw lands only its first box and frees
+    its victim long before the animation ends), extending the slot-based pummel and throw hits
+    this plan landed rather than forking them;
+  - real Inhale, replacing the `isHolding` stand-in;
+  - the CPU's tech, hitstun-cancel air dodge and parry, which must drive the passive statuses and
+    `tumbleFall`, and its SDI mash, which presses directions in its own hitlag to no effect;
+  - `localBuild()` tests that need `engineRules`, and its text's `setKnockback` snippets (now
+    `fixedKnockback`), its uses of `GROUNDED_METEOR_MULTIPLIER` (gone) and of `autolinkX` and
+    `autolinkY` (gone).
 - *Both:* modelling 366° and 368° before Donkey Kong's up special or Samus's up smash can run
-  its script, and each plan's one bump of `ENGINE_RULES_VERSION` with the pin in
+  its script, DK's `FinalEnd`, `FinalAirEnd` and `FinalEnd_Com`, which the parser's `sharedTail`
+  refuses, and each plan's one bump of `ENGINE_RULES_VERSION` with the pin in
   `rulesVersion.test.ts` (Plan 4 to 4, Plan 5 to 5).
-- *The plan-final wave*, after this entry: the two rulings above, the 367° clamp order, and the
-  reviews' minors.
+- *Still to come in the final wave:* the tests the task reviews left out.

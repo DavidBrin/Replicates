@@ -31,17 +31,25 @@ deal enough knockback to put the opponent into tumble), reducing the knockback r
 revision 2047089), and "Landing a meteor smash or spike on a grounded opponent counts as a
 bounce" ([Knockback](https://www.ssbwiki.com/Knockback), revision 2063895). So the old
 "0.8" is the *Melee* and *Smash 4* figure for the same bounce, and *Ultimate*'s is a 5%
-loss. The engine models it once, as the launch fires, and only for a tumbling launch: Task
-12's floor bounce, which keeps 0.9 (the param `damage_fly_reflect_d_speed_mul`; SmashWiki's
-95% is the disputed alternative). The hitstun is the hit's own: "the amount of hitstun
-delivered by a meteor smash is not affected by the knockback reduction" (Meteor smash). Set
-knockback bounces too; a meteor too weak to tumble does not bounce, and the victim flinches
-where it stands. No tech: "meteor smashes done on grounded-standing characters can no
-longer be teched" (Meteor smash). rubendal's `Knockback.bounce` / `parameters.bounce` 0.8 is
-dead code at the pinned commit (its only call, `multiworker.js:212`, is commented out); its
-live `Distance` sim bounces off a floor at 0.9 for a tumbling launch, as Task 12 does.
-UNVERIFIED: that this release bounce skips the 0.8 a mid-flight bounce takes off the
-hitstun. **MED** (Plan 3, Task 16b fix round 1)
+loss. The engine models it once, as the launch fires, for every tumbling launch that points
+into the floor on a grounded victim, whether or not its box is marked a meteor (a meteor
+smash or a spike, in the page's words; the plan's final wave widened it from meteors
+alone): Task 12's floor bounce, which keeps 0.9 (the param `damage_fly_reflect_d_speed_mul`;
+SmashWiki's 95% is the disputed alternative), and only if the victim still stands on a floor
+once the freeze's SDI and ASDI have shifted it. The hitstun is the hit's own: "the amount of
+hitstun delivered by a meteor smash is not affected by the knockback reduction" (Meteor
+smash), and the page that gives the mid-flight bounce its 0.8 says "Characters bouncing off
+surfaces due to knockback have their hitstun reduced by 0.8× relative to the initial amount,
+with the exception of grounded meteor smashes" ([Hitstun](https://www.ssbwiki.com/Hitstun)).
+Set knockback bounces too; a meteor too weak to tumble does not bounce, and the victim
+flinches where it stands. No tech: "meteor smashes done on grounded-standing characters can
+no longer be teched" (Meteor smash). rubendal's `Knockback.bounce` / `parameters.bounce` 0.8
+is dead code at the pinned commit (its only call, `multiworker.js:212`, is commented out);
+its live `Distance` sim bounces off a floor at 0.9 for a tumbling launch, as Task 12 does.
+UNVERIFIED: that the hitstun exception covers a launch into the floor that is neither a
+meteor smash nor a spike, and that the bounced launch keeps the balloon speed-up and set
+weight's fall a mid-flight bounce disarms. **MED** (Plan 3, Task 16b fix round 1; the
+exception's source, the final wave)
 
 ### Worked examples, used as engine tests
 
@@ -310,11 +318,14 @@ through. **HIGH** — [Priority](https://www.ssbwiki.com/Priority).
   2063895) says Ultimate removed every knockback modifier from set knockback; rubendal
   SSBU-Calculator applies its crouch-cancel factor (0.85) to `WeightBasedKB` too
   (`js/global.js` L645, L706 at `233590e9`). The engine leaves it off. **MED**
-- **A grounded meteor's bounce and hitstun.** The bounce happens as the launch fires and
-  keeps the hit's whole hitstun (SmashWiki "Meteor smash"); whether the 0.8 that a
-  mid-flight bounce takes off the hitstun (`damage_fly_reflect_reaction_frame_mul`) applies
-  to it is not published. The engine does not apply it, and the bounced launch keeps the
-  balloon speed-up and set weight's fall, which a mid-flight bounce disarms. **MED**
+- **A grounded meteor's release bounce.** It happens as the launch fires and keeps the hit's
+  whole hitstun: SmashWiki "Meteor smash", and "Hitstun", whose 0.8 bounce reduction is "with
+  the exception of grounded meteor smashes". What no page says is what the bounced launch
+  keeps. Here it keeps the balloon speed-up and set weight's fall, which a mid-flight bounce
+  disarms (`kineticReflect`), because it is the launch itself and not a second one. And every
+  tumbling launch into the floor on a grounded victim takes the same bounce and the same
+  uncut hitstun, though the page's exception names meteor smashes (a spike counts as a
+  bounce, SmashWiki "Knockback", but a 315° box is neither). **MED**
 - **The floor bounce's speed loss.** The param `damage_fly_reflect_d_speed_mul` and
   rubendal keep 0.9; SmashWiki gives a 5% loss for Ultimate. The engine keeps 0.9. **MED**
 - **The end of set weight's 10 frames.** The engine ends them early with the launch (the
