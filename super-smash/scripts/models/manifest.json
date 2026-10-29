@@ -1,0 +1,694 @@
+{
+  "schema": 1,
+  "source": {
+    "project": "Worldblender/smash-ultimate-models-exported",
+    "projectId": 11666571,
+    "commit": "df76879171b064570b4e49a608c9f98211b33edb"
+  },
+  "files": [
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/deyes_eye_donkey_wd_col.png",
+      "bytes": 1168,
+      "sha256": "25b822d78d54f83ba4486c8408643034beadf74b5f215e800b42ade7c037f352"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/deyes_eye_yellowl_donkey_d_col.png",
+      "bytes": 1160,
+      "sha256": "32d96b8da50288c97acd3cbfe9f58d7c1a6f8a0bd766af5c2e49ba763005e288"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/deyes_eye_yellowr_donkey_d_col.png",
+      "bytes": 1166,
+      "sha256": "db6336aa886c61ece95a0cfa26ec3206e1500c3402d4512ef2ac5c8567529764"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/donkey-c00.blend",
+      "bytes": 8662432,
+      "sha256": "41a76b1f3e01dc5be8af94f334f1ee8c1781aeaba321476c194395d4278ac47c"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/eye_doneky_002_col.png",
+      "bytes": 17270,
+      "sha256": "2994f5e88759f98552eb5b464240c3bb4a9792a02375b33e19ba46fb030ae825"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/eye_donkey_001.png",
+      "bytes": 9995,
+      "sha256": "c84da8ccf1f5855181a34ade0f27c5964798cf3855822e3ba2220b702f21ae2c"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/eye_yellowl_donkey_001_col.png",
+      "bytes": 1154,
+      "sha256": "ca14c411b5cedee57474164a50fbbe2bcfde6e52ec592ad6222dc2c7103e4de7"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/eye_yellowr_donkey_001_col.png",
+      "bytes": 1165,
+      "sha256": "01f6bc682926afb4d7549d552bfdb9b90c68d1e72c061c360499c1d7b6e11d7d"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/leyes_eye_yellowl_donkey_l_col.png",
+      "bytes": 1190,
+      "sha256": "589f29a43017101b84e5c84392b62b96713a8da8f3d44842861760bda7b8ff07"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/leyes_eye_yellowr_donkey_l_col.png",
+      "bytes": 1222,
+      "sha256": "705ddfc2f08b5abcc4acc3f243161960a8627658c75cd8b511878a89a8fc716b"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/skin_donkey_001_col.png",
+      "bytes": 1292552,
+      "sha256": "822c27562ad3fcd584b753387979b31d0b2da537236a8525468d1d09589d57b4"
+    },
+    {
+      "fighter": "donkeyKong",
+      "path": "fighter/donkey/model/body/c00/tooth_donkey_002_col.png",
+      "bytes": 13372,
+      "sha256": "bbbdd4f14eff6d800c6900af9c3227504ed4bd8d68b8d2ab2ed553bd512f180d"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/body_fox_001_col.png",
+      "bytes": 303752,
+      "sha256": "477dd567c66118de3944138602f07f97bee0c225869117436970a6c93903fa56"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/def_fox_001_col.png",
+      "bytes": 1075039,
+      "sha256": "d3841b1da45b9d26c303eba6cc4bfd0ade90b233369088100cbde60e9b10f3d1"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/deyes_eye_fox_d_col.png",
+      "bytes": 5121,
+      "sha256": "cefb5c43287892fc90aaf8b1ad0a364d2a7e2f559ec25160935133a0540c468c"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/deyes_eye_fox_wd_col.png",
+      "bytes": 10915,
+      "sha256": "085c41004713794b56d3b5be48fb1f3a9034b858c2c81f2dc326b6884f7dcfa4"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/eye_fox_001_col.png",
+      "bytes": 9476,
+      "sha256": "e1346475efdc840b3554c58b682ec14b673a0f16c34ab33021bf52fc512db7cb"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/eye_fox_002_col.png",
+      "bytes": 17868,
+      "sha256": "a9e57f39ca0daccdf3c6f6f9ab313bb891a0509e8181ba0a3ec187c4143c1ee2"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/eye_fox_004_col.png",
+      "bytes": 11278,
+      "sha256": "ba9e556a5907f7aff7aaedc12e1a0e546f0c16eeb882d2a62b4552e789296f13"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/fox_alp_001_col.png",
+      "bytes": 47325,
+      "sha256": "4ce6d6744b4953377b1572ccc6563fc509c23fac6d74db5e975107c12004bc73"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/fox-c00.blend",
+      "bytes": 6428792,
+      "sha256": "59d9ebdf257e326af06a7d55a9c12b27dae535c6ac97bd2a5e940668a7d88aa7"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/head_fox_001_col.png",
+      "bytes": 332375,
+      "sha256": "9473bba1c5f755fc1d83425669a6698c2fc8fd954bae8e470a8b06fcc921bc8b"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/leyes_eye_fox_l_col.png",
+      "bytes": 9003,
+      "sha256": "af753812a02e97704dccdad4a9d82e147726cce93b9aa0d98add1dcd1f0afa4c"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/metal_blaster_001_col.png",
+      "bytes": 716337,
+      "sha256": "064b0c3bf2a081a62fd1025fd67822388ddf53e622b24c3aee36393bc4201f2a"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/metal_fox_001_col.png",
+      "bytes": 257543,
+      "sha256": "cd3b5f03b1c650f82b1c6228142e4ac9b779c809492087b27155b4d183a4b0d4"
+    },
+    {
+      "fighter": "fox",
+      "path": "fighter/fox/model/body/c00/metal_fox_002_col.png",
+      "bytes": 232,
+      "sha256": "13eb00112fe90728d5f3032c1127039b4c180519116b5a7190a4160984246276"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_b2d_col.png",
+      "bytes": 59854,
+      "sha256": "dc58a33ef885773632989362e45e035b2fe29b05a85bf5acd405e3ff4b62468e"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_cd_col.png",
+      "bytes": 35903,
+      "sha256": "70a247292e0467c82933c261b4d38b599a749e74e8792498ab271803a7d34d87"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_dd_col.png",
+      "bytes": 43691,
+      "sha256": "b2fd0793db53722b20b3f791ef2f701302a91b9254590459dd53750afe501224"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_ed_col.png",
+      "bytes": 54181,
+      "sha256": "2c76b7a50eecb65febb68005745ae704ba83c61c945324e7efdc6c16553db09c"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_fd_col.png",
+      "bytes": 54897,
+      "sha256": "4db7754ebc10e217e7e4b5d54dad9a9627fdc7bf89351c4ef2087ebc9d4aec2b"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_gd_col.png",
+      "bytes": 122961,
+      "sha256": "b3b394a1d2bd17237438716a5646cfb0f9cab6504e9e97c2d27a859515a2e81a"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/deyes_eye_kirby_wd_col.png",
+      "bytes": 50923,
+      "sha256": "226a9ec56d8344351743fdd743ef996fdb60f3cb90797478b48eae131bd72737"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_b2g_col.png",
+      "bytes": 71670,
+      "sha256": "d7430f62e94101ee7ac2fd52b00fe4de9bd35a242dc27ea104327b89349d8612"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_cg_col.png",
+      "bytes": 39863,
+      "sha256": "2617a6689d0b5e012c07087ba2e9863dafc4dcdb5257704acee6a7c6b304277b"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_dg_col.png",
+      "bytes": 50527,
+      "sha256": "34e4031f0e7fc4f02ccae3538ec3f9348b5ac27a54cf715bcca47034d513c9d3"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_eg_col.png",
+      "bytes": 65177,
+      "sha256": "c058652eb81f64164bd69053ca04919205a09758f8116e12a89639032cd6cc23"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_fg_col.png",
+      "bytes": 65881,
+      "sha256": "749a103730e1c486c4a98ef8cd7152b7bf5e36bfa58aa625b9aa61b3efa5742c"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_gg_col.png",
+      "bytes": 130541,
+      "sha256": "18321afa9c81d25aac2c06447477e0a9f846188112c6915c80b1fe5e3894a427"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/eye_kirby_wg_col.png",
+      "bytes": 55954,
+      "sha256": "5951220150769ae76f5a298220082077fbe2974bb72a9997159c9e6b4cbd38f8"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/kirby-c00.blend",
+      "bytes": 9042756,
+      "sha256": "8674bd9eea87d351662cf4c3090f1b18ab2a10128c96d42656b4216f2e75829b"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_b2l_col.png",
+      "bytes": 60422,
+      "sha256": "cd9473158541c8a1b75df0ac29b4b35a56c91aac486285c0c8a71d13202a6ccc"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_cl_col.png",
+      "bytes": 35767,
+      "sha256": "a0d052adb807c5e95fdb0a330e314067a23a3444c445cab5c7a883c5a86d2b3b"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_dl_col.png",
+      "bytes": 43637,
+      "sha256": "832776855e1279894dd53958151e5800ea614cd4ebed40527f78f2269043d8cc"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_el_col.png",
+      "bytes": 53187,
+      "sha256": "525a18c0c9b5f0e3acc31aee210b00e68f09c08e9a348db5eed45b2383688a2a"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_fl_col.png",
+      "bytes": 55783,
+      "sha256": "3ff6d1743bba9558d9376130a65037dbee139a47aa194751a784d20c644d9597"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_gl_col.png",
+      "bytes": 123324,
+      "sha256": "31f4907f3a727ef5cb1791f373ca7e5f3c365475a05e9aeebb467ab8c8151433"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/leyes_eye_kirby_wl_col.png",
+      "bytes": 50068,
+      "sha256": "854a239e38511fa8cb2ac39d5224a3f5bc9500b5ce803abe3967241cfc0bddb8"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_b2_col.png",
+      "bytes": 58439,
+      "sha256": "c06628c63fe6ff68ecc667bccbe935ca5139e6e33112fd5d5cfd1340512b3da2"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_c_col.png",
+      "bytes": 36352,
+      "sha256": "09532abcb5ac81be68d892ba561a5730815d2fc4f9e489e9cfb760f96104a6c4"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_d_col.png",
+      "bytes": 42742,
+      "sha256": "d4308052064511c0b28da84ba5b249ad77d0004045ac27830c9473dd2fe5b0b2"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_e_col.png",
+      "bytes": 51039,
+      "sha256": "a1c282779407f90b0e76678b824824e7db16b170655ebdbd1bc2ac4228d45de3"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_f_col.png",
+      "bytes": 54784,
+      "sha256": "169c9517643852ccff85bd4e5ca1da797321df4025037c1a7314de16ccba94ce"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_g_col.png",
+      "bytes": 129019,
+      "sha256": "7a926c1590058b803282543a107af2688c17b6635d81a3b6ae28402f8b2e73d6"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/melee_eye_kirby_w_col.png",
+      "bytes": 47511,
+      "sha256": "0d75fec14afcacc051910b752839345ef47a7a2b8209ec8aa0d1301a00086b72"
+    },
+    {
+      "fighter": "kirby",
+      "path": "fighter/kirby/model/body/c00/skin_kirby_001_col.png",
+      "bytes": 107,
+      "sha256": "eb72a37be2fbaa28be6bd0861561ebf8950692de9b9c28f818a1a4b2ba2df8e4"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/alp_link_001_col.png",
+      "bytes": 291386,
+      "sha256": "0fae161ce047ff9256ee9f6cbea974e55815dc9ba18e197d90c32106a1030cbf"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/alp_link_002_col.png",
+      "bytes": 28070,
+      "sha256": "da252be81b618a6c84569b43f5ee049e244d2d06af7109ffe6b7ef7b16b1158f"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/def_link_001_col.png",
+      "bytes": 2187201,
+      "sha256": "780cdf011631b5e46c51095e604f8e2149b58c7cdceb5a4a4cf7477c67766352"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/def_link_002_col.png",
+      "bytes": 707586,
+      "sha256": "c8bb15a7a726a5f8235ffe16f126f51d9f37ef30f0e14d88be343c587b53b02a"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/deyes_eye_link_d_col.png",
+      "bytes": 12274,
+      "sha256": "bf963e0840bd1d6a283a6fa11a8e96688b532d05fba57e9b8a4cb3547471106d"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/deyes_eye_link_wd_col.png",
+      "bytes": 18466,
+      "sha256": "12d89fee8527094a81730e9b0f71cd311b0d389d62f8040b195813226be10c27"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/eye_link_b_col.png",
+      "bytes": 19170,
+      "sha256": "5bce0074b5c44173652fc58004b835b8588c93d58ce01e66d1f0b32ad7475f16"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/eye_link_g_col.png",
+      "bytes": 18897,
+      "sha256": "91ac549544f6b9ccba3f8d93bb7e4085ed7fec24dea69da26eb2dee0e961eff8"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/eye_link_w_col.png",
+      "bytes": 19013,
+      "sha256": "c818f89576bf8c265f71d35032ec8652f54127e57a418125d83535de13eb3927"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/leyes_eye_link_l_col.png",
+      "bytes": 17320,
+      "sha256": "bc885c024ba2fbb4fc701c603ffc6780130b1282f425ea7b5e92ada437c21bce"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/link-c00.blend",
+      "bytes": 9983644,
+      "sha256": "1291da62c7075a847d48841d087f350cc5bc62119661acda9cd00099b85f1506"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/metal_link_001_col.png",
+      "bytes": 1054308,
+      "sha256": "37d7552ad20d49b39a730d958e360b5312c6bb64656a2211528cd8409182e0d1"
+    },
+    {
+      "fighter": "link",
+      "path": "fighter/link/model/body/c00/skin_link_001_col.png",
+      "bytes": 210664,
+      "sha256": "6e00127e49a0876a0873878d60da53307dceac35807553e2ee9769d1f5e6747c"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/alp_mario_001_col.png",
+      "bytes": 105512,
+      "sha256": "f06fdf864d27bfbb375df9c45b27310a3109f17d2bd55632416bef91ab01c2ea"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/alp_mario_002_col.png",
+      "bytes": 878,
+      "sha256": "6c5c9633b5e93d51bda32f90601afc5b2bcf31c53d0aded73a58c03a1b4f52b5"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/def_mario_001_col.png",
+      "bytes": 660105,
+      "sha256": "98e0f59d9eb77a30880435a118ae78929acbd3b5f80511fca9d384b6efa4ee28"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/deyes_eye_mario_d_col.png",
+      "bytes": 19897,
+      "sha256": "651cf63bf82d1d38b13caed70c23e4ec773685f419b7fcd268bd380cb0cabe07"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/deyes_eye_mario_wd_col.png",
+      "bytes": 15652,
+      "sha256": "fb5948e382736a54b579a997e05bd539d07c86d4883ce15beda3ee19207aa762"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/eye_mario_b_col.png",
+      "bytes": 16971,
+      "sha256": "6370eb1f915094a9ea89c2830390c965d59e8c771f82a995eb11409ac3b6c999"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/eye_mario_g_col.png",
+      "bytes": 21134,
+      "sha256": "82d0641e7a40e0d32b47f3b4311a649e9ac7db4afcf5c6cadf46ae4352d53060"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/eye_mario_w_col.png",
+      "bytes": 13024,
+      "sha256": "d51e032425813e0ab7cfd35131e497418e19e21a54460477dde2b6b67e4a2d2a"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/leyes_eye_mario_l_col.png",
+      "bytes": 20761,
+      "sha256": "40517da957a5a501d341175c2966433f6402152a9e5e44f4aa202de878f2666c"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/mario-c00.blend",
+      "bytes": 9190080,
+      "sha256": "8af85d9accb3f13b2bc920553da2a9545cbdb980182bba15d59f23274a03c44d"
+    },
+    {
+      "fighter": "mario",
+      "path": "fighter/mario/model/body/c00/skin_mario_001_col.png",
+      "bytes": 214673,
+      "sha256": "02f116d19622ec80d5513f98036c2a89a27af4a5f3ac1f562c8d8b036e8116c6"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/alp_marth_001_col.png",
+      "bytes": 682119,
+      "sha256": "8673747a9d7c380d22805d09c859fce723f083366318d99852b5a7596bebbad0"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/alp_marth_002_col.png",
+      "bytes": 654094,
+      "sha256": "d09f541d943efb4f6d2b92abc34ef86c310cb847c3eec0cfd7f65ab2b47b8cce"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/alp_marth_003_col.png",
+      "bytes": 63571,
+      "sha256": "8defde999d8fbe5324b4ec6b0a4a6a2ec1b84932be6b0f21f7a0ee96f7a34f0e"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/def_marth_001_col.png",
+      "bytes": 1394823,
+      "sha256": "456bc699b94732432fd03b1f2b348aed4173f37cd048bc21b06dce4f8d42404b"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/def_marth_002_col.png",
+      "bytes": 864595,
+      "sha256": "1359aaed53e6606419b7d3a5f5b81539087428110d9373d3be7609c45f819fbf"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/deyes_eye_marth_d_col.png",
+      "bytes": 9243,
+      "sha256": "f134b7edd47617abd0ac4aa5767ef1403cef4565cd0b4c27481a3eb3a9400df8"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/deyes_eye_marth_wd_col.png",
+      "bytes": 21167,
+      "sha256": "1363a5693f4de53501f810a225de8c8b734705ccdce8066f364052ed49096910"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/eye_marth_g_col.png",
+      "bytes": 11263,
+      "sha256": "247957e941bd913d9be0a6735371b1f1f7d8f6b3bfb239205aef648c4d7f68a9"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/eye_marth_w_col.png",
+      "bytes": 19851,
+      "sha256": "07da216d50643a8d0642e18e034fda0240e069c6064e3c4d702157c3f6f3a315"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/eyel_marth_b_col.png",
+      "bytes": 10151,
+      "sha256": "0ef9c931fc7759055b8dea7a043bd3f6bbc67dbdeca0047ffe996e5714393421"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/eyer_marth_b_col.png",
+      "bytes": 10368,
+      "sha256": "33234aa3472a452d4b5e47e7c3ced5a2707e248f19edf89d47bd4d7f2601a386"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/leyes_eye_marth_l_col.png",
+      "bytes": 10473,
+      "sha256": "3cadd73b89de44c072ceb6f73b47cfcf1aa1984e83d823c38173c697131403ed"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/marth-c00.blend",
+      "bytes": 7147728,
+      "sha256": "57faa3559d2fee3743fa356725984e53cd9ad6e8dfd98aeb35b57c11d6735843"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/metal_marth_001_col.png",
+      "bytes": 951251,
+      "sha256": "797a8836de273778a0c1486bf3c38900c70cfc6663e8dde765fb3bd4a19d5720"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/skin_marth_001_col.png",
+      "bytes": 864744,
+      "sha256": "f0e4fe032703de1f1cf613855153ab140ebee405a1b8f33df227386cf525d727"
+    },
+    {
+      "fighter": "marth",
+      "path": "fighter/marth/model/body/c00/skin_marth_002_col.png",
+      "bytes": 26994,
+      "sha256": "aa8c462ba5e0e53d393dd523ed11e90a8f6057ffaeaf178d0f909dbd6564a49a"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/deyes_pikachu_facial_01_d_col.png",
+      "bytes": 228375,
+      "sha256": "6d272bdc337b16f4821adc5a66c4d8c4b288506868d9d292c80b9e73b4d009e6"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/leyes_pikachu_facial_01_l_col.png",
+      "bytes": 253765,
+      "sha256": "b83ec703a8cb22dc5caf62f5a7a0193904cc008b282d532a3909b9c7ce096834"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/pikachu_facial_01_col.png",
+      "bytes": 201855,
+      "sha256": "3cbf93469b8ad60c62926de3402b0476cdf4e5ea55e9ef2a73724546bb7970a0"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/pikachu_facial_01_g_col.png",
+      "bytes": 249790,
+      "sha256": "1b0ff0b12f082ce4d7ffc32cbb4ce9bb71dc4ba5dd3fc9dab75f8f9bc6fd252e"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/pikachu_facial_02_col.png",
+      "bytes": 61363,
+      "sha256": "4bfba02b69e342a6fbe7766ab583b83877c43b42c5c81ef76558b14ac3b1a152"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/pikachu_facial_03_col.png",
+      "bytes": 100260,
+      "sha256": "ede00045e3584d5d6334955bd95a7289ff85061aea7b51c1b071857e7351e59c"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/pikachu_facial_04_col.png",
+      "bytes": 74232,
+      "sha256": "c465e7c555ddc08fa8fb294616d12bf171fa875ac8765c78d4f789b421867b03"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/pikachu-c00.blend",
+      "bytes": 7281600,
+      "sha256": "e30b61720de64ec3b7db3974b1490dc3fc40cd147c3ed5a22e500bb614140b9f"
+    },
+    {
+      "fighter": "pikachu",
+      "path": "fighter/pikachu/model/body/c00/skin_pikachu_001_col.png",
+      "bytes": 247295,
+      "sha256": "a7e43004590e0bd93ba10f02395691f31d2b179ffde622f26bc1e3e95fe1ed3d"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/deyes_eye_samus_d_col.png",
+      "bytes": 18112,
+      "sha256": "44ca2e06f000e13845388cb7f31ee93d1e8dc1cbe1e9c23c65f5f2f526cf2e86"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/eye_samus_g_col.png",
+      "bytes": 19393,
+      "sha256": "3a0feeccdf2c5c1ee93b2725e0e2ac02d76437c4e61f9baf05411cb621a1d23d"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/eye_samus_w_col.png",
+      "bytes": 32584,
+      "sha256": "4ccf01fbc6e2042069fd7206c84be107eb5877ca1275d94bd3e534a8ce74c4c0"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/leyes_eye_samus_l_col.png",
+      "bytes": 18941,
+      "sha256": "d50639670f6a81b6baf832b3f5ca13fa515d7c8289cd5dc3a35f2c7524545be6"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/met_gun_001_col.png",
+      "bytes": 74788,
+      "sha256": "92546d096b610076ae9f5399023c94e280ff318fe4229530fb1b7975b1702cff"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/met_morph_001_col.png",
+      "bytes": 226631,
+      "sha256": "a1236d7fcad4fbc35aadc740addbc855a7f61eecc624481803b7b39e585b7d29"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/met_samus_001_col.png",
+      "bytes": 1186450,
+      "sha256": "4232a6165a36c7200db427e745a63515c35aa197f9ae40faed03939019c73aff"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/met_samus_002_col.png",
+      "bytes": 16360,
+      "sha256": "ed48afffc733694e85bc716ce6e4c272e7b996af84ee9c502d115b3491d69037"
+    },
+    {
+      "fighter": "samus",
+      "path": "fighter/samus/model/body/c00/samus-c00.blend",
+      "bytes": 4295156,
+      "sha256": "fa0866aa0ce4b374d352320618721758851e1a1335f8ee0689c36daa61257b6a"
+    }
+  ]
+}
