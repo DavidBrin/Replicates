@@ -37,7 +37,7 @@ import { conflictFreeSelection } from "@/input/schemes";
 import { useMatchConfig, type MatchResult, type PlayerResultStat, type PlayerSlot } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, leaveOnline, roomErrorMessage, useOnlineStore } from "@/lib/onlineStore";
 import { NetHud } from "@/components/match/NetHud";
-import type { OnlineMatchConfig } from "@/net/online/lobby";
+import type { OnlineMatchConfig, RefuseReason } from "@/net/online/lobby";
 import { getActiveSession, type OnlineSessionLike } from "@/net/online/session";
 import type { LinkHealth } from "@/net/online/watchdog";
 import type { NetStats } from "@/net/rollback";
@@ -488,18 +488,19 @@ export default function PlayPage() {
     };
     /**
      * The guest could not play this host's start: it runs another build (Plan
-     * 2 Task 27). Nothing was played, so there are no results either: the
+     * 2 Task 27), or could not read the start (the same build's, but
+     * malformed). Nothing was played, so there are no results either: the
      * match stops, and the overlay says why; its way out leaves the room.
      */
-    const refused = () => {
+    const refused = (reason: RefuseReason) => {
       if (finished) return;
       finished = true;
       stopMonitor?.();
       mounted?.runner.stop();
-      setError(roomErrorMessage("engine-mismatch", session.roomCode));
+      setError(roomErrorMessage(reason, session.roomCode));
     };
     const offRefusal = session.on((event) => {
-      if (event.type === "lobby" && event.message.kind === "refuse" && session.role === "host") refused();
+      if (event.type === "lobby" && event.message.kind === "refuse" && session.role === "host") refused(event.message.reason);
     });
     // Each player is on their own machine, so each gets Config 1 (with their
     // own rebinding) and every pad, on their own port.

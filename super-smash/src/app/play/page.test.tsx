@@ -291,6 +291,20 @@ describe("the play page, online", () => {
     expect(getActiveSession()).toBeNull();
   });
 
+  /** The guest read the start's stamp as this build's and still could not play it: the host is told so, not "a different version". */
+  it("says the settings could not be read when the guest refuses a start it could not read", () => {
+    const { fake } = goOnline("host");
+    render(<PlayPage />);
+    const { runner } = only(mocks.runners);
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "unreadable-start" } }));
+
+    expect(runner.stop).toHaveBeenCalled();
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("THE MATCH COULD NOT START");
+    expect(alert).toHaveTextContent("The match settings could not be read, so leave the room and start again.");
+    expect(alert).not.toHaveTextContent("different version");
+  });
+
   /**
    * The refusal can land after this page read the start while rendering but
    * before its effect runs: the store has already withdrawn the start and

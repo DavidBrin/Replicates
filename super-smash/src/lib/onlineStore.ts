@@ -11,7 +11,7 @@ import { create } from "zustand";
 
 import type { MatchRules } from "@/engine/types";
 import { buildMismatch, describeMismatch, localBuild } from "@/game/onlineConfig";
-import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage } from "@/net/online/lobby";
+import type { BuildStamp, LobbyMessage, OnlineMatchConfig, ReceivedLobbyMessage, RefuseReason } from "@/net/online/lobby";
 import { getActiveSession, setActiveSession, type OnlineSessionLike, type SessionError } from "@/net/online/session";
 import type { Role } from "@/net/signalProtocol";
 import type { Unsubscribe } from "@/net/transport";
@@ -23,8 +23,12 @@ import { useMatchConfig, type StageForm } from "./matchConfig";
  * from, so the select screens gate on it.
  */
 export type OnlineStatus = "idle" | "connecting" | "waiting" | "linking" | "connected" | "error";
-/** "engine-mismatch": the other player runs another build (Plan 2 Task 27). */
-export type OnlineErrorReason = SessionError | "link-failed" | "engine-mismatch";
+/**
+ * "engine-mismatch": the other player runs another build (Plan 2 Task 27).
+ * "unreadable-start": a start from this very build that its parser cannot read
+ * (the stamps agree, so it is not another version).
+ */
+export type OnlineErrorReason = SessionError | "link-failed" | "engine-mismatch" | "unreadable-start";
 
 /** Shown while the seat the opponent left stands empty. */
 export const PEER_LEFT_NOTICE = "The other player left the room.";
@@ -131,6 +135,8 @@ function playerSentence(reason: OnlineErrorReason, roomCode: string): string {
       return "The direct connection could not be opened. Try again; strict networks need the TURN relay.";
     case "engine-mismatch":
       return "The other player is running a different version. Both reload the page.";
+    case "unreadable-start":
+      return "The match settings could not be read, so leave the room and start again.";
     case "bad-message":
     case "too-many-messages":
       return "The room closed the connection.";
@@ -176,6 +182,14 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
     online().patch({ status: "error", errorReason: reason, error: roomErrorMessage(reason, session.roomCode), notice: null });
   };
 
+  /** Said for good, a start not yet played withdrawn, and the room left. */
+  const leaveRefused = (reason: RefuseReason) => {
+    fail(reason);
+    online().patch({ config: null });
+    // Once this delivery is over, not in the middle of it (session.ts, `leaveSoon`).
+    queueMicrotask(() => session.close());
+  };
+
   /**
    * The other player runs another build: the two would not be playing the same
    * game, so nothing starts. Said for good, like any room error, and like the
@@ -187,11 +201,22 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    */
   const refuseBuild = (why: string) => {
     console.warn("David-Smash: not playing the other player's build:", why);
-    fail("engine-mismatch");
-    online().patch({ config: null });
-    // Once this delivery is over, not in the middle of it (session.ts, `leaveSoon`).
-    queueMicrotask(() => session.close());
+    leaveRefused("engine-mismatch");
   };
+
+  /**
+   * A start from this very build that this side cannot read. It is not
+   * another version, so it is not said to be (the stamps agree); but nothing
+   * can be played from it, and the host has sent it and waits, so it ends the
+   * room as a refused build does. An honest host never sends one (`sendLobby`
+   * reads a start as the guest will before it goes), so this is a corrupted
+   * or tampered message, or a bug.
+   */
+  const refuseUnreadableStart = (why: string) => {
+    console.warn("David-Smash: cannot read the other player's start:", why);
+    leaveRefused("unreadable-start");
+  };
+
 
   const sayHello = () => session.sendLobby({ kind: "hello", ...localBuild() });
 
@@ -255,7 +280,8 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         // packet and ends nothing.
         const start = online().config;
         if (session.role === "host" && start !== null && start !== withdrawnStart) {
-          refuseBuild("it refused this build's start (its own console says why)");
+          if (message.reason === "unreadable-start") refuseUnreadableStart("it could not read this build's start (its own console says why)");
+          else refuseBuild("it refused this build's start (its own console says why)");
         }
         return;
       }
@@ -272,8 +298,13 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
           refuseBuild(describeMismatch(why, build));
         } else if (message.kind === "start") {
           online().patch({ config: message.config });
+        } else {
+          // This very build's stamp on a start it cannot read. Dropped, the
+          // guest would sit connected with no match, for good, while the host
+          // plays on alone: the host is told, and the room is left.
+          session.sendLobby({ kind: "refuse", reason: "unreadable-start" });
+          refuseUnreadableStart("a start with this build's stamp that this build's parser cannot read");
         }
-        // An unreadable start from this very build is dropped, as it always was.
         return;
       }
       default:

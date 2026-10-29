@@ -86,14 +86,22 @@ export type LobbyMessage =
   | { readonly kind: "away"; readonly away: boolean }
   /** This side's `BuildStamp`, said each time its channel opens. Nothing starts until the other side's matches. */
   | { readonly kind: "hello"; readonly build: string; readonly protocol: number; readonly bones: string; readonly engineRules: string }
-  /** The guest cannot play the host's start: the host runs another build. */
-  | { readonly kind: "refuse"; readonly reason: "engine-mismatch" };
+  /**
+   * The guest cannot play the host's start: the host runs another build
+   * ("engine-mismatch"), or sent one this build cannot read though its stamp
+   * is this build's ("unreadable-start"), which no build that checks what it
+   * sends does (`OnlineSession.sendLobby`).
+   */
+  | { readonly kind: "refuse"; readonly reason: RefuseReason };
+
+export type RefuseReason = "engine-mismatch" | "unreadable-start";
 
 /**
  * A start this build cannot play as sent. `build` is the stamp it carries,
  * read before anything else, or null when it has none this build can read (a
- * build from before the stamp): the guest refuses another build's start
- * rather than drop it, which would leave the host playing alone. Only
+ * build from before the stamp): the guest refuses an unreadable start, of
+ * another build or of its own, rather than drop it, which would leave the
+ * host playing alone and the guest waiting on a match that never comes. Only
  * `parseLobbyMessage` makes one; nothing sends it.
  */
 export interface UnreadableStart {
@@ -160,8 +168,10 @@ export function parseLobbyMessage(payload: unknown): ReceivedLobbyMessage | null
         ? { kind: "hello", build: stamp.build, protocol: stamp.protocol, bones: stamp.bones, engineRules: stamp.engineRules }
         : null;
     }
-    case "refuse":
-      return payload.reason === "engine-mismatch" ? { kind: "refuse", reason: "engine-mismatch" } : null;
+    case "refuse": {
+      const reason = payload.reason;
+      return reason === "engine-mismatch" || reason === "unreadable-start" ? { kind: "refuse", reason } : null;
+    }
     default:
       return null;
   }

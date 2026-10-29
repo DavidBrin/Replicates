@@ -45,6 +45,9 @@ const CONFIG: OnlineMatchConfig = {
 /** This build's hello: what each side says as its channel opens, and the other side's when it runs the same build. */
 const HELLO: LobbyMessage = { kind: "hello", ...localBuild() };
 
+/** What both players read when a start from this very build cannot be read: no "different version", the stamps agree. */
+const UNREADABLE_START_SENTENCE = "The match settings could not be read, so leave the room and start again.";
+
 /**
  * What a developer reads when a peer is refused goes to the console. The tests
  * that refuse one read it here rather than print it.
@@ -199,15 +202,23 @@ describe("binding a session to the stores", () => {
     expect(guest.sent).toEqual([{ kind: "refuse", reason: "engine-mismatch" }]);
   });
 
-  /** This build's own start, unreadable here, is not another version: dropped, as any unreadable start always was. */
-  it("drops an unreadable start that says it is this build, refusing nothing", () => {
+  /**
+   * This build's own start, unreadable here, is not another version, so it is
+   * not said to be (the stamps agree). It is still a start no match can come
+   * of, and the host has sent it and is waiting: dropped, the guest would sit
+   * connected with no match for good (codex P2-2). It is refused like any
+   * other, in its own words, and the room is left.
+   */
+  it("refuses an unreadable start that says it is this build: told to the host, in its own words, and leaves", async () => {
     const guest = fakeSession();
     bindSession(guest.session);
     guest.emit({ type: "joined", role: "guest" });
     guest.emit({ type: "lobby", message: { kind: "unreadable-start", build: localBuild() } });
-    expect(useOnlineStore.getState()).toMatchObject({ config: null, error: null, errorReason: null });
-    expect(guest.sent).toEqual([]);
-    expect(guest.session.close).not.toHaveBeenCalled();
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "unreadable-start" });
+    expect(useOnlineStore.getState().error).toBe(UNREADABLE_START_SENTENCE);
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "unreadable-start" }]);
+    await Promise.resolve();
+    expect(guest.session.close).toHaveBeenCalledTimes(1);
   });
 
   it("shows the host the same reason when the guest refuses its start, withdraws the start, and leaves", async () => {
@@ -218,6 +229,19 @@ describe("binding a session to the stores", () => {
     host.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } });
     expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "engine-mismatch" });
     expect(useOnlineStore.getState().error).toBe("The other player is running a different version. Both reload the page.");
+    expect(host.sent).toEqual([]);
+    await Promise.resolve();
+    expect(host.session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the host the guest's own reason when the guest could not read its start, withdraws the start, and leaves", async () => {
+    const host = fakeSession();
+    bindSession(host.session);
+    host.emit({ type: "joined", role: "host" });
+    useOnlineStore.getState().patch({ config: CONFIG });
+    host.emit({ type: "lobby", message: { kind: "refuse", reason: "unreadable-start" } });
+    expect(useOnlineStore.getState()).toMatchObject({ config: null, status: "error", errorReason: "unreadable-start" });
+    expect(useOnlineStore.getState().error).toBe(UNREADABLE_START_SENTENCE);
     expect(host.sent).toEqual([]);
     await Promise.resolve();
     expect(host.session.close).toHaveBeenCalledTimes(1);
@@ -690,6 +714,43 @@ describe("the build handshake", () => {
     expect(warn.mock.calls[0].join(" ")).toContain("no build stamp this build can read");
   });
 
+  /**
+   * Codex P2-2, through the parser a guest really has: the same build says hello
+   * and then sends a start whose seed is not a number. The stamp is the guest's
+   * own, so it is not another version; it is a start nothing can play, and the
+   * host has sent it. It must end cleanly, not leave the guest connected with
+   * no match and no word, for good.
+   */
+  it("refuses a start from this very build that its parser cannot read, rather than wait on it for good", async () => {
+    vi.useFakeTimers();
+    const guest = opened("guest");
+    guest.emit({ type: "lobby", message: overTheWire(HELLO) });
+    expect(useOnlineStore.getState().status).toBe("connected");
+    guest.sent.length = 0;
+
+    const start = parseLobbyMessage(JSON.parse(JSON.stringify({ kind: "start", config: { ...CONFIG, seed: "bad" } })));
+    expect(start).toEqual({ kind: "unreadable-start", build: localBuild() });
+    guest.emit({ type: "lobby", message: start! });
+
+    expect(guest.sent).toEqual([{ kind: "refuse", reason: "unreadable-start" }]);
+    expect(useOnlineStore.getState()).toMatchObject({
+      status: "error",
+      errorReason: "unreadable-start",
+      error: UNREADABLE_START_SENTENCE,
+      notice: null,
+      config: null,
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0].join(" ")).toContain("cannot read");
+    expect(guest.session.close).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(guest.session.close).toHaveBeenCalledTimes(1);
+    // Nothing that follows undoes it, or starts a wait of its own.
+    vi.advanceTimersByTime(HELLO_TIMEOUT_MS * 2);
+    guest.emit({ type: "lobby", message: { kind: "start", config: CONFIG } });
+    expect(useOnlineStore.getState()).toMatchObject({ status: "error", errorReason: "unreadable-start", config: null });
+  });
+
   it("says its own hello on the way out, so the other side refuses too, even before its channel opened", async () => {
     const fake = fakeSession();
     bindSession(fake.session);
@@ -995,6 +1056,7 @@ describe("sending and leaving", () => {
       "bad-start",
       "link-failed",
       "engine-mismatch",
+      "unreadable-start",
     ] as const;
     // The list is hand-written; tsc fails here when a reason is added without it.
     expectTypeOf<Exclude<OnlineErrorReason, (typeof reasons)[number]>>().toBeNever();

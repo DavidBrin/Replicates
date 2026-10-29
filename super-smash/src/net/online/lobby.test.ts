@@ -92,6 +92,7 @@ describe("lobby messages", () => {
 
   it("reads a refusal, so a host learns why its start was not played", () => {
     expect(parseLobbyMessage({ kind: "refuse", reason: "engine-mismatch" })).toEqual({ kind: "refuse", reason: "engine-mismatch" });
+    expect(parseLobbyMessage({ kind: "refuse", reason: "unreadable-start" })).toEqual({ kind: "refuse", reason: "unreadable-start" });
   });
 
   it("reads an away flag", () => {
