@@ -51,6 +51,7 @@ import sys
 
 import bpy
 import mathutils
+import numpy as np
 
 # flatten_layers.py sits beside this script (plain Python, also run by the tests).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -267,6 +268,55 @@ def rebuild_material(fighter, material, meshes):
     return image.name, f"{image_key(fighter, image, material)}:{'alpha' if alpha else 'opaque'}", layers, alpha
 
 
+def sampled_max_alpha(obj, material, alpha_of):
+    """
+    The highest alpha of `material`'s colour image among the texels `obj`'s own
+    triangles drawn with it sample, from its UVs (1 when the material reads no
+    alpha): what decides whether a MASK cut leaves anything of that face mesh
+    (verifyGlb's face checks). A texel counts when its centre lies in a
+    triangle, and each triangle counts its centroid's texel, so a sliver still
+    samples one. `alpha_of` caches each image's alpha plane.
+    """
+    tree = material.node_tree
+    if not any(l.to_node.type == "BSDF_PRINCIPLED" and l.to_socket.name == "Alpha" for l in tree.links):
+        return 1.0
+    image_node = next(n for n in tree.nodes if n.type == "TEX_IMAGE")
+    image = image_node.image
+    if image.name not in alpha_of:
+        w, h = image.size
+        px = np.empty(w * h * 4, dtype=np.float32)
+        image.pixels.foreach_get(px)
+        alpha_of[image.name] = px.reshape(h, w, 4)[..., 3]
+    alpha = alpha_of[image.name]
+    h, w = alpha.shape
+    _, uv_name = uv_map_of(tree, image_node)
+    uv = (obj.data.uv_layers[uv_name] if uv_name else obj.data.uv_layers.active).data
+    slots = {i for i, slot in enumerate(obj.material_slots) if slot.material == material}
+    obj.data.calc_loop_triangles()
+    best = 0.0
+    for t in obj.data.loop_triangles:
+        if t.material_index not in slots:
+            continue
+        p = np.array([uv[l].uv[:] for l in t.loops], dtype=np.float64) * (w, h)
+        p -= np.floor(p.min(0) / (w, h)) * (w, h)  # REPEAT: into the first tile
+        c = p.mean(0)
+        best = max(best, float(alpha[int(c[1]) % h, int(c[0]) % w]))
+        x0, y0 = np.floor(p.min(0)).astype(int)
+        x1, y1 = np.ceil(p.max(0)).astype(int)
+        xs, ys = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
+        a, b, cc = p
+        den = (b[1] - cc[1]) * (a[0] - cc[0]) + (cc[0] - b[0]) * (a[1] - cc[1])
+        if abs(den) > 1e-12:
+            l1 = ((b[1] - cc[1]) * (xs - cc[0]) + (cc[0] - b[0]) * (ys - cc[1])) / den
+            l2 = ((cc[1] - a[1]) * (xs - cc[0]) + (a[0] - cc[0]) * (ys - cc[1])) / den
+            inside = (l1 >= 0) & (l2 >= 0) & (1 - l1 - l2 >= 0)
+            if inside.any():
+                best = max(best, float(alpha[np.floor(ys[inside]).astype(int) % h, np.floor(xs[inside]).astype(int) % w].max()))
+        if best >= 1.0:
+            break
+    return round(min(best, 1.0), 4)
+
+
 def inverse_rigid(m):
     """
     The reader's inverse (`inv_rigid` in skeleton_from_blend.py): the transposed
@@ -419,6 +469,13 @@ def main():
                 drawn_with.append(slot.material.name)
         # The glb materials this part draws with, for verifyGlb's face checks.
         report_of[obj.name]["materials"] = drawn_with
+
+    # Each face mesh's own sampled alpha, per material it draws with (verifyGlb: a MASK cut must leave some of it).
+    alpha_of = {}
+    for obj in meshes:
+        report = report_of[obj.name]
+        if report.get("face"):
+            report["maxAlpha"] = {name: sampled_max_alpha(obj, bpy.data.materials[name], alpha_of) for name in report["materials"]}
 
     bone_model = {}
     bones = []

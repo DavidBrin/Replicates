@@ -1,12 +1,16 @@
 {
   "//": "Which meshes of each fighter's c00 .blend are exported (Plan 4). Names without Blender's .NNN suffix; every mesh in the file must be listed exactly once, in keep, drawOnly or drop, so a renamed or new mesh fails the export instead of silently appearing. keep: exported, and measured into the hurt capsules (skeleton_from_blend.py, export_gltf.py). drawOnly: exported, never measured, so it cannot move a committed hurt capsule (Task 21b). drop: not exported. face: the fighter's neutral face, every one of them exported; the export and verify fail without them (Task 21b). Kept: the body, the neutral face, open eyes, and props in their battle position (Link's sword and shield in hand, Marth's drawn Falchion); dropped: alternative expressions, blinks, results-screen faces, low-detail copies, sheathed/stowed props, the Morph Ball. Read from the meshes listed in each .blend on 2026-10-24; the faces checked by eye in close-ups of every head on 2026-10-29 (Task 21b), the rest UNVERIFIED by eye beyond the animation lab's sheets.",
   "mario": {
+    "//": "drawOnly: Mario_Hair is his sideburns and the hair under the back of his cap, in his file's default-visible collection; without it the side view shows bare skin there (Task 21b review). Measured, its Head-weighted vertices would move the committed Head hurt capsule (x 1.81049 -> 1.66598, r 2.56522 -> 2.42343).",
     "keep": [
       "Mario_Eye_VIS_O_OBJShape",
       "Mario_FaceNMClose_VIS_O_OBJShape",
       "Mario_FaceN_VIS_O_OBJShape",
       "Mario_Hathead_VIS_O_OBJShape",
       "c00bodyShape"
+    ],
+    "drawOnly": [
+      "Mario_Hair_VIS_O_OBJShape"
     ],
     "face": [
       "Mario_Eye_VIS_O_OBJShape",
@@ -26,7 +30,6 @@
       "Mario_FaceNMOpen_VIS_O_OBJShape",
       "Mario_Final_VIS_O_OBJShape",
       "Mario_Furafura_VIS_O_OBJShape",
-      "Mario_Hair_VIS_O_OBJShape",
       "Mario_Halfblink1_VIS_O_OBJShape",
       "Mario_Halfblink2_VIS_O_OBJShape",
       "Mario_Halfblink3_VIS_O_OBJShape",
@@ -50,6 +53,7 @@
     ]
   },
   "donkeyKong": {
+    "//": "drawOnly: donkey_FaceUP1 is his brow and open eyelids, the one FaceUP variant in his file's default-visible collection (FaceUP2-8 are in the excluded Expressions); without it his head is open between hair and muzzle. Measured, it would move the committed Head hurt capsule (r 5.22146 -> 5.13582) (Task 21b).",
     "keep": [
       "GamemodelShape",
       "donkey_Eye_VIS_O_OBJShape",

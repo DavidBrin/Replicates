@@ -22,7 +22,7 @@ import { MeshoptDecoder } from "meshoptimizer";
 import { describe, expect, it } from "vitest";
 
 import { FIGHTER_IDS } from "@/fighters";
-import { faceProblems, verifyGlb } from "../../../scripts/models/glb.mjs";
+import { FLATTENED_EYES, faceProblems, verifyGlb } from "../../../scripts/models/glb.mjs";
 import { parseBoneDump } from "./dump";
 
 const ROOT = process.cwd();
@@ -34,6 +34,21 @@ interface MeshRules {
 }
 const RULES = JSON.parse(readFileSync(join(ROOT, "scripts", "models", "meshes.json"), "utf8")) as Record<string, MeshRules>;
 
+/**
+ * Each fighter's neutral face, by name: dropping a face mesh from both `keep`
+ * and `face` in one edit (Pikachu shipping one-eyed) fails here (Task 21b fix round).
+ */
+const FACE_MESHES: Record<string, readonly string[]> = {
+  mario: ["Mario_Eye_VIS_O_OBJShape", "Mario_FaceNMClose_VIS_O_OBJShape", "Mario_FaceN_VIS_O_OBJShape"],
+  donkeyKong: ["donkey_Eye_VIS_O_OBJShape", "donkey_FaceN_VIS_O_OBJShape", "donkey_FaceUP1_VIS_O_OBJShape"],
+  link: ["link_Eye_VIS_O_OBJShape", "link_FaceN_Mouth_VIS_O_OBJShape", "link_Openblink_VIS_O_OBJShape"],
+  samus: ["samus_eye_NORMAL_VIS_O_OBJShape"],
+  kirby: ["Kirby_Eye1_VIS_O_OBJShape", "Kirby_FaceN_VIS_O_OBJShape"],
+  fox: ["Fox_FaceN_mayu_VIS_O_OBJShape", "Fox_FaceN_mouth_VIS_O_OBJShape", "Fox_normal_eye_VIS_O_OBJShape"],
+  pikachu: ["Pikachu_LEye_VIS_O_OBJShape", "Pikachu_Mouth_VIS_O_OBJShape", "Pikachu_REye_VIS_O_OBJShape"],
+  marth: ["Marth_Brow1_VIS_O_OBJShape", "Marth_FaceN_VIS_O_OBJShape", "marth_eye_VIS_O_OBJShape"],
+};
+
 describe("meshes.json names every fighter's neutral face, and exports all of it", () => {
   it.each(FIGHTER_IDS)("%s: lists its face meshes, an eye among them, each one exported and none dropped", (id) => {
     const r = RULES[id];
@@ -44,18 +59,34 @@ describe("meshes.json names every fighter's neutral face, and exports all of it"
       expect(r.drop, `${id}: face mesh ${name} is dropped`).not.toContain(name);
     }
     expect(r.face?.some((n) => /eye/i.test(n)), `${id}: no eye among its face meshes`).toBe(true);
+    expect([...(r.face ?? [])].sort(), `${id}: its face, by name`).toEqual([...FACE_MESHES[id]].sort());
     // Every mesh is decided once: exported and measured, exported only, or dropped.
     const all = [...r.keep, ...(r.drawOnly ?? []), ...r.drop];
     expect(new Set(all).size, `${id}: a mesh is listed twice`).toBe(all.length);
   });
 
-  it("draws Donkey Kong's upper face, the one his file shows by default, without measuring it into a hurtbox", () => {
+  it("draws Donkey Kong's upper face and Mario's hair, both in their files' default view, without measuring them into a hurtbox", () => {
     // donkey_FaceUP1 is his brow and open eyelids, the only FaceUP variant in the file's visible collection
     // (FaceUP2-8 sit in the excluded "Expressions"). Kept as drawOnly: its 194 Head-weighted vertices would move
     // the committed Head hurt capsule (r 5.22146 -> 5.13582), and with it the skeleton, the bake and the golden.
     expect(RULES.donkeyKong.drawOnly).toEqual(["donkey_FaceUP1_VIS_O_OBJShape"]);
     expect(RULES.donkeyKong.face).toContain("donkey_FaceUP1_VIS_O_OBJShape");
-    expect(FIGHTER_IDS.filter((id) => (RULES[id].drawOnly ?? []).length > 0)).toEqual(["donkeyKong"]);
+    // Mario_Hair is his sideburns and the hair under the back of his cap, in his file's visible collection;
+    // without it the side view shows bare skin there (Task 21b review). Head-weighted too, so drawOnly.
+    expect(RULES.mario.drawOnly).toEqual(["Mario_Hair_VIS_O_OBJShape"]);
+    expect(FIGHTER_IDS.filter((id) => (RULES[id].drawOnly ?? []).length > 0)).toEqual(["mario", "donkeyKong"]);
+  });
+
+  it("pins the eye materials that layer an iris over the eye white, which must ship flattened", () => {
+    // Every material in the eight files whose Base Color is Mix(white, iris, iris alpha) (Task 21b review: the
+    // ten, and no other drawn material layers its colour).
+    expect(FLATTENED_EYES).toEqual({
+      mario: ["EyeL", "EyeR"],
+      donkeyKong: ["EyeL", "EyeR"],
+      link: ["EyeL", "EyeR"],
+      fox: ["EyeL", "EyeR"],
+      marth: ["EyeL", "EyeR"],
+    });
   });
 });
 
@@ -91,6 +122,11 @@ describe("this checkout's build (when `pnpm models` has run)", () => {
     const base = (name: string) => name.replace(/\.\d+$/, "");
     expect([...new Set(faces.map((m) => base(m.name)))].sort()).toEqual([...(RULES[id].face ?? [])].sort());
     for (const m of faces) expect(m.kept || m.drawOnly, `${id} ${m.name}`).toBe(true);
+    // Each flattened eye came out of its two layers, and each face mesh carries its own measured alpha.
+    for (const name of (FLATTENED_EYES as Record<string, readonly string[]>)[id] ?? []) {
+      expect(dump.materials.find((m) => m.name === name)?.layers, `${id} ${name}`).toHaveLength(2);
+    }
+    for (const m of faces) expect(Object.keys(m.maxAlpha ?? {}).sort(), `${id} ${m.name}`).toEqual([...(m.materials ?? [])].sort());
 
     const file = join(ROOT, "public", "models", index!.models[id].file);
     await MeshoptDecoder.ready;

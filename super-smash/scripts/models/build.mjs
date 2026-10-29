@@ -21,7 +21,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 import { join } from "node:path";
 
 import { optimizeGlb, skeletonRecord, verifyGlb } from "./glb.mjs";
-import { pipelineStamp } from "./stamp.mjs";
+import { BLENDER_VERSION, blenderRelease, pipelineStamp } from "./stamp.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const CACHE = join(ROOT, ".model-cache");
@@ -74,6 +74,7 @@ for (const id of fighters) {
 
   await optimizeGlb(raw, opt, id);
   const dump = JSON.parse(readFileSync(dumpFile, "utf8"));
+  if (blenderRelease(dump.blender) !== BLENDER_VERSION) die(`${id}: exported by Blender ${dump.blender}, not ${BLENDER_VERSION} (BLENDER_VERSION in scripts/models/stamp.mjs) — set BLENDER= to Blender ${BLENDER_VERSION}`);
   const report = await verifyGlb(opt, dump);
   if (report.problems.length > 0) die(report.problems.join("\n"));
 
@@ -92,7 +93,7 @@ for (const id of fighters) {
   const file = `${id}.${hash.slice(0, 8)}.glb`;
   for (const old of readdirSync(OUT)) if (old.startsWith(`${id}.`) && old.endsWith(".glb") && old !== file) rmSync(join(OUT, old));
   copyFileSync(opt, join(OUT, file));
-  index.models[id] = { file, bytes: bytes.length, sha256: hash, skeleton: skeletonSha, pipeline };
+  index.models[id] = { file, bytes: bytes.length, sha256: hash, skeleton: skeletonSha, pipeline, blender: dump.blender };
   console.log(`${id}: ${file}  ${(bytes.length / 1048576).toFixed(2)} MiB  ${report.triangles} tris  ${report.primitives} primitives  ${report.joints} joints`);
 }
 

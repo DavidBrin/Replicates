@@ -4,7 +4,8 @@
  * built against a different skeleton than the committed bake (or with
  * `--allow-skeleton-drift`), built by another export pipeline than this
  * checkout's (`stamp.mjs`: a glb from before a `meshes.json` choice, a cut-out
- * override or an export rule changed, Task 21b), or joined by a file `index.json` doesn't name
+ * override or an export rule changed, Task 21b) or by another Blender than
+ * `BLENDER_VERSION`, or joined by a file `index.json` doesn't name
  * (`next build` copies all of `public/models/` into the deploy) — or whose
  * `public/models/` git would commit: anything in it that `git add` would take
  * or that is already tracked or staged. The ripped models are deployed from
@@ -18,7 +19,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { PIPELINE_INPUTS, pipelineStamp } from "./stamp.mjs";
+import { BLENDER_VERSION, PIPELINE_INPUTS, blenderRelease, pipelineStamp } from "./stamp.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const FIGHTERS = ["mario", "donkeyKong", "link", "samus", "kirby", "fox", "pikachu", "marth"];
@@ -67,6 +68,8 @@ if (!existsSync(indexFile)) {
     else if (e.skeleton !== sha256(skeleton)) problems.push(`${id}: built against another skeleton than the committed one — run \`pnpm models\``);
     if (e.pipeline === undefined) problems.push(`${id}: built before export builds were stamped — run \`pnpm models\``);
     else if (e.pipeline !== stamp) problems.push(`${id}: built by another export pipeline than this checkout's (${PIPELINE_INPUTS.join(", ")}, or a pipeline package) — run \`pnpm models\``);
+    if (e.blender === undefined) problems.push(`${id}: built before builds recorded their Blender — run \`pnpm models\``);
+    else if (blenderRelease(e.blender) !== BLENDER_VERSION) problems.push(`${id}: exported by Blender ${e.blender}, not ${BLENDER_VERSION} (BLENDER_VERSION in scripts/models/stamp.mjs) — run \`pnpm models\` with Blender ${BLENDER_VERSION}`);
   }
   const named = new Set(["index.json", ...Object.values(index.models ?? {}).map((e) => e.file)]);
   const stray = readdirSync(join(ROOT, "public", "models")).filter((f) => !named.has(f));

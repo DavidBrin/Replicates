@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { PIPELINE_INPUTS, PIPELINE_PACKAGES, pipelineStamp } from "../../../scripts/models/stamp.mjs";
+import { BLENDER_VERSION, PIPELINE_INPUTS, PIPELINE_PACKAGES, blenderRelease, pipelineStamp } from "../../../scripts/models/stamp.mjs";
 
 /**
  * The deploy guard, `scripts/models/check.mjs` (Plan 4 Task 8), run for real:
@@ -55,7 +55,7 @@ beforeEach(() => {
     const glb = Buffer.from(`stand-in ${id}`);
     const file = `${id}.${sha256(glb).slice(0, 8)}.glb`;
     writeFileSync(at("public", "models", file), glb);
-    models[id] = { file, bytes: glb.length, sha256: sha256(glb), skeleton: sha256(skeleton), pipeline: stamp };
+    models[id] = { file, bytes: glb.length, sha256: sha256(glb), skeleton: sha256(skeleton), pipeline: stamp, blender: "5.2.2 LTS" };
   }
   writeIndex({ schema: 1, models });
 });
@@ -147,6 +147,27 @@ describe("models:check, the deploy guard", () => {
     writeFileSync(at("node_modules", "sharp", "package.json"), JSON.stringify({ name: "sharp", version: "0.35.5" }));
     r = check();
     expect(r.out).toContain("mario: built by another export pipeline than this checkout's");
+  });
+
+  it("refuses a model exported by another Blender, and one that recorded none (Task 21b fix round)", () => {
+    const i = index();
+    i.models.fox.blender = "4.2.1 LTS";
+    delete i.models.link.blender;
+    writeIndex(i);
+    const r = check();
+    expect(r.status).toBe(1);
+    expect(r.out).toContain(`fox: exported by Blender 4.2.1 LTS, not ${BLENDER_VERSION} (BLENDER_VERSION in scripts/models/stamp.mjs) — run \`pnpm models\` with Blender ${BLENDER_VERSION}`);
+    expect(r.out).toContain("link: built before builds recorded their Blender — run `pnpm models`");
+    expect(r.out).not.toContain("mario:");
+  });
+
+  it("pins the one Blender release every glb is exported by, and reads it from the version a dump records", () => {
+    expect(BLENDER_VERSION).toBe("5.2.2");
+    expect(blenderRelease("5.2.2 LTS")).toBe("5.2.2");
+    expect(blenderRelease("5.2.2")).toBe("5.2.2");
+    expect(blenderRelease("5.2.20 LTS")).toBe("5.2.20");
+    expect(blenderRelease("LTS")).toBeNull();
+    expect(blenderRelease(undefined)).toBeNull();
   });
 
   it("stamps exactly the inputs that decide a glb's bytes, and moves with each one", () => {

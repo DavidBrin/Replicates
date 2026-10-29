@@ -71,6 +71,21 @@ export const ALPHA_CUTOFF_OVERRIDES = Object.freeze({});
 export const FACE_SOLID_COLOURS = Object.freeze({
   "mario/alp_mario_002": "Mario's moustache: a one-colour texture (sRGB 55/55/57), which prune() folds into the colour factor",
 });
+/**
+ * The eye materials whose source layers an iris over the eye white (Base Color
+ * = Mix(white, iris, iris alpha)), by fighter: every one must ship flattened
+ * into one texture (`export_gltf.py`, `flatten_layers.py`). Unflattened, they
+ * shipped as blank whites (Mario, Link, Marth), whites without pupils (Donkey
+ * Kong) and an iris with holes for the white (Fox), Task 21b. The Task 21b
+ * review found these ten, and no other drawn material that layers its colour.
+ */
+export const FLATTENED_EYES = Object.freeze({
+  mario: Object.freeze(["EyeL", "EyeR"]),
+  donkeyKong: Object.freeze(["EyeL", "EyeR"]),
+  link: Object.freeze(["EyeL", "EyeR"]),
+  fox: Object.freeze(["EyeL", "EyeR"]),
+  marth: Object.freeze(["EyeL", "EyeR"]),
+});
 /** Skeleton drift: how far a committed bone may sit from Blender's dump (the dump's 6-decimal rounding is 5e-7). */
 const SKELETON_TOLERANCE = 1e-4;
 
@@ -139,18 +154,13 @@ export function joinByMaterial() {
   };
 }
 
-/** How many texels of an encoded image (PNG, WebP, …) have alpha below `cutoff`, and how many it has. */
-async function alphaCount(image, name, cutoff) {
+/** How many texels of an encoded image (PNG, WebP, …) have alpha below `ALPHA_CUTOFF`. */
+async function holesIn(image, name) {
   if (image === null) throw new Error(`texture ${name} has no image data`);
   const { data } = await sharp(Buffer.from(image)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  let below = 0;
-  for (let i = 3; i < data.length; i += 4) if (data[i] < cutoff * 255) below++;
-  return { below, texels: data.length / 4 };
-}
-
-/** How many texels of an encoded image have alpha below `ALPHA_CUTOFF`. */
-async function holesIn(image, name) {
-  return (await alphaCount(image, name, ALPHA_CUTOFF)).below;
+  let holes = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] < ALPHA_CUTOFF * 255) holes++;
+  return holes;
 }
 
 /**
@@ -214,11 +224,14 @@ export function alphaModes(fighter = null, overrides = ALPHA_CUTOFF_OVERRIDES) {
  * dump (export_gltf.py's) marks the neutral face's meshes (`face`) and names
  * the glb materials each draws with; a material flattened from two layers
  * carries its `layers`. A fighter must have a face, an eye among it, every
- * face mesh drawn, and every face material: in the glb; with a colour texture,
- * or a reason in `FACE_SOLID_COLOURS`; not fully transparent; never BLEND (a
- * face part drawn without depth writes sorts wrongly against the head); and
- * OPAQUE when flattened (its source mixed colour only, never alpha) or when
- * its source reads no alpha (the dump's `alpha: false`).
+ * eye `FLATTENED_EYES` names flattened, every face mesh drawn, and every face
+ * material: in the glb; with a colour texture, or a reason in
+ * `FACE_SOLID_COLOURS`; never BLEND (a face part drawn without depth writes
+ * sorts wrongly against the head); OPAQUE when flattened (its source mixed
+ * colour only, never alpha) or when its source reads no alpha (the dump's
+ * `alpha: false`); and, when MASK, not cut away: neither by its colour factor
+ * nor on any face mesh, whose own sampled texels the export measures (the
+ * dump's `maxAlpha`, the highest alpha among the texels that mesh's UVs cover).
  */
 export async function faceProblems(doc, dump) {
   const who = dump.fighter ?? "?";
@@ -227,6 +240,11 @@ export async function faceProblems(doc, dump) {
   const problems = [];
   if (!faces.some((m) => /eye/i.test(m.name))) problems.push(`${who}: no eye among its face meshes (${faces.map((m) => m.name).join(", ")})`);
   const byName = new Map(doc.getRoot().listMaterials().map((m) => [m.getName(), m]));
+  for (const name of Object.hasOwn(FLATTENED_EYES, who) ? FLATTENED_EYES[who] : []) {
+    if ((dump.materials ?? []).find((m) => m.name === name)?.layers?.length !== 2) {
+      problems.push(`${who}: ${name} layers an iris over the eye white in its source and must ship flattened (FLATTENED_EYES), but the dump has no layers for it`);
+    }
+  }
   const layered = new Set((dump.materials ?? []).filter((m) => m.layers).map((m) => m.name));
   const noAlpha = new Set((dump.materials ?? []).filter((m) => m.alpha === false).map((m) => m.name));
   const checked = new Set();
@@ -245,9 +263,17 @@ export async function faceProblems(doc, dump) {
         problems.push(`${who}: face mesh ${mesh.name} draws with ${name}, which the glb does not have`);
         continue;
       }
+      const tex = mat.getBaseColorTexture();
+      const cutoff = mat.getAlphaCutoff();
+      const factor = mat.getBaseColorFactor()[3];
+      // Each face mesh's own texels: a MASK material cuts it away when even its brightest sampled alpha falls short.
+      if (mat.getAlphaMode() === "MASK" && tex !== null && factor >= cutoff) {
+        const most = mesh.maxAlpha?.[name];
+        if (most === undefined) problems.push(`${who}: face mesh ${mesh.name} has no measured alpha for ${name} (export_gltf.py records each face mesh's)`);
+        else if (most * factor < cutoff) problems.push(`${who}: face mesh ${mesh.name} draws nothing with ${name}: MASK at ${cutoff} cuts every texel it samples (its highest alpha is ${most.toFixed(3)})`);
+      }
       if (checked.has(name)) continue;
       checked.add(name);
-      const tex = mat.getBaseColorTexture();
       if (tex === null && !Object.hasOwn(FACE_SOLID_COLOURS, `${who}/${name}`)) {
         problems.push(`${who}: face material ${name} has no colour texture, and FACE_SOLID_COLOURS states no reason`);
       }
@@ -255,17 +281,8 @@ export async function faceProblems(doc, dump) {
       if (mode === "BLEND") problems.push(`${who}: face material ${name} is BLEND — a face part drawn without depth writes sorts wrongly against the head`);
       else if (layered.has(name) && mode !== "OPAQUE") problems.push(`${who}: face material ${name} layers two textures into one and must be OPAQUE, not ${mode}`);
       else if (noAlpha.has(name) && mode !== "OPAQUE") problems.push(`${who}: face material ${name} reads no alpha in its source and must be OPAQUE, not ${mode}`);
-      if (mode === "MASK") {
-        // A texel draws when its alpha times the factor's reaches the cutoff.
-        const cutoff = mat.getAlphaCutoff();
-        const factor = mat.getBaseColorFactor()[3];
-        let cut = factor < cutoff;
-        if (!cut && tex !== null) {
-          const { below, texels } = await alphaCount(tex.getImage(), tex.getName(), cutoff / factor);
-          cut = below === texels;
-        }
-        if (cut) problems.push(`${who}: face material ${name} is fully transparent (MASK at ${cutoff} cuts every texel)`);
-      }
+      // A texel draws when its alpha times the factor's reaches the cutoff: a factor below it cuts everything.
+      if (mode === "MASK" && factor < cutoff) problems.push(`${who}: face material ${name} draws nothing: its colour factor's alpha ${factor} is below its MASK cutoff ${cutoff}`);
     }
   }
   return problems;

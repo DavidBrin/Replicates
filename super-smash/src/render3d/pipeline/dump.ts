@@ -16,8 +16,8 @@
  *   "meshes": [{ "name": "Mario_FaceN_VIS_O_OBJShape", "kept": true, "verts": 209, "polys": 302 }, …],
  *   "materials": [{ "name": "skin_mario_001", "image": "skin_mario_001_col.png" }, …],
  *   // Blender's dump only (Task 21b): a drawn mesh's `materials` (as the glb names them),
- *   // `face` on the neutral face's meshes, each material's `alpha` (does its source read
- *   // it) and a flattened material's two `layers`.
+ *   // `face` on the neutral face's meshes and their sampled `maxAlpha`, each material's
+ *   // `alpha` (does its source read it) and a flattened material's two `layers`.
  *   "hurt": [{ "bone": "Head", "x1": 0.4, "x2": 2.6, "r": 2.1 }, …]
  * }
  * ```
@@ -62,6 +62,12 @@ export interface DumpMesh {
   readonly face?: boolean;
   /** The glb materials a drawn mesh draws with (Blender's dump). */
   readonly materials?: readonly string[];
+  /**
+   * A face mesh's highest texture alpha among the texels its own UVs sample, per
+   * material it draws with (1 where the material reads no alpha; Blender's dump,
+   * Task 21b fix round): a MASK cut below it leaves nothing of that mesh.
+   */
+  readonly maxAlpha?: Readonly<Record<string, number>>;
   readonly verts: number;
   readonly polys: number;
 }

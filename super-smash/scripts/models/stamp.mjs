@@ -9,9 +9,11 @@
  * would otherwise deploy as if it were current.
  *
  * The inputs: the scripts and lists `build.mjs` runs, the manifest that pins
- * every downloaded file by SHA-256, and the versions of the packages that
- * write the glb. Blender is pinned by its own install (Task 7). No other
- * import: `check.mjs` runs it alone.
+ * every downloaded file by SHA-256, the versions of the packages that write
+ * the glb, and the Blender release that exports it (`BLENDER_VERSION`; each
+ * model also records the version its dump says it was exported by, and
+ * `models:check` refuses any other, Task 21b fix round). No other import:
+ * `check.mjs` runs it alone.
  */
 
 import { createHash } from "node:crypto";
@@ -27,6 +29,14 @@ export const PIPELINE_INPUTS = Object.freeze([
   "scripts/models/manifest.json",
   "scripts/models/meshes.json",
 ]);
+
+/** The Blender release every glb is exported by (Task 7 installs it; its dump records `5.2.2 LTS`). */
+export const BLENDER_VERSION = "5.2.2";
+
+/** The release number in a Blender version string (`"5.2.2 LTS"` → `"5.2.2"`), or null. */
+export function blenderRelease(version) {
+  return typeof version === "string" ? (/^\d+\.\d+\.\d+/.exec(version)?.[0] ?? null) : null;
+}
 
 /** Packages whose versions decide a glb's bytes (the optimiser, its compressor and its texture encoder). */
 export const PIPELINE_PACKAGES = Object.freeze(["@gltf-transform/core", "@gltf-transform/extensions", "@gltf-transform/functions", "meshoptimizer", "sharp"]);
@@ -44,5 +54,6 @@ export function pipelineStamp(root) {
     const file = join(root, "node_modules", pkg, "package.json");
     lines.push(`${pkg}@${existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).version : "missing"}`);
   }
+  lines.push(`blender@${BLENDER_VERSION}`);
   return sha256(lines.join("\n") + "\n");
 }
