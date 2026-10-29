@@ -8,10 +8,11 @@ is the one nearly everybody actually plays.
 
 The menus, the HUD and the physics are reproduced from measured values rather than
 approximated by feel: the knockback equation is Ultimate's, the stage geometry is Kurogane
-Hammer's, and the frame data comes out of the game's own decompiled scripts. The fighters
-are drawn from code — a bone hierarchy of capsules and circles — because there is no
-legitimate way to obtain Nintendo's art, and because every open-source Smash clone that
-tried to ship real sprites stalled on making them.
+Hammer's, and the frame data comes out of the game's own decompiled scripts. The animation
+is the project's own — every move a hand-authored clip timed to its hitboxes — and in a match
+those clips pose each fighter's SSBU model, which `pnpm models` fetches and builds on your own
+machine and which is never committed to this repository. Without it, every fighter is a
+capsule stand-in ([D57](DECISIONS.md#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked)).
 
 It also does one thing the original does not: **rollback netcode**. Ultimate is delay-based.
 
@@ -33,10 +34,12 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/engine`](src/engine) | The simulation: fixed-point maths, knockback, hitboxes, the action state machine |
 | [`src/fighters`](src/fighters) | Eight fighters, every attribute and every move |
 | [`src/stages`](src/stages) | Six stages, and the Ω / Battlefield forms as a data transform |
-| [`src/render`](src/render) | The canvas painter — skeletons, poses, camera, VFX, HUD |
-| [`src/render/poses`](src/render/poses) | One file per animation, each with the frame budget it was drawn to |
+| [`src/render`](src/render) | The 2D overlay and the animation source — poses, camera, move effects, particles, HUD |
+| [`src/render/poses`](src/render/poses) | One file per animation, each with the frame budget it was drawn to: what the models are posed by |
 | [`src/render/chars`](src/render/chars) | One directory per fighter: their rig, their own clips, what their moves paint |
-| [`docs/character-art.md`](docs/character-art.md) | How to make a character look like themselves — the four layers and the gotchas |
+| [`src/render3d`](src/render3d) | The 3D world (three.js): the side camera, the stage, the models posed by the clips, sparks and shields, and the bone bake |
+| [`scripts/models`](scripts/models) | `pnpm models`: fetch, export and check the fighter models; only their hashes and bone numbers are committed |
+| [`docs/character-art.md`](docs/character-art.md) | How a fighter is drawn — the model pipeline, the retarget rule, the bake — and the gotchas |
 | [`src/net`](src/net) | Rollback session, wire format, four transports, and the online lobby |
 | [`worker`](worker) | The Cloudflare Worker: static assets, TURN credentials, and a Durable Object per room |
 | [`src/ai`](src/ai) | CPU levels 1–9, as a pure function |
@@ -45,8 +48,8 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 | [`src/game`](src/game) | The fixed-timestep loop that joins the simulation to the browser |
 | [`e2e`](e2e) | Playwright specs, including the screenshot capture |
 | [`e2e-online`](e2e-online) | Two (or three) browsers in one room, against `wrangler dev` or the deployed Worker |
-| [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame |
-| [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — swing arc, projectile, hit spark — by cranking a paused match by hand |
+| [`scripts/animsheet.mjs`](scripts/animsheet.mjs) | Captures any animation as a contact sheet, one cell per frame, with the sim's hit- and hurtboxes |
+| [`scripts/fightsheet.mjs`](scripts/fightsheet.mjs) | Captures a move *as played* — projectile, hit spark, the opponent flinching — by cranking a paused match by hand |
 | [`docs/screenshots`](docs/screenshots) | The images in this README |
 
 ## Quick start
@@ -75,7 +78,13 @@ one and Join room in the other.
 | `pnpm run test:e2e:online` | Two browsers play an online match against `wrangler dev` |
 | `pnpm run typecheck` | `tsc --noEmit` for the app and for the Worker |
 | `pnpm run lint` | ESLint |
-| `pnpm run deploy` | Build and `wrangler deploy` (David's Cloudflare login) |
+| `pnpm run deploy` | `models:check`, build and `wrangler deploy` (David's Cloudflare login) |
+| `pnpm models:fetch` | Fetch the fighter models at a pinned commit into the git-ignored `.model-cache/`, SHA-256-checked |
+| `pnpm models` | Export, join and optimise one glb per fighter into the git-ignored `public/models/` (needs Blender, portable, in `.model-cache/tools/`) |
+| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones |
+
+Without `pnpm models` the game runs as it is, with every fighter a capsule stand-in; the
+simulation and every test need neither the models nor Blender.
 
 Screenshots are captured, not taken by hand:
 
@@ -84,11 +93,14 @@ CAPTURE=1 npx playwright test screenshots --project=desktop-chrome
 ```
 
 Animation has its own workshop at **<http://localhost:3000/anim>** — pick any fighter and any
-action and it draws one cell per simulation frame at the action's true length, with 60Hz
-playback and an onion skin. The same strip can be captured from the command line:
+action and it draws one cell per simulation frame at the action's true length: the fighter's
+model (or its stand-in) posed exactly as the match poses it, with the sim's hitboxes (red) and
+hurtboxes (yellow) over each cell. The same strip can be captured from the command line, into
+the git-ignored `test-results/anim/` (a picture of a model is never committed):
 
 ```bash
-node scripts/animsheet.mjs roll --fighter kirby --out roll.png
+node scripts/animsheet.mjs roll --fighter kirby
+node scripts/animsheet.mjs attack --fighter mario --move ftilt
 ```
 
 It exists because animation is the one thing here that cannot be judged from its source, and
@@ -96,9 +108,9 @@ because without it a whole class of bug is invisible: seventeen of the twenty-on
 clips turned out to be a single frozen pose held for the length of the state
 ([D39](DECISIONS.md#d39--seventeen-of-the-twenty-one-movements-were-a-single-frozen-pose)).
 
-The lab draws the pose. Half of what makes an attack read is drawn by the *match* — the blade
-arc, the projectile, the spark, the opponent flinching — so there is a second capture for that,
-which starts a real match, stops the clock and steps it by hand:
+The lab draws the pose. Half of what makes an attack read is drawn by the *match* — the
+projectile, the spark, the opponent flinching — so there is a second capture for that, which
+starts a real match, stops the clock and steps it by hand:
 
 ```bash
 node scripts/fightsheet.mjs --fighter link --move fsmash --out link-fsmash.png
@@ -111,8 +123,9 @@ frame the shutter happened to land on
 ([D46](DECISIONS.md#d46--photographing-a-move-as-it-is-actually-played)).
 
 Making one character look like themselves has its own guide:
-**[docs/character-art.md](docs/character-art.md)** — the four layers a fighter is made of, which
-files belong to which character, and the conventions that have each cost somebody a day.
+**[docs/character-art.md](docs/character-art.md)** — how a fighter is drawn (the model pipeline,
+the retarget rule, the bake), which files belong to which character, and the conventions that
+have each cost somebody a day.
 
 Eight people working on eight characters at once turns out to be a bug-finding instrument as much
 as an art pipeline: what it converges on is the *shared* code, and the second pass found a
@@ -132,7 +145,7 @@ throw left a blank page
 
 | Character select | The match |
 |---|---|
-| <img src="docs/screenshots/character-select.png" width="420" alt="Character select: a portrait grid ordered by fighter number, with sheared player panels below"> | <img src="docs/screenshots/match.png" width="420" alt="Mario and Donkey Kong fighting on Battlefield, with the damage HUD below"> |
+| <img src="docs/screenshots/character-select.png" width="420" alt="Character select: a portrait grid ordered by fighter number, with sheared player panels below"> | <img src="docs/screenshots/match.png" width="420" alt="Mario and Donkey Kong, drawn as their capsule stand-ins, fighting on Battlefield in 3D, with the damage HUD below"> |
 
 | Main menu | Stage select |
 |---|---|
@@ -224,6 +237,20 @@ Cosmetic state — particles, screen shake, sound — lives *outside* `GameState
 by the events `step()` returns, so re-simulating eight frames after a rollback does not
 replay eight frames of explosions ([D4](DECISIONS.md#d4--cosmetic-state-lives-outside-gamestate)).
 
+**The match is drawn on three canvases**, stacked: the stage's parallax sky (2D), the 3D world
+(three.js, `src/render3d/`: the stage built from the sim's own platform rects, the fighters'
+SSBU models, their shields, hit sparks and KO blasts), and a transparent 2D overlay on top
+(`src/render/`: the HUD, port tags, move effects, projectiles, the other particles and the
+magnifying glass). All three are framed by the same camera value, and three.js loads in its own
+chunk after `/play` mounts. The models are posed by the replica's own 2D clips, retargeted onto
+each SSBU skeleton in the side plane; the simulation reads those same bones from integer tables
+baked at build time (`public/bake/roster.bin.gz`), so a hitbox rides the limb the player sees and
+the sim never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
+(`UPDATE_BAKE=1`) and re-run `reach.test.ts`. The models themselves are built locally by
+`pnpm models` and never committed; without them every fighter is a capsule stand-in of its own
+hurtboxes, and one that fails to load is a stand-in for that match only
+([D57](DECISIONS.md#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked)).
+
 Inside `engine/` the simulation is laid out the way Super Smash Bros. Ultimate's own engine is,
 as far as the public modding projects show it ([D55](DECISIONS.md#d55--the-engine-takes-ultimates-shape-params-energies-statuses-scripts)):
 fighter numbers are `FighterParams` with `fighter_param.prc` names (`params.ts`); a fighter's
@@ -289,6 +316,7 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
 | Piece | What it is |
 |---|---|
 | `out/` | `next build` with `output: "export"` — every route is a file |
+| `out/models/` | The fighter glbs, built on the deploying machine by `pnpm models` and uploaded from local disk; `models:check` runs first. Never in git |
 | `wrangler.jsonc` | Worker `david-smash`: serves `out/`, runs first only for `/api/*` and `/ws/*` |
 | `GET /api/ice` | Mints 1-hour Cloudflare TURN credentials for pages on this site; STUN-only without the two secrets |
 | `RATE_LIMITER` | Optional rate limit, 60 requests a minute per address across `/api/ice` and the room sockets; fails open |
@@ -317,9 +345,12 @@ fails closed: if git cannot say what the uncommitted changes are, a production b
    speed (Mario's is about 0.5) so the first walk frame is a step rather than a ramp from
    zero. `FighterAttributes` carries only a top walk speed, so a one-frame tap travels
    about a third of what it should.
-3. **Hitbox positions on limbs are estimated.** Damage, frames, angles and knockback come
-   from the decompiled scripts and are exact; hitboxes mounted on limbs depend on animation
-   data this project does not have, and are marked `// POSITION: estimated` in the source
+3. **Limb hitboxes follow our animation, not Ultimate's.** Damage, frames, angles and knockback
+   come from the decompiled scripts and are exact; a hitbox the script hangs on a limb rides that
+   limb as our own clip poses it on the SSBU skeleton, and `reach.test.ts` lists every move whose
+   reach moved, each reviewed
+   ([D57](DECISIONS.md#d57--the-fighters-are-ssbus-models-the-animation-is-ours-and-the-bones-are-baked)).
+   Moves that do not run their script keep the legacy tables' estimated boxes
    ([D17](DECISIONS.md#d17--move-data-comes-from-the-decompiled-scripts-not-from-a-frame-data-site)).
 4. **Some combat rules have no published source.** Where none settles a rule — Lucario's tech
    frames standing in for all eight fighters, how long a ledge trump stuns, ASDI's distance, the
@@ -341,9 +372,11 @@ fails closed: if git cannot say what the uncommitted changes are, a production b
 A study, not a product, and not affiliated with Nintendo in any way.
 
 **David-Smash** is a rebuild of Super Smash Bros. Ultimate's versus mode as an exercise in
-agentic software development. Every character, sound and image in this project is generated
-from code: no Nintendo sprites, models, music or logos are used, reproduced or distributed
-anywhere in this repository. Super Smash Bros. and all related characters and trademarks are
+agentic software development. Every sound and image in this repository is generated from
+code: no Nintendo sprites, models, textures, music or logos are reproduced or distributed
+anywhere in it. The fighter models a match draws are fetched and built on the player's own
+machine by `pnpm models` and are never committed; without them, the fighters are the project's
+own capsule stand-ins. Super Smash Bros. and all related characters and trademarks are
 the property of Nintendo. Non-commercial, educational, and free.
 
 It was built from eight parallel research lanes, then a frozen engine contract, then six

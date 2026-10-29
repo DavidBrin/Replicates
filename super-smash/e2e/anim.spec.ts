@@ -8,7 +8,8 @@ import { expect, test } from "@playwright/test";
  * that throws while sampling — a malformed keyframe, a bone name that is not a
  * bone, a period of zero — takes the page down and takes with it the only way
  * anyone would notice. A unit test proves a clip is well-formed; this proves it
- * can be drawn.
+ * can be drawn. The sheet is the 3D one since Plan 4 (Task 23): the fighter's
+ * model, or its stand-in where `pnpm models` has not been run.
  */
 
 /** One action from each family, which between them touch every clip file. */
@@ -54,21 +55,23 @@ test("every fighter's rig survives the same clip", async ({ page }) => {
   for (const id of fighters) {
     await page.getByLabel("Fighter").selectOption(id);
     await expect(page.getByLabel("Contact sheet")).toBeVisible();
+    // The sheet says what it drew this fighter with once it is built: until then a throw would not have happened yet.
+    await expect(page.getByText(/contact sheet — (model|stand-in)/), id).toBeVisible({ timeout: 30_000 });
   }
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
 /**
- * The model sheet (Plan 4, Task 21): the fighter's model posed by the match's own
- * pose, with the sim's boxes over it. Photographed in Chromium, whose WebGL is
+ * The contact sheet in 3D (Plan 4, Tasks 21 and 23): the fighter's model posed by
+ * the match's own pose, with the sim's boxes over it. Photographed in Chromium, whose WebGL is
  * real (software-rendered on a machine with no GPU); the fighters are their
  * models, or the stand-ins where `pnpm models` has not been run.
  */
 
-/** Per cell of the sheet: how many pixels of the model sheet's GL canvas differ from its background, and how many of the overlay are the hitboxes' red. */
+/** Per cell of the sheet: how many pixels of its GL canvas differ from its background, and how many of the overlay are the hitboxes' red. */
 async function cellPixels(page: import("@playwright/test").Page): Promise<{ model: number[]; red: number[] }> {
-  return page.getByLabel("Model sheet").evaluate((sheet) => {
+  return page.getByLabel("Contact sheet").evaluate((sheet) => {
     const [gl, over] = Array.from(sheet.querySelectorAll("canvas"));
     const cell = 150;
     const cols = gl.width / cell;
@@ -100,14 +103,14 @@ async function cellPixels(page: import("@playwright/test").Page): Promise<{ mode
   });
 }
 
-test("the model sheet draws a forward tilt: the model in every cell, the hitboxes on frames 5 to 7 only", async ({ page }) => {
+test("the contact sheet draws a forward tilt: the model in every cell, the hitboxes on frames 5 to 7 only", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
 
   await page.goto("/anim");
   await page.getByLabel("Action").selectOption("attack");
   await page.getByLabel("Move").selectOption("ftilt");
-  await expect(page.locator('[aria-label="Model sheet"][data-drawn="true"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]')).toBeVisible({ timeout: 30_000 });
 
   // 25 frames, in cells of 150 px.
   const { model, red } = await cellPixels(page);
@@ -131,7 +134,7 @@ test("the context-leak detector matches Chromium's warning and not its driver no
   expect(TOO_MANY_CONTEXTS.test("[.WebGL-0x13c00b00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels")).toBe(false);
 });
 
-test("every fighter's model sheet draws, one renderer at a time", async ({ page }) => {
+test("every fighter's contact sheet draws, one renderer at a time", async ({ page }) => {
   const errors: string[] = [];
   const warnings: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -144,7 +147,7 @@ test("every fighter's model sheet draws, one renderer at a time", async ({ page 
   await page.getByLabel("Action").selectOption("land");
   for (const id of fighters) {
     await page.getByLabel("Fighter").selectOption(id);
-    await expect(page.locator('[aria-label="Model sheet"][data-drawn="true"]'), id).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]'), id).toBeVisible({ timeout: 30_000 });
     const { model } = await cellPixels(page);
     expect(model.every((n) => n > 200), `${id}: a cell is blank: ${model.join(",")}`).toBe(true);
   }
@@ -152,4 +155,16 @@ test("every fighter's model sheet draws, one renderer at a time", async ({ page 
   // Chromium warns when a page makes too many WebGL contexts ("Too many active WebGL contexts").
   expect(warnings, warnings.join("\n")).toEqual([]);
   expect(errors, errors.join("\n")).toEqual([]);
+});
+
+/**
+ * The Task 21 re-review measured the page 480 px wide at a phone's 390: the 2D
+ * playback canvas was 460 px wide. Plan 4 removed it (Task 23); the sheet
+ * scrolls in a box of its own, so the page itself never scrolls sideways.
+ */
+test("the lab fits a phone's width: only the sheet scrolls sideways", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/anim");
+  await expect(page.locator('[aria-label="Contact sheet"][data-drawn="true"]')).toBeAttached({ timeout: 30_000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

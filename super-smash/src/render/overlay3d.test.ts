@@ -9,19 +9,16 @@ import { createHudState } from "./hud";
 import { createMockContext } from "./mockContext";
 import { WORLD3D_PARTICLES, drawScene, visualHeight, type OverlayAnchor, type RenderState } from "./renderer";
 import { getCharacterRig } from "./chars";
-import * as swing from "./swing";
 import { makeFighter, makeState, makeStage } from "./testFixtures";
 import * as vfx from "./vfx";
 
 vi.mock("./characterArt", async (orig) => ({ ...(await orig<typeof import("./characterArt")>()), drawPortTag: vi.fn() }));
-vi.mock("./swing", async (orig) => ({ ...(await orig<typeof import("./swing")>()), drawSwingArc: vi.fn() }));
 vi.mock("./vfx", async (orig) => {
   const real = await orig<typeof import("./vfx")>();
   return {
     ...real,
     drawDizzyStars: vi.fn(),
     drawFinalSmashAura: vi.fn(),
-    drawShield: vi.fn(),
     drawParticles: vi.fn(real.drawParticles),
   };
 });
@@ -29,7 +26,7 @@ vi.mock("./vfx", async (orig) => {
 const dk = FIGHTERS.find((f) => f.id === "donkeyKong")!;
 const marth = FIGHTERS.find((f) => f.id === "marth")!;
 
-function stateWith(world3d: boolean, anchors: readonly (OverlayAnchor | null)[] | undefined, fighters = [
+function stateWith(anchors: readonly (OverlayAnchor | null)[] | undefined, fighters = [
   makeFighter({ port: 0, defId: "donkeyKong", x: fx(-10), action: "shieldBroken", actionFrame: 30 }),
   makeFighter({ port: 1, defId: "marth", x: fx(10), action: "attack", move: "fsmash", actionFrame: 12 }),
 ]): RenderState {
@@ -40,7 +37,6 @@ function stateWith(world3d: boolean, anchors: readonly (OverlayAnchor | null)[] 
     fighters: [dk, marth],
     vfx: vfx.createVfx(),
     hud: createHudState(),
-    world3d,
     anchors,
   };
 }
@@ -54,7 +50,7 @@ describe("the overlay over the 3D world (Plan 4, MAJOR 5)", () => {
     vi.clearAllMocks();
     const cam = createCamera();
     const anchors: OverlayAnchor[] = [{ headX: 4, headTop: 26.3 }, { headX: 0.4, headTop: 18.8 }];
-    drawScene(createMockContext(), stateWith(true, anchors), null, cam, 1);
+    drawScene(createMockContext(), stateWith(anchors), null, cam, 1);
     const tags = vi.mocked(characterArt.drawPortTag).mock.calls;
     expect(tags).toHaveLength(2);
     // DK faces right (+1): his head is 4 units in front of his feet at x = -10.
@@ -65,32 +61,17 @@ describe("the overlay over the 3D world (Plan 4, MAJOR 5)", () => {
     expect(vi.mocked(vfx.drawFinalSmashAura).mock.calls[1][3]).toBe(18.8);
   });
 
-  it("draws no 2D swing arc over a 3D sword", () => {
+  /** No bake, no anchor: the 2D rig's height stands in, for the tags and stars as for everything else hung on the fighter. */
+  it("falls back to the 2D rig's height for a fighter with no anchor", () => {
     vi.clearAllMocks();
-    drawScene(createMockContext(), stateWith(true, [null, null]), null, createCamera(), 1);
-    expect(swing.drawSwingArc).not.toHaveBeenCalled();
-  });
-
-  it("keeps the 2D rig's heights and swing arcs in the 2D renderer", () => {
-    vi.clearAllMocks();
-    drawScene(createMockContext(), stateWith(false, undefined), null, createCamera(), 1);
-    expect(swing.drawSwingArc).toHaveBeenCalled();
+    drawScene(createMockContext(), stateWith(undefined), null, createCamera(), 1);
     expect(vi.mocked(vfx.drawDizzyStars).mock.calls[0][3]).toBe(visualHeight(getCharacterRig("donkeyKong")));
-  });
-
-  /** The Task 18 review: the 3D layer draws the shield bubble (`vfx3d.ts`); a 2D one on top would be a second. */
-  it("leaves the shield to the 3D layer, and keeps it in the 2D renderer", () => {
-    vi.clearAllMocks();
-    drawScene(createMockContext(), stateWith(true, [null, null]), null, createCamera(), 1);
-    expect(vfx.drawShield).not.toHaveBeenCalled();
-    drawScene(createMockContext(), stateWith(false, undefined), null, createCamera(), 1);
-    expect(vfx.drawShield).toHaveBeenCalledTimes(2);
   });
 
   it("reports which fighters a move effect hides, for the 3D layer", () => {
     const kirby = FIGHTERS.find((f) => f.id === "kirby")!;
     const rs: RenderState = {
-      ...stateWith(true, [null, null], [
+      ...stateWith([null, null], [
         makeFighter({ port: 0, defId: "donkeyKong", x: fx(-10) }),
         // Kirby's Stone, mid-fall: the stone is drawn instead of him.
         makeFighter({ port: 1, defId: "kirby", x: fx(10), grounded: false, action: "special", move: "downB", actionFrame: 20 }),
@@ -130,12 +111,11 @@ describe("the overlay leaves the 3D layer's particles to it", () => {
     expect(all.calls.length).toBeGreaterThan(only.calls.length);
   });
 
-  it("is what the overlay passes in the 3D world, and only there", () => {
-    vi.clearAllMocks();
-    drawScene(createMockContext(), stateWith(true, [null, null]), null, createCamera(), 1);
-    expect(vi.mocked(vfx.drawParticles).mock.calls[0][3]).toBe(WORLD3D_PARTICLES);
-    vi.clearAllMocks();
-    drawScene(createMockContext(), stateWith(false, undefined), null, createCamera(), 1);
-    expect(vi.mocked(vfx.drawParticles).mock.calls[0][3]).toBeUndefined();
+  it("is what the overlay passes, with an anchor or without one", () => {
+    for (const anchors of [[null, null], undefined]) {
+      vi.clearAllMocks();
+      drawScene(createMockContext(), stateWith(anchors), null, createCamera(), 1);
+      expect(vi.mocked(vfx.drawParticles).mock.calls[0][3]).toBe(WORLD3D_PARTICLES);
+    }
   });
 });

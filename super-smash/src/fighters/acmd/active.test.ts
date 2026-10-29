@@ -12,7 +12,7 @@ import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
 import { prepareFighterScripts } from "@/engine/acmd/run";
-import { fx, toFloat } from "@/engine/fixed";
+import { fx } from "@/engine/fixed";
 import { activeHitboxes, chargeHoldFrame } from "@/engine/hitbox";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
@@ -21,7 +21,6 @@ import type { AcmdCommand, AcmdScript } from "@/engine/acmd/types";
 import type { FighterDef, GameState, Hitbox, InputFrame, MoveSlot } from "@/engine/types";
 import { armourWindow } from "@/render/fxKit";
 import { moveTimingFor } from "@/render/poses/timing";
-import { swingArcFor } from "@/render/swing";
 import { FIGHTERS } from "../index";
 import { STAGES } from "@/stages";
 import { ACTIVE_SCRIPT_SLOTS, activatable } from "./active";
@@ -204,9 +203,9 @@ describe("an activated script in a real match", () => {
 });
 
 /*
- * Plan 3, Task 18 (carried from Plan 2 Task 15): the renderer (`swing.ts`, `fxKit.ts`,
- * `poses/timing.ts`), the CPU (`behaviours.ts`) and the charge hold (`chargeHoldFrame`) read a
- * move's `MoveDef`, and the sim reads its script. An activated slot's `MoveDef` table is the
+ * Plan 3, Task 18 (carried from Plan 2 Task 15): the renderer (`fxKit.ts`, `poses/timing.ts`;
+ * the 2D swing arc that read it too went in Plan 4), the CPU (`behaviours.ts`) and the charge
+ * hold (`chargeHoldFrame`) read a move's `MoveDef`, and the sim reads its script. An activated slot's `MoveDef` table is the
  * script's own boxes (`withReferenceScripts`), so every reader sees what the sim runs.
  *
  * Every proof runs against the bake's bones, for Plan 3's 38 root-bone slots (tables placed
@@ -257,26 +256,6 @@ describe("what render, the CPU and the charge hold read of an activated move", (
       for (const hb of simBoxes(def, slot, g)) furthest = Math.max(furthest, hb.x + hb.radius, (hb.x2 ?? hb.x) + hb.radius);
     }
     expect(moveReach(def.moves[slot]!)).toBe(furthest);
-  });
-
-  it.each(SYNCED)("%s %s: the swing is drawn at full strength exactly while the sim has an attack live, as far as it reaches", (_id, slot, def) => {
-    const height = toFloat(def.attributes.height);
-    const action = slot === "grab" || slot === "dashGrab" ? "grab" : "attack";
-    for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) {
-      const live = simBoxes(def, slot, g).filter((hb) => hb.grabbing !== true);
-      const arc = swingArcFor(def, { action, actionFrame: g - 1, move: slot, x: 0, y: 0, facing: 1 }, height);
-      expect(arc?.alpha === 1, `frame ${g}`).toBe(live.length > 0);
-      if (live.length === 0 || arc === null) continue;
-      // Measured from the shoulder pivot, like the swing: the far end of a capsule counts.
-      const reach = Math.max(
-        ...live.flatMap((hb) =>
-          [[hb.x, hb.y] as const, [hb.x2 ?? hb.x, hb.y2 ?? hb.y] as const].map(
-            ([x, y]) => Math.hypot(toFloat(x), toFloat(y) - height * 0.55) + toFloat(hb.radius),
-          ),
-        ),
-      );
-      expect(arc.outerRadius, `frame ${g}`).toBeCloseTo(reach, 9);
-    }
   });
 
   it.each(SYNCED)("%s %s: the charge hold and the animation timing start from the sim's first live frame", (_id, slot, def) => {

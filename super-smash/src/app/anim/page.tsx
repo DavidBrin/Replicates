@@ -9,47 +9,27 @@
  * landed on the right frame — at 60Hz a screenshot round-trip is fifteen frames
  * wide, so most animations were never actually looked at.
  *
- * Two views, and the difference matters:
+ * One view: the **contact sheet** (`Lab3D`), one cell per *simulation frame*
+ * of the action at its true length, each the fighter's SSBU model posed by the
+ * match's own pose (`drawnPose`, on the sim's clock) with the sim's hitboxes
+ * and hurtboxes over it. This is the view that tells the truth about timing: a
+ * four-frame landing gets four cells, and if three of them are the same drawing
+ * you can see that they are. A clip edit is a gameplay edit now (D57), and this
+ * is where its limbs and boxes are looked at together.
  *
- * - **Contact sheet** draws one cell per *simulation frame* of the action, at
- *   its true length, sampled the way the renderer samples it. This is the view
- *   that tells the truth about timing: a four-frame landing gets four cells,
- *   and if three of them are the same drawing you can see that they are.
- * - **Playback** runs the same thing at 60Hz so the motion can be felt.
- *
- * Both go through `samplePoseForFighter`, so what shows here is what the match
- * shows, including the state-duration remapping in `poses/timing.ts`.
+ * Plan 4 removed the 2D contact sheet and the 60 Hz 2D playback: they drew the
+ * 2D figure the match no longer draws.
  */
 
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  drawFigure,
-  getCharacterRig,
-  propAnimFor,
-  resolvePalette,
-  rimWidthFor,
-  squashFor,
-} from "@/render/characterArt";
-import { rigHeight } from "@/render/skeleton";
-import {
-  actionDurationFor,
-  poseNameFor,
-  poseSpinFor,
-  poseTimeFor,
-  samplePoseForFighter,
-  jumpTimingFor,
-  type JumpTiming,
-} from "@/render/poses";
+import { useEffect, useMemo, useState } from "react";
+import { actionDurationFor, poseNameFor, poseTimeFor, jumpTimingFor, type JumpTiming } from "@/render/poses";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
-import { makeFighter, makeStage } from "@/render/testFixtures";
+import { makeFighter } from "@/render/testFixtures";
 import { clipFor } from "@/render/chars";
-import { drawMoveFx } from "@/render/specialFx";
-import { DREW_NOTHING } from "@/render/fxKit";
-import { createCamera } from "@/render/camera";
 import { FIGHTER_IDS, getFighter } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
 import { useBake } from "@/game/useBake";
@@ -57,13 +37,13 @@ import type { BakeTables } from "@/engine/acmd/bakeTables";
 import type { ActionState, FighterDef, FighterState, MoveSlot } from "@/engine/types";
 
 /**
- * The 3D model sheet. three.js (~200 KB gzipped) loads with it, through
- * `import()`, after the page is up: the lab's own 2D views need none of it
+ * The contact sheet, in 3D. three.js (~200 KB gzipped) loads with it, through
+ * `import()`, after the page is up, so the page's own controls need none of it
  * (`app/chunkSplit.test.ts` walks this page's static imports for it).
  */
 const Lab3D = dynamic(() => import("./Lab3D").then((m) => m.Lab3D), {
   ssr: false,
-  loading: () => <p style={{ color: "#7C8896", fontSize: 12, margin: "6px 0" }}>model sheet — loading</p>,
+  loading: () => <p style={{ color: "#7C8896", fontSize: 12, margin: "6px 0" }}>contact sheet — loading</p>,
 });
 
 /** Every action worth looking at, grouped the way an animator would think of them. */
@@ -127,7 +107,7 @@ export function gameFighterFor(id: string, bake: BakeTables | null): FighterDef 
 }
 
 /**
- * How many cells the sheets draw for these options: the action's true length.
+ * How many cells the sheet draws for these options: the action's true length.
  *
  * An attack's length is its move's `totalFrames`, and the game's is not always
  * the legacy table's: a slot running its imported script ends on the script's
@@ -226,8 +206,8 @@ export function usesMoveFor(action: ActionState): boolean {
 
 /**
  * The fighter these options show on `frame`: that many frames into the action,
- * at the origin facing forward. Both sheets pose it, the 3D one through the
- * match's own `drawnPose` and the same fighter's boxes (`Lab3D`).
+ * at the origin facing forward. The sheet poses it through the match's own
+ * `drawnPose` and puts the same fighter's boxes over it (`Lab3D`).
  */
 export function fighterAt(o: Options, frame: number): FighterState {
   return makeFighter({
@@ -303,125 +283,6 @@ function speedFor(o: Options): number {
   return 0;
 }
 
-/**
- * Draw one fighter, centred on its feet, exactly as the renderer would.
- *
- * Exported for the tests. "Exactly as the renderer would" is the whole contract
- * of this file and it has been broken three times in one pass — the prop
- * velocity it never passed, the rim width it sized by its own formula, the
- * aerials it drew standing on the floor — so the claim is worth something only
- * if something checks it.
- */
-export function drawCell(
-  ctx: CanvasRenderingContext2D,
-  o: Options,
-  frame: number,
-  cx: number,
-  groundY: number,
-  zoom: number,
-  alpha = 1,
-): void {
-  const f = fighterAt(o, frame);
-  const def = getFighter(o.fighterId) ?? null;
-  const rig = getCharacterRig(o.fighterId);
-  const palette = resolvePalette(def, 0);
-  const move = def?.moves?.[moveFor(o)];
-  const timing = move
-    ? {
-        total: move.totalFrames,
-        firstActive: move.hitboxes.length ? Math.min(...move.hitboxes.map((h) => h.startFrame)) - 1 : -1,
-        lastActive: move.hitboxes.length ? Math.max(...move.hitboxes.map((h) => h.endFrame)) - 1 : -1,
-      }
-    : undefined;
-  const usesMove = usesMoveFor(o.action);
-  const jump = def ? jumpTimingFor(def) : undefined;
-  const pose = samplePoseForFighter(f, frame, usesMove ? timing : undefined, jump);
-  const squash = squashFor(f);
-
-  const transform = {
-    x: cx + pose.offsetX * rig.scale * zoom,
-    y: groundY - pose.offsetY * rig.scale * zoom,
-    scale: zoom * rig.scale,
-    scaleX: squash.scaleX * pose.scaleX,
-    scaleY: squash.scaleY * pose.scaleY,
-    facing: 1 as const,
-    rotation: pose.rotation + poseSpinFor(f, frame, usesMove ? timing : undefined, jump),
-    pivot: rigHeight(rig.bones, rig.headRadius) * 0.45,
-  };
-  // The same `anim` a match would give, from the same function, because the lab
-  // is only worth looking at while it agrees with the renderer. It shipped
-  // without this at all — so the one tool built for reviewing motion was the one
-  // place a prop's own motion could not be seen, and an author checking a tail
-  // there would have concluded it was dead.
-  const params = {
-    rig,
-    palette,
-    pose,
-    transform,
-    alpha,
-    anim: propAnimFor(f, frame, usesMove ? (timing?.total ?? 0) : 0),
-  } as const;
-
-  // The move's own effect — the plasma, the rock, the electricity. Drawn here
-  // and not only in a match because half of what makes a special look like
-  // itself is painted rather than posed, and a lab that showed only the pose
-  // would say Kirby's Stone and Samus's Charge Shot still look identical.
-  const height = rigHeight(rig.bones, rig.headRadius) * rig.scale;
-  const cam = { ...createCamera(makeStage()), zoom };
-  const fx = def ? drawMoveFx(ctx, def, f, cam, height, cx, groundY) : DREW_NOTHING;
-
-  if (!fx.hideFigure) {
-    // Through the same function the match uses. The lab had its own formula and
-    // no `rig.scale`, so the moment the renderer became proportional the
-    // authoring view stopped agreeing with the game for every fighter whose
-    // scale is not 1 — which is most of them.
-    drawFigure(ctx, { ...params, mode: "rim", rimWidth: rimWidthFor(rig.scale, zoom) });
-    drawFigure(ctx, { ...params, mode: "body" });
-  }
-
-  // The same order the renderer uses, including when there is no figure to be
-  // after. The lab is only worth looking at while it agrees with the match, and
-  // an early return here would have hidden the over-layer of the one effect
-  // that replaces the fighter — the case where it is the whole picture.
-  for (const paint of fx.over) paint();
-}
-
-/**
- * Draw one past frame faintly, through an offscreen canvas.
- *
- * The obvious way — set `globalAlpha` and draw — does not work: an effect
- * painter is free to assign `globalAlpha` itself, and thirteen of them across
- * Mario, Link and Kirby do. Those assignments *replace* the value rather than
- * multiplying it, so the ghost's plasma came out at full strength over a figure
- * that had faded correctly, which is worse than no onion skin at all.
- *
- * Compositing a finished cell is the one approach a painter cannot reach past.
- */
-let scratch: HTMLCanvasElement | null = null;
-
-function ghost(
-  ctx: CanvasRenderingContext2D,
-  target: HTMLCanvasElement,
-  o: Options,
-  frame: number,
-  groundY: number,
-  alpha: number,
-): void {
-  if (!scratch) scratch = document.createElement("canvas");
-  if (scratch.width !== target.width || scratch.height !== target.height) {
-    scratch.width = target.width;
-    scratch.height = target.height;
-  }
-  const s = scratch.getContext("2d");
-  if (!s) return;
-  s.clearRect(0, 0, scratch.width, scratch.height);
-  drawCell(s, o, frame, scratch.width / 2, groundY, 9);
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(scratch, 0, 0);
-  ctx.restore();
-}
-
 export default function AnimLab() {
   const [fighterId, setFighterId] = useState("mario");
   const [action, setAction] = useState<ActionState>("land");
@@ -429,9 +290,6 @@ export default function AnimLab() {
   const [jumpsUsed, setJumpsUsed] = useState(1);
   const [fastFalling, setFastFalling] = useState(false);
   const [playing, setPlaying] = useState(true);
-  const [onion, setOnion] = useState(false);
-  const sheet = useRef<HTMLCanvasElement>(null);
-  const stage = useRef<HTMLCanvasElement>(null);
   const [frame, setFrame] = useState(0);
 
   const o = useMemo<Options>(
@@ -443,81 +301,20 @@ export default function AnimLab() {
   const total = useMemo(() => lengthFor(o, tables), [o, tables]);
   const poseName = useMemo(() => poseNameFor(fighterAt(o, 0)), [o]);
 
-  // The contact sheet: one cell per simulation frame, at the action's real length.
+  // The frame the scrubber and the sheet's caption show, stepping at 60 Hz while playing.
   useEffect(() => {
-    const c = sheet.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-    // One cell per simulation frame, with no cap. There used to be a cap of
-    // 48, which quietly turned the sheet into a *sample* the moment a move ran
-    // longer than that: a 91-frame Fire Fox got 48 cells spread across it and
-    // forty-three frames — including any one-frame key or effect — were never
-    // drawn at all. A sheet that skips frames is worse than a short one,
-    // because nothing on it says which frames are missing.
-    const n = total;
-    const cell = 150;
-    const rows = Math.ceil(n / 12);
-    c.width = cell * Math.min(n, 12);
-    c.height = (cell + 20) * rows;
-    ctx.fillStyle = "#12151A";
-    ctx.fillRect(0, 0, c.width, c.height);
-    for (let i = 0; i < n; i++) {
-      const col = i % 12;
-      const row = Math.floor(i / 12);
-      const x = col * cell + cell / 2;
-      const top = row * (cell + 20);
-      const groundY = top + cell - 18;
-      ctx.strokeStyle = "#2A3038";
-      ctx.beginPath();
-      ctx.moveTo(col * cell, groundY + 0.5);
-      ctx.lineTo(col * cell + cell, groundY + 0.5);
-      ctx.stroke();
-      const f = i;
-      drawCell(ctx, o, f, x, groundY, 4.0);
-      ctx.fillStyle = "#7C8896";
-      ctx.font = "11px ui-monospace, monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(`${f}`, x, top + cell + 13);
-    }
-  }, [o, total]);
-
-  // Playback at 60Hz, with an optional onion skin of the previous four frames.
-  useEffect(() => {
-    const c = stage.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
+    if (!playing) return;
     let raf = 0;
     let last = 0;
-    let f = frame;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      if (playing && now - last >= 1000 / 60) {
-        last = now;
-        f = (f + 1) % Math.max(1, total);
-        setFrame(f);
-      }
-      const shown = playing ? f : frame;
-      ctx.fillStyle = "#12151A";
-      ctx.fillRect(0, 0, c.width, c.height);
-      const groundY = c.height - 60;
-      ctx.strokeStyle = "#2A3038";
-      ctx.beginPath();
-      ctx.moveTo(0, groundY + 0.5);
-      ctx.lineTo(c.width, groundY + 0.5);
-      ctx.stroke();
-      if (onion) {
-        for (let k = 4; k >= 1; k--) {
-          const prev = shown - k;
-          if (prev >= 0) ghost(ctx, c, o, prev, groundY, 0.14 * (5 - k) * 0.5);
-        }
-      }
-      drawCell(ctx, o, shown, c.width / 2, groundY, 9);
+      if (now - last < 1000 / 60) return;
+      last = now;
+      setFrame((f) => (f + 1) % Math.max(1, total));
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [o, total, playing, onion, frame]);
+  }, [playing, total]);
 
   // The grab has frame data but no choice of slot, so it gets no dropdown.
   const usesMove = action === "attack" || action === "special" || action === "throw";
@@ -558,7 +355,6 @@ export default function AnimLab() {
           <label><input type="checkbox" checked={fastFalling} onChange={(e) => setFastFalling(e.target.checked)} /> fast fall</label>
         )}
         <button onClick={() => setPlaying((p) => !p)}>{playing ? "pause" : "play"}</button>
-        <label><input type="checkbox" checked={onion} onChange={(e) => setOnion(e.target.checked)} /> onion skin</label>
         <input
           aria-label="Frame"
           type="range"
@@ -571,13 +367,6 @@ export default function AnimLab() {
       </div>
 
       <Lab3D options={o} total={total} frame={Math.min(frame, total - 1)} />
-      <canvas ref={stage} width={460} height={420} aria-label="Playback" style={{ borderRadius: 6, marginBottom: 18 }} />
-      <div>
-        <div style={{ color: "#7C8896", fontSize: 12, marginBottom: 6 }}>
-          contact sheet — one cell per simulation frame
-        </div>
-        <canvas ref={sheet} aria-label="Contact sheet" style={{ borderRadius: 6, maxWidth: "100%" }} />
-      </div>
       <p style={{ color: "#4E5866", fontSize: 12, marginTop: 18 }}>
         {FIGHTER_IDS.length} fighters share every clip. See src/render/poses/.
       </p>

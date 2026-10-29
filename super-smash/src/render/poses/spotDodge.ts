@@ -43,9 +43,9 @@ export const SPOT_DODGE_SEGMENTS = {
  * point of the move. Frames 21–23 are what an opponent is waiting on, so the
  * recovery is animated as an arrival rather than as a fade back to neutral.
  *
- * None of the ghosting is done here. `intangibleAlpha` blinks the fighter and
- * `trackAfterimages` drops a trail every other intangible frame, both driven off
- * the engine's window rather than off this clip. What is left to the pose is the
+ * None of the ghosting is done here. `intangibleAlpha` blinks the fighter (the
+ * dodge afterimages went in Plan 4: Ultimate draws none), driven off the
+ * engine's window rather than off this clip. What is left to the pose is the
  * silhouette, and unlike a roll — which sells itself by travelling — a spot
  * dodge never leaves the spot. So the whole read is the shape changing: down a
  * fifth of standing height and in to narrower than the fighter stands, arrived

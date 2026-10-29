@@ -80,9 +80,10 @@ function ramp(v: number, from: number, to: number): number {
  * toward the fighter's front.
  *
  * Used **only** by Final Cutter, where the arc belongs to the blade being drawn
- * beside it. Every ordinary kick deliberately has no arc here: `render/swing.ts`
- * already derives one from the move's own hitboxes, so an authored arc would be
- * a second source of truth about reach, and the two drift apart within a week.
+ * beside it. Every ordinary kick deliberately has no arc here: the 2D swing arc
+ * (removed in Plan 4) derived one from the move's own hitboxes, so an authored arc
+ * would have been a second source of truth about reach, and the two drift apart
+ * within a week.
  * The same reasoning is why Link's file paints nothing for his sword moves.
  */
 function sweep(
@@ -1136,11 +1137,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * frame you stop on, something is sweeping, and the pair being opposite is
    * what says *turning* rather than *swinging*.
    *
-   * They hug the outline at 1.06–1.24 radii deliberately. `render/swing.ts`
-   * already derives an arc from the move's own hitboxes and an authored arc
-   * that reached further would be a second, drifting claim about range — this
-   * one claims nothing about reach, only about rotation, so it stays inside the
-   * hurtbox it is drawn on.
+   * They hug the outline at 1.06–1.24 radii deliberately. The 2D swing arc
+   * (removed in Plan 4) derived an arc from the move's own hitboxes, and an
+   * authored arc that reached further would be a second, drifting claim about
+   * range — this one claims nothing about reach, only about rotation, so it
+   * stays inside the hurtbox it is drawn on.
    */
   nair: ({ ctx, x, y, u, dir, frame, over }) => {
     const a = ramp(frame, 6, 9) * (1 - ramp(frame, 28, 36));

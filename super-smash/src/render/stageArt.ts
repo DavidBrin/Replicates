@@ -1,13 +1,15 @@
 /**
- * Stage geometry and backgrounds.
+ * Stage colours and backgrounds.
  *
- * Geometry comes entirely from `StageDef` — nothing in this file knows how wide
- * Battlefield is. That matters more than it sounds: the stage list carries
- * measured competitive geometry (SPEC §8) and every stage also has an Ω form and
- * a Battlefield form, so hard-coding a single layout would mean three copies of
- * each stage's art and three chances to disagree with the collision the engine
- * actually uses. What the renderer supplies is the *skin*: the slab profile, the
- * ledge lip, and a parallax background chosen by `StageDef.theme`.
+ * Geometry comes entirely from `StageDef` — nothing here or in the 3D stage
+ * (`render3d/stage3d.ts`, which builds the platforms from the sim's own rects,
+ * D57) knows how wide Battlefield is. That matters more than it sounds: the stage
+ * list carries measured competitive geometry (SPEC §8) and every stage also has
+ * an Ω form and a Battlefield form, so hard-coding a single layout would mean
+ * three copies of each stage's art and three chances to disagree with the
+ * collision the engine actually uses. What this file supplies is the *skin*: each
+ * theme's platform colours (`stagePaintFor`) and a parallax background chosen by
+ * `StageDef.theme`.
  *
  * The backgrounds are geometric and atmospheric rather than literal. That is
  * partly the same copyright constraint that produced the procedural fighters,
@@ -17,9 +19,8 @@
  */
 
 import { toFloat } from "@/engine/fixed";
-import type { Platform, StageDef } from "@/engine/types";
+import type { StageDef } from "@/engine/types";
 import { VIEW_HEIGHT, VIEW_WIDTH, worldToScreen, type Camera } from "./camera";
-import { withAlpha } from "./characterArt";
 
 export type StageTheme =
   | "battlefield"
@@ -47,26 +48,9 @@ export function themeFor(theme: string | null | undefined): StageTheme {
   return "neutral";
 }
 
-/* --------------------------------------------------------- moving platforms -- */
-
-/**
- * Where a sweeping platform is on a given frame.
- *
- * Smashville's platform is the only one that moves, and its position is *not*
- * in `GameState` — it is a pure function of the frame number, which is what lets
- * it roll back for free along with everything else. The renderer therefore has
- * to recompute it with the same formula the collision uses; the coupling is
- * unavoidable and is at least confined to this one function.
- */
-export function platformOffsetX(platform: Platform, frame: number): number {
-  if (!platform.motion || platform.motion.kind !== "sweep") return 0;
-  const period = platform.motion.periodFrames || 1;
-  return toFloat(platform.motion.amplitude) * Math.sin((2 * Math.PI * frame) / period);
-}
-
 /* ---------------------------------------------------------------- painting -- */
 
-/** A stage's platform colours, shared by the 2D platform painter and the 3D platforms (Plan 4). */
+/** A stage's platform colours, for the 3D platforms (`render3d/stage3d.ts`). */
 export function stagePaintFor(stage: Pick<StageDef, "theme">): StagePaint {
   return PAINTS[themeFor(stage.theme)];
 }
@@ -130,108 +114,6 @@ const PAINTS: Record<StageTheme, StagePaint> = {
     softEdge: "#D4DAE4",
   },
 };
-
-/** How far below its top surface a main platform's body is drawn, in units. */
-const MAIN_DEPTH = 46;
-const SOFT_THICKNESS = 2.6;
-const LEDGE_LIP = 2.2;
-
-export function drawPlatforms(
-  ctx: CanvasRenderingContext2D,
-  stage: StageDef,
-  cam: Camera,
-  frame: number,
-): void {
-  const paint = stagePaintFor(stage);
-  ctx.save();
-  ctx.lineCap = "square";
-  ctx.lineJoin = "miter";
-
-  for (const platform of stage.platforms) {
-    const dx = platformOffsetX(platform, frame);
-    const cx = toFloat(platform.x) + dx;
-    const half = toFloat(platform.halfWidth);
-    const top = toFloat(platform.y);
-
-    if (platform.soft) drawSoftPlatform(ctx, cam, paint, cx, top, half);
-    else drawMainPlatform(ctx, cam, paint, cx, top, half, platform.ledges);
-  }
-  ctx.restore();
-}
-
-function drawMainPlatform(
-  ctx: CanvasRenderingContext2D,
-  cam: Camera,
-  paint: StagePaint,
-  cx: number,
-  top: number,
-  half: number,
-  ledges: boolean,
-): void {
-  const tl = worldToScreen(cam, cx - half, top);
-  const tr = worldToScreen(cam, cx + half, top);
-  const bl = worldToScreen(cam, cx - half * 0.62, top - MAIN_DEPTH);
-  const br = worldToScreen(cam, cx + half * 0.62, top - MAIN_DEPTH);
-
-  // Body: a trapezoid narrowing downward, which is what makes a floating
-  // platform read as a solid object rather than as a line.
-  ctx.beginPath();
-  ctx.moveTo(tl.x, tl.y);
-  ctx.lineTo(tr.x, tr.y);
-  ctx.lineTo(br.x, br.y);
-  ctx.lineTo(bl.x, bl.y);
-  ctx.closePath();
-  const g = ctx.createLinearGradient(tl.x, tl.y, bl.x, bl.y);
-  g.addColorStop(0, paint.face);
-  g.addColorStop(1, paint.deep);
-  ctx.fillStyle = g;
-  ctx.fill();
-  ctx.strokeStyle = paint.deep;
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  // Top surface.
-  const surfaceH = Math.max(4, 1.4 * cam.zoom);
-  ctx.fillStyle = paint.top;
-  ctx.fillRect(tl.x, tl.y - surfaceH, tr.x - tl.x, surfaceH);
-
-  if (ledges) {
-    // The grabbable lip, brightened. A player has to be able to see exactly
-    // where the ledge is from across the stage.
-    const lip = LEDGE_LIP * cam.zoom;
-    ctx.fillStyle = paint.edge;
-    ctx.fillRect(tl.x - lip * 0.4, tl.y - surfaceH, lip, surfaceH + lip * 1.4);
-    ctx.fillRect(tr.x - lip * 0.6, tl.y - surfaceH, lip, surfaceH + lip * 1.4);
-  }
-}
-
-function drawSoftPlatform(
-  ctx: CanvasRenderingContext2D,
-  cam: Camera,
-  paint: StagePaint,
-  cx: number,
-  top: number,
-  half: number,
-): void {
-  const tl = worldToScreen(cam, cx - half, top);
-  const tr = worldToScreen(cam, cx + half, top);
-  const h = Math.max(5, SOFT_THICKNESS * cam.zoom);
-
-  ctx.beginPath();
-  ctx.moveTo(tl.x, tl.y);
-  ctx.lineTo(tr.x, tr.y);
-  ctx.lineTo(tr.x - h * 0.5, tl.y + h);
-  ctx.lineTo(tl.x + h * 0.5, tl.y + h);
-  ctx.closePath();
-  ctx.fillStyle = paint.soft;
-  ctx.fill();
-  ctx.strokeStyle = withAlpha(paint.softEdge, 0.6);
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.fillStyle = paint.softEdge;
-  ctx.fillRect(tl.x, tl.y - Math.max(2, h * 0.28), tr.x - tl.x, Math.max(2, h * 0.28));
-}
 
 /* ------------------------------------------------------------- backgrounds -- */
 

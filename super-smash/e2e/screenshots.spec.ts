@@ -23,6 +23,41 @@ test.skip(!CAPTURE, "Screenshot capture only runs with CAPTURE=1");
 const shot = (name: string) => `docs/screenshots/${name}.png`;
 
 /**
+ * Never a picture of a Nintendo model (Plan 4, Task 23). The repo is public, a
+ * render of the real SSBU models is a derivative of ripped assets, and a
+ * takedown over one would take the whole repo down. So every capture runs with
+ * the models taken away — every request under `/models/` answered 404, the way
+ * a host without them answers — and the fighters draw as the project's own
+ * capsule stand-ins. Everything else in a frame (the stage, the HUD, the sky)
+ * is our own art.
+ */
+const isModelRequest = (url: URL): boolean => url.pathname.startsWith("/models/");
+
+test.beforeEach(async ({ page }) => {
+  await page.route(isModelRequest, (route) =>
+    route.fulfill({ status: 404, contentType: "text/html", body: "<!doctype html><title>404</title>" }),
+  );
+});
+
+/** What the 3D layer says it drew each fighter with (`window.__smashRender.info().fighters`), re-declared like the routes. */
+type FighterKind = "glb" | "standIn" | "loading";
+
+/**
+ * Refuse to write a match screenshot unless the page reports a stand-in for
+ * every fighter. A model that reached the page anyway — a route that stopped
+ * matching, a fighter still loading — stops the capture rather than shipping.
+ */
+async function refuseUnlessStandIns(page: Page): Promise<void> {
+  const kinds = await page.evaluate(
+    () =>
+      (window as unknown as { __smashRender?: { info(): { fighters: FighterKind[] } } }).__smashRender?.info().fighters ?? null,
+  );
+  if (kinds === null || kinds.length === 0 || kinds.some((k) => k !== "standIn")) {
+    throw new Error(`refusing to capture a match: every fighter must be a stand-in, and the page reports ${JSON.stringify(kinds)}`);
+  }
+}
+
+/**
  * Wait for a frame worth photographing.
  *
  * "Six seconds in" is a coin flip: one fighter is often mid-launch and out of
@@ -111,10 +146,12 @@ test("the match, and the HUD", async ({ page }) => {
   // and fighters mid-action, rather than four idle poses on the spawn points.
   await page.waitForTimeout(6000);
   await waitForBothOnStage(page);
+  await refuseUnlessStandIns(page);
   await page.screenshot({ path: shot("match") });
 
   await page.waitForTimeout(6000);
   await waitForBothOnStage(page);
+  await refuseUnlessStandIns(page);
   await page.screenshot({ path: shot("match-2") });
 });
 

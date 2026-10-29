@@ -6,25 +6,107 @@ Read this before changing a character. It is the accumulated set of things that
 have gone wrong here, and most of them are silent — the fighter goes on looking
 plausible and slightly wrong, which is the hardest kind of bug to see.
 
-## The four layers
+## How a fighter is drawn
 
-A fighter on screen is four things stacked, in the order they matter:
+Since Plan 4 (DECISIONS [D57](../DECISIONS.md)), a fighter in a match is their
+**SSBU model**, posed by **our own 2D clips** retargeted onto the model's
+bones, and the simulation reads those same bones from integer tables **baked**
+at build time. Five things stack:
 
 | Layer | What it decides | Where it lives |
 |---|---|---|
-| **Rig** | Proportion, palette, props — the silhouette | `src/render/chars/<id>/rig.ts` |
-| **Pose** | What the body is doing this frame | `src/render/poses/` shared, `chars/<id>/poses.ts` per fighter |
-| **Move FX** | What the move paints: plasma, rock, sparks, arcs | `src/render/chars/<id>/fx.ts` |
+| **Model** | The body: proportions, textures, face | built on your machine by `pnpm models` into `public/models/` (git-ignored) |
+| **Pose** | What the body is doing this frame | `src/render/poses/` shared, `chars/<id>/poses.ts` per fighter, retargeted by `src/render3d/retarget/` |
+| **Move FX** | What the move paints over the model: plasma, rock, sparks, arcs | `src/render/chars/<id>/fx.ts`, on the 2D overlay |
 | **Projectiles** | The fireball, the arrow, the bolt | `chars/<id>/fx.ts` → `projectiles` |
+| **Rig** | The 2D figure: HUD portraits, stock icons, the magnifying glass — and the bone lengths and rest angles the clips are written against | `src/render/chars/<id>/rig.ts` |
 
-Only the middle one is shared, and only by default.
+The play page stacks three canvases: the stage's sky (2D), the 3D world
+(WebGL: the stage, the fighters, their shields, hit sparks and KO blasts), and a
+transparent 2D overlay on top (the HUD, port tags, move effects, projectiles,
+the other particles, the KO flash, the magnifying glass).
+
+### The model pipeline
+
+```bash
+pnpm models:fetch      # the .blend files and textures, at a pinned commit, SHA-256-checked, into .model-cache/
+pnpm models            # Blender (portable, in .model-cache/tools/) exports, joins and optimises one glb per fighter
+pnpm models:check      # what `pnpm run deploy` runs first: every glb present, unchanged, under 25 MiB, built
+                       # against the committed skeletons by this pipeline, and nothing in public/models/ git would take
+```
+
+The models come from Worldblender's Blender re-exports. **Nothing Nintendo made
+is ever committed**: no `.blend`, no glb, no texture, nothing under
+`.model-cache/` or `public/models/`, and no screenshot or capture of a model —
+the repo is public, and a takedown of one file would take the whole repo down.
+What is committed is numbers about the models: the manifest's sizes and
+SHA-256s (`scripts/models/manifest.json`), which meshes are the fighter
+(`scripts/models/meshes.json`), each skeleton's bone names, bind matrices and
+hurt-capsule sizes (`src/render3d/skeletons/*.json`, read out of the `.blend`
+files by a stdlib-only reader, `pnpm models:skeletons`, no Blender), and the
+bake. `noRippedAssets.test.ts` refuses any tracked file whose name, or whose
+size and hash, is a manifest file's.
+
+**Without `pnpm models`, every fighter is a stand-in**: their own hurtbox
+capsules on the same bones, in their port's colour, posed exactly as the model
+would be. A model that fails to
+load is a stand-in for that match only. The game, the sim and every test need
+neither Blender nor the model cache.
+
+### The retarget rule
+
+A clip is still a list of 2D angles, and each angle now drives SSBU bones
+(`src/render3d/retarget/map.ts`): the hip, spine, head, legs and feet keep
+SSBU's own bind stance at the 2D rest pose and turn from it in the side plane;
+the arms, whose bind pose is a T, are first hung straight down and then turned
+to the 2D angle. Every bone a clip does not name keeps its bind pose and rides
+along, and the limbs keep SSBU's lengths — which is the point: hitboxes hang
+off the real limbs. The side view only ever shows the side plane, which is the
+plane the clips are drawn in.
+
+A per-fighter exception goes in `RETARGET_OVERRIDES` against a measured failure
+(Link's and Marth's sword hand is turned a further 90°, because the model holds
+the blade across the fist). A render-only turn of the head toward the camera
+(`faceTurn.ts`) leaves every box bone where it is.
+
+### The bake
+
+`public/bake/roster.bin.gz` is every fighter × every motion × every frame of
+the bones the sim reads, in Q12 integers, made by the same functions the
+renderer runs each frame (clock, clip sample, retarget, root transform). The
+sim's limb hitboxes, the hurtboxes and the ECB all hang off it, and its
+SHA-256 is part of the engine fingerprint online peers compare. Regenerate it
+whenever a clip (`src/render/poses/**`, `chars/*/poses.ts`), a rig's bones or
+scale, a skeleton, a fighter's moves or scripts, or the retargeter changes:
+
+```bash
+UPDATE_BAKE=1 pnpm vitest run src/render3d/bake/roster.test.ts
+```
+
+`roster.test.ts` fails until you do.
+
+### A clip edit is a gameplay edit now
+
+Moving a limb in a clip moves the hitbox and hurtboxes that ride it. After any
+clip change: re-bake, then run the ratchets and look at what moved —
+
+```bash
+pnpm vitest run src/fighters/acmd/reach.test.ts src/fighters/acmd/limb.test.ts src/game/hurtboxes.test.ts
+# regenerate with UPDATE_REACH=1 / UPDATE_LIMB=1 / UPDATE_HURT=1, and review every changed row
+UPDATE_GOLDEN=1 pnpm vitest run src/game/golden.test.ts   # then rewrite RULES_PIN.golden and say why
+```
+
+`reach.test.ts` compares every switched-on move's reach per frame and per
+direction against the legacy box; an entry in `reach.allow.json` needs a class
+and a reason. Check the move in the lab's contact sheet (below), where the
+model and the sim's boxes are drawn together.
 
 ## What you own
 
 Three files, and nobody else opens them:
 
 ```
-src/render/chars/<id>/rig.ts      the look
+src/render/chars/<id>/rig.ts      the 2D figure (portraits, stock icons) and the bones your clips are written against
 src/render/chars/<id>/poses.ts    the clips that are yours rather than everybody's
 src/render/chars/<id>/fx.ts       what your moves paint, and your projectiles
 ```
@@ -113,13 +195,15 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
 };
 ```
 
-Effects are painted **under** the fighter by default, and may return
-`{ hideFigure: true }` to replace them entirely (Kirby's Stone is the only one
-that does).
+Effects are painted on the 2D overlay, which sits in front of the 3D world, so
+everything an effect paints is over the model. An effect may return
+`{ hideFigure: true }` to hide the model entirely (Kirby's Stone is the only one
+that does). The effect's `x, y` is the fighter's feet on screen, moved by the
+clip's own root offset exactly as the model is; its `height` is the model's head
+(the top of its head capsule).
 
-Under the fighter is the right default — a charge glow behind the body, a
-shockwave at the feet — and the wrong one for anything the body is *inside* of.
-Call `over` for those:
+`over` defers a paint until the rest of the effect is down — for anything the
+rest of the effect must not cover:
 
 ```ts
 uair: ({ ctx, x, y, u, over }) => {
@@ -130,12 +214,12 @@ uair: ({ ctx, x, y, u, over }) => {
 
 Queue order is paint order, and the callback runs with the canvas state the
 renderer left rather than the state at the point you called `over` — save and
-restore inside it if it needs one. Samus's drill had its centre occluded by
-Samus for a whole round of iteration, and every fighter's up air puts its
-graphic exactly where the body already is.
+restore inside it if it needs one. (With the 2D figure, `over` was what put a
+paint in front of the body: Samus's drill had its centre occluded by Samus for a
+whole round of iteration.)
 
-`over` still lands *under* the port tag and the shield, both of which are
-readability a move graphic should not bury. If your effect has to be legible
+`over` still lands *under* the port tag, which is readability a move graphic
+should not bury. If your effect has to be legible
 above the head, that is a reason to move it, not to fight the tag: Link's
 boomerang spent two-thirds of its wind-up hidden behind his shoulder across two
 rounds before it was solved authorially, by winding up above the head instead.
@@ -161,7 +245,14 @@ The context arrives translated to the projectile's position and *not* rotated �
 a fireball tumbles, an arrow noses over as it falls, a bomb does neither, so the
 rotation is yours to apply.
 
-## Custom props
+## The 2D figure: portraits, stock icons and props
+
+The rig's capsules, props and palette no longer draw the fighter in a match
+(the model does); they draw the HUD's head portraits and stock icons, the
+character-select art and the magnifying glass, all from the same rig. What
+follows is how that figure is painted.
+
+### Custom props
 
 The shared `PropKind` table is thirty shapes and adding to it is an edit to a
 file everyone lives in. For a shape only you will ever need, use:
@@ -224,10 +315,12 @@ invisible, not subtle.
 ## Two things a rig can declare
 
 **`tagClearance`** — how far your silhouette reaches above your *skeleton*, in
-rig units. The port tag is placed from `rigHeight`, which measures bones and the
-head circle and knows nothing about props, so a fighter whose identifying shape
-sits on top of their head wears the tag on it. Four characters hit this
-independently. Declare it and the tag rises; leave it and nothing changes.
+rig units. Over the 3D world the port tag hangs a unit above the model's head
+capsule; only without a bake is it placed from `rigHeight`, which measures bones
+and the head circle and knows nothing about props, so a fighter whose
+identifying shape sits on top of their head wore the tag on it. Four characters
+hit this independently. Declare it and that fallback tag rises; leave it and
+nothing changes.
 
 **`extra`** — a fifth palette role, for a fighter with a surface the other four
 cannot carry. Marth's cape is the case: it is a distinct colour from his tunic,
@@ -278,16 +371,22 @@ passing?*
 ```bash
 npm run dev                                            # once
 
-# The pose, frame by frame, at the action's true length.
-node scripts/animsheet.mjs fsmash --fighter link --move fsmash --out /tmp/x.png
+# The pose, frame by frame, at the action's true length: the model (or its
+# stand-in) in every cell, with the sim's hitboxes (red) and hurtboxes (yellow).
+node scripts/animsheet.mjs attack --fighter link --move fsmash --out /tmp/x.png
 
-# The move as actually played: swing arc, projectile, hit spark, the opponent
-# flinching. Drives a real match and hand-cranks the clock.
+# The move as actually played: projectile, hit spark, the opponent flinching.
+# Drives a real match and hand-cranks the clock.
 node scripts/fightsheet.mjs --fighter link --move fsmash --out /tmp/y.png
 node scripts/fightsheet.mjs --fighter samus --move neutralB --frames 0,8,16,24,32
 ```
 
-Also `http://localhost:3000/anim` interactively, with onion skin and a scrubber.
+Also `http://localhost:3000/anim` interactively: the same contact sheet, one cell
+per simulation frame, for any fighter and action. It is the one place a clip's
+limbs and the boxes that ride them are drawn together, so it is where a clip
+edit is checked. Without `--out`, captures land in the git-ignored
+`test-results/anim/`: a picture of a real model is as unshippable as the model,
+so never commit one, wherever it was written.
 
 **A screenshot is the deliverable, not the check.** Look at it. If you cannot
 say which frame is the contact frame, neither can a player.
@@ -298,8 +397,8 @@ say which frame is the contact frame, neither can a player.
   startup, active frames, FAF, landing lag per move per character.
 - **Hitbox visualisation** — <https://rubendal.github.io/ssbu/#/Character> and
   <https://github.com/RSN-Bran/ultimate-hitboxes>.
-- **Models** — <https://gitlab.com/Worldblender/smash-ultimate-models-exported>
-  for proportion and silhouette.
+- **Models** — <https://gitlab.com/Worldblender/smash-ultimate-models-exported>,
+  which `pnpm models:fetch` fetches at a pinned commit (never committed here).
 - SmashWiki per-character pages for what each move *is* — the name and the
   motion, which is what you are drawing.
 

@@ -1,9 +1,10 @@
 /**
- * The two callers who draw a fighter have to drain the effect's over-queue.
+ * The overlay has to drain the effect's over-queue.
  *
  * `drawMoveFx` hands back the paints an effect deferred, and everything about
  * whether they reach the screen is the *caller's* obligation — a `for` loop
- * after `drawFigure` in the renderer, and the same loop in the animation lab.
+ * after the effect in the renderer. (The animation lab drew a 2D figure and
+ * drained it too, until Plan 4 replaced its 2D cells with the 3D sheet.)
  * Forgetting it is silent in the worst way: the effect still paints its under
  * layer, so the move looks like a slightly incomplete version of itself rather
  * than like a bug, and the author reads that as their own drawing being wrong.
@@ -31,6 +32,7 @@ vi.mock("./specialFx", async (importOriginal) => {
 
 const { render } = await import("./renderer");
 const { createCamera } = await import("./camera");
+const { PANEL_INK, withAlpha } = await import("./characterArt");
 const { createHudState } = await import("./hud");
 const { createVfx } = await import("./vfx");
 const { createMockContext } = await import("./mockContext");
@@ -58,68 +60,27 @@ describe("the renderer drains what an effect deferred", () => {
   }
 
   /**
-   * Where the mark landed relative to the figure.
+   * Where the mark landed relative to the port tag.
    *
-   * Counting the mark proves it was painted; it does not prove it was painted
-   * *after* the body, which is the entire point of the layer. A caller that
-   * drained the queue before `drawFigure` would paint exactly one mark, under
-   * the fighter, and satisfy a test that only counts.
-   *
-   * The figure's own sentinel is the round line cap: capsules are the only
-   * thing drawn that way, and nothing before the fighters uses it.
+   * Counting the mark proves it was painted; it does not prove *where* in the
+   * fighter's layers. The figure is the 3D model now, under this canvas, so the
+   * deferred layer is over it whenever it is painted at all; what is left to get
+   * wrong is the port tag, which is readability the player needs and a move
+   * graphic must not bury. The tag's sentinel is its panel, the only shape
+   * painted in `PANEL_INK` at 0.82.
    */
   function order(ctx: ReturnType<typeof createMockContext>): { marks: number; after: boolean } {
     const mark = ctx.calls.findIndex((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x);
-    const figure = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
+    const tag = ctx.calls.findIndex((c) => c.method === "set:fillStyle" && c.args[0] === withAlpha(PANEL_INK, 0.82));
     return {
       marks: ctx.calls.filter((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x).length,
-      after: mark > figure && figure >= 0,
+      after: mark >= 0 && tag > mark,
     };
   }
 
-  it("paints it once per fighter, after the figure", () => {
+  it("paints it once per fighter, under the port tag", () => {
     const { marks: n, after } = marks();
     expect(n, "the over-queue never reached the canvas").toBe(1);
-    expect(after, "the deferred paint landed under the figure, not over it").toBe(true);
-  });
-});
-
-/**
- * The lab is the other half of the contract, and it was not being checked.
- *
- * This file said "both callers that draw a fighter must drain the queue" and
- * then only ever called `render`. Deleting the lab's own `for (const paint of
- * fx.over)` loop left every assertion above green — so the test named the
- * contract it was failing to enforce, which is the most expensive kind of test
- * to have: it reads as coverage.
- */
-describe("the animation lab drains it too", () => {
-  it("paints the deferred layer in the authoring view", async () => {
-    const { drawCell } = await import("@/app/anim/page");
-    const ctx = createMockContext(800, 600);
-    drawCell(
-      ctx as unknown as CanvasRenderingContext2D,
-      {
-        fighterId: "kirby",
-        action: "special",
-        move: "downB",
-        jumpsUsed: 0,
-        fastFalling: false,
-      },
-      12,
-      400,
-      500,
-      9,
-    );
-    const mark = ctx.calls.findIndex((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x);
-    const figure = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
-    expect(
-      ctx.calls.filter((c) => c.method === "fillRect" && c.args[0] === OVER_MARK.x).length,
-      "the lab never drained the over-queue",
-    ).toBe(1);
-    // Kirby's Stone hides the figure, so there is no body sentinel on this
-    // frame — pick a fighter who is drawn, so ordering is observable at all.
-    expect(figure, "no figure was drawn, so ordering proves nothing here").toBeGreaterThan(-1);
-    expect(mark > figure, "the lab painted the deferred layer under the figure").toBe(true);
+    expect(after, "the deferred paint landed over the port tag").toBe(true);
   });
 });

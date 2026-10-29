@@ -94,8 +94,9 @@ export interface MatchAudio {
 
 /**
  * The shield is up — including `shieldRelease`, whose bubble is still shrinking
- * on screen. Kept identical to `drawShield`'s predicate on purpose: a hum that
- * stops while a bubble is still visible is a bug you hear before you see.
+ * on screen. Kept identical to the 3D bubble's predicate on purpose
+ * (`render3d/vfx3d.ts` `shieldLook`): a hum that stops while a bubble is still
+ * visible is a bug you hear before you see.
  */
 function isShielding(f: FighterState): boolean {
   return (
@@ -156,10 +157,10 @@ export interface MatchRunnerOptions {
   readonly audio?: MatchAudio | null;
   readonly onEnd?: (outcome: MatchOutcome) => void;
   readonly onFrame?: (state: GameState, events: StepEvents) => void;
-  readonly debugSilhouette?: boolean;
   /**
    * The 3D world under the overlay canvas (Plan 4, `render3d/renderer3d.ts`).
-   * Absent: the whole frame is drawn in 2D on the canvas given to `start`.
+   * The play page always passes one; it is optional so unit tests can run a
+   * match without a GPU, and then only the overlay is drawn.
    */
   readonly presenter?: WorldPresenter | null;
   /** The stage's 2D background, under the 3D layer. Only read with a presenter. */
@@ -231,7 +232,6 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     audio = null,
     onEnd,
     onFrame,
-    debugSilhouette = false,
     presenter = null,
     background = null,
   } = options;
@@ -381,8 +381,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     // screen ever expires: sparks pile up to the particle cap and stay, a hit
     // fighter stays white, and the full-screen flash a lost stock puts up never
     // lifts. `stepVfx` is the composite that runs both in the right order, plus
-    // the three trackers that read cosmetic state off the fighters directly
-    // (dodge afterimages, charge motes, damage smoke) and which nothing else
+    // the trackers that read cosmetic state off the fighters directly (ground
+    // dust, launch trails, charge motes, damage smoke) and which nothing else
     // calls at all.
     stepVfx(vfx, events, state, defs);
     updateHud(hud, state);
@@ -419,8 +419,6 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       cpu: players.map((p) => p.cpuLevel !== null),
       vfx,
       hud,
-      debugSilhouette,
-      world3d: presenter !== null,
       // The 3D model's head, from the bake the sim steps with (Plan 4).
       anchors:
         presenter === null

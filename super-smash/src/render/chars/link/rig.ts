@@ -220,9 +220,10 @@ function quiver(b: Brush): void {
  * magnified captures put the drawn blade at 0.23–0.29 H against a wanted 0.55
  * and called it a gladius.
  *
- * It also explained something that looked unrelated. `swing.ts` derives the
- * swoosh from the move's own hitboxes, so on the forward smash the arc reaches
- * 13.7 world units from his centre — and the sword tip reached 10. The graphic
+ * It also explained something that looked unrelated. The 2D swing arc (removed
+ * in Plan 4) derived the swoosh from the move's own hitboxes, so on the forward
+ * smash the arc reached 13.7 world units from his centre — and the sword tip
+ * reached 10. The graphic
  * that says "this is how far the move goes" and the weapon that is supposed to
  * be making it were four units apart, which reads as two swings happening at
  * once. Lengthening the blade closes most of that gap without touching a

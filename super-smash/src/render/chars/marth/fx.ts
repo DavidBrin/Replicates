@@ -293,9 +293,9 @@ function paintTip(c: FxContext, point: BladePoint, k: number, s: number): void {
   const px = x + dir * point.x * u;
   const py = y - point.y * u;
   const sx = x;
-  // 0.68 rather than `swing.ts`'s 0.55. That pivot is a compromise across eight
-  // rigs; this one only has to serve Marth, whose shoulder sits at 9.6 of the
-  // 14.1 rig units between his feet and his crown. Getting it wrong does not
+  // 0.68 rather than the 2D swing arc's 0.55 (removed in Plan 4). That pivot was
+  // a compromise across eight rigs; this one only has to serve Marth, whose
+  // shoulder sits at 9.6 of the 14.1 rig units between his feet and his crown. Getting it wrong does not
   // move the flash — it tilts the star off the line of the blade, which is the
   // one thing that makes it read as a sword's point rather than a firefly.
   const sy = y - height * 0.68 * u;
@@ -513,8 +513,9 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    *   frames 33-44  the riposte: the starburst first, then the crescent sweeping
    *                 214° → 100° (down behind, under, out forward) with the
    *                 trailing edge two frames behind the leading one, then the
-   *                 ring. No hitbox lives there, so `swing.ts` draws nothing of
-   *                 its own and this is the whole graphic of the cut.
+   *                 ring. No hitbox lives there, so the 2D swing arc (removed in
+   *                 Plan 4) drew nothing of its own and this is the whole graphic
+   *                 of the cut.
    *
    * The blade's rig-unit endpoints below are measured off the clip's own guard
    * key rather than guessed, which is why they moved this round: the guard used

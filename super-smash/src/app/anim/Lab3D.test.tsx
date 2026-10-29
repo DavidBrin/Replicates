@@ -1,5 +1,5 @@
 /**
- * The lab's model sheet (Plan 4, Task 21): the fighter's model posed by the
+ * The lab's contact sheet (Plan 4, Tasks 21 and 23): the fighter's model posed by the
  * match's own `drawnPose`, one cell per frame at the action's true length, with
  * the boxes the sim plays drawn over each cell (red hitboxes, yellow hurtboxes).
  *
@@ -374,8 +374,8 @@ describe("Lab3D", () => {
 
   it("says what it is drawing and marks the sheet drawn once every cell is", async () => {
     const { getByLabelText, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={4} />);
-    await findByText(/model sheet — stand-in \(test\)/);
-    await waitFor(() => expect(getByLabelText("Model sheet")).toHaveAttribute("data-drawn", "true"));
+    await findByText(/contact sheet — stand-in \(test\)/);
+    await waitFor(() => expect(getByLabelText("Contact sheet")).toHaveAttribute("data-drawn", "true"));
   });
 
   it("makes no second renderer for a new action or fighter, and frees the one it has on unmount", async () => {
@@ -427,9 +427,9 @@ describe("Lab3D", () => {
     const { findByText, getByLabelText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
     await findByText(/Could not load the fighters' animation data \(HTTP 404\)\./);
     expect(gl.FakeGL.all.flatMap((r) => r.draws)).toEqual([]);
-    // `animsheet --view 3d` reads this, and fails at once with it rather than waiting out its timeout.
-    expect(getByLabelText("Model sheet")).toHaveAttribute("data-error", "Could not load the fighters' animation data (HTTP 404).");
-    expect(getByLabelText("Model sheet")).not.toHaveAttribute("data-drawn");
+    // `scripts/animsheet.mjs` reads this, and fails at once with it rather than waiting out its timeout.
+    expect(getByLabelText("Contact sheet")).toHaveAttribute("data-error", "Could not load the fighters' animation data (HTTP 404).");
+    expect(getByLabelText("Contact sheet")).not.toHaveAttribute("data-drawn");
   });
 
   it("says why when a fighter's model will not build, marks the sheet failed, and draws nothing", async () => {
@@ -443,16 +443,16 @@ describe("Lab3D", () => {
       },
     });
     const { findByText, getByLabelText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
-    await findByText(/model sheet — broken glb/);
-    expect(getByLabelText("Model sheet")).toHaveAttribute("data-error", "broken glb");
-    expect(getByLabelText("Model sheet")).not.toHaveAttribute("data-drawn");
+    await findByText(/contact sheet — broken glb/);
+    expect(getByLabelText("Contact sheet")).toHaveAttribute("data-error", "broken glb");
+    expect(getByLabelText("Contact sheet")).not.toHaveAttribute("data-drawn");
     expect(gl.FakeGL.all.flatMap((r) => r.draws)).toEqual([]);
   });
 
   it("is a scroll container of its own, so an 1800 px sheet never scrolls the page sideways", async () => {
     const { getByLabelText, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
-    await findByText(/model sheet — stand-in/);
-    expect(getByLabelText("Model sheet").parentElement).toHaveStyle({ maxWidth: "100%", overflowX: "auto" });
+    await findByText(/contact sheet — stand-in/);
+    expect(getByLabelText("Contact sheet").parentElement).toHaveStyle({ maxWidth: "100%", overflowX: "auto" });
   });
 });
 
@@ -488,7 +488,7 @@ describe("Lab3D frees what the GPU holds of a model it drew", () => {
   it("when its fighter goes: a switch to another fighter", async () => {
     const freed = cachedMario();
     const { rerender, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
-    await findByText(/model sheet — model/);
+    await findByText(/contact sheet — model/);
     await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
     // In use, so not freed while it is drawn.
     expect(freed.geometry).not.toHaveBeenCalled();
@@ -502,7 +502,7 @@ describe("Lab3D frees what the GPU holds of a model it drew", () => {
   it("when the sheet leaves the page", async () => {
     const freed = cachedMario();
     const { unmount, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
-    await findByText(/model sheet — model/);
+    await findByText(/contact sheet — model/);
     await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
     expect(freed.geometry).not.toHaveBeenCalled();
 
@@ -514,7 +514,7 @@ describe("Lab3D frees what the GPU holds of a model it drew", () => {
   it("but not on a new action for the same fighter, which keeps drawing the same model", async () => {
     const freed = cachedMario();
     const { rerender, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
-    await findByText(/model sheet — model/);
+    await findByText(/contact sheet — model/);
     await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
 
     rerender(<Lab3D options={opts({ action: "stand", move: "fsmash" })} total={20} frame={0} />);

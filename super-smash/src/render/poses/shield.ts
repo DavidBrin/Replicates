@@ -1,16 +1,18 @@
 /**
  * Holding shield, and dropping it.
  *
- * ## What `drawShield` leaves for the pose to do
+ * ## What the shield bubble leaves for the pose to do
  *
- * This is the clip in the library that is mostly *covered up*. `drawShield`
- * fills a port-coloured disc of radius `0.92 × fighterHeight × (0.5 + 0.5 ×
- * hp)`, centred half a body up, over everything below — at full health that is
- * a bubble nearly twice the fighter's height, and even an almost-broken shield
- * still swallows the torso. The fill is only a quarter opaque, so the fighter
- * is not hidden so much as washed — but a coloured wash plus a heavy ring, on a
- * figure an eighth of the screen tall, is the end of anything between the hips
- * and the chin.
+ * This is the clip in the library that is mostly *covered up*. It was shaped
+ * against the 2D bubble Plan 1 drew: a port-coloured disc of radius `0.92 ×
+ * fighterHeight × (0.5 + 0.5 × hp)`, centred half a body up, over everything
+ * below — at full health a bubble nearly twice the fighter's height, and even
+ * an almost-broken shield still swallowed the torso. The fill was only a
+ * quarter opaque, so the fighter was not hidden so much as washed — but a
+ * coloured wash plus a heavy ring, on a figure an eighth of the screen tall, is
+ * the end of anything between the hips and the chin. Plan 4 draws the sim's own
+ * bubble instead (`render3d/vfx3d.ts` `shieldLook`, from `shieldBubble`), which
+ * covers less of an SSBU-sized body (D57); the choices below still hold.
  *
  * So the effort here is deliberately lopsided, and the next person to open this
  * file should know that was a choice rather than an unfinished job. Three

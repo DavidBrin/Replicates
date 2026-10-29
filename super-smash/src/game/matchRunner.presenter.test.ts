@@ -58,8 +58,7 @@ describe("the match runner with a 3D presenter", () => {
     runner.stop();
     runner.advance(3);
     expect(presenter.paint).toHaveBeenCalledTimes(1);
-    const [rs, , , hidden] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(rs.world3d).toBe(true);
+    const [, , , hidden] = (presenter.paint as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(hidden).toEqual([false, false]);
     runner.dispose();
     expect(presenter.dispose).toHaveBeenCalledOnce();
@@ -70,7 +69,8 @@ describe("the match runner with a 3D presenter", () => {
     expect(background.calls.some((c) => c.method === "fillRect")).toBe(true);
   });
 
-  it("draws the whole frame in 2D, as before, with no presenter", () => {
+  /** Plan 4, Task 23: the overlay is the only 2D mode. Without a presenter (a unit test, no GPU) there is no world under it. */
+  it("draws only the overlay with no presenter: cleared, no sky and no fighter", () => {
     const overlay = createMockContext();
     const runner = createMatchRunner({
       stage: getStageOrThrow("battlefield"),
@@ -84,7 +84,10 @@ describe("the match runner with a 3D presenter", () => {
     runner.start(canvasWith(overlay));
     runner.stop();
     runner.advance(1);
-    expect(overlay.calls.some((c) => c.method === "fillRect" && c.args[2] === 1920 && c.args[3] === 1080)).toBe(true);
+    expect(overlay.calls.some((c) => c.method === "clearRect")).toBe(true);
+    expect(overlay.calls.some((c) => c.method === "fillRect" && c.args[2] === 1920 && c.args[3] === 1080)).toBe(false);
+    // The HUD is still drawn.
+    expect(overlay.calls.some((c) => c.method === "fillText")).toBe(true);
     runner.dispose();
   });
 

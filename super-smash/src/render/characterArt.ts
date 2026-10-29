@@ -13,8 +13,9 @@
  * Kong is a barrel with legs a third of his height and arms past his knees;
  * Pikachu's head is nearly as wide as his body; Marth is a third narrower than
  * Mario everywhere. Blacked out at thumbnail size these are already four
- * different characters, before a single colour is chosen. `debugSilhouette`
- * exists so that claim can be checked rather than asserted.
+ * different characters, before a single colour is chosen. The `silhouette`
+ * draw mode paints exactly that flat shape (the stock icons are drawn in it), so
+ * the claim can be checked rather than asserted.
  *
  * **2. One prop that breaks the outline.** Fighting games are read at the
  * edges: Fox's ears and tail, Samus's pauldrons and arm cannon, Link's cap and
@@ -106,8 +107,6 @@ export {
   FEET,
   DEFAULT_RIG,
   PROP_STILL,
-  propAnimFor,
-  rimWidthFor,
   type Brush,
   type DrawMode,
   type PropAnim,
@@ -930,28 +929,7 @@ export function hitlagShake(fighter: Pick<FighterState, "hitlag">): number {
   return (fighter.hitlag % 2 === 0 ? 1 : -1) * k * 0.55;
 }
 
-/* ----------------------------------------------------- port ring & tag ---- */
-
-/** The soft port-coloured disc under a grounded fighter. */
-export function drawPortRing(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radius: number,
-  port: number,
-  alpha = 0.65,
-): void {
-  const colour = PORT_COLOURS[port % PORT_COLOURS.length];
-  ctx.save();
-  ellipse(ctx, x, y, radius, radius * 0.32);
-  ctx.fillStyle = withAlpha(colour, alpha * 0.28);
-  ctx.fill();
-  ctx.strokeStyle = withAlpha(colour, alpha);
-  ctx.lineWidth = Math.max(2, radius * 0.1);
-  ctx.lineCap = "square";
-  ctx.stroke();
-  ctx.restore();
-}
+/* ------------------------------------------------------------- port tag ---- */
 
 /** "P1" / "CPU" on a port-coloured chevron above the head. */
 export function drawPortTag(

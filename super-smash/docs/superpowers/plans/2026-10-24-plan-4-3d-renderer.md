@@ -9523,7 +9523,7 @@ git commit -m "super-smash: 3D by default; remove the dead Canvas2D fighter path
 
 ## Interfaces for later phases
 
-Exact definitions Plan 5 (specials, Final Smash, CPU, controls) builds on, as committed by the end of this plan.
+Exact definitions Plan 5 (specials, Final Smash, CPU, controls) builds on, as committed by the end of this plan. Updated at Task 23 to the code as it landed (rulings R1 and R4, Tasks 9 and 10): `statusMotion` reads `charge`, `statusDuration` needs the fighter's def and is mirrored by `actionDurationFor`, and `withLimbScripts` takes the bone table to place through.
 
 ### The bake and the pose clock (`src/engine/acmd/`)
 
@@ -9533,10 +9533,17 @@ export type ClockKind = "script" | "once" | "scaled" | "loop" | "idle" | "paced"
 export interface MotionClock { readonly kind: ClockKind; readonly frames: number }
 export const SCALED_FRAMES = 60;
 export const STRIDE_UNITS = 36;
+export const IDLE_PORT_OFFSET = 27;
+export const OPEN_ENDED_FRAMES = 30;
 export function playsMoveScript(action: ActionState): boolean;
-export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling">): MotionKind; // "status_<action>", "_aerial", "_fast"
+// "status_<action>", "_aerial", "_fast"; an air dodge's direction class from `charge`
+// ("status_airDodge", "_side", "_up", "_down", "_diagUp", "_diagDown") and "status_roll_back" (R4)
+export function statusMotion(f: Pick<FighterState, "action" | "jumpsUsed" | "fastFalling" | "charge">): MotionKind;
 export const VARIABLE_LENGTH_ACTIONS: ReadonlySet<ActionState>;
-export function statusDuration(f, def?: FighterDef): number | undefined;
+export function jumpRiseFrames(p: FighterParams, f: Pick<FighterState, "actionFrame" | "jumpsUsed" | "shortHop" | "vy">): number;
+// the fighter's own lengths (dodges per fighter and direction); case for case render/poses/timing.ts
+// `actionDurationFor` (src/render/poses/statusDuration.test.ts holds the two equal)
+export function statusDuration(f: Pick<FighterState, "action" | "actionFrame" | "charge" | "hitstun" | "jumpsUsed" | "shortHop" | "vy">, def: FighterDef): number | undefined;
 export type ClockLookup = (fighterId: string, motion: MotionKind) => MotionClock | undefined;
 export interface PoseIndex { readonly motion: MotionKind; readonly frame: number }
 export function poseIndexOf(def: FighterDef, f: ClockedFighter, globalFrame: number, clockOf: ClockLookup): PoseIndex | null;
@@ -9571,8 +9578,8 @@ interface SimContext { readonly bones?: BoneTable; readonly bake?: BakeTables /*
 ```
 
 **Adding a motion to the bake (Plan 5: counters, reflectors, wall jump, footstool, Final Smash).**
-- *A new status:* follow Plan 2's four-part rule (an `ActionState` member, a `StatusKind`, a `FighterStatus`, an `ALL_STATUSES` entry). `statusMotion` names its motion `status_<action>` automatically and `statusMotionSpecs()` bakes it. Give it a clip: a case in `poseNameFor` (`render/poses/timing.ts`) naming an existing or new `PoseName` (a new clip is a file in `render/poses/` plus a `POSE_LIBRARY` entry, or a fighter's own in `chars/<id>/poses.ts`). If its length is a constant, add the case to `statusDuration`; if it varies per frame of play, also add the action to `VARIABLE_LENGTH_ACTIONS`. Then `UPDATE_BAKE=1 pnpm vitest run src/render3d/bake/roster.test.ts` and `UPDATE_GOLDEN=1 …`.
-- *A new or changed move:* its motion is its active script's on the game's fighter (`gameScriptFor(withLimbScripts(def), slot).motion`) at the script's motion frames; its clip is `SLOT_POSE[slot]` (with the fighter's override). A script that names a bone the committed skeleton lacks makes `bakeFighter` throw naming it; add the bone to the skeleton by re-running Task 6 Step 6 (it keeps every bone any reference script names). Re-bake, then run `limb.test.ts`, `reach.test.ts` and `hurtboxes.test.ts` (regenerate with `UPDATE_LIMB=1` / `UPDATE_REACH=1` / `UPDATE_HURT=1` and review). A move switched on in a new script table must also reach `GAME_ENGINE_RULES.activeSlots`, or two builds that differ in it share a fingerprint.
+- *A new status:* follow Plan 2's four-part rule (an `ActionState` member, a `StatusKind`, a `FighterStatus`, an `ALL_STATUSES` entry). `statusMotion` names its motion `status_<action>` automatically and `statusMotionSpecs()` bakes it. Give it a clip: a case in `poseNameFor` (`render/poses/timing.ts`) naming an existing or new `PoseName` (a new clip is a file in `render/poses/` plus a `POSE_LIBRARY` entry, or a fighter's own in `chars/<id>/poses.ts`). If its length is a constant, add the case to **both** `statusDuration` (`engine/acmd/poseClock.ts`) and `actionDurationFor` (`render/poses/timing.ts`): `statusDuration.test.ts` fails until the two agree. If it varies per frame of play, also add the action to `VARIABLE_LENGTH_ACTIONS`. **If its motion depends on `charge`** (as the air dodge's direction and the roll's way do, R4), give `statusMotion` the suffix and the action a `DODGE_CHARGES` entry in `render3d/bake/bake.ts`, one charge the sim gives per motion: `statusMotionSpecs()` bakes only the charges listed there (0 otherwise), and `bake.test.ts` fails until every motion `statusMotion` can name is baked, at a charge the sim gives it. Then `UPDATE_BAKE=1 pnpm vitest run src/render3d/bake/roster.test.ts` and `UPDATE_GOLDEN=1 …`.
+- *A new or changed move:* its motion is its active script's on the game's fighter (`gameScriptFor(withLimbScripts(def, bake.bones), slot).motion`; the bake's own input is the no-sync form, `withLimbScripts(def, null)`, R1) at the script's motion frames; its clip is `SLOT_POSE[slot]` (with the fighter's override). A script that names a bone the committed skeleton lacks makes `bakeFighter` throw naming it; add the bone to the skeleton by re-running Task 6 Step 6 (it keeps every bone any reference script names). Re-bake, then run `limb.test.ts`, `reach.test.ts` and `hurtboxes.test.ts` (regenerate with `UPDATE_LIMB=1` / `UPDATE_REACH=1` / `UPDATE_HURT=1` and review). A move switched on in a new script table must also reach `GAME_ENGINE_RULES.activeSlots`, or two builds that differ in it share a fingerprint.
 - *A Final Smash cinematic* that moves a fighter outside the side plane: the bake only stores the side-plane projection; a cinematic camera belongs to the presenter (below), not the bake.
 
 ### The 3D layer (`src/render3d/`)

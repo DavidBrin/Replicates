@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { fx } from "@/engine/fixed";
-import { SHIELD_MAX_HEALTH } from "@/engine/constants";
 import { FIGHTER_UNITS, MAX_ZOOM, createCamera } from "./camera";
 import { PORT_COLOURS, hexToRgb } from "./characterArt";
 import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
@@ -11,7 +10,6 @@ import {
   createVfx,
   drawKoFlash,
   drawParticles,
-  drawShield,
   drawSmashBall,
   drawStarKos,
   hitFlashAmount,
@@ -20,7 +18,6 @@ import {
   spawnHitSpark,
   stepVfx,
   footPlanted,
-  trackAfterimages,
   trackGroundFx,
   trackLaunchTrails,
   updateVfx,
@@ -65,7 +62,9 @@ describe("events, not state", () => {
     ingestEvents(v, hit(), state);
     const afterOne = v.particles.length;
     for (let i = 0; i < 8; i++) {
-      trackAfterimages(v, state);
+      // The trackers that read state run again on every re-simulation.
+      trackGroundFx(v, state);
+      trackLaunchTrails(v, state);
       updateVfx(v);
     }
     expect(afterOne).toBeGreaterThan(0);
@@ -270,7 +269,7 @@ describe("expiry", () => {
     expect(v.particles.length).toBeLessThanOrEqual(640);
   });
 
-  it("clears afterimages, star KOs and screen KOs too", () => {
+  it("clears star KOs and screen KOs too", () => {
     const v = createVfx();
     ingestEvents(
       v,
@@ -291,40 +290,12 @@ describe("expiry", () => {
   });
 });
 
-describe("shields", () => {
-  it("is drawn only while shielding", () => {
-    const idle = createMockContext();
-    const held = createMockContext();
-    const v = createVfx();
-    drawShield(idle, v, makeFighter({ action: "stand" }), cam, 13);
-    drawShield(held, v, makeFighter({ action: "shield" }), cam, 13);
-    expect(countOf(idle, "arc")).toBe(0);
-    expect(countOf(held, "arc")).toBeGreaterThan(0);
-  });
-
-  it("shrinks as shield HP drops", () => {
-    const radii: number[] = [];
-    for (const hp of [1, 0.6, 0.2, 0]) {
-      const ctx = createMockContext();
-      drawShield(
-        ctx,
-        createVfx(),
-        makeFighter({ action: "shield", shieldHealth: Math.round(SHIELD_MAX_HEALTH * hp) }),
-        cam,
-        13,
-      );
-      radii.push(callsOf(ctx, "arc")[0].args[2] as number);
-    }
-    for (let i = 1; i < radii.length; i++) expect(radii[i]).toBeLessThan(radii[i - 1]);
-  });
-
-  it("is port-coloured", () => {
-    const ctx = createMockContext();
-    drawShield(ctx, createVfx(), makeFighter({ port: 1, action: "shield" }), cam, 13);
-    expect(assignmentsTo(ctx, "fillStyle").some((s) => String(s).includes("59, 123, 254"))).toBe(true);
-  });
-
-  it("flashes white on a perfect shield — which Ultimate scores on release", () => {
+/**
+ * The shield bubble is the 3D layer's (`render3d/vfx3d.ts` `shieldLook`, tested
+ * there); what is left here is the perfect-shield flash it reads.
+ */
+describe("the perfect-shield flash", () => {
+  it("flashes on a perfect shield — which Ultimate scores on release", () => {
     const v = createVfx();
     const state = makeState({
       fighters: [
@@ -334,10 +305,6 @@ describe("shields", () => {
     });
     ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
     expect(v.parryFlash[1]).toBeGreaterThan(0);
-
-    const ctx = createMockContext();
-    drawShield(ctx, v, state.fighters[1], cam, 13);
-    expect(assignmentsTo(ctx, "fillStyle").some((s) => String(s).includes("255, 255, 255"))).toBe(true);
   });
 
   it("does not flash for a shield hit outside the release window", () => {
@@ -347,17 +314,6 @@ describe("shields", () => {
     });
     ingestEvents(v, makeEvents({ shieldHits: [{ victim: 1, x: 0, y: 0 }] }), state);
     expect(v.parryFlash[1]).toBe(0);
-  });
-
-  it("fades out over the drop animation", () => {
-    const early = createMockContext();
-    const late = createMockContext();
-    const v = createVfx();
-    drawShield(early, v, makeFighter({ action: "shieldRelease", actionFrame: 1 }), cam, 13);
-    drawShield(late, v, makeFighter({ action: "shieldRelease", actionFrame: 10 }), cam, 13);
-    const alpha = (c: typeof early) =>
-      Number(String(assignmentsTo(c, "fillStyle")[0]).match(/([\d.]+)\)$/)?.[1] ?? 0);
-    expect(alpha(late)).toBeLessThan(alpha(early));
   });
 });
 
@@ -400,17 +356,6 @@ describe("KOs", () => {
 });
 
 describe("continuous effects", () => {
-  it("trails afterimages only while a dodge is actually intangible", () => {
-    const v = createVfx();
-    trackAfterimages(v, makeState({ fighters: [makeFighter({ action: "roll", intangible: 0 })] }));
-    expect(v.afterimages).toHaveLength(0);
-    trackAfterimages(
-      v,
-      makeState({ fighters: [makeFighter({ action: "roll", intangible: 8, actionFrame: 4 })] }),
-    );
-    expect(v.afterimages).toHaveLength(1);
-  });
-
   it("emits charge motes only while a smash is held", () => {
     const idle = createVfx();
     stepVfx(idle, null, makeState({ fighters: [makeFighter({ charge: 0 })] }));

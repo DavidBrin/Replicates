@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The animation lab in 3D (Plan 4): the fighter's SSBU model posed by the same
+ * The animation lab's contact sheet, in 3D (Plan 4): the fighter's SSBU model posed by the same
  * `drawnPose` the match uses (`Fighter3D`, through the shared retarget
  * `driveFor` reads), one cell per frame at the action's true length, with this
  * frame's hitboxes (red) and hurtboxes (yellow) drawn over it from the sim's own
@@ -37,7 +37,7 @@ import { createLights, drawnResources } from "@/render3d/renderer3d";
 import { SKELETONS } from "@/render3d/skeletons";
 import { fighterAt, gameFighterFor, type Options } from "./page";
 
-/** One cell's side in pixels and the cells per row: the 2D contact sheet's, so the two sheets read alike. */
+/** One cell's side in pixels and the cells per row (the 2D contact sheet's, which this replaced in Plan 4). */
 export const CELL = 150;
 export const COLUMNS = 12;
 
@@ -319,12 +319,12 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
   return (
     <section>
       <div style={{ color: "#7C8896", fontSize: 12, margin: "6px 0" }}>
-        model sheet — {status}; red: hitboxes, yellow: hurtboxes (the sim&apos;s own) — frame {frame}
+        contact sheet — {status}; red: hitboxes, yellow: hurtboxes (the sim&apos;s own) — frame {frame}
       </div>
       {/* The sheet is 150 px a cell, 1800 px across: its own scroll container, so a narrow window does not scroll the page. */}
       <div style={{ maxWidth: "100%", overflowX: "auto" }}>
-        {/* `data-drawn` once every cell is drawn, `data-error` with why when it cannot be (`animsheet --view 3d` waits for either). */}
-        <div ref={sheet} aria-label="Model sheet" data-error={failure ?? undefined} style={{ position: "relative", display: "block", width: "max-content" }}>
+        {/* `data-drawn` once every cell is drawn, `data-error` with why when it cannot be (`scripts/animsheet.mjs` waits for either). */}
+        <div ref={sheet} aria-label="Contact sheet" data-error={failure ?? undefined} style={{ position: "relative", display: "block", width: "max-content" }}>
           <canvas ref={gl} style={{ display: "block" }} />
           <canvas ref={overlay} style={{ position: "absolute", inset: 0 }} />
         </div>

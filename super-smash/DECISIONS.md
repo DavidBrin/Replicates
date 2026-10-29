@@ -2466,9 +2466,9 @@ And the rulings made after this entry's first draft, in the final wave:
   diverge earlier than they otherwise would (a shield start and a turnaround hand off a frame
   sooner), and a jump out of shield is possible a frame sooner.
 - *The spot dodge and the rolls come from UFD, per fighter, under the air dodge's convention*
-  (the final review, Minor 1); dodge staling is an open question. Cost: their animations still
-  run on Plan 1's 24- and 31-frame timing and drift from the new lengths (a Plan 4 render
-  re-time, as 20c did for the air dodge), and the spot dodge's cancel is not modelled.
+  (the final review, Minor 1); dodge staling is an open question. Cost: their animations ran
+  on Plan 1's 24- and 31-frame timing and drifted from the new lengths until Plan 4 Task 9b
+  re-timed them (closed, D57), and the spot dodge's cancel is not modelled.
 - *The release runs ASDI, the clamp, a ground re-check, then the launch* (Important 1 and the
   Task 19 re-review's N2). Cost: a clamp tie at an origin exactly on a platform's edge still
   differs (`clampShiftToStage` uses `> reach`, `resolveCollision` `>= reach`); `physics.test.ts`
@@ -2716,9 +2716,9 @@ under `.superpowers/sdd/` (`2026-10-24-plan-4-3d-renderer`,
 - *Plan 4:*
   - the shield bone, the `throw` joint and the ECB from the bake; clips of their own for the six
     new actions; the shield-break clip's 240 frames against a stun of up to 400 plus 33;
-  - the spot dodge and roll animations, which still run on Plan 1's 24- and 31-frame timing and
-    drift from each fighter's own lengths (Mario's spot dodge crouches to about frame 21 and is
-    intangible to 17): a render re-time, as Task 20c did for the air dodge;
+  - the spot dodge and roll animations, which ran on Plan 1's 24- and 31-frame timing and
+    drifted from each fighter's own lengths (Mario's spot dodge crouched to about frame 21 and is
+    intangible to 17): closed by Plan 4 Task 9b's render re-time (D57);
   - sparks, placed at a capsule's first point, and a glancing blow's missing "chik" event;
   - re-deriving the synced hitbox tables if the bake animates the root bone (they are placed
     through `LEGACY_BONE_TABLE` at load); `active.test.ts` reads the game's own bone table now,
@@ -2758,3 +2758,279 @@ under `.superpowers/sdd/` (`2026-10-24-plan-4-3d-renderer`,
   the `victimFreeze` clear. Its one behaviour change is that a throw, a pummel, a turnaround
   and a crouch's start and end buffer a press like every other status (a golden
   regeneration, `RULES_PIN.golden` rewritten, the version unmoved).
+
+## D57 — The fighters are SSBU's models, the animation is ours, and the bones are baked
+
+**Decision.** David-Smash draws its fighters with their SSBU models (Worldblender's Blender
+re-exports, fetched and built locally by `pnpm models`, never committed), animated by the
+replica's own 2D pose clips retargeted onto each SSBU skeleton, and the sim reads those same
+bones from integer tables baked at build time (`public/bake/roster.bin.gz`). Plan 4 built it in
+23 tasks and four inserted ones (9b, 13b, 21b, 21c); its last task made the 3D world the only way
+a match is drawn and removed the 2D fighter path it replaced.
+
+**Why the clips and not SSBU's animations.** SSBU's animations are game files; the clips are
+ours, already timed to every move's hitboxes (D34) and reviewed one by one (D41, D44). Driving
+SSBU bones from them keeps the animation source the project owns and has tuned, and the side
+view only ever shows the side plane — which is the plane the clips are drawn in.
+
+**Why bake.** Research R§2 named the root cause of "the attacks don't look like anything": the
+animation and the hitboxes were two sources of truth. Now one function — clock, clip sample,
+retarget, root transform — runs at build time into Q12 integers for the sim and at run time into
+three.js for the screen, and a test holds every bone of every frame of every motion to the bake's
+1/256-unit quantum. Hurtboxes, the ECB's height and width, and the limb-bone hitboxes of the
+published scripts all hang off those bones.
+
+**What it costs.** A limb hitbox goes where our clip puts the limb, not where Ultimate's
+animation would; `reach.test.ts` lists every move whose reach moved, and each was reviewed. A
+clip edit is now a gameplay edit and needs a re-bake. Hurt capsule sizes are derived from mesh
+weights and are UNVERIFIED. The bake must match on both peers; its SHA-256 is the engine
+fingerprint they compare. And it has a size: about 230 KB gzipped per fighter. Today's bake is
+1,845,102 bytes gzipped, 88.0% of the 2 MiB budget `roster.test.ts` holds it to (6,366,019 raw);
+a ninth fighter reaches about 98.9% and a tenth fails, so a roster that grows raises the budget
+first, with its reason (the file is fetched once and cached).
+
+**Sizes are SSBU's.** Hurtboxes, the ECB and limb reach come from the models' bones, so bodies
+are the models' (Donkey Kong 26.3 units tall standing, was 15.0); the old `attributes.width` /
+`height` box is only the no-bake fallback. `src/game/hurt.allow.json` lists every fighter's old
+box beside its bones' numbers, regenerated and reviewed on any change. The ECB's width is the
+pelvis capsule's (the chest made DK's 21.6 units wide); its top is the highest of the head,
+trunk and leg capsules, never the arms (Task 12's fix round: raised arms had lifted DK's tumble
+ECB to 40.8); its bottom stays at the feet, in the air too (UNVERIFIED). So DK's airborne ECB is
+31 to 37 units tall against 26.3 standing: the air clips straighten his hunched stand and raise
+his head and bust, and the top follows the head, to 1.42 times his standing top where the rest
+of the roster reach 1.17 to 1.31. Plausible, and UNVERIFIED: whether Ultimate's ECB follows the
+head in the air. The camera still frames every fighter with at least 16.7 units of headroom.
+
+**Built without Blender where it matters.** The skeletons, hurt capsules and bake come from a
+stdlib-only reader of the `.blend` files (`scripts/models/skeleton_from_blend.py`), so the sim,
+the bake and every test need neither Blender nor the model cache; Blender (5.2.2, portable, in
+`.model-cache/tools/`) only exports the glbs, and its dump is cross-checked against the reader's.
+Which meshes are the fighter is an exhaustive per-fighter list (`scripts/models/meshes.json`),
+not a name pattern.
+
+**One clock.** The bake bakes the game's fighters (limb-bone scripts on), and the renderer draws
+on the sim's clock — even where the 2D renderer used to restart a clip, as on a mid-fall fast
+fall — so hitboxes, hurtboxes and drawn limbs agree; D42's four-frame fade is the one cosmetic
+exception (`fighterPose.ts`: during it a hurtbox can lead the drawn body slightly; attacks never
+fade, so a hitbox never can). `ENGINE_RULES_VERSION` is 4, and the online fingerprint covers the
+bake and the limb-bone slots.
+
+**Settled with it.** Size modifiers scale limb offsets and hurt capsules with each fighter's
+`scale`, not ATTACK sizes (SmashWiki's draft "Size modifiers" article, moderate confidence:
+UNVERIFIED). No bloom, no facial-expression swaps, and the shield stays where Plan 3 put it
+rather than on a baked bone. The overlay hangs port tags, move effects, dizzy stars and the Final
+Smash aura on each model's head capsule, and no longer draws 2D swing arcs. three.js loads in its
+own chunk after `/play` (or `/anim`) mounts. A model that fails to load is a stand-in for that
+match only: its own hurtbox capsules on the same bones, in its port's colour.
+
+**3D by default** (Task 23). The play page always hands the match runner a 3D presenter: three
+canvases, the stage's sky (2D), the 3D world (stage, fighters, shields, hit sparks and KO
+blasts) and a transparent 2D overlay (HUD, port tags, move effects, projectiles, the other
+particles, the KO flash, the magnifying glass). The runner still takes no presenter in a unit
+test, with no GPU, and then draws the overlay alone. What went is the 2D *match* drawing the 3D
+world replaced: the full-body figure, its rim pass and the `debugSilhouette` mode, the dodge
+afterimages (Ultimate draws none; their tracking state went too), the 2D platforms
+(`drawPlatforms`, `platformOffsetX`; the 3D stage is built from the sim's own rects), the 2D
+shield (`drawShield`; the bubble is `vfx3d.ts`'s `shieldLook`, the sim's own `shieldBubble`),
+the port ring, the 2D swing arcs (`render/swing.ts`), and the animation lab's 2D views (the 2D
+contact sheet, the 60 Hz playback and its onion skin), which drew that same figure. What stayed:
+the clips (`render/poses/**`, `chars/*/poses.ts`), which are the bake's source; the rigs and
+`drawFigure`, which draw the HUD's portraits, stock icons and magnifying glass; the move-effect
+and projectile painters (`chars/*/fx.ts`), on the overlay; the camera, the HUD and the overlay's
+effects. The overlay still samples a fighter's clip for one thing, its root offset, so a move
+effect sits on the body as the model is moved by it (the 3D root takes the same offset times the
+2D rig's scale). The lab's 3D sheet is its contact sheet now, with the sim's hitboxes and
+hurtboxes over every cell, and `scripts/animsheet.mjs` photographs it (its `--view` and
+`--playback` flags went with the 2D views). The README's match screenshots are captured with
+every model request answered 404, so they show the stand-ins; the capture refuses to write unless
+the page reports a stand-in for every fighter.
+
+**What it is not.** No ripped file is ever committed (spec §3.1): only bone names, bind matrices,
+capsule sizes and SHA-256s; the guard test refuses any tracked file whose name, or whose size and
+hash, is a manifest file's, and the pre-push scan hashes every blob a push would send against the
+manifest. No render or screenshot of a real model is committed either: the repo is public, and a
+picture of a model is a derivative of the ripped files. Captures go to the git-ignored
+`test-results/anim/`. A checkout without `pnpm models` plays with capsule stand-ins.
+
+**The inserted tasks.**
+- *9b, before the first bake* (ruling R5): a render-only re-time of the spot dodge and roll
+  clips (`groundDodgeTime.ts`, `spotDodgeClipTime`, `rollClipTime` with an inner tuck anchor),
+  as Plan 3's Task 20c did for the air dodge, so each fighter's clip brackets its own
+  intangibility. The golden did not move; the bake was born with it. It closes D56's "Plan 1
+  24/31-frame timing" item. The recovery now plays over each fighter's real recovery, 8 to 9
+  frames after a spot dodge's window and 14 to 19 after a roll's, where the old grid drew 3 and
+  10: slower and smoother than it was drawn, and the tell is no longer a 3-frame arrival.
+- *13b, after the limb-bone scripts* (ruling R12(e)): every attack clip now strikes with the
+  limb its hitboxes ride (`strike.test.ts`, 50 slots, 7 listed exceptions). Six held slots were
+  re-posed and freed (DK bair, Mario fair and nair, Fox nair and dair, Marth dair); limbs were
+  swapped side for side where the clip struck with the other one (Mario fair, nair and utilt, DK
+  bair and jab, Fox nair, Kirby ftilt), Fox dair, Marth dair, Kirby uair and Samus dtilt were
+  re-posed, and Mario gained a jab-3 kick of his own. Its fix round turned the swordsmen's hand
+  (below). Each round re-baked and regenerated the golden.
+- *21b, the faces* (from the Task 21 lab): every face was broken in the export, not at run time.
+  The eyes are layered in the `.blend` (the iris on its own UV map over the eye white) and the
+  export kept one layer, so each layered eye is now baked into one opaque texture (Mario, Link,
+  Marth, Donkey Kong, Fox); DK's brow mesh and Mario's hair are drawn but kept out of the hurtbox
+  measurement (`drawOnly`), so no box moved; the alpha mode is decided per texture. Each model
+  records the export pipeline's stamp and the Blender version it was built with, and
+  `models:check` refuses a model built otherwise.
+- *21c, the side-on camera*: at the game's pure side view a face is edge-on, and Kirby's never
+  showed. One leaf bone per fighter turns toward the camera, render only: Kirby's `Body` 45°,
+  Pikachu's `Head` 35°, the other six's `Head` 15°, all UNVERIFIED (by eye). No turned bone has a
+  rig child, so no box bone moves (tested on every bone, both facings). A whole-fighter turn was
+  rejected: it would foreshorten the drawn limbs against boxes that do not move.
+
+**The rulings, R1 to R13.** Each made by the controller on David's behalf, recommended option
+adopted.
+- *R1, the limb slots' synced `MoveDef` tables*: `withReferenceScripts` takes the bone table to
+  place through, and `withLimbScripts(def, bake.bones)` places them through the bake, memoised
+  per (def, table); the bake's own input is the no-sync form (`withLimbScripts(def, null)`). So
+  the CPU's reach, `moveTimingFor` and the charge hold read the boxes the sim runs.
+- *R2, the online stamp*: the lobby's `connect()` waits for the bake to install before it opens a
+  session, so the first `hello` already carries the baked bones and rules; a bake that fails is
+  the lobby's error, in the bake's own sentence.
+- *R3, online starts and model loading*: online, a match waits at most 5 s for the models, then
+  plays any fighter not ready as a stand-in, and the link monitor starts with the match. Local
+  matches wait for the models (each request has its own 20 s timeout).
+- *R4, per-fighter dodges in the bake*: a motion per air-dodge direction class and per roll
+  direction, each at the fighter's own length, sampled on the 2D clips' re-timed clocks; 57
+  status motions over the 48 actions.
+- *R5*: Task 9b, above.
+- *R6, the SDI clamp and the ledge trump*: both read the same bone-derived body box as collision.
+- *R7, a held fighter's place*: still the UNVERIFIED stand-in (beside the captor), with the two
+  baked rest half-widths; the captor's `throw` joint is carried to Plan 5.
+- *R8, artefacts against the plan*: the manifest (114 files), `meshes.json` and the eight
+  skeleton SHA-256s matched exactly. Everything regenerated from them differed, each difference
+  explained in its task's report (table below).
+- *R9, sparks on capsules*: a hit event carries the point of the hitbox's segment nearest the
+  struck capsule, in integers (events are in neither the golden digest nor `hashState`), and the
+  3D sparks spawn there; in the Task 18 review's sample, 34 of 538 hits landed away from the box's
+  near end, by up to 9.1 units.
+- *R10*: the glancing blow's missing "chik" went to `POLISH-BACKLOG.md`.
+- *R11*: the six actions Plan 3 added keep borrowing existing clips, baked as borrowed, and the
+  shield stays where Plan 3 put it; both are carried (below).
+- *R12, limb placement*: a limb box is placed only on a bone the clips place — the root (`top`,
+  `trans`), a bone the retarget drives, or a rigid rider of one; a root-hung independent joint
+  (`throw`, `rot`) is not, so Samus's grab and dash grab keep their legacy boxes. `reach.test.ts`
+  compares every frame, in each direction (forward, back, up, down; a sweep by its envelope),
+  catches included: under 0.8 times the legacy reach and more than a unit short fails. Each
+  `reach.allow.json` entry has a class (`root-exact`, `sweep`, `size`, `clip-gain`) and a reason;
+  a clip-gain is accepted only by the controller. A pinned hold list (`limb.hold.json`) keeps a
+  slot on its legacy box; after 13b it holds only Samus's dair (below).
+- *R13, the stage*: the drawn main body is the sim's solid, `HARD_PLATFORM_DEPTH` deep with
+  straight walls, so a fighter rising from below bonks on what is drawn and walls act where they
+  are seen. Battlefield's floating-island taper is lost in 3D; a non-colliding layer behind the
+  play plane could restore it (polish).
+
+**Where the numbers ended up** (R8: the plan's values came from a scratch replay without Plan 1
+and before Plan 3's final wave; each difference has its cause in its task's report):
+
+| Artefact | The plan | At Task 23 |
+|---|---|---|
+| Bake digest | `66c2f7af…` | `1131b09c1efaf89f4763cfa599d3fbdbbdbe8b255381c0c6912073a5149e0107` |
+| Bake size, raw / gzipped | 5,453,163 / 1,575,058 | 6,366,019 / 1,845,102 (R4's dodge motions, Plan 3's statuses and real lengths, the limb slots, 13b's clips) |
+| Limb-bone slots switched on | 53 | 50 (R12: Samus grab and dash grab not placeable; Samus dair held) |
+| `reach.allow.json` | 27 entries | 36: 23 `size`, 7 `clip-gain`, 4 `root-exact`, 2 `sweep` |
+| `reconcile.allow.json` | 119 → 102 | 119 → 103 (Pikachu's bair lead had already gone in Plan 3) |
+| `RULES_PIN` | version 4 | `{ version: 4, golden: "89571aca" }` |
+
+**How it stayed safe.** The golden harness plays six matches: four CPU matches, the scripted
+match and the tech lab. Task 12 bumped `ENGINE_RULES_VERSION` and `RULES_PIN.version` to 4 once,
+with its first behaviour change; every later regeneration (Task 12's fix round, Task 13 and its
+fix round, 13b and its fix round) rewrote only `RULES_PIN.golden`, each commit saying why, and no
+pin entry was dropped. Measured last at 13b's fix round, hits, shield hits and KOs are 19/0/1
+(Mario against Fox), 36/3/1 (Donkey Kong against Pikachu), 18/0/4 (Link against Samus), 13/1/2
+(Kirby against Marth), 6/3/1 (the script) and 0/0/2 (the lab); `MUST_VISIT` still names all 48
+states, covered as a union (the CPU matches reach 31; the script and the lab the rest). Apart
+from 13b, Tasks 14 to 23 changed nothing the sim reads: the golden has stayed `89571aca` since
+13b's fix round, and at Task 23 `UPDATE_BAKE=1` regenerated the bake byte for byte. The engine
+never imports three.js or `render3d/` (`layering.test.ts`). Before any push, the controller's
+`prepush-scan.sh` lists every path the push adds (renames included) and hashes every blob
+against the model manifest.
+
+**Accepted differences.** Each was ruled, with what it costs.
+- *A held smash charge* shows, in 3D, the pose of the frame the hold pins, about 0.93 of the
+  strike, where the 2D renderer parked the clip at 0.55 (`bake.ts`'s header). The 3D is the only
+  figure now; the overlay's move-effect anchor still reads the 2D clip there, so during a hold an
+  effect can sit off the model by the difference between the clip's root offset at those two
+  points (neither is over 3 units for any smash).
+- *The tech roll* borrows the roll clip and plays it linearly over `TECH_ROLL_FRAMES`. That
+  reaches gameplay, not only the drawing: its compact, balled-up hurtboxes fall on the vulnerable
+  frames 21 to 25, and it is nearly upright on intangible frames 1 to 9 (R11; a clip-time change
+  in both the clip and the bake).
+- *The ledge attack* draws, and hurts, in ftilt's end pose from frame 31 to 55: it borrows
+  ftilt's clip, and with no length of its own in the pose clock it plays over the 30-frame
+  fallback (`OPEN_ENDED_FRAMES`) against its 55-frame state. Kirby's borrows the ftilt whose legs 13b
+  swapped, which stands because its published script hangs only a root box.
+- *The shield* (R11 keeps Plan 3's bubble, centred half-way up the legacy box): SSBU-sized
+  bodies poke out of it. Donkey Kong's head is 7.0 units out of a full shield; pokes on a worn
+  shield went from 0.1% to 5.6%; centring the bubble mid-body instead bares the feet (12.8%).
+  The scripted match's first jab poked Fox's shield until it was re-tuned. The shield on a bone is
+  carried.
+- *The six actions Plan 3 added* (`tech`, `techRoll`, `techWall`, `techCeiling`, `tumbleFall`,
+  `ledgeTrumped`) borrow existing clips (R11).
+- *Clip-gains*, each accepted with its reason in `reach.allow.json` and an eyeball in 3D left for
+  polish: Donkey Kong's nair 11.0 → 25.6 (the published motion spins with the arms out, and the
+  box rides `armr` at full extension); Kirby's dtilt 6.0 → 13.5 (the low kick extends the leg, the
+  `toer` box at the script's offset); Kirby's nair 4.0 → 9.3 (a hip box, the script's offset plus
+  the radius, on a trunk bone that barely moves); Kirby's ftilt 6.4 → 15.3, ×2.39 (the three
+  `footl` boxes run 8.5 units out from the ankle along the pointed foot, `game_attacks3`); and,
+  with the grip below, Link's jab 3 11.3 → 22.6 (×2.00), Link's utilt 18.5 → 37.5 (×2.03) and
+  Marth's utilt 18.4 → 33.7 (×1.83): a sword box's reach is the arm plus the model's blade along
+  the authored direction, with the script's own offsets along the sword bone. Marth's uair sits
+  exactly at its size cap (×1.80), so a small clip or skeleton change would make it a clip-gain.
+- *Pikachu's bair is `root-exact`*: its boxes ride `trans`, which the bake moves with the clip's
+  whole-body offset, turn and squash; over the live frames its pose maps the script's local y to
+  −0.79 to −1.06 of x, which is part of the 0.72 to 0.78 per-frame loss, the rest the script's own
+  geometry.
+- *Samus's dair stays on its legacy table*: posed plumb under her, the cannon's meteor box
+  reaches at best 0.9 short of her feet against the legacy estimate of 6.0 to 6.5 below them, and
+  reaching it needs her body about 7 units lower in the air, which no published number gives.
+  The 3D shows the clip's cannon in front of her chest while the legacy box sits below her.
+- *The swordsmen's grip*: the SSBU model's fist holds the blade across it, a quarter-turn from
+  the 2D drawing (bind: `HandR`→`HaveR` along −X; Marth's `Sword1` and Link's `Sword2` along +Z).
+  `RETARGET_OVERRIDES` turns Link's and Marth's `handR` 90° further (`Drive.turn`, read only
+  through `driveFor`), and on all 51 live frames of the 12 sword slots the 3D blade lies within
+  −5.9° to +3.7° of the drawn one (pinned to ±10°), where it was 82° to 92° back.
+- *What the striking-limb and reach tests cannot see*: both measure along the move's direction
+  only, so a limb or sword moved across it passes (Marth's fair `sword1` moved down 12, 20 or 40
+  units gives no fault), and a one-frame wrong-limb swap passes where the idle limb's far joint
+  is within 2 units (Fox bair, Mario dtilt, Link bair). The ±10° blade test covers the swords;
+  for the rest the guard is the 3D eyeball in polish.
+- *Foot contact*: at idle the feet sink up to 1.1 below the floor, and crouch and shield lift
+  them up to 2.4. The hurtboxes agree with the drawing, so it is clip and retarget fidelity, not
+  a mismatch (`POLISH-BACKLOG.md`).
+- *Faces and the side-on camera*: the export flattens the layered eyes into one texture and draws
+  DK's brow as draw-only, kept out of the hurtbox measurement; 21c's head turn moves no box bone.
+  In Ultimate the bodies turn toward the camera inside the animations, and that turn is part of
+  the published reach; our clips pose the limbs in the side plane only. That is one source of the
+  clip-gains, and an open question for polish.
+
+**Open questions.** Each is marked `UNVERIFIED:` in the code, or is a known gap: the hurt capsule
+sizes (from mesh weights; Kirby's 7 capsules against the humanoid 11); the ECB's bottom at the
+feet in the air and DK's airborne height; the size-modifier rule; the face-turn angles; the
+held-fighter placement; the shield's centre; and Donkey Kong's standing size (26.3 units against
+legacy 15.0), which is what "adopt SSBU sizes" means for him unless a spine-lean override
+(`RETARGET_OVERRIDES`) is asked for.
+
+**Adding to the bake.** The recipe is in the plan's "Interfaces for later phases"
+(`docs/superpowers/plans/2026-10-24-plan-4-3d-renderer.md`), brought up to the code at Task 23. A
+new status's constant length goes in both `statusDuration` (`engine/acmd/poseClock.ts`) and
+`actionDurationFor` (`render/poses/timing.ts`), which `statusDuration.test.ts` holds equal; a
+motion that depends on `charge`, as the air dodge's direction and the roll's way do, also needs a
+`DODGE_CHARGES` entry in `render3d/bake/bake.ts`, or `bake.test.ts` fails because the bake never
+plays it; then re-bake, and run the reach, limb and hurt ratchets.
+
+**Found and carried.** The controller's lists (`.superpowers/sdd/`) are the detail; this is the
+summary.
+- *Plan 5*: the captor's `throw` joint for a held fighter (R7) and Samus's tether, which needs a
+  clip that places `throw` at the claw; the shield on a bone; clips of their own for the six
+  borrowed actions; a contact point for shield hits; the CPU's spacing, which now reads baked limb
+  reach; modelling 366° and 368° before DK's up special and Samus's up smash can run.
+- *The plan-final wave*: a Node version pin (`engines` and `.nvmrc`), because the bake digest
+  depends on V8's float maths and `import.meta.main` needs Node 24.2 or later; and the reviews'
+  remaining Minors.
+- *Polish*: the glancing blow's "chik" (R10); a decorative stage layer behind the play plane
+  (R13); blob shadows and a camera tilt; the clip-gain and foot-contact eyeballs; and a SPEC §6
+  question found in the lab — a keyboard player cannot forward-tilt from standing, because a held
+  direction dashes before the tilt window opens.

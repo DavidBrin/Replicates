@@ -7,7 +7,6 @@ import {
   REST_SAMPLE,
   drawFigure,
   drawHeadPortrait,
-  drawPortRing,
   drawPortTag,
   drawStockIcon,
   getCharacterRig,
@@ -466,12 +465,6 @@ describe("squash and stretch", () => {
 });
 
 describe("port furniture", () => {
-  it("rings the feet in the port colour", () => {
-    const ctx = createMockContext();
-    drawPortRing(ctx, 100, 200, 40, 1);
-    expect(assignmentsTo(ctx, "strokeStyle").some((v) => String(v).includes("59, 123, 254"))).toBe(true);
-  });
-
   it("labels a player and a CPU differently", () => {
     const a = createMockContext();
     const b = createMockContext();

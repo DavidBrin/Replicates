@@ -10,15 +10,15 @@
  * produced it is re-run. See SPEC §3.
  *
  * The exceptions are the things that are *continuous properties of a state*
- * rather than *reactions to a moment*: the shield bubble's radius follows shield
- * HP, the smash-charge glow follows `charge`, the Smash Ball's aura follows the
- * ball. Those are read from state each frame because they have no "moment" to
+ * rather than *reactions to a moment*: the smash-charge glow follows `charge`,
+ * the Smash Ball's aura follows the ball (and, in the 3D layer, the shield
+ * bubble's radius follows shield HP, `render3d/vfx3d.ts`). Those are read from state each frame because they have no "moment" to
  * spawn on, and re-deriving them after a rollback is correct rather than
  * duplicative.
  */
 
 import { toFloat } from "@/engine/fixed";
-import { SHIELD_MAX_HEALTH, SHIELD_RELEASE_FRAMES, PERFECT_SHIELD_WINDOW } from "@/engine/constants";
+import { PERFECT_SHIELD_WINDOW } from "@/engine/constants";
 import type { FighterDef, FighterState, GameState, StepEvents } from "@/engine/types";
 import { createPoseBlends, type PoseBlend } from "./blend";
 import { moveTimingFor, poseTimeFor, type PosedFighter } from "./poses";
@@ -75,20 +75,10 @@ export interface ScreenKo {
   port: number;
 }
 
-export interface Afterimage {
-  x: number;
-  y: number;
-  facing: number;
-  port: number;
-  life: number;
-  maxLife: number;
-}
-
 export interface VfxState {
   particles: Particle[];
   starKos: StarKo[];
   screenKos: ScreenKo[];
-  afterimages: Afterimage[];
   /** Frames of white flash remaining, per port. */
   hitFlash: number[];
   /** Frames of perfect-shield flash remaining, per port. */
@@ -143,7 +133,6 @@ export function createVfx(): VfxState {
     particles: [],
     starKos: [],
     screenKos: [],
-    afterimages: [],
     hitFlash: [0, 0, 0, 0],
     parryFlash: [0, 0, 0, 0],
     koFlash: 0,
@@ -564,33 +553,6 @@ export function spawnBurst(
 }
 
 /**
- * Dodge afterimages.
- *
- * Derived from the fighter's action rather than from an event, because a dodge
- * is a span and not a moment: the trail has to be laid down on every frame the
- * fighter is intangible, and there is no `dodgeFrame` event to hang it on.
- */
-export function trackAfterimages(v: VfxState, state: GameState): void {
-  for (const f of state.fighters) {
-    const dodging =
-      f.action === "roll" ||
-      f.action === "spotDodge" ||
-      f.action === "airDodge" ||
-      f.action === "ledgeRoll";
-    if (!dodging || f.intangible <= 0) continue;
-    if (f.actionFrame % 2 !== 0) continue;
-    v.afterimages.push({
-      x: toFloat(f.x),
-      y: toFloat(f.y),
-      facing: f.facing,
-      port: f.port,
-      life: 12,
-      maxLife: 12,
-    });
-  }
-}
-
-/**
  * Whether a fighter's foot planted between the last frame and this one.
  *
  * A run cycle is symmetric — two contacts, at the start and at the halfway
@@ -615,7 +577,7 @@ export function footPlanted(f: PosedFighter): boolean {
  * The simulation emits an event for exactly two of these — a grounded jump and
  * a landing — because those are the two the *engine* cares about. Every other
  * moment a fighter shoves against the ground is a span of an action state and
- * nothing announces it, so it is derived here the same way afterimages are.
+ * nothing announces it, so it is derived here from the fighters' states.
  *
  * Which mattered more than it sounds. Ultimate's ground effects are how you
  * read weight and commitment at a glance: the midair jump has a white puff that
@@ -859,15 +821,6 @@ export function updateVfx(v: VfxState): void {
   v.particles.length = w;
 
   w = 0;
-  for (let i = 0; i < v.afterimages.length; i++) {
-    const a = v.afterimages[i];
-    a.life--;
-    if (a.life <= 0) continue;
-    v.afterimages[w++] = a;
-  }
-  v.afterimages.length = w;
-
-  w = 0;
   for (let i = 0; i < v.starKos.length; i++) {
     const s = v.starKos[i];
     s.life--;
@@ -922,7 +875,6 @@ export function trackSwings(v: VfxState, state: GameState): void {
 export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState, defs?: ChargeDefs): void {
   trackSwings(v, state);
   if (events) ingestEvents(v, events, state);
-  trackAfterimages(v, state);
   trackGroundFx(v, state);
   trackLaunchTrails(v, state);
   trackChargeGlow(v, state, defs);
@@ -1040,57 +992,6 @@ function star(
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
-}
-
-/**
- * The shield bubble.
- *
- * Radius follows shield HP, which is the mechanic made visible: a shield that
- * has been whittled to a quarter is visibly a quarter the size, and the fighter
- * is visibly poking out of it. Perfect shield flashes white — and it flashes on
- * *release*, matching Ultimate's rule rather than Smash 4's.
- */
-export function drawShield(
-  ctx: CanvasRenderingContext2D,
-  v: VfxState,
-  fighter: FighterState,
-  cam: Camera,
-  fighterHeight: number,
-): void {
-  const shielding =
-    fighter.action === "shieldStart" ||
-    fighter.action === "shield" ||
-    fighter.action === "shieldStun" ||
-    fighter.action === "shieldRelease";
-  if (!shielding) return;
-
-  const hp = Math.max(0, toFloat(fighter.shieldHealth)) / toFloat(SHIELD_MAX_HEALTH);
-  const s = worldToScreen(cam, toFloat(fighter.x), toFloat(fighter.y) + fighterHeight * 0.5);
-  const base = fighterHeight * 0.92 * cam.zoom;
-  const radius = base * (0.5 + 0.5 * Math.max(0, Math.min(1, hp)));
-
-  let alpha = 0.42;
-  let colour = PORT_COLOURS[fighter.port % 4];
-  if (fighter.action === "shieldStart") alpha *= Math.min(1, fighter.actionFrame / 3 + 0.35);
-  if (fighter.action === "shieldRelease") {
-    alpha *= Math.max(0, 1 - fighter.actionFrame / SHIELD_RELEASE_FRAMES);
-  }
-  const parry = v.parryFlash[fighter.port] ?? 0;
-  if (parry > 0) {
-    colour = "#FFFFFF";
-    alpha = 0.35 + (parry / 10) * 0.6;
-  }
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
-  ctx.fillStyle = withAlpha(colour, alpha * 0.55);
-  ctx.fill();
-  ctx.strokeStyle = withAlpha(colour, Math.min(1, alpha * 2));
-  ctx.lineWidth = Math.max(2, radius * 0.09);
-  ctx.lineCap = "square";
-  ctx.stroke();
-  ctx.restore();
 }
 
 /* ----------------------------------------------------------- projectiles -- */

@@ -641,7 +641,8 @@ const dashAttackClip: PoseClip = {
  * cannot do what the reference does and the substitute is a decision rather
  * than an approximation: the **charge pose** (frame 9) cannot put the hilt
  * behind a head this size, the **contact** blade is angled to agree with the
- * swoosh `swing.ts` derives rather than with the reference's flat blade, and
+ * swoosh the 2D swing arc derived (removed in Plan 4) rather than with the
+ * reference's flat blade, and
  * the **hold** had to be re-cut when the standing stance got wider than the
  * lunge was.
  *
@@ -791,10 +792,10 @@ const fsmashClip: PoseClip = {
       //
       // And the blade sits **twenty-two degrees above horizontal** rather than
       // flat, which is a step away from the reference and towards the thing
-      // drawn next to it. `swing.ts` derives the swoosh from the move's own
-      // hitboxes and sweeps it from about +51° down to −51° across the active
-      // window; on the contact frame its leading edge — the bright hard line a
-      // player reads as *the blade* — is at +26°. A flat blade there left the
+      // drawn next to it. The 2D swing arc (removed in Plan 4) derived the swoosh
+      // from the move's own hitboxes and swept it from about +51° down to −51°
+      // across the active window; on the contact frame its leading edge — the
+      // bright hard line a player read as *the blade* — was at +26°. A flat blade there left the
       // sword and its own trail forty degrees apart in the one frame everybody
       // looks at. The tip at this angle is still inside the far hitbox, so
       // nothing is being promised that the move does not have.

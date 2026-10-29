@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { fx } from "@/engine/fixed";
-import { MIN_ZOOM, createCamera } from "./camera";
+import { createCamera } from "./camera";
 import { createHudState } from "./hud";
-import { assignmentsTo, callsOf, countOf, createMockContext } from "./mockContext";
+import { assignmentsTo, callsOf, countCapsules, countOf, createMockContext } from "./mockContext";
 import {
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
@@ -14,6 +14,7 @@ import {
   interpolatePosition,
   projectileVisual,
   render,
+  renderBackground,
   visualHeight,
   type RenderState,
 } from "./renderer";
@@ -42,7 +43,6 @@ function renderState(over: Partial<RenderState> = {}): RenderState {
     cpu: over.cpu,
     vfx: over.vfx ?? createVfx(),
     hud: over.hud ?? createHudState(),
-    debugSilhouette: over.debugSilhouette,
     showBlastZone: over.showBlastZone,
   };
 }
@@ -88,15 +88,27 @@ describe("letterboxing", () => {
     }
   });
 
-  it("paints the bars black and clips to the frame", () => {
+  /** The overlay over the 3D world (Plan 4): cleared, so the world shows through, never painted over. */
+  it("clears the whole canvas rather than painting it, and clips to the frame", () => {
     const ctx = createMockContext(2560, 1080);
     render(ctx, renderState(), null, createCamera(stage), 0);
-    expect(assignmentsTo(ctx, "fillStyle")[0]).toBe("#000000");
+    expect(callsOf(ctx, "clearRect")[0].args).toEqual([0, 0, 2560, 1080]);
+    expect(ctx.calls.some((c) => c.method === "fillRect" && c.args[2] === 2560 && c.args[3] === 1080)).toBe(false);
     expect(countOf(ctx, "clip")).toBeGreaterThan(0);
     const scales = callsOf(ctx, "scale").map((c) => c.args as number[]);
     expect(scales[0]).toEqual([1, 1]);
     const translates = callsOf(ctx, "translate").map((c) => c.args as number[]);
     expect(translates[0]).toEqual([320, 0]);
+  });
+
+  /** The bars belong to the sky under the 3D layer (`renderBackground`), letterboxed the same way. */
+  it("paints the bars black under the 3D layer", () => {
+    const ctx = createMockContext(2560, 1080);
+    renderBackground(ctx, stage, createCamera(stage), 0);
+    expect(assignmentsTo(ctx, "fillStyle")[0]).toBe("#000000");
+    expect(callsOf(ctx, "fillRect")[0].args).toEqual([0, 0, 2560, 1080]);
+    expect(callsOf(ctx, "scale").map((c) => c.args)[0]).toEqual([1, 1]);
+    expect(callsOf(ctx, "translate").map((c) => c.args)[0]).toEqual([320, 0]);
   });
 });
 
@@ -141,13 +153,16 @@ describe("interpolation", () => {
     const current = makeState({ fighters: [makeFighter({ port: 0, x: fx(10) })] });
     const cam = createCamera(stage);
 
+    // Where the port tag goes: the overlay hangs it on the drawn fighter, so it
+    // follows the same interpolated position the 3D layer draws the model at.
+    // The tag panel is the only shape painted in `PANEL_INK` at 0.82; the path
+    // op that opened it is its first point.
     const at = (alpha: number) => {
       const ctx = createMockContext();
       drawScene(ctx, renderState({ current, previous }), null, cam, alpha);
-      // The first capsule's start point — the background also draws paths, so
-      // anchor on the first round-capped stroke rather than on call zero.
-      const firstBone = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
-      const move = ctx.calls.slice(firstBone).find((c) => c.method === "moveTo");
+      const panel = ctx.calls.findIndex((c) => c.method === "set:fillStyle" && c.args[0] === withAlpha(PANEL_INK, 0.82));
+      expect(panel, "no port tag was drawn").toBeGreaterThan(-1);
+      const move = ctx.calls.slice(0, panel).reverse().find((c) => c.method === "moveTo");
       return move!.args[0] as number;
     };
     expect(at(0.9)).toBeGreaterThan(at(0.1));
@@ -162,79 +177,57 @@ describe("draw order", () => {
       const at = ctx.calls.findIndex((c) => predicate(c.method, c.args));
       if (at >= 0) marks.push({ at, name });
     };
-    // The sky is the only thing that fills the whole frame.
+    // The sky was the only thing that filled the whole frame.
     first((m, a) => m === "fillRect" && a[2] === 1920 && a[3] === 1080, "background");
-    // Battlefield's platform top is the only use of this colour.
+    // Battlefield's platform top was the only use of this colour.
     first((m, a) => m === "set:fillStyle" && a[0] === "#6FA8D6", "platforms");
-    first((m, a) => m === "set:lineCap" && a[0] === "round", "fighters");
+    // The port tag's panel is the only shape painted in this ink.
+    first((m, a) => m === "set:fillStyle" && a[0] === withAlpha(PANEL_INK, 0.82), "tags");
     first((m, a) => m === "fillText" && String(a[0]) === "0", "hud");
     return marks.sort((x, y) => x.at - y.at).map((m) => m.name);
   }
 
-  it("runs background, platforms, fighters, HUD in that order", () => {
+  /** The sky, the platforms and the fighters are the 3D layer's now (Plan 4); the overlay hangs the tags and the HUD over them. */
+  it("draws no sky and no platforms, and puts the HUD over the fighters' tags", () => {
     const ctx = createMockContext();
     drawScene(ctx, renderState(), null, createCamera(stage), 1);
-    expect(orderOf(ctx)).toEqual(["background", "platforms", "fighters", "hud"]);
+    expect(orderOf(ctx)).toEqual(["tags", "hud"]);
   });
 
-  it("draws each fighter's rim before its body", () => {
-    const ctx = createMockContext();
-    drawScene(ctx, renderState({ current: makeState({ fighters: [makeFighter()] }) }), null, createCamera(stage), 1);
-    // The rim pass is the wider of the two, and it comes first.
-    const widths = ctx.calls
-      .filter((c) => c.method === "set:lineWidth")
-      .map((c) => c.args[0] as number);
-    const torsoWidths = widths.filter((w) => w > 5);
-    expect(torsoWidths.length).toBeGreaterThan(1);
-    expect(Math.max(...torsoWidths.slice(0, 15))).toBeGreaterThan(
-      Math.max(...torsoWidths.slice(15, 30)),
-    );
-  });
-
-  it("skips the rim entirely in silhouette mode", () => {
-    const plain = createMockContext();
-    const flat = createMockContext();
-    const s = renderState({ current: makeState({ fighters: [makeFighter()] }) });
-    drawScene(plain, s, null, createCamera(stage), 1);
-    drawScene(flat, { ...s, debugSilhouette: true }, null, createCamera(stage), 1);
-    expect(countOf(flat, "stroke")).toBeLessThan(countOf(plain, "stroke"));
-  });
-
-  it("does not draw a dead fighter's body", () => {
+  /**
+   * The figure is the 3D model (Plan 4, Task 23). Capsules are the 2D figure's
+   * mark (`countCapsules`: `drawCapsule` is the only round line cap in
+   * `render/`), and the HUD's portraits are drawn with them too, so the frame is
+   * measured against the same frame with nobody on the stage: the HUD is the
+   * same, and a living fighter adds no capsule of their own.
+   */
+  it("draws no fighter's body, living or dead: the 3D layer draws them", () => {
     const alive = createMockContext();
     const dead = createMockContext();
-    drawScene(alive, renderState({ current: makeState({ fighters: [makeFighter()] }) }), null, createCamera(stage), 1);
-    drawScene(
-      dead,
-      renderState({ current: makeState({ fighters: [makeFighter({ action: "dead" })] }) }),
-      null,
-      createCamera(stage),
-      1,
-    );
-    expect(countOf(dead, "stroke")).toBeLessThan(countOf(alive, "stroke"));
+    const fighters = (action: "stand" | "dead") => [makeFighter({ port: 0, x: fx(-20), action }), makeFighter({ port: 1, x: fx(20), action })];
+    drawScene(alive, renderState({ current: makeState({ fighters: fighters("stand") }) }), null, createCamera(stage), 1);
+    drawScene(dead, renderState({ current: makeState({ fighters: fighters("dead") }) }), null, createCamera(stage), 1);
+    expect(countCapsules(alive)).toBe(countCapsules(dead));
   });
 
-  /*
-   * The hit flash used to be a `source-atop` rect 800px on a side, which
-   * composited against the *scene* — every cloud, mountain and platform inside
-   * it went pale. At the scene level the symptom is exact and easy to state: a
-   * flashing fighter must not add a single area fill to the frame, because
-   * everything the flash paints is a bone.
+  /**
+   * The hit flash brightens the model (`render3d/fighter3d.ts`); the overlay
+   * draws nothing for it. It used to be a `source-atop` rect 800px on a side,
+   * which composited against the *scene*, and then a flat pass over the 2D
+   * figure's bones; over the 3D world, any wash here would sit on the model.
    */
-  it("a hit flash adds no wash over the scene", () => {
+  it("a hit flash adds nothing to the overlay", () => {
     const plain = createMockContext();
     const flashing = createMockContext();
-    const s = renderState({ current: makeState({ fighters: [makeFighter()] }) });
+    const current = makeState({ fighters: [makeFighter()] });
     const flashed = createVfx();
     flashed.hitFlash[0] = HIT_FLASH_FRAMES;
 
-    drawScene(plain, s, null, createCamera(stage), 1);
-    drawScene(flashing, { ...s, vfx: flashed }, null, createCamera(stage), 1);
+    drawScene(plain, renderState({ current }), null, createCamera(stage), 1);
+    drawScene(flashing, renderState({ current, vfx: flashed }), null, createCamera(stage), 1);
 
-    expect(countOf(flashing, "fillRect")).toBe(countOf(plain, "fillRect"));
-    expect(assignmentsTo(flashing, "globalCompositeOperation").filter((m) => m !== "source-over")).toEqual([]);
-    // And it did flash: one extra flat pass over the fighter's own bones.
-    expect(countOf(flashing, "stroke")).toBeGreaterThan(countOf(plain, "stroke"));
+    // As data: a gradient the HUD makes is a fresh object with its own closures each frame.
+    expect(JSON.stringify(flashing.calls)).toBe(JSON.stringify(plain.calls));
   });
 
   it("draws the blast zone only when asked", () => {
@@ -351,42 +344,14 @@ describe("the whole frame", () => {
     ).not.toThrow();
   });
 
-  it("draws every stage theme", () => {
+  /** The sky under the 3D layer (`renderBackground`); the 3D stage draws each theme's platforms (`render3d/stage3d.ts`). */
+  it("draws every stage theme's sky", () => {
     for (const theme of ["battlefield", "finalDestination", "smashville", "townAndCity", "pokemonStadium2", "who knows"]) {
       const ctx = createMockContext();
-      const s = { ...renderState(), stage: makeStage({ theme }) };
-      expect(() => drawScene(ctx, s, null, createCamera(s.stage), 1), theme).not.toThrow();
-      expect(countOf(ctx, "fillRect"), theme).toBeGreaterThan(0);
+      const themed = makeStage({ theme });
+      expect(() => renderBackground(ctx, themed, createCamera(themed), 1), theme).not.toThrow();
+      expect(countOf(ctx, "fillRect"), theme).toBeGreaterThan(1);
     }
-  });
-
-  it("moves Smashville's platform with the frame, without asking the simulation", () => {
-    const sweeping = makeStage({
-      theme: "smashville",
-      platforms: [
-        { x: 0, y: 0, halfWidth: fx(70), soft: false, ledges: true },
-        {
-          x: 0,
-          y: fx(31),
-          halfWidth: fx(28),
-          soft: true,
-          ledges: false,
-          motion: { kind: "sweep", amplitude: fx(60), periodFrames: 480 },
-        },
-      ],
-    });
-    const at = (frame: number) => {
-      const ctx = createMockContext();
-      drawScene(
-        ctx,
-        { ...renderState({ current: makeState({ frame }) }), stage: sweeping },
-        null,
-        createCamera(sweeping),
-        1,
-      );
-      return callsOf(ctx, "moveTo").map((c) => c.args[0] as number);
-    };
-    expect(at(0)).not.toEqual(at(120));
   });
 });
 
@@ -421,102 +386,6 @@ describe("effects reach the screen", () => {
     const dizzy = fillsDrawn({ action: "shieldBroken", actionFrame: 30 });
     const standing = fillsDrawn({ action: "stand", actionFrame: 30 });
     expect(dizzy).toBeGreaterThan(standing + DIZZY_STARS - 1);
-  });
-});
-
-/**
- * What the renderer tells a prop about the fighter's motion.
- *
- * Every field of `PropAnim` is in the prop's own frame, which is mirrored with
- * the fighter — so a painter never sees a direction and must never branch on
- * one. That makes `vx` the field with a real decision behind it: it is signed
- * by facing, so "moving the way I am pointing" is positive whichever way that
- * is, and a tail trails on `-vx` in both directions with one line of code.
- *
- * Get it wrong and a tail streams backwards when its owner runs left, which is
- * the same bug the `flip` sign on props already produced once.
- */
-describe("the motion a prop is told about", () => {
-  function animFor(over: Parameters<typeof makeFighter>[0]) {
-    const seen: { vx: number; vy: number; frame: number; airborne: boolean }[] = [];
-    const base = getCharacterRig("mario");
-    const fighter = makeFighter(over);
-    const state = renderState({
-      current: makeState({ fighters: [fighter], frame: 77 }),
-      fighters: [
-        makeDef({
-          id: fighter.defId,
-          // The rig the renderer resolves comes from the fighter's id, so the
-          // spy has to be installed on that rig rather than passed in.
-        }),
-      ],
-    });
-    const rig = CHARACTER_RIGS[fighter.defId];
-    const original = rig.props;
-    Object.defineProperty(rig, "props", {
-      value: [
-        {
-          kind: "custom",
-          bone: "head",
-          at: 1,
-          size: 1,
-          colour: "primary",
-          draw: (_b: unknown, _p: unknown, anim: (typeof seen)[number]) => seen.push(anim),
-        },
-      ],
-      configurable: true,
-      writable: true,
-    });
-    try {
-      render(createMockContext(1600, 900), state, makeEvents(), createCamera(stage), 0);
-    } finally {
-      Object.defineProperty(rig, "props", { value: original, configurable: true, writable: true });
-    }
-    expect(base).toBeDefined();
-    return seen[0];
-  }
-
-  it("calls forward positive whichever way the fighter faces", () => {
-    const right = animFor({ defId: "mario", vx: fx(2), facing: 1, action: "run" });
-    const left = animFor({ defId: "mario", vx: fx(-2), facing: -1, action: "run" });
-    expect(right.vx, "running forward read as negative").toBeGreaterThan(0);
-    expect(left.vx, "the same run, mirrored, read the other way").toBeGreaterThan(0);
-    expect(left.vx).toBeCloseTo(right.vx, 6);
-  });
-
-  /**
-   * The half of this that shipped broken.
-   *
-   * The test above asserts the *sign* and passes just as happily against a
-   * value 4096 times too large — which is exactly what was handed to painters
-   * for a day, because the simulation is Q12 fixed point and the renderer
-   * passed `f.vx` through raw. `PropAnim` documents world units per frame, a
-   * full run is 2.4 of them, and painters were receiving 9839. The author who
-   * found it corrected for it inside their own painter, which is what everyone
-   * would have done differently.
-   *
-   * So: assert the number, not its sign. A units bug has no other symptom — the
-   * fighter still animates, the prop still moves, and it moves by three
-   * thousand radians.
-   */
-  it("hands over world units per frame, decoded, not the simulation's fixed point", () => {
-    const anim = animFor({ defId: "mario", vx: fx(2.4), vy: fx(-1.5), facing: 1, action: "run" });
-    expect(anim.vx, `a 2.4-unit run arrived as ${anim.vx}`).toBeCloseTo(2.4, 3);
-    expect(anim.vy).toBeCloseTo(-1.5, 3);
-  });
-
-  it("keeps vertical velocity in world terms — up is up in both directions", () => {
-    const rising = animFor({ defId: "mario", vy: fx(3), facing: -1, grounded: false });
-    expect(rising.vy).toBeGreaterThan(0);
-  });
-
-  it("passes the global frame, so a prop can idle on its own clock", () => {
-    expect(animFor({ defId: "mario" }).frame).toBe(77);
-  });
-
-  it("says whether the fighter is off the ground", () => {
-    expect(animFor({ defId: "mario", grounded: false }).airborne).toBe(true);
-    expect(animFor({ defId: "mario", grounded: true }).airborne).toBe(false);
   });
 });
 
@@ -645,65 +514,5 @@ describe("where the port tag sits", () => {
       .filter(([, r]) => (r.tagClearance ?? 0) > 0)
       .map(([k]) => k);
     expect(declaring).toEqual(["pikachu"]);
-  });
-});
-
-/**
- * The rim reaches the canvas scaled — measured through the callers.
- *
- * Every other test of `rimWidthFor` calls it directly, so all of them stay
- * green if a caller reverts to its own flat formula while the helper stays
- * correct. That is not hypothetical: caller drift is what caused the bug. The
- * animation lab had `Math.max(2, zoom * 0.5)` of its own and went on using it
- * after the renderer became proportional.
- *
- * Measured by rendering *one* rig at two scales rather than two rigs at one
- * scale. Bone thickness scales with the rig too, so comparing two different
- * fighters mixes their proportions into the ratio; the same rig at 1× and 2×
- * must produce stroke widths in exactly that ratio, and only does if the rim
- * scales along with the bones.
- *
- * Pinned at `MIN_ZOOM`, which is where the floor applies and where the first
- * fix was wrong.
- */
-describe("the outline as the callers actually draw it", () => {
-  function widestStroke(id: string, scale: number): number {
-    const rig = CHARACTER_RIGS[id];
-    const original = rig.scale;
-    Object.defineProperty(rig, "scale", { value: scale, configurable: true, writable: true });
-    try {
-      const ctx = createMockContext(1600, 900);
-      const state = renderState({
-        current: makeState({ fighters: [makeFighter({ defId: id })] }),
-        fighters: [makeDef({ id })],
-      });
-      const cam = { ...createCamera(stage), zoom: MIN_ZOOM };
-      render(ctx, state, makeEvents(), cam, 0);
-      // Only the fighter's own strokes. The widest `lineWidth` on the canvas
-      // belongs to the stage or the HUD, neither of which scales with a rig —
-      // taking it produced a ratio of exactly 1 and a test that could never
-      // pass. Capsules are the only round-capped strokes, and the port tag's
-      // panel fill marks where the fighter ends.
-      const from = ctx.calls.findIndex((c) => c.method === "set:lineCap" && c.args[0] === "round");
-      const ink = withAlpha(PANEL_INK, 0.82);
-      const to = ctx.calls.findIndex((c) => c.method === "set:fillStyle" && c.args[0] === ink);
-      expect(from, "no fighter was drawn").toBeGreaterThan(-1);
-      expect(to, "no port tag, so the fighter's extent is unbounded").toBeGreaterThan(from);
-      const widths = ctx.calls
-        .slice(from, to)
-        .filter((c) => c.method === "set:lineWidth")
-        .map((c) => c.args[0] as number)
-        .filter((w) => Number.isFinite(w));
-      expect(widths.length, "nothing was stroked").toBeGreaterThan(0);
-      return Math.max(...widths);
-    } finally {
-      Object.defineProperty(rig, "scale", { value: original, configurable: true, writable: true });
-    }
-  }
-
-  it("doubles when the rig doubles, at the zoom where the floor applies", () => {
-    const single = widestStroke("pikachu", 0.7);
-    const double = widestStroke("pikachu", 1.4);
-    expect(double / single, "the outline did not scale with the rig").toBeCloseTo(2, 2);
   });
 });

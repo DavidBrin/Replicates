@@ -14,12 +14,10 @@
 import { describe, expect, it } from "vitest";
 import { FIGHTERS } from "@/fighters";
 import type { ActionState } from "@/engine/types";
-import { drawCell, fighterAt, groundedFor, lengthFor, moveFor, usesMoveFor, verticalFor, type Options } from "./page";
+import { fighterAt, groundedFor, lengthFor, moveFor, usesMoveFor, verticalFor, type Options } from "./page";
 import { getFighter } from "@/fighters";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
-import { CHARACTER_RIGS } from "@/render/characterArt";
-import { createMockContext } from "@/render/mockContext";
 import type { MoveSlot } from "@/engine/types";
 import { readBakeFromDisk } from "@/game/bakeNode";
 
@@ -104,58 +102,18 @@ describe("whether the lab thinks a fighter is on the ground", () => {
   });
 
   /**
-   * Through `drawCell`, not through the helper.
+   * Through `fighterAt`, not through the helper.
    *
    * Every assertion above calls `groundedFor` directly, so reverting
    * `fighterAt` to its old hard-coded expression while leaving the helper
-   * intact keeps them all green — and props would again be told a neutral air
-   * happens on the floor. The helper is not the contract; what `drawCell`
-   * hands a prop painter is.
+   * intact keeps them all green. The helper is not the contract; the fighter
+   * the contact sheet poses (`Lab3D` poses `fighterAt`) is.
    */
-  it("hands a prop painter the airborne flag it computed", () => {
-    const seen: boolean[] = [];
-    const rig = CHARACTER_RIGS["pikachu"];
-    const original = rig.props;
-    Object.defineProperty(rig, "props", {
-      value: [
-        {
-          kind: "custom",
-          bone: "head",
-          at: 1,
-          size: 1,
-          colour: "primary",
-          draw: (_b: unknown, _p: unknown, anim: { airborne: boolean }) => seen.push(anim.airborne),
-        },
-      ],
-      configurable: true,
-      writable: true,
-    });
-    try {
-      const cell = (over: Partial<Options>) => {
-        seen.length = 0;
-        drawCell(
-          createMockContext(600, 600) as unknown as CanvasRenderingContext2D,
-          {
-            fighterId: "pikachu",
-            action: "stand",
-            move: "jab1",
-            jumpsUsed: 0,
-            fastFalling: false,
-            ...over,
-          },
-          0,
-          300,
-          500,
-          8,
-        );
-        return seen[0];
-      };
-      expect(cell({ action: "attack", move: "nair" }), "an aerial was drawn as grounded").toBe(true);
-      expect(cell({ action: "ledgeHang" }), "a ledge hang was drawn as grounded").toBe(true);
-      expect(cell({ action: "attack", move: "fsmash" }), "a grounded smash was drawn airborne").toBe(false);
-    } finally {
-      Object.defineProperty(rig, "props", { value: original, configurable: true, writable: true });
-    }
+  it("hands the sheet's fighter the airborne flag it computed", () => {
+    const at = (over: Partial<Options>) => fighterAt(opts(over), 0).grounded;
+    expect(at({ action: "attack", move: "nair" }), "an aerial was posed as grounded").toBe(false);
+    expect(at({ action: "ledgeHang" }), "a ledge hang was posed as grounded").toBe(false);
+    expect(at({ action: "attack", move: "fsmash" }), "a grounded smash was posed airborne").toBe(true);
   });
 
   it("treats hanging off a ledge as being in the air", () => {
