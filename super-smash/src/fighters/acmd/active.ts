@@ -7,8 +7,8 @@
  *
  * - every ATTACK and CATCH hangs off a bone the table can place (`placeable`):
  *   for Plan 3, the root bone `top`, the only bone `LEGACY_BONE_TABLE` places;
- *   for Plan 4's limb-bone scripts (`limb.ts`), the root and every bone the
- *   bake places;
+ *   for Plan 4's limb-bone scripts (`limb.ts`), the root and every bone our
+ *   clips place (`render3d/retarget/placeable.ts`);
  * - the move is not one a status drives rather than its script: a throw
  *   (`ATTACK_ABS`) or a pummel (`set_catch_only_all`);
  * - its legacy move carries nothing the script would drop: no scripted
@@ -94,8 +94,8 @@ export const ROOT_BONE_ONLY = (bone: string): boolean => bone === "top";
 
 /**
  * The rule above, for one slot. `placeable` says which bones a bone table can
- * place: the root bone for Plan 3; the root and every baked limb for Plan 4's
- * `LIMB_SCRIPT_SLOTS` (`limb.ts`).
+ * place: the root bone for Plan 3; the root and every bone our clips place for
+ * Plan 4's `LIMB_SCRIPT_SLOTS` (`limb.ts`).
  */
 export function activatable(
   slot: MoveSlot,

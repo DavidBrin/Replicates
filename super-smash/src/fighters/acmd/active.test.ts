@@ -38,8 +38,7 @@ import { readBakeFromDisk } from "@/game/bakeNode";
  * `withReferenceScripts` placed Plan 3's synced `MoveDef` tables through the
  * root-bone table (`LEGACY_BONE_TABLE`). They stay right under the bake only because
  * the bake places `top` exactly as that table does: it never bakes the root, so `top`
- * falls through the bake's layered table to `TOP_POSE` (DISPATCH-NOTES 13.4). The
- * first describe proves that; it fails the day the bake animates the root, when those
+ * falls through the bake's layered table to `TOP_POSE`. The first describe proves that; it fails the day the bake animates the root, when those
  * tables must be placed through the bake too, as the limb-bone ones are.
  */
 const BAKE = readBakeFromDisk();
@@ -212,7 +211,7 @@ describe("an activated script in a real match", () => {
  *
  * Every proof runs against the bake's bones, for Plan 3's 38 root-bone slots (tables placed
  * through the root-bone table, the plain roster) and for Plan 4's limb-bone slots (tables
- * placed through the bake, `withLimbScripts(def, bake.bones)`; DISPATCH-NOTES 13.4(b)).
+ * placed through the bake, `withLimbScripts(def, bake.bones)`).
  */
 describe("what render, the CPU and the charge hold read of an activated move", () => {
   const ACTIVE: [string, MoveSlot, FighterDef][] = FIGHTERS.flatMap((def) =>
@@ -240,9 +239,9 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     return out;
   }
 
-  it("activates 38 slots, and the bake 53 more", () => {
+  it("activates 38 slots, and the bake 44 more", () => {
     expect(ACTIVE).toHaveLength(38);
-    expect(LIMB).toHaveLength(53);
+    expect(LIMB).toHaveLength(44);
   });
 
   it.each(SYNCED)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {

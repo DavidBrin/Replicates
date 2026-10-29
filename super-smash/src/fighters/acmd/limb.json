@@ -2,16 +2,13 @@
   "mario": [
     "bair",
     "dtilt",
-    "fair",
     "ftilt",
     "jab2",
     "jab3",
-    "nair",
     "uair",
     "utilt"
   ],
   "donkeyKong": [
-    "bair",
     "fair",
     "jab1",
     "jab2",
@@ -26,12 +23,9 @@
   ],
   "samus": [
     "bair",
-    "dair",
-    "dashGrab",
     "dtilt",
     "fair",
     "ftilt",
-    "grab",
     "jab2",
     "nair",
     "utilt"
@@ -44,9 +38,7 @@
   ],
   "fox": [
     "bair",
-    "dair",
     "ftilt",
-    "nair",
     "uair"
   ],
   "pikachu": [
@@ -58,7 +50,6 @@
     "utilt"
   ],
   "marth": [
-    "dair",
     "dtilt",
     "fair",
     "ftilt",

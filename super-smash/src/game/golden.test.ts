@@ -477,7 +477,9 @@ describe("engine golden trace", () => {
   // tech lab: hits 19/36/13/11, 6 and 0; shield hits 0/3/0/0, 3 and 0; KOs 1/1/3/2,
   // 1 and 2, and the same again after Task 12's fix round 1 (the ECB's top from the
   // body, not the arms; the underside asks where the feet were), which moved only
-  // link-samus from frame 2232 and the lab's ceiling tech from frame 1 to 3.
+  // link-samus from frame 2232 and the lab's ceiling tech from frame 1 to 3. Task 13's
+  // fix round 1 (Samus's grabs and seven held slots back on their legacy moves) moved
+  // only mario-fox, from frame 2034: hits 16, shield hits 0, KOs 3 there now.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

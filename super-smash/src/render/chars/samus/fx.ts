@@ -888,12 +888,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * Hard-coding the standing numbers put the dash grab's tether on its way home
    * two frames before the move stopped grabbing.
    *
-   * Every grab box counts, not just the first. In the game (Plan 4) both grabs
-   * run their published scripts — a sphere on the `throw` bone and a capsule off
-   * the root — and a table placed through the bake lists a box that moves as
-   * one entry per position. So the beam is out on the first frame any of them
-   * is live, held until the last, and reaches the furthest any of them does,
-   * a capsule's far end included (DISPATCH-NOTES 13.6).
+   * Every grab box counts, not just the first. A grab that runs its published
+   * script (Plan 4) has several boxes, a capsule among them, and a table placed
+   * through the bake lists a box that moves as one entry per position. So the
+   * beam is out on the first frame any of them is live, held until the last,
+   * and reaches the furthest any of them does, a capsule's far end included.
    */
   grab: ({ ctx, def, f, x, y, u, dir, frame }) => {
     const move = def.moves[f.move ?? "grab"] ?? def.moves.grab;

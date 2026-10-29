@@ -96,8 +96,8 @@ describe("the committed bake", () => {
   it("stays within its size budget (2 MB gzipped, 8 MB uncompressed)", () => {
     // Measured on the committed skeletons, sword and tail bones included, with
     // each fighter's own dodges per direction (ruling R4) and the limb-bone
-    // scripts' motions at their own lengths (Task 13): 1.84 MB / 6.37 MB
-    // (1,844,303 / 6,366,019 bytes). Past this budget, bake fewer bones, not a bigger file.
+    // scripts' motions at their own lengths (Task 13): 1.84 MB / 6.36 MB
+    // (1,844,075 / 6,364,483 bytes). Past this budget, bake fewer bones, not a bigger file.
     expect(readFileSync(FILE).length).toBeLessThan(2 * 1024 * 1024);
     expect(fresh.length).toBeLessThan(8 * 1024 * 1024);
   });

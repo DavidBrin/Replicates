@@ -5,20 +5,36 @@
  * `registryContext` keep Plan 3's root-bone set, so a test that steps without
  * the bake never meets a bone it cannot place.
  *
- * The rule is Plan 3's `activatable` with the bones widened to the root plus
- * every bone in the fighter's committed skeleton (`src/render3d/skeletons/`);
- * `limb.json` is its output written out, regenerated and pinned by
- * `limb.test.ts`, so a reviewer sees exactly which moves changed.
+ * The rule is Plan 3's `activatable` with the bones widened from the root to
+ * every bone our clips place: the root, a bone a clip drives, or one riding a
+ * driven bone rigidly (`render3d/retarget/placeable.ts`). A bone under the root
+ * that no clip moves (Samus's grapple claw, `throw`) stays out: the bake would
+ * leave it at the fighter's feet. Slots the rule admits whose clip puts the box
+ * somewhere a player would call wrong are held on their legacy move
+ * (`limb.hold.json`) until the clip is fixed. `limb.json` is the rule's output,
+ * held slots left out, regenerated and pinned by `limb.test.ts`, so a reviewer
+ * sees exactly which moves changed.
  */
 
 import type { BoneTable } from "@/engine/acmd/bones";
 import type { FighterDef, MoveSlot } from "@/engine/types";
 import { withReferenceScripts } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
+import HOLD from "./limb.hold.json";
 import LIMB from "./limb.json";
 
 /** Per fighter, the slots running their imported limb-bone script in the game. */
 export const LIMB_SCRIPT_SLOTS = LIMB as Readonly<Record<string, readonly MoveSlot[]>>;
+
+/** A slot the rule admits but the game keeps on its legacy table until its clip is fixed, and why. */
+export interface LimbHold {
+  readonly fighter: string;
+  readonly move: MoveSlot;
+  readonly reason: string;
+}
+
+/** The held slots (`limb.hold.json`), which the census leaves out of `limb.json`. */
+export const LIMB_HOLD = HOLD as readonly LimbHold[];
 
 /** Each def's game form, per bone table it was placed through. */
 const placed = new WeakMap<BoneTable, WeakMap<FighterDef, FighterDef>>();

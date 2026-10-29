@@ -168,7 +168,9 @@ let installing: Promise<BakeTables> | null = null;
 /**
  * Load the bake (once) and install it in `GAME_SIM_CONTEXT` and
  * `GAME_ENGINE_RULES`, once per page: callers awaiting it at the same time, or
- * later, share the one install; a failed one may be retried. What every page
+ * later, share the one install. A caller that arrives while an install is
+ * failing shares that failure, as `loadBake`'s callers share a failed fetch;
+ * the next call after it starts again, so a retry works. What every page
  * awaits before a match. Rejects with a sentence a player can read (`fetchBake`)
  * or, for a bake the roster cannot run on, the fighter and move that cannot.
  *

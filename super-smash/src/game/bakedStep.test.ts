@@ -5,13 +5,15 @@ import { bakedEcb, fighterHurtboxes, localHurtboxes, restEcb } from "@/engine/ac
 import { LEDGE_GRAB_RANGE_X } from "@/engine/constants";
 import { ONE, fx, mul, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
-import { capsulesOverlap, contactPoint, deepestReach, hurtboxCapsule, pointSegmentDistSq, type Capsule } from "@/engine/hitbox";
+import { capsulesOverlap, contactPoint, deepestReach, hurtboxCapsule, moveFrameOf, pointSegmentDistSq, type Capsule } from "@/engine/hitbox";
 import { kineticLaunch } from "@/engine/kinetic";
 import { HARD_PLATFORM_DEPTH } from "@/engine/physics";
 import { cloneState, createInitialState, step, type SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
 import type { FighterDef, FighterState, GameState, InputFrame, MatchRules, StageDef, StepEvents } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
+import { LIMB_SCRIPT_SLOTS } from "@/fighters/acmd/limb";
+import { bakedContext } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
 
 /**
@@ -378,5 +380,77 @@ describe("rollback across a change of hurtbox shape (Plan 4, Task 12)", () => {
       replayPrev = inputs(i);
     }
     expect(hashState(replay)).toBe(hashState(live));
+  });
+});
+
+/* ----------------------------------------- a limb-bone script in a match -- */
+
+/*
+ * Plan 4, Task 13 (the review's minor 5): a limb slot's box, stepped through the
+ * game's context, lands where the bake puts the limb. Fox's forward tilt (a
+ * capsule on his right knee) against a Mario standing in front of him: the
+ * distance at which the baked box first touches Mario's capsules is worked out
+ * from the geometry, and the match connects half a unit inside it and misses a
+ * unit beyond it. The legacy tilt, whose box ends 3.7 units shorter, misses
+ * from where the baked one connects.
+ */
+describe("a limb-bone script in a real match (Plan 4, Task 13)", () => {
+  const GAME = bakedContext({ fighter: roster, stage: () => FLAT }, BAKE);
+  const TILT = (i: number): readonly InputFrame[] => [i === 0 ? Btn.Right | Btn.Soft | Btn.Attack : 0, 0];
+  const FAR = fx(60);
+
+  /** Fox at 0 tilting at a Mario at `x`, in `ctx`; the hits Mario takes. */
+  function tiltAt(x: number, ctx: SimContext): StepEvents["hits"] {
+    return play(pair(["fox", "mario"], 0, x, ctx), 30, TILT, ctx).flatMap((f) => f.events.hits);
+  }
+
+  /** The Mario x at which the baked box first touches him, from each live frame's geometry: [least far, furthest]. */
+  function touch(): { near: number; far: number } {
+    const fox = GAME.fighter("fox");
+    const frames = play(pair(["fox", "mario"], 0, FAR, GAME), 30, TILT, GAME);
+    let near = Infinity;
+    let far = -Infinity;
+    for (const { state } of frames) {
+      const f = state.fighters[0];
+      if (f.action !== "attack" || f.move !== "ftilt") continue;
+      const g = moveFrameOf(f.actionFrame);
+      for (const hb of fox.moves.ftilt!.hitboxes) {
+        if (g < hb.startFrame || g > hb.endFrame) continue;
+        const box: Capsule = { x1: f.x + hb.x, y1: f.y + hb.y, x2: f.x + (hb.x2 ?? hb.x), y2: f.y + (hb.y2 ?? hb.y), r: hb.radius };
+        const body = fighterHurtboxes(roster("mario"), state.fighters[1], state.frame, BAKE)!;
+        const overlapsAt = (x: number) => body.some((c) => capsulesOverlap(box, { ...c, x1: c.x1 + x - FAR, x2: c.x2 + x - FAR }));
+        // The furthest Mario x the box still reaches, to 1/4096 of a unit.
+        let lo = 0;
+        let hi = FAR;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (overlapsAt(mid)) lo = mid;
+          else hi = mid;
+        }
+        near = Math.min(near, lo);
+        far = Math.max(far, lo);
+      }
+    }
+    return { near, far };
+  }
+
+  it("is Fox's forward tilt, a limb slot the game runs", () => {
+    expect(LIMB_SCRIPT_SLOTS.fox).toContain("ftilt");
+    expect(GAME.fighter("fox").scripts?.ftilt).toBeDefined();
+  });
+
+  it("connects inside the baked box's reach, and misses a unit beyond it", () => {
+    const { near, far } = touch();
+    expect(near).toBeGreaterThan(fx(10));
+    // The body breathes a little between the live frames; inside the nearest touch, outside the furthest.
+    expect(far - near).toBeLessThan(fx(0.5));
+    expect(tiltAt(near - fx(0.5), GAME).filter((h) => h.victim === 1)).toHaveLength(1);
+    expect(tiltAt(far + fx(1), GAME)).toEqual([]);
+  });
+
+  it("is the baked box that connects: the legacy tilt misses from there", () => {
+    const { near } = touch();
+    const legacy: SimContext = { ...world(true), fighter: (id) => roster(id) };
+    expect(tiltAt(near - fx(0.5), legacy)).toEqual([]);
   });
 });

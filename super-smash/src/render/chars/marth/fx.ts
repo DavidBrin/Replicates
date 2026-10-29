@@ -120,7 +120,7 @@ interface BladePoint {
  * end of a capsule lies further out. In the game (Plan 4) the blade moves run
  * their published scripts, whose capsules may be written point first (his down
  * tilt) or hilt first, so the far end (`x2`/`y2`) can be the point of the blade
- * as well as the near one (DISPATCH-NOTES 13.6).
+ * as well as the near one.
  */
 function pointOf(hb: Hitbox, shoulder: number): BladePoint {
   const near = { x: toFloat(hb.x), y: toFloat(hb.y) };

@@ -1,29 +1,152 @@
 {
-  "mario bair": "legacy -1.9 / baked 3.4",
-  "mario fair": "legacy 9.8 / baked 5.2",
-  "mario jab2": "legacy 7.4 / baked 10.8",
-  "mario jab3": "legacy 8.9 / baked 17.3",
-  "donkeyKong bair": "legacy -4.5 / baked 10.1",
-  "donkeyKong fair": "legacy 14.0 / baked 26.5",
-  "donkeyKong jab1": "legacy 11.5 / baked 15.5",
-  "donkeyKong jab2": "legacy 11.0 / baked 21.4",
-  "donkeyKong nair": "legacy 11.0 / baked 25.6",
-  "link bair": "legacy -4.0 / baked 5.6",
-  "link jab3": "legacy 11.3 / baked 19.5",
-  "link nair": "legacy 9.5 / baked 13.7",
-  "samus dair": "legacy 5.5 / baked 10.8",
-  "samus dtilt": "legacy 10.5 / baked 21.6",
-  "samus fair": "legacy 10.5 / baked 18.1",
-  "samus jab2": "legacy 10.5 / baked 13.8",
-  "samus nair": "legacy 9.5 / baked 16.0",
-  "samus utilt": "legacy 5.0 / baked 10.3",
-  "kirby dtilt": "legacy 6.0 / baked 13.5",
-  "kirby nair": "legacy 4.0 / baked 9.3",
-  "fox dair": "legacy 4.4 / baked 10.0",
-  "fox ftilt": "legacy 9.6 / baked 13.3",
-  "fox uair": "legacy 4.5 / baked 7.7",
-  "pikachu bair": "legacy -0.8 / baked 5.5",
-  "pikachu dair": "legacy 3.0 / baked 11.0",
-  "pikachu dashAttack": "legacy 6.6 / baked 11.7",
-  "marth dtilt": "legacy 13.2 / baked 18.4"
+  "mario jab2": {
+    "measured": "F: best 7.4 -> 10.8 (x1.46)",
+    "class": "size",
+    "reason": "a clip-placed limb (armr) reaching 7.4 -> 10.8, x1.46, within 1.25 x mario's size ratio 1.23 (cap 1.53): the SSBU-sized body (D57)"
+  },
+  "mario jab3": {
+    "measured": "F: best 8.9 -> 17.3 (x1.94)",
+    "class": "root-exact",
+    "reason": "the furthest box hangs off top, so it sits at the script's own offset (the published one); the legacy table transcribed a shorter reach"
+  },
+  "donkeyKong fair": {
+    "measured": "F: best 14.0 -> 26.5 (x1.89)",
+    "class": "size",
+    "reason": "a clip-placed limb (arml) reaching 14.0 -> 26.5, x1.89, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57)"
+  },
+  "donkeyKong jab1": {
+    "measured": "F: best 11.5 -> 15.5 (x1.35)",
+    "class": "root-exact",
+    "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
+  },
+  "donkeyKong jab2": {
+    "measured": "F: best 11.0 -> 21.4 (x1.94)",
+    "class": "size",
+    "reason": "a clip-placed limb (handr) reaching 11.0 -> 21.4, x1.94, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57)"
+  },
+  "donkeyKong nair": {
+    "measured": "F: best 11.0 -> 25.6 (x2.33)",
+    "class": "clip-gain",
+    "reason": "a clip-placed limb (armr) reaching 11.0 -> 25.6, x2.33, beyond 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): more than the bigger body explains; for the controller's ruling"
+  },
+  "link ftilt": {
+    "measured": "F: best 13.5 -> 13.5 (x1.00); below 0.8x on 1 of 5 shared frames, worst g15 13.5 -> 10.2",
+    "class": "sweep",
+    "reason": "an overhead arc: on its first live frame (g15) the blade (sword2) is still coming down, 10.2 forward; from g16 it reaches the legacy 13.5. A single-frame loss at the arc's start"
+  },
+  "link jab3": {
+    "measured": "F: best 11.3 -> 19.5 (x1.73)",
+    "class": "root-exact",
+    "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
+  },
+  "link nair": {
+    "measured": "F: best 9.5 -> 13.7 (x1.44)",
+    "class": "size",
+    "reason": "a clip-placed limb (kneer) reaching 9.5 -> 13.7, x1.44, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+  },
+  "link utilt": {
+    "measured": "U: best 18.5 -> 30.7 (x1.66)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword2 (on handr)) reaching 18.5 -> 30.7, x1.66, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+  },
+  "samus bair": {
+    "measured": "B: best 11.5 -> 18.3 (x1.59)",
+    "class": "size",
+    "reason": "a clip-placed limb (kneer) reaching 11.5 -> 18.3, x1.59, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+  },
+  "samus dtilt": {
+    "measured": "F: best 10.5 -> 21.6 (x2.06)",
+    "class": "root-exact",
+    "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
+  },
+  "samus fair": {
+    "measured": "F: best 10.5 -> 18.1 (x1.72)",
+    "class": "size",
+    "reason": "a clip-placed limb (armr) reaching 10.5 -> 18.1, x1.72, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+  },
+  "samus jab2": {
+    "measured": "F: best 10.5 -> 13.8 (x1.32)",
+    "class": "size",
+    "reason": "a clip-placed limb (armr) reaching 10.5 -> 13.8, x1.32, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+  },
+  "samus nair": {
+    "measured": "SWEEP F: best 9.5 -> 16.0 (x1.69)",
+    "class": "sweep",
+    "reason": "a spinning kick: the legacy box stands still at 9.5 while the baked knee (kneer) circles her, behind her on some frames and 16.0 in front at its best; judged by its best reach, which is not below the legacy one"
+  },
+  "samus utilt": {
+    "measured": "U: best 19.0 -> 31.9 (x1.68)",
+    "class": "size",
+    "reason": "a clip-placed limb (kneer) reaching 19.0 -> 31.9, x1.68, within 1.25 x samus's size ratio 1.75 (cap 2.18): the SSBU-sized body (D57)"
+  },
+  "kirby dtilt": {
+    "measured": "F: best 6.0 -> 13.5 (x2.25)",
+    "class": "clip-gain",
+    "reason": "a clip-placed limb (toer (on footr)) reaching 6.0 -> 13.5, x2.25, beyond 1.25 x kirby's size ratio 1.43 (cap 1.79): more than the bigger body explains; for the controller's ruling"
+  },
+  "kirby nair": {
+    "measured": "F: best 4.0 -> 9.3 (x2.31)",
+    "class": "clip-gain",
+    "reason": "a clip-placed limb (hip) reaching 4.0 -> 9.3, x2.31, beyond 1.25 x kirby's size ratio 1.43 (cap 1.79): more than the bigger body explains; for the controller's ruling"
+  },
+  "kirby uair": {
+    "measured": "U: best 11.4 -> 17.1 (x1.50)",
+    "class": "size",
+    "reason": "a clip-placed limb (footr) reaching 11.4 -> 17.1, x1.50, within 1.25 x kirby's size ratio 1.43 (cap 1.79): the SSBU-sized body (D57)"
+  },
+  "fox bair": {
+    "measured": "B: best 10.1 -> 15.7 (x1.56)",
+    "class": "size",
+    "reason": "a clip-placed limb (kneer) reaching 10.1 -> 15.7, x1.56, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
+  },
+  "fox ftilt": {
+    "measured": "F: best 9.6 -> 13.3 (x1.39)",
+    "class": "size",
+    "reason": "a clip-placed limb (kneer) reaching 9.6 -> 13.3, x1.39, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
+  },
+  "fox uair": {
+    "measured": "U: best 16.0 -> 22.5 (x1.41)",
+    "class": "size",
+    "reason": "a clip-placed limb (footr) reaching 16.0 -> 22.5, x1.41, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
+  },
+  "pikachu bair": {
+    "measured": "B: best 6.4 -> 10.2 (x1.59); below 0.8x on 6 of 12 shared frames, worst g9 6.0 -> 4.3",
+    "class": "root-exact",
+    "reason": "every box hangs off trans, the skeleton root that is also Ultimate's root, at the script's own offsets: the multi-hit's boxes reach 4.3 to 5.3 behind him (0.72 to 0.78 of the legacy 6.0 on 6 frames) and the last hit 10.2, all as published"
+  },
+  "pikachu dair": {
+    "measured": "SWEEP D: best 4.4 -> 8.4 (x1.91)",
+    "class": "sweep",
+    "reason": "a drill spin: the legacy box stands still 4.4 below him while the baked neck box circles, 8.4 below at its best; judged by its best reach, which is not below the legacy one"
+  },
+  "pikachu dashAttack": {
+    "measured": "F: best 6.6 -> 11.7 (x1.78)",
+    "class": "size",
+    "reason": "a clip-placed limb (neck) reaching 6.6 -> 11.7, x1.78, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
+  },
+  "pikachu uair": {
+    "measured": "U: best 10.4 -> 17.7 (x1.70)",
+    "class": "size",
+    "reason": "a clip-placed limb (tail4 (on hip)) reaching 10.4 -> 17.7, x1.70, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
+  },
+  "pikachu utilt": {
+    "measured": "U: best 10.6 -> 16.4 (x1.55)",
+    "class": "size",
+    "reason": "a clip-placed limb (tail4 (on hip)) reaching 10.6 -> 16.4, x1.55, within 1.25 x pikachu's size ratio 1.64 (cap 2.05): the SSBU-sized body (D57)"
+  },
+  "marth dtilt": {
+    "measured": "F: best 13.2 -> 18.4 (x1.39)",
+    "class": "root-exact",
+    "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
+  },
+  "marth uair": {
+    "measured": "U: best 19.4 -> 28.9 (x1.49)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.4 -> 28.9, x1.49, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+  },
+  "marth utilt": {
+    "measured": "U: best 18.4 -> 28.2 (x1.53)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 18.4 -> 28.2, x1.53, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+  }
 }

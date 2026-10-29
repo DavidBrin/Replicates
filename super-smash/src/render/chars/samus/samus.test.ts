@@ -798,11 +798,11 @@ describe("the Grapple Beam reaches what it grabs", () => {
 });
 
 /*
- * Plan 4 (Task 13): in the game, both grabs run their published scripts, whose
- * boxes the bake places — a sphere on the `throw` bone and a capsule off the
- * root, and a box that moves is one table entry per position. The beam is read
- * off all of them: out on the first frame any is live, held until the last, to
- * the furthest edge any reaches, far ends included.
+ * Plan 4 (Task 13): the game hands out each fighter in its limb-script form,
+ * placed through the bake. Samus's grabs stay on their legacy moves there: their
+ * scripts hang the claw off `throw`, a bone under the root that no clip moves, so
+ * the bake would leave it at her feet (ruling R12). The legacy boxes, whose
+ * frames are the script's, drive the beam.
  */
 describe("the Grapple Beam, with the game's grab boxes (the bake's)", () => {
   const GAME = withLimbScripts(samus, readBakeFromDisk().bones);
@@ -810,9 +810,9 @@ describe("the Grapple Beam, with the game's grab boxes (the bake's)", () => {
   const grabs = (move: MoveSlot) => GAME.moves[move]!.hitboxes.filter((hb) => hb.grabbing);
   const furthest = (move: MoveSlot) => Math.max(...grabs(move).flatMap((hb) => [toFloat(hb.x), toFloat(hb.x2 ?? hb.x)]));
 
-  it.each(CASES)("%s runs its script here: more than one grab box", (move) => {
-    expect(GAME.scripts?.[move]).toBeDefined();
-    expect(grabs(move).length).toBeGreaterThan(1);
+  it.each(CASES)("%s keeps its legacy move in the game: the claw's bone is one no clip moves", (move) => {
+    expect(GAME.scripts?.[move]).toBeUndefined();
+    expect(GAME.moves[move]).toBe(samus.moves[move]);
   });
 
   it.each(CASES)("%s puts the claw on the furthest any of its grab boxes reaches", (move) => {

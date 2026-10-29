@@ -308,7 +308,7 @@ describe("the roster, prepared against the bake (DISPATCH-NOTES 11.1)", () => {
       expect(engineFingerprint(GAME_SIM_CONTEXT, { ...GAME_ENGINE_RULES, activeSlots: { ...GAME_ENGINE_RULES.activeSlots, mario } })).not.toBe(after);
     });
 
-    // DISPATCH-NOTES 13.5 (carried from Plan 3 Task 20): the slots the stamp names are
+    // Carried from Plan 3 Task 20: the slots the stamp names are
     // the slots the game's fighters run from imported scripts — after the install as
     // before it (`simContext.test.ts`), now Plan 3's and the limb-bone ones together.
     it("names exactly the slots the game's fighters run from imported scripts", () => {
