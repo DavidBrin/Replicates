@@ -3,15 +3,23 @@
  * online through `ENGINE_ROLLBACK_DEPS`.
  *
  * It is the registry context plus the bone table script hitboxes resolve
- * through (`SimContext.bones`, DECISIONS D55). Plan 2 has only the root bone
- * (`LEGACY_BONE_TABLE`); Plan 4 replaces that value with its bake
- * (`layeredBoneTable(bakedBoneTable(…), LEGACY_BONE_TABLE)`). That alone is not
- * enough: `registerFighters` prepares and checks every script against
- * `registryContext.bones`, not this context's `bones`, so Plan 4 must also
- * prepare the scripts against the bake (`prepareFighterScripts`), or a bone the
- * bake cannot place fails mid-match instead of at load. The table is never a
- * module global inside the engine: a caller that wants a different one passes
- * a different context.
+ * through (`SimContext.bones`, DECISIONS D55). It starts on Plan 2's root bone
+ * (`LEGACY_BONE_TABLE`) and stays there until Plan 4's `installBake`
+ * (`game/bake.ts`) swaps the bake in, once it has loaded: `bones` becomes the
+ * bake's layered table (`layeredBoneTable(bakedBoneTable(…), LEGACY_BONE_TABLE)`)
+ * and `bake` its clocks and hurtboxes. Nothing installs it at load, so a test
+ * that steps with this context plays the root bone until it installs the bake.
+ *
+ * `registerFighters` prepares and checks every script against
+ * `registryContext.bones`, the root bone, not this context's, so that check says
+ * nothing about the bake's. `installBake` therefore prepares the roster against
+ * the bake itself (`prepareFighterScripts`, via `prepareRoster`): a bone the bake
+ * cannot place, or a 363°/366°/368° box, fails at install, not mid-match, and
+ * leaves this context untouched. The table is never a module global inside the
+ * engine: a caller that wants a different one passes a different context.
+ *
+ * Installing the bake changes what `engineFingerprint` reads, so it changes what
+ * `localBuild()` stamps in the middle of a session (see `ensureBakeInstalled`).
  */
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
@@ -21,7 +29,8 @@ import { registryContext, type SimContext } from "@/engine/simulate";
 import type { MoveSlot } from "@/engine/types";
 import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 
-export const GAME_SIM_CONTEXT: SimContext = { ...registryContext, bones: LEGACY_BONE_TABLE };
+/** Mutable so `installBake` (Plan 4, `game/bake.ts`) can swap the bake in once it has loaded. */
+export const GAME_SIM_CONTEXT: { -readonly [K in keyof SimContext]: SimContext[K] } = { ...registryContext, bones: LEGACY_BONE_TABLE };
 
 /** What, besides the bones, makes two builds the same game (Plan 3, Task 20). */
 export interface EngineRules {

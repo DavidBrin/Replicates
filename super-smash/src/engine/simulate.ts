@@ -133,6 +133,7 @@ import {
   kineticSetX,
 } from "./kinetic";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
+import type { BakeTables } from "./acmd/bakeTables";
 import { launchBefore, techOrBounce, updateTechInput } from "./tech";
 import { cloneCombat, emptyCombat } from "./combat";
 import type { CombatState } from "./combat";
@@ -208,6 +209,11 @@ export interface SimContext {
    * means the root-bone `LEGACY_BONE_TABLE`; Plan 4 passes its bake here.
    */
   readonly bones?: BoneTable;
+  /**
+   * Plan 4: the bake's motion clocks and per-bone hurtboxes (`acmd/bakeTables.ts`).
+   * Absent means Plan 2's single capsule and fixed ECB.
+   */
+  readonly bake?: BakeTables;
 }
 
 export const registryContext: SimContext = {

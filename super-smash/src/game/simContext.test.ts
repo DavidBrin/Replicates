@@ -18,7 +18,7 @@ describe("the game's SimContext", () => {
     expect(GAME_SIM_CONTEXT.stage("battlefield")).toBe(registryContext.stage("battlefield"));
   });
 
-  it("carries the root-bone table in Plan 2", () => {
+  it("carries the root-bone table until the bake is installed", () => {
     expect(GAME_SIM_CONTEXT.bones).toBe(LEGACY_BONE_TABLE);
   });
 
