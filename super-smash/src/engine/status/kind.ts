@@ -151,7 +151,11 @@ export interface FighterStatus {
   readonly kineticType: KineticType;
   /** status_pre: once, on entry, after the previous status's `end`. */
   readonly pre?: (f: FighterState) => void;
-  /** status_main: every frame the fighter is not frozen, after `actionFrame` advances. */
+  /**
+   * status_main: every frame the fighter is not frozen, after `actionFrame`
+   * advances; and on the frame a timed status hands off to this one, at
+   * `actionFrame` 0, which is the fighter's first actionable frame (`handOff`).
+   */
   readonly main: (f: FighterState, intent: Intent, ctx: StateContext) => void;
   /**
    * status_exec: per-frame extras after the kinetic type has run. Unused in

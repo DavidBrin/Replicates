@@ -2,27 +2,33 @@
  * What the spot dodge has to *look* like, asserted off the sampled clip rather
  * than off the keyframe table.
  *
- * Every test here reads the clip at the twenty-four times the renderer actually
- * asks for — `poseTimeFor` divides `actionFrame` by `SPOT_DODGE_FRAMES`, so no
- * other time is ever sampled — resolves each sample onto the reference rig, and
- * measures the silhouette. That is deliberately one step removed from the
+ * Every test here reads the clip at the twenty-four times of the grid it is
+ * drawn on (`CLIP_FRAMES`, below), resolves each sample onto the reference rig,
+ * and measures the silhouette. That is deliberately one step removed from the
  * numbers in `spotDodge.ts`: a keyframe can be retimed or re-posed freely, and
  * these only complain when the *motion* stops being a spot dodge.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { SPOT_DODGE_FRAMES, SPOT_DODGE_INTANGIBLE } from "@/engine/constants";
 import { samplePose, type PoseSample } from "./clip";
 import { spotDodge } from "./spotDodge";
 import { BASE_RIG, DRAWN_BONES, resolve, type BoneName } from "../skeleton";
 
-const [FIRST_INTANGIBLE, LAST_INTANGIBLE] = SPOT_DODGE_INTANGIBLE;
-const FRAMES = Array.from({ length: SPOT_DODGE_FRAMES }, (_, f) => f);
-const LAST = SPOT_DODGE_FRAMES - 1;
+/**
+ * The grid the clip is drawn on (`spotDodge.ts`, keys at n/24): Plan 1's shared
+ * spot dodge, 24 frames, intangible on `actionFrame` 3-20. The engine's spot
+ * dodge is each fighter's own now (UltimateFrameData, `groundDodge.ts`; Plan 3
+ * final wave) and the renderer plays the clip over that length
+ * (`actionDurationFor`), so these test the drawing on its own grid.
+ */
+const CLIP_FRAMES = 24;
+const [FIRST_INTANGIBLE, LAST_INTANGIBLE] = [3, 20];
+const FRAMES = Array.from({ length: CLIP_FRAMES }, (_, f) => f);
+const LAST = CLIP_FRAMES - 1;
 
 const sampleAt = (frame: number): PoseSample =>
-  samplePose(spotDodge, frame / SPOT_DODGE_FRAMES);
+  samplePose(spotDodge, frame / CLIP_FRAMES);
 
 interface Silhouette {
   /** Widest horizontal span of the drawn capsules, in rig units. */
@@ -86,7 +92,7 @@ const window_ = FRAMES.filter((f) => f >= FIRST_INTANGIBLE && f <= LAST_INTANGIB
 describe("the spot dodge is not one drawing", () => {
   it("changes shape on most of its frames", () => {
     const distinct = new Set(shape.map((s) => `${s.height.toFixed(2)}/${s.width.toFixed(2)}`));
-    expect(distinct.size).toBeGreaterThan(SPOT_DODGE_FRAMES / 2);
+    expect(distinct.size).toBeGreaterThan(CLIP_FRAMES / 2);
   });
 });
 
@@ -105,7 +111,7 @@ describe("the compress", () => {
   });
 
   it("spends its whole travel inside the first quarter of the clip", () => {
-    const quarter = Math.floor(SPOT_DODGE_FRAMES / 4);
+    const quarter = Math.floor(CLIP_FRAMES / 4);
     const before = shape.slice(0, quarter + 1).map((s) => s.height);
     // Every frame after the first quarter is nearer the crouch than to standing.
     const mid = (tallest + shortest) / 2;
@@ -184,7 +190,7 @@ describe("it is a spot dodge and not a roll", () => {
     // on the snap into the tuck, so the bar is set above that and well under the
     // hundred and eighty a wrapped bone would take.
     let worst = 0;
-    for (let f = 1; f < SPOT_DODGE_FRAMES; f++) {
+    for (let f = 1; f < CLIP_FRAMES; f++) {
       const before = sampleAt(f - 1).angles;
       const after = sampleAt(f).angles;
       for (const name of Object.keys(after) as BoneName[]) {

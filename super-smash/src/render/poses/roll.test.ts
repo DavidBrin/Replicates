@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { ROLL_FRAMES, ROLL_INTANGIBLE } from "@/engine/constants";
 import { CHARACTER_RIGS, getCharacterRig, rotationPivot } from "@/render/characterArt";
 import { DRAWN_BONES, resolve, type BoneName, type PoseAngles } from "@/render/skeleton";
 import { samplePose } from "./clip";
@@ -18,8 +17,16 @@ import { roll } from "./roll";
  * only works on Mario is a tuck that does not work.
  */
 
+/**
+ * The grid the clip is drawn on (`roll.ts`): Plan 1's shared roll, 31 frames,
+ * intangible on `actionFrame` 4-20. The engine's rolls are each fighter's own
+ * now, forward and back (UltimateFrameData, `groundDodge.ts`; Plan 3 final
+ * wave), and the renderer plays the clip over that length
+ * (`actionDurationFor`), so these test the drawing on its own grid.
+ */
+const ROLL_FRAMES = 31;
 const FRAMES = Array.from({ length: ROLL_FRAMES }, (_, i) => i);
-const [INTANGIBLE_FROM, INTANGIBLE_TO] = ROLL_INTANGIBLE;
+const [INTANGIBLE_FROM, INTANGIBLE_TO] = [4, 20];
 const RIGS = Object.keys(CHARACTER_RIGS);
 
 /** The whole-body turn on a frame, in degrees, built the way `poseSpinFor` builds it. */

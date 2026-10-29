@@ -119,11 +119,21 @@
  * frames. Mario's jab and grab are the imported scripts now (four boxes, two-box
  * capsule grabs), and every hit and event above keeps its frame.
  *
+ * Plan 3's final wave (a timed status ends on its first actionable frame, where
+ * the next status reads input; the spot dodge and rolls are each fighter's own,
+ * from UltimateFrameData) re-tuned nothing: no pin tripped. Five things moved.
+ * Mario walks a frame sooner after the throw (274, not 275) and after the smash
+ * (800, not 801), which puts him 0.58 units further on, so the hang is on 862,
+ * not 864. Fox's spot dodge (344) is his own 23 frames, not 24 (standing on 367),
+ * and Mario's roll (1696) is his forward roll's 29 frames, not 31 (standing on
+ * 1725). Every hit and event above keeps its frame, and the trace is the same
+ * again from 1781.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
  * (Fox breaking free on 140, the pummel on 217, the throw on 247, the shield break
- * on 649, the techs on 789 and 1029, the hangs on 864, 1193, 1299, 1400 and 1781,
+ * on 649, the techs on 789 and 1029, the hangs on 862, 1193, 1299, 1400 and 1781,
  * the trump on 1788, the hits on 747, 1006, 1578 and 1635, Fox down on 1673, time
- * up on 2014). All were checked against a run after Plan 3 Task 18.
+ * up on 2014). All were checked against a run after Plan 3's final wave.
  */
 
 import { Btn } from "@/engine/types";
@@ -215,13 +225,13 @@ const STEPS: readonly ScriptStep[] = [
   // stage and lands near its middle.
   [1, L, SOFT | U], //            732: a fresh left...
   [1, L | A, SOFT | U], //        733: ...and attack inside 5 frames: forward smash
-  [46, 0, SOFT | U], //           734: tumble (747); Mario can walk again on 801
+  [46, 0, SOFT | U], //           734: tumble (747); Mario can walk again on 800
   [1, 0, S | SOFT | U], //        780: Fox presses shield 9 frames before he lands...
   [19, 0, SOFT | U], //           781: ...and techs in place on 789 (his launch is slow enough, under 3), then stands
   // Mario walks off the right edge onto the ledge. Each walk to a ledge ends
   // inside the hang's first 4 frames, when it ignores the stick: a right still
   // held after that would let go and regrab, over and over.
-  [65, R | SOFT, 0], //           800: ledgeHang on 864 (he turns from left to right first)
+  [65, R | SOFT, 0], //           800: ledgeHang on 862 (he turns from left to right first)
   [19, 0, 0],
   [1, J, 0], //                   884: ledgeJump, then jump
   [18, L, 0], //                  885: drift back over the stage

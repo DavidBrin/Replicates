@@ -76,6 +76,15 @@ const legacy: FighterDef = {
       downFrames: 54,
       directionalIntangible: [2, 18],
     },
+    // Spot dodge and rolls (Plan 3 final wave): UltimateFrameData,
+    // https://ultimateframedata.com/fox, "Dodges / Rolls": each "Total frames"
+    // and "Intangible on frame a-b", fresh. The spot dodge is the second of
+    // UFD's "18/23"; the first is its cancel, not modelled (`GroundDodgeAttributes`).
+    groundDodge: {
+      spotDodge: { frames: 23, intangible: [3, 14] },
+      forwardRoll: { frames: 26, intangible: [4, 12] },
+      backRoll: { frames: 32, intangible: [4, 14] },
+    },
   },
 
   params: FIGHTER_PARAMS.fox,

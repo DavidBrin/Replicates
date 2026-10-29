@@ -320,7 +320,11 @@ export interface ProjectileDef {
 export interface MoveDef {
   readonly slot: MoveSlot;
   readonly name: string;
-  /** First Actionable Frame — the move ends and the fighter may act again. */
+  /**
+   * UFD's "Total frames" T: the move's frames are 1..T, and the first actionable
+   * frame is T + 1. The move is entered on its frame 1 (`actionFrame` 0), so it
+   * ends on `actionFrame` T, where the fighter acts (`handOff`, `states.ts`).
+   */
   readonly totalFrames: number;
   readonly hitboxes: readonly Hitbox[];
   /** Aerials only: frames of lag if the move is still out on landing. */
@@ -390,6 +394,40 @@ export interface FighterAttributes {
    * (`DEFAULT_AIR_DODGE`, `airDodge.ts`). Every roster fighter has its own.
    */
   readonly airDodge?: AirDodgeAttributes;
+  /**
+   * The fighter's spot dodge and rolls (Plan 3 final wave), from its
+   * UltimateFrameData page. Optional for the same reason as `airDodge`: the
+   * engine's test fighters dodge as Mario does (`DEFAULT_GROUND_DODGE`,
+   * `groundDodge.ts`). Every roster fighter has its own.
+   */
+  readonly groundDodge?: GroundDodgeAttributes;
+}
+
+/**
+ * One ground dodge as UltimateFrameData's "Dodges / Rolls" table publishes it
+ * (https://ultimateframedata.com/<fighter>), fresh, in published frames. The
+ * engine reads both one `actionFrame` earlier, as it reads the air dodge's
+ * (`groundDodge.ts`).
+ */
+export interface DodgeFrames {
+  /** "Total frames" T: the dodge's frames 1..T; the first actionable frame is T + 1. */
+  readonly frames: number;
+  /** "Intangible on frame a-b": both ends included. */
+  readonly intangible: readonly [first: number, last: number];
+}
+
+/** One fighter's spot dodge and rolls. Each fighter file cites its UFD page. */
+export interface GroundDodgeAttributes {
+  /**
+   * The spot dodge: UFD's second number ("20/25" for Mario). SmashWiki "Spot
+   * dodge" (https://www.ssbwiki.com/Spot_dodge) gives 25 for Mario and 20
+   * "canceled" into a ground attack or special, which the replica does not model.
+   */
+  readonly spotDodge: DodgeFrames;
+  /** The roll toward the way the fighter faces (SSBU's ESCAPE_F). */
+  readonly forwardRoll: DodgeFrames;
+  /** The roll away from it (ESCAPE_B), which UFD lists separately. */
+  readonly backRoll: DodgeFrames;
 }
 
 /**

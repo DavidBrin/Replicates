@@ -101,7 +101,10 @@ export function isDirectionalAirDodge(f: Pick<FighterState, "action" | "charge">
 
 /**
  * How many frames an air dodge lasts: the status ends on the frame
- * `actionFrame` reaches it (`STATUS_ESCAPE_AIR`). Neutral: P
+ * `actionFrame` reaches it (`STATUS_ESCAPE_AIR`): for a length N, the dodge's
+ * frame N + 1, its first actionable frame, where the fall reads input
+ * (`handOff`; Plan 3 final wave). Mario's 52-frame neutral dodge acts on frame
+ * 53. Neutral: P
  * `escape_air_stiff_frame`. Directional: `escape_air_slide_stiff_frame`
  * sideways, `_u_` straight up, `_d_` straight down.
  *

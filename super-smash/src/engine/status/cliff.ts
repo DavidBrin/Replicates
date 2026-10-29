@@ -67,7 +67,7 @@ function ledgeOption(total: number) {
       bufferPress(f, intent, ctx.frame);
       return;
     }
-    finishLedgeOption(f, ctx);
+    finishLedgeOption(f, intent, ctx);
   };
 }
 

@@ -10,9 +10,9 @@
  * a photograph cannot be mistimed. Give a landing a squash key and a recovery
  * key and the question appears immediately: a landing lasts four frames, a
  * landing out of a forward-air lasts as many as the move's landing lag says,
- * and a roll lasts thirty-one. Played at the old fixed thirty-frame guess, a
- * four-frame landing would show the first thirteen percent of its clip and
- * nothing else.
+ * and a roll as many as the fighter's own (Mario's forward roll is 29). Played
+ * at the old fixed thirty-frame guess, a four-frame landing would show the
+ * first thirteen percent of its clip and nothing else.
  *
  * So `actionDurationFor` reads the state machine's own frame counts. Every
  * number it returns is the same constant the engine branches on, imported
@@ -21,6 +21,7 @@
  */
 
 import { DEFAULT_AIR_DODGE, airDodgeFrames, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
+import { DEFAULT_GROUND_DODGE, groundDodgeOf, rollOf } from "@/engine/groundDodge";
 import { toFloat } from "@/engine/fixed";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
@@ -28,10 +29,8 @@ import { actionFrameOf, chargeHoldFrame } from "@/engine/hitbox";
 import {
   DASH_INTERRUPT_FRAME,
   JUMP_SQUAT_FRAMES,
-  ROLL_FRAMES,
   SHIELD_BREAK_STUN,
   SHIELD_RELEASE_FRAMES,
-  SPOT_DODGE_FRAMES,
   TECH_CEILING_FRAMES,
   TECH_FRAMES,
   TECH_ROLL_FRAMES,
@@ -52,7 +51,7 @@ import {
   SHIELD_START_FRAMES,
   TURNAROUND_FRAMES,
 } from "@/engine/states";
-import type { AirDodgeAttributes, FighterDef, FighterState, MoveSlot } from "@/engine/types";
+import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttributes, MoveSlot } from "@/engine/types";
 import { clipFor } from "../chars/poses";
 import { airDodgeClipTime } from "./airDodge";
 import { samplePose, type PoseSample } from "./clip";
@@ -103,6 +102,8 @@ export interface JumpTiming {
    * every caller already timing a clip by the fighter has it.
    */
   readonly airDodge: AirDodgeAttributes;
+  /** The fighter's spot dodge and rolls (Plan 3 final wave), carried for the same reason. */
+  readonly groundDodge: GroundDodgeAttributes;
 }
 
 const jumpTimings = new WeakMap<FighterDef, JumpTiming>();
@@ -119,6 +120,7 @@ export function jumpTimingFor(def: FighterDef): JumpTiming {
       air: Array.from({ length: airs }, (_, i) => jumpRiseSpeeds(p, "air", i).length),
       ledgeSpeeds: jumpRiseSpeeds(p, "ledge"),
       airDodge: airDodgeOf(def.attributes),
+      groundDodge: groundDodgeOf(def.attributes),
     };
     jumpTimings.set(def, t);
   }
@@ -349,10 +351,12 @@ export function actionDurationFor(
       return SHIELD_RELEASE_FRAMES;
     case "shieldBroken":
       return SHIELD_BREAK_STUN;
+    // The fighter's own lengths, the roll's by the way `charge` remembers: the
+    // engine's own rule (`groundDodge.ts`). Without the fighter's timing, Mario's.
     case "spotDodge":
-      return SPOT_DODGE_FRAMES;
+      return (jump?.groundDodge ?? DEFAULT_GROUND_DODGE).spotDodge.frames;
     case "roll":
-      return ROLL_FRAMES;
+      return rollOf(jump?.groundDodge ?? DEFAULT_GROUND_DODGE, f.charge).frames;
     case "ledgeRoll":
       return LEDGE_ROLL_FRAMES;
     // The fighter's own length, by the direction `charge` remembers: the

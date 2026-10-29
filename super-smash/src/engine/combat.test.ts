@@ -41,6 +41,8 @@ import {
   SHIELD_DECAY_PER_FRAME,
   SHIELD_MAX_HEALTH,
   SHIELD_REGEN_PER_FRAME,
+  SHIELD_RELEASE_FRAMES,
+  TECH_FRAMES,
   TECH_LOCKOUT,
   TECH_WALL_HOLD,
   TECH_WINDOW,
@@ -70,10 +72,12 @@ import {
   LEDGE_GETUP_FRAMES,
   LEDGE_JUMP_FRAMES,
   LEDGE_ROLL_FRAMES,
+  PUMMEL_FRAMES,
   grabHoldFrames,
 } from "./states";
 import { Btn } from "./types";
 import type {
+  ActionState,
   FighterAttributes,
   FighterDef,
   FighterState,
@@ -4684,5 +4688,234 @@ describe("autolink angles (Plan 3, Task 19)", () => {
     expect(kept.kinetic.damageX).toBeLessThan(0);
     expect(kept.kinetic.damageY).toBeGreaterThan(0);
     expect(Math.abs(Math.hypot(kept.kinetic.damageX, kept.kinetic.damageY) - kept.launchSpeed)).toBeLessThan(3);
+  });
+});
+
+/* ------------------------- final wave: the first actionable frame -- */
+
+/**
+ * Plan 3's final review, Important 4, ruled Option A. A timed status the fighter
+ * enters itself, in phase 3, counts its entry frame as its frame 1 (`actionFrame`
+ * 0), so its length T, UFD's "Total frames" (first actionable frame T + 1), ends
+ * it on `actionFrame` T, frame T + 1, and the next status's `main` reads input on
+ * that same frame (`handOff`, `states.ts`), the way `jumpSquat` leaves on its last
+ * frame. A status entered on contact (a landing in phase 5, a hit in phase 6)
+ * counts its entry frame as frame 0, and was already right; those are pinned as
+ * they were.
+ *
+ * "Acts on frame N" is pinned two ways: a fresh press made on frame N is taken on
+ * frame N while frame N − 1 is still the old status, and a press buffered earlier
+ * (Ultimate's 9-frame buffer) fires on frame N and not before.
+ */
+describe("a timed status ends on its first actionable frame (Plan 3 final wave)", () => {
+  /** Fighter 0 standing at x 0, fighter 1 parked at x -60, out of every reach. */
+  function apart(): GameState {
+    const s = standing();
+    s.fighters[1].x = fx(-60);
+    s.fighters[1].facing = 1;
+    return s;
+  }
+  /** Fighter `port`'s action after each frame; index i is the frame the i-th step played. */
+  const actions = (frames: Frame[], port = 0): ActionState[] => frames.map((f) => f.state.fighters[port].action);
+  /** Fighter 0 hanging on the right ledge (x 80), past `LEDGE_HANG_MIN`. */
+  function hanging(): GameState {
+    const s = apart();
+    const f = s.fighters[0];
+    Object.assign(f, { x: fx(80), y: 0, grounded: false, platform: -1, action: "ledgeHang", actionFrame: 5, intangible: 0, facing: -1 });
+    f.ledge = { platform: 0, side: 1 };
+    return s;
+  }
+  /** Fighter 0 high over the stage, falling, free to act. */
+  function aloft(): GameState {
+    const s = apart();
+    Object.assign(s.fighters[0], { y: fx(150), grounded: false, platform: -1, action: "fall", actionFrame: 0, jumpsUsed: 1 });
+    return s;
+  }
+
+  // The tester's jab is 24 frames (`move`): UFD's "Total frames" 24, first actionable 25.
+  it("acts out of a 24-frame jab on frame 25, a fresh press or a buffered one", () => {
+    const fresh = actions(play(apart(), 26, (i) => [i === 0 ? Btn.Attack : i === 24 ? Btn.Jump : 0, 0]));
+    expect(fresh.slice(0, 24).every((a) => a === "attack"), "frames 1-24 are the jab").toBe(true);
+    expect(fresh[24], "frame 25").toBe("jumpSquat");
+    const buffered = actions(play(apart(), 26, (i) => [i === 0 ? Btn.Attack : i === 19 ? Btn.Jump : 0, 0]));
+    expect(buffered.indexOf("jumpSquat") + 1).toBe(25);
+  });
+
+  // The tester air dodges as Mario does (`DEFAULT_AIR_DODGE`): P's
+  // `escape_air_stiff_frame` 52 (fudgepop01/amiibo_research `fighter_param_motion.xml`
+  // @523374aa L26), first actionable 53. The roster's own are pinned in
+  // `fighters/movement.test.ts`.
+  it("acts out of Mario's 52-frame neutral air dodge on frame 53", () => {
+    expect(DEFAULT_AIR_DODGE.neutralFrames).toBe(52);
+    const a = actions(play(aloft(), 54, (i) => [i === 0 ? Btn.Shield : i === 52 ? Btn.Attack : 0, 0]));
+    expect(a[51], "frame 52").toBe("airDodge");
+    expect(a[52], "frame 53: the neutral air").toBe("attack");
+    const buffered = actions(play(aloft(), 54, (i) => [i === 0 ? Btn.Shield : i === 46 ? Btn.Attack : 0, 0]));
+    expect(buffered.indexOf("attack") + 1).toBe(53);
+  });
+
+  // UFD (https://ultimateframedata.com/mario, "Shield Drop — 11 frames (universal)"):
+  // the drop's frames 1-11, first actionable 12.
+  it("acts out of the 11-frame shield drop on frame 12", () => {
+    expect(SHIELD_RELEASE_FRAMES).toBe(11);
+    // Shield held for 6 frames, let go on the 7th (index 6): the drop's frame 1.
+    const drop = (press: number) => actions(play(apart(), 20, (i) => [i < 6 ? Btn.Shield : i === press ? Btn.Jump : 0, 0]));
+    const fresh = drop(6 + 11);
+    expect(fresh[6], "the drop's frame 1").toBe("shieldRelease");
+    expect(fresh[6 + 10], "its frame 11").toBe("shieldRelease");
+    expect(fresh[6 + 11], "its frame 12").toBe("jumpSquat");
+    expect(drop(6 + 5).indexOf("jumpSquat") - 6 + 1).toBe(12);
+  });
+
+  // UNVERIFIED: `LEDGE_GETUP_FRAMES` 26 is pre-existing and unsourced (D56's open
+  // questions). Whatever its length, the getup acts on the frame after it.
+  it("acts out of a ledge getup on its length + 1", () => {
+    const n = LEDGE_GETUP_FRAMES;
+    const getup = (press: number) => actions(play(hanging(), n + 3, (i) => [i === 0 ? Btn.Up : i === press ? Btn.Jump : 0, 0]));
+    const fresh = getup(n);
+    expect(fresh[0]).toBe("ledgeGetUp");
+    expect(fresh[n - 1], `frame ${n}`).toBe("ledgeGetUp");
+    expect(fresh[n], `frame ${n + 1}: on the stage, and jumping`).toBe("jumpSquat");
+    expect(getup(n - 6).indexOf("jumpSquat") + 1).toBe(n + 1);
+  });
+
+  // The other three ledge options and every other timed status the fighter starts
+  // itself hand off the same way: a fresh press on the frame after the length is
+  // taken on it. UNVERIFIED: the lengths, pre-existing and unsourced (the ledge
+  // options' 13/55/34, `SHIELD_START_FRAMES` 1, `CROUCH_START_FRAMES` and
+  // `CROUCH_END_FRAMES` 5, `TURNAROUND_FRAMES` 11, `PUMMEL_FRAMES` 10) or the
+  // tester's own (its 30-frame grab); what is pinned is the frame after each.
+  it.each([
+    ["ledgeJump", LEDGE_JUMP_FRAMES],
+    ["ledgeAttack", LEDGE_ATTACK_FRAMES],
+    ["ledgeRoll", LEDGE_ROLL_FRAMES],
+  ] as const)("acts out of a %s on its length + 1", (action, n) => {
+    const key = action === "ledgeJump" ? Btn.Jump : action === "ledgeAttack" ? Btn.Attack : Btn.Shield;
+    // A ledge jump ends in the air: the press there is the air dodge.
+    const press = action === "ledgeJump" ? Btn.Shield : Btn.Jump;
+    const a = actions(play(hanging(), n + 2, (i) => [i === 0 ? key : i === n ? press : 0, 0]));
+    expect(a[0]).toBe(action);
+    expect(a[n - 1]).toBe(action);
+    expect(a[n]).toBe(action === "ledgeJump" ? "airDodge" : "jumpSquat");
+  });
+
+  it("acts out of a whiffed 30-frame grab on frame 31", () => {
+    const a = actions(play(apart(), 32, (i) => [i === 0 ? Btn.Grab : i === 30 ? Btn.Jump : 0, 0]));
+    expect(a[29]).toBe("grab");
+    expect(a[30]).toBe("jumpSquat");
+  });
+
+  it("acts out of the one-frame shield start on frame 2: a jump out of shield", () => {
+    const a = actions(play(apart(), 3, (i) => [i === 0 ? Btn.Shield : i === 1 ? Btn.Shield | Btn.Jump : Btn.Shield, 0]));
+    expect(a[0]).toBe("shieldStart");
+    expect(a[1]).toBe("jumpSquat");
+  });
+
+  it("acts out of a crouch's start and its end on their length + 1", () => {
+    // Down held: crouchStart on frame 1, crouch on frame 6, where the press is a down tilt (the jab, for the tester).
+    const down = actions(play(apart(), 7, (i) => [i === 5 ? Btn.Down | Btn.Attack : Btn.Down, 0]));
+    expect(down[4]).toBe("crouchStart");
+    expect(down[5]).toBe("attack");
+    // Let go after 7 crouching frames: crouchEnd from frame 8, its frames 1-5, then a jump on its frame 6.
+    const up = actions(play(apart(), 15, (i) => [i < 7 ? Btn.Down : i === 12 ? Btn.Jump : 0, 0]));
+    expect(up[7]).toBe("crouchEnd");
+    expect(up[11]).toBe("crouchEnd");
+    expect(up[12]).toBe("jumpSquat");
+  });
+
+  it("acts out of a run's 11-frame turnaround on frame 12", () => {
+    const s = apart();
+    Object.assign(s.fighters[0], { action: "run", actionFrame: 20 });
+    const a = actions(play(s, 13, (i) => [i === 0 ? Btn.Left : i === 11 ? Btn.Jump : 0, 0]));
+    expect(a[0]).toBe("turnaround");
+    expect(a[10]).toBe("turnaround");
+    expect(a[11]).toBe("jumpSquat");
+  });
+
+  it("acts out of a pummel on its length + 1: a second pummel starts there", () => {
+    const pummeller: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, pummel: move("pummel", { totalFrames: 10, hitboxes: [] }) } };
+    const ctx = ctxFor(pummeller);
+    const s = standing(ctx);
+    // Fighter 0 grabs fighter 1 (8 units off) and pummels; nothing lands, so nothing freezes.
+    const frames = play(s, 60, (i) => [i === 0 ? Btn.Grab : i === 40 || i === 40 + PUMMEL_FRAMES ? Btn.Attack : 0, 0], ctx);
+    const a = actions(frames);
+    expect(a[39], "held").toBe("grabHold");
+    expect(a[40]).toBe("pummel");
+    expect(a[40 + PUMMEL_FRAMES - 1]).toBe("pummel");
+    expect(frames[40 + PUMMEL_FRAMES].state.fighters[0]).toMatchObject({ action: "pummel", actionFrame: 0 });
+  });
+
+  /* ---- statuses entered on contact: unchanged ---- */
+
+  // A landing is entered in phase 5, on the frame of landing: lag L is frames 1..L
+  // after it, and the fighter acts on L + 1 (SmashWiki "Lag", https://www.ssbwiki.com/Lag).
+  it("still acts out of 8 frames of landing lag on the 9th frame after the landing", () => {
+    const fallingNair = () => {
+      const s = apart();
+      Object.assign(s.fighters[0], { y: fx(3), grounded: false, platform: -1, action: "fall", jumpsUsed: 1 });
+      return s;
+    };
+    const dry = actions(play(fallingNair(), 20, (i) => [i === 0 ? Btn.Attack : 0, 0]));
+    const landed = dry.indexOf("landingLag");
+    expect(dry[landed + 7], "lag frame 7").toBe("landingLag");
+    // A press buffered in the lag fires on the 9th frame after the landing, not on the 8th.
+    const a = actions(play(fallingNair(), landed + 10, (i) => [i === 0 ? Btn.Attack : i === landed + 4 ? Btn.Jump : 0, 0]));
+    expect(a.indexOf("jumpSquat") - landed).toBe(9);
+  });
+
+  // A tech is entered on the frame of landing too: in place it is 26 frames, first
+  // actionable 27 (SmashWiki "Lucario (SSBU)/Techs", `TECH_FRAMES`).
+  it("still acts out of a tech in place on the 27th frame after the landing", () => {
+    const flying = () => {
+      const s = apart();
+      const v = s.fighters[1];
+      Object.assign(v, { x: 0, y: fx(6), grounded: false, platform: -1, action: "tumble", actionFrame: 0, hitstun: 60 });
+      s.fighters[0].x = fx(60);
+      v.kinetic.damageY = fx(-2);
+      v.launchSpeed = fx(2);
+      v.vy = fx(-2);
+      return s;
+    };
+    const dry = actions(play(flying(), 10, (i) => [0, i === 0 ? Btn.Shield : 0]), 1);
+    const teched = dry.indexOf("tech");
+    expect(teched).toBeGreaterThan(0);
+    const a = actions(play(flying(), teched + 30, (i) => [0, i === 0 ? Btn.Shield : i === teched + 20 ? Btn.Jump : 0]), 1);
+    expect(a[teched + TECH_FRAMES - 1]).toBe("tech");
+    expect(a.indexOf("jumpSquat") - teched).toBe(TECH_FRAMES + 1);
+  });
+
+  /** The tick of the hit, the victim's first frame after the freeze, and the stun it was dealt. */
+  function afterFreeze(frames: Frame[], shield: boolean): { first: number; stun: number } {
+    const hit = frames.findIndex((f) => (shield ? f.events.shieldHits : f.events.hits).length > 0);
+    expect(hit, "the jab connects").toBeGreaterThanOrEqual(0);
+    const stun = frames[hit].state.fighters[1].hitstun;
+    const first = frames.findIndex((f, i) => i > hit && f.state.fighters[1].actionFrame === 1);
+    return { first, stun };
+  }
+
+  // Hitstun H: rubendal SSBU-Calculator's FAF is H + 1, counted from the first frame
+  // after the freeze (https://github.com/rubendal/SSBU-Calculator). A weak flat hit
+  // keeps the victim on the ground, so the act is a jab.
+  it("still acts out of hitstun H on the (H + 1)th frame after the freeze", () => {
+    const flat: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle: 0, baseKnockback: fx(20), knockbackGrowth: 0 })] }) },
+    };
+    const ctx = ctxFor(flat);
+    const dry = play(standing(ctx), 40, JAB, ctx);
+    const { first, stun } = afterFreeze(dry, false);
+    expect(stun).toBeGreaterThan(3);
+    const frames = play(standing(ctx), first + stun + 2, (i) => [i === 0 ? Btn.Attack : 0, i === first + stun - 3 ? Btn.Attack : 0], ctx);
+    expect(frames[first + stun - 1].state.fighters[1].grounded).toBe(true);
+    expect(actions(frames, 1).indexOf("attack") - first + 1).toBe(stun + 1);
+  });
+
+  // Shieldstun S: acts on S + 1 after the freeze, as hitstun does (rubendal SSBU-Calculator).
+  it("still acts out of shieldstun S on the (S + 1)th frame after the freeze", () => {
+    const dry = play(standing(), 40, JAB_INTO_SHIELD);
+    const { first, stun } = afterFreeze(dry, true);
+    expect(stun).toBeGreaterThan(1);
+    const frames = play(standing(), first + stun + 2, (i) => [i === 0 ? Btn.Attack : 0, i === first + stun - 2 ? Btn.Shield | Btn.Jump : Btn.Shield]);
+    expect(actions(frames, 1).indexOf("jumpSquat") - first + 1).toBe(stun + 1);
   });
 });

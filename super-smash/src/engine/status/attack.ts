@@ -25,6 +25,7 @@ import {
   THROW_FRAMES,
   bufferPress,
   buttonPresses,
+  handOff,
   hasMove,
   presses,
   releaseGrab,
@@ -72,8 +73,10 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     startMove(f, "attack", move.followUp);
     return;
   }
+  // `totalFrames` is UFD's "Total frames" T: the move's frames 1..T, and the
+  // fighter acts on frame T + 1, this one (`handOff`).
   if (f.actionFrame >= move.totalFrames) {
-    startAction(f, f.grounded ? "stand" : "fall");
+    handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
     return;
   }
   bufferPress(f, intent, ctx.frame);
@@ -108,7 +111,7 @@ export const STATUS_CATCH: FighterStatus = {
     }
     const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
     if (f.actionFrame >= (move?.totalFrames ?? 30)) {
-      startAction(f, f.grounded ? "stand" : "fall");
+      handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -164,8 +167,8 @@ export const STATUS_CATCH_ATTACK: FighterStatus = {
   action: "pummel",
   kineticType: "FALL",
   pre: clearHitRecord,
-  main(f) {
-    if (f.actionFrame >= PUMMEL_FRAMES) startAction(f, "grabHold");
+  main(f, intent, ctx) {
+    if (f.actionFrame >= PUMMEL_FRAMES) handOff(f, "grabHold", intent, ctx);
   },
 };
 
@@ -174,7 +177,7 @@ export const STATUS_THROW: FighterStatus = {
   action: "throw",
   kineticType: "FALL",
   pre: clearHitRecord,
-  main(f, _intent, ctx) {
+  main(f, intent, ctx) {
     const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
     if (f.actionFrame >= (move?.totalFrames ?? THROW_FRAMES)) {
       // A throw normally releases through its own hitbox connecting, but a
@@ -183,7 +186,7 @@ export const STATUS_THROW: FighterStatus = {
       // link still tying two fighters together. The animation finishing is
       // the backstop: nobody is held once the throw is over.
       releaseHeld(f, ctx.fighters);
-      startAction(f, f.grounded ? "stand" : "fall");
+      handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
     }
   },
 };

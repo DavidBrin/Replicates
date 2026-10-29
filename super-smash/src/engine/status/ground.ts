@@ -13,6 +13,7 @@ import {
   CROUCH_START_FRAMES,
   RUN_BRAKE_FRAMES,
   TURNAROUND_FRAMES,
+  handOff,
   handleActionable,
   startAction,
 } from "../states";
@@ -125,8 +126,8 @@ export const STATUS_TURN_RUN: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_TURN_RUN",
   action: "turnaround",
   kineticType: "GROUND_STOP",
-  main(f) {
-    if (f.actionFrame >= TURNAROUND_FRAMES) startAction(f, "stand");
+  main(f, intent, ctx) {
+    if (f.actionFrame >= TURNAROUND_FRAMES) handOff(f, "stand", intent, ctx);
   },
 };
 
@@ -134,8 +135,8 @@ export const STATUS_SQUAT: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_SQUAT",
   action: "crouchStart",
   kineticType: "GROUND_STOP",
-  main(f) {
-    if (f.actionFrame >= CROUCH_START_FRAMES) startAction(f, "crouch");
+  main(f, intent, ctx) {
+    if (f.actionFrame >= CROUCH_START_FRAMES) handOff(f, "crouch", intent, ctx);
   },
 };
 
@@ -153,8 +154,8 @@ export const STATUS_SQUAT_RV: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_SQUAT_RV",
   action: "crouchEnd",
   kineticType: "GROUND_STOP",
-  main(f) {
-    if (f.actionFrame >= CROUCH_END_FRAMES) startAction(f, "stand");
+  main(f, intent, ctx) {
+    if (f.actionFrame >= CROUCH_END_FRAMES) handOff(f, "stand", intent, ctx);
   },
 };
 

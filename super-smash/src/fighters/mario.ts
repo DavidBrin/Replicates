@@ -99,6 +99,15 @@ const legacy: FighterDef = {
       downFrames: 71,
       directionalIntangible: [3, 19],
     },
+    // Spot dodge and rolls (Plan 3 final wave): UltimateFrameData,
+    // https://ultimateframedata.com/mario, "Dodges / Rolls": each "Total frames"
+    // and "Intangible on frame a-b", fresh. The spot dodge is the second of
+    // UFD's "20/25"; the first is its cancel, not modelled (`GroundDodgeAttributes`).
+    groundDodge: {
+      spotDodge: { frames: 25, intangible: [3, 17] },
+      forwardRoll: { frames: 29, intangible: [4, 15] },
+      backRoll: { frames: 34, intangible: [5, 16] },
+    },
   },
 
   params: FIGHTER_PARAMS.mario,

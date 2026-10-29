@@ -43,16 +43,15 @@ import {
   RESPAWN_INVINCIBILITY_MAX,
   RESPAWN_INVINCIBILITY_MIN,
   RESPAWN_PLATFORM_FRAMES,
-  ROLL_INTANGIBLE,
   SDI_INPUT_INTERVAL,
   SMASH_CHARGE_DAMAGE,
   SMASH_CHARGE_MAX,
   SMASH_INPUT_WINDOW,
   TAP_JUMP_FRAMES,
-  SPOT_DODGE_INTANGIBLE,
   TECH_CEILING_INTANGIBLE,
   TECH_INTANGIBLE,
 } from "./constants";
+import { dodgeIntangible, groundDodgeOf, rollOf } from "./groundDodge";
 import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
 import { clearHitRecord } from "./hitbox";
@@ -350,6 +349,37 @@ export function startAction(f: FighterState, action: ActionState): void {
 }
 
 /**
+ * End a timed status on its first actionable frame: change to `action`, then run
+ * that status's `main` on this same frame (Plan 3 final wave, the final review's
+ * Important 4, Option A).
+ *
+ * A status the fighter enters itself, in phase 3 (a move, a dodge, the shield
+ * drop, a ledge option), counts its entry frame as its frame 1: it already moves
+ * and is hit-tested as that status (`actionFrame` 0; `moveScriptFrame`'s + 1).
+ * So a length T, UFD's "Total frames" (first actionable frame T + 1), ends it on
+ * `actionFrame` T, frame T + 1, and the fighter must be able to act on that
+ * frame. Changing status alone left the new status's `main`, which carries the
+ * input check, to its first run on the next frame: one frame late for every
+ * such status. Running it here is how `jumpSquat` already leaves on its last
+ * frame.
+ *
+ * The order is the registry's (`changeStatus`): the old status's `end`, the new
+ * one's `pre`, then the new one's `main`, once. Nothing runs twice: the old
+ * status's `main` reads no input on the frame it hands off (its `bufferPress`
+ * is on the other branch), and the new status starts at `actionFrame` 0, short
+ * of every timed status's length, so its `main` never hands off again.
+ *
+ * Not for a status entered on contact or on another status's last frame (a
+ * landing, a tech, hitstun, shieldstun, the trump, the get-up after lying
+ * down): its `actionFrame` 0 is the frame before its frame 1, so `startAction`
+ * already ends it on its first actionable frame.
+ */
+export function handOff(f: FighterState, action: ActionState, intent: Intent, ctx: StateContext): void {
+  changeStatus(f, action);
+  STATUS_TABLE[action]?.main(f, intent, ctx);
+}
+
+/**
  * Enter a swinging status with `slot` as its move. Task 8 also resets the hit
  * record in those statuses' `pre`; it is reset here too so a status not yet
  * registered — a test that skips the registry — behaves the same.
@@ -373,23 +403,30 @@ export function chargeMultiplier(charge: number): number {
 /* ------------------------------------------------------ dodge windows -- */
 
 /**
- * The intangible window of a dodge, as [first frame, last frame].
+ * The intangible window of a dodge, as [first, last] `actionFrame`: one
+ * convention for every dodge, whatever frame its status was entered on.
  *
  * `FighterState.intangible` is a countdown, not a schedule, so a spot dodge
- * cannot simply set it to 20 on entry: that would grant intangibility on frames
- * 0–2, which the real game deliberately does not. Instead the window is
- * re-asserted one frame at a time from inside it, which reproduces `[3, 20]`
- * exactly and leaves a longer grant (a ledge grab, a respawn) untouched.
+ * cannot simply set it on entry: that would grant intangibility on its first
+ * frames, which the real game deliberately does not. Instead the window is
+ * re-asserted one frame at a time from inside it, which reproduces it exactly
+ * and leaves a longer grant (a ledge grab, a respawn) untouched.
  *
- * An air dodge's window is the fighter's own, neutral or directional
- * (`airDodgeIntangible`; Plan 3, Task 20c).
+ * Each source's frames are mapped by where its status is entered (the final
+ * review's frame-convention table). The spot dodge, the rolls and the air dodge
+ * are entered on their own frame in phase 3, their frame 1, so a published
+ * frame N is `actionFrame` N − 1: the spot dodge and rolls are the fighter's
+ * own (`dodgeIntangible`, UFD; Plan 3 final wave), the air dodge's too, neutral
+ * or directional (`airDodgeIntangible`; Plan 3, Task 20c). A tech is entered on
+ * the frame of landing (phase 5), the frame before its frame 1, so its
+ * published frames are its `actionFrame`s as they stand.
  */
 export function dodgeWindow(f: FighterState, attrs: FighterAttributes): readonly [number, number] | null {
   switch (f.action) {
     case "spotDodge":
-      return SPOT_DODGE_INTANGIBLE;
+      return dodgeIntangible(groundDodgeOf(attrs).spotDodge);
     case "roll":
-      return ROLL_INTANGIBLE;
+      return dodgeIntangible(rollOf(groundDodgeOf(attrs), f.charge));
     case "airDodge":
       return airDodgeIntangible(airDodgeOf(attrs), f.charge);
     // Teching (Plan 3, Task 12): SmashWiki "Lucario (SSBU)/Techs".
@@ -705,18 +742,20 @@ export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContex
  * simplification and a deliberate one: the alternative is running collision
  * against the very ledge the fighter is climbing over, which lands it back on
  * the ledge it is trying to leave on the first frame of every getup.
+ *
+ * The option ends on its first actionable frame, which reads `intent` (`handOff`).
  */
-export function finishLedgeOption(f: FighterState, ctx: StateContext): void {
+export function finishLedgeOption(f: FighterState, intent: Intent, ctx: StateContext): void {
   const ledge = f.ledge;
   f.ledge = null;
   if (f.action === "ledgeJump") {
     kineticSetY(f, LEDGE_JUMP_VELOCITY);
     f.jumpsUsed = 1;
-    startAction(f, "jump");
+    handOff(f, "jump", intent, ctx);
     return;
   }
   if (ledge === null || ledge.platform >= ctx.stage.platforms.length) {
-    startAction(f, "fall");
+    handOff(f, "fall", intent, ctx);
     return;
   }
   const p = ctx.stage.platforms[ledge.platform];
@@ -730,7 +769,7 @@ export function finishLedgeOption(f: FighterState, ctx: StateContext): void {
   f.jumpsUsed = 0;
   f.airDodged = false;
   f.airTime = 0;
-  startAction(f, "stand");
+  handOff(f, "stand", intent, ctx);
 }
 
 /**

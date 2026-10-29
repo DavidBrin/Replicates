@@ -1,7 +1,12 @@
 import { P, type PoseClip } from "./clip";
 
 /**
- * Roll — 31 frames, intangible on 4-20 (`ROLL_FRAMES`, `ROLL_INTANGIBLE`).
+ * Roll — drawn on a 31-frame grid, intangible on 4-20 (Plan 1's shared roll).
+ * The engine's rolls are each fighter's own now, forward and back
+ * (UltimateFrameData, `groundDodge.ts`; Plan 3 final wave): Mario's are 29 and
+ * 34, intangible on `actionFrame` 3-14 and 4-15. The clip plays over the
+ * fighter's own length (`actionDurationFor`), so its beats fall near, not on,
+ * that window.
  *
  * Three beats, because that is what Ultimate shows and because the player on the
  * other side has to be able to read them: a few frames of ducking that are still
@@ -26,9 +31,9 @@ import { P, type PoseClip } from "./clip";
  *
  * It turns at a constant rate, and both halves of that are worth saying.
  * Easing the keys cannot change it: `poseSpinFor` integrates `spin` against
- * `poseTimeFor`, which for a roll is `actionFrame / ROLL_FRAMES`, so an ease
- * moves the pose and leaves the turn exactly where it was. And it should not be
- * changed — `startAction` gives a roll one velocity for all 31 frames and
+ * `poseTimeFor`, which for a roll is `actionFrame` over the roll's length, so an
+ * ease moves the pose and leaves the turn exactly where it was. And it should
+ * not be changed — the roll's status gives it one velocity for all its frames and
  * `applyMovement` never touches it again, so a constant turn is the rate that
  * rolls without slipping. Redistributing it with a keyframe `rotation` on top
  * would buy a slower commit at the price of a ball skidding over ground it is

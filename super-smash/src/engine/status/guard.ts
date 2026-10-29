@@ -8,19 +8,23 @@
  * purpose: `end` also runs when a hit interrupts the roll, which would zero
  * `vx` during the victim's hitlag. Nothing moves while frozen, but the CPU
  * reads `vx`, and the golden trace catches the difference.
+ *
+ * The shield start, the shield drop and the three dodges end on their first
+ * actionable frame, where the next status's `main` runs (`handOff`; Plan 3
+ * final wave). The spot dodge's and the rolls' lengths are each fighter's own
+ * (`groundDodge.ts`), and a roll keeps its way, forward or back, in `charge`.
  */
 
 import { airDodgeFrames, airDodgeOf } from "../airDodge";
 import {
   FURAFURA_END_FRAMES,
-  ROLL_FRAMES,
   SHIELD_BREAK_MASH_BUTTON,
   SHIELD_BREAK_MASH_STICK,
   SHIELD_BREAK_RESET,
   SHIELD_MIN_HOLD,
   SHIELD_RELEASE_FRAMES,
-  SPOT_DODGE_FRAMES,
 } from "../constants";
+import { groundDodgeOf, rollCharge, rollOf } from "../groundDodge";
 import { kineticSetX } from "../kinetic";
 import { mashFrames } from "../shield";
 import {
@@ -28,6 +32,7 @@ import {
   SHIELD_START_FRAMES,
   bufferPress,
   buttonPresses,
+  handOff,
   hasMove,
   presses,
   startAction,
@@ -39,8 +44,8 @@ export const STATUS_GUARD_ON: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_GUARD_ON",
   action: "shieldStart",
   kineticType: "GROUND_STOP",
-  main(f) {
-    if (f.actionFrame >= SHIELD_START_FRAMES) startAction(f, "shield");
+  main(f, intent, ctx) {
+    if (f.actionFrame >= SHIELD_START_FRAMES) handOff(f, "shield", intent, ctx);
   },
 };
 
@@ -74,7 +79,11 @@ export const STATUS_GUARD: FighterStatus = {
     }
     if (intent.x !== 0) {
       startAction(f, "roll");
-      kineticSetX(f, intent.x * Math.trunc(ROLL_DISTANCE / ROLL_FRAMES), "stop");
+      // Forward or back, each its own length (`groundDodge.ts`); the distance is
+      // the same either way (`ROLL_DISTANCE`, UNVERIFIED), spread over the roll.
+      f.charge = rollCharge(intent.x, f.facing);
+      const frames = rollOf(groundDodgeOf(ctx.def.attributes), f.charge).frames;
+      kineticSetX(f, intent.x * Math.trunc(ROLL_DISTANCE / frames), "stop");
     }
   },
 };
@@ -84,7 +93,7 @@ export const STATUS_GUARD_OFF: FighterStatus = {
   action: "shieldRelease",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= SHIELD_RELEASE_FRAMES) startAction(f, "stand");
+    if (f.actionFrame >= SHIELD_RELEASE_FRAMES) handOff(f, "stand", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -138,7 +147,8 @@ export const STATUS_ESCAPE: FighterStatus = {
   action: "spotDodge",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= SPOT_DODGE_FRAMES) startAction(f, "stand");
+    // Each fighter's own length, UFD's "Total frames" (`groundDodge.ts`).
+    if (f.actionFrame >= groundDodgeOf(ctx.def.attributes).spotDodge.frames) handOff(f, "stand", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -148,9 +158,10 @@ export const STATUS_ESCAPE_F: FighterStatus = {
   action: "roll",
   kineticType: "MOTION",
   main(f, intent, ctx) {
-    if (f.actionFrame >= ROLL_FRAMES) {
+    // Forward or back, by the way `charge` remembers (`rollOf`).
+    if (f.actionFrame >= rollOf(groundDodgeOf(ctx.def.attributes), f.charge).frames) {
       kineticSetX(f, 0, "stop");
-      startAction(f, "stand");
+      handOff(f, "stand", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -170,7 +181,7 @@ export const STATUS_ESCAPE_AIR: FighterStatus = {
     // Each fighter's own length, by the direction `charge` remembers (Plan 3,
     // Task 20c; `airDodgeFrames`).
     const total = airDodgeFrames(airDodgeOf(ctx.def.attributes), f.charge);
-    if (f.actionFrame >= total) startAction(f, "fall");
+    if (f.actionFrame >= total) handOff(f, "fall", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };

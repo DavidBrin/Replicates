@@ -369,10 +369,11 @@ export const SMASH_CHARGE_DAMAGE = fx(1.4);
 
 /* ---------------------------------------------------------------- dodges -- */
 
-export const SPOT_DODGE_FRAMES = 24;
-export const SPOT_DODGE_INTANGIBLE = [3, 20] as const;
-export const ROLL_FRAMES = 31;
-export const ROLL_INTANGIBLE = [4, 20] as const;
+/*
+ * The spot dodge and the rolls are each fighter's own (Plan 3 final wave):
+ * `FighterAttributes.groundDodge`, from UltimateFrameData, read by
+ * `groundDodge.ts`.
+ */
 /*
  * Air dodges (Plan 3, Task 20c). Each fighter's lengths and intangibility are
  * its own (`FighterAttributes.airDodge`); what follows is shared by the whole

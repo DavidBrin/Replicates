@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_AIR_DODGE, airDodgeCharge, directionalLandingLag } from "./airDodge";
 import { fx } from "./fixed";
+import { DEFAULT_GROUND_DODGE, ROLL_BACK, ROLL_FORWARD } from "./groundDodge";
 import {
   AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
@@ -10,10 +11,8 @@ import {
   JUMP_SQUAT_FRAMES,
   LAUNCH_SPEED_DECAY,
   PERFECT_SHIELD_WINDOW,
-  ROLL_INTANGIBLE,
   SDI_DISTANCE,
   SHIELD_MIN_HOLD,
-  SPOT_DODGE_INTANGIBLE,
   SMASH_INPUT_WINDOW,
   TAP_JUMP_FRAMES,
 } from "./constants";
@@ -609,28 +608,32 @@ describe("shield", () => {
     expect(g.vx).toBeGreaterThan(0);
   });
 
-  it("grants spot-dodge intangibility exactly on frames 3 to 20", () => {
-    const f = fighter({ action: "spotDodge", actionFrame: 0 });
+  // The tester authors no ground dodge, so it dodges as Mario does
+  // (`DEFAULT_GROUND_DODGE`; UltimateFrameData, https://ultimateframedata.com/mario):
+  // spot dodge intangible on 3-17, forward roll 4-15, back roll 5-16. The entry
+  // frame is frame 1, so published frame N is `actionFrame` N - 1 (`groundDodge.ts`).
+  /** The `actionFrame`s a dodge entered on `actionFrame` 0 is intangible on. */
+  function intangibleFrames(over: Partial<FighterState>): number[] {
+    const f = fighter({ actionFrame: 0, ...over });
     const seen: number[] = [];
     for (let i = 1; i <= 24; i++) {
       f.intangible = 0;
       tick(f, 0, 0);
       if (f.intangible > 0) seen.push(f.actionFrame);
     }
-    expect(seen[0]).toBe(SPOT_DODGE_INTANGIBLE[0]);
-    expect(seen[seen.length - 1]).toBe(SPOT_DODGE_INTANGIBLE[1]);
+    return seen;
+  }
+
+  it("grants spot-dodge intangibility on Mario's frames 3-17, actionFrame 2-16", () => {
+    expect(DEFAULT_GROUND_DODGE.spotDodge.intangible).toEqual([3, 17]);
+    const seen = intangibleFrames({ action: "spotDodge" });
+    expect([seen[0], seen.at(-1)]).toEqual([2, 16]);
+    expect(seen).toHaveLength(15);
   });
 
-  it("grants roll intangibility exactly on frames 4 to 20", () => {
-    const f = fighter({ action: "roll", actionFrame: 0 });
-    const seen: number[] = [];
-    for (let i = 1; i <= 24; i++) {
-      f.intangible = 0;
-      tick(f, 0, 0);
-      if (f.intangible > 0) seen.push(f.actionFrame);
-    }
-    expect(seen[0]).toBe(ROLL_INTANGIBLE[0]);
-    expect(seen[seen.length - 1]).toBe(ROLL_INTANGIBLE[1]);
+  it("grants roll intangibility on Mario's 4-15 forward (actionFrame 3-14) and 5-16 back (4-15)", () => {
+    expect(intangibleFrames({ action: "roll", charge: ROLL_FORWARD })).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(intangibleFrames({ action: "roll", charge: ROLL_BACK })).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
   });
 });
 

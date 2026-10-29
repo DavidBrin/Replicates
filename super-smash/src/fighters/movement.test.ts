@@ -4,7 +4,7 @@ import { airBrakeFromDef, airDodgeFromDef, sideDodgeTravel } from "@/ai/behaviou
 import { ONE, fx, mul, toFloat } from "@/engine/fixed";
 import { emptyKinetic, initialRiseStep, jumpLaunchSpeed, jumpRiseSpeeds } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
-import { LEDGE_HANG_MIN, onLanded } from "@/engine/states";
+import { LEDGE_HANG_MIN, ROLL_DISTANCE, onLanded } from "@/engine/states";
 import { Btn } from "@/engine/types";
 import type { FighterState, GameState, InputFrame, MatchRules } from "@/engine/types";
 import { STAGES } from "@/stages";
@@ -52,6 +52,9 @@ function play(s0: GameState, inputs: readonly InputFrame[]): FighterState[] {
 }
 
 const hold = (input: InputFrame, n: number): InputFrame[] => Array.from({ length: n }, () => input);
+
+/** A dodge as UltimateFrameData publishes it: [total frames, first intangible, last intangible]. */
+type Dodge = readonly [total: number, first: number, last: number];
 
 /** Height above the ground, in units, on every frame from the first airborne one. */
 function airborneHeights(frames: readonly FighterState[], groundY: number): number[] {
@@ -701,6 +704,94 @@ describe("air dodges: each fighter's own lengths and intangibility (Plan 3, Task
 
   it("gives Fox the shortest neutral dodge, 38 frames, where the replica used to give everyone 50", () => {
     expect(dodgeFrames("fox", 0).length).toBe(38);
+  });
+
+  // The dodge ends on `actionFrame` P (its frame P + 1), the first actionable frame,
+  // and the fall that takes over reads input on it (Plan 3 final wave, `handOff`):
+  // Mario's 52-frame neutral dodge acts on frame 53.
+  it.each(IDS)("%s: acts out of the neutral dodge on the frame after P's length", (id) => {
+    const n = P[id].neutral;
+    const frames = play(aloft(id), [Btn.Shield, ...hold(0, n - 1), Btn.Attack, 0]);
+    expect(frames[n - 1].action, `frame ${n}`).toBe("airDodge");
+    expect(frames[n].action, `frame ${n + 1}: the neutral air`).toBe("attack");
+  });
+});
+
+describe("spot dodges and rolls: each fighter's own frames (Plan 3 final wave)", () => {
+  // UltimateFrameData, one page per fighter, "Dodges / Rolls": each dodge's "Total
+  // frames" T (its frames 1..T, first actionable T + 1) and "Intangible on frame
+  // a-b". The spot dodge's T is the second of UFD's pair ("20/25" for Mario):
+  // SmashWiki "Spot dodge" (https://www.ssbwiki.com/Spot_dodge) gives Mario's as
+  // 25, and 20 "canceled" into a ground attack or special, which is not modelled.
+  // Fresh dodges: staling is not modelled either.
+  const UFD: Record<RosterId, { url: string; spot: Dodge; forward: Dodge; back: Dodge }> = {
+    mario: { url: "https://ultimateframedata.com/mario", spot: [25, 3, 17], forward: [29, 4, 15], back: [34, 5, 16] },
+    donkeyKong: { url: "https://ultimateframedata.com/donkey_kong", spot: [26, 3, 17], forward: [30, 4, 15], back: [35, 5, 16] },
+    link: { url: "https://ultimateframedata.com/link", spot: [26, 3, 17], forward: [30, 4, 15], back: [35, 5, 16] },
+    samus: { url: "https://ultimateframedata.com/samus", spot: [26, 3, 17], forward: [34, 4, 18], back: [39, 5, 20] },
+    kirby: { url: "https://ultimateframedata.com/kirby", spot: [26, 3, 17], forward: [30, 4, 15], back: [35, 5, 16] },
+    fox: { url: "https://ultimateframedata.com/fox", spot: [23, 3, 14], forward: [26, 4, 12], back: [32, 4, 14] },
+    pikachu: { url: "https://ultimateframedata.com/pikachu", spot: [24, 3, 16], forward: [28, 4, 14], back: [33, 4, 15] },
+    marth: { url: "https://ultimateframedata.com/marth", spot: [25, 3, 17], forward: [29, 4, 15], back: [34, 5, 16] },
+  };
+
+  /** Out of a held shield: down for the spot dodge, toward or away from the facing for a roll. */
+  function dodgeFrom(id: RosterId, kind: "spot" | "forward" | "back", pressAt = -1): FighterState[] {
+    const s = standing(id);
+    const facing = s.fighters[0].facing;
+    const key = kind === "spot" ? Btn.Down : (kind === "forward") === facing > 0 ? Btn.Right : Btn.Left;
+    // Shield for 4 frames, then the dodge on the 5th (index 4): its frame 1.
+    return play(s, [...hold(Btn.Shield, 4), Btn.Shield | key, ...Array.from({ length: 50 }, (_, i) => (i + 1 === pressAt ? Btn.Jump : 0))]).slice(4);
+  }
+  const ACTION = { spot: "spotDodge", forward: "roll", back: "roll" } as const;
+
+  /** [total, first intangible, last intangible], published frames counted from the dodge's frame 1. */
+  function measured(id: RosterId, kind: "spot" | "forward" | "back"): Dodge {
+    const frames = dodgeFrom(id, kind);
+    const total = frames.findIndex((f) => f.action !== ACTION[kind]);
+    const on = frames.slice(0, total).flatMap((f, i) => (f.intangible > 0 ? [i + 1] : []));
+    return [total, on[0], on.at(-1)!];
+  }
+
+  it.each(IDS)("%s: the spot dodge's and both rolls' lengths and intangible frames are UFD's", (id) => {
+    for (const kind of ["spot", "forward", "back"] as const) expect(measured(id, kind), `${kind}, ${UFD[id].url}`).toEqual(UFD[id][kind]);
+  });
+
+  it.each(IDS)("%s: acts out of each on the frame after its total", (id) => {
+    for (const kind of ["spot", "forward", "back"] as const) {
+      const t = UFD[id][kind][0];
+      const frames = dodgeFrom(id, kind, t);
+      expect(frames[t - 1].action, `${kind} frame ${t}`).toBe(ACTION[kind]);
+      expect(frames[t].action, `${kind} frame ${t + 1}`).toBe("jumpSquat");
+    }
+  });
+
+  it("is authored by every roster fighter, none left to the engine's default (Mario's)", () => {
+    for (const f of FIGHTERS) expect(f.attributes.groundDodge, f.id).toBeDefined();
+  });
+
+  // The two pinned by hand: Mario's spot dodge is intangible on 3-17 of 25 and
+  // Fox's on 3-14 of 23; Mario's rolls are 29 (4-15) forward and 34 (5-16) back,
+  // Fox's 26 (4-12) and 32 (4-14).
+  it.each([
+    ["mario", [25, 3, 17], [29, 4, 15], [34, 5, 16]],
+    ["fox", [23, 3, 14], [26, 4, 12], [32, 4, 14]],
+  ] as const)("%s: spot dodge %j, forward roll %j, back roll %j", (id, spot, forward, back) => {
+    expect(measured(id, "spot")).toEqual(spot);
+    expect(measured(id, "forward")).toEqual(forward);
+    expect(measured(id, "back")).toEqual(back);
+  });
+
+  it("rolls the way the stick points, forward or back, the same distance either way", () => {
+    for (const kind of ["forward", "back"] as const) {
+      const frames = dodgeFrom("mario", kind);
+      const total = UFD.mario[kind][0];
+      const travel = frames[total].x - frames[0].x + frames[0].vx;
+      const dir = (kind === "forward" ? 1 : -1) * frames[0].facing;
+      expect(Math.sign(travel), kind).toBe(dir);
+      // `ROLL_DISTANCE` (UNVERIFIED) over the roll's own length, a whole Q12 step a frame.
+      expect(Math.abs(travel), kind).toBe(total * Math.trunc(ROLL_DISTANCE / total));
+    }
   });
 });
 

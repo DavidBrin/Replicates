@@ -1,8 +1,11 @@
 import { P, type PoseClip } from "./clip";
 
 /**
- * The spot dodge — 24 frames, intangible on 3–20 (`SPOT_DODGE_FRAMES`,
- * `SPOT_DODGE_INTANGIBLE`).
+ * The spot dodge — drawn on a 24-frame grid, intangible on 3–20 (Plan 1's
+ * shared spot dodge). The engine's spot dodge is each fighter's own now
+ * (UltimateFrameData, `groundDodge.ts`; Plan 3 final wave): Mario's is 25,
+ * intangible on `actionFrame` 2–16. The clip plays over the fighter's own
+ * length (`actionDurationFor`), so its beats fall near, not on, that window.
  *
  * Ultimate calls it a sidestep and it is the shortest and fastest of the three
  * dodges: almost every character in the roster turns intangible on frame 3, and
@@ -150,10 +153,10 @@ export const spotDodge: PoseClip = {
       ease: "out",
     },
     // Frame 23, the last frame anything is drawn on: `poseTimeFor` divides by
-    // `SPOT_DODGE_FRAMES`, so the clip is only ever sampled at n/24 and t = 1
-    // belongs to whatever comes next. This key is therefore the standing shape
-    // itself, close enough to `idle` that the cut costs nothing — and it is the
-    // frame that tells the opponent the punish window is open.
+    // the spot dodge's length, so on the grid the clip is only ever sampled at
+    // n/24 and t = 1 belongs to whatever comes next. This key is therefore the
+    // standing shape itself, close enough to `idle` that the cut costs nothing —
+    // and it is the frame that tells the opponent the punish window is open.
     {
       t: 23 / 24,
       pose: P({

@@ -72,6 +72,15 @@ const legacy: FighterDef = {
       downFrames: 69,
       directionalIntangible: [2, 18],
     },
+    // Spot dodge and rolls (Plan 3 final wave): UltimateFrameData,
+    // https://ultimateframedata.com/pikachu, "Dodges / Rolls": each "Total frames"
+    // and "Intangible on frame a-b", fresh. The spot dodge is the second of
+    // UFD's "19/24"; the first is its cancel, not modelled (`GroundDodgeAttributes`).
+    groundDodge: {
+      spotDodge: { frames: 24, intangible: [3, 16] },
+      forwardRoll: { frames: 28, intangible: [4, 14] },
+      backRoll: { frames: 33, intangible: [4, 15] },
+    },
   },
 
   params: FIGHTER_PARAMS.pikachu,
