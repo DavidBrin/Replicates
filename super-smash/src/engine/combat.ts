@@ -81,6 +81,19 @@ export interface CombatState {
   /** The hit point at contact, world, Q12: the centre of the hitbox. 0 for 365. */
   autolinkPointX: number;
   autolinkPointY: number;
+  /**
+   * The freeze now running (`hitlag`) was dealt to this fighter as a hit's
+   * victim: a hit on its body or its shield (a parry included), or a pummel. Only
+   * then may it SDI, and ASDI (Plan 3 final wave; the final review's Important 3):
+   * SmashWiki "Smash directional influence" lets players "slightly alter their
+   * position during hitlag from being hit by an attack", and "Shield SDI ... allows
+   * players to move slightly when their shield is hit". An attacker's freeze is
+   * not one. Set with the victim's hitlag, cleared when the freeze ends and on KO.
+   * UNVERIFIED: that a parry's freeze counts (the page's shield SDI does not
+   * mention perfect shields), and a pummel's, where the hold places the victim
+   * at its captor whatever SDI did (`holdAtCaptor`).
+   */
+  victimFreeze: boolean;
 }
 
 export function emptyCombat(): CombatState {
@@ -104,6 +117,7 @@ export function emptyCombat(): CombatState {
     autolinkMomentumY: 0,
     autolinkPointX: 0,
     autolinkPointY: 0,
+    victimFreeze: false,
   };
 }
 
@@ -128,5 +142,6 @@ export function cloneCombat(c: CombatState): CombatState {
     autolinkMomentumY: c.autolinkMomentumY,
     autolinkPointX: c.autolinkPointX,
     autolinkPointY: c.autolinkPointY,
+    victimFreeze: c.victimFreeze,
   };
 }

@@ -601,7 +601,9 @@ export function step(
     if (f.hitlag > 0) {
       // Frozen on contact. The only thing a victim may do is SDI — one pulse
       // per fresh direction press, at most one every four frames — which is why
-      // mashing during the crunch works exactly as it does in the real game.
+      // mashing during the crunch works exactly as it does in the real game. Only
+      // the victim: an attacker frozen by its own hit stands still, whatever the
+      // stick says (`CombatState.victimFreeze`; Plan 3 final wave).
       f.hitlag -= 1;
       frozen[i] = true;
       // A held fighter can still mash out of the grab during the freeze of a
@@ -636,6 +638,7 @@ export function step(
         leaveGroundIfShiftedOff(f, stage, s.frame);
         releasePendingLaunch(f, intent);
       }
+      if (f.hitlag === 0) f.combat.victimFreeze = false;
       continue;
     }
 
@@ -803,6 +806,7 @@ export function step(
     kineticClear(f);
     f.hitstun = 0;
     f.hitlag = 0;
+    f.combat.victimFreeze = false;
     f.balloon = false;
     clearPendingLaunch(f);
     f.grounded = false;
@@ -1412,10 +1416,12 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
 /**
  * Automatic SDI: the freeze of an electric or paralyzing hit ends with a shift
  * toward the held stick (Plan 3, Task 11; `ASDI_DISTANCE`), the first of the
- * release's four steps in `step` (phase 3). It is spent either way.
+ * release's four steps in `step` (phase 3). It is spent either way. A victim's,
+ * as SDI is (`CombatState.victimFreeze`): only a hit's victim is ever armed with
+ * it, so the second test states the rule rather than changes what it does.
  */
 function applyAsdi(f: FighterState, intent: Intent): void {
-  if (f.combat.asdi && (intent.x !== 0 || intent.y !== 0)) {
+  if (f.combat.asdi && f.combat.victimFreeze && (intent.x !== 0 || intent.y !== 0)) {
     const diagonal = intent.x !== 0 && intent.y !== 0;
     const distance = diagonal ? mul(ASDI_DISTANCE, DIAGONAL) : ASDI_DISTANCE;
     f.x += intent.x * distance;
@@ -1685,6 +1691,16 @@ function enterStaleQueue(attacker: FighterState, slot: MoveSlot | null, onShield
 }
 
 /**
+ * Freeze `victim` for `lag` frames as the fighter a hit landed on: the one freeze
+ * SDI and ASDI act in (`CombatState.victimFreeze`; Plan 3 final wave). A hit with
+ * no freeze leaves nothing to SDI in.
+ */
+function freezeVictim(victim: FighterState, lag: number): void {
+  victim.hitlag = lag;
+  victim.combat.victimFreeze = lag > 0;
+}
+
+/**
  * A pummel: damage, a freeze for both fighters, and nothing else (Plan 3, Task
  * 14; Plan 5, Task 7 keeps the name). The victim stays held: no knockback, no
  * hitstun, no release and no status change, and the escape timer is untouched
@@ -1708,7 +1724,7 @@ function applyHeldHit(
   victim.damage += damage;
   victim.airDodged = false;
   const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
-  victim.hitlag = lag;
+  freezeVictim(victim, lag);
   attacker.hitlag = lag;
   events.hits.push({
     attacker: attacker.port,
@@ -1898,7 +1914,7 @@ function applyHit(
       // `PARRY_MELEE_*`). Pushback carries the 0.15 inside its formula, before the
       // 1.3 cap. A parried projectile freezes nobody a stage away.
       const parry = perfectShieldHitlag(lag, fromProjectile, hb.direct ?? !fromProjectile);
-      victim.hitlag = parry.defender;
+      freezeVictim(victim, parry.defender);
       if (!fromProjectile) attacker.hitlag = parry.attacker;
       kineticSetX(victim, away * shieldPushback(stunExact, true), "stop");
       if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
@@ -1907,7 +1923,7 @@ function applyHit(
     }
     victim.shieldHealth -= shieldDamage(damage);
     victim.hitstun = computeShieldstun(damage, stunOpts);
-    victim.hitlag = lag;
+    freezeVictim(victim, lag);
     if (!fromProjectile) attacker.hitlag = lag;
     kineticSetX(victim, away * shieldPushback(stunExact), "stop");
     // A melee attacker on the ground slides back off the shield too; a
@@ -2034,7 +2050,7 @@ function applyHit(
       kineticTurnLaunch(victim, victim.kinetic.damageX + added.vx, victim.kinetic.damageY + added.vy);
     }
     victim.combat.comboHits += 1;
-    victim.hitlag = Math.max(victim.hitlag, lag);
+    freezeVictim(victim, Math.max(victim.hitlag, lag));
     if (!fromProjectile) attacker.hitlag = lag;
     events.hits.push({
       attacker: attacker.port,
@@ -2093,7 +2109,7 @@ function applyHit(
   // it a few frames later with its hitstun cut). One too weak to tumble does not
   // bounce: the victim flinches where it stands (SmashWiki "Meteor smash").
   victim.combat.launchBounce = victim.grounded && tumbles;
-  victim.hitlag = lag;
+  freezeVictim(victim, lag);
   victim.intangible = 0;
   // A hit that knocks a hanging fighter off the ledge locks the ledge out, as
   // letting go does; a hit anywhere else leaves the lockout alone.

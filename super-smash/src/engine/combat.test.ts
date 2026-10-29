@@ -1044,13 +1044,14 @@ describe("perfect shield (Plan 3, Task 10)", () => {
 /* --------------------------------------------- Task 11: SDI and ASDI -- */
 
 describe("SDI and ASDI (Plan 3, Task 11)", () => {
-  /** Fighter 1 frozen in hitlag with `hits` consecutive hits taken, pulsing SDI right. */
+  /** Fighter 1 frozen in a hit's hitlag with `hits` consecutive hits taken, pulsing SDI right. */
   function pulse(hits: number): number {
     const s = standing();
     const v = s.fighters[1];
     v.action = "hitstun";
     v.hitstun = 20;
     v.hitlag = 4;
+    v.combat.victimFreeze = true;
     v.combat.comboHits = hits;
     const x0 = v.x;
     return play(s, 1, () => [0, Btn.Right]).at(-1)!.state.fighters[1].x - x0;
@@ -1225,6 +1226,7 @@ describe("SDI cannot push a fighter into the stage (Plan 3, Task 11)", () => {
     v.action = "hitstun";
     v.hitstun = 20 + after;
     v.hitlag = 20;
+    v.combat.victimFreeze = true;
     const frames = play(s, 20 + after, (i) => [0, i < 20 && i % 2 === 0 ? stick : 0], ctx);
     return {
       frozen: frames[19].state.fighters[1],
@@ -5067,5 +5069,98 @@ describe("a tumbling launch into the floor bounces a grounded victim once, as it
   it("leaves the victim of a 270° box too weak to tumble on the ground: a flinch, not a bounce", () => {
     const { hitstun, after } = spiked({ baseKnockback: fx(40) });
     expect(after.slice(0, hitstun).every((f) => f.grounded && f.y === 0 && f.action === "hitstun")).toBe(true);
+  });
+});
+
+describe("SDI and ASDI are the hit fighter's alone (final wave, part 2, item 3)", () => {
+  /**
+   * Fighter 0 jabs fighter 1 (who holds `shield`, if asked); `stick(f0, f1)` is the pair's direction
+   * input on a frame. Returns every frame and the contact frame's index.
+   */
+  function exchange(
+    stick: (attacker: FighterState, victim: FighterState) => readonly [InputFrame, InputFrame],
+    shield: (i: number) => boolean = () => false,
+    prepare: (s: GameState) => void = () => {},
+  ): { frames: Frame[]; hit: number } {
+    let s = standing();
+    prepare(s);
+    let prev: readonly InputFrame[] = [0, 0];
+    const frames: Frame[] = [];
+    for (let i = 0; i < 50; i++) {
+      const [a, v] = stick(s.fighters[0], s.fighters[1]);
+      const now = [(i === 0 ? Btn.Attack : 0) | a, (shield(i) ? Btn.Shield : 0) | v];
+      const r = step(s, now, { prevInputs: prev, ctx: ctxFor() });
+      frames.push(r);
+      s = r.state;
+      prev = now;
+    }
+    const hit = frames.findIndex((f) => f.events.hits.length + f.events.shieldHits.length > 0);
+    expect(hit, "the jab connects").toBeGreaterThanOrEqual(0);
+    return { frames, hit };
+  }
+  /** Fighter `port`'s x on every frame of its freeze from the contact frame on, the contact frame first. */
+  const frozenX = (frames: Frame[], hit: number, port: number): number[] =>
+    frames.slice(hit).filter((f, i) => i === 0 || frames[hit + i - 1].state.fighters[port].hitlag > 0).map((f) => f.state.fighters[port].x);
+  /** Mash `dir` on every frame of `f`'s freeze an SDI pulse could fire on. */
+  const pulseFrame = (f: FighterState): boolean => f.hitlag > 0 && f.hitlag % 4 === 0;
+
+  // The final review's Important 3: SmashWiki "Smash directional influence"
+  // (https://www.ssbwiki.com/Smash_directional_influence) lets players "slightly alter
+  // their position during hitlag from being hit by an attack". An attacker's own freeze
+  // is not that: it slid 6 units over a 12-frame jab freeze.
+  it("does not move an attacker under the stick during its own hitlag", () => {
+    const { frames, hit } = exchange((a) => [pulseFrame(a) ? Btn.Left : 0, 0]);
+    expect(frames[hit].state.fighters[0].hitlag).toBeGreaterThan(4);
+    const xs = frozenX(frames, hit, 0);
+    expect(xs.length).toBeGreaterThan(4);
+    expect(new Set(xs).size).toBe(1);
+  });
+
+  // A parry freezes the attacker 14 frames beyond the hit (Task 10): pulsing away through
+  // it was about 6 more units out of the punish.
+  it("does not move a parried attacker under the stick", () => {
+    const parrySetup = (s: GameState): void => {
+      s.fighters[1].action = "shield";
+      s.fighters[1].actionFrame = 10;
+    };
+    const held = exchange(() => [0, 0], () => true, parrySetup);
+    const k = held.hit;
+    // Shield held to two frames before the hit, then let go: the jab lands in the parry window.
+    const { frames, hit } = exchange((a) => [pulseFrame(a) ? Btn.Left : 0, 0], (i) => i < k - 2, parrySetup);
+    expect(hit).toBe(k);
+    expect(frames[hit].state.fighters[1].action).toBe("shieldRelease");
+    expect(frames[hit].state.fighters[0].hitlag).toBeGreaterThan(14);
+    const xs = frozenX(frames, hit, 0);
+    expect(xs.length).toBeGreaterThan(14);
+    expect(new Set(xs).size).toBe(1);
+  });
+
+  it("still moves the fighter hit: one pulse of 2 units at a time", () => {
+    let pulses = 0;
+    const { frames, hit } = exchange((_a, v) => {
+      if (!pulseFrame(v)) return [0, 0];
+      pulses += 1;
+      return [0, Btn.Right];
+    });
+    const xs = frozenX(frames, hit, 1);
+    expect(pulses).toBeGreaterThan(1);
+    expect(xs.at(-1)! - xs[0]).toBe(pulses * SDI_DISTANCE);
+  });
+
+  // "Shield SDI is a mechanic that allows players to move slightly when their shield is hit" (same page).
+  it("still moves a shielding fighter whose shield was hit", () => {
+    let pulses = 0;
+    const { frames, hit } = exchange(
+      (_a, v) => {
+        if (!pulseFrame(v)) return [0, 0];
+        pulses += 1;
+        return [0, Btn.Right];
+      },
+      () => true,
+    );
+    expect(frames[hit].events.shieldHits).toHaveLength(1);
+    const xs = frozenX(frames, hit, 1);
+    expect(pulses).toBeGreaterThan(0);
+    expect(xs.at(-1)! - xs[0]).toBe(pulses * SDI_DISTANCE);
   });
 });

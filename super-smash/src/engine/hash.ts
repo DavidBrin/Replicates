@@ -184,6 +184,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.autolinkMomentumY);
   x = mixInt(x, c.autolinkPointX);
   x = mixInt(x, c.autolinkPointY);
+  x = mixBool(x, c.victimFreeze);
   return x;
 }
 

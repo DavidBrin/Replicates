@@ -160,7 +160,7 @@ export interface Intent {
   /** The fresh direction that made `smash` true, which may differ from x/y. */
   readonly smashX: number;
   readonly smashY: number;
-  /** One SDI pulse this frame, or (0, 0). Only ever non-zero during hitlag. */
+  /** One SDI pulse this frame, or (0, 0). Only ever non-zero in a hit victim's hitlag. */
   readonly sdiX: number;
   readonly sdiY: number;
   /** `Btn.Soft`: a partial tilt. No dash, no smash, a quarter of the DI. */
@@ -230,9 +230,11 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
   // SDI: one pulse per fresh direction press, and at most one every four frames.
   // The rate limit rides on the hitlag counter because `FighterState` has no
   // spare field for "frames since the last pulse" — and it must not gain one,
-  // since every field in it is hashed and re-simulated on every rollback.
+  // since every field in it is hashed and re-simulated on every rollback. Only
+  // in a freeze dealt to this fighter by a hit (`CombatState.victimFreeze`): an
+  // attacker's own hitlag is not one (Plan 3 final wave).
   const freshDir = f.framesSinceDirPress === 0;
-  const canPulse = f.hitlag > 0 && freshDir && f.hitlag % SDI_INPUT_INTERVAL === 0;
+  const canPulse = f.hitlag > 0 && f.combat.victimFreeze && freshDir && f.hitlag % SDI_INPUT_INTERVAL === 0;
 
   // Tap jump: an up press that nobody claimed.
   //

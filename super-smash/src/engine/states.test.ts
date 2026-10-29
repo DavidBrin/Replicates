@@ -839,8 +839,15 @@ describe("hitstun", () => {
 });
 
 describe("SDI", () => {
+  /** Frozen for `hitlag` frames by a hit it took (`CombatState.victimFreeze`). */
+  const struck = (over: Partial<FighterState>): FighterState => {
+    const f = fighter(over);
+    f.combat.victimFreeze = true;
+    return f;
+  };
+
   it("gives one pulse per fresh direction press during hitlag", () => {
-    const f = fighter({ hitlag: 8 });
+    const f = struck({ hitlag: 8 });
     updateInputTracking(f, Btn.Right, 0);
     const intent = interpretInput(f, Btn.Right, 0);
     expect(intent.sdiX).toBe(1);
@@ -848,21 +855,28 @@ describe("SDI", () => {
   });
 
   it("gives nothing for a direction merely held", () => {
-    const f = fighter({ hitlag: 8, framesSinceDirPress: 3, lastDirPressed: Btn.Right });
+    const f = struck({ hitlag: 8, framesSinceDirPress: 3, lastDirPressed: Btn.Right });
     updateInputTracking(f, Btn.Right, Btn.Right);
     const intent = interpretInput(f, Btn.Right, Btn.Right);
     expect(intent.sdiX).toBe(0);
   });
 
   it("gives nothing outside hitlag", () => {
-    const f = fighter({ hitlag: 0 });
+    const f = struck({ hitlag: 0 });
+    updateInputTracking(f, Btn.Right, 0);
+    expect(interpretInput(f, Btn.Right, 0).sdiX).toBe(0);
+  });
+
+  // Plan 3 final wave: the freeze of a fighter's own hit is not one to SDI in.
+  it("gives nothing in a freeze the fighter was not hit into", () => {
+    const f = fighter({ hitlag: 8 });
     updateInputTracking(f, Btn.Right, 0);
     expect(interpretInput(f, Btn.Right, 0).sdiX).toBe(0);
   });
 
   it("rate-limits to one pulse every four frames", () => {
     let pulses = 0;
-    const f = fighter({ hitlag: 12 });
+    const f = struck({ hitlag: 12 });
     for (let i = 0; i < 12; i++) {
       // A player mashing a direction on and off as fast as the keyboard allows.
       const input = i % 2 === 0 ? Btn.Right : 0;
