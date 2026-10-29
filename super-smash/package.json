@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "preview": "next build && wrangler dev --port 8787",
-    "deploy": "next build && wrangler deploy",
+    "deploy": "node scripts/models/check.mjs && next build && wrangler deploy",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,7 +15,9 @@
     "test:e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json",
     "models:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/models/fetch.mjs",
-    "models:skeletons": "node scripts/models/skeletons.mjs"
+    "models:skeletons": "node scripts/models/skeletons.mjs",
+    "models": "node scripts/models/build.mjs",
+    "models:check": "node scripts/models/check.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -27,6 +29,9 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261001.1",
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
     "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.0",
@@ -41,6 +46,8 @@
     "eslint-config-next": "16.3.0",
     "fast-check": "^4.3.0",
     "jsdom": "^30.0.1",
+    "meshoptimizer": "1.3.0",
+    "sharp": "0.35.3",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^8.2.1",
