@@ -83,7 +83,8 @@ const TIP_COOL = "#5FD8FF";
  *
  * "Closer in" is measured from the shoulder rather than along x, because Up
  * Smash's tip is high rather than far — x = 1.5, y = 17 — and a horizontal test
- * would pick the scooping hitbox at his ankles instead.
+ * would pick the scooping hitbox at his ankles instead. Each box is measured at
+ * its point (`pointOf`): a capsule's far end when that is the end further out.
  */
 function sweetspotOf(boxes: readonly Hitbox[], shoulder: number): { tip: Hitbox; inner: Hitbox } | null {
   let best: Hitbox | null = null;
@@ -93,7 +94,7 @@ function sweetspotOf(boxes: readonly Hitbox[], shoulder: number): { tip: Hitbox;
   }
   if (best === null) return null;
   const tip = best;
-  const reach = (hb: Hitbox) => Math.hypot(toFloat(hb.x), toFloat(hb.y) - shoulder);
+  const reach = (hb: Hitbox) => pointOf(hb, shoulder).reach;
   const far = reach(tip);
   // The nearest-in box that is genuinely closer. It is both the test for "is
   // there a sweetspot at all" and, because it sits on the body of the blade, the
@@ -105,6 +106,28 @@ function sweetspotOf(boxes: readonly Hitbox[], shoulder: number): { tip: Hitbox;
     if (inner === null || reach(hb) > reach(inner)) inner = hb;
   }
   return inner === null ? null : { tip, inner };
+}
+
+/** A box's point, in world units, and how far it is from the shoulder. */
+interface BladePoint {
+  readonly x: number;
+  readonly y: number;
+  readonly reach: number;
+}
+
+/**
+ * The end of a box furthest from the shoulder: a sphere's centre, or whichever
+ * end of a capsule lies further out. In the game (Plan 4) the blade moves run
+ * their published scripts, whose capsules may be written point first (his down
+ * tilt) or hilt first, so the far end (`x2`/`y2`) can be the point of the blade
+ * as well as the near one (DISPATCH-NOTES 13.6).
+ */
+function pointOf(hb: Hitbox, shoulder: number): BladePoint {
+  const near = { x: toFloat(hb.x), y: toFloat(hb.y) };
+  const far = { x: toFloat(hb.x2 ?? hb.x), y: toFloat(hb.y2 ?? hb.y) };
+  const nearReach = Math.hypot(near.x, near.y - shoulder);
+  const farReach = Math.hypot(far.x, far.y - shoulder);
+  return farReach > nearReach ? { ...far, reach: farReach } : { ...near, reach: nearReach };
 }
 
 /** Live hitboxes on `frame`, counted the way the frame data is. */
@@ -194,12 +217,12 @@ function tipStrength(c: FxContext, hb: Hitbox): number {
  * glows along it, growing outward, is a gradient rather than three beads,
  * because `glow` is a radial falloff and they overlap.
  */
-function paintEdge(c: FxContext, inner: Hitbox, tip: Hitbox, k: number): void {
+function paintEdge(c: FxContext, inner: BladePoint, tip: BladePoint, k: number): void {
   const { ctx, u, dir, x, y } = c;
-  const ix = x + dir * toFloat(inner.x) * u;
-  const iy = y - toFloat(inner.y) * u;
-  const tx = x + dir * toFloat(tip.x) * u;
-  const ty = y - toFloat(tip.y) * u;
+  const ix = x + dir * inner.x * u;
+  const iy = y - inner.y * u;
+  const tx = x + dir * tip.x * u;
+  const ty = y - tip.y * u;
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -229,10 +252,10 @@ function paintEdge(c: FxContext, inner: Hitbox, tip: Hitbox, k: number): void {
  * spike is a third of the length, which is what stops it reading as a lens
  * flare pasted on top.
  */
-function paintTip(c: FxContext, hb: Hitbox, k: number, s: number): void {
+function paintTip(c: FxContext, point: BladePoint, k: number, s: number): void {
   const { ctx, u, dir, x, y, height } = c;
-  const px = x + dir * toFloat(hb.x) * u;
-  const py = y - toFloat(hb.y) * u;
+  const px = x + dir * point.x * u;
+  const py = y - point.y * u;
   const sx = x;
   // 0.68 rather than `swing.ts`'s 0.55. That pivot is a compromise across eight
   // rigs; this one only has to serve Marth, whose shoulder sits at 9.6 of the
@@ -345,9 +368,10 @@ const tipper: FxFn = (c) => {
     // Smash's tips are inside the head-and-shoulders region, and Neutral Air's
     // second sweetspot is behind his back. Painted under the figure those are a
     // flash the fighter is standing on top of.
+    const point = pointOf(hb, shoulder);
     c.over(() => {
-      paintEdge(c, inner, hb, k);
-      paintTip(c, hb, k, s);
+      paintEdge(c, pointOf(inner, shoulder), point, k);
+      paintTip(c, point, k, s);
     });
   }
   return NOTHING;

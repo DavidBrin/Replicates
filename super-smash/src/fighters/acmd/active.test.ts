@@ -1,7 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
+
 import { describe, expect, it } from "vitest";
 
 import { moveReach } from "@/ai/behaviours";
-import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
+import { decodeBake } from "@/engine/acmd/bakeCodec";
+import { LEGACY_BONE_TABLE, TOP_POSE, newBonePose } from "@/engine/acmd/bones";
 import { ATTACK, clearAll, frame, loop } from "@/engine/acmd/dsl";
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
 import { runScript } from "@/engine/acmd/interpreter";
@@ -21,21 +26,51 @@ import { FIGHTERS } from "../index";
 import { STAGES } from "@/stages";
 import { ACTIVE_SCRIPT_SLOTS, activatable } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
-import { GAME_SIM_CONTEXT } from "@/game/simContext";
+import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
+import { readBakeFromDisk } from "@/game/bakeNode";
 
 /**
- * The bone table the game's sim places every script box through. The tests below
- * read it from the game's own context, not a table named here, so what they compare
- * is what the sim runs. `withReferenceScripts` places the synced `MoveDef` tables
- * through the root-bone table (`LEGACY_BONE_TABLE`); the first test says so, and fails
- * the day the game's context carries another (Plan 4's bake), when those tables must
- * be derived again (carried to Plan 4; the Task 18 review's minor 2).
+ * The bone table the installed game places every script box through: the bake's
+ * (Plan 4; `installBake`). The per-frame proofs below run against it, so what they
+ * compare is what the game runs, for Plan 3's root-bone slots and Plan 4's limb-bone
+ * slots alike.
+ *
+ * `withReferenceScripts` placed Plan 3's synced `MoveDef` tables through the
+ * root-bone table (`LEGACY_BONE_TABLE`). They stay right under the bake only because
+ * the bake places `top` exactly as that table does: it never bakes the root, so `top`
+ * falls through the bake's layered table to `TOP_POSE` (DISPATCH-NOTES 13.4). The
+ * first describe proves that; it fails the day the bake animates the root, when those
+ * tables must be placed through the bake too, as the limb-bone ones are.
  */
-const BONES = GAME_SIM_CONTEXT.bones ?? LEGACY_BONE_TABLE;
+const BAKE = readBakeFromDisk();
+const BONES = BAKE.bones;
 
-describe("the bone table the activated scripts are synced through", () => {
-  it("is still the root-bone table: a different one means the synced MoveDef tables must be re-derived", () => {
-    expect(BONES).toBe(LEGACY_BONE_TABLE);
+describe("the root bone under the bake, which Plan 3's synced tables rely on", () => {
+  const baked = decodeBake(new Uint8Array(gunzipSync(readFileSync(join(process.cwd(), "public", "bake", "roster.bin.gz")))));
+
+  it("is never baked: no fighter's baked bones name it", () => {
+    expect(baked).toHaveLength(FIGHTERS.length);
+    for (const f of baked) expect(f.bones.bones, f.bones.fighter).not.toContain("top");
+  });
+
+  it("is placed exactly where the root-bone table places it, on every frame of every baked motion", () => {
+    const pose = newBonePose();
+    const KEYS = ["tx", "ty", "m00", "m01", "m02", "m10", "m11", "m12"] as const;
+    const off: string[] = [];
+    let asked = 0;
+    for (const f of baked) {
+      for (const [motion, m] of Object.entries(f.bones.motions)) {
+        for (let k = 1; k <= m.frames; k++, asked++) {
+          const placed = BONES.pose(f.bones.fighter, motion, k, "top", pose);
+          if (!placed || KEYS.some((key) => pose[key] !== TOP_POSE[key])) off.push(`${f.bones.fighter}/${motion} frame ${k}`);
+        }
+      }
+    }
+    expect(off).toEqual([]);
+    expect(asked).toBeGreaterThan(10_000);
+    // …which is the root-bone table's own answer.
+    expect(LEGACY_BONE_TABLE.pose("mario", "attack_11", 1, "top", pose)).toBe(true);
+    expect(pose).toEqual(TOP_POSE);
   });
 });
 
@@ -112,18 +147,23 @@ describe("autolink angles the engine does not model (Plan 3, Task 19)", () => {
   });
 
   // None is live today: every script the roster runs, and every compiled move and projectile,
-  // loads through the same refusal registration applies.
-  it("is met by no move the roster runs", () => {
-    for (const def of FIGHTERS) expect(() => prepareFighterScripts(def, BONES), def.id).not.toThrow();
+  // loads through the same refusal registration applies — and so does every script the
+  // installed game runs, limb-bone ones included, against the bake's bones.
+  it("is met by no move the roster runs, nor any the installed game runs", () => {
+    for (const def of FIGHTERS) {
+      expect(() => prepareFighterScripts(def, LEGACY_BONE_TABLE), def.id).not.toThrow();
+      expect(() => prepareFighterScripts(withLimbScripts(def, BONES), BONES), def.id).not.toThrow();
+    }
   });
 });
 
 describe("an activated script in a real match", () => {
   const RULES = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false } as const;
+  // The plain roster on the root bone: Plan 3's world, which is what this drill is about.
   const ctx: SimContext = {
     fighter: (id) => FIGHTERS.find((f) => f.id === id)!,
     stage: (id) => STAGES.find((s) => s.id === id)!,
-    bones: BONES,
+    bones: LEGACY_BONE_TABLE,
   };
 
   /** Mario above Pikachu, both in the air, Mario down-airs. */
@@ -169,11 +209,20 @@ describe("an activated script in a real match", () => {
  * `poses/timing.ts`), the CPU (`behaviours.ts`) and the charge hold (`chargeHoldFrame`) read a
  * move's `MoveDef`, and the sim reads its script. An activated slot's `MoveDef` table is the
  * script's own boxes (`withReferenceScripts`), so every reader sees what the sim runs.
+ *
+ * Every proof runs against the bake's bones, for Plan 3's 38 root-bone slots (tables placed
+ * through the root-bone table, the plain roster) and for Plan 4's limb-bone slots (tables
+ * placed through the bake, `withLimbScripts(def, bake.bones)`; DISPATCH-NOTES 13.4(b)).
  */
 describe("what render, the CPU and the charge hold read of an activated move", () => {
   const ACTIVE: [string, MoveSlot, FighterDef][] = FIGHTERS.flatMap((def) =>
     ACTIVE_SCRIPT_SLOTS[def.id].map((slot): [string, MoveSlot, FighterDef] => [def.id, slot, def]),
   );
+  const LIMB: [string, MoveSlot, FighterDef][] = FIGHTERS.flatMap((legacy) => {
+    const def = withLimbScripts(legacy, BONES);
+    return (LIMB_SCRIPT_SLOTS[def.id] ?? []).map((slot): [string, MoveSlot, FighterDef] => [`${def.id} (limb)`, slot, def]);
+  });
+  const SYNCED = [...ACTIVE, ...LIMB];
 
   /** A box with the frames it is live on blanked: what the two sides must agree on frame by frame. */
   const shape = (hb: Hitbox): Hitbox => ({ ...hb, startFrame: 0, endFrame: 0 });
@@ -191,18 +240,19 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     return out;
   }
 
-  it("activates 38 slots", () => {
+  it("activates 38 slots, and the bake 53 more", () => {
     expect(ACTIVE).toHaveLength(38);
+    expect(LIMB).toHaveLength(53);
   });
 
-  it.each(ACTIVE)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {
+  it.each(SYNCED)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {
     const move = def.moves[slot]!;
     for (let g = 1; g <= move.totalFrames + 10; g++) {
       expect(activeHitboxes(move, g).map(shape), `frame ${g}`).toEqual(simBoxes(def, slot, g).map(shape));
     }
   });
 
-  it.each(ACTIVE)("%s %s: the CPU's reach is the furthest the sim's boxes reach, far ends included", (_id, slot, def) => {
+  it.each(SYNCED)("%s %s: the CPU's reach is the furthest the sim's boxes reach, far ends included", (_id, slot, def) => {
     let furthest = 0;
     for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) {
       for (const hb of simBoxes(def, slot, g)) furthest = Math.max(furthest, hb.x + hb.radius, (hb.x2 ?? hb.x) + hb.radius);
@@ -210,7 +260,7 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     expect(moveReach(def.moves[slot]!)).toBe(furthest);
   });
 
-  it.each(ACTIVE)("%s %s: the swing is drawn at full strength exactly while the sim has an attack live, as far as it reaches", (_id, slot, def) => {
+  it.each(SYNCED)("%s %s: the swing is drawn at full strength exactly while the sim has an attack live, as far as it reaches", (_id, slot, def) => {
     const height = toFloat(def.attributes.height);
     const action = slot === "grab" || slot === "dashGrab" ? "grab" : "attack";
     for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) {
@@ -230,7 +280,7 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     }
   });
 
-  it.each(ACTIVE)("%s %s: the charge hold and the animation timing start from the sim's first live frame", (_id, slot, def) => {
+  it.each(SYNCED)("%s %s: the charge hold and the animation timing start from the sim's first live frame", (_id, slot, def) => {
     const live = simLive(def, slot);
     const move = def.moves[slot]!;
     // `chargeHoldFrame`: one actionFrame before the earliest live one (`actionFrameOf(first) - 1`).
@@ -240,7 +290,7 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     expect(timing.lastActive).toBe(live[live.length - 1] - 1);
   });
 
-  it.each(ACTIVE)("%s %s: no armour, and no projectile, on any frame of the script", (_id, slot, def) => {
+  it.each(SYNCED)("%s %s: no armour, and no projectile, on any frame of the script", (_id, slot, def) => {
     expect(armourWindow(def, slot)).toBeNull();
     expect(def.moves[slot]!.projectiles).toBeUndefined();
     const script = gameScriptFor(def, slot)!;

@@ -13,9 +13,11 @@
 import { describe, expect, it } from "vitest";
 
 import { samus } from "@/fighters/samus";
-import type { MoveSlot } from "@/engine/types";
+import { withLimbScripts } from "@/fighters/acmd/limb";
+import type { FighterDef, Hitbox, MoveSlot } from "@/engine/types";
 import { SMASH_CHARGE_MAX } from "@/engine/constants";
-import { toFloat } from "@/engine/fixed";
+import { fx as q12, toFloat } from "@/engine/fixed";
+import { readBakeFromDisk } from "@/game/bakeNode";
 import { getCharacterRig, rotationPivot } from "../../characterArt";
 import { samplePose, type PoseClip } from "../../poses/clip";
 import { resolve, type Skeleton } from "../../skeleton";
@@ -489,9 +491,10 @@ function tracingContext(): { ctx: CanvasRenderingContext2D; trace: Trace } {
 function fxTrace(
   slot: MoveSlot,
   frame: number,
-  opts: { charge?: number; move?: MoveSlot; u?: number } = {},
+  opts: { charge?: number; move?: MoveSlot; u?: number; def?: FighterDef } = {},
 ): { under: Trace; over: Trace; deferred: number } {
   const u = opts.u ?? 10;
+  const def = opts.def ?? samus;
   const { ctx, trace } = tracingContext();
   const queued: (() => void)[] = [];
   const painter = fx[slot];
@@ -499,14 +502,14 @@ function fxTrace(
   painter({
     ctx,
     f: { facing: 1, charge: opts.charge ?? 0, move: opts.move ?? slot } as never,
-    def: samus,
+    def,
     cam: { zoom: u } as never,
     height: 12.2,
     x: 400,
     y: 400,
     u,
     frame,
-    total: samus.moves[opts.move ?? slot]?.totalFrames ?? 40,
+    total: def.moves[opts.move ?? slot]?.totalFrames ?? 40,
     t: 0,
     dir: 1,
     over: (paint: () => void) => queued.push(paint),
@@ -733,14 +736,14 @@ describe("the effects the body is inside of are painted in front of it", () => {
 
 /* --------------------------------------------------------- the tether -- */
 
-describe("the Grapple Beam reaches what it grabs", () => {
-  /** How far forward, in rig units, the beam was drawn on this frame. */
-  function reachOn(move: MoveSlot, frame: number): number {
-    const t = fxTrace("grab", frame, { move });
-    if (t.under.points.length === 0) return 0;
-    return Math.max(...t.under.points.map((p) => p.x - 400)) / 10;
-  }
+/** How far forward, in rig units, the beam was drawn on this frame. */
+function reachOn(move: MoveSlot, frame: number, def: FighterDef = samus): number {
+  const t = fxTrace("grab", frame, { move, def });
+  if (t.under.points.length === 0) return 0;
+  return Math.max(...t.under.points.map((p) => p.x - 400)) / 10;
+}
 
+describe("the Grapple Beam reaches what it grabs", () => {
   /**
    * Both grabs, and they are not the same move.
    *
@@ -773,6 +776,16 @@ describe("the Grapple Beam reaches what it grabs", () => {
     expect(reachOn(move, total - 1)).toBeLessThan(7);
   });
 
+  /**
+   * An extended grab box is a capsule, and its far end can be the end that
+   * reaches (DISPATCH-NOTES 13.6): the claw goes on whichever end is further out.
+   */
+  it("puts the claw on a capsule's far end when that is the end further out", () => {
+    const capsule: Hitbox = { ...samus.moves.grab!.hitboxes[0], x: q12(5), x2: q12(13), y2: q12(6.5) };
+    const def: FighterDef = { ...samus, moves: { ...samus.moves, grab: { ...samus.moves.grab!, hitboxes: [capsule] } } };
+    expect(reachOn("grab", capsule.startFrame, def)).toBeGreaterThan(13 - 0.6);
+  });
+
   it("is drawn thick enough to see at the zoom a match is played at", () => {
     // The first version was a 0.24-unit core in a 0.7-unit halo, which at match
     // scale is a three-pixel dotted line over a night stage — geometrically
@@ -781,6 +794,39 @@ describe("the Grapple Beam reaches what it grabs", () => {
     const t = fxTrace("grab", 18);
     const widest = Math.max(...t.under.strokeWidths);
     expect(widest / 10, `the beam's widest stroke is ${(widest / 10).toFixed(2)} rig units`).toBeGreaterThan(1.0);
+  });
+});
+
+/*
+ * Plan 4 (Task 13): in the game, both grabs run their published scripts, whose
+ * boxes the bake places — a sphere on the `throw` bone and a capsule off the
+ * root, and a box that moves is one table entry per position. The beam is read
+ * off all of them: out on the first frame any is live, held until the last, to
+ * the furthest edge any reaches, far ends included.
+ */
+describe("the Grapple Beam, with the game's grab boxes (the bake's)", () => {
+  const GAME = withLimbScripts(samus, readBakeFromDisk().bones);
+  const CASES: MoveSlot[] = ["grab", "dashGrab"];
+  const grabs = (move: MoveSlot) => GAME.moves[move]!.hitboxes.filter((hb) => hb.grabbing);
+  const furthest = (move: MoveSlot) => Math.max(...grabs(move).flatMap((hb) => [toFloat(hb.x), toFloat(hb.x2 ?? hb.x)]));
+
+  it.each(CASES)("%s runs its script here: more than one grab box", (move) => {
+    expect(GAME.scripts?.[move]).toBeDefined();
+    expect(grabs(move).length).toBeGreaterThan(1);
+  });
+
+  it.each(CASES)("%s puts the claw on the furthest any of its grab boxes reaches", (move) => {
+    const first = Math.min(...grabs(move).map((hb) => hb.startFrame));
+    expect(reachOn(move, first, GAME)).toBeGreaterThan(furthest(move) - 0.6);
+  });
+
+  it.each(CASES)("%s is still out on the last frame any of its grab boxes is live", (move) => {
+    const last = Math.max(...grabs(move).map((hb) => hb.endFrame));
+    expect(reachOn(move, last, GAME)).toBeGreaterThan(furthest(move) - 0.6);
+  });
+
+  it.each(CASES)("%s has pulled the beam home by the time the move ends", (move) => {
+    expect(reachOn(move, GAME.moves[move]!.totalFrames - 1, GAME)).toBeLessThan(7);
   });
 });
 

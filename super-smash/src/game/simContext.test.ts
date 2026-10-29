@@ -74,7 +74,9 @@ describe("the game's SimContext", () => {
    * The slots the stamp names are the slots the registered fighters run from
    * imported scripts: a fighter built with a script the table does not list, or
    * the table naming one no fighter runs, would leave the fingerprint saying
-   * something the engine does not do.
+   * something the engine does not do. Before the bake is installed that is Plan
+   * 3's root-bone set; installed, it is that and the limb-bone slots together
+   * (`mergeSlots`), which `bake.test.ts` pins the same way.
    */
   it("names exactly the slots the roster runs from imported scripts", () => {
     const running = Object.fromEntries(

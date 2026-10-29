@@ -5,8 +5,10 @@
  * sim on the compiled legacy moves. A script can run *now*, before Plan 4's
  * bone bake, only if the replica can place and honour everything in it:
  *
- * - every ATTACK and CATCH hangs off the root bone, `top` — the only bone
- *   `LEGACY_BONE_TABLE` places (limb-bone scripts wait for Plan 4's bake);
+ * - every ATTACK and CATCH hangs off a bone the table can place (`placeable`):
+ *   for Plan 3, the root bone `top`, the only bone `LEGACY_BONE_TABLE` places;
+ *   for Plan 4's limb-bone scripts (`limb.ts`), the root and every bone the
+ *   bake places;
  * - the move is not one a status drives rather than its script: a throw
  *   (`ATTACK_ABS`) or a pummel (`set_catch_only_all`);
  * - its legacy move carries nothing the script would drop: no scripted
@@ -20,15 +22,17 @@
  *   would refuse it at load, and the rule says so first.
  *
  * `ACTIVE_SCRIPT_SLOTS` is the rule's output written out, so a reviewer sees
- * the list and `active.test.ts` proves it is exactly the rule's output.
+ * the list and `active.test.ts` proves it is exactly the rule's output. Plan 4's
+ * `LIMB_SCRIPT_SLOTS` (`limb.ts`) is the same rule over the bake's bones, written
+ * out to `limb.json` and pinned the same way (`limb.test.ts`).
  */
 
-import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
+import { LEGACY_BONE_TABLE, type BoneTable } from "@/engine/acmd/bones";
 import { scriptHitboxTable } from "@/engine/acmd/hitboxes";
 import { runScript } from "@/engine/acmd/interpreter";
 import { isUnmodelledAutolink } from "@/engine/knockback";
 import type { AcmdCommand, AcmdScript } from "@/engine/acmd/types";
-import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
+import type { FighterDef, Hitbox, MoveDef, MoveSlot } from "@/engine/types";
 import type { ReferenceFighter } from "./reference";
 
 /**
@@ -85,14 +89,26 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>): boolean
   return true;
 }
 
-/** The rule above, for one slot. */
-export function activatable(slot: MoveSlot, move: MoveDef | undefined, script: AcmdScript): boolean {
+/** Plan 3's bones: the root alone, the only bone `LEGACY_BONE_TABLE` places. */
+export const ROOT_BONE_ONLY = (bone: string): boolean => bone === "top";
+
+/**
+ * The rule above, for one slot. `placeable` says which bones a bone table can
+ * place: the root bone for Plan 3; the root and every baked limb for Plan 4's
+ * `LIMB_SCRIPT_SLOTS` (`limb.ts`).
+ */
+export function activatable(
+  slot: MoveSlot,
+  move: MoveDef | undefined,
+  script: AcmdScript,
+  placeable: (bone: string) => boolean = ROOT_BONE_ONLY,
+): boolean {
   if (move === undefined || STATUS_DRIVEN.has(slot)) return false;
   if (move.momentum !== undefined || move.projectiles !== undefined) return false;
   if (move.superArmourFrames !== undefined || move.chargeable === true) return false;
   const bones = new Set<string>();
   if (!runnable(script.commands, bones)) return false;
-  if (bones.size === 0 || ![...bones].every((b) => b === "top")) return false;
+  if (bones.size === 0 || ![...bones].every(placeable)) return false;
   const end = runScript(script, CLEARED_BY);
   return end.attacks.length + end.catches.length === 0;
 }
@@ -108,12 +124,28 @@ export function activatable(slot: MoveSlot, move: MoveDef | undefined, script: A
  * renderer's swing and timing, the CPU's reach and the charge hold read the
  * `MoveDef`, and a legacy table left in place would have them drawing,
  * spacing and holding for a move the sim no longer runs. The boxes are placed
- * by `LEGACY_BONE_TABLE`, the table that places `top`, the only bone a script
- * the rule admits uses. The compiled legacy script never reads this table:
- * the script overrides the slot (`gameScriptFor`). Everything else about the
- * legacy move stays.
+ * through `bones` (ruling R1(a), Plan 4):
+ * - `LEGACY_BONE_TABLE`, the default: Plan 3's slots, whose boxes hang off
+ *   `top` alone. The bake places `top` exactly as this table does (it never
+ *   bakes the root), so these tables stay right once the bake is installed;
+ * - the bake's table: Plan 4's limb-bone slots (`withLimbScripts`), whose boxes
+ *   only the bake can place;
+ * - `null`: no table is placed and the legacy `hitboxes` stay — the scripts and
+ *   their published lengths only. That is the bake's own input (`bakeRoster`),
+ *   which reads nothing of a move but its `totalFrames` and its script, and has
+ *   no bake to place through yet.
+ *
+ * A box the table cannot place throws, naming the fighter, the move and the
+ * script. The compiled legacy script never reads this table: the script
+ * overrides the slot (`gameScriptFor`). Everything else about the legacy move
+ * stays.
  */
-export function withReferenceScripts(def: FighterDef, ref: ReferenceFighter, slots: readonly MoveSlot[]): FighterDef {
+export function withReferenceScripts(
+  def: FighterDef,
+  ref: ReferenceFighter,
+  slots: readonly MoveSlot[],
+  bones: BoneTable | null = LEGACY_BONE_TABLE,
+): FighterDef {
   const scripts: Partial<Record<MoveSlot, AcmdScript>> = { ...def.scripts };
   const moves: Partial<Record<MoveSlot, MoveDef>> = { ...def.moves };
   for (const slot of slots) {
@@ -126,10 +158,19 @@ export function withReferenceScripts(def: FighterDef, ref: ReferenceFighter, slo
     moves[slot] = {
       ...move,
       ...(faf !== undefined ? { totalFrames: faf - 1 } : {}),
-      hitboxes: scriptHitboxTable(script, def.id, LEGACY_BONE_TABLE),
+      ...(bones !== null ? { hitboxes: syncedTable(def, slot, script, bones) } : {}),
     };
   }
   return { ...def, scripts, moves };
+}
+
+/** `scriptHitboxTable`, with the fighter, the move and the script named on a refusal. */
+function syncedTable(def: FighterDef, slot: MoveSlot, script: AcmdScript, bones: BoneTable): Hitbox[] {
+  try {
+    return scriptHitboxTable(script, def.id, bones);
+  } catch (e) {
+    throw new Error(`${def.id} ${slot} (${script.name}): ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+  }
 }
 
 /**

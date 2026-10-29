@@ -162,7 +162,10 @@ const MATCHES: readonly Match[] = [
  * imported scripts' reach), so the script trumps Mario on 1788 (`goldenScript.ts`).
  * Plan 4 Task 12 (the baked world, at SSBU's sizes): the CPU matches reach 39, the script
  * 44 and the tech lab its 7; the Donkey Kong and Pikachu match trumps a ledge once again,
- * and the script still trumps Mario, on 1786.
+ * and the script still trumps Mario, on 1786. Task 13 (the limb-bone scripts on; the CPUs
+ * space by their baked reach): the CPU matches reach 32 — none grabs, spot-dodges,
+ * techs, ledge-rolls, is shield-stunned or trumps a ledge — and the script and the
+ * lab, unchanged, cover those.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -453,11 +456,12 @@ describe("engine golden trace", () => {
   const all = MATCHES.map((m) => played.get(m.name)!);
 
   // A trace of idle fighters would pass every refactor and prove nothing.
-  // Measured 2026-10-29 on Plan 4 Task 12 (the baked world: per-bone hurtboxes and
-  // the bones' ECB, at SSBU's sizes), the four CPU matches in `MATCHES` order, then
-  // the script, then the tech lab: hits 15/32/13/17, 6 and 0; shield hits 1/2/0/1,
-  // 3 and 0; KOs 1/0/3/1, 1 and 2. (Plan 3's, on Plan 2's boxes: hits 12/18/7/11,
-  // shield hits 0/3/2/0, KOs 3/1/1/2.)
+  // Measured 2026-10-29 on Plan 4 Task 13 (the baked world, with the limb-bone
+  // scripts on), the four CPU matches in `MATCHES` order, then the script, then the
+  // tech lab: hits 19/36/13/11, 6 and 0; shield hits 0/3/0/0, 3 and 0; KOs 1/1/3/2,
+  // 1 and 2. (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
+  // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
+  // 0/3/2/0, KOs 3/1/1/2.)
   // The floors below are what a refactor must not drop, not these counts.
   function expectCombat(): void {
     const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);

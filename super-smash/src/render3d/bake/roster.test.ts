@@ -7,6 +7,10 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { decodeBake, encodeBake } from "@/engine/acmd/bakeCodec";
+import { runScript } from "@/engine/acmd/interpreter";
+import { gameScriptFor } from "@/engine/acmd/legacy";
+import { FIGHTERS } from "@/fighters";
+import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "@/fighters/acmd/limb";
 import { BAKE_BYTES, BAKE_DIGEST } from "@/fighters/bake/digest";
 import { SKELETONS } from "../skeletons";
 import { bakeRoster } from "./roster";
@@ -59,6 +63,25 @@ describe("the committed bake", () => {
     expect(fresh.length).toBe(BAKE_BYTES);
   });
 
+  it("bakes the fighters the game plays — limb-bone scripts on — so every move's clock is its game script's length", () => {
+    const baked = new Map(decodeBake(fresh).map((f) => [f.bones.fighter, f]));
+    let adopted = 0;
+    for (const legacy of FIGHTERS) {
+      // The bake's input form (ruling R1(a)): the scripts and their lengths, no table to place through.
+      const def = withLimbScripts(legacy, null);
+      for (const slot of LIMB_SCRIPT_SLOTS[def.id] ?? []) {
+        const script = gameScriptFor(def, slot)!;
+        const clock = baked.get(def.id)!.clocks[script.motion];
+        expect(clock, `${def.id} ${slot} ${script.motion}`).toBeDefined();
+        let last = 0;
+        for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) last = Math.max(last, runScript(script, g).motionFrame);
+        expect(clock.frames, `${def.id} ${slot}`).toBe(last);
+        adopted++;
+      }
+    }
+    expect(adopted).toBeGreaterThan(40);
+  });
+
   it("round-trips through the decoder bit for bit", () => {
     expect(encodeBake(decodeBake(fresh))).toEqual(fresh);
   });
@@ -72,8 +95,9 @@ describe("the committed bake", () => {
 
   it("stays within its size budget (2 MB gzipped, 8 MB uncompressed)", () => {
     // Measured on the committed skeletons, sword and tail bones included, with
-    // each fighter's own dodges per direction (ruling R4): 1.84 MB / 6.36 MB
-    // (1,843,325 / 6,362,403 bytes). Past this budget, bake fewer bones, not a bigger file.
+    // each fighter's own dodges per direction (ruling R4) and the limb-bone
+    // scripts' motions at their own lengths (Task 13): 1.84 MB / 6.37 MB
+    // (1,844,303 / 6,366,019 bytes). Past this budget, bake fewer bones, not a bigger file.
     expect(readFileSync(FILE).length).toBeLessThan(2 * 1024 * 1024);
     expect(fresh.length).toBeLessThan(8 * 1024 * 1024);
   });

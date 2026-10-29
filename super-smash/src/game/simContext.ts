@@ -6,20 +6,24 @@
  * through (`SimContext.bones`, DECISIONS D55). It starts on Plan 2's root bone
  * (`LEGACY_BONE_TABLE`) and stays there until Plan 4's `installBake`
  * (`game/bake.ts`) swaps the bake in, once it has loaded: `bones` becomes the
- * bake's layered table (`layeredBoneTable(bakedBoneTable(…), LEGACY_BONE_TABLE)`)
- * and `bake` its clocks and hurtboxes. Nothing installs it at load, so a test
- * that steps with this context plays the root bone until it installs the bake.
+ * bake's layered table (`layeredBoneTable(bakedBoneTable(…), LEGACY_BONE_TABLE)`),
+ * `bake` its clocks and hurtboxes, and `fighter` hands out each registered
+ * fighter with its limb-bone scripts on (`withLimbScripts`, Task 13), which only
+ * the bake can place. Nothing installs it at load, so a test that steps with
+ * this context plays the root bone and Plan 3's scripts until it installs the bake.
  *
  * `registerFighters` prepares and checks every script against
  * `registryContext.bones`, the root bone, not this context's, so that check says
- * nothing about the bake's. `installBake` therefore prepares the roster against
- * the bake itself (`prepareFighterScripts`, via `prepareRoster`): a bone the bake
- * cannot place, or a 363°/366°/368° box, fails at install, not mid-match, and
- * leaves this context untouched. The table is never a module global inside the
- * engine: a caller that wants a different one passes a different context.
+ * nothing about the bake's. `installBake` therefore prepares the fighters it
+ * hands out against the bake itself (`prepareFighterScripts`, via
+ * `prepareRoster`): a bone the bake cannot place, or a 363°/366°/368° box, fails
+ * at install, not mid-match, and leaves this context and `GAME_ENGINE_RULES`
+ * untouched. The table is never a module global inside the engine: a caller
+ * that wants a different one passes a different context.
  *
- * Installing the bake changes what `engineFingerprint` reads, so it changes what
- * `localBuild()` stamps in the middle of a session (see `ensureBakeInstalled`).
+ * Installing the bake changes what `engineFingerprint` reads — the bones, and
+ * the running slots in `GAME_ENGINE_RULES` — so it changes what `localBuild()`
+ * stamps in the middle of a session (see `ensureBakeInstalled`).
  */
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
@@ -36,11 +40,32 @@ export const GAME_SIM_CONTEXT: { -readonly [K in keyof SimContext]: SimContext[K
 export interface EngineRules {
   /** `ENGINE_RULES_VERSION`. */
   readonly version: number;
-  /** Which moves run their imported scripts (`ACTIVE_SCRIPT_SLOTS`). */
+  /** Which moves run their imported scripts (`ACTIVE_SCRIPT_SLOTS`, plus `LIMB_SCRIPT_SLOTS` once the bake is installed). */
   readonly activeSlots: Readonly<Record<string, readonly MoveSlot[]>>;
 }
 
-export const GAME_ENGINE_RULES: EngineRules = { version: ENGINE_RULES_VERSION, activeSlots: ACTIVE_SCRIPT_SLOTS };
+/**
+ * Mutable like `GAME_SIM_CONTEXT`: `installBake` (Plan 4) adds the limb-bone
+ * slots it switches on (`LIMB_SCRIPT_SLOTS`), so a build with a different
+ * `limb.json` has a different fingerprint even when its bake is the same.
+ * Until then it names Plan 3's root-bone slots, the ones the plain roster runs.
+ */
+export const GAME_ENGINE_RULES: { -readonly [K in keyof EngineRules]: EngineRules[K] } = {
+  version: ENGINE_RULES_VERSION,
+  activeSlots: ACTIVE_SCRIPT_SLOTS,
+};
+
+/** Two slot tables as one: every slot either runs, each fighter's in a stable order. */
+export function mergeSlots(
+  a: Readonly<Record<string, readonly MoveSlot[]>>,
+  b: Readonly<Record<string, readonly MoveSlot[]>>,
+): Record<string, readonly MoveSlot[]> {
+  const out: Record<string, readonly MoveSlot[]> = {};
+  for (const id of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    out[id] = [...new Set([...(a[id] ?? []), ...(b[id] ?? [])])];
+  }
+  return out;
+}
 
 /** A 32-bit hash as the 8 lowercase hex digits the lobby reads (`FINGERPRINT`, net/online/lobby.ts). */
 function hex8(h: number): string {

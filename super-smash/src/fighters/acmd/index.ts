@@ -1,8 +1,9 @@
 /**
  * Every fighter's imported reference scripts, by fighter id (Plan 2, Task 16).
- * This table is not imported by the game, which takes each fighter's generated
- * module directly and runs its scripts in 38 move slots (`withReferenceScripts`,
- * `active.ts`; Plan 3 Task 18). The reconciliation and self-check tests read it.
+ * Each fighter takes its generated module directly and runs its scripts in 38
+ * move slots (`withReferenceScripts`, `active.ts`; Plan 3 Task 18). The game
+ * reads this table for Plan 4's limb-bone slots (`limb.ts`), which run only in
+ * its baked context; the reconciliation and self-check tests read it too.
  */
 
 import { DONKEY_KONG } from "./generated/donkeyKong";

@@ -35,7 +35,7 @@ import {
 import { withAlpha } from "../../rigKit";
 import { SMASH_CHARGE_MAX } from "@/engine/constants";
 import { toFloat } from "@/engine/fixed";
-import type { MoveSlot } from "@/engine/types";
+import type { Hitbox, MoveSlot } from "@/engine/types";
 
 /* ---------------------------------------------------------------- palette -- */
 
@@ -57,6 +57,24 @@ const SCREW = "#FFF2A8";
 const SCREW_COOL = "#8FE8FF";
 
 const HIDE: SpecialFxResult = { hideFigure: true };
+
+/**
+ * The end of any of `boxes` that lies furthest forward, with its box's radius:
+ * a capsule's far end (`x2`/`y2`) counts as much as its near end, since either
+ * can be the one that reaches. Null for no boxes.
+ */
+function leadingEnd(boxes: readonly Hitbox[]): { x: number; y: number; radius: number } | null {
+  let best: { x: number; y: number; radius: number } | null = null;
+  for (const hb of boxes) {
+    for (const [x, y] of [
+      [hb.x, hb.y],
+      [hb.x2 ?? hb.x, hb.y2 ?? hb.y],
+    ] as const) {
+      if (best === null || x + hb.radius > best.x + best.radius) best = { x, y, radius: hb.radius };
+    }
+  }
+  return best;
+}
 
 /* ---------------------------------------------------------------- helpers -- */
 
@@ -869,22 +887,30 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
    * dash grab that reaches 15 and is live on 17–24, sharing this one painter.
    * Hard-coding the standing numbers put the dash grab's tether on its way home
    * two frames before the move stopped grabbing.
+   *
+   * Every grab box counts, not just the first. In the game (Plan 4) both grabs
+   * run their published scripts — a sphere on the `throw` bone and a capsule off
+   * the root — and a table placed through the bake lists a box that moves as
+   * one entry per position. So the beam is out on the first frame any of them
+   * is live, held until the last, and reaches the furthest any of them does,
+   * a capsule's far end included (DISPATCH-NOTES 13.6).
    */
   grab: ({ ctx, def, f, x, y, u, dir, frame }) => {
     const move = def.moves[f.move ?? "grab"] ?? def.moves.grab;
-    const box = move?.hitboxes[0];
+    const boxes = move?.hitboxes.filter((hb) => hb.grabbing) ?? [];
     // The claw goes on the **leading edge** of the grab box, not its centre:
     // the box has a radius and anything the far side of it is caught, so
     // stopping the graphic at the centre draws a tether shorter than the move.
-    const reach = box ? toFloat(box.x) + toFloat(box.radius) * 0.55 : 14.0;
-    const out = box ? box.startFrame : 15;
-    const held = box ? box.endFrame : 22;
+    const claw = leadingEnd(boxes);
+    const reach = claw ? toFloat(claw.x) + toFloat(claw.radius) * 0.55 : 14.0;
+    const out = boxes.length > 0 ? Math.min(...boxes.map((hb) => hb.startFrame)) : 15;
+    const held = boxes.length > 0 ? Math.max(...boxes.map((hb) => hb.endFrame)) : 22;
     // The muzzle the beam leaves from. 6.2 left a gap of clear background
     // between the bore and the first bead, and on the early frames the claw and
     // its halo floated in mid-air attached to nothing — which reads as her
     // having fired a small blue ball, i.e. as her neutral special.
     const MUZZLE = 7.1;
-    const y0 = y - u * (box ? toFloat(box.y) : 6.5);
+    const y0 = y - u * (claw ? toFloat(claw.y) : 6.5);
     // Out by the frame the grab becomes live, held for as long as it is, home
     // eight frames later.
     const ext =

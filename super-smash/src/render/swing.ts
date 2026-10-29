@@ -135,13 +135,20 @@ export function swingArcFor(
 
   // An extended box is a capsule, and either end of it can be the furthest
   // point (a grab's or a sword's far end usually is): both are measured.
+  //
+  // Live means live on the frame drawn (in the tail, on the window's last
+  // frame). A table placed through the bake (Plan 4) splits a box that moves
+  // into one entry per position (`scriptHitboxTable`), so one window can hold
+  // the same box at several frames' positions; only this frame's counts.
+  const at = Math.min(frame, window.end);
   let far: Hitbox | null = null;
   let farX = 0;
   let farY = 0;
   let farDist = -1;
   let damage = 0;
+  for (const hb of window.boxes) damage = Math.max(damage, toFloat(hb.damage));
   for (const hb of window.boxes) {
-    damage = Math.max(damage, toFloat(hb.damage));
+    if (at < hb.startFrame || at > hb.endFrame) continue;
     for (const [x, y] of [
       [hb.x, hb.y],
       [hb.x2 ?? hb.x, hb.y2 ?? hb.y],

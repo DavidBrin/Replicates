@@ -8,8 +8,10 @@ import { gameScriptFor } from "@/engine/acmd/legacy";
 import type { AcmdScript } from "@/engine/acmd/types";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
+import { readBakeFromDisk } from "@/game/bakeNode";
 import { FIGHTERS } from "../index";
 import { REFERENCE_SCRIPTS } from "./index";
+import { withLimbScripts } from "./limb";
 
 /**
  * DECISIONS D17, kept honest: the moves the roster actually runs against the
@@ -21,9 +23,10 @@ import { REFERENCE_SCRIPTS } from "./index";
  * first frame, and first actionable frame (`CancelFrame`, which is the
  * move's `totalFrames + 1`). "Runs" is `gameScriptFor`: the imported script
  * for a slot Plan 3 activated (`acmd/active.ts`), else the compiled legacy
- * move — which `legacy.test.ts` proves frame-identical to its table. Every disagreement is listed in `reconcile.allow.json`
- * with its value on each side. The list is a ratchet: it may shrink (Plan 3
- * adopts the scripts and deletes entries) but a new entry fails this test until
+ * move — which `legacy.test.ts` proves frame-identical to its table — as the
+ * game plays it: with Plan 4's limb-bone scripts on (`limb.ts`). Every disagreement is listed in `reconcile.allow.json`
+ * with its value on each side. The list is a ratchet: it may shrink (Plans 3
+ * and 4 adopt the scripts and delete entries) but a new entry fails this test until
  * a human looks at it. Regenerate after a deliberate change with
  *
  *   UPDATE_RECONCILE=1 pnpm vitest run src/fighters/acmd/reconcile.test.ts
@@ -82,7 +85,10 @@ function referenceFacts(fighter: string, key: string): Facts | null {
 
 function disagreements(): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const def of FIGHTERS) {
+  // The game's fighters: Plan 3's root-bone scripts and Plan 4's limb-bone ones,
+  // placed through the bake as the game places them (ruling R1(a)).
+  const bones = readBakeFromDisk().bones;
+  for (const def of FIGHTERS.map((d) => withLimbScripts(d, bones))) {
     const ref = REFERENCE_SCRIPTS[def.id];
     for (const slot of Object.keys(def.moves) as MoveSlot[]) {
       const key = ref.slots[slot];

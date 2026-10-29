@@ -29,8 +29,8 @@
 import { describe, expect, it } from "vitest";
 
 import { marth as def } from "@/fighters/marth";
-import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
-import { toFloat } from "@/engine/fixed";
+import type { FighterDef, Hitbox, MoveDef, MoveSlot } from "@/engine/types";
+import { fx as q12, toFloat } from "@/engine/fixed";
 import { chargeHoldFrame } from "@/engine/hitbox";
 import { resolve, type PoseAngles } from "../../skeleton";
 import { samplePose, type Keyframe, type PoseClip } from "../../poses/clip";
@@ -649,6 +649,59 @@ describe("the effects are wired to moves that exist", () => {
     const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, undefined);
     expect(r.over.length, "the tip flash is painted under the fighter").toBeGreaterThan(0);
     expect(ctx.calls.length, "something was painted under the fighter that should be over it").toBe(0);
+  });
+});
+
+/**
+ * The point of the blade is the end of a box furthest from the shoulder.
+ *
+ * In the game (Plan 4) the blade moves run their published scripts, and some of
+ * their boxes are capsules: two ends on one bone, the far end written second.
+ * Whichever end lies further out is where the point is, so that end is what the
+ * tipper measures, lights and flashes (DISPATCH-NOTES 13.6). Measuring the near
+ * end alone, a capsule written hilt first has no sweetspot at all.
+ */
+describe("the point of a capsule is its end furthest out", () => {
+  const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
+  const cam = createCamera(makeStage());
+  const HEIGHT = 14;
+  /** Level with the shoulder the tipper measures from, so reach is plain `x`. */
+  const LEVEL = HEIGHT * 0.55;
+
+  /** Forward tilt as two boxes on the same frames: the tip (lowest id) as given, a sourspot at 6. */
+  const blade = (tip: Partial<Hitbox>): FighterDef => {
+    const ftilt = marth.moves.ftilt as MoveDef;
+    const base = ftilt.hitboxes[0];
+    const boxes: Hitbox[] = [
+      { ...base, id: 0, startFrame: 8, endFrame: 11, x: q12(2), y: q12(LEVEL), radius: q12(3), ...tip },
+      { ...base, id: 1, startFrame: 8, endFrame: 11, x: q12(6), y: q12(LEVEL), radius: q12(3) },
+    ];
+    return { ...marth, moves: { ...marth.moves, ftilt: { ...ftilt, hitboxes: boxes } } };
+  };
+
+  /** Arcs painted within a box-width of the world point (wx, wy) on the swing's first live frame. */
+  const arcsNear = (d: FighterDef, wx: number, wy: number): number => {
+    const ctx = createMockContext();
+    const f = makeFighter({ defId: "marth", action: "attack", move: "ftilt", actionFrame: 7 });
+    const r = drawMoveFx(ctx, d, f, cam, HEIGHT, 960, 700, { lastHit: [null, null, null, null], frame: 7 });
+    for (const paint of r.over) paint();
+    const px = 960 + wx * cam.zoom;
+    const py = 700 - wy * cam.zoom;
+    return ctx.calls.filter(
+      (c) => c.method === "arc" && Math.hypot((c.args[0] as number) - px, (c.args[1] as number) - py) < cam.zoom * 1.5,
+    ).length;
+  };
+
+  it("flashes a capsule written hilt first at its far end, out past the sourspot", () => {
+    expect(arcsNear(blade({ x2: q12(12), y2: q12(LEVEL) }), 12, LEVEL)).toBeGreaterThan(0);
+  });
+
+  it("and the same box without its far end is no tipper: nothing painted at either end", () => {
+    expect(arcsNear(blade({}), 2, LEVEL) + arcsNear(blade({}), 12, LEVEL)).toBe(0);
+  });
+
+  it("measures a capsule written point first from that point, as before", () => {
+    expect(arcsNear(blade({ x: q12(12), x2: q12(2), y2: q12(LEVEL) }), 12, LEVEL)).toBeGreaterThan(0);
   });
 });
 
