@@ -3,8 +3,8 @@
  * before the Blender spike has produced a real one, and without a single
  * Nintendo-derived number in a fixture.
  *
- * It copies the *conventions* the spike's dump uses (verified on the real
- * Mario dump, Plan 4 Task 4): bind pose is a T-pose; +Y up, +Z forward, +X the
+ * It copies the *conventions* the spike's dump uses (as observed on Mario's
+ * real `.blend` during the Plan 4 spike): bind pose is a T-pose; +Y up, +Z forward, +X the
  * fighter's left; spine bones' local +X points up; limb bones' local +X points
  * along the limb toward the child; names are SSBU's (`Hip`, `KneeR`, `HandL`).
  * The proportions are round numbers, not Mario's.

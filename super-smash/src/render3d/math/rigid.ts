@@ -60,12 +60,23 @@ export function qRotate(q: Quat, v: Vec3): Vec3 {
 
 /**
  * The shortest rotation taking unit vector `from` onto unit vector `to` (the
- * "swing"). Antiparallel vectors turn about +X, the side view's screen normal,
- * so a bone pointing straight up swings forward-and-down rather than sideways.
+ * "swing"; both must be unit length).
+ *
+ * Antiparallel vectors have no unique shortest rotation: any half turn about an
+ * axis perpendicular to `from` works. We pick the one nearest +X, the side
+ * view's screen normal in model space, so a bone pointing straight up swings
+ * forward-and-down rather than sideways. That is +X itself whenever `from` is
+ * perpendicular to X, and +X with its `from` component removed otherwise; when
+ * `from` lies (nearly) along ±X, +X has nothing left to keep, so +Y is used.
  */
 export function qFromTo(from: Vec3, to: Vec3): Quat {
   const d = from[0] * to[0] + from[1] * to[1] + from[2] * to[2];
-  if (d < -1 + 1e-9) return [1, 0, 0, 0];
+  if (d < -1 + 1e-9) {
+    const ref: Vec3 = Math.abs(from[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const along = ref[0] * from[0] + ref[1] * from[1] + ref[2] * from[2];
+    const [ax, ay, az] = normalize([ref[0] - along * from[0], ref[1] - along * from[1], ref[2] - along * from[2]]);
+    return [ax, ay, az, 0];
+  }
   const cx = from[1] * to[2] - from[2] * to[1];
   const cy = from[2] * to[0] - from[0] * to[2];
   const cz = from[0] * to[1] - from[1] * to[0];

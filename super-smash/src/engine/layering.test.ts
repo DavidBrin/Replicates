@@ -11,9 +11,10 @@ import { describe, expect, it } from "vitest";
  * break it *quietly* — the symptom is not a crash, it is two players watching
  * the same match end differently forty frames later:
  *
- * 1. **A forbidden import.** Reaching into `render/`, `net/`, `components/`,
- *    `app/`, `audio/`, React or Next drags a browser API, a module-level
- *    singleton or a render-time value into the simulation. Re-simulating a frame
+ * 1. **A forbidden import.** Reaching into `render/`, `render3d/`, `net/`,
+ *    `components/`, `app/`, `audio/`, React or Next drags a browser API, a
+ *    module-level singleton, a render-time value or (`render3d/`) float matrix
+ *    and quaternion maths into the simulation. Re-simulating a frame
  *    then depends on something that is not in `GameState`.
  * 2. **A banned call.** `Math.random` is unseedable. `Date.now` and
  *    `performance.now` are wall-clock, and a rollback re-simulates the same frame
@@ -36,8 +37,12 @@ const ENGINE_DIR = join(process.cwd(), "src", "engine") + "/";
 /** Package names the simulation may not reach for. */
 const BANNED_PACKAGES = ["react", "react-dom", "next"];
 
-/** Sibling layers the simulation may not reach for, by first path segment. */
-const BANNED_LAYERS = ["render", "net", "components", "app", "audio", "ai", "input"];
+/**
+ * Sibling layers the simulation may not reach for, by first path segment.
+ * `render3d` is the 3D renderer's float maths (Plan 4); the engine reads its
+ * output only as the integer bake tables in `engine/acmd`.
+ */
+const BANNED_LAYERS = ["render", "render3d", "net", "components", "app", "audio", "ai", "input"];
 
 /**
  * Calls that make a frame irreproducible. Written as strings and turned into
@@ -271,6 +276,16 @@ describe("engine layering", () => {
     it("catches an aliased forbidden import", () => {
       const spec = importSpecifiers('import x from "@/net/session";')[0];
       expect(BANNED_LAYERS).toContain(layerOf(spec));
+    });
+
+    it("catches an import of the 3D renderer's float maths, relative or aliased", () => {
+      for (const src of ['import { qMul } from "../render3d/math/rigid";', 'import { buildRig } from "../../render3d/skeleton/skeleton";', 'import { qMul } from "@/render3d/math/rigid";']) {
+        const spec = importSpecifiers(src)[0];
+        expect(layerOf(spec)).toBe("render3d");
+        expect(BANNED_LAYERS).toContain(layerOf(spec));
+      }
+      // `render` is not a prefix match: the two layers are banned separately.
+      expect(BANNED_LAYERS).toContain("render");
     });
 
     it("catches a React import", () => {
