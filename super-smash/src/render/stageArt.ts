@@ -66,6 +66,11 @@ export function platformOffsetX(platform: Platform, frame: number): number {
 
 /* ---------------------------------------------------------------- painting -- */
 
+/** A stage's colours, shared by the 2D background and the 3D platforms (Plan 4). */
+export function stagePaintFor(stage: Pick<StageDef, "theme">): StagePaint {
+  return PAINTS[themeFor(stage.theme)];
+}
+
 export interface StagePaint {
   readonly top: string;
   readonly face: string;
