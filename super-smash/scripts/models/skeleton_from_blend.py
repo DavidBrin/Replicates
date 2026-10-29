@@ -303,6 +303,14 @@ def read_config(a, fighter):
         mesh_rules = json.load(f).get(fighter)
     if mesh_rules is None:
         fail(fighter, f"no entry in {a['meshes']}")
+    # keep: exported and measured into the hurt capsules; drawOnly: exported, never
+    # measured (Task 21b); drop: not exported. Each mesh is decided once.
+    lists = ("keep", "drawOnly", "drop")
+    for i, first in enumerate(lists):
+        for second in lists[i + 1:]:
+            both = sorted(set(mesh_rules.get(first, [])) & set(mesh_rules.get(second, [])))
+            if both:
+                fail(fighter, f"mesh {both[0]} is listed twice in scripts/models/meshes.json ({first} and {second})")
     with open(a["hurt"]) as f:
         hurt_table = json.load(f)
     hurt_entry = hurt_table.get(fighter, hurt_table["default"])
@@ -417,7 +425,7 @@ def read_blend(a, fighter, data, mesh_rules, hurt_bones):
             at = parent_of[at]
         owner[n] = None if any(NOT_BODY.match(c) for c in chain) else next((c for c in chain if c in hurt_bones), None)
 
-    listed = set(mesh_rules["keep"]) | set(mesh_rules["drop"])
+    listed = set(mesh_rules["keep"]) | set(mesh_rules.get("drawOnly", [])) | set(mesh_rules["drop"])
     meshes = []
     points = {h: [] for h in hurt_bones}
     inverse = {h: inv_rigid(world[h]) for h in hurt_bones}
@@ -427,13 +435,17 @@ def read_blend(a, fighter, data, mesh_rules, hurt_bones):
             continue
         base_name = SUFFIX.sub("", o["name"])
         if base_name not in listed:
-            fail(fighter, f"mesh {o['name']} is in neither keep nor drop of scripts/models/meshes.json")
+            fail(fighter, f"mesh {o['name']} is in neither keep, drawOnly nor drop of scripts/models/meshes.json")
         what = f"mesh {o['name']}"
         blend.records(mb, "Mesh", 1, what)
         kept = o["parent"] == arm_ptr and base_name in mesh_rules["keep"]
         totvert = blend.read(mb[5], mesh_l["totvert"], "<i")[0]
         totpoly = blend.read(mb[5], mesh_l["totpoly"], "<i")[0]
-        meshes.append({"name": o["name"], "kept": kept, "verts": totvert, "polys": totpoly})
+        report = {"name": o["name"], "kept": kept, "verts": totvert, "polys": totpoly}
+        if o["parent"] == arm_ptr and base_name in mesh_rules.get("drawOnly", []):
+            # Drawn in the glb (export_gltf.py) but left out of the hurt capsules.
+            report = {"name": o["name"], "kept": False, "drawOnly": True, "verts": totvert, "polys": totpoly}
+        meshes.append(report)
         if not kept:
             continue
         mvert = blend.read(mb[5], mesh_l["mvert"], "<Q")[0]

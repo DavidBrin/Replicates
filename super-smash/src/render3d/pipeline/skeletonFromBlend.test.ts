@@ -239,12 +239,12 @@ function blend(c: Craft = {}): Buffer {
 }
 
 let runs = 0;
-function read(c: Craft = {}) {
+function read(c: Craft = {}, meshes = MESHES) {
   const name = `craft-${++runs}`;
   const file = join(dir, `${name}.blend`);
   const out = join(dir, `${name}.json`);
   writeFileSync(file, blend(c));
-  const r = spawnSync("python3", ["-I", "-B", READER, file, "--fighter", "test", "--code", "test", "--meshes", MESHES, "--hurt", HURT, "--out", out], {
+  const r = spawnSync("python3", ["-I", "-B", READER, file, "--fighter", "test", "--code", "test", "--meshes", meshes, "--hurt", HURT, "--out", out], {
     encoding: "utf8",
     timeout: KILL_MS,
   });
@@ -277,6 +277,34 @@ describe("the .blend reader on a crafted file", () => {
     expect(dump.meshes).toEqual([{ name: "body", kept: true, verts: 16, polys: 0 }]);
     expect(dump.hurt.map((h: { bone: string }) => h.bone)).toEqual(["Head", "Hip"]);
     expect(r.stdout).toMatch(/^skeleton_from_blend test: 3 bones, 1\/1 meshes kept, 2 hurt capsules/);
+  });
+
+  describe("meshes.json's drawOnly list (Task 21b: drawn in the glb, never measured into a hurt capsule)", () => {
+    const rules = (r: object) => {
+      const f = join(dir, `meshes-${++runs}.json`);
+      writeFileSync(f, JSON.stringify({ test: r }));
+      return f;
+    };
+
+    it("accepts a drawOnly mesh as listed, and measures no hurt capsule from it", () => {
+      const r = read({}, rules({ keep: [], drawOnly: ["body"], drop: [] }));
+      // The fixture's only mesh: with it unmeasured, no hurt bone owns a vertex, which is the proof it was left out.
+      expect(r.stderr.trim()).toBe("skeleton_from_blend test: hurt bone Head owns only 0 kept vertices");
+      expect(r.status).toBe(1);
+    });
+
+    it("refuses a mesh listed twice, so a face mesh cannot be both measured and not", () => {
+      const r = read({}, rules({ keep: ["body"], drawOnly: ["body"], drop: [] }));
+      expect(r.stderr.trim()).toBe("skeleton_from_blend test: mesh body is listed twice in scripts/models/meshes.json (keep and drawOnly)");
+      expect(r.status).toBe(1);
+      expect(r.wrote).toBe(false);
+    });
+
+    it("leaves the dump exactly as before when drawOnly is empty and a face is listed (the committed skeletons stay byte-identical)", () => {
+      const r = read({}, rules({ keep: ["body"], drawOnly: [], drop: [], face: ["body"] }));
+      expect(r.status).toBe(0);
+      expect(JSON.parse(readFileSync(r.out, "utf8")).meshes).toEqual([{ name: "body", kept: true, verts: 16, polys: 0 }]);
+    });
   });
 
   describe("never loops on a cycle in the file's pointers", () => {

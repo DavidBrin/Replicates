@@ -2,7 +2,9 @@
  * Deploy guard (Plan 4): refuse to build a deploy whose models are missing,
  * changed since they were built, over Cloudflare's 25 MiB per-file limit,
  * built against a different skeleton than the committed bake (or with
- * `--allow-skeleton-drift`), or joined by a file `index.json` doesn't name
+ * `--allow-skeleton-drift`), built by another export pipeline than this
+ * checkout's (`stamp.mjs`: a glb from before a `meshes.json` choice, a cut-out
+ * override or an export rule changed, Task 21b), or joined by a file `index.json` doesn't name
  * (`next build` copies all of `public/models/` into the deploy) — or whose
  * `public/models/` git would commit: anything in it that `git add` would take
  * or that is already tracked or staged. The ripped models are deployed from
@@ -15,6 +17,8 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+
+import { PIPELINE_INPUTS, pipelineStamp } from "./stamp.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const FIGHTERS = ["mario", "donkeyKong", "link", "samus", "kirby", "fox", "pikachu", "marth"];
@@ -43,6 +47,7 @@ if (!existsSync(indexFile)) {
   problems.push("public/models/index.json is missing — run `pnpm models`");
 } else {
   const index = JSON.parse(readFileSync(indexFile, "utf8"));
+  const stamp = pipelineStamp(ROOT);
   for (const id of FIGHTERS) {
     const e = index.models?.[id];
     if (!e) {
@@ -60,6 +65,8 @@ if (!existsSync(indexFile)) {
     const skeleton = readFileSync(join(ROOT, "src", "render3d", "skeletons", `${id}.json`));
     if (e.skeleton === null) problems.push(`${id}: built with --allow-skeleton-drift or without a committed skeleton — not deployable, run \`pnpm models\``);
     else if (e.skeleton !== sha256(skeleton)) problems.push(`${id}: built against another skeleton than the committed one — run \`pnpm models\``);
+    if (e.pipeline === undefined) problems.push(`${id}: built before export builds were stamped — run \`pnpm models\``);
+    else if (e.pipeline !== stamp) problems.push(`${id}: built by another export pipeline than this checkout's (${PIPELINE_INPUTS.join(", ")}, or a pipeline package) — run \`pnpm models\``);
   }
   const named = new Set(["index.json", ...Object.values(index.models ?? {}).map((e) => e.file)]);
   const stray = readdirSync(join(ROOT, "public", "models")).filter((f) => !named.has(f));
@@ -70,4 +77,4 @@ if (problems.length > 0) {
   console.error(`models:check failed:\n  ${problems.join("\n  ")}`);
   process.exit(1);
 }
-console.log("models:check: all eight fighters built against the committed skeletons");
+console.log("models:check: all eight fighters built against the committed skeletons by this checkout's export pipeline");

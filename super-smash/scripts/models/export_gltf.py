@@ -9,30 +9,40 @@ Blender headless: one fighter's c00 .blend -> a skinned .glb and a bone dump.
         --hurt src/render3d/skeletons/hurtBones.json
 
 Run by scripts/models/build.mjs for each fighter (Plan 4 Task 8). What it does:
-1. Keeps exactly the meshes `scripts/models/meshes.json` lists under `keep`
-   for this fighter (names without Blender's `.NNN` suffix) and deletes those
-   under `drop`: the neutral face, eyes and body stay; alternate expressions,
-   blinks, low-poly duplicates and sheathed-sword copies go. A mesh in neither
-   list fails the export -- the lists are exhaustive, written from the real
-   files, so a new upstream mesh is a decision, not a silent guess.
+1. Keeps exactly the meshes `scripts/models/meshes.json` lists under `keep` or
+   `drawOnly` for this fighter (names without Blender's `.NNN` suffix) and
+   deletes those under `drop`: the neutral face, eyes and body stay; alternate
+   expressions, blinks, low-poly duplicates and sheathed-sword copies go. A mesh
+   in no list, or in two, fails the export -- the lists are exhaustive, written
+   from the real files, so a new upstream mesh is a decision, not a silent
+   guess. Every mesh the fighter's `face` list names must be exported (Task 21b).
 2. Rebuilds every kept material as Principled BSDF <- the material's c00
-   colour texture (`*_col.png`, largest if several), colour and alpha, keeping
-   the texture's UV map; materials that end up on the same texture become one.
+   colour texture (`*_col.png`, largest if several), keeping the texture's UV
+   map; its alpha too, only when the source reads it (Task 21b: Donkey Kong's
+   body reads, with its alpha ignored, the PNG whose alpha is his fur card's
+   mask). A colour that layers an overlay image over a base image (the eyes:
+   an iris on its own UV map, its alpha the mix factor) is flattened into one
+   opaque texture on the base's UV map (`flatten_layers.py`, Task 21b).
+   Materials that end up on the same image bytes, read the same way, become one.
 3. Dumps every bone's bind matrix in SSBU model space and per-bone hurt
-   capsules derived from the kept meshes' vertex weights (UNVERIFIED sizes) --
-   the same numbers `skeleton_from_blend.py` reads without Blender, which
-   `dump.test.ts` cross-checks.
+   capsules derived from the `keep` meshes' vertex weights (UNVERIFIED sizes;
+   `drawOnly` meshes are never measured) -- the same numbers
+   `skeleton_from_blend.py` reads without Blender, which `dump.test.ts`
+   cross-checks. The dump also names each drawn mesh's materials and marks the
+   face's meshes, for `verifyGlb`'s face checks.
 4. Joins the kept meshes into one object, so the glb has one primitive per
-   texture (at most `MAX_PRIMITIVES` in glb.mjs) instead of one per part:
-   Link's 13 kept parts are 7 draw calls (7 textures), not 44.
+   material (at most `MAX_PRIMITIVES` in glb.mjs) instead of one per part:
+   Link's 13 kept parts are 8 draw calls (his two flattened eyes are two), not 44.
 5. Exports armature + the joined mesh as GLB (skins on, animations and morphs off).
 
 Prints the kept and dropped meshes. Fails loudly (exit 1, a message naming the
-fighter) on: no or several armatures, a mesh missing from meshes.json, a kept
-material with no colour texture, an unloadable texture, or an exporter missing
-an option. Schema of the dump: src/render3d/pipeline/dump.ts.
+fighter) on: no or several armatures, a mesh missing from meshes.json (or in
+two of its lists), a face mesh not exported, a kept material with no colour
+texture, an unloadable texture, a layered colour that cannot be flattened, or
+an exporter missing an option. Schema of the dump: src/render3d/pipeline/dump.ts.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -41,6 +51,10 @@ import sys
 
 import bpy
 import mathutils
+
+# flatten_layers.py sits beside this script (plain Python, also run by the tests).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import flatten_layers  # noqa: E402
 
 DUMP_SCHEMA = 1
 SUFFIX = re.compile(r"\.\d+$")
@@ -91,39 +105,166 @@ def colour_image(material):
     return best, best_node
 
 
-def rebuild_material(fighter, material):
-    image, image_node = colour_image(material)
-    if image is None:
-        fail(fighter, f"material {material.name} has no colour texture")
-    # The .blend is downloaded data: an image path it stores could point anywhere
-    # on this machine, and the texture ends up in a public glb. Only the fighter's
-    # own pinned files (beside the .blend) may be read; a packed image is the
-    # pinned .blend's own bytes.
-    if image.packed_file is None:
-        own = os.path.realpath(os.path.dirname(bpy.data.filepath))
-        path = os.path.realpath(bpy.path.abspath(image.filepath))
-        if os.path.commonpath([own, path]) != own:
-            fail(fighter, f"texture {image.filepath} for {material.name} is outside {own}")
+def own_path(fighter, image, material):
+    """
+    The file an unpacked image reads. The .blend is downloaded data: an image
+    path it stores could point anywhere on this machine, and the texture ends up
+    in a public glb. Only the fighter's own pinned files (beside the .blend) may
+    be read; a packed image is the pinned .blend's own bytes (None here).
+    """
+    if image.packed_file is not None:
+        return None
+    own = os.path.realpath(os.path.dirname(bpy.data.filepath))
+    path = os.path.realpath(bpy.path.abspath(image.filepath))
+    if os.path.commonpath([own, path]) != own:
+        fail(fighter, f"texture {image.filepath} for {material.name} is outside {own}")
+    return path
+
+
+def load_image(fighter, image, material):
+    own_path(fighter, image, material)
     image.reload()
     if image.size[0] == 0:
         fail(fighter, f"texture {image.filepath} for {material.name} did not load (is it in .model-cache/src/{fighter}/?)")
+
+
+def reads_alpha(material, image):
+    """
+    Whether the source material reads its colour texture's alpha: something
+    feeds a Principled BSDF's Alpha, and the image's alpha is not ignored
+    (Donkey Kong loads one PNG twice: `alpha_mode` NONE for his body, STRAIGHT
+    for his fur card).
+    """
     tree = material.node_tree
-    uv_link = next((l for l in tree.links if l.to_node == image_node and l.to_socket.name == "Vector"), None)
-    uv_node = uv_link.from_node if uv_link is not None else None
-    uv_name = uv_node.uv_map if uv_node is not None and uv_node.type == "UVMAP" else None
+    linked = any(l.to_node.type == "BSDF_PRINCIPLED" and l.to_socket.name == "Alpha" for l in tree.links)
+    return linked and image.alpha_mode != "NONE"
+
+
+def image_key(fighter, image, material):
+    """The bytes an image reads, not its name (Donkey Kong loads one file as two images)."""
+    path = own_path(fighter, image, material)
+    if path is None:
+        return hashlib.sha256(bytes(image.packed_file.data)).hexdigest()
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def uv_map_of(tree, image_node):
+    link = next((l for l in tree.links if l.to_node == image_node and l.to_socket.name == "Vector"), None)
+    node = link.from_node if link is not None else None
+    return node, (node.uv_map if node is not None and node.type == "UVMAP" else None)
+
+
+def layered_colour(fighter, material):
+    """
+    (base image node, overlay image node) when the material's Base Color is
+    `mix(base colour, overlay colour, overlay alpha)` (an RGBA Mix node, blend
+    MIX) -- the eyes of Mario, Donkey Kong, Link, Fox and Marth -- else None. A
+    Mix that feeds Base Color in any other way fails: it would lose a layer.
+    """
+    tree = material.node_tree
+    if tree is None:
+        return None
+    for bsdf in [n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"]:
+        link = next((l for l in tree.links if l.to_node == bsdf and l.to_socket.name == "Base Color"), None)
+        if link is None or link.from_node.type != "MIX":
+            continue
+        mix = link.from_node
+        src = {}
+        for sock in mix.inputs:
+            if sock.enabled and sock.is_linked:
+                src[sock.identifier] = (sock.links[0].from_node, sock.links[0].from_socket.name)
+        a, b, f = src.get("A_Color"), src.get("B_Color"), src.get("Factor_Float")
+        ok = (
+            mix.data_type == "RGBA" and mix.blend_type == "MIX" and a and b and f
+            and a[0].type == "TEX_IMAGE" and a[1] == "Color" and b[0].type == "TEX_IMAGE" and b[1] == "Color"
+            and f[0] == b[0] and f[1] == "Alpha" and a[0].image is not None and b[0].image is not None
+        )
+        if not ok:
+            fail(fighter, f"material {material.name} mixes its Base Color in a way the export cannot flatten into one texture")
+        return a[0], b[0]
+    return None
+
+
+def flatten_material(fighter, material, base_node, overlay_node, meshes):
+    """
+    Bake `material`'s two layers into one opaque image on the base's UV map,
+    from the triangles of every exported mesh drawn with it (flatten_layers.py).
+    Returns the new image, packed so the glTF exporter embeds it.
+    """
+    tree = material.node_tree
+    _, base_uv = uv_map_of(tree, base_node)
+    _, over_uv = uv_map_of(tree, overlay_node)
+    if base_uv is None or over_uv is None:
+        fail(fighter, f"material {material.name}: each layer must name its UV map")
+    layers = []
+    for node in (base_node, overlay_node):
+        load_image(fighter, node.image, material)
+        w, h = node.image.size
+        layers.append(flatten_layers.Layer(w, h, list(node.image.pixels[:]), node.extension))
+    triangles = []
+    for obj in meshes:
+        slots = [i for i, slot in enumerate(obj.material_slots) if slot.material == material]
+        if not slots:
+            continue
+        me = obj.data
+        if base_uv not in me.uv_layers or over_uv not in me.uv_layers:
+            fail(fighter, f"mesh {obj.name} has no UV map {base_uv} or {over_uv} for {material.name}")
+        uv_a, uv_b = me.uv_layers[base_uv].data, me.uv_layers[over_uv].data
+        me.calc_loop_triangles()
+        for t in me.loop_triangles:
+            if t.material_index in slots:
+                triangles.append(([tuple(uv_a[l].uv) for l in t.loops], [tuple(uv_b[l].uv) for l in t.loops]))
+    if not triangles:
+        fail(fighter, f"material {material.name} layers two images but no exported triangle uses it")
+    try:
+        pixels, (w, h) = flatten_layers.flatten(layers[0], layers[1], triangles)
+    except flatten_layers.FlattenError as e:
+        fail(fighter, f"material {material.name}: {e}")
+    image = bpy.data.images.new(f"{base_node.image.name}+{overlay_node.image.name}", w, h, alpha=True)
+    image.pixels.foreach_set(pixels)
+    image.pack()
+    return image
+
+
+def rebuild_material(fighter, material, meshes):
+    """
+    Rebuild `material` as Principled BSDF <- one colour image, on that image's
+    UV map, its alpha linked only when the source reads it. Returns (image
+    name, merge key, layers, alpha): layers is the (base, overlay) image names a
+    layered colour was flattened from, else None; alpha whether it reads alpha.
+    Two materials with one key become one: the same bytes, read the same way.
+    """
+    layered = layered_colour(fighter, material)
+    if layered is not None:
+        image_node = layered[0]
+        image = flatten_material(fighter, material, layered[0], layered[1], meshes)
+        layers = (layered[0].image.name, layered[1].image.name)
+        image_node.image = image
+        alpha = False
+    else:
+        image, image_node = colour_image(material)
+        if image is None:
+            fail(fighter, f"material {material.name} has no colour texture")
+        load_image(fighter, image, material)
+        layers = None
+        alpha = reads_alpha(material, image)
+    tree = material.node_tree
+    uv_node, uv_name = uv_map_of(tree, image_node)
     for node in list(tree.nodes):
         if node not in (image_node, uv_node):
             tree.nodes.remove(node)
     bsdf = tree.nodes.new("ShaderNodeBsdfPrincipled")
     out = tree.nodes.new("ShaderNodeOutputMaterial")
     tree.links.new(image_node.outputs["Color"], bsdf.inputs["Base Color"])
-    tree.links.new(image_node.outputs["Alpha"], bsdf.inputs["Alpha"])
+    if alpha:
+        tree.links.new(image_node.outputs["Alpha"], bsdf.inputs["Alpha"])
     tree.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
     if uv_name is not None:
         uv = tree.nodes.new("ShaderNodeUVMap")
         uv.uv_map = uv_name
         tree.links.new(uv.outputs["UV"], image_node.inputs["Vector"])
-    return image.name
+    return image.name, f"{image_key(fighter, image, material)}:{'alpha' if alpha else 'opaque'}", layers, alpha
 
 
 def inverse_rigid(m):
@@ -200,22 +341,46 @@ def main():
         fail(fighter, f"no entry in {a['meshes']}")
     hurt_table = load_json(a["hurt"])
     hurt_bones = hurt_table.get(fighter, hurt_table["default"])["bones"]
-    listed = set(rules["keep"]) | set(rules["drop"])
-    meshes, mesh_report = [], []
+    # keep: exported and measured into the hurt capsules; drawOnly: exported, never
+    # measured (Task 21b); drop: not exported. Each mesh is decided once.
+    lists = ("keep", "drawOnly", "drop")
+    for i, first in enumerate(lists):
+        for second in lists[i + 1:]:
+            both = sorted(set(rules.get(first, [])) & set(rules.get(second, [])))
+            if both:
+                fail(fighter, f"mesh {both[0]} is listed twice in scripts/models/meshes.json ({first} and {second})")
+    drawn_names = set(rules["keep"]) | set(rules.get("drawOnly", []))
+    face_names = set(rules.get("face", []))
+    if not face_names:
+        fail(fighter, "meshes.json names no face meshes for it (`face`) -- a fighter must not export without its face")
+    for name in sorted(face_names - drawn_names):
+        fail(fighter, f"face mesh {name} is not under keep or drawOnly in scripts/models/meshes.json")
+    listed = drawn_names | set(rules["drop"])
+    meshes, measured, mesh_report = [], [], []
     for obj in [o for o in bpy.data.objects if o.type == "MESH"]:
         base = SUFFIX.sub("", obj.name)
         if base not in listed:
-            fail(fighter, f"mesh {obj.name} is in neither keep nor drop of scripts/models/meshes.json")
-        kept = obj.parent == armature and base in rules["keep"]
-        mesh_report.append({"name": obj.name, "kept": kept, "verts": len(obj.data.vertices), "polys": len(obj.data.polygons)})
-        if kept:
+            fail(fighter, f"mesh {obj.name} is in neither keep, drawOnly nor drop of scripts/models/meshes.json")
+        drawn = obj.parent == armature and base in drawn_names
+        report = {"name": obj.name, "kept": drawn and base in rules["keep"], "verts": len(obj.data.vertices), "polys": len(obj.data.polygons)}
+        if drawn and not report["kept"]:
+            report = {"name": obj.name, "kept": False, "drawOnly": True, "verts": report["verts"], "polys": report["polys"]}
+        if drawn and base in face_names:
+            report["face"] = True
+        mesh_report.append(report)
+        if drawn:
             meshes.append(obj)
+            if report["kept"]:
+                measured.append(obj)
         else:
             bpy.data.objects.remove(obj, do_unlink=True)
     if not meshes:
         fail(fighter, "kept no mesh")
+    for name in sorted(face_names - {SUFFIX.sub("", o.name) for o in meshes}):
+        fail(fighter, f"face mesh {name} is not exported: it is not in the .blend, or not parented to the armature")
     print(f"export_gltf {fighter}: kept " + ", ".join(sorted(m["name"] for m in mesh_report if m["kept"])))
-    print(f"export_gltf {fighter}: dropped " + ", ".join(sorted(m["name"] for m in mesh_report if not m["kept"])))
+    print(f"export_gltf {fighter}: drawn only " + ", ".join(sorted(m["name"] for m in mesh_report if m.get("drawOnly"))))
+    print(f"export_gltf {fighter}: dropped " + ", ".join(sorted(m["name"] for m in mesh_report if not m["kept"] and not m.get("drawOnly"))))
 
     # A kept part can sit in a collection the file excludes from the view layer
     # (Donkey Kong's bodyL/bodyR and a GamemodelShape in "Expressions", Link's
@@ -232,17 +397,28 @@ def main():
     view_layer.update()
 
     materials = []
-    by_image = {}
+    key_of = {}
+    by_key = {}
+    report_of = {r["name"]: r for r in mesh_report}
     for obj in meshes:
+        drawn_with = []
         for slot in obj.material_slots:
             if slot.material is None:
                 continue
-            if slot.material.name not in {m["name"] for m in materials}:
-                image = rebuild_material(fighter, slot.material)
-                materials.append({"name": slot.material.name, "image": image})
-                by_image.setdefault(image, slot.material)
-            # One material per texture: two parts painted from one image draw together.
-            slot.material = by_image[next(m["image"] for m in materials if m["name"] == slot.material.name)]
+            if slot.material.name not in key_of:
+                image, key, layers, alpha = rebuild_material(fighter, slot.material, meshes)
+                entry = {"name": slot.material.name, "image": image, "alpha": alpha}
+                if layers is not None:
+                    entry["layers"] = list(layers)
+                materials.append(entry)
+                key_of[slot.material.name] = key
+                by_key.setdefault(key, slot.material)
+            # One material per image read one way: two parts painted from the same bytes draw together.
+            slot.material = by_key[key_of[slot.material.name]]
+            if slot.material.name not in drawn_with:
+                drawn_with.append(slot.material.name)
+        # The glb materials this part draws with, for verifyGlb's face checks.
+        report_of[obj.name]["materials"] = drawn_with
 
     bone_model = {}
     bones = []
@@ -261,7 +437,7 @@ def main():
         "bones": bones,
         "meshes": mesh_report,
         "materials": materials,
-        "hurt": hurt_capsules(fighter, armature, meshes, bone_model, hurt_bones),
+        "hurt": hurt_capsules(fighter, armature, measured, bone_model, hurt_bones),
     }
     with open(a["dump"], "w") as f:
         json.dump(dump, f, indent=1)
@@ -298,7 +474,7 @@ def main():
     if missing:
         fail(fighter, f"this Blender's glTF exporter lacks options {missing}")
     bpy.ops.export_scene.gltf(**options)
-    print(f"export_gltf {fighter}: {len(meshes)} meshes joined, {len(by_image)} textures, {len(bones)} bones, {len(dump['hurt'])} hurt capsules")
+    print(f"export_gltf {fighter}: {len(meshes)} meshes joined, {len(by_key)} materials, {len(bones)} bones, {len(dump['hurt'])} hurt capsules")
 
 
 main()

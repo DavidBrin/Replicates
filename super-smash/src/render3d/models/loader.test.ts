@@ -284,19 +284,22 @@ describe("loading fighter models (never fatal)", () => {
 
 describe("the model index the pipeline writes", () => {
   // The shape `scripts/models/build.mjs` writes into public/models/index.json: each entry also
-  // records the SHA-256 of the skeleton file its glb was built against (null for a spike build).
+  // records the SHA-256 of the skeleton file its glb was built against (null for a spike build)
+  // and the stamp of the export pipeline that built it (Task 21b; `models:check` reads both).
   // The values are synthetic; no real index or glb is read.
   const pipelineIndex = {
     schema: 1,
     models: {
-      donkeyKong: { file: "donkeyKong.8a8fcec5.glb", bytes: 322152, sha256: "8".repeat(64), skeleton: "6".repeat(64) },
-      mario: { file: "mario.ce77996e.glb", bytes: 150280, sha256: "c".repeat(64), skeleton: null },
+      donkeyKong: { file: "donkeyKong.8a8fcec5.glb", bytes: 322152, sha256: "8".repeat(64), skeleton: "6".repeat(64), pipeline: "f".repeat(64) },
+      mario: { file: "mario.ce77996e.glb", bytes: 150280, sha256: "c".repeat(64), skeleton: null, pipeline: "f".repeat(64) },
     },
   };
 
   it("accepts it, extra fields and all", () => {
     const index = parseModelIndex(pipelineIndex);
     expect(index?.models.donkeyKong).toMatchObject({ file: "donkeyKong.8a8fcec5.glb", bytes: 322152 });
+    // Fields the loader does not read pass through untouched.
+    expect(index?.models.donkeyKong).toMatchObject({ skeleton: "6".repeat(64), pipeline: "f".repeat(64) });
     expect(Object.keys(index?.models ?? {})).toEqual(["donkeyKong", "mario"]);
   });
 

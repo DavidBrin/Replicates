@@ -11,7 +11,8 @@
  * `.model-cache/tools/Blender.app`. Each glb records the SHA-256 of the
  * committed skeleton it matches (null when its bones drifted, under
  * `--allow-skeleton-drift`), so `check.mjs` can refuse to deploy models built
- * against different bones than the committed bake.
+ * against different bones than the committed bake, and the export pipeline's
+ * stamp (`stamp.mjs`), so it can refuse a glb an export rule has since changed.
  */
 
 import { spawnSync } from "node:child_process";
@@ -20,6 +21,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 import { join } from "node:path";
 
 import { optimizeGlb, skeletonRecord, verifyGlb } from "./glb.mjs";
+import { pipelineStamp } from "./stamp.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const CACHE = join(ROOT, ".model-cache");
@@ -48,6 +50,8 @@ for (const dir of ["glb", "dumps"]) mkdirSync(join(CACHE, dir), { recursive: tru
 mkdirSync(OUT, { recursive: true });
 const indexFile = join(OUT, "index.json");
 const index = existsSync(indexFile) ? JSON.parse(readFileSync(indexFile, "utf8")) : { schema: 1, models: {} };
+// Taken before any export: what this run's glbs are built by.
+const pipeline = pipelineStamp(ROOT);
 
 for (const id of fighters) {
   const blendEntry = manifest.files.find((f) => f.fighter === id && f.path.endsWith(".blend"));
@@ -88,7 +92,7 @@ for (const id of fighters) {
   const file = `${id}.${hash.slice(0, 8)}.glb`;
   for (const old of readdirSync(OUT)) if (old.startsWith(`${id}.`) && old.endsWith(".glb") && old !== file) rmSync(join(OUT, old));
   copyFileSync(opt, join(OUT, file));
-  index.models[id] = { file, bytes: bytes.length, sha256: hash, skeleton: skeletonSha };
+  index.models[id] = { file, bytes: bytes.length, sha256: hash, skeleton: skeletonSha, pipeline };
   console.log(`${id}: ${file}  ${(bytes.length / 1048576).toFixed(2)} MiB  ${report.triangles} tris  ${report.primitives} primitives  ${report.joints} joints`);
 }
 

@@ -15,6 +15,9 @@
  *   "bones": [{ "name": "Trans", "parent": null, "world": [16 numbers, column-major] }, …],
  *   "meshes": [{ "name": "Mario_FaceN_VIS_O_OBJShape", "kept": true, "verts": 209, "polys": 302 }, …],
  *   "materials": [{ "name": "skin_mario_001", "image": "skin_mario_001_col.png" }, …],
+ *   // Blender's dump only (Task 21b): a drawn mesh's `materials` (as the glb names them),
+ *   // `face` on the neutral face's meshes, each material's `alpha` (does its source read
+ *   // it) and a flattened material's two `layers`.
  *   "hurt": [{ "bone": "Head", "x1": 0.4, "x2": 2.6, "r": 2.1 }, …]
  * }
  * ```
@@ -51,10 +54,25 @@ export const RIGID_TOLERANCE_DUMP = 5e-3;
 
 export interface DumpMesh {
   readonly name: string;
-  /** Listed under `keep` in `scripts/models/meshes.json` (and parented to the armature). */
+  /** Listed under `keep` in `scripts/models/meshes.json` (and parented to the armature): exported and measured into the hurt capsules. */
   readonly kept: boolean;
+  /** Listed under `drawOnly` (and parented to the armature): exported, never measured (Task 21b). */
+  readonly drawOnly?: boolean;
+  /** One of the fighter's neutral-face meshes (`face` in meshes.json; Blender's dump). */
+  readonly face?: boolean;
+  /** The glb materials a drawn mesh draws with (Blender's dump). */
+  readonly materials?: readonly string[];
   readonly verts: number;
   readonly polys: number;
+}
+
+export interface DumpMaterial {
+  readonly name: string;
+  readonly image: string;
+  /** A layered colour flattened into `image`: its base and overlay images (Blender's dump, Task 21b). */
+  readonly layers?: readonly [string, string];
+  /** Whether the source material reads its texture's alpha; false ships OPAQUE (Blender's dump, Task 21b). */
+  readonly alpha?: boolean;
 }
 
 export interface BoneDump extends SkeletonFile {
@@ -63,7 +81,7 @@ export interface BoneDump extends SkeletonFile {
   readonly blend: string;
   readonly space: "ssbu-model";
   readonly meshes: readonly DumpMesh[];
-  readonly materials: readonly { readonly name: string; readonly image: string }[];
+  readonly materials: readonly DumpMaterial[];
 }
 
 function fail(fighter: string, why: string): never {

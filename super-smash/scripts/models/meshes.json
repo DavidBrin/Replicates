@@ -1,5 +1,5 @@
 {
-  "//": "Which meshes of each fighter's c00 .blend are exported (Plan 4). Names without Blender's .NNN suffix; every mesh in the file must be listed in keep or drop, so a renamed or new mesh fails the export instead of silently appearing. Kept: the body, the neutral face, open eyes, and props in their battle position (Link's sword and shield in hand, Marth's drawn Falchion); dropped: alternative expressions, blinks, results-screen faces, low-detail copies, sheathed/stowed props, the Morph Ball. Read from the meshes listed in each .blend on 2026-10-24; UNVERIFIED by eye until the lab shows each fighter.",
+  "//": "Which meshes of each fighter's c00 .blend are exported (Plan 4). Names without Blender's .NNN suffix; every mesh in the file must be listed exactly once, in keep, drawOnly or drop, so a renamed or new mesh fails the export instead of silently appearing. keep: exported, and measured into the hurt capsules (skeleton_from_blend.py, export_gltf.py). drawOnly: exported, never measured, so it cannot move a committed hurt capsule (Task 21b). drop: not exported. face: the fighter's neutral face, every one of them exported; the export and verify fail without them (Task 21b). Kept: the body, the neutral face, open eyes, and props in their battle position (Link's sword and shield in hand, Marth's drawn Falchion); dropped: alternative expressions, blinks, results-screen faces, low-detail copies, sheathed/stowed props, the Morph Ball. Read from the meshes listed in each .blend on 2026-10-24; the faces checked by eye in close-ups of every head on 2026-10-29 (Task 21b), the rest UNVERIFIED by eye beyond the animation lab's sheets.",
   "mario": {
     "keep": [
       "Mario_Eye_VIS_O_OBJShape",
@@ -7,6 +7,11 @@
       "Mario_FaceN_VIS_O_OBJShape",
       "Mario_Hathead_VIS_O_OBJShape",
       "c00bodyShape"
+    ],
+    "face": [
+      "Mario_Eye_VIS_O_OBJShape",
+      "Mario_FaceNMClose_VIS_O_OBJShape",
+      "Mario_FaceN_VIS_O_OBJShape"
     ],
     "drop": [
       "Mario_Attack_VIS_O_OBJShape",
@@ -59,6 +64,14 @@
       "senaka_O_OBJShape",
       "ura_O_OBJShape"
     ],
+    "drawOnly": [
+      "donkey_FaceUP1_VIS_O_OBJShape"
+    ],
+    "face": [
+      "donkey_Eye_VIS_O_OBJShape",
+      "donkey_FaceN_VIS_O_OBJShape",
+      "donkey_FaceUP1_VIS_O_OBJShape"
+    ],
     "drop": [
       "donkey_Attack2_VIS_O_OBJShape",
       "donkey_Attack3_VIS_O_OBJShape",
@@ -69,7 +82,6 @@
       "donkey_Cliff_VIS_O_OBJShape",
       "donkey_Down_VIS_O_OBJShape",
       "donkey_Escape_VIS_O_OBJShape",
-      "donkey_FaceUP1_VIS_O_OBJShape",
       "donkey_FaceUP2_VIS_O_OBJShape",
       "donkey_FaceUP3_VIS_O_OBJShape",
       "donkey_FaceUP4_VIS_O_OBJShape",
@@ -104,6 +116,11 @@
       "link_ken_VIS_O_OBJShape",
       "link_sayatuka_VIS_O_OBJShape",
       "link_tate_VIS_O_OBJShape"
+    ],
+    "face": [
+      "link_Eye_VIS_O_OBJShape",
+      "link_FaceN_Mouth_VIS_O_OBJShape",
+      "link_Openblink_VIS_O_OBJShape"
     ],
     "drop": [
       "body_c00_lowShape",
@@ -155,6 +172,9 @@
       "shourder_pad_L_O_OBJShape",
       "shourder_pad_R_O_OBJShape"
     ],
+    "face": [
+      "samus_eye_NORMAL_VIS_O_OBJShape"
+    ],
     "drop": [
       "samus_ball_VIS_O_OBJShape"
     ]
@@ -162,6 +182,10 @@
   "kirby": {
     "keep": [
       "Kirby_Armfoot_VIS_O_OBJShape",
+      "Kirby_Eye1_VIS_O_OBJShape",
+      "Kirby_FaceN_VIS_O_OBJShape"
+    ],
+    "face": [
       "Kirby_Eye1_VIS_O_OBJShape",
       "Kirby_FaceN_VIS_O_OBJShape"
     ],
@@ -197,6 +221,11 @@
       "groupShape32",
       "scouter1Shape"
     ],
+    "face": [
+      "Fox_FaceN_mayu_VIS_O_OBJShape",
+      "Fox_FaceN_mouth_VIS_O_OBJShape",
+      "Fox_normal_eye_VIS_O_OBJShape"
+    ],
     "drop": [
       "Fox_Appeal_mayu_VIS_O_OBJShape",
       "Fox_Appeal_mouth_VIS_O_OBJShape",
@@ -225,6 +254,11 @@
   "pikachu": {
     "keep": [
       "Body_VIS_O_OBJShape",
+      "Pikachu_LEye_VIS_O_OBJShape",
+      "Pikachu_Mouth_VIS_O_OBJShape",
+      "Pikachu_REye_VIS_O_OBJShape"
+    ],
+    "face": [
       "Pikachu_LEye_VIS_O_OBJShape",
       "Pikachu_Mouth_VIS_O_OBJShape",
       "Pikachu_REye_VIS_O_OBJShape"
@@ -275,6 +309,11 @@
       "WeaponbladeM_VIS_O_OBJShape",
       "WeapongripM_VIS_O_OBJShape",
       "hair_groupShape",
+      "marth_eye_VIS_O_OBJShape"
+    ],
+    "face": [
+      "Marth_Brow1_VIS_O_OBJShape",
+      "Marth_FaceN_VIS_O_OBJShape",
       "marth_eye_VIS_O_OBJShape"
     ],
     "drop": [

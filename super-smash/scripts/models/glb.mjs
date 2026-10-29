@@ -15,7 +15,8 @@
  * (one draw call each: four fighters stay under half of the 100-call frame,
  * `renderer3d.test.ts`), no texture over 1024 px, every bone of the dump a
  * joint within `JOINT_TOLERANCE` of its bind pose, inverse bind matrices that
- * undo those joints, and no BLEND material that is really opaque.
+ * undo those joints, no BLEND material that is really opaque, and a face that
+ * draws (`faceProblems`, Task 21b).
  */
 
 import { createHash } from "node:crypto";
@@ -30,7 +31,11 @@ import sharp from "sharp";
 export const MAX_GLB_BYTES = 25 * 1024 * 1024;
 export const MAX_TRIANGLES = 120_000;
 export const MAX_TEXTURE = 1024;
-/** Draw calls per fighter: export_gltf.py joins the parts, one primitive per texture (Fox and Marth: 8, from 10 materials). */
+/**
+ * Draw calls per fighter: export_gltf.py joins the parts, one primitive per
+ * material. The most are 9 (Fox: his body and fur card share a texture but not
+ * its alpha; Marth: two flattened eyes, Task 21b).
+ */
 export const MAX_PRIMITIVES = 12;
 /**
  * How far a glb joint may sit from the dump's bind pose (largest matrix entry).
@@ -58,8 +63,21 @@ export const ALPHA_CUTOFF = 0.5;
  * the material stays MASK, so it still writes depth. UNVERIFIED: by eye
  * (0.5, 0.25, 0.1, 0.02 and OPAQUE were looked at; BLEND made the head
  * see-through). Nothing else is overridden.
+ *
+ * Task 21b found what showed through his scalp: his body (opaque in its
+ * source) was cut by this card's alpha, the same PNG's. With the body OPAQUE
+ * the card covers only the fur (hair tuft, wrist and ankle edges), and 0.1 and
+ * 0.5 look alike in close-ups; kept at 0.1 as Task 21 chose it.
  */
 export const ALPHA_CUTOFF_OVERRIDES = Object.freeze({ "donkeyKong/alp": 0.1 });
+/**
+ * Face materials that ship with no colour texture, and why that is right, by
+ * `<fighter>/<material>` (Task 21b). `prune()` folds a texture of one colour
+ * into the colour factor, which draws the same.
+ */
+export const FACE_SOLID_COLOURS = Object.freeze({
+  "mario/alp_mario_002": "Mario's moustache: a one-colour texture (sRGB 55/55/57), which prune() folds into the colour factor",
+});
 /** Skeleton drift: how far a committed bone may sit from Blender's dump (the dump's 6-decimal rounding is 5e-7). */
 const SKELETON_TOLERANCE = 1e-4;
 
@@ -128,13 +146,18 @@ export function joinByMaterial() {
   };
 }
 
-/** How many texels of an encoded image (PNG, WebP, …) have alpha below `ALPHA_CUTOFF`. */
-async function holesIn(image, name) {
+/** How many texels of an encoded image (PNG, WebP, …) have alpha below `cutoff`, and how many it has. */
+async function alphaCount(image, name, cutoff) {
   if (image === null) throw new Error(`texture ${name} has no image data`);
   const { data } = await sharp(Buffer.from(image)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  let holes = 0;
-  for (let i = 3; i < data.length; i += 4) if (data[i] < ALPHA_CUTOFF * 255) holes++;
-  return holes;
+  let below = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] < cutoff * 255) below++;
+  return { below, texels: data.length / 4 };
+}
+
+/** How many texels of an encoded image have alpha below `ALPHA_CUTOFF`. */
+async function holesIn(image, name) {
+  return (await alphaCount(image, name, ALPHA_CUTOFF)).below;
 }
 
 /**
@@ -146,6 +169,8 @@ async function holesIn(image, name) {
  * (Marth's def_marth_001 is 213–255 and his clothes must not turn see-through).
  * Blender exports BLEND for every material whose alpha is linked, and three.js
  * draws BLEND without depth writes, so a body would sort wrongly against itself.
+ * Only those are decided here: a material Blender exports OPAQUE has a source
+ * that never reads its texture's alpha (`alphaModes`).
  */
 export function alphaModeFor(factorAlpha, holes) {
   if (factorAlpha < 1) return "BLEND";
@@ -163,10 +188,15 @@ export function alphaCutoffFor(fighter, material) {
 }
 
 /**
- * A pass: set every material's alpha mode with `alphaModeFor`, and a MASK
+ * A pass: set the alpha mode of every material whose alpha export_gltf.py
+ * linked (Blender writes those BLEND) with `alphaModeFor`, and a MASK
  * material's cutoff with `alphaCutoffFor` (`fighter` names whose glb this is;
- * without one, every cutoff is the default). Run after `prune()`, which turns
- * solid textures into factors.
+ * without one, every cutoff is the default). A material that arrives OPAQUE
+ * stays OPAQUE: its source never reads its texture's alpha, whatever that
+ * alpha holds (Donkey Kong's body reads, with its alpha ignored, the PNG whose
+ * alpha is his fur card's mask; cut by it, his scalp and temples showed the
+ * background, Task 21b). Run after `prune()`, which turns solid textures into
+ * factors.
  *
  * @param {string | null} [fighter]
  */
@@ -174,6 +204,7 @@ export function alphaModes(fighter = null) {
   return async (doc) => {
     const holesOf = new Map();
     for (const mat of doc.getRoot().listMaterials()) {
+      if (mat.getAlphaMode() === "OPAQUE") continue;
       const tex = mat.getBaseColorTexture();
       if (tex !== null && !holesOf.has(tex)) holesOf.set(tex, await holesIn(tex.getImage(), tex.getName()));
       const mode = alphaModeFor(mat.getBaseColorFactor()[3], tex === null ? 0 : holesOf.get(tex));
@@ -181,6 +212,68 @@ export function alphaModes(fighter = null) {
       if (mode === "MASK") mat.setAlphaCutoff(alphaCutoffFor(fighter, mat.getName()));
     }
   };
+}
+
+/**
+ * What is wrong with a built glb's face, empty when nothing (Task 21b). The
+ * dump (export_gltf.py's) marks the neutral face's meshes (`face`) and names
+ * the glb materials each draws with; a material flattened from two layers
+ * carries its `layers`. A fighter must have a face, an eye among it, every
+ * face mesh drawn, and every face material: in the glb; with a colour texture,
+ * or a reason in `FACE_SOLID_COLOURS`; not fully transparent; never BLEND (a
+ * face part drawn without depth writes sorts wrongly against the head); and
+ * OPAQUE when flattened (its source mixed colour only, never alpha) or when
+ * its source reads no alpha (the dump's `alpha: false`).
+ */
+export async function faceProblems(doc, dump) {
+  const who = dump.fighter ?? "?";
+  const faces = dump.meshes.filter((m) => m.face);
+  if (faces.length === 0) return [`${who}: the dump names no face mesh (meshes.json \`face\`) — a fighter must not export without its face`];
+  const problems = [];
+  if (!faces.some((m) => /eye/i.test(m.name))) problems.push(`${who}: no eye among its face meshes (${faces.map((m) => m.name).join(", ")})`);
+  const byName = new Map(doc.getRoot().listMaterials().map((m) => [m.getName(), m]));
+  const layered = new Set((dump.materials ?? []).filter((m) => m.layers).map((m) => m.name));
+  const noAlpha = new Set((dump.materials ?? []).filter((m) => m.alpha === false).map((m) => m.name));
+  const checked = new Set();
+  for (const mesh of faces) {
+    if (!mesh.kept && !mesh.drawOnly) {
+      problems.push(`${who}: face mesh ${mesh.name} is not drawn`);
+      continue;
+    }
+    if (!mesh.materials?.length) {
+      problems.push(`${who}: face mesh ${mesh.name} draws with no material`);
+      continue;
+    }
+    for (const name of mesh.materials) {
+      const mat = byName.get(name);
+      if (mat === undefined) {
+        problems.push(`${who}: face mesh ${mesh.name} draws with ${name}, which the glb does not have`);
+        continue;
+      }
+      if (checked.has(name)) continue;
+      checked.add(name);
+      const tex = mat.getBaseColorTexture();
+      if (tex === null && !Object.hasOwn(FACE_SOLID_COLOURS, `${who}/${name}`)) {
+        problems.push(`${who}: face material ${name} has no colour texture, and FACE_SOLID_COLOURS states no reason`);
+      }
+      const mode = mat.getAlphaMode();
+      if (mode === "BLEND") problems.push(`${who}: face material ${name} is BLEND — a face part drawn without depth writes sorts wrongly against the head`);
+      else if (layered.has(name) && mode !== "OPAQUE") problems.push(`${who}: face material ${name} layers two textures into one and must be OPAQUE, not ${mode}`);
+      else if (noAlpha.has(name) && mode !== "OPAQUE") problems.push(`${who}: face material ${name} reads no alpha in its source and must be OPAQUE, not ${mode}`);
+      if (mode === "MASK") {
+        // A texel draws when its alpha times the factor's reaches the cutoff.
+        const cutoff = mat.getAlphaCutoff();
+        const factor = mat.getBaseColorFactor()[3];
+        let cut = factor < cutoff;
+        if (!cut && tex !== null) {
+          const { below, texels } = await alphaCount(tex.getImage(), tex.getName(), cutoff / factor);
+          cut = below === texels;
+        }
+        if (cut) problems.push(`${who}: face material ${name} is fully transparent (MASK at ${cutoff} cuts every texel)`);
+      }
+    }
+  }
+  return problems;
 }
 
 /**
@@ -273,6 +366,8 @@ export async function verifyGlb(file, dump) {
     if (off > JOINT_TOLERANCE) problems.push(`${file}: joint ${bone.name} is ${off.toFixed(4)} from the dump's bind pose`);
   }
   for (const name of ["Hip", "Head"]) if (!joints.has(name)) problems.push(`${file}: no ${name} joint`);
+  // export_gltf.py's dumps always list meshes; a bones-only dump checks the skeleton alone.
+  if (Array.isArray(dump.meshes)) problems.push(...(await faceProblems(doc, dump)));
   for (const mat of doc.getRoot().listMaterials()) {
     if (mat.getAlphaMode() !== "BLEND" || mat.getBaseColorFactor()[3] < 1) continue;
     const tex = mat.getBaseColorTexture();

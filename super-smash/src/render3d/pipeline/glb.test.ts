@@ -14,11 +14,13 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   ALPHA_CUTOFF,
   ALPHA_CUTOFF_OVERRIDES,
+  FACE_SOLID_COLOURS,
   JOINT_TOLERANCE,
   MAX_PRIMITIVES,
   alphaCutoffFor,
   alphaModeFor,
   alphaModes,
+  faceProblems,
   optimizeGlb,
   skeletonRecord,
   verifyGlb,
@@ -183,6 +185,18 @@ describe("alpha modes, decided from the colour alpha at export", () => {
     expect(mode("edge127").getAlphaMode()).toBe("MASK");
   });
 
+  it("keeps OPAQUE a material Blender exports OPAQUE — its source never reads its texture's alpha — whatever that alpha holds", async () => {
+    // Donkey Kong's `body` reads the skin texture with its alpha ignored; the same PNG's alpha is his fur card's
+    // mask (`alp`), 16,198 texels under the body below 0.1. Cut by it, the scalp and temples showed the background.
+    const doc = await fixtureDoc({
+      materials: { body: { alpha: (i) => (i < 6 ? 0 : 255), mode: "OPAQUE" }, alp: { alpha: (i) => (i < 6 ? 0 : 255), mode: "BLEND" } },
+      prims: [{ material: "body" }],
+    });
+    await doc.transform(alphaModes("donkeyKong"));
+    const by = (name: string) => doc.getRoot().listMaterials().find((m) => m.getName() === name)!;
+    expect([by("body").getAlphaMode(), by("alp").getAlphaMode(), by("alp").getAlphaCutoff()]).toEqual(["OPAQUE", "MASK", 0.1]);
+  });
+
   it("a cut-out the lab showed wrong has its own cutoff, named by fighter and material; every other material keeps 0.5", async () => {
     // Donkey Kong's `alp` is the hair and fur-edge card. At 0.5 the hair is a speckle of strands over the void
     // (the animation lab's model sheet, Plan 4 Task 21); at 0.1 it is the mop. UNVERIFIED: by eye.
@@ -211,6 +225,81 @@ describe("alpha modes, decided from the colour alpha at export", () => {
     expect(opaqueBlend.problems).toContainEqual(expect.stringContaining("material cloth is BLEND but nothing in it is below alpha 0.5"));
     const scouter = await verifyGlb(await fixtureGlb("blend-scouter", { materials: { scouter: { factorAlpha: 0.851, mode: "BLEND" } }, prims: [{ material: "scouter" }] }), DUMP);
     expect(scouter.problems).toEqual([]);
+  });
+});
+
+describe("the face checks (Task 21b): no fighter ships without a face that draws", () => {
+  /** A face mesh as export_gltf.py records it in the dump: drawn, with the materials it draws with. */
+  const face = (name: string, materials: string[], over: object = {}) => ({ name, kept: true, verts: 3, polys: 1, face: true, materials, ...over });
+  const opaque = { alpha: () => 255, mode: "OPAQUE" as const };
+  const lashes = { alpha: (i: number) => (i < 6 ? 0 : 255), mode: "MASK" as const };
+  const docWith = (materials: Record<string, MaterialSpec>) => fixtureDoc({ materials, prims: Object.keys(materials).map((material) => ({ material })) });
+  const dumpOf = (meshes: object[], materials: object[] = [], fighter = "mario") => ({ fighter, bones: DUMP.bones, meshes, materials });
+
+  it("passes eyes flattened onto one opaque texture, a cut-out lash card and a skin", async () => {
+    const doc = await docWith({ EyeL: opaque, lashes, skin: opaque });
+    const dump = dumpOf(
+      [face("Mario_Eye_VIS_O_OBJShape", ["EyeL"]), face("Mario_Eye_VIS_O_OBJShape.001", ["EyeL"]), face("Mario_FaceN_VIS_O_OBJShape", ["lashes", "skin"]), { name: "c00bodyShape", kept: true, verts: 3, polys: 1, materials: ["skin"] }],
+      [{ name: "EyeL", image: "eye_w.png+eye_b.png", layers: ["eye_w.png", "eye_b.png"] }],
+    );
+    expect(await faceProblems(doc, dump)).toEqual([]);
+  });
+
+  it("refuses a dump that lists meshes but no face, or a face with no eye", async () => {
+    const doc = await docWith({ skin: opaque });
+    expect(await faceProblems(doc, dumpOf([{ name: "c00bodyShape", kept: true, verts: 3, polys: 1, materials: ["skin"] }]))).toEqual([
+      "mario: the dump names no face mesh (meshes.json `face`) — a fighter must not export without its face",
+    ]);
+    expect(await faceProblems(doc, dumpOf([face("Mario_FaceN_VIS_O_OBJShape", ["skin"])]))).toEqual(["mario: no eye among its face meshes (Mario_FaceN_VIS_O_OBJShape)"]);
+  });
+
+  it("refuses a face mesh that is not drawn, draws with nothing, or draws with a material the glb lacks", async () => {
+    const doc = await docWith({ EyeL: opaque });
+    const problems = await faceProblems(doc, dumpOf([face("Mario_Eye_VIS_O_OBJShape", ["EyeL"], { kept: false }), face("Mario_Eye_VIS_O_OBJShape.001", []), face("Mario_FaceN_VIS_O_OBJShape", ["skin_mario_001"])]));
+    expect(problems).toEqual([
+      "mario: face mesh Mario_Eye_VIS_O_OBJShape is not drawn",
+      "mario: face mesh Mario_Eye_VIS_O_OBJShape.001 draws with no material",
+      "mario: face mesh Mario_FaceN_VIS_O_OBJShape draws with skin_mario_001, which the glb does not have",
+    ]);
+  });
+
+  it("refuses a face material with no colour texture, unless its reason is stated (Mario's one-colour moustache)", async () => {
+    expect(Object.keys(FACE_SOLID_COLOURS)).toEqual(["mario/alp_mario_002"]);
+    const doc = await docWith({ EyeL: opaque, alp_mario_002: { mode: "OPAQUE" } });
+    const meshes = [face("Mario_Eye_VIS_O_OBJShape", ["EyeL"]), face("Mario_FaceN_VIS_O_OBJShape", ["alp_mario_002"])];
+    expect(await faceProblems(doc, dumpOf(meshes))).toEqual([]);
+    expect(await faceProblems(doc, dumpOf(meshes, [], "fox"))).toEqual(["fox: face material alp_mario_002 has no colour texture, and FACE_SOLID_COLOURS states no reason"]);
+  });
+
+  it("refuses a face material that draws nothing: every texel cut, or a colour factor below its cutoff", async () => {
+    const doc = await docWith({ EyeL: { alpha: () => 40, mode: "MASK" }, brow: { alpha: () => 255, mode: "MASK", factorAlpha: 0.3 } });
+    expect(await faceProblems(doc, dumpOf([face("Mario_Eye_VIS_O_OBJShape", ["EyeL", "brow"])]))).toEqual([
+      "mario: face material EyeL is fully transparent (MASK at 0.5 cuts every texel)",
+      "mario: face material brow is fully transparent (MASK at 0.5 cuts every texel)",
+    ]);
+  });
+
+  it("refuses a face material that is not OPAQUE when its source reads no alpha (Donkey Kong's face skin, cut by his fur's mask)", async () => {
+    const doc = await docWith({ EyeL: opaque, body: lashes });
+    const dump = dumpOf([face("donkey_Eye_VIS_O_OBJShape", ["EyeL"]), face("donkey_FaceN_VIS_O_OBJShape", ["body"])], [{ name: "body", image: "skin.png", alpha: false }], "donkeyKong");
+    expect(await faceProblems(doc, dump)).toEqual(["donkeyKong: face material body reads no alpha in its source and must be OPAQUE, not MASK"]);
+  });
+
+  it("refuses a BLEND face material, and a flattened eye that is not OPAQUE", async () => {
+    const doc = await docWith({ EyeL: { alpha: (i: number) => (i < 6 ? 0 : 255), mode: "MASK" }, visor: { alpha: () => 255, mode: "BLEND", factorAlpha: 0.8 } });
+    const dump = dumpOf([face("Mario_Eye_VIS_O_OBJShape", ["EyeL", "visor"])], [{ name: "EyeL", image: "w+b", layers: ["w", "b"] }]);
+    expect(await faceProblems(doc, dump)).toEqual([
+      "mario: face material EyeL layers two textures into one and must be OPAQUE, not MASK",
+      "mario: face material visor is BLEND — a face part drawn without depth writes sorts wrongly against the head",
+    ]);
+  });
+
+  it("verifyGlb runs them on every dump that lists meshes (export_gltf.py's always do), and not on a bones-only dump", async () => {
+    const file = await fixtureGlb("faceless", OPAQUE_SKIN);
+    expect((await verifyGlb(file, { ...DUMP, fighter: "mario", meshes: [{ name: "c00bodyShape", kept: true, verts: 3, polys: 1, materials: ["skin"] }] })).problems).toEqual([
+      "mario: the dump names no face mesh (meshes.json `face`) — a fighter must not export without its face",
+    ]);
+    expect((await verifyGlb(file, { ...DUMP, fighter: "mario", meshes: [face("Mario_Eye_VIS_O_OBJShape", ["skin"])] })).problems).toEqual([]);
   });
 });
 
