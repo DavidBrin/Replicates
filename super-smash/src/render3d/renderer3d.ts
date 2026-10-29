@@ -7,8 +7,11 @@
  *
  * It never takes the match down: missing glbs become stand-ins (`models/`), a
  * lost WebGL context pauses painting until the browser restores it (the sim
- * keeps running), and `dispose()` frees every GPU resource it drew when the
- * match ends (`MatchRunner.dispose`).
+ * keeps running; one still lost after `CONTEXT_RESTORE_WAIT_MS` is reported
+ * through `onContextGone`, for the page to say so), and `dispose()` frees
+ * every GPU resource it drew when the match ends (`MatchRunner.dispose`). A
+ * page that cannot have WebGL at all gets `NO_WEBGL`, a sentence a player can
+ * act on, instead of three's own message.
  *
  * Frame cost (the R§4 budget, `budget.ts`): one draw call per stage platform,
  * one per glb primitive (stand-ins: one per hurt capsule), and one call per
@@ -105,7 +108,32 @@ export interface Renderer3DOptions {
   readonly skeletons: Readonly<Record<string, SkeletonFile>>;
   readonly models: ModelCache;
   readonly makeGL?: (canvas: HTMLCanvasElement) => GLLike;
+  /**
+   * Told `true` once a lost context has stayed lost for `CONTEXT_RESTORE_WAIT_MS`,
+   * and `false` if the browser gives it back after all.
+   */
+  readonly onContextGone?: (gone: boolean) => void;
 }
+
+/**
+ * What the player reads when the page cannot draw the 3D world at all: WebGL
+ * switched off, blocked, or missing (final review M1). three's own message
+ * ("THREE.WebGLRenderer: Error creating WebGL context.") names nothing a
+ * player can do about it. The error's `cause` keeps three's.
+ */
+export const NO_WEBGL = "This browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or try another browser.";
+
+/**
+ * How long a lost WebGL context may stay lost before the page is told
+ * (`onContextGone`). A browser that gives a context back does it once its GPU
+ * process is running again, usually within a second or two; one still lost
+ * after five seconds is very likely lost for good (Chromium, for one, stops
+ * giving WebGL back to a page whose contexts keep taking the GPU down). Until
+ * then a lost context is only a pause in the picture, and says nothing.
+ * UNVERIFIED (not measured here): the wait is a judgement, not a browser's
+ * number.
+ */
+export const CONTEXT_RESTORE_WAIT_MS = 5_000;
 
 /** The game's 16:9 in its smallest whole steps: a buffer is `k` of each. */
 const STEP_W = 16;
@@ -214,7 +242,12 @@ function previousOf(previous: GameState | null, port: number): FighterState | un
 }
 
 export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
-  const gl = (opts.makeGL ?? defaultGL)(opts.canvas);
+  let gl: GLLike;
+  try {
+    gl = (opts.makeGL ?? defaultGL)(opts.canvas);
+  } catch (e) {
+    throw new Error(NO_WEBGL, { cause: e });
+  }
   gl.setClearColor(CLEAR_COLOUR, CLEAR_ALPHA);
   gl.toneMapping = NoToneMapping;
   gl.outputColorSpace = SRGBColorSpace;
@@ -270,10 +303,24 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   ).then(() => undefined);
 
   let lost = false;
+  /** Running from a loss until `CONTEXT_RESTORE_WAIT_MS` has passed, or the context is back. */
+  let lostTimer: ReturnType<typeof setTimeout> | null = null;
+  /** `onContextGone(true)` was said, and nothing since has taken it back. */
+  let saidGone = false;
+  const stopWaiting = () => {
+    if (lostTimer !== null) clearTimeout(lostTimer);
+    lostTimer = null;
+  };
   const onLost = (e: Event) => {
     // Without preventDefault the browser never offers the context back.
     e.preventDefault();
     lost = true;
+    stopWaiting();
+    lostTimer = setTimeout(() => {
+      lostTimer = null;
+      saidGone = true;
+      opts.onContextGone?.(true);
+    }, CONTEXT_RESTORE_WAIT_MS);
     // Every GPU copy went with the context. Tell three to forget each one now,
     // while its deletes are no-ops: on restore it starts afresh but leaves its
     // old records' listeners on everything, which would keep them alive and
@@ -283,6 +330,11 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   };
   const onRestored = () => {
     lost = false;
+    stopWaiting();
+    if (saidGone) {
+      saidGone = false;
+      opts.onContextGone?.(false);
+    }
     // three's restore starts its background from its own default clear colour; this layer's is put back.
     gl.setClearColor(CLEAR_COLOUR, CLEAR_ALPHA);
     // three starts its GL state afresh on restore and uploads geometry and
@@ -368,6 +420,8 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
     dispose() {
       if (disposed) return;
       disposed = true;
+      // Nobody is left to tell.
+      stopWaiting();
       opts.canvas.removeEventListener("webglcontextlost", onLost, false);
       opts.canvas.removeEventListener("webglcontextrestored", onRestored, false);
       // Everything drawn, gathered while it is still in the scene.

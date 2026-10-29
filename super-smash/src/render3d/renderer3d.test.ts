@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BufferAttribute,
   BufferGeometry,
@@ -48,7 +48,7 @@ import { MAX_DRAW_CALLS, MAX_FIGHTER_PRIMITIVES, MAX_TRIANGLES_PER_FRAME } from 
 import { createFighter3D } from "./fighter3d";
 import { LOST_CONTEXT_ERROR, claimContext } from "./fakeContext";
 import { createModelCache, parseModelIndex, type ModelCache, type ModelIndexEntry } from "./models/loader";
-import { bufferSizeFor, createRenderer3D, type GLLike } from "./renderer3d";
+import { CONTEXT_RESTORE_WAIT_MS, NO_WEBGL, bufferSizeFor, createRenderer3D, type GLLike } from "./renderer3d";
 import { SKELETONS } from "./skeletons";
 import { bonesFromRig } from "./threeRig";
 import { HIT_FLASH_GAIN, type ToonMaterial } from "./toon";
@@ -152,7 +152,7 @@ function capCache(ids: readonly string[], warn = vi.fn(), side: Side = FrontSide
 
 const RULES = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false } as const;
 
-function setup(opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanvasElement } = {}) {
+function setup(opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanvasElement; onContextGone?: (gone: boolean) => void } = {}) {
   bootstrapEngine();
   const stage = stageOf(opts.stageId ?? "battlefield");
   const canvas = opts.canvas ?? document.createElement("canvas");
@@ -167,6 +167,7 @@ function setup(opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanva
     // By default no `pnpm models`: every fighter must come out as a stand-in, and the match must still paint.
     models: opts.models ?? createModelCache({ index: async () => null, load: async () => { throw new Error("unreachable"); } }, warn),
     makeGL: (c) => (gl = fakeGL(c)),
+    onContextGone: opts.onContextGone,
   });
   const state: GameState = createInitialState(stage.id, defs.map((d) => ({ defId: d.id })), RULES, 1);
   const rs: RenderState = { current: state, previous: null, stage, fighters: defs, vfx: createVfx(), hud: createHudState() };
@@ -457,6 +458,114 @@ describe("the 3D presenter", () => {
     canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     presenter.dispose();
     expect(gl().dispose).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * Final review, Declined #3: a context the browser never gives back left the
+   * fighters invisible for the rest of the match with no word. The presenter
+   * says so once the loss has lasted `CONTEXT_RESTORE_WAIT_MS`, and again if the
+   * context comes back after all; a loss restored in time says nothing.
+   */
+  describe("a lost context that does not come back", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("is reported once it has stayed lost for the stated wait, and taken back if the browser restores it after all", async () => {
+      vi.useFakeTimers();
+      const gone = vi.fn();
+      const { presenter, canvas } = setup({ onContextGone: gone });
+      await presenter.ready;
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS - 1);
+      expect(gone).not.toHaveBeenCalled();
+      expect(presenter.info().lost).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(gone.mock.calls).toEqual([[true]]);
+      vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS * 10);
+      expect(gone).toHaveBeenCalledOnce();
+      canvas.dispatchEvent(new Event("webglcontextrestored"));
+      expect(gone.mock.calls).toEqual([[true], [false]]);
+      expect(presenter.info().lost).toBe(false);
+      presenter.dispose();
+    });
+
+    it("says nothing about a loss the browser restores within the wait, and starts the wait afresh on the next one", async () => {
+      vi.useFakeTimers();
+      const gone = vi.fn();
+      const { presenter, canvas } = setup({ onContextGone: gone });
+      await presenter.ready;
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS - 1);
+      canvas.dispatchEvent(new Event("webglcontextrestored"));
+      vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS * 10);
+      expect(gone).not.toHaveBeenCalled();
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS - 1);
+      expect(gone).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(gone.mock.calls).toEqual([[true]]);
+      presenter.dispose();
+    });
+
+    it("tells nobody once the match is over", async () => {
+      vi.useFakeTimers();
+      const gone = vi.fn();
+      const { presenter, canvas } = setup({ onContextGone: gone });
+      await presenter.ready;
+      expect(vi.getTimerCount()).toBe(0);
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      presenter.dispose();
+      expect(vi.getTimerCount()).toBe(0);
+      vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS * 10);
+      expect(gone).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Final review M1: with no WebGL (switched off, blocked, or missing) the
+   * player read three's own "THREE.WebGLRenderer: Error creating WebGL
+   * context." The presenter says what is wrong and what to do; three's message
+   * stays as the cause.
+   */
+  describe("no WebGL at all", () => {
+    const build = (makeGL?: (canvas: HTMLCanvasElement) => GLLike) => () =>
+      createRenderer3D({
+        canvas: document.createElement("canvas"),
+        stage: stageOf("battlefield"),
+        defs,
+        bake,
+        skeletons: SKELETONS,
+        models: createModelCache({ index: async () => null, load: async () => Promise.reject(new Error("unused")) }, () => {}),
+        makeGL,
+      });
+
+    it("says what to do about it in a sentence of its own when the renderer cannot be built, keeping three's as the cause", () => {
+      const three = new Error("THREE.WebGLRenderer: Error creating WebGL context.");
+      const err = (() => {
+        try {
+          build(() => {
+            throw three;
+          })();
+        } catch (e) {
+          return e as Error;
+        }
+        return null;
+      })();
+      expect(err?.message).toBe(NO_WEBGL);
+      expect(err?.message).toBe("This browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or try another browser.");
+      expect(err?.cause).toBe(three);
+    });
+
+    it("says it for three's own renderer on a canvas that hands out no WebGL context", () => {
+      const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+      try {
+        expect(build()).toThrow(NO_WEBGL);
+        expect(getContext).toHaveBeenCalled();
+      } finally {
+        getContext.mockRestore();
+      }
+    });
   });
 
   it("sizes its buffer to the window and the display's pixel ratio, exactly 16:9, never past 1080p (Review Focus #3, Task 14 carry)", () => {

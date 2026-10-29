@@ -104,6 +104,8 @@ export interface WorldOptions {
   readonly modelWaitMs?: number;
   /** The WebGL renderer; tests pass a fake (`Renderer3DOptions.makeGL`). */
   readonly makeGL?: Renderer3DOptions["makeGL"];
+  /** A lost WebGL context gone for good, or back after all (`Renderer3DOptions.onContextGone`). */
+  readonly onContextGone?: Renderer3DOptions["onContextGone"];
 }
 
 /** A presenter for one match. Its `ready` resolves once every fighter has a model or a stand-in. */
@@ -114,7 +116,8 @@ export function createWorld(
   bake: BakeTables,
   options: WorldOptions = {},
 ): Presenter3D {
-  const world = (models: ModelCache) => createRenderer3D({ canvas: layers.gl, stage, defs, bake, skeletons: SKELETONS, models, makeGL: options.makeGL });
+  const world = (models: ModelCache) =>
+    createRenderer3D({ canvas: layers.gl, stage, defs, bake, skeletons: SKELETONS, models, makeGL: options.makeGL, onContextGone: options.onContextGone });
   if (options.modelWaitMs === undefined) return world(sharedModels());
   const waiting = withModelWait(sharedModels(), options.modelWaitMs);
   const presenter = world(waiting);

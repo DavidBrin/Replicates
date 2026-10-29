@@ -29,7 +29,7 @@ import type { BakeTables } from "@/engine/acmd/bakeTables";
 import type { GamepadOptions } from "@/input/gamepad";
 import { claimContext } from "@/render3d/fakeContext";
 import { createModelCache } from "@/render3d/models/loader";
-import { createRenderer3D, type GLLike, type Presenter3D } from "@/render3d/renderer3d";
+import { CONTEXT_RESTORE_WAIT_MS, createRenderer3D, type GLLike, type Presenter3D } from "@/render3d/renderer3d";
 import { SKELETONS } from "@/render3d/skeletons";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, bindSession, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
@@ -62,7 +62,9 @@ const mocks = vi.hoisted(() => {
   /** Set to keep the next world's fighters loading until the test says. */
   const holdModels = { next: false };
   /** Set to build every world with this instead of the stub presenter: the real one, say. */
-  const buildWorld = { with: null as ((layers: WorldLayers, stage: StageDef, defs: readonly FighterDef[], bake: BakeTables) => Presenter3D) | null };
+  const buildWorld = {
+    with: null as ((layers: WorldLayers, stage: StageDef, defs: readonly FighterDef[], bake: BakeTables, options?: WorldOptions) => Presenter3D) | null,
+  };
   /** What `useBake` says; a test sets it before rendering. */
   const bake = { state: { tables: {} as object | null, error: null as string | null } };
   return { runners, monitors, pads, fail, worlds, holdModels, buildWorld, bake };
@@ -107,7 +109,7 @@ vi.mock("@/game/useBake", () => ({ useBake: () => mocks.bake.state }));
 const WORLD = vi.hoisted(() => ({
   createWorld: (layers: WorldLayers, stage: StageDef, defs: readonly FighterDef[], bake: BakeTables, options?: WorldOptions) => {
     if (mocks.buildWorld.with !== null) {
-      const real = mocks.buildWorld.with(layers, stage, defs, bake);
+      const real = mocks.buildWorld.with(layers, stage, defs, bake, options);
       const presenter = { ...real, dispose: vi.fn(real.dispose), info: vi.fn(real.info) };
       mocks.worlds.push({ layers, defs, options, presenter, resolve: () => {}, reject: () => {} });
       return presenter;
@@ -948,6 +950,70 @@ describe("the play page in 3D (Plan 4)", () => {
     expect(mocks.runners).toEqual([]);
   });
 
+  /** A presenter on a fake WebGL context the page builds as it would the real one: `makeGL` decides what the canvas gives. */
+  function realWorld(makeGL: (canvas: HTMLCanvasElement) => GLLike) {
+    mocks.bake.state = { tables: readBakeFromDisk(), error: null };
+    const models = createModelCache({ index: async () => null, load: async () => Promise.reject(new Error("unused")) }, () => {});
+    mocks.buildWorld.with = (layers, stage, defs, bake, options) =>
+      createRenderer3D({ canvas: layers.gl, stage, defs, bake, skeletons: SKELETONS, models, makeGL, onContextGone: options?.onContextGone });
+  }
+  const workingGL = (canvas: HTMLCanvasElement): GLLike => ({
+    domElement: canvas,
+    info: { render: { calls: 0, triangles: 0 } },
+    setPixelRatio: () => {},
+    setSize: () => {},
+    setClearColor: () => {},
+    render: () => {},
+    dispose: () => {},
+    ...claimContext(canvas),
+  });
+
+  /** Final review M1: what the page shows with no WebGL is the presenter's sentence, not three's. */
+  it("says the browser cannot draw the 3D world, and what to do, when there is no WebGL", async () => {
+    realWorld(() => {
+      throw new Error("THREE.WebGLRenderer: Error creating WebGL context.");
+    });
+    await renderPage();
+    await act(async () => {});
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("THE MATCH COULD NOT START");
+    expect(alert).toHaveTextContent("This browser can't draw the 3D world (WebGL is off or unavailable): turn on hardware acceleration or try another browser.");
+    expect(alert).not.toHaveTextContent("THREE");
+    expect(mocks.runners).toEqual([]);
+  });
+
+  /**
+   * Final review, Declined #3, with the real presenter and fake timers: a
+   * context the browser never gives back is said over the match once the
+   * presenter's wait is up, while the match runs on; a restore takes it back.
+   */
+  it.each([
+    ["locally", false, "The browser stopped drawing the 3D world and has not given it back. The match is still running: reload the page to bring the picture back."],
+    [
+      "online",
+      true,
+      "The browser stopped drawing the 3D world and has not given it back. The match is still running: reloading the page brings the picture back, but leaves this online match.",
+    ],
+  ] as const)("says so over the match, %s, when a lost picture does not come back, and the match runs on", async (_where, isOnline, sentence) => {
+    if (isOnline) goOnline("guest");
+    realWorld(workingGL);
+    await renderPage();
+    await act(async () => {});
+    const { runner } = only(mocks.runners);
+    expect(runner.start).toHaveBeenCalledOnce();
+    const canvas = layer("world");
+    act(() => void canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true })));
+    act(() => vi.advanceTimersByTime(CONTEXT_RESTORE_WAIT_MS - 1));
+    expect(screen.queryByText(sentence)).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole("alert")).toHaveTextContent(sentence);
+    expect(screen.queryByText("THE MATCH COULD NOT START")).toBeNull();
+    expect(runner.stop).not.toHaveBeenCalled();
+    expect(runner.dispose).not.toHaveBeenCalled();
+    act(() => void canvas.dispatchEvent(new Event("webglcontextrestored")));
+    expect(screen.queryByText(sentence)).toBeNull();
+  });
+
   it("frees the 3D world when the runner cannot be built", async () => {
     mocks.fail.next = true;
     await renderPage();
@@ -1066,7 +1132,7 @@ describe("the play page in 3D (Plan 4)", () => {
     goOnline("host");
     await renderPage();
     const world = only(mocks.worlds);
-    expect(world.options).toEqual({ modelWaitMs: 5_000 });
+    expect(world.options).toEqual({ modelWaitMs: 5_000, onContextGone: expect.any(Function) });
     // Room for the two peers' starts to land apart within the other's link monitor's patience.
     expect(world.options!.modelWaitMs!).toBeLessThanOrEqual(STALL_LOST_MS / 2);
     expect(mocks.monitors).toEqual([]);

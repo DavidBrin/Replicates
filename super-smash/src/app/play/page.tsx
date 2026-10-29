@@ -90,6 +90,15 @@ const NET_STATS_MS = 250;
  */
 const ONLINE_MODEL_WAIT_MS = 5_000;
 
+/**
+ * Over the match when the browser took the 3D picture away and has not given
+ * it back (`CONTEXT_RESTORE_WAIT_MS`; final review, Declined #3). The sim and
+ * the overlay carry on; a reload builds a new context. Online, a reload also
+ * leaves the match, so it says that too.
+ */
+const PICTURE_GONE = "The browser stopped drawing the 3D world and has not given it back. The match is still running: reload the page to bring the picture back.";
+const PICTURE_GONE_ONLINE = "The browser stopped drawing the 3D world and has not given it back. The match is still running: reloading the page brings the picture back, but leaves this online match.";
+
 interface StatTracker {
   readonly kos: number[];
   readonly falls: number[];
@@ -182,6 +191,8 @@ interface MountArgs {
   /** Every fighter has a model or a stand-in; the match has started. */
   readonly onReady: () => void;
   readonly onError: (message: string) => void;
+  /** The 3D picture is gone for good (`true`), or back after all (`false`): the match plays on either way. */
+  readonly onPictureGone: (gone: boolean) => void;
 }
 
 /**
@@ -209,13 +220,14 @@ function mountMatch(args: MountArgs): Mounted {
 
   // The 3D world under the overlay (Plan 4), drawing the game's fighters — the
   // same defs, limb-bone scripts and all, that the sim steps. First, so a page
-  // that cannot draw it (no WebGL) has nothing else to release.
+  // that cannot draw it (no WebGL: `NO_WEBGL`, the sentence the page shows) has
+  // nothing else to release.
   const presenter: Presenter3D = args.world.createWorld(
     args.layers,
     args.stage,
     slots.map((s) => GAME_SIM_CONTEXT.fighter(s.selection.defId)),
     args.bake,
-    args.modelWaitMs === undefined ? {} : { modelWaitMs: args.modelWaitMs },
+    { onContextGone: args.onPictureGone, ...(args.modelWaitMs === undefined ? {} : { modelWaitMs: args.modelWaitMs }) },
   );
   let stopFollowing: () => void;
   try {
@@ -460,6 +472,7 @@ export default function PlayPage() {
   const [peerAway, setPeerAway] = useState(false);
   const [stalled, setStalled] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pictureGone, setPictureGone] = useState(false);
   // A bake that fails its digest says "…does not match this version of the game. Reload the page."
   const shownError = error ?? bake.error ?? worldError;
 
@@ -557,6 +570,7 @@ export default function PlayPage() {
         world,
         onReady: () => setLoading(false),
         onError: (message) => setError(message),
+        onPictureGone: setPictureGone,
       });
       runnerRef.current = mounted.runner;
       mountedRef.current = mounted;
@@ -740,6 +754,7 @@ export default function PlayPage() {
           });
         },
         onError: (message) => setError(message),
+        onPictureGone: setPictureGone,
       });
       const runner = mounted.runner;
       runnerRef.current = runner;
@@ -802,6 +817,11 @@ export default function PlayPage() {
         {loading && !shownError && (
           <p role="status" className="absolute inset-x-0 bottom-8 text-center font-menu text-sm text-white/70">
             Loading fighters…
+          </p>
+        )}
+        {pictureGone && !shownError && (
+          <p role="alert" className="absolute inset-x-4 top-6 mx-auto max-w-xl bg-black/80 px-4 py-2 text-center font-menu text-sm text-white">
+            {online ? PICTURE_GONE_ONLINE : PICTURE_GONE}
           </p>
         )}
       </div>
