@@ -11,12 +11,13 @@
  * match ends (`MatchRunner.dispose`).
  *
  * Frame cost (the R§4 budget, `budget.ts`): one draw call per stage platform,
- * one per glb primitive (stand-ins: one per hurt capsule), and one each for
- * every spark and burst, every shield and every blob shadow, however many are
- * up — `renderer3d.test.ts` holds four fighters at `glb.mjs`'s caps with every
- * effect live under `MAX_DRAW_CALLS` and `MAX_TRIANGLES_PER_FRAME`. Shadow maps
- * would draw every fighter twice, so the shadows are discs. No bloom
- * ("Decisions taken" 7).
+ * one per glb primitive (stand-ins: one per hurt capsule), and one call per
+ * batch, however many are up: one for all the sparks and bursts, one for all
+ * the shields, one for all the blob shadows. `renderer3d.test.ts` holds four
+ * fighters at `glb.mjs`'s caps with every effect live, fading or not, under
+ * `MAX_DRAW_CALLS` and `MAX_TRIANGLES_PER_FRAME`. Shadow maps would draw every
+ * fighter twice, so the shadows are discs. No bloom ("Decisions taken" 7), no
+ * tone mapping, sRGB out.
  */
 
 import {
@@ -29,8 +30,10 @@ import {
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
+  NoToneMapping,
   Quaternion,
   Scene,
+  SRGBColorSpace,
   Vector3,
   WebGLRenderer,
   type Camera as ThreeCamera,
@@ -39,6 +42,7 @@ import {
   type Object3D,
   type SkinnedMesh,
   type Texture,
+  type ToneMapping,
 } from "three";
 
 import type { BakeTables } from "@/engine/acmd/bakeTables";
@@ -64,6 +68,9 @@ export interface GLLike {
   setClearColor(colour: number, alpha: number): void;
   render(scene: Object3D, camera: ThreeCamera): void;
   dispose(): void;
+  /** Set by the presenter (three's defaults are the same); optional, so a fake need not carry them. */
+  toneMapping?: ToneMapping;
+  outputColorSpace?: string;
 }
 
 export interface RenderInfo {
@@ -127,6 +134,19 @@ function defaultGL(canvas: HTMLCanvasElement): GLLike {
   return new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
 }
 
+/** Cleared to nothing: the overlay's background shows where nothing is drawn. */
+const CLEAR_COLOUR = 0x000000;
+const CLEAR_ALPHA = 0;
+
+/**
+ * Light intensities (three's physically based units: a white face meets its
+ * albedo at about π of light). The key light leads the fill so the toon ramp's
+ * bands read; a face toward the camera gets (2.6 + 0.44 + 0.1) / π ≈ 1.0 × its
+ * albedo. UNVERIFIED (by eye): the Task 19 review's measured values; polish
+ * revisits them with screenshots.
+ */
+const LIGHTS = { hemisphere: 0.8, ambient: 0.1, sun: 2.6 } as const;
+
 /** A blob shadow's size against the fighter's `attributes.width`, across and in depth. UNVERIFIED (cosmetic): by eye. */
 const SHADOW_ACROSS = 1.6;
 const SHADOW_DEEP = 1.1;
@@ -180,7 +200,9 @@ function previousOf(previous: GameState | null, port: number): FighterState | un
 
 export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   const gl = (opts.makeGL ?? defaultGL)(opts.canvas);
-  gl.setClearColor(0x000000, 0);
+  gl.setClearColor(CLEAR_COLOUR, CLEAR_ALPHA);
+  gl.toneMapping = NoToneMapping;
+  gl.outputColorSpace = SRGBColorSpace;
   // The buffer is sized in device pixels already (`bufferSizeFor`).
   gl.setPixelRatio(1);
   let buffer = bufferSizeFor(VIEW_WIDTH, VIEW_HEIGHT, 1);
@@ -195,9 +217,9 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   // In the scene, `applySideCamera`'s update is its only one: three updates a camera again only if it has no parent.
   scene.add(camera);
 
-  const hemisphere = new HemisphereLight(0xffffff, 0x445066, 1.4);
-  const ambient = new AmbientLight(0xffffff, 0.25);
-  const sun = new DirectionalLight(0xffffff, 1.6);
+  const hemisphere = new HemisphereLight(0xffffff, 0x445066, LIGHTS.hemisphere);
+  const ambient = new AmbientLight(0xffffff, LIGHTS.ambient);
+  const sun = new DirectionalLight(0xffffff, LIGHTS.sun);
   sun.position.set(-40, 120, 160);
   const stage = createStage3D(opts.stage);
   const vfx = createVfx3D();
@@ -249,6 +271,8 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   };
   const onRestored = () => {
     lost = false;
+    // three's restore starts its background from its own default clear colour; this layer's is put back.
+    gl.setClearColor(CLEAR_COLOUR, CLEAR_ALPHA);
     // three starts its GL state afresh on restore and uploads geometry and
     // textures again as it draws them; every material compiles again too.
     scene.traverse((o) => {

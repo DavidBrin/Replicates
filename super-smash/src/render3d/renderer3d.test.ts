@@ -2,18 +2,27 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BufferAttribute,
   BufferGeometry,
+  AmbientLight,
   DataTexture,
+  DirectionalLight,
+  DoubleSide,
   EventDispatcher,
+  FrontSide,
   Group,
+  HemisphereLight,
   InstancedMesh,
   Matrix4,
   MeshStandardMaterial,
+  NoToneMapping,
   Object3D,
   Quaternion,
   Skeleton,
   SkinnedMesh,
+  SRGBColorSpace,
   Vector3,
   type Camera as ThreeCamera,
+  type Side,
+  type ToneMapping,
   type Material,
   type Mesh,
   type Texture,
@@ -31,7 +40,7 @@ import { readBakeFromDisk } from "@/game/bakeNode";
 import { createCamera } from "@/render/camera";
 import { createHudState } from "@/render/hud";
 import type { RenderState } from "@/render/renderer";
-import { createVfx, type Particle } from "@/render/vfx";
+import { createVfx, hitFlashAmount, HIT_FLASH_FRAMES, type Particle } from "@/render/vfx";
 import { STAGES } from "@/stages";
 import { MAX_TRIANGLES } from "../../scripts/models/glb.mjs";
 import { fighterPoser } from "./bake/bake";
@@ -41,6 +50,7 @@ import { createModelCache, parseModelIndex, type ModelCache, type ModelIndexEntr
 import { bufferSizeFor, createRenderer3D, type GLLike } from "./renderer3d";
 import { SKELETONS } from "./skeletons";
 import { bonesFromRig } from "./threeRig";
+import { HIT_FLASH_GAIN, type ToonMaterial } from "./toon";
 import { MAX_SHIELDS, MAX_SPRITES } from "./vfx3d";
 
 const bake = readBakeFromDisk();
@@ -53,7 +63,9 @@ const defs = ["mario", "fox", "kirby", "donkeyKong"].map((id) => withLimbScripts
  * drawing, `render` updates the scene's matrices unless `scene.matrixWorldAutoUpdate`
  * is off, and a parentless camera's (three r186 `WebGLRenderer.render`); then one
  * draw per visible mesh (per material group), none for an instanced mesh with no
- * instances, and its triangles once per instance.
+ * instances, and its triangles once per instance. A transparent double-sided
+ * material draws twice, back faces then front, unless `forceSinglePass`
+ * (`WebGLRenderer.js:2165-2176`).
  */
 function fakeGL(canvas: HTMLCanvasElement) {
   const gl = {
@@ -65,6 +77,9 @@ function fakeGL(canvas: HTMLCanvasElement) {
     setPixelRatio: vi.fn(),
     setSize: vi.fn(),
     setClearColor: vi.fn(),
+    /** What the presenter sets them to: three's defaults are the same, so only the fake shows it set them. */
+    toneMapping: undefined as ToneMapping | undefined,
+    outputColorSpace: undefined as string | undefined,
     render: vi.fn((scene: Object3D, camera: ThreeCamera) => {
       if ((scene as Object3D & { matrixWorldAutoUpdate: boolean }).matrixWorldAutoUpdate) scene.updateMatrixWorld();
       if (camera.parent === null && camera.matrixWorldAutoUpdate) camera.updateMatrixWorld();
@@ -77,8 +92,13 @@ function fakeGL(canvas: HTMLCanvasElement) {
         if (instances === 0) return;
         const g = mesh.geometry;
         const vertices = g.index?.count ?? (g.attributes.position as BufferAttribute | undefined)?.count ?? 0;
-        calls += Array.isArray(mesh.material) ? Math.max(1, g.groups.length) : 1;
-        triangles += (vertices / 3) * instances;
+        const passes = (m: Material) => (m.transparent && m.side === DoubleSide && !m.forceSinglePass ? 2 : 1);
+        const groups = Array.isArray(mesh.material) && g.groups.length > 0 ? g.groups : [{ count: vertices, materialIndex: 0 }];
+        for (const group of groups) {
+          const m = Array.isArray(mesh.material) ? mesh.material[group.materialIndex ?? 0] : mesh.material;
+          calls += passes(m);
+          triangles += (Math.min(group.count, vertices) / 3) * instances * passes(m);
+        }
       });
       gl.info.render.calls = calls;
       gl.info.render.triangles = triangles;
@@ -99,7 +119,7 @@ const glbScenes = new Map<string, Group>();
  * GLTFLoader binds every primitive of a skinned mesh to one), `MAX_TRIANGLES`
  * triangles between them (`glb.mjs`'s caps), and a colour texture.
  */
-function glbAtTheCap(entry: ModelIndexEntry): Object3D {
+function glbAtTheCap(entry: ModelIndexEntry, side: Side = FrontSide): Object3D {
   const def = defs.find((d) => entry.file.startsWith(`${d.id}.`))!;
   const scene = new Group();
   const bones = bonesFromRig(fighterPoser(def, SKELETONS[def.id]).rig3);
@@ -110,7 +130,7 @@ function glbAtTheCap(entry: ModelIndexEntry): Object3D {
   geometry.setAttribute("position", new BufferAttribute(new Float32Array((MAX_TRIANGLES / MAX_FIGHTER_PRIMITIVES) * 9), 3));
   const map = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
   for (let i = 0; i < MAX_FIGHTER_PRIMITIVES; i++) {
-    const part = new SkinnedMesh(geometry, new MeshStandardMaterial({ map, name: `part${i}` }));
+    const part = new SkinnedMesh(geometry, new MeshStandardMaterial({ map, side, name: `part${i}` }));
     scene.add(part);
     part.bind(skeleton, new Matrix4());
   }
@@ -119,9 +139,9 @@ function glbAtTheCap(entry: ModelIndexEntry): Object3D {
 }
 
 /** A cache whose index lists `ids` (each loads `glbAtTheCap`); every other fighter is a stand-in. */
-function capCache(ids: readonly string[], warn = vi.fn()): ModelCache {
+function capCache(ids: readonly string[], warn = vi.fn(), side: Side = FrontSide): ModelCache {
   const index = parseModelIndex({ schema: 1, models: Object.fromEntries(ids.map((id) => [id, { file: `${id}.00000000.glb`, bytes: 1, sha256: "x" }])) });
-  return createModelCache({ index: async () => index, load: async (e) => glbAtTheCap(e) }, warn);
+  return createModelCache({ index: async () => index, load: async (e) => glbAtTheCap(e, side) }, warn);
 }
 
 const RULES = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false } as const;
@@ -226,6 +246,23 @@ describe("the 3D presenter", () => {
     expect(resourcesOf(scene).skeletons.size).toBe(4);
   });
 
+  it("stays inside the draw-call budget with double-sided glbs at the caps while every fighter fades: three would draw each part twice", async () => {
+    const { presenter, rs, state, stage, gl } = setup({ models: capCache(defs.map((d) => d.id), vi.fn(), DoubleSide) });
+    await presenter.ready;
+    standAll(state, "shield");
+    // Intangible, so the fade (`setFade`) makes every part of every fighter transparent.
+    state.fighters.forEach((f, i) => (state.fighters[i] = { ...f, intangible: 10 }));
+    fillSparks(rs);
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const parts = [...resourcesOf(gl().scene!).materials].filter((m) => m.type === "MeshToonMaterial");
+    expect(parts).toHaveLength(4 * MAX_FIGHTER_PRIMITIVES);
+    expect(parts.every((m) => m.transparent && m.side === DoubleSide)).toBe(true);
+    // Two passes each would be 4 × 12 × 2 + 7 = 103.
+    expect(presenter.info().calls).toBe(4 * MAX_FIGHTER_PRIMITIVES + 7);
+    expect(presenter.info().calls).toBeLessThanOrEqual(MAX_DRAW_CALLS);
+    expect(presenter.info().triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
+  });
+
   it("builds every matrix in the scene once a frame: three's own pass over the scene would build them all again (Task 17 carry)", async () => {
     const { presenter, rs, state, stage, gl } = setup({ models: capCache(["mario", "fox"]) });
     await presenter.ready;
@@ -328,6 +365,52 @@ describe("the 3D presenter", () => {
     }
   });
 
+  it("lights the scene with the look's values, tone mapping off and sRGB out (UNVERIFIED by eye: pinned so any change is deliberate)", () => {
+    const { presenter, rs, stage, gl } = setup();
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const lights = gl().scene!.children;
+    const hemisphere = lights.find((o) => (o as HemisphereLight).isHemisphereLight) as HemisphereLight;
+    const ambient = lights.find((o) => (o as AmbientLight).isAmbientLight) as AmbientLight;
+    const sun = lights.find((o) => (o as DirectionalLight).isDirectionalLight) as DirectionalLight;
+    expect([hemisphere.intensity, hemisphere.color.getHex(), hemisphere.groundColor.getHex()]).toEqual([0.8, 0xffffff, 0x445066]);
+    expect([ambient.intensity, ambient.color.getHex()]).toEqual([0.1, 0xffffff]);
+    expect([sun.intensity, sun.color.getHex()]).toEqual([2.6, 0xffffff]);
+    expect(gl().toneMapping).toBe(NoToneMapping);
+    expect(gl().outputColorSpace).toBe(SRGBColorSpace);
+    presenter.dispose();
+  });
+
+  it("flashes a struck fighter brighter in its own colours, never see-through: every opaque material stays opaque, writes depth, keeps alpha 1", async () => {
+    // Mario and Fox from glbs (a colour texture each), Kirby and Donkey Kong as stand-ins.
+    const { presenter, rs, state, stage, gl } = setup({ models: capCache(["mario", "fox"]) });
+    await presenter.ready;
+    standAll(state);
+    // Past the entry's intangibility, whose blink is the one thing allowed to fade a fighter.
+    state.fighters.forEach((f, i) => (state.fighters[i] = { ...f, intangible: 0, invincible: 0 }));
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const toon = [...resourcesOf(gl().scene!).materials].filter((m): m is ToonMaterial => m.type === "MeshToonMaterial");
+    const alphaOf = (m: ToonMaterial) => [m.transparent, m.depthWrite, m.opacity, m.alphaTest, m.version];
+    const unflashed = toon.map(alphaOf);
+    expect(toon.every((m) => m.emissive.getHex() === 0)).toBe(true);
+
+    for (let p = 0; p < 4; p++) rs.vfx.hitFlash[p] = HIT_FLASH_FRAMES;
+    presenter.paint(rs, createCamera(stage), 1, []);
+    const amount = hitFlashAmount(rs.vfx, 0);
+    expect(amount).toBeGreaterThan(0.8);
+    expect(toon.length).toBeGreaterThan(20);
+    // Not one material's alpha mode, opacity or program moved: the flash is light added, nothing composited.
+    expect(toon.map(alphaOf)).toEqual(unflashed);
+    for (const m of toon.filter((t) => !t.userData.alpha.transparent)) expect([m.transparent, m.depthWrite, m.opacity]).toEqual([false, true, 1]);
+    for (const m of toon) {
+      // Brighter by the fighter's own colours (the texture through `emissiveMap`), never washed to white.
+      expect(m.emissiveMap).toBe(m.map);
+      expect(m.emissive.r).toBeCloseTo(m.color.r * amount * HIT_FLASH_GAIN, 9);
+      expect(m.emissive.g).toBeCloseTo(m.color.g * amount * HIT_FLASH_GAIN, 9);
+      expect(m.emissive.b).toBeCloseTo(m.color.b * amount * HIT_FLASH_GAIN, 9);
+    }
+    presenter.dispose();
+  });
+
   it("stops painting while the WebGL context is lost and resumes when it is restored, every material recompiled (Review Focus #2)", async () => {
     const { presenter, rs, gl, canvas, stage } = setup({ models: capCache(["mario", "fox"]) });
     await presenter.ready;
@@ -340,7 +423,10 @@ describe("the 3D presenter", () => {
     for (const r of [...geometries, ...materials, ...textures, ...instanced]) {
       (r as EventDispatcher<{ dispose: object }>).addEventListener("dispose", () => forgotten.set(r, (forgotten.get(r) ?? 0) + 1));
     }
+    const clear = gl().setClearColor.mock.calls[0];
+    expect(clear).toEqual([0x000000, 0]);
     gl().render.mockClear();
+    gl().setClearColor.mockClear();
     const lost = new Event("webglcontextlost", { cancelable: true });
     canvas.dispatchEvent(lost);
     // Without it the browser never offers the context back.
@@ -354,6 +440,8 @@ describe("the 3D presenter", () => {
     expect(presenter.info().lost).toBe(true);
     canvas.dispatchEvent(new Event("webglcontextrestored"));
     expect(presenter.info().lost).toBe(false);
+    // The clear colour is the presenter's, put back: three's restore starts from its own default.
+    expect(gl().setClearColor.mock.calls).toEqual([clear]);
     expect(materials.size).toBeGreaterThan(5);
     for (const [m, v] of versions) expect(m.version, m.name || m.type).toBeGreaterThan(v);
     presenter.paint(rs, createCamera(stage), 0, []);

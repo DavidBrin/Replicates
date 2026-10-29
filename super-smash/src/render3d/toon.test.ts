@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DoubleSide, FrontSide, Mesh, MeshStandardMaterial, ShaderChunk, ShaderLib, type Material } from "three";
+import { DataTexture, DoubleSide, FrontSide, Mesh, MeshStandardMaterial, NormalBlending, ShaderChunk, ShaderLib, type Material } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import { MAP_ALPHA_ANCHOR, RIM_ANCHOR, setFade, setHitFlash, toonFor, toonMaterial } from "./toon";
+import { HIT_FLASH_GAIN, MAP_ALPHA_ANCHOR, RIM_ANCHOR, RIM_STRENGTH, setFade, setHitFlash, toonFor, toonMaterial, toonRamp } from "./toon";
 
 /** Run a material's `onBeforeCompile` on three's own toon shader, as the renderer would. */
 function compiled(m: ReturnType<typeof toonMaterial>) {
@@ -141,10 +141,38 @@ describe("the toon + rim material", () => {
     expect([blend.transparent, blend.opacity, blend.depthWrite]).toEqual([true, 0.8, false]);
   });
 
-  it("flashes white through the emissive, never by compositing (D21)", () => {
-    const m = toonMaterial(null);
-    setHitFlash(m, 0.8);
-    expect(m.emissive.r).toBeCloseTo(0.8, 6);
-    expect(m.blending).toBe(1); // NormalBlending
+  it("flashes a hit (D21) as light in the fighter's own colours, capped, never touching its alpha or its program", () => {
+    const texture = new DataTexture(new Uint8Array([200, 120, 40, 255]), 1, 1);
+    const materials = [
+      toonMaterial(null),
+      toonMaterial(texture),
+      toonFor(new MeshStandardMaterial({ map: texture, color: 0x884422 })),
+      toonFor(new MeshStandardMaterial({ alphaTest: 0.5 })),
+      toonFor(new MeshStandardMaterial({ transparent: true, depthWrite: false, opacity: 0.8 })),
+    ];
+    for (const m of materials) {
+      // The texture lights the flash too, so a texel brightens in its own colour instead of washing to white.
+      expect(m.emissiveMap).toBe(m.map);
+      const alpha = [m.transparent, m.opacity, m.alphaTest, m.depthWrite, m.blending, m.version];
+      setHitFlash(m, 0.85);
+      expect(m.emissive.r).toBeCloseTo(m.color.r * 0.85 * HIT_FLASH_GAIN, 12);
+      expect(m.emissive.g).toBeCloseTo(m.color.g * 0.85 * HIT_FLASH_GAIN, 12);
+      expect(m.emissive.b).toBeCloseTo(m.color.b * 0.85 * HIT_FLASH_GAIN, 12);
+      expect([m.transparent, m.opacity, m.alphaTest, m.depthWrite, m.blending, m.version]).toEqual(alpha);
+      expect(m.blending).toBe(NormalBlending);
+      setHitFlash(m, 0);
+      expect(m.emissive.getHex()).toBe(0);
+    }
+    // UNVERIFIED (by eye): the cap, pinned so a change is deliberate.
+    expect(HIT_FLASH_GAIN).toBe(1.4);
+  });
+
+  it("has the look's values, drawn in one pass (UNVERIFIED by eye: pinned so any change is deliberate)", () => {
+    expect(RIM_STRENGTH).toBe(0.15);
+    expect(toonMaterial(null).userData.rimStrength.value).toBe(0.15);
+    // 90/170/255 as linear bytes: a RedFormat ramp cannot be tagged sRGB, so three reads it as linear.
+    expect([...(toonRamp().image.data as Uint8Array)]).toEqual([26, 102, 255]);
+    // A transparent double side is otherwise two draws (three's back-then-front pass): a fading fighter's every part.
+    for (const m of [toonMaterial(null), toonFor(new MeshStandardMaterial({ side: DoubleSide, transparent: true }))]) expect(m.forceSinglePass).toBe(true);
   });
 });

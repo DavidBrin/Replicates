@@ -2,7 +2,10 @@
  * The fighters' material: Ultimate-ish cel shading — a three-step toon ramp on
  * the c00 colour texture plus a view-facing rim — in one `MeshToonMaterial`
  * per glb material, so a fighter costs one draw call per material and no extra
- * pass. `hitFlash` (D21's white flash on a hit victim) drives the emissive.
+ * pass (`forceSinglePass`: three would draw a transparent double-sided part
+ * twice, and a fading fighter's every part is transparent). `hitFlash` (D21's
+ * flash on a hit victim) drives the emissive, lit by the fighter's own colour
+ * texture, so a hit brightens the fighter and never bleaches or fades it.
  *
  * Alpha is the glb's own. The export decides each material's glTF alpha mode
  * from its texture (Plan 4 Task 8: OPAQUE, MASK for cut-outs such as eyes and
@@ -25,8 +28,25 @@ import {
   type Texture,
 } from "three";
 
-/** Lit, mid, shadow — three bands, as Ultimate's toon ramp reads at a distance. UNVERIFIED: by eye. */
-const RAMP = new Uint8Array([90, 170, 255]);
+/**
+ * Lit, mid, shadow — three bands, as Ultimate's toon ramp reads at a distance:
+ * 255/170/90 as sRGB, stored linear (1.0, 0.4, 0.1), because three reads a
+ * RedFormat texture as linear and will not take an sRGB tag on one (it warns).
+ * UNVERIFIED (by eye): the Task 19 review's measured values; polish revisits
+ * them with screenshots.
+ */
+const RAMP = new Uint8Array([26, 102, 255]);
+
+/** The rim's strength. UNVERIFIED (by eye): stronger washes the fighters' colours out (0.35 cost 18% of their saturation, Task 19 review). */
+export const RIM_STRENGTH = 0.15;
+
+/**
+ * A hit's flash at full strength adds this much of the fighter's own colour
+ * (`hitFlashAmount` peaks at 0.85, so 0.85 × 1.4 ≈ 1.2× its albedo): bright,
+ * and every texture still reads. White light instead washed a struck fighter
+ * to a pale ghost (Task 20's match screenshots). UNVERIFIED (by eye).
+ */
+export const HIT_FLASH_GAIN = 1.4;
 
 let ramp: DataTexture | null = null;
 export function toonRamp(): DataTexture {
@@ -81,8 +101,10 @@ const alphaOf = (m: Material): ToonAlpha => ({ transparent: m.transparent, opaci
 const isOpaque = (a: ToonAlpha): boolean => !a.transparent && a.alphaTest === 0;
 
 /** An opaque toon material (the stand-in's, and the base of `toonFor`). */
-export function toonMaterial(map: Texture | null, rimColor = new Color(0xffffff), rimStrength = 0.35): ToonMaterial {
-  const m = new MeshToonMaterial({ map, gradientMap: toonRamp() }) as ToonMaterial;
+export function toonMaterial(map: Texture | null, rimColor = new Color(0xffffff), rimStrength = RIM_STRENGTH): ToonMaterial {
+  // The colour texture lights the hit flash too (`setHitFlash`); set here, so a flash never changes the program.
+  const m = new MeshToonMaterial({ map, emissiveMap: map, gradientMap: toonRamp() }) as ToonMaterial;
+  m.forceSinglePass = true;
   const strength = { value: rimStrength };
   const mapAlpha = { value: 0 };
   m.userData = { rimStrength: strength, mapAlpha, hitFlash: 0, alpha: alphaOf(m) };
@@ -119,10 +141,15 @@ export function toonFor(source: Material): ToonMaterial {
   return m;
 }
 
-/** White flash on a hit victim, 0..1 (`hitFlashAmount`). */
+/**
+ * The flash on a hit victim (`hitFlashAmount`, 0..0.85): light in the
+ * material's own colour (`color` here, times its texture through
+ * `emissiveMap`), up to `HIT_FLASH_GAIN` of it. Opacity, transparency and
+ * depth are never touched: only the intangibility fade (`setFade`) changes them.
+ */
 export function setHitFlash(m: ToonMaterial, amount: number): void {
   m.userData.hitFlash = amount;
-  m.emissive.setScalar(amount);
+  m.emissive.copy(m.color).multiplyScalar(amount * HIT_FLASH_GAIN);
 }
 
 /**
