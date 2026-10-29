@@ -119,10 +119,11 @@ def rebuild_material(fighter, material):
 def inverse_rigid(m):
     """
     The reader's inverse (`inv_rigid` in skeleton_from_blend.py): the transposed
-    rotation, not `m.inverted()`. SSBU authors a little scale into some bind
-    frames (Mario's LegL/KneeL X axes are 3.3e-4 short), where a full inverse
-    moves a knee capsule's ends by 2.3e-3; the committed capsules are the
-    reader's, so the dump uses the same maths.
+    rotation, not `m.inverted()`. The .blend stores a little scale in some bind
+    frames (Blender 2.83's bone-roll precision on bones pointing almost opposite
+    their parent's Y: Mario's LegL/KneeL X axes are 3.3e-4 short), where a full
+    inverse moves a knee capsule's ends by 2.3e-3; the committed capsules are
+    the reader's, so the dump uses the same maths.
     """
     rot = m.to_3x3().transposed()
     out = rot.to_4x4()

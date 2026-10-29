@@ -46,7 +46,7 @@ describe("the Blender spike's bone dump", () => {
     expect(() => parseBoneDump({ ...d, bones: moveBone(d, "ToeL", 1.2, 0.8, -1.3) })).toThrow(/forward is not \+Z \(ToeL/);
   });
 
-  it("admits SSBU's authored helper-bone residue (4.28e-3, measured) up to RIGID_TOLERANCE_DUMP, and never a mirror", () => {
+  it("admits the helper-bone residue stored in the .blend (4.28e-3, measured) up to RIGID_TOLERANCE_DUMP, and never a mirror", () => {
     expect(RIGID_TOLERANCE_DUMP).toBe(5e-3);
     const d = dump();
     const withKneeL = (edit: (w: number[]) => number[]) => ({ ...d, bones: d.bones.map((b) => (b.name === "KneeL" ? { ...b, world: edit([...b.world]) } : b)) });

@@ -76,24 +76,40 @@ const FIGHTER_ID = /^[A-Za-z][A-Za-z0-9_]*$/;
  * three tolerances of ±1). The determinant's sign is checked on its own, so a
  * mirror is always refused, and the bottom row must be exactly 0 0 0 1.
  *
- * SSBU's binds are not exactly rigid. Measured on the eight .blend files (Plan 4
- * Task 6), the largest residue on a committed bone is Link's `Sword1`/`Sword2`: a
- * 1.08e-3 shear between X and Z (X also 5.8e-4 long). Next is Mario's leg chain
- * `LegL`…`ToeR`, whose down-pointing axis is 3.3e-4 short. That residue is
- * authored in SSBU's stored bind matrices, not reader error: the same reader
- * gives every bone of Donkey Kong, Samus, Kirby, Fox and Marth within 8e-5.
+ * The binds in the eight .blend files are not exactly rigid. Measured (Plan 4
+ * Task 6), the largest residue on a committed bone is Link's `Sword1`/`Sword2`:
+ * a 1.08e-3 shear between X and Z, with X also 5.8e-4 long. Next is Mario's leg
+ * chain `LegL`…`ToeR`, whose down-pointing axis is 3.3e-4 short.
  *
- * 2e-3 admits it with about 2× margin, plus the dump's five-decimal rounding
- * (under 2e-5), and refuses any scale or shear beyond 0.2%. `buildRig` rebuilds
- * every frame orthonormal before use, so the residue never reaches the maths.
+ * The residue is stored in the files: an independent SDNA read gets the same
+ * numbers, so it is not reader error. It comes from Blender 2.83, which saved
+ * all eight. Blender's float32 bone-roll maths loses precision on a bone that
+ * points almost opposite its parent's Y axis, and the residue grows as that gap
+ * shrinks (1 + y is 1.9e-4 for Mario's `LegL`, 1.7e-4 for Link's `Sword1`).
+ * Every other committed bone is within 1e-4. Helper bones that only the raw
+ * dump holds go further.
+ *
+ * 2e-3 admits the residue with about 2× margin, plus the dump's five-decimal
+ * rounding (under 2e-5), and refuses any scale or shear beyond 0.2%. `buildRig`
+ * rebuilds every frame orthonormal before use, so the residue never reaches the
+ * TypeScript maths. The reader's capsule fit, which inverts hurt-bone frames as
+ * rigid, does carry it: about 1e-3 units on Mario's leg capsules, pinned by R8.
+ *
  * A raw dump, which still holds the helper bones that trimming drops, is checked
  * against its own wider `RIGID_TOLERANCE_DUMP` (`pipeline/dump.ts`), passed in
  * through `ParseSkeletonOptions`.
  */
 export const RIGID_TOLERANCE = 2e-3;
 
+/** The widest tolerance a caller may ask for; the raw dump's is 5e-3. */
+const MAX_RIGID_TOLERANCE = 0.01;
+
 export interface ParseSkeletonOptions {
-  /** How far a bind frame may miss rigid. `RIGID_TOLERANCE` unless the caller is validating a raw dump. */
+  /**
+   * How far a bind frame may miss rigid: `RIGID_TOLERANCE` unless the caller is
+   * validating a raw dump. Must be finite and in (0, 0.01]. `Infinity` would
+   * accept any scale or shear.
+   */
   readonly rigidTolerance?: number;
 }
 
@@ -134,6 +150,9 @@ function notRigid(m: readonly number[], tolerance: number): string | null {
  */
 export function parseSkeletonFile(json: unknown, options: ParseSkeletonOptions = {}): SkeletonFile {
   const tolerance = options.rigidTolerance ?? RIGID_TOLERANCE;
+  if (!(Number.isFinite(tolerance) && tolerance > 0 && tolerance <= MAX_RIGID_TOLERANCE)) {
+    throw new Error(`skeleton: rigidTolerance ${tolerance} is not a finite number in (0, ${MAX_RIGID_TOLERANCE}]`);
+  }
   const o: Record<string, unknown> | null = isRecord(json) ? json : null;
   const fighter = typeof o?.fighter === "string" && o.fighter !== "" ? o.fighter : "?";
   if (o === null) fail(fighter, "not an object");
@@ -199,11 +218,12 @@ export function parseSkeletonFile(json: unknown, options: ParseSkeletonOptions =
 
 /**
  * Rebuild a bind frame from its X and Y axes (Gram-Schmidt), so the frames the
- * rig keeps are orthonormal to rounding error. SSBU's binds carry a small
- * authored residue, the dump rounds to five decimals, and `parseSkeletonFile`
- * accepts a frame within `RIGID_TOLERANCE` of rigid; this removes all of that
- * before anything inverts a frame as rigid. It keeps the X axis's direction. A parsed
- * frame has determinant +1, so the rebuilt one never flips handedness.
+ * rig keeps are orthonormal to rounding error. The .blend binds carry a small
+ * residue (Blender 2.83's bone-roll precision), the dump rounds to five
+ * decimals, and `parseSkeletonFile` accepts a frame within `RIGID_TOLERANCE` of
+ * rigid. This removes all of that before anything inverts a frame as rigid, and
+ * keeps the X axis's direction. A parsed frame has determinant +1, so the
+ * rebuilt one never flips handedness.
  */
 function orthonormal(m: readonly number[]): number[] {
   const x = normalize([m[0], m[1], m[2]]);

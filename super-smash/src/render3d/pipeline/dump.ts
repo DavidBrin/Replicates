@@ -33,10 +33,14 @@ export const DUMP_SCHEMA = 1;
 /**
  * How far a raw dump's bind frame may miss rigid. The committed skeletons use
  * `RIGID_TOLERANCE` (2e-3), but a dump holds every bone in the .blend, including
- * helper bones that SSBU authors with a little scale. Measured on the eight files
- * (Plan 4 Task 6): Mario's `H_LegL` X axis is 4.28e-3 long and his `H_LegR` 5.3e-4
- * short; Pikachu's `H_LegL`/`H_LegL2` are 7.0e-4 long. That residue is in SSBU's
- * stored bind matrices, not reader error.
+ * helper bones whose stored binds carry a little scale. Measured on the eight
+ * files (Plan 4 Task 6): Mario's `H_LegL` X axis is 4.28e-3 long and his `H_LegR`
+ * 5.3e-4 short; Pikachu's `H_LegL`/`H_LegL2` are 7.0e-4 long.
+ *
+ * The residue is stored in the files, not reader error. It comes from Blender
+ * 2.83's float32 bone-roll precision: each of these bones points almost opposite
+ * its parent's Y axis, and the residue grows as that gap shrinks (1 + y is
+ * 4.5e-5 for Mario's `H_LegL`).
  *
  * `skeletonFromDump` trims all of those bones, and a committed skeleton is held to
  * `RIGID_TOLERANCE` again when it is read. 5e-3 admits the measured maximum with

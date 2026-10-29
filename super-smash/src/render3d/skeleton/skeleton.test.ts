@@ -157,7 +157,7 @@ describe("the skeleton file", () => {
       expect(() => parseSkeletonFile(withWorld("Head", (w) => [...w.slice(4, 8), ...w.slice(0, 4), ...w.slice(8)]))).toThrow(/mirror image/);
     });
 
-    it("tolerates SSBU's authored bind residue and the dump's rounding, and not much more", () => {
+    it("tolerates the residue stored in the .blend binds and the dump's rounding, and not much more", () => {
       const scale = (f: number) => (w: number[]) => w.map((v, i) => (i < 12 && i % 4 !== 3 ? v * f : v));
       expect(RIGID_TOLERANCE).toBe(2e-3);
       expect(() => parseSkeletonFile(withWorld("Head", scale(1 + RIGID_TOLERANCE / 2)))).not.toThrow();
@@ -182,6 +182,14 @@ describe("the skeleton file", () => {
       expect(() => parseSkeletonFile(withWorld("Head", shearXZ(6e-3)), dumpPath)).toThrow(/is sheared/);
       expect(() => parseSkeletonFile(withWorld("Head", mirrorZ), dumpPath)).toThrow(/bone "Head" world matrix is a mirror image \(determinant -1/);
       expect(() => parseSkeletonFile(withWorld("Head", (w) => w.map((v, i) => (i === 7 ? 1e-3 : v))), dumpPath)).toThrow(/bottom row/);
+    });
+
+    it("takes a tolerance only if it is finite and in (0, 0.01]: Infinity would accept any scale", () => {
+      for (const bad of [Number.POSITIVE_INFINITY, Number.NaN, 0, -1e-3, 0.0100001, 1]) {
+        expect(() => parseSkeletonFile(testSkeleton(), { rigidTolerance: bad }), String(bad)).toThrow(/rigidTolerance .* is not a finite number in \(0, 0\.01\]/);
+      }
+      expect(() => parseSkeletonFile(testSkeleton(), { rigidTolerance: 0.01 })).not.toThrow();
+      expect(() => parseSkeletonFile(testSkeleton(), { rigidTolerance: 1e-6 })).not.toThrow();
     });
 
     it("is not fooled into accepting a matrix with a NaN that every comparison would let past", () => {
@@ -330,7 +338,7 @@ describe("buildRig", () => {
     }
   });
 
-  it("rebuilds a frame carrying SSBU's authored residue as exactly rigid, keeping its X direction and its position", () => {
+  it("rebuilds a frame carrying the .blend binds' residue as exactly rigid, keeping its X direction and its position", () => {
     // Mario's KneeL: the down-pointing X axis 0.999668 long; plus Link's sword shear, 1.08e-3.
     const file = withWorld("KneeL", (w) => shearXZ(1.08e-3)(w.map((v, i) => (i < 3 ? v * 0.999668 : v))));
     const raw = file.bones.find((b) => b.name === "KneeL")!.world;
