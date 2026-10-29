@@ -575,7 +575,7 @@ export const LEDGE_REGRAB_SCALING = [fx(1), fx(0.8), fx(0.5), fx(0)] as const;
 /**
  * Frames after letting go of a ledge (a drop by down or away) or being hit or
  * grabbed off one during which the fighter cannot grab ANY ledge (a trump sets
- * `LEDGE_TRUMPED_FRAMES` instead). Counts down every frame,
+ * `LEDGE_TRUMPED_FRAMES` + 1 instead). Counts down every frame,
  * and landing clears it. Without it the wall that pushes a dropped body clear
  * of the stage (the ECB) puts it straight back inside the grab box on the same
  * frame, and a ledge drop regrabs forever.
@@ -605,8 +605,9 @@ export const LEDGE_REGRAB_LOCKOUT_FRAMES = 29;
  * How long a fighter whose ledge was taken from under it (ledge trump) cannot
  * act: SmashWiki "Ledge trump" (https://www.ssbwiki.com/Ledge_trump) says it
  * "cannot take any action for a moment" and publishes no frame count.
- * UNVERIFIED: 30. It is also how long `ledgeLockout` keeps it off every ledge
- * (`trumpLedge`), so that it cannot take the ledge straight back.
+ * UNVERIFIED: 30. `ledgeLockout` keeps it off every ledge for all of it, the
+ * last frame included (`trumpLedge` sets it one higher, as it counts down from
+ * the next frame), so that it cannot take the ledge straight back.
  */
 export const LEDGE_TRUMPED_FRAMES = 30;
 

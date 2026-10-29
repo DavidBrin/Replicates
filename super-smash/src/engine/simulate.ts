@@ -1352,6 +1352,13 @@ function applyInvincibleHit(
  */
 function releasePendingLaunch(f: FighterState, intent: Intent): void {
   if (f.pendingFacing === 0) return;
+  // A launch ends a short hop, as the hit ended a fast fall: an aerial thrown out
+  // of its hitstun (Task 7) is not the hop's, and deals 1x, not 0.85x (Plan 3
+  // final wave; the final review's Minor 3). Here, as the launch fires, not on
+  // contact: in a trade the fighter's own aerial lands on the same frame and is
+  // still the short hop's, whichever port the hit phase reaches first (a hit with
+  // no freeze fires its launch on contact, so a trade of two of those does not).
+  f.shortHop = false;
   if (f.combat.autolink) {
     releaseAutolink(f);
     return;
@@ -2152,10 +2159,6 @@ function applyHit(
   victim.ledge = null;
   victim.ledgeRegrabs = 0;
   victim.fastFalling = false;
-  // A launch ends a short hop as it ends a fast fall: an aerial thrown out of the
-  // hitstun (Task 7) is not a short hop's, and deals 1x (Plan 3 final wave; the
-  // final review's Minor 3).
-  victim.shortHop = false;
   // Hitlag freezes both parties to a melee exchange. A projectile's owner is not
   // a party to it — freezing Link when his arrow connects across the stage would
   // give the opponent a free frame every time they walked into one.

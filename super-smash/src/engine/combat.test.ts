@@ -5398,12 +5398,17 @@ describe("the smaller engine items (final wave, part 2, item 7)", () => {
   });
 
   // The final review's Minor 3: a hit that launches a short hop's fighter ends the hop,
-  // so an aerial out of the hitstun (Task 7) deals 1x, not the short hop's 0.85x.
-  it("ends a short hop, as it ends a fast fall, when a hit launches the fighter", () => {
+  // so an aerial out of the hitstun (Task 7) deals 1x, not the short hop's 0.85x. The
+  // hop ends as the launch fires: on the contact frame it is still the hop, so an aerial
+  // of the victim's own that trades with the hit keeps its 0.85x whatever the port order.
+  it("ends a short hop when the launch fires, as the hit ends a fast fall", () => {
     const s = standing();
     Object.assign(s.fighters[1], { action: "fall", y: fx(2), grounded: false, platform: -1, shortHop: true, fastFalling: true, jumpsUsed: 1 });
-    const hit = play(s, 8, JAB).find((f) => f.events.hits.length > 0)!;
-    expect(hit.state.fighters[1]).toMatchObject({ shortHop: false, fastFalling: false });
+    const frames = play(s, 30, JAB);
+    const hit = frames.findIndex((f) => f.events.hits.length > 0);
+    const fired = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+    expect(frames[hit].state.fighters[1]).toMatchObject({ shortHop: true, fastFalling: false });
+    expect(frames[fired].state.fighters[1].shortHop).toBe(false);
   });
 });
 

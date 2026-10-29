@@ -675,9 +675,9 @@ export interface FighterState {
    * by a KO. Two things set it:
    * - letting go of a ledge (a drop by down or away), or being hit or grabbed off
    *   one: `LEDGE_REGRAB_LOCKOUT_FRAMES`, so the drop does not regrab at once;
-   * - being trumped off a ledge (Plan 3, Task 15): `LEDGE_TRUMPED_FRAMES`, the
-   *   whole of the lag in which the fighter cannot act, so it cannot take the
-   *   ledge back.
+   * - being trumped off a ledge (Plan 3, Task 15): `LEDGE_TRUMPED_FRAMES` + 1,
+   *   the whole of the lag in which the fighter cannot act, its last frame
+   *   included (the final wave), so it cannot take the ledge back.
    * A getup, roll, jump or attack from the ledge does not set it.
    */
   ledgeLockout: number;

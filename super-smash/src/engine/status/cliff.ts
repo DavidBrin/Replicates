@@ -103,8 +103,8 @@ export const STATUS_CLIFF_JUMP1: FighterStatus = {
  * CLIFF_ROBBED (Plan 3, Task 15): the ledge was taken from under this fighter
  * (`trumpLedge`). It falls, with no say in where, and may not act until the lag
  * is over: no `handleActionable`, no buffering, and no ledge (`ledgeLockout`,
- * set for the same length). GROUND_STOP in the air is exactly that: gravity, air
- * friction, no air control.
+ * set to cover the lag to its last frame). GROUND_STOP in the air is exactly
+ * that: gravity, air friction, no air control.
  */
 export const STATUS_CLIFF_ROBBED: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_CLIFF_ROBBED",
