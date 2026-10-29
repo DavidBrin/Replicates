@@ -142,10 +142,12 @@ const CLEAR_ALPHA = 0;
  * Light intensities (three's physically based units: a white face meets its
  * albedo at about π of light). The key light leads the fill so the toon ramp's
  * bands read; a face toward the camera gets (2.6 + 0.44 + 0.1) / π ≈ 1.0 × its
- * albedo. UNVERIFIED (by eye): the Task 19 review's measured values; polish
- * revisits them with screenshots.
+ * albedo. The hemisphere's ground colour (a cool blue-grey under the fighters)
+ * and the sun's position (high, in front, from the left) are by eye too.
+ * UNVERIFIED (by eye): the Task 19 review's measured values; polish revisits
+ * them with screenshots.
  */
-const LIGHTS = { hemisphere: 0.8, ambient: 0.1, sun: 2.6 } as const;
+const LIGHTS = { hemisphere: 0.8, hemisphereGround: 0x445066, ambient: 0.1, sun: 2.6, sunAt: [-40, 120, 160] } as const;
 
 /**
  * The scene's three lights, as a match lights it. The animation lab's model
@@ -153,10 +155,10 @@ const LIGHTS = { hemisphere: 0.8, ambient: 0.1, sun: 2.6 } as const;
  * under the light the game draws it in.
  */
 export function createLights(): { readonly hemisphere: HemisphereLight; readonly ambient: AmbientLight; readonly sun: DirectionalLight } {
-  const hemisphere = new HemisphereLight(0xffffff, 0x445066, LIGHTS.hemisphere);
+  const hemisphere = new HemisphereLight(0xffffff, LIGHTS.hemisphereGround, LIGHTS.hemisphere);
   const ambient = new AmbientLight(0xffffff, LIGHTS.ambient);
   const sun = new DirectionalLight(0xffffff, LIGHTS.sun);
-  sun.position.set(-40, 120, 160);
+  sun.position.set(...LIGHTS.sunAt);
   return { hemisphere, ambient, sun };
 }
 

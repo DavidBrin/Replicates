@@ -67,6 +67,24 @@ describe("Marth's tipper on the game's defs (carry 4)", () => {
     expect(biggest(painted(marth, slot, frame, sour!.id)), `${slot}: a sourspot hit`).toBe(0);
   });
 
+  /**
+   * Two boxes as strong as each other are both the tip: jab 1's #2 and #3 (5%,
+   * frames 5–6) and up tilt's #3 and #5 (10%, frame 6). A hit by either is a
+   * tipper, whichever of them the flash is drawn on.
+   */
+  it.each([
+    ["jab1", 5],
+    ["utilt", 6],
+  ] as const)("%s: blooms for every box as strong as the tip, on frame %i", (slot, frame) => {
+    const marth = game("marth");
+    const live = marth.moves[slot]!.hitboxes.filter((h) => !h.grabbing && h.startFrame <= frame && frame <= h.endFrame);
+    const strongest = Math.max(...live.map((h) => h.damage));
+    const tips = [...new Set(live.filter((h) => h.damage === strongest).map((h) => h.id))];
+    expect(tips.length, `${slot} f${frame}: equally strong boxes`).toBeGreaterThanOrEqual(2);
+    const gleam = biggest(painted(marth, slot, frame, null));
+    for (const id of tips) expect(biggest(painted(marth, slot, frame, id)), `${slot} f${frame}: a hit by #${id}`).toBeGreaterThan(gleam);
+  });
+
   it("marks forward air's 11.5% box, the script's #2, as the tip", () => {
     const marth = game("marth");
     const fair = marth.moves.fair!.hitboxes;

@@ -1,13 +1,14 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Vector3, type Camera as ThreeCamera, type Object3D, type PerspectiveCamera } from "three";
 
-import type { MatchRules } from "@/engine/types";
+import { toFloat } from "@/engine/fixed";
+import type { FighterState, MatchRules } from "@/engine/types";
 import { LoopbackNetwork } from "@/net/adapters/loopback";
 import { createNullTransport } from "@/net/transport";
 import { VIEW_HEIGHT, VIEW_WIDTH, createCamera } from "@/render/camera";
 import * as characterArt from "@/render/characterArt";
 import { createMockContext } from "@/render/mockContext";
-import { interpolatePosition } from "@/render/renderer";
+import { INTERPOLATION_SNAP_UNITS, interpolatePosition, type RenderState } from "@/render/renderer";
 import { overlayAnchor } from "@/render3d/anchors";
 import { createModelCache } from "@/render3d/models/loader";
 import { createRenderer3D, type GLLike } from "@/render3d/renderer3d";
@@ -213,8 +214,22 @@ describe("the overlay's anchors over the 3D world", () => {
     runner.start(canvasWith(createMockContext()));
     runner.stop();
     runner.advance(150);
-    vi.mocked(characterArt.drawPortTag).mockClear();
-    runner.advance(1);
+    // Measured on a frame where a fighter moves, by less than a snap: `advance`
+    // paints at alpha 0, so both layers draw last frame's position, and a tag
+    // hung on this frame's would be off by the move.
+    const movedBy = (rs: RenderState, f: FighterState) => {
+      const was = rs.previous?.fighters.find((g) => g.port === f.port);
+      return was === undefined ? 0 : Math.hypot(toFloat(f.x - was.x), toFloat(f.y - was.y));
+    };
+    let moved = 0;
+    for (let i = 0; i < 600 && !(moved > 0.25 && moved < INTERPOLATION_SNAP_UNITS); i++) {
+      vi.mocked(characterArt.drawPortTag).mockClear();
+      runner.advance(1);
+      const rs = vi.mocked(presenter.paint).mock.calls.at(-1)![0];
+      const tagged = vi.mocked(characterArt.drawPortTag).mock.calls.length === 2;
+      moved = tagged ? Math.max(...runner.state.fighters.map((f) => movedBy(rs, f))) : 0;
+    }
+    expect(moved, "a frame on which a fighter moves").toBeGreaterThan(0.25);
     const [rs, camera] = vi.mocked(presenter.paint).mock.calls.at(-1)!;
     // One object, read by both layers in the same paint.
     expect(camera).toBe(runner.camera);

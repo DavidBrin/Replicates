@@ -164,7 +164,7 @@ describe("the toon + rim material", () => {
       expect(m.emissive.getHex()).toBe(0);
     }
     // UNVERIFIED (by eye): the cap, pinned so a change is deliberate.
-    expect(HIT_FLASH_GAIN).toBe(1.4);
+    expect(HIT_FLASH_GAIN).toBe(2.5);
   });
 
   it("has the look's values, drawn in one pass (UNVERIFIED by eye: pinned so any change is deliberate)", () => {

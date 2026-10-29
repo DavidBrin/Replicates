@@ -46,6 +46,7 @@ import { MAX_TRIANGLES } from "../../scripts/models/glb.mjs";
 import { fighterPoser } from "./bake/bake";
 import { MAX_DRAW_CALLS, MAX_FIGHTER_PRIMITIVES, MAX_TRIANGLES_PER_FRAME } from "./budget";
 import { createFighter3D } from "./fighter3d";
+import { LOST_CONTEXT_ERROR, claimContext } from "./fakeContext";
 import { createModelCache, parseModelIndex, type ModelCache, type ModelIndexEntry } from "./models/loader";
 import { bufferSizeFor, createRenderer3D, type GLLike } from "./renderer3d";
 import { SKELETONS } from "./skeletons";
@@ -65,9 +66,12 @@ const defs = ["mario", "fox", "kirby", "donkeyKong"].map((id) => withLimbScripts
  * draw per visible mesh (per material group), none for an instanced mesh with no
  * instances, and its triangles once per instance. A transparent double-sided
  * material draws twice, back faces then front, unless `forceSinglePass`
- * (`WebGLRenderer.js:2165-2176`).
+ * (`WebGLRenderer.js:2165-2176`). Its canvas's context is modelled
+ * (`fakeContext.ts`): `forceContextLoss` loses it for good, and a renderer
+ * cannot then be built on that canvas, as three's cannot (Task 20 carry 14).
  */
 function fakeGL(canvas: HTMLCanvasElement) {
+  const context = claimContext(canvas);
   const gl = {
     domElement: canvas,
     info: { render: { calls: 0, triangles: 0 } },
@@ -106,6 +110,8 @@ function fakeGL(canvas: HTMLCanvasElement) {
       gl.look?.(scene);
     }),
     dispose: vi.fn(),
+    /** Three's, which the presenter must never call: the next match's renderer on this canvas could not be built. */
+    forceContextLoss: vi.fn(context.forceContextLoss),
   };
   return gl satisfies GLLike;
 }
@@ -567,6 +573,8 @@ describe("the 3D presenter", () => {
     const added = vi.spyOn(first.canvas, "addEventListener");
     first.presenter.dispose();
 
+    // The context is left usable, however a regression might spell the loss.
+    expect(first.gl().forceContextLoss).not.toHaveBeenCalled();
     const second = setup({ models, canvas: first.canvas });
     await second.presenter.ready;
     expect(second.gl().domElement).toBe(first.canvas);
@@ -586,6 +594,12 @@ describe("the 3D presenter", () => {
     expect(second.gl().render).toHaveBeenCalledOnce();
     expect(first.gl().render).not.toHaveBeenCalled();
     second.presenter.dispose();
+  });
+
+  it("models the context it must leave usable: a canvas forced lost builds no second renderer", () => {
+    const canvas = document.createElement("canvas");
+    fakeGL(canvas).forceContextLoss();
+    expect(() => fakeGL(canvas)).toThrow(LOST_CONTEXT_ERROR);
   });
 
   it("never builds a fighter whose model arrives after dispose", async () => {

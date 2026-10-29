@@ -118,6 +118,29 @@ describe("the page's model cache", () => {
     // Let the cache's own timeouts run out, so nothing is left pending for the next test.
     await vi.advanceTimersByTimeAsync(MODEL_TIMEOUT_MS);
   });
+
+  /** The Task 20 review: a player who leaves an online match while its models load hears nothing more of it. */
+  it("calls off an online match's wait when the match goes", async () => {
+    vi.useFakeTimers();
+    bootstrapEngine();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/models/index.json" ? Promise.resolve(new Response(JSON.stringify(indexOf(["marth", "fox"])))) : new Promise(() => {}),
+      ),
+    );
+    const world = createWorld(layers(), getStageOrThrow("battlefield"), [gameDef("marth"), gameDef("fox")], bake, {
+      modelWaitMs: 5_000,
+      makeGL: fakeGL,
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    world.dispose();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/not loaded within/));
+    // The shared cache's own download carries on for the next match, and settles.
+    await vi.advanceTimersByTimeAsync(MODEL_TIMEOUT_MS);
+  });
 });
 
 describe("a model wait", () => {
@@ -135,6 +158,24 @@ describe("a model wait", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(await got).toBe(glb);
     expect(warn).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops every wait it is running when cancelled, and still answers with the cache's model", async () => {
+    vi.useFakeTimers();
+    const warn = vi.fn();
+    let arrive!: (m: LoadedModel) => void;
+    const capped = withModelWait(cacheOf(() => new Promise((r) => (arrive = r))), 5_000, warn);
+    const got = capped.get("link");
+    expect(vi.getTimerCount()).toBe(1);
+    capped.cancel();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(warn).not.toHaveBeenCalled();
+    arrive(glb);
+    expect(await got).toBe(glb);
+    // Asked after the match has gone: no wait at all.
+    void capped.get("samus");
     expect(vi.getTimerCount()).toBe(0);
   });
 

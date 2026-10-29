@@ -34,35 +34,60 @@ export function preloadModels(fighterIds: readonly string[]): Promise<void> {
   return sharedModels().preload(fighterIds);
 }
 
+/** One match's view of the model cache, with a wait it can call off. */
+export interface WaitingModels extends ModelCache {
+  /**
+   * The match is over: every wait still running stops, so nothing says a
+   * fighter of a match that has gone will be drawn as a stand-in. Asking
+   * afterwards waits on the cache alone.
+   */
+  cancel(): void;
+}
+
 /**
  * `cache`, as one match sees it when it can wait only `ms` for a model (ruling
  * R3, online): a model that has not arrived by then is a stand-in for this
  * match. The download carries on in `cache`, so the next match has it; this
  * one never swaps a stand-in for a model mid-match.
  */
-export function withModelWait(cache: ModelCache, ms: number, warn: (msg: string) => void = console.warn): ModelCache {
+export function withModelWait(cache: ModelCache, ms: number, warn: (msg: string) => void = console.warn): WaitingModels {
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  let cancelled = false;
   return {
     get(id) {
+      if (cancelled) return cache.get(id);
       return new Promise<LoadedModel>((resolve) => {
         const timer = setTimeout(() => {
+          timers.delete(timer);
           const reason = `not loaded within ${ms} ms (online)`;
           warn(`David-Smash: drawing ${id} as a stand-in — ${reason}`);
           resolve({ kind: "standIn", reason });
         }, ms);
+        timers.add(timer);
         // `get` never rejects (`createModelCache`): a failure is already a stand-in.
         void cache.get(id).then((model) => {
           clearTimeout(timer);
+          timers.delete(timer);
           resolve(model);
         });
       });
     },
     preload: (ids) => cache.preload(ids),
     status: () => cache.status(),
+    cancel() {
+      cancelled = true;
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+    },
   };
 }
 
 export interface WorldLayers {
-  /** The WebGL canvas, under the overlay. A fresh one per match: a disposed presenter loses its context for good. */
+  /**
+   * The WebGL canvas, under the overlay. A disposed presenter leaves its
+   * context usable, so the next match may draw on the same canvas (React's
+   * development remount does; Task 20 carry 14).
+   */
   readonly gl: HTMLCanvasElement;
   /** The 2D canvas for the stage's sky, under the WebGL canvas. */
   readonly background: HTMLCanvasElement;
@@ -89,8 +114,18 @@ export function createWorld(
   bake: BakeTables,
   options: WorldOptions = {},
 ): Presenter3D {
-  const cache = options.modelWaitMs === undefined ? sharedModels() : withModelWait(sharedModels(), options.modelWaitMs);
-  return createRenderer3D({ canvas: layers.gl, stage, defs, bake, skeletons: SKELETONS, models: cache, makeGL: options.makeGL });
+  const world = (models: ModelCache) => createRenderer3D({ canvas: layers.gl, stage, defs, bake, skeletons: SKELETONS, models, makeGL: options.makeGL });
+  if (options.modelWaitMs === undefined) return world(sharedModels());
+  const waiting = withModelWait(sharedModels(), options.modelWaitMs);
+  const presenter = world(waiting);
+  return {
+    ...presenter,
+    // A player who leaves while the models load hears nothing more of this match.
+    dispose() {
+      waiting.cancel();
+      presenter.dispose();
+    },
+  };
 }
 
 /** Keep the presenter's buffer to the canvas's CSS size × DPR; returns the unsubscribe. */

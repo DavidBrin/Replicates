@@ -16,14 +16,21 @@ import { AudioEngine } from "@/audio";
 import { STALL_HINT_MS } from "@/components/match/NetHud";
 import { CharacterSelect } from "@/components/menu/CharacterSelect";
 import { Results } from "@/components/menu/Results";
-import { resolveMatchStage } from "@/game/bootstrap";
+import { readBakeFromDisk } from "@/game/bakeNode";
+import { getFighterOrThrow, resolveMatchStage } from "@/game/bootstrap";
 import { STALL_LOST_MS, type LinkMonitorOptions } from "@/game/linkMonitor";
 import type { MatchRunnerOptions } from "@/game/matchRunner";
 import { localBuild, runnerSlotsFor } from "@/game/onlineConfig";
 import { GAME_SIM_CONTEXT } from "@/game/simContext";
 import type { World3dModule } from "@/game/useWorld3d";
 import type { WorldLayers, WorldOptions } from "@/game/world3d";
+import type { FighterDef, StageDef } from "@/engine/types";
+import type { BakeTables } from "@/engine/acmd/bakeTables";
 import type { GamepadOptions } from "@/input/gamepad";
+import { claimContext } from "@/render3d/fakeContext";
+import { createModelCache } from "@/render3d/models/loader";
+import { createRenderer3D, type GLLike, type Presenter3D } from "@/render3d/renderer3d";
+import { SKELETONS } from "@/render3d/skeletons";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, bindSession, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
 import type { DoSignalStatus } from "@/net/adapters/doSignal";
@@ -54,9 +61,11 @@ const mocks = vi.hoisted(() => {
   }[] = [];
   /** Set to keep the next world's fighters loading until the test says. */
   const holdModels = { next: false };
+  /** Set to build every world with this instead of the stub presenter: the real one, say. */
+  const buildWorld = { with: null as ((layers: WorldLayers, stage: StageDef, defs: readonly FighterDef[], bake: BakeTables) => Presenter3D) | null };
   /** What `useBake` says; a test sets it before rendering. */
   const bake = { state: { tables: {} as object | null, error: null as string | null } };
-  return { runners, monitors, pads, fail, worlds, holdModels, bake };
+  return { runners, monitors, pads, fail, worlds, holdModels, buildWorld, bake };
 });
 
 vi.mock("@/game/matchRunner", () => ({
@@ -68,7 +77,8 @@ vi.mock("@/game/matchRunner", () => ({
     const runner = {
       start: vi.fn(),
       stop: vi.fn(),
-      dispose: vi.fn(),
+      // As the real runner does (`MatchRunner.dispose`, 20.1): the presenter goes with it.
+      dispose: vi.fn(() => options.presenter?.dispose()),
       advance: vi.fn(),
       redraw: vi.fn(),
       netStats: null,
@@ -95,7 +105,13 @@ vi.mock("@/game/useBake", () => ({ useBake: () => mocks.bake.state }));
 
 // The 3D world's module, as `useWorld3d` hands it over once its chunk is in.
 const WORLD = vi.hoisted(() => ({
-  createWorld: (layers: WorldLayers, _stage: unknown, defs: readonly { id: string }[], _bake: unknown, options?: WorldOptions) => {
+  createWorld: (layers: WorldLayers, stage: StageDef, defs: readonly FighterDef[], bake: BakeTables, options?: WorldOptions) => {
+    if (mocks.buildWorld.with !== null) {
+      const real = mocks.buildWorld.with(layers, stage, defs, bake);
+      const presenter = { ...real, dispose: vi.fn(real.dispose), info: vi.fn(real.info) };
+      mocks.worlds.push({ layers, defs, options, presenter, resolve: () => {}, reject: () => {} });
+      return presenter;
+    }
     let resolve!: () => void;
     let reject!: (e: Error) => void;
     const held = mocks.holdModels.next;
@@ -174,6 +190,7 @@ beforeEach(() => {
   mocks.fail.next = false;
   mocks.worlds.length = 0;
   mocks.holdModels.next = false;
+  mocks.buildWorld.with = null;
   mocks.bake.state = { tables: {}, error: null };
   WORLD_STATE.world = WORLD;
   WORLD_STATE.error = null;
@@ -665,6 +682,24 @@ describe("the play page, local", () => {
     }
   });
 
+  /** The match's own teardown releases the sound too (Plan 1's test above covers only a runner that cannot be built). */
+  it("releases the sound when the match goes away", async () => {
+    const release = vi.fn();
+    const unlock = vi.spyOn(AudioEngine.prototype, "unlockOnGesture").mockReturnValue(release);
+    const dispose = vi.spyOn(AudioEngine.prototype, "dispose");
+    try {
+      const { unmount } = await renderPage();
+      expect(only(mocks.runners).runner.start).toHaveBeenCalled();
+      expect(dispose).not.toHaveBeenCalled();
+      unmount();
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(dispose).toHaveBeenCalledTimes(1);
+    } finally {
+      unlock.mockRestore();
+      dispose.mockRestore();
+    }
+  });
+
   it("plays the menus' match with no network, each pad held to its human's port", async () => {
     const config = useMatchConfig.getState();
     config.addPlayer();
@@ -713,11 +748,25 @@ describe("the play page in 3D (Plan 4)", () => {
 
   /** One set of defs for the sim, the CPU, the overlay and the 3D world: the game's, limb-bone scripts and all (carry 7). */
   it("plays and draws the game's fighters, as the sim context hands them out", async () => {
-    await renderPage();
-    const { options } = only(mocks.runners);
-    expect(options.getFighter("mario")).toBe(GAME_SIM_CONTEXT.fighter("mario"));
-    const world = only(mocks.worlds);
-    expect(world.defs).toEqual(options.players.map((p) => GAME_SIM_CONTEXT.fighter(p.selection.defId)));
+    // With no bake installed, the context hands out the registry's own defs; a
+    // context of distinct objects tells "the game's" from "the registry's".
+    const real = GAME_SIM_CONTEXT.fighter;
+    const game = new Map<string, FighterDef>();
+    GAME_SIM_CONTEXT.fighter = (id) => game.get(id) ?? (game.set(id, { ...real(id) }), game.get(id)!);
+    try {
+      await renderPage();
+      const { options } = only(mocks.runners);
+      expect(options.getFighter("mario")).toBe(GAME_SIM_CONTEXT.fighter("mario"));
+      expect(options.getFighter("mario")).not.toBe(getFighterOrThrow("mario"));
+      const world = only(mocks.worlds);
+      expect(world.defs).toHaveLength(options.players.length);
+      world.defs.forEach((def, i) => {
+        expect(def).toBe(GAME_SIM_CONTEXT.fighter(options.players[i].selection.defId));
+        expect(def).not.toBe(getFighterOrThrow(def.id));
+      });
+    } finally {
+      GAME_SIM_CONTEXT.fighter = real;
+    }
   });
 
   it("reports a move's length from the game's fighter, so a limb slot says its script's (carry 7)", async () => {
@@ -853,6 +902,44 @@ describe("the play page in 3D (Plan 4)", () => {
     expect(mocks.worlds[1].layers.gl).toBe(layer("world"));
   });
 
+  /**
+   * The same double mount with the real presenter on a modelled WebGL context
+   * (`fakeContext.ts`): the first match's presenter is disposed with its runner,
+   * and the second is built on the very same canvas. A presenter that forced
+   * its context lost on dispose, however spelled, would stop the second one
+   * here, as it does in Chromium ("THE MATCH COULD NOT START").
+   */
+  it("builds the double mount's second presenter on the canvas the first one drew on, and starts its match", async () => {
+    mocks.bake.state = { tables: readBakeFromDisk(), error: null };
+    const models = createModelCache({ index: async () => null, load: async () => Promise.reject(new Error("unused")) }, () => {});
+    const contextGL = (canvas: HTMLCanvasElement): GLLike => ({
+      domElement: canvas,
+      info: { render: { calls: 0, triangles: 0 } },
+      setPixelRatio: () => {},
+      setSize: () => {},
+      setClearColor: () => {},
+      render: () => {},
+      dispose: () => {},
+      ...claimContext(canvas),
+    });
+    mocks.buildWorld.with = (layers, stage, defs, bake) =>
+      createRenderer3D({ canvas: layers.gl, stage, defs, bake, skeletons: SKELETONS, models, makeGL: contextGL });
+    await renderPage(
+      <StrictMode>
+        <PlayPage />
+      </StrictMode>,
+    );
+    await act(async () => {});
+    expect(screen.queryByText("THE MATCH COULD NOT START")).toBeNull();
+    expect(mocks.worlds).toHaveLength(2);
+    expect(mocks.worlds[1].layers.gl).toBe(mocks.worlds[0].layers.gl);
+    expect(mocks.worlds[0].presenter.dispose).toHaveBeenCalledOnce();
+    const [first, second] = mocks.runners;
+    expect(first.runner.start).not.toHaveBeenCalled();
+    expect(second.runner.start).toHaveBeenCalledWith(overlay());
+    expect(mocks.worlds[1].presenter.info()).toMatchObject({ lost: false, fighters: ["standIn", "standIn"] });
+  });
+
   it("plays a second match on the same canvases once the first is over", async () => {
     await renderPage();
     act(() => useMatchConfig.getState().setStocks(2));
@@ -875,6 +962,20 @@ describe("the play page in 3D (Plan 4)", () => {
    * then plays the rest as stand-ins; and its link monitor starts with the
    * match, not at mount, so a slow download is never read as a dead link.
    */
+  /**
+   * DISPATCH-NOTES 20.6: the room's guards run before the page waits for the
+   * bake and the 3D world. A refusal recorded while they load still sends the
+   * host back to where the room is, rather than leaving it on a loading screen.
+   */
+  it("runs the room's guards before it waits for the bake and the 3D world", async () => {
+    mocks.bake.state = { tables: null, error: null };
+    goOnline("host");
+    useOnlineStore.getState().patch({ status: "error", errorReason: "engine-mismatch", error: "The other player is running a different version. Both reload the page." });
+    await renderPage();
+    expect(routerMock.replace).toHaveBeenCalledWith("/stage");
+    expect(mocks.runners).toEqual([]);
+  });
+
   it("caps the wait for models online, and watches the link only once the match starts", async () => {
     mocks.holdModels.next = true;
     goOnline("host");

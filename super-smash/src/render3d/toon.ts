@@ -29,9 +29,10 @@ import {
 } from "three";
 
 /**
- * Lit, mid, shadow — three bands, as Ultimate's toon ramp reads at a distance:
- * 255/170/90 as sRGB, stored linear (1.0, 0.4, 0.1), because three reads a
- * RedFormat texture as linear and will not take an sRGB tag on one (it warns).
+ * Shadow, mid, lit — three bands, as Ultimate's toon ramp reads at a distance,
+ * in the order three samples the ramp (darkest first): 90/170/255 as sRGB,
+ * stored linear (0.1, 0.4, 1.0), because three reads a RedFormat texture as
+ * linear and will not take an sRGB tag on one (it warns).
  * UNVERIFIED (by eye): the Task 19 review's measured values; polish revisits
  * them with screenshots.
  */
@@ -42,11 +43,15 @@ export const RIM_STRENGTH = 0.15;
 
 /**
  * A hit's flash at full strength adds this much of the fighter's own colour
- * (`hitFlashAmount` peaks at 0.85, so 0.85 × 1.4 ≈ 1.2× its albedo): bright,
- * and every texture still reads. White light instead washed a struck fighter
- * to a pale ghost (Task 20's match screenshots). UNVERIFIED (by eye).
+ * (`hitFlashAmount` peaks at 0.85, so 0.85 × 2.5 ≈ 2.1× its albedo at the
+ * four-frame peak, and about 1.06× on a jab's first frame): bright, and every
+ * texture still reads — Donkey Kong's fur keeps its contrast, and his hands
+ * only blow out from 3.3. At 1.4 most hits showed about 0.6× for one frame, too
+ * subtle to see (Task 19 fix re-review, gain strips compared). White light
+ * instead washed a struck fighter to a pale ghost (Task 20's match
+ * screenshots). UNVERIFIED (by eye).
  */
-export const HIT_FLASH_GAIN = 1.4;
+export const HIT_FLASH_GAIN = 2.5;
 
 let ramp: DataTexture | null = null;
 export function toonRamp(): DataTexture {
