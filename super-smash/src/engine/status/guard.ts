@@ -32,6 +32,7 @@ import {
   SHIELD_START_FRAMES,
   bufferPress,
   buttonPresses,
+  endStatus,
   handOff,
   hasMove,
   presses,
@@ -110,7 +111,7 @@ export const STATUS_GUARD_DAMAGE: FighterStatus = {
       bufferPress(f, intent, ctx.frame);
       return;
     }
-    startAction(f, intent.shieldHeld ? "shield" : "shieldRelease");
+    endStatus(f, intent.shieldHeld ? "shield" : "shieldRelease", intent, ctx);
   },
 };
 

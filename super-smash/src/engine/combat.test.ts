@@ -44,6 +44,7 @@ import {
   SHIELD_RELEASE_FRAMES,
   TECH_FRAMES,
   TECH_LOCKOUT,
+  TECH_WALL_FRAMES,
   TECH_WALL_HOLD,
   TECH_WINDOW,
 } from "./constants";
@@ -5403,5 +5404,124 @@ describe("the smaller engine items (final wave, part 2, item 7)", () => {
     Object.assign(s.fighters[1], { action: "fall", y: fx(2), grounded: false, platform: -1, shortHop: true, fastFalling: true, jumpsUsed: 1 });
     const hit = play(s, 8, JAB).find((f) => f.events.hits.length > 0)!;
     expect(hit.state.fighters[1]).toMatchObject({ shortHop: false, fastFalling: false });
+  });
+});
+
+/**
+ * Plan 3 final wave, part 2, item 8 (part 1's report, concern 5). A press made on
+ * any frame of a status, its last included, either acts on the first actionable
+ * frame or waits in the buffer (Ultimate's 9 frames). Earlier presses always did;
+ * one made on the very last frame of a status entered on contact (a landing, a
+ * hit, a tech) was lost: that frame changes status without buffering, and on the
+ * next the key is held, not pressed.
+ */
+describe("a press on a status's last frame is not lost (final wave, part 2, item 8)", () => {
+  /** Fighter 0 standing at x 0, fighter 1 parked at x -60, out of every reach. */
+  const apart = (): GameState => {
+    const s = standing();
+    s.fighters[1].x = fx(-60);
+    s.fighters[1].facing = 1;
+    return s;
+  };
+  const actionsOf = (frames: Frame[], port = 0): ActionState[] => frames.map((f) => f.state.fighters[port].action);
+
+  // Landing lag 8 (the tester's nair) is frames 1-8 after the landing, and the fighter
+  // acts on the 9th (SmashWiki "Lag", https://www.ssbwiki.com/Lag).
+  it("takes a jump pressed on the last frame of landing lag on the first frame after it", () => {
+    const fallingNair = () => {
+      const s = apart();
+      Object.assign(s.fighters[0], { y: fx(3), grounded: false, platform: -1, action: "fall", jumpsUsed: 1 });
+      return s;
+    };
+    const dry = actionsOf(play(fallingNair(), 20, (i) => [i === 0 ? Btn.Attack : 0, 0]));
+    const landed = dry.indexOf("landingLag");
+    const a = actionsOf(play(fallingNair(), landed + 11, (i) => [i === 0 ? Btn.Attack : i === landed + 8 ? Btn.Jump : 0, 0]));
+    expect(a[landed + 7], "lag frame 7").toBe("landingLag");
+    expect(a[landed + 9], "the 9th frame after the landing").toBe("jumpSquat");
+  });
+
+  // Hitstun H is the H frames after the freeze; the fighter acts on the (H + 1)th
+  // (rubendal SSBU-Calculator, https://github.com/rubendal/SSBU-Calculator).
+  it("takes an attack pressed on the last frame of hitstun on the first frame after it", () => {
+    const flat = jabbing(hitbox({ angle: 0, baseKnockback: fx(20), knockbackGrowth: 0 }));
+    const dry = play(standing(flat), 40, JAB, flat);
+    const hit = dry.findIndex((f) => f.events.hits.length > 0);
+    const stun = dry[hit].state.fighters[1].hitstun;
+    const first = dry.findIndex((f, i) => i > hit && f.state.fighters[1].actionFrame === 1);
+    const last = first + stun - 1;
+    const frames = play(standing(flat), last + 3, (i) => [i === 0 ? Btn.Attack : 0, i === last ? Btn.Attack : 0], flat);
+    const a = actionsOf(frames, 1);
+    expect(a[last - 1]).toBe("hitstun");
+    expect(a[last + 1], "the (H + 1)th frame after the freeze").toBe("attack");
+  });
+
+  // Shieldstun S, the same way (rubendal SSBU-Calculator).
+  it("takes a jump out of shield pressed on the last frame of shieldstun on the first frame after it", () => {
+    const dry = play(standing(), 40, JAB_INTO_SHIELD);
+    const hit = dry.findIndex((f) => f.events.shieldHits.length > 0);
+    const stun = dry[hit].state.fighters[1].hitstun;
+    const first = dry.findIndex((f, i) => i > hit && f.state.fighters[1].actionFrame === 1);
+    const last = first + stun - 1;
+    const frames = play(standing(), last + 3, (i) => [i === 0 ? Btn.Attack : 0, i === last ? Btn.Shield | Btn.Jump : Btn.Shield]);
+    const a = actionsOf(frames, 1);
+    expect(a[last - 1]).toBe("shieldStun");
+    expect(a[last + 1]).toBe("jumpSquat");
+  });
+
+  // A tech in place is 26 frames after the landing, first actionable 27 (SmashWiki
+  // "Lucario (SSBU)/Techs", `TECH_FRAMES`).
+  it("takes a jump pressed on the last frame of a tech in place on the first frame after it", () => {
+    const flying = () => {
+      const s = apart();
+      const v = s.fighters[1];
+      Object.assign(v, { x: 0, y: fx(6), grounded: false, platform: -1, action: "tumble", actionFrame: 0, hitstun: 60 });
+      s.fighters[0].x = fx(60);
+      v.kinetic.damageY = fx(-2);
+      v.launchSpeed = fx(2);
+      v.vy = fx(-2);
+      return s;
+    };
+    const teched = actionsOf(play(flying(), 10, (i) => [0, i === 0 ? Btn.Shield : 0]), 1).indexOf("tech");
+    const last = teched + TECH_FRAMES;
+    const a = actionsOf(play(flying(), last + 3, (i) => [0, i === 0 ? Btn.Shield : i === last ? Btn.Jump : 0]), 1);
+    expect(a[last - 1]).toBe("tech");
+    expect(a[last + 1]).toBe("jumpSquat");
+  });
+
+  // A wall tech is free to act from `TECH_WALL_INTERRUPT` (6) on, its last frame (26)
+  // included, so a press there acts at once: here the air jump.
+  it("takes a jump pressed on the last frame of a wall tech, on that frame", () => {
+    const flying = () => {
+      const s = apart();
+      const v = s.fighters[1];
+      Object.assign(v, { x: fx(92), y: fx(-20), grounded: false, platform: -1, action: "tumble", actionFrame: 0, hitstun: 60, jumpsUsed: 1 });
+      s.fighters[0].x = fx(-70);
+      v.kinetic.damageX = fx(-4);
+      v.launchSpeed = fx(4);
+      v.vx = fx(-4);
+      return s;
+    };
+    const teched = actionsOf(play(flying(), 10, (i) => [0, i === 0 ? Btn.Shield : 0]), 1).indexOf("techWall");
+    expect(teched).toBeGreaterThan(0);
+    const last = teched + TECH_WALL_FRAMES;
+    const a = actionsOf(play(flying(), last + 2, (i) => [0, i === 0 ? Btn.Shield : i === last ? Btn.Jump : 0]), 1);
+    expect(a[last - 1]).toBe("techWall");
+    expect(a[last]).toBe("jump");
+  });
+
+  // A status the fighter enters itself already took it: its last frame buffers, and the
+  // hand-off frame reads input (part 1). Pinned, with the 24-frame jab and the 11-frame
+  // shield drop (UFD, https://ultimateframedata.com/mario, "Shield Drop — 11 frames").
+  it("takes a jump pressed on a jab's last frame on the frame after it", () => {
+    const a = actionsOf(play(apart(), 26, (i) => [i === 0 ? Btn.Attack : i === 23 ? Btn.Jump : 0, 0]));
+    expect(a[23], "the jab's frame 24").toBe("attack");
+    expect(a[24], "frame 25").toBe("jumpSquat");
+  });
+
+  it("takes a jump pressed on the shield drop's last frame on the frame after it", () => {
+    // Shield held for 6 frames, let go on the 7th (index 6): the drop's frames 1-11 are indices 6-16.
+    const a = actionsOf(play(apart(), 20, (i) => [i < 6 ? Btn.Shield : i === 16 ? Btn.Jump : 0, 0]));
+    expect(a[16], "the drop's frame 11").toBe("shieldRelease");
+    expect(a[17], "its frame 12").toBe("jumpSquat");
   });
 });

@@ -17,6 +17,7 @@ import {
   GETUP_FRAMES,
   aerialSlot,
   bufferPress,
+  endStatus,
   hasMove,
   peekBuffer,
   startAction,
@@ -86,7 +87,7 @@ function reelMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     bufferPress(f, intent, ctx.frame);
     return;
   }
-  startAction(f, f.grounded ? "stand" : f.action === "tumble" ? "tumbleFall" : "fall");
+  endStatus(f, f.grounded ? "stand" : f.action === "tumble" ? "tumbleFall" : "fall", intent, ctx);
 }
 
 export const STATUS_DAMAGE: FighterStatus = {
@@ -144,7 +145,7 @@ export const STATUS_DOWN_WAIT: FighterStatus = {
   action: "downed",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= DOWNED_FRAMES) startAction(f, "getUp");
+    if (f.actionFrame >= DOWNED_FRAMES) endStatus(f, "getUp", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -154,7 +155,7 @@ export const STATUS_DOWN_STAND: FighterStatus = {
   action: "getUp",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= GETUP_FRAMES) startAction(f, "stand");
+    if (f.actionFrame >= GETUP_FRAMES) endStatus(f, "stand", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };

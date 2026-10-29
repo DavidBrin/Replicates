@@ -387,12 +387,30 @@ export function startAction(f: FighterState, action: ActionState): void {
  *
  * Not for a status entered on contact or on another status's last frame (a
  * landing, a tech, hitstun, shieldstun, the trump, the get-up after lying
- * down): its `actionFrame` 0 is the frame before its frame 1, so `startAction`
- * already ends it on its first actionable frame.
+ * down): its `actionFrame` 0 is the frame before its frame 1, so the frame it
+ * reaches its length on is its last, and the fighter acts on the next.
+ * `endStatus` ends those, keeping a press made on that last frame.
  */
 export function handOff(f: FighterState, action: ActionState, intent: Intent, ctx: StateContext): void {
   changeStatus(f, action);
   STATUS_TABLE[action]?.main(f, intent, ctx);
+}
+
+/**
+ * End a status entered on contact on its last frame: keep a press made on this
+ * frame in the buffer, then change to `action` (Plan 3 final wave; part 1's
+ * report, concern 5). The counterpart of `handOff`.
+ *
+ * A landing, a tech or a hit's reel (hitstun, shieldstun) is entered in phase 5
+ * or 6, so its `actionFrame` 0 is the frame before its frame 1, and the frame it
+ * reaches its length on is its last, not its first actionable one: the fighter
+ * acts on the next frame, where the buffer fires (`presses`). Every earlier frame
+ * of the status buffers a press; changing status alone dropped one made on this
+ * frame, because on the next the key is held, not pressed.
+ */
+export function endStatus(f: FighterState, action: ActionState, intent: Intent, ctx: StateContext): void {
+  bufferPress(f, intent, ctx.frame);
+  startAction(f, action);
 }
 
 /**

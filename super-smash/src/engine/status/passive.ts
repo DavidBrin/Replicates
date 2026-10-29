@@ -17,7 +17,7 @@ import {
   TECH_WALL_INTERRUPT,
 } from "../constants";
 import { kineticSetX, kineticSetY } from "../kinetic";
-import { bufferPress, handleActionable, startAction } from "../states";
+import { bufferPress, endStatus, handleActionable, startAction } from "../states";
 import type { FighterStatus } from "./kind";
 
 export const STATUS_PASSIVE: FighterStatus = {
@@ -25,7 +25,7 @@ export const STATUS_PASSIVE: FighterStatus = {
   action: "tech",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= TECH_FRAMES) startAction(f, "stand");
+    if (f.actionFrame >= TECH_FRAMES) endStatus(f, "stand", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -37,7 +37,7 @@ export const STATUS_PASSIVE_FB: FighterStatus = {
   main(f, intent, ctx) {
     if (f.actionFrame >= TECH_ROLL_FRAMES) {
       kineticSetX(f, 0, "stop");
-      startAction(f, "stand");
+      endStatus(f, "stand", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
   },
 };
@@ -51,11 +51,13 @@ export const STATUS_PASSIVE_WALL: FighterStatus = {
     if (f.actionFrame <= TECH_WALL_HOLD) kineticSetY(f, 0);
   },
   main(f, intent, ctx) {
+    // Free to act from `TECH_WALL_INTERRUPT` on, its last frame included: a press
+    // there acts at once rather than being dropped by the change to `fall`.
+    if (f.actionFrame >= TECH_WALL_INTERRUPT && handleActionable(f, intent, ctx)) return;
     if (f.actionFrame >= TECH_WALL_FRAMES) {
       startAction(f, "fall");
       return;
     }
-    if (f.actionFrame >= TECH_WALL_INTERRUPT && handleActionable(f, intent, ctx)) return;
     bufferPress(f, intent, ctx.frame);
   },
 };
@@ -65,7 +67,7 @@ export const STATUS_PASSIVE_CEIL: FighterStatus = {
   action: "techCeiling",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
-    if (f.actionFrame >= TECH_CEILING_FRAMES) startAction(f, "fall");
+    if (f.actionFrame >= TECH_CEILING_FRAMES) endStatus(f, "fall", intent, ctx);
     else bufferPress(f, intent, ctx.frame);
   },
 };
