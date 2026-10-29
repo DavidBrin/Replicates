@@ -52,9 +52,13 @@ function hex8(h: number): string {
  * `MoveDef` tables, fighter and stage parameters, and the constants. A change
  * to any of those reaches it only through `ENGINE_RULES_VERSION`, which is
  * bumped once per plan; `rulesVersion.test.ts` pins that version to the golden
- * trace, and that sees only the behaviour its five matches exercise. Two
+ * trace, and that sees only the behaviour its six matches exercise. Two
  * builds of one commit with different uncommitted edits are told apart by the
- * build id (`next.config.ts`), not by this.
+ * build id (`next.config.ts`), not by this, and the id cannot always do it:
+ * every "dev" build (git could not name a commit) shares one id, and so does
+ * every `-dirty-unknown` build of one commit (changes git could not read). Two
+ * of either, with different rules inside one plan, pass every part of the
+ * stamp. A production build refuses both (`resolveBuildId`).
  */
 export function rulesFingerprint(rules: EngineRules = GAME_ENGINE_RULES): string {
   let h = mixInt(FNV_OFFSET, rules.version);

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
 import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
-import { mixBool, mixInt, mixString } from "@/engine/hash";
+import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
@@ -148,10 +148,11 @@ const MATCHES: readonly Match[] = [
  * `tumbleFall` and lies down (`downed`, `getUp`) on landing unless it techs, so the CPU
  * matches reach all three. The script techs Fox on two of its landings (`tech`) and the
  * tech lab reaches `techRoll`, `techWall` and `techCeiling`, which no scripted fight gets
- * to without off-stage play. Task 15 added `ledgeTrumped`: all four CPU matches reached it
- * then (measured 2026-10-28), two fighters going for one ledge being what recovering CPUs
- * do. After Task 18 none does (the CPUs space by the imported scripts' reach), so the
- * script trumps Mario on 1788 (`goldenScript.ts`).
+ * to without off-stage play. Task 15 added `ledgeTrumped`: three of the four CPU matches
+ * reached it then (four trumps between them, as its re-review counted: the draft's "all
+ * four" was before only a hanging fighter could be trumped), two fighters going for one
+ * ledge being what recovering CPUs do. After Task 18 none does (the CPUs space by the
+ * imported scripts' reach), so the script trumps Mario on 1788 (`goldenScript.ts`).
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -235,7 +236,7 @@ const DIRECTIONS = Btn.Left | Btn.Right | Btn.Up | Btn.Down;
  * - each projectile's position.
  */
 function digest(s: GameState): number {
-  let x = mixInt(0x811c9dc5, s.frame);
+  let x = mixInt(FNV_OFFSET, s.frame);
   x = mixInt(x, s.rngSeed);
   x = mixInt(x, s.freezeFrames);
   x = mixInt(x, s.timeRemaining);
@@ -317,7 +318,7 @@ function hitKind(attacker: FighterState): string {
  * exactly the energies' sum, and every number a fighter carries is an integer
  * (Q12 or a count). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all five matches.
+ * on every frame of all six matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -360,7 +361,7 @@ function play(match: Match): Played {
   match.setup?.(state);
   const inputsFor = match.driver();
   let prev: readonly InputFrame[] = match.fighters.map(() => 0);
-  let roll = 0x811c9dc5;
+  let roll = FNV_OFFSET;
   const digests: number[] = [];
   const actions = new Set<ActionState>();
   const soft = new Set<SoftPath>();

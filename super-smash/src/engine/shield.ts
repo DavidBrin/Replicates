@@ -48,8 +48,8 @@ export function shieldScale(health: number): number {
  * `min((shieldstun + 1) × 0.09 × (0.15 if perfect), 1.3)` on the shieldstun
  * *before* rounding, Q12 (`shieldstunExact`). The perfect-shield factor sits
  * inside the formula and the 1.3 cap comes last, so a hard-hit parry slides
- * 0.15 of the *uncapped* push, not 0.15 of 1.3 — SmashWiki "Shield (SSBU)"
- * (https://www.ssbwiki.com/Shield_(SSBU), pushback table), rubendal
+ * 0.15 of the *uncapped* push, not 0.15 of 1.3 — SmashWiki "Shield"
+ * (https://www.ssbwiki.com/Shield, pushback table), rubendal
  * SSBU-Calculator `ShieldPushback` (`js/formulas.js`: `… × 0.09 × perfectshieldMult2`
  * then `if (pushback > 1.3)`), and `research/rebuild-2026-10/tools/ssbu_ref.mjs`.
  */

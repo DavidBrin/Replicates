@@ -728,7 +728,10 @@ export function step(
         // `findLedgeGrab` has already shut the ledge to us while it is, so the test below
         // is that same rule stated where the trump decides its target (SmashWiki "Ledge
         // trump": buffering an attack, a jump or a roll "the moment it is grabbed" avoids the
-        // trump). UNVERIFIED: that reading.
+        // trump). UNVERIFIED: that reading, and above all for a regular getup: the page
+        // names only an attack, a jump and a roll, and says "a regular getup and dropping
+        // from the ledge cannot be buffered, making it much easier to trump someone
+        // attempting these ledge options". Here a getup's performer is exempt like the rest.
         //
         // UNVERIFIED: two fighters taking one free ledge on the same frame. The ports are
         // handled in order, so the later one trumps the earlier, which hung for no frames. That
@@ -1168,9 +1171,11 @@ function resolveHits(
         // A box that only grazes the body — less than 0.1 deep — is a glancing
         // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
         // before the lowest-id pick, so it cannot shadow a deeper box of the same
-        // source. A grab and a hit that reaches a raised shield are not decided by
-        // the depth into the body (SmashWiki's glancing blow is hitbox on hurtbox),
-        // and keep the plain overlap test they always had.
+        // source. UNVERIFIED: that a grab, or a hit that reaches a raised shield,
+        // is exempt. SmashWiki "Glancing blow" says nothing of either, so this is
+        // a choice, not a rule: they keep the plain overlap test they always had
+        // (a grab stays as reliable as it was, a shield is poked as it was).
+        // D56 lists it under Open questions.
         if (
           sweptCapsulePenetration(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
           !c.hitbox.grabbing &&
@@ -1366,12 +1371,16 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   const facing = f.pendingFacing;
   const relStick = intent.x * (facing >= 0 ? 1 : -1);
   // DI and LSI only act on a launch that tumbles and is not within 0.17 rad of
-  // straight ahead (rubendal Sm4sh-Calculator wiki "DI and LSI calculation",
-  // https://github.com/rubendal/Sm4sh-Calculator/wiki/DI-and-LSI-calculation:
+  // straight ahead (rubendal Sm4sh-Calculator wiki "DI and LSI calculation and
+  // controller stick limits",
+  // https://github.com/rubendal/Sm4sh-Calculator/wiki/DI-and-LSI-calculation-and-controller-stick-limits:
   // "Conditions for DI: … the attack causes tumble; launch angle is greater than
   // 9.74°" — Ultimate "reuses the directional influence mechanics" of Smash 4,
   // SmashWiki "Directional influence"; rubendal SSBU-Calculator `js/knockback.js`
-  // computes LSI only inside `di_able`). Tumble is the *base* hitstun's call: a
+  // computes LSI only inside `di_able`). UNVERIFIED: the list's other condition,
+  // "the opponent's kinetic handler is in the air (the opponent doesn't slide on the
+  // ground after hitlag)", is not modelled: a grounded victim is DI'd here (D56 lists
+  // it). Tumble is the *base* hitstun's call: a
   // sped-up launch's `hitstun` counts its shorter real time, so its base comes
   // back from the parked reaction frames (Plan 3, Task 6).
   const baseHitstun = f.combat.launchFaf > 0 ? f.combat.launchFaf - 1 : f.hitstun;
@@ -1410,11 +1419,17 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   // smashes done on grounded-standing characters can no longer be teched" (same
   // page). The hitstun stays the hit's, from its whole knockback ("the amount of
   // hitstun delivered by a meteor smash is not affected by the knockback
-  // reduction"; Task 16 review, Minor 7). UNVERIFIED: that the 0.8 a mid-flight
-  // bounce takes off the hitstun (`BOUNCE_HITSTUN_RATIO`, the param
-  // `damage_fly_reflect_reaction_frame_mul`) does not apply to this one, and
-  // that the bounced launch keeps the speed-up and set weight's fall a
-  // mid-flight bounce disarms (`kineticReflect`): it is the launch itself.
+  // reduction"; Task 16 review, Minor 7). The 0.8 a mid-flight bounce takes off
+  // the hitstun (`BOUNCE_HITSTUN_RATIO`, the param
+  // `damage_fly_reflect_reaction_frame_mul`) does not apply to this one: SmashWiki
+  // "Hitstun" (https://www.ssbwiki.com/Hitstun): "Characters bouncing off
+  // surfaces due to knockback have their hitstun reduced by 0.8× relative to the
+  // initial amount, with the exception of grounded meteor smashes." The page's
+  // exception names meteor smashes; every tumbling launch into the floor takes
+  // it here, which is UNVERIFIED for one that is neither a meteor smash nor a
+  // spike. UNVERIFIED: that the bounced launch keeps the speed-up and set
+  // weight's fall a mid-flight bounce disarms (`kineticReflect`): it is the
+  // launch itself.
   if (f.combat.launchBounce && f.grounded && vy < 0 && speed >= BOUNCE_FLOOR_MIN_SPEED) {
     vx = byRatio(vx, BOUNCE_FLOOR_LAUNCH_RATIO);
     vy = byRatio(-vy, BOUNCE_FLOOR_LAUNCH_RATIO);

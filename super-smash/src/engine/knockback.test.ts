@@ -87,8 +87,6 @@ describe("computeKnockback", () => {
     expect(toFloat(kb)).toBeCloseTo(47.64, 1);
   });
 
-  // A grounded meteor is not a knockback multiplier: it is a floor bounce as the
-  // launch fires, after hitstun is decided (Plan 3, Task 16b; `combat.test.ts`).
   it("applies the crouch-cancel multiplier", () => {
     const args = {
       percent: fx(50),

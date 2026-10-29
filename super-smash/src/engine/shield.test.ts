@@ -104,7 +104,7 @@ describe("perfect shield hitlag (Plan 3, Task 10)", () => {
 
 describe("perfect shield pushback (Plan 3, Task 10 fix round 1)", () => {
   // The 0.15 sits inside the formula and the 1.3 cap comes last — SmashWiki
-  // "Shield (SSBU)" (https://www.ssbwiki.com/Shield_(SSBU)), pushback table;
+  // "Shield" (https://www.ssbwiki.com/Shield), pushback table;
   // rubendal SSBU-Calculator `ShieldPushback`
   // (https://github.com/rubendal/SSBU-Calculator/blob/master/js/formulas.js):
   // `((… + 3) × 0.09 × perfectshieldMult2)`, then `if (pushback > 1.3)`; and

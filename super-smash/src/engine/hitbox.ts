@@ -189,8 +189,13 @@ export function sweptHitboxOverlaps(
  *
  * The same swept capsule and the same spine distance as `sweptHitboxOverlaps`,
  * so the two cannot disagree about whether a box touches: a box that overlaps is
- * never negative. The integer square root floors, so the depth is within one Q12
- * unit (0.00024) of the exact one, on the deep side.
+ * never negative. The integer square root floors, and a swept spine's
+ * projection rounds, so the depth is not exact: measured against a float
+ * reference over about 39,000 near-contact boxes (Plan 3, Task 13 review), the
+ * error is at most +1.3 Q12 units for a box standing still and runs from -0.54
+ * to +10.3 for a swept one (0.0025 units at worst, a fortieth of
+ * `GLANCING_BLOW_DEPTH`). It leans toward the deep side, so a borderline box is
+ * more likely to hit than to graze.
  */
 export function sweptHitboxPenetration(
   prevX: number,

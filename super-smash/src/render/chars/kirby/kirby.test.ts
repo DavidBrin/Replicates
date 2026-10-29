@@ -183,8 +183,17 @@ function activeWindows(slot: MoveSlot, strike: number): Window[] {
     const a = hb.startFrame - 1;
     const b = hb.endFrame - 1;
     // Where the box is: its centre, which for an extended box (an imported
-    // script's capsule, Plan 3 Task 18) is the middle of its two ends — Burning's
-    // runs the length of his body, and either end alone points the wrong way.
+    // script's capsule, Plan 3 Task 18) is the middle of its two ends. What that
+    // changes is the windows more than the direction (Task 18 review). Burning's
+    // near end alone points along his body, (1.00, -0.09) over frames 9-17; only
+    // its far end points straight down. But Burning re-issues one box three
+    // times, its near end at x 3, 4 and 4, and judged by the near end those are
+    // one place, so frames 18-34 made a single window, over which the pose
+    // withdraws 0.84 and the test fails. Their midpoints (1.5, 1.75, 2.0) differ,
+    // so they are separate windows, judged nine frames at a time, and the drop
+    // from frame 26 to 27 falls between two. Merged back into one, the midpoint
+    // oracle would still pass, 0.93 to 0.70 against a tolerance of 0.25, but
+    // only just.
     const x = (hb.x + (hb.x2 ?? hb.x)) / 2;
     const y = (hb.y + (hb.y2 ?? hb.y)) / 2;
     const last = runs[runs.length - 1];

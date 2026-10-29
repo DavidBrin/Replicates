@@ -19,7 +19,7 @@ export const TICK_RATE = 60;
  * differ here play different games and desync on the first hit, so the
  * version goes into `engineFingerprint` (`src/game/simContext.ts`). Plan 3
  * sets it to 3; each later plan that changes what `step()` does bumps it once,
- * as its first engine task (Plan 4 sets 4, Plan 5 sets 5).
+ * as its first behaviour change (Plan 4 sets 4, Plan 5 sets 5).
  *
  * Inside a plan the rules move task by task and the version stays: a task that
  * changes behaviour regenerates the golden trace, and
@@ -271,7 +271,7 @@ export const PARRY_MELEE_INDIRECT = [14, 2] as const;
 export const PARRY_PROJECTILE_DIRECT = [0, 8] as const;
 export const PARRY_PROJECTILE_INDIRECT = [0, -1] as const;
 /**
- * A perfect shield's pushback factor (SmashWiki "Shield (SSBU)", pushback table: "0.15 for a perfect
+ * A perfect shield's pushback factor (SmashWiki "Shield", pushback table: "0.15 for a perfect
  * shield"). It multiplies inside the formula, before the 1.3 cap (`shieldPushback`).
  */
 export const PERFECT_SHIELD_PUSHBACK_RATIO: Ratio = [3, 20];
@@ -509,17 +509,20 @@ export const BOUNCE_SURFACE_LAUNCH_RATIO: Ratio = [19, 20];
  * (https://www.ssbwiki.com/Hitstun: Ultimate keeps Smash 4's bounce reduction,
  * "0.8× relative to the initial amount") and the vanilla param
  * `damage_fly_reflect_reaction_frame_mul` 0.8 (`common.xml` L366). Applied to
- * what is left, UNVERIFIED.
+ * what is left, UNVERIFIED. The page's own exception: "with the exception of
+ * grounded meteor smashes", whose bounce at release keeps its hitstun whole
+ * (`releasePendingLaunch`).
  */
 export const BOUNCE_HITSTUN_RATIO: Ratio = [4, 5];
 /**
  * An air dodge begun out of a tumble that meets a surface in its first 15
  * frames is a tech (`actionFrame` 0-14: the dodge's starting frame is its frame
  * 1, `actionFrame` 0, as it already moves and collides, so 0-14 are the first
- * 15; `airDodge.ts` counts every air-dodge rule so): SmashWiki "Lucario (SSBU)/Techs" ("neutral and directional
- * air dodges can be used for every form of teching during the first 15
- * frames", "After 16 frames ... no longer able to tech against surfaces") and
- * the vanilla param `air_escape_passive_trigger_frame` 15 (`common.xml` L306).
+ * 15; `airDodge.ts` counts every air-dodge rule so): SmashWiki "Lucario
+ * (SSBU)/Techs" ("neutral and directional air dodges can be used for every
+ * form of teching during the first 15 frames", "After 16 frames ... no longer
+ * able to tech against surfaces") and the vanilla param
+ * `air_escape_passive_trigger_frame` 15 (`common.xml` L306).
  * UNVERIFIED: that it is only an air dodge out of a tumble (the hitstun cancel
  * or `tumbleFall`). The pages read as if any air dodge within 15 frames could,
  * but SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge) says wavelanding

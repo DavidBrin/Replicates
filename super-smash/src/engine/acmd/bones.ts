@@ -33,7 +33,7 @@
  */
 
 import { ONE } from "../fixed";
-import { mixInt, mixString } from "../hash";
+import { FNV_OFFSET, mixInt, mixString } from "../hash";
 import type { BoneName, MotionKind } from "./types";
 
 /** One bone's pose; `BoneTable.pose` writes into one, so it is mutable on purpose. */
@@ -92,16 +92,13 @@ export function bakedPoseIndex(frame: number, boneIndex: number, boneCount: numb
   return ((frame - 1) * boneCount + boneIndex) * BONE_POSE_STRIDE;
 }
 
-/** FNV-1a's offset basis, the seed `hash.ts` uses too. */
-const FINGERPRINT_SEED = 0x811c9dc5;
-
 function hex(h: number): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
 /** The fingerprint of a bake: every fighter, bone name, motion and Int32, in a fixed order. */
 function bakeFingerprint(fighters: readonly BakedFighterBones[]): string {
-  let h = FINGERPRINT_SEED;
+  let h = FNV_OFFSET;
   for (const f of [...fighters].sort((a, b) => (a.fighter < b.fighter ? -1 : a.fighter > b.fighter ? 1 : 0))) {
     h = mixString(h, f.fighter);
     h = mixInt(h, f.bones.length);
@@ -186,7 +183,7 @@ export const TOP_POSE: Readonly<BonePose> = { tx: 0, ty: 0, m00: 0, m01: 0, m02:
 
 /** The label and the eight pose Int32s, so a changed `TOP_POSE` is a changed table. */
 function legacyFingerprint(): string {
-  let h = mixString(FINGERPRINT_SEED, "legacy:top");
+  let h = mixString(FNV_OFFSET, "legacy:top");
   for (const v of [TOP_POSE.tx, TOP_POSE.ty, TOP_POSE.m00, TOP_POSE.m01, TOP_POSE.m02, TOP_POSE.m10, TOP_POSE.m11, TOP_POSE.m12]) {
     h = mixInt(h, v);
   }
@@ -209,7 +206,7 @@ export const LEGACY_BONE_TABLE: BoneTable = {
  */
 export function layeredBoneTable(primary: BoneTable, fallback: BoneTable): BoneTable {
   return {
-    fingerprint: hex(mixString(mixString(FINGERPRINT_SEED, primary.fingerprint), fallback.fingerprint)),
+    fingerprint: hex(mixString(mixString(FNV_OFFSET, primary.fingerprint), fallback.fingerprint)),
     pose(fighterId, motion, frame, bone, out) {
       return primary.pose(fighterId, motion, frame, bone, out) || fallback.pose(fighterId, motion, frame, bone, out);
     },

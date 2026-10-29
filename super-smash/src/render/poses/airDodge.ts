@@ -5,13 +5,16 @@ import { BASE_RIG, deg, type BoneName } from "../skeleton";
  * The air dodge — one clip stretched across every air dodge in the game.
  *
  * Each fighter's dodges are its own (Plan 3, Task 20c): a neutral one lasts 38
- * to 61 frames and is intangible to frame 26-32; a directional one lasts 54 to
- * 141 and is intangible only to frame 19-22 (`airDodgeFrames`,
- * `airDodgeIntangible`). Every beat is a proportion, played linearly where the
- * window ends between 0.32 and 0.56 of the clip, the range it was authored for,
- * and around the window's end otherwise (`airDodgeClipTime`). The frame numbers
- * below are quoted for Mario's neutral dodge (52 frames, intangible 3-29, which
- * plays linearly). SmashWiki records the directional dodge — Ultimate's
+ * to 61 frames and is intangible through published frame 26-32; a directional
+ * one lasts 54 to 141 and is intangible only through published frame 19-22
+ * (`airDodgeFrames`, `airDodgeIntangible`). The clip is indexed by `actionFrame`,
+ * 0 to its length, and a published frame N is `actionFrame` N - 1, so those
+ * windows end on `actionFrame` 25-31 and 18-21: the number `airDodgeClipTime`
+ * takes. Every beat is a proportion, played linearly where the window ends
+ * between 0.32 and 0.56 of the clip, the range it was authored for, and around
+ * the window's end otherwise. The frame numbers below are `actionFrame`s of
+ * Mario's neutral dodge (52 frames, intangible published 3-29, `actionFrame`
+ * 2-28, which plays linearly). SmashWiki records the directional dodge — Ultimate's
  * declawed wavedash — as opening with "a five frame windup animation" in which
  * the fighter pulls back opposite the input before moving, which is the
  * counter-lean here: the fighter is still gathering for the first few frames
@@ -74,7 +77,7 @@ export const airDodge: PoseClip = {
     },
     // Frame 7.8. The tuck: knees to chest, arms wrapped over the shins,
     // the ball already tipped a quarter turn into the dodge. Intangibility has
-    // been on since frame 3, so for a moment the fighter is safe and does not
+    // been on since frame 2, so for a moment the fighter is safe and does not
     // look it — which is what the real move's windup does too.
     {
       t: 0.15,

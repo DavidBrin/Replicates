@@ -114,7 +114,7 @@
  * full-hop off it, runs after him and takes the ledge on 1788, which trumps Mario
  * (`ledgeTrumped`, 1788-1817). Fox, still holding right, lets go on 1792 and drifts
  * away to the same KO, on the same frame (1862); Mario air-jumps back on 1819 (a
- * press on 1818, the frame the trump ends, goes to the trump) and lands on 1857. The
+ * press on 1818, the frame the trump ends, goes to the trump) and lands on 1856. The
  * respawn (1936), the step off the platform (1960) and time up (2014) keep their
  * frames. Mario's jab and grab are the imported scripts now (four boxes, two-box
  * capsule grabs), and every hit and event above keeps its frame.
@@ -303,7 +303,7 @@ const STEPS: readonly ScriptStep[] = [
   [22, R, R], //                 1760: ...and Fox after him; Mario hangs on 1781
   [37, 0, R], //                 1782: Fox takes the ledge on 1788: Mario is ledgeTrumped; Fox lets go on 1792
   [1, J | L, R], //              1819: Mario, falling since 1818, jumps back...
-  [40, L, R], //                 1820: ...and lands on the stage (1857); Fox, a KO through the bottom on 1862: dead
+  [40, L, R], //                 1820: ...and lands on the stage (1856); Fox, a KO through the bottom on 1862: dead
   [100, 0, 0], //                1860: respawnPlatform from 1936
   [1, 0, D], //                  1960: step off the platform
   [60, 0, 0],

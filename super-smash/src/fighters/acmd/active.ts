@@ -31,7 +31,12 @@ import type { AcmdCommand, AcmdScript } from "@/engine/acmd/types";
 import type { FighterDef, MoveDef, MoveSlot } from "@/engine/types";
 import type { ReferenceFighter } from "./reference";
 
-/** Commands the interpreter runs and the sim honours (or that change nothing). */
+/**
+ * Commands the interpreter runs. The sim honours every one but `setFlag`, which
+ * the interpreter tracks (`flags`) and nothing reads: a script's `ENABLE_COMBO`
+ * and `ENABLE_LANDING` windows are ignored here, and the legacy move's
+ * `followUp` and `autoCancel*` stand in for them (Task 18 review).
+ */
 const RUN_OPS: ReadonlySet<AcmdCommand["op"]> = new Set([
   "frame",
   "wait",

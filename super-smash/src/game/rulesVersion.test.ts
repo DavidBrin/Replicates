@@ -24,7 +24,7 @@ import { FNV_OFFSET, mixInt, mixString } from "@/engine/hash";
  *   `ENGINE_RULES_VERSION` (src/engine/constants.ts) and `RULES_PIN.version`
  *   together, once, and set `RULES_PIN.golden` too if its trace moved.
  *
- * What it cannot see: a change to behaviour the five golden matches do not
+ * What it cannot see: a change to behaviour the six golden matches do not
  * exercise, and the difference between a bump and a rewrite of the pin by hand
  * (the version beside the digest in the diff is what a reviewer checks).
  */

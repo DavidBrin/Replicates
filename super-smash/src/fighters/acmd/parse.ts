@@ -138,6 +138,13 @@ const DUPLICATE_MARKER = "methodlib::L2CValue::operatorbool()const(is_excute)";
  * taken and the rest of the duplicate is the tail. A duplicate that mirrors no
  * such run is refused: a tail guessed from copies that do not line up would
  * invent commands or lose them.
+ *
+ * Only some of the corpus's duplicates line up (Plan 3 Task 18's review parsed
+ * all 1,429 scripts in the eight cached dumps): Mario's `SpecialHi` and
+ * `SpecialAirHi` do, and Donkey Kong's `FinalEnd`, `FinalAirEnd` and
+ * `FinalEnd_Com` carry the marker too and are refused below. None of the three
+ * is imported (`finalSmash` takes `Final` and `FinalStart`), so nothing breaks
+ * today; a plan that imports a final smash's end meets the refusal.
  */
 function sharedTail(first: readonly RawCommand[], duplicate: readonly RawCommand[]): RawCommand[] {
   for (let m = Math.min(first.length, duplicate.length); m >= 0; m--) {

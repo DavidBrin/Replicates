@@ -176,9 +176,9 @@ export function airDodgeRefusesLedge(f: Pick<FighterState, "action" | "charge" |
  * Whether a floor the fighter meets is not a landing: a directional dodge in its
  * slingshot holds the fighter on the surface, still in the air and still in the
  * dodge, its step into the floor stopped (`kineticAirDodgeHold`), until the
- * slide carries it off (`resolveCollision`). UNVERIFIED, the
- * mods' reading: both turn the landing transitions off when the dodge starts and
- * on, with the fighter put back in the air, only once the slide is under way
+ * slide carries it off (`resolveCollision`). UNVERIFIED, the mods' reading:
+ * both turn the landing transitions off when the dodge starts and on, with the
+ * fighter put back in the air, only once the slide is under way
  * (WuBor Patch `escape_air.rs` L37 and L364-374,
  * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L364-L374;
  * HewDraw Remix `airdodge.rs` L173 and L573-574,
