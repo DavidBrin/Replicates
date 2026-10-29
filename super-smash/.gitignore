@@ -26,3 +26,14 @@ blob-report/
 .wrangler/
 .dev.vars
 .dev.vars.*
+
+# Nintendo-ripped models and textures (spec §3.1): fetched and built locally by
+# `pnpm models`, deployed from local disk, never committed. Only hashes
+# (scripts/models/manifest.json) and derived numbers (src/render3d/skeletons/,
+# public/bake/) are tracked.
+/.model-cache/
+/public/models/
+*.blend
+*.blend1
+# Bytecode from the model scripts (they run with -B; this catches a run without it).
+__pycache__/
