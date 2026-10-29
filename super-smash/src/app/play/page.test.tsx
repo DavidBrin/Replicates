@@ -613,6 +613,88 @@ describe("the play page, leaving online", () => {
     expect(routerMock.push).not.toHaveBeenCalledWith("/results");
   });
 
+  /**
+   * Final review M2: before the match mounts (the bake, or the 3D world's
+   * code, still loading) the room is this page's all the same. Leaving then
+   * must do what leaving a match does: withdraw the start at once, so the
+   * guest's character select, mounting in the same commit, does not follow it
+   * straight back here, and leave the room a moment later, so the other side
+   * hears of it rather than waiting on a match that never comes.
+   */
+  describe("leaving before the match mounts", () => {
+    const WAITS = {
+      "the bake": () => {
+        mocks.bake.state = { tables: null, error: null };
+      },
+      "the 3D world's code": () => {
+        WORLD_STATE.world = null;
+      },
+    } as const;
+    const CASES = (["host", "guest"] as const).flatMap((role) => (Object.keys(WAITS) as (keyof typeof WAITS)[]).map((wait) => [role, wait] as const));
+
+    it.each(CASES)("as the %s, waiting for %s: withdraws the start and leaves the room, with no way back to /play", async (role, wait) => {
+      const { fake } = goOnline(role);
+      WAITS[wait]();
+      resetRosterCache();
+      function Screen({ at }: { at: "play" | "fighters" }) {
+        return at === "play" ? <PlayPage /> : <CharacterSelect />;
+      }
+      const { rerender } = render(<Screen at="play" />);
+      await act(async () => {});
+      expect(mocks.runners).toEqual([]);
+      routerMock.push.mockClear();
+      // One commit: the page unmounts and character select mounts, as a browser Back does.
+      rerender(<Screen at="fighters" />);
+      await act(async () => {});
+      expect(useOnlineStore.getState().config).toBeNull();
+      flushTimers();
+      expect(routerMock.push).not.toHaveBeenCalledWith("/play");
+      // The room is left, and with it the other side is told.
+      expect(getActiveSession()).toBeNull();
+      expect(fake.session.close).toHaveBeenCalled();
+    });
+
+    it.each(CASES)("as the %s, waiting for %s: a plain unmount leaves the room too", async (role, wait) => {
+      const { fake } = goOnline(role);
+      WAITS[wait]();
+      const { unmount } = await renderPage();
+      unmount();
+      expect(useOnlineStore.getState().config).toBeNull();
+      flushTimers();
+      expect(getActiveSession()).toBeNull();
+      expect(fake.session.close).toHaveBeenCalled();
+    });
+
+    it.each(CASES)("as the %s, waiting for %s: keeps the room, and plays, once what it waited for arrives", async (role, wait) => {
+      const { fake } = goOnline(role);
+      WAITS[wait]();
+      const { rerender } = await renderPage();
+      expect(mocks.runners).toEqual([]);
+      mocks.bake.state = { tables: {}, error: null };
+      WORLD_STATE.world = WORLD;
+      rerender(<PlayPage />);
+      await act(async () => {});
+      flushTimers();
+      expect(mocks.runners).toHaveLength(1);
+      expect(getActiveSession()).toBe(fake.session);
+      expect(fake.session.close).not.toHaveBeenCalled();
+      expect(useOnlineStore.getState().config).toBe(CONFIG);
+    });
+
+    it("keeps the room through React's development remount while it waits", async () => {
+      const { fake } = goOnline("guest");
+      WAITS["the bake"]();
+      await renderPage(
+        <StrictMode>
+          <PlayPage />
+        </StrictMode>,
+      );
+      flushTimers();
+      expect(getActiveSession()).toBe(fake.session);
+      expect(useOnlineStore.getState().config).toBe(CONFIG);
+    });
+  });
+
   it.each([
     ["host", "/stage"],
     ["guest", "/fighters"],

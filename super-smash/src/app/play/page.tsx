@@ -145,6 +145,22 @@ function onlineAtMount(): OnlineMount | null {
  */
 let pendingLeave: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * This page's online match is abandoned: it went some other way than to the
+ * results (browser Back, a swipe), mounted or still waiting for the bake or
+ * the 3D world's code (final review M2). The start is withdrawn now, or the
+ * guest's character select, mounting in this same commit, would follow it
+ * straight back here; the room is left a moment later (see `pendingLeave`),
+ * and only if it is still this match's. Leaving it tells the other side.
+ */
+function abandonOnline(session: OnlineSessionLike): void {
+  useOnlineStore.getState().patch({ config: null });
+  pendingLeave = setTimeout(() => {
+    pendingLeave = null;
+    if (getActiveSession() === session) leaveOnline();
+  }, 0);
+}
+
 interface MountArgs {
   readonly canvas: HTMLCanvasElement;
   readonly slots: RunnerSlot[];
@@ -580,8 +596,9 @@ export default function PlayPage() {
       router.replace(session.role === "host" ? "/stage" : "/fighters");
       return;
     }
-    // React's development remount: the unmount just undone withdrew the start
-    // and scheduled a leave, but this is the same match, so neither stands.
+    // React's development remount, or this effect running again once the bake
+    // or the 3D world's code is in: the cleanup just run withdrew the start and
+    // scheduled a leave, but this is the same match, so neither stands.
     if (pendingLeave !== null) {
       clearTimeout(pendingLeave);
       pendingLeave = null;
@@ -600,7 +617,10 @@ export default function PlayPage() {
     const canvas = canvasRef.current;
     const gl = glRef.current;
     const background = bgRef.current;
-    if (!canvas || !gl || !background || bake.tables === null || world === null) return;
+    // No match yet, but the room is this page's: leaving now abandons it, as
+    // leaving a mounted match does. Run again when what it waits for arrives,
+    // this cleanup's withdrawal is undone above, as a development remount's is.
+    if (!canvas || !gl || !background || bake.tables === null || world === null) return () => abandonOnline(session);
     const tables = bake.tables;
 
     let mounted: Mounted | null = null;
@@ -750,18 +770,7 @@ export default function PlayPage() {
       runnerRef.current = null;
       keyboardRef.current = null;
       delete (window as unknown as { __smashNet?: unknown }).__smashNet;
-      if (!handedOff) {
-        // Gone some other way than to the results (browser Back, a swipe): the
-        // match is abandoned, and the room with it. The start is withdrawn
-        // now, or the guest's character select, mounting in this same commit,
-        // would follow it straight back here; the room is left a moment later
-        // (see `pendingLeave`), and only if it is still this match's.
-        useOnlineStore.getState().patch({ config: null });
-        pendingLeave = setTimeout(() => {
-          pendingLeave = null;
-          if (getActiveSession() === session) leaveOnline();
-        }, 0);
-      }
+      if (!handedOff) abandonOnline(session);
     };
   }, [online, bindings, router, setResult, bake.tables, world]);
 
