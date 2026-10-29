@@ -110,6 +110,28 @@ describe("OnlineLobby, the bake first (Plan 4)", () => {
     expect(screen.getByRole("button", { name: /join room/i })).toBeInTheDocument();
   });
 
+  /**
+   * codex P1-1: a bake that never arrives ends at its deadline (`BAKE_TIMEOUT_MS`)
+   * in a sentence that says trying again may help, and trying again works: the
+   * next connect asks for the bake afresh, and opens the room once it is in.
+   */
+  it("says the bake took too long, and a second try opens the room once it is in", async () => {
+    const sentence = "The fighters' animation data took too long to download. Check your connection and try again.";
+    bake.next = Promise.reject(new Error(sentence));
+    const { openSession } = harness();
+    await create();
+    expect(openSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(sentence);
+    expect(useOnlineStore.getState().status).toBe("error");
+    const asked = bake.calls;
+
+    bake.next = null;
+    await create();
+    expect(bake.calls).toBe(asked + 1);
+    expect(openSession).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("opens nothing for a player who left while the bake loaded", async () => {
     let install!: () => void;
     bake.next = new Promise<void>((resolve) => (install = resolve));

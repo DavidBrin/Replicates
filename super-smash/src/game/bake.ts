@@ -2,14 +2,15 @@
  * Loading the bake in the browser and installing it in the game's context
  * (Plan 4).
  *
- * `public/bake/roster.bin.gz` is fetched once, gunzipped with the platform's
- * `DecompressionStream`, checked against the digest compiled into this build
- * (`BAKE_DIGEST`) and decoded into the tables the sim reads. A file that does
- * not match is refused: a stale cached bake would put hitboxes somewhere other
- * than where this build's renderer draws limbs, and online it would desync.
- * There is no fallback to the legacy bones: a bake that does not load, verify
- * or install is an error the caller shows, because the game it would play is
- * not the one its peer plays.
+ * `public/bake/roster.bin.gz` is fetched once, within a deadline
+ * (`BAKE_TIMEOUT_MS`), gunzipped with the platform's `DecompressionStream`,
+ * checked against the digest compiled into this build (`BAKE_DIGEST`) and
+ * decoded into the tables the sim reads. A file that does not match is
+ * refused: a stale cached bake would put hitboxes somewhere other than where
+ * this build's renderer draws limbs, and online it would desync. There is no
+ * fallback to the legacy bones: a bake that does not load, verify or install
+ * is an error the caller shows, because the game it would play is not the one
+ * its peer plays.
  */
 
 import { decodeBake } from "@/engine/acmd/bakeCodec";
@@ -26,11 +27,59 @@ import { GAME_ENGINE_RULES, GAME_SIM_CONTEXT, mergeSlots } from "./simContext";
 
 export const BAKE_URL = "/bake/roster.bin.gz";
 
-export type FetchLike = (url: string) => Promise<Pick<Response, "ok" | "status" | "body">>;
+/** `fetch`, as far as the bake uses it: the signal is what ends a download that ran out of time. */
+export type FetchLike = (url: string, init: { readonly signal: AbortSignal }) => Promise<Pick<Response, "ok" | "status" | "body">>;
 
-async function gunzip(body: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const stream = body.pipeThrough(new DecompressionStream("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>);
+/**
+ * The longest the bake's request and the read of its body may take, together.
+ * The file is about 1.8 MB gzipped (1,845,102 bytes when this was written), so
+ * thirty seconds lets it through a connection of half a megabit a second
+ * (14.8 Mbit in 30 s). Without a deadline a request that never answers, or a
+ * body that never closes, leaves the player on the lobby's "Connecting…" or
+ * `/play`'s "Loading fighters…" for ever (codex P1-1).
+ */
+export const BAKE_TIMEOUT_MS = 30_000;
+
+/** On the deadline. Trying again may well work, so it says so. */
+const TOO_SLOW = "The fighters' animation data took too long to download. Check your connection and try again.";
+
+/** gzip's magic number, the first two bytes of every gzip file (RFC 1952 §2.3.1). */
+const isGzip = (bytes: Uint8Array): boolean => bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+
+async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = new Response(bytes as BodyInit).body!.pipeThrough(
+    new DecompressionStream("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
+  );
   return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * `BAKE_URL`'s body, every byte of it, or a rejection: the request's own, or
+ * `TOO_SLOW` once `BAKE_TIMEOUT_MS` has passed since asking, whether the
+ * request never answered or its body never closed. On the deadline the fetch
+ * is aborted, which ends its body's stream too.
+ */
+async function download(fetchFn: FetchLike): Promise<Uint8Array> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(TOO_SLOW));
+      controller.abort();
+    }, BAKE_TIMEOUT_MS);
+  });
+  const read = (async () => {
+    const res = await fetchFn(BAKE_URL, { signal: controller.signal });
+    if (!res.ok || res.body === null) throw new Error(`Could not load the fighters' animation data (HTTP ${res.status}).`);
+    return new Uint8Array(await new Response(res.body).arrayBuffer());
+  })();
+  // What the abort makes of a download the deadline already ended is nobody's to hear.
+  read.catch(() => {});
+  try {
+    return await Promise.race([read, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const MISMATCH = "The fighters' animation data does not match this version of the game. Reload the page.";
@@ -51,20 +100,26 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 /**
  * Fetch, verify and decode the bake. Rejects with a sentence a player can read:
- * the file missing, anything that is not exactly this build's bake (another
- * build's, cut short, corrupt, or a page that is not gzip at all), or a page
- * that cannot check it. The length and digest are checked before the decoder
- * reads a byte.
+ * the file missing, too slow to arrive (`BAKE_TIMEOUT_MS`), anything that is
+ * not exactly this build's bake (another build's, cut short, corrupt, or a page
+ * that is not a bake at all), or a page that cannot check it. The length and
+ * digest are checked before the decoder reads a byte.
+ *
+ * Bytes that do not start with gzip's magic number are checked as they are
+ * (final review M3): an edge that answered with `Content-Encoding: gzip` has
+ * the browser hand over the bake already decoded. The same length and digest
+ * decide, so nothing but this build's bake passes either way.
  */
-export async function fetchBake(fetchFn: FetchLike = (u) => fetch(u, { cache: "no-cache" })): Promise<BakeTables> {
-  const res = await fetchFn(BAKE_URL);
-  if (!res.ok || res.body === null) throw new Error(`Could not load the fighters' animation data (HTTP ${res.status}).`);
-  let bytes: Uint8Array;
-  try {
-    bytes = await gunzip(res.body);
-  } catch (e) {
-    // A cut-off or corrupt stream makes the decompressor throw, often with no message at all.
-    throw new Error(MISMATCH, { cause: e });
+export async function fetchBake(fetchFn: FetchLike = (u, init) => fetch(u, { cache: "no-cache", signal: init.signal })): Promise<BakeTables> {
+  const body = await download(fetchFn);
+  let bytes = body;
+  if (isGzip(body)) {
+    try {
+      bytes = await gunzip(body);
+    } catch (e) {
+      // A cut-off or corrupt stream makes the decompressor throw, often with no message at all.
+      throw new Error(MISMATCH, { cause: e });
+    }
   }
   if (bytes.length !== BAKE_BYTES || (await sha256Hex(bytes)) !== BAKE_DIGEST) throw new Error(MISMATCH);
   return bakeTables(decodeBake(bytes), BAKE_DIGEST);

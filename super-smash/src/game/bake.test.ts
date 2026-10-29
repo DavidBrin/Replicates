@@ -15,7 +15,7 @@ import { ACTIVE_SCRIPT_SLOTS } from "@/fighters/acmd/active";
 import { LIMB_SCRIPT_SLOTS, withLimbScripts } from "@/fighters/acmd/limb";
 import { BAKE_DIGEST } from "@/fighters/bake/digest";
 import { STAGES } from "@/stages";
-import { bakedContext, fetchBake, installBake, prepareRoster } from "./bake";
+import { BAKE_TIMEOUT_MS, bakedContext, fetchBake, installBake, prepareRoster } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
 import { bootstrapEngine } from "./bootstrap";
 import { localBuild } from "./onlineConfig";
@@ -76,6 +76,22 @@ describe("loading the bake in the browser", () => {
     expect((err as Error).message).toBe("The fighters' animation data does not match this version of the game. Reload the page.");
   });
 
+  // Final review M3: an edge that answered with `Content-Encoding: gzip` has the
+  // browser hand over the bake already decoded. Bytes that do not start with
+  // gzip's `1f 8b` are checked as they are: only this build's bake passes.
+  it("accepts the bake already decoded by the way, by the same length and digest", async () => {
+    const tables = await fetchBake(serve(new Uint8Array(gunzipSync(GZ))));
+    expect(tables.fingerprint).toBe(BAKE_DIGEST);
+    expect(tables.hurtboxes("mario")?.length).toBeGreaterThan(0);
+  });
+
+  it("refuses decoded bytes that are not exactly this build's bake", async () => {
+    const raw = gunzipSync(GZ);
+    raw[raw.length - 1] ^= 1;
+    await expect(fetchBake(serve(new Uint8Array(raw)))).rejects.toThrow(/^The fighters' animation data does not match this version of the game\. Reload the page\.$/);
+    await expect(fetchBake(serve(new Uint8Array(gunzipSync(GZ).subarray(1))))).rejects.toThrow(/does not match this version of the game/);
+  });
+
   // `crypto.subtle` exists only on a secure page (https, or localhost). Over plain
   // http on a LAN address the file cannot be checked at all, and "reload" would not
   // help, so it says so in a sentence of its own.
@@ -92,6 +108,90 @@ describe("loading the bake in the browser", () => {
         "The fighters' animation data can only be checked on a secure (https) page. Open the game over https, or on localhost.",
       );
     });
+  });
+});
+
+/**
+ * codex P1-1: the lobby waits for the bake before it opens a room, and `/play`
+ * before it mounts a match, so a request that never answers, or a body that
+ * never closes, must not leave a player waiting for ever. The request and the
+ * body share one deadline; on it the fetch is aborted and the player is told,
+ * in a sentence that says trying again may help.
+ */
+describe("a bake that does not arrive in time", () => {
+  const TOO_SLOW = "The fighters' animation data took too long to download. Check your connection and try again.";
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** `p`, watched: whether it has settled yet, and what it settled with. */
+  function watch<T>(p: Promise<T>) {
+    const seen = { settled: false, error: undefined as unknown };
+    p.then(
+      () => (seen.settled = true),
+      (e: unknown) => {
+        seen.settled = true;
+        seen.error = e;
+      },
+    );
+    return seen;
+  }
+
+  it("gives up on a request that never answers, aborts it, and says to try again", async () => {
+    let signal: AbortSignal | undefined;
+    const seen = watch(
+      fetchBake((_url, init) => {
+        signal = init.signal;
+        return new Promise(() => {});
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS - 1);
+    expect(seen.settled).toBe(false);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(seen.settled).toBe(true);
+    expect((seen.error as Error).message).toBe(TOO_SLOW);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("gives up on a body that never closes, under the same deadline as the request", async () => {
+    let signal: AbortSignal | undefined;
+    // The headers at once, the first kilobyte of the file, then nothing more, ever.
+    const stalled = () => new ReadableStream<Uint8Array<ArrayBuffer>>({ start: (c) => c.enqueue(new Uint8Array(GZ.subarray(0, 1024))) });
+    const seen = watch(
+      fetchBake(async (_url, init) => {
+        signal = init.signal;
+        return { ok: true, status: 200, body: stalled() };
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS - 1);
+    expect(seen.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((seen.error as Error).message).toBe(TOO_SLOW);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("leaves no deadline running once the bake is in, or once the file is refused", async () => {
+    await fetchBake(serve(new Uint8Array(GZ)));
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(fetchBake(serve(new Uint8Array(0), 404))).rejects.toThrow(/HTTP 404/);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("is retried by the next page that asks, and that try can succeed", async () => {
+    const { ensureBakeInstalled, GAME_SIM_CONTEXT: ctx } = await fresh();
+    const seen = watch(ensureBakeInstalled(() => new Promise(() => {})));
+    await vi.advanceTimersByTimeAsync(BAKE_TIMEOUT_MS);
+    expect((seen.error as Error).message).toBe(TOO_SLOW);
+    expect(ctx.bake).toBeUndefined();
+    vi.useRealTimers();
+    const tables = await ensureBakeInstalled(serve(new Uint8Array(GZ)));
+    expect(tables.fingerprint).toBe(BAKE_DIGEST);
+    expect(ctx.bake).toBe(tables);
   });
 });
 

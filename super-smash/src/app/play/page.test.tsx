@@ -846,8 +846,11 @@ describe("the play page in 3D (Plan 4)", () => {
     expect(runner.dispose).toHaveBeenCalled();
   });
 
-  it("shows the bake's own sentence when it cannot load, and builds no match", async () => {
-    const sentence = "The fighters' animation data does not match this version of the game. Reload the page.";
+  it.each([
+    ["does not match", "The fighters' animation data does not match this version of the game. Reload the page."],
+    // codex P1-1: the deadline's sentence, shown the same way.
+    ["took too long", "The fighters' animation data took too long to download. Check your connection and try again."],
+  ])("shows the bake's own sentence when it cannot load (%s), and builds no match", async (_why, sentence) => {
     mocks.bake.state = { tables: null, error: sentence };
     await renderPage();
     expect(screen.getByRole("alert")).toHaveTextContent(sentence);
