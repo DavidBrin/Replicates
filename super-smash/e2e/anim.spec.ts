@@ -119,12 +119,24 @@ test("the model sheet draws a forward tilt: the model in every cell, the hitboxe
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
+/**
+ * Only Chromium's own warning about a page's contexts, not "WebGL" alone: its driver notices read
+ * `[.WebGL-0x…]GL Driver Message (OpenGL, Performance, …, GPU stall due to ReadPixels)`, and are harmless.
+ */
+const TOO_MANY_CONTEXTS = /too many (active )?webgl contexts/i;
+
+test("the context-leak detector matches Chromium's warning and not its driver notices", () => {
+  expect(TOO_MANY_CONTEXTS.test("WARNING: Too many active WebGL contexts. Oldest context will be lost.")).toBe(true);
+  expect(TOO_MANY_CONTEXTS.test("Too many WebGL contexts")).toBe(true);
+  expect(TOO_MANY_CONTEXTS.test("[.WebGL-0x13c00b00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels")).toBe(false);
+});
+
 test("every fighter's model sheet draws, one renderer at a time", async ({ page }) => {
   const errors: string[] = [];
   const warnings: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => {
-    if (/WebGL/i.test(m.text())) warnings.push(m.text());
+    if (TOO_MANY_CONTEXTS.test(m.text())) warnings.push(m.text());
   });
 
   await page.goto("/anim");

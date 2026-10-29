@@ -40,8 +40,17 @@ if (!existsSync(join(ROOT, "scripts", "models", "manifest.json"))) {
 }
 
 const PIPELINE_ONLY = /\.(blend\d*|glb|gltf|webp|ktx2)$/i;
-/** The two git-ignored output folders, at any depth and in any letter case. */
-const IGNORED_OUTPUT = /(^|\/)(\.model-cache|public\/models)\//i;
+/**
+ * The git-ignored output folders, at any depth and in any letter case: the two the model pipeline writes, and
+ * `test-results/`, where the capture scripts and Playwright write the pictures they take of the models.
+ */
+const IGNORED_OUTPUT = /(^|\/)(\.model-cache|public\/models|test-results)\//i;
+/**
+ * A picture the animation tools take (`animsheet.mjs`, `fightsheet.mjs`): a render of a ripped model is the same
+ * exposure as the model, so one is refused wherever it lies, whether it was force-added past .gitignore or written
+ * by `--out` into a tracked folder.
+ */
+const CAPTURE_PNG = /(^|\/)(anim|fight)-[^/]*\.png$/i;
 const GITLINK = "160000";
 const MAX_BUFFER = 1 << 30;
 
@@ -66,6 +75,7 @@ export function rippedAssets(
   for (const { path, id } of entries) {
     if (IGNORED_OUTPUT.test(path)) out.push(`${path} (git-ignored output)`);
     else if (PIPELINE_ONLY.test(path)) out.push(`${path} (pipeline-only format)`);
+    else if (CAPTURE_PNG.test(path)) out.push(`${path} (animation-tool capture)`);
     else if (names.has(basename(path).toLowerCase())) out.push(`${path} (manifest file name)`);
     else {
       // Only a blob of exactly a manifest size can have a manifest hash.
@@ -134,6 +144,20 @@ describe("the ripped-asset rule", () => {
     expect(run(["public/eye_donkey_001.png", "art/pikachu_facial_01_col.png"])).toHaveLength(2);
     expect(run(["docs/a.png"])).toEqual(["docs/a.png (manifest file bytes)"]);
     expect(run(["x/fighter.webp", "y/z.ktx2", "a.glb", "b.blend"])).toHaveLength(4);
+  });
+
+  it("refuses a capture of the models, and anything under test-results/, wherever it lies", () => {
+    expect(
+      run(["super-smash/test-results/anim/anim-mario-attack.png", "Risk/test-results/x.txt", "super-smash/fight-mario-fsmash.png", "docs/shots/ANIM-link-land.PNG", "docs/fight-samus-neutralB.png"]),
+    ).toEqual([
+      "super-smash/test-results/anim/anim-mario-attack.png (git-ignored output)",
+      "Risk/test-results/x.txt (git-ignored output)",
+      "super-smash/fight-mario-fsmash.png (animation-tool capture)",
+      "docs/shots/ANIM-link-land.PNG (animation-tool capture)",
+      "docs/fight-samus-neutralB.png (animation-tool capture)",
+    ]);
+    // Not a capture: other pictures, and names that only start like one.
+    expect(run(["docs/screenshots/title.png", "super-smash/docs/screenshots/match.png", "docs/animation.png", "docs/anim-notes.md", "docs/animal-fight.png", "src/test-results.ts"])).toEqual([]);
   });
 
   it("passes ordinary files, even one the size of a texture", () => {
@@ -205,6 +229,24 @@ describe("no Nintendo-ripped asset is tracked", () => {
       for (const p of planted) s.plant(p);
       const flagged = scan(s.env).map((f) => f.replace(/ \(.*\)$/, ""));
       expect(flagged.sort()).toEqual([...planted].sort());
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  it("sees a capture force-added past .gitignore, or written into a tracked folder", () => {
+    const s = scratch();
+    try {
+      expect(scan(s.env)).toEqual([]);
+      const planted = [
+        "super-smash/test-results/anim/anim-mario-attack.png", // `git add -f` of the capture scripts' default output
+        "super-smash/fight-link-fsmash.png", // a package-root capture
+        "super-smash/docs/screenshots/anim-kirby-land.png", // `--out` into a tracked folder
+        "super-smash/test-results/.last-run.json", // anything Playwright leaves there
+      ];
+      for (const p of planted) s.plant(p);
+      s.plant("super-smash/docs/screenshots/title.png"); // an ordinary picture is not one
+      expect(scan(s.env).map((f) => f.replace(/ \(.*\)$/, "")).sort()).toEqual([...planted].sort());
     } finally {
       s.cleanup();
     }

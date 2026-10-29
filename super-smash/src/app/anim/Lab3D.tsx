@@ -196,7 +196,8 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
   const stage = useRef<Stage | null>(null);
   const { tables: bake, error: bakeError } = useBake();
   const [built, setBuilt] = useState<Built | null>(null);
-  const [model, setModel] = useState<{ id: string; text: string } | null>(null);
+  /** What building `id`'s fighter came to: its model's kind, or why it would not build. */
+  const [model, setModel] = useState<{ id: string; text: string; failed: boolean } | null>(null);
 
   // The fighter: their model (or a stand-in) on the match's own pose path.
   useEffect(() => {
@@ -213,11 +214,11 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
         try {
           made = createFighter3D({ def, port: 0, poser: fighterPoser(def, SKELETONS[def.id]), bake, model: loaded });
         } catch (e) {
-          setModel({ id, text: e instanceof Error ? e.message : String(e) });
+          setModel({ id, text: e instanceof Error ? e.message : String(e), failed: true });
           return;
         }
         setBuilt({ id, fighter: made });
-        setModel({ id, text: loaded.kind === "glb" ? "model" : `stand-in (${loaded.reason})` });
+        setModel({ id, text: loaded.kind === "glb" ? "model" : `stand-in (${loaded.reason})`, failed: false });
       });
     return () => {
       live = false;
@@ -310,16 +311,23 @@ export function Lab3D({ options, total, frame }: { options: Options; total: numb
     [],
   );
 
-  const status = bakeError ?? (bake !== null && model?.id === options.fighterId ? model.text : "loading");
+  const mine = bake !== null && model?.id === options.fighterId ? model : null;
+  // Why the sheet cannot be drawn, if it cannot: the bake did not load, or this fighter would not build.
+  const failure = bakeError ?? (mine?.failed ? mine.text : null);
+  const status = failure ?? mine?.text ?? "loading";
 
   return (
     <section>
       <div style={{ color: "#7C8896", fontSize: 12, margin: "6px 0" }}>
         model sheet — {status}; red: hitboxes, yellow: hurtboxes (the sim&apos;s own) — frame {frame}
       </div>
-      <div ref={sheet} aria-label="Model sheet" style={{ position: "relative", display: "inline-block" }}>
-        <canvas ref={gl} />
-        <canvas ref={overlay} style={{ position: "absolute", inset: 0 }} />
+      {/* The sheet is 150 px a cell, 1800 px across: its own scroll container, so a narrow window does not scroll the page. */}
+      <div style={{ maxWidth: "100%", overflowX: "auto" }}>
+        {/* `data-drawn` once every cell is drawn, `data-error` with why when it cannot be (`animsheet --view 3d` waits for either). */}
+        <div ref={sheet} aria-label="Model sheet" data-error={failure ?? undefined} style={{ position: "relative", display: "block", width: "max-content" }}>
+          <canvas ref={gl} style={{ display: "block" }} />
+          <canvas ref={overlay} style={{ position: "absolute", inset: 0 }} />
+        </div>
       </div>
     </section>
   );

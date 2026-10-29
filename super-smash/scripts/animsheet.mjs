@@ -66,10 +66,23 @@ await page.getByRole("button", { name: /pause|play/ }).click().catch(() => {});
 await page.waitForTimeout(200);
 
 if (which === "Model sheet") {
-  // The sheet says what it is drawing once the fighter's model (or its stand-in) is in, and marks itself drawn
-  // when every cell is: wait for both, or the photograph catches a blank canvas.
-  await page.getByText(/model sheet — (model|stand-in)/).waitFor({ timeout: 30000 });
-  await page.locator('[aria-label="Model sheet"][data-drawn="true"]').waitFor({ timeout: 30000 });
+  // The sheet marks itself `data-drawn` when every cell is drawn, or `data-error` with the reason when it cannot be
+  // (the bake did not load, or the fighter's model would not build). Wait for either: a photograph of a canvas that
+  // is not drawn yet is blank, and a failure should be reported as itself, not as a 30 s timeout.
+  await page.waitForFunction(
+    () => {
+      const sheet = document.querySelector('[aria-label="Model sheet"]');
+      return sheet !== null && (sheet.getAttribute("data-drawn") === "true" || sheet.hasAttribute("data-error"));
+    },
+    undefined,
+    { timeout: 30000 },
+  );
+  const failure = await page.getByLabel("Model sheet").getAttribute("data-error");
+  if (failure !== null) {
+    console.error(`the model sheet could not be drawn: ${failure}`);
+    await browser.close();
+    process.exit(1);
+  }
 }
 const title = (await page.locator("h1").innerText()).replace(/\s+/g, " ");
 await page.getByLabel(which).screenshot({ path: out });

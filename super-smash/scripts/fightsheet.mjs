@@ -68,9 +68,13 @@ const out = resolve(flag("out", join("test-results", "anim", `fight-${fighter}-$
  */
 const INPUT = {
   jab: { keys: ["attack"] },
-  ftilt: { keys: ["right", "attack"] },
-  utilt: { keys: ["up", "attack"] },
-  dtilt: { keys: ["down", "attack"] },
+  // A tilt is a direction held SOFT with attack, and `Btn.Soft` comes only from an analog stick (`input/gamepad.ts`):
+  // a key is always fully deflected, so a keyboard presses direction and attack on one frame and gets a smash (held
+  // 0-4 frames before attack), a dash attack (held longer), or an up-tilt's jump. These moves are driven the way a
+  // player throws them, with a stick pushed to `pad` (0.55: past the walk threshold, short of the dash one).
+  ftilt: { keys: [], pad: { x: 0.55, y: 0 } },
+  utilt: { keys: [], pad: { x: 0, y: -0.55 } },
+  dtilt: { keys: [], pad: { x: 0, y: 0.55 } },
   dashAttack: { keys: ["right"], then: ["right", "attack"], run: 12 },
   fsmash: { keys: ["right", "attack"], smash: true },
   usmash: { keys: ["up", "attack"], smash: true },
@@ -120,6 +124,23 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
+// A fake standard-mapping pad, only for a move that needs a stick: the game reads `navigator.getGamepads()` once a tick.
+// Its stick and A button are set from the page below (`setPad`); idle, it is neutral.
+if (plan.pad) {
+  await page.addInitScript(() => {
+    const idle = () => ({ pressed: false, touched: false, value: 0 });
+    window.__fightsheetPad = {
+      id: "fightsheet fake pad",
+      index: 0,
+      connected: true,
+      mapping: "standard",
+      timestamp: 0,
+      axes: [0, 0, 0, 0],
+      buttons: Array.from({ length: 17 }, idle),
+    };
+    navigator.getGamepads = () => [window.__fightsheetPad];
+  });
+}
 
 /* ------------------------------------------------------------ into a match -- */
 
@@ -175,6 +196,18 @@ async function pick(id) {
 
 /* -------------------------------------------------------- crank the clock -- */
 
+/** The fake pad's left stick (`x` right, `y` down, as a pad reports them) and its A button (attack). */
+const setPad = (x, y, attack) =>
+  page.evaluate(
+    ([px, py, a]) => {
+      const pad = window.__fightsheetPad;
+      pad.axes[0] = px;
+      pad.axes[1] = py;
+      pad.buttons[0] = { pressed: a, touched: a, value: a ? 1 : 0 };
+    },
+    [x, y, attack],
+  );
+
 const debug = {
   pause: () => page.evaluate(() => window.__smashDebug.pause()),
   step: (n) => page.evaluate((k) => window.__smashDebug.step(k), n),
@@ -213,6 +246,7 @@ for (let i = 0; i < 90; i++) {
 // frame gives the uncharged version — which is the one the frame data
 // describes and the one worth photographing.
 for (const k of plan.keys) await page.keyboard.down(KEY[k]);
+if (plan.pad) await setPad(plan.pad.x, plan.pad.y, true);
 await debug.step(1);
 
 // A dash attack is a *second* input thrown out of an existing run, so it needs
@@ -239,6 +273,7 @@ const isRequested = (slot) =>
   slot === move || (move === "grab" && slot === "dashGrab") || (move === "jab" && slot === "jab1");
 
 let started = false;
+let performed = null;
 let wrongMove = null;
 for (let i = 0; i < 30 && !started; i++) {
   const [me] = await debug.fighters();
@@ -247,8 +282,10 @@ for (let i = 0; i < 30 && !started; i++) {
   // `fsmash` showing an ftilt: a smash input read one frame too slow is a
   // tilt, and both are `action: "attack"`. A capture that quietly photographs
   // a different move is worse than one that fails.
-  if (offensive && isRequested(me.move)) started = true;
-  else {
+  if (offensive && isRequested(me.move)) {
+    started = true;
+    performed = me.move;
+  } else {
     if (offensive) wrongMove = me.move;
     await debug.step(1);
   }
@@ -272,6 +309,7 @@ if (started && hold > 0) {
 // startup and contact landing one frame late on the one tool used to check
 // exactly that. The release registers on the capture loop's own first step.
 for (const k of plan.keys) await page.keyboard.up(KEY[k]);
+if (plan.pad) await setPad(0, 0, false);
 if (!started) {
   console.error(
     wrongMove
@@ -398,4 +436,5 @@ if (errors.length) {
   console.error(errors.join("\n"));
   process.exit(1);
 }
-console.log(`${fighter} ${move} vs ${against} — frames ${wanted.join(", ")}\n${out}`);
+// What the match actually played, not just what was asked for (it was matched above: a different move exits 1).
+console.log(`${fighter} ${move} (performed ${performed}) vs ${against} — frames ${wanted.join(", ")}\n${out}`);

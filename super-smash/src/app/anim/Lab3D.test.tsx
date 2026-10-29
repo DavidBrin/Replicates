@@ -11,7 +11,7 @@
 
 import { render, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Texture, type BufferGeometry, type SkinnedMesh } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BakeTables } from "@/engine/acmd/bakeTables";
@@ -23,7 +23,10 @@ import { FIGHTERS } from "@/fighters";
 import { withLimbScripts } from "@/fighters/acmd/limb";
 import { readBakeFromDisk } from "@/game/bakeNode";
 import { createMockContext, type MockContext } from "@/render/mockContext";
+import { fighterPoser } from "@/render3d/bake/bake";
+import { armatureModel } from "@/render3d/armatureModel";
 import { drawnPose } from "@/render3d/fighterPose";
+import { SKELETONS } from "@/render3d/skeletons";
 import { boxExtent, CELL, COLUMNS, Lab3D, labBoxes, modelExtent, sheetView } from "./Lab3D";
 import { fighterAt, type Options } from "./page";
 
@@ -86,10 +89,14 @@ vi.mock("three", async (importOriginal) => ({ ...(await importOriginal<typeof im
 const bakeState = vi.hoisted(() => ({ tables: null as BakeTables | null, error: null as string | null }));
 vi.mock("@/game/useBake", () => ({ useBake: () => bakeState }));
 
-/** No network: every fighter is a stand-in (its own hurtbox capsules on the same bones). */
+/** No network: every fighter is a stand-in (its own hurtbox capsules on the same bones) unless a test says otherwise. */
+const models = vi.hoisted(() => {
+  const standIn = async (): Promise<unknown> => ({ kind: "standIn", reason: "test" });
+  return { standIn, get: standIn as (id: string) => Promise<unknown> };
+});
 vi.mock("@/game/world3d", () => ({
   sharedModels: () => ({
-    get: async () => ({ kind: "standIn", reason: "test" }),
+    get: (id: string) => models.get(id),
     preload: async () => undefined,
     status: () => ({}),
   }),
@@ -265,6 +272,7 @@ describe("the sheet's framing", () => {
 let ctx: MockContext;
 
 beforeEach(() => {
+  models.get = models.standIn;
   gl.FakeGL.all.length = 0;
   bakeState.tables = bake;
   bakeState.error = null;
@@ -338,25 +346,30 @@ describe("Lab3D", () => {
     render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={4} />);
     await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
 
-    const o = opts();
-    const boxes = sheetOf(o, FTILT_FRAMES);
+    // Cell by cell, in order: its hurtboxes (yellow), then its hitboxes (red), one stroke per capsule.
+    const boxes = sheetOf(opts(), FTILT_FRAMES);
     const drawn = strokes(ctx);
-    const red = drawn.filter((s) => s.colour === RED);
-    const yellow = drawn.filter((s) => s.colour === YELLOW);
-    expect(red).toHaveLength(boxes.reduce((n, b) => n + b.hit.length, 0));
-    expect(red).toHaveLength(9);
-    expect(yellow).toHaveLength(boxes.reduce((n, b) => n + b.hurt.length, 0));
-    // A capsule is two circles: the near and the far end.
-    for (const s of drawn) expect(s.arcs).toHaveLength(2);
-    // Nothing spills into another cell: the sheet is 12 cells wide and 3 high.
-    for (const s of drawn) {
-      for (const a of s.arcs) {
-        expect(a.x).toBeGreaterThanOrEqual(0);
-        expect(a.x).toBeLessThanOrEqual(COLUMNS * CELL);
-        expect(a.y).toBeGreaterThanOrEqual(0);
-        expect(a.y).toBeLessThanOrEqual(3 * CELL);
+    let red = 0;
+    boxes.forEach((b, i) => {
+      const mine = drawn.splice(0, b.hurt.length + b.hit.length);
+      expect(mine.map((s) => s.colour), `cell ${i}`).toEqual([...b.hurt.map(() => YELLOW), ...b.hit.map(() => RED)]);
+      red += b.hit.length;
+      const left = (i % COLUMNS) * CELL;
+      const top = Math.floor(i / COLUMNS) * CELL;
+      for (const s of mine) {
+        // A capsule is two circles: the near and the far end, both centred inside this cell.
+        expect(s.arcs, `cell ${i}`).toHaveLength(2);
+        for (const a of s.arcs) {
+          expect(a.x, `cell ${i} x`).toBeGreaterThanOrEqual(left);
+          expect(a.x, `cell ${i} x`).toBeLessThanOrEqual(left + CELL);
+          expect(a.y, `cell ${i} y`).toBeGreaterThanOrEqual(top);
+          expect(a.y, `cell ${i} y`).toBeLessThanOrEqual(top + CELL);
+        }
       }
-    }
+    });
+    // Three hitboxes on each of three frames, and nothing drawn that no cell owns.
+    expect(red).toBe(9);
+    expect(drawn).toEqual([]);
   });
 
   it("says what it is drawing and marks the sheet drawn once every cell is", async () => {
@@ -411,8 +424,102 @@ describe("Lab3D", () => {
   it("draws nothing, and says why, when the bake did not load", async () => {
     bakeState.tables = null;
     bakeState.error = "Could not load the fighters' animation data (HTTP 404).";
-    const { findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
+    const { findByText, getByLabelText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
     await findByText(/Could not load the fighters' animation data \(HTTP 404\)\./);
     expect(gl.FakeGL.all.flatMap((r) => r.draws)).toEqual([]);
+    // `animsheet --view 3d` reads this, and fails at once with it rather than waiting out its timeout.
+    expect(getByLabelText("Model sheet")).toHaveAttribute("data-error", "Could not load the fighters' animation data (HTTP 404).");
+    expect(getByLabelText("Model sheet")).not.toHaveAttribute("data-drawn");
+  });
+
+  it("says why when a fighter's model will not build, marks the sheet failed, and draws nothing", async () => {
+    // A glb that throws when the fighter clones it: `createFighter3D` fails, and the lab must say so itself.
+    models.get = async () => ({
+      kind: "glb",
+      scene: {
+        clone() {
+          throw new Error("broken glb");
+        },
+      },
+    });
+    const { findByText, getByLabelText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
+    await findByText(/model sheet — broken glb/);
+    expect(getByLabelText("Model sheet")).toHaveAttribute("data-error", "broken glb");
+    expect(getByLabelText("Model sheet")).not.toHaveAttribute("data-drawn");
+    expect(gl.FakeGL.all.flatMap((r) => r.draws)).toEqual([]);
+  });
+
+  it("is a scroll container of its own, so an 1800 px sheet never scrolls the page sideways", async () => {
+    const { getByLabelText, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
+    await findByText(/model sheet — stand-in/);
+    expect(getByLabelText("Model sheet").parentElement).toHaveStyle({ maxWidth: "100%", overflowX: "auto" });
+  });
+});
+
+/**
+ * The GPU's copies of what a fighter drew. A glb's geometry and textures belong to
+ * the shared model cache, so tearing a fighter down (`Fighter3D.dispose`) frees only
+ * its own skeleton and materials: the lab must free the rest itself, or the roster's
+ * textures and buffers pile up in the GPU with every fighter shown and stay there
+ * after the page is left (measured in Chromium in the Task 21 review: about 40
+ * textures and 228 buffers, against 4 and 0).
+ *
+ * three frees a resource's GPU copy when it dispatches "dispose", so that is what is
+ * listened for, on a glb stand-in's geometry and texture (a stand-in's own capsules
+ * and materials are freed by the fighter either way, so they pin nothing).
+ */
+describe("Lab3D frees what the GPU holds of a model it drew", () => {
+  /** A glb of Mario, as the cache holds one: its geometry and texture, with a listener on each. */
+  function cachedMario() {
+    const def = game("mario");
+    const texture = new Texture();
+    const scene = armatureModel(fighterPoser(def, SKELETONS.mario).rig3, [new MeshStandardMaterial({ name: "skin", map: texture })]);
+    let geometry: BufferGeometry | null = null;
+    scene.traverse((o) => {
+      if ((o as SkinnedMesh).isSkinnedMesh) geometry = (o as SkinnedMesh).geometry;
+    });
+    const freed = { geometry: vi.fn(), texture: vi.fn() };
+    geometry!.addEventListener("dispose", freed.geometry);
+    texture.addEventListener("dispose", freed.texture);
+    models.get = async (id) => (id === "mario" ? { kind: "glb", scene } : { kind: "standIn", reason: "test" });
+    return freed;
+  }
+
+  it("when its fighter goes: a switch to another fighter", async () => {
+    const freed = cachedMario();
+    const { rerender, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
+    await findByText(/model sheet — model/);
+    await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
+    // In use, so not freed while it is drawn.
+    expect(freed.geometry).not.toHaveBeenCalled();
+    expect(freed.texture).not.toHaveBeenCalled();
+
+    rerender(<Lab3D options={opts({ fighterId: "kirby" })} total={FTILT_FRAMES} frame={0} />);
+    await waitFor(() => expect(freed.geometry).toHaveBeenCalledTimes(1));
+    expect(freed.texture).toHaveBeenCalledTimes(1);
+  });
+
+  it("when the sheet leaves the page", async () => {
+    const freed = cachedMario();
+    const { unmount, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
+    await findByText(/model sheet — model/);
+    await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
+    expect(freed.geometry).not.toHaveBeenCalled();
+
+    unmount();
+    expect(freed.geometry).toHaveBeenCalledTimes(1);
+    expect(freed.texture).toHaveBeenCalledTimes(1);
+  });
+
+  it("but not on a new action for the same fighter, which keeps drawing the same model", async () => {
+    const freed = cachedMario();
+    const { rerender, findByText } = render(<Lab3D options={opts()} total={FTILT_FRAMES} frame={0} />);
+    await findByText(/model sheet — model/);
+    await waitFor(() => expect(gl.FakeGL.all[0]?.draws).toHaveLength(FTILT_FRAMES));
+
+    rerender(<Lab3D options={opts({ action: "stand", move: "fsmash" })} total={20} frame={0} />);
+    await waitFor(() => expect(gl.FakeGL.all[0].draws).toHaveLength(FTILT_FRAMES + 20));
+    expect(freed.geometry).not.toHaveBeenCalled();
+    expect(freed.texture).not.toHaveBeenCalled();
   });
 });
