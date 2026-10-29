@@ -3,11 +3,13 @@
  * platform rectangles (`StageDef.platforms`), so the surface a fighter stands on
  * is the surface the sim lands them on — no art to drift out of step.
  *
- * A main platform is a prism whose top is the walkable surface and whose body
- * tapers to 62% of its width over `MAIN_DEPTH` units below (the silhouette the
- * 2D stage art drew); a soft platform is a thin slab. Each is one mesh with
- * vertex colours from the stage's palette (`stagePaintFor`), so a whole stage
- * is one draw call per platform — Battlefield is four.
+ * A main platform is a wall-sided block `HARD_PLATFORM_DEPTH` deep below its
+ * top: exactly the solid the sim collides with, so a fighter that is pushed off
+ * a wall, or stopped by an underside, is pushed off and stopped by what is drawn
+ * (ruling R13). A soft platform is a thin slab: the sim gives it no body, only
+ * a top surface to land on. Each is one mesh with vertex colours from the
+ * stage's palette (`stagePaintFor`), so a whole stage is one draw call per
+ * platform — Battlefield is four.
  *
  * Moving platforms are placed every frame with `platformCentreX`, the sim's own
  * function, rather than the 2D art's float sine, so they never disagree.
@@ -16,11 +18,13 @@
 import { BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshLambertMaterial } from "three";
 
 import { toFloat } from "@/engine/fixed";
-import { platformCentreX } from "@/engine/physics";
+import { HARD_PLATFORM_DEPTH, platformCentreX } from "@/engine/physics";
 import type { Platform, StageDef } from "@/engine/types";
 import { stagePaintFor } from "@/render/stageArt";
 
-export const MAIN_DEPTH = 46;
+/** A main body is the sim's solid, as deep as the sim makes it (R13). */
+export const MAIN_DEPTH = toFloat(HARD_PLATFORM_DEPTH);
+/** How thick a soft platform is drawn. UNVERIFIED (cosmetic): the sim gives a soft platform no body. */
 export const SOFT_THICKNESS = 1.2;
 /** How far a platform reaches toward and away from the camera, in units. UNVERIFIED: by eye. */
 export const MAIN_DEPTH_Z = 36;
@@ -81,27 +85,31 @@ export function createStage3D(stage: StageDef): Stage3D {
   const material = new MeshLambertMaterial({ vertexColors: true });
   const group = new Group();
   group.name = `stage:${stage.id}`;
-  const placed: { mesh: Mesh; platform: Platform }[] = [];
+  const meshes: Mesh[] = [];
+  // Only a moving platform is ever placed again, so the per-frame path walks just those.
+  const movers: { mesh: Mesh; platform: Platform }[] = [];
   for (const platform of stage.platforms) {
     const half = toFloat(platform.halfWidth);
     const geometry = platform.soft
       ? prismGeometry(half, SOFT_THICKNESS, 1, SOFT_DEPTH_Z, rgb(paint.softEdge), rgb(paint.soft), rgb(paint.soft))
-      : prismGeometry(half, MAIN_DEPTH, 0.62, MAIN_DEPTH_Z, rgb(paint.top), rgb(paint.face), rgb(paint.deep));
+      : prismGeometry(half, MAIN_DEPTH, 1, MAIN_DEPTH_Z, rgb(paint.top), rgb(paint.face), rgb(paint.deep));
     const mesh = new Mesh(geometry, material);
     mesh.position.set(toFloat(platform.x), toFloat(platform.y), 0);
     mesh.receiveShadow = true;
     group.add(mesh);
-    placed.push({ mesh, platform });
+    meshes.push(mesh);
+    if (platform.motion) movers.push({ mesh, platform });
   }
   return {
     group,
     update(frame) {
-      for (const { mesh, platform } of placed) {
-        if (platform.motion) mesh.position.x = toFloat(platformCentreX(platform, frame));
+      for (let i = 0; i < movers.length; i++) {
+        const { mesh, platform } = movers[i];
+        mesh.position.x = toFloat(platformCentreX(platform, frame));
       }
     },
     dispose() {
-      for (const { mesh } of placed) mesh.geometry.dispose();
+      for (const mesh of meshes) mesh.geometry.dispose();
       material.dispose();
       group.clear();
     },

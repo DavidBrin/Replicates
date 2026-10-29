@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * the same match end differently forty frames later:
  *
  * 1. **A forbidden import.** Reaching into `render/`, `render3d/`, `net/`,
- *    `components/`, `app/`, `audio/`, React or Next drags a browser API, a
+ *    `components/`, `app/`, `audio/`, React, Next or three.js drags a browser API, a
  *    module-level singleton, a render-time value or (`render3d/`) float matrix
  *    and quaternion maths into the simulation. Re-simulating a frame
  *    then depends on something that is not in `GameState`.
@@ -35,7 +35,7 @@ import { describe, expect, it } from "vitest";
 const ENGINE_DIR = join(process.cwd(), "src", "engine") + "/";
 
 /** Package names the simulation may not reach for. */
-const BANNED_PACKAGES = ["react", "react-dom", "next"];
+const BANNED_PACKAGES = ["react", "react-dom", "next", "three"];
 
 /**
  * Sibling layers the simulation may not reach for, by first path segment.
@@ -291,6 +291,21 @@ describe("engine layering", () => {
     it("catches a React import", () => {
       const spec = importSpecifiers('import { useState } from "react";')[0];
       expect(BANNED_PACKAGES).toContain(spec.split("/")[0]);
+    });
+
+    it("catches a three.js import, bare, namespaced or from its examples", () => {
+      const fixtures: [string, string][] = [
+        ['import { Vector3 } from "three";', "three"],
+        ['import * as THREE from "three";', "three"],
+        ['import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";', "three/examples/jsm/loaders/GLTFLoader.js"],
+      ];
+      // The same test the scan above applies to an engine file's imports.
+      const violations: string[] = [];
+      for (const [src, spec] of fixtures) {
+        expect(importSpecifiers(src)).toEqual([spec]);
+        if (BANNED_PACKAGES.includes(spec.split("/")[0])) violations.push(`probe.ts imports ${spec}`);
+      }
+      expect(violations).toEqual(fixtures.map(([, spec]) => `probe.ts imports ${spec}`));
     });
 
     it("allows a sibling engine import", () => {

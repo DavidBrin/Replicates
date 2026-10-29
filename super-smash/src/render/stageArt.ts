@@ -66,7 +66,7 @@ export function platformOffsetX(platform: Platform, frame: number): number {
 
 /* ---------------------------------------------------------------- painting -- */
 
-/** A stage's colours, shared by the 2D background and the 3D platforms (Plan 4). */
+/** A stage's platform colours, shared by the 2D platform painter and the 3D platforms (Plan 4). */
 export function stagePaintFor(stage: Pick<StageDef, "theme">): StagePaint {
   return PAINTS[themeFor(stage.theme)];
 }
@@ -142,7 +142,7 @@ export function drawPlatforms(
   cam: Camera,
   frame: number,
 ): void {
-  const paint = PAINTS[themeFor(stage.theme)];
+  const paint = stagePaintFor(stage);
   ctx.save();
   ctx.lineCap = "square";
   ctx.lineJoin = "miter";
