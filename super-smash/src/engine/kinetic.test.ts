@@ -23,6 +23,7 @@ import {
   kineticSumX,
   kineticSumY,
   kineticTakeStep,
+  kineticTurnLaunch,
 } from "./kinetic";
 import { damageSpeedUpMaxMag } from "./knockback";
 import type { KineticState, KineticType } from "./kinetic";
@@ -893,11 +894,95 @@ describe("the DAMAGE energy, sped up (init_damage_speed_up)", () => {
     expect(f.launchSpeed).toBe(g.launchSpeed - LAUNCH_SPEED_DECAY);
   });
 
+  // Every path that ends a launch's hitstun: a clear, a landing, a scripted motion,
+  // a jump (which keeps the horizontal speed as drift and replaces the rest) and a
+  // frame of a non-reeling status (`kineticExec`, any kinetic type, a fall here).
   it("is disarmed by anything that ends the launch", () => {
-    for (const end of [kineticClear, kineticLand, (f: FighterState) => kineticMotion(f, 0, 0)]) {
+    const enders: [string, (f: FighterState) => void][] = [
+      ["kineticClear", kineticClear],
+      ["kineticLand", kineticLand],
+      ["kineticMotion", (f) => kineticMotion(f, 0, 0)],
+      ["kineticJump", (f) => kineticJump(f, fx(3))],
+      ["kineticExec", (f) => kineticExec(f, "FALL", { stickX: 0, params: PARAMS })],
+    ];
+    for (const [name, end] of enders) {
       const f = sped();
+      expect(f.kinetic.speedUpMax, `${name}: armed first`).toBeGreaterThan(0);
       end(f);
-      expect(f.kinetic.speedUpMax).toBe(0);
+      expect(f.kinetic.speedUpMax, name).toBe(0);
     }
+  });
+});
+
+/* ------------------------------ turning a kept launch (Plan 3, Task 8) -- */
+
+describe("kineticTurnLaunch", () => {
+  /** Flying straight up at 5, with a little drift and gravity of its own beside it. */
+  const flying = (): FighterState => {
+    const f = body({ damageY: fx(5), controlX: fx(0.5), gravityY: -fx(1) }, { launchSpeed: fx(5) });
+    kineticSum(f);
+    return f;
+  };
+
+  it("points the launch along the vector and keeps its speed: (3, 4) of a 5 launch", () => {
+    const f = flying();
+    kineticTurnLaunch(f, fx(3), fx(4));
+    expect([f.kinetic.damageX, f.kinetic.damageY]).toEqual([fx(3), fx(4)]);
+    expect(f.launchSpeed).toBe(fx(5));
+  });
+
+  it("scales the vector to the launch's speed, not its own length", () => {
+    const f = flying();
+    kineticTurnLaunch(f, fx(30), fx(40));
+    expect([f.kinetic.damageX, f.kinetic.damageY]).toEqual([fx(3), fx(4)]);
+    const slow = body({ damageY: fx(1) }, { launchSpeed: fx(1) });
+    kineticTurnLaunch(slow, fx(3), fx(4));
+    expect(slow.kinetic.damageX / ONE).toBeCloseTo(0.6, 3);
+    expect(slow.kinetic.damageY / ONE).toBeCloseTo(0.8, 3);
+  });
+
+  it("writes the sum back, and leaves every other energy as it was", () => {
+    const f = flying();
+    kineticTurnLaunch(f, fx(3), fx(4));
+    expect(f.kinetic.controlX).toBe(fx(0.5));
+    expect(f.kinetic.gravityY).toBe(-fx(1));
+    expect(f.vx).toBe(fx(0.5) + fx(3));
+    expect(f.vy).toBe(-fx(1) + fx(4));
+    expect([f.vx, f.vy]).toEqual([kineticSumX(f), kineticSumY(f)]);
+  });
+
+  it("can turn it right round, and onto either side", () => {
+    const back = flying();
+    kineticTurnLaunch(back, 0, -fx(2));
+    expect([back.kinetic.damageX, back.kinetic.damageY]).toEqual([0, -fx(5)]);
+    const left = flying();
+    kineticTurnLaunch(left, -fx(1), 0);
+    expect([left.kinetic.damageX, left.kinetic.damageY]).toEqual([-fx(5), 0]);
+  });
+
+  it("leaves the launch as it was for a zero vector", () => {
+    const f = flying();
+    kineticTurnLaunch(f, 0, 0);
+    expect([f.kinetic.damageX, f.kinetic.damageY, f.launchSpeed]).toEqual([0, fx(5), fx(5)]);
+  });
+
+  // The vector's length is a Q12 square root, off by a unit or so, which a launch of
+  // speed 5 magnifies by 5 / the length: a vector under 1 long turns it to within a
+  // percent, not a few units. The property is for vectors a hit can make (1 or more).
+  it("keeps the speed to within a few units, for any direction", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: -40 * ONE, max: 40 * ONE }), fc.integer({ min: -40 * ONE, max: 40 * ONE }), (dx, dy) => {
+        fc.pre(Math.hypot(dx, dy) >= ONE);
+        const f = flying();
+        kineticTurnLaunch(f, dx, dy);
+        return Math.abs(Math.hypot(f.kinetic.damageX, f.kinetic.damageY) - fx(5)) <= 8;
+      }),
+    );
+  });
+
+  it("treats a vector too short to square as a zero vector", () => {
+    const f = flying();
+    kineticTurnLaunch(f, 40, 40);
+    expect([f.kinetic.damageX, f.kinetic.damageY]).toEqual([0, fx(5)]);
   });
 });

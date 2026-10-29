@@ -61,7 +61,7 @@ import {
   shieldstunExact,
 } from "./knockback";
 import { attackerShieldPushback, shieldBubble, shieldDamage, shieldPushback } from "./shield";
-import { kineticSetX, kineticSumX, kineticSumY } from "./kinetic";
+import { kineticClear, kineticSetX, kineticSumX, kineticSumY } from "./kinetic";
 import { findLedgeGrab, resolveCollision } from "./physics";
 import { cloneState, createInitialState, step } from "./simulate";
 import type { SimContext } from "./simulate";
@@ -224,6 +224,25 @@ function play(
 /** Fighter 0 presses attack once (a jab) and nothing else happens. */
 const JAB = (i: number): readonly InputFrame[] => (i === 0 ? [Btn.Attack, 0] : [0, 0]);
 
+/** A fighter whose neutral B throws one 6% pellet (4 units a frame, spent on a hit), on `spawnFrame`. */
+function pelletShooter(spawnFrame = 6): FighterDef {
+  const pellet = hitbox({ startFrame: 1, endFrame: 90, x: 0, y: 0, damage: fx(6) });
+  return {
+    ...BASE_DEF,
+    moves: {
+      ...BASE_DEF.moves,
+      neutralB: move("neutralB", {
+        totalFrames: 30,
+        hitboxes: [],
+        projectiles: [
+          { id: "pellet", spawnFrame, offsetX: fx(6), offsetY: fx(6), vx: fx(4), vy: 0, gravity: 0, lifetime: 90, hitbox: pellet, destroyOnHit: true, visual: "energy" },
+        ],
+      }),
+    },
+  };
+}
+const SHOOT = (i: number): readonly InputFrame[] => (i === 0 ? [Btn.Special, 0] : [0, 0]);
+
 /* --------------------------------------------- Task 1: super armour -- */
 
 describe("super armour counts the damage once (Plan 3, Task 1)", () => {
@@ -241,6 +260,56 @@ describe("super armour counts the damage once (Plan 3, Task 1)", () => {
     // Armour: no launch, no hitstun, still in the move.
     expect(after.hitstun).toBe(0);
     expect(after.action).toBe("special");
+  });
+
+  // Final wave, part 4 (the Task 1 review's minor): the same jab on a victim who
+  // is NOT armoured. Without it the test above would pass for a world in which
+  // nothing is ever launched, so this is the arm that says the armour is what
+  // stopped the launch: the damage still counts once, and the victim flinches.
+  it("control: the same jab on an unarmoured victim counts the damage once and launches", () => {
+    const frames = play(standing(), 8, JAB);
+    const hit = frames.flatMap((f) => f.events.hits).find((h) => h.victim === 1);
+    expect(hit, "the jab should land on the unarmoured fighter").toBeDefined();
+    const after = frames[frames.length - 1].state.fighters[1];
+    expect(after.damage).toBe(hit!.damage);
+    expect(hit!.knockback).toBeGreaterThan(0);
+    expect(after.hitstun).toBeGreaterThan(0);
+    expect(after.action).not.toBe("stand");
+  });
+
+  // Armour has no say in who threw the hit: a projectile meets the same branch.
+  // The damage lands once, the victim stays in its move, and, as for any
+  // projectile, nobody freezes (the owner is not at the hit).
+  it("a projectile on an armoured victim adds the damage once, launches nothing and freezes nobody", () => {
+    const ctx = ctxFor(pelletShooter());
+    const s = standing(ctx);
+    const v = s.fighters[1];
+    v.action = "special";
+    v.move = "downB";
+    v.actionFrame = 5;
+    const frames = play(s, 16, SHOOT, ctx);
+    const hits = frames.flatMap((f) => f.events.hits).filter((h) => h.victim === 1);
+    expect(hits, "the pellet lands once and is spent").toHaveLength(1);
+    const after = frames[frames.length - 1].state;
+    expect(after.fighters[1].damage).toBe(hits[0].damage);
+    expect(hits[0].knockback).toBe(0);
+    expect(after.fighters[1].hitstun).toBe(0);
+    expect(after.fighters[1].action).toBe("special");
+    // On the frame the pellet lands (a hitlag would run out well before the end).
+    const landed = frames[frames.findIndex((f) => f.events.hits.length > 0)].state;
+    expect(landed.fighters[0].hitlag).toBe(0);
+    expect(landed.fighters[1].hitlag).toBe(0);
+  });
+
+  it("control: the same pellet on an unarmoured victim launches it", () => {
+    const ctx = ctxFor(pelletShooter());
+    const frames = play(standing(ctx), 16, SHOOT, ctx);
+    const hits = frames.flatMap((f) => f.events.hits).filter((h) => h.victim === 1);
+    expect(hits).toHaveLength(1);
+    const after = frames[frames.length - 1].state.fighters[1];
+    expect(after.damage).toBe(hits[0].damage);
+    expect(hits[0].knockback).toBeGreaterThan(0);
+    expect(after.action).not.toBe("stand");
   });
 });
 
@@ -369,12 +438,70 @@ describe("flat launches (Plan 3, Task 3)", () => {
   }
 
   // rubendal `js/knockback.js`: a grounded victim launched at 0° (`groundedZeroAngle`)
-  // leaves at 0.8 of the launch speed.
+  // leaves at 0.8 of the launch speed. The 0.8 is written out here, not read from
+  // `GROUNDED_ZERO_LAUNCH_RATIO`, so a changed constant fails this test instead of
+  // moving it along (the Task 3 review: the first version was circular).
   it("slides a grounded victim along 0° at 0.8 of the launch speed", () => {
+    expect(GROUNDED_ZERO_LAUNCH_RATIO).toEqual([4, 5]);
     const grounded = launchOf(false);
     const airborne = launchOf(true);
     expect(airborne.speed).toBe(mul(airborne.kb, LAUNCH_SPEED_RATIO));
-    expect(grounded.speed).toBe(mul(byRatio(grounded.kb, GROUNDED_ZERO_LAUNCH_RATIO), LAUNCH_SPEED_RATIO));
+    expect(grounded.speed).toBe(mul(byRatio(grounded.kb, [4, 5]), LAUNCH_SPEED_RATIO));
+    expect(grounded.speed / airborne.speed).toBeCloseTo(0.8, 3);
+  });
+});
+
+// The launch angle a hit resolves to, through `step()`, at the knockbacks the
+// angle rules turn on (Plan 3, Task 3 review; final wave, part 4). `knockbackGrowth`
+// 0 leaves the formula only its base, so a box's `baseKnockback` IS the knockback
+// the hit reports, to the Q12 unit: the edges of the 60, 88 and 120 rules are
+// reachable exactly, which the percent-driven tests above cannot do.
+describe("the resolved launch angle through a real hit, at an exact knockback (Plan 3, Task 3 review)", () => {
+  function hitAt(angle: number, kb: number, grounded: boolean): { angle: number; knockback: number } {
+    const def: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ angle, baseKnockback: kb, knockbackGrowth: 0 })] }) },
+    };
+    const ctx = ctxFor(def);
+    const s = standing(ctx);
+    if (!grounded) Object.assign(s.fighters[1], { grounded: false, platform: -1, y: fx(1), action: "fall" });
+    const hit = play(s, 8, JAB, ctx).flatMap((f) => f.events.hits)[0];
+    expect(hit, "the jab lands").toBeDefined();
+    expect(hit.knockback, "the box fixes the knockback").toBe(kb);
+    return hit;
+  }
+  const SAKURAI = fx(361);
+
+  // SmashWiki "Sakurai angle" (https://www.ssbwiki.com/Sakurai_angle): a grounded
+  // victim goes at 0° below 60 knockback and up a ramp from there; rubendal's
+  // `SakuraiAngle` is min((kb − 60)/28 × 38 + 1, 38), so 60 itself is 1°, not 0°.
+  it("sends a grounded Sakurai hit of exactly 60 knockback at 1°, and one unit less flat", () => {
+    expect(hitAt(SAKURAI, fx(60), true).angle).toBe(fx(1));
+    expect(hitAt(SAKURAI, fx(60) - 1, true).angle).toBe(0);
+  });
+
+  it("ramps a grounded Sakurai hit between 60 and 88: halfway up, at 74, it is 20°", () => {
+    expect(hitAt(SAKURAI, fx(74), true).angle).toBe(fx(20));
+    // The ramp's own 1° offset would reach past 38° just below 88; the cap holds it.
+    expect(hitAt(SAKURAI, fx(87.9), true).angle).toBe(fx(38));
+    expect(hitAt(SAKURAI, fx(88), true).angle).toBe(fx(38));
+  });
+
+  // SmashWiki "Sakurai angle": "moves with a launch angle of 0 have been given the
+  // Sakurai angle-like property of changing to 32 degrees if they deal 120 units
+  // of knockback or more"; rubendal `js/knockback.js` applies it to 0 and 180.
+  it("lifts a flat 0° hit to 32° from exactly 120 knockback, grounded or in the air", () => {
+    for (const grounded of [true, false]) {
+      expect(hitAt(0, fx(120), grounded).angle, `grounded ${grounded}`).toBe(fx(32));
+      expect(hitAt(0, fx(120) - 1, grounded).angle, `grounded ${grounded}`).toBe(0);
+    }
+  });
+
+  // UNVERIFIED: the 148° mirror (`resolveAngle`; D56 lists it).
+  it("lifts a straight-back 180° hit to 148° from exactly 120 knockback, and not before", () => {
+    expect(hitAt(fx(180), fx(120), true).angle).toBe(fx(148));
+    expect(hitAt(fx(180), fx(120), false).angle).toBe(fx(148));
+    expect(hitAt(fx(180), fx(120) - 1, true).angle).toBe(fx(180));
   });
 });
 
@@ -400,10 +527,38 @@ describe("DI needs a tumbling launch (Plan 3, Task 4)", () => {
     expect(launchAfter(0, Btn.Down)).toEqual(launchAfter(0, 0));
   });
 
-  it("bends a tumbling launch", () => {
+  // A held Down is also LSI (0.92x the speed), which lowers `vy` all by itself, so
+  // a test that holds Down and sees `vy` fall cannot tell DI from LSI: it passes
+  // with `applyDI` removed (the Task 4 review). A stick along the x axis is no LSI
+  // (LSI reads only the vertical), so what it does to a 45° launch is DI's alone:
+  // the angle turns toward the stick by 9.74° × sin 45° (the stick's component
+  // perpendicular to the launch), and the speed does not move.
+  it("bends a tumbling launch's angle toward the stick and leaves its speed alone, with a stick LSI ignores", () => {
     const none = launchAfter(150, 0);
-    const bent = launchAfter(150, Btn.Down);
-    expect(bent.vy).toBeLessThan(none.vy);
+    const bent = launchAfter(150, Btn.Right);
+    const speed = (v: { vx: number; vy: number }): number => Math.hypot(v.vx, v.vy);
+    // Directions through the engine's own lookup trig (the layering test bans the float
+    // kind here): the launch's unit vector against the cos and sin of the angle it should
+    // have. 45° untouched; DI turns it toward the stick (down, for a stick on the right,
+    // of a launch up and to the right) by 9.74° × sin 45° = 6.887°: to 38.113°.
+    const unit = (v: { vx: number; vy: number }): [number, number] => [v.vx / speed(v), v.vy / speed(v)];
+    const direction = (deg: number): [number, number] => [toFloat(cosDeg(fx(deg))), toFloat(sinDeg(fx(deg)))];
+    for (const [got, want] of [
+      [unit(none), direction(45)],
+      [unit(bent), direction(45 - 9.74 * Math.SQRT1_2)],
+    ] as const) {
+      expect(got[0]).toBeCloseTo(want[0], 3);
+      expect(got[1]).toBeCloseTo(want[1], 3);
+    }
+    expect(speed(bent) / speed(none)).toBeCloseTo(1, 3);
+  });
+
+  // The other half: Down is LSI, and a launch LSI acts on is made slower by it.
+  it("scales a tumbling launch's speed by LSI, for a stick with a vertical part", () => {
+    const none = launchAfter(150, 0);
+    const down = launchAfter(150, Btn.Down);
+    const speed = (v: { vx: number; vy: number }): number => Math.hypot(v.vx, v.vy);
+    expect(speed(down) / speed(none)).toBeCloseTo(0.92, 2);
   });
   // LSI is computed inside `di_able` too: a tumbling launch straight ahead keeps its speed.
   it("does not scale a tumbling launch straight ahead with LSI", () => {
@@ -455,10 +610,35 @@ describe("the balloon speed-up through a real hit (Plan 3, Task 6)", () => {
     return { hitstun: frames[i].state.fighters[1].hitstun, knockback: frames[i].events.hits[0].knockback };
   }
 
+  // The numbers are written out, not read back from `effectiveHitstun` (the Task 6
+  // review: the first version compared the sim with the function it calls, so it
+  // would have followed a wrong schedule). 150 knockback is a base hitstun of
+  // floor(150 × 0.4) − 1 = 59 and 42 real frames sped up (rubendal SSBU-Calculator
+  // `ReactionFrameMulSpeedUp`, https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1117).
   it("holds a tumbling victim in hitstun for the sped-up time, not the base", () => {
     const c = contact(growthDef);
-    expect(c.hitstun).toBe(effectiveHitstun(c.knockback, true));
-    expect(c.hitstun).toBeLessThan(computeHitstun(c.knockback));
+    expect(c.knockback).toBe(fx(150));
+    expect(c.hitstun).toBe(42);
+    expect(c.hitstun).toBeLessThan(59);
+  });
+
+  // SmashWiki "Hitstun" (https://www.ssbwiki.com/Hitstun): 90 and 145 knockback
+  // give 33 and 41 frames in Ultimate. Counted through `step()`: the frames the
+  // victim is out of its freeze and still tumbling, not a field read back.
+  it.each([
+    [90, 33],
+    [145, 41],
+  ])("keeps a victim of %i knockback tumbling for %i real frames once its freeze ends", (kb, frames) => {
+    const def: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ baseKnockback: fx(kb), knockbackGrowth: 0 })] }) },
+    };
+    const run = play(standing(ctxFor(def)), 90, JAB, ctxFor(def));
+    const hit = run.findIndex((f) => f.events.hits.length > 0);
+    expect(hit, "the jab lands").toBeGreaterThanOrEqual(0);
+    expect(run[hit].events.hits[0].knockback).toBe(fx(kb));
+    const tumbling = run.slice(hit).filter((f) => f.state.fighters[1].action === "tumble" && f.state.fighters[1].hitlag === 0);
+    expect(tumbling).toHaveLength(frames);
   });
 
   // rubendal SSBU-Calculator `js/knockback.js`: the speed-up runs only `if (tumble && !isFKB)`.
@@ -485,6 +665,9 @@ describe("the balloon speed-up through a real hit (Plan 3, Task 6)", () => {
       s.fighters[1].action = "fall";
       const frames = play(s, 120, JAB, ctxFor(def));
       const at = frames.findIndex((f) => f.events.kos.some((k) => k.port === 1));
+      // Before it is used as an index: -1 would read frames[-2] and throw a TypeError
+      // that says nothing about the launch that never reached the line.
+      expect(at, "fighter 1 is KO'd within the 120 frames played").toBeGreaterThan(0);
       const kos = frames.flatMap((f) => f.events.kos).filter((k) => k.port === 1).length;
       return { frame: at, kos, lastInside: frames[at - 1].state.fighters[1].x };
     }
@@ -539,15 +722,17 @@ describe("tumble starts at 80 knockback (Plan 3, Task 6 addendum)", () => {
     expect(h.action).toBe("tumble");
   });
 
-  // 32 reaction frames start the speed-up at 1.2× (`damageSpeedUpMaxMag`,
-  // rubendal `InitDamageSpeedUp`): too little to save a real frame here, but armed.
+  // 32 reaction frames start the speed-up at 1.2× (rubendal `InitDamageSpeedUp`,
+  // 1 + 5 × (32 − 30)/50 = 1.2, https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1047):
+  // too little to save a real frame here, so the hitstun is the base's floor(82.4 × 0.4) − 1
+  // = 31, but the speed-up is armed. Written out, not read back from the functions the sim calls.
   it("tumbles at 82.4 knockback, with the balloon speed-up applied", () => {
     const h = hitAt(82.4);
     expect(h.knockback).toBe(fx(82.4));
     expect(h.action).toBe("tumble");
     expect(h.launchFaf).toBe(32);
-    expect(h.hitstun).toBe(effectiveHitstun(h.knockback, true));
-    expect(h.speedUpMax).toBe(damageSpeedUpMaxMag(32));
+    expect(h.hitstun).toBe(31);
+    expect(toFloat(h.speedUpMax)).toBeCloseTo(1.2, 2);
     expect(h.speedUpMax).toBeGreaterThan(ONE);
   });
 });
@@ -572,13 +757,97 @@ describe("hitstun cancel (Plan 3, Task 7)", () => {
   }
   const press = (b: InputFrame) => (i: number): readonly InputFrame[] => [0, i === 0 ? b : 0];
 
-  // SmashWiki "Hitstun canceling" (https://www.ssbwiki.com/Hitstun_canceling):
-  // air dodge after frame 40 if launch speed is below 2.5; aerial after frame 45
-  // below 2. rubendal `parameters.hitstunCancel` agrees (frames 40/45, speeds 2.5/2).
+  // SmashWiki "Hitstun canceling" (https://www.ssbwiki.com/Hitstun_canceling), In
+  // Smash 4, which Ultimate keeps: "A player can now only cancel hitstun with an
+  // airdodge or aerial after 40 and 45 frames respectively, and only if the current
+  // launch speed ... is below 2.5 and 2 respectively." rubendal SSBU-Calculator
+  // `parameters.hitstunCancel` agrees (frames 40/45, launch speeds 2.5/2,
+  // https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L26).
   it("air dodges out of hitstun from frame 41 when the launch is slower than 2.5", () => {
     const after = play(tumbling(40, fx(2.4)), 1, press(Btn.Shield)).at(-1)!.state.fighters[1];
     expect(after.action).toBe("airDodge");
     expect(after.hitstun).toBe(0);
+  });
+
+  // Final wave, part 4 (the Task 7 review's test gaps).
+
+  // The cancel is for a fighter in the air: `hitstunCancel` returns at once for a
+  // grounded one, which neither air dodges (a shield press is a tech's, Task 12)
+  // nor attacks out of the tumble, even with both windows open.
+  it("does not cancel a tumble that is on the ground, with both windows open", () => {
+    const s = tumbling(50, fx(1.9));
+    Object.assign(s.fighters[1], { grounded: true, platform: 0, y: 0 });
+    for (const b of [Btn.Shield, Btn.Attack]) {
+      const after = play(s, 3, press(b)).map((f) => f.state.fighters[1]);
+      expect(after.map((v) => v.action), `button ${b}`).toEqual(["tumble", "tumble", "tumble"]);
+      expect(after.at(-1)!.hitstun, `button ${b}`).toBe(57);
+    }
+  });
+
+  it("takes an attack pressed before frame 46 once the window opens, and spends the buffer on it", () => {
+    // Pressed at 43 (frame 42 + the step), the aerial window opens at 46: three
+    // steps of waiting in hitstun, an aerial on the fourth.
+    const frames = play(tumbling(42, fx(1.9)), 5, press(Btn.Attack)).map((f) => f.state.fighters[1]);
+    expect(frames.map((v) => v.action)).toEqual(["tumble", "tumble", "tumble", "attack", "attack"]);
+    expect(frames[3].move).toBe("nair");
+    expect(frames[2].bufferedAction, "held until the window opens").toEqual({ kind: "attack", frame: 1 });
+    expect(frames[3].bufferedAction, "spent by the cancel it fired").toBeNull();
+  });
+
+  it("spends a buffered shield on the air dodge it fires", () => {
+    const frames = play(tumbling(37, fx(2)), 4, (i) => [0, i === 0 ? Btn.Shield : 0]).map((f) => f.state.fighters[1]);
+    expect(frames[2].bufferedAction).toEqual({ kind: "shield", frame: 1 });
+    expect(frames[3].action).toBe("airDodge");
+    expect(frames[3].bufferedAction).toBeNull();
+  });
+
+  // "A buffered press is spent only by the cancel it fires" (`hitstunCancel`): an
+  // air dodge already spent leaves the shield press buffered, and the aerial a
+  // fresh attack then fires is not that press's cancel, so it stays.
+  it("leaves a buffered shield alone when a fresh attack fires the aerial instead", () => {
+    const s = tumbling(43, fx(1.9));
+    s.fighters[1].airDodged = true;
+    const frames = play(s, 6, (i) => [0, i === 0 ? Btn.Shield : i === 3 ? Btn.Attack : 0]).map((f) => f.state.fighters[1]);
+    expect(frames[2].action).toBe("tumble");
+    expect(frames[3].action).toBe("attack");
+    expect(frames[3].bufferedAction).toEqual({ kind: "shield", frame: 1 });
+  });
+
+  // What becomes of the launch's DAMAGE energy. The cancel clears the hitstun and
+  // nothing else: the launch decays by 0.051 a frame (SmashWiki "Knockback", launch
+  // speed "decays by 0.051 every frame") through the aerial and through a neutral air
+  // dodge, which keeps the tumble's momentum (SmashWiki "Air dodge", Task 20b); a
+  // directional dodge keeps it through its slingshot and clears it as the slide
+  // starts (WuBor `escape_air.rs`, Task 20c). The Task 7 review asked for "zero after
+  // the air dodge", which was the rule at that commit; Tasks 20b and 20c replaced it.
+  it("keeps decaying the launch after the aerial and after a neutral air dodge", () => {
+    for (const [name, b, from, speed] of [
+      ["aerial", Btn.Attack, 45, fx(1.9)],
+      ["neutral air dodge", Btn.Shield, 40, fx(2.4)],
+    ] as const) {
+      const frames = play(tumbling(from, speed), 6, press(b)).map((f) => f.state.fighters[1]);
+      expect(frames[0].action, name).not.toBe("tumble");
+      let expected = speed;
+      for (const [k, v] of frames.entries()) {
+        expected -= LAUNCH_SPEED_DECAY;
+        expect(v.kinetic.damageX, `${name}, frame ${k}`).toBe(expected);
+        expect(v.launchSpeed, `${name}, frame ${k}`).toBe(expected);
+      }
+    }
+  });
+
+  it("carries the launch through a directional air dodge's slingshot and clears it at the slide", () => {
+    const frames = play(tumbling(40, fx(2.4)), 7, (i) => [0, i === 0 ? Btn.Shield | Btn.Right : Btn.Right]).map(
+      (f) => f.state.fighters[1],
+    );
+    expect(frames.every((v) => v.action === "airDodge")).toBe(true);
+    const cleared = frames.findIndex((v) => v.kinetic.damageX === 0);
+    expect(cleared, "the slide starts within the window").toBeGreaterThan(0);
+    for (const v of frames.slice(0, cleared)) expect(v.kinetic.damageX).toBeGreaterThan(0);
+    for (const v of frames.slice(cleared)) {
+      expect(v.kinetic.damageX).toBe(0);
+      expect(v.launchSpeed).toBe(0);
+    }
   });
 
   it("does not air dodge on frame 40", () => {
@@ -647,30 +916,42 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
    * that fighter 0 (or 2 itself, `sameSource`) gave it, `ratio` times as fast as
    * the jab's own launch would be.
    */
+  /** Fighter 0 far away, fighter 1 the victim 8 units from fighter 2, who jabs it. */
+  function threeFighters(over: FighterDef = quick): GameState {
+    const c = ctxFor(over);
+    const s = createInitialState(
+      "flat",
+      [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }],
+      RULES,
+      12345,
+      c,
+    );
+    const place = [
+      { x: fx(-60), facing: 1 },
+      { x: fx(8), facing: -1 },
+      { x: 0, facing: 1 },
+    ];
+    s.fighters.forEach((f, i) => {
+      Object.assign(f, place[i], { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
+    });
+    return s;
+  }
+  const jabFrom2 = (i: number): readonly InputFrame[] => [0, 0, i === 0 ? Btn.Attack : 0];
+
   function stacked(
     ratio: number,
     sameSource = false,
     hitstun = 50,
-  ): { victim: GameState["fighters"][number]; untouched: number } {
-    const fresh = (): GameState => {
-      const s = createInitialState(
-        "flat",
-        [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }],
-        RULES,
-        12345,
-        ctx,
-      );
-      const place = [
-        { x: fx(-60), facing: 1 },
-        { x: fx(8), facing: -1 },
-        { x: 0, facing: 1 },
-      ];
-      s.fighters.forEach((f, i) => {
-        Object.assign(f, place[i], { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
-      });
-      return s;
-    };
-    const jab = (i: number): readonly InputFrame[] => [0, 0, i === 0 ? Btn.Attack : 0];
+  ): {
+    victim: GameState["fighters"][number];
+    untouched: number;
+    hit: StepEvents["hits"][number];
+    /** The first launch's speed, as it stood when the second hit connected. */
+    before: number;
+    jabSpeed: number;
+  } {
+    const fresh = (): GameState => threeFighters();
+    const jab = jabFrom2;
     // The jab's own launch speed, against a victim standing still.
     const dry = play(fresh(), 8, jab, ctx).find((f) => f.events.hits.length > 0)!;
     const jabSpeed = Math.trunc((dry.events.hits[0].knockback * 3) / 100); // knockback × 0.03
@@ -690,8 +971,10 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
     v.combat.launchSource = sameSource ? 2 : 0;
     const frames = play(s, 8, jab, ctx);
     const hit = frames.findIndex((f) => f.events.hits.length > 0);
+    const victim = frames[hit].state.fighters[1];
     // What the first launch's hitstun reads on the hit frame if nothing touched it.
-    return { victim: frames[hit].state.fighters[1], untouched: 50 - (hit + 1) };
+    // A kept launch keeps its speed, so what it has now is what it had on contact.
+    return { victim, untouched: 50 - (hit + 1), hit: frames[hit].events.hits[0], before: victim.launchSpeed, jabSpeed };
   }
 
   it("keeps the first launch when the new one is 0.5x to 0.9x of it", () => {
@@ -705,12 +988,29 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
   // inverse tangent of both hits' added knockback vectors"; the first hit's launch
   // speed is retained, and the resulting angle cannot be DI'd.
   it("turns a kept launch toward the sum of both launches, at its own speed", () => {
-    const { victim } = stacked(0.7);
+    const { victim, hit, before, jabSpeed } = stacked(0.7);
     const k = victim.kinetic;
     // Straight up, plus the jab's 45° to the right: now up and to the right.
     expect(k.damageX).toBeGreaterThan(0);
     expect(k.damageY).toBeGreaterThan(k.damageX);
     expect(Math.abs(Math.hypot(k.damageX, k.damageY) - victim.launchSpeed)).toBeLessThan(3);
+    // Exactly where: the sum of (0, the first launch's speed) and the jab's own 45°
+    // launch, whose speed is its knockback × 0.03 (`jabSpeed`), by arctangent (SmashWiki
+    // "Knockback", stacking). The jab's angle is 45° on an airborne victim, from
+    // fighter 2, who faces right. Float arithmetic here, to a hundredth of a degree.
+    // Done as vectors, as the engine's own trig is the only kind allowed here: the kept
+    // launch (damageX, damageY) must be along (fromJab, first + fromJab), the sum, which
+    // is `sin` of the angle between them under 0.0005 (0.03°) by their cross product, and
+    // the same way round (dot > 0).
+    const fromJab = (jabSpeed / ONE) * Math.SQRT1_2;
+    const [sumX, sumY] = [fromJab, before / ONE + fromJab];
+    const [kx, ky] = [k.damageX / ONE, k.damageY / ONE];
+    const length = Math.hypot(kx, ky) * Math.hypot(sumX, sumY);
+    expect(Math.abs(kx * sumY - ky * sumX) / length, "along the sum").toBeLessThan(0.0005);
+    expect(kx * sumX + ky * sumY, "the same way round").toBeGreaterThan(0);
+    // The hit's own report says the same (the spark follows the launch it turned).
+    expect(toFloat(cosDeg(hit.angle))).toBeCloseTo(kx / Math.hypot(kx, ky), 2);
+    expect(toFloat(sinDeg(hit.angle))).toBeCloseTo(ky / Math.hypot(kx, ky), 2);
   });
 
   it("replaces a launch whose hitstun is over, however fast it still drifts", () => {
@@ -730,6 +1030,131 @@ describe("knockback stacking (Plan 3, Task 8)", () => {
     const { victim, untouched } = stacked(0.95);
     expect(victim.pendingFacing).not.toBe(0);
     expect(victim.hitstun).not.toBe(untouched);
+  });
+
+  // A launch parked in the freeze is compared by its knockback's speed, as a flying
+  // one is by its vector's (`pendingKnockback`, then `launchSpeed`). The victim is
+  // frozen in hitlag with the launch waiting, from a different source, when the jab
+  // lands; `ratio` is the jab's speed over the parked launch's. UNVERIFIED reading:
+  // the page does not say a launch not yet fired is "live" (see `applyHit`).
+  describe("a launch still parked in the freeze", () => {
+    function parked(ratio: number): { victim: GameState["fighters"][number]; jabKb: number; parkedKb: number } {
+      const dry = play(threeFighters(), 8, jabFrom2, ctx).find((f) => f.events.hits.length > 0)!;
+      const jabKb = dry.events.hits[0].knockback;
+      const parkedKb = Math.trunc(jabKb / ratio);
+      const s = threeFighters();
+      const v = s.fighters[1];
+      v.grounded = false;
+      v.platform = -1;
+      v.y = fx(1);
+      v.action = "tumble";
+      v.hitstun = 50;
+      v.hitlag = 20;
+      v.pendingKnockback = parkedKb;
+      v.pendingAngle = fx(90);
+      v.pendingFacing = 1;
+      v.combat.launchSource = 0;
+      // The launch this one replaced is still on the DAMAGE energy until the freeze
+      // ends. A kept hit must turn neither: the parked launch has no vector, and
+      // the one beside it is not the launch being kept.
+      v.kinetic.damageY = fx(0.5);
+      v.launchSpeed = fx(0.5);
+      v.vy = fx(0.5);
+      const frames = play(s, 8, jabFrom2, ctx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      return { victim: frames[hit].state.fighters[1], jabKb, parkedKb };
+    }
+
+    it("keeps it against a hit 0.5x to 0.9x as fast: still parked, untouched, and not turned", () => {
+      const { victim, parkedKb } = parked(0.7);
+      expect(victim.pendingFacing).toBe(1);
+      expect(victim.pendingKnockback).toBe(parkedKb);
+      expect(victim.pendingAngle).toBe(fx(90));
+      expect(victim.combat.launchSource).toBe(0);
+      expect(victim.kinetic.damageX).toBe(0);
+      expect(victim.kinetic.damageY).toBe(fx(0.5));
+      expect(victim.damage).toBeGreaterThan(0);
+      expect(victim.combat.comboHits).toBe(1);
+    });
+
+    it("armours through a hit under 0.5x as fast, the same way", () => {
+      const { victim, parkedKb } = parked(0.4);
+      expect(victim.pendingFacing).toBe(1);
+      expect(victim.pendingKnockback).toBe(parkedKb);
+      expect(victim.pendingAngle).toBe(fx(90));
+      expect(victim.combat.launchSource).toBe(0);
+      expect(victim.damage).toBeGreaterThan(0);
+    });
+
+    it("lets a hit faster than 0.9x take over, source and knockback", () => {
+      const { victim, jabKb } = parked(0.95);
+      expect(victim.combat.launchSource).toBe(2);
+      expect(victim.pendingKnockback).toBe(jabKb);
+    });
+
+    it("holds the freeze at the longer of the two", () => {
+      const { victim } = parked(0.7);
+      // 20 frames parked, minus the frames before the jab lands, against the jab's own hitlag.
+      expect(victim.hitlag).toBeGreaterThan(computeHitlag(fx(10)));
+    });
+  });
+
+  // SmashWiki "Knockback", stacking: "hitboxes belonging to articles coded separately
+  // from a character, such as ... all projectiles, are considered separate sources, and
+  // can thus be subjected to knockback stacking with physical moves from the character
+  // that produced them." The owner's jab first, then its own pellet: a different source
+  // (`candidateKey`: the port against 1000 + the instance), so a weaker pellet keeps the
+  // jab's launch instead of taking over from it, as a second jab would.
+  describe("a projectile and its owner", () => {
+    // The pellet leaves on the first frame so it meets a victim still close to where
+    // the owner's launch found it, before that victim has flown out of its way.
+    const shooter = pelletShooter(1);
+    const sctx = ctxFor(shooter);
+    /** Fighter 1 flying straight up from the owner's jab at `ratio` x the pellet's speed; the owner shoots. */
+    function pelletOnFlyer(ratio: number, from: number): { victim: GameState["fighters"][number]; untouched: number } {
+      const base = (): GameState => {
+        const s = standing(sctx);
+        return s;
+      };
+      const dry = play(base(), 16, SHOOT, sctx).find((f) => f.events.hits.length > 0)!;
+      const pelletSpeed = Math.trunc((dry.events.hits[0].knockback * 3) / 100);
+      const s = base();
+      const v = s.fighters[1];
+      v.grounded = false;
+      v.platform = -1;
+      v.y = fx(1);
+      v.action = "tumble";
+      v.hitstun = 50;
+      const current = Math.trunc(pelletSpeed / ratio);
+      v.kinetic.damageY = current;
+      v.launchSpeed = current;
+      v.vy = current;
+      v.combat.launchSource = from;
+      const frames = play(s, 16, SHOOT, sctx);
+      const hit = frames.findIndex((f) => f.events.hits.length > 0);
+      return { victim: frames[hit].state.fighters[1], untouched: 50 - (hit + 1) };
+    }
+
+    it("stack: a weaker pellet is kept against, not taken over by, the owner's own launch", () => {
+      const { victim, untouched } = pelletOnFlyer(0.7, 0);
+      expect(victim.hitstun).toBe(untouched);
+      expect(victim.pendingFacing).toBe(0);
+      expect(victim.combat.launchSource).toBe(0);
+      expect(victim.damage).toBeGreaterThan(0);
+    });
+
+    it("armours through a pellet under 0.5x of it", () => {
+      const { victim, untouched } = pelletOnFlyer(0.4, 0);
+      expect(victim.hitstun).toBe(untouched);
+      expect(victim.pendingFacing).toBe(0);
+    });
+
+    it("control: a launch from that same pellet is the same source, and is replaced", () => {
+      // The instance id of the first pellet a match throws is 1 (`candidateKey`: 1000 + id).
+      const { victim } = pelletOnFlyer(0.4, 1001);
+      expect(victim.pendingFacing).not.toBe(0);
+      expect(victim.combat.launchSource).toBe(1001);
+    });
   });
 
   // Review Focus #4: a multi-hit move is one source, so each of its hits takes
@@ -904,6 +1329,101 @@ describe("shields (Plan 3, Task 9)", () => {
     // Five presses: 27 frames earned.
     expect(still - mashed).toBe(27);
   });
+
+  // Final wave, part 4: the Task 9 review's test gaps, each the rule through `step()`.
+
+  /** Fighter 1 broken with `stun` frames left, mashing `inputs`; its stun after `n` frames. */
+  const brokenAfter = (n: number, inputs: (i: number) => InputFrame, stun = 100): number => {
+    const s = standing();
+    Object.assign(s.fighters[1], { action: "shieldBroken", hitstun: stun, shieldHealth: 0 });
+    return play(s, n, (i) => [0, inputs(i)]).at(-1)!.state.fighters[1].hitstun;
+  };
+
+  // SmashWiki "Stun" (https://www.ssbwiki.com/Stun): a stick input takes 3 frames off a
+  // shield break in Ultimate. A direction pressed fresh each time (a held one counts
+  // once: the Task 9 review's held-Up minor, above), so the stick alternates.
+  it("takes 3 frames off the stun for each fresh stick input", () => {
+    const still = brokenAfter(10, () => 0);
+    // Left on frames 0, 2, 4, 6, 8: five fresh presses.
+    expect(still - brokenAfter(10, (i) => (i % 2 === 0 ? Btn.Left : 0))).toBe(15);
+  });
+
+  // UNVERIFIED (`buttonPresses`): buttons pressed on one frame each count. Pinned so a
+  // change of that reading is a decision: two buttons are 10.8 frames (10 whole), three
+  // 16.2 (16), and a button with a fresh stick direction 8.4 (8), in one frame.
+  it("counts every button pressed on one frame, and a stick input with them", () => {
+    const still = brokenAfter(1, () => 0);
+    expect(still - brokenAfter(1, () => Btn.Attack | Btn.Special)).toBe(10);
+    expect(still - brokenAfter(1, () => Btn.Attack | Btn.Special | Btn.Jump)).toBe(16);
+    expect(still - brokenAfter(1, () => Btn.Attack | Btn.Left)).toBe(8);
+  });
+
+  // The fractional carry: 5.4 a press, so five presses are 27 and the tenths stay for
+  // the sixth (`mashFrames`); the carry is the whole struggle's, not each frame's.
+  it("keeps the tenths of a frame between presses", () => {
+    const still = brokenAfter(12, () => 0);
+    expect(still - brokenAfter(12, (i) => (i % 2 === 0 ? Btn.Attack : 0))).toBe(32);
+  });
+
+  // The break stun is `400 - percent` whole frames on every route to the break, and a
+  // fraction of a percent is ignored (UNVERIFIED rounding, `shieldBreakStun`). Through
+  // the hit, above, at 120%; here the other route, a shield held until it decays to
+  // nothing, at 99.5% (400 - 99.5 = 300.5, 300 whole frames).
+  it("breaks a held shield that decays away into 400 - percent frames too, a fraction of a percent ignored", () => {
+    const s = standing();
+    Object.assign(s.fighters[1], { action: "shield", shieldHealth: SHIELD_DECAY_PER_FRAME * 3, damage: fx(99.5) });
+    const frames = play(s, 12, () => [0, Btn.Shield]);
+    const broke = frames.findIndex((f) => f.state.fighters[1].action === "shieldBroken");
+    expect(broke, "the held shield wears away within a dozen frames").toBeGreaterThan(0);
+    const v = frames[broke].state.fighters[1];
+    expect(v.shieldHealth).toBe(0);
+    expect(v.hitstun).toBe(300);
+    expect(frames[broke].events.shieldBreaks).toEqual([1]);
+  });
+
+  // A melee attacker slides off the shield only from the ground (UNVERIFIED: rubendal's
+  // formula has no situation, and the replica pushes only a grounded one; `applyHit`).
+  it("pushes a grounded melee attacker off the shield and leaves an airborne one where it was", () => {
+    const air = standing();
+    Object.assign(air.fighters[0], { grounded: false, platform: -1, y: fx(2), action: "fall" });
+    const at = play(air, 12, (i) => [i === 0 ? Btn.Attack : 0, Btn.Shield]);
+    const hitFrame = at.findIndex((f) => f.events.shieldHits.length > 0);
+    expect(hitFrame, "the aerial lands on the shield").toBeGreaterThan(0);
+    const airborne = at[hitFrame].state.fighters[0];
+    expect(airborne.grounded).toBe(false);
+    expect(airborne.kinetic.controlX).toBe(0);
+    expect(airborne.kinetic.stopX).toBe(0);
+    // The control: the same jab from the ground does push.
+    const ground = shieldHit().at.state.fighters[0];
+    expect(ground.vx).toBeLessThan(0);
+  });
+
+  it("does not push a projectile's owner at all, the pellet hitting the shield from afar", () => {
+    const sctx = ctxFor(pelletShooter());
+    const s = standing(sctx);
+    // Shield already up, and not a parry (a shield held 10 frames is past its window).
+    Object.assign(s.fighters[1], { action: "shield", actionFrame: 10, x: fx(40) });
+    const frames = play(s, 40, (i) => [i === 0 ? Btn.Special : 0, Btn.Shield], sctx);
+    const hit = frames.findIndex((f) => f.events.shieldHits.length > 0);
+    expect(hit).toBeGreaterThan(0);
+    expect(frames[hit].state.fighters[0].vx).toBe(0);
+    expect(frames[hit].state.fighters[0].hitlag).toBe(0);
+    expect(frames[hit].state.fighters[1].vx).not.toBe(0);
+  });
+
+  // The 1.3 cap (SmashWiki "Shield", pushback table: "no more than 1.3"), through a hit
+  // hard enough to overflow it: a 40% smash is (40 × 0.8 × 0.725 + 3) × 0.09 = 2.358
+  // before the cap. The unit test pins the function; this pins that the hit uses it.
+  it("caps the defender's pushback at 1.3 for a hit that would push further", () => {
+    const hard: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ damage: fx(40) })] }) },
+    };
+    const hctx = ctxFor(hard);
+    const frames = play(standing(hctx), 12, JAB_INTO_SHIELD, hctx);
+    const hit = frames.find((f) => f.events.shieldHits.length > 0)!;
+    expect(hit.state.fighters[1].vx).toBe(fx(1.3));
+  });
 });
 
 /* ------------------------------------------- Task 10: perfect shield -- */
@@ -913,10 +1433,16 @@ describe("perfect shield (Plan 3, Task 10)", () => {
    * Fighter 0 attacks with `attack`; fighter 1 shields and lets go so that the
    * hit lands on frame 2 of the drop — inside the 5-frame parry window.
    */
-  function parried(def: FighterDef, attack: (i: number) => InputFrame, gap: number): Frame {
+  function parried(
+    def: FighterDef,
+    attack: (i: number) => InputFrame,
+    gap: number,
+    prepare: (s: GameState) => void = () => {},
+  ): Frame {
     const ctx = ctxFor(def);
     const setup = (): GameState => {
       const s = standing(ctx);
+      prepare(s);
       s.fighters[1].x = fx(gap);
       // Shield already up long enough to be dropped (SHIELD_MIN_HOLD).
       s.fighters[1].action = "shield";
@@ -932,6 +1458,29 @@ describe("perfect shield (Plan 3, Task 10)", () => {
   // The extra hitlag rides on the *shield* hitlag (×0.67).
   const JAB_DMG = mul(fx(10), STALE_FRESH_BONUS);
   const JAB_LAG = computeHitlag(JAB_DMG, { shielding: true });
+
+  // The cap order (Task 10 fix round 1), through `step()`: the 0.15 goes inside the
+  // formula and the 1.3 cap comes last (SmashWiki "Shield", https://www.ssbwiki.com/Shield,
+  // pushback table; rubendal `ShieldPushback`). A 30% smash (31.5 fresh) is
+  // (31.5 × 0.8 × 0.725 + 3) × 0.09 = 1.91 before either: capped first (1.3) and then
+  // × 0.15 it would slide the defender 0.195; the right order gives 1.91 × 0.15 = 0.287.
+  // The cap is not reached after the 0.15, so this pins the order and not the cap
+  // itself (`shield.test.ts` pins that).
+  it("pushes a parried 30% smash (stun + 1) x 0.09 x 0.15, not 1.3 x 0.15, the old order's cap", () => {
+    const smash: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, fsmash: move("fsmash", { totalFrames: 40, hitboxes: [hitbox({ damage: fx(30) })] }) },
+    };
+    const at = parried(smash, () => 0, 8, (s) => Object.assign(s.fighters[0], { action: "attack", move: "fsmash", actionFrame: 0 }));
+    const d = mul(fx(30), STALE_FRESH_BONUS);
+    const defender = at.state.fighters[1];
+    expect(at.events.shieldHits).toHaveLength(1);
+    expect(defender.action).toBe("shieldRelease");
+    expect(defender.vx).toBe(shieldPushback(shieldstunExact(d, { smash: true }), true));
+    // Written out: (30 × 1.05 × 0.8 × 0.725 + 3) × 0.09 × 0.15.
+    expect(toFloat(defender.vx)).toBeCloseTo((31.5 * 0.8 * 0.725 + 3) * 0.09 * 0.15, 3);
+    expect(defender.vx).not.toBe(byRatio(fx(1.3), [3, 20]));
+  });
 
   it("freezes a direct melee attacker 14 frames and the defender 11 beyond the hit", () => {
     const at = parried(BASE_DEF, (i) => (i === 0 ? Btn.Attack : 0), 8);
@@ -2234,6 +2783,35 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
     expect(at(frames, 10).y, "the slide lifts it the full 20").toBe(low + AIR_DODGE_SLIDE_DISTANCE);
   });
 
+  // A launch the dodge carries through a slingshot *held on the floor*: the hold stops
+  // only MOTION's step into it (`kineticAirDodgeHold`), so the launch lives on, still
+  // decaying, and clears when the slide starts. `kineticSetY(f, 0)` would do it too, for
+  // `vy`, and end the launch with it (it zeroes DAMAGE's y and re-bases the speed on the
+  // x), which is why this launch has a vertical part: the first one, 0.6 across and
+  // 0.8 *down*, is meeting the floor the slingshot is held on. UNVERIFIED, like the
+  // rest of the hold (WuBor `escape_air.rs` keeps the launch through the slingshot).
+  it("keeps a launch with a vertical part through a slingshot held on the floor, still decaying", () => {
+    // From a plain fall: a dodge out of a tumble near the floor is its tech, not a slingshot.
+    const s = aloft(0, 3, { action: "fall" });
+    const v = s.fighters[1];
+    v.kinetic.damageX = fx(0.6);
+    v.kinetic.damageY = -fx(0.8);
+    v.launchSpeed = fx(1);
+    v.vx = fx(0.6);
+    v.vy = -fx(0.8);
+    const frames = dodge(s, Btn.Up, 8);
+    const held = frames.slice(0, 4).filter((f) => f.state.fighters[1].y === 0);
+    expect(held.length, "the slingshot is held on the floor").toBeGreaterThan(0);
+    for (const [i, f] of frames.slice(0, 4).entries()) {
+      const k = f.state.fighters[1];
+      expect(k.launchSpeed, `slingshot frame ${i}`).toBe(fx(1) - (i + 1) * LAUNCH_SPEED_DECAY);
+      expect(k.kinetic.damageY, `slingshot frame ${i}: still heading down`).toBeLessThan(0);
+      expect(k.kinetic.damageX, `slingshot frame ${i}`).toBeGreaterThan(0);
+    }
+    // And it goes when the slide starts, as for any launch (`kineticAirDodge`).
+    expect(at(frames, 4)).toMatchObject({ launchSpeed: 0, kinetic: { damageX: 0, damageY: 0 } });
+  });
+
   it("does not land in its slingshot up and across either, and never slides backwards", () => {
     const frames = dodge(aloft(0, 1), Btn.Up | Btn.Right, 12);
     expect(frames.every((f) => f.state.fighters[1].action === "airDodge"), "never lands").toBe(true);
@@ -2335,6 +2913,73 @@ describe("glancing blows (Plan 3, Task 13)", () => {
   it("puts the line at 0.1: 0.09 deep is a graze, 0.11 deep is a hit", () => {
     expect(jabWithOverlap(0.09).flatMap((f) => f.events.hits)).toEqual([]);
     expect(jabWithOverlap(0.11).flatMap((f) => f.events.hits)).toHaveLength(1);
+  });
+
+  // The exact line (final wave, part 4; the Task 13 review). 0.1 is 410 Q12 units
+  // (fx(0.1) is 409.6, rounded). A box *exactly* that deep is a hit ("less than 0.1
+  // units through a hurtbox" is the graze); one unit less is a graze. The 0.09 / 0.11
+  // pair above is 0.01 either side, so it passes for `<=` and for a line moved by 40
+  // units (0.0098): these three depths do not.
+  it("puts the line at exactly 410 Q12 deep: 410 is a hit, 409 is a graze", () => {
+    expect(GLANCING_BLOW_DEPTH).toBe(410);
+    // Depth is the radii's sum less the spine distance, and the distance is an integer
+    // square root, exact only when the squared distance divides by 4096. So the victim
+    // stands a multiple of 64 away (19200 = 4.6875, so 300 × 64), and the box's radius
+    // is what is set to reach the depth: depth = r + 4 (the body) − 4.6875 (all in Q12).
+    const BODY = 4 * 4096;
+    const DIST = 19200;
+    const at = (depth: number): Frame[] => {
+      const def: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ radius: depth + DIST - BODY })] }) },
+      };
+      const ctx = ctxFor(def);
+      const s = standing(ctx);
+      s.fighters[1].x = fx(8) + DIST;
+      return play(s, 8, JAB, ctx);
+    };
+    expect(at(GLANCING_BLOW_DEPTH - 1).flatMap((f) => f.events.hits)).toEqual([]);
+    expect(at(GLANCING_BLOW_DEPTH).flatMap((f) => f.events.hits)).toHaveLength(1);
+    expect(at(GLANCING_BLOW_DEPTH + 1).flatMap((f) => f.events.hits)).toHaveLength(1);
+  });
+
+  // A graze is skipped before intangibility and invincibility are looked at, so a
+  // victim in either is grazed like any other: the box simply is not there.
+  describe("against a victim who is invincible or intangible", () => {
+    const grazed = (over: Partial<FighterState>, depth: number): Frame[] => {
+      const s = standing();
+      Object.assign(s.fighters[1], over, { x: fx(17) - depth });
+      return play(s, 8, JAB);
+    };
+
+    // Invincible is not intangible: a *hit* connects, is spent, freezes the attacker
+    // and is reported with nothing transferred (the clang, `applyInvincibleHit`). A
+    // graze is not a hit, so it gets none of that and the swing stays live.
+    it("gives an invincible victim no clang from a graze, and leaves the swing unspent", () => {
+      const frames = grazed({ invincible: 30 }, 205);
+      expect(frames.flatMap((f) => f.events.hits)).toEqual([]);
+      expect(frames.at(-1)!.state.fighters[0].hitlag).toBe(0);
+      expect(frames.at(-1)!.state.fighters[0].hitThisMove).toEqual([]);
+      // The control: a box 0.2 in is the clang, zero damage, and the attacker frozen.
+      const deep = grazed({ invincible: 30 }, 819);
+      const hit = deep.flatMap((f) => f.events.hits);
+      expect(hit).toHaveLength(1);
+      expect(hit[0].damage).toBe(0);
+      expect(deep.some((f) => f.state.fighters[0].hitlag > 0)).toBe(true);
+      expect(deep.at(-1)!.state.fighters[0].hitThisMove).toEqual([1]);
+    });
+
+    // No mutant tells this from a deep box: an intangible victim is skipped whatever
+    // the depth, and the swing is never spent on them (see `resolveHits`). It pins that
+    // the graze does not change that.
+    it("hits an intangible victim neither deep nor shallow, and spends nothing", () => {
+      for (const depth of [205, 819]) {
+        const frames = grazed({ intangible: 30 }, depth);
+        expect(frames.flatMap((f) => f.events.hits), `depth ${depth}`).toEqual([]);
+        expect(frames.at(-1)!.state.fighters[0].hitThisMove, `depth ${depth}`).toEqual([]);
+        expect(frames.at(-1)!.state.fighters[1].damage, `depth ${depth}`).toBe(0);
+      }
+    });
   });
 
   it("does not spend the swing: the same jab lands once the bodies close in", () => {
@@ -2913,6 +3558,13 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       kineticSetX(a, fx(2));
       const frames = play(s, 3, () => [0, 0]);
       for (const f of frames) expect(f.state.fighters[0]).toMatchObject({ grounded: true, platform: 0, x: fx(80), grabbing: 1 });
+      // The stop is of the velocity too (`resolveCollision`'s `kineticSetX(f, 0)`), not only
+      // of the position: held against the lip it is going nowhere, so nothing is left to
+      // push it at the edge again each frame, or to carry it on once the hold ends.
+      for (const [k, f] of frames.entries()) {
+        const a = f.state.fighters[0];
+        expect([a.vx, kineticSumX(a)], `frame ${k}`).toEqual([0, 0]);
+      }
     });
 
     it("never carries a victim past the edge: a holder pushed at the lip stops there, still holding", () => {
@@ -2951,6 +3603,12 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       const frames = play(s, 5, () => [0, 0]);
       const held = frames[0].state.fighters[1];
       expect(held).toMatchObject({ x: fx(84), y: 0, grounded: false, platform: -1, jumpsUsed: 2, airDodged: true, airTime: 0 });
+      // Airtime stays 0 for as long as it is held, frame after frame: a fighter that is placed
+      // is not falling, so the ledge's airtime bonus does not run (UNVERIFIED: no source says
+      // what being held does to it; `holdAtCaptor`). Once it is let go the count starts again.
+      const heldFrames = frames.filter((f) => f.state.fighters[1].grabbedBy >= 0);
+      expect(heldFrames.length).toBeGreaterThan(1);
+      for (const f of heldFrames) expect(f.state.fighters[1].airTime).toBe(0);
       // Let go at the lip: the victim is in the air rather than standing on nothing (and, being
       // right at the ledge, may take it).
       const freed = frames.find((f) => f.state.fighters[1].grabbedBy < 0)!.state.fighters[1];
@@ -3734,9 +4392,29 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
       expect(fired.launchSpeed).toBe(byRatio(mul(fx(100), LAUNCH_SPEED_RATIO), BOUNCE_FLOOR_LAUNCH_RATIO));
       expect(fired.kinetic.damageY).toBeGreaterThan(0);
       expect(fired.grounded).toBe(false);
+      // On the release frame itself the hitstun is still the hit's: the bounce that
+      // fires there takes nothing off it. (`countsDownByOne` below starts from this
+      // frame, so a cut made at release would not show in it.)
+      expect(fired.hitstun, "at release").toBe(spike.hitstun);
       // Up and away for the next 12 frames: no second bounce, so no 0.8 cut of the hitstun.
       expect(spike.after.slice(1, 13).every((f) => !f.grounded && f.y > 0)).toBe(true);
       expect(countsDownByOne(spike.after, 12)).toBe(true);
+    });
+
+    // The bounce turns the whole launch about, both components at 0.9, not only the
+    // vertical one: a straight-down 270° has no horizontal part to show it. At 250°
+    // (inside the 230-310 spike range; SmashWiki "Meteor smash", rubendal `spike`) the
+    // launch of 100 knockback, 3.0 a frame, goes 3.0 × cos 250° = -1.026 across and
+    // -2.819 down; bounced, -0.923 across and +2.537 up, at 2.7.
+    it("scales the horizontal part of a launch that is not straight down by 0.9 as well", () => {
+      const spike = spiked([frame(4), box({ angle: 250, bkb: 100, kbg: 0 }), frame(7), clearAll()]);
+      expect(spike.knockback).toBe(fx(100));
+      const [fired] = spike.after;
+      expect(fired.grounded).toBe(false);
+      expect(fired.kinetic.damageX / ONE).toBeCloseTo(3 * toFloat(cosDeg(fx(250))) * 0.9, 2);
+      expect(fired.kinetic.damageY / ONE).toBeCloseTo(-3 * toFloat(sinDeg(fx(250))) * 0.9, 2);
+      expect(fired.launchSpeed / ONE).toBeCloseTo(2.7, 2);
+      expect(fired.hitstun, "at release").toBe(spike.hitstun);
     });
 
     // Set knockback bounces as well: the bounce is the launch meeting the floor, not
@@ -4136,6 +4814,41 @@ describe("capsule hitboxes through a real hit (Plan 3, Task 17)", () => {
       const left = shielded(across, 0, true);
       expect(left).toMatchObject({ shieldHits: 1, hits: 0 });
       expect(left.away).toBeGreaterThan(0);
+    });
+
+    // A vertical capsule (`dx` 0, `dy` not: a far end straight above or below the near
+    // one, 8 of the 127 generated far-end ATTACKs; the Task 17 re-review's M1). It has
+    // one x, so it is the sphere's rule while that x is to one side of the victim, and the
+    // spanning rule when the victim stands on it (`shieldPushDirection`: `dx` or `dy`).
+    // UNVERIFIED, like the rest of which way a shield is pushed. Each both ways round:
+    // the attacker on the left facing right, and on the right facing left. A sphere
+    // level with the victim goes +x whichever side the attacker is on, so only the
+    // mirrored half tells the two rules apart.
+    describe("a vertical capsule", () => {
+      /** At `z` out, from 2 up to 12 up, 2 wide: the shield bubble's height is 6. */
+      const vertical = (z: number): ReturnType<typeof ATTACK> =>
+        ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 2, z, y2: 12 });
+
+      it.each([false, true])("pushes a victim it stands beside away from the box (mirrored %s)", (mirrored) => {
+        // The box is at 10 and the victim at 14, on the shield's facing side of it.
+        const hit = shielded(vertical(10), 14, mirrored);
+        expect(hit).toMatchObject({ shieldHits: 1, hits: 0 });
+        expect(hit.away).toBeGreaterThan(0);
+      });
+
+      it.each([false, true])("pushes a victim it stands on away from the attacker's body (mirrored %s)", (mirrored) => {
+        // The victim is at x = the box's x: no side to be nearest on, so the attacker's.
+        const hit = shielded(vertical(10), 10, mirrored);
+        expect(hit).toMatchObject({ shieldHits: 1, hits: 0 });
+        expect(hit.away).toBeGreaterThan(0);
+      });
+
+      it.each([false, true])("pushes a victim on the attacker's own spot the way the attacker faces (mirrored %s)", (mirrored) => {
+        // The box through the attacker too: the tie, `attacker.facing`, which is -x mirrored.
+        const hit = shielded(vertical(0), 0, mirrored);
+        expect(hit).toMatchObject({ shieldHits: 1, hits: 0 });
+        expect(hit.away).toBeGreaterThan(0);
+      });
     });
 
     // A sphere is its own nearest point: today's rule, tie and all (a sphere level with
@@ -5146,6 +5859,44 @@ describe("SDI and ASDI are the hit fighter's alone (final wave, part 2, item 3)"
     expect(frames[hit].state.fighters[0].hitlag).toBeGreaterThan(14);
     const xs = frozenX(frames, hit, 0);
     expect(xs.length).toBeGreaterThan(14);
+    expect(new Set(xs).size).toBe(1);
+  });
+
+  // The part-1/2 re-review's one test gap: `victimFreeze` is cleared when the freeze ends
+  // (`step`, phase 3). Without that line a fighter hit earlier keeps the flag, and is
+  // an SDI-er in its own *later* hitlag, as an attacker: drifting 8.11 -> 10.11 -> 12.11
+  // over its jab's freeze (the re-review's probe), which this test would see as a move.
+  it("does not let a fighter that was hit earlier SDI in its own later hitlag", () => {
+    // Fighter 0 jabs fighter 1; run to the frame its launch has been released.
+    const first = play(standing(), 30, JAB);
+    const hit = first.findIndex((f) => f.events.hits.length > 0);
+    const released = first.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+    expect(released, "the first freeze ends").toBeGreaterThan(hit);
+    expect(first[released].state.fighters[1].combat.victimFreeze, "cleared with the freeze").toBe(false);
+    // Stand them up again, fighter 1 now facing fighter 0 to jab it back, everything
+    // else of fighter 1 as the sim left it.
+    let s = cloneState(first[released].state);
+    for (const f of s.fighters) {
+      Object.assign(f, { action: "stand", actionFrame: 0, move: null, hitstun: 0, hitlag: 0, grounded: true, platform: 0, y: 0, intangible: 0, bufferedAction: null, hitThisMove: [], pendingFacing: 0 });
+      kineticClear(f);
+    }
+    Object.assign(s.fighters[1], { x: 0, facing: 1 });
+    Object.assign(s.fighters[0], { x: fx(8), facing: -1 });
+    let prev: readonly InputFrame[] = [0, 0];
+    const xs: number[] = [];
+    let seenHitlag = 0;
+    for (let i = 0; i < 40; i++) {
+      const me = s.fighters[1];
+      const now = [0, (i === 0 ? Btn.Attack : 0) | (me.hitlag > 0 && me.hitlag % 4 === 0 ? Btn.Left : 0)];
+      const r = step(s, now, { prevInputs: prev, ctx: ctxFor() });
+      s = r.state;
+      prev = now;
+      if (s.fighters[1].hitlag > 0) {
+        seenHitlag += 1;
+        xs.push(s.fighters[1].x);
+      }
+    }
+    expect(seenHitlag, "its own jab freezes it").toBeGreaterThan(4);
     expect(new Set(xs).size).toBe(1);
   });
 

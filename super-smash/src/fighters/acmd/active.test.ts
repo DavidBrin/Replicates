@@ -21,6 +21,23 @@ import { FIGHTERS } from "../index";
 import { STAGES } from "@/stages";
 import { ACTIVE_SCRIPT_SLOTS, activatable } from "./active";
 import { REFERENCE_SCRIPTS } from "./index";
+import { GAME_SIM_CONTEXT } from "@/game/simContext";
+
+/**
+ * The bone table the game's sim places every script box through. The tests below
+ * read it from the game's own context, not a table named here, so what they compare
+ * is what the sim runs. `withReferenceScripts` places the synced `MoveDef` tables
+ * through the root-bone table (`LEGACY_BONE_TABLE`); the first test says so, and fails
+ * the day the game's context carries another (Plan 4's bake), when those tables must
+ * be derived again (carried to Plan 4; the Task 18 review's minor 2).
+ */
+const BONES = GAME_SIM_CONTEXT.bones ?? LEGACY_BONE_TABLE;
+
+describe("the bone table the activated scripts are synced through", () => {
+  it("is still the root-bone table: a different one means the synced MoveDef tables must be re-derived", () => {
+    expect(BONES).toBe(LEGACY_BONE_TABLE);
+  });
+});
 
 /** Every bone a script hangs a box off. */
 function bones(commands: readonly AcmdCommand[], out = new Set<string>()): Set<string> {
@@ -97,7 +114,7 @@ describe("autolink angles the engine does not model (Plan 3, Task 19)", () => {
   // None is live today: every script the roster runs, and every compiled move and projectile,
   // loads through the same refusal registration applies.
   it("is met by no move the roster runs", () => {
-    for (const def of FIGHTERS) expect(() => prepareFighterScripts(def, LEGACY_BONE_TABLE), def.id).not.toThrow();
+    for (const def of FIGHTERS) expect(() => prepareFighterScripts(def, BONES), def.id).not.toThrow();
   });
 });
 
@@ -106,6 +123,7 @@ describe("an activated script in a real match", () => {
   const ctx: SimContext = {
     fighter: (id) => FIGHTERS.find((f) => f.id === id)!,
     stage: (id) => STAGES.find((s) => s.id === id)!,
+    bones: BONES,
   };
 
   /** Mario above Pikachu, both in the air, Mario down-airs. */
@@ -163,7 +181,7 @@ describe("what render, the CPU and the charge hold read of an activated move", (
   /** The boxes the sim builds for `slot` on game frame `g` (`gatherHitboxes`). */
   function simBoxes(def: FighterDef, slot: MoveSlot, g: number): Hitbox[] {
     const script = gameScriptFor(def, slot)!;
-    return scriptHitboxes(runScript(script, g), def.id, script.motion, g, LEGACY_BONE_TABLE);
+    return scriptHitboxes(runScript(script, g), def.id, script.motion, g, BONES);
   }
 
   /** The game frames the sim has a box live on, attack or grab, through the move's end. */

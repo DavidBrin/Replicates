@@ -10,6 +10,7 @@ import {
   SAKURAI_ANGLE,
   SAKURAI_GROUNDED,
   SOFT_DI_SHIFT,
+  SPEED_UP_END_RATE,
   TUMBLE_HITSTUN,
 } from "./constants";
 import {
@@ -26,10 +27,11 @@ import {
   effectiveHitstun,
   knockbackStack,
   knockbackToVelocity,
+  launchDiAble,
   normalizeAngle,
   resolveAngle,
-  stickSensibility,
   toWorldAngle,
+  TURN,
 } from "./knockback";
 import type { MoveSlot } from "./types";
 import * as ref from "../../research/rebuild-2026-10/tools/ssbu_ref.mjs";
@@ -272,7 +274,8 @@ describe("computeHitstun", () => {
 });
 
 describe("the balloon speed-up (init_damage_speed_up)", () => {
-  // rubendal SSBU-Calculator `InitDamageSpeedUp`: 1× at 30 frames of FAF, 6× at 80, linear between.
+  // rubendal SSBU-Calculator `InitDamageSpeedUp` (L1047,
+  // https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1047): 1× at 30 frames of FAF, 6× at 80, linear between.
   it("scales its first-frame multiplier from 1x at 30 FAF to 6x at 80", () => {
     expect(damageSpeedUpMaxMag(30)).toBe(ONE);
     expect(damageSpeedUpMaxMag(55)).toBe(fx(3.5));
@@ -280,8 +283,9 @@ describe("the balloon speed-up (init_damage_speed_up)", () => {
     expect(damageSpeedUpMaxMag(200)).toBe(fx(6));
   });
 
-  // SmashWiki "Hitstun": 90 and 145 knockback give 33 and 41 frames in
-  // Ultimate (36 and 58 in Smash 4); rubendal's port gives 49 at 200 and 61 at 250.
+  // SmashWiki "Hitstun" (https://www.ssbwiki.com/Hitstun): 90 and 145 knockback give
+  // 33 and 41 frames in Ultimate (36 and 58 in Smash 4); rubendal's port
+  // (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1117, `ReactionFrameMulSpeedUp`) gives 49 at 200 and 61 at 250.
   it.each([
     [90, 33],
     [145, 41],
@@ -291,6 +295,8 @@ describe("the balloon speed-up (init_damage_speed_up)", () => {
     expect(effectiveHitstun(fx(kb), true)).toBe(frames);
   });
 
+  // `ssbu_ref.mjs` `speedUp` is the float port of rubendal's `InitDamageSpeedUp` and
+  // `ReactionFrameMulSpeedUp` (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1047, #L1117).
   it("matches the reference port at every knockback up to 500", () => {
     for (let q = 0; q <= 2000; q++) {
       const kb = fx(q / 4);
@@ -300,14 +306,55 @@ describe("the balloon speed-up (init_damage_speed_up)", () => {
     }
   });
 
-  // SmashWiki "Hitstun": past 200 the effect stops scaling and hitstun grows at
-  // (kb − 200) × 0.25 — which falls out of the 6× cap, within a frame.
+  // The Q12 schedule is the float port's frame for frame to 554.75 knockback; past
+  // that its truncation can put one frame more, never fewer and never two (the Task 5
+  // review measured the same: 13 of 1,496 sampled knockbacks, +1). Pinned to 2,000,
+  // in quarter steps, which is far past any hit the game can deal; the first
+  // divergence is where `faf` reaches 222 (rubendal's port,
+  // https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1117, in floats).
+  it("stays within one frame above the float port past 500 knockback, and never below it", () => {
+    let first = -1;
+    for (let q = 2001; q <= 8000; q++) {
+      const kb = fx(q / 4);
+      const diff = effectiveHitstun(kb, true) - Math.max(4, ref.speedUp(toFloat(kb)).framesWithSpeedUp - 1);
+      expect(diff, `kb ${q / 4}`).toBeGreaterThanOrEqual(0);
+      expect(diff, `kb ${q / 4}`).toBeLessThanOrEqual(1);
+      if (diff !== 0 && first < 0) first = q / 4;
+    }
+    expect(first, "the first knockback the Q12 schedule runs a frame long").toBe(555);
+  });
+
+  // SmashWiki "Hitstun" (https://www.ssbwiki.com/Hitstun): past 200 the effect stops
+  // scaling and hitstun grows at (kb − 200) × 0.25 — which falls out of the 6× cap,
+  // within a frame.
   it("grows by (kb - 200) x 0.25 past 200, within a frame", () => {
     const at200 = effectiveHitstun(fx(200), true);
     for (let kb = 200; kb <= 500; kb += 0.25) {
       const extra = effectiveHitstun(fx(kb), true) - at200;
       expect(Math.abs(extra - Math.floor((kb - 200) * 0.25)), `kb ${kb}`).toBeLessThanOrEqual(1);
     }
+  });
+
+  // rubendal `ReactionFrameMulSpeedUp` (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1117):
+  // clamp((faf × 0.3 − frame)/(faf × 0.3 − faf), 0, 1) × maxMag, `end_rate` 70.
+  // The edges, at faf 50 (so 0.3 × faf is exactly 15 frames): full at the start,
+  // capped above it, half at the midpoint of the ramp, and nothing from the point
+  // where 70% of the frames are spent, on that exact frame and every one after.
+  it("falls from the full multiplier at the start to nothing at 30% of the frames left", () => {
+    expect(SPEED_UP_END_RATE).toBe(70);
+    const faf = 50;
+    const max = damageSpeedUpMaxMag(faf);
+    expect(damageSpeedUpMag(faf * ONE, faf, max)).toBe(max);
+    expect(damageSpeedUpMag(faf * ONE + 1000, faf, max), "capped above the start").toBe(max);
+    // Halfway along the ramp: frame = 0.65 × faf, where the ratio is 0.5.
+    expect(damageSpeedUpMag(Math.trunc(0.65 * faf * ONE), faf, max)).toBe(Math.trunc(max / 2));
+    expect(damageSpeedUpMag(15 * ONE, faf, max), "exactly 30% left").toBe(0);
+    expect(damageSpeedUpMag(15 * ONE - 1, faf, max)).toBe(0);
+    expect(damageSpeedUpMag(0, faf, max)).toBe(0);
+    // One unit above the edge the ramp has started, but one unit of ramp is far
+    // under one unit of multiplier, so the truncation still gives 0; not for long.
+    expect(damageSpeedUpMag(15 * ONE + 1, faf, max)).toBe(0);
+    expect(damageSpeedUpMag(16 * ONE, faf, max)).toBeGreaterThan(0);
   });
 
   it("never takes a tumbling hit below tumble", () => {
@@ -423,7 +470,7 @@ describe("computeStaleness", () => {
     [6, 0.04255],
     [7, 0.03345],
     [8, 0.025],
-  ])("takes the published %i-th slot reduction off, with no freshness bonus", (i, reduction) => {
+  ])("takes slot %i's published reduction off, with no freshness bonus", (i, reduction) => {
     const queue = new Array<MoveSlot>(9).fill("jab1");
     queue[i] = slot;
     expect(toFloat(computeStaleness(queue, slot).damage)).toBeCloseTo(1 - reduction, 3);
@@ -500,6 +547,24 @@ describe("applyDI", () => {
     expect(applyDI(fx(180), 0, 1)).not.toBe(fx(180));
   });
 
+  // The edge of that rule is 0.17 rad = 9.74° (`DI_MAX_DEVIATION`, "less than DI
+  // angle change param" cannot DI), on a signed angle: inclusive on both sides of
+  // straight ahead, and one fixed-point unit inside it is not DI-able. Final wave,
+  // part 4 (the Task 4 review's 9.74° edge).
+  it("lets a launch DI from exactly 9.74° either side of straight ahead, and not one unit inside", () => {
+    const above = DI_MAX_DEVIATION;
+    const below = TURN - DI_MAX_DEVIATION;
+    expect(launchDiAble(above - 1)).toBe(false);
+    expect(launchDiAble(above)).toBe(true);
+    expect(launchDiAble(below + 1)).toBe(false);
+    expect(launchDiAble(below)).toBe(true);
+    // And `applyDI` agrees: the stick moves the one and not the other.
+    expect(applyDI(above - 1, 0, 1)).toBe(above - 1);
+    expect(applyDI(above, 0, 1)).not.toBe(above);
+    expect(applyDI(below + 1, 0, 1)).toBe(below + 1);
+    expect(applyDI(below, 0, 1)).not.toBe(below);
+  });
+
   // SmashWiki "Directional influence" (https://www.ssbwiki.com/Directional_influence):
   // at most 0.17 rad, less as the stick is tilted less. rubendal `DI`:
   // `variation = |X·ly − Y·lx| / |L|`, linear — not squared.
@@ -542,24 +607,6 @@ describe("applyDI", () => {
         },
       ),
     );
-  });
-});
-
-describe("stickSensibility", () => {
-  // rubendal SSBU-Calculator `StickSensibility`: |v| < 24 reads 0, beyond 120
-  // reads full, v/120 between — the 24/120 dead zone DI and LSI read through.
-  it.each([
-    [0, 0],
-    [23, 0],
-    [-23, 0],
-    [24, 0.2],
-    [60, 0.5],
-    [-60, -0.5],
-    [120, 1],
-    [127, 1],
-    [-128, -1],
-  ])("reads raw %i as %f", (raw, expected) => {
-    expect(toFloat(stickSensibility(raw))).toBeCloseTo(expected, 3);
   });
 });
 

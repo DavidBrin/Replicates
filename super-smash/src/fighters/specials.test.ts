@@ -459,9 +459,11 @@ describe("a dash grab near the edge never takes the holder off the stage", () =>
   });
 
   // The holder pressed down on frame 40: it used to drop off the ledge with the victim, 345 frames
-  // of hold at 150%, and both went through the bottom blast zone on frame 141.
-  it("does not carry a victim at 150% through the blast zone: no stock is lost", () => {
+  // of hold at 150%, and both went through the bottom blast zone on frame 141. The 180 frames played
+  // run past that, so "no KO" is the whole drop, not a window that ends before it could happen.
+  it("does not carry a victim at 150% over the edge: nobody is KO'd in 180 frames, past the old KO on frame 141", () => {
     const { states, kos } = dashGrab("mario", "mario", 0.5, 18, 150, [40, Btn.Down]);
+    expect(states.length).toBeGreaterThan(141);
     expect(kos).toBe(0);
     expect(states.some((s) => s.fighters[0].grabbing >= 0)).toBe(true);
     expect(states.at(-1)!.fighters.map((f) => f.stocks)).toEqual([3, 3]);

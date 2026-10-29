@@ -686,7 +686,10 @@ export interface FighterState {
   /** Frames of Final Smash standby remaining, or 0. */
   finalSmashReady: number;
 
-  /** Per-move staleness queue: the last 9 move slots landed. */
+  /**
+   * Per-move staleness queue: the last 9 move slots landed. `combat.staleShield`
+   * runs parallel to it, entry for entry (see there for the invariant).
+   */
   staleQueue: MoveSlot[];
   /** Hitboxes already connected this move, so one swing hits once. */
   hitThisMove: number[];

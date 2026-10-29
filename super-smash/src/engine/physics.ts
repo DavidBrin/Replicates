@@ -477,8 +477,16 @@ function inLedgeOption(fighters: readonly FighterState[], port: number, platform
  * moment it is grabbed" avoid the trump, and the ledge cannot be shared.
  * UNVERIFIED: that the ledge is refused, rather than grabbed and trumped, for
  * the whole of an option. The fighter asking is told by its port, not by
- * identity, so a copy of it asks as it would. Without the list nobody holds a
- * ledge.
+ * identity, so a copy of it asks as it would.
+ *
+ * The default list is empty, so a call without one is told nobody holds a ledge: the
+ * rule is skipped, it fails open. That is safe, not an oversight (Plan 3 final wave,
+ * part 4; the Task 15 review's N3). This is a pure query: only a caller that acts on
+ * the answer can break "one fighter to a ledge", and the one that does, `step`, passes
+ * `s.fighters` (a test per option, in `combat.test.ts`, fails if it stops). A caller
+ * that forgot the list would be shown a grab the rule refuses and could not make it;
+ * failing closed instead would refuse every ledge to every caller that has no list to
+ * give, which a query for geometry alone (the physics tests) is.
  */
 export function findLedgeGrab(
   f: FighterState,

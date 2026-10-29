@@ -34,8 +34,12 @@ import type { FighterStatus } from "./kind";
  * may air dodge (from frame 41, launch slower than 2.5) or attack (from frame
  * 46, slower than 2) before hitstun runs out. SmashWiki "Hitstun canceling";
  * rubendal `parameters.hitstunCancel`. `actionFrame` counts real frames since
- * the hit's freeze ended, which is how both sources count them: the windows
- * "do not account for the speed-up" (SmashWiki "Hitstun").
+ * the hit's freeze ended, which is how both sources count them. SmashWiki "Hitstun"
+ * (https://www.ssbwiki.com/Hitstun): the cancel's "launch speed thresholds take the
+ * knockback speed-up effect into account, its earliest windows of 40 and 45 frames
+ * do not"; rubendal SSBU-Calculator `js/global.js` L860, "Frame hitstun cancel is
+ * possible isn't affected by speed up"
+ * (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/global.js#L860).
  *
  * Only a *press* (fresh or buffered) cancels: a shield held for a ground tech
  * (Task 12) must not spend the air dodge. A fighter whose air dodge is spent

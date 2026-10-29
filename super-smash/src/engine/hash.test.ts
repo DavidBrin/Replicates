@@ -305,6 +305,23 @@ describe("hashState", () => {
     expect(hashState(a)).not.toBe(hashState(b));
   });
 
+  // The list above only pushes one mark, which the length alone would show. A
+  // hash that mixed `staleShield.length` and skipped the elements would pass it
+  // while two fighters with the same queue and different marks (a shield hit,
+  // which stales at 0.85, against an ordinary one) disagreed on every later hit's
+  // damage: a silent rollback desync (Plan 3, Task 2 review; final wave, part 4).
+  it("distinguishes staleShield marks of the same length, by element and by order", () => {
+    const withMarks = (marks: boolean[]): number => {
+      const s = state();
+      s.fighters[0].staleQueue = marks.map(() => "jab1" as const);
+      s.fighters[0].combat.staleShield = marks;
+      return hashState(s);
+    };
+    expect(withMarks([true])).not.toBe(withMarks([false]));
+    expect(withMarks([true, false])).not.toBe(withMarks([false, true]));
+    expect(withMarks([false, false, true])).not.toBe(withMarks([false, false, false]));
+  });
+
   it("distinguishes a null move from a move named nothing-like", () => {
     const a = state();
     const b = state();

@@ -73,9 +73,12 @@ export const LAUNCH_SPEED_DECAY = fx(0.051);
 /**
  * Hitstun cancel: an airborne victim may air dodge from hitstun frame 41 while
  * the launch is slower than 2.5, or attack from frame 46 while it is slower than
- * 2. SmashWiki "Hitstun canceling" (https://www.ssbwiki.com/Hitstun_canceling):
- * "after frame 40" / "after frame 45"; rubendal SSBU-Calculator
- * `parameters.hitstunCancel` (frames 40/45, launch speeds 2.5/2).
+ * 2. SmashWiki "Hitstun canceling" (https://www.ssbwiki.com/Hitstun_canceling),
+ * Smash 4, whose parameters Ultimate "retains": "A player can now only cancel
+ * hitstun with an airdodge or aerial after 40 and 45 frames respectively, and only
+ * if the current launch speed ... is below 2.5 and 2 respectively." rubendal
+ * SSBU-Calculator `parameters.hitstunCancel` (frames 40/45, launch speeds 2.5/2,
+ * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L26).
  */
 export const HITSTUN_CANCEL_AIR_DODGE_FRAME = 41;
 export const HITSTUN_CANCEL_AERIAL_FRAME = 46;
@@ -99,6 +102,13 @@ export const HITSTUN_MIN_FAF = 5;
 export const SPEED_UP_FAF_MIN = 30;
 export const SPEED_UP_FAF_MAX = 80;
 export const SPEED_UP_MAX_MAG = 6;
+/**
+ * `damage_fly_speed_up_end_rate`, in percent: the multiplier has fallen to nothing
+ * once this much of the reaction frames is spent, so it is gone with 100 − 70 = 30%
+ * of them left (rubendal `ReactionFrameMulSpeedUp`, `unk0 = 1 − end_rate / 100`,
+ * https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/formulas.js#L1117).
+ */
+export const SPEED_UP_END_RATE = 70;
 
 /** Vertical launches (70°-110°) get a fixed fall speed — "balloon knockback". */
 export const BALLOON_ANGLE_MIN = fx(70);
@@ -188,6 +198,12 @@ export const GROUNDED_ZERO_LAUNCH_RATIO: Ratio = [4, 5];
  * Knockback stacking (SmashWiki "Knockback", stacking, Ultimate): a new launch
  * from another source at 0.5×–0.9× of the live one keeps the live one; under
  * 0.5× the target armours through it.
+ *
+ * UNVERIFIED: which side of each edge a launch of exactly 0.5× or 0.9× falls.
+ * The page says "between", and gives no inclusivity. Here exactly 0.5× is kept
+ * (armour is strictly under it) and exactly 0.9× is kept (a launch has to be
+ * faster than 0.9× to replace), so both edges belong to the keep. A Q12 speed
+ * hits an edge only by coincidence, so it rarely decides a real hit.
  */
 export const KB_STACK_ARMOUR: Ratio = [1, 2];
 export const KB_STACK_KEEP: Ratio = [9, 10];
@@ -523,6 +539,11 @@ export const BOUNCE_HITSTUN_RATIO: Ratio = [4, 5];
  * form of teching during the first 15 frames", "After 16 frames ... no longer
  * able to tech against surfaces") and the vanilla param
  * `air_escape_passive_trigger_frame` 15 (`common.xml` L306).
+ * UNVERIFIED: the boundary itself. The page's "first 15 frames" and "After 16
+ * frames" leave the 16th frame open, and its frame count may or may not be this
+ * one's (the entry frame as frame 1); the param's 15 decides it here, so the 16th
+ * frame (`actionFrame` 15) does not tech (Plan 3 final wave, part 4; the Task 12
+ * re-review's M3).
  * UNVERIFIED: that it is only an air dodge out of a tumble (the hitstun cancel
  * or `tumbleFall`). The pages read as if any air dodge within 15 frames could,
  * but SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge) says wavelanding
@@ -657,9 +678,6 @@ export const OFFSCREEN_DAMAGE_CEILING = fx(150);
  * influence"; rubendal SSBU-Calculator `parameters.di = 0.17`.
  */
 export const DI_MAX_DEVIATION = fx(9.74);
-/** Raw stick dead zone and full-throw value for DI/LSI (rubendal `StickSensibility`). */
-export const DI_STICK_DEAD_ZONE = 24;
-export const DI_STICK_FULL = 120;
 /**
  * How much a soft stick (`Btn.Soft`) shortens DI, as a right shift: a quarter.
  *

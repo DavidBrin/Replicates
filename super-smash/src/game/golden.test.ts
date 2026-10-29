@@ -7,6 +7,8 @@ import { cpuInput, type CpuWorld } from "@/ai/cpu";
 import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
+import { launchWorldAngle } from "@/engine/knockback";
+import { toFloat } from "@/engine/fixed";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -299,8 +301,24 @@ function softPaths(before: FighterState, after: FighterState, input: InputFrame,
   // A launch parked by a hit fires on the last frame of hitlag, bent by the
   // direction held then. Being grabbed or KO'd also clears it, but launches nothing.
   const launched = before.pendingFacing !== 0 && after.pendingFacing === 0;
-  if (launched && after.action !== "grabbed" && after.action !== "dead") out.push("DI");
+  if (launched && after.action === "tumble" && diBentTheLaunch(before, after)) out.push("DI");
   return out;
+}
+
+/**
+ * Did DI actually bend the launch that fired this frame? Only a tumbling launch
+ * is DI-able, and one within 0.17 rad of straight ahead is not DI-able at all
+ * (`launchDiAble`), so "a launch fired while a soft direction was held" is not
+ * the path: a launch DI ignored left it untaken. This reads the effect, not the
+ * rule: the direction the launch left in (its DAMAGE energy) against the one the
+ * hit parked, which differ by more than a rounding error and by no more than
+ * DI's 9.74° (a bounce at release, which turns a launch right round, is not DI).
+ */
+function diBentTheLaunch(before: FighterState, after: FighterState): boolean {
+  const parked = toFloat(launchWorldAngle(before.pendingAngle, before.pendingFacing));
+  const fired = (Math.atan2(after.kinetic.damageY, after.kinetic.damageX) * 180) / Math.PI;
+  const turned = Math.abs(((fired - parked + 540) % 360) - 180);
+  return turned > 0.1 && turned <= 9.75;
 }
 
 /**
@@ -315,8 +333,10 @@ function hitKind(attacker: FighterState): string {
 
 /**
  * What must hold on every frame, whatever the fighters do: `vx`/`vy` are
- * exactly the energies' sum, and every number a fighter carries is an integer
- * (Q12 or a count). The static guards cannot see every write
+ * exactly the energies' sum, every number a fighter carries is an integer
+ * (Q12 or a count), and the stale queue's parallel array has its length (and
+ * across fighters, `stateInvariantBreaks`: no ledge held twice). The
+ * static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
  * on every frame of all six matches.
  */
@@ -327,6 +347,34 @@ function invariantBreaks(f: FighterState, frame: number): string[] {
     out.push(`${at}: vx/vy ${f.vx}/${f.vy}, energies ${kineticSumX(f)}/${kineticSumY(f)}`);
   }
   for (const leaf of nonIntegers(f, "fighter")) out.push(`${at}: ${leaf}`);
+  // `combat.staleShield` is `staleQueue`'s parallel array (the invariant is
+  // documented on `CombatState.staleShield`): a drift would stale a move at the
+  // wrong rate without throwing.
+  if (f.combat.staleShield.length !== f.staleQueue.length) {
+    out.push(`${at}: staleShield ${f.combat.staleShield.length} marks, staleQueue ${f.staleQueue.length} entries`);
+  }
+  return out;
+}
+
+/**
+ * What must hold of the whole state on every frame, across fighters: a ledge is
+ * held by one fighter at most. SmashWiki "Ledge" (https://www.ssbwiki.com/Ledge):
+ * "Multiple characters cannot hold onto an edge at the same time". A fighter
+ * hanging on one is trumped off it by the next grab, and one in a ledge option,
+ * which keeps its `ledge` set, has it refused to everybody else (`findLedgeGrab`):
+ * so two fighters with the same `ledge` is a rule broken, however it happened
+ * (Plan 3 final wave, part 4; the Task 15 review's N4).
+ */
+function stateInvariantBreaks(s: GameState, frame: number): string[] {
+  const out: string[] = [];
+  const holder = new Map<string, number>();
+  for (const f of s.fighters) {
+    if (f.ledge === null) continue;
+    const key = `platform ${f.ledge.platform}, side ${f.ledge.side}`;
+    const first = holder.get(key);
+    if (first === undefined) holder.set(key, f.port);
+    else out.push(`frame ${frame}: ports ${first} and ${f.port} both hold the ledge at ${key}`);
+  }
   return out;
 }
 
@@ -379,6 +427,7 @@ function play(match: Match): Played {
       for (const p of softPaths(state.fighters[port], after, inputs[port], prev[port])) soft.add(p);
       if (breaks.length < 5) breaks.push(...invariantBreaks(after, frame));
     }
+    if (breaks.length < 5) breaks.push(...stateInvariantBreaks(out.state, frame));
     state = out.state;
     prev = inputs;
     hits += out.events.hits.length;
@@ -396,8 +445,10 @@ describe("engine golden trace", () => {
   const all = MATCHES.map((m) => played.get(m.name)!);
 
   // A trace of idle fighters would pass every refactor and prove nothing.
-  // Measured 2026-10-27 after the Plan 2 final fix wave, CPU matches then the
-  // script: hits 14/10/13/22 and 5, shield hits 0/1/2/1 and 3, KOs 1/2/1/0 and 1.
+  // Measured 2026-10-28 on the Plan 3 final wave's part 3 (0c249b8), the four CPU
+  // matches in `MATCHES` order, then the script, then the tech lab:
+  // hits 12/26/7/12, 6 and 0; shield hits 0/1/2/0, 3 and 0; KOs 3/0/1/0, 1 and 2.
+  // The floors below are what a refactor must not drop, not these counts.
   function expectCombat(): void {
     const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);
     for (const p of cpu) expect(p.hits).toBeGreaterThan(5);

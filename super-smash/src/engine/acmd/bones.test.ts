@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ONE, fx } from "../fixed";
-import type { HitEffect } from "../types";
+import { activeHitboxes } from "../hitbox";
+import type { HitEffect, Hitbox, MoveDef } from "../types";
 import {
   BONE_POSE_STRIDE,
   LEGACY_BONE_TABLE,
@@ -13,8 +14,8 @@ import {
   newBonePose,
 } from "./bones";
 import type { BakedFighterBones, BonePose, BoneTable } from "./bones";
-import { ATTACK, CATCH, frame, script, shieldSetoffMul } from "./dsl";
-import { ATTR_OF_EFFECT, EFFECT_OF_ATTR, scriptHitboxes } from "./hitboxes";
+import { ATTACK, CATCH, clearAll, frame, script, shieldSetoffMul } from "./dsl";
+import { ATTR_OF_EFFECT, EFFECT_OF_ATTR, scriptHitboxTable, scriptHitboxes } from "./hitboxes";
 import { runScript } from "./interpreter";
 
 /**
@@ -280,6 +281,46 @@ describe("scriptHitboxes", () => {
     const at = (g: number) => scriptHitboxes(runScript(arm, g), "mario", "attack_11", g, baked).map((h) => [h.x, h.y, h.x2, h.y2]);
     expect(at(1)).toEqual([[fx(5), fx(6), fx(11), fx(9)]]);
     expect(at(3)).toEqual([[fx(9), fx(6), fx(15), fx(9)]]);
+  });
+});
+
+describe("scriptHitboxTable", () => {
+  const box = ATTACK({ id: 0, bone: "top", damage: 1.4, angle: 361, kbg: 0, bkb: 30, size: 2, x: 0, y: 6, z: 8 });
+  /** Game frames 4-9 with the same box live on all of them; `again` re-issues it, identical, on frame 7. */
+  const drill = (again: boolean) =>
+    script("game_test", "attack_11", [frame(4), box, frame(7), ...(again ? [clearAll(), box] : []), frame(10), clearAll()]);
+
+  // A multi-hit is `clear_all` and the same box again, the very next command, on one
+  // frame: the box never leaves, so nothing about it changes, but it is a new swing and
+  // must be a new table entry (the Task 18 review's minor 3: untested). Same box and
+  // same ids either side of the re-issue, which is exactly the case a table that only
+  // looked at what changed would merge.
+  it("splits a box that is cleared and issued again, identical, on the same frame into two entries", () => {
+    const table = scriptHitboxTable(drill(true), "mario", LEGACY_BONE_TABLE);
+    expect(table.map((h) => [h.id, h.startFrame, h.endFrame])).toEqual([
+      [0, 4, 6],
+      [0, 7, 9],
+    ]);
+    expect(table[1]).toEqual({ ...table[0], startFrame: 7, endFrame: 9 });
+  });
+
+  it("keeps one entry for the same box left alone", () => {
+    const table = scriptHitboxTable(drill(false), "mario", LEGACY_BONE_TABLE);
+    expect(table.map((h) => [h.id, h.startFrame, h.endFrame])).toEqual([[0, 4, 9]]);
+  });
+
+  // The table is what the readers of `MoveDef.hitboxes` see, so it must list, frame
+  // for frame, the boxes the sim hits with.
+  it.each([true, false])("lists the boxes the sim runs on every game frame (re-issued %s)", (again) => {
+    const s = drill(again);
+    const move: MoveDef = { slot: "jab1", name: "test", totalFrames: 11, hitboxes: scriptHitboxTable(s, "mario", LEGACY_BONE_TABLE) };
+    // The frames a box is live on are the table's own business; what each frame lists is the box.
+    const shape = (list: Hitbox[]): Hitbox[] => list.map((h) => ({ ...h, startFrame: 0, endFrame: 0 }));
+    for (let g = 1; g <= 11; g++) {
+      expect(shape(activeHitboxes(move, g)), `game frame ${g}`).toEqual(
+        shape(scriptHitboxes(runScript(s, g), "mario", "attack_11", g, LEGACY_BONE_TABLE)),
+      );
+    }
   });
 });
 

@@ -27,6 +27,7 @@ import {
   LAUNCH_SPEED_RATIO,
   SPEED_UP_FAF_MAX,
   SPEED_UP_FAF_MIN,
+  SPEED_UP_END_RATE,
   SPEED_UP_MAX_MAG,
   RAGE_START,
   RAGE_CAP,
@@ -55,8 +56,6 @@ import {
   STALE_KNOCKBACK_DAMPING,
   AUTOLINK_UNMODELLED,
   DI_MAX_DEVIATION,
-  DI_STICK_DEAD_ZONE,
-  DI_STICK_FULL,
   SOFT_DI_SHIFT,
   LSI_UP,
   LSI_DOWN,
@@ -92,6 +91,13 @@ const RAGE_SPAN = RAGE_CAP - RAGE_START;
 export const CROUCH_CANCEL_MULTIPLIER: Ratio = [17, 20];
 /** Full turn, in fixed degrees. */
 export const TURN = fx(360);
+/**
+ * Half a turn, in fixed degrees: the mirror `toWorldAngle` and `launchWorldAngle`
+ * reflect an angle about (`HALF_TURN − a`), the signed-angle wrap in `launchDiAble`,
+ * and the angle of a hitbox that launches straight back at the attacker
+ * (`resolveAngle`'s backward flat launch).
+ */
+export const HALF_TURN = fx(180);
 
 /** Fold an angle into [0, 360). Fixed degrees in, fixed degrees out. */
 export function normalizeAngle(angleFx: number): number {
@@ -107,7 +113,7 @@ export function normalizeAngle(angleFx: number): number {
  * the mirror image: cos flips sign, sin does not.
  */
 export function toWorldAngle(angleFx: number, facing: number): number {
-  return facing >= 0 ? normalizeAngle(angleFx) : normalizeAngle(fx(180) - angleFx);
+  return facing >= 0 ? normalizeAngle(angleFx) : normalizeAngle(HALF_TURN - angleFx);
 }
 
 /* ------------------------------------------------------------- knockback -- */
@@ -234,12 +240,17 @@ export function damageSpeedUpMaxMag(faf: number): number {
  * launch that started at `faf`: rubendal `ReactionFrameMulSpeedUp`,
  * `clamp((faf × 0.3 − frame) / (faf × 0.3 − faf), 0, 1) × maxMag` — full at
  * the start, falling to nothing once 70% of the reaction frames are spent
- * (`damage_fly_speed_up_end_rate` 70). One truncation.
+ * (`damage_fly_speed_up_end_rate`, `SPEED_UP_END_RATE`). One truncation.
+ *
+ * In percent, so it stays integer: with `left = 100 − end rate`, the ratio is
+ * `(100 × frame − left × faf) / ((100 − left) × faf)`, which is the formula above
+ * for 30 and 70 with both sides times 10 (the same quotient, so the same result).
  */
 export function damageSpeedUpMag(frame: number, faf: number, maxMag: number): number {
-  const num = 10 * frame - 3 * faf * ONE;
+  const left = 100 - SPEED_UP_END_RATE;
+  const num = 100 * frame - left * faf * ONE;
   if (num <= 0) return 0;
-  const mag = Math.trunc((maxMag * num) / (7 * faf * ONE));
+  const mag = Math.trunc((maxMag * num) / (SPEED_UP_END_RATE * faf * ONE));
   return mag > maxMag ? maxMag : mag;
 }
 
@@ -465,7 +476,11 @@ export function computeStaleness(
   shieldQueue: readonly boolean[] = [],
 ): Staleness {
   // Summed over a common denominator of 100000 × 20, so the 0.85 shield factor
-  // (17/20) and the five-digit table stay exact until one final truncation.
+  // (17/20) and the five-digit table stay exact until one final truncation. Each
+  // term is the table's value over 1e5 times its factor, scaled by that shared 20:
+  // an ordinary slot adds `table × 20`, a shield slot `table × 17` (`num / den`
+  // is 17 / 20 against 1 / 1, and `STALE_SHIELD_RATIO[1]` is the 20 both carry).
+  // The sum is divided by `100_000 × 20` once, below.
   let reduction = 0;
   let present = false;
   const n = Math.min(queue.length, STALE_QUEUE_LENGTH);
@@ -493,27 +508,13 @@ function unitStick(sx: number, sy: number): { x: number; y: number } {
 }
 
 /**
- * A raw stick axis (−128…127) as the game reads it for DI and LSI: nothing
- * inside ±24, full from ±120, linear between. rubendal SSBU-Calculator
- * `StickSensibility`. The keyboard and Plan 1's gamepad bits only ever reach
- * the engine as full (or `Btn.Soft`) deflection, so `applyDI` never needs it
- * today; it is here for an analog stick value, should one reach `InputFrame`.
- */
-export function stickSensibility(raw: number): number {
-  if (raw > -DI_STICK_DEAD_ZONE && raw < DI_STICK_DEAD_ZONE) return 0;
-  if (raw > DI_STICK_FULL) return ONE;
-  if (raw < -DI_STICK_FULL) return -ONE;
-  return Math.trunc((raw * ONE) / DI_STICK_FULL);
-}
-
-/**
  * Whether a launch's angle admits DI and LSI at all: not within 0.17 rad of
  * straight ahead, measured on the signed angle (rubendal: "Cannot DI if launch
  * angle is less than DI angle change param"). Straight *behind* is DI-able.
  */
 export function launchDiAble(angleFx: number): boolean {
   const a = normalizeAngle(angleFx);
-  const signed = a > fx(180) ? a - TURN : a;
+  const signed = a > HALF_TURN ? a - TURN : a;
   return signed <= -DI_MAX_DEVIATION || signed >= DI_MAX_DEVIATION;
 }
 
@@ -584,7 +585,7 @@ export function resolveAngle(hitbox: Pick<Hitbox, "angle">, victimGrounded: bool
   if (hitbox.angle !== SAKURAI_ANGLE) {
     // A strong flat launch is lifted to 32° (mirrored for a backward one).
     if (kb >= FLAT_LIFT_KB && hitbox.angle === 0) return FLAT_LIFT_ANGLE;
-    if (kb >= FLAT_LIFT_KB && hitbox.angle === fx(180)) return fx(180) - FLAT_LIFT_ANGLE;
+    if (kb >= FLAT_LIFT_KB && hitbox.angle === HALF_TURN) return HALF_TURN - FLAT_LIFT_ANGLE;
     return hitbox.angle;
   }
   if (!victimGrounded) return SAKURAI_AIRBORNE;
@@ -643,7 +644,7 @@ export interface LaunchVector {
  */
 export function launchWorldAngle(angleFx: number, facing: number): number {
   const a = normalizeAngle(angleFx);
-  return facing >= 0 ? a : normalizeAngle(fx(180) - a);
+  return facing >= 0 ? a : normalizeAngle(HALF_TURN - a);
 }
 
 export function knockbackToVelocity(kb: number, angleFx: number, facing: number): LaunchVector {
@@ -667,6 +668,10 @@ export function knockbackToVelocity(kb: number, angleFx: number, facing: number)
  * the first launch — its speed, direction and hitstun — and one under 0.5×
  * is armoured through; anything faster takes over. Speeds are Q12; a target
  * with no live launch (`current` 0) is simply launched.
+ *
+ * UNVERIFIED: the edges. The page says "between"; here exactly 0.5× keeps
+ * (armour is strictly under) and exactly 0.9× keeps (replace is strictly over),
+ * see `KB_STACK_ARMOUR`.
  */
 export function knockbackStack(fresh: number, current: number): "replace" | "keep" | "armour" {
   if (current <= 0) return "replace";

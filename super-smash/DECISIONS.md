@@ -1984,9 +1984,10 @@ air, and is spiked now (the final review, Important 1).
   ahead can be DI'd (rubendal's Sm4sh-Calculator wiki: "the attack causes tumble; launch angle
   is greater than 9.74°"; Ultimate keeps Smash 4's DI, SmashWiki "Directional influence").
   Straight behind is DI-able. DI was square in the stick and bent every launch. Plan 1's `Btn.Soft`
-  still quarters the bend (`SOFT_DI_SHIFT`, D54), UNVERIFIED as before. `stickSensibility`
-  (rubendal `StickSensibility`: nothing inside ±24, full from ±120) is ready for an analog
-  stick and has no caller.
+  still quarters the bend (`SOFT_DI_SHIFT`, D54), UNVERIFIED as before. Task 4 also
+  added `stickSensibility` (rubendal `StickSensibility`: nothing inside ±24, full from ±120)
+  for an analog stick; nothing ever called it, and part 4 of the final wave removed it with its
+  constants. An analog value reaching `InputFrame` would bring it back from that rule.
 - *LSI* acts inside the same gate, and not on a launch strictly between 65° and 115° or
   between 245° and 295° (rubendal's `LSI` tests are strict).
 - *SDI* pulses grow ×1.15 from the sixth consecutive hit (SmashWiki "Smash directional

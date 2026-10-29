@@ -877,7 +877,9 @@ function captorOf(s: GameState, f: FighterState): FighterState | null {
  * "land"). A victim held past the edge (the captor at the lip, facing out) is
  * held in the air: not grounded, so no restore, and a release leaves it to fall.
  * It is placed, so gravity never moves it, and it is not "in the air" for the
- * ledge's airtime bonus either. Positions are written, not velocities:
+ * ledge's airtime bonus either (`airTime` stays 0 while held). UNVERIFIED: that
+ * last part; SmashWiki "Ledge" counts the time in the air before a grab, and no
+ * source says what being held does to it. Positions are written, not velocities:
  * `kineticSet` re-sums the energies.
  */
 function holdAtCaptor(
@@ -2083,6 +2085,17 @@ function applyHit(
   // parked autolink is then compared by its knockback's speed and a live one by
   // its vector's (`launchSpeed`). The hits of one multi-hit move are one source
   // and always replace each other, so an autolink move never stacks with itself.
+  //
+  // Four readings here are UNVERIFIED (the Task 8 review). Live: the page compares
+  // the new launch with "the first hit's [launch speed] at the time the second hit
+  // connects" and says nothing of a launch whose hitstun is over or one parked in
+  // the freeze; here a fighter is live while `hitstun` runs or a launch is parked.
+  // The 0.8 grounded-flat factor: `current` is the launch as it flies (a parked one
+  // carries the 0.8 in `pendingKnockback`), `fresh` is the new knockback × 0.03
+  // without it, so a grounded flat second hit compares as stronger than it would
+  // launch. The edges, exactly 0.5× and 0.9× (`KB_STACK_ARMOUR`). And a kept launch
+  // keeps the `balloon` flag its own angle set: it is not reclassified for the
+  // vector it is turned to, which may be inside or outside the balloon cone.
   const source = candidateKey(c);
   const live = victim.hitstun > 0 || victim.pendingFacing !== 0;
   const current = !live

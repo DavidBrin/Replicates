@@ -13,6 +13,13 @@ export interface CombatState {
    * Parallel to `FighterState.staleQueue`: entry i landed on a shield, so it
    * stales at 0.85 (SmashWiki "Stale-move negation"). Pushed and trimmed with
    * the queue, never on its own.
+   *
+   * INVARIANT: `staleShield.length === staleQueue.length` at every frame boundary.
+   * Anything that pushes, trims, empties or replaces the queue (`enterStaleQueue`,
+   * the KO reset, `cloneState`, a fixture) must do the same to this array.
+   * `computeStaleness` reads a missing mark as "not a shield hit", so a drift
+   * would not throw: it would stale a move at the wrong rate. The golden trace's
+   * per-frame invariants check it on every frame of every match.
    */
   staleShield: boolean[];
   /**

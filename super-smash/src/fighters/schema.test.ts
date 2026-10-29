@@ -12,6 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { toFloat } from "@/engine/fixed";
 import type { FighterDef, Hitbox, MoveDef, MoveSlot } from "@/engine/types";
+import { ACTIVE_SCRIPT_SLOTS } from "./acmd/active";
 import { AERIAL_SLOTS, FIGHTERS, REQUIRED_SLOTS, getFighter } from "./index";
 
 /** Look a fighter up, failing loudly rather than returning undefined. */
@@ -380,6 +381,23 @@ describe("hitbox values", () => {
         ).toBe(ids.length);
       }
     }
+  });
+
+  // The check this replaced was every box of a move distinct, which caught a mistyped
+  // id (two boxes both 0 on different frames pass the per-frame rule above). It still
+  // holds for every move the sim runs from its compiled table: only a script-run slot
+  // reuses ids across windows (`ACTIVE_SCRIPT_SLOTS`), so those alone are exempt (Plan 3,
+  // Task 18 review, minor 6).
+  it.each(each)("%s gives each move it runs from its compiled table ids distinct across the whole move", (_name, fighter) => {
+    const scripted = new Set<MoveSlot>(ACTIVE_SCRIPT_SLOTS[fighter.id]);
+    let checked = 0;
+    for (const { slot, move } of moves(fighter)) {
+      if (scripted.has(slot)) continue;
+      checked += 1;
+      const ids = move.hitboxes.map((h) => `${h.grabbing ? "grab " : ""}${h.id}`);
+      expect(new Set(ids).size, `${fighter.name}'s ${slot} reuses a hitbox id: ${ids.join(", ")}`).toBe(ids.length);
+    }
+    expect(checked, "some moves are still compiled-only").toBeGreaterThan(0);
   });
 
   it.each(each)("%s only meteors on a downward angle", (_name, fighter) => {

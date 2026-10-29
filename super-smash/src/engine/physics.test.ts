@@ -25,6 +25,7 @@ import {
   walkVelocity,
 } from "./physics";
 import type { ActionState, FighterAttributes, FighterState, StageDef } from "./types";
+import { battlefield as BATTLEFIELD } from "@/stages/battlefield";
 
 const ATTRS: FighterAttributes = {
   weight: 98,
@@ -425,34 +426,31 @@ describe("clampShiftToStage", () => {
   });
 
   // The lip: the origin is just past the edge but the fighter is above the
-  // surface, and the shift carries it back over the span. `resolveCollision`
-  // lands that fighter ("strictly above last frame lands rather than being
-  // pushed"), so the shift does too, instead of throwing it out sideways.
-  // Battlefield's main platform reaches 79.99; the fighter starts 1.51 beyond it.
+  // surface, and the shift carries it back over the span. `resolveCollision` lands
+  // that fighter (its wall test is "Strictly above: a fighter level with the surface
+  // last frame (one stepping or dropping off it) is already at the wall, not landing
+  // on it", `physics.ts`), so the shift does too, instead of throwing it out sideways.
+  // On the real Battlefield (`BATTLEFIELD`): its main platform reaches 79.99 and its
+  // floor is at y = 0.111, not 0 (`stages/battlefield.ts`); the fighter starts 1.51
+  // beyond the ledge. (A hand-built stage at y = 0 stood in until the Task 11 re-review.)
   it("lands a fighter above the surface on a diagonal shift back over the lip, not out sideways", () => {
-    const battlefield: StageDef = {
-      ...STAGE,
-      platforms: [{ x: 0, y: 0, halfWidth: fx(79.99), soft: false, ledges: true }],
-    };
-    const f = shifted(fighter({ x: fx(-79.5), y: fx(-1) }), fx(-81.5), fx(1), battlefield);
-    expect([f.x, f.y]).toEqual([fx(-79.5), 0]);
+    const f = shifted(fighter({ x: fx(-79.5), y: fx(-1) }), fx(-81.5), fx(1), BATTLEFIELD);
+    expect([f.x, f.y]).toEqual([fx(-79.5), fx(0.111)]);
     // ...as the collision phase does for the same move.
     const g = fighter({ x: fx(-79.5), y: fx(-1) });
-    expect(resolveCollision(g, fx(-81.5), fx(1), battlefield, ATTRS, 0).landed).toBe(true);
+    expect(resolveCollision(g, fx(-81.5), fx(1), BATTLEFIELD, ATTRS, 0).landed).toBe(true);
     expect(g.x).toBe(fx(-79.5));
+    expect(g.y).toBe(fx(0.111));
   });
 
   // The edge tie (Task 11 re-review; Plan 3 final wave): a fighter exactly level with the
   // surface, beside the stage, is at the wall in `resolveCollision` ("Strictly above"), so
   // a shift that carries it back over the span pushes it out sideways there too.
   it("pushes a fighter level with the surface beside the stage out sideways, as the wall does", () => {
-    const battlefield: StageDef = {
-      ...STAGE,
-      platforms: [{ x: 0, y: 0, halfWidth: fx(79.99), soft: false, ledges: true }],
-    };
-    const f = shifted(fighter({ x: fx(-79.5), y: fx(-2) }), fx(-81.5), 0, battlefield);
+    // Level: the previous frame's origin is exactly Battlefield's floor, 0.111.
+    const f = shifted(fighter({ x: fx(-79.5), y: fx(-2) }), fx(-81.5), fx(0.111), BATTLEFIELD);
     const g = fighter({ x: fx(-79.5), y: fx(-2) });
-    const out = resolveCollision(g, fx(-81.5), 0, battlefield, ATTRS, 0);
+    const out = resolveCollision(g, fx(-81.5), fx(0.111), BATTLEFIELD, ATTRS, 0);
     expect(out.landed).toBe(false);
     expect([g.x, g.y]).toEqual([fx(-79.99) - ATTRS.width, fx(-2)]);
     expect([f.x, f.y]).toEqual([g.x, g.y]);
@@ -566,6 +564,20 @@ describe("ledges", () => {
       const me = asking();
       const far = holding("ledgeRoll", { x: fx(-80), ledge: { platform: 0, side: -1 } });
       expect(findLedgeGrab(me, STAGE, 0, 0, [me, far])).toEqual({ platform: 0, side: 1 });
+    });
+
+    // The ledge is one platform's one side: an option on a *different platform's* ledge
+    // on the same side leaves this one free (`inLedgeOption` compares both).
+    it("is that one platform's ledge only", () => {
+      const twoLedges: StageDef = {
+        ...STAGE,
+        platforms: [STAGE.platforms[0], { x: 0, y: fx(40), halfWidth: fx(80), soft: false, ledges: true }],
+      };
+      const me = asking();
+      const upstairs = holding("ledgeRoll", { y: fx(40), ledge: { platform: 1, side: 1 } });
+      expect(findLedgeGrab(me, twoLedges, 0, 0, [me, upstairs])).toEqual({ platform: 0, side: 1 });
+      // The same fighter on this platform's ledge does shut it.
+      expect(findLedgeGrab(me, twoLedges, 0, 0, [me, holding("ledgeRoll")])).toBeNull();
     });
 
     // The list knows the fighter asking by its port, so a copy of it is not another fighter.
