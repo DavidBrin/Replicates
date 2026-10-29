@@ -17,19 +17,45 @@ export type Mat4 = readonly number[];
 
 export const IDENTITY_Q: Quat = [0, 0, 0, 1];
 
+/** A quaternion or vector the caller owns and refills (the renderer's per-frame scratch). */
+export type QuatOut = [number, number, number, number];
+export type Vec3Out = [number, number, number];
+
 export function qMul(a: Quat, b: Quat): Quat {
-  const [ax, ay, az, aw] = a;
-  const [bx, by, bz, bw] = b;
-  return [
-    aw * bx + ax * bw + ay * bz - az * by,
-    aw * by - ax * bz + ay * bw + az * bx,
-    aw * bz + ax * by - ay * bx + az * bw,
-    aw * bw - ax * bx - ay * by - az * bz,
-  ];
+  return qMulInto([0, 0, 0, 0], a, b);
+}
+
+/** `a · b` written into `out` (which may be `a` or `b`); the one formula `qMul` also runs. */
+export function qMulInto(out: QuatOut, a: Quat, b: Quat): QuatOut {
+  // Indexed reads, not destructuring: no iterator, so nothing is allocated even before V8 optimises this.
+  const ax = a[0], ay = a[1], az = a[2], aw = a[3];
+  const bx = b[0], by = b[1], bz = b[2], bw = b[3];
+  out[0] = aw * bx + ax * bw + ay * bz - az * by;
+  out[1] = aw * by - ax * bz + ay * bw + az * bx;
+  out[2] = aw * bz + ax * by - ay * bx + az * bw;
+  out[3] = aw * bw - ax * bx - ay * by - az * bz;
+  return out;
 }
 
 export function qConj(q: Quat): Quat {
-  return [-q[0], -q[1], -q[2], q[3]];
+  return qConjInto([0, 0, 0, 0], q);
+}
+
+export function qConjInto(out: QuatOut, q: Quat): QuatOut {
+  out[0] = -q[0];
+  out[1] = -q[1];
+  out[2] = -q[2];
+  out[3] = q[3];
+  return out;
+}
+
+/** Copy `q` into `out`. */
+export function qCopyInto(out: QuatOut, q: Quat): QuatOut {
+  out[0] = q[0];
+  out[1] = q[1];
+  out[2] = q[2];
+  out[3] = q[3];
+  return out;
 }
 
 export function qNormalize(q: Quat): Quat {
@@ -45,17 +71,33 @@ export function qAxisAngle(axis: Vec3, angle: number): Quat {
 
 /** Rotation about +X — the side view's screen normal in model space. */
 export function qRotX(angle: number): Quat {
-  return [Math.sin(angle / 2), 0, 0, Math.cos(angle / 2)];
+  return qRotXInto([0, 0, 0, 0], angle);
+}
+
+export function qRotXInto(out: QuatOut, angle: number): QuatOut {
+  out[0] = Math.sin(angle / 2);
+  out[1] = 0;
+  out[2] = 0;
+  out[3] = Math.cos(angle / 2);
+  return out;
 }
 
 export function qRotate(q: Quat, v: Vec3): Vec3 {
-  const [x, y, z, w] = q;
-  const [vx, vy, vz] = v;
+  return qRotateInto([0, 0, 0], q, v);
+}
+
+/** `v` turned by `q`, written into `out` (which may be `v`). */
+export function qRotateInto(out: Vec3Out, q: Quat, v: Vec3): Vec3Out {
+  const x = q[0], y = q[1], z = q[2], w = q[3];
+  const vx = v[0], vy = v[1], vz = v[2];
   // t = 2 · (q.xyz × v); v' = v + w·t + q.xyz × t
   const tx = 2 * (y * vz - z * vy);
   const ty = 2 * (z * vx - x * vz);
   const tz = 2 * (x * vy - y * vx);
-  return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
+  out[0] = vx + w * tx + (y * tz - z * ty);
+  out[1] = vy + w * ty + (z * tx - x * tz);
+  out[2] = vz + w * tz + (x * ty - y * tx);
+  return out;
 }
 
 /**

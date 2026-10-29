@@ -7,7 +7,7 @@ import { compose, mAxis, mInvertRigid, mMul, mTranslation, normalize, qRotX, typ
 import { buildRig, type SkeletonFile } from "../skeleton/skeleton";
 import { testSkeleton } from "../skeleton/testSkeleton";
 import { RETARGET } from "./map";
-import { accumulatedAngles, calibrate, retarget } from "./retarget";
+import { accumulatedAngles, calibrate, newPoseBuffer, retarget, retargetInto } from "./retarget";
 
 const rig = buildRig(testSkeleton());
 const cal = calibrate(rig, BASE_RIG);
@@ -287,6 +287,32 @@ describe("whole-body turns", () => {
     const acc = accumulatedAngles(BASE_RIG, DISTINCT, r);
     expect(angleDelta(acc.upperArmR, sideAngle(world, "ShoulderR", "ArmR"))).toBeCloseTo(0, 9);
     expect(angleDelta(acc.forearmL, sideAngle(world, "ArmL", "HandL"))).toBeCloseTo(0, 9);
+  });
+});
+
+describe("posing in place (the renderer, every frame)", () => {
+  it("refills one buffer with exactly what a fresh one gets, pose after pose, keeping every array it owns", () => {
+    const buffer = newPoseBuffer(rig);
+    const arrays = [buffer.q, buffer.t, ...buffer.q, ...buffer.t];
+    const poses: [PoseAngles, number][] = [
+      [DISTINCT, deg(15)],
+      [{}, 0],
+      [{ ...DISTINCT, root: deg(-6) }, deg(-140)],
+      [{ thighR: 2.6, upperArmL: deg(-80), forearmL: deg(30) }, deg(400)],
+      [DISTINCT, deg(15)],
+    ];
+    for (const [angles, rotation] of poses) {
+      expect(retargetInto(cal, BASE_RIG, angles, rotation, buffer)).toBe(buffer);
+      const fresh = retarget(cal, BASE_RIG, angles, rotation);
+      expect(buffer.q).toEqual(fresh.q);
+      expect(buffer.t).toEqual(fresh.t);
+    }
+    expect([buffer.q, buffer.t, ...buffer.q, ...buffer.t].every((a, k) => a === arrays[k])).toBe(true);
+  });
+
+  it("refuses a buffer made for another skeleton", () => {
+    const fewer = newPoseBuffer({ ...rig, names: rig.names.slice(1) });
+    expect(() => retargetInto(cal, BASE_RIG, {}, 0, fewer)).toThrow(`retarget ${rig.fighter}: a pose buffer for ${rig.names.length - 1} bones, not ${rig.names.length}`);
   });
 });
 

@@ -479,7 +479,7 @@ export function drawDepth(f: FighterState): number {
 }
 
 /** Intangible frames blink; invincible ones do not (SPEC's distinction). */
-function intangibleAlpha(f: FighterState): number {
+export function intangibleAlpha(f: FighterState): number {
   if (f.intangible > 0) return f.actionFrame % 6 < 3 ? 0.42 : 0.8;
   if (f.invincible > 0) return 0.92;
   if (f.action === "respawnPlatform") return 0.85;

@@ -58,7 +58,7 @@ import { PACED_BY_SPEED, SLOT_POSE, poseNameFor } from "@/render/poses/timing";
 import type { Rig } from "@/render/skeleton";
 import { buildRig, type Rig3, type SkeletonFile } from "../skeleton/skeleton";
 import { calibrate, retarget, type Calibration } from "../retarget/retarget";
-import { sideBonePose, worldMatrices, type RootXform } from "./fk";
+import { IDENTITY_ROOT, sideBonePose, worldMatrices, type RootXform } from "./fk";
 
 /* --------------------------------------------------------- clip timing -- */
 
@@ -212,13 +212,20 @@ export function fighterPoser(def: FighterDef, skeleton: SkeletonFile): FighterPo
 
 /** The root transform a pose sample asks for (offsets and squash), at the fighter's size. */
 export function rootXformOf(p: FighterPoser, s: PoseSample): RootXform {
-  return {
-    forward: s.offsetX * p.rigScale2d,
-    up: s.offsetY * p.rigScale2d,
-    squashForward: s.scaleX,
-    squashUp: s.scaleY,
-    scale: p.scale,
-  };
+  return rootXformInto(p, s, { ...IDENTITY_ROOT });
+}
+
+/** A `RootXform` its owner refills every frame (the renderer's). */
+export type RootXformOut = { -readonly [K in keyof RootXform]: RootXform[K] };
+
+/** `rootXformOf`, written into `out`. */
+export function rootXformInto(p: FighterPoser, s: PoseSample, out: RootXformOut): RootXformOut {
+  out.forward = s.offsetX * p.rigScale2d;
+  out.up = s.offsetY * p.rigScale2d;
+  out.squashForward = s.scaleX;
+  out.squashUp = s.scaleY;
+  out.scale = p.scale;
+  return out;
 }
 
 /** World matrices of every bone for a pose sample plus a clip spin (radians). */
