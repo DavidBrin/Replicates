@@ -6367,3 +6367,42 @@ describe("a press on a status's last frame is not lost (final wave, part 2, item
     expect(a[17], "its frame 12").toBe("jumpSquat");
   });
 });
+
+/* ------------------------------------- Plan 4: where a hit touched the body -- */
+
+// Ruling R9 (Plan 4, Task 12): a hit event also says where the box met the body,
+// the point of the box's spine nearest the hurt capsule it reached deepest, so a
+// spark can sit on a capsule's tip and not at its first point (`x`, `y`, which
+// stay the box's near end as before). Presentation only: events are in neither
+// the golden digest nor `hashState`.
+describe("a hit says where the box touched the body (Plan 4, ruling R9)", () => {
+  function hitWith(attack: ReturnType<typeof ATTACK>): StepEvents["hits"][number] {
+    const def: FighterDef = {
+      ...BASE_DEF,
+      scripts: { jab1: { name: "game_attack11", motion: "attack_11", commands: [frame(4), attack, frame(7), clearAll()] } },
+    };
+    const s = standing(ctxFor(def));
+    s.fighters[1].x = fx(20);
+    const hits = play(s, 8, JAB, ctxFor(def)).flatMap((f) => f.events.hits);
+    expect(hits).toHaveLength(1);
+    return hits[0];
+  }
+
+  it("is the point of a capsule box nearest the body, not its first point", () => {
+    // The box runs from 2 to 15 out at 6 up; the body at 20 is 4 wide, its spine 4 to 8 up.
+    const hit = hitWith(ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 6, z: 2, z2: 15 }));
+    expect([hit.x, hit.y]).toEqual([fx(2), fx(6)]);
+    expect([hit.contactX, hit.contactY]).toEqual([fx(15), fx(6)]);
+  });
+
+  it("is the same whichever end the script writes first", () => {
+    const hit = hitWith(ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 2, x: 0, y: 6, z: 15, z2: 2 }));
+    expect([hit.x, hit.y]).toEqual([fx(15), fx(6)]);
+    expect([hit.contactX, hit.contactY]).toEqual([fx(15), fx(6)]);
+  });
+
+  it("is a sphere's centre", () => {
+    const hit = hitWith(ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 30, size: 6, x: 0, y: 6, z: 14 }));
+    expect([hit.contactX, hit.contactY]).toEqual([hit.x, hit.y]);
+  });
+});

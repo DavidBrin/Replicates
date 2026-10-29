@@ -265,6 +265,93 @@ export function sweptCapsulePenetration(
   return Math.max(near, far, now, was);
 }
 
+/**
+ * Which of `targets` (at least one) a box reaches deepest, and how deep, by
+ * `sweptCapsulePenetration` — the first of any reached equally deep. With a
+ * bake a fighter is one hurt capsule per bone (Plan 4, Task 12), and Plan 3's
+ * glancing blow is a box that reaches the body less than 0.1 deep anywhere: a
+ * box that grazes an arm on its way into the chest is a hit. Without one it is
+ * Plan 2's single capsule, index 0.
+ */
+export function deepestReach(
+  prevX: number,
+  prevY: number,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  radius: number,
+  targets: readonly Capsule[],
+): { index: number; depth: number } {
+  let index = 0;
+  let depth = sweptCapsulePenetration(prevX, prevY, x, y, dx, dy, radius, targets[0]);
+  for (let i = 1; i < targets.length; i++) {
+    const d = sweptCapsulePenetration(prevX, prevY, x, y, dx, dy, radius, targets[i]);
+    if (d > depth) {
+      index = i;
+      depth = d;
+    }
+  }
+  return { index, depth };
+}
+
+/**
+ * `v × num / den`, truncated: a fraction of a fixed-point length taken in one
+ * integer division, not through a Q12 parameter, which would put the point 3
+ * units along a 10-unit segment 8 Q12 units short. The operands stay far inside
+ * 2^53 for anything within a blast zone.
+ */
+function along(v: number, num: number, den: number): number {
+  return Math.trunc((v * num) / den);
+}
+
+/** The point of segment a→b nearest (px, py), fixed-point: where `pointSegmentDistSq` measures to. */
+function nearestOnSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): { x: number; y: number } {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lenSq = mul(abx, abx) + mul(aby, aby);
+  if (lenSq <= 0) return { x: ax, y: ay };
+  const dot = clamp(mul(px - ax, abx) + mul(py - ay, aby), 0, lenSq);
+  return { x: ax + along(abx, dot, lenSq), y: ay + along(aby, dot, lenSq) };
+}
+
+/**
+ * Where a box touched a capsule: the point of the box's spine nearest the
+ * capsule's spine (Plan 4, ruling R9), so a hit's spark can sit where a sword's
+ * tip met an arm rather than at the box's first point. A sphere's is its
+ * centre. Integers throughout, but presentation only: it is reported in the hit
+ * event and nothing in the sim reads it.
+ *
+ * Where the spines cross, it is the crossing. Otherwise the nearest pair has an
+ * end of one of them in it (the identity `segmentSegmentDistSq` rests on): one
+ * of the box's ends, or the point of the box's spine nearest one of the
+ * capsule's ends — whichever pair is closest, the first in that order on a tie.
+ */
+export function contactPoint(box: Capsule, target: Capsule): { x: number; y: number } {
+  const ax = box.x2 - box.x1;
+  const ay = box.y2 - box.y1;
+  if (segmentsIntersect(box.x1, box.y1, box.x2, box.y2, target.x1, target.y1, target.x2, target.y2)) {
+    const bx = target.x2 - target.x1;
+    const by = target.y2 - target.y1;
+    const denom = mul(ax, by) - mul(ay, bx);
+    // Parallel and overlapping: no single crossing, but a capsule end lies on the spine.
+    if (denom !== 0) {
+      // The crossing's fraction of the box's spine, as a ratio of two cross products.
+      const num = clamp((mul(target.x1 - box.x1, by) - mul(target.y1 - box.y1, bx)) * Math.sign(denom), 0, Math.abs(denom));
+      return { x: box.x1 + along(ax, num, Math.abs(denom)), y: box.y1 + along(ay, num, Math.abs(denom)) };
+    }
+  }
+  const candidates = [
+    { at: { x: box.x1, y: box.y1 }, d: pointSegmentDistSq(box.x1, box.y1, target.x1, target.y1, target.x2, target.y2) },
+    { at: { x: box.x2, y: box.y2 }, d: pointSegmentDistSq(box.x2, box.y2, target.x1, target.y1, target.x2, target.y2) },
+    { at: nearestOnSegment(target.x1, target.y1, box.x1, box.y1, box.x2, box.y2), d: pointSegmentDistSq(target.x1, target.y1, box.x1, box.y1, box.x2, box.y2) },
+    { at: nearestOnSegment(target.x2, target.y2, box.x1, box.y1, box.x2, box.y2), d: pointSegmentDistSq(target.x2, target.y2, box.x1, box.y1, box.x2, box.y2) },
+  ];
+  let best = candidates[0];
+  for (const c of candidates) if (c.d < best.d) best = c;
+  return best.at;
+}
+
 /** Does either end of the target's spine lie inside the parallelogram a capsule's spine sweeps? */
 function spineInsideSweep(
   prevX: number,

@@ -626,7 +626,7 @@ describe("a connecting pummel", () => {
 
     const hit = ticks[HOLD_INPUT_TICK];
     expect(hit.hits).toEqual([
-      { attacker: 0, victim: 1, damage: 5591, x: 24576, y: 24576, knockback: 0, angle: 0, hitboxId: 0 },
+      { attacker: 0, victim: 1, damage: 5591, x: 24576, y: 24576, contactX: 24576, contactY: 24576, knockback: 0, angle: 0, hitboxId: 0 },
     ]);
     const [a, b] = hit.state.fighters;
     expect(a).toMatchObject({ action: "pummel", move: "pummel", grabbing: 1, hitlag: 6, hitThisMove: [1] });
@@ -675,7 +675,7 @@ describe("the four throws", () => {
     const connected = ticks.findIndex((k) => k.hits.length > 0);
     expect(connected).toBe(HOLD_INPUT_TICK + 5);
     expect(ticks[connected].hits).toEqual([
-      { attacker: 0, victim: 1, damage: 30107, x: 24576, y: 24576, knockback: 310933, angle: t.angle, hitboxId: 0 },
+      { attacker: 0, victim: 1, damage: 30107, x: 24576, y: 24576, contactX: 24576, contactY: 24576, knockback: 310933, angle: t.angle, hitboxId: 0 },
     ]);
     expect(ticks.filter((k) => k.hits.length > 0)).toHaveLength(1);
     const [a, b] = ticks[connected].state.fighters;

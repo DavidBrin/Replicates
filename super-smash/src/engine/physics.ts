@@ -212,6 +212,8 @@ export interface CollisionOptions {
    * (Plan 3, Task 14, fix round 2). Nothing else in the engine stops at a cliff.
    */
   readonly cliffStop?: boolean;
+  /** This frame's ECB from the bake (Plan 4); `ecbOf` when absent. */
+  readonly ecb?: Ecb;
 }
 
 /**
@@ -233,7 +235,7 @@ export function resolveCollision(
   opts: CollisionOptions = {},
 ): CollisionOutcome {
   const out: CollisionOutcome = { landed: false, leftGround: false, blocked: false, wall: 0, ceiling: false };
-  const ecb = ecbOf(f, attrs);
+  const ecb = opts.ecb ?? ecbOf(f, attrs);
 
   // Already standing on something: the only question is whether it is still there.
   if (f.grounded && f.platform >= 0 && f.platform < stage.platforms.length) {
@@ -372,6 +374,11 @@ export function resolveCollision(
  * beyond the platform's edge is otherwise pushed back out sideways; one whose
  * origin was within its span stays on top of it (or, from below, under it).
  * A soft platform only ever has the floor.
+ *
+ * The body is `ecb`, the one `resolveCollision` is given this frame: with a
+ * bake, the bones' (Plan 4, ruling R6). A shift kept out by a smaller body
+ * could leave the bones' ECB inside a wall that `resolveCollision`, finding the
+ * origin already past the edge, would never push it out of. `ecbOf` when absent.
  */
 export function clampShiftToStage(
   f: FighterState,
@@ -380,9 +387,9 @@ export function clampShiftToStage(
   stage: StageDef,
   attrs: FighterAttributes,
   frame: number,
+  ecb: Ecb = ecbOf(f, attrs),
 ): void {
   if (f.x === prevX && f.y === prevY) return;
-  const ecb = ecbOf(f, attrs);
   for (const p of stage.platforms) {
     const cx = platformCentreX(p, frame);
     const reach = p.halfWidth;
@@ -590,12 +597,16 @@ export function blastZoneKO(f: FighterState, stage: StageDef): KOKind | null {
  * halfway up. Ultimate derives it from bones each frame and locks the bottom
  * to the feet on the ground (research/rebuild-2026-10/README.md §3, "ECB").
  *
- * A partial seam, UNVERIFIED as a rule: nothing public gives the sizes per
- * fighter or per animation, so until Plan 4 bakes bones the diamond is the
- * hurtbox's height and half-width with its bottom at the feet in the air as
- * well; `resolveCollision` tests the side points against a platform's span as
- * a rectangle (no slanted diamond edges) and keeps the platform's own reach
- * for ceilings. Plan 4 completes it from bones.
+ * UNVERIFIED as a rule: nothing public gives the sizes per fighter or per
+ * animation. With a bake, `step` reads it off this frame's bones (Plan 4,
+ * `acmd/hurtboxes.ts` `bakedEcb`: the top of the highest hurt capsule, the
+ * pelvis capsule's reach to either side, the bottom at the feet) and passes it
+ * to `resolveCollision`, `clampShiftToStage`, the ledge grab and the trump.
+ * `ecbOf` is Plan 2's box, what they read without one: the hurtbox's height
+ * and half-width, its bottom at the feet in the air as well. Either way
+ * `resolveCollision` tests the side points against a platform's span as a
+ * rectangle (no slanted diamond edges) and keeps the platform's own reach for
+ * ceilings.
  */
 export interface Ecb {
   readonly bottom: number;
@@ -613,10 +624,9 @@ export interface Point {
 }
 
 /**
- * The ECB's four points in world space, the seam Plan 4 fills from bones. The
- * engine does not call it yet: collision (`resolveCollision`) and ledge grabs
- * read `ecbOf`'s bottom, top and half-width as a rectangle, which these four
- * points stand for.
+ * The ECB's four points in world space, from Plan 2's box. The engine does not
+ * call it: collision (`resolveCollision`) and ledge grabs read an ECB's bottom,
+ * top and half-width as a rectangle, which these four points stand for.
  */
 export function ecbPoints(
   f: Pick<FighterState, "x" | "y" | "grounded">,

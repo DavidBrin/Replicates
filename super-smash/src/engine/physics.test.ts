@@ -473,6 +473,21 @@ describe("clampShiftToStage", () => {
     expect([f.x, f.y]).toEqual([0, fx(-31)]);
   });
 
+  // Plan 4, ruling R6: with a bake the fighter's body is its bones' ECB, which `step`
+  // passes in, so a shift is kept out by the same body `resolveCollision` pushes.
+  it("keeps the ECB it is given out of the stage, not the attributes' box (Plan 4, R6)", () => {
+    const bones = { bottom: 0, top: fx(20), half: fx(7) };
+    // Beside the wall: 85 is clear of the box (80 + 4) but inside the bones' body (80 + 7).
+    const side = fighter({ x: fx(85), y: fx(-10) });
+    clampShiftToStage(side, fx(90), fx(-10), STAGE, ATTRS, 0, bones);
+    expect(side.x).toBe(fx(87));
+    expect(shifted(fighter({ x: fx(85), y: fx(-10) }), fx(90), fx(-10)).x).toBe(fx(85));
+    // Under the stage: the bones' head is 20 up, not 12.
+    const under = fighter({ x: 0, y: -HARD_PLATFORM_DEPTH - fx(19) });
+    clampShiftToStage(under, 0, -HARD_PLATFORM_DEPTH - fx(21), STAGE, ATTRS, 0, bones);
+    expect(under.y).toBe(-HARD_PLATFORM_DEPTH - fx(20));
+  });
+
   it("never leaves a shifted fighter inside the body, whichever way it comes in", () => {
     const reach = fx(80) + ATTRS.width;
     const inside = (x: number, y: number): boolean =>
@@ -669,6 +684,24 @@ describe("the environment collision box (ECB)", () => {
     expect(f.x).toBe(fx(80) + ATTRS.width);
     // A fighter who walked off faces out, away from the ledge: the rear grab box reaches it.
     expect(findLedgeGrab(f, STAGE, 0, ATTRS.width)).toEqual({ platform: 0, side: 1 });
+  });
+
+  // Plan 4: with a bake the ECB is this frame's bones' (`acmd/hurtboxes.ts`), which
+  // `step` passes in; without one it is still the box above.
+  it("pushes and stops the ECB it is given, not the attributes' box (Plan 4)", () => {
+    const bones = { bottom: 0, top: fx(20), half: fx(7) };
+    // The wall: the bones' side point, 7 out, not the box's 4.
+    const f = fighter({ x: fx(81), y: fx(-1), vy: -fx(1), facing: 1 });
+    resolveCollision(f, fx(80.5), 0, STAGE, ATTRS, 0, { ecb: bones });
+    expect(f.x).toBe(fx(87));
+    // The ceiling: a head 20 up meets the underside the box's 12 would still be below.
+    const rising = (ecb?: typeof bones) => {
+      const g = fighter({ x: 0, y: -HARD_PLATFORM_DEPTH - fx(19), vy: fx(2) });
+      const out = resolveCollision(g, 0, -HARD_PLATFORM_DEPTH - fx(21), STAGE, ATTRS, 0, ecb === undefined ? {} : { ecb });
+      return { y: g.y, ceiling: out.ceiling };
+    };
+    expect(rising(bones)).toEqual({ y: -HARD_PLATFORM_DEPTH - fx(20), ceiling: true });
+    expect(rising()).toEqual({ y: -HARD_PLATFORM_DEPTH - fx(19), ceiling: false });
   });
 
   it("pushes a body moving away from the wall clear without stopping it", () => {

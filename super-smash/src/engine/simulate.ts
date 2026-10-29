@@ -73,14 +73,16 @@ import {
   capsulesOverlap,
   circle,
   clearHitRecord,
+  contactPoint,
+  deepestReach,
   hitboxWorldPos,
   hurtboxCapsule,
   markHit,
   resolveClank,
   sweptCapsuleOverlaps,
-  sweptCapsulePenetration,
 } from "./hitbox";
 import type { Capsule } from "./hitbox";
+import type { Ecb, Point } from "./physics";
 import {
   advanceProjectile,
   cloneProjectile,
@@ -133,7 +135,8 @@ import {
   kineticSetX,
 } from "./kinetic";
 import { LEGACY_BONE_TABLE, type BoneTable } from "./acmd/bones";
-import type { BakeTables } from "./acmd/bakeTables";
+import { LEGACY_BAKE, type BakeTables } from "./acmd/bakeTables";
+import { bakedEcb, fighterHurtboxes, restEcb } from "./acmd/hurtboxes";
 import { launchBefore, techOrBounce, updateTechInput } from "./tech";
 import { cloneCombat, emptyCombat } from "./combat";
 import type { CombatState } from "./combat";
@@ -152,7 +155,6 @@ import { releaseHeld, struggleInGrab } from "./status/attack";
 import { emptyEvents } from "./types";
 import type {
   ActionState,
-  FighterAttributes,
   FighterDef,
   FighterState,
   GameState,
@@ -545,6 +547,11 @@ export function step(
   const events = emptyEvents();
   const stage = ctx.stage(s.stageId);
   const defs = s.fighters.map((f) => ctx.fighter(f.defId));
+  const bones = ctx.bones ?? LEGACY_BONE_TABLE;
+  const bake = ctx.bake ?? LEGACY_BAKE;
+  // A fighter's ECB this frame: from its bones (Plan 4), or Plan 2's box without a bake.
+  // One body for every reader: the collision, the SDI clamp, the ledge grab and the trump.
+  const ecbFor = (i: number, f: FighterState): Ecb => bakedEcb(defs[i], f, s.frame, bake, bones) ?? ecbOf(f, defs[i].attributes);
   const prevInputs = opts.prevInputs ?? inputs;
 
   s.frame += 1;
@@ -640,7 +647,7 @@ export function step(
       // only if the victim is still standing on one.
       const releasing = f.hitlag === 0 && f.pendingFacing !== 0;
       if (releasing) applyAsdi(f, intent);
-      clampShiftToStage(f, shiftedFromX, shiftedFromY, stage, defs[i].attributes, s.frame);
+      clampShiftToStage(f, shiftedFromX, shiftedFromY, stage, defs[i].attributes, s.frame, ecbFor(i, f));
       if (releasing) {
         leaveGroundIfShiftedOff(f, stage, s.frame);
         releasePendingLaunch(f, intent);
@@ -695,6 +702,8 @@ export function step(
     if (captorOf(s, f) !== null) continue; // held: the captor's floor is all it touches
 
     const before = launchBefore(f);
+    // The ECB from this frame's bones (Plan 4), or Plan 2's box without a bake.
+    const ecb = ecbFor(i, f);
     const outcome = resolveCollision(
       f,
       preIntegrate[i].x,
@@ -703,7 +712,7 @@ export function step(
       defs[i].attributes,
       s.frame,
       // The catch statuses stop at the edge instead of walking off it.
-      { cliffStop: isCatchStatus(f.action) },
+      { cliffStop: isCatchStatus(f.action), ecb },
     );
     // A tumbling body that meets a surface techs or bounces (Plan 3, Task 12);
     // otherwise a landing is a landing — a missed tech lies down in `onLanded`.
@@ -718,7 +727,7 @@ export function step(
     }
 
     if (!f.grounded) {
-      const grab = findLedgeGrab(f, stage, s.frame, ecbOf(f, defs[i].attributes).half, s.fighters);
+      const grab = findLedgeGrab(f, stage, s.frame, ecb.half, s.fighters);
       if (grab !== null) {
         const pos = ledgePosition(stage, grab, s.frame);
         const frames =
@@ -747,7 +756,8 @@ export function step(
           const other = s.fighters[j];
           if (j === i || other.ledge === null || other.action !== "ledgeHang") continue;
           if (other.ledge.platform !== grab.platform || other.ledge.side !== grab.side) continue;
-          trumpLedge(other, ecbOf(other, defs[j].attributes).half + ONE);
+          // Clear of the stage by its own ECB's half-width and a unit: its bones', with a bake (ruling R6).
+          trumpLedge(other, ecbFor(j, other).half + ONE);
         }
         grabLedge(f, grab.platform, grab.side, pos.x, pos.y, frames);
       }
@@ -762,7 +772,7 @@ export function step(
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     const captor = f.action === "dead" ? null : captorOf(s, f);
-    if (captor !== null) holdAtCaptor(f, captor, defs[captor.port].attributes, defs[i].attributes, stage, s.frame);
+    if (captor !== null) holdAtCaptor(f, captor, bodyHalf(defs[captor.port], bake, bones), bodyHalf(defs[i], bake, bones), stage, s.frame);
   }
 
   /* -- 6. hitboxes: gather, clank, connect --------------------------------- */
@@ -773,10 +783,10 @@ export function step(
   spawnDueProjectiles(s, defs, beforeActionFrame, frozen, projectilePrev);
 
   const destroyed = new Set<number>();
-  const candidates = gatherHitboxes(s, defs, prevPos, frozen, ctx.bones ?? LEGACY_BONE_TABLE);
+  const candidates = gatherHitboxes(s, defs, prevPos, frozen, bones);
   appendProjectileCandidates(s, defs, candidates, projectilePrev);
   resolveClanks(s, candidates, events, destroyed);
-  resolveHits(s, defs, candidates, intents, events, destroyed);
+  resolveHits(s, defs, bake, bones, candidates, intents, events, destroyed);
   if (destroyed.size > 0) {
     s.projectiles = s.projectiles.filter((p) => !destroyed.has(p.instanceId));
   }
@@ -871,10 +881,13 @@ function captorOf(s: GameState, f: FighterState): FighterState | null {
  *
  * UNVERIFIED: where a held fighter stands. SmashWiki "Grab" says only that "the
  * opponent is immobilized"; in the game the victim is pulled to the grabber's
- * hand (CAPTURE_PULLED, then CAPTURE_WAIT attached to the `throw` joint), a bone
- * position that arrives with Plan 4's bake. Until then: bodies touching, the two
- * hurtbox radii apart, in front of the captor. The roster's legacy pummel and
- * throw boxes were written for a victim about this close.
+ * hand (CAPTURE_PULLED, then CAPTURE_WAIT attached to the `throw` joint). The
+ * stand-in: bodies touching, in front of the captor, `captorHalf + half` apart:
+ * the two fighters' standing ECB half-widths from the bake (Plan 4, ruling R7:
+ * a body's size is its bones'), or the legacy `attributes.width` of one the
+ * bake does not cover (`bodyHalf`). Placing it at the captor's baked `throw`
+ * joint every frame is carried to Plan 5. The pummel and throw boxes are
+ * catch-only (no geometry test), so the distance moves no hit.
  *
  * Standing where the captor stands counts as touching the ground, if there is
  * ground there: a victim over the captor's platform is grounded on it, and a
@@ -891,13 +904,13 @@ function captorOf(s: GameState, f: FighterState): FighterState | null {
 function holdAtCaptor(
   f: FighterState,
   captor: FighterState,
-  captorAttrs: FighterAttributes,
-  attrs: FighterAttributes,
+  captorHalf: number,
+  half: number,
   stage: StageDef,
   frame: number,
 ): void {
   const ahead = captor.facing >= 0 ? 1 : -1;
-  f.x = captor.x + ahead * (captorAttrs.width + attrs.width);
+  f.x = captor.x + ahead * (captorHalf + half);
   f.y = captor.y;
   const platform = captor.grounded ? stage.platforms[captor.platform] : undefined;
   const over = platform !== undefined && Math.abs(f.x - platformCentreX(platform, frame)) <= platform.halfWidth;
@@ -911,6 +924,15 @@ function holdAtCaptor(
     f.jumpsUsed = 0;
     f.airDodged = false;
   }
+}
+
+/**
+ * How wide a fighter's body is to either side, standing: its standing ECB's
+ * half-width from the bake (`restEcb`, Plan 4), or Plan 2's `attributes.width`
+ * without one.
+ */
+function bodyHalf(def: FighterDef, bake: BakeTables, bones: BoneTable): number {
+  return restEcb(def, bake, bones)?.half ?? def.attributes.width;
 }
 
 /* ------------------------------------------------------------- hit phases -- */
@@ -1148,6 +1170,8 @@ function isAerialSlot(slot: MoveSlot): boolean {
 function resolveHits(
   s: GameState,
   defs: readonly FighterDef[],
+  bake: BakeTables,
+  bones: BoneTable,
   candidates: readonly Candidate[],
   intents: readonly Intent[],
   events: StepEvents,
@@ -1156,7 +1180,10 @@ function resolveHits(
   for (let v = 0; v < s.fighters.length; v++) {
     const victim = s.fighters[v];
     if (victim.action === "dead" || victim.action === "entering") continue;
-    const hurtbox = hurtboxCapsule(victim, defs[v].attributes);
+    // One capsule per bone from the bake (Plan 4), else Plan 2's single capsule.
+    const hurtboxes = fighterHurtboxes(defs[v], victim, s.frame, bake, bones) ?? [hurtboxCapsule(victim, defs[v].attributes)];
+    /** How deep `c` reaches the body at its deepest, and on which capsule. */
+    const reachOf = (c: Candidate) => deepestReach(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtboxes);
 
     // Per source, the lowest-id hitbox that reaches this victim.
     const perSource = new Map<number, Candidate>();
@@ -1175,20 +1202,19 @@ function resolveHits(
         // box sits there only for some of the roster (Plan 3, Task 14).
         if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
       } else {
-        if (!sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtbox)) continue;
+        // Any capsule the box reaches (Plan 4: one per bone).
+        if (!hurtboxes.some((h) => sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, h))) continue;
         // A box that only grazes the body — less than 0.1 deep — is a glancing
         // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
         // before the lowest-id pick, so it cannot shadow a deeper box of the same
-        // source. UNVERIFIED: that a grab, or a hit that reaches a raised shield,
-        // is exempt. SmashWiki "Glancing blow" says nothing of either, so this is
-        // a choice, not a rule: they keep the plain overlap test they always had
-        // (a grab stays as reliable as it was, a shield is poked as it was).
-        // D56 lists it under Open questions.
-        if (
-          sweptCapsulePenetration(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtbox) < GLANCING_BLOW_DEPTH &&
-          !c.hitbox.grabbing &&
-          !hitReachesShield(victim, defs[v], c)
-        ) {
+        // source. With a bake the body is a capsule per bone, and the depth is the
+        // deepest any of them is reached (Plan 4): a box that grazes an arm on its
+        // way into the chest hits. UNVERIFIED: that a grab, or a hit that reaches
+        // a raised shield, is exempt. SmashWiki "Glancing blow" says nothing of
+        // either, so this is a choice, not a rule: they keep the plain overlap test
+        // they always had (a grab stays as reliable as it was, a shield is poked as
+        // it was). D56 lists it under Open questions.
+        if (reachOf(c).depth < GLANCING_BLOW_DEPTH && !c.hitbox.grabbing && !hitReachesShield(victim, defs[v], c)) {
           continue;
         }
       }
@@ -1215,11 +1241,14 @@ function resolveHits(
       if (victim.intangible > 0) continue;
       // Fresh out of a grab: grabs pass through, unspent, for 60 frames (Task 14).
       if (c.hitbox.grabbing === true && victim.combat.grabImmune > 0) continue;
+      // Where the box met the body, for the spark: on the capsule it reached
+      // deepest (ruling R9). A catch-only box is not tested, but it has one too.
+      const contact = contactPoint(capsuleOf(c), hurtboxes[reachOf(c).index]);
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
-      if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, events);
-      else if (c.slot === "pummel" && c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, events);
-      else applyHit(s, attacker, victim, defs[v], c, intents[v], events);
+      if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
+      else if (c.slot === "pummel" && c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
+      else applyHit(s, attacker, victim, defs[v], c, contact, intents[v], events);
       if (c.destroyOnHit && c.projectile !== null) destroyed.add(c.projectile.instanceId);
     }
   }
@@ -1308,6 +1337,7 @@ function applyInvincibleHit(
   attacker: FighterState,
   victim: FighterState,
   c: Candidate,
+  contact: Point,
   events: StepEvents,
 ): void {
   recordHit(c, attacker, victim.port);
@@ -1336,6 +1366,8 @@ function applyInvincibleHit(
     damage: 0,
     x: c.x,
     y: c.y,
+    contactX: contact.x,
+    contactY: contact.y,
     knockback: 0,
     // An invincible defender is not launched, so there is no direction to
     // report and the spark stays symmetric.
@@ -1772,6 +1804,7 @@ function applyHeldHit(
   attacker: FighterState,
   victim: FighterState,
   c: Candidate,
+  contact: Point,
   events: StepEvents,
 ): void {
   const hb = c.hitbox;
@@ -1789,6 +1822,8 @@ function applyHeldHit(
     damage,
     x: c.x,
     y: c.y,
+    contactX: contact.x,
+    contactY: contact.y,
     knockback: 0,
     angle: 0,
     hitboxId: hb.id,
@@ -1856,6 +1891,7 @@ function applyHit(
   victim: FighterState,
   victimDef: FighterDef,
   c: Candidate,
+  contact: Point,
   victimIntent: Intent,
   events: StepEvents,
 ): void {
@@ -2025,6 +2061,8 @@ function applyHit(
       damage,
       x: c.x,
       y: c.y,
+      contactX: contact.x,
+      contactY: contact.y,
       knockback: 0,
       angle: 0,
       hitboxId: hb.id,
@@ -2132,6 +2170,8 @@ function applyHit(
       damage,
       x: c.x,
       y: c.y,
+      contactX: contact.x,
+      contactY: contact.y,
       knockback: verdict === "keep" ? kb : 0,
       // A kept launch goes on the way it goes, and the spark says so (Plan 3 final
       // wave; the Task 8 review's minor). One armoured through launches nothing new.
@@ -2215,6 +2255,8 @@ function applyHit(
     damage,
     x: c.x,
     y: c.y,
+    contactX: contact.x,
+    contactY: contact.y,
     knockback: kb,
     // The un-DI'd direction. DI has not been chosen yet — it is sampled on the
     // last frame of hitlag — so this is the launch as the *hit* set it, which

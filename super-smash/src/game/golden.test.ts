@@ -15,6 +15,8 @@ import { Btn } from "@/engine/types";
 import type { ActionState, FighterState, GameState, InputFrame, MatchRules, MoveSlot } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
+import { bakedContext } from "./bake";
+import { readBakeFromDisk } from "./bakeNode";
 
 import { TECH_LAB } from "./goldenLab";
 import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
@@ -52,7 +54,7 @@ const LEVELS = [9, 7] as const;
 
 const FIGHTER_BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
 const STAGE_BY_ID = new Map(STAGES.map((s) => [s.id, s]));
-const CTX: SimContext = {
+const BASE: SimContext = {
   fighter(id) {
     const d = FIGHTER_BY_ID.get(id);
     if (d === undefined) throw new Error(`unknown fighter ${id}`);
@@ -64,6 +66,9 @@ const CTX: SimContext = {
     return s;
   },
 };
+// As the game plays (Plan 4): the committed bake — limb-bone hitboxes, per-bone
+// hurtboxes, the bone-derived ECB — and the limb-bone scripts it can place (Task 13).
+const CTX: SimContext = bakedContext(BASE, readBakeFromDisk());
 
 /** One frame's keys for every port, given the state they will be applied to. */
 type Driver = (state: GameState, frame: number) => readonly InputFrame[];
@@ -155,6 +160,9 @@ const MATCHES: readonly Match[] = [
  * four" was before only a hanging fighter could be trumped), two fighters going for one
  * ledge being what recovering CPUs do. After Task 18 none does (the CPUs space by the
  * imported scripts' reach), so the script trumps Mario on 1788 (`goldenScript.ts`).
+ * Plan 4 Task 12 (the baked world, at SSBU's sizes): the CPU matches reach 39, the script
+ * 44 and the tech lab its 7; the Donkey Kong and Pikachu match trumps a ledge once again,
+ * and the script still trumps Mario, on 1786.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -445,9 +453,11 @@ describe("engine golden trace", () => {
   const all = MATCHES.map((m) => played.get(m.name)!);
 
   // A trace of idle fighters would pass every refactor and prove nothing.
-  // Measured 2026-10-28 on the Plan 3 final wave's part 4 (d8ef263), the four CPU
-  // matches in `MATCHES` order, then the script, then the tech lab:
-  // hits 12/18/7/11, 6 and 0; shield hits 0/3/2/0, 3 and 0; KOs 3/1/1/2, 1 and 2.
+  // Measured 2026-10-29 on Plan 4 Task 12 (the baked world: per-bone hurtboxes and
+  // the bones' ECB, at SSBU's sizes), the four CPU matches in `MATCHES` order, then
+  // the script, then the tech lab: hits 15/32/13/17, 6 and 0; shield hits 1/2/0/1,
+  // 3 and 0; KOs 1/0/3/1, 1 and 2. (Plan 3's, on Plan 2's boxes: hits 12/18/7/11,
+  // shield hits 0/3/2/0, KOs 3/1/1/2.)
   // The floors below are what a refactor must not drop, not these counts.
   function expectCombat(): void {
     const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);

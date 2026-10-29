@@ -27,7 +27,7 @@ export const TICK_RATE = 60;
  * that task rewrites the digest in the pin and nothing else. Bumping this
  * number fails the same test until the pin's version follows.
  */
-export const ENGINE_RULES_VERSION = 3;
+export const ENGINE_RULES_VERSION = 4;
 
 /* ------------------------------------------------------------------ combat -- */
 

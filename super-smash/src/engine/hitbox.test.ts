@@ -12,6 +12,8 @@ import {
   circle,
   circlesOverlap,
   clearHitRecord,
+  contactPoint,
+  deepestReach,
   hitboxWorldPos,
   hurtboxCapsule,
   markHit,
@@ -526,5 +528,74 @@ describe("capsule hitboxes (Plan 3, Task 17)", () => {
         { numRuns: 300 },
       );
     });
+  });
+});
+
+/* ----------------------------------------- per-bone hurtboxes (Plan 4) -- */
+
+describe("a box against one hurt capsule per bone (Plan 4, Task 12)", () => {
+  // The box: a sphere of radius 1 at the origin, standing still.
+  const reach = (targets: readonly Capsule[]) => deepestReach(0, 0, 0, 0, 0, 0, fx(1), targets);
+  const depth = (t: Capsule) => sweptCapsulePenetration(0, 0, 0, 0, 0, 0, fx(1), t);
+  const graze = circle(fx(2.95), 0, fx(2)); // 0.05 deep: a glancing blow on its own
+  const deep = circle(0, fx(1), fx(2)); //     2 deep
+
+  it("is the deepest any capsule is reached, and which one, whatever the order", () => {
+    expect(reach([graze, deep])).toEqual({ index: 1, depth: depth(deep) });
+    expect(reach([deep, graze])).toEqual({ index: 0, depth: depth(deep) });
+    expect(depth(graze)).toBeLessThan(GLANCING_BLOW_DEPTH);
+    expect(depth(deep)).toBeGreaterThan(GLANCING_BLOW_DEPTH);
+  });
+
+  it("is the single capsule's own depth when there is one (Plan 2's body, no bake)", () => {
+    expect(reach([graze])).toEqual({ index: 0, depth: depth(graze) });
+  });
+
+  it("keeps the first of two capsules reached equally deep", () => {
+    expect(reach([deep, graze, deep])).toEqual({ index: 0, depth: depth(deep) });
+  });
+
+  it("is negative when no capsule is reached", () => {
+    expect(reach([circle(fx(10), 0, fx(2)), circle(0, fx(-9), fx(1))]).depth).toBeLessThan(0);
+  });
+});
+
+describe("where a box touches a capsule (Plan 4, ruling R9)", () => {
+  const seg = (x1: number, y1: number, x2: number, y2: number, r = fx(1)): Capsule => ({ x1: fx(x1), y1: fx(y1), x2: fx(x2), y2: fx(y2), r });
+  const at = (x: number, y: number) => ({ x: fx(x), y: fx(y) });
+
+  it("is a sphere's centre, wherever the capsule is", () => {
+    expect(contactPoint(circle(fx(3), fx(4), fx(2)), seg(10, -5, 10, 5))).toEqual(at(3, 4));
+  });
+
+  it("is where the box's spine crosses the capsule's", () => {
+    expect(contactPoint(seg(0, 0, 10, 0), seg(4, -3, 4, 3))).toEqual(at(4, 0));
+    expect(contactPoint(seg(0, 0, 10, 10), seg(0, 10, 10, 0))).toEqual(at(5, 5));
+  });
+
+  it("is the box's end nearest a capsule beyond it", () => {
+    expect(contactPoint(seg(0, 0, 10, 0), seg(15, 2, 15, 8))).toEqual(at(10, 0));
+    expect(contactPoint(seg(10, 0, 0, 0), seg(15, 2, 15, 8))).toEqual(at(10, 0));
+  });
+
+  it("is the point under the capsule's nearer end when that end is over the box's spine", () => {
+    expect(contactPoint(seg(0, 0, 10, 0), seg(3, 5, 7, 9))).toEqual(at(3, 0));
+    expect(contactPoint(seg(0, 0, 10, 0), seg(6, -9, 6, -2))).toEqual(at(6, 0));
+  });
+
+  it("lies on the box's spine, as integers, for any pair", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer({ min: fx(-60), max: fx(60) }), { minLength: 8, maxLength: 8 }),
+        ([ax, ay, bx, by, cx, cy, dx, dy]) => {
+          const box = { x1: ax, y1: ay, x2: bx, y2: by, r: fx(1) };
+          const p = contactPoint(box, { x1: cx, y1: cy, x2: dx, y2: dy, r: fx(1) });
+          expect(Number.isInteger(p.x) && Number.isInteger(p.y)).toBe(true);
+          // On the spine within rounding: Q12 truncation leaves it a few units off the line at most.
+          expect(pointSegmentDistSq(p.x, p.y, ax, ay, bx, by)).toBeLessThanOrEqual(16);
+        },
+      ),
+      { numRuns: 300 },
+    );
   });
 });

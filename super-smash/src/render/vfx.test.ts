@@ -39,6 +39,8 @@ function hit(over: Partial<{ damage: number; knockback: number; victim: number; 
         damage: over.damage ?? fx(10),
         x: 0,
         y: fx(6),
+        contactX: 0,
+        contactY: fx(6),
         knockback: over.knockback ?? fx(60),
         angle: over.angle ?? fx(45), hitboxId: 0,
       },
@@ -646,8 +648,8 @@ describe("the hitbox a swing landed with", () => {
     const state = swinger();
     const events = makeEvents({
       hits: [
-        { attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: first },
-        { attacker: 0, victim: 2, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: second },
+        { attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(30), angle: 0, hitboxId: first },
+        { attacker: 0, victim: 2, damage: fx(9), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(30), angle: 0, hitboxId: second },
       ],
     });
     ingestEvents(v, events, state);
@@ -677,7 +679,7 @@ describe("the hitbox a swing landed with", () => {
     ingestEvents(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 0 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(30), angle: 0, hitboxId: 0 }],
       }),
       state,
     );
@@ -689,7 +691,7 @@ describe("the hitbox a swing landed with", () => {
     ingestEvents(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 2 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(30), angle: 0, hitboxId: 2 }],
       }),
       later,
     );
@@ -707,7 +709,7 @@ describe("the hitbox a swing landed with", () => {
     ingestEvents(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 0 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(30), angle: 0, hitboxId: 0 }],
       }),
       tip,
     );
@@ -719,7 +721,7 @@ describe("the hitbox a swing landed with", () => {
     ingestEvents(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, knockback: fx(30), angle: 0, hitboxId: 1 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(9), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(30), angle: 0, hitboxId: 1 }],
       }),
       later,
     );
@@ -748,7 +750,7 @@ describe("a hit survives the freeze it caused", () => {
     stepVfx(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
       }),
       contact,
     );
@@ -770,7 +772,7 @@ describe("a hit survives the freeze it caused", () => {
     stepVfx(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
       }),
       contact,
     );
@@ -789,7 +791,7 @@ describe("a hit survives the freeze it caused", () => {
     stepVfx(
       v,
       makeEvents({
-        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
+        hits: [{ attacker: 0, victim: 1, damage: fx(14), x: 0, y: 0, contactX: 0, contactY: 0, knockback: fx(60), angle: 0, hitboxId: 0 }],
       }),
       first,
     );

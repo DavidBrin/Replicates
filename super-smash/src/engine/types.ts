@@ -810,8 +810,17 @@ export interface StepEvents {
     attacker: number;
     victim: number;
     damage: number;
+    /** The box's near end: its point for a sphere, its first point for a capsule. */
     x: number;
     y: number;
+    /**
+     * Where the box touched the body: the point of the box's spine nearest the
+     * hurt capsule it reached deepest (Plan 4, ruling R9; `contactPoint`). A
+     * sphere's is its centre, `x`/`y`; a capsule's can be its far end, a
+     * sword's tip. Presentation only, like everything here: where a spark goes.
+     */
+    contactX: number;
+    contactY: number;
     knockback: number;
     /**
      * The world direction the victim is about to travel, in fixed degrees from
