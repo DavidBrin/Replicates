@@ -420,7 +420,14 @@ const ftiltClip: PoseClip = {
   ],
 };
 
-/** Link, up tilt: an overhead arcing slash that starts from behind him. */
+/**
+ * Link, up tilt: an overhead arcing slash that starts from behind him.
+ *
+ * The off hand drops to shoulder height as the blade comes over (Plan 4, Task
+ * 13b fix round 1): raised behind him it stood 2.3 units above the blade on the
+ * last live frame, once the model's blade followed the drawn one, and the
+ * script's boxes ride the sword arm (`game_attackhi3`: `sword2`, `armr`).
+ */
 const utiltClip: PoseClip = {
   loop: false,
   strike: 0.3,
@@ -458,7 +465,7 @@ const utiltClip: PoseClip = {
         thighR: 162, shinR: 20, footR: -86,
         thighL: 198, shinL: 18, footL: -84,
         upperArmR: 88, forearmR: 2,
-        upperArmL: 306, forearmL: -8,
+        upperArmL: 286, forearmL: -8,
       }),
       offsetY: 0.1,
     },

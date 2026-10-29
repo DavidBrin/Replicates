@@ -35,6 +35,12 @@ export interface Drive {
   /** Child bone defining the along-axis; absent means local +X. Must share the order of `bones`. */
   readonly tips?: readonly (string | null)[];
   readonly rest: "bind" | "down";
+  /**
+   * Degrees the bone is turned past the 2D bone's direction, in the side plane
+   * (clockwise, as the 2D angles are). Read only by a "down" drive; absent is 0.
+   * For a hand whose model holds something across it rather than along it.
+   */
+  readonly turn?: number;
 }
 
 export const RETARGET: Readonly<Partial<Record<BoneName, Drive>>> = {
@@ -56,14 +62,35 @@ export const RETARGET: Readonly<Partial<Record<BoneName, Drive>>> = {
 };
 
 /**
- * Per-fighter replacements for `RETARGET` entries, for skeletons that do not
- * follow the humanoid naming. Empty until the spike's dumps say otherwise:
- * `skeletons.test.ts` (Plan 4 Task 6) runs every committed skeleton through
- * `calibrate`, which names the missing bone, so an entry here is added only
- * against that failure. (`retarget.test.ts` runs the invented test skeleton and
- * the map row by row.)
+ * Per-fighter replacements for `RETARGET` entries, read only through
+ * `driveFor`. An entry is added against a measured failure: a skeleton that
+ * does not follow the humanoid naming (`skeletons.test.ts` runs every committed
+ * skeleton through `calibrate`, which names the missing bone), or a bone whose
+ * model differs from the 2D drawing.
+ *
+ * The swordsmen's right hand (Plan 4, Task 13b fix round 1). The 2D rig draws
+ * the blade along `handR` (`drawFalchion`, `masterSword`). The SSBU
+ * model's fist holds it across: in the bind pose `HandR`→`HaveR` runs along −X
+ * while Marth's `Sword1` (+Z) and Link's `Sword2` (+X) run along +Z, a
+ * quarter-turn apart. Driven like any other hand, the 3D blade lay 82–92° back
+ * from the drawn one on every live frame of the 12 sword slots, and the
+ * scripts' sword boxes with it. Turning the hand a further 90° puts the blade
+ * on the drawn blade, within −6° to +4° (`strike.test.ts` holds it to ±10°);
+ * the hand's bones and tip are unchanged, so nothing else moves.
  */
-export const RETARGET_OVERRIDES: Readonly<Record<string, Readonly<Partial<Record<BoneName, Drive>>>>> = {};
+export const RETARGET_OVERRIDES: Readonly<Record<string, Readonly<Partial<Record<BoneName, Drive>>>>> = {
+  link: { handR: { ...RETARGET.handR!, turn: 90 } },
+  marth: { handR: { ...RETARGET.handR!, turn: 90 } },
+};
+
+/**
+ * The drive `fighterId`'s skeleton uses for a 2D bone: its override, else the
+ * shared row. The one resolver: the bake and the renderer (`calibrate`), the
+ * placeable-bone rule and the tests all ask here.
+ */
+export function driveFor(fighterId: string, bone: BoneName): Drive | undefined {
+  return RETARGET_OVERRIDES[fighterId]?.[bone] ?? RETARGET[bone];
+}
 
 /** The bone whose bind height is the whole-body rotation pivot (the 2D rig pivots at the pelvis). */
 export const PIVOT_BONE = "Hip";

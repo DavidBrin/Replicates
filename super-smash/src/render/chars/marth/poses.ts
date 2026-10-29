@@ -1412,16 +1412,13 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * three units below his feet. The rest (`game_attackairlw`) hang off the
    * sword arm and the blade (`armr`, `sword1`), live on frames 9–13.
    *
-   * **Posed for the blade the SSBU model holds (Plan 4, Task 13b).** The 2D
-   * Falchion is drawn along the hand; the model grips it across the fist, so on
-   * the retargeted skeleton the blade points a quarter-turn back from the hand
-   * (blade = arm + `handR` − 90°). The first version drew the crescent along the
-   * hand, and on the skeleton the blade rose to head height in front on frames
-   * 12 and 13 while only the root box went below. Here the wrist turns the
-   * blade under him: in front and down on frame 9, straight down and a shade
-   * behind on frame 11, behind and down on frame 13, the tip box 0.9, −0.5 and
-   * 0.7 units off the floor line. Drawn in 2D, the blade on these frames points
-   * back; the 3D is what the game plays.
+   * **The blade passes under him (Plan 4, Task 13b).** The first version drew
+   * the arc too high: the blade rose to head height in front on frames 12 and 13
+   * while only the root box went below. Here the wrist turns the blade under
+   * him: in front and down on frame 9, straight down and a shade behind on
+   * frame 11, behind and down on frame 13, the tip box 0.9, −0.5 and 0.7 units
+   * off the floor line. The blade is the hand's direction, in 2D and, since the
+   * swordsmen's grip turn (`retarget/map.ts`), on the skeleton too.
    *
    * Under him needs him lower: the hand hangs nine units up, a blade under seven
    * long, and the published meteor is 3.3 below his feet. So the legs tuck and
@@ -1430,9 +1427,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * `first = 8` (the earliest hitbox is frame 9), `total = 59`, `strike = 0.3`:
    *
    *   t 0     → f 0    blade up and forward
-   *   t 0.3   → f 8    under him from the front: A = 160°, blade 145°
-   *   t 0.327 → f 10   the meteor: A = 185°, blade 192°
-   *   t 0.355 → f 12   the last live frame: A = 195°, blade 210°
+   *   t 0.3   → f 8    under him from the front: arm 160°, blade 145°
+   *   t 0.327 → f 10   the meteor: arm 185°, blade 192°
+   *   t 0.355 → f 12   the last live frame: arm 195°, blade 210°
    *   t 0.38  → f 14   swept through and up behind
    *   t 0.6   → f 30   recovering
    */
@@ -1452,14 +1449,14 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         ease: "in",
       },
       // Frame 9: the blade comes in under him from the front, 35° short of
-      // straight down (A = 160°, blade 145°).
+      // straight down (arm 160°, blade 145°).
       {
         t: 0.3,
         pose: P({
           hip: -4, torso: 20, head: -14,
           thighR: 118, shinR: 112, footR: -80,
           thighL: 128, shinL: 108, footL: -80,
-          upperArmR: 144, forearmR: 0, handR: 75,
+          upperArmR: 144, forearmR: 0, handR: -15,
           upperArmL: 214, forearmL: -40,
         }),
         offsetY: -2.8,
@@ -1474,7 +1471,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           hip: -6, torso: 26, head: -18,
           thighR: 116, shinR: 114, footR: -80,
           thighL: 126, shinL: 110, footL: -80,
-          upperArmR: 165, forearmR: 0, handR: 97,
+          upperArmR: 165, forearmR: 0, handR: 7,
           upperArmL: 220, forearmL: -36,
         }),
         offsetY: -3.0,
@@ -1482,14 +1479,14 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         ease: "linear",
       },
       // Frame 13, the last live frame: the crescent finishes down and behind
-      // him (A = 195°, blade 210°).
+      // him (arm 195°, blade 210°).
       {
         t: 0.355,
         pose: P({
           hip: -4, torso: 20, head: -14,
           thighR: 118, shinR: 112, footR: -80,
           thighL: 128, shinL: 108, footL: -80,
-          upperArmR: 179, forearmR: 0, handR: 105,
+          upperArmR: 179, forearmR: 0, handR: 15,
           upperArmL: 214, forearmL: -36,
         }),
         offsetY: -2.8,
@@ -1502,7 +1499,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           hip: -2, torso: 14, head: -8,
           thighR: 150, shinR: 60, footR: -84,
           thighL: 162, shinL: 56, footL: -82,
-          upperArmR: 211, forearmR: 0, handR: 125,
+          upperArmR: 211, forearmR: 0, handR: 35,
           upperArmL: 204, forearmL: -30,
         }),
         offsetY: -1.6,
@@ -1514,7 +1511,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           torso: 6,
           thighR: 172, shinR: 22, footR: -84,
           thighL: 192, shinL: 20, footL: -82,
-          upperArmR: 226, forearmR: -12, handR: 60,
+          upperArmR: 226, forearmR: -12, handR: -30,
           upperArmL: 196, forearmL: -24,
         }),
         offsetY: -0.4,

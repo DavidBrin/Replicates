@@ -2230,7 +2230,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * shared jab plays with its limbs traded (`swapLimbSides`) and the far fist
    * throws it; drawn with the near fist, the box sat on a hand at his chest
    * while the other one punched (Plan 4, Task 13b). Jab 2, the uppercut, hangs
-   * its box on `handr` and keeps the shared clip as drawn.
+   * its box on `handr` and keeps the shared clip as drawn. `jab` is also the
+   * pose an attack, special or throw status falls back to with no move set
+   * (`poseNameFor`), so those three baked motions trade sides with it.
    */
   jab: swapLimbSides(sharedJab),
 };

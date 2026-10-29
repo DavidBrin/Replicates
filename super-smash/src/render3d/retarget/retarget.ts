@@ -14,7 +14,7 @@
  *   along-axis lies in the side plane at angle β; `ref` is the 2D bone's own
  *   rest angle. At the 2D rest pose the bone sits at β, SSBU's stance.
  * - "down": `base` is its bind rotation swung so its along-axis points straight
- *   down; `ref` is 180°.
+ *   down; `ref` is 180°, less the drive's `turn` (the swordsmen's hand, 90°).
  * Its world rotation for a pose is then
  *
  *   world = Rx(a − ref) · base
@@ -58,7 +58,7 @@ import {
   type Vec3Out,
 } from "../math/rigid";
 import type { Rig3 } from "../skeleton/skeleton";
-import { PIVOT_BONE, RETARGET, RETARGET_OVERRIDES, type Drive } from "./map";
+import { PIVOT_BONE, driveFor } from "./map";
 
 interface DriveEntry {
   readonly index: number;
@@ -121,10 +121,6 @@ export interface Calibration {
 
 const DIR_DOWN: Vec3 = [0, -1, 0];
 
-function driveFor(fighter: string, our: BoneName): Drive | undefined {
-  return RETARGET_OVERRIDES[fighter]?.[our] ?? RETARGET[our];
-}
-
 /**
  * How far a root bone may sit from y = z = 0 and still count as at the feet.
  * The dump rounds to five decimals, so anything this large is a real offset;
@@ -180,7 +176,9 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
         along = normalize(mAxis(world, 0));
       }
       if (drive.rest === "down") {
-        drives.push({ index, our, ourAt: BONE_AT.get(our)!, base: qMul(qFromTo(along, DIR_DOWN), mRotation(world)), ref: Math.PI });
+        // A `turn` sets the bone that far past the 2D bone (`map.ts`, the swordsmen's grip).
+        const ref = drive.turn === undefined ? Math.PI : Math.PI - (drive.turn * Math.PI) / 180;
+        drives.push({ index, our, ourAt: BONE_AT.get(our)!, base: qMul(qFromTo(along, DIR_DOWN), mRotation(world)), ref });
         return;
       }
       // "bind": keep the bind direction's side-plane angle, drop its sideways lean.

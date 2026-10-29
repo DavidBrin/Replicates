@@ -11,10 +11,12 @@ import type { FighterDef, MoveSlot } from "@/engine/types";
 import { P, swapLimbSides, type PoseClip } from "@/render/poses/clip";
 import type { BoneName } from "@/render/skeleton";
 import { clipFor } from "@/render/chars";
+import { SLOT_POSE } from "@/render/poses/timing";
 import { fighterPoser, moveSamplers, poseWorld, sampleAt, type MotionSampler } from "@/render3d/bake/bake";
 import { sideBonePose } from "@/render3d/bake/fk";
-import { RETARGET, RETARGET_OVERRIDES } from "@/render3d/retarget/map";
+import { driveFor } from "@/render3d/retarget/map";
 import { boneRole } from "@/render3d/retarget/placeable";
+import { accumulatedAngles } from "@/render3d/retarget/retarget";
 import { SKELETONS } from "@/render3d/skeletons";
 import { FIGHTERS } from "../index";
 import { withReferenceScripts } from "./active";
@@ -63,10 +65,9 @@ const CHAIN: Readonly<Record<Limb, readonly BoneName[]>> = {
   "leg R": ["thighR", "shinR", "footR"],
 };
 
-/** The SSBU bones a 2D bone turns, for this fighter (`RETARGET`, with its overrides). */
+/** The SSBU bones a 2D bone turns, for this fighter (`driveFor`, with its overrides). */
 function drives(id: string, bone: BoneName): string[] {
-  const d = { ...RETARGET, ...RETARGET_OVERRIDES[id] }[bone];
-  return d === undefined ? [] : d.bones.map((b) => b.toLowerCase());
+  return driveFor(id, bone)?.bones.map((b) => b.toLowerCase()) ?? [];
 }
 
 /**
@@ -143,6 +144,8 @@ function point3(m: readonly number[], l: readonly [number, number, number]): [nu
 /** One fighter's bones, posed from its clips: world matrices per motion frame, and a bone table over them. */
 interface Posed {
   readonly world: (motion: MotionKind, frame: number) => number[][];
+  /** The 2D hand's accumulated angle on a motion frame, radians: where the 2D rig draws a blade. */
+  readonly drawnHandR: (motion: MotionKind, frame: number) => number;
   readonly index: (bone: string) => number;
   /** The script's bones placed as the bake would, over the root bone `top`. */
   readonly bones: BoneTable;
@@ -154,17 +157,23 @@ function posed(def: FighterDef, swap?: { motion: MotionKind; clip: PoseClip }): 
   const samplers = new Map<MotionKind, MotionSampler>(moveSamplers(def));
   if (swap !== undefined) samplers.set(swap.motion, { ...samplers.get(swap.motion)!, clip: swap.clip });
   const cache = new Map<string, number[][]>();
-  const world = (motion: MotionKind, frame: number): number[][] => {
+  const sampled = (motion: MotionKind, frame: number) => {
     const s = samplers.get(motion)!;
-    const k = Math.min(Math.max(frame, 1), s.clock.frames);
-    const key = `${motion} ${k}`;
+    return sampleAt(s, Math.min(Math.max(frame, 1), s.clock.frames));
+  };
+  const world = (motion: MotionKind, frame: number): number[][] => {
+    const key = `${motion} ${frame}`;
     let w = cache.get(key);
     if (w === undefined) {
-      const { sample, spin } = sampleAt(s, k);
+      const { sample, spin } = sampled(motion, frame);
       w = poseWorld(p, sample, spin);
       cache.set(key, w);
     }
     return w;
+  };
+  const drawnHandR = (motion: MotionKind, frame: number): number => {
+    const { sample, spin } = sampled(motion, frame);
+    return accumulatedAngles(p.rig2d, sample.angles, sample.rotation + spin).handR;
   };
   const index = (bone: string): number => p.rig3.byLower.get(bone)!;
   const own: BoneTable = {
@@ -176,7 +185,7 @@ function posed(def: FighterDef, swap?: { motion: MotionKind; clip: PoseClip }): 
       return true;
     },
   };
-  return { world, index, bones: layeredBoneTable(own, LEGACY_BONE_TABLE) };
+  return { world, drawnHandR, index, bones: layeredBoneTable(own, LEGACY_BONE_TABLE) };
 }
 
 /**
@@ -230,6 +239,7 @@ function faultsOf(def: FighterDef, slot: MoveSlot, d: Dir, at: Posed = posed(def
     const best = Math.max(...LIMBS.map((l) => reach[l]));
     boxes.forEach((h, i) => {
       const limb = limbOf(id, named[i]);
+      // Along the move's direction only: a limb moved across it, still the furthest that way, passes (D57).
       if (limb === null || reach[limb] >= best - LEAD) return;
       const lead = LIMBS.find((l) => reach[l] === best)!;
       out.push({
@@ -332,7 +342,7 @@ describe("the rule catches", () => {
     const def = formOf(id, slot);
     const motion = gameScriptFor(def, slot)!.motion;
     expect(faultsOf(def, slot, d)).toEqual([]);
-    expect(faultsOf(def, slot, d, posed(def, { motion, clip: swapLimbSides(clipFor(id, slot)) })).length).toBeGreaterThan(0);
+    expect(faultsOf(def, slot, d, posed(def, { motion, clip: swapLimbSides(clipFor(id, SLOT_POSE[slot])) })).length).toBeGreaterThan(0);
   });
 
   it("Marth's forward air with the sword arm dropped straight down", () => {
@@ -340,15 +350,65 @@ describe("the rule catches", () => {
     const motion = gameScriptFor(def, "fair")!.motion;
     const clip = clipFor("marth", "fair");
     // Every key's sword arm hangs plumb (the upper arm turned against the spine's
-    // lean, the elbow straight) and the wrist turns the blade to the floor.
+    // lean, the elbow and wrist straight), so the blade along it points at the floor.
     const dropped: PoseClip = {
       ...clip,
       keys: clip.keys.map((k) => {
         const lean = (k.pose.hip ?? 0) + (k.pose.torso ?? 0) + (k.rotation ?? 0);
-        return { ...k, pose: { ...k.pose, ...P({ forearmR: 0, handR: 90 }), upperArmR: Math.PI - lean } };
+        return { ...k, pose: { ...k.pose, ...P({ forearmR: 0, handR: 0 }), upperArmR: Math.PI - lean } };
       }),
     };
     expect(faultsOf(def, "fair", "F")).toEqual([]);
     expect(faultsOf(def, "fair", "F", posed(def, { motion, clip: dropped })).length).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * The swordsmen's grip (`retarget/map.ts`, Task 13b fix round 1): the 2D rig
+ * draws the blade along the hand, and the model's fist holds it across, so the
+ * hand is turned a further quarter. Here, on every live frame of every Link and
+ * Marth slot whose boxes ride the sword, the blade the skeleton holds lies
+ * within 10° of the blade the clip draws, in the side plane. (It measured 82–92°
+ * off before the turn, and −6° to +4° after; Marth's down tilt squashes.)
+ */
+describe("the sword the skeleton holds is the sword the clip draws", () => {
+  /** The bone each swordsman's blade runs along, and its local axis: the committed skeletons'. */
+  const BLADE: Readonly<Record<string, { readonly bone: string; readonly axis: 0 | 1 | 2 }>> = {
+    link: { bone: "sword2", axis: 0 },
+    marth: { bone: "sword1", axis: 2 },
+  };
+  /** Side-plane angle of a world matrix's local axis: 0 up, 90° forward, as the 2D rig's angles are. */
+  const sideAngle = (m: readonly number[], axis: number): number => Math.atan2(m[axis * 4 + 2], m[axis * 4 + 1]);
+  const wrapDeg = (r: number): number => {
+    const d = ((r * 180) / Math.PI) % 360;
+    return d > 180 ? d - 360 : d <= -180 ? d + 360 : d;
+  };
+
+  it.each(Object.entries(BLADE))("%s's blade lies forward in the bind pose, along the axis named", (id, blade) => {
+    const rig = fighterPoser(FIGHTERS.find((f) => f.id === id)!, SKELETONS[id]).rig3;
+    const m = rig.restWorld[rig.byLower.get(blade.bone)!];
+    expect(m[blade.axis * 4 + 2], `${id} ${blade.bone} axis ${blade.axis}`).toBeGreaterThan(0.95);
+  });
+
+  it("holds the blade within 10° of the drawn one, on every live frame of every sword slot", () => {
+    const off: string[] = [];
+    let frames = 0;
+    for (const [id, blade] of Object.entries(BLADE)) {
+      const def = withLimbScripts(FIGHTERS.find((f) => f.id === id)!, null);
+      const at = posed(def);
+      for (const slot of LIMB_SCRIPT_SLOTS[id] ?? []) {
+        const script = gameScriptFor(def, slot)!;
+        for (let g = 1; g <= def.moves[slot]!.totalFrames; g++) {
+          const st = runScript(script, g);
+          if (!st.attacks.some((a) => a.bone.startsWith("sword"))) continue;
+          frames++;
+          const held = sideAngle(at.world(script.motion, st.motionFrame)[at.index(blade.bone)], blade.axis);
+          const err = wrapDeg(held - at.drawnHandR(script.motion, st.motionFrame));
+          if (Math.abs(err) > 10) off.push(`${id} ${slot} g${g}: the held blade is ${err.toFixed(1)}° off the drawn one`);
+        }
+      }
+    }
+    expect(off).toEqual([]);
+    expect(frames, "sword frames judged").toBeGreaterThan(40);
   });
 });

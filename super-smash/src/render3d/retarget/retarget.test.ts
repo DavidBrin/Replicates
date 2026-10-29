@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { FIGHTERS } from "@/fighters";
+import { getCharacterRig } from "@/render/chars";
 import { angleDelta } from "@/render/poses/clip";
 import { BASE_RIG, BONE_NAMES, deg, resolve, type BoneName, type PoseAngles } from "@/render/skeleton";
 import { IDENTITY_ROOT, worldMatrices } from "../bake/fk";
 import { compose, mAxis, mInvertRigid, mMul, mTranslation, normalize, qRotX, type Vec3 } from "../math/rigid";
 import { buildRig, type SkeletonFile } from "../skeleton/skeleton";
 import { testSkeleton } from "../skeleton/testSkeleton";
-import { RETARGET } from "./map";
+import { SKELETONS } from "../skeletons";
+import { RETARGET, RETARGET_OVERRIDES, driveFor } from "./map";
 import { accumulatedAngles, calibrate, newPoseBuffer, retarget, retargetInto } from "./retarget";
 
 const rig = buildRig(testSkeleton());
@@ -363,5 +366,33 @@ describe("a bind pose that leans out of the side plane", () => {
     expect(knee[0]).toBeCloseTo(hipSide, 9);
     expect(Math.hypot(knee[0] - leg[0], knee[1] - leg[1], knee[2] - leg[2])).toBeCloseTo(full, 9);
     expect(angleDelta(sideAngleOf(world, "LegL", "KneeL"), inPlane + delta)).toBeCloseTo(0, 9);
+  });
+});
+
+/*
+ * The swordsmen's grip (Task 13b fix round 1): the model's fist holds the blade
+ * across it, a quarter-turn from the 2D drawing, so Link's and Marth's right
+ * hand is turned 90° further. That is the only override, and only `handR`'s
+ * reference angle moves: π for the other six fighters, π/2 for the two.
+ */
+describe("the per-fighter drives", () => {
+  const SWORDSMEN = ["link", "marth"];
+
+  it("override only the swordsmen's right hand, keeping its bones and tip", () => {
+    expect(Object.keys(RETARGET_OVERRIDES).sort()).toEqual(SWORDSMEN);
+    for (const id of SWORDSMEN) {
+      expect(Object.keys(RETARGET_OVERRIDES[id])).toEqual(["handR"]);
+      expect(driveFor(id, "handR")).toEqual({ ...RETARGET.handR, turn: 90 });
+      for (const bone of BONE_NAMES) if (bone !== "handR") expect(driveFor(id, bone), `${id} ${bone}`).toBe(RETARGET[bone]);
+    }
+  });
+
+  it.each(FIGHTERS.map((f) => f.id))("calibrate %s's right hand at its reference angle", (id) => {
+    const c = calibrate(buildRig(SKELETONS[id]), getCharacterRig(id).bones);
+    const hand = c.drives.filter((d) => d.our === "handR");
+    expect(hand).toHaveLength(1);
+    expect(hand[0].ref).toBeCloseTo(SWORDSMEN.includes(id) ? Math.PI / 2 : Math.PI, 12);
+    // Every other drive keeps the shared rule.
+    for (const d of c.drives) if (d.our !== "handR" && RETARGET[d.our]!.rest === "down") expect(d.ref, `${id} ${d.our}`).toBe(Math.PI);
   });
 });

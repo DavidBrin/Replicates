@@ -166,7 +166,9 @@ const MATCHES: readonly Match[] = [
  * and the script still trumps Mario, on 1786. Task 13 (the limb-bone scripts on; the CPUs
  * space by their baked reach): the CPU matches reach 32 — none grabs, spot-dodges,
  * techs, ledge-rolls, is shield-stunned or trumps a ledge — and the script and the
- * lab, unchanged, cover those.
+ * lab, unchanged, cover those. Task 13b's fix round 1 (Link's and Marth's blades
+ * held along the drawn ones): 31 — a shield is stunned now, and none crouches,
+ * grabs, spot-dodges, techs, ledge-rolls, breaks a shield or trumps a ledge.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -483,7 +485,9 @@ describe("engine golden trace", () => {
   // (six held clips re-posed and back on their scripts, and the clips whose striking
   // limb was not the script's) moved mario-fox from the 2001-2100 sample, back to
   // hits 19, shield hits 0, KOs 1, and kirby-marth from the first sample: hits 15,
-  // shield hits 0, KOs 2; the other four are unchanged.
+  // shield hits 0, KOs 2; the other four are unchanged. Its fix round 1 (Link's and
+  // Marth's blades held along the drawn ones) moved link-samus and kirby-marth from
+  // the first sample: hits 18 and 13, shield hits 0 and 1, KOs 4 and 2.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

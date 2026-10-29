@@ -40,14 +40,14 @@
     "reason": "accepted by the controller (ruling on the clip-gains): the published motion spins with the arms outstretched, and the box rides armr at full extension, 11.0 -> 25.6, x2.33 against a size cap of 2.19 (D57)"
   },
   "link ftilt": {
-    "measured": "F: best 13.5 -> 13.5 (x1.00); below 0.8x on 1 of 5 shared frames, worst g15 13.5 -> 10.2",
-    "class": "sweep",
-    "reason": "an overhead arc: on its first live frame (g15) the blade (sword2) is still coming down, 10.2 forward; from g16 it reaches the legacy 13.5. A single-frame loss at the arc's start"
+    "measured": "F: best 13.5 -> 21.2 (x1.57)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword2 (on handr)) reaching 13.5 -> 21.2, x1.57, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts); before it, the blade pointed up and the arc's first frame fell short (a sweep)"
   },
   "link jab3": {
-    "measured": "F: best 11.3 -> 19.5 (x1.73)",
-    "class": "root-exact",
-    "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
+    "measured": "F: best 11.3 -> 22.6 (x2.00)",
+    "class": "clip-gain",
+    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 11.3 -> 22.6, x2.00 against a size cap of 1.80, the blade box now out past the published root boxes at chest height (D57)"
   },
   "link nair": {
     "measured": "F: best 9.5 -> 13.7 (x1.44)",
@@ -55,9 +55,9 @@
     "reason": "a clip-placed limb (kneer) reaching 9.5 -> 13.7, x1.44, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
   },
   "link utilt": {
-    "measured": "U: best 18.5 -> 30.7 (x1.66)",
-    "class": "size",
-    "reason": "a clip-placed limb (sword2 (on handr)) reaching 18.5 -> 30.7, x1.66, within 1.25 x link's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+    "measured": "U: best 18.5 -> 37.5 (x2.03)",
+    "class": "clip-gain",
+    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 18.5 -> 37.5, x2.03 against a size cap of 1.80 (D57)"
   },
   "samus bair": {
     "measured": "B: best 11.5 -> 18.3 (x1.59)",
@@ -97,7 +97,7 @@
   "kirby ftilt": {
     "measured": "F: best 6.4 -> 15.3 (x2.39)",
     "class": "clip-gain",
-    "reason": "a clip-placed limb (footl) reaching 6.4 -> 15.3, x2.39, beyond 1.25 x kirby's size ratio 1.43 (cap 1.79): the roundhouse now on the left foot the script names (Task 13b), whose three boxes run 8.5 units out from the ankle along the pointed foot (game_attacks3: y 0, -4.5, -8.5); for the controller's ruling"
+    "reason": "accepted by the controller (ruling on the clip-gains): the kick extends the leg, and the three footl boxes run 8.5 units out from the ankle along the pointed foot at the script's own offsets (game_attacks3: y 0, -4.5, -8.5), 6.4 -> 15.3, x2.39 against a size cap of 1.79 (D57). Task 13b: the roundhouse on the left foot the script names"
   },
   "kirby nair": {
     "measured": "F: best 4.0 -> 9.3 (x2.31)",
@@ -159,14 +159,24 @@
     "class": "root-exact",
     "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
   },
-  "marth uair": {
-    "measured": "U: best 19.4 -> 28.9 (x1.49)",
+  "marth ftilt": {
+    "measured": "F: best 13.4 -> 18.2 (x1.36)",
     "class": "size",
-    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.4 -> 28.9, x1.49, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 13.4 -> 18.2, x1.36, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+  },
+  "marth jab2": {
+    "measured": "F: best 13.4 -> 17.6 (x1.31)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 13.4 -> 17.6, x1.31, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
+  },
+  "marth uair": {
+    "measured": "U: best 19.4 -> 34.9 (x1.80)",
+    "class": "size",
+    "reason": "a clip-placed limb (sword1 (on handr)) reaching 19.4 -> 34.9, x1.80, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57). Task 13b fix round 1: the blade the model holds now lies along the drawn one (the swordsmen's grip, retarget/map.ts)"
   },
   "marth utilt": {
-    "measured": "U: best 18.4 -> 28.2 (x1.53)",
-    "class": "size",
-    "reason": "a clip-placed limb (sword1 (on handr)) reaching 18.4 -> 28.2, x1.53, within 1.25 x marth's size ratio 1.44 (cap 1.80): the SSBU-sized body (D57)"
+    "measured": "U: best 18.4 -> 33.7 (x1.83)",
+    "class": "clip-gain",
+    "reason": "accepted by the controller (ruling on the grip's clip-gains): a sword box's reach is the arm plus the model's blade along the authored direction, with the script's own offsets along the sword bone: 18.4 -> 33.7, x1.83 against a size cap of 1.80 (D57)"
   }
 }

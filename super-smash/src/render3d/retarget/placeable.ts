@@ -14,8 +14,9 @@
  * it, so it is not placeable.
  */
 
+import { BONE_NAMES } from "@/render/skeleton";
 import type { SkeletonFile } from "../skeleton/skeleton";
-import { RETARGET, RETARGET_OVERRIDES } from "./map";
+import { driveFor } from "./map";
 
 /** The script's root bone, which `LEGACY_BONE_TABLE` places, whatever the skeleton calls its root. */
 const SCRIPT_ROOT = "top";
@@ -32,10 +33,9 @@ export type BoneRole =
   | { readonly kind: "root" | "driven" | "unanimated" | "missing" }
   | { readonly kind: "rides"; readonly on: string };
 
-/** The bones `RETARGET` (with the fighter's overrides) drives, lower case. */
+/** The bones the fighter's drives (`driveFor`) turn, lower case. */
 export function drivenBones(fighterId: string): Set<string> {
-  const drives = { ...RETARGET, ...RETARGET_OVERRIDES[fighterId] };
-  return new Set(Object.values(drives).flatMap((d) => (d === undefined ? [] : d.bones.map((b) => b.toLowerCase()))));
+  return new Set(BONE_NAMES.flatMap((n) => driveFor(fighterId, n)?.bones.map((b) => b.toLowerCase()) ?? []));
 }
 
 export function boneRole(skeleton: SkeletonFile, bone: string): BoneRole {

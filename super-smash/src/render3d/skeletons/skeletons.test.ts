@@ -10,7 +10,7 @@ import { getCharacterRig } from "@/render/chars";
 import { BONE_NAMES } from "@/render/skeleton";
 import { referenceScriptBones } from "../bake/roster";
 import { parseBoneDump, skeletonFromDump } from "../pipeline/dump";
-import { PIVOT_BONE, RETARGET, RETARGET_OVERRIDES } from "../retarget/map";
+import { PIVOT_BONE, driveFor } from "../retarget/map";
 import { calibrate } from "../retarget/retarget";
 import { buildRig, parseSkeletonFile } from "../skeleton/skeleton";
 import { hurtBonesFor } from "./hurtBones";
@@ -33,7 +33,7 @@ const MISSING: Readonly<Record<string, Readonly<Record<string, string>>>> = JSON
 function neededBones(fighterId: string): Set<string> {
   const out = new Set<string>([PIVOT_BONE.toLowerCase()]);
   for (const name of BONE_NAMES) {
-    const drive = RETARGET_OVERRIDES[fighterId]?.[name] ?? RETARGET[name];
+    const drive = driveFor(fighterId, name);
     for (const b of [...(drive?.bones ?? []), ...(drive?.tips ?? [])]) if (b !== null) out.add(b.toLowerCase());
   }
   for (const b of referenceScriptBones(fighterId)) out.add(b);
