@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CHARACTER_RIGS, getCharacterRig, rotationPivot } from "@/render/characterArt";
 import { DRAWN_BONES, resolve, type BoneName, type PoseAngles } from "@/render/skeleton";
 import { samplePose } from "./clip";
-import { roll } from "./roll";
+import { ROLL_SEGMENTS, roll } from "./roll";
 
 /**
  * What a roll is asserted on.
@@ -21,8 +21,9 @@ import { roll } from "./roll";
  * The grid the clip is drawn on (`roll.ts`): Plan 1's shared roll, 31 frames,
  * intangible on `actionFrame` 4-20. The engine's rolls are each fighter's own
  * now, forward and back (UltimateFrameData, `groundDodge.ts`; Plan 3 final
- * wave), and the renderer plays the clip over that length
- * (`actionDurationFor`), so these test the drawing on its own grid.
+ * wave), and the renderer re-times the clip to them (`rollClipTime`, Plan 4
+ * Task 9b; `groundDodgeTime.test.ts` tests that against every fighter), so
+ * these test the drawing on its own grid.
  */
 const ROLL_FRAMES = 31;
 const FRAMES = Array.from({ length: ROLL_FRAMES }, (_, i) => i);
@@ -225,5 +226,60 @@ describe("nothing snaps", () => {
         expect(Math.abs(soles[f] - soles[f - 1])).toBeLessThan(standing * 0.12);
       }
     }
+  });
+});
+
+describe("the segments the re-timing places (ROLL_SEGMENTS)", () => {
+  /**
+   * How far the furthest point of the fighter is from their own pelvis: the tuck's size, blind to the
+   * turn. (A bounding box is not: a turning ball's swells and shrinks with the angle, and a rig whose
+   * head or ears stick out of the ball hides the opening in its height.)
+   */
+  function reachAt(rigId: string, t: number): number {
+    const rig = getCharacterRig(rigId);
+    const s = samplePose(roll, t);
+    const sk = resolve(rig.bones, s.angles, {
+      x: 0,
+      y: 0,
+      scale: 1,
+      facing: 1,
+      pivot: rotationPivot(rig),
+      scaleX: s.scaleX,
+      scaleY: s.scaleY,
+    });
+    const px = sk.hip.x0;
+    const py = sk.hip.y0;
+    let worst = Math.hypot(sk.head.x1 - px, sk.head.y1 - py) + rig.headRadius * s.scaleX;
+    for (const name of DRAWN_BONES) {
+      const b = sk[name];
+      const half = b.thickness / 2;
+      worst = Math.max(worst, Math.hypot(b.x0 - px, b.y0 - py) + half, Math.hypot(b.x1 - px, b.y1 - py) + half);
+    }
+    return worst;
+  }
+  const tightestOf = (rigId: string): number =>
+    Math.min(...Array.from({ length: 311 }, (_, i) => reachAt(rigId, i / 310)));
+
+  it("shuts the ball on its key and holds it shut to the evasive segment's end, on every rig", () => {
+    for (const id of RIGS) {
+      const tightest = tightestOf(id);
+      expect(reachAt(id, ROLL_SEGMENTS.ball) / tightest, `${id}: the ball key`).toBeLessThan(1.03);
+      expect(reachAt(id, ROLL_SEGMENTS.open) / tightest, `${id}: the end of the evasive segment`).toBeLessThan(1.03);
+    }
+  });
+
+  it("has committed to the tuck at the duck without having closed it", () => {
+    for (const id of RIGS) expect(reachAt(id, ROLL_SEGMENTS.duck) / tightestOf(id), id).toBeGreaterThan(1.2);
+  });
+
+  it("is visibly opening two grid frames after the evasive segment ends", () => {
+    for (const id of RIGS) {
+      expect(reachAt(id, ROLL_SEGMENTS.open + 2 / ROLL_FRAMES) / tightestOf(id), id).toBeGreaterThan(1.07);
+    }
+  });
+
+  it("closes the tuck, duck to ball, in the frames `tuckFrames` says, and settles on the grid's last frame", () => {
+    expect((ROLL_SEGMENTS.ball - ROLL_SEGMENTS.duck) * ROLL_FRAMES).toBeCloseTo(ROLL_SEGMENTS.tuckFrames, 2);
+    expect(ROLL_SEGMENTS.settle).toBe((ROLL_FRAMES - 1) / ROLL_FRAMES);
   });
 });

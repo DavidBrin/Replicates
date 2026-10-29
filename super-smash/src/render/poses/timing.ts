@@ -21,7 +21,7 @@
  */
 
 import { DEFAULT_AIR_DODGE, airDodgeFrames, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
-import { DEFAULT_GROUND_DODGE, groundDodgeOf, rollOf } from "@/engine/groundDodge";
+import { DEFAULT_GROUND_DODGE, dodgeIntangible, groundDodgeOf, rollOf } from "@/engine/groundDodge";
 import { toFloat } from "@/engine/fixed";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
@@ -55,6 +55,7 @@ import type { AirDodgeAttributes, FighterDef, FighterState, GroundDodgeAttribute
 import { clipFor } from "../chars/poses";
 import { airDodgeClipTime } from "./airDodge";
 import { samplePose, type PoseSample } from "./clip";
+import { rollClipTime, rollTurnTime, spotDodgeClipTime } from "./groundDodgeTime";
 import { type PoseName } from "./library";
 
 /** Everything the pose layer needs to know about a fighter. */
@@ -497,6 +498,18 @@ export function poseTimeFor(
     return airDodgeClipTime(fighter.actionFrame, airDodgeFrames(a, fighter.charge), airDodgeIntangible(a, fighter.charge)[1]);
   }
 
+  // The spot dodge and the rolls play their evasive segment over the fighter's own intangible
+  // frames (`groundDodgeTime.ts`). Only a dodge: the ledge and tech rolls, which borrow the roll
+  // clip, play it plainly over their own lengths.
+  if (name === "spotDodge" && fighter.action === "spotDodge") {
+    const d = (jump?.groundDodge ?? DEFAULT_GROUND_DODGE).spotDodge;
+    return spotDodgeClipTime(fighter.actionFrame, d.frames, ...dodgeIntangible(d));
+  }
+  if (name === "roll" && fighter.action === "roll") {
+    const d = rollOf(jump?.groundDodge ?? DEFAULT_GROUND_DODGE, fighter.charge);
+    return rollClipTime(fighter.actionFrame, d.frames, ...dodgeIntangible(d));
+  }
+
   const stateFrames = actionDurationFor(fighter, jump);
   const total = timing && timing.total > 0 ? timing.total : (stateFrames ?? 30);
   const f = fighter.actionFrame;
@@ -528,7 +541,13 @@ export function poseSpinFor(
   const name = poseNameFor(fighter);
   const spin = clipFor(fighter.defId, name)?.spin;
   if (!spin) return 0;
-  return poseTimeFor(name, fighter, frame, timing, jump) * spin * Math.PI * 2;
+  // A roll turns at one constant rate over its own length, not over the re-timed clip
+  // (`rollTurnTime`): it rolls without slipping.
+  const t =
+    name === "roll" && fighter.action === "roll"
+      ? rollTurnTime(fighter.actionFrame, actionDurationFor(fighter, jump) ?? 0)
+      : poseTimeFor(name, fighter, frame, timing, jump);
+  return t * spin * Math.PI * 2;
 }
 
 /** The pose a fighter is in this frame, ready to hand to `resolve()`. */

@@ -12,15 +12,16 @@
 import { describe, expect, it } from "vitest";
 
 import { samplePose, type PoseSample } from "./clip";
-import { spotDodge } from "./spotDodge";
+import { SPOT_DODGE_SEGMENTS, spotDodge } from "./spotDodge";
 import { BASE_RIG, DRAWN_BONES, resolve, type BoneName } from "../skeleton";
 
 /**
  * The grid the clip is drawn on (`spotDodge.ts`, keys at n/24): Plan 1's shared
  * spot dodge, 24 frames, intangible on `actionFrame` 3-20. The engine's spot
  * dodge is each fighter's own now (UltimateFrameData, `groundDodge.ts`; Plan 3
- * final wave) and the renderer plays the clip over that length
- * (`actionDurationFor`), so these test the drawing on its own grid.
+ * final wave) and the renderer re-times the clip to it (`spotDodgeClipTime`,
+ * Plan 4 Task 9b; `groundDodgeTime.test.ts` tests that against every fighter),
+ * so these test the drawing on its own grid.
  */
 const CLIP_FRAMES = 24;
 const [FIRST_INTANGIBLE, LAST_INTANGIBLE] = [3, 20];
@@ -88,6 +89,16 @@ const tallest = Math.max(...shape.map((s) => s.height));
 const shortest = Math.min(...shape.map((s) => s.height));
 const narrowest = Math.min(...shape.map((s) => s.width));
 const window_ = FRAMES.filter((f) => f >= FIRST_INTANGIBLE && f <= LAST_INTANGIBLE);
+
+describe("the segments the re-timing places", () => {
+  it("are the window these tests hold the drawing to, and the last frame of the grid", () => {
+    // `spotDodgeClipTime` plays the evasive segment over each fighter's own intangible frames, so
+    // the segment is the window the drawing is asserted on below: the compress arrives on its
+    // first frame and the tell is its last, and the standing shape is the grid's last frame.
+    expect(SPOT_DODGE_SEGMENTS.evasive).toEqual([FIRST_INTANGIBLE / CLIP_FRAMES, LAST_INTANGIBLE / CLIP_FRAMES]);
+    expect(SPOT_DODGE_SEGMENTS.settle).toBe(LAST / CLIP_FRAMES);
+  });
+});
 
 describe("the spot dodge is not one drawing", () => {
   it("changes shape on most of its frames", () => {

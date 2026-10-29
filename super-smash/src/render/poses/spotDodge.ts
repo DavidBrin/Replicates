@@ -1,11 +1,35 @@
 import { P, type PoseClip } from "./clip";
 
 /**
+ * The clip's segments, in clip time, for `spotDodgeClipTime`
+ * (`groundDodgeTime.ts`), which plays them over each fighter's own frames
+ * (Plan 4, Task 9b). Read off the keys below and checked against the sampled
+ * silhouette (`spotDodge.test.ts`, on the grid it is drawn on):
+ *
+ * - **Startup**, `t` 0 to `evasive[0]`: the break and the snap down.
+ * - **Evasive**, `evasive[0]` to `evasive[1]`: from key 3, where the compressed
+ *   shape arrives (the crouch is over 85% done by it, and the narrowest drawing
+ *   in the clip is inside the segment), to key 20, the tell, the last frame the
+ *   fighter is crouched: the hips are already lifting and from here the height
+ *   rises on every frame. The segment is the window the clip was drawn against,
+ *   Plan 1's 3-20 on its 24-frame grid.
+ * - **Recovery**, `evasive[1]` to `settle`: the stand back up, ending on key 23,
+ *   the standing shape, which is the last frame the clip is drawn on (`t` = 23/24
+ *   is the last frame of a 24-frame grid; `t` = 1 is the hand-off, never drawn).
+ */
+export const SPOT_DODGE_SEGMENTS = {
+  evasive: [3 / 24, 20 / 24],
+  settle: 23 / 24,
+} as const;
+
+/**
  * The spot dodge — drawn on a 24-frame grid, intangible on 3–20 (Plan 1's
  * shared spot dodge). The engine's spot dodge is each fighter's own now
  * (UltimateFrameData, `groundDodge.ts`; Plan 3 final wave): Mario's is 25,
- * intangible on `actionFrame` 2–16. The clip plays over the fighter's own
- * length (`actionDurationFor`), so its beats fall near, not on, that window.
+ * intangible on `actionFrame` 2–16. `spotDodgeClipTime` plays the clip's
+ * segments (`SPOT_DODGE_SEGMENTS`) over the fighter's own frames, the evasive
+ * one over exactly its intangible ones, so the keys below are still the grid's
+ * and are named by their frames on it.
  *
  * Ultimate calls it a sidestep and it is the shortest and fastest of the three
  * dodges: almost every character in the roster turns intangible on frame 3, and
@@ -77,9 +101,10 @@ export const spotDodge: PoseClip = {
     // arrives on. Landing it here rather than a frame either side is the one
     // piece of timing this clip can be wrong about: the frame the engine stops
     // letting hitboxes touch the fighter is the frame the eye has to lose them
-    // on.
+    // on. `spotDodgeClipTime` lands this key on each fighter's own first
+    // intangible frame (the start of the evasive segment).
     {
-      t: 3 / 24,
+      t: SPOT_DODGE_SEGMENTS.evasive[0],
       pose: P({
         torso: 26, head: -22, hip: -11,
         thighR: 138, shinR: 84, footR: -124,
@@ -119,9 +144,10 @@ export const spotDodge: PoseClip = {
     // Frame 20, the last intangible frame — and the tell. The hips are already
     // lifting and the shoulders are coming back square; a player who has learned
     // to watch for this frame is reading it correctly, because one frame later
-    // the fighter can be hit.
+    // the fighter can be hit. `spotDodgeClipTime` lands this key on each
+    // fighter's own last intangible frame (the end of the evasive segment).
     {
-      t: 20 / 24,
+      t: SPOT_DODGE_SEGMENTS.evasive[1],
       pose: P({
         torso: 22, head: -18, hip: -9,
         thighR: 134, shinR: 84, footR: -112,
@@ -152,13 +178,13 @@ export const spotDodge: PoseClip = {
       scaleY: 0.98,
       ease: "out",
     },
-    // Frame 23, the last frame anything is drawn on: `poseTimeFor` divides by
-    // the spot dodge's length, so on the grid the clip is only ever sampled at
-    // n/24 and t = 1 belongs to whatever comes next. This key is therefore the
-    // standing shape itself, close enough to `idle` that the cut costs nothing —
-    // and it is the frame that tells the opponent the punish window is open.
+    // Frame 23, the last frame anything is drawn on: `spotDodgeClipTime` puts
+    // the fighter's last frame here, whatever its length, and t = 1 belongs to
+    // whatever comes next. This key is therefore the standing shape itself,
+    // close enough to `idle` that the cut costs nothing — and it is the frame
+    // that tells the opponent the punish window is open.
     {
-      t: 23 / 24,
+      t: SPOT_DODGE_SEGMENTS.settle,
       pose: P({
         torso: 4, head: -4,
         thighR: 174, shinR: 8, footR: -90,
