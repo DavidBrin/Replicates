@@ -7,6 +7,9 @@
  * round, so a left-facing Link holds his sword in the same hand. Every bone's
  * side-plane position is the same either way, so a hitbox the sim mirrors by
  * facing sits on the limb you see (`fighter3d.test.ts`, Review Focus #4).
+ * After the pose, the face is turned toward the camera (`faceTurn.ts`, Task
+ * 21c): a head, or Kirby's body bone, about the vertical through its own
+ * origin, so no bone that carries a box moves.
  *
  * A fighter with no model (`LoadedModel` "standIn": no index, a 404, a bad
  * download, a timeout) is drawn as its own hurtbox capsules on the same bones,
@@ -35,6 +38,7 @@ import { hitlagShake } from "@/render/characterArt";
 import { intangibleAlpha } from "@/render/renderer";
 import { PORT_COLOURS } from "@/render/rigKit";
 import type { FighterPoser } from "./bake/bake";
+import { FACE_TURNS, faceTurner, type FaceTurn } from "./faceTurn";
 import { drawnPose, poseInputs, type FighterPoseInputs } from "./fighterPose";
 import type { LoadedModel } from "./models/loader";
 import { applyLocalPose, applyRoot, bindBones, bonesFromRig, hangBonesAsRig } from "./threeRig";
@@ -139,6 +143,8 @@ export interface Fighter3DOptions {
   readonly poser: FighterPoser;
   readonly bake: BakeTables;
   readonly model: LoadedModel;
+  /** The bones turned toward the camera (default: `FACE_TURNS` for this fighter; `[]` for none). */
+  readonly faceTurns?: readonly FaceTurn[];
 }
 
 export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
@@ -152,6 +158,7 @@ export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
   placement.add(rootGroup);
   const bones = bindBones(poser.rig3, built.root);
   if (opts.model.kind === "glb") hangBonesAsRig(poser.rig3, bones, built.root);
+  const turner = faceTurner(poser.rig3, bones, rootGroup, opts.faceTurns ?? FACE_TURNS[opts.def.id] ?? []);
   const materials = built.materials;
   let opacity = 1;
   let flash = 0;
@@ -168,6 +175,7 @@ export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
       const pose = drawnPose(inputs, f, fr.frame, fr.blends);
       applyLocalPose(bones, pose.local);
       applyRoot(rootGroup, pose.root);
+      turner.apply(f.facing);
       const alpha = intangibleAlpha(f);
       if (alpha !== opacity || fr.hitFlash !== flash) {
         for (let k = 0; k < materials.length; k++) {

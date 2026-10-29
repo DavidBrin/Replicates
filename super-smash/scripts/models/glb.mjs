@@ -55,21 +55,14 @@ export const INVERSE_BIND_TOLERANCE = 1e-2;
 export const ALPHA_CUTOFF = 0.5;
 /**
  * Cut-outs that look wrong at `ALPHA_CUTOFF`, with the cutoff that reads right,
- * by `<fighter>/<material>`. Found in the animation lab's model sheet (Plan 4,
- * Task 21): Donkey Kong's `alp` is the hair and fur-edge card, and at 0.5 his
- * hair is a speckle of strands over the void behind it (the sheet shows the
- * background through the scalp), while at 0.1 it is the mop, and the fur edges
- * at his wrists and ankles keep their ragged shape. Only the cutoff differs:
- * the material stays MASK, so it still writes depth. UNVERIFIED: by eye
- * (0.5, 0.25, 0.1, 0.02 and OPAQUE were looked at; BLEND made the head
- * see-through). Nothing else is overridden.
- *
- * Task 21b found what showed through his scalp: his body (opaque in its
- * source) was cut by this card's alpha, the same PNG's. With the body OPAQUE
- * the card covers only the fur (hair tuft, wrist and ankle edges), and 0.1 and
- * 0.5 look alike in close-ups; kept at 0.1 as Task 21 chose it.
+ * by `<fighter>/<material>`; only the cutoff differs, so the material stays
+ * MASK and still writes depth. None today. Task 21 gave Donkey Kong's fur card
+ * `alp` 0.1, because at 0.5 the background showed through his scalp; Task 21b
+ * found that was his opaque body cut by the card's alpha (the same PNG's), and
+ * with the body OPAQUE, close-ups of the hair tuft, the scalp and the wrist fur
+ * at 0.1 and 0.5 look alike (Task 21c), so the entry is gone.
  */
-export const ALPHA_CUTOFF_OVERRIDES = Object.freeze({ "donkeyKong/alp": 0.1 });
+export const ALPHA_CUTOFF_OVERRIDES = Object.freeze({});
 /**
  * Face materials that ship with no colour texture, and why that is right, by
  * `<fighter>/<material>` (Task 21b). `prune()` folds a texture of one colour
@@ -182,9 +175,10 @@ export function alphaModeFor(factorAlpha, holes) {
  *
  * @param {string | null} fighter
  * @param {string} material
+ * @param {Readonly<Record<string, number>>} [overrides]
  */
-export function alphaCutoffFor(fighter, material) {
-  return Object.hasOwn(ALPHA_CUTOFF_OVERRIDES, `${fighter}/${material}`) ? ALPHA_CUTOFF_OVERRIDES[`${fighter}/${material}`] : ALPHA_CUTOFF;
+export function alphaCutoffFor(fighter, material, overrides = ALPHA_CUTOFF_OVERRIDES) {
+  return Object.hasOwn(overrides, `${fighter}/${material}`) ? overrides[`${fighter}/${material}`] : ALPHA_CUTOFF;
 }
 
 /**
@@ -199,8 +193,9 @@ export function alphaCutoffFor(fighter, material) {
  * factors.
  *
  * @param {string | null} [fighter]
+ * @param {Readonly<Record<string, number>>} [overrides] the cut-out table (`ALPHA_CUTOFF_OVERRIDES`)
  */
-export function alphaModes(fighter = null) {
+export function alphaModes(fighter = null, overrides = ALPHA_CUTOFF_OVERRIDES) {
   return async (doc) => {
     const holesOf = new Map();
     for (const mat of doc.getRoot().listMaterials()) {
@@ -209,7 +204,7 @@ export function alphaModes(fighter = null) {
       if (tex !== null && !holesOf.has(tex)) holesOf.set(tex, await holesIn(tex.getImage(), tex.getName()));
       const mode = alphaModeFor(mat.getBaseColorFactor()[3], tex === null ? 0 : holesOf.get(tex));
       mat.setAlphaMode(mode);
-      if (mode === "MASK") mat.setAlphaCutoff(alphaCutoffFor(fighter, mat.getName()));
+      if (mode === "MASK") mat.setAlphaCutoff(alphaCutoffFor(fighter, mat.getName(), overrides));
     }
   };
 }
@@ -280,8 +275,9 @@ export async function faceProblems(doc, dump) {
  * @param {string} input
  * @param {string} output
  * @param {string | null} [fighter] whose glb this is, for its cut-out overrides (`ALPHA_CUTOFF_OVERRIDES`)
+ * @param {Readonly<Record<string, number>>} [overrides] the cut-out table
  */
-export async function optimizeGlb(input, output, fighter = null) {
+export async function optimizeGlb(input, output, fighter = null, overrides = ALPHA_CUTOFF_OVERRIDES) {
   const nio = await io();
   const doc = await nio.read(input);
   await doc.transform(
@@ -290,7 +286,7 @@ export async function optimizeGlb(input, output, fighter = null) {
     joinByMaterial(),
     prune(),
     weld(),
-    alphaModes(fighter),
+    alphaModes(fighter, overrides),
     textureCompress({ encoder: sharp, targetFormat: "webp", resize: [MAX_TEXTURE, MAX_TEXTURE] }),
     meshopt({ encoder: MeshoptEncoder, level: "medium" }),
   );

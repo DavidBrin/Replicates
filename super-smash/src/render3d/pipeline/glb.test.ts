@@ -194,24 +194,30 @@ describe("alpha modes, decided from the colour alpha at export", () => {
     });
     await doc.transform(alphaModes("donkeyKong"));
     const by = (name: string) => doc.getRoot().listMaterials().find((m) => m.getName() === name)!;
-    expect([by("body").getAlphaMode(), by("alp").getAlphaMode(), by("alp").getAlphaCutoff()]).toEqual(["OPAQUE", "MASK", 0.1]);
+    expect([by("body").getAlphaMode(), by("alp").getAlphaMode(), by("alp").getAlphaCutoff()]).toEqual(["OPAQUE", "MASK", 0.5]);
   });
 
-  it("a cut-out the lab showed wrong has its own cutoff, named by fighter and material; every other material keeps 0.5", async () => {
-    // Donkey Kong's `alp` is the hair and fur-edge card. At 0.5 the hair is a speckle of strands over the void
-    // (the animation lab's model sheet, Plan 4 Task 21); at 0.1 it is the mop. UNVERIFIED: by eye.
-    expect(ALPHA_CUTOFF_OVERRIDES).toEqual({ "donkeyKong/alp": 0.1 });
-    expect(alphaCutoffFor("donkeyKong", "alp")).toBe(0.1);
-    expect(alphaCutoffFor("donkeyKong", "body")).toBe(ALPHA_CUTOFF);
+  it("no cut-out has its own cutoff: Donkey Kong's 0.1 is gone, with the body cut-out it made up for (Task 21c)", () => {
+    // Task 21 set his fur card `alp` to 0.1 because at 0.5 the background showed through his scalp. Task 21b
+    // found that was his opaque body cut by the card's alpha; with the body OPAQUE, close-ups of the hair tuft,
+    // the scalp and the wrist fur at 0.1 and 0.5 look alike (Task 21c), so every cut-out is 0.5 again.
+    expect(ALPHA_CUTOFF_OVERRIDES).toEqual({});
+    expect(alphaCutoffFor("donkeyKong", "alp")).toBe(ALPHA_CUTOFF);
+  });
+
+  it("a cut-out can still have its own cutoff, named by fighter and material; every other material keeps 0.5", async () => {
+    const OVERRIDES = { "donkeyKong/alp": 0.1 };
+    expect(alphaCutoffFor("donkeyKong", "alp", OVERRIDES)).toBe(0.1);
+    expect(alphaCutoffFor("donkeyKong", "body", OVERRIDES)).toBe(ALPHA_CUTOFF);
     // The same material name on another fighter is another material.
-    expect(alphaCutoffFor("mario", "alp")).toBe(ALPHA_CUTOFF);
-    expect(alphaCutoffFor(null, "alp")).toBe(ALPHA_CUTOFF);
-    expect(alphaCutoffFor("toString", "constructor")).toBe(ALPHA_CUTOFF);
+    expect(alphaCutoffFor("mario", "alp", OVERRIDES)).toBe(ALPHA_CUTOFF);
+    expect(alphaCutoffFor(null, "alp", OVERRIDES)).toBe(ALPHA_CUTOFF);
+    expect(alphaCutoffFor("toString", "constructor", OVERRIDES)).toBe(ALPHA_CUTOFF);
 
     const spec = { materials: { alp: { alpha: (i: number) => (i < 6 ? 0 : 255) }, hair: { alpha: (i: number) => (i < 6 ? 0 : 255) } }, prims: [{ material: "alp" }] };
     const cutoffs = async (fighter?: string) => {
       const doc = await fixtureDoc(spec);
-      await doc.transform(alphaModes(fighter));
+      await doc.transform(alphaModes(fighter, OVERRIDES));
       const by = (name: string) => doc.getRoot().listMaterials().find((m) => m.getName() === name)!;
       return [by("alp").getAlphaMode(), by("alp").getAlphaCutoff(), by("hair").getAlphaMode(), by("hair").getAlphaCutoff()];
     };
@@ -340,7 +346,7 @@ describe("optimizeGlb for a named fighter", () => {
     });
     const cutoffs = async (name: string, fighter?: string) => {
       const output = join(dir, `${name}.glb`);
-      await optimizeGlb(input, output, fighter);
+      await optimizeGlb(input, output, fighter, { "donkeyKong/alp": 0.1 });
       const mats = (await io.read(output)).getRoot().listMaterials();
       return mats.map((m) => [m.getName(), m.getAlphaMode(), m.getAlphaCutoff()]).sort();
     };
