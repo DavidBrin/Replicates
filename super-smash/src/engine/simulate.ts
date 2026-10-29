@@ -620,10 +620,22 @@ export function step(
       // back finally happens — bent by whichever direction is held *now*. The
       // fighter stays frozen for the rest of this frame, so the velocity first
       // applies on the next one, exactly as it did when it was set on contact.
-      if (f.hitlag === 0) releasePendingLaunch(f, intent);
-      // SDI and ASDI move a fighter who skips the collision phase below, so
-      // the shift is kept out of the stage's solid bodies here (Task 11).
+      //
+      // In four steps, in this order (Plan 3 final wave; the final review's
+      // Important 1, Task 19 re-review N2): the automatic SDI shift; the clamp
+      // that keeps SDI and ASDI out of the stage's solid bodies (Task 11), since a
+      // frozen fighter skips the collision phase below; the ground re-check, as
+      // the shift may have carried a grounded victim off its platform; and only
+      // then the launch, which reads where the victim really is: a 367° pull aims
+      // from the clamped position, and a downward launch bounces off the floor
+      // only if the victim is still standing on one.
+      const releasing = f.hitlag === 0 && f.pendingFacing !== 0;
+      if (releasing) applyAsdi(f, intent);
       clampShiftToStage(f, shiftedFromX, shiftedFromY, stage, defs[i].attributes, s.frame);
+      if (releasing) {
+        leaveGroundIfShiftedOff(f, stage, s.frame);
+        releasePendingLaunch(f, intent);
+      }
       continue;
     }
 
@@ -1317,22 +1329,17 @@ function applyInvincibleHit(
  * The victim has had the whole freeze to decide, so a launch angle here is a
  * reaction to a hit that has already landed rather than a guess made before it
  * did; SDI mashing during those same frames is unaffected, because it moves the
- * fighter's position and this decides their velocity.
+ * fighter's position and this decides their velocity. `step` has already
+ * applied the automatic SDI shift, kept the shifts out of the stage and
+ * re-checked the ground by then (phase 3), so the position and `grounded` read
+ * here are where the victim really is. A hit with no freeze calls it on
+ * contact, with nothing shifted.
  *
  * Everything is in attacker-relative space, so the stick is mirrored by the
  * facing the launch was authored against before it is read.
  */
 function releasePendingLaunch(f: FighterState, intent: Intent): void {
   if (f.pendingFacing === 0) return;
-  // Automatic SDI: the freeze of an electric or paralyzing hit ends with a
-  // shift toward the held stick (Plan 3, Task 11; `ASDI_DISTANCE`).
-  if (f.combat.asdi && (intent.x !== 0 || intent.y !== 0)) {
-    const diagonal = intent.x !== 0 && intent.y !== 0;
-    const distance = diagonal ? mul(ASDI_DISTANCE, DIAGONAL) : ASDI_DISTANCE;
-    f.x += intent.x * distance;
-    f.y += intent.y * distance;
-  }
-  f.combat.asdi = false;
   if (f.combat.autolink) {
     releaseAutolink(f);
     return;
@@ -1399,6 +1406,43 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
 }
 
 /**
+ * Automatic SDI: the freeze of an electric or paralyzing hit ends with a shift
+ * toward the held stick (Plan 3, Task 11; `ASDI_DISTANCE`), the first of the
+ * release's four steps in `step` (phase 3). It is spent either way.
+ */
+function applyAsdi(f: FighterState, intent: Intent): void {
+  if (f.combat.asdi && (intent.x !== 0 || intent.y !== 0)) {
+    const diagonal = intent.x !== 0 && intent.y !== 0;
+    const distance = diagonal ? mul(ASDI_DISTANCE, DIAGONAL) : ASDI_DISTANCE;
+    f.x += intent.x * distance;
+    f.y += intent.y * distance;
+  }
+  f.combat.asdi = false;
+}
+
+/**
+ * The ground re-check of a frozen victim whose launch is about to fire (Plan 3
+ * final wave; the final review's Important 1). `grounded` was decided before the
+ * freeze, and a frozen fighter skips the collision phase, so SDI and ASDI could
+ * carry a grounded victim off its platform while it still counted as standing
+ * there: a downward launch then bounced it up off thin air. It is the test
+ * `resolveCollision` asks of a fighter already standing on something, on the
+ * clamped position: is its origin still over the platform's span? If not, it has
+ * left the ground without a jump, which spends the ground jump as walking off
+ * does (`onLeftGround`; SmashWiki "Double jump").
+ */
+function leaveGroundIfShiftedOff(f: FighterState, stage: StageDef, frame: number): void {
+  if (!f.grounded) return;
+  if (f.platform >= 0 && f.platform < stage.platforms.length) {
+    const p = stage.platforms[f.platform];
+    if (abs(f.x - platformCentreX(p, frame)) <= p.halfWidth) return;
+  }
+  f.grounded = false;
+  f.platform = -1;
+  f.jumpsUsed = Math.max(f.jumpsUsed, 1);
+}
+
+/**
  * A launch that rises takes a grounded victim off the floor. Launched off the
  * floor is leaving the ground without a jump: the ground jump is spent, the
  * midair jumps are not (see `onLeftGround`). Being hit gives none back either:
@@ -1427,9 +1471,10 @@ function leaveGroundIfLifted(f: FighterState): void {
  * its hitstun was shortened for it on contact, and UNVERIFIED for 365°, whose
  * section does not say) and set weight's fall ("whatever the angle",
  * `reelOnce`). UNVERIFIED: that DI and LSI do not act on it (the page names
- * only SDI), that it is never balloon (the page does not say), and that the
- * position it reads is the one before `clampShiftToStage` keeps the SDI shift
- * out of the stage's solid bodies.
+ * only SDI), and that it is never balloon (the page does not say). The position
+ * it reads is the one `clampShiftToStage` leaves, after SDI and ASDI: where the
+ * victim really is when the freeze ends (Plan 3 final wave; Task 19 re-review
+ * N2), not a point inside the stage the clamp has just moved it out of.
  */
 function releaseAutolink(f: FighterState): void {
   const v = autolinkVector(parkedAutolink(f.combat), f.x, f.y);

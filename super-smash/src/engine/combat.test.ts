@@ -4919,3 +4919,116 @@ describe("a timed status ends on its first actionable frame (Plan 3 final wave)"
     expect(actions(frames, 1).indexOf("jumpSquat") - first + 1).toBe(stun + 1);
   });
 });
+
+/* -------------------------------- final wave, part 2: the engine fixes -- */
+
+/**
+ * Plan 3 final wave, part 2. Each describe is one numbered fix of the brief
+ * (`final-wave-2-brief.md`), through `step()` on the flat test stage (its edge
+ * at x = 80).
+ */
+
+/** The tester with `jab1`'s one box replaced by `hb`. */
+function jabbing(hb: Hitbox): SimContext {
+  return ctxFor({ ...BASE_DEF, moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hb] }) } });
+}
+
+/**
+ * Fighter 0 jabs once, on the first step; `stick(v)` is fighter 1's input on a
+ * frame, from its state before the frame. Returns every frame, the hit's index
+ * and the index of the frame fighter 1's freeze ends on.
+ */
+function jabbedWhile(
+  s: GameState,
+  ctx: SimContext,
+  stick: (v: FighterState, i: number) => InputFrame,
+  n = 40,
+): { frames: Frame[]; hit: number; fired: number } {
+  const frames: Frame[] = [];
+  let state = s;
+  let prev: readonly InputFrame[] = [0, 0];
+  for (let i = 0; i < n; i++) {
+    const now = [i === 0 ? Btn.Attack : 0, stick(state.fighters[1], i)];
+    const r = step(state, now, { prevInputs: prev, ctx });
+    frames.push(r);
+    state = r.state;
+    prev = now;
+  }
+  const hit = frames.findIndex((f) => f.events.hits.length > 0);
+  const fired = frames.findIndex((f, i) => i > hit && f.state.fighters[1].hitlag === 0);
+  return { frames, hit, fired };
+}
+
+/** Fighter 1 mashes `dir` on every frame of its freeze an SDI pulse can fire on (`SDI_INPUT_INTERVAL`). */
+const mashing = (dir: number) => (v: FighterState): InputFrame => (v.hitlag > 0 && v.hitlag % 4 === 0 ? dir : 0);
+
+describe("the freeze ends in order: ASDI, the clamp, a ground re-check, then the launch (final wave, part 2, item 1)", () => {
+  // A tumbling meteor (270°, 120 knockback, 12 frames of freeze) from fighter 0 at
+  // x 70 onto fighter 1 standing at x 78, 2 units from the stage's edge at 80.
+  const meteor = jabbing(hitbox({ angle: fx(270), meteor: true, baseKnockback: fx(120), knockbackGrowth: 0 }));
+  const atTheLip = (): GameState => {
+    const s = standing(meteor);
+    s.fighters[0].x = fx(70);
+    s.fighters[1].x = fx(78);
+    return s;
+  };
+
+  it("bounces a grounded victim of a tumbling meteor that stays on the stage (the control)", () => {
+    const { frames, fired } = jabbedWhile(atTheLip(), meteor, () => 0);
+    const v = frames[fired].state.fighters[1];
+    expect(v.x).toBe(fx(78));
+    expect(v.kinetic.damageY).toBeGreaterThan(0);
+  });
+
+  // The final review's Important 1: the victim SDIs off the lip during the freeze,
+  // so at release it stands over nothing, and the meteor spikes it.
+  it("spikes a grounded meteor's victim who SDIs past the edge, rather than bouncing it off thin air", () => {
+    const { frames, hit, fired } = jabbedWhile(atTheLip(), meteor, mashing(Btn.Right));
+    expect(frames[hit].state.fighters[1].x).toBe(fx(78));
+    const v = frames[fired].state.fighters[1];
+    // Three pulses of 2 (freeze 12, 8, 4): past the edge at 80.
+    expect(v.x).toBe(fx(84));
+    expect(v.grounded).toBe(false);
+    expect(v.kinetic.damageY).toBeLessThan(0);
+    // The whole launch, not the bounce's 0.9 of it.
+    expect(v.launchSpeed).toBe(mul(fx(120), LAUNCH_SPEED_RATIO));
+    // ...and down it goes.
+    expect(frames[fired + 5].state.fighters[1].y).toBeLessThan(0);
+  });
+
+  // Task 19 re-review N2: the 367 vector was read before the clamp, from a victim
+  // the ASDI shift had put inside the floor (vy 1.374 in the reviewer's probe; 1.200
+  // from where the clamp leaves it). An electric 367 box, live on the jab's first
+  // frame, catches fighter 1 just above the floor; she holds down through the freeze.
+  it("aims a 367 pull from where the clamp leaves the victim, not from inside the floor", () => {
+    const ctx = jabbing(hitbox({ startFrame: 1, endFrame: 3, angle: fx(367), effect: "electric", damage: fx(2) }));
+    const s = standing(ctx);
+    Object.assign(s.fighters[1], { x: fx(12), y: fx(0.13), grounded: false, platform: -1, action: "fall" });
+    const { frames, hit, fired } = jabbedWhile(s, ctx, (_v, i) => (i >= 1 ? Btn.Down : 0));
+    const contact = frames[hit].state.fighters[1];
+    expect(contact.grounded).toBe(false);
+    expect(contact.y).toBeGreaterThan(0);
+    expect(contact.y).toBeLessThan(ASDI_DISTANCE);
+    const a = frames[hit].state.fighters[0];
+    const box = frames[hit].events.hits[0];
+    const v = frames[fired].state.fighters[1];
+    // The shift down went into the floor, and the clamp put her back on its surface.
+    expect(v.y).toBe(0);
+    expect(v.kinetic.damageY).toBe(a.vy + byRatio(box.y - v.y, [1, 5]));
+    expect(v.kinetic.damageY).not.toBe(a.vy + byRatio(box.y - (contact.y - ASDI_DISTANCE), [1, 5]));
+  });
+
+  // Task 19 re-review N3: the pull reads the victim where ASDI left her, as it does for SDI.
+  it("aims a 367 pull from where ASDI moved the victim", () => {
+    const ctx = jabbing(hitbox({ angle: fx(367), effect: "electric", damage: fx(2) }));
+    const s = standing(ctx);
+    Object.assign(s.fighters[1], { x: fx(12), y: fx(2), grounded: false, platform: -1, action: "fall" });
+    const { frames, hit, fired } = jabbedWhile(s, ctx, (v) => (v.hitlag > 0 ? Btn.Right : 0));
+    const contact = frames[hit].state.fighters[1];
+    const a = frames[hit].state.fighters[0];
+    const box = frames[hit].events.hits[0];
+    const v = frames[fired].state.fighters[1];
+    expect(v.x - contact.x).toBe(ASDI_DISTANCE);
+    expect(v.kinetic.damageX).toBe(a.vx + byRatio(box.x - v.x, [1, 5]));
+  });
+});
