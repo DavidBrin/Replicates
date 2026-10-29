@@ -58,7 +58,7 @@ import {
   type Vec3Out,
 } from "../math/rigid";
 import type { Rig3 } from "../skeleton/skeleton";
-import { PIVOT_BONE, driveFor } from "./map";
+import { PIVOT_BONE, driveFor, type Drive } from "./map";
 
 interface DriveEntry {
   readonly index: number;
@@ -111,8 +111,8 @@ export interface Calibration {
   readonly drives: readonly DriveEntry[];
   /**
    * For each rig bone, the index in `drives` of the drive that poses it, or −1
-   * for a bone that rides its parent. Where two drives name one bone the later
-   * one poses it.
+   * for a bone that rides its parent. One drive at most: `calibrate` refuses a
+   * bone two drives name.
    */
   readonly driveOf: readonly number[];
   /** World height of the pelvis in bind pose, model units. */
@@ -131,9 +131,13 @@ const ROOT_AT_FEET_TOLERANCE = 1e-4;
 /**
  * Precompute every driven bone's reference rotation against the fighter's 2D
  * rig (`rig2d` supplies the rest angles a "bind" drive is relative to). Throws
- * naming the fighter and the bone (or the root) that cannot be calibrated.
+ * naming the fighter and the bone (or the root) that cannot be calibrated, and
+ * refuses a drive table that cannot mean what it says: two drives on one SSBU
+ * bone (the later would silently win), or a `turn` on a "bind" drive (only a
+ * "down" drive reads it, so it would do nothing). `drives` is the table, as
+ * `driveFor` reads it; a test passes its own.
  */
-export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
+export function calibrate(rig: Rig3, rig2d: Rig, drives: (fighterId: string, bone: BoneName) => Drive | undefined = driveFor): Calibration {
   // `retarget` shifts a root bone by P - R*P to pivot about the pelvis. That is
   // the turn of a root bone at the feet; a root off the y/z origin would need
   // R*T + (P - R*P). SSBU's root is at the feet, and a skeleton that is not
@@ -147,11 +151,16 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
       );
     }
   });
-  const drives: DriveEntry[] = [];
+  const entries: DriveEntry[] = [];
+  /** Which 2D bone drives each rig bone so far. */
+  const drivenBy = new Map<number, BoneName>();
   const rest2d = accumulatedAngles(rig2d, {}, 0);
   for (const our of BONE_NAMES) {
-    const drive = driveFor(rig.fighter, our);
+    const drive = drives(rig.fighter, our);
     if (!drive) continue;
+    if (drive.turn !== undefined && drive.rest !== "down") {
+      throw new Error(`retarget ${rig.fighter}: ${our} has a turn of ${drive.turn}°, which only a "down" drive reads; give it rest "down" or drop the turn`);
+    }
     const present = drive.bones.map((b) => rig.byLower.get(b.toLowerCase()));
     if (present.every((i) => i === undefined)) {
       throw new Error(`retarget ${rig.fighter}: skeleton lacks ${our}'s bone (tried ${drive.bones.join(", ")})`);
@@ -159,6 +168,9 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
     drive.bones.forEach((name, k) => {
       const index = present[k];
       if (index === undefined) return;
+      const first = drivenBy.get(index);
+      if (first !== undefined) throw new Error(`retarget ${rig.fighter}: ${name} is driven by both ${first} and ${our}; one SSBU bone takes one drive`);
+      drivenBy.set(index, our);
       const world = rig.restWorld[index];
       const tipName = drive.tips?.[k] ?? null;
       let along: Vec3;
@@ -178,7 +190,7 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
       if (drive.rest === "down") {
         // A `turn` sets the bone that far past the 2D bone (`map.ts`, the swordsmen's grip).
         const ref = drive.turn === undefined ? Math.PI : Math.PI - (drive.turn * Math.PI) / 180;
-        drives.push({ index, our, ourAt: BONE_AT.get(our)!, base: qMul(qFromTo(along, DIR_DOWN), mRotation(world)), ref });
+        entries.push({ index, our, ourAt: BONE_AT.get(our)!, base: qMul(qFromTo(along, DIR_DOWN), mRotation(world)), ref });
         return;
       }
       // "bind": keep the bind direction's side-plane angle, drop its sideways lean.
@@ -187,14 +199,14 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
         throw new Error(`retarget ${rig.fighter}: ${name} points sideways in its bind pose; give ${our} rest "down"`);
       }
       const inPlane: Vec3 = [0, along[1] / side, along[2] / side];
-      drives.push({ index, our, ourAt: BONE_AT.get(our)!, base: qMul(qFromTo(along, inPlane), mRotation(world)), ref: rest2d[our] });
+      entries.push({ index, our, ourAt: BONE_AT.get(our)!, base: qMul(qFromTo(along, inPlane), mRotation(world)), ref: rest2d[our] });
     });
   }
   const pivot = rig.byLower.get(PIVOT_BONE.toLowerCase());
   if (pivot === undefined) throw new Error(`retarget ${rig.fighter}: skeleton lacks ${PIVOT_BONE}`);
   const driveOf = rig.names.map(() => -1);
-  drives.forEach((d, k) => (driveOf[d.index] = k));
-  return { rig, drives, driveOf, pivotY: mTranslation(rig.restWorld[pivot])[1] };
+  entries.forEach((d, k) => (driveOf[d.index] = k));
+  return { rig, drives: entries, driveOf, pivotY: mTranslation(rig.restWorld[pivot])[1] };
 }
 
 /** Accumulated 2D angles, the way `resolve()` walks them. */

@@ -721,6 +721,17 @@ describe("the environment collision box (ECB)", () => {
     }
   });
 
+  // Task 12 re-review, N1: feet exactly level with the underside last frame are
+  // not inside the stage (the golden's invariant spares that boundary too), so a
+  // body rising from there meets the underside like one rising from below it.
+  it("stops a rising body whose feet were exactly level with the underside last frame (re-review N1)", () => {
+    const bottom = -HARD_PLATFORM_DEPTH;
+    const f = fighter({ x: 0, y: bottom + fx(2), vy: fx(2) });
+    const out = resolveCollision(f, 0, bottom, STAGE, ATTRS, 0, { ecb: { bottom: 0, top: fx(20), half: fx(4) } });
+    expect(out.ceiling).toBe(true);
+    expect(f.y).toBe(bottom - fx(20));
+  });
+
   it("leaves a body whose feet were already inside the stage to the stage, as before", () => {
     // Feet inside the solid body last frame (between its underside and its surface):
     // nothing pushes it down out of the stage, as nothing did with Plan 2's box.

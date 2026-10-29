@@ -9,15 +9,15 @@ import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { launchWorldAngle } from "@/engine/knockback";
 import { toFloat } from "@/engine/fixed";
-import { HARD_PLATFORM_DEPTH, platformCentreX } from "@/engine/physics";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { ActionState, FighterState, GameState, InputFrame, MatchRules, MoveSlot, StageDef } from "@/engine/types";
+import type { ActionState, FighterState, GameState, InputFrame, MatchRules, MoveSlot } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { bakedContext } from "./bake";
 import { readBakeFromDisk } from "./bakeNode";
+import { stateInvariantBreaks } from "./stateInvariants";
 
 import { TECH_LAB } from "./goldenLab";
 import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
@@ -350,8 +350,7 @@ function hitKind(attacker: FighterState): string {
  * exactly the energies' sum, every number a fighter carries is an integer
  * (Q12 or a count), and the stale queue's parallel array has its length (and
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
- * fighter inside the stage). The
- * static guards cannot see every write
+ * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
  * on every frame of all six matches.
  */
@@ -367,42 +366,6 @@ function invariantBreaks(f: FighterState, frame: number): string[] {
   // wrong rate without throwing.
   if (f.combat.staleShield.length !== f.staleQueue.length) {
     out.push(`${at}: staleShield ${f.combat.staleShield.length} marks, staleQueue ${f.staleQueue.length} entries`);
-  }
-  return out;
-}
-
-/**
- * What must hold of the whole state on every frame, across fighters: a ledge is
- * held by one fighter at most. SmashWiki "Ledge" (https://www.ssbwiki.com/Ledge):
- * "Multiple characters cannot hold onto an edge at the same time". A fighter
- * hanging on one is trumped off it by the next grab, and one in a ledge option,
- * which keeps its `ledge` set, has it refused to everybody else (`findLedgeGrab`):
- * so two fighters with the same `ledge` is a rule broken, however it happened
- * (Plan 3 final wave, part 4; the Task 15 review's N4).
- *
- * And no fighter's origin, its feet, is ever strictly inside a hard platform's
- * solid body: within its span, below its surface and above its underside
- * (`HARD_PLATFORM_DEPTH`). The walls, the ceilings and the SDI clamp all keep a
- * body out, and a body that got in, a fighter rising through the underside, is
- * otherwise invisible to the trace (Plan 4, Task 12 fix round 1: the bones' ECB
- * once let an up special rise straight through the stage).
- */
-function stateInvariantBreaks(s: GameState, stage: StageDef, frame: number): string[] {
-  const out: string[] = [];
-  const holder = new Map<string, number>();
-  for (const f of s.fighters) {
-    if (f.ledge === null) continue;
-    const key = `platform ${f.ledge.platform}, side ${f.ledge.side}`;
-    const first = holder.get(key);
-    if (first === undefined) holder.set(key, f.port);
-    else out.push(`frame ${frame}: ports ${first} and ${f.port} both hold the ledge at ${key}`);
-  }
-  for (const f of s.fighters) {
-    stage.platforms.forEach((p, i) => {
-      if (p.soft) return;
-      const inside = Math.abs(f.x - platformCentreX(p, s.frame)) < p.halfWidth && f.y < p.y && f.y > p.y - HARD_PLATFORM_DEPTH;
-      if (inside) out.push(`frame ${frame}, port ${f.port}: origin (${toFloat(f.x)}, ${toFloat(f.y)}) inside platform ${i} (${f.action})`);
-    });
   }
   return out;
 }

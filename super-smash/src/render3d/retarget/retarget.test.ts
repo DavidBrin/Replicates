@@ -139,6 +139,24 @@ describe("retargeting a 2D pose onto an SSBU skeleton", () => {
     );
     expect(() => calibrate(buildRig({ ...sideways, bones }), BASE_RIG)).toThrow(/LegL points sideways.*thighL rest "down"/);
   });
+
+  // Plan 4 final wave: two drives on one SSBU bone would pose it twice, the
+  // later one silently winning (Task 3 review); and a `turn` is read only by a
+  // "down" drive, so on a "bind" drive it would do nothing and pass every test
+  // (Task 13b re-review). Both are mistakes in the drive table, refused by name.
+  it("refuses two drives on one SSBU bone, naming the bone and both 2D bones", () => {
+    const twice = (id: string, bone: BoneName) => (bone === "head" ? { bones: ["Neck", "Bust"], rest: "bind" as const } : driveFor(id, bone));
+    expect(() => calibrate(rig, BASE_RIG, twice)).toThrow(/^retarget test: Bust is driven by both torso and head; one SSBU bone takes one drive$/);
+    const sameTwice = (id: string, bone: BoneName) => (bone === "torso" ? { bones: ["Waist", "waist"], rest: "bind" as const } : driveFor(id, bone));
+    expect(() => calibrate(rig, BASE_RIG, sameTwice)).toThrow(/^retarget test: waist is driven by both torso and torso; one SSBU bone takes one drive$/);
+  });
+
+  it("refuses a turn on a \"bind\" drive, which only a \"down\" drive reads", () => {
+    const turned = (id: string, bone: BoneName) => (bone === "thighL" ? { ...RETARGET.thighL!, turn: 30 } : driveFor(id, bone));
+    expect(() => calibrate(rig, BASE_RIG, turned)).toThrow(/^retarget test: thighL has a turn of 30°, which only a "down" drive reads; give it rest "down" or drop the turn$/);
+    // The swordsmen's grip, a turn on a "down" drive, is what a turn is for.
+    expect(() => calibrate(buildRig(SKELETONS.marth), getCharacterRig("marth").bones)).not.toThrow();
+  });
 });
 
 /**

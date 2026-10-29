@@ -37,7 +37,8 @@ export interface Drive {
   readonly rest: "bind" | "down";
   /**
    * Degrees the bone is turned past the 2D bone's direction, in the side plane
-   * (clockwise, as the 2D angles are). Read only by a "down" drive; absent is 0.
+   * (clockwise, as the 2D angles are). Read only by a "down" drive (`calibrate`
+   * refuses one on a "bind" drive); absent is 0.
    * For a hand whose model holds something across it rather than along it.
    */
   readonly turn?: number;

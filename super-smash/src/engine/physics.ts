@@ -316,8 +316,10 @@ export function resolveCollision(
     // taller, as already inside, and it rose through the stage (Plan 4, Task 12 fix
     // round 1). Nor last frame's own top: a pose can reach into the underside before
     // the body ever rises (the tech lab's Donkey Kong). Feet below and head above is a
-    // body in the stage from underneath, and it is pushed back down.
-    if (f.vy > 0 && abs(f.x - cx) < reach && prevY + ecb.bottom < bottom && head > bottom) {
+    // body in the stage from underneath, and it is pushed back down. Feet exactly level
+    // with the underside count as below it: they were not inside the stage (the Task 12
+    // re-review's N1; the golden's invariant spares that boundary too).
+    if (f.vy > 0 && abs(f.x - cx) < reach && prevY + ecb.bottom <= bottom && head > bottom) {
       f.y = bottom - ecb.top;
       kineticSetY(f, 0);
       out.blocked = true;
