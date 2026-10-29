@@ -168,7 +168,11 @@ export const STATUS_CATCH_ATTACK: FighterStatus = {
   kineticType: "FALL",
   pre: clearHitRecord,
   main(f, intent, ctx) {
+    // A press on any frame of the pummel, the last included, is kept for the hold it
+    // hands off to (a second pummel, a throw), as in every other status: the input
+    // buffer is for every action (Plan 3 final wave, part 4).
     if (f.actionFrame >= PUMMEL_FRAMES) handOff(f, "grabHold", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
   },
 };
 
@@ -187,7 +191,7 @@ export const STATUS_THROW: FighterStatus = {
       // the backstop: nobody is held once the throw is over.
       releaseHeld(f, ctx.fighters);
       handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
-    }
+    } else bufferPress(f, intent, ctx.frame);
   },
 };
 

@@ -2224,6 +2224,11 @@ rule's output.
   shieldstun, downed, the get-up and the techs now buffer it, and a wall tech, actionable from
   frame 6, reads input before its last frame's change. The trump, a broken shield, being
   grabbed or thrown and `entering` are left as they were.
+- *Every status buffers a press* (part 4 of the final wave; the part 1 and 2 re-review's Minor 2).
+  A throw, a pummel, a run's turnaround and a crouch's start and end never called `bufferPress`,
+  so a press on any frame before the hand-off, the last included, was lost, and only one made on
+  the hand-off frame itself acted. They keep it now, as every other status already did, so the
+  input buffer is one rule (its 9 frames, `presses`) and not five exceptions.
 - *The spot dodge and the rolls are each fighter's own* (UFD "Dodges / Rolls";
   `FighterAttributes.groundDodge`, `src/engine/groundDodge.ts`), under the air dodge's
   convention: a published frame N is `actionFrame` N − 1, for the length and for the
@@ -2341,7 +2346,11 @@ tech that no other match reaches without off-stage play. The coverage pin names 
 states. Tasks 3, 4, 9, 12, 14 and 18 re-tuned the scripted match (`goldenScript.ts`'s header
 says how), and no pin entry was dropped. The final wave regenerated the trace four times (the
 hand-off, SDI for the victim alone, the mash input, and the buffered last-frame press), each
-with `RULES_PIN.golden` and the version unmoved, and re-tuned nothing, as no pin tripped. The
+with `RULES_PIN.golden` and the version unmoved, and re-tuned nothing, as no pin tripped. Part 4
+regenerated it a fifth time, for the buffered press in a turnaround, a crouch, a pummel and a
+throw: two CPU matches moved (Donkey Kong against Pikachu from frame 36, Kirby against Marth
+from frame 480, each a shield press during a run's turnaround that now acts as it ends), the
+rest byte-identical, no pin entry dropped and no re-tune needed. The
 release order, the release bounce, the KO clears, hitlag on a shield and its smaller fixes left
 the trace byte-identical. The end-to-end test "the player can actually damage the CPU" failed
 about one run in eight, because a blind back-and-forth pattern ran the player off the stage in
@@ -2498,6 +2507,11 @@ And the rulings made after this entry's first draft, in the final wave:
 - *A fresh press on the last frame of a contact status is buffered* (part 1's report, concern
   5). Cost: a golden regeneration (a jump pressed on a landing's last frame now fires, where
   the fighter used to dash instead).
+- *A throw, a pummel, a turnaround and a crouch's start and end buffer a press like every other
+  status* (the part 1 and 2 re-review's Minor 2). Why: the input buffer applies to every
+  action, and one rule beats five exceptions. Cost: a golden regeneration (two CPU matches, a
+  shield press during a turnaround that now acts as it ends), and a second pummel pressed a few
+  frames early now comes out as the first ends.
 - *A start from this build that the guest cannot read is refused, in its own words* (codex
   P2-2): "a different version" would be false. Cost: a second reason on the `refuse` message.
 

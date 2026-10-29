@@ -13,6 +13,7 @@ import {
   CROUCH_START_FRAMES,
   RUN_BRAKE_FRAMES,
   TURNAROUND_FRAMES,
+  bufferPress,
   handOff,
   handleActionable,
   startAction,
@@ -127,7 +128,10 @@ export const STATUS_TURN_RUN: FighterStatus = {
   action: "turnaround",
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
+    // A press during the turnaround is kept for the status it hands off to, as in
+    // every status that is not yet free to act (Plan 3 final wave, part 4).
     if (f.actionFrame >= TURNAROUND_FRAMES) handOff(f, "stand", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
   },
 };
 
@@ -137,6 +141,7 @@ export const STATUS_SQUAT: FighterStatus = {
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
     if (f.actionFrame >= CROUCH_START_FRAMES) handOff(f, "crouch", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
   },
 };
 
@@ -156,6 +161,7 @@ export const STATUS_SQUAT_RV: FighterStatus = {
   kineticType: "GROUND_STOP",
   main(f, intent, ctx) {
     if (f.actionFrame >= CROUCH_END_FRAMES) handOff(f, "stand", intent, ctx);
+    else bufferPress(f, intent, ctx.frame);
   },
 };
 

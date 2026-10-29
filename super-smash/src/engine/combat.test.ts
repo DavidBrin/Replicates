@@ -5649,6 +5649,92 @@ describe("a timed status ends on its first actionable frame (Plan 3 final wave)"
   });
 });
 
+/* --------- final wave, part 4: a press in a status that is not yet free to act -- */
+
+// Ultimate's input buffer is for every action, not some (SmashWiki "Input buffering",
+// https://www.ssbwiki.com/Input_buffering: a press made a few frames early still acts the
+// frame it can). Part 1 made it hold on the last frame of a landing, a reel and a tech; the
+// re-review found five statuses that never buffered at all, so a press on any of their
+// frames, the last included, was lost: a pummel, a throw, a run's turnaround, and a crouch's
+// start and end. Each is pinned here the same way: a press early in the status, one in its
+// middle and one on its last frame all act on the first frame the fighter is free.
+describe("a press made while a status is not yet free to act is kept (Plan 3 final wave, part 4)", () => {
+  const actions4 = (frames: Frame[], port = 0): ActionState[] => frames.map((f) => f.state.fighters[port].action);
+  /** Fighter 0 standing at x 0, fighter 1 parked at x -60, out of every reach. */
+  function alone(ctx: SimContext = ctxFor()): GameState {
+    const s = standing(ctx);
+    s.fighters[1].x = fx(-60);
+    s.fighters[1].facing = 1;
+    return s;
+  }
+
+  // A run's turnaround is 11 frames: indices 0-10 (the frame it is entered, `Btn.Left`
+  // against a run to the right, is frame 1), and a fresh press acts on index 11.
+  it.each([3, 6, 10])("takes a jump pressed on turnaround frame %i when the turnaround ends", (press) => {
+    const s = alone();
+    Object.assign(s.fighters[0], { action: "run", actionFrame: 20 });
+    const a = actions4(play(s, 13, (i) => [i === 0 ? Btn.Left : i === press ? Btn.Jump : 0, 0]));
+    expect(a[10]).toBe("turnaround");
+    expect(a[11]).toBe("jumpSquat");
+  });
+
+  // The crouch's start is 5 frames: indices 0-4, free on index 5, where a held Down and an
+  // attack press is a down tilt (the tester's jab).
+  it.each([1, 3, 4])("takes an attack pressed on crouch-start frame %i when the crouch is reached", (press) => {
+    const a = actions4(play(alone(), 7, (i) => [i === press ? Btn.Down | Btn.Attack : Btn.Down, 0]));
+    expect(a[4]).toBe("crouchStart");
+    expect(a[5]).toBe("attack");
+  });
+
+  // Let go after 7 crouching frames: crouchEnd is indices 7-11, free on index 12.
+  it.each([8, 10, 11])("takes a jump pressed on crouch-end frame %i when the crouch is over", (press) => {
+    const a = actions4(play(alone(), 15, (i) => [i < 7 ? Btn.Down : i === press ? Btn.Jump : 0, 0]));
+    expect(a[7]).toBe("crouchEnd");
+    expect(a[11]).toBe("crouchEnd");
+    expect(a[12]).toBe("jumpSquat");
+  });
+
+  /** Fighter 0 holding fighter 1 (a hold nobody is going to break), the pair 8 apart. */
+  function holding(ctx: SimContext): GameState {
+    const s = standing(ctx);
+    const [a, v] = s.fighters;
+    a.action = "grabHold";
+    a.grabbing = 1;
+    v.action = "grabbed";
+    v.actionFrame = 30;
+    v.grabbedBy = 0;
+    v.grabTimer = 100;
+    return s;
+  }
+
+  // The pummel is `PUMMEL_FRAMES` 10: pressed once on the hold's first frame, it runs indices
+  // 0-9 and the hold takes over on index 10, where a second press is the second pummel. A
+  // press on any pummel frame, the last (index 9) included, is that second pummel.
+  it.each([2, 5, 9])("takes an attack pressed on pummel frame %i as the second pummel when the first ends", (press) => {
+    const pummeller: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, pummel: move("pummel", { totalFrames: 10, hitboxes: [] }) } };
+    const ctx = ctxFor(pummeller);
+    const frames = play(holding(ctx), 14, (i) => [i === 0 || i === press ? Btn.Attack : 0, 0], ctx);
+    const a = actions4(frames);
+    expect(a[0]).toBe("pummel");
+    expect(a[PUMMEL_FRAMES - 1]).toBe("pummel");
+    expect(frames[PUMMEL_FRAMES].state.fighters[0], "the next pummel starts as the first hands off").toMatchObject({ action: "pummel", actionFrame: 0 });
+  });
+
+  // A throw with no box to land is the backstop: its animation ending releases the victim
+  // and the thrower stands. A 20-frame throw begun on index 1 is indices 1-20 and the thrower
+  // is free on 21; the buffer is 9 frames, so the presses are in its last 9 (index 13 up).
+  it.each([13, 17, 20])("takes a jump pressed on index %i of a throw when the throw ends", (press) => {
+    const thrower: FighterDef = { ...BASE_DEF, moves: { ...BASE_DEF.moves, fthrow: move("fthrow", { totalFrames: 20, hitboxes: [] }) } };
+    const ctx = ctxFor(thrower);
+    // Forward on index 1 starts the throw on that frame; its frames are indices 1-20.
+    const frames = play(holding(ctx), 24, (i) => [i === 1 ? Btn.Right : i === press ? Btn.Jump : 0, 0], ctx);
+    const a = actions4(frames);
+    expect(a[1]).toBe("throw");
+    expect(a[20]).toBe("throw");
+    expect(a[21]).toBe("jumpSquat");
+  });
+});
+
 /* -------------------------------- final wave, part 2: the engine fixes -- */
 
 /**
