@@ -17,11 +17,11 @@ import { hitstun } from "./hitstun";
  * Every reel length that can reach this clip.
  *
  * The ceiling is the engine's: a hit worth `TUMBLE_HITSTUN` frames or more is
- * sent to `tumble` at the moment of contact, so 31 is the longest reel there
- * is. The floor is three because `hitstun = floor(knockback × 0.4) − 1` and the
- * weakest hits in the game — jabs, weak-hit aerials — land in the fours and
- * fives; three is a frame under the realistic minimum and therefore the honest
- * worst case to hold every property at.
+ * sent to `tumble` at the moment of contact, so 30 is the longest reel there
+ * is. The floor is three because `hitstun = floor(max(knockback × 0.4, 5)) − 1`
+ * never gives less than four — the weakest hits in the game, jabs and weak-hit
+ * aerials, land in the fours and fives — so three is a frame under the minimum
+ * and therefore the honest worst case to hold every property at.
  */
 const LENGTHS = Array.from({ length: TUMBLE_HITSTUN - 3 }, (_, i) => i + 3);
 

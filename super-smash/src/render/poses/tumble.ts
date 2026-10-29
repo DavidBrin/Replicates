@@ -30,10 +30,12 @@ import { deg } from "../skeleton";
  *
  * ## Thirty-two frames, and a turn that is not quite even
  *
- * 32 rather than 26, because 32 is `TUMBLE_HITSTUN`: the shortest hit that
- * tumbles at all now shows exactly one complete revolution, so nobody is ever
- * dropped out of tumble mid-turn, and a kill shot's 60-90 frames shows two or
- * three. It also drops the step from 13.9° a frame to 11.3°, which the eye can
+ * 32 rather than 26, because 32 was `TUMBLE_HITSTUN` when the clip was drawn:
+ * the shortest hit that tumbled at all showed exactly one complete revolution.
+ * Since Plan 3 tumble starts at 31 frames (`TUMBLE_HITSTUN`, knockback 80), a
+ * frame short of one, and the balloon speed-up shortens a kill shot's hitstun to
+ * about 40-60 real frames, between one turn and two (DECISIONS D56). The 32
+ * also drops the step from 13.9° a frame to 11.3°, which the eye can
  * still read as a body rather than a blur — and since the flail is locked to
  * the spin, the period sets the flail rate too. 1.9Hz is about as fast as an
  * arm actually thrashes.

@@ -3,12 +3,12 @@
  *
  * ## The length is different every single time
  *
- * `hitstun = floor(knockback × 0.4) − 1` ([SmashWiki: Hitstun]) and the state
- * runs for exactly that many frames, so `poseTimeFor` samples this clip at
- * `actionFrame / hitstun`. A jab gives three to five frames and the strongest
- * hit that stays out of tumble gives thirty-one — at 32 the victim is sent to
- * `tumble` instead (`TUMBLE_HITSTUN`, checked at the moment of the hit in
- * `simulate.ts`), so thirty-one is a hard ceiling and this clip never has to
+ * `hitstun = floor(max(knockback × 0.4, 5)) − 1` ([SmashWiki: Hitstun]) and the
+ * state runs for exactly that many frames, so `poseTimeFor` samples this clip at
+ * `actionFrame / hitstun`. A jab gives a few frames, never under four, and the
+ * strongest hit that stays out of tumble gives thirty — at 31 the victim is
+ * sent to `tumble` instead (`TUMBLE_HITSTUN`, checked at the moment of the hit
+ * in `simulate.ts`), so thirty is a hard ceiling and this clip never has to
  * cover a launch.
  *
  * That range is the whole design problem, and it is not the same problem
@@ -23,7 +23,7 @@
  * 2. **Everything after frame 0 recovers monotonically.** A pose that got
  *    worse before it got better would, subsampled at three points, read as a
  *    random selection of drawings. Monotone means *any* subsampling of it still
- *    tells the same story, which is the only way one clip serves 3 and 31.
+ *    tells the same story, which is the only way one clip serves 4 and 30.
  *
  * The interest a thirty-frame reel needs therefore lives in the *extremities*,
  * not in the spine: the head and arms overshoot and settle, and that overshoot
@@ -51,7 +51,7 @@
  * ## What is not here
  *
  * Hitstun cancelling opens at frame 40 for an air dodge and 45 for an aerial
- * ([SmashWiki: Hitstun canceling]); both are past this clip's ceiling of 31, so
+ * ([SmashWiki: Hitstun canceling]); both are past this clip's ceiling of 30, so
  * there is no cancel to animate and the reel simply ends.
  *
  * One clip has to commit to one direction, and it commits to the common case:

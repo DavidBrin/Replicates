@@ -107,17 +107,24 @@ such.
 
 ## 2. Hitstun and tumble
 
-`hitstun = floor(knockback × 0.4) − 1`. The 0.4 has held since Melee; Ultimate always
-subtracts the extra frame. **HIGH** — [Hitstun](https://www.ssbwiki.com/Hitstun).
+`hitstun = floor(max(knockback × 0.4, 5)) − 1`: never under **4** frames. The 0.4 has held
+since Melee; Ultimate always subtracts the extra frame. **HIGH** —
+[Hitstun](https://www.ssbwiki.com/Hitstun); rubendal SSBU-Calculator `Hitstun`.
 
-Tumble begins at **≥ 32 frames of hitstun**, computed before modifiers. **HIGH** —
-[Tumbling](https://www.ssbwiki.com/Tumbling). Note this is a *hitstun-frame* threshold,
-not the "knockback > 80" rule of thumb that circulates; 32 frames back-computes to ≈ 82.5
-knockback, close but not equal. The engine checks frames.
+Tumble begins when the reaction frames, hitstun + 1, reach **32**: knockback **80**, hitstun
+31. **HIGH** — rubendal SSBU-Calculator and the reference port's `isTumble`
+(`floor(kb × 0.4) − 1 + 1 ≥ 32`); [Tumbling](https://www.ssbwiki.com/Tumbling). An earlier
+revision of this document read the threshold as 32 frames of hitstun, about 82.5 knockback;
+Plan 3 Task 6 moved the engine to 80.
 
 During tumble, launch speed starts at **0.03×** the knockback and decays **0.051** per
-frame. Above 200 knockback the speed-up stops scaling and hitstun instead grows by
-`(knockback − 200) × 0.25`. **HIGH**
+frame. A tumbling launch without set knockback is also played back faster at first: the
+balloon speed-up (`init_damage_speed_up`; rubendal `InitDamageSpeedUp` and
+`ReactionFrameMulSpeedUp`) runs it up to **6×** on its first frame (from 80 reaction frames;
+none at 30 or fewer), falling to 1× once 70% of its reaction frames are spent. So 90, 145,
+200 and 250 knockback hold the victim 33, 41, 49 and 61 real frames (Hitstun), and the
+`(knockback − 200) × 0.25` slope above 200 is that schedule's 6× cap, not a rule of its own.
+**HIGH** (Plan 3, Tasks 5 and 6; DECISIONS D56)
 
 ---
 
@@ -195,17 +202,16 @@ earlier** against a direct attack, **12 frames earlier** against a disjointed on
 **8 frames *later*** against a direct projectile — perfect-shielding a projectile is worse
 than just holding shield. **HIGH**
 
-### Gaps
+### Shield damage, size and breaking
 
-The **shield-break stun formula** could not be recovered. Sources agree it is inversely
-proportional to the victim's percent and reducible by mashing, but no coefficients were
-published, and `dragdown.wiki` — which likely has them — returned HTTP 403 on every
-attempt. The engine uses 240 frames scaled by percent and mash input, which is a
-**LOW**-confidence stand-in and is labelled as such in `constants.ts`.
-
-Likewise, no source gave a shield-HP-damage-per-hit equation distinct from the shieldstun
-formula. The engine treats shield HP loss as equal to the damage dealt, a commonly cited
-simplification. **LOW**
+A hit takes **×1.19** of its damage off the shield, and the shield shrinks to
+`(HP/50) × 0.85 + 0.15` of its radius, so a worn one can be poked
+([Shield](https://www.ssbwiki.com/Shield)). A shield break stuns for **`400 − percent`**
+frames ("From Brawl onward, the formula is changed to 400 − p",
+[Stun](https://www.ssbwiki.com/Stun)), shortened 5.4 frames per button press and 3 per stick
+input, then 33 frames of FuraFuraEnd (same page); the shield comes back at **37.5** HP
+(SmashWiki "Shield break"). **HIGH** (Plan 3, Task 9) An earlier revision of this document
+could not find these, and the engine used a 240-frame stand-in and full damage until then.
 
 ---
 
@@ -307,7 +313,8 @@ through. **HIGH** — [Priority](https://www.ssbwiki.com/Priority).
 - **A grounded meteor's bounce and hitstun.** The bounce happens as the launch fires and
   keeps the hit's whole hitstun (SmashWiki "Meteor smash"); whether the 0.8 that a
   mid-flight bounce takes off the hitstun (`damage_fly_reflect_reaction_frame_mul`) applies
-  to it is not published. The engine does not apply it. **MED**
+  to it is not published. The engine does not apply it, and the bounced launch keeps the
+  balloon speed-up and set weight's fall, which a mid-flight bounce disarms. **MED**
 - **The floor bounce's speed loss.** The param `damage_fly_reflect_d_speed_mul` and
   rubendal keep 0.9; SmashWiki gives a 5% loss for Ultimate. The engine keeps 0.9. **MED**
 - **The end of set weight's 10 frames.** The engine ends them early with the launch (the
@@ -324,7 +331,8 @@ through. **HIGH** — [Priority](https://www.ssbwiki.com/Priority).
   [Meteor smash](https://www.ssbwiki.com/Meteor_smash)
 - [Shield](https://www.ssbwiki.com/Shield) ·
   [Shieldstun](https://www.ssbwiki.com/Shieldstun) ·
-  [Perfect shield](https://www.ssbwiki.com/Perfect_shield)
+  [Perfect shield](https://www.ssbwiki.com/Perfect_shield) ·
+  [Stun](https://www.ssbwiki.com/Stun)
 - [Directional influence](https://www.ssbwiki.com/Directional_influence) ·
   [Smash directional influence](https://www.ssbwiki.com/Smash_directional_influence)
 - [Ledge](https://www.ssbwiki.com/Ledge) ·

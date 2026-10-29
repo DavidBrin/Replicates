@@ -23,7 +23,7 @@ It also does one thing the original does not: **rollback netcode**. Ultimate is 
 |---|---|
 | [`SPEC.md`](SPEC.md) | The contract this was built against — architecture, formulas, controls, roster, stages |
 | [`DECISIONS.md`](DECISIONS.md) | Every non-obvious choice and why, including the ones that were wrong first |
-| [`research/physics-and-knockback.md`](research/physics-and-knockback.md) | Ultimate's combat maths, formula by formula, with the two places the sources disagree |
+| [`research/physics-and-knockback.md`](research/physics-and-knockback.md) | Ultimate's combat maths, formula by formula, and where the sources disagree |
 | [`research/netcode-and-latency.md`](research/netcode-and-latency.md) | Rollback, determinism in JavaScript, and why shared WiFi needs no code at all |
 | [`research/keyboard-controls.md`](research/keyboard-controls.md) | Translating an analog stick onto keys, and what is genuinely lost |
 | [`research/ui-and-visual-language.md`](research/ui-and-visual-language.md) | Every screen, pixel-sampled from the real game |
@@ -231,7 +231,11 @@ velocity is a sum of KineticModule energies — control, stop, gravity, motion, 
 each action is a status object with `pre`/`main`/`exec`/`end` under a `FIGHTER_STATUS_KIND_*` name
 (`status/`); and every move runs as an ACMD `game_` script whose hitboxes hang off bones through a
 `BoneTable` (`acmd/`). The published scripts for all eight fighters are imported by
-`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`.
+`scripts/import-acmd.mjs` into `src/fighters/acmd/generated/`, and 38 moves, ones whose hitboxes
+all hang off the root bone, already run them (`src/fighters/acmd/active.ts`). Combat follows Ultimate's
+published rules — the balloon speed-up, DI, shields, staling, teching, grabs, air dodges and the
+rest — and where no source settles one, the code says `UNVERIFIED:`
+([D56](DECISIONS.md#d56--combat-follows-ultimates-published-rules)).
 
 ---
 
@@ -317,8 +321,10 @@ fails closed: if git cannot say what the uncommitted changes are, a production b
    from the decompiled scripts and are exact; hitboxes mounted on limbs depend on animation
    data this project does not have, and are marked `// POSITION: estimated` in the source
    ([D17](DECISIONS.md#d17--move-data-comes-from-the-decompiled-scripts-not-from-a-frame-data-site)).
-4. **Shield-break stun is a stand-in.** No source publishes the coefficients, and the wiki
-   that likely has them refused every fetch.
+4. **Some combat rules have no published source.** Where none settles a rule — Lucario's tech
+   frames standing in for all eight fighters, how long a ledge trump stuns, ASDI's distance, the
+   shield's centre — the code marks it `UNVERIFIED:`, and D56 lists each as an open question
+   ([D56](DECISIONS.md#d56--combat-follows-ultimates-published-rules)).
 5. **Eight fighters, not eighty-nine.** They were chosen to span the archetype space so the
    physics is actually exercised — a super-heavyweight, a featherweight, a zoner, a
    fast-faller, a multi-jumper, a sword spacer.

@@ -23,7 +23,7 @@ reasoning live in [`DECISIONS.md`](DECISIONS.md); the evidence behind them is in
 | **Knockback** | The launch distance a hit produces, from the formula in §4. Not the same as damage. |
 | **Hitstun** | Frames after a hit during which the victim cannot act. Derived from knockback. |
 | **Hitlag** | Frames during which *both* fighters freeze on contact. The impact "crunch". |
-| **Tumble** | The helpless spinning state entered above 32 frames of hitstun. |
+| **Tumble** | The helpless spinning state entered at 31 frames of hitstun or more (knockback 80). |
 | **Stale** | A move used recently deals less damage. Ultimate barely reduces its knockback. |
 | **Stock** | A life. Losing all of them ends your match. |
 | **Blast zone** | The rectangle outside which a fighter is KO'd. |
@@ -115,7 +115,9 @@ rage and crouch-cancel (0.85). A grounded meteor that tumbles is a floor bounce 
 (Task 12's ×0.9; SmashWiki's Ultimate figure is a 5% loss), not a knockback cut
 ([Meteor smash](https://www.ssbwiki.com/Meteor_smash), [Knockback](https://www.ssbwiki.com/Knockback)).
 
-**Hitstun** `floor(KB × 0.4) − 1`. At ≥ 32 frames the victim tumbles.
+**Hitstun** `floor(max(KB × 0.4, 5)) − 1`, so never under 4 frames. From 80 knockback (hitstun
+31, 32 reaction frames) the victim tumbles, and a tumbling launch without set knockback plays
+back sped up, so its hitstun is shorter in real frames (DECISIONS D56).
 
 **Rage** `1 + ((percent − 35) / 115) × 0.1`, active from 35%, capped at 150% and 1.1×.
 Applies to knockback only, and never to set-knockback moves.

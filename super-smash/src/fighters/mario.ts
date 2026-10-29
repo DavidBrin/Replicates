@@ -27,7 +27,8 @@
  * `baseKnockback` and `knockbackGrowth` hold the game's **raw** values, not
  * pre-divided ones: growth 99 means 99, and SPEC §4's formula divides by 100.
  * `angle` 361 is the Sakurai angle, which resolves differently for grounded and
- * airborne victims — see `SAKURAI_ANGLE` in `engine/constants.ts`.
+ * airborne victims, and on the ground by the hit's knockback — see
+ * `SAKURAI_ANGLE` in `engine/constants.ts`.
  *
  * Hitbox `x`/`y` are facing-relative offsets from the fighter's origin, which
  * sits between the feet, in the same units as the stage. The ACMD data gives

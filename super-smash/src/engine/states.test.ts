@@ -814,7 +814,7 @@ describe("air dodge", () => {
 /* ------------------------------------------------------------ reeling -- */
 
 describe("hitstun", () => {
-  it("becomes tumble past 32 frames", () => {
+  it("becomes tumble at TUMBLE_HITSTUN (31) frames or more", () => {
     const f = fighter({ grounded: false, action: "hitstun", hitstun: 40 });
     tick(f, 0, 0);
     expect(f.action).toBe("tumble");

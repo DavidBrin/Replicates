@@ -218,7 +218,10 @@ export interface Hitbox {
   /**
    * Launch angle in fixed degrees, measured counter-clockwise from "directly
    * in front of the attacker". 361 (`SAKURAI_ANGLE`) means the angle depends on
-   * whether the victim is grounded or airborne.
+   * whether the victim is grounded or airborne, and on the ground on the
+   * knockback too (`resolveAngle`). 0° and 180° lift to 32° and 148° from 120
+   * knockback (`FLAT_LIFT_KB`), and 363° and 365°-368° are autolink angles, not
+   * directions (`AUTOLINK_MIN`, `AUTOLINK_UNMODELLED`).
    */
   readonly angle: number;
   /** Base knockback, the script's `bkb`, in either formula. */

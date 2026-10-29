@@ -27,13 +27,15 @@
  * so the packed frame is digital either way. Two parts of the analog signal do
  * survive packing. The first is one bit of magnitude, `Btn.Soft`: a stick held
  * in a direction but short of a full push sets it, and the engine reads it as
- * half deflection: a half-speed walk (and run acceleration), a tilt instead of a
- * smash, and DI bent a quarter as far (`SOFT_DI_SHIFT`). The second is the part
- * that matters most for smashes: a flick crosses the direction threshold from
- * zero in one frame and therefore produces a *fresh press edge*, which is
- * exactly the signal `SMASH_INPUT_WINDOW` keys off. The full analog values are
- * exposed on the poll result beside the frame, so the local layer can use them
- * without changing what goes over the wire.
+ * half deflection for a half-speed walk (and run acceleration) and a tilt
+ * instead of a smash, and bends DI a quarter as far (`SOFT_DI_SHIFT`). DI is
+ * linear in the stick (Plan 3), so that quarter is a stick at a quarter of its
+ * throw, not half: one bit cannot be both, and the quarter is UNVERIFIED (D54).
+ * The second is the part that matters most for smashes: a flick crosses the
+ * direction threshold from zero in one frame and therefore produces a *fresh
+ * press edge*, which is exactly the signal `SMASH_INPUT_WINDOW` keys off. The
+ * full analog values are exposed on the poll result beside the frame, so the
+ * local layer can use them without changing what goes over the wire.
  */
 
 import { Btn, type InputFrame } from "@/engine/types";
