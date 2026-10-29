@@ -1170,6 +1170,14 @@ attack pressed while the fighter happens to be airborne silently performs the *a
 same direction, and the first sheet it produced came back labelled `fsmash` showing a forward
 air — exactly the kind of quiet wrong answer a review tool must never give.
 
+`window.__smashDebug` ships in production builds, ungated: `play/page.tsx` installs it whenever a
+match mounts and deletes it when the match ends, with no `NODE_ENV` check, and that is on purpose.
+It is read-only state the client already holds (the frame, the stage, each fighter) plus
+`pause`, `resume` and `step`, which in an online match go through the session, so a player who
+pokes them can only stall or desync their own tab: the netcode is input-based and hash-checked.
+Nothing secret is on it. `fightsheet` and the end-to-end suite both need it, and the suite can
+point at a deployed copy (`SMASH_URL`).
+
 ---
 
 ## D47 — What eight parallel characters found in the shared code
@@ -2477,11 +2485,16 @@ And the rulings made after this entry's first draft, in the final wave:
 - *Inhale holds its victim for the move, as a stand-in* (the Task 14 re-review's ruling): the
   captor guard made Inhale release its victim a frame after the catch. Cost: a stand-in Plan
   5 Task 9 replaces, with no cliff stop.
-- *A hit that armour takes does not give the air dodge back* (the Task 7 review). Cost:
-  UNVERIFIED reading of "get hit".
+- *A hit that armour takes does not give the air dodge back* (the Task 7 review). Why:
+  SmashWiki "Air dodge" gives it back on "get hit", and a fighter armour holds in its move is
+  not hit out of anything: no flinch, no hitstun, still in the move. Cost: UNVERIFIED
+  reading of "get hit".
 - *A short hop ends as the launch fires, not on contact* (the final review, Minor 3): on
   contact a trade depended on port order. Cost: two hits with no hitlag that trade still do.
-- *The trump's lockout is `LEDGE_TRUMPED_FRAMES` + 1* (the final review, Minor 2). Cost: none.
+- *The trump's lockout is `LEDGE_TRUMPED_FRAMES` + 1* (the final review, Minor 2). Why: the
+  lockout counts down from the frame after the trump, so at `LEDGE_TRUMPED_FRAMES` it ended
+  a frame before the trumped fighter's lag did, and the fighter could take a ledge on a frame
+  it cannot act in. Cost: none.
 - *A fresh press on the last frame of a contact status is buffered* (part 1's report, concern
   5). Cost: a golden regeneration (a jump pressed on a landing's last frame now fires, where
   the fighter used to dash instead).

@@ -58,7 +58,9 @@ function hex8(h: number): string {
  * every "dev" build (git could not name a commit) shares one id, and so does
  * every `-dirty-unknown` build of one commit (changes git could not read). Two
  * of either, with different rules inside one plan, pass every part of the
- * stamp. A production build refuses both (`resolveBuildId`).
+ * stamp. A production build refuses both (`resolveBuildId`), unless `BUILD_ID` is set
+ * outright: `BUILD_ID=dev` for the first, and any `BUILD_ID` for the second, are the
+ * allowed exceptions (`next.config.ts`), where whoever set it has said so.
  */
 export function rulesFingerprint(rules: EngineRules = GAME_ENGINE_RULES): string {
   let h = mixInt(FNV_OFFSET, rules.version);

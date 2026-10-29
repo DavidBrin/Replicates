@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { P1, holdForFrames, readFighters, simFrame, startMatch, stepFrames } from "./helpers";
+import { P1, holdForFrames, readFighters, simFrame, simStageId, startMatch, stepFrames } from "./helpers";
 
 /**
  * Does pressing a key move your fighter?
@@ -120,11 +120,23 @@ test("the attack key puts the fighter into an attacking state", async ({ page })
 });
 
 test("the player can actually damage the CPU", async ({ page }) => {
+  // A generous explicit limit, not Playwright's 30 s default: the loop below costs about
+  // four page round trips per simulated frame. A run that lands takes about 215 frames,
+  // but the failure this test exists to catch, a CPU never hurt, plays out the whole
+  // 20-second budget (about 1,200 frames), and on a slow machine that should end on the
+  // assertion's message, not on "Test timeout".
+  test.setTimeout(120_000);
   // The match starts on `READY_FRAME` with nothing pressed, so it is in the
   // same state on every run, and so is every frame after it that gets the same
   // keys. (A change to the combat rules can move where this lands; it cannot
   // make one run differ from the next.)
   await startMatch(page, { stepped: true });
+
+  // `EDGE_MARGIN` below is Battlefield's: the bot stops 70 units out, inside its 79.99
+  // ledge. On a narrower stage (Smashville is 69.65) the same bot would run off it, and
+  // the failure would read as a CPU that was never hit. So the stage is asserted, and a
+  // reordered stage list fails here, by name.
+  expect(await simStageId(page), "the first stage is the one EDGE_MARGIN was written for").toBe("battlefield");
 
   // Specifically the CPU's percent, on port 1 — not "somebody's". A player
   // whose inputs go nowhere still watches their own percent climb as the CPU

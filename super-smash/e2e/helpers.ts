@@ -75,6 +75,7 @@ export interface DebugFighter {
 
 interface DebugHandle {
   frame: number;
+  stageId: string;
   fighters(): DebugFighter[];
 }
 
@@ -83,6 +84,11 @@ export async function readFighters(page: Page): Promise<DebugFighter[]> {
     const w = window as unknown as { __smashDebug?: DebugHandle };
     return w.__smashDebug?.fighters() ?? [];
   });
+}
+
+/** The id of the stage the match is on ("" before one is running). */
+export async function simStageId(page: Page): Promise<string> {
+  return page.evaluate(() => (window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.stageId ?? "");
 }
 
 /** The simulation frame the match is on (0 before one is running). */

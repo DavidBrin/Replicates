@@ -213,10 +213,11 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
    * or tampered message, or a bug.
    */
   const refuseUnreadableStart = (why: string) => {
-    console.warn("David-Smash: cannot read the other player's start:", why);
+    // Neutral about the seat: the guest cannot read the start it was sent, the host
+    // is told that it could not, and each says which in `why`.
+    console.warn("David-Smash: a start from this build could not be read:", why);
     leaveRefused("unreadable-start");
   };
-
 
   const sayHello = () => session.sendLobby({ kind: "hello", ...localBuild() });
 
@@ -280,7 +281,7 @@ export function bindSession(session: OnlineSessionLike): Unsubscribe {
         // packet and ends nothing.
         const start = online().config;
         if (session.role === "host" && start !== null && start !== withdrawnStart) {
-          if (message.reason === "unreadable-start") refuseUnreadableStart("it could not read this build's start (its own console says why)");
+          if (message.reason === "unreadable-start") refuseUnreadableStart("the other player could not read the start this build sent (its own console says why)");
           else refuseBuild("it refused this build's start (its own console says why)");
         }
         return;
