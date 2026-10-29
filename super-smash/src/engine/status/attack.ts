@@ -202,9 +202,9 @@ export function struggleInGrab(f: FighterState, intent: Intent, ctx: StateContex
   const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
   f.grabTimer -= (elapsed ? 1 : 0) + mashFrames(f.combat, buttonPresses(intent), sticks, GRAB_MASH_BUTTON, GRAB_MASH_STICK);
   if (f.grabTimer > 0 || f.actionFrame < GRAB_MIN_FRAMES) return;
-  // A grab release: the holder's own status sees `grabbing < 0` and stands.
+  // A grab release: the holder's own status sees `grabbing < 0` and stands. The
+  // mash credit goes with the link (`releaseGrab`).
   releaseGrab(f, ctx.fighters);
-  f.combat.mash = 0;
   f.combat.grabImmune = GRAB_RELEASE_IMMUNITY;
   startAction(f, f.grounded ? "stand" : "fall");
 }

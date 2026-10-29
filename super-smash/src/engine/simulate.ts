@@ -821,6 +821,12 @@ export function step(
     f.shieldHealth = SHIELD_MAX_HEALTH;
     f.staleQueue.length = 0;
     f.combat.staleShield.length = 0;
+    // Nothing of the lost stock's struggles, launches or swings rides into the
+    // respawn: a mash credit left over shortened the next shield-break stun by a
+    // frame (Plan 3 final wave; codex P2-1, the final review's Minor 6).
+    f.combat.mash = 0;
+    f.combat.launchSource = -1;
+    f.combat.swingQueued = false;
     clearHitRecord(f);
     startAction(f, "dead");
     s.freezeFrames = KO_FREEZE_FRAMES;

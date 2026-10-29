@@ -81,7 +81,9 @@ export function shieldBreakStun(percent: number): number {
  * `perButton` and `sticks` at `perStick`, both in **tenths of a frame** so the
  * published fractions stay exact (5.4 a button in shield-break stun, 14.4 in a
  * grab), with the remainder carried in `CombatState.mash`. That one carry serves
- * both struggles, so whatever ends one zeroes it.
+ * both struggles, so whatever starts or ends one zeroes it: a new shield break
+ * (`STATUS_FURAFURA`'s `pre`), its FuraFuraEnd, a grab's catch and its release
+ * (`releaseGrab`), and a KO (Plan 3 final wave).
  */
 export function mashFrames(c: CombatState, buttons: number, sticks: number, perButton: number, perStick: number): number {
   c.mash += buttons * perButton + sticks * perStick;

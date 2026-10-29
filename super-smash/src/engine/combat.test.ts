@@ -5164,3 +5164,56 @@ describe("SDI and ASDI are the hit fighter's alone (final wave, part 2, item 3)"
     expect(xs.at(-1)! - xs[0]).toBe(pulses * SDI_DISTANCE);
   });
 });
+
+describe("a KO, a new shield break and a grab release leave nothing behind (final wave, part 2, item 4)", () => {
+  // Codex P2-1 and the final review's Minor 6: a KO kept `mash` (it shortened the next
+  // shield-break stun by a frame after the respawn), `launchSource` and `swingQueued`.
+  it("clears the mash credit, the launch source and the queued swing on a KO", () => {
+    const s = standing();
+    const v = s.fighters[1];
+    Object.assign(v, { action: "shieldBroken", hitstun: 100, shieldHealth: 0, y: fx(-200), grounded: false, platform: -1 });
+    v.combat.mash = 8;
+    v.combat.launchSource = 0;
+    v.combat.swingQueued = true;
+    const [ko] = play(s, 1, () => [0, 0]);
+    expect(ko.events.kos.map((k) => k.port)).toEqual([1]);
+    expect(ko.state.fighters[1].combat).toMatchObject({ mash: 0, launchSource: -1, swingQueued: false });
+  });
+
+  /** One button press's worth of shield-break stun, for a fighter whose shield breaks with `mash` tenths left over. */
+  const firstPressAfterBreak = (mash: number): { mash: number; earned: number } => {
+    const s = standing();
+    const v = s.fighters[1];
+    Object.assign(v, { action: "shield", actionFrame: 10, shieldHealth: 1 });
+    v.combat.mash = mash;
+    const frames = play(s, 3, (i) => [0, i === 0 ? Btn.Shield : i === 2 ? Btn.Attack : 0]);
+    const broken = frames[0].state.fighters[1];
+    expect(broken.action).toBe("shieldBroken");
+    return { mash: broken.combat.mash, earned: frames[1].state.fighters[1].hitstun - 1 - frames[2].state.fighters[1].hitstun };
+  };
+
+  // Task 9's minor: a new break starts its mash at zero, whatever an earlier struggle left.
+  it("starts a new shield break's mash at zero", () => {
+    expect(firstPressAfterBreak(8)).toEqual({ mash: 0, earned: 5 });
+    expect(firstPressAfterBreak(0)).toEqual({ mash: 0, earned: 5 });
+  });
+
+  // ...and a grab's mash goes with the grab, however it ends: here a throw's hit.
+  it("clears the held fighter's mash credit when the grab is let go", () => {
+    const thrower: FighterDef = {
+      ...BASE_DEF,
+      moves: { ...BASE_DEF.moves, fthrow: move("fthrow", { totalFrames: 20, hitboxes: [hitbox({ startFrame: 2, endFrame: 3 })] }) },
+    };
+    const ctx = ctxFor(thrower);
+    const s = standing(ctx);
+    const [a, v] = s.fighters;
+    Object.assign(a, { action: "grabHold", grabbing: 1 });
+    Object.assign(v, { action: "grabbed", actionFrame: 30, grabbedBy: 0, grabTimer: 400 });
+    v.combat.mash = 7;
+    const frames = play(s, 8, (i) => [i === 0 ? Btn.Right : 0, 0], ctx);
+    const hit = frames.findIndex((f) => f.events.hits.length > 0);
+    expect(hit).toBeGreaterThan(0);
+    expect(frames[hit - 1].state.fighters[1].combat.mash).toBe(7);
+    expect(frames[hit].state.fighters[1]).toMatchObject({ grabbedBy: -1, combat: expect.objectContaining({ mash: 0 }) });
+  });
+});

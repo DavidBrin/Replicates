@@ -118,6 +118,11 @@ export const STATUS_FURAFURA: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_FURAFURA",
   action: "shieldBroken",
   kineticType: "GROUND_STOP",
+  // A new break's mash starts at zero, whatever an earlier struggle left in the
+  // shared carry (`mashFrames`; Plan 3 final wave, the Task 9 review's minor).
+  pre(f) {
+    f.combat.mash = 0;
+  },
   main(f, intent) {
     // `charge` is free in this status: 0 while stunned, 1 in FuraFuraEnd.
     if (f.hitstun > 0) {

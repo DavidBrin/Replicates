@@ -806,13 +806,16 @@ export function releaseGrab(f: FighterState, fighters: readonly FighterState[]):
     const victim = fighters[f.grabbing];
     if (victim !== undefined && victim.grabbedBy === f.port) {
       victim.grabbedBy = -1;
-      // The escape timer is the victim's (Plan 3, Task 14): it goes with the link.
+      // The escape timer and the mash credit are the victim's (Plan 3, Task 14;
+      // the final wave): they go with the link, however it ends.
       victim.grabTimer = 0;
+      victim.combat.mash = 0;
     }
   }
   if (f.grabbedBy >= 0) {
     const holder = fighters[f.grabbedBy];
     if (holder !== undefined && holder.grabbing === f.port) holder.grabbing = -1;
+    f.combat.mash = 0;
   }
   f.grabbing = -1;
   f.grabbedBy = -1;
