@@ -35,8 +35,6 @@ export interface Drive {
   /** Child bone defining the along-axis; absent means local +X. Must share the order of `bones`. */
   readonly tips?: readonly (string | null)[];
   readonly rest: "bind" | "down";
-  /** True when a skeleton may lack every listed bone (the drive is skipped). */
-  readonly optional?: boolean;
 }
 
 export const RETARGET: Readonly<Partial<Record<BoneName, Drive>>> = {
@@ -60,8 +58,10 @@ export const RETARGET: Readonly<Partial<Record<BoneName, Drive>>> = {
 /**
  * Per-fighter replacements for `RETARGET` entries, for skeletons that do not
  * follow the humanoid naming. Empty until the spike's dumps say otherwise:
- * `retarget.test.ts` runs every committed skeleton through `calibrate`, which
- * names the missing bone, so an entry here is added only against that failure.
+ * `skeletons.test.ts` (Plan 4 Task 6) runs every committed skeleton through
+ * `calibrate`, which names the missing bone, so an entry here is added only
+ * against that failure. (`retarget.test.ts` runs the invented test skeleton and
+ * the map row by row.)
  */
 export const RETARGET_OVERRIDES: Readonly<Record<string, Readonly<Partial<Record<BoneName, Drive>>>>> = {};
 

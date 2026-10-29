@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { angleDelta } from "@/render/poses/clip";
-import { BASE_RIG, deg, resolve } from "@/render/skeleton";
+import { BASE_RIG, BONE_NAMES, deg, resolve, type BoneName, type PoseAngles } from "@/render/skeleton";
 import { IDENTITY_ROOT, worldMatrices } from "../bake/fk";
-import { mAxis, mTranslation, normalize } from "../math/rigid";
-import { buildRig } from "../skeleton/skeleton";
+import { compose, mAxis, mInvertRigid, mMul, mTranslation, normalize, qRotX, type Vec3 } from "../math/rigid";
+import { buildRig, type SkeletonFile } from "../skeleton/skeleton";
 import { testSkeleton } from "../skeleton/testSkeleton";
+import { RETARGET } from "./map";
 import { accumulatedAngles, calibrate, retarget } from "./retarget";
 
 const rig = buildRig(testSkeleton());
@@ -91,10 +92,40 @@ describe("retargeting a 2D pose onto an SSBU skeleton", () => {
     expect(sk.head.x1).toBeGreaterThan(sk.hip.x0);
   });
 
-  it("names the bone a skeleton is missing, rather than posing a broken rig", () => {
+  it("names the bone and the tip a skeleton is missing, rather than posing a broken rig", () => {
     const broken = testSkeleton("broken");
     const noKnee = { ...broken, bones: broken.bones.filter((b) => !["KneeR", "FootR", "ToeR"].includes(b.name)) };
-    expect(() => calibrate(buildRig(noKnee), BASE_RIG)).toThrow(/broken: skeleton lacks/);
+    // LegR is there, its tip is not: the thigh is the first drive to fail.
+    expect(() => calibrate(buildRig(noKnee), BASE_RIG)).toThrow(/^retarget broken: skeleton lacks LegR's tip KneeR$/);
+  });
+
+  it("names the 2D bone and every SSBU bone it tried when none of them is there", () => {
+    const broken = testSkeleton("broken");
+    const noLeg = { ...broken, bones: broken.bones.filter((b) => !["LegR", "KneeR", "FootR", "ToeR"].includes(b.name)) };
+    expect(() => calibrate(buildRig(noLeg), BASE_RIG)).toThrow(/^retarget broken: skeleton lacks thighR's bone \(tried LegR\)$/);
+    const noSpine = { ...broken, bones: broken.bones.filter((b) => !["Waist", "Bust", "Neck", "Head", "ClavicleC", "ClavicleL", "ShoulderL", "ArmL", "HandL", "HaveL", "ClavicleR", "ShoulderR", "ArmR", "HandR", "HaveR"].includes(b.name)) };
+    expect(() => calibrate(buildRig(noSpine), BASE_RIG)).toThrow(/^retarget broken: skeleton lacks torso's bone \(tried Waist, Bust\)$/);
+  });
+
+  it("names the bone and its tip when they sit at the same point, rather than failing inside the maths", () => {
+    const flat = testSkeleton("flat");
+    const leg = flat.bones.find((b) => b.name === "LegL")!;
+    // KneeL moved onto LegL: the thigh has no direction.
+    const bones = flat.bones.map((b) => (b.name === "KneeL" ? { ...b, world: [...b.world.slice(0, 12), leg.world[12], leg.world[13], leg.world[14], 1] } : b));
+    expect(() => calibrate(buildRig({ ...flat, bones }), BASE_RIG)).toThrow(/^retarget flat: LegL and its tip KneeL sit at the same point, so thighL has no direction$/);
+  });
+
+  it("refuses a root bone that is not at the feet: the pivot shift assumes y = z = 0", () => {
+    const at = (name: string, y: number, z: number): SkeletonFile => {
+      const file = testSkeleton("raised");
+      return { ...file, bones: file.bones.map((b) => (b.name === name ? { ...b, world: [...b.world.slice(0, 12), 0, y, z, 1] } : b)) };
+    };
+    expect(() => calibrate(buildRig(at("Trans", 1, 0)), BASE_RIG)).toThrow(/^retarget raised: root bone Trans sits at y 1, z 0, not at the feet/);
+    expect(() => calibrate(buildRig(at("Trans", 0, -2)), BASE_RIG)).toThrow(/^retarget raised: root bone Trans sits at y 0, z -2, not at the feet/);
+    // Along the depth axis is harmless: a turn about X leaves it alone.
+    const sideways = testSkeleton("sideways-root");
+    const moved = { ...sideways, bones: sideways.bones.map((b) => (b.name === "Trans" ? { ...b, world: [...b.world.slice(0, 12), 3, 0, 0, 1] } : b)) };
+    expect(() => calibrate(buildRig(moved), BASE_RIG)).not.toThrow();
   });
 
   it("refuses a 'bind' drive whose bind direction is sideways, naming the fix", () => {
@@ -104,5 +135,207 @@ describe("retargeting a 2D pose onto an SSBU skeleton", () => {
       b.name === "KneeL" ? { ...b, world: [...b.world.slice(0, 12), 3.3, 5.5, 0, 1] } : b,
     );
     expect(() => calibrate(buildRig({ ...sideways, bones }), BASE_RIG)).toThrow(/LegL points sideways.*thighL rest "down"/);
+  });
+});
+
+/**
+ * The map, written out in full, on purpose: this table is the authority and
+ * `RETARGET` is checked against it, so a row deleted from, or added to, the map
+ * cannot slip through by shrinking the thing the test iterates. Each row is a
+ * 2D bone, how its rest pose meets SSBU's bind pose, and the SSBU bones it turns
+ * as `[bone, tip]` (a bone with no tip points along its own +X).
+ */
+interface Row {
+  readonly bone: BoneName;
+  readonly rest: "bind" | "down";
+  readonly drives: readonly (readonly [bone: string, tip: string | null])[];
+}
+
+const MAP: readonly Row[] = [
+  { bone: "hip", rest: "bind", drives: [["Hip", null]] },
+  { bone: "torso", rest: "bind", drives: [["Waist", null], ["Bust", null]] },
+  { bone: "head", rest: "bind", drives: [["Neck", null], ["Head", null]] },
+  { bone: "thighL", rest: "bind", drives: [["LegL", "KneeL"]] },
+  { bone: "shinL", rest: "bind", drives: [["KneeL", "FootL"]] },
+  { bone: "footL", rest: "bind", drives: [["FootL", "ToeL"]] },
+  { bone: "thighR", rest: "bind", drives: [["LegR", "KneeR"]] },
+  { bone: "shinR", rest: "bind", drives: [["KneeR", "FootR"]] },
+  { bone: "footR", rest: "bind", drives: [["FootR", "ToeR"]] },
+  { bone: "upperArmL", rest: "down", drives: [["ShoulderL", "ArmL"]] },
+  { bone: "forearmL", rest: "down", drives: [["ArmL", "HandL"]] },
+  { bone: "handL", rest: "down", drives: [["HandL", "HaveL"]] },
+  { bone: "upperArmR", rest: "down", drives: [["ShoulderR", "ArmR"]] },
+  { bone: "forearmR", rest: "down", drives: [["ArmR", "HandR"]] },
+  { bone: "handR", rest: "down", drives: [["HandR", "HaveR"]] },
+];
+
+/** Every 2D bone but the root at its own angle, no two alike, so a bone driving another's SSBU bone is a different direction. */
+const DISTINCT: PoseAngles = {
+  hip: deg(9),
+  torso: deg(-24),
+  head: deg(17),
+  thighL: deg(-70),
+  shinL: deg(35),
+  footL: deg(52),
+  thighR: deg(115),
+  shinR: deg(-48),
+  footR: deg(-21),
+  upperArmL: deg(-130),
+  forearmL: deg(66),
+  handL: deg(-37),
+  upperArmR: deg(95),
+  forearmR: deg(-58),
+  handR: deg(41),
+};
+
+const T2D = { x: 0, y: 0, scale: 1, facing: 1 } as const;
+
+/** Side-plane angle of an SSBU bone: toward its tip, or along its own +X without one. */
+function boneAngle(world: readonly (readonly number[])[], bone: string, tip: string | null): number {
+  if (tip === null) {
+    const axis = mAxis(world[at(bone)], 0);
+    return Math.atan2(axis[2], axis[1]);
+  }
+  return sideAngle(world as number[][], bone, tip);
+}
+
+/** Every matrix entry of two poses agrees. */
+function expectSamePose(got: readonly (readonly number[])[], want: readonly (readonly number[])[]): void {
+  expect(got).toHaveLength(want.length);
+  got.forEach((m, i) => {
+    m.forEach((v, k) => expect(v, `${rig.names[i]}[${k}]`).toBeCloseTo(want[i][k], 9));
+  });
+}
+
+describe("the 2D-to-SSBU map, row by row", () => {
+  it("is the fifteen rows below: one per 2D bone but the root, and nothing else", () => {
+    expect(MAP.map((r) => r.bone)).toEqual(BONE_NAMES.filter((n) => n !== "root"));
+    expect(Object.keys(RETARGET).sort()).toEqual(MAP.map((r) => r.bone).sort());
+  });
+
+  it("accumulates the 2D angles the way resolve() does, which is the oracle for the rows", () => {
+    const rotation = deg(13);
+    const sk = resolve(BASE_RIG, { ...DISTINCT, root: deg(-6) }, { ...T2D, rotation });
+    const acc = accumulatedAngles(BASE_RIG, { ...DISTINCT, root: deg(-6) }, rotation);
+    for (const name of BONE_NAMES) expect(acc[name], name).toBeCloseTo(sk[name].angle, 12);
+  });
+
+  for (const row of MAP) {
+    it(`${row.bone} turns ${row.drives.map(([b]) => b).join(" and ")} to the 2D angle (rest "${row.rest}")`, () => {
+      const world = posed(DISTINCT);
+      const posed2d = resolve(BASE_RIG, DISTINCT, T2D)[row.bone].angle;
+      const rest2d = resolve(BASE_RIG, {}, T2D)[row.bone].angle;
+      for (const [bone, tip] of row.drives) {
+        // "down": the 2D angle itself. "bind": SSBU's own bind direction, turned by the clip's angle relative to the 2D rest.
+        const want =
+          row.rest === "down"
+            ? posed2d
+            : boneAngle(rig.restWorld, bone, tip) + (posed2d - rest2d);
+        expect(angleDelta(boneAngle(world, bone, tip), want), `${bone}`).toBeCloseTo(0, 9);
+      }
+    });
+  }
+
+  it("turns exactly the bones it drives: a bone no row names rides on its parent", () => {
+    // Every SSBU bone the map names, from the literal table.
+    const driven = new Set(MAP.flatMap((r) => r.drives.map(([b]) => b)));
+    const world = posed(DISTINCT);
+    for (const name of ["ClavicleL", "ClavicleR", "ClavicleC", "HaveL", "HaveR", "ToeL", "ToeR", "Throw"]) {
+      expect(driven.has(name), name).toBe(false);
+      const i = at(name);
+      const p = rig.parent[i];
+      // Its transform relative to its parent is its bind transform.
+      const bind = mMul(mInvertRigid(rig.restWorld[p]), rig.restWorld[i]);
+      const now = mMul(mInvertRigid(world[p]), world[i]);
+      now.forEach((v, k) => expect(v, `${name}[${k}]`).toBeCloseTo(bind[k], 9));
+    }
+  });
+});
+
+describe("whole-body turns", () => {
+  const turn = (a: number, shift: Vec3 = [0, 0, 0]) => compose(shift, qRotX(a));
+
+  it("turns every bone by the root's angle about the feet, as resolve() does for the root bone", () => {
+    const a = deg(30);
+    const world = posed({ root: a });
+    expectSamePose(world, REST.map((m) => mMul(turn(a), m)));
+    // The head, 10 up at rest, leans forward: +z, the way the 2D rig's front is.
+    const head = mTranslation(world[at("Head")]);
+    expect(head[1]).toBeCloseTo(10 * Math.cos(a), 9);
+    expect(head[2]).toBeCloseTo(10 * Math.sin(a), 9);
+    const sk = resolve(BASE_RIG, { root: a }, T2D);
+    expect(Math.atan2(head[2], head[1])).toBeCloseTo(Math.atan2(sk.head.x1, -sk.head.y1), 9);
+  });
+
+  it("composes the root's angle with the pose rotation, which alone pivots about the pelvis", () => {
+    const a = deg(30);
+    const r = deg(20);
+    const world = posed({ root: a }, r);
+    // resolve()'s shift: P - R*P, with R the rotation only (forward is -P sin r, up P (1 - cos r)).
+    const shift: Vec3 = [0, cal.pivotY * (1 - Math.cos(r)), -cal.pivotY * Math.sin(r)];
+    expectSamePose(world, REST.map((m) => mMul(turn(a + r, shift), m)));
+  });
+
+  it("still poses the driven bones on top of a whole-body turn", () => {
+    const a = deg(-35);
+    const r = deg(15);
+    const world = posed(DISTINCT, r);
+    const turned = posed({ ...DISTINCT, root: a }, 0);
+    // Turning the root by `a` turns the whole posed body by `a`, driven bones included.
+    expectSamePose(turned, posed(DISTINCT).map((m) => mMul(turn(a), m)));
+    // The rotation adds to every driven bone's 2D angle.
+    const acc = accumulatedAngles(BASE_RIG, DISTINCT, r);
+    expect(angleDelta(acc.upperArmR, sideAngle(world, "ShoulderR", "ArmR"))).toBeCloseTo(0, 9);
+    expect(angleDelta(acc.forearmL, sideAngle(world, "ArmL", "HandL"))).toBeCloseTo(0, 9);
+  });
+});
+
+describe("a bind pose that leans out of the side plane", () => {
+  // The left thigh leans 0.6 out sideways and 0.5 forward of the hip, with the rest of the leg moved along with the knee.
+  const lean = testSkeleton("lean");
+  const OUT = 0.6;
+  const FORWARD = 0.5;
+  const leaning = {
+    ...lean,
+    bones: lean.bones.map((b) =>
+      ["KneeL", "FootL", "ToeL"].includes(b.name)
+        ? { ...b, world: [...b.world.slice(0, 12), b.world[12] + OUT, b.world[13], b.world[14] + FORWARD, 1] }
+        : b,
+    ),
+  };
+  const leanRig = buildRig(leaning);
+  const leanCal = calibrate(leanRig, BASE_RIG);
+  const poseOf = (angles: PoseAngles) => worldMatrices(leanRig, retarget(leanCal, BASE_RIG, angles, 0), IDENTITY_ROOT);
+  const idx = (name: string) => leanRig.byLower.get(name.toLowerCase())!;
+  const sideAngleOf = (world: readonly (readonly number[])[], from: string, to: string): number => {
+    const a = mTranslation(world[idx(from)]);
+    const b = mTranslation(world[idx(to)]);
+    return Math.atan2(b[2] - a[2], b[1] - a[1]);
+  };
+  const hipSide = leanRig.restWorld[idx("LegL")][12];
+  const full = Math.hypot(OUT, 2.1, FORWARD);
+  const inPlane = Math.atan2(FORWARD, -2.1);
+
+  it("swings the lean out at the 2D rest pose: the knee comes into the thigh's own plane at the projected angle, keeping its length", () => {
+    const world = poseOf({});
+    const leg = mTranslation(world[idx("LegL")]);
+    const knee = mTranslation(world[idx("KneeL")]);
+    expect(knee[0]).toBeCloseTo(hipSide, 9);
+    expect(knee[0]).toBeCloseTo(leg[0], 9);
+    expect(Math.hypot(knee[0] - leg[0], knee[1] - leg[1], knee[2] - leg[2])).toBeCloseTo(full, 9);
+    expect(angleDelta(sideAngleOf(world, "LegL", "KneeL"), inPlane)).toBeCloseTo(0, 9);
+    // Without the swing the knee would sit where the bind pose put it.
+    expect(mTranslation(leanRig.restWorld[idx("KneeL")])[0]).toBeCloseTo(hipSide + OUT, 9);
+  });
+
+  it("keeps the thigh in its plane at the clip's angle relative to rest, and its length, in motion", () => {
+    const rest = accumulatedAngles(BASE_RIG, {}, 0).thighL;
+    const delta = deg(40);
+    const world = poseOf({ thighL: rest + delta });
+    const leg = mTranslation(world[idx("LegL")]);
+    const knee = mTranslation(world[idx("KneeL")]);
+    expect(knee[0]).toBeCloseTo(hipSide, 9);
+    expect(Math.hypot(knee[0] - leg[0], knee[1] - leg[1], knee[2] - leg[2])).toBeCloseTo(full, 9);
+    expect(angleDelta(sideAngleOf(world, "LegL", "KneeL"), inPlane + delta)).toBeCloseTo(0, 9);
   });
 });

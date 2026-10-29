@@ -45,6 +45,19 @@ describe("forward kinematics and the side-plane projection", () => {
     expect(pose.tx).toBe(-32 * BAKE_QUANTUM);
   });
 
+  it("never stores a negative zero: a tiny negative entry rounds to 0, which a decoded bake compares equal to", () => {
+    // Math.round(-0.3) is -0, and -0 is not 0 to toBe/Object.is or to `v % BAKE_QUANTUM === 0` in a round trip.
+    const m = [...IDENTITY];
+    m[1] = -0.0001;
+    m[2] = -0.0001;
+    m[6] = -0.0001;
+    m[9] = -0.0001;
+    m[13] = -0.0001;
+    m[14] = -0.0001;
+    expect(sideBonePose(m)).toEqual({ tx: 0, ty: 0, m00: 0, m01: 0, m02: ONE, m10: 0, m11: ONE, m12: 0 });
+    for (const v of Object.values(sideBonePose(m))) expect(Object.is(v, -0)).toBe(false);
+  });
+
   it("applies the root transform: clip offsets, squash and the fighter's size", () => {
     const head = rig.byLower.get("head")!;
     const plain = mTranslation(worldMatrices(rig, restPose(rig), IDENTITY_ROOT)[head]);

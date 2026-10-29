@@ -74,11 +74,31 @@ function driveFor(fighter: string, our: BoneName): Drive | undefined {
 }
 
 /**
+ * How far a root bone may sit from y = z = 0 and still count as at the feet.
+ * The dump rounds to five decimals, so anything this large is a real offset;
+ * it is also well under the bake's 1/256-unit grid.
+ */
+const ROOT_AT_FEET_TOLERANCE = 1e-4;
+
+/**
  * Precompute every driven bone's reference rotation against the fighter's 2D
  * rig (`rig2d` supplies the rest angles a "bind" drive is relative to). Throws
- * naming the missing bone.
+ * naming the fighter and the bone (or the root) that cannot be calibrated.
  */
 export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
+  // `retarget` shifts a root bone by P - R*P to pivot about the pelvis. That is
+  // the turn of a root bone at the feet; a root off the y/z origin would need
+  // R*T + (P - R*P). SSBU's root is at the feet, and a skeleton that is not
+  // fails here, by name, rather than posing with a pelvis that drifts.
+  rig.parent.forEach((p, i) => {
+    if (p >= 0) return;
+    const [, y, z] = mTranslation(rig.restWorld[i]);
+    if (Math.abs(y) > ROOT_AT_FEET_TOLERANCE || Math.abs(z) > ROOT_AT_FEET_TOLERANCE) {
+      throw new Error(
+        `retarget ${rig.fighter}: root bone ${rig.names[i]} sits at y ${y}, z ${z}, not at the feet; the whole-body pivot assumes y = z = 0`,
+      );
+    }
+  });
   const drives: DriveEntry[] = [];
   const rest2d = accumulatedAngles(rig2d, {}, 0);
   for (const our of BONE_NAMES) {
@@ -86,7 +106,6 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
     if (!drive) continue;
     const present = drive.bones.map((b) => rig.byLower.get(b.toLowerCase()));
     if (present.every((i) => i === undefined)) {
-      if (drive.optional) continue;
       throw new Error(`retarget ${rig.fighter}: skeleton lacks ${our}'s bone (tried ${drive.bones.join(", ")})`);
     }
     drive.bones.forEach((name, k) => {
@@ -100,7 +119,11 @@ export function calibrate(rig: Rig3, rig2d: Rig): Calibration {
         if (tip === undefined) throw new Error(`retarget ${rig.fighter}: skeleton lacks ${name}'s tip ${tipName}`);
         const a = mTranslation(world);
         const b = mTranslation(rig.restWorld[tip]);
-        along = normalize([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+        const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        if (Math.hypot(d[0], d[1], d[2]) < 1e-9) {
+          throw new Error(`retarget ${rig.fighter}: ${name} and its tip ${tipName} sit at the same point, so ${our} has no direction`);
+        }
+        along = normalize(d);
       } else {
         along = normalize(mAxis(world, 0));
       }
@@ -156,7 +179,8 @@ export function retarget(cal: Calibration, rig2d: Rig, angles: PoseAngles, rotat
   const q: Quat[] = new Array(n);
   const t: Vec3[] = rig.restLocalT.slice();
   // Whole body: the 2D root's angle and the pose rotation turn everything at the
-  // root; `rotation` alone pivots about the pelvis (resolve()'s P − R·P shift).
+  // root; `rotation` alone pivots about the pelvis (resolve()'s P − R·P shift,
+  // right for a root at the feet, which `calibrate` checks).
   const bodyTurn = acc.root;
   for (let i = 0; i < n; i++) {
     const p = rig.parent[i];

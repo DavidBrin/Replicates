@@ -52,10 +52,14 @@ export function worldMatrices(rig: Rig3, pose: LocalPose, root: RootXform): numb
 
 /**
  * Baked poses are stored at 1/256 unit (`BAKE_QUANTUM` Q12 units): an offset
- * 10 units out along a bone lands within 0.04 units, and the roster file is a
- * third the size (Plan 4 Task 10: 1.58 MB gzipped on the real skeletons; int32 Q12 was 3.4 MB on the invented one).
+ * 10 units out along a bone lands within 0.04 units, and a pose stored on that
+ * grid is far smaller than full Q12 (the bake's size budget is Task 10's to
+ * measure and state, not this file's).
+ *
+ * `+ 0` turns the `-0` that rounding a tiny negative gives into `0`, so a pose
+ * compares equal to its decoded form under `Object.is`/`toBe`.
  */
-const q = (v: number): number => Math.round((v * ONE) / BAKE_QUANTUM) * BAKE_QUANTUM;
+const q = (v: number): number => Math.round((v * ONE) / BAKE_QUANTUM) * BAKE_QUANTUM + 0;
 
 /** A world matrix projected onto the side plane, quantised to the bake's precision (Q12 values). */
 export function sideBonePose(m: Mat4): BonePose {
