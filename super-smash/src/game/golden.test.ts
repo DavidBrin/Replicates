@@ -445,9 +445,9 @@ describe("engine golden trace", () => {
   const all = MATCHES.map((m) => played.get(m.name)!);
 
   // A trace of idle fighters would pass every refactor and prove nothing.
-  // Measured 2026-10-28 on the Plan 3 final wave's part 3 (0c249b8), the four CPU
+  // Measured 2026-10-28 on the Plan 3 final wave's part 4 (d8ef263), the four CPU
   // matches in `MATCHES` order, then the script, then the tech lab:
-  // hits 12/26/7/12, 6 and 0; shield hits 0/1/2/0, 3 and 0; KOs 3/0/1/0, 1 and 2.
+  // hits 12/18/7/11, 6 and 0; shield hits 0/3/2/0, 3 and 0; KOs 3/1/1/2, 1 and 2.
   // The floors below are what a refactor must not drop, not these counts.
   function expectCombat(): void {
     const cpu = MATCHES.filter((m) => m.cpu).map((m) => played.get(m.name)!);

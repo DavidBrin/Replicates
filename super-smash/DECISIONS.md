@@ -2721,8 +2721,8 @@ under `.superpowers/sdd/` (`2026-10-24-plan-4-3d-renderer`,
     intangible to 17): a render re-time, as Task 20c did for the air dodge;
   - sparks, placed at a capsule's first point, and a glancing blow's missing "chik" event;
   - re-deriving the synced hitbox tables if the bake animates the root bone (they are placed
-    through `LEGACY_BONE_TABLE` at load), and `active.test.ts`'s per-frame proof, which places
-    through it on both sides and so would not notice the swap;
+    through `LEGACY_BONE_TABLE` at load); `active.test.ts` reads the game's own bone table now,
+    and its first test fails the day that is not `LEGACY_BONE_TABLE`;
   - render readers that take only a box's near end (Samus's grab tether, `render/chars/samus/fx.ts`
     ~875; Marth's `sweetspotOf`, `render/chars/marth/fx.ts` ~338), which the bake's capsules on
     the `throw` bone would reach;
@@ -2743,4 +2743,18 @@ under `.superpowers/sdd/` (`2026-10-24-plan-4-3d-renderer`,
   its script, DK's `FinalEnd`, `FinalAirEnd` and `FinalEnd_Com`, which the parser's `sharedTail`
   refuses, and each plan's one bump of `ENGINE_RULES_VERSION` with the pin in
   `rulesVersion.test.ts` (Plan 4 to 4, Plan 5 to 5).
-- *Still to come in the final wave:* the tests the task reviews left out.
+- *Part 4 of the final wave* added the tests, named constants and comments the task reviews
+  left out, each shown to fail a mutant of the rule it pins: Task 1 (an unarmoured control, a
+  projectile against armour), 2 (`staleShield` hashed by element, its parallel-queue invariant
+  checked on every golden frame), 3 (the 0.8 written as [4, 5], through-hit angles at exact
+  knockbacks, `HALF_TURN`), 4 (a soft-DI pin that counts only a launch DI turned, the 9.74°
+  edge, DI apart from LSI, `stickSensibility` removed), 5 (`SPEED_UP_END_RATE`, the Q12/float
+  divergence past 500), 6 (literal oracles: 31 at 82.4, 33 and 41 frames counted through
+  `step()`), 7 (the grounded, buffered and consumed cancel, the DAMAGE energy after it), 8
+  (UNVERIFIED marks, a parked keep, a projectile against its owner, the exact turn angle,
+  `kineticTurnLaunch`), 9 and 10 (the mash input, the decay break, the pushback gates and cap
+  order), 11, 13 (the exact glancing line, 410 Q12), 14, 15 (no two fighters on one ledge, in
+  the golden), 16b, 17 (a vertical capsule), 18, 20c (a launch through a held slingshot) and
+  the `victimFreeze` clear. Its one behaviour change is that a throw, a pummel, a turnaround
+  and a crouch's start and end buffer a press like every other status (a golden
+  regeneration, `RULES_PIN.golden` rewritten, the version unmoved).
