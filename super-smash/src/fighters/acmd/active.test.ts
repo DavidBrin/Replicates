@@ -239,9 +239,9 @@ describe("what render, the CPU and the charge hold read of an activated move", (
     return out;
   }
 
-  it("activates 38 slots, and the bake 44 more", () => {
+  it("activates 38 slots, and the bake 50 more", () => {
     expect(ACTIVE).toHaveLength(38);
-    expect(LIMB).toHaveLength(44);
+    expect(LIMB).toHaveLength(50);
   });
 
   it.each(SYNCED)("%s %s: the move's hitbox table is the script's boxes, on every frame", (_id, slot, def) => {

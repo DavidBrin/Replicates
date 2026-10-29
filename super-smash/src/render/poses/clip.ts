@@ -14,7 +14,7 @@
  * per attack look like anticipation rather than like four photographs.
  */
 
-import { deg, type BoneName, type PoseAngles } from "../skeleton";
+import { BASE_RIG, deg, type BoneName, type PoseAngles } from "../skeleton";
 
 /* ----------------------------------------------------------- interpolation -- */
 
@@ -159,6 +159,62 @@ export function P(a: Partial<Record<BoneName, number>>): PoseAngles {
     if (v !== undefined) out[key] = deg(v);
   }
   return out;
+}
+
+/** Each limb bone and its partner on the other side of the body. */
+const SIDE_PAIRS: readonly (readonly [BoneName, BoneName])[] = [
+  ["thighL", "thighR"],
+  ["shinL", "shinR"],
+  ["footL", "footR"],
+  ["upperArmL", "upperArmR"],
+  ["forearmL", "forearmR"],
+  ["handL", "handR"],
+];
+
+/**
+ * Author-time helper: the same clip with its left and right limbs traded, so
+ * the limb that was the near one does what the far one did and the other way
+ * round (Plan 4, Task 13b).
+ *
+ * For the moves whose published script hangs its hitboxes on the other limb
+ * than the one the clip was drawn striking with: Ultimate's Meteor Knuckle is a
+ * left-handed overhand (`arml`, `shoulderl`), and a clip that swings the right
+ * arm leaves the hitbox on an arm hanging at Mario's side once the bake places
+ * it there. In the side view the two sides are the same shape, so the swap
+ * changes only which one is drawn in front.
+ *
+ * A key's tracks are renamed, so a bone a key leaves out still holds what its
+ * neighbours say. A side the clip never names at all rests at its own rest
+ * angle, which the rig keeps different from its partner's (`BASE_RIG`'s thighs
+ * at 184° and 176°, upper arms at 191° and 169°, forearms at ∓13°); that rest
+ * is written into every key of the side that now plays it, so the traded limb
+ * hangs exactly where its partner did. No character rig changes a rest angle
+ * (`tweakRig` keeps the roster's). One case stays inexact: across a span whose
+ * two keys name neither side of a pair, each side rests at its own rest angle,
+ * as in the untraded clip. In the clips traded so far that is one thigh in
+ * a recovery span of Mario's forward air and up tilt and the shared jab, 8° and
+ * 0.3 units from its partner's place, never a striking limb.
+ */
+export function swapLimbSides(clip: PoseClip): PoseClip {
+  const named = new Set(clip.keys.flatMap((k) => Object.keys(k.pose)));
+  const traded = (pose: PoseAngles, from: BoneName): number | undefined =>
+    pose[from] ?? (named.has(from) ? undefined : BASE_RIG[from].angle);
+  return {
+    ...clip,
+    keys: clip.keys.map((k) => {
+      const pose: PoseAngles = { ...k.pose };
+      for (const [l, r] of SIDE_PAIRS) {
+        if (!named.has(l) && !named.has(r)) continue;
+        const toL = traded(k.pose, r);
+        const toR = traded(k.pose, l);
+        delete pose[l];
+        delete pose[r];
+        if (toL !== undefined) pose[l] = toL;
+        if (toR !== undefined) pose[r] = toR;
+      }
+      return { ...k, pose };
+    }),
+  };
 }
 
 /**

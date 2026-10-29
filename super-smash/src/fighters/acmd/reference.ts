@@ -7,8 +7,9 @@
  * scripts hang hitboxes off limb bones that only Plan 4's bake can place. Since
  * Plan 3 Task 18 the game runs them in 38 move slots, whose scripts hang every
  * box off the root bone and can run whole (`acmd/active.ts` states the rule;
- * DECISIONS D56). Since Plan 4 Task 13 the game also runs 44 limb-bone scripts,
- * beside the bake that places them (`acmd/limb.ts`). Every other slot still runs
+ * DECISIONS D56). Since Plan 4 Task 13 the game also runs limb-bone scripts
+ * beside the bake that places them, 50 since Task 13b re-posed six held clips
+ * (`acmd/limb.ts`). Every other slot still runs
  * its compiled legacy script.
  * `reconcile.test.ts` compares what each slot runs with its script so every
  * disagreement is listed rather than discovered.

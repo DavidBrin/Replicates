@@ -2,36 +2,6 @@
   {
     "fighter": "samus",
     "move": "dair",
-    "reason": "placement: the cannon (armr) is at hip and chest height in front of her (y 11.9 to 18) on every live frame, so the meteor reaches 6.9 to 8.3 above her feet where the legacy box reached 6.0 to 6.5 below them"
-  },
-  {
-    "fighter": "donkeyKong",
-    "move": "bair",
-    "reason": "placement: the kicking leg's boxes (footl, kneel, hip) are in front of him (x +2.4 to +5.1), so the back air reaches 5.0 to 6.6 behind him against the legacy 13.0 to 13.5"
-  },
-  {
-    "fighter": "mario",
-    "move": "fair",
-    "reason": "placement: the striking arm (arml, shoulderl) hangs at his side (arml at x 0.6, y 3.6), so the forward air reaches 5.0 to 5.2 against the legacy 9.6 to 9.8"
-  },
-  {
-    "fighter": "fox",
-    "move": "nair",
-    "reason": "placement: the kneel box sits behind him (x -4.2), so the neutral air reaches 4.1 to 4.5 forward against the legacy 6.4 to 7.2, on all 20 shared frames"
-  },
-  {
-    "fighter": "marth",
-    "move": "dair",
-    "reason": "placement and timing: only the root top box (frame 11) goes below him; the sword boxes stay 3.8 or more above his feet and return to head height in front on frames 12 and 13"
-  },
-  {
-    "fighter": "mario",
-    "move": "nair",
-    "reason": "placement: the late hit sits on the near thigh (kneer, legr) at x 0.7, so it reaches 3.4 to 3.5 forward against the legacy 5.6"
-  },
-  {
-    "fighter": "fox",
-    "move": "dair",
-    "reason": "placement: the boxes (top, toel) go forward, not down, so the down air reaches 2.6 to 2.9 below him against the legacy 4.5"
+    "reason": "placement: the meteor box (armr x 5.2, radius 5) cannot reach below her: with the cannon arm plumb and her body pitched forward 90 degrees its centre stays 5.9 above her feet, so the down air reaches at best 0.9 short of them against the legacy 6.0 to 6.5 below (an estimated position, D17); closing that needs her whole body about 7 units lower in the air, which no published number gives (Task 13b)"
   }
 ]

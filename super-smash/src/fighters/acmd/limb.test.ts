@@ -152,19 +152,12 @@ describe.skipIf(UPDATING)("the bones a box may hang off (ruling R12)", () => {
 /*
  * Slots the rule admits whose boxes our clips put somewhere a player would call
  * wrong (the Task 13 review's per-frame survey): they keep their legacy table
- * until their clip is fixed (Task 13b), which is the only change this list may
- * see — entries leave it, none join. Pinned here, as the status-driven slots are.
+ * until their clip is fixed, which is the only change this list may see —
+ * entries leave it, none join. Pinned here, as the status-driven slots are.
+ * Task 13b re-posed six of the seven; Samus's down air stays (its reason).
  */
 describe.skipIf(UPDATING)("the held slots (limb.hold.json)", () => {
-  const PINNED: readonly (readonly [string, MoveSlot])[] = [
-    ["samus", "dair"],
-    ["donkeyKong", "bair"],
-    ["mario", "fair"],
-    ["fox", "nair"],
-    ["marth", "dair"],
-    ["mario", "nair"],
-    ["fox", "dair"],
-  ];
+  const PINNED: readonly (readonly [string, MoveSlot])[] = [["samus", "dair"]];
 
   it("are exactly these, each with the placement fault it waits on", () => {
     expect(LIMB_HOLD.map((h) => [h.fighter, h.move])).toEqual(PINNED);

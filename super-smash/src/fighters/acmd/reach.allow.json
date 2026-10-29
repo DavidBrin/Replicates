@@ -9,15 +9,25 @@
     "class": "root-exact",
     "reason": "the furthest box hangs off top, so it sits at the script's own offset (the published one); the legacy table transcribed a shorter reach"
   },
+  "mario utilt": {
+    "measured": "U: best 14.8 -> 21.6 (x1.46)",
+    "class": "size",
+    "reason": "a clip-placed limb (arml) reaching 14.8 -> 21.6, x1.46, within 1.25 x mario's size ratio 1.23 (cap 1.53): the SSBU-sized body (D57). Task 13b: the spinning uppercut now on the left arm the script names"
+  },
+  "donkeyKong bair": {
+    "measured": "B: best 13.5 -> 20.1 (x1.49)",
+    "class": "size",
+    "reason": "a clip-placed limb (footl) reaching 13.5 -> 20.1, x1.49, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57). Task 13b: the back kick now on the left leg the script names"
+  },
   "donkeyKong fair": {
     "measured": "F: best 14.0 -> 26.5 (x1.89)",
     "class": "size",
     "reason": "a clip-placed limb (arml) reaching 14.0 -> 26.5, x1.89, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57)"
   },
   "donkeyKong jab1": {
-    "measured": "F: best 11.5 -> 15.5 (x1.35)",
-    "class": "root-exact",
-    "reason": "the furthest box hangs off top, at the script's own offset; the legacy table transcribed a shorter reach"
+    "measured": "F: best 11.5 -> 19.4 (x1.68)",
+    "class": "size",
+    "reason": "a clip-placed limb (handl) reaching 11.5 -> 19.4, x1.68, within 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): the SSBU-sized body (D57). Task 13b: the hook is left-handed, so the box rides the fist that punches; before, the furthest box was the root's (15.5)"
   },
   "donkeyKong jab2": {
     "measured": "F: best 11.0 -> 21.4 (x1.94)",
@@ -27,7 +37,7 @@
   "donkeyKong nair": {
     "measured": "F: best 11.0 -> 25.6 (x2.33)",
     "class": "clip-gain",
-    "reason": "a clip-placed limb (armr) reaching 11.0 -> 25.6, x2.33, beyond 1.25 x donkeyKong's size ratio 1.76 (cap 2.19): more than the bigger body explains; for the controller's ruling"
+    "reason": "accepted by the controller (ruling on the clip-gains): the published motion spins with the arms outstretched, and the box rides armr at full extension, 11.0 -> 25.6, x2.33 against a size cap of 2.19 (D57)"
   },
   "link ftilt": {
     "measured": "F: best 13.5 -> 13.5 (x1.00); below 0.8x on 1 of 5 shared frames, worst g15 13.5 -> 10.2",
@@ -82,12 +92,17 @@
   "kirby dtilt": {
     "measured": "F: best 6.0 -> 13.5 (x2.25)",
     "class": "clip-gain",
-    "reason": "a clip-placed limb (toer (on footr)) reaching 6.0 -> 13.5, x2.25, beyond 1.25 x kirby's size ratio 1.43 (cap 1.79): more than the bigger body explains; for the controller's ruling"
+    "reason": "accepted by the controller (ruling on the clip-gains): the low kick extends the leg, and the toer box sits at the script's own offset (4.3) off the toe, 6.0 -> 13.5, x2.25 against a size cap of 1.79 (D57)"
+  },
+  "kirby ftilt": {
+    "measured": "F: best 6.4 -> 15.3 (x2.39)",
+    "class": "clip-gain",
+    "reason": "a clip-placed limb (footl) reaching 6.4 -> 15.3, x2.39, beyond 1.25 x kirby's size ratio 1.43 (cap 1.79): the roundhouse now on the left foot the script names (Task 13b), whose three boxes run 8.5 units out from the ankle along the pointed foot (game_attacks3: y 0, -4.5, -8.5); for the controller's ruling"
   },
   "kirby nair": {
     "measured": "F: best 4.0 -> 9.3 (x2.31)",
     "class": "clip-gain",
-    "reason": "a clip-placed limb (hip) reaching 4.0 -> 9.3, x2.31, beyond 1.25 x kirby's size ratio 1.43 (cap 1.79): more than the bigger body explains; for the controller's ruling"
+    "reason": "accepted by the controller (ruling on the clip-gains): the hip box reaches about its script offset plus its radius from a trunk bone that barely moves, 4.0 -> 9.3, x2.31 against a size cap of 1.79 (D57)"
   },
   "kirby uair": {
     "measured": "U: best 11.4 -> 17.1 (x1.50)",
@@ -104,6 +119,11 @@
     "class": "size",
     "reason": "a clip-placed limb (kneer) reaching 9.6 -> 13.3, x1.39, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57)"
   },
+  "fox nair": {
+    "measured": "F: best 7.2 -> 10.5 (x1.46)",
+    "class": "size",
+    "reason": "a clip-placed limb (kneel) reaching 7.2 -> 10.5, x1.46, within 1.25 x fox's size ratio 1.48 (cap 1.85): the SSBU-sized body (D57). Task 13b: the flying kick now on the left leg the script names"
+  },
   "fox uair": {
     "measured": "U: best 16.0 -> 22.5 (x1.41)",
     "class": "size",
@@ -112,7 +132,7 @@
   "pikachu bair": {
     "measured": "B: best 6.4 -> 10.2 (x1.59); below 0.8x on 6 of 12 shared frames, worst g9 6.0 -> 4.3",
     "class": "root-exact",
-    "reason": "every box hangs off trans, the skeleton root that is also Ultimate's root, at the script's own offsets: the multi-hit's boxes reach 4.3 to 5.3 behind him (0.72 to 0.78 of the legacy 6.0 on 6 frames) and the last hit 10.2, all as published"
+    "reason": "every box hangs off trans, the skeleton root and Ultimate's root too, but unlike top the bake moves trans with the clip's whole-body offset, turn and squash: over the live frames its pose maps the script's local y to -0.79 to -1.06 of x, so the multi-hit's boxes are not at the script's own offsets, and part of the 0.72 to 0.78 loss (4.3 to 5.3 behind him against the legacy 6.0 on 6 frames) is that; the last hit reaches 10.2 (D57)"
   },
   "pikachu dair": {
     "measured": "SWEEP D: best 4.4 -> 8.4 (x1.91)",

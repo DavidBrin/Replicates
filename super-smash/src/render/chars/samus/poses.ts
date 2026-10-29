@@ -1695,7 +1695,18 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
     ],
   },
 
-  /** Down tilt: kneel, cannon thrust low and forward, and a blast off the end. */
+  /**
+   * Down tilt: kneel, cannon thrust low and forward, and a blast off the end.
+   *
+   * "Kneels and quickly thrusts her Arm Cannon downward to fire a small, fiery
+   * blast" (SmashWiki). The published script hangs one box on the cannon arm
+   * (`game_attacklw3`: `armr`) and puts the blast on the root, out at 14.4. The
+   * first version knelt into a lunge with the front leg straight out along the
+   * floor, and on the SSBU skeleton that leg reached 10.5 units ahead while the
+   * cannon stopped at 6: a kick with the arm's box beside it (Plan 4, Task
+   * 13b). So she kneels — front shin upright, back knee down — and the cannon
+   * is the furthest thing forward.
+   */
   dtilt: {
     loop: false,
     strike: 0.3,
@@ -1718,10 +1729,10 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         // low or the effect and the hitbox are in different places.
         t: 0.3,
         pose: P({
-          torso: 28, head: -22, hip: -8,
-          thighR: 116, shinR: 4, footR: -84,
-          thighL: 152, shinL: 128, footL: -60,
-          upperArmR: 126, forearmR: -22,
+          torso: 34, head: -26, hip: -8,
+          thighR: 104, shinR: 84, footR: -88,
+          thighL: 188, shinL: 96, footL: -60,
+          upperArmR: 120, forearmR: -4,
           upperArmL: 208, forearmL: -44,
         }),
         offsetY: -2.6,
@@ -1735,10 +1746,10 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         // `fx.ts` is at full brightness. Held.
         t: 0.336,
         pose: P({
-          torso: 27, head: -21, hip: -8,
-          thighR: 117, shinR: 5, footR: -84,
-          thighL: 152, shinL: 127, footL: -60,
-          upperArmR: 127, forearmR: -22,
+          torso: 33, head: -25, hip: -8,
+          thighR: 104, shinR: 84, footR: -88,
+          thighL: 188, shinL: 96, footL: -60,
+          upperArmR: 121, forearmR: -4,
           upperArmL: 208, forearmL: -44,
         }),
         offsetY: -2.6,
@@ -1751,8 +1762,8 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         t: 0.5,
         pose: P({
           torso: 24, head: -18,
-          thighR: 124, shinR: 20, footR: -84,
-          thighL: 150, shinL: 118, footL: -64,
+          thighR: 112, shinR: 78, footR: -86,
+          thighL: 178, shinL: 100, footL: -64,
           upperArmR: 134, forearmR: -30,
         }),
         offsetY: -2.4,

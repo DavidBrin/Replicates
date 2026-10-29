@@ -23,6 +23,7 @@ import { assignmentsTo, countOf, createMockContext, type MockContext } from "../
 
 /** Which move each override animates. Every entry in `poses` needs one. */
 const SLOT: Partial<Record<PoseName, MoveSlot>> = {
+  jab3: "jab3",
   ftilt: "ftilt",
   utilt: "utilt",
   dtilt: "dtilt",

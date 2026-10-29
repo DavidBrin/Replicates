@@ -1407,33 +1407,34 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    *
    * Read `fighters/marth.ts`'s header: the meteor is hitbox **id 0**, 15% at
    * world (−3.0, −3.3) — below and slightly *behind* him — live on **frame 11
-   * and frame 11 only**, and it does more than the tip's 14%. The tip (id 1, at
-   * (6.7, −1.0)) launches at the Sakurai angle and does not spike. So the
-   * animation has one job the frame data cannot do on its own: on frame 11 the
-   * blade must genuinely be in the space beneath and behind him, and on the
-   * frames either side it must be sweeping through it.
+   * and frame 11 only**, and it does more than the tip's 14%. That box hangs off
+   * the root in the published script, so its place is exact: the blade passes
+   * three units below his feet. The rest (`game_attackairlw`) hang off the
+   * sword arm and the blade (`armr`, `sword1`), live on frames 9–13.
    *
-   * `first = 8` (the earliest hitbox is frame 9), `total = 59`, `strike = 0.3`.
-   * The meteor is frame 11 = actionFrame 10, and
+   * **Posed for the blade the SSBU model holds (Plan 4, Task 13b).** The 2D
+   * Falchion is drawn along the hand; the model grips it across the fist, so on
+   * the retargeted skeleton the blade points a quarter-turn back from the hand
+   * (blade = arm + `handR` − 90°). The first version drew the crescent along the
+   * hand, and on the skeleton the blade rose to head height in front on frames
+   * 12 and 13 while only the root box went below. Here the wrist turns the
+   * blade under him: in front and down on frame 9, straight down and a shade
+   * behind on frame 11, behind and down on frame 13, the tip box 0.9, −0.5 and
+   * 0.7 units off the floor line. Drawn in 2D, the blade on these frames points
+   * back; the 3D is what the game plays.
    *
-   *   t = 0.3 + 0.7 × (10 − 8)/(59 − 8) = 0.327
+   * Under him needs him lower: the hand hangs nine units up, a blade under seven
+   * long, and the published meteor is 3.3 below his feet. So the legs tuck and
+   * the body drops 2.8–3.0 rig units through the swing (it dropped 0.8 before).
    *
-   * so there is a key at `t: 0.327` and it is the one that matters most.
+   * `first = 8` (the earliest hitbox is frame 9), `total = 59`, `strike = 0.3`:
    *
    *   t 0     → f 0    blade up and forward
-   *   t 0.3   → f 8    the tip: A = 145°, point at world (6.7, 1.6)
-   *   t 0.327 → f 10   the meteor: A = 195°, point at world (−3.0, −0.1)
-   *   t 0.38  → f 14   swept through and behind
+   *   t 0.3   → f 8    under him from the front: A = 160°, blade 145°
+   *   t 0.327 → f 10   the meteor: A = 185°, blade 192°
+   *   t 0.355 → f 12   the last live frame: A = 195°, blade 210°
+   *   t 0.38  → f 14   swept through and up behind
    *   t 0.6   → f 30   recovering
-   *
-   * Fifty degrees in two frames is the fastest span in any of his clips, and it
-   * should be: a one-frame meteor window is the definition of a moment you
-   * either caught or did not.
-   *
-   * Honest gap: the point reaches the meteor's x exactly and sits about three
-   * world units above its y. Getting lower needs the hips above the shoulders,
-   * which at this level of abstraction reads as a fall rather than as a chop, so
-   * the `offsetY: -0.8` on that key is as far as it goes.
    */
   dair: {
     loop: false,
@@ -1450,65 +1451,62 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         }),
         ease: "in",
       },
+      // Frame 9: the blade comes in under him from the front, 35° short of
+      // straight down (A = 160°, blade 145°).
       {
         t: 0.3,
         pose: P({
-          hip: -4, torso: 16, head: -12,
-          thighR: 168, shinR: 18, footR: -84,
-          thighL: 190, shinL: 16, footL: -82,
-          upperArmR: 133, forearmR: 0, handR: 0,
-          upperArmL: 200, forearmL: -44,
+          hip: -4, torso: 20, head: -14,
+          thighR: 118, shinR: 112, footR: -80,
+          thighL: 128, shinL: 108, footL: -80,
+          upperArmR: 144, forearmR: 0, handR: 75,
+          upperArmL: 214, forearmL: -40,
         }),
-        offsetY: -0.3,
-        scaleX: 0.94,
-        scaleY: 1.1,
-        ease: "out",
+        offsetY: -2.8,
+        scaleY: 1.04,
+        ease: "linear",
       },
-      // Frame 11. The blade is through the vertical and behind his own legs,
-      // which is where the meteor lives.
+      // Frame 11, the meteor: the blade straight down and a shade behind (195°),
+      // through the published root box at (−3.0, −3.3).
       {
         t: 0.327,
         pose: P({
-          hip: -6, torso: 22, head: -16,
-          thighR: 176, shinR: 12, footR: -88,
-          thighL: 186, shinL: 10, footL: -86,
-          upperArmR: 179, forearmR: 0, handR: 0,
-          upperArmL: 210, forearmL: -38,
+          hip: -6, torso: 26, head: -18,
+          thighR: 116, shinR: 114, footR: -80,
+          thighL: 126, shinL: 110, footL: -80,
+          upperArmR: 165, forearmR: 0, handR: 97,
+          upperArmL: 220, forearmL: -36,
         }),
-        offsetY: -0.8,
-        scaleX: 0.92,
-        scaleY: 1.12,
+        offsetY: -3.0,
+        scaleY: 1.06,
+        ease: "linear",
       },
-      // The hitbox is live for the whole of frames 9-13, and `ease: "out"` is a
-      // cubic: without this key the fighter is a third of the way into the
-      // recovery before the last live frame. The drift across this window is the
-      // whole point here rather than a fault: the tip and the meteor are two
-      // different sweetspots in two different places, so what is held is the
-      // blade being *through* the arc, not parked in one pose.
+      // Frame 13, the last live frame: the crescent finishes down and behind
+      // him (A = 195°, blade 210°).
       {
         t: 0.355,
         pose: P({
-          hip: -4, torso: 16, head: -12,
-          thighR: 168, shinR: 18, footR: -84,
-          thighL: 190, shinL: 16, footL: -82,
-          upperArmR: 133, forearmR: 0, handR: 0,
-          upperArmL: 200, forearmL: -44,
+          hip: -4, torso: 20, head: -14,
+          thighR: 118, shinR: 112, footR: -80,
+          thighL: 128, shinL: 108, footL: -80,
+          upperArmR: 179, forearmR: 0, handR: 105,
+          upperArmL: 214, forearmL: -36,
         }),
-        offsetY: -0.3,
-        scaleX: 0.94,
-        scaleY: 1.1,
+        offsetY: -2.8,
+        scaleY: 1.04,
+        ease: "out",
       },
       {
         t: 0.38,
         pose: P({
           hip: -2, torso: 14, head: -8,
-          thighR: 178, shinR: 14, footR: -86,
-          thighL: 188, shinL: 12, footL: -84,
-          upperArmR: 201, forearmR: 0, handR: 0,
+          thighR: 150, shinR: 60, footR: -84,
+          thighL: 162, shinL: 56, footL: -82,
+          upperArmR: 211, forearmR: 0, handR: 125,
           upperArmL: 204, forearmL: -30,
         }),
-        offsetY: -0.5,
-        scaleY: 1.06,
+        offsetY: -1.6,
+        scaleY: 1.02,
       },
       {
         t: 0.6,
@@ -1516,12 +1514,12 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           torso: 6,
           thighR: 172, shinR: 22, footR: -84,
           thighL: 192, shinL: 20, footL: -82,
-          upperArmR: 226, forearmR: -12, handR: 0,
+          upperArmR: 226, forearmR: -12, handR: 60,
           upperArmL: 196, forearmL: -24,
         }),
-        offsetY: -0.2,
+        offsetY: -0.4,
       },
-      { t: 1, pose: P({ torso: 2, thighR: 166, shinR: 26, thighL: 194, shinL: 24, upperArmR: 258, forearmR: -20 }) },
+      { t: 1, pose: P({ torso: 2, thighR: 166, shinR: 26, thighL: 194, shinL: 24, upperArmR: 258, forearmR: -20, handR: 0 }) },
     ],
   },
 

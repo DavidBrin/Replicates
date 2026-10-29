@@ -658,8 +658,8 @@ describe("the effects are wired to moves that exist", () => {
  * In the game (Plan 4) the blade moves run their published scripts, and some of
  * their boxes are capsules: two ends on one bone, the far end written second.
  * Whichever end lies further out is where the point is, so that end is what the
- * tipper measures, lights and flashes (DISPATCH-NOTES 13.6). Measuring the near
- * end alone, a capsule written hilt first has no sweetspot at all.
+ * tipper measures, lights and flashes. Measuring the near end alone, a capsule
+ * written hilt first has no sweetspot at all.
  */
 describe("the point of a capsule is its end furthest out", () => {
   const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;

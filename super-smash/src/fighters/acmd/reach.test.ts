@@ -16,6 +16,7 @@ import { boneRole } from "@/render3d/retarget/placeable";
 import { SKELETONS } from "@/render3d/skeletons";
 import { FIGHTERS } from "../index";
 import { withReferenceScripts } from "./active";
+import { DIRECTION, along, dirOf, type Dir, type Klass } from "./hitDirection";
 import { REFERENCE_SCRIPTS } from "./index";
 import { LIMB_HOLD, LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
 
@@ -46,74 +47,6 @@ import { LIMB_HOLD, LIMB_SCRIPT_SLOTS, withLimbScripts } from "./limb";
 const FILE = join(process.cwd(), "src", "fighters", "acmd", "reach.allow.json");
 const bake = readBakeFromDisk();
 
-type Dir = "F" | "B" | "U" | "D";
-type Klass = Dir | `SWEEP ${Dir}`;
-
-/**
- * Each limb slot's direction class, from the move's published hit direction:
- * forward for jabs, tilts, forward airs, dash attacks and grabs; back for back
- * airs; up for up airs and up tilts; down for down airs; a sweep for a spin or
- * arc whose legacy box stands still (Samus's spinning neutral air, Pikachu's
- * drill). The neutral airs that are not spins are classed forward, as the
- * Task 13 review's per-frame survey classed them. Held slots are classed too,
- * so the slot is ready when its hold is lifted.
- */
-const DIRECTION: Readonly<Record<string, Klass>> = {
-  "mario bair": "B",
-  "mario dtilt": "F",
-  "mario fair": "F",
-  "mario ftilt": "F",
-  "mario jab2": "F",
-  "mario jab3": "F",
-  "mario nair": "F",
-  "mario uair": "U",
-  "mario utilt": "U",
-  "donkeyKong bair": "B",
-  "donkeyKong fair": "F",
-  "donkeyKong jab1": "F",
-  "donkeyKong jab2": "F",
-  "donkeyKong nair": "F",
-  "link bair": "B",
-  "link ftilt": "F",
-  "link jab3": "F",
-  "link nair": "F",
-  "link utilt": "U",
-  "samus bair": "B",
-  "samus dair": "D",
-  "samus dtilt": "F",
-  "samus fair": "F",
-  "samus ftilt": "F",
-  "samus jab2": "F",
-  "samus nair": "SWEEP F",
-  "samus utilt": "U",
-  "kirby dtilt": "F",
-  "kirby ftilt": "F",
-  "kirby nair": "F",
-  "kirby uair": "U",
-  "fox bair": "B",
-  "fox dair": "D",
-  "fox ftilt": "F",
-  "fox nair": "F",
-  "fox uair": "U",
-  "pikachu bair": "B",
-  "pikachu dair": "SWEEP D",
-  "pikachu dashAttack": "F",
-  "pikachu ftilt": "F",
-  "pikachu uair": "U",
-  "pikachu utilt": "U",
-  "marth dair": "D",
-  "marth dtilt": "F",
-  "marth fair": "F",
-  "marth ftilt": "F",
-  "marth jab1": "F",
-  "marth jab2": "F",
-  "marth nair": "F",
-  "marth uair": "U",
-  "marth utilt": "U",
-};
-
-const dirOf = (k: Klass): Dir => (k.startsWith("SWEEP ") ? (k.slice(6) as Dir) : (k as Dir));
-
 /** A live box and the bone it hangs off. */
 interface Live {
   readonly box: Hitbox;
@@ -127,8 +60,7 @@ function reachOf(h: Hitbox, d: Dir): number {
     [h.x, h.y],
     [h.x2 ?? h.x, h.y2 ?? h.y],
   ]) {
-    const along = d === "F" ? x : d === "B" ? -x : d === "U" ? y : -y;
-    best = Math.max(best, along + h.radius);
+    best = Math.max(best, along(d, x, y) + h.radius);
   }
   return best;
 }
@@ -261,8 +193,11 @@ const isRoot = (id: string, bone: string): boolean => boneRole(SKELETONS[id], bo
 /**
  * What the measurement must show for an entry's class to hold, or null:
  * - `root-exact`: the limb's reach, at its best and on every loss frame, comes
- *   from a box on the root (`top`, `trans`), placed at the script's own offset;
- * - `sweep`: a sweep class, or a loss on a single frame (an arc's first frame);
+ *   from a box on the root (`top`, `trans`): on `top` at the script's own
+ *   offset; on `trans`, the skeleton's root, at that offset as the clip's
+ *   whole-body offset, turn and squash carry it;
+ * - `sweep`: a sweep class whose best reach holds (no `sweepLoss`), or a loss
+ *   on a single frame (an arc's first frame);
  * - `size`: a gain off a clip-placed bone, no loss, within 1.25× the size ratio;
  * - `clip-gain`: a gain off a clip-placed bone beyond 1.25× the size ratio.
  */
@@ -274,6 +209,7 @@ function classProblem(id: string, klass: Klass, v: Verdict, cls: AllowEntry["cla
       if (!isRoot(id, v.envelope.bone) || v.losses.some((l) => !isRoot(id, l.bone))) return "its reach is not from a root box";
       return null;
     case "sweep":
+      if (v.sweepLoss) return `its best reach ${f1(v.envelope.limb)} is below 0.8x the legacy ${f1(v.envelope.legacy)}`;
       return klass !== dirOf(klass) || v.losses.length === 1 ? null : "not a sweep, nor a single-frame loss";
     case "size":
       if (!v.gain || v.losses.length > 0 || isRoot(id, v.envelope.bone)) return "not a clip-placed gain without a loss";
@@ -343,9 +279,11 @@ describe("adopted moves reach about as far as they did, every frame, the way the
 });
 
 /*
- * The ratchet's own cases. The held slots are real ones it must catch (a back air
- * swung to the front, a 37% loss, down airs gone forward), and so is Samus's grab
- * as it would be with its box on a bone no clip moves; the rest are made up.
+ * The ratchet's own cases. The held slot is a real one it must catch (Samus's
+ * down air, the cannon at her chest), and so is Samus's grab as it would be with
+ * its box on a bone no clip moves; the rest are made up. The slots Task 13b
+ * freed (a back air swung to the front, a 37% loss) now pass, and their clips as
+ * first drawn are pinned by `strike.test.ts`.
  */
 describe("the ratchet", () => {
   it("still catches every held slot, so each hold is still needed (lift it when its clip is fixed)", () => {
@@ -359,13 +297,12 @@ describe("the ratchet", () => {
     expect(passing).toEqual([]);
   });
 
-  it.each([
-    ["donkeyKong", "bair", "a back air swung to the front", "B"],
-    ["fox", "nair", "a loss of 37 percent", "F"],
-  ] as const)("catches %s %s, %s", (id, slot, _what, klass) => {
-    const { legacy } = pair(id);
-    const forced = withReferenceScripts(legacy, REFERENCE_SCRIPTS[id], [slot], bake.bones);
-    expect(verdictOf(legacy, forced, slot, klass).losses.length).toBeGreaterThan(0);
+  it("catches Samus's down air with the cannon at her chest, on every live frame", () => {
+    const { legacy } = pair("samus");
+    const forced = withReferenceScripts(legacy, REFERENCE_SCRIPTS.samus, ["dair"], bake.bones);
+    const v = verdictOf(legacy, forced, "dair", "D");
+    expect(v.losses.length).toBe(v.shared);
+    expect(v.shared).toBe(7);
   });
 
   it.each(["grab", "dashGrab"] as const)("catches Samus's %s with its box on the never-animated `throw` bone, catches included", (slot) => {
@@ -409,6 +346,16 @@ describe("the ratchet", () => {
     const spin = frames(4, (g) => [box(g === 2 ? 10 : -3)]);
     expect(judge(legacy, spin, "SWEEP F")).toMatchObject({ losses: [], sweepLoss: false });
     expect(judge(legacy, frames(4, () => [box(4)]), "SWEEP F").sweepLoss).toBe(true);
+  });
+
+  it("refuses the sweep class to a sweep whose best reach collapsed (Samus's nair, 9.5 -> 7.0)", () => {
+    // The loss check leaves allowlisted slots to the class check, so the class
+    // check is where a collapsed sweep has to fail, not only the `measured` text.
+    const v = judge(frames(4, () => [box(8.5)]), frames(4, (g) => [box(g === 2 ? 6 : -3)]), "SWEEP F");
+    expect(v.sweepLoss).toBe(true);
+    expect(classProblem("samus", "SWEEP F", v, "sweep")).toMatch(/best reach .* below 0\.8x/);
+    // The same spin at its committed best (16.0) still passes.
+    expect(classProblem("samus", "SWEEP F", judge(frames(4, () => [box(8.5)]), frames(4, (g) => [box(g === 2 ? 15 : -3)]), "SWEEP F"), "sweep")).toBeNull();
   });
 
   it("measures a capsule to whichever end reaches further, whichever end is written first", () => {

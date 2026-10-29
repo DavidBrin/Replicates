@@ -777,8 +777,9 @@ describe("the Grapple Beam reaches what it grabs", () => {
   });
 
   /**
-   * An extended grab box is a capsule, and its far end can be the end that
-   * reaches (DISPATCH-NOTES 13.6): the claw goes on whichever end is further out.
+   * An extended grab box is a capsule (Samus's published grab scripts write
+   * one), and its far end can be the end that reaches: the claw goes on
+   * whichever end is further out.
    */
   it("puts the claw on a capsule's far end when that is the end further out", () => {
     const capsule: Hitbox = { ...samus.moves.grab!.hitboxes[0], x: q12(5), x2: q12(13), y2: q12(6.5) };

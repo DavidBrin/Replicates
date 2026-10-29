@@ -14,11 +14,12 @@ import {
   samplePose,
   samplePoseForFighter,
   smoothstep,
+  swapLimbSides,
   type PoseName,
 } from "./poses";
 import { makeFighter } from "./testFixtures";
 import { getCharacterRig, rotationPivot } from "./characterArt";
-import { resolve } from "./skeleton";
+import { BASE_RIG, deg, resolve } from "./skeleton";
 import type { BoneName } from "./skeleton";
 
 const TAU = Math.PI * 2;
@@ -244,6 +245,69 @@ describe("sampling", () => {
     const b = samplePose(POSE_LIBRARY.shield, 0);
     const mid = blendSamples(a, b, 0.5);
     expect(mid.offsetY).toBeCloseTo((a.offsetY + b.offsetY) / 2, 9);
+  });
+});
+
+describe("trading a clip's left and right limbs", () => {
+  /** Where every bone lands for a clip at `t`, on the reference rig. */
+  const drawn = (clip: Parameters<typeof samplePose>[0], t: number) => {
+    const s = samplePose(clip, t);
+    return resolve(BASE_RIG, s.angles, { x: 0, y: 0, scale: 1, facing: 1 });
+  };
+  const LIMB_ENDS: [BoneName, BoneName][] = [["handL", "handR"], ["footL", "footR"], ["forearmL", "forearmR"], ["shinL", "shinR"]];
+
+  it("hands each side's tracks to the other, key by key, and leaves the trunk alone", () => {
+    const clip = {
+      loop: false,
+      keys: [
+        { t: 0, pose: { torso: 0.3, upperArmR: 1.0, upperArmL: 3.0, thighL: 2.5 } },
+        { t: 1, pose: { torso: 0.1, upperArmR: 1.4 } },
+      ],
+    };
+    const swapped = swapLimbSides(clip);
+    // `thighR` is never named, so the traded `thighL` rests where `thighR` rested.
+    expect(swapped.keys[0].pose).toEqual({ torso: 0.3, upperArmL: 1.0, upperArmR: 3.0, thighR: 2.5, thighL: BASE_RIG.thighR.angle });
+    // A bone a key leaves out stays left out, so it still holds its neighbour's value.
+    expect(swapped.keys[1].pose).toEqual({ torso: 0.1, upperArmL: 1.4, thighL: BASE_RIG.thighR.angle });
+  });
+
+  it("gives a side the clip never names its partner's rest angle, so the traded limb hangs where it did", () => {
+    const swapped = swapLimbSides({ loop: false, keys: [{ t: 0, pose: { upperArmR: deg(90) } }] });
+    expect(swapped.keys[0].pose.upperArmL).toBeCloseTo(deg(90), 12);
+    expect(swapped.keys[0].pose.upperArmR).toBeCloseTo(BASE_RIG.upperArmL.angle, 12);
+  });
+
+  it("draws each limb where its partner was, for a clip that names both sides in every key", () => {
+    const both = (a: number) => ({
+      upperArmL: deg(150 + a), forearmL: deg(-20 - a), upperArmR: deg(80 - a), forearmR: deg(10 + a),
+      thighL: deg(200 + a), shinL: deg(30), footL: deg(-80), thighR: deg(120 - a), shinR: deg(-6), footR: deg(-30),
+    });
+    const clip = { loop: false, keys: [{ t: 0, pose: both(0) }, { t: 0.4, pose: both(20), ease: "out" as const }, { t: 1, pose: both(-10) }] };
+    for (const t of [0, 0.2, 0.4, 0.7, 0.95]) {
+      const a = drawn(clip, t);
+      const b = drawn(swapLimbSides(clip), t);
+      for (const [l, r] of LIMB_ENDS) {
+        expect(b[l].x1, `${l} at ${t}`).toBeCloseTo(a[r].x1, 9);
+        expect(b[l].y1, `${l} at ${t}`).toBeCloseTo(a[r].y1, 9);
+        expect(b[r].x1, `${r} at ${t}`).toBeCloseTo(a[l].x1, 9);
+      }
+    }
+  });
+
+  it("is undone by trading again", () => {
+    for (const name of ["jab", "fair", "bair", "nair", "ftilt", "dair"] as PoseName[]) {
+      const clip = POSE_LIBRARY[name];
+      for (let i = 0; i <= 10; i++) {
+        const a = drawn(clip, i / 10);
+        const c = drawn(swapLimbSides(swapLimbSides(clip)), i / 10);
+        for (const pair of LIMB_ENDS) {
+          for (const bone of pair) {
+            expect(c[bone].x1, `${name} ${bone} at ${i / 10}`).toBeCloseTo(a[bone].x1, 9);
+            expect(c[bone].y1, `${name} ${bone} at ${i / 10}`).toBeCloseTo(a[bone].y1, 9);
+          }
+        }
+      }
+    }
   });
 });
 

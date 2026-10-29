@@ -14,7 +14,8 @@
  * *shape*.
  */
 
-import { P, type PoseClip } from "../../poses/clip";
+import { jab as sharedJab } from "../../poses/attacks";
+import { P, swapLimbSides, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
 /**
@@ -1675,8 +1676,13 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * The kick is angled 30° up rather than level, because `y: 7` is two units
    * above his hip and a level kick puts the toe below the pelvis where it reads
    * as a foot he is standing on.
+   *
+   * Drawn with the near (right) leg and played with the limbs traded
+   * (`swapLimbSides`, Plan 4 Task 13b): the hitbox chain the frames show is the
+   * published script's `footl` → `kneel` → `hip`, the left leg, and kicked with
+   * the right one the boxes sat on the tucked leg in front of him.
    */
-  bair: {
+  bair: swapLimbSides({
     loop: false,
     strike: 0.24,
     keys: [
@@ -1773,7 +1779,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         }),
       },
     ],
-  },
+  }),
 
   /**
    * Up air — the arcing headbutt.
@@ -2217,4 +2223,14 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       },
     ],
   },
+
+  /**
+   * Jab 1 — "a hook followed by an uppercut" (SmashWiki). The published hook
+   * (`game_attack11`) hangs its fist boxes on `handl`, the left hand, so the
+   * shared jab plays with its limbs traded (`swapLimbSides`) and the far fist
+   * throws it; drawn with the near fist, the box sat on a hand at his chest
+   * while the other one punched (Plan 4, Task 13b). Jab 2, the uppercut, hangs
+   * its box on `handr` and keeps the shared clip as drawn.
+   */
+  jab: swapLimbSides(sharedJab),
 };

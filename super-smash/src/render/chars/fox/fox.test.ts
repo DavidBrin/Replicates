@@ -242,7 +242,9 @@ describe("the strike key is where the clip says it is", () => {
     ["fsmash", "fsmash", "footR", 0],
     ["usmash", "usmash", "footR", 0],
     ["dsmash", "dsmash", "footR", 0],
-    ["nair", "nair", "footR", 0],
+    // Plan 4 Task 13b: neutral air kicks with the left leg (the script's
+    // `kneel`), so its clip plays with the limbs traded.
+    ["nair", "nair", "footL", 0],
     ["fair", "fair", "footR", 0],
     ["bair", "bair", "footR", 0],
     ["grab", "grab", "handR", 0],

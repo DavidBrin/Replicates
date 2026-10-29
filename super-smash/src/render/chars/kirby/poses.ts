@@ -58,7 +58,7 @@
  * animation.
  */
 
-import { P, type Keyframe, type PoseClip } from "../../poses/clip";
+import { P, swapLimbSides, type Keyframe, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
 /**
@@ -213,8 +213,13 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   /**
    * Forward tilt — "a spinning roundhouse kick". The whip of the body is the
    * move; the boot arriving out front is the hit. total 23, firstActive 4.
+   *
+   * Drawn with the near (right) leg and played with the limbs traded
+   * (`swapLimbSides`, Plan 4 Task 13b): the published kick hangs its three
+   * boxes on the left foot (`game_attacks3`: `footl`). The counterbalancing arm
+   * drops to the front of the ball rather than reaching past the boot.
    */
-  ftilt: {
+  ftilt: swapLimbSides({
     loop: false,
     strike: 0.26,
     keys: [
@@ -238,8 +243,8 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           thighL: 200,
           shinL: -6,
           footL: -88,
-          upperArmR: 74,
-          forearmR: -8,
+          upperArmR: 128,
+          forearmR: -20,
           upperArmL: 268,
           forearmL: -16,
         }),
@@ -257,7 +262,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       },
       { t: 1, pose: P({ ...STANCE, ...ARMS_REST }) },
     ],
-  },
+  }),
 
   /**
    * Up tilt — "a scorpion kick", foot intangible, reaching up and slightly
@@ -871,7 +876,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   /**
    * Up air — the bicycle kick again, in midair. Same shape as the up smash and
    * that is correct: SmashWiki calls it "a bicycle kick similar to his up
-   * smash". total 35, firstActive 7.
+   * smash". total 35, firstActive 7. The arms are out to the sides, not
+   * overhead (Plan 4 Task 13b): raised, the hands rose 2.3 units past the
+   * kicking foot that carries the published boxes (`game_attackairhi`: `footr`).
    */
   uair: {
     loop: false,
@@ -894,9 +901,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
           thighL: 220,
           shinL: -16,
           footL: -78,
-          upperArmR: 26,
+          upperArmR: 76,
           forearmR: -8,
-          upperArmL: 330,
+          upperArmL: 284,
           forearmL: 8,
         }),
         rotation: -0.42,

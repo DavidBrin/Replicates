@@ -37,7 +37,7 @@
  * a frame, which reads as a freeze. Each clip gets two recovery keys.
  */
 
-import { P, type PoseClip } from "../../poses/clip";
+import { P, swapLimbSides, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
 /**
@@ -646,6 +646,12 @@ const dsmash: PoseClip = {
  * more frames. Frame 27 lands at t ≈ 0.61, so the leg is still out two thirds
  * of the way through the clip — a kick that snapped back would have nothing
  * left to carry the weak half.
+ *
+ * Drawn with the near (right) leg kicking and played with the limbs traded
+ * (`swapLimbSides`, Plan 4 Task 13b): the published script keeps a box on the
+ * left knee for the whole move (`game_attackairn`: `kneel`, with `kneer` and
+ * then `legr` on the other leg), so the left leg is the one that kicks and the
+ * right one trails behind him.
  */
 const nair: PoseClip = {
   loop: false,
@@ -731,6 +737,11 @@ const nair: PoseClip = {
  * above his head first: the raised-fist key is the whole read, and it is held
  * with `hold` rather than eased so the wind-up is a drawing rather than a
  * blur.
+ *
+ * Drawn with the near (right) arm and played with the limbs traded
+ * (`swapLimbSides`, Plan 4 Task 13b): the published overhand hangs its boxes on
+ * the left arm (`game_attackairf`: `arml`, `shoulderl`), and swung with the
+ * right one the meteor's box sat on an arm hanging at his side.
  */
 const fair: PoseClip = {
   loop: false,
@@ -1196,6 +1207,78 @@ const ftilt: PoseClip = {
     },
     { t: 0.8, pose: P({ torso: 2, thighR: 150, shinR: 34, thighL: 198, shinL: 24 }) },
     { t: 1, pose: P({ torso: 3, upperArmR: 140, forearmR: -28, upperArmL: 200, forearmL: -30 }) },
+  ],
+};
+
+/**
+ * Jab 3: the kick.
+ *
+ * "The Punch + Punch + Kick combo from Super Mario 64" (SmashWiki), and the
+ * third hit is *Kick Up*: in Ultimate it comes out on frame 3 and "goes
+ * higher". The shared jab clip punched it, so the published script's foot box
+ * (`game_attack13`: `footr`, beside two root boxes out at x 7–13, y 6–9) sat on
+ * a planted foot while a fist did the work (Plan 4, Task 13b). The right leg
+ * kicks forward and up from a chambered knee; the root boxes are the kick's
+ * reach, and the foot carries its own box out under them.
+ *
+ * Live on frames 3–4 of 33: `strike` 0.3 on frame 3, and the last live frame
+ * lands at 0.3 + 0.7 · 1/31 ≈ 0.323, so the extension is held to 0.33.
+ */
+const jab3: PoseClip = {
+  loop: false,
+  strike: 0.3,
+  keys: [
+    {
+      t: 0,
+      pose: P({
+        torso: 2, head: -2,
+        thighR: 112, shinR: 96, footR: -70,
+        thighL: 194, shinL: 14, footL: -86,
+        upperArmR: 160, forearmR: -70,
+        upperArmL: 150, forearmL: -80,
+      }),
+      ease: "in",
+    },
+    // Contact, frame 3. Kicking leg accumulated 72 / 66: forward and rising,
+    // the ankle above the pelvis; the body leans back over the planted leg.
+    {
+      t: 0.3,
+      pose: P({
+        torso: -14, head: 12, hip: 6,
+        thighR: 66, shinR: -6, footR: -40,
+        thighL: 190, shinL: 10, footL: -86,
+        upperArmR: 214, forearmR: 34,
+        upperArmL: 160, forearmL: -60,
+      }),
+      offsetX: 0.3,
+      ease: "hold",
+    },
+    // Frame 4, the last live frame.
+    {
+      t: 0.33,
+      pose: P({
+        torso: -14, head: 12, hip: 6,
+        thighR: 68, shinR: -4, footR: -42,
+        thighL: 190, shinL: 10, footL: -86,
+        upperArmR: 212, forearmR: 32,
+        upperArmL: 162, forearmL: -60,
+      }),
+      offsetX: 0.3,
+      ease: "out",
+    },
+    {
+      t: 0.52,
+      pose: P({
+        torso: -4, head: 4, hip: 2,
+        thighR: 128, shinR: 44, footR: -72,
+        thighL: 192, shinL: 12, footL: -86,
+        upperArmR: 180, forearmR: -10,
+        upperArmL: 156, forearmL: -70,
+      }),
+      offsetX: 0.15,
+    },
+    { t: 0.78, pose: P({ torso: 2, thighR: 156, shinR: 22, footR: -86, thighL: 198, shinL: 16, upperArmR: 150, forearmR: -60, upperArmL: 154, forearmL: -74 }) },
+    { t: 1, pose: P({ torso: 3, thighR: 158, shinR: 18, thighL: 200, shinL: 18, upperArmR: 146, forearmR: -50, upperArmL: 152, forearmL: -70 }) },
   ],
 };
 
@@ -1725,6 +1808,10 @@ const downB: PoseClip = {
  * held keys below are 20% of the clip apart and the fist covers 40° between
  * them. An uppercut that finishes on frame 5 and then waits is a fighter
  * holding his arm in the air for six frames.
+ *
+ * Drawn with the near (right) arm and played with the limbs traded
+ * (`swapLimbSides`, Plan 4 Task 13b): the published uppercut hangs its boxes on
+ * the left arm (`game_attackhi3`: `arml`).
  */
 const utilt: PoseClip = {
   loop: false,
@@ -1953,13 +2040,14 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   fsmash,
   usmash,
   dsmash,
-  nair,
-  fair,
+  nair: swapLimbSides(nair),
+  fair: swapLimbSides(fair),
   bair,
   uair,
   dair,
   ftilt,
-  utilt,
+  jab3,
+  utilt: swapLimbSides(utilt),
   dtilt,
   dashAttack,
   neutralB,

@@ -53,7 +53,7 @@
  * where `fighters/fox.ts` says that hitbox is.
  */
 
-import { P, type PoseClip } from "../../poses/clip";
+import { P, swapLimbSides, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
 /* ----------------------------------------------------------------- idle -- */
@@ -1030,6 +1030,11 @@ const dsmash: PoseClip = {
  *
  * This is the one clip here where the long hold is not a stylistic choice
  * about snap. It is what the move *is*.
+ *
+ * Drawn with the near (right) leg and played with the limbs traded
+ * (`swapLimbSides`, Plan 4 Task 13b): the published kick hangs its box on the
+ * left knee (`game_attackairn`: `kneel`, beside one on `hip`), which the right
+ * leg's kick left behind him.
  */
 const nair: PoseClip = {
   loop: false,
@@ -1401,7 +1406,10 @@ const uair: PoseClip = {
  *
  * Legs stay pinned together and pointed straight down throughout — the hitbox
  * is at y = -1.5, i.e. below his own feet, and a drill whose legs wander is
- * not a drill.
+ * not a drill. The toes point down too, and the body hangs a unit lower than it
+ * first did (Plan 4 Task 13b): the published drill hangs its box on the toe
+ * (`game_attackairlw`: `toel`), and with the feet flexed forward it reached 2.6
+ * to 2.9 below him against the legacy 4.5; pointed, 3.7 to 4.0.
  */
 const dair: PoseClip = {
   loop: false,
@@ -1460,7 +1468,7 @@ const dair: PoseClip = {
  */
 function drillKeys() {
   const T = [0.1, 0.16, 0.22, 0.28, 0.34, 0.4];
-  return T.map((t, i) => {
+  const keys = T.map((t, i) => {
     const phase = i % 2 === 0 ? 1 : -1;
     return {
       t,
@@ -1468,8 +1476,8 @@ function drillKeys() {
         torso: 2, head: -2, hip: phase * 4,
         // Legs together and straight down, alternating which one leads by a
         // few degrees — the scissor of a drill, not a stride.
-        thighR: 180 - phase * 10, shinR: -4, footR: -100 + phase * 8,
-        thighL: 180 + phase * 10, shinL: -4, footL: -100 - phase * 8,
+        thighR: 180 - phase * 10, shinR: -4, footR: phase * 8,
+        thighL: 180 + phase * 10, shinL: -4, footL: -phase * 8,
         upperArmR: 150 + phase * 16, forearmR: -40,
         upperArmL: 210 - phase * 16, forearmL: 40,
       }),
@@ -1477,10 +1485,14 @@ function drillKeys() {
       // revolution of the corkscrew.
       scaleX: i % 2 === 0 ? 0.74 : 1.0,
       scaleY: 1.2,
-      offsetY: -0.45,
+      offsetY: -1.0,
       ease: "out" as const,
     };
   });
+  // Each hit is live for two frames, and the published script's last one ends
+  // on motion frame 21 (t 0.42 on the bake's clock), a frame past its key: held
+  // there, the toes are still down when it ends instead of already kicking out.
+  return [...keys, { ...keys[keys.length - 1], t: 0.42 }];
 }
 
 /* ---------------------------------------------------------------- grab -- */
@@ -2112,7 +2124,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   fsmash,
   usmash,
   dsmash,
-  nair,
+  nair: swapLimbSides(nair),
   fair,
   bair,
   uair,
