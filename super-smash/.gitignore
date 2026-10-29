@@ -37,3 +37,9 @@ blob-report/
 *.blend1
 # Bytecode from the model scripts (they run with -B; this catches a run without it).
 __pycache__/
+
+# Captures of the animation tooling (`scripts/animsheet.mjs`, `scripts/fightsheet.mjs`).
+# They photograph the fighters' models, so none may ever be committed: both scripts
+# write into test-results/ by default, and a stray one in the package root is ignored too.
+/anim-*.png
+/fight-*.png

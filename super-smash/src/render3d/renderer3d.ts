@@ -147,6 +147,19 @@ const CLEAR_ALPHA = 0;
  */
 const LIGHTS = { hemisphere: 0.8, ambient: 0.1, sun: 2.6 } as const;
 
+/**
+ * The scene's three lights, as a match lights it. The animation lab's model
+ * sheet (`app/anim/Lab3D.tsx`) builds its lights here too, so a clip is judged
+ * under the light the game draws it in.
+ */
+export function createLights(): { readonly hemisphere: HemisphereLight; readonly ambient: AmbientLight; readonly sun: DirectionalLight } {
+  const hemisphere = new HemisphereLight(0xffffff, 0x445066, LIGHTS.hemisphere);
+  const ambient = new AmbientLight(0xffffff, LIGHTS.ambient);
+  const sun = new DirectionalLight(0xffffff, LIGHTS.sun);
+  sun.position.set(-40, 120, 160);
+  return { hemisphere, ambient, sun };
+}
+
 /** A blob shadow's size against the fighter's `attributes.width`, across and in depth. UNVERIFIED (cosmetic): by eye. */
 const SHADOW_ACROSS = 1.6;
 const SHADOW_DEEP = 1.1;
@@ -163,7 +176,7 @@ interface DrawnShield {
 }
 
 /** Something the GPU holds a copy of, which three frees on a "dispose" event. */
-interface Freeable {
+export interface Freeable {
   addEventListener(type: "dispose", listener: (event: { target: unknown }) => void): void;
   removeEventListener(type: "dispose", listener: (event: { target: unknown }) => void): void;
   dispose(): void;
@@ -174,7 +187,7 @@ interface Freeable {
  * every geometry, material and texture (a skeleton's bone texture too), and
  * every instanced mesh (its instance buffers).
  */
-function drawnResources(scene: Object3D): Set<Freeable> {
+export function drawnResources(scene: Object3D): Set<Freeable> {
   const out = new Set<Freeable>();
   const add = (r: object) => out.add(r as Freeable);
   scene.traverse((o) => {
@@ -217,10 +230,7 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
   // In the scene, `applySideCamera`'s update is its only one: three updates a camera again only if it has no parent.
   scene.add(camera);
 
-  const hemisphere = new HemisphereLight(0xffffff, 0x445066, LIGHTS.hemisphere);
-  const ambient = new AmbientLight(0xffffff, LIGHTS.ambient);
-  const sun = new DirectionalLight(0xffffff, LIGHTS.sun);
-  sun.position.set(-40, 120, 160);
+  const { hemisphere, ambient, sun } = createLights();
   const stage = createStage3D(opts.stage);
   const vfx = createVfx3D();
 

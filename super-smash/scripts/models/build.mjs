@@ -68,7 +68,7 @@ for (const id of fighters) {
   );
   if (blender.status !== 0) die(`Blender export failed for ${id}`);
 
-  await optimizeGlb(raw, opt);
+  await optimizeGlb(raw, opt, id);
   const dump = JSON.parse(readFileSync(dumpFile, "utf8"));
   const report = await verifyGlb(opt, dump);
   if (report.problems.length > 0) die(report.problems.join("\n"));

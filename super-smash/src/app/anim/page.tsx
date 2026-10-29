@@ -23,6 +23,7 @@
 
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   drawFigure,
@@ -50,7 +51,20 @@ import { drawMoveFx } from "@/render/specialFx";
 import { DREW_NOTHING } from "@/render/fxKit";
 import { createCamera } from "@/render/camera";
 import { FIGHTER_IDS, getFighter } from "@/fighters";
+import { withLimbScripts } from "@/fighters/acmd/limb";
+import { useBake } from "@/game/useBake";
+import type { BakeTables } from "@/engine/acmd/bakeTables";
 import type { ActionState, FighterDef, FighterState, MoveSlot } from "@/engine/types";
+
+/**
+ * The 3D model sheet. three.js (~200 KB gzipped) loads with it, through
+ * `import()`, after the page is up: the lab's own 2D views need none of it
+ * (`app/chunkSplit.test.ts` walks this page's static imports for it).
+ */
+const Lab3D = dynamic(() => import("./Lab3D").then((m) => m.Lab3D), {
+  ssr: false,
+  loading: () => <p style={{ color: "#7C8896", fontSize: 12, margin: "6px 0" }}>model sheet — loading</p>,
+});
 
 /** Every action worth looking at, grouped the way an animator would think of them. */
 const GROUPS: ReadonlyArray<readonly [string, readonly ActionState[]]> = [
@@ -99,6 +113,36 @@ function lengthOf(f: FighterState, jump?: JumpTiming, moveFrames?: number): numb
     }
   }
   return clip.period ?? 30;
+}
+
+/**
+ * The fighter as the game plays it against `bake`: its limb-bone scripts on and
+ * their `MoveDef` tables placed through the bake's bones (`withLimbScripts`,
+ * ruling R1(a)) — the very object the installed context hands the sim, the CPU
+ * and the match's renderer. Without a bake, the plain def.
+ */
+export function gameFighterFor(id: string, bake: BakeTables | null): FighterDef | undefined {
+  const base = getFighter(id);
+  return base !== undefined && bake !== null ? withLimbScripts(base, bake.bones) : base;
+}
+
+/**
+ * How many cells the sheets draw for these options: the action's true length.
+ *
+ * An attack's length is its move's `totalFrames`, and the game's is not always
+ * the legacy table's: a slot running its imported script ends on the script's
+ * published first actionable frame (`withReferenceScripts`), which differs from
+ * the legacy length for Mario's up air, Kirby's neutral and up airs and Fox's
+ * neutral air. So once the bake is in, the game's own def is asked
+ * (`withLimbScripts`), the one the sim, the bake and the match play.
+ */
+export function lengthFor(o: Options, bake: BakeTables | null): number {
+  const def = gameFighterFor(o.fighterId, bake);
+  return lengthOf(
+    fighterAt(o, 0),
+    def ? jumpTimingFor(def) : undefined,
+    usesMoveFor(o.action) ? def?.moves?.[moveFor(o)]?.totalFrames : undefined,
+  );
 }
 
 export interface Options {
@@ -180,7 +224,12 @@ export function usesMoveFor(action: ActionState): boolean {
   return action === "attack" || action === "special" || action === "throw" || action === "grab";
 }
 
-function fighterAt(o: Options, frame: number): FighterState {
+/**
+ * The fighter these options show on `frame`: that many frames into the action,
+ * at the origin facing forward. Both sheets pose it, the 3D one through the
+ * match's own `drawnPose` and the same fighter's boxes (`Lab3D`).
+ */
+export function fighterAt(o: Options, frame: number): FighterState {
   return makeFighter({
     defId: o.fighterId,
     action: o.action,
@@ -389,14 +438,9 @@ export default function AnimLab() {
     () => ({ fighterId, action, move, jumpsUsed, fastFalling }),
     [fighterId, action, move, jumpsUsed, fastFalling],
   );
-  const total = useMemo(() => {
-    const def = getFighter(o.fighterId);
-    return lengthOf(
-      fighterAt(o, 0),
-      def ? jumpTimingFor(def) : undefined,
-      usesMoveFor(o.action) ? def?.moves?.[moveFor(o)]?.totalFrames : undefined,
-    );
-  }, [o]);
+  // The bake loads (and installs) in the background, as the match's does; until it is in the lab shows the legacy lengths.
+  const { tables } = useBake();
+  const total = useMemo(() => lengthFor(o, tables), [o, tables]);
   const poseName = useMemo(() => poseNameFor(fighterAt(o, 0)), [o]);
 
   // The contact sheet: one cell per simulation frame, at the action's real length.
@@ -526,6 +570,7 @@ export default function AnimLab() {
         <span style={{ color: "#7C8896" }}>frame {Math.min(frame, total - 1)}</span>
       </div>
 
+      <Lab3D options={o} total={total} frame={Math.min(frame, total - 1)} />
       <canvas ref={stage} width={460} height={420} aria-label="Playback" style={{ borderRadius: 6, marginBottom: 18 }} />
       <div>
         <div style={{ color: "#7C8896", fontSize: 12, marginBottom: 6 }}>

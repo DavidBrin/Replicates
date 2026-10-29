@@ -14,13 +14,14 @@
 import { describe, expect, it } from "vitest";
 import { FIGHTERS } from "@/fighters";
 import type { ActionState } from "@/engine/types";
-import { drawCell, groundedFor, moveFor, usesMoveFor, verticalFor, type Options } from "./page";
+import { drawCell, fighterAt, groundedFor, lengthFor, moveFor, usesMoveFor, verticalFor, type Options } from "./page";
 import { getFighter } from "@/fighters";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { CHARACTER_RIGS } from "@/render/characterArt";
 import { createMockContext } from "@/render/mockContext";
 import type { MoveSlot } from "@/engine/types";
+import { readBakeFromDisk } from "@/game/bakeNode";
 
 const opts = (over: Partial<Options> = {}): Options => ({
   fighterId: "mario",
@@ -214,5 +215,58 @@ describe("whether the lab thinks a fighter is on the ground", () => {
     // The move dropdown keeps its last value when hidden, so `stand` can be
     // carrying `nair`. A fighter standing still is standing still.
     expect(groundedFor(opts({ action: "stand", move: "nair" }))).toBe(true);
+  });
+});
+
+/**
+ * The fighter the model sheet poses on each cell, and how many cells there are
+ * (Plan 4, Task 21). Both are what the sim's own tables say, because the sheet
+ * is tuned against the limbs and boxes the game plays.
+ */
+describe("what the model sheet shows", () => {
+  const opts = (over: Partial<Options> = {}): Options => ({
+    fighterId: "mario",
+    action: "attack",
+    move: "ftilt",
+    jumpsUsed: 0,
+    fastFalling: false,
+    ...over,
+  });
+
+  it("poses cell i as a fighter i frames into the action, on the move the action performs", () => {
+    for (const i of [0, 4, 24]) {
+      const f = fighterAt(opts(), i);
+      expect(f.actionFrame).toBe(i);
+      expect(f.action).toBe("attack");
+      expect(f.move).toBe("ftilt");
+      expect(f.defId).toBe("mario");
+    }
+    // A grab performs the grab, whatever the dropdown still says.
+    expect(fighterAt(opts({ action: "grab", move: "fsmash" }), 3).move).toBe("grab");
+  });
+
+  it("is as long as the game's own move: four slots' published lengths differ from the legacy table's", () => {
+    const bake = readBakeFromDisk();
+    // The game's lengths come from the imported scripts' first actionable frame (`withLimbScripts`):
+    // FAF − 1, UltimateFrameData's own column (https://ultimateframedata.com).
+    for (const [fighterId, move, legacy, game] of [
+      ["mario", "uair", 30, 31],
+      ["kirby", "nair", 52, 54],
+      ["kirby", "uair", 35, 37],
+      ["fox", "nair", 38, 41],
+      // Where they agree, the bake changes nothing.
+      ["mario", "ftilt", 25, 25],
+    ] as const) {
+      const o = opts({ fighterId, move });
+      expect(lengthFor(o, null), `${fighterId} ${move} before the bake`).toBe(legacy);
+      expect(lengthFor(o, bake), `${fighterId} ${move} with the bake`).toBe(game);
+    }
+  });
+
+  it("leaves an action that is not a move alone", () => {
+    const bake = readBakeFromDisk();
+    for (const action of ["land", "stand", "roll"] as const) {
+      expect(lengthFor(opts({ action }), bake), action).toBe(lengthFor(opts({ action }), null));
+    }
   });
 });

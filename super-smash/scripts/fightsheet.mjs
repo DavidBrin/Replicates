@@ -31,12 +31,13 @@
  *               move that charges. Default 0, i.e. tapped.
  *   --full      capture the whole 1920×1080 frame per cell rather than a crop
  *               around the fighter.
- *   --out       where to write. Default fight-<fighter>-<move>.png
+ *   --out       where to write. Default test-results/anim/fight-<fighter>-<move>.png
+ *               (git-ignored: it photographs the fighters' models, which are never committed).
  */
 
 import { chromium } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -54,7 +55,9 @@ const full = has("full");
 // that charge. Documented since the first version and never parsed until a
 // review pointed out that `--hold 90` produced an identical uncharged sheet.
 const hold = Math.max(0, Number(flag("hold", "0")) || 0);
-const out = resolve(flag("out", `fight-${fighter}-${move}.png`));
+// Into the git-ignored test-results/anim/, never the package root: the match is drawn with the fighters' models now,
+// and a picture of a model is as unshippable as the model (the animation lab's `animsheet.mjs` does the same).
+const out = resolve(flag("out", join("test-results", "anim", `fight-${fighter}-${move}.png`)));
 
 /**
  * Which keys make each move happen, as a player would press them.
@@ -139,7 +142,8 @@ await pick(against);
 await page.getByRole("button", { name: /ready|fight/i }).first().click();
 await page.waitForURL("**/play");
 await page.getByLabel("Match").waitFor();
-await page.waitForTimeout(1400);
+// The match starts only once its models are ready (Plan 4): wait on the sim, not the clock.
+await page.waitForFunction(() => (window.__smashDebug?.frame ?? 0) >= 70, undefined, { timeout: 30000 });
 
 /**
  * Click a fighter's portrait by name.

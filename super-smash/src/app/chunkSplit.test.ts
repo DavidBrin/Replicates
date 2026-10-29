@@ -55,9 +55,10 @@ function walk(entry: string): { packages: Set<string>; dynamic: Set<string> } {
 const isThree = (p: string) => p === "three" || p.startsWith("three/");
 
 describe("three.js stays out of every page's initial chunk (Plan 4)", () => {
-  // Every page the game ships but the animation lab (`/anim`, a developer tool that draws the 3D lab statically).
+  // Every page the game ships, the animation lab's included: its model sheet (`Lab3D`) loads through `import()` too.
   for (const page of [
     "page.tsx",
+    "anim/page.tsx",
     "menu/page.tsx",
     "rules/page.tsx",
     "stage/page.tsx",
@@ -80,6 +81,11 @@ describe("three.js stays out of every page's initial chunk (Plan 4)", () => {
     const fighters = walk(join(SRC, "app", "fighters", "page.tsx"));
     expect(fighters.dynamic).toContain("game/world3d.ts");
     expect([...fighters.packages].filter(isThree)).toEqual([]);
+  });
+
+  it("the animation lab loads its model sheet only through import(), and the sheet itself does use three", () => {
+    expect(walk(join(SRC, "app", "anim", "page.tsx")).dynamic).toContain("app/anim/Lab3D.tsx");
+    expect(walk(join(SRC, "app", "anim", "Lab3D.tsx")).packages).toContain("three");
   });
 
   it("the walk does see three where it is static (the 3D world itself)", () => {

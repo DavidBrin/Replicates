@@ -48,6 +48,18 @@ export const JOINT_TOLERANCE = 2e-3;
 export const INVERSE_BIND_TOLERANCE = 1e-2;
 /** A texel below this alpha is a hole: glTF's default MASK cutoff. */
 export const ALPHA_CUTOFF = 0.5;
+/**
+ * Cut-outs that look wrong at `ALPHA_CUTOFF`, with the cutoff that reads right,
+ * by `<fighter>/<material>`. Found in the animation lab's model sheet (Plan 4,
+ * Task 21): Donkey Kong's `alp` is the hair and fur-edge card, and at 0.5 his
+ * hair is a speckle of strands over the void behind it (the sheet shows the
+ * background through the scalp), while at 0.1 it is the mop, and the fur edges
+ * at his wrists and ankles keep their ragged shape. Only the cutoff differs:
+ * the material stays MASK, so it still writes depth. UNVERIFIED: by eye
+ * (0.5, 0.25, 0.1, 0.02 and OPAQUE were looked at; BLEND made the head
+ * see-through). Nothing else is overridden.
+ */
+export const ALPHA_CUTOFF_OVERRIDES = Object.freeze({ "donkeyKong/alp": 0.1 });
 /** Skeleton drift: how far a committed bone may sit from Blender's dump (the dump's 6-decimal rounding is 5e-7). */
 const SKELETON_TOLERANCE = 1e-4;
 
@@ -140,8 +152,25 @@ export function alphaModeFor(factorAlpha, holes) {
   return holes > 0 ? "MASK" : "OPAQUE";
 }
 
-/** A pass: set every material's alpha mode with `alphaModeFor`. Run after `prune()`, which turns solid textures into factors. */
-export function alphaModes() {
+/**
+ * The cutoff a MASK material of `fighter` is exported with: its override, else `ALPHA_CUTOFF`.
+ *
+ * @param {string | null} fighter
+ * @param {string} material
+ */
+export function alphaCutoffFor(fighter, material) {
+  return Object.hasOwn(ALPHA_CUTOFF_OVERRIDES, `${fighter}/${material}`) ? ALPHA_CUTOFF_OVERRIDES[`${fighter}/${material}`] : ALPHA_CUTOFF;
+}
+
+/**
+ * A pass: set every material's alpha mode with `alphaModeFor`, and a MASK
+ * material's cutoff with `alphaCutoffFor` (`fighter` names whose glb this is;
+ * without one, every cutoff is the default). Run after `prune()`, which turns
+ * solid textures into factors.
+ *
+ * @param {string | null} [fighter]
+ */
+export function alphaModes(fighter = null) {
   return async (doc) => {
     const holesOf = new Map();
     for (const mat of doc.getRoot().listMaterials()) {
@@ -149,12 +178,17 @@ export function alphaModes() {
       if (tex !== null && !holesOf.has(tex)) holesOf.set(tex, await holesIn(tex.getImage(), tex.getName()));
       const mode = alphaModeFor(mat.getBaseColorFactor()[3], tex === null ? 0 : holesOf.get(tex));
       mat.setAlphaMode(mode);
-      if (mode === "MASK") mat.setAlphaCutoff(ALPHA_CUTOFF);
+      if (mode === "MASK") mat.setAlphaCutoff(alphaCutoffFor(fighter, mat.getName()));
     }
   };
 }
 
-export async function optimizeGlb(input, output) {
+/**
+ * @param {string} input
+ * @param {string} output
+ * @param {string | null} [fighter] whose glb this is, for its cut-out overrides (`ALPHA_CUTOFF_OVERRIDES`)
+ */
+export async function optimizeGlb(input, output, fighter = null) {
   const nio = await io();
   const doc = await nio.read(input);
   await doc.transform(
@@ -163,7 +197,7 @@ export async function optimizeGlb(input, output) {
     joinByMaterial(),
     prune(),
     weld(),
-    alphaModes(),
+    alphaModes(fighter),
     textureCompress({ encoder: sharp, targetFormat: "webp", resize: [MAX_TEXTURE, MAX_TEXTURE] }),
     meshopt({ encoder: MeshoptEncoder, level: "medium" }),
   );
@@ -274,15 +308,15 @@ export function skeletonRecord(committedBytes, dump) {
 // space or one reached through a symlink (macOS's /tmp) never matched, and
 // `verify` exited 0 without checking anything.
 if (import.meta.main) {
-  const [cmd, a, b] = process.argv.slice(2);
-  if (cmd === "optimize") await optimizeGlb(a, b);
+  const [cmd, a, b, fighter] = process.argv.slice(2);
+  if (cmd === "optimize") await optimizeGlb(a, b, fighter);
   else if (cmd === "verify") {
     const r = await verifyGlb(a, JSON.parse(readFileSync(b, "utf8")));
     console.log(JSON.stringify({ bytes: r.bytes, triangles: r.triangles, primitives: r.primitives, joints: r.joints }));
     for (const p of r.problems) console.error(p);
     process.exit(r.problems.length ? 1 : 0);
   } else {
-    console.error("usage: glb.mjs optimize <in> <out> | verify <glb> <dump>");
+    console.error("usage: glb.mjs optimize <in> <out> [fighter] | verify <glb> <dump>");
     process.exit(2);
   }
 }

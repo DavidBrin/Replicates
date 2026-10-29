@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,8 +13,10 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import {
   ALPHA_CUTOFF,
+  ALPHA_CUTOFF_OVERRIDES,
   JOINT_TOLERANCE,
   MAX_PRIMITIVES,
+  alphaCutoffFor,
   alphaModeFor,
   alphaModes,
   optimizeGlb,
@@ -181,6 +183,29 @@ describe("alpha modes, decided from the colour alpha at export", () => {
     expect(mode("edge127").getAlphaMode()).toBe("MASK");
   });
 
+  it("a cut-out the lab showed wrong has its own cutoff, named by fighter and material; every other material keeps 0.5", async () => {
+    // Donkey Kong's `alp` is the hair and fur-edge card. At 0.5 the hair is a speckle of strands over the void
+    // (the animation lab's model sheet, Plan 4 Task 21); at 0.1 it is the mop. UNVERIFIED: by eye.
+    expect(ALPHA_CUTOFF_OVERRIDES).toEqual({ "donkeyKong/alp": 0.1 });
+    expect(alphaCutoffFor("donkeyKong", "alp")).toBe(0.1);
+    expect(alphaCutoffFor("donkeyKong", "body")).toBe(ALPHA_CUTOFF);
+    // The same material name on another fighter is another material.
+    expect(alphaCutoffFor("mario", "alp")).toBe(ALPHA_CUTOFF);
+    expect(alphaCutoffFor(null, "alp")).toBe(ALPHA_CUTOFF);
+    expect(alphaCutoffFor("toString", "constructor")).toBe(ALPHA_CUTOFF);
+
+    const spec = { materials: { alp: { alpha: (i: number) => (i < 6 ? 0 : 255) }, hair: { alpha: (i: number) => (i < 6 ? 0 : 255) } }, prims: [{ material: "alp" }] };
+    const cutoffs = async (fighter?: string) => {
+      const doc = await fixtureDoc(spec);
+      await doc.transform(alphaModes(fighter));
+      const by = (name: string) => doc.getRoot().listMaterials().find((m) => m.getName() === name)!;
+      return [by("alp").getAlphaMode(), by("alp").getAlphaCutoff(), by("hair").getAlphaMode(), by("hair").getAlphaCutoff()];
+    };
+    expect(await cutoffs("donkeyKong")).toEqual(["MASK", 0.1, "MASK", 0.5]);
+    expect(await cutoffs("mario")).toEqual(["MASK", 0.5, "MASK", 0.5]);
+    expect(await cutoffs()).toEqual(["MASK", 0.5, "MASK", 0.5]);
+  });
+
   it("verify refuses a BLEND material that is effectively opaque (three.js would draw it without depth writes)", async () => {
     const opaqueBlend = await verifyGlb(await fixtureGlb("blend-opaque", { materials: { cloth: { alpha: (i) => (i % 2 ? 213 : 255), mode: "BLEND" } }, prims: [{ material: "cloth" }] }), DUMP);
     expect(opaqueBlend.problems).toContainEqual(expect.stringContaining("material cloth is BLEND but nothing in it is below alpha 0.5"));
@@ -212,6 +237,30 @@ describe("optimizeGlb", () => {
       ["skin", "OPAQUE", false], // two primitives, one draw call; Blender's placeholder white COLOR_0 gone
     ]);
     expect((await verifyGlb(output, DUMP)).problems).toEqual([]);
+  });
+});
+
+describe("optimizeGlb for a named fighter", () => {
+  it("applies that fighter's cut-out override to its material, and only to it", async () => {
+    await MeshoptDecoder.ready;
+    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ "meshopt.decoder": MeshoptDecoder });
+    const input = await fixtureGlb("fighter-override", {
+      // Different textures, or `dedup()` would fold the two materials into one.
+      materials: { alp: { alpha: (i) => (i < 6 ? 0 : 255) }, hair: { alpha: (i) => (i < 9 ? 0 : 255) } },
+      prims: [{ material: "alp" }, { material: "hair" }],
+    });
+    const cutoffs = async (name: string, fighter?: string) => {
+      const output = join(dir, `${name}.glb`);
+      await optimizeGlb(input, output, fighter);
+      const mats = (await io.read(output)).getRoot().listMaterials();
+      return mats.map((m) => [m.getName(), m.getAlphaMode(), m.getAlphaCutoff()]).sort();
+    };
+    expect(await cutoffs("kong", "donkeyKong")).toEqual([["alp", "MASK", 0.1], ["hair", "MASK", 0.5]]);
+    expect(await cutoffs("anyone")).toEqual([["alp", "MASK", 0.5], ["hair", "MASK", 0.5]]);
+  });
+
+  it("`pnpm models` names the fighter it is building, or no override would ever apply", () => {
+    expect(readFileSync(join(process.cwd(), "scripts", "models", "build.mjs"), "utf8")).toContain("await optimizeGlb(raw, opt, id);");
   });
 });
 
