@@ -24,7 +24,7 @@
  * The fade and the flash box numbers only until V8 has optimised them.
  */
 
-import { CapsuleGeometry, Group, Mesh, type Material, type Object3D, type SkinnedMesh, type Vector3 } from "three";
+import { CapsuleGeometry, Group, Mesh, type Material, type Object3D, type Skeleton, type SkinnedMesh, type Vector3 } from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import type { BakeTables } from "@/engine/acmd/bakeTables";
@@ -86,8 +86,30 @@ function standInModel(poser: FighterPoser, port: number): Built {
   return { root: bones[0], materials: [material] };
 }
 
+/**
+ * Put the clone's skinned parts back on one skeleton each, as `source` has
+ * them. three's GLTFLoader binds every primitive of a skinned mesh to one
+ * skeleton, but `SkeletonUtils.clone` gives every part a copy of its own, and
+ * three updates and uploads each skeleton's bone texture every frame it draws:
+ * one per part (eight for Marth) instead of one per fighter. The copies hold
+ * the same cloned bones and inverse binds, so any one of them serves them all.
+ * `clone` mirrors `source` child for child (`SkeletonUtils.clone` walks them in
+ * parallel the same way).
+ */
+function shareSkeletons(source: Object3D, clone: Object3D, shared = new Map<Skeleton, Skeleton>()): void {
+  const s = source as SkinnedMesh;
+  const c = clone as SkinnedMesh;
+  if (s.isSkinnedMesh && c.isSkinnedMesh) {
+    const first = shared.get(s.skeleton);
+    if (first === undefined) shared.set(s.skeleton, c.skeleton);
+    else c.skeleton = first;
+  }
+  for (let i = 0; i < source.children.length; i++) shareSkeletons(source.children[i], clone.children[i], shared);
+}
+
 function glbModel(scene: Object3D): Built {
   const root = cloneSkinned(scene);
+  shareSkeletons(scene, root);
   const materials: ToonMaterial[] = [];
   const swapped = new Map<Material, ToonMaterial>();
   const swap = (m: Material): ToonMaterial => {
@@ -166,13 +188,15 @@ export function createFighter3D(opts: Fighter3DOptions): Fighter3D {
       return true;
     },
     dispose() {
+      const skeletons = new Set<Skeleton>();
       placement.traverse((o) => {
         const mesh = o as Mesh;
         if (!mesh.isMesh) return;
         // A stand-in's capsules are ours; a glb's geometry is the cache's, but its clone's skeleton (and bone texture) is ours.
         if (opts.model.kind === "standIn") mesh.geometry.dispose();
-        else if ((mesh as SkinnedMesh).isSkinnedMesh) (mesh as SkinnedMesh).skeleton.dispose();
+        else if ((mesh as SkinnedMesh).isSkinnedMesh) skeletons.add((mesh as SkinnedMesh).skeleton);
       });
+      for (const s of skeletons) s.dispose();
       for (const m of materials) m.dispose();
       placement.clear();
     },

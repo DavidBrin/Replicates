@@ -339,6 +339,37 @@ describe("a fighter with a glb", () => {
     expect(exported(mine.get("scouter")!)).toEqual([true, 0.851, 0, false]);
   });
 
+  it("keeps a model's parts on one skeleton, its own, as the glb has them: one bone texture a frame, not one a part (Task 17 carry)", () => {
+    const scene = armatureModel(poser.rig3, gltfMaterials());
+    const body = scene.getObjectByName("body") as SkinnedMesh;
+    // More primitives of the same skinned mesh: three's GLTFLoader binds every one of them to the one skeleton.
+    for (let i = 0; i < 3; i++) {
+      const part = new SkinnedMesh(body.geometry, body.material);
+      body.parent!.add(part);
+      part.bind(body.skeleton, body.bindMatrix);
+    }
+    const fighter = createFighter3D({ def: mario, port: 0, poser, bake, model: { kind: "glb", scene } });
+    const parts: SkinnedMesh[] = [];
+    fighter.placement.traverse((o) => {
+      if ((o as SkinnedMesh).isSkinnedMesh) parts.push(o as SkinnedMesh);
+    });
+    expect(parts).toHaveLength(4);
+    const skeletons = new Set(parts.map((p) => p.skeleton));
+    expect(skeletons.size).toBe(1);
+    const [skeleton] = skeletons;
+    expect(skeleton).not.toBe(body.skeleton);
+    expect(skeleton.bones.some((b) => body.skeleton.bones.includes(b))).toBe(false);
+    // Every part's skin follows this fighter's bones.
+    fighter.update(frameOf(makeFighter({ action: "attack", move: "fsmash", actionFrame: 14 })));
+    const want = new Vector3();
+    expect(fighter.bonePosition("arml", want)).toBe(true);
+    const arm = skeleton.bones.findIndex((b) => b.name.toLowerCase() === "arml");
+    for (const part of parts) expect(part.getVertexPosition(arm, new Vector3()).applyMatrix4(part.matrixWorld).distanceTo(want)).toBeLessThan(1e-4);
+    const freed = vi.spyOn(skeleton, "dispose");
+    fighter.dispose();
+    expect(freed).toHaveBeenCalledOnce();
+  });
+
   it("frees its own materials and skeleton, never the cache's geometry, materials or textures", () => {
     const sources = gltfMaterials();
     const scene = armatureModel(poser.rig3, sources);
