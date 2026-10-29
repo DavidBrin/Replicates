@@ -380,6 +380,42 @@ export interface FighterAttributes {
   readonly height: number;
   /** Frames of jumpsquat. Universally 3 in Ultimate. */
   readonly jumpSquatFrames: number;
+  /**
+   * The fighter's air dodges (Plan 3, Task 20c): its entry in the game's
+   * `fighter_param_motion` table. Optional so the engine's hand-built test
+   * fighters need not author one; they dodge as Mario does
+   * (`DEFAULT_AIR_DODGE`, `airDodge.ts`). Every roster fighter has its own.
+   */
+  readonly airDodge?: AirDodgeAttributes;
+}
+
+/**
+ * One fighter's air-dodge lengths and intangibility, in frames, named as
+ * `fighter_param_motion.prc` names them: fudgepop01/amiibo_research
+ * `fighter_param_motion.xml` @523374aa,
+ * https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/fighter_param_motion.xml.
+ * Each fighter file cites the lines its numbers come from.
+ *
+ * An intangibility pair is the param's (`hit_xlu_frame`, `hit_normal_frame`):
+ * intangible from the first for the second's count of frames, so frames
+ * `xlu` to `xlu + normal − 1`. That reading reproduces SmashWiki "Air dodge"'s
+ * Ultimate table (https://www.ssbwiki.com/Air_dodge) for every roster fighter,
+ * neutral and directional (Mario 3, 27 → 3-29 and 3, 19 → 3-21; Fox 2, 25 → 2-26
+ * and 2, 18 → 2-19).
+ */
+export interface AirDodgeAttributes {
+  /** `escape_air_stiff_frame`: a neutral air dodge's length. */
+  readonly neutralFrames: number;
+  /** `escape_air_hit_xlu_frame`, `escape_air_hit_normal_frame`. */
+  readonly neutralIntangible: readonly [xlu: number, normal: number];
+  /** `escape_air_slide_stiff_frame`: a directional air dodge's length, sideways. */
+  readonly sideFrames: number;
+  /** `escape_air_slide_u_stiff_frame`: straight up. */
+  readonly upFrames: number;
+  /** `escape_air_slide_d_stiff_frame`: straight down. */
+  readonly downFrames: number;
+  /** `escape_air_slide_hit_xlu_frame`, `escape_air_slide_hit_normal_frame`. */
+  readonly directionalIntangible: readonly [xlu: number, normal: number];
 }
 
 export interface FighterDef {

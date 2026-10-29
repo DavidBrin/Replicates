@@ -612,6 +612,74 @@ describe("a ledge drop and a double jump back (the regrab lockout, LEDGE_REGRAB_
   }
 });
 
+describe("air dodges: each fighter's own lengths and intangibility (Plan 3, Task 20c)", () => {
+  // fudgepop01/amiibo_research `fighter_param_motion.xml` @523374aa,
+  // https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/fighter_param_motion.xml:
+  // `escape_air_stiff_frame`; `escape_air_slide_stiff_frame` / `_u_` / `_d_`;
+  // `escape_air_hit_xlu_frame` + `_hit_normal_frame` and the `escape_air_slide_`
+  // pair, as the window xlu .. xlu + normal − 1 (SmashWiki "Air dodge"'s Ultimate
+  // table, https://www.ssbwiki.com/Air_dodge, has the same windows). Lines per entry.
+  const P: Record<RosterId, { lines: string; neutral: number; side: number; up: number; down: number; nWin: [number, number]; dWin: [number, number] }> = {
+    mario: { lines: "L22-30, L114-116", neutral: 52, side: 86, up: 115, down: 71, nWin: [3, 29], dWin: [3, 21] },
+    donkeyKong: { lines: "L140-148, L232-234", neutral: 49, side: 82, up: 109, down: 66, nWin: [4, 32], dWin: [4, 22] },
+    link: { lines: "L258-266, L350-352", neutral: 49, side: 82, up: 108, down: 68, nWin: [3, 30], dWin: [3, 21] },
+    samus: { lines: "L376-384, L468-470", neutral: 57, side: 95, up: 129, down: 79, nWin: [3, 29], dWin: [3, 21] },
+    kirby: { lines: "L612-620, L704-706", neutral: 61, side: 102, up: 141, down: 82, nWin: [3, 29], dWin: [3, 21] },
+    fox: { lines: "L730-738, L822-824", neutral: 38, side: 63, up: 75, down: 54, nWin: [2, 26], dWin: [2, 19] },
+    pikachu: { lines: "L848-856, L940-942", neutral: 50, side: 84, up: 109, down: 69, nWin: [2, 26], dWin: [2, 19] },
+    marth: { lines: "L2500-2508, L2592-2594", neutral: 51, side: 85, up: 115, down: 68, nWin: [3, 29], dWin: [3, 21] },
+  };
+
+  /** The one fighter, still in the air high over Final Destination, free to act. */
+  function aloft(id: RosterId): GameState {
+    const s = standing(id);
+    const f = s.fighters[0];
+    Object.assign(f, { y: fx(145), grounded: false, platform: -1, action: "fall", actionFrame: 0, kinetic: emptyKinetic(), vx: 0, vy: 0 });
+    return s;
+  }
+  /** The frames of an air dodge pressed with `dir`, until it ends. */
+  function dodgeFrames(id: RosterId, dir: InputFrame): FighterState[] {
+    const frames = play(aloft(id), [Btn.Shield | dir, ...hold(0, 160)]);
+    const end = frames.findIndex((f) => f.action !== "airDodge");
+    expect(frames[end].action, "it ran its length in the air").toBe("fall");
+    return frames.slice(0, end);
+  }
+  const window = (frames: readonly FighterState[]): [number, number] => {
+    // `intangible` is a countdown the dodge re-asserts at 1 inside its window.
+    const on = frames.filter((f) => f.intangible > 0).map((f) => f.actionFrame);
+    return [on[0], on.at(-1)!];
+  };
+
+  it.each(IDS)("%s: the neutral and the side, up and down directional lengths are P's", (id) => {
+    const p = P[id];
+    expect(dodgeFrames(id, 0).length, `neutral, ${p.lines}`).toBe(p.neutral);
+    expect(dodgeFrames(id, Btn.Left).length, `side, ${p.lines}`).toBe(p.side);
+    expect(dodgeFrames(id, Btn.Up).length, `up, ${p.lines}`).toBe(p.up);
+    expect(dodgeFrames(id, Btn.Down).length, `down, ${p.lines}`).toBe(p.down);
+  });
+
+  // UNVERIFIED (mods only): HewDraw Remix and ssbexo lerp side and up (or down) by
+  // the stick's angle; a keyboard diagonal is 45°, the midpoint, rounded up.
+  it.each(IDS)("%s: a diagonal lasts halfway between the side length and the up or down one, rounded up", (id) => {
+    const p = P[id];
+    expect(dodgeFrames(id, Btn.Right | Btn.Up).length).toBe(Math.ceil((p.side + p.up) / 2));
+    expect(dodgeFrames(id, Btn.Left | Btn.Down).length).toBe(Math.ceil((p.side + p.down) / 2));
+  });
+
+  it.each(IDS)("%s: intangible on P's frames, neutral and directional", (id) => {
+    expect(window(dodgeFrames(id, 0)), P[id].lines).toEqual(P[id].nWin);
+    expect(window(dodgeFrames(id, Btn.Right)), P[id].lines).toEqual(P[id].dWin);
+  });
+
+  it("is authored by every roster fighter, none left to the engine's default (Mario's)", () => {
+    for (const f of FIGHTERS) expect(f.attributes.airDodge, f.id).toBeDefined();
+  });
+
+  it("gives Fox the shortest neutral dodge, 38 frames, where the replica used to give everyone 50", () => {
+    expect(dodgeFrames("fox", 0).length).toBe(38);
+  });
+});
+
 describe("light and heavy landings (SmashWiki Lag, https://www.ssbwiki.com/Lag#Landing_lag)", () => {
   // "a heavy landing occurs once a player has been falling at their maximum
   // falling speed for a set amount of time (the amount of time is character

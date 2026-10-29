@@ -20,14 +20,13 @@
  * it animates.
  */
 
+import { DEFAULT_AIR_DODGE, airDodgeFrames, airDodgeIntangible, airDodgeOf } from "@/engine/airDodge";
 import { toFloat } from "@/engine/fixed";
 import { jumpRiseSpeeds } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { actionFrameOf, chargeHoldFrame } from "@/engine/hitbox";
 import {
-  AIR_DODGE_FRAMES,
   DASH_INTERRUPT_FRAME,
-  DIRECTIONAL_AIR_DODGE_FRAMES,
   JUMP_SQUAT_FRAMES,
   ROLL_FRAMES,
   SHIELD_BREAK_STUN,
@@ -53,8 +52,9 @@ import {
   SHIELD_START_FRAMES,
   TURNAROUND_FRAMES,
 } from "@/engine/states";
-import type { FighterDef, FighterState, MoveSlot } from "@/engine/types";
+import type { AirDodgeAttributes, FighterDef, FighterState, MoveSlot } from "@/engine/types";
 import { clipFor } from "../chars/poses";
+import { airDodgeClipTime } from "./airDodge";
 import { samplePose, type PoseSample } from "./clip";
 import { type PoseName } from "./library";
 
@@ -97,6 +97,12 @@ export interface JumpTiming {
    * `isLedgeJump`.
    */
   readonly ledgeSpeeds: readonly number[];
+  /**
+   * The fighter's air-dodge lengths and windows (Plan 3, Task 20c): not a jump,
+   * but the other state whose length is the fighter's own, carried here so that
+   * every caller already timing a clip by the fighter has it.
+   */
+  readonly airDodge: AirDodgeAttributes;
 }
 
 const jumpTimings = new WeakMap<FighterDef, JumpTiming>();
@@ -112,6 +118,7 @@ export function jumpTimingFor(def: FighterDef): JumpTiming {
       short: jumpRiseSpeeds(p, "short").length,
       air: Array.from({ length: airs }, (_, i) => jumpRiseSpeeds(p, "air", i).length),
       ledgeSpeeds: jumpRiseSpeeds(p, "ledge"),
+      airDodge: airDodgeOf(def.attributes),
     };
     jumpTimings.set(def, t);
   }
@@ -348,10 +355,10 @@ export function actionDurationFor(
       return ROLL_FRAMES;
     case "ledgeRoll":
       return LEDGE_ROLL_FRAMES;
-    // `charge` is how an air dodge remembers it was directional — the same flag
-    // the engine reads for its intangibility window and its landing lag.
+    // The fighter's own length, by the direction `charge` remembers: the
+    // engine's own rule (`airDodgeFrames`). Without the fighter's timing, Mario's.
     case "airDodge":
-      return f.charge === 1 ? DIRECTIONAL_AIR_DODGE_FRAMES : AIR_DODGE_FRAMES;
+      return airDodgeFrames(jump?.airDodge ?? DEFAULT_AIR_DODGE, f.charge);
     case "downed":
       return DOWNED_FRAMES;
     case "getUp":
@@ -478,6 +485,12 @@ export function poseTimeFor(
   const charging = fighter.charge > 0 && fighter.actionFrame <= (timing?.chargeHold ?? Infinity);
   if (charging && (name === "fsmash" || name === "usmash" || name === "dsmash")) {
     return (strike ?? 0.3) * 0.55;
+  }
+
+  // The air dodge plays in two halves around its intangible window (`airDodgeClipTime`).
+  if (name === "airDodge" && fighter.action === "airDodge") {
+    const a = jump?.airDodge ?? DEFAULT_AIR_DODGE;
+    return airDodgeClipTime(fighter.actionFrame, airDodgeFrames(a, fighter.charge), airDodgeIntangible(a, fighter.charge)[1]);
   }
 
   const stateFrames = actionDurationFor(fighter, jump);

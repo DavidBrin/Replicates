@@ -227,8 +227,9 @@ export function kineticSetY(f: FighterState, vy: number): void {
   const k = f.kinetic;
   k.gravityY = vy;
   k.motionY = 0;
-  // An outright vertical speed ends a full hop's initial rise: a jump, a
-  // directional air dodge, a grab, a landing or a ledge jump all replace it.
+  // An outright vertical speed ends a full hop's initial rise: a jump, a grab,
+  // a landing or a ledge jump all replace it (a directional air dodge ends it
+  // too, in `kineticAirDodge`).
   k.jumpInitial = 0;
   if (k.damageY !== 0) {
     k.damageY = 0;
@@ -386,8 +387,6 @@ export interface KineticInput {
    */
   readonly stickMag?: number;
   readonly params: FighterParams;
-  /** A directional air dodge only: its intangible window is open, so gravity waits. */
-  readonly holdVertical: boolean;
 }
 
 /** One frame of gravity toward `terminal`, which is a positive speed. */
@@ -466,8 +465,7 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
       break;
   }
   if (!f.grounded) {
-    const skip = jumpFrame(f, p) || input.holdVertical;
-    if (!skip) {
+    if (!jumpFrame(f, p)) {
       k.gravityY = gravityStep(k.gravityY, p.air_accel_y, f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable);
     }
     // Frames at full fall speed decide a heavy landing (SmashWiki "Lag").
@@ -643,6 +641,69 @@ export function kineticEndMotion(f: FighterState): void {
   k.gravityY += k.motionY;
   k.motionX = 0;
   k.motionY = 0;
+  kineticSum(f);
+}
+
+/* --------------------------------------------------- directional air dodge -- */
+
+/**
+ * One frame of a directional air dodge's own movement (Plan 3, Task 20c): the
+ * slingshot back, then the slide (`directionalDodgeFrame`, `airDodge.ts`). The
+ * dodge's velocity goes on MOTION, as a move's scripted momentum does, and
+ * nothing else moves the fighter: drift (CONTROL, STOP) and gravity are off,
+ * as the reimplementations of the vanilla status disable them for the slide
+ * (HewDraw Remix `airdodge.rs` L505-507,
+ * https://github.com/HDR-Development/HewDraw-Remix/blob/a56075404c96853b260689a341d63fcb90a33f93/fighters/common/src/general_statuses/airdodge.rs#L505-L507;
+ * ssbexo `escape_air.rs` L153-154,
+ * https://github.com/Armasher5872/ssbexo/blob/e725aa375677092adf81c67e5a982cde3e478670/fighters/common/src/status/escape/escape_air.rs#L153-L154).
+ * A full hop's initial rise is gravity's, and stops with it.
+ *
+ * A launch survives the slingshot, decaying as it always does, and is cleared
+ * when the slide starts (`endLaunch`): WuBor Patch `escape_air.rs` L379-385
+ * clears the DAMAGE energy there, in live code
+ * (https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L379-L385).
+ * UNVERIFIED: HewDraw Remix keeps it until the landing (`airdodge.rs`
+ * L143-146, "prevents knockback speed from applying into wavelands"), and
+ * SmashWiki "Lucario (SSBU)/Air dodge"'s "This backward shifting can cause
+ * Lucario to die needlessly at times when knockback received is too strong"
+ * needs it through the slingshot at least.
+ */
+export function kineticAirDodge(f: FighterState, vx: number, vy: number, endLaunch: boolean, p: FighterParams): void {
+  const k = f.kinetic;
+  k.speedUpMax = 0;
+  k.setWeightFrames = 0;
+  if (endLaunch) {
+    k.damageX = 0;
+    k.damageY = 0;
+    f.launchSpeed = 0;
+  } else if (f.launchSpeed > 0) {
+    kineticDecayDamage(f, launchDecay(f, p));
+  }
+  k.controlX = 0;
+  k.stopX = 0;
+  k.gravityY = 0;
+  k.jumpInitial = 0;
+  k.fallFrames = 0;
+  k.motionX = vx;
+  k.motionY = vy;
+  kineticSum(f);
+}
+
+/**
+ * A directional air dodge's slide is over: the end speed along its direction
+ * becomes drift's (CONTROL) and gravity's (GRAVITY), and the fall's rules
+ * (`kineticExec`) take it from this same frame. HewDraw Remix hands the slide's
+ * x to CONTROL and its y to GRAVITY when the slide ends (`airdodge.rs`
+ * L587-621,
+ * https://github.com/HDR-Development/HewDraw-Remix/blob/a56075404c96853b260689a341d63fcb90a33f93/fighters/common/src/general_statuses/airdodge.rs#L587-L621).
+ */
+export function kineticAirDodgeHandOff(f: FighterState, vx: number, vy: number): void {
+  const k = f.kinetic;
+  k.motionX = 0;
+  k.motionY = 0;
+  k.stopX = 0;
+  k.controlX = vx;
+  k.gravityY = vy;
   kineticSum(f);
 }
 

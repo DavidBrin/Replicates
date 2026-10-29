@@ -22,7 +22,6 @@ import {
   startAction,
   startAirDodge,
   startMove,
-  techInputNearFloor,
 } from "../states";
 import type { Intent, StateContext } from "../states";
 import type { FighterState } from "../types";
@@ -40,11 +39,14 @@ import type { FighterStatus } from "./kind";
  * Only a *press* (fresh or buffered) cancels: a shield held for a ground tech
  * (Task 12) must not spend the air dodge. A fighter whose air dodge is spent
  * stays in hitstun — nothing is cleared before the dodge is known to start.
- * A buffered press is spent only by the cancel it fires. Near the floor a
- * neutral press is still the air dodge: it keeps the tumble's momentum and techs
- * the surface it meets in its first 15 frames (`startAirDodge`, `techOrBounce`;
- * Plan 3, Task 20b). One with a direction held, with the floor inside the tech
- * window below it, is a tech input instead (`techInputNearFloor`).
+ * A buffered press is spent only by the cancel it fires. Near the floor the
+ * press is still the air dodge, which techs the surface it meets in its first 15
+ * frames (`techOrBounce`): a neutral one keeps the tumble's momentum and falls
+ * into it (Plan 3, Task 20b), and one with a direction held is the directional
+ * dodge, which reaches the floor or not by its own movement (Task 20c; SmashWiki
+ * "Lucario (SSBU)/Techs": "when not in enough hitstun, holding the analog stick
+ * in a direction while pressing shield/grab can turn into a directional air
+ * dodge buffer, which can be a misinput").
  */
 function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   if (f.grounded) return false;
@@ -52,7 +54,7 @@ function hitstunCancel(f: FighterState, intent: Intent, ctx: StateContext): bool
   const aerial = f.actionFrame >= HITSTUN_CANCEL_AERIAL_FRAME && f.launchSpeed < HITSTUN_CANCEL_AERIAL_SPEED;
   if (!dodge && !aerial) return false;
   const buffered = peekBuffer(f, ctx.frame);
-  if (dodge && !f.airDodged && (intent.shieldPressed || buffered === "shield") && !techInputNearFloor(f, intent, ctx)) {
+  if (dodge && !f.airDodged && (intent.shieldPressed || buffered === "shield")) {
     if (buffered === "shield") f.bufferedAction = null;
     f.hitstun = 0;
     f.balloon = false;
@@ -117,10 +119,11 @@ export const STATUS_DAMAGE_FLY: FighterStatus = {
  * (`onLanded`: `downed`, at any speed; `techOrBounce` for the tech). The
  * reimplementations of the vanilla `DamageFall_Main` agree: HewDraw Remix
  * `damagefall.rs` and WuBor Patch `damage_fall.rs` (cited in the Task 12 review).
- * A press of shield is an air dodge, which ends it. A neutral one keeps the
- * tumble's momentum and techs a surface it meets in its first 15 frames
- * (`startAirDodge`, `techOrBounce`; Plan 3, Task 20b); one with a direction held,
- * with the floor inside the tech window, is the tech instead (`techInputNearFloor`).
+ * A press of shield is an air dodge, which ends it, and techs a surface it meets
+ * in its first 15 frames (`techOrBounce`). A neutral one keeps the tumble's
+ * momentum and falls into it (`startAirDodge`; Plan 3, Task 20b); one with a
+ * direction held is the directional dodge, which may not reach the floor in time:
+ * the misinput SmashWiki "Lucario (SSBU)/Techs" warns of (Task 20c).
  */
 export const STATUS_DAMAGE_FALL: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_DAMAGE_FALL",

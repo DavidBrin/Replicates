@@ -373,21 +373,76 @@ export const SPOT_DODGE_FRAMES = 24;
 export const SPOT_DODGE_INTANGIBLE = [3, 20] as const;
 export const ROLL_FRAMES = 31;
 export const ROLL_INTANGIBLE = [4, 20] as const;
-export const AIR_DODGE_FRAMES = 50;
-export const AIR_DODGE_INTANGIBLE = [3, 28] as const;
+/*
+ * Air dodges (Plan 3, Task 20c). Each fighter's lengths and intangibility are
+ * its own (`FighterAttributes.airDodge`); what follows is shared by the whole
+ * roster. Sources:
+ *
+ * - P: fudgepop01/amiibo_research `fighter_param_motion.xml` @523374aa,
+ *   https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/fighter_param_motion.xml.
+ *   Cited at Mario's entry (L5-116); the other seven fighters' entries carry
+ *   the same values for every param below.
+ * - C: the same repo's `common.xml` @523374aa,
+ *   https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/common.xml.
+ * - W: SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge.
+ */
+
+/** A neutral air dodge's landing lag: C L117 `landing_frame_escape_air` 10; W "10 frames, down from 21". */
 export const AIR_DODGE_LANDING_LAG = 10;
 /**
- * A directional air dodge is punished for landing in it, and heavily.
- *
- * Nearly double the neutral dodge's lag, which is what stops Ultimate's
- * directional air dodge from being a free approach: it is the descendant of the
- * wavedash and it costs. Both were 10 here, which made the directional dodge
- * strictly better than the neutral one — more distance, same recovery.
+ * A directional air dodge's landing lag runs from 19 at its earliest landing
+ * down to 10 at its latest: SmashWiki "Lucario (SSBU)/Air dodge"
+ * (https://www.ssbwiki.com/Lucario_(SSBU)/Air_dodge): "If Lucario lands the
+ * earliest it can ... Lucario suffers the maximum 19 frames. Landing later
+ * suffers less, and can be as little as 10 frames." Bracketed by P L42-43
+ * (`landing_frame_escape_air_slide_max` 20, `landing_frame_escape_air_slide`
+ * 10) and W ("ranging from 11 to 19 frames"). UNVERIFIED: the schedule between
+ * the ends (`directionalLandingLag`).
  */
-export const DIRECTIONAL_AIR_DODGE_LANDING_LAG = 19;
-export const DIRECTIONAL_AIR_DODGE_FRAMES = 63;
-export const DIRECTIONAL_AIR_DODGE_INTANGIBLE = [3, 20] as const;
-export const DIRECTIONAL_AIR_DODGE_SPEED = fx(3.2);
+export const DIRECTIONAL_AIR_DODGE_LANDING_LAG_MAX = 19;
+export const DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN = 10;
+/**
+ * The slingshot: first a shift of 7 units back, against the dodge's direction,
+ * over its first 4 frames (P L33 `escape_air_slide_back_distance` 7, L34
+ * `escape_air_slide_back_end_frame` 4; W: "characters first shift a small
+ * distance towards the opposite direction in a slingshot fashion").
+ */
+export const AIR_DODGE_SLINGSHOT_DISTANCE = fx(7);
+export const AIR_DODGE_SLINGSHOT_FRAMES = 4;
+/**
+ * The slingshot's shape: the cubic Bezier through 0.5, 0.8, 0.9, 1.0 (in
+ * tenths here), sampled at the back frames' 0, 1/3, 2/3 and 1, each frame
+ * moving by the curve's step times the distance. UNVERIFIED: that is the
+ * commented-out back phase of WuBor Patch `escape_air.rs` L343-366
+ * (`sv_math::bezier_curve(0.5, 0.8, 0.9, 1.0, result)` over `back_end_frame - 1`,
+ * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L343-L366),
+ * apparently the vanilla code it replaced, started from 0: 3.5, 1.69, 1.06 and
+ * 0.75 units back, 7 in all.
+ */
+export const AIR_DODGE_SLINGSHOT_CURVE = [5, 8, 9, 10] as const;
+/**
+ * The slide: from 4.2 a frame down to 1.3, covering 20 units (P L35
+ * `escape_air_slide_speed` 4.2, L39 `escape_air_slide_end_speed` 1.3, L36
+ * `escape_air_slide_distance` 20; W "Directional air dodge distance":
+ * "Everyone else | 20"). UNVERIFIED: the curve between the ends, which the
+ * game's STOP-energy reset (`ENERGY_STOP_RESET_TYPE_ESCAPE_AIR_SLIDE`) holds and
+ * nothing publishes; the replica brakes it by a constant (`airDodgeSlideStep`).
+ */
+export const AIR_DODGE_SLIDE_SPEED = fx(4.2);
+export const AIR_DODGE_SLIDE_END_SPEED = fx(1.3);
+export const AIR_DODGE_SLIDE_DISTANCE = fx(20);
+/**
+ * Landing in a directional air dodge slides at no more than 2 a frame: C L119
+ * `escape_air_slide_landing_speed_max` 2 (the waveland's slide).
+ */
+export const AIR_DODGE_LANDING_SLIDE_MAX = fx(2);
+/**
+ * No ledge is grabbed in a directional air dodge's first 24 frames: W "all
+ * characters can grab edges after the first 24 frames of their directional air
+ * dodge" (SmashWiki "Lucario (SSBU)/Air dodge": "all directional air dodges
+ * grab ledge on frame 25").
+ */
+export const AIR_DODGE_LEDGE_FRAMES = 24;
 
 /* ------------------------------------------------------------------ tech -- */
 

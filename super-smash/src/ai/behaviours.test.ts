@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { AIR_DODGE_FRAMES, SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
+import { DEFAULT_AIR_DODGE, airDodgeCharge } from "@/engine/airDodge";
+import { SHIELD_MAX_HEALTH, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { fx, toFloat } from "@/engine/fixed";
 import { Btn, held, type FighterState, type GameState, type StageDef } from "@/engine/types";
 import { emptyCombat } from "@/engine/combat";
@@ -123,6 +124,7 @@ function context(
     jumps: 1,
     meleeReach: MELEE_RANGE,
     airBrake: 0,
+    airDodge: DEFAULT_AIR_DODGE,
     rolls,
   };
 }
@@ -372,13 +374,32 @@ describe("recover", () => {
   // falling (Plan 3, Task 20b): chasing an opponent toward the ledge in one would
   // drift it off the stage with no way back, so it steers back over the stage.
   it("steers back over the stage while an air dodge's drift would carry it off", () => {
-    const dodging = (x: number, vx: number) =>
-      gameState([fighter(0, { x: fx(x), y: fx(15), vx: fx(vx), grounded: false, platform: -1, action: "airDodge" })]);
+    const dodging = (x: number, vx: number, over: Partial<FighterState> = {}) =>
+      gameState([fighter(0, { x: fx(x), y: fx(15), vx: fx(vx), grounded: false, platform: -1, action: "airDodge", ...over })]);
     const result = recover(context(dodging(-70, -1), L9));
     expect(result.score).toBeGreaterThan(0);
     expect(result.input).toBe(Btn.Right);
     expect(recover(context(dodging(-70, 1), L9)).score).toBe(0);
     expect(recover(context(dodging(0, -1), L9)).score).toBe(0);
+    // Steering is drift, which `recover` does at every level (Task 20c, M5).
+    expect(recover(context(dodging(-70, -1), L1, [0, 0, 0, 0.99, 0, 0])).input).toBe(Btn.Right);
+  });
+
+  // Plan 3, Task 20c (the Task 20b review's M5): judged over what is left of
+  // the dodge, by the fighter's own length (Mario's neutral 52, its directional
+  // sideways 86), not the whole length every frame.
+  it("judges the drift over the frames the dodge has left", () => {
+    const dodging = (actionFrame: number, charge = 0) =>
+      gameState([
+        fighter(0, { x: fx(-70), y: fx(15), vx: -fx(1), grounded: false, platform: -1, action: "airDodge", actionFrame, charge }),
+      ]);
+    // 10 left carry it 10, to -80: still over the stage (-82 is off it).
+    expect(recover(context(dodging(DEFAULT_AIR_DODGE.neutralFrames - 10), L9)).score).toBe(0);
+    expect(recover(context(dodging(DEFAULT_AIR_DODGE.neutralFrames - 13), L9)).input).toBe(Btn.Right);
+    // A directional one sideways runs 86: on its frame 73 it has 13 left.
+    const side = airDodgeCharge(-1, 0);
+    expect(recover(context(dodging(DEFAULT_AIR_DODGE.sideFrames - 13, side), L9)).input).toBe(Btn.Right);
+    expect(recover(context(dodging(DEFAULT_AIR_DODGE.sideFrames - 10, side), L9)).score).toBe(0);
   });
 });
 
@@ -438,31 +459,65 @@ describe("shield", () => {
     expect(held(shield(context(airborne(-66, 1.2), L9)).input, Btn.Shield)).toBe(true);
     expect(held(shield(context(airborne(0, -1.2), L9)).input, Btn.Shield)).toBe(true);
     // Air friction shortens the drift: 1.2 a frame bled by 0.015 a frame carries
-    // 40.9 over the dodge, not 60, so from x -30 it stays on the stage.
+    // 41.7 over Mario's 52-frame dodge, not 62.4, so from x -30 it stays on the stage.
     expect(shield(context(airborne(-30, -1.2), L9)).score).toBe(0);
     const braked = { ...context(airborne(-30, -1.2), L9), airBrake: fx(0.015) };
     expect(held(shield(braked).input, Btn.Shield)).toBe(true);
   });
+
+  // Plan 3, Task 20c: over the fighter's own neutral length. Fox's is 38
+  // (fudgepop01 `fighter_param_motion.xml` @523374aa L734), 45.6 at 1.2 a frame:
+  // from x -30 that stays on the stage where Mario's 52 (62.4) does not.
+  it("judges the dodge's drift by the fighter's own length", () => {
+    const airborne = gameState([
+      fighter(0, { x: fx(-30), y: fx(15), vx: -fx(1.2), grounded: false, platform: -1, action: "fall" }),
+      fighter(1, { x: fx(-10), y: fx(15), action: "attack", actionFrame: 8 }),
+    ]);
+    expect(shield(context(airborne, L9)).score).toBe(0);
+    const fox = { ...context(airborne, L9), airDodge: { ...DEFAULT_AIR_DODGE, neutralFrames: 38 } };
+    expect(held(shield(fox).input, Btn.Shield)).toBe(true);
+  });
+
+  // Knowing the dodge drifts it off is recovery judgement: a CPU whose recovery
+  // roll fails forgets it, as `recover` has it forget the jump back (Task 20c, M5).
+  it("forgets the guard when its recovery roll fails, as a low level does", () => {
+    const airborne = gameState([
+      fighter(0, { x: fx(-66), y: fx(15), vx: -fx(1.2), grounded: false, platform: -1, action: "fall" }),
+      fighter(1, { x: fx(-46), y: fx(15), action: "attack", actionFrame: 40 }),
+    ]);
+    const rolls = (recovery: number) => [0, 0, 0, recovery, 0, 0];
+    expect(rolls(0)[ROLL_RECOVER]).toBe(0);
+    expect(shield(context(airborne, L1, rolls(0))).score).toBe(0);
+    expect(held(shield(context(airborne, L1, rolls(0.5))).input, Btn.Shield)).toBe(true);
+    // Level 9 never fails the roll (recoverySkill 1).
+    expect(shield(context(airborne, L9, rolls(0.99))).score).toBe(0);
+  });
 });
 
 describe("dodgeDrift", () => {
-  it("is the drift that air friction leaves over the dodge, frame by frame", () => {
+  it("is the drift that air friction leaves over the frames given, frame by frame", () => {
     const cases: [number, number][] = [
       [fx(1.2), fx(0.015)],
       [-fx(0.3), fx(0.0038)],
       [fx(2), fx(0.05)],
       [-fx(0.9), 0],
     ];
-    for (const [vx, brake] of cases) {
-      // The engine's neutral stick: `approach(controlX, 0, air_brake_x)`, then move.
-      let v = Math.abs(vx);
-      let x = 0;
-      for (let i = 0; i < AIR_DODGE_FRAMES; i++) {
-        v = Math.max(v - brake, 0);
-        x += v;
+    for (const frames of [DEFAULT_AIR_DODGE.neutralFrames, 38, 7, 0]) {
+      for (const [vx, brake] of cases) {
+        // The engine's neutral stick: `approach(controlX, 0, air_brake_x)`, then move.
+        let v = Math.abs(vx);
+        let x = 0;
+        for (let i = 0; i < frames; i++) {
+          v = Math.max(v - brake, 0);
+          x += v;
+        }
+        expect(dodgeDrift(vx, brake, frames), `${toFloat(vx)} at ${toFloat(brake)} over ${frames}`).toBe(vx < 0 ? -x : x);
       }
-      expect(dodgeDrift(vx, brake), `${toFloat(vx)} at ${toFloat(brake)}`).toBe(vx < 0 ? -x : x);
     }
+  });
+
+  it("is nothing once the dodge has no frames left", () => {
+    expect(dodgeDrift(fx(1.2), fx(0.015), -3)).toBe(0);
   });
 });
 

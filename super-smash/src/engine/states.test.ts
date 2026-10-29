@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_AIR_DODGE, airDodgeCharge, directionalLandingLag } from "./airDodge";
 import { fx } from "./fixed";
 import {
-  AIR_DODGE_FRAMES,
   AIR_DODGE_LANDING_LAG,
   BUFFER_FRAMES,
-  DIRECTIONAL_AIR_DODGE_INTANGIBLE,
-  DIRECTIONAL_AIR_DODGE_LANDING_LAG,
-  DIRECTIONAL_AIR_DODGE_FRAMES,
-  DIRECTIONAL_AIR_DODGE_SPEED,
+  DIRECTIONAL_AIR_DODGE_LANDING_LAG_MAX,
+  DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN,
   JUMP_SQUAT_FRAMES,
   LAUNCH_SPEED_DECAY,
   PERFECT_SHIELD_WINDOW,
@@ -637,7 +635,12 @@ describe("shield", () => {
 });
 
 describe("air dodge", () => {
-  it("is neutral without a direction and directional with one", () => {
+  // The tester authors no air dodge, so it dodges as Mario does (`DEFAULT_AIR_DODGE`:
+  // fudgepop01/amiibo_research `fighter_param_motion.xml` @523374aa, Mario's entry).
+  const MARIO = DEFAULT_AIR_DODGE;
+  const NEUTRAL_FRAMES = MARIO.neutralFrames;
+
+  it("is neutral without a direction and directional with one, which remembers it and slings back first", () => {
     const neutral = fighter({ grounded: false, action: "fall" });
     tick(neutral, Btn.Shield, 0);
     expect(neutral.action).toBe("airDodge");
@@ -647,41 +650,71 @@ describe("air dodge", () => {
     const directional = fighter({ grounded: false, action: "fall" });
     tick(directional, Btn.Shield | Btn.Right, 0);
     expect(directional.action).toBe("airDodge");
-    expect(directional.charge).toBe(1);
-    expect(directional.vx).toBeGreaterThan(0);
+    expect(directional.charge).toBe(airDodgeCharge(1, 0));
+    expect(directional.vx, "the slingshot goes back first").toBeLessThan(0);
   });
 
-  it("costs nearly double the landing lag when it was directional", () => {
-    // Otherwise a directional air dodge is strictly better than a neutral one —
-    // more distance for the same recovery — and Ultimate's descendant of the
-    // wavedash becomes a free approach.
-    const lagAfter = (buttons: number): number => {
+  // P (Mario): `escape_air_stiff_frame` 52 (L26); `escape_air_slide_stiff_frame`
+  // 86, `_u_` 115, `_d_` 71 (L114-116). A diagonal is the 45° midpoint, rounded
+  // up: UNVERIFIED (HewDraw Remix and ssbexo lerp by the stick's angle).
+  it.each([
+    ["neutral", 52, Btn.Shield],
+    ["sideways", 86, Btn.Shield | Btn.Left],
+    ["up", 115, Btn.Shield | Btn.Up],
+    ["down", 71, Btn.Shield | Btn.Down],
+    ["diagonally up", 101, Btn.Shield | Btn.Right | Btn.Up],
+    ["diagonally down", 79, Btn.Shield | Btn.Right | Btn.Down],
+  ])("lasts its fighter's own length %s: %i frames", (_name, frames, press) => {
+    const f = fighter({ grounded: false, action: "fall", y: fx(1000) });
+    tick(f, press, 0);
+    for (let i = 1; i < frames; i++) tick(f, 0, i === 1 ? press : 0);
+    expect(f.action).toBe("airDodge");
+    tick(f, 0, 0);
+    expect(f.action).toBe("fall");
+  });
+
+  // P (Mario): intangible from `hit_xlu_frame` for `hit_normal_frame` frames:
+  // neutral 3, 27 (L22-23) → 3-29, directional 3, 19 (L29-30) → 3-21, as
+  // SmashWiki "Air dodge"'s Ultimate table has them.
+  it.each([
+    ["neutral", Btn.Shield, [3, 29]],
+    ["directional", Btn.Shield | Btn.Up, [3, 21]],
+  ])("is intangible %s exactly on its fighter's frames", (_name, press, span) => {
+    const f = fighter({ grounded: false, action: "fall", y: fx(1000) });
+    tick(f, press, 0);
+    const seen: number[] = [];
+    for (let i = 1; i <= 40; i++) {
+      f.intangible = 0;
+      tick(f, 0, i === 1 ? press : 0);
+      if (f.intangible > 0) seen.push(f.actionFrame);
+    }
+    expect([seen[0], seen.at(-1)]).toEqual(span);
+    expect(seen.length).toBe(span[1] - span[0] + 1);
+  });
+
+  // Neutral: `landing_frame_escape_air` 10 (fudgepop01 `common.xml` L117).
+  // Directional: SmashWiki "Lucario (SSBU)/Air dodge", "maximum 19 frames ... as
+  // little as 10", over P's 20/10 (L42-43) and W's 11-19. UNVERIFIED: linear.
+  it("lands neutral with 10 frames of lag, directional with 19 on its first frame down to 10 on its last", () => {
+    const lagAt = (press: number, frame: number): number => {
       const f = fighter({ grounded: false, action: "fall", y: fx(4) });
-      tick(f, buttons, 0);
+      tick(f, press, 0);
       expect(f.action).toBe("airDodge");
+      f.actionFrame = frame;
       onLanded(f, ctx());
       expect(f.action).toBe("landingLag");
       return f.charge;
     };
-    expect(lagAfter(Btn.Shield)).toBe(AIR_DODGE_LANDING_LAG);
-    expect(lagAfter(Btn.Shield | Btn.Right)).toBe(DIRECTIONAL_AIR_DODGE_LANDING_LAG);
-    expect(DIRECTIONAL_AIR_DODGE_LANDING_LAG).toBeGreaterThan(AIR_DODGE_LANDING_LAG);
-  });
-
-  it("lasts 50 frames neutral and 63 directional", () => {
-    const neutral = fighter({ grounded: false, action: "fall" });
-    tick(neutral, Btn.Shield, 0);
-    for (let i = 0; i < AIR_DODGE_FRAMES; i++) tick(neutral, 0, 0);
-    expect(neutral.action).toBe("fall");
-
-    const directional = fighter({ grounded: false, action: "fall" });
-    tick(directional, Btn.Shield | Btn.Right, 0);
-    for (let i = 0; i < AIR_DODGE_FRAMES; i++) tick(directional, 0, 0);
-    expect(directional.action).toBe("airDodge");
-    for (let i = 0; i < DIRECTIONAL_AIR_DODGE_FRAMES - AIR_DODGE_FRAMES; i++) {
-      tick(directional, 0, 0);
-    }
-    expect(directional.action).toBe("fall");
+    expect(lagAt(Btn.Shield, 0)).toBe(AIR_DODGE_LANDING_LAG);
+    expect(lagAt(Btn.Shield, 40)).toBe(AIR_DODGE_LANDING_LAG);
+    const side = Btn.Shield | Btn.Right;
+    expect(lagAt(side, 0)).toBe(DIRECTIONAL_AIR_DODGE_LANDING_LAG_MAX);
+    expect(lagAt(side, MARIO.sideFrames - 1)).toBe(DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN);
+    expect(lagAt(side, 42)).toBe(19 - Math.trunc((9 * 42) / 85));
+    // Linear over the dodge's frames, never rising.
+    const lags = [...Array(MARIO.sideFrames).keys()].map((n) => directionalLandingLag(n, MARIO.sideFrames));
+    expect(lags.every((l, n) => n === 0 || l <= lags[n - 1])).toBe(true);
+    expect(new Set(lags).size).toBe(10);
   });
 
   it("is available once per airtime", () => {
@@ -718,7 +751,7 @@ describe("air dodge", () => {
   it("keeps the fighter's momentum when neutral: it drifts and falls on exactly as a fall does", () => {
     const dodging = airborne("fall", 0.8, 1.2);
     const falling = airborne("fall", 0.8, 1.2);
-    for (let i = 0; i < AIR_DODGE_FRAMES; i++) {
+    for (let i = 0; i < NEUTRAL_FRAMES; i++) {
       tick(dodging, i === 0 ? Btn.Shield : 0, i === 1 ? Btn.Shield : 0);
       tick(falling, 0, 0);
       expect(dodging.action, `frame ${i}`).toBe("airDodge");
@@ -746,36 +779,35 @@ describe("air dodge", () => {
     expect([f.vx, f.vy]).toEqual([kineticSumX(f), kineticSumY(f)]);
   });
 
-  // UNVERIFIED (see `startAirDodge`): SmashWiki "Air friction" has an air dodge
-  // end a fast fall "starting in Brawl", with falling friction then slowing the
-  // fall; the replica has no falling friction, so the fast fall carries on.
-  it("leaves a fast fall falling at its fast-fall speed through a neutral dodge", () => {
-    const f = airborne("fall", 0, 0, { fastFalling: true });
+  // SmashWiki "Air friction" (https://www.ssbwiki.com/Air_friction): an air dodge
+  // ends a fast fall "starting in Brawl". UNVERIFIED when: a neutral dodge carries
+  // it and ends it as it ends (Task 20c; the replica has no falling friction, so
+  // the fall speed returns to normal on the next frame); a directional dodge
+  // replaces the vertical speed, so it ends it on the press.
+  it("keeps a fast fall through a neutral dodge, and ends it when the dodge ends", () => {
+    const f = airborne("fall", 0, 0, { fastFalling: true, y: fx(1000) });
     f.kinetic.gravityY = -PARAMS.dive_speed_y;
     f.vy = -PARAMS.dive_speed_y;
-    for (let i = 0; i < AIR_DODGE_FRAMES; i++) {
+    for (let i = 0; i < NEUTRAL_FRAMES; i++) {
       tick(f, i === 0 ? Btn.Shield : 0, i === 1 ? Btn.Shield : 0);
       expect(f.action).toBe("airDodge");
       expect(f.vy, `frame ${i}`).toBe(-PARAMS.dive_speed_y);
-    }
-    expect(f.fastFalling).toBe(true);
-  });
-
-  // Unchanged by Task 20b: the directional dodge sets its own speed, ends the
-  // launch and holds its height through its intangible window.
-  it("still sets its own velocity when directional, and holds its height through the intangible window", () => {
-    const f = airborne("fall", 0.5, -1);
-    f.kinetic.damageX = fx(0.6);
-    f.launchSpeed = fx(0.6);
-    f.vx = fx(1.1);
-    tick(f, Btn.Shield | Btn.Right, 0);
-    expect([f.vx, f.vy, f.launchSpeed]).toEqual([DIRECTIONAL_AIR_DODGE_SPEED, 0, 0]);
-    for (let i = 1; i <= DIRECTIONAL_AIR_DODGE_INTANGIBLE[1]; i++) {
-      tick(f, 0, i === 1 ? Btn.Shield | Btn.Right : 0);
-      expect(f.vy, `frame ${i}`).toBe(0);
+      expect(f.fastFalling, `frame ${i}`).toBe(true);
     }
     tick(f, 0, 0);
-    expect(f.vy, "gravity once the window closes").toBeLessThan(0);
+    expect(f.action).toBe("fall");
+    expect(f.fastFalling).toBe(false);
+    tick(f, 0, 0);
+    expect(f.vy, "back to the normal fall speed").toBe(-PARAMS.air_speed_y_stable);
+  });
+
+  it("ends a fast fall on the press of a directional dodge", () => {
+    const f = airborne("fall", 0, 0, { fastFalling: true });
+    f.kinetic.gravityY = -PARAMS.dive_speed_y;
+    f.vy = -PARAMS.dive_speed_y;
+    tick(f, Btn.Shield | Btn.Down, 0);
+    expect(f.action).toBe("airDodge");
+    expect(f.fastFalling).toBe(false);
   });
 });
 

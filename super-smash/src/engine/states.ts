@@ -21,15 +21,22 @@
  * SPEC §6 is the contract for the interpretation half; §4 for the frame counts.
  */
 
-import { DIAGONAL, ONE, fx, clamp } from "./fixed";
+import { ONE, fx, clamp } from "./fixed";
 import {
-  AIR_DODGE_INTANGIBLE,
+  airDodgeCharge,
+  airDodgeFrames,
+  airDodgeIntangible,
+  airDodgeOf,
+  directionalDodgeFrame,
+  directionalLandingLag,
+  isDirectionalAirDodge,
+  isDirectionalDodge,
+} from "./airDodge";
+import {
   AIR_DODGE_LANDING_LAG,
-  DIRECTIONAL_AIR_DODGE_LANDING_LAG,
+  AIR_DODGE_LANDING_SLIDE_MAX,
   BUFFER_FRAMES,
   DASH_THRESHOLD_FRAMES,
-  DIRECTIONAL_AIR_DODGE_INTANGIBLE,
-  DIRECTIONAL_AIR_DODGE_SPEED,
   LEDGE_JUMP_VELOCITY,
   LEDGE_TRUMPED_FRAMES,
   PERFECT_SHIELD_WINDOW,
@@ -44,26 +51,16 @@ import {
   TAP_JUMP_FRAMES,
   SPOT_DODGE_INTANGIBLE,
   TECH_CEILING_INTANGIBLE,
-  TECH_FLOOR_MAX_SPEED,
   TECH_INTANGIBLE,
-  TECH_WINDOW,
 } from "./constants";
-import { cloneCombat } from "./combat";
-import {
-  dropThroughPlatform,
-  ecbOf,
-  findLedgeGrab,
-  hitstunGravityOptions,
-  integrate,
-  platformCentreX,
-  resolveCollision,
-} from "./physics";
+import { dropThroughPlatform, hitstunGravityOptions, platformCentreX } from "./physics";
 import { moveScriptFrame } from "./acmd/run";
 import { clearHitRecord } from "./hitbox";
 import {
   carrierOf,
-  cloneKinetic,
   kineticAdopt,
+  kineticAirDodge,
+  kineticAirDodgeHandOff,
   kineticClear,
   kineticEndMotion,
   kineticExec,
@@ -82,6 +79,7 @@ import { Btn, held, pressed, released, stickX, stickY } from "./types";
 import type {
   ActionState,
   BufferedAction,
+  FighterAttributes,
   FighterDef,
   FighterState,
   InputFrame,
@@ -382,15 +380,18 @@ export function chargeMultiplier(charge: number): number {
  * 0–2, which the real game deliberately does not. Instead the window is
  * re-asserted one frame at a time from inside it, which reproduces `[3, 20]`
  * exactly and leaves a longer grant (a ledge grab, a respawn) untouched.
+ *
+ * An air dodge's window is the fighter's own, neutral or directional
+ * (`airDodgeIntangible`; Plan 3, Task 20c).
  */
-export function dodgeWindow(f: FighterState): readonly [number, number] | null {
+export function dodgeWindow(f: FighterState, attrs: FighterAttributes): readonly [number, number] | null {
   switch (f.action) {
     case "spotDodge":
       return SPOT_DODGE_INTANGIBLE;
     case "roll":
       return ROLL_INTANGIBLE;
     case "airDodge":
-      return f.charge === 1 ? DIRECTIONAL_AIR_DODGE_INTANGIBLE : AIR_DODGE_INTANGIBLE;
+      return airDodgeIntangible(airDodgeOf(attrs), f.charge);
     // Teching (Plan 3, Task 12): SmashWiki "Lucario (SSBU)/Techs".
     case "tech":
     case "techRoll":
@@ -403,8 +404,8 @@ export function dodgeWindow(f: FighterState): readonly [number, number] | null {
   }
 }
 
-export function updateDodgeIntangibility(f: FighterState): void {
-  const w = dodgeWindow(f);
+export function updateDodgeIntangibility(f: FighterState, attrs: FighterAttributes): void {
+  const w = dodgeWindow(f, attrs);
   if (w === null) return;
   if (f.actionFrame >= w[0] && f.actionFrame <= w[1]) {
     f.intangible = Math.max(f.intangible, 1);
@@ -547,152 +548,60 @@ export function airJump(f: FighterState, ctx: StateContext): boolean {
   return true;
 }
 
-/** What a fighter pressing nothing means, for the frames `landsWithin` imagines. */
-const NO_INPUT: Intent = {
-  x: 0,
-  y: 0,
-  jumpPressed: false,
-  jumpHeld: false,
-  attackPressed: false,
-  attackHeld: false,
-  specialPressed: false,
-  shieldHeld: false,
-  shieldPressed: false,
-  shieldReleased: false,
-  grabPressed: false,
-  downPressed: false,
-  wantsDash: false,
-  smash: false,
-  smashX: 0,
-  smashY: 0,
-  sdiX: 0,
-  sdiY: 0,
-  soft: false,
-};
-
 /**
- * Would this airborne tumbling fighter, left alone, land on a floor within the
- * next `frames` frames (this one included), at a launch the floor tech takes?
+ * Start an air dodge, unless this airtime's is spent.
  *
- * Exact, not an estimate: it replays the frames on a scratch copy with the
- * movement and the collision the step itself runs (`applyMovement`,
- * `integrate`, `resolveCollision`, with the frame number, so a moving platform
- * is where it will be), and the ledge grab that would end the fall first (the
- * same `findLedgeGrab`, with the others as they are now, so a ledge somebody is
- * performing an option on is shut here as it is in the step). What
- * it assumes is that nothing else happens: this frame is played with the
- * `intent` it has, the later ones with no input, the hitstun runs down and a
- * tumble that runs out tumbles on (`tumbleFall`), and nobody else touches it.
- * It does not run the status's `main`, which could ask this very question again;
- * so a fast fall pressed on this frame, which lands it sooner, is not seen
- * (that errs towards "no", never towards a landing that does not happen).
- *
- * Pure: the fighter and the state are not touched. `kinetic` and `combat` are
- * the two sub-objects the replay writes, and are copied; the arrays and the
- * buffered action it only reads. Integer arithmetic, and only the state, the
- * stage and the frame. Plan 3, Task 12.
- */
-export function landsWithin(f: FighterState, intent: Intent, ctx: StateContext, frames: number): boolean {
-  const g: FighterState = { ...f, kinetic: cloneKinetic(f.kinetic), combat: cloneCombat(f.combat) };
-  const attrs = ctx.def.attributes;
-  for (let k = 0; k < frames; k++) {
-    if (k > 0) {
-      // Phase 3 for a fighter nobody touches: the hitstun runs down, and a tumble
-      // whose hitstun is over in the air tumbles on (`reelMain`).
-      if (g.hitstun > 0) g.hitstun -= 1;
-      if (g.hitstun === 0) {
-        g.balloon = false;
-        if (g.action === "tumble") startAction(g, "tumbleFall");
-      }
-    }
-    applyMovement(g, k === 0 ? intent : NO_INPUT, ctx);
-    const prevX = g.x;
-    const prevY = g.y;
-    integrate(g);
-    const speed = g.launchSpeed;
-    const frame = ctx.frame + k;
-    if (resolveCollision(g, prevX, prevY, ctx.stage, attrs, frame).landed) return speed <= TECH_FLOOR_MAX_SPEED;
-    if (!g.grounded && findLedgeGrab(g, ctx.stage, frame, ecbOf(g, attrs).half, ctx.fighters) !== null) return false;
-  }
-  return false;
-}
-
-/**
- * A tumbling fighter pressing shield (or holding it) *with a direction held*,
- * with the floor under it inside the tech window and a tech input live, is
- * making a tech input, not asking for an air dodge (Plan 3, Task 12; narrowed
- * to a direction held in Task 20b).
- *
- * SmashWiki "Lucario (SSBU)/Techs": "a neutral airdodge option within 15 frames
- * of landing will also activate a tech option": in the game the one press does
- * both. A neutral press needs nothing here: it is the air dodge, which keeps the
- * tumble's momentum (`startAirDodge`) and techs the floor it meets in its first
- * 15 frames (`techOrBounce`). A press with a direction held is a directional
- * dodge, which the replica still models as its own velocity with its height
- * held through its intangible window (21 frames): a sideways or upward one never
- * reaches a floor a few frames below, even on the frame it would have landed,
- * so the tech, and the tech roll the stick asks for, would be lost. That press
- * is read as the tech alone. This retires with a directional dodge that follows
- * SmashWiki "Air dodge" (https://www.ssbwiki.com/Air_dodge: a slingshot, then a
- * travel of 20, then a fall), which the replica does not model yet.
- *
- * Only while the tech is real: `updateTechInput` has already run, so
- * `techWindow` is what this frame's collision will see (a press inside the
- * 40-frame lockout opens none, and then it is an air dodge, as it was); and
- * only if the landing falls inside what is left of it (`landsWithin`), or a
- * shield held from an earlier frame, which techs a floor, is keeping it live
- * (on the frame it is pressed a shield is held too, but that is the press).
- * UNVERIFIED: that reading, and `TECH_WINDOW` as how close "close" is.
- * `tumble` is the hitstun cancel's side of it (`status/damage.ts`),
- * `tumbleFall` the other (`handleActionable`).
- */
-export function techInputNearFloor(f: FighterState, intent: Intent, ctx: StateContext): boolean {
-  if (f.action !== "tumble" && f.action !== "tumbleFall") return false;
-  // A neutral press or hold is the air dodge, which falls on into the tech.
-  if (intent.x === 0 && intent.y === 0) return false;
-  // A shield held from before this frame keeps the floor tech live; the frame a
-  // press is made it is "held" too, which is no reason to read it as one.
-  const held = intent.shieldHeld && !intent.shieldPressed;
-  const live = Math.max(f.combat.techWindow, held ? TECH_WINDOW : 0);
-  return live > 0 && landsWithin(f, intent, ctx, live);
-}
-
-/**
- * Start an air dodge, unless this airtime's is spent (the neutral one: Plan 3, Task 20b).
- *
- * A neutral dodge leaves the fighter's momentum exactly as it was: SmashWiki
- * "Air dodge" (https://www.ssbwiki.com/Air_dodge), Ultimate, says it "behaves
- * like air dodges in Brawl and Smash 4, preserving their momentum", and of
- * Brawl's that it "no longer halts the character's momentum ... it simply
- * grants brief intangiblity along the character's current line of movement".
- * So no energy is touched here: drift, gravity, a launch still decaying, a full
- * hop's initial rise and a fast fall all carry on, and `applyMovement` drives
- * them as a fall's would (gravity included: "every character falls
- * approximately the same distance when air dodging"). The reimplementations of
- * the vanilla status turn its kinetic type to FALL once
- * `FIGHTER_STATUS_ESCAPE_AIR_FLAG_FALL` is on (HewDraw Remix `airdodge.rs`
- * L265-274,
+ * **Neutral** (no direction held; Plan 3, Task 20b). It leaves the fighter's
+ * momentum exactly as it was: SmashWiki "Air dodge"
+ * (https://www.ssbwiki.com/Air_dodge), Ultimate, says it "behaves like air
+ * dodges in Brawl and Smash 4, preserving their momentum", and of Brawl's that
+ * it "no longer halts the character's momentum ... it simply grants brief
+ * intangiblity along the character's current line of movement". So no energy
+ * is touched here: drift, gravity, a launch still decaying, a full hop's
+ * initial rise and a fast fall all carry on, and `applyMovement` drives them as
+ * a fall's would (gravity included: "every character falls approximately the
+ * same distance when air dodging"). SmashWiki "Lucario (SSBU)/Techs"
+ * (https://www.ssbwiki.com/Lucario_(SSBU)/Techs) needs it falling too: "When
+ * hitstun finishes, a neutral airdodge option within 15 frames of landing will
+ * also activate a tech option." The reimplementations of the vanilla status
+ * turn its kinetic type to FALL once `FIGHTER_STATUS_ESCAPE_AIR_FLAG_FALL` is on
+ * (HewDraw Remix `airdodge.rs` L265-274,
  * https://github.com/HDR-Development/HewDraw-Remix/blob/a56075404c96853b260689a341d63fcb90a33f93/fighters/common/src/general_statuses/airdodge.rs#L265-L274;
  * WuBor Patch `escape_air.rs` L301-311,
  * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L301-L311).
- * UNVERIFIED: the frames before that flag, which run a kinetic type of the
- * status's own (`FIGHTER_KINETIC_TYPE_UNIQ`, HewDraw Remix `airdodge.rs` L50)
- * whose rules no source publishes, and the common param `escape_air_brake` = 1
- * (fudgepop01/amiibo_research `common.xml` L689,
- * https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/common.xml#L689),
- * whose effect is unpublished; the replica runs the fall's rules from the
- * first frame.
  *
- * A fast fall carries on, UNVERIFIED: SmashWiki "Air friction"
- * (https://www.ssbwiki.com/Air_friction) has an air dodge end a fast fall
- * "starting in Brawl", after which falling friction slows the fall (0.015 a
- * frame for Mario, Donkey Kong, Kirby and Fox in Ultimate, the same page). The
- * replica has no falling friction, so ending the fast fall here would drop the
- * fighter to its normal fall speed on the next frame; carrying it on is the
- * nearer of the two over the dodge.
+ * UNVERIFIED, the neutral dodge's first frames, before that flag: they run a
+ * kinetic type of the status's own (`FIGHTER_KINETIC_TYPE_UNIQ`, HewDraw Remix
+ * `airdodge.rs` L50) whose rules no source publishes, with the common param
+ * `escape_air_brake` = 1 (fudgepop01/amiibo_research `common.xml` L689,
+ * https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/common.xml#L689)
+ * of unpublished effect. One mod argues against the replica's reading: HewDraw
+ * Remix's neutral branch of `setup_escape_air_slide_common` (`airdodge.rs`
+ * L476-482) disables MOTION, GRAVITY, CONTROL and STOP until `FLAG_FALL`, a hang
+ * in which only a launch moves. The two SmashWiki lines above ("preserving
+ * their momentum", and the neutral dodge's tech within 15 frames of landing)
+ * are the evidence for the replica's: it runs the fall's rules from the first
+ * frame.
  *
- * A directional dodge is unchanged: it sets its own velocity (and so ends any
- * launch) and holds its height through its intangible window.
+ * UNVERIFIED, an interpretation: "keeps all momentum" here includes a full
+ * hop's scheduled launch. `jumpFrame` still fires the rest of the hop when the
+ * initial rise ends inside the dodge, which is a future impulse, not current
+ * velocity; the other reading would end the rise at the press.
+ *
+ * The fast fall carries on through a neutral dodge and ends with it (the
+ * status's `end`): SmashWiki "Air friction" (https://www.ssbwiki.com/Air_friction)
+ * has an air dodge end a fast fall "starting in Brawl". UNVERIFIED: when, and
+ * the falling friction (0.015 a frame for Mario, Donkey Kong, Kirby and Fox in
+ * Ultimate, the same page) that then slows the fall, which the replica does not
+ * model: the fall speed returns to normal on the frame after the dodge.
+ *
+ * **Directional** (a direction held; Plan 3, Task 20c). `charge` remembers the
+ * direction (`airDodgeCharge`), which sets the dodge's length and intangibility
+ * (each fighter's own) and its movement: the slingshot back, the slide, then
+ * the fall (`applyMovement`, `directionalDodgeFrame`). A fast fall ends here,
+ * on the press: the dodge replaces the vertical speed outright, so there is no
+ * fall left to carry, and the flag would otherwise drive the fall after the
+ * slide to the fast-fall speed (SmashWiki "Air friction", as above).
  */
 export function startAirDodge(f: FighterState, intent: Intent): boolean {
   if (f.airDodged) return false;
@@ -700,20 +609,13 @@ export function startAirDodge(f: FighterState, intent: Intent): boolean {
   // An air dodge begun out of a tumble techs on a surface in its first 15
   // frames (Task 12); read before the status changes.
   const fromTumble = f.action === "tumble" || f.action === "tumbleFall";
-  const directional = intent.x !== 0 || intent.y !== 0;
   startAction(f, "airDodge");
   f.combat.tumbleDodge = fromTumble;
-  // `charge` is meaningless outside a smash, so an air dodge borrows it to
-  // remember whether it was directional — which decides its length (63 frames
-  // against 50), its intangible window, and whether it holds its own velocity.
-  f.charge = directional ? 1 : 0;
-  if (directional) {
-    const diagonal = intent.x !== 0 && intent.y !== 0;
-    const speed = diagonal
-      ? Math.trunc((DIRECTIONAL_AIR_DODGE_SPEED * DIAGONAL) / ONE)
-      : DIRECTIONAL_AIR_DODGE_SPEED;
-    kineticSet(f, intent.x * speed, intent.y * speed);
-    f.launchSpeed = 0;
+  if (isDirectionalDodge(intent)) {
+    f.charge = airDodgeCharge(intent.x, intent.y);
+    f.fastFalling = false;
+  } else {
+    f.charge = 0;
   }
   return true;
 }
@@ -752,8 +654,15 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
     return false;
   }
 
-  // Airborne.
-  if ((p.shield || intent.shieldHeld) && !techInputNearFloor(f, intent, ctx) && startAirDodge(f, intent)) return true;
+  // Airborne. A shield press (or one held: a fall buffers a held input,
+  // SmashWiki "Buffer") is the air dodge, near a floor too: one out of a tumble
+  // techs the surface it meets in its first 15 frames (`techOrBounce`), and one
+  // with a direction held is the directional dodge it asks for, which may not
+  // reach the floor in time (SmashWiki "Lucario (SSBU)/Techs": "when not in
+  // enough hitstun, holding the analog stick in a direction while pressing
+  // shield/grab can turn into a directional air dodge buffer, which can be a
+  // misinput"; Plan 3, Task 20c).
+  if ((p.shield || intent.shieldHeld) && startAirDodge(f, intent)) return true;
   if (p.special && beginSpecial(f, ctx, specialSlot(intent))) return true;
   if (p.attack) {
     const slot = aerialSlot(f, intent);
@@ -778,7 +687,7 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
  */
 export function advanceFighter(f: FighterState, intent: Intent, ctx: StateContext, table: StatusTable = STATUS_TABLE): void {
   f.actionFrame += 1;
-  updateDodgeIntangibility(f);
+  updateDodgeIntangibility(f, ctx.def.attributes);
 
   const status = table[f.action];
   if (status === undefined) {
@@ -979,16 +888,22 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     return;
   }
 
-  const w = dodgeWindow(f);
+  const params = fighterParams(ctx.def);
+  // A directional air dodge moves on its own schedule for its first frames: the
+  // slingshot and the slide, with drift and gravity off, then the hand-off to
+  // them (Plan 3, Task 20c; `directionalDodgeFrame`). A neutral one keeps
+  // falling as it was (`startAirDodge`, Task 20b).
+  const dodge = directionalDodgeFrame(f);
+  if (dodge !== null && dodge.phase !== "handOff") {
+    kineticAirDodge(f, dodge.x, dodge.y, dodge.phase === "slide", params);
+    status.exec?.(f, intent, ctx);
+    return;
+  }
+  if (dodge !== null) kineticAirDodgeHandOff(f, dodge.x, dodge.y);
   kineticExec(f, type, {
     stickX: intent.x,
     stickMag: intent.soft ? ONE >> 1 : ONE,
-    params: fighterParams(ctx.def),
-    // A directional air dodge (`charge` 1) holds its own velocity outright;
-    // gravity resumes when the intangible window closes, which is what makes a
-    // missed one a free punish. A neutral one keeps falling as it was
-    // (`startAirDodge`, Plan 3, Task 20b).
-    holdVertical: f.action === "airDodge" && f.charge === 1 && w !== null && f.actionFrame <= w[1],
+    params,
   });
   status.exec?.(f, intent, ctx);
 }
@@ -1049,10 +964,19 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   }
   if (f.action === "airDodge") {
     // Read before `startAction`, which clears it: `charge` is how an air dodge
-    // remembers it was directional (see `updateDodgeIntangibility`).
-    const directional = f.charge === 1;
+    // remembers its direction (`airDodgeCharge`).
+    if (!isDirectionalAirDodge(f)) {
+      startAction(f, "landingLag");
+      f.charge = AIR_DODGE_LANDING_LAG;
+      return;
+    }
+    // Directional: 19 frames at the earliest landing down to 10 at the latest
+    // (`directionalLandingLag`), and the slide it lands with (the waveland) no
+    // faster than 2 (`AIR_DODGE_LANDING_SLIDE_MAX`; Plan 3, Task 20c).
+    const lag = directionalLandingLag(f.actionFrame, airDodgeFrames(airDodgeOf(ctx.def.attributes), f.charge));
+    kineticSetX(f, clamp(f.vx, -AIR_DODGE_LANDING_SLIDE_MAX, AIR_DODGE_LANDING_SLIDE_MAX), "stop");
     startAction(f, "landingLag");
-    f.charge = directional ? DIRECTIONAL_AIR_DODGE_LANDING_LAG : AIR_DODGE_LANDING_LAG;
+    f.charge = lag;
     return;
   }
   startAction(f, "land");

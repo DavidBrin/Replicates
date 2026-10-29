@@ -353,7 +353,7 @@ type LegacyType = Exclude<KineticType, "DASH" | "RUN">;
 const TYPES: readonly LegacyType[] = ["FALL", "GROUND_STOP", "WALK", "MOTION", "AIR_ESCAPE", "NONE"];
 
 /** The pre-Plan-2 `applyMovement` switch and gravity block, on one vx/vy. */
-function legacy(type: LegacyType, f: FighterState, stickX: number, holdVertical: boolean): [number, number] {
+function legacy(type: LegacyType, f: FighterState, stickX: number): [number, number] {
   let vx = f.vx;
   let vy = f.vy;
   switch (type) {
@@ -373,7 +373,7 @@ function legacy(type: LegacyType, f: FighterState, stickX: number, holdVertical:
       break;
   }
   if (!f.grounded) {
-    if (!holdVertical) vy = applyGravity(vy, ATTRS, { fastFalling: f.fastFalling });
+    vy = applyGravity(vy, ATTRS, { fastFalling: f.fastFalling });
   } else if (vy < 0) {
     vy = 0;
   }
@@ -394,13 +394,12 @@ describe("kineticExec reproduces the legacy single-velocity movement", () => {
         fc.constantFrom(-1, 0, 1),
         fc.constantFrom(-1, 1),
         fc.integer({ min: 0, max: 30 }),
-        fc.boolean(),
-        (type, a, b, gy, grounded, fastFalling, stickX, facing, actionFrame, holdVertical) => {
+        (type, a, b, gy, grounded, fastFalling, stickX, facing, actionFrame) => {
           // Speed may sit on either horizontal carrier when the frame starts.
           const f = body({ controlX: a, stopX: b, gravityY: gy }, { grounded, fastFalling, facing, actionFrame });
           kineticSum(f);
-          const want = legacy(type, f, stickX, holdVertical);
-          kineticExec(f, type, { stickX, params: PARAMS, holdVertical });
+          const want = legacy(type, f, stickX);
+          kineticExec(f, type, { stickX, params: PARAMS });
           return f.vx === want[0] && f.vy === want[1];
         },
       ),
@@ -461,7 +460,7 @@ describe("the DAMAGE energy: a launch decays on its own", () => {
     const f = launch();
     for (let i = 0; i < 5; i++) kineticReel(f, PARAMS, false);
     const before = { speed: f.launchSpeed, control: f.kinetic.controlX, gravity: f.kinetic.gravityY };
-    kineticExec(f, "FALL", { stickX: -1, params: PARAMS, holdVertical: false });
+    kineticExec(f, "FALL", { stickX: -1, params: PARAMS });
     expect(f.launchSpeed).toBe(before.speed - LAUNCH_SPEED_DECAY);
     expect(f.kinetic.controlX).toBe(before.control - (PARAMS.air_accel_x_add + PARAMS.air_accel_x_mul));
     expect(f.kinetic.gravityY).toBe(Math.max(before.gravity - PARAMS.air_accel_y, -PARAMS.air_speed_y_stable));
@@ -478,7 +477,7 @@ describe("the DAMAGE energy: a launch decays on its own", () => {
 
     const acting = body({}, { grounded: true });
     kineticLaunch(acting, fx(3), 0, fx(3));
-    kineticExec(acting, "GROUND_STOP", { stickX: 0, params: PARAMS, holdVertical: false });
+    kineticExec(acting, "GROUND_STOP", { stickX: 0, params: PARAMS });
     expect(acting.launchSpeed).toBe(fx(3) - LAUNCH_SPEED_DECAY - PARAMS.ground_brake);
   });
 
@@ -553,7 +552,7 @@ describe("the DAMAGE energy under set weight (Plan 3, Task 16b)", () => {
   // landing or anything else that ends the launch (as the balloon speed-up does).
   it("ends with the launch: out of hitstun, on landing, or cleared", () => {
     const acting = setWeightLaunch();
-    kineticExec(acting, "FALL", { stickX: 0, params: PARAMS, holdVertical: false });
+    kineticExec(acting, "FALL", { stickX: 0, params: PARAMS });
     expect(acting.kinetic.setWeightFrames).toBe(0);
     const landed = setWeightLaunch();
     kineticLand(landed);
@@ -614,7 +613,7 @@ describe("the MOTION energy: a move's scripted velocity", () => {
     // Hold, hand over, then ten frames of ordinary air: nothing brings the launch back.
     for (let i = 0; i < 3; i++) kineticMotion(f, fx(0.35), fx(2.5));
     kineticEndMotion(f);
-    for (let i = 0; i < 10; i++) kineticExec(f, "FALL", { stickX: 0, params: PARAMS, holdVertical: false });
+    for (let i = 0; i < 10; i++) kineticExec(f, "FALL", { stickX: 0, params: PARAMS });
     expect(f.kinetic).toMatchObject({ damageX: 0, damageY: 0 });
     expect(f.launchSpeed).toBe(0);
     expect(f.vx).toBe(f.kinetic.controlX);
@@ -752,7 +751,7 @@ describe("air friction (SmashWiki Air friction, https://www.ssbwiki.com/Air_fric
   // "Air friction only applies when the player is not holding the Control Stick
   // in a horizontal direction." `air_brake_x` is the calculator's AirFriction.
   const P = { ...PARAMS, air_brake_x: fx(0.0075) };
-  const NEUTRAL = { stickX: 0, params: P, holdVertical: false };
+  const NEUTRAL = { stickX: 0, params: P };
   const accel = P.air_accel_x_add + P.air_accel_x_mul;
 
   describe("airControlX", () => {

@@ -10,9 +10,8 @@
  * reads `vx`, and the golden trace catches the difference.
  */
 
+import { airDodgeFrames, airDodgeOf } from "../airDodge";
 import {
-  AIR_DODGE_FRAMES,
-  DIRECTIONAL_AIR_DODGE_FRAMES,
   FURAFURA_END_FRAMES,
   ROLL_FRAMES,
   SHIELD_BREAK_MASH_BUTTON,
@@ -160,13 +159,17 @@ export const STATUS_ESCAPE_AIR: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_ESCAPE_AIR",
   action: "airDodge",
   kineticType: "AIR_ESCAPE",
-  // The tech trigger belongs to this air dodge alone (Plan 3, Task 12).
   end(f) {
+    // The tech trigger belongs to this air dodge alone (Plan 3, Task 12).
     f.combat.tumbleDodge = false;
+    // The dodge ends a fast fall (SmashWiki "Air friction",
+    // https://www.ssbwiki.com/Air_friction; `startAirDodge`; Plan 3, Task 20c).
+    f.fastFalling = false;
   },
   main(f, intent, ctx) {
-    // `charge` remembers a directional dodge: 63 frames rather than 50.
-    const total = f.charge === 1 ? DIRECTIONAL_AIR_DODGE_FRAMES : AIR_DODGE_FRAMES;
+    // Each fighter's own length, by the direction `charge` remembers (Plan 3,
+    // Task 20c; `airDodgeFrames`).
+    const total = airDodgeFrames(airDodgeOf(ctx.def.attributes), f.charge);
     if (f.actionFrame >= total) startAction(f, "fall");
     else bufferPress(f, intent, ctx.frame);
   },

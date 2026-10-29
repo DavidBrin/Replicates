@@ -17,6 +17,7 @@
  * nothing.
  */
 
+import { airDodgeRefusesLedge } from "./airDodge";
 import { ONE, fx, mul, abs, clamp, approach, sinDeg } from "./fixed";
 import {
   BALLOON_FALL_SPEED,
@@ -444,6 +445,11 @@ function inLedgeOption(fighters: readonly FighterState[], port: number, platform
  * lockout (`ledgeLockout`): after letting go of a ledge or being hit or grabbed
  * off one it stops a drop regrabbing on the frame it happens, and after being
  * trumped off one (Plan 3, Task 15) it keeps the fighter from taking it back.
+ * And so does a directional air dodge in its first 24 frames
+ * (`airDodgeRefusesLedge`; SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge:
+ * "all characters can grab edges after the first 24 frames of their directional
+ * air dodge"; Plan 3, Task 20c). Being the one rule, it holds for the trump as
+ * well: a dodging fighter refused here trumps nobody.
  *
  * `fighters` is everybody in the match, for the one rule that is not a property
  * of the fighter asking: a ledge cannot be shared (SmashWiki "Ledge": "Multiple
@@ -453,8 +459,9 @@ function inLedgeOption(fighters: readonly FighterState[], port: number, platform
  * the option has left it: SmashWiki "Ledge trump" has buffering an option "the
  * moment it is grabbed" avoid the trump, and the ledge cannot be shared.
  * UNVERIFIED: that the ledge is refused, rather than grabbed and trumped, for
- * the whole of an option. The fighter asking is told by its port, because
- * `landsWithin` replays a copy of it. Without the list nobody holds a ledge.
+ * the whole of an option. The fighter asking is told by its port, not by
+ * identity, so a copy of it asks as it would. Without the list nobody holds a
+ * ledge.
  */
 export function findLedgeGrab(
   f: FighterState,
@@ -466,6 +473,7 @@ export function findLedgeGrab(
   if (f.grounded || f.ledge !== null) return null;
   if (f.hitstun > 0 || f.hitlag > 0) return null;
   if (f.ledgeLockout > 0) return null; // just let go of a ledge, or was hit off one, or trumped off it
+  if (airDodgeRefusesLedge(f)) return null; // the first 24 frames of a directional air dodge
   if (f.vy > 0) return null; // rising past a ledge does not snap you onto it
 
   for (let i = 0; i < stage.platforms.length; i++) {

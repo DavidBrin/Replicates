@@ -552,7 +552,7 @@ describe("ledges", () => {
       expect(findLedgeGrab(me, STAGE, 0, 0, [me, far])).toEqual({ platform: 0, side: 1 });
     });
 
-    // `landsWithin` replays a copy of the fighter, which the list knows by its port.
+    // The list knows the fighter asking by its port, so a copy of it is not another fighter.
     it("does not count the fighter asking, or a copy of it", () => {
       const me = asking();
       const mine = holding("ledgeJump", { port: 0 });

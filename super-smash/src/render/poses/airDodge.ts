@@ -2,29 +2,31 @@ import { P, type PoseClip } from "./clip";
 import { deg } from "../skeleton";
 
 /**
- * The air dodge — one clip stretched across two different moves.
+ * The air dodge — one clip stretched across every air dodge in the game.
  *
- * A neutral air dodge is 50 frames with intangibility on 3–28; a directional
- * one is 63 with intangibility on 3–20 (`AIR_DODGE_FRAMES`,
- * `DIRECTIONAL_AIR_DODGE_FRAMES` and their windows). Both play this clip, so
- * every beat is a proportion and the frame numbers below are quoted for the
- * neutral first, the directional in brackets. SmashWiki records the directional
- * dodge — Ultimate's declawed wavedash — as opening with "a five frame windup
- * animation" in which the fighter pulls back opposite the input before moving,
- * which is the counter-lean here: the fighter is still gathering for the first
- * few frames they are already intangible on. The deepest point of the curl is
- * at `t = 0.3`, and that number is doing the work — it is the one place inside
- * the intangible window of *both* dodges, frame 15 of the neutral and frame 19
- * of the directional.
+ * Each fighter's dodges are its own (Plan 3, Task 20c): a neutral one lasts 38
+ * to 61 frames and is intangible to frame 26-32; a directional one lasts 54 to
+ * 141 and is intangible only to frame 19-22 (`airDodgeFrames`,
+ * `airDodgeIntangible`). Every beat is a proportion, played linearly where the
+ * window ends between 0.32 and 0.56 of the clip, the range it was authored for,
+ * and around the window's end otherwise (`airDodgeClipTime`). The frame numbers
+ * below are quoted for Mario's neutral dodge (52 frames, intangible 3-29, which
+ * plays linearly). SmashWiki records the directional dodge — Ultimate's
+ * declawed wavedash — as opening with "a five frame windup animation" in which
+ * the fighter pulls back opposite the input before moving, which is the
+ * counter-lean here: the fighter is still gathering for the first few frames
+ * they are already intangible on. The deepest point of the curl is at
+ * `t = 0.3`, and that number is doing the work — with the window's end kept at
+ * 0.32 of the clip or later, it is inside the window of every dodge on the roster.
  *
  * The important beat is the last one. A fighter gets one air dodge per airtime
  * and cannot act until this animation ends, so its tail is the classic punish
- * in the game — and on the directional dodge the fighter has been tangible
- * again since frame 20 of 63. The ball therefore starts loosening at `t = 0.5`
- * and is thrown open at 0.64, which makes the recovery more than half the clip
- * and gives it a shape of its own: uncurl, overshoot, settle. It has to be
- * unmistakably not the dodge any more, because for most of it the fighter is
- * exactly as hittable as they look.
+ * in the game — and a directional dodge leaves the fighter tangible for most of
+ * its length. The ball therefore starts loosening at `t = 0.5` and is thrown
+ * open at 0.64, which makes the recovery more than half the clip and gives it a
+ * shape of its own: uncurl, overshoot, settle. It has to be unmistakably not the
+ * dodge any more, because for most of it the fighter is exactly as hittable as
+ * they look.
  *
  * The turn is keyed `rotation` and not `spin` even though it is a spin. `spin`
  * integrates linearly to `t = 1` and cannot come back: a value big enough to
@@ -52,8 +54,8 @@ export const airDodge: PoseClip = {
       }),
       offsetY: 0.12,
     },
-    // Frame 2.5 [3.2]. The windup: hips back, chest open, the body leaning the
-    // wrong way. Three frames of anticipation is all a 50-frame move can spare,
+    // Frame 2.6. The windup: hips back, chest open, the body leaning the
+    // wrong way. Three frames of anticipation is all the window can spare,
     // and without them the tuck has nothing behind it.
     {
       t: 0.05,
@@ -70,7 +72,7 @@ export const airDodge: PoseClip = {
       scaleX: 0.94,
       scaleY: 1.04,
     },
-    // Frame 7.5 [9.5]. The tuck: knees to chest, arms wrapped over the shins,
+    // Frame 7.8. The tuck: knees to chest, arms wrapped over the shins,
     // the ball already tipped a quarter turn into the dodge. Intangibility has
     // been on since frame 3, so for a moment the fighter is safe and does not
     // look it — which is what the real move's windup does too.
@@ -89,9 +91,8 @@ export const airDodge: PoseClip = {
       scaleX: 0.84,
       scaleY: 0.86,
     },
-    // Frame 15 [19]. The tightest the fighter ever gets, on the last frame the
-    // shorter of the two windows still covers. This is the drawing the blink
-    // and the afterimages are trailing.
+    // Frame 15.6. The tightest the fighter ever gets, well inside the window.
+    // This is the drawing the blink and the afterimages are trailing.
     {
       t: 0.3,
       pose: P({
@@ -107,9 +108,9 @@ export const airDodge: PoseClip = {
       scaleX: 0.76,
       scaleY: 0.8,
     },
-    // Frame 25 [31.5]. The ball loosens while the turn carries on past
-    // horizontal — the spin outlasts the tuck, which is what stops the middle
-    // of the clip being a photograph of a curled fighter for twenty frames.
+    // Frame 26. The ball loosens while the turn carries on past horizontal —
+    // the spin outlasts the tuck, which is what stops the middle of the clip
+    // being a photograph of a curled fighter for twenty frames.
     {
       t: 0.5,
       pose: P({
@@ -125,7 +126,7 @@ export const airDodge: PoseClip = {
       scaleY: 0.85,
       ease: "out",
     },
-    // Frame 32 [40]. Thrown open. The legs go first and the arms trail: the
+    // Frame 33.3. Thrown open. The legs go first and the arms trail: the
     // fighter is not righting themselves, they are being unfolded by the fall.
     {
       t: 0.64,
@@ -141,7 +142,7 @@ export const airDodge: PoseClip = {
       scaleX: 0.88,
       scaleY: 0.9,
     },
-    // Frame 39.5 [49.8]. The helpless part. The limbs are flung past where they
+    // Frame 41.1. The helpless part. The limbs are flung past where they
     // will settle and the chest tips back — nobody who could act would be in
     // this shape, and the fighter cannot act for another ten frames.
     {
@@ -158,10 +159,10 @@ export const airDodge: PoseClip = {
       scaleX: 0.99,
       scaleY: 1.05,
     },
-    // Frame 45.5 [57.3]. The arms come back down. This key exists because the
-    // last ten frames are otherwise a single ease from the flail to the fall
+    // Frame 47.3. The arms come back down. This key exists because the
+    // last frames are otherwise a single ease from the flail to the fall
     // pose — under a degree a frame, which the eye reads as a fighter who is
-    // ready again, ten frames before they are.
+    // ready again, before they are.
     {
       t: 0.91,
       pose: P({
@@ -176,7 +177,7 @@ export const airDodge: PoseClip = {
       scaleX: 0.98,
       scaleY: 1.04,
     },
-    // Frame 50 [63], which is also frame 0 of `fall`.
+    // Frame 52, which is also frame 0 of `fall`.
     {
       t: 1,
       pose: P({
@@ -192,3 +193,35 @@ export const airDodge: PoseClip = {
     },
   ],
 };
+
+/**
+ * Where in the clip an intangible window may end and the drawing still read
+ * right: the clip was authored for windows ending 20/63 of the way through (the
+ * old flat directional dodge) to 28/50 (the old flat neutral one) — curled up to
+ * there, uncurling after.
+ */
+export const AIR_DODGE_WINDOW_END_MIN = 20 / 63;
+export const AIR_DODGE_WINDOW_END_MAX = 28 / 50;
+
+/**
+ * Clip time for `actionFrame` `frame` of an air dodge `total` frames long whose
+ * intangibility ends on `lastIntangible` (`airDodgeIntangible`). Linear,
+ * `frame / total`, wherever that puts the window's end inside the range the clip
+ * was authored for (`AIR_DODGE_WINDOW_END_MIN`/`_MAX`). Outside it the clip is
+ * played in two pieces, as an attack's is around its contact frame
+ * (`poseTimeFor`): the window's last frame lands on the range's nearer end, the
+ * clip before it stretched across the window and the clip after it across the
+ * rest. Each fighter's own lengths put most dodges outside it (Plan 3, Task 20c):
+ * a directional dodge's window ends 19-22 frames into 54-141, a neutral one's
+ * 26-32 into 38-61.
+ */
+export function airDodgeClipTime(frame: number, total: number, lastIntangible: number): number {
+  if (total <= 0) return 0;
+  const linear = Math.min(1, Math.max(0, frame / total));
+  if (lastIntangible <= 0 || lastIntangible >= total) return linear;
+  const at = lastIntangible / total;
+  const end = at < AIR_DODGE_WINDOW_END_MIN ? AIR_DODGE_WINDOW_END_MIN : at > AIR_DODGE_WINDOW_END_MAX ? AIR_DODGE_WINDOW_END_MAX : at;
+  if (end === at) return linear;
+  if (frame <= lastIntangible) return Math.max(0, (end * frame) / lastIntangible);
+  return Math.min(1, end + ((1 - end) * (frame - lastIntangible)) / (total - lastIntangible));
+}

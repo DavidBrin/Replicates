@@ -26,8 +26,9 @@
  * four frames, which is roughly a very good human.
  */
 
+import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
 import { nextRandom } from "@/engine/fixed";
-import type { GameState, InputFrame } from "@/engine/types";
+import type { AirDodgeAttributes, GameState, InputFrame } from "@/engine/types";
 import {
   BEHAVIOURS,
   DECISION_ROLLS,
@@ -63,6 +64,11 @@ export interface CpuWorld {
    * air dodge drifts it. Defaults to 0, which carries the drift on unslowed.
    */
   readonly airBrake?: number;
+  /**
+   * This fighter's air-dodge lengths, from `airDodgeFromDef`, for how long a
+   * dodge drifts it (Plan 3, Task 20c). Defaults to Mario's (`DEFAULT_AIR_DODGE`).
+   */
+  readonly airDodge?: AirDodgeAttributes;
 }
 
 /**
@@ -157,6 +163,7 @@ export function decideCpu(
     jumps: world.jumps ?? DEFAULT_AIR_JUMPS,
     meleeReach: world.meleeReach ?? MELEE_RANGE,
     airBrake: world.airBrake ?? 0,
+    airDodge: world.airDodge ?? DEFAULT_AIR_DODGE,
     rolls,
   };
 

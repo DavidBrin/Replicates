@@ -28,6 +28,7 @@
 import {
   Btn,
   type ActionState,
+  type AirDodgeAttributes,
   type FighterDef,
   type FighterState,
   type GameState,
@@ -36,7 +37,8 @@ import {
   type MoveSlot,
   type StageDef,
 } from "@/engine/types";
-import { AIR_DODGE_FRAMES, SDI_INPUT_INTERVAL, SMASH_INPUT_WINDOW } from "@/engine/constants";
+import { airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
+import { SDI_INPUT_INTERVAL, SMASH_INPUT_WINDOW } from "@/engine/constants";
 import { abs, fx, magnitude } from "@/engine/fixed";
 import { fighterParams } from "@/engine/params";
 
@@ -276,6 +278,8 @@ export interface BehaviourContext {
   readonly meleeReach: number;
   /** This fighter's air friction, Q12 a frame. See `airBrakeFromDef`. */
   readonly airBrake: number;
+  /** This fighter's air-dodge lengths. See `airDodgeFromDef`. */
+  readonly airDodge: AirDodgeAttributes;
   /** Pre-drawn randoms in [0,1), one per `ROLL_*` slot. */
   readonly rolls: readonly number[];
 }
@@ -362,6 +366,11 @@ export function airBrakeFromDef(def: FighterDef): number {
   return fighterParams(def).air_brake_x;
 }
 
+/** A fighter's own air-dodge lengths (Plan 3, Task 20c), for how long a dodge drifts it. */
+export function airDodgeFromDef(def: FighterDef): AirDodgeAttributes {
+  return airDodgeOf(def.attributes);
+}
+
 /**
  * How far in front of the fighter one move's hitboxes reach, in world units:
  * the furthest box's centre plus its radius, 0 for a move that reaches nothing
@@ -446,26 +455,29 @@ export function isOffstage(f: FighterState, stage: StageView): boolean {
 }
 
 /**
- * How far a neutral air dodge carries the fighter sideways, from its `vx` now.
- * The dodge keeps the fighter's momentum (SmashWiki "Air dodge",
- * https://www.ssbwiki.com/Air_dodge: "preserving their momentum"; Plan 3, Task
- * 20b) for `AIR_DODGE_FRAMES`, and with the stick let go air friction
- * (`airBrake`) takes that much off it every frame (SmashWiki "Air friction",
+ * How far an air dodge carries the fighter sideways over `frames` more frames,
+ * from its `vx` now. A neutral dodge keeps the fighter's momentum (SmashWiki
+ * "Air dodge", https://www.ssbwiki.com/Air_dodge: "preserving their momentum";
+ * Plan 3, Task 20b), and with the stick let go air friction (`airBrake`) takes
+ * that much off it every frame (SmashWiki "Air friction",
  * https://www.ssbwiki.com/Air_friction). All of `vx` is bled at that rate,
  * though a launch on it decays at its own 0.051, faster than any fighter's air
  * friction here: so this is the further of the two, and errs towards not dodging.
+ * `frames` is the fighter's own dodge length for a dodge not yet begun, and what
+ * is left of it for one under way (Task 20c), whose `vx` may be a directional
+ * dodge's slide: further again, and the steering it asks for is back over the stage.
  */
-export function dodgeDrift(vx: number, airBrake: number): number {
+export function dodgeDrift(vx: number, airBrake: number, frames: number): number {
   const speed = abs(vx);
-  const frames = airBrake > 0 ? Math.min(AIR_DODGE_FRAMES, Math.trunc(speed / airBrake)) : AIR_DODGE_FRAMES;
-  const drift = frames * speed - Math.trunc((airBrake * frames * (frames + 1)) / 2);
+  const n = Math.max(0, airBrake > 0 ? Math.min(frames, Math.trunc(speed / airBrake)) : frames);
+  const drift = n * speed - Math.trunc((airBrake * n * (n + 1)) / 2);
   return vx < 0 ? -drift : drift;
 }
 
-/** Whether a neutral air dodge now would carry the fighter off the stage before it could act again. */
-export function dodgeCarriesOffstage(f: FighterState, stage: StageView, airBrake: number): boolean {
+/** Whether an air dodge with `frames` left would carry the fighter off the stage before it could act again. */
+export function dodgeCarriesOffstage(f: FighterState, stage: StageView, airBrake: number, frames: number): boolean {
   if (f.grounded) return false;
-  return isOffstage({ ...f, x: f.x + dodgeDrift(f.vx, airBrake) }, stage);
+  return isOffstage({ ...f, x: f.x + dodgeDrift(f.vx, airBrake, frames) }, stage);
 }
 
 /**
@@ -566,9 +578,13 @@ export const recover: Behaviour = (ctx) => {
 
   // In an air dodge the fighter cannot act until it ends, and a neutral one
   // keeps falling (Plan 3, Task 20b): whatever else it was chasing, it steers
-  // back over the stage rather than drifting out past the ledge.
-  if (self.action === "airDodge" && dodgeCarriesOffstage(self, stage, ctx.airBrake)) {
-    return { score: 900, input: towardX(self.x, 0) };
+  // back over the stage rather than drifting out past the ledge, judged over
+  // the frames its own dodge has left (Task 20c). Steering is drift, which this
+  // behaviour does at every level (the level-1 failure below is the button,
+  // not the stick), so it is not gated by `recoverySkill` either.
+  if (self.action === "airDodge") {
+    const left = airDodgeFrames(ctx.airDodge, self.charge) - self.actionFrame;
+    if (dodgeCarriesOffstage(self, stage, ctx.airBrake, left)) return { score: 900, input: towardX(self.x, 0) };
   }
 
   const offstage = isOffstage(self, stage);
@@ -633,9 +649,12 @@ export const shield: Behaviour = (ctx) => {
     return { score: 600, input: away | Btn.Shield };
   }
 
-  // In the air the shield is a neutral air dodge, and it keeps the drift:
-  // not one that carries the fighter off the stage.
-  if (dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake)) return NOTHING;
+  // In the air the shield is a neutral air dodge, and it keeps the drift over
+  // the fighter's own dodge length (Task 20c): not one that carries the fighter
+  // off the stage. Knowing that is recovery judgement, so a CPU whose recovery
+  // roll fails forgets it, as it forgets the jump back in `recover`.
+  const minded = ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
+  if (minded && dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, airDodgeFrames(ctx.airDodge, 0))) return NOTHING;
   return { score: 600, input: Btn.Shield };
 };
 

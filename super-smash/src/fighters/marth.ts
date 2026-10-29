@@ -99,6 +99,19 @@ const legacy: FighterDef = {
     width: fx(HALF_WIDTH),
     height: fx(HEIGHT),
     jumpSquatFrames: 3,
+    // Air dodges (Plan 3, Task 20c): fudgepop01/amiibo_research
+    // `fighter_param_motion.xml` @523374aa, the `fighter_kind_marth` entry (L2483):
+    // L2504 `escape_air_stiff_frame`, L2500-2501 `escape_air_hit_xlu_frame` /
+    // `_hit_normal_frame`, L2592-2594 `escape_air_slide_stiff_frame` / `_u_` /
+    // `_d_`, L2507-2508 `escape_air_slide_hit_xlu_frame` / `_hit_normal_frame`.
+    airDodge: {
+      neutralFrames: 51,
+      neutralIntangible: [3, 27],
+      sideFrames: 85,
+      upFrames: 115,
+      downFrames: 68,
+      directionalIntangible: [3, 19],
+    },
   },
 
   params: FIGHTER_PARAMS.marth,

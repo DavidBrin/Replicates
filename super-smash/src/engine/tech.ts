@@ -119,14 +119,35 @@ export function techOrBounce(
   // After the hitstun a wall or ceiling is a plain stop: nothing to tech
   // (SmashWiki "Tech": the character "must be in hitstun"), nothing to bounce.
   if (before.tumbleFall && !floor) return null;
-  // The air dodge is the tech input, at any launch: a neutral dodge keeps the
-  // launch it began with (Task 20b), and the reimplementations of the vanilla
-  // air-dodge tech read the dodge's frame and no speed (HewDraw Remix
+  // The air dodge is the tech input, at any launch and whatever the lockout: a
+  // neutral dodge keeps the launch it began with (Task 20b), a directional one
+  // keeps it through its slingshot (Task 20c), and the reimplementations of the
+  // vanilla air-dodge tech read the dodge's frame and no speed (HewDraw Remix
   // `airdodge.rs` L399-420,
   // https://github.com/HDR-Development/HewDraw-Remix/blob/a56075404c96853b260689a341d63fcb90a33f93/fighters/common/src/general_statuses/airdodge.rs#L399-L420;
   // WuBor Patch `escape_air.rs` L154-189,
   // https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L154-L189).
-  // UNVERIFIED: the vanilla function itself is not published.
+  // The lockout: SmashWiki "Tech" (https://www.ssbwiki.com/Tech), of Smash 4's
+  // dodge tech, "This air dodge cancel additionally ignores the 30-frame tech
+  // penalty, so it works even if the character had pressed shield a short while
+  // beforehand"; Ultimate kept the mechanism (SmashWiki "Lucario (SSBU)/Techs",
+  // https://www.ssbwiki.com/Lucario_(SSBU)/Techs: "neutral and directional air
+  // dodges can be used for every form of teching during the first 15 frames").
+  //
+  // No speed cap, and that cannot turn something that should bounce into a
+  // tech: only a fighter in hitstun bounces, and an air dodge out of hitstun
+  // needs its launch under 2.5 (the hitstun cancel, Task 7), already under the
+  // floor's cap of 3 and the wall's of 6. Only out of `tumbleFall` can a dodge
+  // carry more than 3, and the other outcome there is lying down, never a
+  // bounce (DAMAGE_FALL has no reflect); a launch still over 3 when the hitstun
+  // ends needs knockback of about 310 or more (Task 12's 0.0096 × kb estimate).
+  //
+  // UNVERIFIED: the vanilla function itself is not published, and WuBor's
+  // check also needs a shield press within `passive_trigger_frame` (12)
+  // (`sub_check_passive_button_for_damage`, `escape_air.rs` L158-167), which
+  // the replica does not ask: a dodge from a press buffered into the hitstun
+  // cancel techs a floor 13 frames after that press here, where that gate would
+  // not.
   const techable = before.dodgeTech || before.speed <= (floor ? TECH_FLOOR_MAX_SPEED : TECH_SURFACE_MAX_SPEED);
   const input = before.dodgeTech || f.combat.techWindow > 0 || (floor && intent.shieldHeld);
   if (input && techable) {
