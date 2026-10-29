@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { P1, readFighters, startFromTitle, startMatchFromMenu } from "./helpers";
+import { P1, readFighters, startFromTitle, startMatchFromMenu, stepFrames } from "./helpers";
 
 /**
  * Does rebinding a key actually change which key plays the game?
@@ -39,7 +39,9 @@ test("a rebound key drives the fighter, and the old one stops", async ({ page })
 
   await page.getByRole("button", { name: /back to the main menu/i }).click();
   await page.waitForURL("**/menu");
-  await startMatchFromMenu(page);
+  // Stepped: the keys below are held for counted simulation frames, not for
+  // milliseconds, so a loaded machine cannot stretch or shrink the hold.
+  await startMatchFromMenu(page, { stepped: true });
 
   // Which action states the fighter passes through while a key is held.
   //
@@ -52,7 +54,7 @@ test("a rebound key drives the fighter, and the old one stops", async ({ page })
     const seen = new Set<string>();
     await page.keyboard.down(code);
     for (let i = 0; i < 6; i++) {
-      await page.waitForTimeout(60);
+      await stepFrames(page, 4);
       seen.add((await readFighters(page))[0].action);
     }
     await page.keyboard.up(code);

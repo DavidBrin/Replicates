@@ -54,13 +54,6 @@ export async function startFromTitle(page: Page): Promise<void> {
   await page.waitForURL(`**${ROUTES.menu}`);
 }
 
-/** Hold a key for `frames` at 60Hz, which is how a real input is expressed. */
-export async function holdFor(page: Page, code: string, frames: number): Promise<void> {
-  await page.keyboard.down(code);
-  await page.waitForTimeout((frames / 60) * 1000);
-  await page.keyboard.up(code);
-}
-
 /**
  * One fighter as the simulation holds it, in floats.
  *
@@ -98,20 +91,73 @@ export async function simFrame(page: Page): Promise<number> {
 }
 
 /**
- * Hold a key until the *simulation* has run `frames` more frames, however long
- * that takes on the wall clock. `holdFor` counts wall-clock time, which a
- * loaded machine stretches into fewer simulated frames than it asked for; a
- * test that has to land a hit cannot afford that.
+ * Stop the match's own clock, so the simulation runs only when a test steps it
+ * (`stepFrames`). Keys are still pressed the way a player presses them, through
+ * the page's real listeners; what the test takes over is *when* a frame runs,
+ * which a wall-clock wait cannot promise. A loaded machine stretches
+ * `waitForTimeout(150)` into fewer simulated frames than 150ms holds, and a
+ * key let go late lands on a different frame each run, so a CPU that answers
+ * what it sees fights a different fight each run. (`scripts/fightsheet.mjs`
+ * hand-cranks a match the same way, D46.)
+ *
+ * Idempotent. `startMatch(page, { stepped: true })` calls it; a test only
+ * calls it for a match it started some other way, before any `stepFrames`: a
+ * clock left running would add its own frames to every step.
+ */
+export async function pauseMatch(page: Page): Promise<void> {
+  await page.evaluate(() => (window as unknown as { __smashDebug: { pause(): void } }).__smashDebug.pause());
+}
+
+/** Run exactly `frames` simulation frames, with whatever keys are held, and no others. Needs `pauseMatch`. */
+export async function stepFrames(page: Page, frames: number): Promise<void> {
+  await page.evaluate((n) => (window as unknown as { __smashDebug: { step(n: number): void } }).__smashDebug.step(n), frames);
+}
+
+/**
+ * Run the paused match up to simulation frame `target`, with no key held.
+ *
+ * A match's state at a given frame depends only on the inputs before it, and a
+ * test that has pressed nothing has given none, so the match stands in the same
+ * state whichever frame `pauseMatch` happened to stop on. A test that wants the
+ * same fight every run starts its inputs from here. A match already past
+ * `target` is left where it is.
+ */
+export async function stepToFrame(page: Page, target: number): Promise<void> {
+  const frame = await simFrame(page);
+  if (frame < target) await stepFrames(page, target - frame);
+}
+
+/**
+ * Hold a key for exactly `frames` simulation frames: pressed before the first,
+ * released after the last. Needs `pauseMatch`. The key goes down and up through
+ * the page's real key listeners, and a press arrives as both a held key and a
+ * fresh press on its first frame, as it does for a player.
  */
 export async function holdForFrames(page: Page, code: string, frames: number): Promise<void> {
-  const target = (await simFrame(page)) + frames;
   await page.keyboard.down(code);
-  await page.waitForFunction(
-    (t) => ((window as unknown as { __smashDebug?: DebugHandle }).__smashDebug?.frame ?? 0) >= t,
-    target,
-  );
+  await stepFrames(page, frames);
   await page.keyboard.up(code);
 }
+
+/**
+ * How a test gets its match.
+ *
+ * By default the match runs on its own clock, and the test reads it whenever it
+ * likes: right for a test that only needs *a* match on screen. A test whose
+ * inputs have to land on particular frames asks for `stepped` instead: the
+ * clock stops as the match mounts, the fighters walk on (`READY_FRAME`), and
+ * the match stays still until the test cranks it (`stepFrames`).
+ */
+export interface MatchOptions {
+  readonly stepped?: boolean;
+}
+
+/**
+ * The frame a stepped match stands on when `startMatch` hands it over: past the
+ * entry (`ENTRY_FRAMES`, 12) and where a match on its own clock was about to be
+ * read, a second after the page came up. The same frame every run.
+ */
+export const READY_FRAME = 72;
 
 /**
  * Walk the real menu path into a running match: one human on port 0 and a CPU
@@ -119,9 +165,9 @@ export async function holdForFrames(page: Page, code: string, frames: number): P
  * first. Deliberately not a deep link — the match configuration lives in a
  * client-side store, so `/play` loaded cold has nothing to run.
  */
-export async function startMatch(page: Page): Promise<void> {
+export async function startMatch(page: Page, options: MatchOptions = {}): Promise<void> {
   await startFromTitle(page);
-  await startMatchFromMenu(page);
+  await startMatchFromMenu(page, options);
 }
 
 /**
@@ -131,7 +177,7 @@ export async function startMatch(page: Page): Promise<void> {
  * binding, say — and cannot afford a fresh `page.goto`, since the match
  * configuration lives in a client-side store that a reload would wipe.
  */
-export async function startMatchFromMenu(page: Page): Promise<void> {
+export async function startMatchFromMenu(page: Page, options: MatchOptions = {}): Promise<void> {
   await page.getByRole("button", { name: /smash/i }).first().click();
   await page.waitForURL(`**${ROUTES.rules}`);
   await page.getByRole("button", { name: /next|stage|continue/i }).first().click();
@@ -147,7 +193,17 @@ export async function startMatchFromMenu(page: Page): Promise<void> {
 
   await page.getByRole("button", { name: /ready|fight/i }).first().click();
   await page.waitForURL(`**${ROUTES.play}`);
-  await waitForMatch(page);
+  if (options.stepped) {
+    // As soon as the match exists, so the frames it ran before the clock
+    // stopped are few (the match only moves on its own clock until this
+    // returns). The rest it does with no key held, so wherever it stopped, it
+    // stands in the same state once `READY_FRAME` is reached.
+    await page.waitForFunction(() => Boolean((window as unknown as { __smashDebug?: unknown }).__smashDebug));
+    await pauseMatch(page);
+    await stepToFrame(page, READY_FRAME);
+  } else {
+    await waitForMatch(page);
+  }
 }
 
 /** Wait until the match canvas has actually started painting. */
