@@ -1,7 +1,10 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { MAX_DRAW_CALLS, MAX_TRIANGLES_PER_FRAME } from "../src/render3d/budget";
-import { P1, ROUTES, pauseMatch, simFrame, startFromTitle, startMatch, startMatchFromMenu, waitForMatch } from "./helpers";
+import { MAX_DRAW_CALLS, MAX_FIGHTER_PRIMITIVES, MAX_TRIANGLES_PER_FRAME } from "../src/render3d/budget";
+import { parseModelIndex } from "../src/render3d/models/loader";
+import { SKELETONS } from "../src/render3d/skeletons";
+import { getStage } from "../src/stages";
+import { P1, ROUTES, pauseMatch, simFrame, simStageId, startFromTitle, startMatch, startMatchFromMenu, waitForMatch } from "./helpers";
 
 /**
  * The 3D renderer in a real browser (Plan 4, Task 22).
@@ -25,13 +28,26 @@ import { P1, ROUTES, pauseMatch, simFrame, startFromTitle, startMatch, startMatc
  *   everywhere.
  * - The context, resize and DPR tests do not look at what the fighters are
  *   drawn with.
- * - The budget test asks the page's own server for the model index
- *   (`/models/index.json`) and expects exactly what it lists: a fighter in the
- *   index is drawn from its glb, one that is not (or every one, with no index)
- *   as a stand-in. The same match also runs with the models taken away, so the
- *   stand-ins' own cost is held to the budget on every machine too.
+ * - The budget test asks the page's own server which of its four fighters have
+ *   a model: one has it if the index (which the loader must accept) lists it
+ *   and its glb answers 200. A fighter with a model is expected as its glb;
+ *   any other (no index, an index the loader refuses, a listed glb the server
+ *   lacks) as a stand-in. The same match also runs with the models taken away,
+ *   so the stand-ins' own cost is held to the budget on every machine too.
  *   `REQUIRE_MODELS=1` (after `pnpm models`) refuses a degrade: every fighter
- *   must be its glb.
+ *   must be its glb. A glb that is served but that the page cannot load (a
+ *   length or hash the index does not match) is not a missing model: that
+ *   fails, because `pnpm models:check` would too.
+ *
+ * ## Drawn, not just counted
+ *
+ * A frame's draw calls are known by construction (`renderer3d.ts`): one per
+ * stage platform, one batch each for the sparks and bursts, the shields and
+ * the blob shadows, and the fighters: a stand-in is one mesh per hurt capsule
+ * of its skeleton, a glb is between one primitive and `MAX_FIGHTER_PRIMITIVES`.
+ * So a fighter is seen to draw by a bound on calls that nothing else reaches
+ * (`callRange`): with the capsules never attached a match is the stage and its
+ * batches, 7 calls on Battlefield, and a bare `calls > 0` is met by that alone.
  */
 
 type FighterKind = "glb" | "standIn" | "loading";
@@ -61,6 +77,56 @@ async function framesAdvance(page: Page): Promise<void> {
 
 /** The page's own error screen (`play/page.tsx`); Next's route announcer is a `role="alert"` too, so this asks by its words. */
 const matchFailed = (page: Page) => page.getByText("THE MATCH COULD NOT START");
+
+/** The batches a frame draws besides the stage and the fighters: sparks and bursts, shields, blob shadows (`renderer3d.ts`). */
+const BATCH_CALLS = 3;
+
+/**
+ * The draw calls a frame costs, as the range its parts allow: the stage's
+ * platforms (`stage3d.ts`: one mesh each), the fighters, and at most the three
+ * batches. A stand-in is one mesh per hurt capsule of its fighter's skeleton
+ * (`standInModel`), always all of them; a glb is one to `MAX_FIGHTER_PRIMITIVES`.
+ * `min` is above everything the stage and the batches can draw alone, so a frame
+ * at or over it has fighters in it; `max` is what the parts can draw at most, so
+ * a part drawn twice is over it.
+ */
+function callRange(platforms: number, fighters: readonly { id: string; kind: "glb" | "standIn" }[]): { min: number; max: number } {
+  let fewest = 0;
+  let most = 0;
+  for (const { id, kind } of fighters) {
+    const capsules = SKELETONS[id].hurt.length;
+    fewest += kind === "glb" ? 1 : capsules;
+    most += kind === "glb" ? MAX_FIGHTER_PRIMITIVES : capsules;
+  }
+  const range = { min: platforms + fewest, max: platforms + BATCH_CALLS + most };
+  // The floor is only worth having if the stage and its batches cannot reach it.
+  expect(range.min, "a floor that only drawn fighters reach").toBeGreaterThan(platforms + BATCH_CALLS);
+  return range;
+}
+
+/** The stage of the running match: how many platforms it has. */
+async function stagePlatforms(page: Page): Promise<number> {
+  const id = await simStageId(page);
+  const stage = getStage(id);
+  if (stage === undefined) throw new Error(`the match is on a stage the game does not know: "${id}"`);
+  return stage.platforms.length;
+}
+
+/** Poll until the frame's draw calls are within what its parts allow (`callRange`): the fighters are drawn, each once. */
+async function expectDrawn(page: Page, range: { min: number; max: number }, what: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const calls = (await renderInfo(page))?.calls ?? 0;
+        return calls >= range.min && calls <= range.max ? "within" : `${calls} calls, outside ${range.min}..${range.max}`;
+      },
+      { message: what },
+    )
+    .toBe("within");
+}
+
+/** The fighters a plain `startMatch` picks: the first two tiles of the select screen. */
+const DEFAULT_PAIR = ["mario", "donkeyKong"] as const;
 
 /** A request for the models directory (`/models/index.json` or a glb), and nothing else the app serves. */
 const isModelRequest = (url: URL): boolean => url.pathname.startsWith("/models/");
@@ -133,8 +199,8 @@ test.describe("stand-ins when the models are not there", () => {
     // Both fighters settle on their stand-in: neither is stuck "loading", and the match started.
     await expect.poll(async () => (await renderInfo(page))?.fighters ?? []).toEqual(["standIn", "standIn"]);
     await framesAdvance(page);
-    // A stand-in is drawn, not skipped.
-    expect((await renderInfo(page))?.calls ?? 0).toBeGreaterThan(0);
+    // A stand-in is drawn, not skipped: every capsule of both, once, on top of the stage.
+    await expectDrawn(page, callRange(await stagePlatforms(page), DEFAULT_PAIR.map((id) => ({ id, kind: "standIn" }))), "both stand-ins drawn");
     await expect(matchFailed(page)).toHaveCount(0);
     expect(seen.pageErrors).toEqual([]);
     // Said once per fighter, naming it, so a missing model is never silent.
@@ -154,12 +220,16 @@ test.describe("stand-ins when the models are not there", () => {
 
     await expect.poll(async () => (await renderInfo(page))?.fighters ?? []).toEqual(["standIn", "standIn"]);
     await framesAdvance(page);
+    await expectDrawn(page, callRange(await stagePlatforms(page), DEFAULT_PAIR.map((id) => ({ id, kind: "standIn" }))), "both stand-ins drawn");
     await expect(matchFailed(page)).toHaveCount(0);
     expect(seen.pageErrors).toEqual([]);
     expect(standInsWarnedOf(seen.warnings)).toHaveLength(2);
     expect(seen.warnings.some((w) => w.includes("HTTP 404"))).toBe(true);
   });
 });
+
+/** Longest a restore may take to show: three compiles every program again on the first frame, which a loaded machine stretches. */
+const AFTER_RESTORE_MS = 15_000;
 
 test.describe("a lost WebGL context", () => {
   test("pauses painting, keeps the sim running, and paints again after the restore", async ({ page }) => {
@@ -193,7 +263,11 @@ test.describe("a lost WebGL context", () => {
       await expect.poll(async () => (await renderInfo(page))?.lost, label).toBe(true);
       expect(await isLost(), label).toBe(true);
 
-      // Lost: not one draw call is issued across half a second of the match, and the sim runs on.
+      // Lost: not one draw call is issued across half a second of the match, and the sim runs on. This is the
+      // net behaviour, three's own guard and the presenter's together: no browser-side signal tells them apart
+      // (`info().lost` is the presenter's flag, and `info().calls` stays what it was). The presenter's own guard
+      // is pinned in `renderer3d.test.ts`, "stops painting while the WebGL context is lost and resumes when it
+      // is restored", whose fake GL has none.
       const lost = await glCounts(page);
       await framesAdvance(page);
       expect((await glCounts(page)).draws, `${label}: nothing painted while lost`).toBe(lost.draws);
@@ -201,13 +275,13 @@ test.describe("a lost WebGL context", () => {
       await expect(matchFailed(page), label).toHaveCount(0);
 
       await page.evaluate(() => (window as unknown as { __lose: { restore(): void } }).__lose.restore());
-      await expect.poll(async () => (await renderInfo(page))?.lost, label).toBe(false);
+      await expect.poll(async () => (await renderInfo(page))?.lost, { message: label, timeout: AFTER_RESTORE_MS }).toBe(false);
       expect(await isLost(), label).toBe(false);
 
       // Restored: painting resumes, on shaders compiled again (the old programs went with the context), and draws what it drew.
-      await expect.poll(async () => (await glCounts(page)).draws, `${label}: painting resumed`).toBeGreaterThan(lost.draws);
+      await expect.poll(async () => (await glCounts(page)).draws, { message: `${label}: painting resumed`, timeout: AFTER_RESTORE_MS }).toBeGreaterThan(lost.draws);
       expect((await glCounts(page)).links, `${label}: materials recompiled`).toBeGreaterThan(lost.links);
-      await expect.poll(async () => (await renderInfo(page))?.calls ?? 0, label).toBeGreaterThan(0);
+      await expect.poll(async () => (await renderInfo(page))?.calls ?? 0, { message: label, timeout: AFTER_RESTORE_MS }).toBeGreaterThan(0);
       await framesAdvance(page);
     }
 
@@ -220,7 +294,7 @@ test.describe("a lost WebGL context", () => {
     await page.evaluate(() => (window as unknown as { __lose: { lose(): void } }).__lose.lose());
     await expect.poll(async () => (await renderInfo(page))?.lost).toBe(true);
     await page.evaluate(() => (window as unknown as { __lose: { restore(): void } }).__lose.restore());
-    await expect.poll(async () => (await renderInfo(page))?.lost).toBe(false);
+    await expect.poll(async () => (await renderInfo(page))?.lost, { timeout: AFTER_RESTORE_MS }).toBe(false);
     await repaint(page);
     const again = (await renderInfo(page))!;
     expect({ calls: again.calls, triangles: again.triangles }).toEqual({ calls: held.calls, triangles: held.triangles });
@@ -351,16 +425,24 @@ const HEAVIEST_FOUR = [
   { name: "Mario", id: "mario" },
 ] as const;
 
-/** The fighter ids `/models/index.json` lists, or none: a checkout that never ran `pnpm models` serves a 404. */
-async function modelsBuilt(request: APIRequestContext): Promise<ReadonlySet<string>> {
+/**
+ * Which of `ids` the page's own server has a model for: the index is served and
+ * the loader accepts it (`parseModelIndex`), it lists the fighter, and the glb it
+ * names answers 200. A checkout that never ran `pnpm models` serves a 404 for the
+ * index, and a partial one an index over files that are not there: neither is
+ * built, so neither is expected as a glb.
+ */
+async function modelsBuilt(request: APIRequestContext, ids: readonly string[]): Promise<ReadonlySet<string>> {
   const res = await request.get("/models/index.json");
   if (!res.ok()) return new Set();
-  try {
-    const index = (await res.json()) as { models?: Record<string, unknown> };
-    return new Set(Object.keys(index.models ?? {}));
-  } catch {
-    return new Set();
+  const index = parseModelIndex(await res.json().catch(() => null));
+  if (index === null) return new Set();
+  const built = new Set<string>();
+  for (const id of ids) {
+    const entry = Object.hasOwn(index.models, id) ? index.models[id] : undefined;
+    if (entry !== undefined && (await request.get(`/models/${entry.file}`)).ok()) built.add(id);
   }
+  return built;
 }
 
 /** The menu path of `startMatchFromMenu`, with every wait it makes, for a match of four on the first stage. */
@@ -422,7 +504,7 @@ test.describe("four fighters", () => {
 
   for (const drawnAs of ["whatever the build has", "stand-ins"] as const) {
     test(`stay inside the draw-call and triangle budget (${drawnAs})`, async ({ page, request }) => {
-      const built = drawnAs === "stand-ins" ? new Set<string>() : await modelsBuilt(request);
+      const built = drawnAs === "stand-ins" ? new Set<string>() : await modelsBuilt(request, HEAVIEST_FOUR.map((f) => f.id));
       if (drawnAs === "stand-ins") {
         // Every glb and the index 404: the worst case of the fallback, which is what CI and a failed download get.
         await withoutModels(page);
@@ -434,8 +516,9 @@ test.describe("four fighters", () => {
       // Four ports, each drawn as its glb if the build has one and as a stand-in if not: never stuck loading.
       // `REQUIRE_MODELS=1` allows no degrade: against a build that ran `pnpm models`, all four must be glbs.
       const requireGlb = process.env.REQUIRE_MODELS === "1" && drawnAs !== "stand-ins";
-      const want = HEAVIEST_FOUR.map((f) => (requireGlb || built.has(f.id) ? "glb" : "standIn"));
+      const want = HEAVIEST_FOUR.map((f) => (requireGlb || built.has(f.id) ? ("glb" as const) : ("standIn" as const)));
       await expect.poll(async () => (await renderInfo(page))?.fighters).toEqual(want);
+      const range = callRange(await stagePlatforms(page), HEAVIEST_FOUR.map((f, i) => ({ id: f.id, kind: want[i] })));
 
       // The match as it runs on its own clock...
       const live = { calls: 0, triangles: 0 };
@@ -454,10 +537,13 @@ test.describe("four fighters", () => {
 
       const worst = { calls: Math.max(live.calls, stepped.calls), triangles: Math.max(live.triangles, stepped.triangles) };
       test.info().annotations.push({ type: "measured", description: `${drawnAs}: ${worst.calls} calls, ${worst.triangles} triangles, ${stepped.hitFrames} hit frames, ${stepped.shieldFrames} shield frames` });
-      // Something was drawn for every fighter, and the effects were up during the frames that were counted.
-      expect(worst.calls).toBeGreaterThanOrEqual(4);
+      // The effects were up during the frames that were counted...
       expect(stepped.hitFrames).toBeGreaterThan(0);
       expect(stepped.shieldFrames).toBeGreaterThan(0);
+      // ...and the fighters were drawn, each once: more than the stage and the batches alone can reach (stand-ins
+      // that draw nothing are 7 calls on Battlefield), and no more than the parts allow (a part drawn twice is over).
+      expect(worst.calls, "the fighters are drawn").toBeGreaterThanOrEqual(range.min);
+      expect(worst.calls, "no part is drawn twice").toBeLessThanOrEqual(range.max);
       expect(worst.calls).toBeLessThan(MAX_DRAW_CALLS);
       expect(worst.triangles).toBeLessThan(MAX_TRIANGLES_PER_FRAME);
       await expect(matchFailed(page)).toHaveCount(0);
