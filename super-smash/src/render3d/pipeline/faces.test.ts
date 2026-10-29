@@ -115,8 +115,12 @@ describe("this checkout's build (when `pnpm models` has run)", () => {
   const indexFile = join(ROOT, "public", "models", "index.json");
   const index = existsSync(indexFile) ? (JSON.parse(readFileSync(indexFile, "utf8")) as { models: Record<string, { file: string }> }) : null;
   const built = FIGHTER_IDS.filter((id) => existsSync(dumpFile(id)) && index?.models[id] !== undefined);
+  // `skipIf` cannot act on an empty `each`: `it.each([])` registers no test at all, and vitest fails a
+  // file with none ("No test found in suite"). A fresh clone has no build, so its case is one skipped
+  // test, not a red file (final review I1).
+  const cases = built.length > 0 ? built : ["(no local build)"];
 
-  it.skipIf(built.length === 0).each(built)("%s: every face mesh is in the dump, drawn, and its materials pass the face checks", async (id) => {
+  it.skipIf(built.length === 0).each(cases)("%s: every face mesh is in the dump, drawn, and its materials pass the face checks", async (id) => {
     const dump = parseBoneDump(JSON.parse(readFileSync(dumpFile(id), "utf8")));
     const faces = dump.meshes.filter((m) => m.face);
     const base = (name: string) => name.replace(/\.\d+$/, "");
