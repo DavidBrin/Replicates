@@ -388,6 +388,10 @@ export function clampShiftToStage(
     const reach = p.halfWidth;
     // At or above the surface before the shift (the ECB's bottom point decides).
     const wasAbove = prevY + ecb.bottom >= p.y;
+    // Strictly above: `resolveCollision`'s wall test. One level with the surface
+    // beside the stage is at the wall, not landing on it (Plan 3 final wave; the
+    // Task 11 re-review's edge tie).
+    const wasStrictlyAbove = prevY + ecb.bottom > p.y;
     if (p.soft) {
       if (wasAbove && f.y + ecb.bottom < p.y && abs(f.x - cx) <= reach) f.y = p.y - ecb.bottom;
       continue;
@@ -398,8 +402,10 @@ export function clampShiftToStage(
       abs(x - cx) < body && y + ecb.bottom < p.y && y + ecb.top > bottom;
     if (inside(prevX, prevY) || !inside(f.x, f.y)) continue;
     // From above and now over the span: it lands, as `resolveCollision`'s landing
-    // test lands it, even if its origin started past the edge (the lip).
-    if (wasAbove && abs(f.x - cx) <= reach) f.y = p.y - ecb.bottom;
+    // test lands it, even if its origin started past the edge (the lip). Strictly
+    // above, as there: a fighter level with the surface past the edge is pushed
+    // out sideways below, as `resolveCollision`'s wall pushes it.
+    if (wasStrictlyAbove && abs(f.x - cx) <= reach) f.y = p.y - ecb.bottom;
     else if (abs(prevX - cx) > reach) f.x = prevX <= cx ? cx - body : cx + body;
     else if (wasAbove) f.y = p.y - ecb.bottom;
     else f.y = bottom - ecb.top;

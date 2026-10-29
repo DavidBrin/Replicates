@@ -687,12 +687,11 @@ export const SDI_COMBO_RATIO: Ratio = [23, 20];
  * Automatic SDI: on the last frame of hitlag from an electric or paralyzing
  * hit that does not launch between 70° and 110°, the victim shifts toward the
  * held stick (SmashWiki "Smash directional influence", Ultimate).
- * UNVERIFIED: Ultimate's exact distance. The page gives ASDI as 1.33 units in
- * Smash 4 (SDI 2 units, down from 6; ASDI down from 3) and says Ultimate's SDI
- * "retains its shorter distance from Smash 4", but it states no Ultimate ASDI
- * distance. It also says ASDI "now applies twice against moves with these
- * effects", which is not modelled. Half an SDI pulse, 1 unit, is the plan's
- * stand-in; 1.33 is the one published figure.
+ * 1.33 units: the page gives Smash 4's as "1.33 units with ASDI (down from 3)",
+ * and of Ultimate says "SDI retains its shorter distance from Smash 4" (Plan 3
+ * final wave; the Task 11 ruling). UNVERIFIED: Ultimate's exact distance, which
+ * the page does not state for ASDI. It also says ASDI "now applies twice against
+ * moves with these effects", which is not modelled.
  */
-export const ASDI_DISTANCE = fx(1);
+export const ASDI_DISTANCE = fx(1.33);
 export const ASDI_VERTICAL = [fx(70), fx(110)] as const;

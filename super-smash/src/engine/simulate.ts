@@ -110,6 +110,7 @@ import {
   grabLedge,
   hasSuperArmour,
   interpretInput,
+  isCatchStatus,
   isHolding,
   isParrying,
   onLanded,
@@ -661,8 +662,9 @@ export function step(
   // A fighter whose status is not a holding one has let go, whatever its link
   // says: a clank cancels a pummel and leaves `grabbing` set, and carrying the
   // victim from then on drags it off the stage with the captor (Plan 3, Task 14).
-  for (const f of s.fighters) {
-    if (f.grabbing >= 0 && f.action !== "dead" && !isHolding(f.action)) releaseHeld(f, s.fighters);
+  for (let i = 0; i < s.fighters.length; i++) {
+    const f = s.fighters[i];
+    if (f.grabbing >= 0 && f.action !== "dead" && !isHolding(f, defs[i])) releaseHeld(f, s.fighters);
   }
 
   /* -- 4. physics ---------------------------------------------------------- */
@@ -695,7 +697,7 @@ export function step(
       defs[i].attributes,
       s.frame,
       // The catch statuses stop at the edge instead of walking off it.
-      { cliffStop: isHolding(f.action) },
+      { cliffStop: isCatchStatus(f.action) },
     );
     // A tumbling body that meets a surface techs or bounces (Plan 3, Task 12);
     // otherwise a landing is a landing — a missed tech lies down in `onLanded`.
@@ -1569,8 +1571,10 @@ function autolinkOf(victim: FighterState, hb: Hitbox, c: Candidate, attacker: Fi
     pull,
     momentumX: c.projectile !== null ? c.projectile.vx : attacker.vx,
     momentumY: c.projectile !== null ? c.projectile.vy : attacker.vy,
-    pointX: pull ? c.x + Math.trunc(c.dx / 2) : 0,
-    pointY: pull ? c.y + Math.trunc(c.dy / 2) : 0,
+    // Halved once, from both ends together, so the two orders of an odd
+    // extent give the same point (Task 19 re-review N1).
+    pointX: pull ? Math.trunc((2 * c.x + c.dx) / 2) : 0,
+    pointY: pull ? Math.trunc((2 * c.y + c.dy) / 2) : 0,
   };
 }
 
@@ -1651,6 +1655,23 @@ function vectorWorldAngle(x: number, y: number, facing: number): number {
     }
   }
   return best;
+}
+
+/**
+ * Which way a launch kept through a weaker hit goes (`HitEvent.angle`): one still
+ * parked in the freeze, its own angle as its hit reported it (undecided by DI
+ * yet); one in flight, the world direction of its vector, after the keep has
+ * turned it (`kineticTurnLaunch`).
+ */
+function keptLaunchAngle(victim: FighterState, facing: number): number {
+  if (victim.pendingFacing !== 0) {
+    if (victim.combat.autolink) {
+      const link = autolinkVector(parkedAutolink(victim.combat), victim.x, victim.y);
+      return vectorWorldAngle(link.vx, link.vy, victim.pendingFacing);
+    }
+    return launchWorldAngle(victim.pendingAngle, victim.pendingFacing);
+  }
+  return vectorWorldAngle(victim.kinetic.damageX, victim.kinetic.damageY, facing);
 }
 
 function clearPendingLaunch(f: FighterState): void {
@@ -1951,9 +1972,6 @@ function applyHit(
 
   /* ---- the damage path ---- */
   victim.damage += damage;
-  // "Characters can only air dodge once until they land, get hit, or grab a
-  // ledge" (SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge). Plan 3, Task 7.
-  victim.airDodged = false;
 
   /* ---- the super-armour path ---- */
   //
@@ -1983,6 +2001,13 @@ function applyHit(
     });
     return;
   }
+
+  // "Characters can only air dodge once until they land, get hit, or grab a
+  // ledge" (SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge). Plan 3, Task 7.
+  // Below the armour: a hit armour takes is not one that gets the fighter hit
+  // out of anything (Plan 3 final wave; the Task 7 review's minor). UNVERIFIED:
+  // that reading of "get hit".
+  victim.airDodged = false;
 
   const crouchCancel = isCrouching(victim);
 
@@ -2067,7 +2092,9 @@ function applyHit(
       x: c.x,
       y: c.y,
       knockback: verdict === "keep" ? kb : 0,
-      angle: 0,
+      // A kept launch goes on the way it goes, and the spark says so (Plan 3 final
+      // wave; the Task 8 review's minor). One armoured through launches nothing new.
+      angle: verdict === "keep" ? keptLaunchAngle(victim, sourceFacing) : 0,
       hitboxId: hb.id,
     });
     return;
@@ -2125,6 +2152,10 @@ function applyHit(
   victim.ledge = null;
   victim.ledgeRegrabs = 0;
   victim.fastFalling = false;
+  // A launch ends a short hop as it ends a fast fall: an aerial thrown out of the
+  // hitstun (Task 7) is not a short hop's, and deals 1x (Plan 3 final wave; the
+  // final review's Minor 3).
+  victim.shortHop = false;
   // Hitlag freezes both parties to a melee exchange. A projectile's owner is not
   // a party to it — freezing Link when his arrow connects across the stage would
   // give the opponent a free frame every time they walked into one.

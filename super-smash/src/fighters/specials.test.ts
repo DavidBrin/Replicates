@@ -529,3 +529,44 @@ describe("Donkey Kong's Headbutt", () => {
     expect(after.slice(1).every((f, i) => f.hitstun === after[i].hitstun - 1)).toBe(true);
   });
 });
+
+/**
+ * Kirby's Inhale, until Plan 5 Task 9 builds it (Plan 3 final wave, part 2, item 7;
+ * the Task 14 re-review's minor). Its neutral special catches with a grab box, and the
+ * guard that lets a captor's victim go once the captor stops holding released the
+ * victim one frame after the catch. UNVERIFIED stand-in: `special` holds while its
+ * move owns a catch box, so the victim is held for the whole inhale and let go when it
+ * ends, with the usual 60 frames of grab immunity.
+ */
+describe("Kirby's Inhale holds its victim for the move", () => {
+  it("holds Mario from the catch to the end of the inhale, then lets him go", () => {
+    let s = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "mario" }], RULES, 0x1a4e);
+    for (const f of s.fighters) {
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: fx(0), intangible: 0, invincible: 0 });
+    }
+    Object.assign(s.fighters[0], { x: fx(0), facing: 1 });
+    Object.assign(s.fighters[1], { x: fx(7), facing: -1 });
+    const kirby = FIGHTERS.find((f) => f.id === "kirby")!;
+    const total = kirby.moves.neutralB!.totalFrames;
+    let prev: [number, number] = [0, 0];
+    const states: GameState[] = [];
+    for (let i = 0; i < total + 5; i++) {
+      const inputs: [number, number] = [i === 0 ? Btn.Special : 0, 0];
+      s = step(s, inputs, { prevInputs: prev }).state;
+      prev = inputs;
+      states.push(s);
+    }
+    const caught = states.findIndex((t) => t.fighters[1].grabbedBy === 0);
+    expect(caught, "the inhale should catch Mario").toBeGreaterThan(0);
+    const inhaling = states.slice(caught).filter((t) => t.fighters[0].action === "special");
+    expect(inhaling.length).toBeGreaterThan(20);
+    for (const t of inhaling) {
+      expect(t.fighters[0].grabbing, `frame ${t.frame}`).toBe(1);
+      expect(t.fighters[1]).toMatchObject({ action: "grabbed", grabbedBy: 0 });
+    }
+    const after = states.find((t, i) => i > caught && t.fighters[0].action !== "special")!;
+    expect(after.fighters[0].grabbing).toBe(-1);
+    expect(after.fighters[1].grabbedBy).toBe(-1);
+    expect(after.fighters[1].combat.grabImmune).toBeGreaterThan(50);
+  });
+});

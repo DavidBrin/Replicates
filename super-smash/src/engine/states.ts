@@ -789,12 +789,30 @@ export function finishLedgeOption(f: FighterState, intent: Intent, ctx: StateCon
 }
 
 /**
- * The statuses a captor can be in and still be holding someone: CATCH, CATCH_WAIT,
- * CATCH_ATTACK and THROW. A fighter in any other status with `grabbing` set has
- * stopped holding (a clank cancelled the pummel, say), and the link ends there.
+ * The catch statuses: CATCH, CATCH_WAIT, CATCH_ATTACK and THROW, the ones that
+ * stop at a cliff (`CollisionOptions.cliffStop`).
  */
-export function isHolding(action: ActionState): boolean {
+export function isCatchStatus(action: ActionState): boolean {
   return action === "grab" || action === "grabHold" || action === "pummel" || action === "throw";
+}
+
+/**
+ * Is `f` in a status a captor can be in and still be holding someone? The catch
+ * statuses (`isCatchStatus`). A fighter in any other status with `grabbing` set
+ * has stopped holding (a clank cancelled the pummel, say), and the link ends
+ * there.
+ *
+ * And `special`, while its move owns a catch box: Kirby's Inhale catches with
+ * one, and holds its victim for the move, which lets it go when it ends (Plan 3
+ * final wave; the Task 14 re-review's minor, where the guard let go one frame
+ * after the catch). UNVERIFIED: a stand-in for Inhale's own statuses, which Plan
+ * 5 Task 9 builds and which replace it. It does not stop at a cliff: that is the
+ * catch statuses' alone.
+ */
+export function isHolding(f: Pick<FighterState, "action" | "move">, def: FighterDef): boolean {
+  if (isCatchStatus(f.action)) return true;
+  if (f.action !== "special" || f.move === null) return false;
+  return def.moves[f.move]?.hitboxes.some((h) => h.grabbing === true) ?? false;
 }
 
 /**
@@ -1083,7 +1101,11 @@ export function trumpLedge(f: FighterState, clearance: number): void {
   if (f.ledge !== null) f.x += f.ledge.side * clearance;
   f.ledge = null;
   f.intangible = 0;
-  f.ledgeLockout = LEDGE_TRUMPED_FRAMES;
+  // One more than the lag: the lockout counts down from the frame after this one,
+  // and the lag's last frame (`actionFrame` LEDGE_TRUMPED_FRAMES) is still one the
+  // fighter cannot act in, so it must not take a ledge then either (Plan 3 final
+  // wave; the final review's Minor 2).
+  f.ledgeLockout = LEDGE_TRUMPED_FRAMES + 1;
   kineticClear(f);
   startAction(f, "ledgeTrumped");
 }

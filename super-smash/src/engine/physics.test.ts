@@ -442,6 +442,22 @@ describe("clampShiftToStage", () => {
     expect(g.x).toBe(fx(-79.5));
   });
 
+  // The edge tie (Task 11 re-review; Plan 3 final wave): a fighter exactly level with the
+  // surface, beside the stage, is at the wall in `resolveCollision` ("Strictly above"), so
+  // a shift that carries it back over the span pushes it out sideways there too.
+  it("pushes a fighter level with the surface beside the stage out sideways, as the wall does", () => {
+    const battlefield: StageDef = {
+      ...STAGE,
+      platforms: [{ x: 0, y: 0, halfWidth: fx(79.99), soft: false, ledges: true }],
+    };
+    const f = shifted(fighter({ x: fx(-79.5), y: fx(-2) }), fx(-81.5), 0, battlefield);
+    const g = fighter({ x: fx(-79.5), y: fx(-2) });
+    const out = resolveCollision(g, fx(-81.5), 0, battlefield, ATTRS, 0);
+    expect(out.landed).toBe(false);
+    expect([g.x, g.y]).toEqual([fx(-79.99) - ATTRS.width, fx(-2)]);
+    expect([f.x, f.y]).toEqual([g.x, g.y]);
+  });
+
   it("stops a fighter that was under the stage at its underside", () => {
     const head = ATTRS.height;
     const f = shifted(fighter({ x: 0, y: -HARD_PLATFORM_DEPTH - head + fx(9) }), 0, -HARD_PLATFORM_DEPTH - head - fx(1));

@@ -3224,6 +3224,19 @@ describe("ledge trump (Plan 3, Task 15)", () => {
       }
     });
 
+    // The final review's Minor 2: the lockout ran out on the lag's last frame (`actionFrame`
+    // 30, one it "cannot take any action" in), a frame before the fighter could act. Asked at
+    // the ledge, as below: refused on that frame, and free on the next, the first it acts on.
+    it("is kept off the ledge on the lag's last frame too, and not after it", () => {
+      const { frames, at } = trump(LEDGE_TRUMPED_FRAMES + 3);
+      const atLedge = (i: number): FighterState => ({ ...frames[i].state.fighters[hanger], x: fx(84), y: fx(-2), vy: -fx(1), grounded: false });
+      const last = at + LEDGE_TRUMPED_FRAMES;
+      expect(frames[last].state.fighters[hanger].actionFrame).toBe(0);
+      expect(frames[last - 1].state.fighters[hanger]).toMatchObject({ action: "ledgeTrumped", actionFrame: LEDGE_TRUMPED_FRAMES - 1 });
+      expect(findLedgeGrab(atLedge(last), STAGE, frames[last].state.frame, ATTRS.width)).toBeNull();
+      expect(findLedgeGrab(atLedge(last + 1), STAGE, frames[last + 1].state.frame, ATTRS.width)).not.toBeNull();
+    });
+
     // The fall takes the fighter out of the grab box within a dozen frames, so a lockout
     // that ran short would not show above: ask `findLedgeGrab` at the ledge instead.
     it("is kept off every ledge for the whole lag, wherever it is", () => {
@@ -5274,5 +5287,121 @@ describe("a hitlag multiplier below 1x counts as 1x on a shield (final wave, par
     const lag = computeHitlag(JAB_DAMAGE, { moveMultiplier: fx(0.3) });
     expect(lag).toBeLessThan(computeHitlag(JAB_DAMAGE, { shielding: true }));
     expect(freezes(JAB)).toEqual([lag, lag]);
+  });
+});
+
+describe("the smaller engine items (final wave, part 2, item 7)", () => {
+  // SmashWiki "Smash directional influence" (https://www.ssbwiki.com/Smash_directional_influence):
+  // Smash 4's ASDI is "1.33 units with ASDI (down from 3)", and Ultimate's "SDI retains its
+  // shorter distance from Smash 4". UNVERIFIED: Ultimate's exact ASDI distance (Task 11 ruling).
+  it("shifts 1.33 units on an automatic SDI", () => {
+    expect(ASDI_DISTANCE).toBe(fx(1.33));
+    expect(ASDI_DISTANCE).toBe(5448);
+  });
+
+  // The Task 7 review's minor. SmashWiki "Air dodge": once "until they land, get hit, or grab a
+  // ledge". UNVERIFIED: that a hit armour takes is not "get hit": it does not take the launch.
+  it("gives the air dodge back for a hit that launches, not for one armour takes", () => {
+    const aloftIn = (action: ActionState, slot: MoveDef["slot"] | null) => {
+      const s = standing();
+      Object.assign(s.fighters[1], { action, move: slot, actionFrame: 2, y: fx(2), grounded: false, platform: -1, airDodged: true, jumpsUsed: 1 });
+      const hit = play(s, 8, JAB).find((f) => f.events.hits.length > 0)!;
+      return { knockback: hit.events.hits[0].knockback, airDodged: hit.state.fighters[1].airDodged };
+    };
+    // Down special is armoured on its frames 1-30 (`BASE_DEF`).
+    expect(aloftIn("special", "downB")).toEqual({ knockback: 0, airDodged: true });
+    const launched = aloftIn("fall", null);
+    expect(launched.knockback).toBeGreaterThan(0);
+    expect(launched.airDodged).toBe(false);
+  });
+
+  /** The hit event's direction is along `x`, `y`: their cross product with its unit vector is ~0, the dot positive. */
+  const along = (angle: number, x: number, y: number): void => {
+    expect(Math.abs(x * sinDeg(angle) - y * cosDeg(angle)) / Math.hypot(x, y)).toBeLessThan(0.0025 * ONE);
+    expect(x * cosDeg(angle) + y * sinDeg(angle)).toBeGreaterThan(0);
+  };
+
+  // The Task 8 review's minor: a hit that keeps the launch it meets reported angle 0.
+  describe("a kept launch's hit reports the way the kept launch goes", () => {
+    /**
+     * Three fighters: 0 far away, 1 the victim, 2 jabs it from x 0 on its first frame with a
+     * set 60 knockback (a launch of 1.8): between 0.5 and 0.9 of the victim's own, so it keeps it.
+     */
+    const three = (prepare: (v: FighterState) => void) => {
+      const quick: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, jab1: move("jab1", { hitboxes: [hitbox({ startFrame: 1, radius: fx(10), baseKnockback: fx(60), knockbackGrowth: 0 })] }) },
+      };
+      const ctx = ctxFor(quick);
+      const s = createInitialState("flat", [{ defId: "tester" }, { defId: "tester" }, { defId: "tester" }], RULES, 12345, ctx);
+      [{ x: fx(-60), facing: 1 }, { x: fx(8), facing: -1 }, { x: 0, facing: 1 }].forEach((place, i) => {
+        Object.assign(s.fighters[i], place, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: 0, intangible: 0 });
+      });
+      const v = s.fighters[1];
+      v.combat.launchSource = 0;
+      prepare(v);
+      const frames = play(s, 4, (i) => [0, 0, i === 0 ? Btn.Attack : 0], ctx);
+      return frames[frames.findIndex((f) => f.events.hits.length > 0)];
+    };
+
+    it("for a launch in flight: along its vector, turned by the hit", () => {
+      const hit = three((v) => {
+        Object.assign(v, { grounded: false, platform: -1, y: fx(1), action: "tumble", hitstun: 50 });
+        v.kinetic.damageX = -fx(1.5);
+        v.kinetic.damageY = fx(2.6);
+        v.launchSpeed = fx(3);
+        v.vx = -fx(1.5);
+        v.vy = fx(2.6);
+      });
+      expect(hit.events.hits[0].knockback).toBeGreaterThan(0);
+      const k = hit.state.fighters[1].kinetic;
+      along(hit.events.hits[0].angle, k.damageX, k.damageY);
+    });
+
+    it("for a launch still parked in the freeze: its own angle, as its hit reported it", () => {
+      const hit = three((v) => {
+        Object.assign(v, { action: "tumble", hitstun: 50, hitlag: 6, pendingKnockback: fx(70), pendingAngle: fx(80), pendingFacing: -1 });
+      });
+      expect(hit.events.hits[0].knockback).toBeGreaterThan(0);
+      expect(hit.state.fighters[1].pendingAngle).toBe(fx(80));
+      expect(hit.events.hits[0].angle).toBe(fx(100));
+    });
+  });
+
+  // Task 19 re-review N1: the midpoint of a capsule whose extent is an odd number of Q12
+  // units was 1 unit apart for its two orders (`c.x + trunc(dx / 2)`).
+  it("pulls a 367 victim toward the same capsule centre whichever end comes first, for an odd extent", () => {
+    const capsule = (y: number, z: number, y2: number, z2: number) => {
+      const ctx = ctxFor({
+        ...BASE_DEF,
+        scripts: {
+          jab1: {
+            name: "game_attack11",
+            motion: "attack_11",
+            commands: [frame(4), ATTACK({ id: 0, bone: "top", damage: 2, angle: 367, kbg: 100, bkb: 40, size: 5, x: 0, y, z, y2, z2, x2: 0 }), frame(7), clearAll()],
+          },
+        },
+      });
+      const s = standing(ctx);
+      Object.assign(s.fighters[1], { x: fx(12), y: fx(2), grounded: false, platform: -1, action: "fall" });
+      const frames = play(s, 30, JAB, ctx);
+      return frames[frames.findIndex((f) => f.events.hits.length > 0)];
+    };
+    // One Q12 unit past 14 forward (script Z is forward), so the horizontal extent is odd.
+    const odd = 14 + 1 / ONE;
+    const near = capsule(2, 2, 10, odd);
+    const far = capsule(10, odd, 2, 2);
+    expect((far.events.hits[0].x - near.events.hits[0].x) % 2).not.toBe(0);
+    const at = (h: Frame) => [h.state.fighters[1].combat.autolinkPointX, h.state.fighters[1].combat.autolinkPointY];
+    expect(at(far)).toEqual(at(near));
+  });
+
+  // The final review's Minor 3: a hit that launches a short hop's fighter ends the hop,
+  // so an aerial out of the hitstun (Task 7) deals 1x, not the short hop's 0.85x.
+  it("ends a short hop, as it ends a fast fall, when a hit launches the fighter", () => {
+    const s = standing();
+    Object.assign(s.fighters[1], { action: "fall", y: fx(2), grounded: false, platform: -1, shortHop: true, fastFalling: true, jumpsUsed: 1 });
+    const hit = play(s, 8, JAB).find((f) => f.events.hits.length > 0)!;
+    expect(hit.state.fighters[1]).toMatchObject({ shortHop: false, fastFalling: false });
   });
 });
