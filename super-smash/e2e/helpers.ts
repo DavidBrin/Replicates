@@ -203,7 +203,9 @@ export async function startMatchFromMenu(page: Page, options: MatchOptions = {})
     // As soon as the match exists, so the frames it ran before the clock
     // stopped are few (the match only moves on its own clock until this
     // returns). The rest it does with no key held, so wherever it stopped, it
-    // stands in the same state once `READY_FRAME` is reached.
+    // stands in the same state once `READY_FRAME` is reached. With the 3D
+    // world (Plan 4) the match exists before its fighters are ready; a pause
+    // taken then holds, and the clock never starts on its own.
     await page.waitForFunction(() => Boolean((window as unknown as { __smashDebug?: unknown }).__smashDebug));
     await pauseMatch(page);
     await stepToFrame(page, READY_FRAME);
@@ -212,11 +214,18 @@ export async function startMatchFromMenu(page: Page, options: MatchOptions = {})
   }
 }
 
-/** Wait until the match canvas has actually started painting. */
+/**
+ * Wait until the match is actually running and past the entry animation.
+ *
+ * With the 3D renderer (Plan 4) a match starts only once its fighters' models
+ * (or stand-ins) are ready, which takes a variable time — so this waits on the
+ * simulation's own frame counter rather than on the wall clock: 70 frames is
+ * past the 12-frame entry and the landing that follows it, so the fighters are
+ * standing on the stage when the test presses anything.
+ */
 export async function waitForMatch(page: Page): Promise<void> {
   await page.getByLabel("Match").waitFor();
-  // One second of real time is sixty simulation frames — comfortably past the
-  // entry animation, so a screenshot taken after this shows fighters on stage
-  // rather than mid-spawn.
-  await page.waitForTimeout(1200);
+  await page.waitForFunction(() => ((window as unknown as { __smashDebug?: { frame: number } }).__smashDebug?.frame ?? 0) >= 70, undefined, {
+    timeout: 30_000,
+  });
 }

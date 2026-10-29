@@ -15,10 +15,17 @@
  * session's transport with a rollback session; that is decided once, at
  * mount, because leaving an online match resets the very stores a local match
  * would otherwise restart from.
+ *
+ * The world is drawn in 3D (Plan 4): three stacked canvases inside the
+ * `aria-label="Match"` element — the stage's sky, the WebGL world, and the 2D
+ * overlay with the HUD and every effect. A match mounts once the bake is
+ * installed and the 3D code (its own chunk, `useWorld3d`) has loaded, and its
+ * clock starts once every fighter has a model or a stand-in.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { BakeTables } from "@/engine/acmd/bakeTables";
 import type { MatchOutcome, MatchRules, StageDef } from "@/engine/types";
 import { toFloat } from "@/engine/fixed";
 import {
@@ -27,9 +34,15 @@ import {
   type NetplayOptions,
   type PlayerSlot as RunnerSlot,
 } from "@/game/matchRunner";
-import { bootstrapEngine, getFighterOrThrow, resolveFighterId, resolveMatchStage, schemeForMenuId } from "@/game/bootstrap";
+import { bootstrapEngine, resolveFighterId, resolveMatchStage, schemeForMenuId } from "@/game/bootstrap";
 import { startLinkMonitor } from "@/game/linkMonitor";
 import { runnerSlotsFor } from "@/game/onlineConfig";
+import { GAME_SIM_CONTEXT } from "@/game/simContext";
+import { useBake } from "@/game/useBake";
+import { useWorld3d, type World3dModule } from "@/game/useWorld3d";
+// Types only: the module itself (and three.js) arrives through `useWorld3d`'s `import()`.
+import type { WorldLayers } from "@/game/world3d";
+import type { Presenter3D } from "@/render3d/renderer3d";
 import { createKeyboardInput, type KeyboardInput } from "@/input/keyboard";
 import { createGamepadInput, padPortMap, type GamepadInput } from "@/input/gamepad";
 import { AudioEngine } from "@/audio";
@@ -66,6 +79,16 @@ const RESULT_DELAY_MS = 2400;
 
 /** How often the HUD's ping, delay and rollback numbers refresh. */
 const NET_STATS_MS = 250;
+
+/**
+ * Online, the longest a match waits for its fighters' models before playing the
+ * rest as stand-ins (ruling R3). The peer whose models came first stands at its
+ * prediction cap until this one starts, and its link monitor calls the match
+ * lost after `STALL_LOST_MS` (10 s) without a confirmed frame: half that leaves
+ * room for the two starts landing apart. A local match waits on the loader's
+ * own timeouts instead (`MODEL_TIMEOUT_MS` per request).
+ */
+const ONLINE_MODEL_WAIT_MS = 5_000;
 
 interface StatTracker {
   readonly kos: number[];
@@ -133,12 +156,33 @@ interface MountArgs {
   readonly gamepad: GamepadInput | null;
   readonly net: NetplayOptions | null;
   readonly onResult: (result: MatchResult) => void;
+  /** The WebGL and background canvases under `canvas` (Plan 4). */
+  readonly layers: WorldLayers;
+  readonly bake: BakeTables;
+  /** `world3d.ts`, loaded by `useWorld3d` (three.js in its own chunk). */
+  readonly world: World3dModule;
+  /** The longest the match waits for models (online, ruling R3); absent, the loader's own timeouts. */
+  readonly modelWaitMs?: number;
+  /** Every fighter has a model or a stand-in; the match has started. */
+  readonly onReady: () => void;
+  readonly onError: (message: string) => void;
 }
+
+/**
+ * What holds a match's clock: the pause menu, a test or `fightsheet.mjs`
+ * hand-cranking it (`__smashDebug.pause`), or the match being over before it
+ * could start (refused, abandoned).
+ */
+type Hold = "menu" | "debug" | "over";
 
 interface Mounted {
   readonly runner: MatchRunner;
+  /** Hold the clock for `reason`, or let it go; it runs once the fighters are ready and nothing holds it. */
+  hold(reason: Hold, held: boolean): void;
   dispose(): void;
 }
+
+const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
  * The runner and everything that hangs off it — sound, kill credit, the e2e
@@ -146,6 +190,24 @@ interface Mounted {
  */
 function mountMatch(args: MountArgs): Mounted {
   const { canvas, slots, ports } = args;
+
+  // The 3D world under the overlay (Plan 4), drawing the game's fighters — the
+  // same defs, limb-bone scripts and all, that the sim steps. First, so a page
+  // that cannot draw it (no WebGL) has nothing else to release.
+  const presenter: Presenter3D = args.world.createWorld(
+    args.layers,
+    args.stage,
+    slots.map((s) => GAME_SIM_CONTEXT.fighter(s.selection.defId)),
+    args.bake,
+    args.modelWaitMs === undefined ? {} : { modelWaitMs: args.modelWaitMs },
+  );
+  let stopFollowing: () => void;
+  try {
+    stopFollowing = args.world.followSize(args.layers.gl, presenter);
+  } catch (e) {
+    presenter.dispose();
+    throw e;
+  }
 
   // Every sound in the game is synthesised on demand, so there is nothing
   // to preload and no reason to build the context before it can be heard.
@@ -184,11 +246,14 @@ function mountMatch(args: MountArgs): Mounted {
       players: slots,
       rules: args.rules,
       seed: args.seed,
-      getFighter: getFighterOrThrow,
+      // The game's fighters, as the 3D world draws them: limb-bone scripts and all.
+      getFighter: (id) => GAME_SIM_CONTEXT.fighter(id),
       keyboard: args.keyboard,
       gamepad: args.gamepad,
       net: args.net,
       audio,
+      presenter,
+      background: args.layers.background,
       onFrame: (state, events) => {
         // The canvas is opaque to an end-to-end test, so the frame counter is
         // published deliberately: it is the one honest signal that the
@@ -228,8 +293,35 @@ function mountMatch(args: MountArgs): Mounted {
     });
   } catch (e) {
     releaseAudio();
+    stopFollowing();
+    presenter.dispose();
     throw e;
   }
+
+  let disposed = false;
+  /** Every fighter has a model or a stand-in, and the runner has its canvas. */
+  let ready = false;
+  let ticking = false;
+  const holds = new Set<Hold>();
+  /**
+   * Run the clock exactly when the fighters are ready and nothing holds it. A
+   * hold placed while the models load is kept: the match must not start behind
+   * the pause menu, nor start ticking under a test that has already taken the
+   * clock (DISPATCH-NOTES 20.4).
+   */
+  const syncClock = () => {
+    if (disposed || !ready) return;
+    const run = holds.size === 0;
+    if (run === ticking) return;
+    ticking = run;
+    if (run) runner.start(canvas);
+    else runner.stop();
+  };
+  const hold = (reason: Hold, held: boolean) => {
+    if (held) holds.add(reason);
+    else holds.delete(reason);
+    syncClock();
+  };
 
   // How an end-to-end test sees the simulation. Accessors rather than a
   // per-frame snapshot: publishing a fresh object 60 times a second would put
@@ -241,9 +333,11 @@ function mountMatch(args: MountArgs): Mounted {
     get stageId() {
       return runner.state.stageId;
     },
-    // Hand-cranking the loop, for looking at a single frame (D46).
-    pause: () => runner.stop(),
-    resume: () => runner.start(canvas),
+    // Hand-cranking the loop, for looking at a single frame (D46). A pause
+    // taken while the fighters load holds: the match never starts its own
+    // clock under a test's steps.
+    pause: () => hold("debug", true),
+    resume: () => hold("debug", false),
     step: (n = 1) => runner.advance(n),
     screenPositions: () =>
       runner.state.fighters.map((f) => {
@@ -252,7 +346,8 @@ function mountMatch(args: MountArgs): Mounted {
       }),
     moveFrames: () =>
       runner.state.fighters.map((f) => {
-        const def = f.move ? getFighterOrThrow(f.defId) : null;
+        // The game's def: a limb slot's length is its script's, not the legacy table's.
+        const def = f.move ? GAME_SIM_CONTEXT.fighter(f.defId) : null;
         return { port: f.port, move: f.move, total: (f.move && def?.moves[f.move]?.totalFrames) ?? 0 };
       }),
     fighters: () =>
@@ -271,28 +366,64 @@ function mountMatch(args: MountArgs): Mounted {
       })),
   };
 
+  // What the 3D layer is doing, for e2e (Plan 4): draw calls, triangles, buffer, lost context, models.
+  (window as unknown as { __smashRender?: unknown }).__smashRender = { info: () => presenter.info() };
+
   const mounted: Mounted = {
     runner,
+    hold,
     dispose() {
+      // Once: a start that failed disposes here, and the page's cleanup comes later.
+      if (disposed) return;
+      disposed = true;
+      stopFollowing();
+      // Frees the presenter too (`MatchRunner.dispose`).
       runner.dispose();
       releaseAudio();
       delete (window as unknown as { __smashDebug?: unknown }).__smashDebug;
+      delete (window as unknown as { __smashRender?: unknown }).__smashRender;
     },
   };
-  try {
-    runner.start(canvas);
-  } catch (e) {
+  const failed = (e: unknown) => {
+    if (disposed) return;
     mounted.dispose();
-    throw e;
-  }
+    args.onError(messageOf(e));
+  };
+
+  // The match starts once every fighter has its model or a stand-in, so nobody
+  // plays the first second against an invisible opponent. Locally that can take
+  // the loader's whole timeout twice over (the index, then the glb); it always
+  // ends, in a model or a stand-in. A fighter that cannot be drawn at all is an
+  // error the page shows, not a match that never starts.
+  void presenter.ready.then(() => {
+    if (disposed) return;
+    ready = true;
+    args.onReady();
+    try {
+      // Started even when a hold is in: that is what hands the runner its
+      // canvas, so a held match still paints the frames a test steps. A hold
+      // stops it again before it has run a frame.
+      runner.start(canvas);
+      ticking = true;
+      syncClock();
+      if (!ticking) runner.redraw();
+    } catch (e) {
+      failed(e);
+    }
+  }, failed);
   return mounted;
 }
 
 export default function PlayPage() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const glRef = useRef<HTMLCanvasElement | null>(null);
+  const bgRef = useRef<HTMLCanvasElement | null>(null);
   const runnerRef = useRef<MatchRunner | null>(null);
+  const mountedRef = useRef<Mounted | null>(null);
   const keyboardRef = useRef<KeyboardInput | null>(null);
+  const bake = useBake();
+  const { world, error: worldError } = useWorld3d();
 
   const players = useMatchConfig((s) => s.players);
   const stageId = useMatchConfig((s) => s.stageId);
@@ -312,6 +443,9 @@ export default function PlayPage() {
   const [linkHealth, setLinkHealth] = useState<LinkHealth>("ok");
   const [peerAway, setPeerAway] = useState(false);
   const [stalled, setStalled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  // A bake that fails its digest says "…does not match this version of the game. Reload the page."
+  const shownError = error ?? bake.error ?? worldError;
 
   /** Cancels the hand-off to the results screen while it waits out the KO's play-out. */
   const cancelResultRef = useRef<(() => void) | null>(null);
@@ -344,7 +478,10 @@ export default function PlayPage() {
   useEffect(() => {
     if (online || stranded) return;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const gl = glRef.current;
+    const background = bgRef.current;
+    if (!canvas || !gl || !background || bake.tables === null || world === null) return;
+    const tables = bake.tables;
 
     let mounted: Mounted | null = null;
     let keyboard: KeyboardInput | null = null;
@@ -399,8 +536,14 @@ export default function PlayPage() {
           setResult(result);
           resultTimer = window.setTimeout(() => router.push("/results"), RESULT_DELAY_MS);
         },
+        layers: { gl, background },
+        bake: tables,
+        world,
+        onReady: () => setLoading(false),
+        onError: (message) => setError(message),
       });
       runnerRef.current = mounted.runner;
+      mountedRef.current = mounted;
     } catch (e) {
       // Deferred out of the effect body: setting state synchronously here
       // cascades a second render before the first has committed.
@@ -416,9 +559,10 @@ export default function PlayPage() {
       keyboard?.detach();
       gamepad?.detach();
       runnerRef.current = null;
+      mountedRef.current = null;
       keyboardRef.current = null;
     };
-  }, [online, stranded, players, stageId, stageForm, rules, bindings, router, setResult]);
+  }, [online, stranded, players, stageId, stageForm, rules, bindings, router, setResult, bake.tables, world]);
 
   /* ----------------------------------------------------------- online match -- */
 
@@ -454,7 +598,10 @@ export default function PlayPage() {
       return;
     }
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const gl = glRef.current;
+    const background = bgRef.current;
+    if (!canvas || !gl || !background || bake.tables === null || world === null) return;
+    const tables = bake.tables;
 
     let mounted: Mounted | null = null;
     let stopMonitor: (() => void) | null = null;
@@ -473,7 +620,7 @@ export default function PlayPage() {
      */
     const abandon = (kind: "connectionLost" | "desync") => {
       if (finished) return;
-      mounted?.runner.stop();
+      mounted?.hold("over", true);
       finish(
         {
           kind,
@@ -496,7 +643,7 @@ export default function PlayPage() {
       if (finished) return;
       finished = true;
       stopMonitor?.();
-      mounted?.runner.stop();
+      mounted?.hold("over", true);
       setError(roomErrorMessage(reason, session.roomCode));
     };
     const offRefusal = session.on((event) => {
@@ -551,20 +698,31 @@ export default function PlayPage() {
           },
         },
         onResult: (result) => finish(result, RESULT_DELAY_MS),
+        layers: { gl, background },
+        bake: tables,
+        world,
+        modelWaitMs: ONLINE_MODEL_WAIT_MS,
+        onReady: () => {
+          setLoading(false);
+          // Watched from its start, not from mount (ruling R3): a model still
+          // loading is not a stalled link. Nothing to watch once it is over.
+          if (finished) return;
+          stopMonitor = startLinkMonitor({
+            transport: session.transport,
+            session,
+            // A match stuck with packets still arriving is lost too.
+            confirmedFrame: () => runner.netStats?.confirmedFrame ?? -1,
+            onHealth: (health, away) => {
+              setLinkHealth(health);
+              setPeerAway(away);
+            },
+            onLost: () => abandon("connectionLost"),
+          });
+        },
+        onError: (message) => setError(message),
       });
       const runner = mounted.runner;
       runnerRef.current = runner;
-      stopMonitor = startLinkMonitor({
-        transport: session.transport,
-        session,
-        // A match stuck with packets still arriving is lost too.
-        confirmedFrame: () => runner.netStats?.confirmedFrame ?? -1,
-        onHealth: (health, away) => {
-          setLinkHealth(health);
-          setPeerAway(away);
-        },
-        onLost: () => abandon("connectionLost"),
-      });
       statsTimer = window.setInterval(() => {
         setNetStats(runner.netStats);
         // Sampled with the numbers: the HUD times the stall itself.
@@ -605,7 +763,7 @@ export default function PlayPage() {
         }, 0);
       }
     };
-  }, [online, bindings, router, setResult]);
+  }, [online, bindings, router, setResult, bake.tables, world]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -614,11 +772,8 @@ export default function PlayPage() {
         const next = !p;
         // An online match cannot pause — the other player's game would stall
         // behind this one — so Esc only brings up the way out.
-        if (!online) {
-          const canvas = canvasRef.current;
-          if (next) runnerRef.current?.stop();
-          else if (canvas) runnerRef.current?.start(canvas);
-        }
+        // Held rather than stopped: Esc while the fighters load keeps the match from starting behind the menu.
+        if (!online) mountedRef.current?.hold("menu", next);
         return next;
       });
     }
@@ -628,23 +783,29 @@ export default function PlayPage() {
 
   return (
     <main className="relative flex h-dvh w-full items-center justify-center bg-black">
-      <canvas
-        ref={canvasRef}
-        width={INTERNAL_WIDTH}
-        height={INTERNAL_HEIGHT}
-        aria-label="Match"
-        className="h-full w-full"
-      />
+      {/* Three layers, one picture: the stage's sky, the 3D world, then the 2D
+          overlay (HUD, tags, effects). Each 16:9, stretched to the same box, so
+          they line up whatever the window's shape. */}
+      <div aria-label="Match" className="relative h-full w-full">
+        <canvas ref={bgRef} data-layer="background" width={INTERNAL_WIDTH} height={INTERNAL_HEIGHT} className="absolute inset-0 h-full w-full" />
+        <canvas ref={glRef} data-layer="world" className="absolute inset-0 h-full w-full" />
+        <canvas ref={canvasRef} data-layer="overlay" width={INTERNAL_WIDTH} height={INTERNAL_HEIGHT} className="absolute inset-0 h-full w-full" />
+        {loading && !shownError && (
+          <p role="status" className="absolute inset-x-0 bottom-8 text-center font-menu text-sm text-white/70">
+            Loading fighters…
+          </p>
+        )}
+      </div>
 
-      {online && !error ? <NetHud stats={netStats} health={linkHealth} peerAway={peerAway} stalled={stalled} /> : null}
+      {online && !shownError ? <NetHud stats={netStats} health={linkHealth} peerAway={peerAway} stalled={stalled} /> : null}
 
-      {error && (
+      {shownError && (
         <div
           role="alert"
           className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 p-8 text-center"
         >
           <p className="font-display text-3xl text-smash-yellow">THE MATCH COULD NOT START</p>
-          <p className="max-w-lg font-menu text-sm text-white/80">{error}</p>
+          <p className="max-w-lg font-menu text-sm text-white/80">{shownError}</p>
           <button
             onClick={quit}
             className="mt-2 skew-x-[-12deg] bg-smash-red px-6 py-2 font-display text-xl text-white"
@@ -654,7 +815,7 @@ export default function PlayPage() {
         </div>
       )}
 
-      {paused && !error && (
+      {paused && !shownError && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70">
           <p className="font-display text-5xl tracking-widest text-white">{online ? "MENU" : "PAUSED"}</p>
           <p className="font-menu text-sm text-white/70">

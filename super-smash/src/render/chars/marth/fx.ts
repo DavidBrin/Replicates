@@ -25,23 +25,25 @@
  * called what it is.
  *
  * `fighters/marth.ts` expresses the mechanic without a flag: two hitboxes on the
- * same frames, the tip placed further out and given the **lower `id`**, because
- * `bestHitbox` resolves overlaps by lowest id. Nothing else in the file says
- * "tipper".
+ * same frames, the tip placed further out and dealing more. Nothing else in the
+ * file says "tipper". Its own tables give the tip the lower `id`; the published
+ * scripts the game runs (Plan 3's, and Plan 4's limb-bone ones) number it
+ * *last* — the highest id on all nine of his limb-bone moves, id 1 of three on
+ * Dancing Blade — so the id order says nothing about which box is the point.
  *
- * So the graphic uses the same rule the simulation does. `sweetspotOf` below
- * takes the live hitboxes on this frame, picks the lowest id — the one that
- * *would* win — and paints it only when some other live box sits closer to the
- * shoulder, i.e. only when there is genuinely a sweetspot to distinguish from a
- * sourspot. That makes the flash derived rather than authored: it cannot claim
- * a tipper on a move that has none, it moves if the frame data moves, and it
- * needs no per-move table.
+ * What does is the damage: the tipper is the box that deals the most.
+ * `sweetspotOf` below takes the live hitboxes on this frame, picks the
+ * strongest (the one furthest out on a tie), and paints it only when some other
+ * live box sits closer to the shoulder, i.e. only when there is genuinely a
+ * sweetspot to distinguish from a sourspot. That makes the flash derived rather
+ * than authored: it cannot claim a tipper on a move that has none, it moves if
+ * the frame data moves, and it needs no per-move table.
  *
  * It falls out of that rule that the moves without a sweetspot paint nothing —
  * Dolphin Slash, whose two hitboxes never share a frame, and Counter, which has
  * one — and that Down Air flashes *below and behind* him on frame 11, because
- * on that one frame the lowest-id box is the meteor rather than the point. Both
- * are correct: they are what the engine would hit with.
+ * on that one frame the strongest box is the meteor rather than the point. Both
+ * are correct: the meteor is what the move pays out on that frame.
  *
  * ## Live, landed, and beaten
  *
@@ -71,41 +73,60 @@ const TIP_TAIL = 4;
 const TIP_HOT = "#F2FDFF";
 const TIP_COOL = "#5FD8FF";
 
+/** The tipper on one frame: the box drawn as the point, where the blade's body starts, and every box that pays as much. */
+interface Sweetspot {
+  readonly tip: Hitbox;
+  readonly inner: BladePoint;
+  /** Ids of the live boxes as strong as the tip: a hit by any of them is a tipper. */
+  readonly tipIds: ReadonlySet<number>;
+}
+
 /**
- * The hitbox that would win an overlap on this frame, if there is a sweetspot
- * to be had.
+ * The tipper on this frame, if there is a sweetspot to be had.
  *
- * Mirrors `bestHitbox` in `engine/hitbox.ts` — lowest id wins — and then asks
- * one further question the engine does not have to: is there another live box
- * *closer in*? Without that, every single-hitbox move would flash as though its
+ * The strongest live box (Task 13 review, carried to Task 20): the tip is what
+ * pays, and the scripts the game runs number it last, so `bestHitbox`'s lowest
+ * id would mark a sourspot. Two equally strong boxes are both the tip; the one
+ * further out (then the lower id) is the one drawn. Then one further question
+ * the engine does not have to ask: is there a weaker live box *closer in*, the
+ * sourspot? Without that, every single-hitbox move would flash as though its
  * whole blade were a sweetspot, which is exactly the lie this graphic exists to
  * avoid telling.
  *
  * "Closer in" is measured from the shoulder rather than along x, because Up
  * Smash's tip is high rather than far — x = 1.5, y = 17 — and a horizontal test
- * would pick the scooping hitbox at his ankles instead. Each box is measured at
- * its point (`pointOf`): a capsule's far end when that is the end further out.
+ * would pick the scooping hitbox at his ankles instead. The tip is measured at
+ * its point (`pointOf`: a capsule's far end when that is the end further out);
+ * a sourspot at its hilt end (`hiltOf`), because a script's sourspot capsule
+ * can run the whole blade, out past the tip's own (his down tilt's does).
  */
-function sweetspotOf(boxes: readonly Hitbox[], shoulder: number): { tip: Hitbox; inner: Hitbox } | null {
+function sweetspotOf(boxes: readonly Hitbox[], shoulder: number): Sweetspot | null {
+  const reach = (hb: Hitbox) => pointOf(hb, shoulder).reach;
   let best: Hitbox | null = null;
   for (const hb of boxes) {
     if (hb.grabbing) continue;
-    if (best === null || hb.id < best.id) best = hb;
+    if (best === null || hb.damage > best.damage) best = hb;
+    else if (hb.damage === best.damage) {
+      const out = reach(hb) - reach(best);
+      if (out > 0 || (out === 0 && hb.id < best.id)) best = hb;
+    }
   }
   if (best === null) return null;
   const tip = best;
-  const reach = (hb: Hitbox) => pointOf(hb, shoulder).reach;
   const far = reach(tip);
-  // The nearest-in box that is genuinely closer. It is both the test for "is
-  // there a sweetspot at all" and, because it sits on the body of the blade, the
-  // inner end of the segment the edge-light runs along.
-  let inner: Hitbox | null = null;
+  // The nearest-in weaker box that is genuinely closer. It is both the test for
+  // "is there a sweetspot at all" and, because it sits on the body of the blade,
+  // the inner end of the segment the edge-light runs along.
+  let inner: BladePoint | null = null;
   for (const hb of boxes) {
-    if (hb.grabbing || hb.id === tip.id) continue;
-    if (reach(hb) >= far - 0.5) continue;
-    if (inner === null || reach(hb) > reach(inner)) inner = hb;
+    if (hb.grabbing || hb.damage >= tip.damage) continue;
+    const hilt = hiltOf(hb, shoulder);
+    if (hilt.reach >= far - 0.5) continue;
+    if (inner === null || hilt.reach > inner.reach) inner = hilt;
   }
-  return inner === null ? null : { tip, inner };
+  if (inner === null) return null;
+  const tipIds = new Set(boxes.filter((hb) => !hb.grabbing && hb.damage === tip.damage).map((hb) => hb.id));
+  return { tip, inner, tipIds };
 }
 
 /** A box's point, in world units, and how far it is from the shoulder. */
@@ -123,11 +144,26 @@ interface BladePoint {
  * as well as the near one.
  */
 function pointOf(hb: Hitbox, shoulder: number): BladePoint {
-  const near = { x: toFloat(hb.x), y: toFloat(hb.y) };
-  const far = { x: toFloat(hb.x2 ?? hb.x), y: toFloat(hb.y2 ?? hb.y) };
-  const nearReach = Math.hypot(near.x, near.y - shoulder);
-  const farReach = Math.hypot(far.x, far.y - shoulder);
-  return farReach > nearReach ? { ...far, reach: farReach } : { ...near, reach: nearReach };
+  const [a, b] = endsOf(hb, shoulder);
+  return b.reach > a.reach ? b : a;
+}
+
+/** The end of a box nearest the shoulder: a sphere's centre, or a capsule's inner end. */
+function hiltOf(hb: Hitbox, shoulder: number): BladePoint {
+  const [a, b] = endsOf(hb, shoulder);
+  return b.reach < a.reach ? b : a;
+}
+
+/** A box's two ends as written (a sphere's are one point), each with its reach from the shoulder. */
+function endsOf(hb: Hitbox, shoulder: number): [BladePoint, BladePoint] {
+  const end = (x: number, y: number): BladePoint => ({ x, y, reach: Math.hypot(x, y - shoulder) });
+  return [end(toFloat(hb.x), toFloat(hb.y)), end(toFloat(hb.x2 ?? hb.x), toFloat(hb.y2 ?? hb.y))];
+}
+
+/** Whether a box of `hb`'s id is live on the frame after `hb` ends: the same box, moved on. */
+function continues(boxes: readonly Hitbox[], hb: Hitbox): boolean {
+  const next = hb.endFrame + 1;
+  return boxes.some((other) => other.id === hb.id && other.startFrame <= next && next <= other.endFrame);
 }
 
 /** Live hitboxes on `frame`, counted the way the frame data is. */
@@ -188,12 +224,12 @@ function strengthFor(hb: Hitbox, frame: number): number {
  * produces: it freezes the attacker without a hit event, so falling back on
  * `hitlag` there bloomed a sourspot that had been shielded.
  */
-function tipStrength(c: FxContext, hb: Hitbox): number {
+function tipStrength(c: FxContext, tipIds: ReadonlySet<number>): number {
   const hit = c.struckWith;
   if (hit === undefined) return c.f.hitlag > 0 ? 1 : 0.42;
-  if (hit === hb.id) return 1;
   if (hit === null) return 0.42;
-  return 0; // a different box won this swing — the point stays dark
+  if (tipIds.has(hit)) return 1;
+  return 0; // a weaker box won this swing — the point stays dark
 }
 
 /**
@@ -355,12 +391,16 @@ const tipper: FxFn = (c) => {
   for (const hb of move.hitboxes) {
     const k = strengthFor(hb, c.frame);
     if (k <= 0) continue;
+    // A box the script moves is one entry per position (Plan 4): only its last
+    // fades out. One that carries on next frame as the same id is still the
+    // live point, drawn where it is now, not a trail of where it was.
+    if (c.frame > hb.endFrame && continues(move.hitboxes, hb)) continue;
     // Re-derive the winner from the frame this box *started* on, so a box still
     // in its tail is judged against the company it actually kept.
     const at = Math.min(c.frame, hb.endFrame);
     const pair = sweetspotOf(liveOn(move.hitboxes, at), shoulder);
     if (pair === null || pair.tip !== hb) continue;
-    const s = tipStrength(c, hb);
+    const s = tipStrength(c, pair.tipIds);
     if (s <= 0) continue;
     const { inner } = pair;
     // `over`, not under. The point of the blade is not always out in clear air:
@@ -370,7 +410,7 @@ const tipper: FxFn = (c) => {
     // flash the fighter is standing on top of.
     const point = pointOf(hb, shoulder);
     c.over(() => {
-      paintEdge(c, pointOf(inner, shoulder), point, k);
+      paintEdge(c, inner, point, k);
       paintTip(c, point, k, s);
     });
   }

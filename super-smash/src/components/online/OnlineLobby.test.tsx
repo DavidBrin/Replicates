@@ -11,6 +11,18 @@ import { fakeSession, type FakeSession } from "@/net/online/testing";
 import type { Role, RoomIntent } from "@/net/signalProtocol";
 import { OnlineLobby, type OpenSession } from "./OnlineLobby";
 
+/**
+ * The bake, stood in for (Plan 4, ruling R2): the lobby installs it before it
+ * opens a room. By default it is in at once; a test can hold it back or fail it.
+ */
+const bake = vi.hoisted(() => ({ next: null as Promise<unknown> | null, calls: 0 }));
+vi.mock("@/game/bake", () => ({
+  ensureBakeInstalled: () => {
+    bake.calls += 1;
+    return bake.next ?? Promise.resolve({});
+  },
+}));
+
 type Opened = FakeSession & { readonly code: string; readonly intent: RoomIntent };
 
 function harness() {
@@ -54,10 +66,59 @@ async function join(code: string) {
 beforeEach(() => {
   leaveOnline();
   routerMock.push.mockClear();
+  bake.next = null;
+  bake.calls = 0;
 });
 
 afterEach(() => {
   window.history.replaceState({}, "", "/");
+});
+
+describe("OnlineLobby, the bake first (Plan 4)", () => {
+  it("starts loading the bake as the screen opens", async () => {
+    harness();
+    await act(async () => {});
+    expect(bake.calls).toBeGreaterThan(0);
+  });
+
+  /**
+   * Installing the bake changes this build's engine fingerprint. The first
+   * `hello` a session says must carry the bake's, or the other side refuses
+   * this build for good, so no room opens until it is in.
+   */
+  it("opens the room only once the bake is installed, showing it is connecting meanwhile", async () => {
+    let install!: () => void;
+    bake.next = new Promise<void>((resolve) => (install = resolve));
+    const { openSession } = harness();
+    await create();
+    expect(useOnlineStore.getState().status).toBe("connecting");
+    expect(screen.getByRole("status")).toHaveTextContent(/Connecting to room/);
+    expect(openSession).not.toHaveBeenCalled();
+    await act(async () => install());
+    expect(openSession).toHaveBeenCalledOnce();
+  });
+
+  it("says the bake's own sentence when it cannot load, and opens no room", async () => {
+    const sentence = "The fighters' animation data does not match this version of the game. Reload the page.";
+    bake.next = Promise.reject(new Error(sentence));
+    const { openSession } = harness();
+    await join("ABCD");
+    expect(openSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(sentence);
+    expect(useOnlineStore.getState().status).toBe("error");
+    // The player can try again.
+    expect(screen.getByRole("button", { name: /join room/i })).toBeInTheDocument();
+  });
+
+  it("opens nothing for a player who left while the bake loaded", async () => {
+    let install!: () => void;
+    bake.next = new Promise<void>((resolve) => (install = resolve));
+    const { openSession } = harness();
+    await create();
+    fireEvent.click(screen.getByRole("button", { name: "Back to the main menu" }));
+    await act(async () => install());
+    expect(openSession).not.toHaveBeenCalled();
+  });
 });
 
 describe("OnlineLobby", () => {
@@ -501,5 +562,31 @@ describe("OnlineLobby", () => {
     });
     expect(screen.getByTestId("room-code")).toHaveTextContent(opened[0].code);
     expect(screen.getByRole("status")).toHaveTextContent("They are in. Opening a direct connection…");
+  });
+});
+
+/**
+ * Ruling R2 end to end, with the real bake installed by the lobby's own
+ * `connect`: the first `hello` the room hears already carries the bake's
+ * engine fingerprint, not the legacy one a page has before the bake is in.
+ * Last in the file: it leaves the bake installed for the module's lifetime.
+ */
+describe("OnlineLobby, the first hello", () => {
+  it("carries the bake's fingerprint, not the one the page started with", async () => {
+    const legacy = localBuild();
+    const real = await vi.importActual<typeof import("@/game/bake")>("@/game/bake");
+    const { readBakeFromDisk } = await import("@/game/bakeNode");
+    bake.next = Promise.resolve().then(() => real.installBake(readBakeFromDisk()));
+    const { opened } = harness();
+    await create();
+    act(() => {
+      opened[0].emit({ type: "joined", role: "host" });
+      opened[0].emit({ type: "peer", present: true });
+      opened[0].emit({ type: "link", status: "open" });
+    });
+    const hello = opened[0].sent.find((m) => m.kind === "hello");
+    expect(hello).toEqual({ kind: "hello", ...localBuild() });
+    expect(hello).not.toMatchObject({ bones: legacy.bones });
+    expect(hello).not.toMatchObject({ engineRules: legacy.engineRules });
   });
 });

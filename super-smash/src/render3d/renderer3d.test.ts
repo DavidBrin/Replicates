@@ -86,7 +86,6 @@ function fakeGL(canvas: HTMLCanvasElement) {
       gl.look?.(scene);
     }),
     dispose: vi.fn(),
-    forceContextLoss: vi.fn(),
   };
   return gl satisfies GLLike;
 }
@@ -127,10 +126,10 @@ function capCache(ids: readonly string[], warn = vi.fn()): ModelCache {
 
 const RULES = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: false } as const;
 
-function setup(opts: { models?: ModelCache; stageId?: string } = {}) {
+function setup(opts: { models?: ModelCache; stageId?: string; canvas?: HTMLCanvasElement } = {}) {
   bootstrapEngine();
   const stage = stageOf(opts.stageId ?? "battlefield");
-  const canvas = document.createElement("canvas");
+  const canvas = opts.canvas ?? document.createElement("canvas");
   let gl!: ReturnType<typeof fakeGL>;
   const warn = vi.fn();
   const presenter = createRenderer3D({
@@ -360,11 +359,10 @@ describe("the 3D presenter", () => {
     presenter.paint(rs, createCamera(stage), 0, []);
     expect(gl().render).toHaveBeenCalledOnce();
 
-    // A loss the browser never gives back: the match ends with the context already gone, and nothing to lose again.
+    // A loss the browser never gives back: the match ends with the context already gone.
     canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     presenter.dispose();
     expect(gl().dispose).toHaveBeenCalledOnce();
-    expect(gl().forceContextLoss).not.toHaveBeenCalled();
   });
 
   it("sizes its buffer to the window and the display's pixel ratio, exactly 16:9, never past 1080p (Review Focus #3, Task 14 carry)", () => {
@@ -396,7 +394,7 @@ describe("the 3D presenter", () => {
     expect(presenter.info().buffer).toEqual({ width: 1920, height: 1080 });
   });
 
-  it("detaches every layer, then frees every geometry, material, texture and skeleton it drew, its listeners and the GL context, once", async () => {
+  it("detaches every layer, then frees every geometry, material, texture and skeleton it drew, its listeners and its renderer, once", async () => {
     // Mario and Fox from glbs, Kirby and Donkey Kong as stand-ins: both kinds of fighter.
     const models = capCache(["mario", "fox"]);
     const { presenter, rs, state, stage, gl, canvas } = setup({ models });
@@ -449,15 +447,12 @@ describe("the 3D presenter", () => {
     expect(remove).toHaveBeenCalledWith("webglcontextlost", expect.any(Function), false);
     expect(remove).toHaveBeenCalledWith("webglcontextrestored", expect.any(Function), false);
     expect(gl().dispose).toHaveBeenCalledOnce();
-    expect(gl().forceContextLoss).toHaveBeenCalledOnce();
-    expect(gl().forceContextLoss.mock.invocationCallOrder[0]).toBeGreaterThan(gl().dispose.mock.invocationCallOrder[0]);
 
     gl().render.mockClear();
     presenter.paint(rs, createCamera(stage), 0, []);
     expect(gl().render).not.toHaveBeenCalled();
     presenter.dispose();
     expect(gl().dispose).toHaveBeenCalledOnce();
-    expect(gl().forceContextLoss).toHaveBeenCalledOnce();
     expect([...freed.values()].every((n) => n === 1)).toBe(true);
 
     // The cache's models still draw: the next match's renderer uploads them again.
@@ -467,6 +462,42 @@ describe("the 3D presenter", () => {
     expect(next.presenter.info().fighters).toEqual(["glb", "glb", "standIn", "standIn"]);
     expect(next.presenter.info().triangles).toBeGreaterThanOrEqual(2 * MAX_TRIANGLES);
     next.presenter.dispose();
+  });
+
+  /**
+   * The Task 19 review, ruled in Task 20: `dispose` leaves the canvas's context
+   * usable, because React's development remount (`reactStrictMode`) builds the
+   * next match's presenter on the very same `<canvas>`. The browser half of
+   * this (a second WebGLRenderer drawing on that canvas) is the e2e flow's
+   * "two matches in a row"; here, the sequence and the listeners.
+   */
+  it("lets a second presenter draw on the same canvas once the first is disposed", async () => {
+    const models = capCache(["mario"]);
+    const first = setup({ models });
+    await first.presenter.ready;
+    first.presenter.paint(first.rs, createCamera(first.stage), 1, []);
+    const added = vi.spyOn(first.canvas, "addEventListener");
+    first.presenter.dispose();
+
+    const second = setup({ models, canvas: first.canvas });
+    await second.presenter.ready;
+    expect(second.gl().domElement).toBe(first.canvas);
+    second.presenter.paint(second.rs, createCamera(second.stage), 1, []);
+    expect(second.gl().render).toHaveBeenCalledOnce();
+    expect(second.presenter.info()).toMatchObject({ lost: false, fighters: ["glb", "standIn", "standIn", "standIn"] });
+    expect(second.presenter.info().calls).toBeGreaterThan(0);
+    // Only the second presenter listens to the canvas now: a lost context pauses it, and the first stays freed.
+    expect(added.mock.calls.map((c) => c[0])).toEqual(["webglcontextlost", "webglcontextrestored"]);
+    first.gl().render.mockClear();
+    second.gl().render.mockClear();
+    first.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    expect(second.presenter.info().lost).toBe(true);
+    expect(first.presenter.info().lost).toBe(false);
+    first.canvas.dispatchEvent(new Event("webglcontextrestored"));
+    second.presenter.paint(second.rs, createCamera(second.stage), 1, []);
+    expect(second.gl().render).toHaveBeenCalledOnce();
+    expect(first.gl().render).not.toHaveBeenCalled();
+    second.presenter.dispose();
   });
 
   it("never builds a fighter whose model arrives after dispose", async () => {

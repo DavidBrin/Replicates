@@ -200,6 +200,22 @@ export function CharacterSelect() {
   // pick, and the host its stage (chosen on the way here).
   useRejoinResend({ stage: true });
 
+  // Online, once both picks are known, both machines start fetching the two
+  // fighters' models (Plan 4), so the match starts with them rather than on
+  // stand-ins while a download finishes. Again for every new pair; a model
+  // already in the page's cache costs nothing. Random is decided by the
+  // host's start, so there is nothing to fetch for it yet. Through `import()`,
+  // which keeps three.js out of this screen's own chunk (`chunkSplit.test.ts`).
+  const hostPick = players[0]?.fighterId ?? null;
+  const guestPick = players[1]?.fighterId ?? null;
+  useEffect(() => {
+    if (onlineRole === null || hostPick === null || guestPick === null) return;
+    const ids = [hostPick, guestPick].filter((id) => id !== RANDOM_FIGHTER);
+    if (ids.length === 0) return;
+    // A chunk that fails to load only means the match fetches the models itself.
+    void import("@/game/world3d").then((w) => w.preloadModels(ids)).catch(() => {});
+  }, [onlineRole, hostPick, guestPick]);
+
   // Online, only the host starts, and only with both players in the room.
   const canStart = ready && (onlineRole === null || (onlineRole === "host" && onlineStatus === "connected"));
 

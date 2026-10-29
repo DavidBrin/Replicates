@@ -64,8 +64,6 @@ export interface GLLike {
   setClearColor(colour: number, alpha: number): void;
   render(scene: Object3D, camera: ThreeCamera): void;
   dispose(): void;
-  /** Gives the context back to the browser now, not whenever the canvas is collected. */
-  forceContextLoss(): void;
 }
 
 export interface RenderInfo {
@@ -85,8 +83,9 @@ export interface Presenter3D {
   resize(cssWidth: number, cssHeight: number, dpr: number): void;
   info(): RenderInfo;
   /**
-   * Frees everything, once. It also loses the canvas's WebGL context for good,
-   * so the next match's presenter needs a canvas of its own.
+   * Frees everything it drew, once, and its listeners. The canvas's WebGL
+   * context is left usable: the next match's presenter may draw on the same
+   * canvas (React's development remount reuses it, Task 20).
    */
   dispose(): void;
 }
@@ -357,9 +356,9 @@ export function createRenderer3D(opts: Renderer3DOptions): Presenter3D {
       // renderer's. A "dispose" in three frees exactly that, so the cache keeps
       // its data for the next match's renderer, which must upload it again anyway.
       for (const r of left) r.dispose();
+      // Not `forceContextLoss()`: that loses the canvas's context for good, and
+      // the next presenter on this canvas could never draw (Task 19 review).
       gl.dispose();
-      // A context the browser already took (and never gave back) has nothing left to lose.
-      if (!lost) gl.forceContextLoss();
     },
   };
 }

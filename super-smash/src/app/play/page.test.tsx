@@ -2,10 +2,12 @@
  * The play page's wiring: which match it builds, from where, and what it does
  * when the match ends or the link gives out. The runner and the link monitor
  * are stood in for — each has its own tests — so these watch what the page
- * hands them and what it does with what they report.
+ * hands them and what it does with what they report. So are the bake (in at
+ * once) and the 3D world (Plan 4): its presenter is ready at once unless a test
+ * holds it back, and a match's clock starts only then.
  */
 
-import { StrictMode, useLayoutEffect } from "react";
+import { StrictMode, useLayoutEffect, type ReactElement } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -15,9 +17,12 @@ import { STALL_HINT_MS } from "@/components/match/NetHud";
 import { CharacterSelect } from "@/components/menu/CharacterSelect";
 import { Results } from "@/components/menu/Results";
 import { resolveMatchStage } from "@/game/bootstrap";
-import type { LinkMonitorOptions } from "@/game/linkMonitor";
+import { STALL_LOST_MS, type LinkMonitorOptions } from "@/game/linkMonitor";
 import type { MatchRunnerOptions } from "@/game/matchRunner";
 import { localBuild, runnerSlotsFor } from "@/game/onlineConfig";
+import { GAME_SIM_CONTEXT } from "@/game/simContext";
+import type { World3dModule } from "@/game/useWorld3d";
+import type { WorldLayers, WorldOptions } from "@/game/world3d";
 import type { GamepadOptions } from "@/input/gamepad";
 import { resetRosterCache, useMatchConfig } from "@/lib/matchConfig";
 import { ONLINE_RESULT_LINGER_MS, bindSession, leaveOnline, useOnlineStore } from "@/lib/onlineStore";
@@ -30,12 +35,28 @@ import type { Role } from "@/net/signalProtocol";
 import PlayPage from "./page";
 
 const mocks = vi.hoisted(() => {
-  const runners: { options: MatchRunnerOptions; runner: { start: Mock; stop: Mock; dispose: Mock; netStats: NetStats | null; stalled: boolean } }[] = [];
+  const runners: {
+    options: MatchRunnerOptions;
+    runner: { start: Mock; stop: Mock; dispose: Mock; redraw: Mock; advance: Mock; netStats: NetStats | null; stalled: boolean; state: { stageId: string; fighters: unknown[] } };
+  }[] = [];
   const monitors: { options: LinkMonitorOptions; stop: Mock }[] = [];
   const pads: { options: GamepadOptions; detach: Mock }[] = [];
   /** Set to make the next runner refuse to build. */
   const fail = { next: false };
-  return { runners, monitors, pads, fail };
+  /** A 3D world built for a match, and the hand that makes its fighters ready. */
+  const worlds: {
+    layers: WorldLayers;
+    defs: readonly { id: string }[];
+    options: WorldOptions | undefined;
+    presenter: { ready: Promise<void>; dispose: Mock; info: Mock };
+    resolve: () => void;
+    reject: (e: Error) => void;
+  }[] = [];
+  /** Set to keep the next world's fighters loading until the test says. */
+  const holdModels = { next: false };
+  /** What `useBake` says; a test sets it before rendering. */
+  const bake = { state: { tables: {} as object | null, error: null as string | null } };
+  return { runners, monitors, pads, fail, worlds, holdModels, bake };
 });
 
 vi.mock("@/game/matchRunner", () => ({
@@ -53,20 +74,55 @@ vi.mock("@/game/matchRunner", () => ({
       netStats: null,
       stalled: false,
       frame: 0,
-      state: { stageId: options.stage.id, fighters: [] },
+      state: { stageId: options.stage.id, fighters: [] as unknown[] },
     };
     mocks.runners.push({ options, runner });
     return runner;
   },
 }));
 
-vi.mock("@/game/linkMonitor", () => ({
+vi.mock("@/game/linkMonitor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/game/linkMonitor")>()),
   startLinkMonitor: (options: LinkMonitorOptions) => {
     const stop = vi.fn();
     mocks.monitors.push({ options, stop });
     return stop;
   },
 }));
+
+// The bake, installed at once (the same object every render, as the hook's state is).
+vi.mock("@/game/useBake", () => ({ useBake: () => mocks.bake.state }));
+
+// The 3D world's module, as `useWorld3d` hands it over once its chunk is in.
+const WORLD = vi.hoisted(() => ({
+  createWorld: (layers: WorldLayers, _stage: unknown, defs: readonly { id: string }[], _bake: unknown, options?: WorldOptions) => {
+    let resolve!: () => void;
+    let reject!: (e: Error) => void;
+    const held = mocks.holdModels.next;
+    mocks.holdModels.next = false;
+    const ready = held
+      ? new Promise<void>((res, rej) => {
+          resolve = res;
+          reject = rej;
+        })
+      : Promise.resolve();
+    const presenter = {
+      ready,
+      paint: vi.fn(),
+      resize: vi.fn(),
+      info: vi.fn(() => ({ calls: 9, triangles: 99, lost: false, buffer: { width: 1280, height: 720 }, fighters: ["glb", "standIn"] })),
+      dispose: vi.fn(),
+    };
+    mocks.worlds.push({ layers, defs, options, presenter, resolve, reject });
+    return presenter;
+  },
+  followSize: vi.fn(() => vi.fn()),
+  preloadModels: vi.fn(async () => {}),
+}));
+const WORLD_STATE = vi.hoisted(() => ({ world: WORLD as unknown, error: null as string | null }));
+vi.mock("@/game/useWorld3d", () => ({ useWorld3d: () => WORLD_STATE as { world: World3dModule | null; error: string | null } }));
+// What the online character select preloads through `import()`.
+vi.mock("@/game/world3d", () => ({ preloadModels: vi.fn(async () => {}) }));
 
 vi.mock("@/input/gamepad", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/input/gamepad")>();
@@ -116,10 +172,27 @@ beforeEach(() => {
   mocks.monitors.length = 0;
   mocks.pads.length = 0;
   mocks.fail.next = false;
+  mocks.worlds.length = 0;
+  mocks.holdModels.next = false;
+  mocks.bake.state = { tables: {}, error: null };
+  WORLD_STATE.world = WORLD;
+  WORLD_STATE.error = null;
   routerMock.push.mockClear();
   routerMock.replace.mockClear();
   useMatchConfig.getState().reset();
 });
+
+/** Render, and let the match start: the bake and the 3D world are in, and the fighters are ready. */
+async function renderPage(ui: ReactElement = <PlayPage />) {
+  const result = render(ui);
+  await act(async () => {});
+  return result;
+}
+
+/** The 2D overlay: the canvas the runner paints the HUD on, and starts with. */
+function overlay(): HTMLCanvasElement {
+  return screen.getByLabelText("Match").querySelector<HTMLCanvasElement>('canvas[data-layer="overlay"]')!;
+}
 
 /** Whatever the page left on a timer for "a moment later" — its deferred leave. */
 function flushTimers() {
@@ -141,9 +214,9 @@ describe("the play page, online", () => {
   it.each([
     ["host", 0],
     ["guest", 1],
-  ] as const)("plays the host's start config as the %s, on port %i, not the seats on this machine", (role, port) => {
+  ] as const)("plays the host's start config as the %s, on port %i, not the seats on this machine", async (role, port) => {
     const { fake } = goOnline(role);
-    render(<PlayPage />);
+    await renderPage();
     const { options } = only(mocks.runners);
     expect(options.players).toEqual(runnerSlotsFor(CONFIG));
     expect(options.stage.id).toBe(resolveMatchStage(CONFIG.stageId, CONFIG.stageForm, CONFIG.seed).id);
@@ -154,9 +227,9 @@ describe("the play page, online", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("hands an online result to the results screen, and leaves the room to it", () => {
+  it("hands an online result to the results screen, and leaves the room to it", async () => {
     const { fake } = goOnline("guest");
-    render(<PlayPage />);
+    await renderPage();
     const { options } = only(mocks.runners);
     act(() => options.onEnd?.({ kind: "stockOut", placings: [1, 0] }));
     expect(useMatchConfig.getState().result).toMatchObject({
@@ -175,9 +248,9 @@ describe("the play page, online", () => {
     expect(fake.session.close).not.toHaveBeenCalled();
   });
 
-  it("keeps sending its last inputs for the results screen's grace, while the channel is open", () => {
+  it("keeps sending its last inputs for the results screen's grace, while the channel is open", async () => {
     const { link } = goOnline("host");
-    render(<PlayPage />);
+    await renderPage();
     const { net } = only(mocks.runners).options;
     expect(net?.lingerMs).toBe(ONLINE_RESULT_LINGER_MS);
     expect(net?.isOpen?.()).toBe(true);
@@ -185,9 +258,9 @@ describe("the play page, online", () => {
     expect(net?.isOpen?.()).toBe(false);
   });
 
-  it("ends the match as Connection Lost the moment the link monitor gives up", () => {
+  it("ends the match as Connection Lost the moment the link monitor gives up", async () => {
     goOnline("host");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     act(() => only(mocks.monitors).options.onLost());
     expect(runner.stop).toHaveBeenCalled();
@@ -209,11 +282,11 @@ describe("the play page, online", () => {
    * inputs, so the other side finds out too — by its own check, or its link
    * monitor.
    */
-  it("ends the match as out of sync the moment the confirmed states disagree, and stops playing", () => {
+  it("ends the match as out of sync the moment the confirmed states disagree, and stops playing", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       goOnline("guest");
-      const { unmount } = render(<PlayPage />);
+      const { unmount } = await renderPage();
       const { options, runner } = only(mocks.runners);
       const report = { frame: 600, localHash: 1, remoteHash: 2, peerId: "h1", port: 0 };
       act(() => options.net?.onDesync?.(report));
@@ -243,11 +316,11 @@ describe("the play page, online", () => {
   });
 
   /** The match ended here first: its result is final, and its play-out and input linger run as normal. */
-  it("leaves a finished match alone when a desync or a lost link is reported during its play-out", () => {
+  it("leaves a finished match alone when a desync or a lost link is reported during its play-out", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       goOnline("host");
-      render(<PlayPage />);
+      await renderPage();
       const { options, runner } = only(mocks.runners);
       act(() => options.onEnd?.({ kind: "stockOut", placings: [0, 1] }));
       act(() => options.net?.onDesync?.({ frame: 600, localHash: 1, remoteHash: 2, peerId: "g1", port: 1 }));
@@ -268,9 +341,9 @@ describe("the play page, online", () => {
    * Task 27). Nothing was played, so nobody wins and there are no results: the
    * page stops, says why, and its way out leaves the room.
    */
-  it("stops the match and says why, without results, when the guest refuses this host's start", () => {
+  it("stops the match and says why, without results, when the guest refuses this host's start", async () => {
     const { fake } = goOnline("host");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     const monitor = only(mocks.monitors);
     act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
@@ -292,9 +365,9 @@ describe("the play page, online", () => {
   });
 
   /** The guest read the start's stamp as this build's and still could not play it: the host is told so, not "a different version". */
-  it("says the settings could not be read when the guest refuses a start it could not read", () => {
+  it("says the settings could not be read when the guest refuses a start it could not read", async () => {
     const { fake } = goOnline("host");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "unreadable-start" } }));
 
@@ -311,7 +384,7 @@ describe("the play page, online", () => {
    * recorded why. That is not a match left behind (which leaves the room), so
    * it goes back to where the room is, as when stranded, keeping the sentence.
    */
-  it("keeps a refusal that lands between its render and its effect on screen, back where the room is", () => {
+  it("keeps a refusal that lands between its render and its effect on screen, back where the room is", async () => {
     // The host's console says the guest refused; the guest's says why.
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { fake } = goOnline("host");
@@ -338,9 +411,9 @@ describe("the play page, online", () => {
   });
 
   /** Only a host's start can be refused: a refusal sent to the guest is nobody's to act on. */
-  it("plays on as the guest when a refusal arrives", () => {
+  it("plays on as the guest when a refusal arrives", async () => {
     const { fake } = goOnline("guest");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
     expect(runner.stop).not.toHaveBeenCalled();
@@ -348,9 +421,9 @@ describe("the play page, online", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("has the link monitor watch the match's confirmed frame, so a match stuck with packets still arriving is lost", () => {
+  it("has the link monitor watch the match's confirmed frame, so a match stuck with packets still arriving is lost", async () => {
     goOnline("host");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     const { confirmedFrame } = only(mocks.monitors).options;
     expect(confirmedFrame?.()).toBe(-1);
@@ -358,9 +431,9 @@ describe("the play page, online", () => {
     expect(confirmedFrame?.()).toBe(418);
   });
 
-  it("shows the link's numbers, and says when the opponent has switched tabs", () => {
+  it("shows the link's numbers, and says when the opponent has switched tabs", async () => {
     goOnline("guest");
-    render(<PlayPage />);
+    await renderPage();
     only(mocks.runners).runner.netStats = STATS;
     act(() => vi.advanceTimersByTime(250));
     expect(screen.getByText("PING 42 ms · DELAY 3f · ROLLBACKS 12")).toBeInTheDocument();
@@ -368,9 +441,9 @@ describe("the play page, online", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Opponent switched tabs…");
   });
 
-  it("says it is waiting when the match has been held at the prediction cap for over a second", () => {
+  it("says it is waiting when the match has been held at the prediction cap for over a second", async () => {
     goOnline("host");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     act(() => vi.advanceTimersByTime(250));
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
@@ -386,9 +459,9 @@ describe("the play page, online", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
-  it("never pauses on Esc, and leaving the match leaves the room", () => {
+  it("never pauses on Esc, and leaving the match leaves the room", async () => {
     goOnline("guest");
-    render(<PlayPage />);
+    await renderPage();
     const { runner } = only(mocks.runners);
     fireEvent.keyDown(window, { code: "Escape" });
     expect(screen.getByText("The match keeps running · Esc to return")).toBeInTheDocument();
@@ -399,9 +472,9 @@ describe("the play page, online", () => {
     expect(getActiveSession()).toBeNull();
   });
 
-  it("lets every pad drive this player's own port, and lets go of them on unmount", () => {
+  it("lets every pad drive this player's own port, and lets go of them on unmount", async () => {
     goOnline("guest");
-    const { unmount } = render(<PlayPage />);
+    const { unmount } = await renderPage();
     const pad = only(mocks.pads);
     expect([0, 1, 2, 3].map((ordinal) => pad.options.portForPad?.(ordinal))).toEqual([1, 1, 1, 1]);
     expect(only(mocks.runners).options.gamepad).toBeTruthy();
@@ -412,9 +485,9 @@ describe("the play page, online", () => {
 });
 
 describe("the play page, leaving online", () => {
-  it("leaves the room when the page goes away mid-match", () => {
+  it("leaves the room when the page goes away mid-match", async () => {
     const { fake } = goOnline("guest");
-    const { unmount } = render(<PlayPage />);
+    const { unmount } = await renderPage();
     unmount();
     flushTimers();
     expect(getActiveSession()).toBeNull();
@@ -422,9 +495,9 @@ describe("the play page, leaving online", () => {
     expect(useOnlineStore.getState().config).toBeNull();
   });
 
-  it("leaves the room when the page goes away during the KO's play-out", () => {
+  it("leaves the room when the page goes away during the KO's play-out", async () => {
     goOnline("host");
-    const { unmount } = render(<PlayPage />);
+    const { unmount } = await renderPage();
     act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [0, 1] }));
     act(() => vi.advanceTimersByTime(1000));
     unmount();
@@ -435,9 +508,9 @@ describe("the play page, leaving online", () => {
     expect(routerMock.push).not.toHaveBeenCalledWith("/results");
   });
 
-  it("keeps the room for the results screen once the result is handed over", () => {
+  it("keeps the room for the results screen once the result is handed over", async () => {
     const { fake } = goOnline("guest");
-    const { unmount } = render(<PlayPage />);
+    const { unmount } = await renderPage();
     act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [1, 0] }));
     act(() => vi.advanceTimersByTime(2400));
     expect(routerMock.push).toHaveBeenCalledWith("/results");
@@ -447,9 +520,9 @@ describe("the play page, leaving online", () => {
     expect(fake.session.close).not.toHaveBeenCalled();
   });
 
-  it("keeps the room through React's development remount", () => {
+  it("keeps the room through React's development remount", async () => {
     const { fake } = goOnline("guest");
-    render(
+    await renderPage(
       <StrictMode>
         <PlayPage />
       </StrictMode>,
@@ -504,18 +577,18 @@ describe("the play page, leaving online", () => {
     expect(useMatchConfig.getState().online).toBe(false);
   });
 
-  it("stops watching the link and drops its e2e handle on unmount", () => {
+  it("stops watching the link and drops its e2e handle on unmount", async () => {
     goOnline("host");
-    const { unmount } = render(<PlayPage />);
+    const { unmount } = await renderPage();
     expect((window as { __smashNet?: unknown }).__smashNet).toBeDefined();
     unmount();
     expect(only(mocks.monitors).stop).toHaveBeenCalled();
     expect((window as { __smashNet?: unknown }).__smashNet).toBeUndefined();
   });
 
-  it("does not bounce to the results after leaving during the KO's play-out", () => {
+  it("does not bounce to the results after leaving during the KO's play-out", async () => {
     goOnline("guest");
-    render(<PlayPage />);
+    await renderPage();
     act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [1, 0] }));
     quitFromMenu("LEAVE MATCH");
     act(() => vi.advanceTimersByTime(5000));
@@ -528,11 +601,11 @@ describe("the play page, leaving online", () => {
     ["guest", "/fighters"],
   ] as const)(
     "sends the %s back to %s with the room kept, not into a local match, when the start was withdrawn before it mounted",
-    (role, screenPath) => {
+    async (role, screenPath) => {
       // Seated online, but the opponent left between the start and this page: no config.
       const { fake } = goOnline(role);
       useOnlineStore.getState().patch({ config: null });
-      render(<PlayPage />);
+      await renderPage();
       expect(mocks.runners).toEqual([]);
       expect(routerMock.replace).toHaveBeenCalledWith(screenPath);
       // The room stays, so it can pair again; that screen shows why it is waiting.
@@ -543,9 +616,9 @@ describe("the play page, leaving online", () => {
     },
   );
 
-  it("goes back to the lobby when it is seated online with no room at all", () => {
+  it("goes back to the lobby when it is seated online with no room at all", async () => {
     useMatchConfig.getState().configureOnline();
-    render(<PlayPage />);
+    await renderPage();
     expect(mocks.runners).toEqual([]);
     expect(routerMock.replace).toHaveBeenCalledWith("/online");
     expect(useMatchConfig.getState().online).toBe(false);
@@ -553,8 +626,8 @@ describe("the play page, leaving online", () => {
 });
 
 describe("the play page, local", () => {
-  it("pauses on Esc and resumes on Esc again", () => {
-    render(<PlayPage />);
+  it("pauses on Esc and resumes on Esc again", async () => {
+    await renderPage();
     const { runner } = only(mocks.runners);
     expect(runner.start).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(window, { code: "Escape" });
@@ -563,11 +636,11 @@ describe("the play page, local", () => {
     fireEvent.keyDown(window, { code: "Escape" });
     expect(screen.queryByText("PAUSED")).toBeNull();
     expect(runner.start).toHaveBeenCalledTimes(2);
-    expect(runner.start).toHaveBeenLastCalledWith(screen.getByLabelText("Match"));
+    expect(runner.start).toHaveBeenLastCalledWith(overlay());
   });
 
-  it("does not bounce to the results after quitting during the KO's play-out", () => {
-    render(<PlayPage />);
+  it("does not bounce to the results after quitting during the KO's play-out", async () => {
+    await renderPage();
     act(() => only(mocks.runners).options.onEnd?.({ kind: "stockOut", placings: [0, 1] }));
     quitFromMenu("QUIT MATCH");
     act(() => vi.advanceTimersByTime(5000));
@@ -581,7 +654,7 @@ describe("the play page, local", () => {
     const dispose = vi.spyOn(AudioEngine.prototype, "dispose");
     try {
       mocks.fail.next = true;
-      render(<PlayPage />);
+      await renderPage();
       await act(async () => {});
       expect(screen.getByRole("alert")).toHaveTextContent("The runner refused to build");
       expect(release).toHaveBeenCalledTimes(1);
@@ -592,11 +665,11 @@ describe("the play page, local", () => {
     }
   });
 
-  it("plays the menus' match with no network, each pad held to its human's port", () => {
+  it("plays the menus' match with no network, each pad held to its human's port", async () => {
     const config = useMatchConfig.getState();
     config.addPlayer();
     config.setPlayerKind(2, "human");
-    const { unmount } = render(<PlayPage />);
+    const { unmount } = await renderPage();
     const { options } = only(mocks.runners);
     expect(options.net).toBeNull();
     expect(options.players).toHaveLength(3);
@@ -608,8 +681,8 @@ describe("the play page, local", () => {
     expect(pad.detach).toHaveBeenCalled();
   });
 
-  it("records a local result without the online flag", () => {
-    render(<PlayPage />);
+  it("records a local result without the online flag", async () => {
+    await renderPage();
     act(() => only(mocks.runners).options.onEnd?.({ kind: "timeUp", placings: [0, 1] }));
     const result = useMatchConfig.getState().result;
     expect(result?.kind).toBe("timeUp");
@@ -617,5 +690,218 @@ describe("the play page, local", () => {
     expect(result).not.toHaveProperty("online");
     act(() => vi.advanceTimersByTime(2400));
     expect(routerMock.push).toHaveBeenCalledWith("/results");
+  });
+});
+
+describe("the play page in 3D (Plan 4)", () => {
+  function layer(name: "background" | "world" | "overlay"): HTMLCanvasElement {
+    return screen.getByLabelText("Match").querySelector<HTMLCanvasElement>(`canvas[data-layer="${name}"]`)!;
+  }
+
+  it("stacks the sky, the 3D world and the overlay inside the Match element, and hands each to its painter", async () => {
+    await renderPage();
+    const match = screen.getByLabelText("Match");
+    expect([...match.querySelectorAll("canvas")].map((c) => c.dataset.layer)).toEqual(["background", "world", "overlay"]);
+    const { options, runner } = only(mocks.runners);
+    const world = only(mocks.worlds);
+    expect(world.layers).toEqual({ gl: layer("world"), background: layer("background") });
+    expect(options.presenter).toBe(world.presenter);
+    expect(options.background).toBe(layer("background"));
+    expect(runner.start).toHaveBeenCalledWith(layer("overlay"));
+    expect(WORLD.followSize).toHaveBeenCalledWith(layer("world"), world.presenter);
+  });
+
+  /** One set of defs for the sim, the CPU, the overlay and the 3D world: the game's, limb-bone scripts and all (carry 7). */
+  it("plays and draws the game's fighters, as the sim context hands them out", async () => {
+    await renderPage();
+    const { options } = only(mocks.runners);
+    expect(options.getFighter("mario")).toBe(GAME_SIM_CONTEXT.fighter("mario"));
+    const world = only(mocks.worlds);
+    expect(world.defs).toEqual(options.players.map((p) => GAME_SIM_CONTEXT.fighter(p.selection.defId)));
+  });
+
+  it("reports a move's length from the game's fighter, so a limb slot says its script's (carry 7)", async () => {
+    const real = GAME_SIM_CONTEXT.fighter;
+    const marth = real("marth");
+    GAME_SIM_CONTEXT.fighter = (id) => (id === "marth" ? { ...marth, moves: { ...marth.moves, fair: { ...marth.moves.fair!, totalFrames: 77 } } } : real(id));
+    try {
+      await renderPage();
+      only(mocks.runners).runner.state.fighters = [{ port: 0, defId: "marth", move: "fair" }];
+      const debug = (window as unknown as { __smashDebug: { moveFrames(): { total: number }[] } }).__smashDebug;
+      expect(debug.moveFrames()).toEqual([{ port: 0, move: "fair", total: 77 }]);
+    } finally {
+      GAME_SIM_CONTEXT.fighter = real;
+    }
+  });
+
+  it("starts the clock only once every fighter has a model or a stand-in, and says it is loading meanwhile", async () => {
+    mocks.holdModels.next = true;
+    await renderPage();
+    const { runner } = only(mocks.runners);
+    expect(runner.start).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading fighters…");
+    await act(async () => only(mocks.worlds).resolve());
+    expect(runner.start).toHaveBeenCalledOnce();
+    expect(runner.start).toHaveBeenCalledWith(overlay());
+    expect(screen.queryByText("Loading fighters…")).toBeNull();
+  });
+
+  /**
+   * DISPATCH-NOTES 20.4: an e2e `stepped` match pauses through `__smashDebug`
+   * the moment it exists, which is now before the fighters are ready. The
+   * ready must not start the clock under the test's steps; the runner still
+   * gets its canvas, so each step paints.
+   */
+  it("keeps a test's pause, taken while the fighters load, when they are ready", async () => {
+    mocks.holdModels.next = true;
+    await renderPage();
+    const { runner } = only(mocks.runners);
+    const debug = (window as unknown as { __smashDebug: { pause(): void; resume(): void; step(n?: number): void } }).__smashDebug;
+    debug.pause();
+    debug.step(72);
+    expect(runner.advance).toHaveBeenCalledWith(72);
+    await act(async () => only(mocks.worlds).resolve());
+    // Handed its canvas and stopped again at once, before a frame could run: the clock stays the test's.
+    expect(runner.start).toHaveBeenCalledOnce();
+    expect(runner.stop).toHaveBeenCalledOnce();
+    expect(runner.stop.mock.invocationCallOrder[0]).toBeGreaterThan(runner.start.mock.invocationCallOrder[0]);
+    expect(runner.redraw).toHaveBeenCalledOnce();
+    debug.pause();
+    expect(runner.stop).toHaveBeenCalledOnce();
+    debug.resume();
+    expect(runner.start).toHaveBeenCalledTimes(2);
+    debug.resume();
+    expect(runner.start).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not start the match behind the pause menu opened while the fighters load", async () => {
+    mocks.holdModels.next = true;
+    await renderPage();
+    const { runner } = only(mocks.runners);
+    fireEvent.keyDown(window, { code: "Escape" });
+    await act(async () => only(mocks.worlds).resolve());
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    expect(runner.stop).toHaveBeenCalledOnce();
+    fireEvent.keyDown(window, { code: "Escape" });
+    expect(runner.start).toHaveBeenCalledTimes(2);
+    expect(runner.start).toHaveBeenLastCalledWith(overlay());
+  });
+
+  it("says why when a fighter cannot be drawn at all, rather than loading for ever", async () => {
+    mocks.holdModels.next = true;
+    await renderPage();
+    const { runner } = only(mocks.runners);
+    await act(async () => only(mocks.worlds).reject(new Error("no skeleton for luigi")));
+    expect(screen.getByRole("alert")).toHaveTextContent("no skeleton for luigi");
+    expect(runner.start).not.toHaveBeenCalled();
+    expect(runner.dispose).toHaveBeenCalled();
+  });
+
+  it("shows the bake's own sentence when it cannot load, and builds no match", async () => {
+    const sentence = "The fighters' animation data does not match this version of the game. Reload the page.";
+    mocks.bake.state = { tables: null, error: sentence };
+    await renderPage();
+    expect(screen.getByRole("alert")).toHaveTextContent(sentence);
+    expect(mocks.runners).toEqual([]);
+    expect(mocks.worlds).toEqual([]);
+  });
+
+  it("says so when the 3D world's code cannot load", async () => {
+    WORLD_STATE.world = null;
+    WORLD_STATE.error = "Loading chunk 812 failed.";
+    await renderPage();
+    expect(screen.getByRole("alert")).toHaveTextContent("Loading chunk 812 failed.");
+    expect(mocks.runners).toEqual([]);
+  });
+
+  it("frees the 3D world when the runner cannot be built", async () => {
+    mocks.fail.next = true;
+    await renderPage();
+    expect(screen.getByRole("alert")).toHaveTextContent("The runner refused to build");
+    expect(only(mocks.worlds).presenter.dispose).toHaveBeenCalledOnce();
+    expect(vi.mocked(WORLD.followSize).mock.results.at(-1)?.value).toHaveBeenCalledOnce();
+  });
+
+  it("publishes what the 3D layer is doing for e2e while the match is up", async () => {
+    const { unmount } = await renderPage();
+    const handle = (window as unknown as { __smashRender?: { info(): unknown } }).__smashRender;
+    expect(handle?.info()).toEqual(only(mocks.worlds).presenter.info());
+    unmount();
+    expect((window as unknown as { __smashRender?: unknown }).__smashRender).toBeUndefined();
+  });
+
+  /**
+   * The Task 19 review, ruled in Task 20 (carry 14 amended): React's
+   * development remount, with the bake and the 3D chunk already in, builds a
+   * second match on the same canvases at once. The presenter leaves its canvas
+   * usable (`renderer3d.test.ts`), so the remount's match is the one that runs.
+   */
+  it("survives React's development double mount: the first match goes before it starts, the second runs on the same canvases", async () => {
+    await renderPage(
+      <StrictMode>
+        <PlayPage />
+      </StrictMode>,
+    );
+    expect(mocks.runners).toHaveLength(2);
+    const [first, second] = mocks.runners;
+    expect(first.runner.dispose).toHaveBeenCalled();
+    expect(first.runner.start).not.toHaveBeenCalled();
+    expect(second.runner.dispose).not.toHaveBeenCalled();
+    expect(second.runner.start).toHaveBeenCalledOnce();
+    expect(second.runner.start).toHaveBeenCalledWith(overlay());
+    expect(mocks.worlds[1].layers.gl).toBe(mocks.worlds[0].layers.gl);
+    expect(mocks.worlds[1].layers.gl).toBe(layer("world"));
+  });
+
+  it("plays a second match on the same canvases once the first is over", async () => {
+    await renderPage();
+    act(() => useMatchConfig.getState().setStocks(2));
+    await act(async () => {});
+    expect(mocks.runners).toHaveLength(2);
+    const [first, second] = mocks.runners;
+    expect(first.runner.dispose).toHaveBeenCalled();
+    expect(second.options.rules.stocks).toBe(2);
+    expect(second.runner.start).toHaveBeenCalledWith(overlay());
+    expect(mocks.worlds.map((w) => w.layers.gl)).toEqual([layer("world"), layer("world")]);
+  });
+
+  it("waits on the loader's own timeouts locally, with no cap of its own", async () => {
+    await renderPage();
+    expect(only(mocks.worlds).options?.modelWaitMs).toBeUndefined();
+  });
+
+  /**
+   * Ruling R3(a): online, a match waits for its models at most five seconds,
+   * then plays the rest as stand-ins; and its link monitor starts with the
+   * match, not at mount, so a slow download is never read as a dead link.
+   */
+  it("caps the wait for models online, and watches the link only once the match starts", async () => {
+    mocks.holdModels.next = true;
+    goOnline("host");
+    await renderPage();
+    const world = only(mocks.worlds);
+    expect(world.options).toEqual({ modelWaitMs: 5_000 });
+    // Room for the two peers' starts to land apart within the other's link monitor's patience.
+    expect(world.options!.modelWaitMs!).toBeLessThanOrEqual(STALL_LOST_MS / 2);
+    expect(mocks.monitors).toEqual([]);
+    const { runner } = only(mocks.runners);
+    expect(runner.start).not.toHaveBeenCalled();
+    await act(async () => world.resolve());
+    expect(only(mocks.monitors)).toBeDefined();
+    expect(runner.start).toHaveBeenCalledOnce();
+  });
+
+  it("never starts, nor watches, an online match the guest refused while its fighters loaded", async () => {
+    mocks.holdModels.next = true;
+    const { fake } = goOnline("host");
+    await renderPage();
+    act(() => fake.emit({ type: "lobby", message: { kind: "refuse", reason: "engine-mismatch" } }));
+    expect(screen.getByRole("alert")).toHaveTextContent("different version");
+    const { runner } = only(mocks.runners);
+    await act(async () => only(mocks.worlds).resolve());
+    expect(mocks.monitors).toEqual([]);
+    // Handed its canvas, then stopped before a frame could run.
+    expect(runner.stop).toHaveBeenCalledOnce();
+    expect(runner.stop.mock.invocationCallOrder[0]).toBeGreaterThan(runner.start.mock.invocationCallOrder[0]);
   });
 });

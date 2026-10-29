@@ -932,10 +932,17 @@ export function stepVfx(v: VfxState, events: StepEvents | null, state: GameState
 
 /* ---------------------------------------------------------------- drawing -- */
 
-export function drawParticles(ctx: CanvasRenderingContext2D, v: VfxState, cam: Camera): void {
+export function drawParticles(
+  ctx: CanvasRenderingContext2D,
+  v: VfxState,
+  cam: Camera,
+  /** Kinds another layer draws (the 3D sprites, Plan 4); skipped here. */
+  skip?: ReadonlySet<ParticleKind>,
+): void {
   ctx.save();
   ctx.lineCap = "butt";
   for (const p of v.particles) {
+    if (skip?.has(p.kind)) continue;
     const t = p.life / p.maxLife;
     const s = worldToScreen(cam, p.x, p.y);
     const r = p.size * cam.zoom;

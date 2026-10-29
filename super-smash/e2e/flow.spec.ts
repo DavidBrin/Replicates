@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ROUTES, startFromTitle, titleReady, waitForMatch } from "./helpers";
+import { ROUTES, startFromTitle, startMatchFromMenu, titleReady, waitForMatch } from "./helpers";
 
 /**
  * The path a player actually takes: title → menu → rules → stage → fighters →
@@ -70,6 +70,41 @@ test("rules, stage and fighters lead to a running match", async ({ page }) => {
     return w.__smashFrame ?? 0;
   });
   expect(frame).toBeGreaterThan(30);
+});
+
+/** What the 3D layer reports (`window.__smashRender`, Plan 4), re-declared like the routes. */
+interface RenderInfo {
+  calls: number;
+  lost: boolean;
+  fighters: string[];
+}
+
+/**
+ * Two matches in a row, each drawn in 3D in a real browser (Task 20 carry 14):
+ * the first match is quit, and the second, on a fresh page back from the menu,
+ * still gets its WebGL context, its fighters and its draw calls. In the app a
+ * match mounts once per page: it waits for the bake and the 3D chunk, which no
+ * first render has, so React's development remount runs before there is a
+ * match to build twice. A second presenter on the same canvas is pinned in
+ * `renderer3d.test.ts` and `page.test.tsx`, not here.
+ */
+test("plays two matches in a row, each drawing its world in 3D", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await startFromTitle(page);
+  for (const round of [1, 2]) {
+    await startMatchFromMenu(page);
+    const info = await page.evaluate(() => (window as unknown as { __smashRender: { info(): RenderInfo } }).__smashRender.info());
+    expect(info.lost, `match ${round}`).toBe(false);
+    expect(info.calls, `match ${round}`).toBeGreaterThan(0);
+    expect(info.fighters, `match ${round}`).not.toContain("loading");
+    // The page's own error overlay; Next's route announcer is a `role="alert"` too.
+    await expect(page.getByText("THE MATCH COULD NOT START")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "QUIT MATCH" }).click();
+    await page.waitForURL(`**${ROUTES.menu}`);
+  }
+  expect(errors).toEqual([]);
 });
 
 test("a stock match ends and reaches the results screen", async ({ page }) => {

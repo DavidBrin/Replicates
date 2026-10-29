@@ -4,6 +4,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ModeTab, ScreenBanner } from "@/components/ui/Panel";
+import { ensureBakeInstalled } from "@/game/bake";
+import { useBake } from "@/game/useBake";
 import { SkewButton, SkewPanel } from "@/components/ui/SkewPanel";
 import { bindSession, leaveOnline, roomErrorMessage, useOnlineStore, type OnlineStatus } from "@/lib/onlineStore";
 import { OnlineSession, setActiveSession, type OnlineSessionLike, type OpenSessionOptions } from "@/net/online/session";
@@ -56,6 +58,10 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
   /** Set once the select screens have the room, so that leaving this screen must not close it. */
   const handedOn = useRef(false);
 
+  // The bake's download starts on arrival, while the player reads the screen:
+  // `connect` waits for it, and by then it is usually in (Plan 4).
+  useBake();
+
   // Arriving here always starts afresh: a room left open by a back button or
   // a finished match must not bounce the player straight back into it.
   useEffect(() => {
@@ -83,6 +89,18 @@ export function OnlineLobby({ openSession = OnlineSession.open }: { openSession?
       config: null,
       hostStage: null,
     });
+    // The bake first (ruling R2): installing it changes this build's engine
+    // fingerprint, and the first `hello` the session says must already carry
+    // the bake's, or the other side refuses this one for good. One that cannot
+    // load is this screen's error, in its own sentence; no room is opened.
+    try {
+      await ensureBakeInstalled();
+    } catch (e) {
+      if (live.current !== mine) return;
+      useOnlineStore.getState().patch({ status: "error", error: e instanceof Error ? e.message : String(e) });
+      return;
+    }
+    if (live.current !== mine) return;
     // `?ice=relay` forces TURN, so a test can prove the relay works.
     const forceRelay = new URLSearchParams(window.location.search).get("ice") === "relay";
     try {

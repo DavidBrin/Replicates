@@ -14,6 +14,10 @@ import { OpenableChannel, inertPeer } from "@/net/testing/fakePeer";
 import { FakeSignalling } from "@/net/testing/fakeSignalling";
 import { CharacterSelect } from "./CharacterSelect";
 
+// The 3D world's module (three.js), stood in for: the lobby only asks it to start downloads.
+const world = vi.hoisted(() => ({ preloadModels: vi.fn<(ids: readonly string[]) => Promise<void>>(async () => {}) }));
+vi.mock("@/game/world3d", () => world);
+
 const portraits = () => screen.getAllByRole("button", { name: /, number \d/i });
 const readyButton = () => screen.getByRole("button", { name: /ready to fight/i });
 
@@ -487,5 +491,45 @@ describe("CharacterSelect, online", () => {
 
       expect(fake.sent).toEqual([HELLO, { kind: "pick", fighterId: mine.fighterId, costume: mine.costume }]);
     });
+  });
+});
+
+/**
+ * Plan 4: once both picks are known, both machines start fetching the two
+ * fighters' models, so the match starts with them rather than stand-ins.
+ * Through `import()`, keeping three.js out of this screen's chunk.
+ */
+describe("CharacterSelect, online, the models", () => {
+  beforeEach(() => world.preloadModels.mockClear());
+
+  it("starts both fighters' downloads once both have picked, and again for a new pair", async () => {
+    const fake = goOnline("guest");
+    await renderSelect();
+    fireEvent.click(portraits()[0]);
+    await act(async () => {});
+    expect(world.preloadModels).not.toHaveBeenCalled();
+    const mine = useMatchConfig.getState().players[1].fighterId!;
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "fox", costume: 0 } }));
+    await vi.waitFor(() => expect(world.preloadModels).toHaveBeenCalledWith(["fox", mine]));
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "marth", costume: 0 } }));
+    await vi.waitFor(() => expect(world.preloadModels).toHaveBeenLastCalledWith(["marth", mine]));
+    expect(world.preloadModels).toHaveBeenCalledTimes(2);
+  });
+
+  it("fetches nothing for Random, which only the host's start decides", async () => {
+    const fake = goOnline("host");
+    await renderSelect();
+    act(() => fake.emit({ type: "lobby", message: { kind: "pick", fighterId: "random", costume: 1 } }));
+    fireEvent.click(portraits()[2]);
+    const mine = useMatchConfig.getState().players[0].fighterId!;
+    await vi.waitFor(() => expect(world.preloadModels).toHaveBeenCalledWith([mine]));
+  });
+
+  it("fetches nothing offline", async () => {
+    await renderSelect();
+    fireEvent.click(portraits()[0]);
+    fireEvent.click(portraits()[1]);
+    await act(async () => {});
+    expect(world.preloadModels).not.toHaveBeenCalled();
   });
 });

@@ -448,11 +448,12 @@ describe("the point lands on the tipper", () => {
       const move = def.moves[slot];
       expect(move, `${slot} is not a move Marth has`).toBeDefined();
 
-      // The sweetspot is the lowest-id hitbox in the first live window — the
-      // same rule `bestHitbox` and the tipper flash both use.
+      // The sweetspot is the strongest hitbox in the first live window — the
+      // tipper, which the flash marks (Task 20; the authored tables also give it
+      // the lowest id).
       const first = Math.min(...move!.hitboxes.map((h) => h.startFrame));
       const live = move!.hitboxes.filter((h) => h.startFrame === first);
-      const tip = live.reduce((a, b) => (a.id <= b.id ? a : b));
+      const tip = live.reduce((a, b) => (b.damage > a.damage ? b : a));
 
       const point = bladeTip(clip.keys[strikeIndexOf(clip)]);
       const want = { x: toFloat(tip.x), y: toFloat(tip.y) };
@@ -668,13 +669,13 @@ describe("the point of a capsule is its end furthest out", () => {
   /** Level with the shoulder the tipper measures from, so reach is plain `x`. */
   const LEVEL = HEIGHT * 0.55;
 
-  /** Forward tilt as two boxes on the same frames: the tip (lowest id) as given, a sourspot at 6. */
+  /** Forward tilt as two boxes on the same frames: the tip (the stronger box) as given, a weaker sourspot at 6. */
   const blade = (tip: Partial<Hitbox>): FighterDef => {
     const ftilt = marth.moves.ftilt as MoveDef;
     const base = ftilt.hitboxes[0];
     const boxes: Hitbox[] = [
-      { ...base, id: 0, startFrame: 8, endFrame: 11, x: q12(2), y: q12(LEVEL), radius: q12(3), ...tip },
-      { ...base, id: 1, startFrame: 8, endFrame: 11, x: q12(6), y: q12(LEVEL), radius: q12(3) },
+      { ...base, id: 0, startFrame: 8, endFrame: 11, x: q12(2), y: q12(LEVEL), radius: q12(3), damage: q12(12), ...tip },
+      { ...base, id: 1, startFrame: 8, endFrame: 11, x: q12(6), y: q12(LEVEL), radius: q12(3), damage: q12(9) },
     ];
     return { ...marth, moves: { ...marth.moves, ftilt: { ...ftilt, hitboxes: boxes } } };
   };

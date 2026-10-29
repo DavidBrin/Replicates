@@ -68,6 +68,7 @@ import {
   drawSmashBall,
   drawStarKos,
   hitFlashAmount,
+  type ParticleKind,
   type VfxState,
 } from "./vfx";
 
@@ -98,7 +99,37 @@ export interface RenderState {
   /** Renders every fighter in flat black, to check silhouette readability. */
   readonly debugSilhouette?: boolean;
   readonly showBlastZone?: boolean;
+  /**
+   * The world — background, platforms, fighters, shields, sparks — is drawn by
+   * the 3D presenter underneath (Plan 4); this canvas is the transparent overlay
+   * that carries everything else.
+   */
+  readonly world3d?: boolean;
+  /**
+   * Per port, where the 3D model's head is this frame (`render3d/anchors.ts`,
+   * from the same baked head bone `Fighter3D` draws). With `world3d`, port
+   * tags, move effects, dizzy stars and the Final Smash aura hang off it
+   * instead of the 2D rig's height — SSBU-sized DK is twice his 2D rig.
+   */
+  readonly anchors?: readonly (OverlayAnchor | null)[];
 }
+
+/** A fighter's head in the 3D world, relative to their feet, in world units. */
+export interface OverlayAnchor {
+  /** Forward of the feet, already signed by facing. */
+  readonly headX: number;
+  /** Top of the head hurt capsule above the feet. */
+  readonly headTop: number;
+}
+
+/** What the overlay learned while drawing that the 3D layer needs this frame. */
+export interface OverlayResult {
+  /** `hidden[port]`: a move effect replaces the fighter (Kirby's Stone). */
+  readonly hidden: boolean[];
+}
+
+/** Particle kinds the 3D layer draws (`render3d/vfx3d.ts` SPRITE_KINDS, repeated so render/ never imports three). */
+export const WORLD3D_PARTICLES: ReadonlySet<ParticleKind> = new Set<ParticleKind>(["spark", "burst"]);
 
 /* ------------------------------------------------------------ letterboxing -- */
 
@@ -172,6 +203,9 @@ export function interpolatePosition(
  * Ball is never hidden behind somebody; particles after fighters so a hit spark
  * lands *on* the victim; the HUD above all of it; the indicators last because
  * they are the one thing that must never be occluded.
+ *
+ * With `world3d` the background, platforms and fighters are the 3D layer's,
+ * under this canvas, which is cleared rather than filled so it shows through.
  */
 export function render(
   ctx: CanvasRenderingContext2D,
@@ -179,14 +213,19 @@ export function render(
   events: StepEvents | null,
   camera: Camera,
   interpolationAlpha: number,
-): void {
+): OverlayResult {
   const canvas = ctx.canvas;
   const box = computeLetterbox(canvas?.width ?? INTERNAL_WIDTH, canvas?.height ?? INTERNAL_HEIGHT);
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, canvas?.width ?? INTERNAL_WIDTH, canvas?.height ?? INTERNAL_HEIGHT);
+  if (state.world3d) {
+    // The 3D layer shows through; the overlay only adds to it.
+    ctx.clearRect(0, 0, canvas?.width ?? INTERNAL_WIDTH, canvas?.height ?? INTERNAL_HEIGHT);
+  } else {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, canvas?.width ?? INTERNAL_WIDTH, canvas?.height ?? INTERNAL_HEIGHT);
+  }
 
   ctx.translate(box.offsetX, box.offsetY);
   ctx.scale(box.scale, box.scale);
@@ -194,8 +233,26 @@ export function render(
   ctx.rect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
   ctx.clip();
 
-  drawScene(ctx, state, events, camera, interpolationAlpha);
+  const result = drawScene(ctx, state, events, camera, interpolationAlpha);
 
+  ctx.restore();
+  return result;
+}
+
+/**
+ * The background canvas under the 3D layer: the stage's parallax sky, letterboxed
+ * like everything else. Only used with `world3d`.
+ */
+export function renderBackground(ctx: CanvasRenderingContext2D, stage: StageDef, camera: Camera, frame: number): void {
+  const canvas = ctx.canvas;
+  const box = computeLetterbox(canvas?.width ?? INTERNAL_WIDTH, canvas?.height ?? INTERNAL_HEIGHT);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, canvas?.width ?? INTERNAL_WIDTH, canvas?.height ?? INTERNAL_HEIGHT);
+  ctx.translate(box.offsetX, box.offsetY);
+  ctx.scale(box.scale, box.scale);
+  drawBackground(ctx, stage, camera, frame);
   ctx.restore();
 }
 
@@ -206,13 +263,16 @@ export function drawScene(
   events: StepEvents | null,
   camera: Camera,
   interpolationAlpha: number,
-): void {
+): OverlayResult {
   const game = state.current;
   const stage = state.stage;
   const mode = state.debugSilhouette ? "silhouette" : "body";
+  const hidden = game.fighters.map(() => false);
 
-  drawBackground(ctx, stage, camera, game.frame);
-  drawPlatforms(ctx, stage, camera, game.frame);
+  if (!state.world3d) {
+    drawBackground(ctx, stage, camera, game.frame);
+    drawPlatforms(ctx, stage, camera, game.frame);
+  }
   if (state.showBlastZone) drawBlastZone(ctx, stage, camera);
 
   const drawn = state.current.fighters.map<DrawnFighter>((fighter) => {
@@ -224,11 +284,12 @@ export function drawScene(
 
   // Dodge afterimages sit under every fighter so a rolling player never hides
   // behind their own ghosts.
-  drawAfterimages(ctx, state, camera, drawn);
+  if (!state.world3d) drawAfterimages(ctx, state, camera, drawn);
 
   // Swings go under the fighters, so the blade passes behind the arm that
-  // swung it rather than washing the fighter out.
-  for (const d of drawn) {
+  // swung it rather than washing the fighter out. Not over the 3D world: there
+  // the sword itself swings, and a 2D arc sized to the 2D rig floated beside it.
+  for (const d of state.world3d ? [] : drawn) {
     if (d.fighter.action === "dead") continue;
     const arc = swingArcFor(d.def, d.fighter, visualHeight(d.rig));
     if (arc) drawSwingArc(ctx, arc, camera);
@@ -245,12 +306,13 @@ export function drawScene(
   // so two idle fighters do not swap depth every time one of them twitches.
   for (const d of [...drawn].sort((a, b) => drawDepth(a.fighter) - drawDepth(b.fighter))) {
     if (d.fighter.action === "dead") continue;
-    drawOneFighter(ctx, state, camera, d, mode);
+    hidden[d.fighter.port] = drawOneFighter(ctx, state, camera, d, mode);
   }
 
   drawProjectiles(ctx, game, camera, projectileVisual(state));
   drawSmashBall(ctx, game, camera);
-  drawParticles(ctx, state.vfx, camera);
+  // Over the 3D world, its sparks and bursts are the 3D layer's sprites; drawn here too, each would show twice.
+  drawParticles(ctx, state.vfx, camera, state.world3d ? WORLD3D_PARTICLES : undefined);
   drawStarKos(ctx, state.vfx, camera);
   drawKoFlash(ctx, state.vfx);
   drawScreenKos(ctx, state.vfx);
@@ -259,6 +321,7 @@ export function drawScene(
   drawHud(ctx, { state: game, info: hudInfo(state), hud: state.hud });
 
   drawIndicators(ctx, state, camera);
+  return { hidden };
 }
 
 /**
@@ -327,7 +390,7 @@ function drawOneFighter(
   cam: Camera,
   d: DrawnFighter,
   mode: "body" | "silhouette",
-): void {
+): boolean {
   const f = d.fighter;
   const rig = d.rig;
   const palette = resolvePalette(d.def, f.costume);
@@ -354,7 +417,10 @@ function drawOneFighter(
     frame,
   );
   const squash = squashFor(f);
-  const height = visualHeight(rig);
+  // Over the 3D world, what hangs on the fighter hangs on the model's head, not
+  // the 2D rig's height: SSBU-sized Donkey Kong is 26.3 units tall, his rig 11.
+  const anchor = state.world3d ? (state.anchors?.[f.port] ?? null) : null;
+  const height = anchor ? anchor.headTop : visualHeight(rig);
 
   const screen = worldToScreen(
     cam,
@@ -382,7 +448,7 @@ function drawOneFighter(
   // translates the body downward is saying where the shape goes, not where the
   // fighter is standing; following it dragged the marker under the stage on
   // every crouch, spot dodge and roll.
-  if (f.grounded && f.action !== "downed") {
+  if (!state.world3d && f.grounded && f.action !== "downed") {
     const feet = worldToScreen(cam, d.x + hitlagShake(f), d.y);
     drawPortRing(ctx, feet.x, feet.y, height * cam.zoom * 0.36, f.port, 0.55);
   }
@@ -413,7 +479,8 @@ function drawOneFighter(
     frame: state.current.frame,
   });
 
-  if (!fx.hideFigure) {
+  // Over the 3D world the figure is the model, drawn underneath.
+  if (!fx.hideFigure && !state.world3d) {
     if (mode !== "silhouette") drawFigure(ctx, { ...params, mode: "rim", rimWidth });
     drawFigure(ctx, { ...params, mode });
   }
@@ -425,7 +492,8 @@ function drawOneFighter(
   for (const paint of fx.over) paint();
 
   drawFinalSmashAura(ctx, f, cam, height, state.current.frame);
-  drawShield(ctx, state.vfx, f, cam, height);
+  // The 3D layer draws the bubble (`vfx3d.ts`), from the sim's own centre and radius.
+  if (!state.world3d) drawShield(ctx, state.vfx, f, cam, height);
   // Above the fighter, and after them, because a broken shield is drawn at the
   // back of the pile and the stars are the part that has to survive that.
   drawDizzyStars(ctx, f, cam, height);
@@ -441,9 +509,17 @@ function drawOneFighter(
   // inboard arm of the V and left one arm, which reads as a hank of hair. The
   // symmetry that made it a boomerang was exactly what was being cut off.
   const label = state.cpu?.[f.port] ? "CPU" : `P${f.port + 1}`;
+  if (anchor) {
+    // A unit over the head capsule: the capsule covers three quarters of the
+    // head's vertices, so ears and hat brims stand a little proud of it.
+    const head = worldToScreen(cam, d.x + anchor.headX, d.y + anchor.headTop + 1);
+    drawPortTag(ctx, head.x, head.y - 14, f.port, label, Math.max(0.6, cam.zoom / 7));
+    return fx.hideFigure;
+  }
   const clearance = (rig.tagClearance ?? 0) * rig.scale;
   const tagY = screen.y - (height + clearance) * cam.zoom - 14;
   drawPortTag(ctx, screen.x, tagY, f.port, label, Math.max(0.6, cam.zoom / 7));
+  return fx.hideFigure;
 }
 
 /**

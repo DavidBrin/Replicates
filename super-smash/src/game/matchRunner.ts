@@ -38,13 +38,15 @@ import type { FighterSelection } from "@/engine/simulate";
 import { createCamera, updateCamera, type Camera } from "@/render/camera";
 import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
-import { render } from "@/render/renderer";
+import { render, renderBackground, type RenderState } from "@/render/renderer";
 import { cpuInput, type CpuWorld } from "@/ai/cpu";
 import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
 import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
 import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
 import type { Transport } from "@/net/transport";
+// Three-free (`render3d/anchors.ts`): the overlay's anchors cost the page no three.js.
+import { overlayAnchor } from "@/render3d/anchors";
 import { ENGINE_ROLLBACK_DEPS } from "./rollbackDeps";
 import { GAME_SIM_CONTEXT } from "./simContext";
 
@@ -155,6 +157,24 @@ export interface MatchRunnerOptions {
   readonly onEnd?: (outcome: MatchOutcome) => void;
   readonly onFrame?: (state: GameState, events: StepEvents) => void;
   readonly debugSilhouette?: boolean;
+  /**
+   * The 3D world under the overlay canvas (Plan 4, `render3d/renderer3d.ts`).
+   * Absent: the whole frame is drawn in 2D on the canvas given to `start`.
+   */
+  readonly presenter?: WorldPresenter | null;
+  /** The stage's 2D background, under the 3D layer. Only read with a presenter. */
+  readonly background?: HTMLCanvasElement | null;
+}
+
+/** What the match runner needs from the 3D presenter. Structural, so tests can fake it. */
+export interface WorldPresenter {
+  /**
+   * Draw the world for `rs`, framed by `camera` — the very object the overlay
+   * is drawn with, so the two layers line up (`render3d/camera3d.ts`).
+   * `hidden[port]`: a move effect replaces that fighter this frame.
+   */
+  paint(rs: RenderState, camera: Camera, alpha: number, hidden: readonly boolean[]): void;
+  dispose(): void;
 }
 
 export interface MatchRunner {
@@ -212,6 +232,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     onEnd,
     onFrame,
     debugSilhouette = false,
+    presenter = null,
+    background = null,
   } = options;
 
   const defs = players.map((p) => getFighter(p.selection.defId));
@@ -384,25 +406,35 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
     }
   }
 
+  const bgCtx = presenter && background ? background.getContext("2d") : null;
+
   function paint(alpha: number): void {
     if (!ctx) return;
-    render(
-      ctx,
-      {
-        current: state,
-        previous,
-        stage,
-        fighters: defs,
-        labels: players.map((p, i) => p.label ?? defs[i]?.name ?? ""),
-        cpu: players.map((p) => p.cpuLevel !== null),
-        vfx,
-        hud,
-        debugSilhouette,
-      },
-      events,
-      camera,
-      alpha,
-    );
+    const rs: RenderState = {
+      current: state,
+      previous,
+      stage,
+      fighters: defs,
+      labels: players.map((p, i) => p.label ?? defs[i]?.name ?? ""),
+      cpu: players.map((p) => p.cpuLevel !== null),
+      vfx,
+      hud,
+      debugSilhouette,
+      world3d: presenter !== null,
+      // The 3D model's head, from the bake the sim steps with (Plan 4).
+      anchors:
+        presenter === null
+          ? undefined
+          : state.fighters.map((f) => {
+              const def = defs[f.port];
+              return def ? overlayAnchor(def, f, state.frame, GAME_SIM_CONTEXT.bake) : null;
+            }),
+    };
+    if (bgCtx) renderBackground(bgCtx, stage, camera, state.frame);
+    // The overlay first: it is what knows a move effect hides its fighter this
+    // frame. Both canvases reach the screen at the same composite either way.
+    const overlay = render(ctx, rs, events, camera, alpha);
+    if (presenter) presenter.paint(rs, camera, alpha, overlay.hidden);
   }
 
   function loop(now: number): void {
@@ -491,6 +523,8 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
       ctx = null;
       if (session && (ended || desyncFrame !== null) && lingerMs > 0) linger(session, lingerMs, desyncFrame);
       else session?.close();
+      // On both paths: a lingering session only re-sends inputs, and draws nothing.
+      presenter?.dispose();
     },
     get netStats() {
       return session ? session.stats() : null;

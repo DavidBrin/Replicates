@@ -549,7 +549,11 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
   nair: ({ ctx, def, x, y, u, frame, dir }) => {
     const move = def.moves.nair;
     if (!move || move.hitboxes.length === 0) return NOTHING;
-    const clean = move.hitboxes.reduce((a, b) => (b.damage > a.damage ? b : a));
+    // The clean hit's window ends on the last frame any box deals its damage:
+    // the game's script (Plan 4) writes each frame of it as an entry of its own,
+    // so the first strongest entry ends on the window's first frame.
+    const strongest = Math.max(...move.hitboxes.map((h) => h.damage));
+    const cleanEnd = Math.max(...move.hitboxes.filter((h) => h.damage === strongest).map((h) => h.endFrame));
     const first = Math.min(...move.hitboxes.map((h) => h.startFrame));
     const last = Math.max(...move.hitboxes.map((h) => h.endFrame));
     // Three frames of lead-in, so the ring is already spinning up behind the
@@ -560,9 +564,9 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     const fade =
       frame < first
         ? 0.4 * (1 - (first - frame) / (LEAD + 1))
-        : frame <= clean.endFrame
+        : frame <= cleanEnd
           ? 1
-          : Math.max(0, 1 - (0.72 * (frame - clean.endFrame)) / (last - clean.endFrame));
+          : Math.max(0, 1 - (0.72 * (frame - cleanEnd)) / (last - cleanEnd));
     if (fade <= 0.01) return NOTHING;
 
     const grow = frame < first ? 0.6 + (0.4 * (LEAD - (first - frame))) / LEAD : 1;
