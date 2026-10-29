@@ -704,6 +704,32 @@ describe("the environment collision box (ECB)", () => {
     expect(rising()).toEqual({ y: -HARD_PLATFORM_DEPTH - fx(19), ceiling: false });
   });
 
+  // Plan 4 Task 12, fix round 1 (C1): a bone ECB changes shape every frame, so the
+  // underside cannot ask whether last frame's position was below it with THIS frame's
+  // top. A body stopped there, whose pose is then any taller, would read as already
+  // inside and rise through the stage. It asks whether the feet were below.
+  it("stops a rising body at the underside even when its top grew since the stop (fix round 1, C1)", () => {
+    const bottom = -HARD_PLATFORM_DEPTH;
+    // Last frame the underside stopped a top of 20 (its head exactly there); now the
+    // pose is taller, by a unit or by one Q12 step, and it rises 2.
+    for (const grown of [fx(21), fx(20) + 1]) {
+      const prevY = bottom - fx(20);
+      const f = fighter({ x: 0, y: prevY + fx(2), vy: fx(2) });
+      const out = resolveCollision(f, 0, prevY, STAGE, ATTRS, 0, { ecb: { bottom: 0, top: grown, half: fx(4) } });
+      expect(out.ceiling, `top ${grown}`).toBe(true);
+      expect(f.y, `top ${grown}`).toBe(bottom - grown);
+    }
+  });
+
+  it("leaves a body whose feet were already inside the stage to the stage, as before", () => {
+    // Feet inside the solid body last frame (between its underside and its surface):
+    // nothing pushes it down out of the stage, as nothing did with Plan 2's box.
+    const f = fighter({ x: 0, y: -fx(29), vy: fx(2) });
+    const out = resolveCollision(f, 0, -fx(31), STAGE, ATTRS, 0, { ecb: { bottom: 0, top: fx(20), half: fx(4) } });
+    expect(out.ceiling).toBe(false);
+    expect(f.y).toBe(-fx(29));
+  });
+
   it("pushes a body moving away from the wall clear without stopping it", () => {
     // Launched outward from the lip: the body still overlaps the wall, the motion leaves it.
     for (const side of [1, -1] as const) {

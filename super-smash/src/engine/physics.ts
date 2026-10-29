@@ -309,8 +309,15 @@ export function resolveCollision(
       }
       out.blocked = true;
     }
-    // Ceiling: the ECB's top rising into the underside of a solid body.
-    if (f.vy > 0 && abs(f.x - cx) < reach && prevY + ecb.top <= bottom && head > bottom) {
+    // Ceiling: the ECB's top rising into the underside of a solid body, from below it:
+    // the feet were under the underside last frame. Not "the head was": with a bake the
+    // ECB is this frame's bones' and changes shape every frame, so last frame's position
+    // with this frame's top can read a body the underside stopped, its pose now any
+    // taller, as already inside, and it rose through the stage (Plan 4, Task 12 fix
+    // round 1). Nor last frame's own top: a pose can reach into the underside before
+    // the body ever rises (the tech lab's Donkey Kong). Feet below and head above is a
+    // body in the stage from underneath, and it is pushed back down.
+    if (f.vy > 0 && abs(f.x - cx) < reach && prevY + ecb.bottom < bottom && head > bottom) {
       f.y = bottom - ecb.top;
       kineticSetY(f, 0);
       out.blocked = true;
@@ -599,9 +606,10 @@ export function blastZoneKO(f: FighterState, stage: StageDef): KOKind | null {
  *
  * UNVERIFIED as a rule: nothing public gives the sizes per fighter or per
  * animation. With a bake, `step` reads it off this frame's bones (Plan 4,
- * `acmd/hurtboxes.ts` `bakedEcb`: the top of the highest hurt capsule, the
- * pelvis capsule's reach to either side, the bottom at the feet) and passes it
- * to `resolveCollision`, `clampShiftToStage`, the ledge grab and the trump.
+ * `acmd/hurtboxes.ts` `bakedEcb`: the top of the highest body capsule, never
+ * an arm's, the pelvis capsule's reach to either side, the bottom at the feet)
+ * and passes it to `resolveCollision`, `clampShiftToStage`, the ledge grab and
+ * the trump.
  * `ecbOf` is Plan 2's box, what they read without one: the hurtbox's height
  * and half-width, its bottom at the feet in the air as well. Either way
  * `resolveCollision` tests the side points against a platform's span as a

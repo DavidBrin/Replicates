@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BAKE } from "@/engine/acmd/bakeTables";
-import { bakedEcb, ECB_BODY_BONES, fighterHurtboxes, localHurtboxes, restEcb } from "@/engine/acmd/hurtboxes";
+import { bakedEcb, ECB_BODY_BONES, ECB_TOP_BONES, fighterHurtboxes, localHurtboxes, restEcb } from "@/engine/acmd/hurtboxes";
 import { poseIndexOf } from "@/engine/acmd/poseClock";
 import { fx, toFloat } from "@/engine/fixed";
 import { hurtboxCapsule } from "@/engine/hitbox";
@@ -16,6 +16,8 @@ import { readBakeFromDisk } from "./bakeNode";
 const bake = readBakeFromDisk();
 const mario = FIGHTERS.find((f) => f.id === "mario")!;
 const top = (caps: readonly { y1: number; y2: number; r: number }[]) => Math.max(...caps.map((c) => Math.max(c.y1, c.y2) + c.r));
+/** The capsules of `id` whose bones set the ECB's top: the body, not the arms (fix round 1). */
+const bodyOf = <T>(id: string, caps: readonly T[]) => caps.filter((_, i) => ECB_TOP_BONES.has(bake.hurtboxes(id)![i].bone));
 
 describe("per-bone hurtboxes from the bake (Plan 4)", () => {
   it("gives every fighter one capsule per baked hurt bone while standing", () => {
@@ -39,6 +41,8 @@ describe("per-bone hurtboxes from the bake (Plan 4)", () => {
     right.forEach((c, i) => {
       expect(left[i].x1 - fx(10) + (c.x1 - fx(10))).toBe(0);
       expect(left[i].y1).toBe(c.y1);
+      expect(left[i].x2 - fx(10) + (c.x2 - fx(10))).toBe(0);
+      expect(left[i].y2).toBe(c.y2);
       expect(left[i].r).toBe(c.r);
     });
   });
@@ -68,10 +72,34 @@ describe("per-bone hurtboxes from the bake (Plan 4)", () => {
 });
 
 describe("the ECB from bones (Plan 4)", () => {
-  it("keeps its bottom at the feet and its top over the head", () => {
+  it("keeps its bottom at the feet and its top over the highest body capsule", () => {
     const e = bakedEcb(mario, makeFighter(), 0, bake)!;
     expect(e.bottom).toBe(0);
-    expect(e.top).toBe(top(localHurtboxes(mario, makeFighter(), 0, bake)!));
+    expect(e.top).toBe(top(bodyOf("mario", localHurtboxes(mario, makeFighter(), 0, bake)!)));
+  });
+
+  // Fix round 1 (the review's I1): a raised arm is not the body. Donkey Kong's arms
+  // over his head in a tumble lifted his ECB to 40.8 against 26.3 standing.
+  it("takes its top from the head, the trunk and the legs, never a raised arm", () => {
+    const dk = FIGHTERS.find((f) => f.id === "donkeyKong")!;
+    const frames = bake.clock("donkeyKong", "status_tumble")!.frames;
+    let armsHigher = 0;
+    for (let af = 0; af < frames; af++) {
+      const f = makeFighter({ defId: "donkeyKong", action: "tumble", actionFrame: af, hitstun: 60 });
+      const caps = localHurtboxes(dk, f, 0, bake)!;
+      const e = bakedEcb(dk, f, 0, bake)!;
+      expect(e.top, `tumble frame ${af}`).toBe(Math.max(top(bodyOf("donkeyKong", caps)), restEcb(dk, bake)!.top >> 1));
+      if (top(caps) > e.top) armsHigher++;
+    }
+    expect(armsHigher, "tumble frames whose arms reach over the body").toBeGreaterThan(0);
+  });
+
+  it("names every hurt bone either a body bone or one of the arm chain", () => {
+    // So a bone a later skeleton adds is put on one side on purpose, not dropped from the top.
+    for (const def of FIGHTERS) {
+      const left = bake.hurtboxes(def.id)!.map((h) => h.bone).filter((b) => !ECB_TOP_BONES.has(b));
+      expect(left.sort(), def.id).toEqual(["arml", "armr", "shoulderl", "shoulderr"]);
+    }
   });
 
   it("shrinks with a crouch but never below half its standing ECB", () => {

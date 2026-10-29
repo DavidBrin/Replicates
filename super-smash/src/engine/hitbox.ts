@@ -298,8 +298,9 @@ export function deepestReach(
 /**
  * `v × num / den`, truncated: a fraction of a fixed-point length taken in one
  * integer division, not through a Q12 parameter, which would put the point 3
- * units along a 10-unit segment 8 Q12 units short. The operands stay far inside
- * 2^53 for anything within a blast zone.
+ * units along a 10-unit segment 8 Q12 units short. The operands stay inside 2^53
+ * for anything within a blast zone (a blast-zone-long segment reaches about 2e15,
+ * a fifth of it); a hitbox's capsule is far shorter.
  */
 function along(v: number, num: number, den: number): number {
   return Math.trunc((v * num) / den);

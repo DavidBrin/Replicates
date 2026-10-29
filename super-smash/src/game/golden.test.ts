@@ -9,10 +9,11 @@ import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { launchWorldAngle } from "@/engine/knockback";
 import { toFloat } from "@/engine/fixed";
+import { HARD_PLATFORM_DEPTH, platformCentreX } from "@/engine/physics";
 import { createInitialState, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
-import type { ActionState, FighterState, GameState, InputFrame, MatchRules, MoveSlot } from "@/engine/types";
+import type { ActionState, FighterState, GameState, InputFrame, MatchRules, MoveSlot, StageDef } from "@/engine/types";
 import { FIGHTERS } from "@/fighters";
 import { STAGES } from "@/stages";
 import { bakedContext } from "./bake";
@@ -346,7 +347,8 @@ function hitKind(attacker: FighterState): string {
  * What must hold on every frame, whatever the fighters do: `vx`/`vy` are
  * exactly the energies' sum, every number a fighter carries is an integer
  * (Q12 or a count), and the stale queue's parallel array has its length (and
- * across fighters, `stateInvariantBreaks`: no ledge held twice). The
+ * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
+ * fighter inside the stage). The
  * static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
  * on every frame of all six matches.
@@ -375,8 +377,15 @@ function invariantBreaks(f: FighterState, frame: number): string[] {
  * which keeps its `ledge` set, has it refused to everybody else (`findLedgeGrab`):
  * so two fighters with the same `ledge` is a rule broken, however it happened
  * (Plan 3 final wave, part 4; the Task 15 review's N4).
+ *
+ * And no fighter's origin, its feet, is ever strictly inside a hard platform's
+ * solid body: within its span, below its surface and above its underside
+ * (`HARD_PLATFORM_DEPTH`). The walls, the ceilings and the SDI clamp all keep a
+ * body out, and a body that got in, a fighter rising through the underside, is
+ * otherwise invisible to the trace (Plan 4, Task 12 fix round 1: the bones' ECB
+ * once let an up special rise straight through the stage).
  */
-function stateInvariantBreaks(s: GameState, frame: number): string[] {
+function stateInvariantBreaks(s: GameState, stage: StageDef, frame: number): string[] {
   const out: string[] = [];
   const holder = new Map<string, number>();
   for (const f of s.fighters) {
@@ -385,6 +394,13 @@ function stateInvariantBreaks(s: GameState, frame: number): string[] {
     const first = holder.get(key);
     if (first === undefined) holder.set(key, f.port);
     else out.push(`frame ${frame}: ports ${first} and ${f.port} both hold the ledge at ${key}`);
+  }
+  for (const f of s.fighters) {
+    stage.platforms.forEach((p, i) => {
+      if (p.soft) return;
+      const inside = Math.abs(f.x - platformCentreX(p, s.frame)) < p.halfWidth && f.y < p.y && f.y > p.y - HARD_PLATFORM_DEPTH;
+      if (inside) out.push(`frame ${frame}, port ${f.port}: origin (${toFloat(f.x)}, ${toFloat(f.y)}) inside platform ${i} (${f.action})`);
+    });
   }
   return out;
 }
@@ -438,7 +454,7 @@ function play(match: Match): Played {
       for (const p of softPaths(state.fighters[port], after, inputs[port], prev[port])) soft.add(p);
       if (breaks.length < 5) breaks.push(...invariantBreaks(after, frame));
     }
-    if (breaks.length < 5) breaks.push(...stateInvariantBreaks(out.state, frame));
+    if (breaks.length < 5) breaks.push(...stateInvariantBreaks(out.state, CTX.stage(match.stage), frame));
     state = out.state;
     prev = inputs;
     hits += out.events.hits.length;
@@ -459,7 +475,10 @@ describe("engine golden trace", () => {
   // Measured 2026-10-29 on Plan 4 Task 13 (the baked world, with the limb-bone
   // scripts on), the four CPU matches in `MATCHES` order, then the script, then the
   // tech lab: hits 19/36/13/11, 6 and 0; shield hits 0/3/0/0, 3 and 0; KOs 1/1/3/2,
-  // 1 and 2. (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
+  // 1 and 2, and the same again after Task 12's fix round 1 (the ECB's top from the
+  // body, not the arms; the underside asks where the feet were), which moved only
+  // link-samus from frame 2232 and the lab's ceiling tech from frame 1 to 3.
+  // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)
   // The floors below are what a refactor must not drop, not these counts.
@@ -498,7 +517,7 @@ describe("engine golden trace", () => {
   it("exercises combat, not an idle screen", expectCombat);
   it("visits every action state and every soft-stick path", expectCoverage);
   it("lands every kind of hit the scripted match lands", expectScriptHits);
-  it("keeps vx/vy the energies' sum, and every fighter number an integer, on every frame", expectInvariants);
+  it("keeps vx/vy the energies' sum, every fighter number an integer, and every fighter out of the stage, on every frame", expectInvariants);
 
   if (process.env.UPDATE_GOLDEN === "1") {
     it("writes the golden trace", () => {

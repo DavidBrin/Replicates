@@ -281,7 +281,37 @@ describe("the ECB from bones in step() (Plan 4, Task 12; ruling R6)", () => {
     expect(mash(false)).toBe(fx(80) + roster("kirby").attributes.width);
   });
 
-  it("meets the stage's underside with the top of this frame's capsules (12.2)", () => {
+  // Fix round 1 (C1): Link's up special rises at a set speed under the stage while its
+  // pose changes shape every frame. The underside stops it, and if the next pose is
+  // any taller, a "came from below" test that reads last frame's position with this
+  // frame's top took it for a body already inside and let it rise through (the review
+  // found Fox and Link doing so in 4 of 56 CPU matches). Whatever height it starts
+  // from, its feet never enter the stage.
+  it("keeps an up special rising into the underside below the stage, however its pose grows (fix round 1)", () => {
+    const bottom = -HARD_PLATFORM_DEPTH;
+    let grewAfterAStop = 0;
+    for (let start = 30; start <= 50; start += 0.5) {
+      const ctx = world(true);
+      const s = with1("link", ctx, falling(0));
+      s.fighters[1].y = bottom - fx(start);
+      const frames = play(s, 50, (i) => [0, i === 0 ? Btn.Up | Btn.Special : 0], ctx);
+      frames.forEach((fr, i) => {
+        const f = fr.state.fighters[1];
+        expect(f.y > bottom && f.y < 0, `from ${start} under: frame ${fr.state.frame} at y ${toFloat(f.y)}`).toBe(false);
+        // The case itself: stopped with its head at the underside, then stopped there
+        // again the next frame by a taller pose (where it used to rise through).
+        const e = bakedEcb(roster("link"), f, fr.state.frame, BAKE)!;
+        const next = frames[i + 1]?.state;
+        if (next === undefined || f.y + e.top !== bottom) return;
+        const g = next.fighters[1];
+        const taller = bakedEcb(roster("link"), g, next.frame, BAKE)!.top;
+        if (taller > e.top && g.y + taller === bottom) grewAfterAStop++;
+      });
+    }
+    expect(grewAfterAStop, "runs where the pose grew right after an underside stop").toBeGreaterThan(0);
+  });
+
+  it("meets the stage's underside with the top of this frame's body capsules (12.2)", () => {
     // Donkey Kong tumbling up from under the stage: his bones' head is far over Plan 2's 15.
     const rising = (y: number) => (f: FighterState) => {
       Object.assign(f, { x: 0, y, grounded: false, platform: -1, action: "tumble", actionFrame: 0, hitstun: 60 });

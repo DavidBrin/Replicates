@@ -23,6 +23,7 @@ import { bonePoint, newBonePose, type BoneTable } from "./bones";
 import type { Ecb } from "../physics";
 import type { Capsule } from "../hitbox";
 import type { FighterDef } from "../types";
+import type { BoneHurtbox } from "./bakeCodec";
 import type { BakeTables } from "./bakeTables";
 import { poseIndexOf, type ClockedFighter } from "./poseClock";
 
@@ -63,10 +64,25 @@ export function fighterHurtboxes(def: FighterDef, f: Placed, globalFrame: number
 export const ECB_BODY_BONES: ReadonlySet<string> = new Set(["hip", "body"]);
 
 /**
- * The ECB from this frame's hurt capsules: the top is the highest point of any
- * capsule; the half-width is the widest reach of the body capsules either side
- * of the origin; the bottom stays at the feet, as Ultimate locks it on the
- * ground (UNVERIFIED in the air — kept at the feet there too, D57).
+ * Bones whose capsules set the ECB's top: the head, the trunk and the legs (the
+ * humanoids' `head`, `bust`, `hip`, `legl/r`, `kneel/r`; Kirby's round `body` and
+ * his `kneel/r`), never the arm chain (`shoulderl/r`, `arml/r`). A raised arm is
+ * not the body: with every capsule, Donkey Kong's arms over his head in a tumble
+ * lifted his ECB to 40.8 units against 26.3 standing, so it met ceilings his body
+ * was nowhere near (Plan 4, Task 12 fix round 1; 19.3 to 31.8 without them).
+ * UNVERIFIED: no public source lists which bones Ultimate builds its ECB from
+ * (research README §3 says only "4-point diamond from bones, bottom locked on
+ * ground"); this is the set `ECB_BODY_BONES` sets the width from, with the head
+ * and legs.
+ */
+export const ECB_TOP_BONES: ReadonlySet<string> = new Set(["head", "bust", "hip", "body", "legl", "legr", "kneel", "kneer"]);
+
+/**
+ * The ECB from this frame's hurt capsules: the top is the highest point of the
+ * body's capsules (`ECB_TOP_BONES`: not the arms); the half-width is the widest
+ * reach of the pelvis capsule (`ECB_BODY_BONES`) either side of the origin; the
+ * bottom stays at the feet, as Ultimate locks it on the ground (UNVERIFIED in
+ * the air — kept at the feet there too, D57).
  *
  * Never narrower than `minHalf` or shorter than `minTop` (half the fighter's
  * standing ECB, `restEcb`), so a tumbling or crouching body cannot shrink the
@@ -81,7 +97,7 @@ export function ecbFromHurtboxes(
   let top = minTop;
   let half = minHalf;
   local.forEach((c, i) => {
-    top = Math.max(top, c.y1 + c.r, c.y2 + c.r);
+    if (ECB_TOP_BONES.has(bones[i])) top = Math.max(top, c.y1 + c.r, c.y2 + c.r);
     if (ECB_BODY_BONES.has(bones[i])) half = Math.max(half, Math.abs(c.x1) + c.r, Math.abs(c.x2) + c.r);
   });
   return { bottom: 0, top, half };
@@ -101,6 +117,15 @@ const STANDING: Omit<ClockedFighter, "defId"> = {
   shortHop: false,
 };
 const restCache = new WeakMap<BakeTables, WeakMap<BoneTable, Map<string, Ecb | null>>>();
+const namesCache = new WeakMap<readonly BoneHurtbox[], readonly string[]>();
+
+/** The fighter's hurt bones' names, lower case, in capsule order: built once per bake. */
+function hurtBoneNames(bake: BakeTables, id: string): readonly string[] {
+  const boxes = bake.hurtboxes(id) ?? [];
+  let names = namesCache.get(boxes);
+  if (names === undefined) namesCache.set(boxes, (names = boxes.map((h) => h.bone.toLowerCase())));
+  return names;
+}
 
 /** The fighter's ECB standing still on frame 0 — the size of its body (D57) — or null without a bake. */
 export function restEcb(def: FighterDef, bake: BakeTables, bones: BoneTable = bake.bones): Ecb | null {
@@ -110,8 +135,7 @@ export function restEcb(def: FighterDef, bake: BakeTables, bones: BoneTable = ba
   if (byFighter === undefined) byBones.set(bones, (byFighter = new Map()));
   if (!byFighter.has(def.id)) {
     const local = localHurtboxes(def, { ...STANDING, defId: def.id }, 0, bake, bones);
-    const names = (bake.hurtboxes(def.id) ?? []).map((h) => h.bone.toLowerCase());
-    byFighter.set(def.id, local === null ? null : ecbFromHurtboxes(local, names, 0, 0));
+    byFighter.set(def.id, local === null ? null : ecbFromHurtboxes(local, hurtBoneNames(bake, def.id), 0, 0));
   }
   return byFighter.get(def.id)!;
 }
@@ -122,6 +146,5 @@ export function bakedEcb(def: FighterDef, f: ClockedFighter, globalFrame: number
   if (rest === null) return null;
   const local = localHurtboxes(def, f, globalFrame, bake, bones);
   if (local === null) return null;
-  const names = (bake.hurtboxes(def.id) ?? []).map((h) => h.bone.toLowerCase());
-  return ecbFromHurtboxes(local, names, rest.half >> 1, rest.top >> 1);
+  return ecbFromHurtboxes(local, hurtBoneNames(bake, def.id), rest.half >> 1, rest.top >> 1);
 }
