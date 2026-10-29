@@ -305,13 +305,22 @@ export interface HitlagOptions {
    * exchange for *both* fighters rather than only for the one who crouched.
    */
   readonly crouchCancel?: boolean;
-  /** Per-move scaling from `Hitbox.hitlagMultiplier`. */
+  /**
+   * Per-move scaling from `Hitbox.hitlagMultiplier`. On a shield one below 1×
+   * counts as 1×, and 0× stays 0× (SmashWiki "Hitlag").
+   */
   readonly moveMultiplier?: number;
 }
 
 /**
  * `hitlag = floor((damage × 0.65 + 6) × electric × shielding × crouchCancel)`,
  * capped at 30.
+ *
+ * On a shield a move's own multiplier below 1× is read as 1× (SmashWiki "Hitlag",
+ * https://www.ssbwiki.com/Hitlag: "Hitlag multipliers less than 1× are ignored if
+ * shielding"), except 0×, which still freezes nobody ("moves with a hitlag
+ * multiplier of 0× will still cause no hitlag, even when perfect shielded").
+ * Plan 3 final wave; the Task 10 review's carry.
  *
  * Both fighters freeze for these frames — it is the crunch that sells the hit,
  * and it is also the window in which the victim mashes SDI. Electric hits freeze
@@ -340,7 +349,8 @@ export function computeHitlag(damage: number, opts: HitlagOptions = {}): number 
   let den = HITLAG_RATIO[1];
 
   const ratios: Ratio[] = [];
-  if (opts.moveMultiplier !== undefined) ratios.push([opts.moveMultiplier, ONE]);
+  const move = opts.moveMultiplier;
+  if (move !== undefined) ratios.push([opts.shielding && move > 0 && move < ONE ? ONE : move, ONE]);
   if (opts.electric) ratios.push(HITLAG_ELECTRIC);
   if (opts.shielding) ratios.push(HITLAG_SHIELDING);
   for (const [n, d] of ratios) {

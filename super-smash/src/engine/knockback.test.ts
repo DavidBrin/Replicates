@@ -373,6 +373,16 @@ describe("computeHitlag", () => {
     expect(computeHitlag(fx(100))).toBe(30);
     expect(computeHitlag(fx(40), { electric: true })).toBe(30);
   });
+
+  // SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag): "Hitlag multipliers less than
+  // 1× are ignored if shielding", and "moves with a hitlag multiplier of 0× will still
+  // cause no hitlag, even when perfect shielded" (Plan 3 final wave).
+  it("reads a move's multiplier below 1x as 1x on a shield, but keeps 0x", () => {
+    expect(computeHitlag(fx(10), { moveMultiplier: fx(0.3) })).toBe(3);
+    expect(computeHitlag(fx(10), { moveMultiplier: fx(0.3), shielding: true })).toBe(8);
+    expect(computeHitlag(fx(10), { moveMultiplier: fx(2), shielding: true })).toBe(16);
+    expect(computeHitlag(fx(10), { moveMultiplier: 0, shielding: true })).toBe(0);
+  });
 });
 
 describe("computeShieldstun", () => {

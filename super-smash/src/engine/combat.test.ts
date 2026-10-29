@@ -5252,3 +5252,27 @@ describe("mashing out of a shield break (final wave, part 2, item 5)", () => {
     expect(v.shieldHealth).toBe(SHIELD_BREAK_RESET + SHIELD_REGEN_PER_FRAME);
   });
 });
+
+describe("a hitlag multiplier below 1x counts as 1x on a shield (final wave, part 2, item 6)", () => {
+  // SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag): "Hitlag multipliers less than 1×
+  // are ignored if shielding", as with Cloud's Limit Cross Slash (0.3×), whose "hits
+  // transition considerably slower if it hits a shield". The Task 10 review's carry.
+  const quick = jabbing(hitbox({ hitlagMultiplier: fx(0.3) }));
+  const JAB_DAMAGE = mul(fx(10), STALE_FRESH_BONUS);
+  const freezes = (inputs: (i: number) => readonly InputFrame[]): [number, number] => {
+    const frames = play(standing(quick), 10, inputs, quick);
+    const at = frames.find((f) => f.events.hits.length + f.events.shieldHits.length > 0)!;
+    return [at.state.fighters[0].hitlag, at.state.fighters[1].hitlag];
+  };
+
+  it("freezes both fighters a shield hit's whole hitlag", () => {
+    const lag = computeHitlag(JAB_DAMAGE, { shielding: true });
+    expect(freezes(JAB_INTO_SHIELD)).toEqual([lag, lag]);
+  });
+
+  it("keeps the 0.3x on a hit to the body", () => {
+    const lag = computeHitlag(JAB_DAMAGE, { moveMultiplier: fx(0.3) });
+    expect(lag).toBeLessThan(computeHitlag(JAB_DAMAGE, { shielding: true }));
+    expect(freezes(JAB)).toEqual([lag, lag]);
+  });
+});
