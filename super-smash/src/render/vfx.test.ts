@@ -431,7 +431,7 @@ describe("continuous effects", () => {
 
   it.each([
     // `charge` also carries a landing's length (ordinary and aerial: `onLanded`) and an air dodge's
-    // "directional" flag (1). None of those is a charge, so none of them glows.
+    // direction (`airDodgeCharge`: 1-9; 1 is down-left). None of those is a charge, so none glows.
     ["a light or heavy landing", { action: "land", charge: 3 }],
     ["an aerial's landing lag", { action: "landingLag", charge: 6 }],
     ["a directional air dodge", { action: "airDodge", charge: 1 }],

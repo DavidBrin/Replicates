@@ -405,7 +405,12 @@ export const DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN = 10;
  * The slingshot: first a shift of 7 units back, against the dodge's direction,
  * over its first 4 frames (P L33 `escape_air_slide_back_distance` 7, L34
  * `escape_air_slide_back_end_frame` 4; W: "characters first shift a small
- * distance towards the opposite direction in a slingshot fashion").
+ * distance towards the opposite direction in a slingshot fashion"). They are
+ * `actionFrame` 0-3, the entry frame already moving, so frames 1-4 counting the
+ * entry frame as the first, and the slide starts on `actionFrame` 4 (frame 5 by
+ * that count). UNVERIFIED, a counting difference: SmashWiki "Lucario
+ * (SSBU)/Air dodge" has the shift "during frames 1-5 before moving toward stage
+ * starting frame 6", one frame more than P's 4.
  */
 export const AIR_DODGE_SLINGSHOT_DISTANCE = fx(7);
 export const AIR_DODGE_SLINGSHOT_FRAMES = 4;
@@ -440,7 +445,8 @@ export const AIR_DODGE_LANDING_SLIDE_MAX = fx(2);
  * No ledge is grabbed in a directional air dodge's first 24 frames: W "all
  * characters can grab edges after the first 24 frames of their directional air
  * dodge" (SmashWiki "Lucario (SSBU)/Air dodge": "all directional air dodges
- * grab ledge on frame 25").
+ * grab ledge on frame 25"). Frames counted as the dodge windows count them
+ * (`airDodge.ts`): the first grab is on `actionFrame` 25.
  */
 export const AIR_DODGE_LEDGE_FRAMES = 24;
 

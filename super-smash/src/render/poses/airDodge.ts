@@ -1,5 +1,5 @@
-import { P, type PoseClip } from "./clip";
-import { deg } from "../skeleton";
+import { P, samplePose, type PoseClip, type PoseSample } from "./clip";
+import { BASE_RIG, deg, type BoneName } from "../skeleton";
 
 /**
  * The air dodge — one clip stretched across every air dodge in the game.
@@ -204,19 +204,32 @@ export const AIR_DODGE_WINDOW_END_MIN = 20 / 63;
 export const AIR_DODGE_WINDOW_END_MAX = 28 / 50;
 
 /**
- * Clip time for `actionFrame` `frame` of an air dodge `total` frames long whose
- * intangibility ends on `lastIntangible` (`airDodgeIntangible`). Linear,
- * `frame / total`, wherever that puts the window's end inside the range the clip
- * was authored for (`AIR_DODGE_WINDOW_END_MIN`/`_MAX`). Outside it the clip is
- * played in two pieces, as an attack's is around its contact frame
- * (`poseTimeFor`): the window's last frame lands on the range's nearer end, the
- * clip before it stretched across the window and the clip after it across the
- * rest. Each fighter's own lengths put most dodges outside it (Plan 3, Task 20c):
- * a directional dodge's window ends 19-22 frames into 54-141, a neutral one's
- * 26-32 into 38-61.
+ * The most any one bone may turn from one frame's drawing to the next, in
+ * degrees: past about this the fighter reads as replaced rather than moved
+ * (`airDodge.test.ts` holds every roster dodge under 32).
  */
-export function airDodgeClipTime(frame: number, total: number, lastIntangible: number): number {
-  if (total <= 0) return 0;
+export const AIR_DODGE_MAX_BONE_STEP = 30;
+
+/** The largest angle any single bone turns between two poses, in degrees. */
+function boneTurn(a: PoseSample, b: PoseSample): number {
+  let worst = 0;
+  for (const name of Object.keys(BASE_RIG) as BoneName[]) {
+    let d = Math.abs(((b.angles[name] ?? BASE_RIG[name].angle) - (a.angles[name] ?? BASE_RIG[name].angle)) * 180) / Math.PI;
+    d %= 360;
+    worst = Math.max(worst, d > 180 ? 360 - d : d);
+  }
+  return worst;
+}
+
+/**
+ * The plain clip time: linear, `frame / total`, wherever that puts the
+ * window's end inside the range the clip was authored for
+ * (`AIR_DODGE_WINDOW_END_MIN`/`_MAX`). Outside it the clip is played in two
+ * pieces, as an attack's is around its contact frame (`poseTimeFor`): the
+ * window's last frame lands on the range's nearer end, the clip before it
+ * stretched across the window and the clip after it across the rest.
+ */
+function plainClipTime(frame: number, total: number, lastIntangible: number): number {
   const linear = Math.min(1, Math.max(0, frame / total));
   if (lastIntangible <= 0 || lastIntangible >= total) return linear;
   const at = lastIntangible / total;
@@ -224,4 +237,91 @@ export function airDodgeClipTime(frame: number, total: number, lastIntangible: n
   if (end === at) return linear;
   if (frame <= lastIntangible) return Math.max(0, (end * frame) / lastIntangible);
   return Math.min(1, end + ((1 - end) * (frame - lastIntangible)) / (total - lastIntangible));
+}
+
+/** How finely the clip's own motion is measured for pacing. */
+const MOTION_STEPS = 1000;
+let motion: number[] | null = null;
+
+/** How far the clip's bones have turned, in total, by clip time `i / MOTION_STEPS`; measured once. */
+function clipMotion(): number[] {
+  if (motion === null) {
+    const poses = Array.from({ length: MOTION_STEPS + 1 }, (_, i) => samplePose(airDodge, i / MOTION_STEPS));
+    const out = [0];
+    for (let i = 1; i <= MOTION_STEPS; i++) out.push(out[i - 1] + boneTurn(poses[i - 1], poses[i]));
+    motion = out;
+  }
+  return motion;
+}
+
+/** The clip time at which `clipMotion` reaches `m`. */
+function timeAtMotion(m: number): number {
+  const c = clipMotion();
+  let lo = 0;
+  let hi = MOTION_STEPS;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (c[mid] < m) lo = mid;
+    else hi = mid;
+  }
+  const span = c[hi] - c[lo];
+  return (lo + (span > 0 ? Math.min(1, Math.max(0, (m - c[lo]) / span)) : 0)) / MOTION_STEPS;
+}
+
+/** The clip's motion at clip time `t`, read off `clipMotion`. */
+function motionAt(t: number): number {
+  const c = clipMotion();
+  const x = Math.min(1, Math.max(0, t)) * MOTION_STEPS;
+  const lo = Math.floor(x);
+  return lo >= MOTION_STEPS ? c[MOTION_STEPS] : c[lo] + (c[lo + 1] - c[lo]) * (x - lo);
+}
+
+const clipTables = new Map<string, readonly number[]>();
+
+/**
+ * The clip time on each frame 0..`total` of one dodge. The plain map
+ * (`plainClipTime`) wherever no bone turns more than `AIR_DODGE_MAX_BONE_STEP`
+ * a frame under it — every dodge on the roster but Fox's 38-frame neutral one,
+ * whose window leaves 12 frames for the recovery. There each of the plain
+ * map's two pieces is paced by the clip's own motion instead (the bones turn
+ * the same amount every frame of the piece), so the window still ends on the
+ * same clip time and the motion is spread over the length.
+ */
+function clipTimes(total: number, lastIntangible: number): readonly number[] {
+  const key = `${total}:${lastIntangible}`;
+  const cached = clipTables.get(key);
+  if (cached !== undefined) return cached;
+  const plain = Array.from({ length: total + 1 }, (_, f) => plainClipTime(f, total, lastIntangible));
+  const poses = plain.map((t) => samplePose(airDodge, t));
+  let peak = 0;
+  for (let f = 0; f < total; f++) peak = Math.max(peak, boneTurn(poses[f], poses[f + 1]));
+  let table: readonly number[] = plain;
+  if (peak > AIR_DODGE_MAX_BONE_STEP) {
+    const split = lastIntangible > 0 && lastIntangible < total ? lastIntangible : total;
+    const end = plain[split];
+    const paced = (f: number, f0: number, f1: number, t0: number, t1: number): number => {
+      const m0 = motionAt(t0);
+      return timeAtMotion(m0 + ((motionAt(t1) - m0) * (f - f0)) / (f1 - f0));
+    };
+    table = plain.map((_, f) => (f <= split ? paced(f, 0, split, 0, end) : paced(f, split, total, end, 1)));
+  }
+  clipTables.set(key, table);
+  return table;
+}
+
+/**
+ * Clip time for `actionFrame` `frame` of an air dodge `total` frames long whose
+ * intangibility ends on `lastIntangible` (`airDodgeIntangible`): `clipTimes`.
+ * Each fighter's own lengths put most dodges outside the clip's authored range
+ * (Plan 3, Task 20c): a directional dodge's window ends 19-22 frames into
+ * 54-141, a neutral one's 26-32 into 38-61. Render only: the simulation never
+ * reads it.
+ */
+export function airDodgeClipTime(frame: number, total: number, lastIntangible: number): number {
+  if (total <= 0) return 0;
+  const table = clipTimes(total, lastIntangible);
+  const f = Math.min(total, Math.max(0, frame));
+  const lo = Math.floor(f);
+  const hi = Math.min(total, lo + 1);
+  return table[lo] + (table[hi] - table[lo]) * (f - lo);
 }

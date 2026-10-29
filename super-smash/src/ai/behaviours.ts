@@ -37,8 +37,15 @@ import {
   type MoveSlot,
   type StageDef,
 } from "@/engine/types";
-import { airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
-import { SDI_INPUT_INTERVAL, SMASH_INPUT_WINDOW } from "@/engine/constants";
+import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
+import {
+  AIR_DODGE_SLIDE_DISTANCE,
+  AIR_DODGE_SLIDE_END_SPEED,
+  AIR_DODGE_SLINGSHOT_DISTANCE,
+  AIR_DODGE_SLINGSHOT_FRAMES,
+  SDI_INPUT_INTERVAL,
+  SMASH_INPUT_WINDOW,
+} from "@/engine/constants";
 import { abs, fx, magnitude } from "@/engine/fixed";
 import { fighterParams } from "@/engine/params";
 
@@ -481,6 +488,31 @@ export function dodgeCarriesOffstage(f: FighterState, stage: StageView, airBrake
 }
 
 /**
+ * How far a sideways directional air dodge carries the fighter, `dir` −1 or 1
+ * (Plan 3, Task 20c): 7 back and 20 forward (the slingshot and the slide,
+ * whatever it was moving at), then the 1.3 it hands to drift, bled by air
+ * friction over the rest of its own sideways length with the stick let go, as
+ * `dodgeDrift` bleeds a neutral dodge's.
+ */
+export function sideDodgeTravel(dir: number, airBrake: number, a: AirDodgeAttributes): number {
+  const rest = airDodgeFrames(a, airDodgeCharge(dir, 0)) - AIR_DODGE_SLINGSHOT_FRAMES - AIR_DODGE_SLIDE_FRAMES;
+  const slide = dir * (AIR_DODGE_SLIDE_DISTANCE - AIR_DODGE_SLINGSHOT_DISTANCE);
+  return slide + dodgeDrift(dir * AIR_DODGE_SLIDE_END_SPEED, airBrake, rest);
+}
+
+/** Whether a sideways directional air dodge now would carry the fighter off the stage before it could act again. */
+export function sideDodgeCarriesOffstage(
+  f: FighterState,
+  stage: StageView,
+  airBrake: number,
+  a: AirDodgeAttributes,
+  dir: number,
+): boolean {
+  if (f.grounded) return false;
+  return isOffstage({ ...f, x: f.x + sideDodgeTravel(dir, airBrake, a) }, stage);
+}
+
+/**
  * Quantise a vector onto the nine digital directions a keyboard can express.
  *
  * An axis is included when it carries at least 40% of the dominant component,
@@ -641,19 +673,26 @@ export const shield: Behaviour = (ctx) => {
 
   if (ctx.rolls[ROLL_SHIELD] >= tuning.shieldRate) return NOTHING;
 
+  // Whether an air dodge would carry the fighter off the stage is recovery
+  // judgement, so a CPU whose recovery roll fails forgets it, as it forgets the
+  // jump back in `recover` (Task 20c).
+  const minded = ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
+
   // A shield that is nearly out of health is worse than no shield: it breaks
-  // and hands over 240 frames of free punishment. Roll away instead.
+  // and hands over 240 frames of free punishment. Roll away instead. In the air
+  // that is a directional dodge (Task 20c): not one whose travel leaves the
+  // stage, where the neutral dodge below is weighed instead.
   const shieldSpent = self.shieldHealth <= fx(12);
   if (shieldSpent) {
     const away = towardX(ctx.view.dx, 0);
-    return { score: 600, input: away | Btn.Shield };
+    const dir = away === Btn.Right ? 1 : away === Btn.Left ? -1 : 0;
+    const offstage = minded && sideDodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, ctx.airDodge, dir);
+    if (dir !== 0 && !offstage) return { score: 600, input: away | Btn.Shield };
   }
 
   // In the air the shield is a neutral air dodge, and it keeps the drift over
   // the fighter's own dodge length (Task 20c): not one that carries the fighter
-  // off the stage. Knowing that is recovery judgement, so a CPU whose recovery
-  // roll fails forgets it, as it forgets the jump back in `recover`.
-  const minded = ctx.rolls[ROLL_RECOVER] < tuning.recoverySkill;
+  // off the stage.
   if (minded && dodgeCarriesOffstage(self, ctx.stage, ctx.airBrake, airDodgeFrames(ctx.airDodge, 0))) return NOTHING;
   return { score: 600, input: Btn.Shield };
 };

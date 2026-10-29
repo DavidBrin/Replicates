@@ -2023,6 +2023,13 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
     expect(frames[0].state.fighters[1].action).toBe("techCeiling");
   });
 
+  // The slingshot of a dodge out of a tumble meeting the floor is its tech: the
+  // mods keep the tech (PASSIVE) on while landing is off (`airDodgeKeepsAir`).
+  it("techs the floor with the slingshot of a dodge aimed up", () => {
+    const frames = until(falling(0, 2, 0, 0), pressing(Btn.Up), 6);
+    expect(frames[0].state.fighters[1].action).toBe("tech");
+  });
+
   it("does the same with a hitstun-cancel press", () => {
     const late = () => {
       const s = flying(0, 4, 0, -0.6);
@@ -2196,6 +2203,46 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
     expect(at(late, total - 1)).toMatchObject({ action: "landingLag", charge: DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN });
   });
 
+  // An up or up-diagonal dodge near the floor: its slingshot meets the floor, and is
+  // held on it, still in the air and in the dodge, until the slide lifts it off.
+  // UNVERIFIED, the mods' reading: WuBor Patch `escape_air.rs` L37 and L364-374,
+  // HewDraw Remix `airdodge.rs` L173 and L573-574 turn landing off until the slide;
+  // SmashWiki "Air dodge": "their new slingshot properties, which prevent characters
+  // from landing with them immediately after leaving the ground" (`airDodgeKeepsAir`).
+  it.each([1, 3, 5, 6.9])("does not land in its slingshot: up from %f units over the floor", (y) => {
+    const frames = dodge(aloft(0, y), Btn.Up, 12);
+    expect(frames.every((f) => f.state.fighters[1].action === "airDodge"), "never lands").toBe(true);
+    expect(frames.every((f) => f.state.fighters[1].y >= 0 && !f.state.fighters[1].grounded)).toBe(true);
+    const low = Math.max(0, fx(y) - AIR_DODGE_SLINGSHOT_DISTANCE);
+    expect(at(frames, 3).y, "held on the floor, no lower").toBe(low);
+    expect(at(frames, 10).y, "the slide lifts it the full 20").toBe(low + AIR_DODGE_SLIDE_DISTANCE);
+  });
+
+  it("does not land in its slingshot up and across either, and never slides backwards", () => {
+    const frames = dodge(aloft(0, 1), Btn.Up | Btn.Right, 12);
+    expect(frames.every((f) => f.state.fighters[1].action === "airDodge"), "never lands").toBe(true);
+    expect(at(frames, 3).y).toBe(0);
+    // The slingshot takes it back 7 along the diagonal; from there it only goes forward.
+    for (let i = 4; i < 12; i++) expect(at(frames, i).x, `frame ${i}`).toBeGreaterThan(at(frames, i - 1).x);
+    expect(at(frames, 10).x).toBeGreaterThan(0);
+    expect(at(frames, 10).y).toBeGreaterThan(fx(13));
+  });
+
+  // A full hop and an up dodge on the first frame it is accepted: the case the
+  // ordinary game reaches (on BASE of fix round 1 it landed with 19 frames of lag).
+  it("does not land in its slingshot out of a full hop's first airborne frames", () => {
+    let s = standing();
+    s.fighters[0].x = fx(-70);
+    s = play(s, 1, () => [0, Btn.Jump]).at(-1)!.state;
+    const frames = play(s, 30, () => [0, Btn.Jump | Btn.Shield | Btn.Up]);
+    const start = frames.findIndex((f) => f.state.fighters[1].action === "airDodge");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const dodging = frames.slice(start, start + 11);
+    expect(Math.min(...dodging.map((f) => f.state.fighters[1].y)), "the slingshot meets the floor").toBe(0);
+    expect(dodging.every((f) => f.state.fighters[1].action === "airDodge"), "never lands").toBe(true);
+    expect(dodging.at(-1)!.state.fighters[1].y).toBeGreaterThanOrEqual(fx(13));
+  });
+
   // C L119 `escape_air_slide_landing_speed_max` 2.
   it("lands its slide no faster than 2", () => {
     const frames = dodge(aloft(0, 0.5), Btn.Right | Btn.Down, 12);
@@ -2207,7 +2254,8 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
   });
 
   // W: "all characters can grab edges after the first 24 frames of their
-  // directional air dodge"; the starting frame is the dodge's first.
+  // directional air dodge", counted as the dodge windows count (the entry frame is
+  // frame 0, `airDodge.ts`).
   describe("the ledge", () => {
     /** Just outboard of the right ledge and a unit below it, facing it: in grab range. */
     const atLedge = () => aloft(84, -1, { facing: -1 });
@@ -2220,15 +2268,27 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
       expect(at(frames, grab - 1).action).toBe("airDodge");
     });
 
-    it("is refused on frame 23 of a directional dodge and taken on frame 24; a neutral dodge takes it at once", () => {
+    // Counted as the dodge windows count (`airDodge.ts`): frames 1-24 are the first
+    // 24, and the first grab is on frame 25 (SmashWiki "Lucario (SSBU)/Air dodge":
+    // "all directional air dodges grab ledge on frame 25").
+    it("is refused on frame 24 of a directional dodge and taken on frame 25", () => {
       const v = atLedge().fighters[1];
       Object.assign(v, { action: "airDodge", charge: airDodgeCharge(0, 1), vy: -fx(1) });
-      const at23 = { ...v, actionFrame: AIR_DODGE_LEDGE_FRAMES - 1 };
       const at24 = { ...v, actionFrame: AIR_DODGE_LEDGE_FRAMES };
-      const neutral = { ...v, charge: 0, actionFrame: 0 };
-      expect(findLedgeGrab(at23, STAGE, 0, fx(4))).toBeNull();
-      expect(findLedgeGrab(at24, STAGE, 0, fx(4))).toEqual({ platform: 0, side: 1 });
-      expect(findLedgeGrab(neutral, STAGE, 0, fx(4))).toEqual({ platform: 0, side: 1 });
+      const at25 = { ...v, actionFrame: AIR_DODGE_LEDGE_FRAMES + 1 };
+      expect(findLedgeGrab({ ...v, actionFrame: 0 }, STAGE, 0, fx(4))).toBeNull();
+      expect(findLedgeGrab(at24, STAGE, 0, fx(4))).toBeNull();
+      expect(findLedgeGrab(at25, STAGE, 0, fx(4))).toEqual({ platform: 0, side: 1 });
+    });
+
+    // UNVERIFIED: SmashWiki "Lucario (SSBU)/Air dodge" has "neutral air dodge grabs
+    // ledge on frame 60+", past the end of Lucario's 48-frame dodge; the mods disagree
+    // on the mechanism, and the replica does not model it (D56, Open questions). This
+    // pins the replica's reading, not the game's.
+    it("lets a neutral dodge take it at once (UNVERIFIED)", () => {
+      const v = atLedge().fighters[1];
+      Object.assign(v, { action: "airDodge", charge: 0, actionFrame: 0, vy: -fx(1) });
+      expect(findLedgeGrab(v, STAGE, 0, fx(4))).toEqual({ platform: 0, side: 1 });
     });
   });
 });

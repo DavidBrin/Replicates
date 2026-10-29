@@ -223,6 +223,25 @@ describe("the air dodge", () => {
     }
   });
 
+  // Fast, but never a teleport, at every length (Task 20c fix round: Fox's 38-frame
+  // neutral dodge, whose window leaves 12 frames for the recovery, turned a bone 40.9
+  // degrees in a frame under plain timing; `airDodgeClipTime` paces it by its motion).
+  it("never teleports, at any length on the roster", () => {
+    for (const d of DODGES) {
+      const frames = everyFrame(d);
+      for (let f = 0; f < d.total; f++) {
+        expect(maxBoneStep(frames[f], frames[f + 1]), `${d.name}: frame ${f}`).toBeLessThan(32);
+        expect(degreesBetween(frames[f].rotation, frames[f + 1].rotation), `${d.name}: frame ${f}`).toBeLessThan(26);
+      }
+    }
+  });
+
+  it("plays Mario's neutral dodge linearly, as it was drawn", () => {
+    for (let f = 0; f <= NEUTRAL.total; f++) {
+      expect(airDodgeClipTime(f, NEUTRAL.total, NEUTRAL.window[1])).toBeCloseTo(f / NEUTRAL.total, 12);
+    }
+  });
+
   it("never stands still for long, at any length on the roster", () => {
     // The bug this replaces was a single frozen pose held for fifty frames. Any
     // stretch of the clip where nothing at all moves is that bug coming back.

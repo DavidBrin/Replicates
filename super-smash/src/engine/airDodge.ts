@@ -13,6 +13,13 @@
  * Sources are cited on the constants (`constants.ts`, "Air dodges") and on
  * `AirDodgeAttributes` (`types.ts`); P is fudgepop01/amiibo_research
  * `fighter_param_motion.xml` @523374aa.
+ *
+ * **Frames.** A published frame N is `actionFrame` N here, for the
+ * intangibility and the ledge gate alike: the convention of every dodge window
+ * in the engine (`dodgeWindow`), in which the frame the status is entered on is
+ * its frame 0. The dodge's own movement (`directionalDodgeFrame`) starts on that
+ * entry frame, as `applyMovement` runs after the status changes; how that
+ * counts against the sources' frames is noted on `AIR_DODGE_SLINGSHOT_FRAMES`.
  */
 
 import {
@@ -120,10 +127,11 @@ export function airDodgeFrames(a: AirDodgeAttributes, charge: number): number {
 /**
  * An air dodge's intangible window as [first, last] `actionFrame`: from the
  * pair's first number for its second's count of frames (`AirDodgeAttributes`),
- * the same frame numbering as every other dodge window here (`dodgeWindow`).
+ * a published frame N being `actionFrame` N (the module's convention, above).
  */
 export function airDodgeIntangible(a: AirDodgeAttributes, charge: number): readonly [number, number] {
-  const [xlu, normal] = charge > 0 ? a.directionalIntangible : a.neutralIntangible;
+  const d = airDodgeDirection(charge);
+  const [xlu, normal] = d.x === 0 && d.y === 0 ? a.neutralIntangible : a.directionalIntangible;
   return [xlu, xlu + normal - 1];
 }
 
@@ -133,9 +141,9 @@ export function airDodgeIntangible(a: AirDodgeAttributes, charge: number): reado
  * linearly between (`DIRECTIONAL_AIR_DODGE_LANDING_LAG_MAX`/`_MIN`).
  * UNVERIFIED: the line. SmashWiki publishes the two ends and that "landing
  * later suffers less"; HewDraw Remix uses the maximum flat (`airdodge.rs`
- * L123), its own choice. The dodge cannot land in its slingshot when aimed
- * down, so its earliest landing is a few frames in; the truncation keeps that
- * at 19.
+ * L123), its own choice. No directional dodge lands in its slingshot
+ * (`airDodgeKeepsAir`), so its earliest landing is a few frames in; the
+ * truncation keeps that at 19.
  */
 export function directionalLandingLag(frame: number, total: number): number {
   const last = total - 1;
@@ -148,12 +156,36 @@ export function directionalLandingLag(frame: number, total: number): number {
 
 /**
  * Whether the dodge keeps this fighter off every ledge: a directional one, in
- * its first `AIR_DODGE_LEDGE_FRAMES` frames. The starting frame is the dodge's
- * first (it already moves and collides, as `AIR_DODGE_TECH_FRAMES` counts), so
- * `actionFrame` 0-23 are the first 24.
+ * its first `AIR_DODGE_LEDGE_FRAMES` frames, frames 1-24 in the module's
+ * convention (above), and the entry frame before them. Its first grab is on
+ * `actionFrame` 25: SmashWiki "Lucario (SSBU)/Air dodge", "all directional air
+ * dodges grab ledge on frame 25".
  */
 export function airDodgeRefusesLedge(f: Pick<FighterState, "action" | "charge" | "actionFrame">): boolean {
-  return isDirectionalAirDodge(f) && f.actionFrame < AIR_DODGE_LEDGE_FRAMES;
+  return isDirectionalAirDodge(f) && f.actionFrame <= AIR_DODGE_LEDGE_FRAMES;
+}
+
+/**
+ * Whether a floor the fighter meets is not a landing: a directional dodge in its
+ * slingshot holds the fighter on the surface, still in the air and still in the
+ * dodge, until the slide carries it off (`resolveCollision`). UNVERIFIED, the
+ * mods' reading: both turn the landing transitions off when the dodge starts and
+ * on, with the fighter put back in the air, only once the slide is under way
+ * (WuBor Patch `escape_air.rs` L37 and L364-374,
+ * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/escape/escape_air.rs#L364-L374;
+ * HewDraw Remix `airdodge.rs` L173 and L573-574,
+ * https://github.com/HDR-Development/HewDraw-Remix/blob/a56075404c96853b260689a341d63fcb90a33f93/fighters/common/src/general_statuses/airdodge.rs#L573-L574).
+ * SmashWiki "Air dodge" agrees: "their new slingshot properties, which prevent
+ * characters from landing with them immediately after leaving the ground".
+ * Without it an up or up-diagonal dodge near a floor would land in its
+ * slingshot with 19 frames of lag, the up-diagonal one sliding backwards.
+ *
+ * A dodge out of a tumble is the exception: the mods leave the tech (PASSIVE)
+ * on, so a floor its slingshot meets is its tech (`techOrBounce`), which needs
+ * the contact to be a landing.
+ */
+export function airDodgeKeepsAir(f: Pick<FighterState, "action" | "charge" | "actionFrame" | "combat">): boolean {
+  return isDirectionalAirDodge(f) && f.actionFrame < AIR_DODGE_SLINGSHOT_FRAMES && !f.combat.tumbleDodge;
 }
 
 /* ----------------------------------------------- directional schedule -- */
@@ -170,9 +202,8 @@ const SLINGSHOT_INTERVALS = AIR_DODGE_SLINGSHOT_FRAMES - 1;
 function slingshotCovered(k: number): number {
   const [p0, p1, p2, p3] = AIR_DODGE_SLINGSHOT_CURVE;
   const n = SLINGSHOT_INTERVALS;
-  const i = k;
-  const r = n - i;
-  const num = r * r * r * p0 + 3 * r * r * i * p1 + 3 * r * i * i * p2 + i * i * i * p3;
+  const r = n - k;
+  const num = r * r * r * p0 + 3 * r * r * k * p1 + 3 * r * k * k * p2 + k * k * k * p3;
   const den = n * n * n * 10;
   return Math.trunc((AIR_DODGE_SLINGSHOT_DISTANCE * num) / den);
 }

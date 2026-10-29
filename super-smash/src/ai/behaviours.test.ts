@@ -20,6 +20,7 @@ import {
   diDirection,
   digitalDirection,
   dodgeDrift,
+  sideDodgeTravel,
   edgeguard,
   fullHopPulse,
   isOffstage,
@@ -476,6 +477,49 @@ describe("shield", () => {
     expect(shield(context(airborne, L9)).score).toBe(0);
     const fox = { ...context(airborne, L9), airDodge: { ...DEFAULT_AIR_DODGE, neutralFrames: 38 } };
     expect(held(shield(fox).input, Btn.Shield)).toBe(true);
+  });
+
+  // A spent shield in the air backs off with a directional air dodge, `away | Shield`
+  // (Task 20c fix round, the review's M3): 7 back, 20 forward and the 1.3 it hands
+  // to drift. Fox's sideways one runs 63 frames (fudgepop01 `fighter_param_motion.xml`
+  // @523374aa L822), and with his air friction 0.015 it carries him 59.9 (`sideDodgeTravel`):
+  // from x 72 on Battlefield (ledge 80) that is off the stage, so he neutral-dodges
+  // instead; from the middle it is not.
+  describe("a spent shield in the air", () => {
+    const FOX = { ...DEFAULT_AIR_DODGE, neutralFrames: 38, sideFrames: 63 };
+    const spent = (x: number) =>
+      gameState([
+        fighter(0, { x: fx(x), y: fx(20), grounded: false, platform: -1, action: "fall", shieldHealth: fx(10) }),
+        fighter(1, { x: fx(x - 20), y: fx(20), action: "attack", actionFrame: 40 }),
+      ]);
+    const fox = (x: number, tuning = L9, rolls?: number[]) => ({ ...context(spent(x), tuning, rolls), airDodge: FOX, airBrake: fx(0.015) });
+
+    it("is how far the engine's sideways dodge goes", () => {
+      expect(sideDodgeTravel(1, fx(0.015), FOX)).toBe(fx(20) - fx(7) + dodgeDrift(fx(1.3), fx(0.015), 63 - 11));
+      expect(sideDodgeTravel(-1, fx(0.015), FOX)).toBe(-sideDodgeTravel(1, fx(0.015), FOX));
+    });
+
+    it("dodges away when the travel stays over the stage", () => {
+      const result = shield(fox(0));
+      expect(held(result.input, Btn.Right) && held(result.input, Btn.Shield)).toBe(true);
+    });
+
+    it("does not dodge away off the stage: it takes the neutral dodge instead", () => {
+      const result = shield(fox(72));
+      expect(held(result.input, Btn.Shield)).toBe(true);
+      expect(held(result.input, Btn.Right)).toBe(false);
+    });
+
+    it("still rolls on the ground, where a roll is no air dodge", () => {
+      const grounded = { ...fox(72), state: gameState([fighter(0, { x: fx(72), shieldHealth: fx(10) }), fighter(1, { x: fx(52), action: "attack", actionFrame: 40 })]) };
+      const result = shield({ ...grounded, view: observe(grounded.state, 0, L9.reactionFrames) });
+      expect(held(result.input, Btn.Right)).toBe(true);
+    });
+
+    it("forgets the guard when its recovery roll fails, as a low level does", () => {
+      const result = shield(fox(72, L1, [0, 0, 0, 0.5, 0, 0]));
+      expect(held(result.input, Btn.Right) && held(result.input, Btn.Shield)).toBe(true);
+    });
   });
 
   // Knowing the dodge drifts it off is recovery judgement: a CPU whose recovery

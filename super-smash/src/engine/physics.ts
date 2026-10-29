@@ -17,7 +17,7 @@
  * nothing.
  */
 
-import { airDodgeRefusesLedge } from "./airDodge";
+import { airDodgeKeepsAir, airDodgeRefusesLedge } from "./airDodge";
 import { ONE, fx, mul, abs, clamp, approach, sinDeg } from "./fixed";
 import {
   BALLOON_FALL_SPEED,
@@ -327,6 +327,10 @@ export function resolveCollision(
     if (prevY + ecb.bottom < p.y) continue; // was already below the surface — no landing from under
     if (f.y + ecb.bottom > p.y) continue; // still above it
     f.y = p.y - ecb.bottom;
+    // A directional air dodge's slingshot does not land: it is held on the
+    // surface, in the air and in the dodge, its velocity its own, until the
+    // slide carries it off (`airDodgeKeepsAir`; Plan 3, Task 20c, UNVERIFIED).
+    if (airDodgeKeepsAir(f)) return out;
     kineticSetY(f, 0);
     f.grounded = true;
     f.platform = i;
@@ -449,7 +453,10 @@ function inLedgeOption(fighters: readonly FighterState[], port: number, platform
  * (`airDodgeRefusesLedge`; SmashWiki "Air dodge", https://www.ssbwiki.com/Air_dodge:
  * "all characters can grab edges after the first 24 frames of their directional
  * air dodge"; Plan 3, Task 20c). Being the one rule, it holds for the trump as
- * well: a dodging fighter refused here trumps nobody.
+ * well: a dodging fighter refused here trumps nobody. A neutral air dodge grabs
+ * a ledge on any frame. UNVERIFIED: SmashWiki "Lucario (SSBU)/Air dodge" has
+ * "neutral air dodge grabs ledge on frame 60+", past the end of Lucario's
+ * 48-frame dodge, and the mods disagree on the mechanism; not modelled (D56).
  *
  * `fighters` is everybody in the match, for the one rule that is not a property
  * of the fighter asking: a ledge cannot be shared (SmashWiki "Ledge": "Multiple

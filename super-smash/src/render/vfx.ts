@@ -769,8 +769,9 @@ export type ChargeDefs = readonly (Pick<FighterDef, "moves"> | null | undefined)
  * Smash-charge motes, spiralling into the charging fighter.
  *
  * `charge` counts up only in an attack or special (`status/attack.ts`, a
- * chargeable move held); everywhere else it is a length or a flag — a landing's
- * frames (`onLanded`), an air dodge's "directional" bit — and must not glow.
+ * chargeable move held); everywhere else it is a length or a code — a landing's
+ * frames (`onLanded`), an air dodge's direction (`airDodgeCharge`, 1-9) — and
+ * must not glow.
  *
  * Nor does it stop when the button comes up: the engine keeps it, frozen, until
  * the move ends. So with the fighters' definitions to hand (`defs`, by port), a

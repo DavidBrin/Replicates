@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { airBrakeFromDef, airDodgeFromDef, sideDodgeTravel } from "@/ai/behaviours";
 import { ONE, fx, mul, toFloat } from "@/engine/fixed";
 import { emptyKinetic, initialRiseStep, jumpLaunchSpeed, jumpRiseSpeeds } from "@/engine/kinetic";
 import { createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
@@ -669,6 +670,15 @@ describe("air dodges: each fighter's own lengths and intangibility (Plan 3, Task
   it.each(IDS)("%s: intangible on P's frames, neutral and directional", (id) => {
     expect(window(dodgeFrames(id, 0)), P[id].lines).toEqual(P[id].nWin);
     expect(window(dodgeFrames(id, Btn.Right)), P[id].lines).toEqual(P[id].dWin);
+  });
+
+  // The CPU's model of a sideways dodge (`sideDodgeTravel`, Task 20c fix round),
+  // held to the engine: with nothing held after the press, Q12-exact.
+  it.each(IDS)("%s: a sideways dodge travels exactly as far as the CPU reckons", (id) => {
+    const def = FIGHTERS.find((f) => f.id === id)!;
+    const s = aloft(id);
+    const frames = dodgeFrames(id, Btn.Right);
+    expect(frames.at(-1)!.x - s.fighters[0].x).toBe(sideDodgeTravel(1, airBrakeFromDef(def), airDodgeFromDef(def)));
   });
 
   it("is authored by every roster fighter, none left to the engine's default (Mario's)", () => {

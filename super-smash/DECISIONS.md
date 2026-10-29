@@ -2114,11 +2114,14 @@ rule's output.
   `_back_end_frame`). Then a slide from 4.2 a frame down to 1.3, covering 20 units
   (`escape_air_slide_speed`, `_end_speed`, `_distance`), with drift and gravity off. Then, on
   `actionFrame` 11, 1.3 along its direction is handed to drift and gravity. A launch survives
-  the slingshot and is cleared when the slide starts (WuBor Patch `escape_air.rs` L379-385). Its
-  landing lag runs from 19 at its earliest landing to 10 at its latest (SmashWiki "Lucario
-  (SSBU)/Air dodge"), a landing slides at no more than 2 (`escape_air_slide_landing_speed_max`,
-  `common.xml` L119), it grabs no ledge in its first 24 frames (SmashWiki "Air dodge"), and the
-  press ends a fast fall. Before, it moved 3.2 a frame from its first frame, held its height
+  the slingshot and is cleared when the slide starts (WuBor Patch `escape_air.rs` L379-385). The
+  slingshot does not land: a floor it meets holds the fighter, still in the air and in the
+  dodge, until the slide lifts it off, as both mods turn landing off until the slide (one out of
+  a tumble techs that floor instead). Its landing lag runs from 19 at its earliest landing to 10
+  at its latest (SmashWiki "Lucario (SSBU)/Air dodge"), a landing slides at no more than 2
+  (`escape_air_slide_landing_speed_max`, `common.xml` L119), it grabs no ledge in its first 24
+  frames (SmashWiki "Air dodge"; its first grab is on frame 25, counted as the dodge windows
+  count), and the press ends a fast fall. Before, it moved 3.2 a frame from its first frame, held its height
   for 21 frames, zeroed any launch and landed with a flat 19.
 - *Each fighter's own lengths and intangibility* (`FighterAttributes.airDodge`) come from its
   entry in the same dump and reproduce SmashWiki's Ultimate table: Fox's neutral dodge lasts
@@ -2130,8 +2133,10 @@ rule's output.
   with a direction held is the directional dodge, which may not reach the floor in time
   (SmashWiki "Lucario (SSBU)/Techs": it "can be a misinput").
 - *The CPU* no longer starts an airborne neutral dodge whose drift would carry it off the
-  stage, and steers back over the stage during one; each fighter's dodge lengths reach it
-  (`CpuWorld.airDodge`). Without that, the golden CPUs drifted off the stage in a dodge and
+  stage, nor, on a spent shield, a sideways directional one whose travel would (7 back, 20
+  forward and the 1.3 drift after), and steers back over the stage during one; each fighter's
+  dodge lengths reach it (`CpuWorld.airDodge`). A CPU whose recovery roll fails forgets both
+  guards, as it forgets the jump back. Without that, the golden CPUs drifted off the stage in a dodge and
   died.
 
 **Online** (Task 20). Two builds with different combat rules refuse each other instead of
@@ -2380,9 +2385,18 @@ Inhale release its victim one frame after the catch.
   table gives 102 and 77.
 - The launch is cleared at the slide (WuBor Patch); HewDraw Remix keeps it until the landing.
 - A neutral dodge's first frames (an unpublished kinetic type, and `escape_air_brake` 1 of
-  unpublished effect), and its ledge timing (Lucario: "frame 60+"), are not modelled.
-- An up or diagonal-up dodge just above a floor can land in its slingshot, with lag 19; the
-  mods keep it in the air until the slide.
+  unpublished effect) are not modelled.
+- A neutral dodge grabs a ledge on any frame. SmashWiki "Lucario (SSBU)/Air dodge" has "neutral
+  air dodge grabs ledge on frame 60+", past the end of Lucario's 48-frame dodge, and the mods
+  disagree on the mechanism. `findLedgeGrab`; the ledge test pins the replica's reading.
+- A directional dodge's slingshot does not land on a floor it meets, but holds the fighter on
+  it in the air until the slide: the mods' reading (WuBor Patch `escape_air.rs` L37 and
+  L364-374, HewDraw Remix `airdodge.rs` L173 and L573-574 turn landing off until the slide).
+  `airDodgeKeepsAir`.
+- The slingshot runs P's 4 frames, the entry frame among them; SmashWiki "Lucario (SSBU)/Air
+  dodge" counts "frames 1-5 before moving toward stage starting frame 6". Air-dodge frames
+  count as the other dodge windows do (the entry frame is frame 0), so the first directional
+  ledge grab is on `actionFrame` 25.
 - A key is a full deflection; the game asks for 0.66 of one (`escape_air_slide_stick`).
 - A fast fall ends with a neutral dodge and the fall speed returns to normal the next frame,
   with no falling friction (SmashWiki "Air friction").
