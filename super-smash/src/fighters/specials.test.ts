@@ -467,3 +467,65 @@ describe("a dash grab near the edge never takes the holder off the stage", () =>
     expect(states.at(-1)!.fighters.map((f) => f.stocks)).toEqual([3, 3]);
   });
 });
+
+/**
+ * Donkey Kong's Headbutt (Plan 3 final wave, part 2, item 2; the final review's
+ * Important 2). Its legacy box is 270°, and SmashWiki files it under "Meteor
+ * smashes (SSBU)" ("Donkey Kong (SSBU)/Side special",
+ * https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Side_special): an airborne victim is
+ * spiked. On the ground it buries, which is a Plan 5 special; until then a
+ * grounded victim it tumbles takes the release's one floor bounce (UNVERIFIED: a
+ * stand-in for the bury).
+ */
+describe("Donkey Kong's Headbutt", () => {
+  /** DK on Final Destination's floor at `dkX`, facing right, one frame before Headbutt's box; Mario 8 in front, at 130%. */
+  function headbutt(mario: Partial<FighterState>, dkX = 0): GameState {
+    const state = createInitialState("finalDestination", [{ defId: "donkeyKong" }, { defId: "mario" }], RULES, 0x4eb7);
+    const [dk, v] = state.fighters;
+    for (const f of state.fighters) {
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, y: fx(0), intangible: 0, invincible: 0 });
+    }
+    // The box is live from game frame 20, which is `actionFrame` 19 (`moveScriptFrame`).
+    Object.assign(dk, { x: fx(dkX), facing: 1, action: "special", move: "sideB", actionFrame: 18 });
+    Object.assign(v, { x: fx(dkX + 8), facing: -1, damage: fx(130), ...mario });
+    return state;
+  }
+
+  /** Mario from the frame his launch fires, for `frames` frames, and the hit's hitstun. */
+  function launched(state: GameState, frames: number): { hitstun: number; after: FighterState[] } {
+    let s = state;
+    let hitstun = -1;
+    const after: FighterState[] = [];
+    for (let i = 0; i < 40 + frames && after.length < frames; i++) {
+      const r = step(s, [0, 0], { prevInputs: [0, 0] });
+      if (r.events.hits.some((h) => h.attacker === 0 && h.victim === 1)) hitstun = r.state.fighters[1].hitstun;
+      s = r.state;
+      if (hitstun >= 0 && (after.length > 0 || (s.fighters[1].hitlag === 0 && s.fighters[1].pendingFacing === 0))) {
+        after.push({ ...s.fighters[1], kinetic: { ...s.fighters[1].kinetic } });
+      }
+    }
+    expect(hitstun, "Headbutt should land on Mario").toBeGreaterThan(0);
+    return { hitstun, after };
+  }
+
+  it("is marked a meteor", () => {
+    const dk = FIGHTERS.find((f) => f.id === "donkeyKong")!;
+    expect(dk.moves.sideB!.hitboxes.map((h) => [h.angle, h.meteor])).toEqual([[fx(270), true]]);
+  });
+
+  // Past the edge (79.995), so nothing breaks the fall; locked out of the ledge so he does not take it first.
+  it("spikes an airborne victim", () => {
+    const { after } = launched(headbutt({ grounded: false, platform: -1, y: fx(4), action: "fall", ledgeLockout: 60 }, 74), 10);
+    expect(after[0].x).toBeGreaterThan(fx(80));
+    expect(after[0].kinetic.damageY).toBeLessThan(0);
+    expect(after.every((f, i) => i === 0 || f.y < after[i - 1].y)).toBe(true);
+  });
+
+  it("bounces a grounded victim it tumbles once, as the launch fires, and keeps the hitstun (UNVERIFIED: for the bury)", () => {
+    const { hitstun, after } = launched(headbutt({}), 13);
+    expect(hitstun).toBeGreaterThan(0);
+    expect(after[0].kinetic.damageY).toBeGreaterThan(0);
+    expect(after.slice(1).every((f) => !f.grounded && f.y > 0)).toBe(true);
+    expect(after.slice(1).every((f, i) => f.hitstun === after[i].hitstun - 1)).toBe(true);
+  });
+});

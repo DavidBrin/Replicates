@@ -5032,3 +5032,40 @@ describe("the freeze ends in order: ASDI, the clamp, a ground re-check, then the
     expect(v.kinetic.damageX).toBe(a.vx + byRatio(box.x - v.x, [1, 5]));
   });
 });
+
+describe("a tumbling launch into the floor bounces a grounded victim once, as it fires (final wave, part 2, item 2)", () => {
+  /** A jab at 270° with 100 knockback (it tumbles) onto fighter 1 standing; her hitstun and every frame from the release. */
+  const spiked = (over: Partial<Hitbox>) => {
+    const ctx = jabbing(hitbox({ angle: fx(270), baseKnockback: fx(100), knockbackGrowth: 0, ...over }));
+    const { frames, hit, fired } = jabbedWhile(standing(ctx), ctx, () => 0);
+    return { hitstun: frames[hit].state.fighters[1].hitstun, after: frames.slice(fired).map((f) => f.state.fighters[1]) };
+  };
+
+  // The final review's Important 2: a downward box not marked a meteor (Donkey Kong's
+  // legacy Headbutt) lifted the victim for a few frames and then bounced it, cutting
+  // its hitstun by the mid-flight bounce's 0.8. The release bounce is floor physics,
+  // Task 12's rule at release: 0.9 of the launch (`BOUNCE_FLOOR_LAUNCH_RATIO`) and the
+  // hit's whole hitstun, whatever the box calls itself.
+  it("bounces the victim of a 270° box that is not a meteor: 0.9 of the launch, the whole hitstun, once", () => {
+    const { hitstun, after } = spiked({});
+    expect(hitstun).toBe(effectiveHitstun(fx(100), true));
+    const [fired] = after;
+    expect(fired.launchSpeed).toBe(byRatio(mul(fx(100), LAUNCH_SPEED_RATIO), BOUNCE_FLOOR_LAUNCH_RATIO));
+    expect(fired.kinetic.damageY).toBeGreaterThan(0);
+    expect(fired.grounded).toBe(false);
+    // Up and away from the release on: no lift along the floor first, no second bounce.
+    expect(after.slice(1, 13).every((f) => !f.grounded && f.y > 0)).toBe(true);
+    expect(after.slice(1, 13).every((f, i) => f.hitstun === after[i].hitstun - 1)).toBe(true);
+  });
+
+  it("is the very bounce a meteor takes", () => {
+    const plain = spiked({}).after.slice(0, 13).map((f) => [f.x, f.y, f.vx, f.vy, f.hitstun]);
+    const meteor = spiked({ meteor: true }).after.slice(0, 13).map((f) => [f.x, f.y, f.vx, f.vy, f.hitstun]);
+    expect(plain).toEqual(meteor);
+  });
+
+  it("leaves the victim of a 270° box too weak to tumble on the ground: a flinch, not a bounce", () => {
+    const { hitstun, after } = spiked({ baseKnockback: fx(40) });
+    expect(after.slice(0, hitstun).every((f) => f.grounded && f.y === 0 && f.action === "hitstun")).toBe(true);
+  });
+});

@@ -246,9 +246,12 @@ export interface Hitbox {
   /** Per-move shieldstun scaling. 1.0 (`ONE`) unless stated. */
   readonly shieldstunMultiplier?: number;
   /**
-   * A meteor: one that tumbles a grounded victim bounces it off the floor as the
-   * launch fires, at Task 12's floor 0.9, and the hitstun stays the hit's
-   * (`releasePendingLaunch`; Plan 3, Task 16b).
+   * A meteor smash: the box is documented to spike (SmashWiki's "Meteor smashes"
+   * lists, or a 230°–310° script angle, `scriptHitboxes`). Since the Plan 3 final
+   * wave it gates nothing: every launch that tumbles a grounded victim into the
+   * floor bounces it as it fires, meteor or not (`releasePendingLaunch`; Task
+   * 16b's rule, widened). It stays as the move's documented kind, for the specials
+   * that read it (a bury, Plan 5).
    */
   readonly meteor?: boolean;
   /** This hitbox grabs rather than damages. */

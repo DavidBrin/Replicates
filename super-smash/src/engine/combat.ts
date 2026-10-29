@@ -28,9 +28,10 @@ export interface CombatState {
    */
   launchSetWeight: boolean;
   /**
-   * The parked launch is a meteor that tumbles a grounded victim: it bounces off
-   * the floor as it fires, once (Plan 3, Task 16b fix round 1). Set on contact,
-   * read when the freeze ends.
+   * The parked launch tumbles a grounded victim: if it points into the floor as
+   * it fires, and the victim still stands on one then, it bounces off it, once
+   * (Plan 3, Task 16b fix round 1, for meteors; the final wave, for any launch).
+   * Set on contact, read when the freeze ends.
    */
   launchBounce: boolean;
   /**

@@ -1375,15 +1375,19 @@ function releasePendingLaunch(f: FighterState, intent: Intent): void {
   let vx = launch.speed > 0 ? Math.trunc((launch.vx * speed) / launch.speed) : 0;
   let vy = launch.speed > 0 ? Math.trunc((launch.vy * speed) / launch.speed) : 0;
   let launchSpeed = speed;
-  // A tumbling meteor on a grounded victim is a floor bounce, here, as it fires
-  // (Plan 3, Task 16b fix round 1): SmashWiki "Meteor smash"
+  // A tumbling launch into the floor on a grounded victim is a floor bounce,
+  // here, as it fires (Plan 3, Task 16b fix round 1, for meteors; the final
+  // wave, for every such launch: `launchBounce`). SmashWiki "Meteor smash"
   // (https://www.ssbwiki.com/Meteor_smash, revision 2047089), grounded targets
   // "immediately bounce off the ground they're standing on (as long as they deal
   // enough knockback to put the opponent into tumble)"; SmashWiki "Knockback"
   // (revision 2063895): "Landing a meteor smash or spike on a grounded opponent
-  // counts as a bounce". So it is Task 12's floor bounce (`techOrBounce`): the
-  // launch, DI'd, is sent back up at 0.9 (`BOUNCE_FLOOR_LAUNCH_RATIO`) if it is
-  // fast enough to bounce and still points into the floor. Not a tech: "meteor
+  // counts as a bounce": a meteor smash or a spike, so any launch into the floor,
+  // whether or not its box is marked a meteor (`Hitbox.meteor`). So it is Task
+  // 12's floor bounce (`techOrBounce`): the launch, DI'd, is sent back up at 0.9
+  // (`BOUNCE_FLOOR_LAUNCH_RATIO`) if it is fast enough to bounce, still points
+  // into the floor, and the victim still stands on one after the freeze's shifts
+  // (`leaveGroundIfShiftedOff`). Not a tech: "meteor
   // smashes done on grounded-standing characters can no longer be teched" (same
   // page). The hitstun stays the hit's, from its whole knockback ("the amount of
   // hitstun delivered by a meteor smash is not affected by the knockback
@@ -2079,12 +2083,16 @@ function applyHit(
   victim.hitstun = effectiveHitstun(kb, speedUp);
   victim.combat.launchFaf = speedUp ? hitstun + 1 : 0;
   victim.combat.launchSetWeight = hb.setWeight === true;
-  // A meteor that tumbles a grounded victim bounces it off the floor as the
-  // launch fires (`releasePendingLaunch`), set knockback included: the bounce is
-  // the launch meeting the floor, not one of the knockback modifiers Ultimate
-  // took off set knockback. One too weak to tumble does not bounce: the victim
-  // flinches where it stands (SmashWiki "Meteor smash").
-  victim.combat.launchBounce = victim.grounded && hb.meteor === true && tumbles;
+  // A launch that tumbles a grounded victim bounces it off the floor as it fires,
+  // if it points into the floor then (`releasePendingLaunch`), set knockback
+  // included: the bounce is the launch meeting the floor, not one of the
+  // knockback modifiers Ultimate took off set knockback. Every such launch, not
+  // only a meteor's: it is floor physics, Task 12's bounce at release (Plan 3
+  // final wave; the final review's Important 2, where Donkey Kong's legacy 270°
+  // Headbutt, not marked a meteor, lifted its victim along the floor and bounced
+  // it a few frames later with its hitstun cut). One too weak to tumble does not
+  // bounce: the victim flinches where it stands (SmashWiki "Meteor smash").
+  victim.combat.launchBounce = victim.grounded && tumbles;
   victim.hitlag = lag;
   victim.intangible = 0;
   // A hit that knocks a hanging fighter off the ledge locks the ledge out, as

@@ -141,10 +141,11 @@ const LR: Readonly<Partial<Record<AttackParams["facing"], "position" | "back">>>
  * A downward launch (230°–310°) is a meteor: rubendal SSBU-Calculator
  * `js/knockback.js`, `this.spike = this.angle >= 230 && this.angle <= 310`
  * (https://github.com/rubendal/SSBU-Calculator/blob/233590e94bc4bd8813f2d1a2af45c8c46648f351/js/knockback.js#L1105).
- * What a meteor does to a grounded victim, a floor bounce as the launch fires
- * when it tumbles, is `releasePendingLaunch`'s. Legacy-compiled scripts say
- * `meteor` outright, either way, so only a script that does not say is
- * classified by its angle.
+ * The floor bounce a tumbling launch into the floor gives a grounded victim is
+ * `releasePendingLaunch`'s, and since the Plan 3 final wave it does not read the
+ * flag: any downward launch takes it. Legacy-compiled scripts say `meteor`
+ * outright, either way, so only a script that does not say is classified by its
+ * angle.
  */
 function isSpikeAngle(angle: number): boolean {
   return angle >= SPIKE_ANGLE_MIN && angle <= SPIKE_ANGLE_MAX;

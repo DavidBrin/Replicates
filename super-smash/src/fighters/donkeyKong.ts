@@ -525,6 +525,16 @@ const legacy: FighterDef = {
         {
           // Angle 270 does two different things depending on where the victim
           // is: it *buries* a grounded opponent and *meteors* an airborne one.
+          // A meteor smash: SmashWiki "Headbutt" (https://www.ssbwiki.com/Headbutt):
+          // "This attack can meteor smash an opponent if used in mid-air", and
+          // "Donkey Kong (SSBU)/Side special"
+          // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Side_special) is filed under
+          // "Meteor smashes (SSBU)" (Plan 3 final wave). The bury is a Plan 5
+          // special: until then a grounded victim the hit tumbles takes the
+          // release's one floor bounce instead (`releasePendingLaunch`).
+          // UNVERIFIED: that bounce, as a stand-in for the bury; and the one box,
+          // where that page's hitbox table gives grounded Headbutt's 270° boxes to
+          // grounded opponents only and a 70° box to aerial ones.
           id: 0,
           startFrame: 20,
           endFrame: 21,
@@ -536,6 +546,7 @@ const legacy: FighterDef = {
           baseKnockback: fx(40),
           knockbackGrowth: fx(40),
           effect: "bury",
+          meteor: true,
         },
       ],
     },
