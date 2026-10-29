@@ -32,7 +32,7 @@ import {
   LEDGE_PERCENT_PENALTY,
   LEDGE_REGRAB_SCALING,
 } from "./constants";
-import { kineticLand, kineticSetX, kineticSetY, kineticTakeStep } from "./kinetic";
+import { kineticAirDodgeHold, kineticLand, kineticSetX, kineticSetY, kineticTakeStep } from "./kinetic";
 import { TURN } from "./knockback";
 import type { FighterAttributes, FighterState, Platform, StageDef } from "./types";
 
@@ -328,9 +328,13 @@ export function resolveCollision(
     if (f.y + ecb.bottom > p.y) continue; // still above it
     f.y = p.y - ecb.bottom;
     // A directional air dodge's slingshot does not land: it is held on the
-    // surface, in the air and in the dodge, its velocity its own, until the
-    // slide carries it off (`airDodgeKeepsAir`; Plan 3, Task 20c, UNVERIFIED).
-    if (airDodgeKeepsAir(f)) return out;
+    // surface, in the air and in the dodge, its step into the floor stopped,
+    // until the slide carries it off (`airDodgeKeepsAir`; Plan 3, Task 20c,
+    // UNVERIFIED).
+    if (airDodgeKeepsAir(f)) {
+      kineticAirDodgeHold(f);
+      return out;
+    }
     kineticSetY(f, 0);
     f.grounded = true;
     f.platform = i;

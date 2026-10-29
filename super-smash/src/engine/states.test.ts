@@ -688,7 +688,9 @@ describe("air dodge", () => {
       tick(f, 0, i === 1 ? press : 0);
       if (f.intangible > 0) seen.push(f.actionFrame);
     }
-    expect([seen[0], seen.at(-1)]).toEqual(span);
+    // `actionFrame` N is the dodge's frame N + 1 (`airDodge.ts`), so the published
+    // frames are one more than the `actionFrame`s.
+    expect([seen[0] + 1, seen.at(-1)! + 1]).toEqual(span);
     expect(seen.length).toBe(span[1] - span[0] + 1);
   });
 

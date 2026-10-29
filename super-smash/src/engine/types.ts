@@ -400,11 +400,12 @@ export interface FighterAttributes {
  * Each fighter file cites the lines its numbers come from.
  *
  * An intangibility pair is the param's (`hit_xlu_frame`, `hit_normal_frame`):
- * intangible from the first for the second's count of frames, so frames
- * `xlu` to `xlu + normal − 1`. That reading reproduces SmashWiki "Air dodge"'s
- * Ultimate table (https://www.ssbwiki.com/Air_dodge) for every roster fighter,
- * neutral and directional (Mario 3, 27 → 3-29 and 3, 19 → 3-21; Fox 2, 25 → 2-26
- * and 2, 18 → 2-19).
+ * intangible from the first for the second's count of frames, so published
+ * frames `xlu` to `xlu + normal − 1`. That reading reproduces SmashWiki "Air
+ * dodge"'s Ultimate table (https://www.ssbwiki.com/Air_dodge) for every roster
+ * fighter, neutral and directional (Mario 3, 27 → 3-29 and 3, 19 → 3-21; Fox
+ * 2, 25 → 2-26 and 2, 18 → 2-19). The engine reads them one `actionFrame`
+ * earlier, as it reads every published air-dodge frame (`airDodgeIntangible`).
  */
 export interface AirDodgeAttributes {
   /** `escape_air_stiff_frame`: a neutral air dodge's length. */

@@ -14,12 +14,13 @@
  * `AirDodgeAttributes` (`types.ts`); P is fudgepop01/amiibo_research
  * `fighter_param_motion.xml` @523374aa.
  *
- * **Frames.** A published frame N is `actionFrame` N here, for the
- * intangibility and the ledge gate alike: the convention of every dodge window
- * in the engine (`dodgeWindow`), in which the frame the status is entered on is
- * its frame 0. The dodge's own movement (`directionalDodgeFrame`) starts on that
- * entry frame, as `applyMovement` runs after the status changes; how that
- * counts against the sources' frames is noted on `AIR_DODGE_SLINGSHOT_FRAMES`.
+ * **Frames.** For every air-dodge rule, `actionFrame` N is the dodge's frame
+ * N + 1: the frame the status is entered on, `actionFrame` 0, is its frame 1, as
+ * it already moves and collides (`applyMovement` runs after the status changes).
+ * A published frame N is therefore `actionFrame` N − 1, for the length, the
+ * slingshot and slide, the landing lag, the intangibility, the ledge gate and
+ * the tech window alike (`AIR_DODGE_TECH_FRAMES`: `actionFrame` 0-14 are the
+ * first 15 frames).
  */
 
 import {
@@ -125,14 +126,17 @@ export function airDodgeFrames(a: AirDodgeAttributes, charge: number): number {
 }
 
 /**
- * An air dodge's intangible window as [first, last] `actionFrame`: from the
- * pair's first number for its second's count of frames (`AirDodgeAttributes`),
- * a published frame N being `actionFrame` N (the module's convention, above).
+ * An air dodge's intangible window as [first, last] `actionFrame`. The pair
+ * gives published frames `xlu` to `xlu + normal − 1` (`AirDodgeAttributes`),
+ * which are `actionFrame` `xlu − 1` to `xlu + normal − 2` (the module's
+ * convention, above): Mario's directional 3-21 is `actionFrame` 2-20. The
+ * roster's smallest `xlu` is 2, so the window never starts on the entry frame,
+ * which `updateDodgeIntangibility` does not see (the status changes after it).
  */
 export function airDodgeIntangible(a: AirDodgeAttributes, charge: number): readonly [number, number] {
   const d = airDodgeDirection(charge);
   const [xlu, normal] = d.x === 0 && d.y === 0 ? a.neutralIntangible : a.directionalIntangible;
-  return [xlu, xlu + normal - 1];
+  return [xlu - 1, xlu + normal - 2];
 }
 
 /**
@@ -156,19 +160,20 @@ export function directionalLandingLag(frame: number, total: number): number {
 
 /**
  * Whether the dodge keeps this fighter off every ledge: a directional one, in
- * its first `AIR_DODGE_LEDGE_FRAMES` frames, frames 1-24 in the module's
- * convention (above), and the entry frame before them. Its first grab is on
- * `actionFrame` 25: SmashWiki "Lucario (SSBU)/Air dodge", "all directional air
- * dodges grab ledge on frame 25".
+ * its first `AIR_DODGE_LEDGE_FRAMES` frames, `actionFrame` 0-23 (the module's
+ * convention, above). Its first grab is on `actionFrame` 24, the dodge's frame
+ * 25: SmashWiki "Lucario (SSBU)/Air dodge", "all directional air dodges grab
+ * ledge on frame 25".
  */
 export function airDodgeRefusesLedge(f: Pick<FighterState, "action" | "charge" | "actionFrame">): boolean {
-  return isDirectionalAirDodge(f) && f.actionFrame <= AIR_DODGE_LEDGE_FRAMES;
+  return isDirectionalAirDodge(f) && f.actionFrame < AIR_DODGE_LEDGE_FRAMES;
 }
 
 /**
  * Whether a floor the fighter meets is not a landing: a directional dodge in its
  * slingshot holds the fighter on the surface, still in the air and still in the
- * dodge, until the slide carries it off (`resolveCollision`). UNVERIFIED, the
+ * dodge, its step into the floor stopped (`kineticAirDodgeHold`), until the
+ * slide carries it off (`resolveCollision`). UNVERIFIED, the
  * mods' reading: both turn the landing transitions off when the dodge starts and
  * on, with the fighter put back in the air, only once the slide is under way
  * (WuBor Patch `escape_air.rs` L37 and L364-374,

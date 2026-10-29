@@ -406,11 +406,10 @@ export const DIRECTIONAL_AIR_DODGE_LANDING_LAG_MIN = 10;
  * over its first 4 frames (P L33 `escape_air_slide_back_distance` 7, L34
  * `escape_air_slide_back_end_frame` 4; W: "characters first shift a small
  * distance towards the opposite direction in a slingshot fashion"). They are
- * `actionFrame` 0-3, the entry frame already moving, so frames 1-4 counting the
- * entry frame as the first, and the slide starts on `actionFrame` 4 (frame 5 by
- * that count). UNVERIFIED, a counting difference: SmashWiki "Lucario
- * (SSBU)/Air dodge" has the shift "during frames 1-5 before moving toward stage
- * starting frame 6", one frame more than P's 4.
+ * the dodge's frames 1-4, `actionFrame` 0-3 (`airDodge.ts`: `actionFrame` N is
+ * frame N + 1), and the slide starts on frame 5. UNVERIFIED, the sources
+ * disagree: SmashWiki "Lucario (SSBU)/Air dodge" has the shift "during frames
+ * 1-5 before moving toward stage starting frame 6", one frame more than P's 4.
  */
 export const AIR_DODGE_SLINGSHOT_DISTANCE = fx(7);
 export const AIR_DODGE_SLINGSHOT_FRAMES = 4;
@@ -445,8 +444,8 @@ export const AIR_DODGE_LANDING_SLIDE_MAX = fx(2);
  * No ledge is grabbed in a directional air dodge's first 24 frames: W "all
  * characters can grab edges after the first 24 frames of their directional air
  * dodge" (SmashWiki "Lucario (SSBU)/Air dodge": "all directional air dodges
- * grab ledge on frame 25"). Frames counted as the dodge windows count them
- * (`airDodge.ts`): the first grab is on `actionFrame` 25.
+ * grab ledge on frame 25"). The first grab is on `actionFrame` 24, the dodge's
+ * frame 25 (`airDodge.ts`: `actionFrame` N is frame N + 1).
  */
 export const AIR_DODGE_LEDGE_FRAMES = 24;
 
@@ -515,7 +514,8 @@ export const BOUNCE_HITSTUN_RATIO: Ratio = [4, 5];
 /**
  * An air dodge begun out of a tumble that meets a surface in its first 15
  * frames is a tech (`actionFrame` 0-14: the dodge's starting frame is its frame
- * 0, and it already moves and collides, so 0-14 are the first 15): SmashWiki "Lucario (SSBU)/Techs" ("neutral and directional
+ * 1, `actionFrame` 0, as it already moves and collides, so 0-14 are the first
+ * 15; `airDodge.ts` counts every air-dodge rule so): SmashWiki "Lucario (SSBU)/Techs" ("neutral and directional
  * air dodges can be used for every form of teching during the first 15
  * frames", "After 16 frames ... no longer able to tech against surfaces") and
  * the vanilla param `air_escape_passive_trigger_frame` 15 (`common.xml` L306).

@@ -645,9 +645,10 @@ describe("air dodges: each fighter's own lengths and intangibility (Plan 3, Task
     expect(frames[end].action, "it ran its length in the air").toBe("fall");
     return frames.slice(0, end);
   }
+  /** The published frames the dodge is intangible on: `actionFrame` N is its frame N + 1 (`airDodge.ts`). */
   const window = (frames: readonly FighterState[]): [number, number] => {
     // `intangible` is a countdown the dodge re-asserts at 1 inside its window.
-    const on = frames.filter((f) => f.intangible > 0).map((f) => f.actionFrame);
+    const on = frames.filter((f) => f.intangible > 0).map((f) => f.actionFrame + 1);
     return [on[0], on.at(-1)!];
   };
 
@@ -683,6 +684,19 @@ describe("air dodges: each fighter's own lengths and intangibility (Plan 3, Task
 
   it("is authored by every roster fighter, none left to the engine's default (Mario's)", () => {
     for (const f of FIGHTERS) expect(f.attributes.airDodge, f.id).toBeDefined();
+  });
+
+  // The frame convention, pinned directly (the controller's ruling for Task 20c):
+  // the entry frame, `actionFrame` 0, is the dodge's frame 1, so P's `hit_xlu_frame`
+  // is `actionFrame` xlu − 1. Fox's is 2 (L730), Mario's 3 (L22).
+  it.each([
+    ["fox", 2],
+    ["mario", 3],
+  ] as const)("%s: a neutral dodge's intangibility starts on actionFrame xlu - 1 (xlu %i)", (id, xlu) => {
+    const frames = dodgeFrames(id, 0);
+    expect(frames[0].actionFrame).toBe(0);
+    expect(frames.find((f) => f.intangible > 0)!.actionFrame).toBe(xlu - 1);
+    expect(frames.slice(0, xlu - 1).every((f) => f.intangible === 0)).toBe(true);
   });
 
   it("gives Fox the shortest neutral dodge, 38 frames, where the replica used to give everyone 50", () => {

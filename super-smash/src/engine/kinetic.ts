@@ -690,6 +690,18 @@ export function kineticAirDodge(f: FighterState, vx: number, vy: number, endLaun
 }
 
 /**
+ * A directional air dodge's slingshot is held on a floor it met (`airDodgeKeepsAir`,
+ * `resolveCollision`): the slingshot's step into the floor stops, so MOTION's
+ * vertical part goes to zero and the fighter's `vy` says it is not moving down.
+ * Only MOTION: a launch the slingshot keeps (DAMAGE) and gravity (off in the
+ * dodge) are left alone, where `kineticSetY` would end the launch.
+ */
+export function kineticAirDodgeHold(f: FighterState): void {
+  f.kinetic.motionY = 0;
+  kineticSum(f);
+}
+
+/**
  * A directional air dodge's slide is over: the end speed along its direction
  * becomes drift's (CONTROL) and gravity's (GRAVITY), and the fall's rules
  * (`kineticExec`) take it from this same frame. HewDraw Remix hands the slide's

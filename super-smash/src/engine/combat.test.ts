@@ -1737,8 +1737,8 @@ describe("tech and bounce (Plan 3, Task 12)", () => {
   /** The first height, on a half-unit grid, whose dodge down meets the floor on `actionFrame` `at`. */
   const metAt = (at: number) => [...Array(120).keys()].map((n) => 1 + n * 0.5).find((y) => cancelDown(y).met === at)!;
 
-  // The dodge's starting frame is its frame 0, and it already moves: a floor met on
-  // `actionFrame` 14 is the 15th frame, `actionFrame` 15 the 16th. (The dodge down
+  // The dodge's starting frame, `actionFrame` 0, is its frame 1, as it already moves
+  // (`airDodge.ts`): a floor met on `actionFrame` 14 is the 15th frame, 15 the 16th. (The dodge down
   // slings up, slides 20 down and then falls: Task 20c.)
   it("techs a floor met on the 15th frame of the air dodge it cancelled hitstun with", () => {
     const { frames, met } = cancelDown(metAt(AIR_DODGE_TECH_FRAMES - 1));
@@ -2213,6 +2213,15 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
     const frames = dodge(aloft(0, y), Btn.Up, 12);
     expect(frames.every((f) => f.state.fighters[1].action === "airDodge"), "never lands").toBe(true);
     expect(frames.every((f) => f.state.fighters[1].y >= 0 && !f.state.fighters[1].grounded)).toBe(true);
+    // Held on the floor, it is not moving down: MOTION's y is zeroed (`kineticAirDodgeHold`),
+    // and `vy` is still the energies' sum.
+    const held = frames.slice(0, 4).filter((f) => f.state.fighters[1].y === 0);
+    expect(held.length, "the slingshot meets the floor").toBeGreaterThan(0);
+    for (const f of held) {
+      const v = f.state.fighters[1];
+      expect([v.vy, v.kinetic.motionY]).toEqual([0, 0]);
+    }
+    for (const f of frames) expect(f.state.fighters[1].vy).toBe(kineticSumY(f.state.fighters[1]));
     const low = Math.max(0, fx(y) - AIR_DODGE_SLINGSHOT_DISTANCE);
     expect(at(frames, 3).y, "held on the floor, no lower").toBe(low);
     expect(at(frames, 10).y, "the slide lifts it the full 20").toBe(low + AIR_DODGE_SLIDE_DISTANCE);
@@ -2254,8 +2263,8 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
   });
 
   // W: "all characters can grab edges after the first 24 frames of their
-  // directional air dodge", counted as the dodge windows count (the entry frame is
-  // frame 0, `airDodge.ts`).
+  // directional air dodge". `actionFrame` N is the dodge's frame N + 1 (`airDodge.ts`),
+  // so the first 24 frames are `actionFrame` 0-23.
   describe("the ledge", () => {
     /** Just outboard of the right ledge and a unit below it, facing it: in grab range. */
     const atLedge = () => aloft(84, -1, { facing: -1 });
@@ -2264,21 +2273,19 @@ describe("a directional air dodge follows the published params (Plan 3, Task 20c
       const frames = dodge(atLedge(), Btn.Up, 80);
       expect(at(frames, 0).vy).toBeLessThan(0);
       const grab = frames.findIndex((f) => f.state.fighters[1].action === "ledgeHang");
-      expect(grab).toBeGreaterThan(AIR_DODGE_LEDGE_FRAMES);
+      expect(grab).toBeGreaterThanOrEqual(AIR_DODGE_LEDGE_FRAMES);
       expect(at(frames, grab - 1).action).toBe("airDodge");
     });
 
-    // Counted as the dodge windows count (`airDodge.ts`): frames 1-24 are the first
-    // 24, and the first grab is on frame 25 (SmashWiki "Lucario (SSBU)/Air dodge":
+    // `actionFrame` N is the dodge's frame N + 1 (`airDodge.ts`): frames 1-24 are the
+    // first 24, and the first grab is on frame 25 (SmashWiki "Lucario (SSBU)/Air dodge":
     // "all directional air dodges grab ledge on frame 25").
-    it("is refused on frame 24 of a directional dodge and taken on frame 25", () => {
+    it("is refused on frame 24 of a directional dodge (actionFrame 23) and taken on frame 25 (actionFrame 24)", () => {
       const v = atLedge().fighters[1];
       Object.assign(v, { action: "airDodge", charge: airDodgeCharge(0, 1), vy: -fx(1) });
-      const at24 = { ...v, actionFrame: AIR_DODGE_LEDGE_FRAMES };
-      const at25 = { ...v, actionFrame: AIR_DODGE_LEDGE_FRAMES + 1 };
       expect(findLedgeGrab({ ...v, actionFrame: 0 }, STAGE, 0, fx(4))).toBeNull();
-      expect(findLedgeGrab(at24, STAGE, 0, fx(4))).toBeNull();
-      expect(findLedgeGrab(at25, STAGE, 0, fx(4))).toEqual({ platform: 0, side: 1 });
+      expect(findLedgeGrab({ ...v, actionFrame: 23 }, STAGE, 0, fx(4))).toBeNull();
+      expect(findLedgeGrab({ ...v, actionFrame: 24 }, STAGE, 0, fx(4))).toEqual({ platform: 0, side: 1 });
     });
 
     // UNVERIFIED: SmashWiki "Lucario (SSBU)/Air dodge" has "neutral air dodge grabs
