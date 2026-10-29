@@ -1934,6 +1934,8 @@ function applyHit(
     kineticSetX(victim, away * shieldPushback(stunExact), "stop");
     // A melee attacker on the ground slides back off the shield too; a
     // projectile's owner is not there to be pushed (rubendal `AttackerShieldPushback`).
+    // UNVERIFIED: that an airborne attacker is not pushed; rubendal's formula has
+    // no situation, and the replica pushes only one on the ground.
     if (!fromProjectile && attacker.grounded) kineticSetX(attacker, -away * attackerShieldPushback(damage));
     if (victim.shieldHealth <= 0) {
       victim.shieldHealth = 0;

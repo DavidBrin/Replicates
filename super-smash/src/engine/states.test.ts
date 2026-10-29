@@ -420,6 +420,7 @@ describe("tilt versus smash", () => {
       x: 0,
       y: 0,
       jumpPressed: false,
+      jumpButtonPressed: false,
       jumpHeld: false,
       attackPressed: false,
       attackHeld: false,

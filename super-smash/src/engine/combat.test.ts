@@ -5217,3 +5217,38 @@ describe("a KO, a new shield break and a grab release leave nothing behind (fina
     expect(frames[hit].state.fighters[1]).toMatchObject({ grabbedBy: -1, combat: expect.objectContaining({ mash: 0 }) });
   });
 });
+
+describe("mashing out of a shield break (final wave, part 2, item 5)", () => {
+  /** Fighter 1 broken with 100 frames of stun, playing `inputs`; its stun after `n` frames. */
+  const stunAfter = (n: number, inputs: (i: number) => InputFrame): number => {
+    const s = standing();
+    Object.assign(s.fighters[1], { action: "shieldBroken", hitstun: 100, shieldHealth: 0 });
+    return play(s, n, (i) => [0, inputs(i)]).at(-1)!.state.fighters[1].hitstun;
+  };
+
+  // The Task 9 review's minor: a held Up counted as a stick input, then again as a
+  // jump press when tap jump fired, `TAP_JUMP_FRAMES` later: 3 + 5.4 frames. It is one
+  // stick input, 3 frames (SmashWiki "Stun"); only the jump button counts as a button.
+  it("counts a held Up once, as the stick input it is, not again through tap jump", () => {
+    const still = stunAfter(10, () => 0);
+    expect(still - stunAfter(10, () => Btn.Up)).toBe(3);
+    // A real jump press is a button: 5.4 frames.
+    expect(still - stunAfter(10, (i) => (i === 0 ? Btn.Jump : 0))).toBe(5);
+  });
+
+  // SmashWiki "Shield break" (https://www.ssbwiki.com/Shield_break): "Any attack that
+  // causes a stunned fighter to flinch ends the stunned state", and after it "the
+  // shield is reset to ... 75% in Ultimate". UNVERIFIED: that a stun ended early by a
+  // hit resets the shield too (the page does not say); the replica resets it whenever
+  // the stunned state ends.
+  it("brings the shield back at 37.5 when a hit ends the stun early", () => {
+    const s = standing();
+    Object.assign(s.fighters[1], { action: "shieldBroken", hitstun: 200, shieldHealth: 0 });
+    const frames = play(s, 8, JAB);
+    const hit = frames.findIndex((f) => f.events.hits.length > 0);
+    expect(hit).toBeGreaterThan(0);
+    const v = frames[hit].state.fighters[1];
+    expect(v.action).not.toBe("shieldBroken");
+    expect(v.shieldHealth).toBe(SHIELD_BREAK_RESET + SHIELD_REGEN_PER_FRAME);
+  });
+});

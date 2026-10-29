@@ -144,6 +144,12 @@ export interface Intent {
   readonly x: number;
   readonly y: number;
   readonly jumpPressed: boolean;
+  /**
+   * The jump *button* was pressed this frame: `jumpPressed` without tap jump.
+   * A mash counts buttons, and a held Up is already its stick input
+   * (`buttonPresses`; Plan 3 final wave).
+   */
+  readonly jumpButtonPressed: boolean;
   readonly jumpHeld: boolean;
   readonly attackPressed: boolean;
   readonly attackHeld: boolean;
@@ -259,6 +265,7 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
     x,
     y,
     jumpPressed: pressed(input, prev, Btn.Jump) || tapJump,
+    jumpButtonPressed: pressed(input, prev, Btn.Jump),
     // Holding up holds the jump, so up gives a full hop and a flick gives a
     // short one — the same distinction the stick makes.
     jumpHeld: held(input, Btn.Jump) || held(input, Btn.Up),
@@ -284,12 +291,19 @@ export function interpretInput(f: FighterState, input: InputFrame, prev: InputFr
  * Fresh button presses this frame, for a mash (shield-break stun, a grab):
  * attack, special, jump, shield and grab each count once. A stick input is a
  * fresh direction press: `framesSinceDirPress === 0` (Plan 3, Task 9).
+ *
+ * The jump is the button's own press, not `jumpPressed`: a held Up is a stick
+ * input when pressed, and tap jump turned it into a jump press five frames
+ * later, so it counted twice (Plan 3 final wave; the Task 9 review's minor).
+ * UNVERIFIED: that buttons pressed on the same frame each count. SmashWiki
+ * "Stun" and "Grab" give a value per button press and say nothing of
+ * simultaneous ones.
  */
 export function buttonPresses(intent: Intent): number {
   let n = 0;
   if (intent.attackPressed) n += 1;
   if (intent.specialPressed) n += 1;
-  if (intent.jumpPressed) n += 1;
+  if (intent.jumpButtonPressed) n += 1;
   if (intent.shieldPressed) n += 1;
   if (intent.grabPressed) n += 1;
   return n;

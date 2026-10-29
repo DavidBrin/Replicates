@@ -69,7 +69,9 @@ export function attackerShieldPushback(damage: number): number {
 /**
  * Shield-break stun in frames: `400 − p`, none at 400% or more
  * (SmashWiki "Stun", https://www.ssbwiki.com/Stun: "From Brawl onward, the
- * formula is changed to 400 − p"). `percent` is Q12.
+ * formula is changed to 400 − p"). `percent` is Q12. UNVERIFIED: rounding
+ * `400 − p` down to whole frames, so a fraction of a percent is ignored; the
+ * page gives the formula on whole percents.
  */
 export function shieldBreakStun(percent: number): number {
   const frames = Math.floor((SHIELD_BREAK_STUN_BASE * ONE - percent) / ONE);

@@ -123,6 +123,16 @@ export const STATUS_FURAFURA: FighterStatus = {
   pre(f) {
     f.combat.mash = 0;
   },
+  // The shield comes back at 75% (SmashWiki "Shield break",
+  // https://www.ssbwiki.com/Shield_break: "the shield is reset to ... 75% in
+  // Ultimate"), not empty, however the stunned state ends: run out, or cut short
+  // by a hit ("Any attack that causes a stunned fighter to flinch ends the
+  // stunned state", the same page) or a grab. UNVERIFIED: that an early end
+  // resets it too; the page gives the reset only for the stun running out. A KO
+  // has already refilled it (`step`, phase 9), so it is never lowered here.
+  end(f) {
+    f.shieldHealth = Math.max(f.shieldHealth, SHIELD_BREAK_RESET);
+  },
   main(f, intent) {
     // `charge` is free in this status: 0 while stunned, 1 in FuraFuraEnd.
     if (f.hitstun > 0) {
@@ -141,8 +151,7 @@ export const STATUS_FURAFURA: FighterStatus = {
       f.combat.mash = 0;
       return;
     }
-    // The shield comes back at 75% (SmashWiki "Shield break"), not empty.
-    f.shieldHealth = SHIELD_BREAK_RESET;
+    // The shield comes back as the status ends (`end`).
     startAction(f, "stand");
   },
 };

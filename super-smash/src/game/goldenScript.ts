@@ -129,6 +129,13 @@
  * 1725). Every hit and event above keeps its frame, and the trace is the same
  * again from 1781.
  *
+ * Plan 3's final wave, part 2 (engine fixes) re-tuned nothing either. Fox's soft
+ * up, held from 732 through his shield-break stun, is one stick input, not a
+ * second one when tap jump fires on 737, so the stun runs 5 frames longer (the
+ * smash still ends it on 747); and the smash, ending the stun early, brings his
+ * shield back at 37.5, not 0. So the trace differs from 737 to 1370, where both
+ * shields have regrown to 50, with every position, action and event the same.
+ *
  * Each step's comment gives the frame it starts on, and the events it names
  * (Fox breaking free on 140, the pummel on 217, the throw on 247, the shield break
  * on 649, the techs on 789 and 1029, the hangs on 862, 1193, 1299, 1400 and 1781,
