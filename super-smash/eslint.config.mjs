@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "test-results/**",
     ".wrangler/**",
+    // Plan 4's git-ignored model pipeline: the fetched cache (with its tool
+    // installs) and the exported models are not our code.
+    ".model-cache/**",
+    "public/models/**",
   ]),
 ]);
 
