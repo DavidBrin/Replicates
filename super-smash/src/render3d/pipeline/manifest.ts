@@ -74,25 +74,82 @@ export function treeUrl(code: string): string {
 
 /** Where a fetched file lives locally, relative to `super-smash/`. */
 export function cachePath(file: Pick<ManifestFile, "fighter" | "path">): string {
+  if (!Object.hasOwn(FIGHTER_CODES, file.fighter)) throw new Error(`refusing unknown fighter "${file.fighter}"`);
   const name = file.path.slice(file.path.lastIndexOf("/") + 1);
   if (!/^[A-Za-z0-9_.-]+$/.test(name) || name.startsWith(".")) throw new Error(`refusing odd file name "${name}"`);
   return `.model-cache/src/${file.fighter}/${name}`;
 }
 
-export function parseManifest(json: unknown): ModelManifest {
+/**
+ * Reads and checks a manifest. Every row must be a wanted file directly inside
+ * its fighter's c00 folder at the pinned commit, with a real byte count and
+ * SHA-256, and each fighter has exactly one .blend: the "never from master"
+ * guarantee lives here, not only in the fetch script. `requireAll: false` lets
+ * `--update-manifest --only <id>` check a manifest that does not yet hold all
+ * eight fighters; every row is still checked.
+ */
+export function parseManifest(json: unknown, options: { requireAll?: boolean } = {}): ModelManifest {
+  const requireAll = options.requireAll ?? true;
   const m = json as Partial<ModelManifest> | null;
   if (m === null || typeof m !== "object" || m.schema !== MANIFEST_SCHEMA) throw new Error("manifest: wrong schema");
   if (m.source?.commit !== MODEL_SOURCE.commit) throw new Error(`manifest: pinned to ${String(m.source?.commit)}, code pins ${MODEL_SOURCE.commit}`);
+  if (m.source.project !== MODEL_SOURCE.project || m.source.projectId !== MODEL_SOURCE.projectId) throw new Error("manifest: wrong source project");
   if (!Array.isArray(m.files)) throw new Error("manifest: no files");
-  for (const id of Object.keys(FIGHTER_CODES)) {
-    if (!m.files.some((f) => f.fighter === id && f.path.endsWith(".blend"))) throw new Error(`manifest: no .blend for ${id}`);
-  }
+  const paths = new Set<string>();
+  const blends = new Map<string, number>();
   for (const f of m.files) {
-    if (!/^[0-9a-f]{64}$/.test(f.sha256)) throw new Error(`manifest: ${f.path} has no sha256`);
-    if (!f.path.startsWith(c00Dir(FIGHTER_CODES[f.fighter] ?? "?") + "/")) throw new Error(`manifest: ${f.path} is outside ${f.fighter}'s c00 folder`);
+    if (f === null || typeof f !== "object") throw new Error("manifest: a row is not an object");
+    if (typeof f.fighter !== "string" || !Object.hasOwn(FIGHTER_CODES, f.fighter)) throw new Error(`manifest: unknown fighter ${JSON.stringify(f.fighter)}`);
+    if (typeof f.path !== "string") throw new Error(`manifest: a ${f.fighter} row has no path`);
+    if (!Number.isSafeInteger(f.bytes) || f.bytes <= 0) throw new Error(`manifest: ${f.path} has no valid byte count`);
+    if (typeof f.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(f.sha256)) throw new Error(`manifest: ${f.path} has no sha256`);
+    const dir = c00Dir(FIGHTER_CODES[f.fighter]) + "/";
+    const name = f.path.slice(dir.length);
+    if (!f.path.startsWith(dir) || name.includes("/") || !wantedFile(name)) {
+      throw new Error(`manifest: ${f.path} is not a .blend or colour map directly in ${f.fighter}'s c00 folder`);
+    }
     cachePath(f);
+    if (paths.has(f.path)) throw new Error(`manifest: ${f.path} is listed twice`);
+    paths.add(f.path);
+    if (name.endsWith(".blend")) blends.set(f.fighter, (blends.get(f.fighter) ?? 0) + 1);
+  }
+  const fighters = requireAll ? Object.keys(FIGHTER_CODES) : [...new Set(m.files.map((f) => f.fighter))];
+  for (const id of fighters) {
+    const n = blends.get(id) ?? 0;
+    if (n === 0) throw new Error(`manifest: no .blend for ${id}`);
+    if (n > 1) throw new Error(`manifest: ${n} .blend files for ${id}, expected one`);
   }
   return m as ModelManifest;
+}
+
+const ORDER = new Intl.Collator("en-US");
+
+/**
+ * The manifest's row order: by fighter, then path, under a fixed en-US collation
+ * (not the machine's locale), so a rerun on another machine rewrites the same
+ * bytes. It is the order the committed manifest was written in; plain code-unit
+ * order would move 8 rows and change the file's digest.
+ */
+export function sortFiles(files: readonly ManifestFile[]): ManifestFile[] {
+  return [...files].sort((a, b) => ORDER.compare(a.fighter, b.fighter) || ORDER.compare(a.path, b.path));
+}
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/**
+ * Why a downloaded file is not what its name says (an HTML sign-in or error
+ * page served with a 200, say), or null. Checked before a file is accepted, so
+ * a manifest can never record a page as `mario-c00.blend`.
+ */
+export function magicProblem(name: string, bytes: Uint8Array): string | null {
+  if (name.endsWith(".blend")) {
+    const ok = "BLENDER".split("").every((c, i) => bytes[i] === c.charCodeAt(0));
+    return ok ? null : `${name} does not start with BLENDER: not a .blend file`;
+  }
+  if (name.endsWith(".png")) {
+    return PNG_SIGNATURE.every((b, i) => bytes[i] === b) ? null : `${name} does not start with the PNG signature: not a PNG`;
+  }
+  return null;
 }
 
 /** Why a downloaded or cached file is not the one the manifest pins, or null if it is. */
