@@ -162,6 +162,24 @@ describe("hit sparks", () => {
     expect(mean(-Math.PI / 2).vy).toBeLessThan(0);
   });
 
+  it("spawns a hit's burst and sparks where the box touched the body, not at the box's near end (R9)", () => {
+    // A sword's box is a capsule: `x`/`y` is its first point, which can be a
+    // whole blade away from the body it landed on. `contactX`/`contactY` is the
+    // point of its spine nearest the capsule it reached deepest.
+    const v = createVfx();
+    ingestEvents(
+      v,
+      makeEvents({
+        hits: [
+          { attacker: 0, victim: 1, damage: fx(12), x: fx(4), y: fx(6), contactX: fx(14), contactY: fx(3), knockback: fx(80), angle: fx(45), hitboxId: 0 },
+        ],
+      }),
+      makeState(),
+    );
+    expect(v.particles.length).toBeGreaterThan(1);
+    for (const p of v.particles) expect([p.x, p.y]).toEqual([14, 3]);
+  });
+
   it("is gone within a fifth of a second", () => {
     // "Practically instantaneous" was the note. Twelve frames is 200ms; the
     // sparks used to live for 26, which is closer to half a second of debris

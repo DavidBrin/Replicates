@@ -188,8 +188,11 @@ function push(v: VfxState, p: Particle): void {
  */
 export function ingestEvents(v: VfxState, events: StepEvents, state: GameState): void {
   for (const hit of events.hits) {
-    const x = toFloat(hit.x);
-    const y = toFloat(hit.y);
+    // Where the box touched the body (Plan 4, R9), not `hit.x`/`hit.y`: that is
+    // the box's near end, which for a sword's capsule is a blade's length from
+    // the body it landed on.
+    const x = toFloat(hit.contactX);
+    const y = toFloat(hit.contactY);
     const damage = toFloat(hit.damage);
     const kb = toFloat(hit.knockback);
     spawnHitSpark(v, x, y, damage, kb, (toFloat(hit.angle) * Math.PI) / 180);
