@@ -154,8 +154,10 @@ export const STATUS_SQUAT_WAIT: FighterStatus = {
   main(f, intent, ctx) {
     if (handleActionable(f, intent, ctx)) return;
     if (intent.y >= 0) startAction(f, "crouchEnd");
-    // Down and to the side crawls, for the fighters who can (Plan 5, Task 12).
-    else if (intent.x !== 0 && ctx.def.attributes.canCrawl === true) startAction(f, "crawl");
+    // Down and to the side crawls, for the fighters who can (Plan 5, Task 12), on
+    // the ground only (fix round 1, ruling R-T12c; `isActionable` already sends a
+    // crouch that leaves the ground to `fall`).
+    else if (intent.x !== 0 && f.grounded && ctx.def.attributes.canCrawl === true) startAction(f, "crawl");
   },
 };
 
@@ -163,13 +165,37 @@ export const STATUS_SQUAT_WAIT: FighterStatus = {
  * Crawling (Plan 5, Task 12): forward 0.7, back 0.5, still facing the same way
  * (SmashWiki "Crawling": "all crawling characters can crawl backwards"); any
  * grounded option out of it, an attack being the down tilt (`groundAttackSlot`).
- * UNVERIFIED: at full speed from its first frame (no acceleration is published).
+ * Presses are read before the stick, as in the crouch, so an attack pressed on
+ * the frame Down is let go is still the down tilt.
+ *
+ * UNVERIFIED, none of it published for a crawl (fix round 1 labels):
+ * - full speed from its first frame (no acceleration is published), and on a
+ *   soft stick as on a full one (no crawl speed by deflection is published; the
+ *   walk's scales, `kineticExec`);
+ * - the speed it has when it stops is handled as a walk's: let go of the side and
+ *   it slides to a stop under the crouch's GROUND_STOP braking, and a down tilt
+ *   out of it drifts on, braked as the attack's FALL kinetic brakes it;
+ * - a crouching or crawling fighter cannot turn without standing up. The page:
+ *   "While most characters can change the direction they face while crawling",
+ *   and its Trivia: "Most characters can turn around while crawling. To do this,
+ *   they can crouch and do a down tilt and then press the control stick or D-pad
+ *   to the opposite direction they are facing, and they will turn around." It
+ *   names neither which fighters "most" leaves out, nor the frame the turn is read
+ *   on, nor whether Down stays held, so it is not modelled: here a down tilt
+ *   hands off to `stand`, and a held Down crouches again before any turn
+ *   (`groundMain`).
  */
 export const STATUS_SQUAT_F: FighterStatus = {
   kind: "FIGHTER_STATUS_KIND_SQUAT_F",
   action: "crawl",
   kineticType: "WALK",
   main(f, intent, ctx) {
+    // In the air it falls, as `groundMain` does (fix round 1, ruling R-T12c: a
+    // guard; `isActionable` already sends a crawl that leaves the ground to `fall`).
+    if (!f.grounded) {
+      startAction(f, "fall");
+      return;
+    }
     if (handleActionable(f, intent, ctx)) return;
     if (intent.y >= 0) startAction(f, "crouchEnd");
     else if (intent.x === 0) startAction(f, "crouch");

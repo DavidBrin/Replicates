@@ -666,7 +666,11 @@ export function fullChargeArmour(f: FighterState, def: FighterDef): readonly [nu
 
 /* -------------------------------------------------- actionable behaviour -- */
 
-/** Can a fighter in this state start something new right now? */
+/**
+ * Can a fighter in this state start something new right now? Its one caller,
+ * `onLeftGround`, reads it as "a fighter leaving the ground in this state falls",
+ * and `crouchStart` is listed for that reading alone (below).
+ */
 export function isActionable(f: FighterState): boolean {
   switch (f.action) {
     case "stand":
@@ -677,6 +681,11 @@ export function isActionable(f: FighterState): boolean {
     case "crouch":
     // A crawl off an edge or a soft platform falls, as a walk does (Plan 5, Task 12).
     case "crawl":
+    // Not free to act (it buffers), but a crouch begun at an edge with speed left
+    // slides off it in `crouchStart`, and falls rather than handing off to a crouch
+    // or a crawl in the air (Plan 5, Task 12 fix round 1, ruling R-T12c). UNVERIFIED:
+    // no source says; it falls as a walk, a run or a crouch does.
+    case "crouchStart":
     case "fall":
     case "tumbleFall":
     case "jump":

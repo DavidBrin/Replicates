@@ -5,7 +5,8 @@
  * No CPU grabs in the golden matches, and the scripted match (`goldenScript.ts`)
  * is Mario against Fox, so Donkey Kong's cargo (Task 8) has to be driven by hand.
  * Task 9 gave Inhale a lab of its own (`goldenInhaleLab.ts`, ruling R-T8e); Task
- * 11 appends the footstools here (ruling R-T11a), and Task 12 the crawl.
+ * 11 appends the footstools here (ruling R-T11a); Task 12 gave the crawl a lab of
+ * its own (`goldenCrawlLab.ts`: no fighter here crawls).
  *
  * Donkey Kong (port 0) against Mario (port 1) on Final Destination, a stock
  * match. They start standing a grab's reach apart, facing each other, so the

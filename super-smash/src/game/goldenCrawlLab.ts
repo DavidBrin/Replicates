@@ -40,14 +40,16 @@ const A = Btn.Attack;
 
 const STEPS: readonly ScriptStep[] = [
   // The crawl, from -60.
-  [12, D, 0], //                    1: crouches, crouched from 6
+  [12, D, 0], //                    1: crouching, crouched from 6
   [10, D | R, 0], //               13: crawls forward, 0.7 a frame, to -53.0 on 22
   [10, D | L, 0], //               23: crawls back, 0.5 a frame, still facing Mario
-  [4, D, 0], //                    33: stops, crouched (it slides to -58.71)
+  [4, D, 0], //                    33: stops, crouched (sliding to -58.71: the walk's
+  //                                   braking, UNVERIFIED for a crawl)
   [8, D | R, 0], //                37: crawls forward again...
   [1, D | R | A, 0], //            45: ...and down tilts out of the crawl, which hits
   [26, D, 0], //                       Mario on 51 (its frame 7) for 7.56% (6.0, ×1.05
-  //                                   fresh, ×1.2 one-on-one); crouches again from 72
+  //                                   fresh, ×1.2 one-on-one); crouching again from 72
+  //                                   (`crouchStart` to 76)
   // Off the edge.
   [62, D | L, 0], //               72: crawls back from 77, facing the stage, off its
   //                                   left edge (-80.0): falls and catches the ledge on 133

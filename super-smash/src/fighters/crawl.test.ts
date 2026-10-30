@@ -105,6 +105,23 @@ describe("crawling", () => {
     expect(last(states).move).toBe("dtilt");
   });
 
+  // The crawl reads its presses before the stick, as the crouch does: an attack
+  // pressed on the frame Down is let go is still the down tilt.
+  it("down tilts on the frame Down is let go, too", () => {
+    const states = run(standing("pikachu"), [...CROUCH, ...hold(6, DR), Btn.Right | Btn.Attack]);
+    expect(states[states.length - 2].fighters[0].action).toBe("crawl");
+    expect(last(states).action).toBe("attack");
+    expect(last(states).move).toBe("dtilt");
+  });
+
+  // UNVERIFIED (fix round 1): a soft stick crawls at full speed. No source gives a
+  // crawl's speed by how far the stick is pushed; the walk's scales (`kineticExec`).
+  it("crawls at full speed on a soft stick too", () => {
+    const soft = run(standing("pikachu"), [...hold(12, Btn.Down | Btn.Soft), ...hold(10, DR | Btn.Soft)]);
+    expect(last(soft).action).toBe("crawl");
+    expect(toFloat(last(soft).vx)).toBeCloseTo(0.7, 3);
+  });
+
   // Ruling R-T12b: the down tilt out of a crawl is the down tilt, frame for frame.
   // UltimateFrameData (https://ultimateframedata.com/pikachu), "Down Tilt":
   // startup 7, active 7-8, total 18, base damage 6.0, which a fresh move deals
@@ -209,6 +226,92 @@ describe("crawling is not a crouch cancel", () => {
     expect([crawling.hit, standingStill.hit, crouching.hit]).toEqual(["crawl", "stand", "crouch"]);
     expect(crawling.freeze).toBe(standingStill.freeze);
     expect(crawling.freeze).toBeGreaterThan(crouching.freeze);
+  });
+});
+
+/**
+ * Ruling R-T12c (fix round 1): a crouch begun at a platform's edge with speed
+ * left slides off it in `crouchStart`. Leaving the ground there is a fall
+ * (`isActionable`, through `onLeftGround`), so nobody crouches or crawls in the
+ * air. Before it, the review's probe had Pikachu hand off from an airborne
+ * `crouchStart` to `crawl`, its air drift overwritten by the crawl's speed, and
+ * Mario to an airborne `crouch`.
+ */
+describe("leaving the ground mid-crouch (ruling R-T12c)", () => {
+  const CROUCHING: readonly string[] = ["crouchStart", "crouch", "crawl"];
+
+  /** `defId` beginning a crouch on `stage`'s platform `platform` at `x`, sliding at `vx`, holding `keys` (Down held before). */
+  function slides(defId: string, stage: string, platform: number, x: number, vx: number, facing: number, keys: InputFrame): GameState[] {
+    const st = STAGES.find((d) => d.id === stage)!;
+    const s = createInitialState(stage, [{ defId }], RULES, 2);
+    Object.assign(s.fighters[0], { action: "crouchStart", actionFrame: 0, grounded: true, platform, x: fx(x), y: st.platforms[platform].y, vx: fx(vx), facing, intangible: 0, invincible: 0 });
+    return run(s, hold(30, keys), Btn.Down);
+  }
+
+  /** No airborne frame crouches or crawls, and the frame it left the ground is a fall (or the ledge it caught). Returns that frame, or -1. */
+  function expectNoAirborneCrouch(states: readonly GameState[], label: string): number {
+    const off = states.findIndex((s) => !s.fighters[0].grounded);
+    states.forEach((s, i) => {
+      if (!s.fighters[0].grounded) expect(CROUCHING, `${label}, frame ${i}`).not.toContain(s.fighters[0].action);
+    });
+    if (off >= 0) expect(["fall", "ledgeHang"], label).toContain(states[off].fighters[0].action);
+    return off;
+  }
+
+  // Battlefield's right platform: soft, its right end at 59.42 (17.3165 either side of 42.1055).
+  it("Pikachu sliding off in crouchStart, holding Down and a side, falls and never crawls in the air (the review's probe)", () => {
+    const states = slides("pikachu", "battlefield", 3, 58.8, 0.6, 1, DL);
+    const off = expectNoAirborneCrouch(states, "pikachu");
+    expect(off).toBeGreaterThan(0);
+    expect(states[off - 1].fighters[0].action).toBe("crouchStart");
+    expect(states[off].fighters[0].action).toBe("fall");
+  });
+
+  it("Mario sliding off in crouchStart, holding Down, falls and never crouches in the air", () => {
+    const states = slides("mario", "battlefield", 3, 58.8, 0.6, 1, Btn.Down);
+    const off = expectNoAirborneCrouch(states, "mario");
+    expect(off).toBeGreaterThan(0);
+    expect(states[off - 1].fighters[0].action).toBe("crouchStart");
+    expect(states[off].fighters[0].action).toBe("fall");
+  });
+
+  it("nobody crouches or crawls in the air, across edges, speeds, facings and keys", () => {
+    // [stage, platform, its centre, its half-width]: Battlefield's right soft platform
+    // and main stage, and Final Destination's stage (ledges at both ends).
+    const edges: [string, number, number, number][] = [
+      ["battlefield", 3, 42.1055, 17.3165],
+      ["battlefield", 0, 0, 79.99],
+      ["finalDestination", 0, -0.005, 79.995],
+    ];
+    let left = 0;
+    let runs = 0;
+    for (const defId of ["pikachu", "mario"])
+      for (const [stage, platform, cx, half] of edges)
+        for (const side of [-1, 1])
+          for (const inside of [0.3, 1.2])
+            for (const speed of [0.4, 0.8, 1.4])
+              for (const facing of [-1, 1])
+                for (const keys of [Btn.Down, DR, DL, Btn.Down | Btn.Soft]) {
+                  const states = slides(defId, stage, platform, cx + side * (half - inside), side * speed, facing, keys);
+                  const label = `${defId} ${stage}/${platform} side ${side} in ${inside} at ${speed} facing ${facing} keys ${keys}`;
+                  if (expectNoAirborneCrouch(states, label) > 0) left++;
+                  runs++;
+                }
+    // Enough of them slide off to mean something: 204 of the 576 when written.
+    expect(runs).toBe(576);
+    expect(left, "runs that left the ground").toBeGreaterThan(100);
+  });
+
+  // Belt and braces (R-T12c): should a crawl or a crouch ever be airborne some other
+  // way, the crawl falls at once and the crouch never starts one.
+  it("an airborne crawl falls at once, and an airborne crouch never starts a crawl", () => {
+    const air = (action: "crawl" | "crouch"): GameState => {
+      const s = createInitialState("finalDestination", [{ defId: "pikachu" }], RULES, 2);
+      Object.assign(s.fighters[0], { action, actionFrame: 3, grounded: false, platform: -1, x: 0, y: fx(40), facing: 1, intangible: 0, invincible: 0, jumpsUsed: 1 });
+      return s;
+    };
+    expect(run(air("crawl"), [DL], Btn.Down)[0].fighters[0].action).toBe("fall");
+    expect(run(air("crouch"), [DL], Btn.Down)[0].fighters[0].action).not.toBe("crawl");
   });
 });
 
