@@ -975,6 +975,7 @@ export function step(
     // ...nor footstooled anyone, and has attacked nobody (Task 11; UNVERIFIED for
     // the count, as for the wall jumps').
     f.combat.footstools = 0;
+    f.combat.footstoolFrame = 0;
     f.combat.sinceAttack = SINCE_ATTACK_CAP;
     // A KO costs Kirby his Copy Ability (Plan 5, Task 9: SmashWiki "Copy Ability",
     // "he will also lose it upon being KO'd").

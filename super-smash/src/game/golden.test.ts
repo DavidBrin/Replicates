@@ -607,6 +607,12 @@ describe("engine golden trace", () => {
   // were (no CPU or scripted match footstools) and appended frames 401-600 to the
   // states lab (ruling R-T11a), whose first four samples are unchanged: two
   // footstools, neither a hit (a footstool deals none), so the counts are as above.
+  // Its fix round 1 (a fighter in hitstun can be stood on; a run of footstools
+  // shortens with fall speed; only a jump pressed that frame footstools; the
+  // footstooler acts from the bounce's frame 8 and is intangible on 9-12) moved only
+  // the states lab, from its 401-500 sample: Mario is intangible on 452-455 and
+  // 492-495, every other named frame as before. The other seven are byte-identical
+  // (no golden CPU footstools), so the counts are as above.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

@@ -200,6 +200,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixInt(x, c.wallJumps);
   x = mixInt(x, c.sinceAttack);
   x = mixInt(x, c.footstools);
+  x = mixInt(x, c.footstoolFrame);
   return x;
 }
 

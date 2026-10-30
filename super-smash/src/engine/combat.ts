@@ -202,6 +202,14 @@ export interface CombatState {
    * ground (any grounded frame), a ledge and a KO; not by a hit or a grab.
    */
   footstools: number;
+  /**
+   * Plan 5, Task 11 fix round 1 (ruling R-T11f): a footstool's bounce, by frame:
+   * 1 on the footstool, counting up while its jumper stays in the bounce's jump or
+   * the fall after, and 0 once past frame 12 or out of them. The jumper acts from
+   * frame 8 and is intangible on frames 9 to 12 (`footstoolBounceHolds`). A KO
+   * clears it; any other status clears it at the next frame's count.
+   */
+  footstoolFrame: number;
 }
 
 /** `CombatState.sinceAttack`'s cap, as `framesSinceDirPress` has one: long past any wait. */
@@ -244,6 +252,7 @@ export function emptyCombat(): CombatState {
     wallJumps: 0,
     sinceAttack: SINCE_ATTACK_CAP,
     footstools: 0,
+    footstoolFrame: 0,
   };
 }
 
@@ -284,5 +293,6 @@ export function cloneCombat(c: CombatState): CombatState {
     wallJumps: c.wallJumps,
     sinceAttack: c.sinceAttack,
     footstools: c.footstools,
+    footstoolFrame: c.footstoolFrame,
   };
 }

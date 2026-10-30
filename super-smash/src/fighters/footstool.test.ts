@@ -19,17 +19,23 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
-import { fx, mul } from "@/engine/fixed";
+import { fx } from "@/engine/fixed";
 import {
+  FALL_SPEED_FASTEST,
+  FALL_SPEED_SLOWEST,
+  FOOTSTOOL_ACT_FRAME,
   FOOTSTOOL_AFTER_ATTACK,
   FOOTSTOOL_AIR_STUN,
   FOOTSTOOL_GROUND_FRAMES,
-  FOOTSTOOL_SPEED_DECAY,
-  FOOTSTOOL_SPEED_LIMIT,
+  FOOTSTOOL_INTANGIBLE_FIRST,
+  FOOTSTOOL_INTANGIBLE_LAST,
   TREADED_KIND_OF_ACTION,
+  footstoolChain,
+  footstoolHeads,
+  headUnder,
 } from "@/engine/footstool";
 import { hashState } from "@/engine/hash";
-import { jumpLaunchSpeed } from "@/engine/kinetic";
+import { jumpLaunchSpeed, kineticLaunch, kineticSetX } from "@/engine/kinetic";
 import { fighterParams } from "@/engine/params";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -171,6 +177,15 @@ describe("footstool jumps", () => {
     expect(at(15)).toBe("footstooled");
   });
 
+  it("counts the wait through a freeze", () => {
+    const s = createInitialState("finalDestination", [{ defId: "mario" }], RULES, 4);
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: 0, y: fx(120), vy: 0, intangible: 0, jumpsUsed: 1, hitlag: 3 });
+    s.fighters[0].combat.sinceAttack = 10;
+    const states = run(s, [0, 0, 0]);
+    expect(states[2].fighters[0].hitlag).toBe(0);
+    expect(states[2].fighters[0].combat.sinceAttack).toBe(13);
+  });
+
   it("counts a special as attacking", () => {
     const s = createInitialState("finalDestination", [{ defId: "mario" }], RULES, 4);
     Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: 0, y: fx(120), vy: 0, intangible: 0, jumpsUsed: 1 });
@@ -226,16 +241,16 @@ describe("footstool jumps", () => {
     expect(after.fighters[1].action).toBe("footstooled");
   });
 
-  it("takes a jump buffered through an air dodge's end", () => {
+  it("takes only a jump pressed that frame: one buffered through an air dodge's end over a head is the midair jump (ruling R-T11e)", () => {
     const s = overHead();
     const total = airDodgeFrames(airDodgeOf(mario.attributes), 0);
     Object.assign(s.fighters[0], { action: "airDodge", actionFrame: total - 2, charge: 0, airDodged: true });
     const states = run(s, [Btn.Jump, 0]);
     expect(states[0].fighters[0].action).toBe("airDodge");
     expect(states[1].fighters[0].action).toBe("jump");
-    expect(states[1].fighters[0].jumpsUsed).toBe(1);
-    expect(states[1].fighters[0].bufferedAction).toBeNull();
-    expect(states[1].fighters[1].action).toBe("footstooled");
+    expect(states[1].fighters[0].jumpsUsed).toBe(2);
+    expect(states[1].fighters[0].combat.footstools).toBe(0);
+    expect(states[1].fighters[1].action).toBe("stand");
   });
 
   it("is refused in special fall (SmashWiki \"Helpless\")", () => {
@@ -270,6 +285,16 @@ describe("footstool jumps", () => {
     // With the air dodge spent, the shield press takes nothing, and the footstool goes.
     const spent = pressed(Btn.Jump | Btn.Shield, true);
     expect([spent.fighters[0].action, spent.fighters[1].action]).toEqual(["jump", "footstooled"]);
+    // A buffered attack or special takes the frame too, and a held shield (not a
+    // fresh press) the air dodge.
+    for (const [kind, action] of [["attack", "attack"], ["special", "special"]] as const) {
+      const s = overHead();
+      s.fighters[0].bufferedAction = { kind, frame: s.frame + 1 };
+      const after = step1(s, [Btn.Jump, 0]);
+      expect([after.fighters[0].action, after.fighters[1].action], `buffered ${kind}`).toEqual([action, "stand"]);
+    }
+    const held = step(overHead(), [Btn.Jump | Btn.Shield, 0], { prevInputs: [Btn.Shield, 0] }).state;
+    expect([held.fighters[0].action, held.fighters[1].action]).toEqual(["airDodge", "stand"]);
     // So does a special press with no special to start (a stand-in without one).
     const none = createInitialState("finalDestination", [{ defId: "noNeutralB" }, { defId: "fox" }], RULES, 4);
     Object.assign(none.fighters[1], overHead().fighters[1]);
@@ -323,26 +348,40 @@ describe("one footstool after another", () => {
     expect(bounce(1).combat.footstools).toBe(2);
   });
 
-  it("is refused once the bounce would be slower than the limit, and the jump is the midair one", () => {
-    // The last footstool Mario has: the most made before it whose bounce is still
-    // at least the limit (his full hop's speed, ×0.75 a footstool).
-    let last = 0;
-    for (let v = mul(BOUNCE, FOOTSTOOL_SPEED_DECAY); v >= FOOTSTOOL_SPEED_LIMIT && last < 50; v = mul(v, FOOTSTOOL_SPEED_DECAY)) last++;
-    // Six in a row for Mario, inside SmashWiki's "between two and six times".
-    expect(last + 1).toBe(6);
-    expect(bounce(last).combat.footstools).toBe(last + 1);
-    const refused = bounce(last + 1);
-    expect(refused.combat.footstools).toBe(last + 1);
-    expect(refused.jumpsUsed).toBe(2);
-    // A buffered jump refused so is still the midair jump, not spent on nothing.
-    const s = overHead();
-    const total = airDodgeFrames(airDodgeOf(mario.attributes), 0);
-    Object.assign(s.fighters[0], { action: "airDodge", actionFrame: total - 2, charge: 0, airDodged: true });
-    s.fighters[0].combat.footstools = last + 1;
-    const states = run(s, [Btn.Jump, 0]);
-    expect(states[1].fighters[0].action).toBe("jump");
-    expect(states[1].fighters[0].jumpsUsed).toBe(2);
-    expect(states[1].fighters[1].action).toBe("stand");
+  /** `defId` dropping onto Fox's head with `made` footstools since the ground: did it footstool, and its jumps after. */
+  function chained(defId: string, made: number): { footstooled: boolean; jumpsUsed: number } {
+    const s = createInitialState("finalDestination", [{ defId }, { defId: "fox" }], RULES, 4);
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: 0, y: 0, vy: 0, intangible: 0 });
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(1), y: fox.attributes.height - fx(1), vy: fx(-1), intangible: 0, jumpsUsed: 1 });
+    s.fighters[0].combat.footstools = made;
+    const after = step1(s, [Btn.Jump, 0]);
+    return { footstooled: after.fighters[1].action === "footstooled", jumpsUsed: after.fighters[0].jumpsUsed };
+  }
+
+  it("runs between two and six in a row, fewer for a faster faller (SmashWiki; ruling R-T11d)", () => {
+    // The run's end from each fighter's falling speed (UNVERIFIED: a straight line
+    // from Jigglypuff's 0.98, six, to Fox's 2.1, two, rounded).
+    const RUN: Record<string, number> = { kirby: 5, samus: 5, mario: 4, pikachu: 4, marth: 4, link: 4, donkeyKong: 4, fox: 2 };
+    // SmashWiki "Falling speed" (Ultimate): Jigglypuff's 0.98 is the slowest, Fox's 2.1 the fastest.
+    expect([FALL_SPEED_SLOWEST, FALL_SPEED_FASTEST]).toEqual([fx(0.98), fx(2.1)]);
+    // Mario with another falling speed (his `params` table carries it).
+    const falling = (v: number): FighterDef => ({ ...mario, params: { ...fighterParams(mario), air_speed_y_stable: v } });
+    expect([0.98, 1.72, 2.1].map((v) => footstoolChain(falling(fx(v))))).toEqual([6, 3, 2]);
+    const byFall = [...FIGHTERS].sort((a, b) => fighterParams(a).air_speed_y_stable - fighterParams(b).air_speed_y_stable);
+    let previous = Infinity;
+    for (const def of byFall) {
+      const n = footstoolChain(def);
+      expect(n, def.id).toBe(RUN[def.id]);
+      expect(n).toBeGreaterThanOrEqual(2);
+      expect(n).toBeLessThanOrEqual(6);
+      expect(n, `${def.id} after a slower faller`).toBeLessThanOrEqual(previous);
+      previous = n;
+      // Through step(): the last of the run footstools; one more is the midair jump.
+      expect(chained(def.id, n - 1).footstooled, `${def.id}'s footstool ${n}`).toBe(true);
+      const refused = chained(def.id, n);
+      expect(refused.footstooled, `${def.id}'s footstool ${n + 1}`).toBe(false);
+      expect(refused.jumpsUsed).toBe(2);
+    }
   });
 
   it("starts again on the ground, on a ledge and after a KO", () => {
@@ -455,6 +494,28 @@ describe("heads read before anybody moves", () => {
     expect(a.fighters[0].jumpsUsed).toBe(1);
     expect(a.fighters[0].combat.footstools).toBe(1);
     expect(hashState(swapPorts(b))).toBe(hashState(a));
+  });
+
+  it("of two heads as high, stands on the nearer", () => {
+    // Two Foxes standing, at 0 (port 1) and 3 (port 2); Mario at 2 is nearer the second.
+    const s = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }, { defId: "fox" }], RULES, 4);
+    Object.assign(s.fighters[1], { action: "stand", grounded: true, platform: 0, x: 0, y: 0, vy: 0, intangible: 0 });
+    Object.assign(s.fighters[2], { action: "stand", grounded: true, platform: 0, x: fx(3), y: 0, vy: 0, intangible: 0 });
+    Object.assign(s.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(2), y: fox.attributes.height - fx(1), vy: fx(-1), intangible: 0, jumpsUsed: 1 });
+    const out = step(s, [Btn.Jump, 0, 0], { prevInputs: [0, 0, 0] });
+    expect(out.events.footstools).toEqual([{ jumper: 0, victim: 2 }]);
+  });
+
+  it("reads the jumper's feet at the bottom of its ECB, not its position", () => {
+    // A bone-derived ECB can sit above the fighter's position (Plan 4): here 3 up.
+    const s = overHead();
+    const [jumper, victim] = s.fighters;
+    jumper.y = fx(10);
+    const defs = [mario, fox];
+    const ecb = (top: number) => [{ bottom: fx(3), top: fx(15), half: fx(2) }, { bottom: 0, top, half: fx(2) }];
+    // Feet at 13: on a head topped at 14, and over (not on) one topped at 12.
+    expect(headUnder(0, footstoolHeads([jumper, { ...victim, y: 0 }], defs, ecb(fx(14))))?.port).toBe(1);
+    expect(headUnder(0, footstoolHeads([jumper, { ...victim, y: 0 }], defs, ecb(fx(12))))).toBeNull();
   });
 
   it("stands on the higher of two heads under the feet", () => {
@@ -574,11 +635,6 @@ describe("who cannot be stood on (Plan 5 review)", () => {
       s.fighters[1].hitlag = 5;
       return s;
     }],
-    ["a fighter in hitstun (DECISION, UNVERIFIED): the launch is not overwritten", () => {
-      const s = stoolOn("fox");
-      Object.assign(s.fighters[1], { action: "tumble", grounded: false, platform: -1, hitstun: 20, vx: fx(2), vy: fx(-1) });
-      return s;
-    }],
   ];
   for (const [name, make] of cases) {
     it(`not ${name}`, () => {
@@ -591,20 +647,24 @@ describe("who cannot be stood on (Plan 5 review)", () => {
       // ...and the one under him is not footstooled, standing or in the air.
       expect(after.fighters[1].action).not.toBe("footstooled");
       expect(after.fighters[1].hitstun).toBeLessThanOrEqual(before.hitstun);
-      if (before.action === "tumble") {
-        expect(after.fighters[1].vx).toBe(before.vx);
-        expect(after.fighters[1].hitstun).toBe(before.hitstun - 1);
-      }
     });
   }
 
-  it("names a footstool kind for every action, the held and holding ones closed", () => {
-    for (const a of ["grabbed", "thrown", "cargoHeld", "cargoCarry", "grabHold", "pummel", "inhaleHold", "swallowed", "spatStar", "dead", "entering", "respawnPlatform"] as const) {
-      expect(TREADED_KIND_OF_ACTION[a], a).toBe("DISABLE");
-    }
-    expect(TREADED_KIND_OF_ACTION.attack).toBe("NO_REAC");
-    expect(TREADED_KIND_OF_ACTION.ledgeHang).toBe("NO_REAC");
-    expect(TREADED_KIND_OF_ACTION.stand).toBe("ENABLE");
+  it("names a footstool kind for every action, each row pinned (a change is a reviewed diff)", () => {
+    const E = "ENABLE";
+    const N = "NO_REAC";
+    const D = "DISABLE";
+    expect(TREADED_KIND_OF_ACTION).toEqual({
+      stand: E, walk: E, dashStart: E, run: E, runBrake: E, turnaround: E, crouchStart: E, crouch: E, crouchEnd: E,
+      jumpSquat: E, jump: E, fall: E, land: E, landingLag: E, specialFall: E, specialLanding: E,
+      attack: N, special: N, grab: E, grabHold: D, pummel: D, throw: N,
+      shieldStart: N, shield: N, shieldRelease: N, shieldStun: N, shieldBroken: E, spotDodge: D, roll: D, airDodge: E,
+      hitstun: E, tumble: E, tumbleFall: E, grabbed: D, thrown: D, downed: E, getUp: E,
+      tech: E, techRoll: E, techWall: E, techCeiling: E,
+      ledgeHang: N, ledgeGetUp: N, ledgeAttack: N, ledgeRoll: N, ledgeJump: N, ledgeTrumped: E,
+      cargoCarry: D, cargoHeld: D, footstooled: E, inhaleHold: D, swallowed: D, spatStar: D,
+      respawnPlatform: D, dead: D, entering: D,
+    });
   });
 });
 
@@ -623,6 +683,60 @@ describe("the one stood on", () => {
     }
     expect(states[frames].fighters[1].action).toBe("stand");
     expect(states[frames + 1].fighters[1].action).toBe("attack");
+  });
+
+  it("a press made during the freeze, before its last frame, acts once it is over", () => {
+    const frames = FOOTSTOOL_GROUND_FRAMES;
+    // Fox presses attack two frames before the freeze's last: the buffer keeps it.
+    const theirs = Array.from({ length: frames + 3 }, (_, i) => (i === frames - 2 ? Btn.Attack : 0));
+    const states = run(overHead(), [Btn.Jump, ...Array<InputFrame>(frames + 2).fill(0)], theirs);
+    expect(states[frames - 2].fighters[1].action).toBe("footstooled");
+    expect(states[frames].fighters[1].action).toBe("stand");
+    expect(states[frames + 1].fighters[1].action).toBe("attack");
+  });
+
+  it("in hitstun in the air, is footstooled: the launch is replaced by the footstool's tumble (ruling R-T11c)", () => {
+    const s = overHead(true);
+    Object.assign(s.fighters[1], { action: "tumble", hitstun: 20 });
+    kineticLaunch(s.fighters[1], fx(2), fx(1), fx(2.24));
+    const after = step1(s, [Btn.Jump, 0]);
+    const victim = after.fighters[1];
+    expect(after.fighters[0].combat.footstools).toBe(1);
+    expect(victim.action).toBe("tumble");
+    expect(victim.hitstun).toBe(FOOTSTOOL_AIR_STUN);
+    expect(victim.launchSpeed).toBe(0);
+    expect(victim.vx).toBe(0);
+    expect(victim.vy).toBe(-fighterParams(fox).air_speed_y_stable);
+  });
+
+  it("in hitstun on the ground, is footstooled and stops: the reel ends, no slide on its launch (ruling R-T11c)", () => {
+    const s = overHead();
+    Object.assign(s.fighters[1], { action: "hitstun", hitstun: 11 });
+    kineticLaunch(s.fighters[1], fx(1), 0, fx(1));
+    const states = run(s, [Btn.Jump, 0, 0, 0, 0]);
+    const victim = states[0].fighters[1];
+    expect(victim.action).toBe("footstooled");
+    expect(victim.hitstun).toBe(0);
+    expect(victim.launchSpeed).toBe(0);
+    expect(victim.vx).toBe(0);
+    for (const st of states) expect(st.fighters[1].x).toBe(victim.x);
+  });
+
+  it("launched upward (balloon), tumbles down at its plain fall speed, not the balloon's", () => {
+    const s = overHead(true);
+    Object.assign(s.fighters[1], { action: "tumble", hitstun: 20, balloon: true });
+    kineticLaunch(s.fighters[1], 0, fx(3), fx(3));
+    const states = run(s, [Btn.Jump, 0, 0, 0]);
+    expect(states[0].fighters[1].balloon).toBe(false);
+    expect(states[3].fighters[1].vy).toBe(-fighterParams(fox).air_speed_y_stable);
+  });
+
+  it("in the air, stops drifting across: the tumble goes straight down", () => {
+    const s = overHead(true);
+    kineticSetX(s.fighters[1], fx(1));
+    expect(s.fighters[1].vx).toBe(fx(1));
+    const after = step1(s, [Btn.Jump, 0]);
+    expect(after.fighters[1].vx).toBe(0);
   });
 
   it("in the air, lies down on landing without a tech, and never bounces", () => {
@@ -651,6 +765,75 @@ describe("the one stood on", () => {
     const after = step1(s, [Btn.Jump, 0]);
     expect(after.fighters[1].action).toBe("tumble");
     expect(after.fighters[1].combat.helplessMove).toBeNull();
+  });
+});
+
+describe("the footstooler's bounce (ruling R-T11f; SmashWiki \"Piranha Plant (SSBU)/Footstooled attack\")", () => {
+  // Frame 1 is the footstool's: step 0 here. "The footstooling opponent can act on
+  // frame 8, and is granted intangibility during frames 9-12, unless the footstool
+  // jump is canceled earlier than this point by an aerial attack or special move."
+  it("acts from frame 8: a press on frames 2 to 7 waits for it", () => {
+    expect(FOOTSTOOL_ACT_FRAME).toBe(8);
+    // An aerial pressed on frame 4 (step 3), and nothing after.
+    const inputs = [Btn.Jump, 0, 0, Btn.Attack, 0, 0, 0, 0, 0];
+    const states = run(overHead(), inputs).map((st) => st.fighters[0]);
+    for (let i = 1; i < 7; i++) expect(["jump", "fall"], `frame ${i + 1}`).toContain(states[i].action);
+    expect(states[7].action).toBe("attack");
+  });
+
+  it("does nothing with a fresh press on frames 2 to 7 but keep it, and takes one on frame 8 at once", () => {
+    // A second jump on frame 2 does not footstool again or spend the midair jump
+    // there; the buffered press comes out on frame 8 as the midair jump.
+    const early = run(overHead(), [Btn.Jump, 0, Btn.Jump, 0, 0, 0, 0, 0]).map((st) => st.fighters[0]);
+    expect(early[2].jumpsUsed).toBe(1);
+    expect(early[2].combat.footstools).toBe(1);
+    expect(early[7].jumpsUsed).toBe(2);
+    const onTime = run(overHead(), [Btn.Jump, 0, 0, 0, 0, 0, 0, Btn.Attack]).map((st) => st.fighters[0]);
+    expect(onTime[6].action).not.toBe("attack");
+    expect(onTime[7].action).toBe("attack");
+  });
+
+  it("still turns the rise to a fall at the apex inside frames 2 to 7", () => {
+    const s = overHead(true);
+    Object.assign(s.fighters[0], { action: "jump", y: fx(120), x: fx(-60) });
+    s.fighters[0].combat.footstoolFrame = 3;
+    s.fighters[0].kinetic.gravityY = fx(-0.5);
+    s.fighters[0].vy = fx(-0.5);
+    const after = step1(s, [0, 0]).fighters[0];
+    expect(after.combat.footstoolFrame).toBe(4);
+    expect(after.action).toBe("fall");
+  });
+
+  it("is intangible on frames 9 to 12, and not on 8 or 13", () => {
+    expect([FOOTSTOOL_INTANGIBLE_FIRST, FOOTSTOOL_INTANGIBLE_LAST]).toEqual([9, 12]);
+    const states = run(overHead(), [Btn.Jump, ...Array<InputFrame>(14).fill(0)]).map((st) => st.fighters[0]);
+    const intangible = states.map((f, i) => (f.intangible > 0 ? i + 1 : 0)).filter((n) => n > 0);
+    expect(intangible).toEqual([9, 10, 11, 12]);
+  });
+
+  it("is not intangible after an aerial on frame 8 (the page's cancel)", () => {
+    const states = run(overHead(), [Btn.Jump, 0, 0, 0, 0, 0, 0, Btn.Attack, 0, 0, 0, 0, 0]).map((st) => st.fighters[0]);
+    expect(states[7].action).toBe("attack");
+    expect(states.slice(8, 12).every((f) => f.intangible === 0)).toBe(true);
+    expect(states[12].combat.footstoolFrame).toBe(0);
+  });
+
+  it("ends on landing, a hit or a KO: the bounce's count clears", () => {
+    const s = overHead();
+    const states = run(s, [Btn.Jump, 0, 0]).map((st) => st.fighters[0]);
+    expect(states[2].combat.footstoolFrame).toBe(3);
+    const ko = createInitialState("finalDestination", [{ defId: "mario" }, { defId: "fox" }], RULES, 4);
+    Object.assign(ko.fighters[0], { action: "fall", grounded: false, platform: -1, x: fx(-200), y: fx(-139), vy: -fx(2), intangible: 0 });
+    ko.fighters[0].combat.footstoolFrame = 5;
+    expect(step(ko, [0, 0], { prevInputs: [0, 0] }).state.fighters[0].combat.footstoolFrame).toBe(0);
+    const hit = overHead();
+    Object.assign(hit.fighters[0], { action: "tumble", hitstun: 10 });
+    hit.fighters[0].combat.footstoolFrame = 5;
+    expect(step(hit, [0, 0], { prevInputs: [0, 0] }).state.fighters[0].combat.footstoolFrame).toBe(0);
+    const landed = overHead();
+    Object.assign(landed.fighters[0], { action: "land", grounded: true, platform: 0, x: fx(30), y: 0, vy: 0 });
+    landed.fighters[0].combat.footstoolFrame = 5;
+    expect(step(landed, [0, 0], { prevInputs: [0, 0] }).state.fighters[0].combat.footstoolFrame).toBe(0);
   });
 });
 

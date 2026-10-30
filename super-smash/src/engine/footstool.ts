@@ -18,19 +18,38 @@
  * interrupted)". And "if this results in a Fall, it will count as a KO for the
  * footstooling player" (`StepEvents.footstools`, `killCredit.ts`).
  *
+ * In Ultimate a fighter in hitstun can be stood on (fix round 1, ruling R-T11c):
+ * SmashWiki "Ice Climbers (SSBU)/Up tilt" (https://www.ssbwiki.com/Ice_Climbers_(SSBU)/Up_tilt,
+ * revision 2061850): "While an opponent is stuck in an up tilt, the lead climber
+ * can footstool them"; SmashWiki "Infinite" (https://www.ssbwiki.com/Infinite,
+ * revision 2009044), its Ultimate section: the Ice Climbers "footstool the opponent as the first Climber hits the
+ * opponent with a singular jab", and Ness's held PSI Magnet, "Then combo into a
+ * footstool". The footstooler "can act on frame 8, and is granted intangibility
+ * during frames 9-12, unless the footstool jump is canceled earlier than this
+ * point by an aerial attack or special move" (SmashWiki "Piranha Plant
+ * (SSBU)/Footstooled attack",
+ * https://www.ssbwiki.com/Piranha_Plant_(SSBU)/Footstooled_attack, revision
+ * 1885609; ruling R-T11f): `FOOTSTOOL_ACT_FRAME`, `FOOTSTOOL_INTANGIBLE_*`.
+ * UNVERIFIED: that the page's numbers, given for a footstool on Piranha Plant,
+ * hold for every footstool; the common params `tread_attack_frame` 8 and
+ * `tread_jump_after_xlu_frame` 4 (below) agree with them.
+ *
  * The game's own check, as WuBor Patch reimplements it (a mod's reimplementation,
- * not first-party), at
+ * not first-party, so what rests on it alone is UNVERIFIED), at
  * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/sub_transitions.rs:
  * `sub_air_check_fall_common` (L486-519) tries the airborne actions in the order
  * special, item throw, lasso, air dodge, attack, footstool (tread jump), wall
  * jump, midair jump; `sub_transition_group_check_air_tread_jump` (L664-739,
- * vanilla kept in comments, WuBor's one addition marked) refuses it while
+ * vanilla kept in comments, WuBor's one addition marked) reads the jump button
+ * only as a press that frame (`FIGHTER_PAD_FLAG_JUMP_TRIGGER`) and the stick's
+ * jump as the flick jump, refuses it while
  * `FIGHTER_INSTANCE_WORK_ID_INT_NO_TREAD_FRAME` runs, and when the next tread
- * speed (`FL_sub_fighter_float_next_tread_speed_y`) is under the common param
- * `tread_jump_speed_limit`. The params
+ * speed (`FL_sub_fighter_float_next_tread_speed_y`, unpublished) is under the
+ * common param `tread_jump_speed_limit`. The params
  * (fudgepop01/amiibo_research `common.xml` L62-67,
  * https://github.com/fudgepop01/amiibo_research/blob/523374aaf3f1b7fa67370f83bec4a53b256ac944/research/paramDecoding/common/param/common.xml#L62-L67):
- * `tread_jump_speed_dec` 0.75, `tread_jump_speed_limit` 0.5,
+ * `tread_jump_speed_dec` 0.75, `tread_jump_speed_limit` 0.5, `tread_attack_frame`
+ * 8, `tread_jump_after_xlu_frame` 4, `tread_jump_disable_frame` 8,
  * `tread_jump_disable_frame_after_attack` 16 (SmashWiki's 16). And each status
  * says whether it can be stood on (`FIGHTER_TREADED_KIND_*`, `TREADED_KIND_OF_ACTION`).
  *
@@ -44,26 +63,32 @@
  * UNVERIFIED, all unpublished: the reach (`FOOTSTOOL_REACH`), the grounded
  * freeze (`FOOTSTOOL_GROUND_FRAMES`), the airborne tumble's stun
  * (`FOOTSTOOL_AIR_STUN`) and its push (the victim's own full fall speed), the
- * bounce's base (the jumper's full hop), and the lower bounce off a ledge. Not
- * modelled, their use unpublished: the common params `tread_jump_disable_frame`
- * 8 and `tread_jump_after_xlu_frame` 4 (`common.xml` L66, L65); nor the page's
- * "Like a normal jump, this jump can be short hopped", whose hop length and
- * decision frame no source gives.
+ * bounce's base (the jumper's full hop), the lower bounce off a ledge, and how a
+ * run of footstools ends (`footstoolChain`). Not modelled: `tread_jump_disable_frame`
+ * 8, whose use is unpublished; and the page's "Like a normal jump, this jump can be
+ * short hopped", whose hop length and decision frame no source gives.
  */
 
 import { SINCE_ATTACK_CAP } from "./combat";
 import { fx, mul } from "./fixed";
 import { jumpLaunchSpeed, kineticClear, kineticJump, kineticSetY } from "./kinetic";
 import { fighterParams } from "./params";
-import { airActionFirst, isHolding, peekBuffer, startAction } from "./states";
+import { airActionFirst, bufferPress, isHolding, startAction } from "./states";
 import type { Intent, StateContext } from "./states";
 import type { ActionState, FighterDef, FighterState, StepEvents } from "./types";
 
 /**
  * SmashWiki: "characters must wait for 16 frames after attacking"; the common
  * param `tread_jump_disable_frame_after_attack` 16 (`common.xml`, above).
+ * UNVERIFIED: which statuses restart it. The replica's `attack` and `special`
+ * do; a throw, a pummel and a getup attack do not (`ageFootstool`).
  */
 export const FOOTSTOOL_AFTER_ATTACK = 16;
+/** SmashWiki "Piranha Plant (SSBU)/Footstooled attack": the footstooler "can act on frame 8" (`tread_attack_frame` 8). */
+export const FOOTSTOOL_ACT_FRAME = 8;
+/** The same page: "granted intangibility during frames 9-12" (`tread_jump_after_xlu_frame` 4: four frames). */
+export const FOOTSTOOL_INTANGIBLE_FIRST = 9;
+export const FOOTSTOOL_INTANGIBLE_LAST = 12;
 /** UNVERIFIED: how long a grounded fighter stays footstooled ("briefly"). */
 export const FOOTSTOOL_GROUND_FRAMES = 30;
 /** UNVERIFIED: an airborne fighter's tumble, in frames of hitstun ("a set distance"). */
@@ -78,12 +103,20 @@ export const FOOTSTOOL_REACH = fx(4);
  */
 export const FOOTSTOOL_SPEED_DECAY = fx(0.75);
 /**
- * No footstool whose bounce would be slower than this (`tread_jump_speed_limit`,
- * compared with the next tread speed in the vanilla check). UNVERIFIED: that
- * the speed compared is the bounce's launch speed in units a frame; read so, it
- * gives Mario six in a row, inside SmashWiki's "between two and six".
+ * How many footstools a run before landing may hold (fix round 1, ruling
+ * R-T11d): SmashWiki "Footstool Jump", "between two and six times in succession
+ * (depending on which character is used—a faster falling speed means that the
+ * character cannot footstool jump as many times)".
  */
-export const FOOTSTOOL_SPEED_LIMIT = fx(0.5);
+export const FOOTSTOOL_CHAIN_MOST = 6;
+export const FOOTSTOOL_CHAIN_LEAST = 2;
+/**
+ * Ultimate's slowest and fastest falling speeds, Jigglypuff's 0.98 and Fox's 2.1
+ * (SmashWiki "Falling speed", https://www.ssbwiki.com/Falling_speed, revision
+ * 2063763, the Ultimate table; Giga Bowser's 2.2 is no fighter's).
+ */
+export const FALL_SPEED_SLOWEST = fx(0.98);
+export const FALL_SPEED_FASTEST = fx(2.1);
 
 /**
  * Whether a status can be stood on: SSBU's `FIGHTER_TREADED_KIND_*`, which each
@@ -103,8 +136,8 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   // UNVERIFIED: standing and walking are the footstool's plain case on the page.
   stand: "ENABLE",
   walk: "ENABLE",
-  // WuBor `movement/dash.rs` (Dash), `movement/run.rs` (RunBrake); UNVERIFIED
-  // for the run and the turn (TURN_RUN), read as theirs.
+  // UNVERIFIED: WuBor `movement/dash.rs` (Dash), `movement/run.rs` (RunBrake),
+  // a reimplementation; the run and the turn (TURN_RUN) read as theirs.
   dashStart: "ENABLE",
   run: "ENABLE",
   runBrake: "ENABLE",
@@ -113,13 +146,13 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   crouchStart: "ENABLE",
   crouch: "ENABLE",
   crouchEnd: "ENABLE",
-  // WuBor `movement/jump_squat.rs`.
+  // UNVERIFIED: WuBor `movement/jump_squat.rs`, a reimplementation.
   jumpSquat: "ENABLE",
   // SmashWiki: "When used on an opponent in midair".
   jump: "ENABLE",
   fall: "ENABLE",
-  // WuBor `movement/landing.rs` (Landing, LandingLight, the special landing),
-  // `attack/attack_air.rs` (LandingAttackAir).
+  // UNVERIFIED: WuBor `movement/landing.rs` (Landing, LandingLight, the special
+  // landing), `attack/attack_air.rs` (LandingAttackAir), a reimplementation.
   land: "ENABLE",
   landingLag: "ENABLE",
   specialLanding: "ENABLE",
@@ -132,13 +165,15 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   attack: "NO_REAC",
   special: "NO_REAC",
   throw: "NO_REAC",
-  // WuBor `catch/catch.rs` (Catch, CatchDash, CatchDashPull): the grab itself is stood on.
+  // UNVERIFIED: WuBor `catch/catch.rs` (Catch, CatchDash, CatchDashPull), a
+  // reimplementation: the grab itself is stood on.
   grab: "ENABLE",
   // Holding somebody: the pair moves as one (Plan 5 review).
   grabHold: "DISABLE",
   pummel: "DISABLE",
-  // UNVERIFIED for the shield's start; WuBor `guard/guard.rs`, `guard_off.rs`,
-  // `guard_damage.rs` (NO_REAC) for the shield, its drop and its stun.
+  // UNVERIFIED: WuBor `guard/guard.rs`, `guard_off.rs`, `guard_damage.rs`
+  // (NO_REAC), a reimplementation, for the shield, its drop and its stun; no
+  // SmashWiki page says. The shield's start is read as the shield's.
   shieldStart: "NO_REAC",
   shield: "NO_REAC",
   shieldRelease: "NO_REAC",
@@ -147,13 +182,14 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   // only the flight before it (`guard/shield_break_fly.rs`, DISABLE), which the
   // replica does not have.
   shieldBroken: "ENABLE",
-  // WuBor `escape/escape.rs` (Escape: the spot dodge); UNVERIFIED for the rolls, read as the spot dodge's.
+  // UNVERIFIED: WuBor `escape/escape.rs` (Escape: the spot dodge), a
+  // reimplementation; the rolls read as the spot dodge's.
   spotDodge: "DISABLE",
   roll: "DISABLE",
   // UNVERIFIED: an air dodge outside its intangible frames.
   airDodge: "ENABLE",
-  // WuBor `damage/damage.rs`, `damage_fly.rs`, `damage_fall.rs` (ENABLE). The
-  // replica keeps a fighter in hitstun closed (`footstoolable`, a DECISION).
+  // SmashWiki's Ultimate footstool combos (above; ruling R-T11c); WuBor
+  // `damage/damage.rs`, `damage_fly.rs`, `damage_fall.rs` (ENABLE) agree.
   hitstun: "ENABLE",
   tumble: "ENABLE",
   tumbleFall: "ENABLE",
@@ -168,8 +204,8 @@ export const TREADED_KIND_OF_ACTION: Readonly<Record<ActionState, TreadedKind>> 
   techWall: "ENABLE",
   techCeiling: "ENABLE",
   // SmashWiki: "the character being jumped off will not fall"; WuBor
-  // `cliff/cliff_wait.rs` (NO_REAC). UNVERIFIED for the ledge options, read as
-  // the hang's, and the getup attack is an attack.
+  // `cliff/cliff_wait.rs` (NO_REAC) agrees. UNVERIFIED for the ledge options,
+  // read as the hang's, and the getup attack is an attack.
   ledgeHang: "NO_REAC",
   ledgeGetUp: "NO_REAC",
   ledgeAttack: "NO_REAC",
@@ -219,14 +255,14 @@ export interface Footstool {
  * or inside Kirby (`grabbedBy`), nor holding or carrying somebody (`isHolding`
  * with the link: a hold, a pummel, a throw before its release, the carry, a
  * mouthful, as `holdsMouthful` reads it); nor — a DECISION, UNVERIFIED — while
- * frozen or reeling from a hit, so a footstool never overwrites a launch (WuBor's
- * damage statuses are ENABLE; no source says what a footstool does to one).
+ * frozen in hitlag. In hitstun it can be (ruling R-T11c, above): the footstool
+ * takes the reel's place (`applyFootstools`).
  */
 export function footstoolable(f: FighterState, def: FighterDef): boolean {
   if (TREADED_KIND_OF_ACTION[f.action] === "DISABLE") return false;
   if (f.intangible > 0 || f.invincible > 0) return false;
   if (f.grabbedBy >= 0 || (f.grabbing >= 0 && isHolding(f, def))) return false;
-  if (f.hitstun > 0 || f.hitlag > 0) return false;
+  if (f.hitlag > 0) return false;
   return true;
 }
 
@@ -279,52 +315,105 @@ export function footstoolSpeed(def: FighterDef, made: number, onLedge: boolean):
 }
 
 /**
- * Phase 3, every frame, frozen or not: the wait after an attack counts (0 while
- * attacking, so it counts from the move's end, however it ends), and the ground
- * starts the run of footstools again.
+ * The most footstools in a run before landing, from the jumper's own falling
+ * speed (ruling R-T11d): SmashWiki's six for Ultimate's slowest faller, two for
+ * its fastest, and a straight line between, rounded. UNVERIFIED: the line. The
+ * game compares an unpublished "next tread speed" with `tread_jump_speed_limit`
+ * 0.5; read as the bounce's own speed, that gave Fox, the fastest faller, the
+ * longest run (8), against the page. For this roster: Kirby and Samus 5; Mario,
+ * Pikachu, Marth, Link and Donkey Kong 4; Fox 2.
  */
-export function ageFootstool(f: FighterState): void {
-  if (f.action === "attack" || f.action === "special") f.combat.sinceAttack = 0;
-  else if (f.combat.sinceAttack < SINCE_ATTACK_CAP) f.combat.sinceAttack += 1;
-  if (f.grounded) f.combat.footstools = 0;
+export function footstoolChain(def: FighterDef): number {
+  const span = FALL_SPEED_FASTEST - FALL_SPEED_SLOWEST;
+  const fall = fighterParams(def).air_speed_y_stable;
+  const over = Math.min(Math.max(fall - FALL_SPEED_SLOWEST, 0), span);
+  const range = FOOTSTOOL_CHAIN_MOST - FOOTSTOOL_CHAIN_LEAST;
+  return FOOTSTOOL_CHAIN_MOST - Math.trunc((2 * range * over + span) / (2 * span));
 }
 
 /**
- * From the fall's main (`airMain`: JUMP and FALL): a jump, pressed or buffered,
- * over an open head. The jumper bounces now; what happens to the one stood on
+ * Phase 3, every frame, frozen or not: the wait after an attack counts (0 while
+ * attacking, so it counts from the move's end, however it ends; UNVERIFIED, which
+ * statuses count as attacking: `FOOTSTOOL_AFTER_ATTACK`), the ground starts the
+ * run of footstools again, and a bounce counts its frames while its jumper is
+ * still in it (its jump, or the fall after; anything else ends it).
+ */
+export function ageFootstool(f: FighterState): void {
+  const c = f.combat;
+  if (f.action === "attack" || f.action === "special") c.sinceAttack = 0;
+  else if (c.sinceAttack < SINCE_ATTACK_CAP) c.sinceAttack += 1;
+  if (f.grounded) c.footstools = 0;
+  if (c.footstoolFrame > 0) {
+    const bouncing = f.action === "jump" || f.action === "fall";
+    c.footstoolFrame = bouncing && c.footstoolFrame < FOOTSTOOL_INTANGIBLE_LAST ? c.footstoolFrame + 1 : 0;
+  }
+}
+
+/**
+ * From the fall's main, before anything reads a press: a footstool's bounce
+ * (ruling R-T11f). Its frame 1 is the footstool's; on frames 2 to 7 the jumper
+ * cannot act, and a press waits in the buffer for frame 8 (as every status not
+ * yet free to act keeps one); on frames 9 to 12, still in the bounce, it is
+ * intangible. An aerial or a special started on frame 8 leaves the bounce, so no
+ * intangibility follows, as the page says; UNVERIFIED that an air dodge, a midair
+ * jump or a wall jump there does the same (the dodge does, by leaving the jump
+ * and fall; the jumps re-enter `jump` and keep it). Returns true while it holds
+ * the jumper.
+ */
+export function footstoolBounceHolds(f: FighterState, intent: Intent, ctx: StateContext): boolean {
+  const frame = f.combat.footstoolFrame;
+  if (frame > 1 && frame < FOOTSTOOL_ACT_FRAME) {
+    bufferPress(f, intent, ctx.frame);
+    return true;
+  }
+  if (frame >= FOOTSTOOL_INTANGIBLE_FIRST) f.intangible = Math.max(f.intangible, 1);
+  return false;
+}
+
+/**
+ * From the fall's main (`airMain`: JUMP and FALL): a jump pressed this frame, the
+ * button's or the stick's (tap jump), over an open head, within the jumper's run
+ * (`footstoolChain`). The jumper bounces now; what happens to the one stood on
  * waits for `applyFootstools`. Returns true if it footstooled.
  *
- * In the game's order (`sub_air_check_fall_common`, above): after a special, an
- * air dodge and an attack pressed on the same frame (`airActionFirst`), and
- * before a wall jump. Not out of a tumble: the vanilla `set_damage_fall_transition`
- * (WuBor Patch `fighters/common/src/status/damage/damage_fall.rs` L87-117, kept in
- * comments) enables the special, attack, wall jump and midair jump groups in
- * DAMAGE_FALL and not the footstool's. Not from special fall either, whose main
- * is not `airMain` (SmashWiki "Helpless", https://www.ssbwiki.com/Helpless:
- * "unable to take any action, with the exception of grabbing a ledge,
- * maneuvering left/right, fastfalling, or climbing a ladder").
+ * Only a press made this frame (ruling R-T11e). UNVERIFIED: no source says a
+ * buffered jump cannot; WuBor's reimplementation of the check reads the button
+ * only as that frame's press (`FIGHTER_PAD_FLAG_JUMP_TRIGGER`). A buffered jump
+ * over a head is the midair jump (`handleActionable`).
+ *
+ * UNVERIFIED, WuBor's reimplementation alone (above): the order, after a special,
+ * an air dodge and an attack pressed on the same frame (`airActionFirst`) and
+ * before a wall jump; and no footstool out of a tumble, where the vanilla
+ * `set_damage_fall_transition` (WuBor Patch
+ * `fighters/common/src/status/damage/damage_fall.rs` L87-117, kept in comments)
+ * enables the special, attack, wall jump and midair jump groups in DAMAGE_FALL and
+ * not the footstool's (SmashWiki "Tumbling", https://www.ssbwiki.com/Tumbling,
+ * revision 2063051: "They can perform aerial attacks, use any remaining jumps, and
+ * use any special moves", and names no footstool). Not from special fall, whose main is not `airMain` (SmashWiki
+ * "Helpless", https://www.ssbwiki.com/Helpless: "unable to take any action, with
+ * the exception of grabbing a ledge, maneuvering left/right, fastfalling, or
+ * climbing a ladder").
  *
  * The bounce spends no midair jump and gives none back; it ends the short hop's
  * damage penalty, as an air jump does (UNVERIFIED for a footstool); it leaves the
  * wall jumps' count alone (SmashWiki "Wall jump", https://www.ssbwiki.com/Wall_jump:
- * reduced "without touching the ground", and a head is not the ground).
+ * reduced "without touching the ground", and a head is not the ground); and it
+ * starts the bounce's frames (`footstoolBounceHolds`).
  */
 export function tryFootstool(f: FighterState, intent: Intent, ctx: StateContext): boolean {
   const heads = ctx.heads;
   if (heads === undefined || ctx.footstools === undefined || f.grounded || f.action === "tumbleFall") return false;
-  const buffered = peekBuffer(f, ctx.frame) === "jump";
-  if (!intent.jumpPressed && !buffered) return false;
+  if (!intent.jumpPressed) return false;
   if (f.combat.sinceAttack < FOOTSTOOL_AFTER_ATTACK || airActionFirst(f, intent, ctx)) return false;
+  if (f.combat.footstools >= footstoolChain(ctx.def)) return false;
   const head = headUnder(f.port, heads);
   if (head === null) return false;
-  const speed = footstoolSpeed(ctx.def, f.combat.footstools, head.onLedge);
-  if (speed < FOOTSTOOL_SPEED_LIMIT) return false;
-  if (buffered) f.bufferedAction = null;
-  kineticJump(f, speed);
+  kineticJump(f, footstoolSpeed(ctx.def, f.combat.footstools, head.onLedge));
   f.fastFalling = false;
   f.shortHop = false;
   f.combat.footstools += 1;
   startAction(f, "jump");
+  f.combat.footstoolFrame = 1;
   ctx.footstools.push({ jumper: f.port, victim: head.port });
   return true;
 }
@@ -336,8 +425,9 @@ export function tryFootstool(f: FighterState, intent: Intent, ctx: StateContext)
  * under way, a shield, a ledge). Standing, they freeze (`footstooled`); in the
  * air they tumble down at their own full fall speed with no launch, so they tech
  * or lie down on landing and never bounce (SmashWiki: no "proper knockback";
- * "teching is possible"). Each footstool that reached its victim is reported, for
- * the kill credit.
+ * "teching is possible"). Either way a reel they were in ends here, its launch
+ * with it (ruling R-T11c): standing, they stop where they are rather than slide
+ * on it. Each footstool that reached its victim is reported, for the kill credit.
  */
 export function applyFootstools(
   fighters: readonly FighterState[],
@@ -350,8 +440,11 @@ export function applyFootstools(
     const victim = fighters[port];
     if (victim === undefined || !footstoolable(victim, defs[port])) continue;
     if (TREADED_KIND_OF_ACTION[victim.action] === "NO_REAC") continue;
+    victim.balloon = false;
     if (victim.grounded) {
       startAction(victim, "footstooled");
+      victim.hitstun = 0;
+      kineticClear(victim);
     } else {
       startAction(victim, "tumble");
       victim.hitstun = FOOTSTOOL_AIR_STUN;

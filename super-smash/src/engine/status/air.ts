@@ -10,7 +10,7 @@ import { JUMP_SQUAT_FRAMES } from "../constants";
 import { kineticGroundJump, kineticSetY } from "../kinetic";
 import { fighterParams } from "../params";
 import { fastFallVelocity } from "../physics";
-import { tryFootstool } from "../footstool";
+import { footstoolBounceHolds, tryFootstool } from "../footstool";
 import { tryWallJump } from "../wallJump";
 import {
   LANDING_ANIMATION_FRAMES,
@@ -61,6 +61,12 @@ export const STATUS_JUMP_SQUAT: FighterStatus = {
 export function airMain(f: FighterState, intent: Intent, ctx: StateContext): void {
   if (f.grounded) {
     startAction(f, "land");
+    return;
+  }
+  // A footstool's bounce acts from its 8th frame (Plan 5, Task 11 fix round 1:
+  // `footstoolBounceHolds`); until then a press waits, and the rise turns to a fall.
+  if (footstoolBounceHolds(f, intent, ctx)) {
+    if (f.vy <= 0 && f.action === "jump") startAction(f, "fall");
     return;
   }
   // A jump over somebody's head (Plan 5, Task 11: `footstool.ts`), which the game

@@ -78,12 +78,14 @@ const STEPS: readonly ScriptStep[] = [
   [32, 0, 0],
   [1, 0, J], //                 444: ...and falling past Donkey Kong's head (its top 26.9),
   //                                 jumps off it: Donkey Kong is footstooled to 473, and
-  //                                 Mario bounces at his full hop's speed, to 60.6 on 473
+  //                                 Mario bounces at his full hop's speed, to 60.6 on 473,
+  //                                 intangible 452-455 (the bounce's frames 9-12; fix round 1)
   [31, 0, 0],
   [8, J, 0], //                 476: Donkey Kong full-hops (the jump held) up under him...
   [1, J, J], //                 484: ...and Mario jumps off his rising head, 0.75× as fast
-  //                                 (his second footstool off the ground): Donkey Kong
-  //                                 tumbles down at his own fall speed, no launch...
+  //                                 (his second footstool off the ground; intangible
+  //                                 492-495): Donkey Kong tumbles down at his own fall
+  //                                 speed, no launch...
   [2, J, 0],
   [114, 0, 0], //               487: ...lies down on 496, gets up on 536 and stands on 566;
   //                                 Mario lands on 564

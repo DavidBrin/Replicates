@@ -918,12 +918,12 @@ export function handleActionable(f: FighterState, intent: Intent, ctx: StateCont
 /**
  * Would `handleActionable` start a special, an air dodge or an aerial for this
  * airborne fighter this frame (a press or the buffer's, read without spending
- * it)? Its airborne branch, before the midair jump, answered ahead of it. The
- * game tries those before a footstool and a wall jump: the vanilla
- * `sub_air_check_fall_common` order, special, item throw, lasso, air dodge,
- * attack, footstool, wall jump, midair jump, as WuBor Patch reimplements it (a
- * mod, not first-party: `fighters/common/src/status/sub_transitions.rs`
- * L486-519 at
+ * it)? Its airborne branch, before the midair jump, answered ahead of it.
+ * UNVERIFIED, resting on a reimplementation alone: that the game tries those
+ * before a footstool and a wall jump, the vanilla `sub_air_check_fall_common`
+ * order, special, item throw, lasso, air dodge, attack, footstool, wall jump,
+ * midair jump, as WuBor Patch reimplements it (a mod, not first-party:
+ * `fighters/common/src/status/sub_transitions.rs` L486-519 at
  * https://github.com/WuBoytH/The-WuBor-Patch/blob/9d5e5cf90d7d686f5ab367a92789019c05574dec/fighters/common/src/status/sub_transitions.rs#L486-L519).
  * An attack press takes the frame even with no aerial to start, as there.
  */
