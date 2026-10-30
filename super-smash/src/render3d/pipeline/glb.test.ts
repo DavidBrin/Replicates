@@ -15,6 +15,7 @@ import {
   ALPHA_CUTOFF,
   ALPHA_CUTOFF_OVERRIDES,
   FACE_SOLID_COLOURS,
+  INVERSE_BIND_TOLERANCE,
   JOINT_TOLERANCE,
   MAX_PRIMITIVES,
   alphaCutoffFor,
@@ -153,6 +154,16 @@ describe("verifyGlb's skeleton checks", () => {
     const r = await verifyGlb(await fixtureGlb("ibm", { ...OPAQUE_SKIN, headIbmY: -2.5 }), DUMP);
     expect(r.problems).toContainEqual(expect.stringContaining("inverse bind matrix of joint Head"));
   });
+
+  it("holds the inverse binds to INVERSE_BIND_TOLERANCE (2e-3, relative) — the worst real glb is 5.4e-4, Link's Sword1 (Task 8 re-review)", async () => {
+    // The shared matrix here is the identity (size 1), so the Head's error is its inverse bind's translation error.
+    expect(INVERSE_BIND_TOLERANCE).toBe(2e-3);
+    expect((await verifyGlb(await fixtureGlb("ibm-close", { ...OPAQUE_SKIN, headIbmY: -2.0015 }), DUMP)).problems).toEqual([]);
+    // 0.005 passed the old 1e-2: on Mario's real glb that let an inverse bind 0.05 units out through.
+    expect((await verifyGlb(await fixtureGlb("ibm-off", { ...OPAQUE_SKIN, headIbmY: -2.005 }), DUMP)).problems).toContainEqual(
+      expect.stringContaining("the inverse bind matrix of joint Head is 0.0050 (relative) from undoing its bind pose"),
+    );
+  });
 });
 
 describe("alpha modes, decided from the colour alpha at export", () => {
@@ -231,6 +242,18 @@ describe("alpha modes, decided from the colour alpha at export", () => {
     expect(opaqueBlend.problems).toContainEqual(expect.stringContaining("material cloth is BLEND but nothing in it is below alpha 0.5"));
     const scouter = await verifyGlb(await fixtureGlb("blend-scouter", { materials: { scouter: { factorAlpha: 0.851, mode: "BLEND" } }, prims: [{ material: "scouter" }] }), DUMP);
     expect(scouter.problems).toEqual([]);
+  });
+
+  it("verify refuses a cut-out flipped to OPAQUE (MASK → OPAQUE): it would draw its holes solid (Task 8 re-review)", async () => {
+    // Link's alp_link_002 is 91% holes; forced OPAQUE it used to pass verify.
+    const file = await fixtureGlb("mask-flipped", { materials: { hair: { alpha: (i) => (i < 6 ? 0 : 255), mode: "OPAQUE" } }, prims: [{ material: "hair" }] });
+    const flipped = "material hair is OPAQUE but 6 texel(s) of its texture are below alpha 0.5, and its source reads that alpha — a cut-out drawn solid";
+    expect((await verifyGlb(file, DUMP)).problems).toEqual([`${file}: ${flipped}`]);
+    expect((await verifyGlb(file, { ...DUMP, materials: [{ name: "hair", image: "hair.png", alpha: true }] })).problems).toEqual([`${file}: ${flipped}`]);
+    // Donkey Kong's body: OPAQUE over a texture with holes is right when its source never reads the alpha (the dump's `alpha: false`).
+    expect((await verifyGlb(file, { ...DUMP, materials: [{ name: "hair", image: "skin.png", alpha: false }] })).problems).toEqual([]);
+    // And OPAQUE with no texel below the cutoff (Marth's 213–255 cloth) is not a flip.
+    expect((await verifyGlb(await fixtureGlb("opaque-partial", { materials: { cloth: { alpha: (i) => (i % 2 ? 213 : 255), mode: "OPAQUE" } }, prims: [{ material: "cloth" }] }), DUMP)).problems).toEqual([]);
   });
 });
 

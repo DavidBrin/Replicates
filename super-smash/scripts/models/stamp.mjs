@@ -43,8 +43,14 @@ export const PIPELINE_PACKAGES = Object.freeze(["@gltf-transform/core", "@gltf-t
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 
-/** The stamp of the pipeline in the package at `root`: a missing input or package counts as `missing`, never as an error. */
-export function pipelineStamp(root) {
+/**
+ * The stamp of the pipeline in the package at `root`: a missing input or package counts as `missing`, never as an
+ * error. `blender` is the release it exports with, `BLENDER_VERSION` unless a test asks about another.
+ *
+ * @param {string} root
+ * @param {string} [blender]
+ */
+export function pipelineStamp(root, blender = BLENDER_VERSION) {
   const lines = [];
   for (const input of PIPELINE_INPUTS) {
     const file = join(root, input);
@@ -54,6 +60,6 @@ export function pipelineStamp(root) {
     const file = join(root, "node_modules", pkg, "package.json");
     lines.push(`${pkg}@${existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).version : "missing"}`);
   }
-  lines.push(`blender@${BLENDER_VERSION}`);
+  lines.push(`blender@${blender}`);
   return sha256(lines.join("\n") + "\n");
 }

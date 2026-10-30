@@ -15,8 +15,9 @@
  * (one draw call each: four fighters stay under half of the 100-call frame,
  * `renderer3d.test.ts`), no texture over 1024 px, every bone of the dump a
  * joint within `JOINT_TOLERANCE` of its bind pose, inverse bind matrices that
- * undo those joints, no BLEND material that is really opaque, and a face that
- * draws (`faceProblems`, Task 21b).
+ * undo those joints, no BLEND material that is really opaque, no cut-out
+ * shipped OPAQUE (its holes drawn solid), and a face that draws
+ * (`faceProblems`, Task 21b).
  */
 
 import { createHash } from "node:crypto";
@@ -48,9 +49,11 @@ export const JOINT_TOLERANCE = 2e-3;
 /**
  * How far apart the joints' `world · inverseBind` may be, relative to their
  * size. They are all one matrix (the mesh's bind transform; after meshopt, the
- * quantisation's), measured within 5.4e-4 (Link's Sword1) and 2e-5 elsewhere.
+ * quantisation's), measured within 5.4e-4 (Link's Sword1) and 2e-5 elsewhere,
+ * so 2e-3 passes every real glb with room; 1e-2 let an inverse bind 0.05 units
+ * out on Mario's (Task 8 re-review).
  */
-export const INVERSE_BIND_TOLERANCE = 1e-2;
+export const INVERSE_BIND_TOLERANCE = 2e-3;
 /** A texel below this alpha is a hole: glTF's default MASK cutoff. */
 export const ALPHA_CUTOFF = 0.5;
 /**
@@ -381,11 +384,21 @@ export async function verifyGlb(file, dump) {
   for (const name of ["Hip", "Head"]) if (!joints.has(name)) problems.push(`${file}: no ${name} joint`);
   // export_gltf.py's dumps always list meshes; a bones-only dump checks the skeleton alone.
   if (Array.isArray(dump.meshes)) problems.push(...(await faceProblems(doc, dump)));
+  // The two ways a material's mode can be wrong for its colour alpha (`alphaModes` decides it): BLEND with nothing
+  // see-through, which three.js draws without depth writes; and a cut-out shipped OPAQUE, which draws its holes solid
+  // (MASK → OPAQUE). A material whose source never reads its texture's alpha (the dump's `alpha: false`: Donkey
+  // Kong's body over the PNG whose alpha is his fur card's mask) is OPAQUE whatever that alpha holds.
+  const readsNoAlpha = new Set((dump.materials ?? []).filter((m) => m.alpha === false).map((m) => m.name));
   for (const mat of doc.getRoot().listMaterials()) {
-    if (mat.getAlphaMode() !== "BLEND" || mat.getBaseColorFactor()[3] < 1) continue;
+    const mode = mat.getAlphaMode();
     const tex = mat.getBaseColorTexture();
-    if (tex === null || (await holesIn(tex.getImage(), tex.getName())) === 0) {
-      problems.push(`${file}: material ${mat.getName()} is BLEND but nothing in it is below alpha ${ALPHA_CUTOFF} — three.js would draw it without depth writes`);
+    if (mode === "BLEND" && mat.getBaseColorFactor()[3] >= 1) {
+      if (tex === null || (await holesIn(tex.getImage(), tex.getName())) === 0) {
+        problems.push(`${file}: material ${mat.getName()} is BLEND but nothing in it is below alpha ${ALPHA_CUTOFF} — three.js would draw it without depth writes`);
+      }
+    } else if (mode === "OPAQUE" && tex !== null && !readsNoAlpha.has(mat.getName())) {
+      const holes = await holesIn(tex.getImage(), tex.getName());
+      if (holes > 0) problems.push(`${file}: material ${mat.getName()} is OPAQUE but ${holes} texel(s) of its texture are below alpha ${ALPHA_CUTOFF}, and its source reads that alpha — a cut-out drawn solid`);
     }
   }
   return { problems, bytes, triangles: tris, primitives: prims, joints: joints.size };

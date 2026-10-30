@@ -220,6 +220,13 @@ describe("models:check, the deploy guard", () => {
     expect(pipelineStamp(repo)).toBe(stamp);
   });
 
+  it("moves with the Blender release the glbs are exported by: the stamp's blender@ line (Task 21b re-review)", () => {
+    const stamp = pipelineStamp(repo);
+    expect(pipelineStamp(repo, BLENDER_VERSION)).toBe(stamp);
+    expect(pipelineStamp(repo, "5.2.3")).not.toBe(stamp);
+    expect(pipelineStamp(repo, "5.2.3")).not.toBe(pipelineStamp(repo, "4.2.1"));
+  });
+
   it("refuses outside a git checkout: it cannot tell what would be committed", () => {
     rmSync(at(".git"), { recursive: true, force: true });
     const r = check();

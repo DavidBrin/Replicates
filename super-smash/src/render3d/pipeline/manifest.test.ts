@@ -157,4 +157,12 @@ describe("a download is checked for what it claims to be", () => {
     expect(magicProblem("skin_mario_001_col.png", html)).toMatch(/not a PNG/);
     expect(magicProblem("skin_mario_001_col.png", new Uint8Array())).toMatch(/not a PNG/);
   });
+
+  it("checks every byte of each signature, not just the first: BLENDXX, and the PNG signature's start before garbage (Task 5 re-review)", () => {
+    expect(magicProblem("mario-c00.blend", new TextEncoder().encode("BLENDXX-v283RENDH"))).toMatch(/not a \.blend/);
+    expect(magicProblem("mario-c00.blend", new TextEncoder().encode("BLENDE"))).toMatch(/not a \.blend/); // its last byte missing
+    const garbage = new TextEncoder().encode("garbage");
+    expect(magicProblem("skin_mario_001_col.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, ...garbage]))).toMatch(/not a PNG/);
+    expect(magicProblem("skin_mario_001_col.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x00, ...garbage]))).toMatch(/not a PNG/); // its last byte wrong
+  });
 });
