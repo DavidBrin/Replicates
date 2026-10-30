@@ -99,6 +99,7 @@ export function attackFromHitbox(hb: Hitbox): AttackParams {
     // Explicit either way, so the hitbox pipeline never classifies a legacy
     // move's angle as a meteor on its own (Plan 3, Task 16).
     meteor: hb.meteor === true,
+    ...(hb.forceReaction === true ? { forceReaction: true } : {}),
   };
 }
 

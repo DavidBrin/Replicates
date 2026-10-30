@@ -126,6 +126,7 @@ import {
   shieldCovers,
   startAction,
   trumpLedge,
+  updateDodgeIntangibility,
   updateInputTracking,
 } from "./states";
 import type { Intent, StateContext } from "./states";
@@ -628,6 +629,13 @@ export function step(
       // stick says (`CombatState.victimFreeze`; Plan 3 final wave).
       f.hitlag -= 1;
       frozen[i] = true;
+      // A move's own intangible frames are its animation's, and a freeze holds
+      // the animation on its frame (SmashWiki "Hitlag",
+      // https://www.ssbwiki.com/Hitlag: the attacker is frozen "in the frame when
+      // they landed the hit"), so they hold too: the countdown above ticks
+      // through a freeze, and `advanceFighter`, which re-asserts the window, does
+      // not run in one (Plan 5, Task 5 fix round 1).
+      updateDodgeIntangibility(f, defs[i]);
       // A held fighter can still mash out of the grab during the freeze of a
       // pummel (SmashWiki "Pummel": "opponents can still mash out of the
       // attacker's grab during hitlag"). Only the mash counts: the frame itself
@@ -1279,12 +1287,18 @@ function resolveHits(
         // The counter catches it (Plan 5, Task 5): the hit is spent and does
         // nothing to the fighter, who starts the counterattack frozen; a melee
         // attacker freezes with them ("freezes for 21 frames alongside the
-        // opponent"). The caught damage is the box's own with its charge (`c`'s
-        // chargeScale), before staleness and the one-on-one bonus (UNVERIFIED:
-        // SmashWiki's "the countered attack's damage" names no modifiers). A
-        // projectile is consumed, and its thrower, not a party to the contact,
-        // does not freeze, as for any projectile hit. UNVERIFIED: that one which
-        // survives its hits (`destroyOnHit` false) is consumed too.
+        // opponent"). The caught damage is the box's own, before staleness
+        // (SmashWiki "Stale Moves", https://www.ssbwiki.com/Stale_Moves: "Moves
+        // that are counter-attacks or absorbers do not take the staleness of the
+        // incoming attack into consideration") and before the one-on-one bonus
+        // (SmashWiki "1v1 multiplier", https://www.ssbwiki.com/1v1_multiplier:
+        // "It does not affect the damage received by counterattacks or
+        // absorption moves"). UNVERIFIED: that a smash's charge counts (`c`'s
+        // chargeScale): the pages name no charge. A projectile is consumed, and
+        // its thrower does not freeze (UNVERIFIED for a counter: the engine's
+        // rule for any projectile hit, its owner not a party to the contact).
+        // UNVERIFIED: that one which survives its hits (`destroyOnHit` false) is
+        // consumed too.
         const counterNow = activeCounter(victim, defs[v]);
         if (counterNow !== null) {
           recordHit(c, attacker, victim.port);
@@ -2129,7 +2143,8 @@ function applyHit(
   // it is why armour has to sit here, after damage and before knockback, rather
   // than at the top with the intangibility checks. The damage was added once,
   // above; adding it again here doubled every armoured hit (Plan 3, Task 1).
-  if (hasSuperArmour(victim, victimDef)) {
+  // A box that forces its reaction goes through armour (`Hitbox.forceReaction`).
+  if (hasSuperArmour(victim, victimDef) && hb.forceReaction !== true) {
     // The attacker still freezes. Hitting armour should feel like hitting
     // something solid, and a hit that reports nothing back reads as a whiff.
     const lag = computeHitlag(damage, {

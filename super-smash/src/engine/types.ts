@@ -261,6 +261,12 @@ export interface Hitbox {
   readonly meteor?: boolean;
   /** `collision_attr_turn` (SmashWiki "Reverse"): the victim is turned round (Plan 5: Cape). */
   readonly reverse?: boolean;
+  /**
+   * `AttackModule::set_force_reaction(id, true, …)`: the hit goes through super
+   * armour as if there were none (Plan 5, Task 5 fix round 1: Marth's
+   * counterattack, SmashWiki "the hitboxes ignore most kinds of armor").
+   */
+  readonly forceReaction?: boolean;
   /** This hitbox grabs rather than damages. */
   readonly grabbing?: boolean;
   /**

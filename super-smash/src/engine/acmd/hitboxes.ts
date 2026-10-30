@@ -115,6 +115,7 @@ function attackHitbox(
     ...(SITUATION[a.situation] !== undefined ? { situation: SITUATION[a.situation] } : {}),
     ...(LR[a.facing] !== undefined ? { lr: LR[a.facing] } : {}),
     ...(a.collisionAttr === "collision_attr_turn" ? { reverse: true } : {}),
+    ...(a.forceReaction === true ? { forceReaction: true } : {}),
   };
 }
 

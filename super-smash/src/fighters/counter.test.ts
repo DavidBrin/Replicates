@@ -29,10 +29,12 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { activeCounter, counterDamage } from "@/engine/counter";
+import { ATTACK, clearAll, frame, script, wait } from "@/engine/acmd/dsl";
+import { activeCounter, counterBubble, counterDamage } from "@/engine/counter";
 import { fx, mul, ONE, toFloat } from "@/engine/fixed";
+import { circle, contactPoint } from "@/engine/hitbox";
 import { hashState } from "@/engine/hash";
-import { spawnProjectile } from "@/engine/projectile";
+import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import { ONE_ON_ONE_MULTIPLIER } from "@/engine/constants";
 import { computeHitlag, computeKnockback, computeStaleness, resolveAngle } from "@/engine/knockback";
 import { cloneState, createInitialState, registerFighters, registerStages, registryContext, step } from "@/engine/simulate";
@@ -42,7 +44,7 @@ import { changeStatus, STATUS_KIND_OF_ACTION } from "@/engine/status/kind";
 import { Btn } from "@/engine/types";
 import type { ActionState, CounterDef, FighterDef, FighterState, GameState, InputFrame, MatchRules, MoveDef, ProjectileDef, StepEvents } from "@/engine/types";
 import { STAGES } from "@/stages";
-import { FIGHTERS, mario, marth } from "./index";
+import { FIGHTERS, fox, link, mario, marth } from "./index";
 
 const RULES: MatchRules = { mode: "stock", stocks: 3, timeLimit: 0, smashBall: false, oneOnOne: true };
 
@@ -91,6 +93,37 @@ const FSMASH = (i: number): [InputFrame, InputFrame] => [i === 0 ? Btn.Right : i
 
 /** The Counter as `marth.ts` holds it, read once. */
 const COUNTER_DEF = marth.moves.downB!.counter as CounterDef;
+
+/**
+ * A plain pellet from a stand-in moveset that only the projectile lookup reads
+ * (as in `reflect.test.ts`), flying level at a chosen height.
+ */
+const PELLET: ProjectileDef = {
+  id: "pellet",
+  spawnFrame: 1,
+  offsetX: 0,
+  offsetY: 0,
+  vx: fx(2),
+  vy: 0,
+  gravity: 0,
+  lifetime: 60,
+  destroyOnHit: true,
+  visual: "energy",
+  hitbox: { id: 0, startFrame: 0, endFrame: 60, x: 0, y: 0, radius: fx(2), damage: fx(5), angle: fx(45), baseKnockback: fx(30), knockbackGrowth: fx(50) },
+};
+const ZONER: FighterDef = { ...mario, id: "zoner", moves: { neutralB: { slot: "neutralB", name: "Pellet", totalFrames: 20, hitboxes: [], projectiles: [PELLET] } } };
+const withZoner = (marthDef: FighterDef = marth): SimContext => ({
+  ...registryContext,
+  fighter: (id) => (id === "zoner" ? ZONER : id === "marth" ? marthDef : registryContext.fighter(id)),
+});
+
+/** A pellet of port 0's at (x, y), flying +x at 2 a frame. */
+function pelletAt(s: GameState, id: number, x: number, y: number): void {
+  const p = spawnProjectile(PELLET, s.fighters[0], id, "zoner");
+  Object.assign(p, { x, y, vx: fx(2), facing: 1, age: 5 });
+  s.projectiles.push(p);
+  s.nextProjectileId = Math.max(s.nextProjectileId, id + 1);
+}
 
 describe("Marth's Counter", () => {
   it("returns a forward smash at ×1.2, and Marth takes nothing", () => {
@@ -190,6 +223,12 @@ describe("the Counter's published numbers, as data (SmashWiki Marth (SSBU)/Down 
     expect(marth.moves.downB).toMatchObject({ totalFrames: 64, intangible: [5, 6], hitboxes: [] });
   });
 
+  it("holds the aerial Counter's physics and lengths (fix round 1): ×0.5, friction 0.0025, gravity 0.04, fall speed 1.2; 79 and 51 frames", () => {
+    const stall = { startX: fx(0.5), boostY: 0, noGravityFrames: 0, gravity: fx(0.04), fallSpeed: fx(1.2), airFriction: fx(0.0025), everyUse: true };
+    expect(marth.moves.downB).toMatchObject({ stall, airTotalFrames: 79 });
+    expect(marth.moves.counterAttack).toMatchObject({ stall, airTotalFrames: 51 });
+  });
+
   it("gives the counterattack its frames and its boxes: 5-7, 8% at 361°, BKB 90, KBG 60, size 5.5, hitlag ×1.4", () => {
     const move = marth.moves.counterAttack!;
     expect(move).toMatchObject({ totalFrames: 41, intangible: [1, 8], counterDamage: true });
@@ -204,6 +243,9 @@ describe("the Counter's published numbers, as data (SmashWiki Marth (SSBU)/Down 
         knockbackGrowth: fx(60),
         radius: fx(5.5),
         hitlagMultiplier: fx(1.4),
+        // Fix round 1: `clang=f` (SETOFF_KIND_OFF), and `set_force_reaction`.
+        transcendent: true,
+        forceReaction: true,
       });
     }
   });
@@ -406,37 +448,11 @@ describe("intangible through the freeze and the counterattack's frames 1-8", () 
 });
 
 describe("the bubble: 10.5 round a centre 10 above his feet", () => {
-  // A plain pellet from a stand-in moveset that only the projectile lookup reads
-  // (as in `reflect.test.ts`), flying level at a chosen height into the guard.
-  const PELLET: ProjectileDef = {
-    id: "pellet",
-    spawnFrame: 1,
-    offsetX: 0,
-    offsetY: 0,
-    vx: fx(2),
-    vy: 0,
-    gravity: 0,
-    lifetime: 60,
-    destroyOnHit: true,
-    visual: "energy",
-    hitbox: { id: 0, startFrame: 0, endFrame: 60, x: 0, y: 0, radius: fx(2), damage: fx(5), angle: fx(45), baseKnockback: fx(30), knockbackGrowth: fx(50) },
-  };
-  const ZONER: FighterDef = { ...mario, id: "zoner", moves: { neutralB: { slot: "neutralB", name: "Pellet", totalFrames: 20, hitboxes: [], projectiles: [PELLET] } } };
-  const withZoner = (marthDef: FighterDef = marth): SimContext => ({
-    ...registryContext,
-    fighter: (id) => (id === "zoner" ? ZONER : id === "marth" ? marthDef : registryContext.fighter(id)),
-  });
-
   /** Marth (at x 30) countering on move frame 11; pellets of Mario's flying at him at these heights, from these x. */
   function volley(shots: readonly { x: number; y: number }[]): GameState {
     const s = duel("mario", 60);
     Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 10 });
-    shots.forEach((at, k) => {
-      const p = spawnProjectile(PELLET, s.fighters[0], k + 1, "zoner");
-      Object.assign(p, { x: fx(at.x), y: fx(at.y), vx: fx(2), facing: 1, age: 5 });
-      s.projectiles.push(p);
-    });
-    s.nextProjectileId = shots.length + 1;
+    shots.forEach((at, k) => pelletAt(s, k + 1, fx(at.x), fx(at.y)));
     return s;
   }
 
@@ -469,10 +485,12 @@ describe("the bubble: 10.5 round a centre 10 above his feet", () => {
 });
 
 describe("the hit it catches is spent", () => {
-  it("a box still live after the counterattack's intangibility does not hit Marth again", () => {
-    // A stand-in forward smash: one long box, live 15-60, 20 out, so it reaches
-    // Marth's body from 22 apart, where the riposte cannot reach back. Marth is
-    // intangible to his counterattack's frame 8; the box is still live after it.
+  /**
+   * A stand-in forward smash: one long box, live 15-60, 20 out, so it reaches
+   * Marth's body from 22 apart, where the riposte cannot reach back. Marth is
+   * intangible to his counterattack's frame 8; the box is still live after it.
+   */
+  function poke(transcendent: boolean) {
     const fsmash = mario.moves.fsmash!;
     const poker: FighterDef = {
       ...mario,
@@ -482,13 +500,17 @@ describe("the hit it catches is spent", () => {
         fsmash: {
           ...fsmash,
           totalFrames: 70,
-          // Transcendent, so it cannot clank with the riposte and end itself there.
-          hitboxes: [{ id: 0, startFrame: 15, endFrame: 60, x: fx(20), y: fx(8), radius: fx(3), damage: fx(5), angle: fx(361), baseKnockback: fx(30), knockbackGrowth: fx(50), transcendent: true }],
+          hitboxes: [{ id: 0, startFrame: 15, endFrame: 60, x: fx(20), y: fx(8), radius: fx(3), damage: fx(5), angle: fx(361), baseKnockback: fx(30), knockbackGrowth: fx(50), transcendent }],
         },
       },
     };
     const ctx: SimContext = { ...registryContext, fighter: (id) => (id === "poker" ? poker : registryContext.fighter(id)) };
-    const { states, events } = run(duel("poker", 22), 80, FSMASH, ctx);
+    return run(duel("poker", 22), 80, FSMASH, ctx);
+  }
+
+  it("a box still live after the counterattack's intangibility does not hit Marth again", () => {
+    // Transcendent, so this asks only about the hit record (the next test has the clank).
+    const { states, events } = poke(true);
     const at = caughtAt(events);
     expect(at).toBeGreaterThan(0);
     // Past the counterattack's intangibility, and the box still out.
@@ -496,6 +518,15 @@ describe("the hit it catches is spent", () => {
     expect(later).toBeGreaterThan(at);
     expect(states[later].fighters[0]).toMatchObject({ move: "fsmash" });
     expect(states[later].fighters[1].intangible).toBe(0);
+    expect(states.every((s) => s.fighters[1].damage === 0)).toBe(true);
+  });
+
+  it("and a box that can clank meets the riposte without a clank (fix round 1: clang=f)", () => {
+    const { states, events } = poke(false);
+    expect(caughtAt(events)).toBeGreaterThan(0);
+    expect(events.flatMap((e) => e.clanks)).toEqual([]);
+    // The riposte played out instead of rebounding into a stand.
+    expect(states.some((s) => s.fighters[1].move === "counterAttack" && s.fighters[1].actionFrame === 12)).toBe(true);
     expect(states.every((s) => s.fighters[1].damage === 0)).toBe(true);
   });
 });
@@ -615,5 +646,206 @@ describe("rollback", () => {
     s.fighters[1].combat.counterDamage = fx(12);
     expect(hashState(s)).not.toBe(before);
     expect(cloneState(s).fighters[1].combat.counterDamage).toBe(fx(12));
+  });
+});
+
+describe("fix round 1: a move's own intangibility holds through its owner's hitlag", () => {
+  it("keeps the riposte's frames 5-8 intangible through its own hit's hitlag, so a pellet in flight passes through", () => {
+    const live = run(duel("mario", 16), 90, FSMASH);
+    const hitAt = live.events.findIndex((e) => e.hits.some((h) => h.attacker === 1));
+    expect(hitAt).toBeGreaterThan(0);
+    const frozen = live.states.filter((s, i) => i >= hitAt && s.fighters[1].move === "counterAttack" && s.fighters[1].hitlag > 0);
+    // The riposte's hitlag ×1.4 holds it on frame 5 for its whole length…
+    expect(frozen.length).toBeGreaterThan(20);
+    for (const s of frozen) {
+      expect(s.fighters[1].actionFrame).toBe(4);
+      // …and frame 5 is in "Intangibility 1-8".
+      expect(s.fighters[1].intangible, `hitlag ${s.fighters[1].hitlag}`).toBeGreaterThan(0);
+    }
+    // A pellet of Mario's already at Marth's body as the riposte connects.
+    const s = cloneState(live.states[hitAt]);
+    pelletAt(s, 1, s.fighters[1].x - fx(3), fx(7));
+    const after = run(s, 8, () => [0, 0], withZoner());
+    expect(after.states.every((t) => t.fighters[1].hitlag > 0)).toBe(true);
+    expect(after.events.flatMap((e) => e.hits).filter((h) => h.victim === 1)).toEqual([]);
+    expect(after.states[after.states.length - 1].fighters[1].damage).toBe(0);
+  });
+
+  it("does the same for Fox's Reflector: intangible 2-3, its 2% connecting on frame 3, held through that hit's hitlag", () => {
+    // SmashWiki "Fox (SSBU)/Down special" (https://www.ssbwiki.com/Fox_(SSBU)/Down_special):
+    // intangibility 2-3 (`fox.ts`, `intangible: [2, 3]`), the box live on frame 3.
+    expect(fox.moves.downB?.intangible).toEqual([2, 3]);
+    const s = createInitialState("finalDestination", [{ defId: "fox" }, { defId: "mario" }], RULES, 5);
+    s.fighters.forEach((f, i) =>
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? -3 : 3), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }),
+    );
+    const { states, events } = run(s, 20, (i) => [i === 0 ? Btn.Down | Btn.Special : 0, 0]);
+    const hitAt = events.findIndex((e) => e.hits.some((h) => h.attacker === 0));
+    expect(states[hitAt].fighters[0]).toMatchObject({ move: "downB", actionFrame: 2 });
+    const frozen = states.filter((t, i) => i >= hitAt && t.fighters[0].hitlag > 0);
+    expect(frozen.length).toBeGreaterThan(5);
+    for (const t of frozen) expect(t.fighters[0].intangible).toBeGreaterThan(0);
+    // Once it moves on to frame 4, the window is over.
+    const on = states.findIndex((t) => t.fighters[0].actionFrame === 3);
+    expect(states[on].fighters[0].intangible).toBe(0);
+  });
+});
+
+describe("fix round 1: the riposte cannot clank (SmashWiki clang=f, rebound=f; SETOFF_KIND_OFF)", () => {
+  it("lands on a caught Link forward tilt instead of clanking with it", () => {
+    // Link's forward tilt (a soft forward press, so no smash), caught on its first
+    // live frame at 14 apart; its box is still out when the cut comes.
+    const { states, events } = run(duel("link", 14), 90, (i) => [i === 12 ? Btn.Right | Btn.Soft | Btn.Attack : 0, i === 0 ? COUNTER : 0]);
+    const at = caughtAt(events);
+    expect(states[at].fighters[0].move).toBe("ftilt");
+    expect(events.flatMap((e) => e.clanks)).toEqual([]);
+    const riposte = events.flatMap((e) => e.hits).find((h) => h.attacker === 1);
+    expect(riposte, "the riposte never landed").toBeDefined();
+    expect(toFloat(riposte!.damage)).toBeCloseTo(toFloat(states[at].fighters[1].combat.counterDamage) * 1.05 * 1.2, 2);
+  });
+});
+
+describe("fix round 1: the aerial Counter (SmashWiki Marth (SSBU)/Down special, Parameters)", () => {
+  /** Marth high over Final Destination, falling at 1.5 and drifting at 1, countering on step 0. */
+  function aerial(frames: number, script: (i: number) => InputFrame = (i) => (i === 0 ? COUNTER : 0)) {
+    const s = duel("mario", 60);
+    Object.assign(s.fighters[1], { action: "fall", grounded: false, platform: -1, x: 0, y: fx(110), vx: fx(1), vy: -fx(1.5) });
+    s.fighters[1].kinetic.controlX = fx(1);
+    return run(s, frames, (i) => [0, script(i)]).states.map((t) => t.fighters[1]);
+  }
+
+  it("halves the speed and stops the fall on its first frame (UNVERIFIED: the stop), then bleeds 0.0025 a frame and falls by 0.04 to 1.2", () => {
+    const m = aerial(40);
+    expect(m[0]).toMatchObject({ action: "special", move: "downB", actionFrame: 0, vy: 0 });
+    // The air friction's frame, then ×0.5 ("Horizontal speed multiplier on startup 0.5").
+    expect(m[0].vx).toBe(mul(fx(1) - fx(0.0025), fx(0.5)));
+    for (let k = 1; k < 39; k++) {
+      // "Air friction 0.0025": no drift, the speed bleeding by it.
+      expect(m[k].vx, `frame ${k + 1}`).toBe(m[k - 1].vx - fx(0.0025));
+      // "Gravity 0.04", "Fall speed 1.2".
+      expect(m[k].vy, `frame ${k + 1}`).toBe(Math.max(-fx(1.2), m[k - 1].vy - fx(0.04)));
+    }
+    expect(m[30].vy).toBe(-fx(1.2));
+    expect(m[38].vy).toBe(-fx(1.2));
+  });
+
+  it("plays to its 79th frame in the air, then falls as Marth does ('Animation length (aerial) 79')", () => {
+    const m = aerial(82);
+    expect(m[78]).toMatchObject({ action: "special", move: "downB", actionFrame: 78 });
+    expect(m[79].action).toBe("fall");
+    // Marth's own fall from there, faster than the Counter's 1.2.
+    expect(m[81].vy).toBeLessThan(-fx(1.2));
+  });
+
+  it("is interruptible from frame 65 in the air ('Interruptible 65')", () => {
+    const m = aerial(70, (i) => (i === 0 ? COUNTER : i === 64 ? Btn.Attack : 0));
+    expect(m[63]).toMatchObject({ action: "special", move: "downB" });
+    expect(m[64]).toMatchObject({ action: "attack", move: "nair" });
+  });
+
+  it("gives the counterattack the same physics and its 51 frames in the air (UNVERIFIED that the Parameters govern it)", () => {
+    const s = duel("mario", 60);
+    Object.assign(s.fighters[1], { action: "special", move: "counterAttack", actionFrame: 40, grounded: false, platform: -1, x: 0, y: fx(100), vx: 0, vy: -fx(0.5) });
+    s.fighters[1].combat.counterDamage = fx(12);
+    const m = run(s, 14, () => [0, 0]).states.map((t) => t.fighters[1]);
+    for (let k = 1; k < 9; k++) expect(m[k].vy).toBe(m[k - 1].vy - fx(0.04));
+    expect(m[9]).toMatchObject({ action: "special", move: "counterAttack", actionFrame: 50 });
+    expect(m[10].action).toBe("fall");
+  });
+});
+
+describe("fix round 1: the riposte goes through armour (SmashWiki: it ignores \"most kinds of armor\")", () => {
+  /** Kirby in his Stone (super armour 10-48) beside Marth's riposte, one frame from its cut. */
+  function stone(marthDef: FighterDef = marth) {
+    const s = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "marth" }], RULES, 5);
+    s.fighters.forEach((f, i) =>
+      Object.assign(f, { action: "stand", actionFrame: 0, grounded: true, platform: 0, x: fx(i === 0 ? -5 : 5), y: 0, facing: i === 0 ? 1 : -1, intangible: 0 }),
+    );
+    Object.assign(s.fighters[0], { action: "special", move: "downB", actionFrame: 20 });
+    Object.assign(s.fighters[1], { action: "special", move: "counterAttack", actionFrame: 3 });
+    s.fighters[1].combat.counterDamage = fx(12);
+    const ctx: SimContext = { ...registryContext, fighter: (id) => (id === "marth" ? marthDef : registryContext.fighter(id)) };
+    return run(s, 2, () => [0, 0], ctx);
+  }
+
+  it("launches an armoured Stone", () => {
+    const { states, events } = stone();
+    const hit = events[0].hits.find((h) => h.attacker === 1)!;
+    expect(hit.knockback).toBeGreaterThan(0);
+    expect(states[0].fighters[0].action).not.toBe("special");
+  });
+
+  it("where the same boxes without it are absorbed by the armour (the scene's control)", () => {
+    const ca = marth.moves.counterAttack!;
+    const plain: FighterDef = { ...marth, moves: { ...marth.moves, counterAttack: { ...ca, hitboxes: ca.hitboxes.map((h) => ({ ...h, forceReaction: false })) } } };
+    const { states, events } = stone(plain);
+    expect(events[0].hits.find((h) => h.attacker === 1)!.knockback).toBe(0);
+    expect(states[0].fighters[0]).toMatchObject({ action: "special", move: "downB" });
+  });
+});
+
+describe("fix round 1: the branches no test pinned", () => {
+  it("consumes the roster's projectiles that survive a hit: Fox's blaster, Link's boomerang and Remote Bomb (UNVERIFIED)", () => {
+    for (const [who, def, id] of [["fox", fox, "blaster"], ["link", link, "boomerang"], ["link", link, "remoteBomb"]] as const) {
+      const pdef = findProjectileDef(def, id)!;
+      expect(pdef.destroyOnHit, `${id} survives a hit`).toBe(false);
+      const s = duel(who, 40);
+      Object.assign(s.fighters[1], { action: "special", move: "downB", actionFrame: 10 });
+      const p = spawnProjectile(pdef, s.fighters[0], 1);
+      Object.assign(p, { x: s.fighters[1].x - fx(13), y: fx(8), vx: fx(2), vy: 0, facing: 1, age: Math.max(p.age, pdef.hitbox.startFrame) });
+      s.projectiles.push(p);
+      s.nextProjectileId = 2;
+      const { states, events } = run(s, 6, () => [0, 0]);
+      const at = caughtAt(events);
+      expect(at, `${id} was never caught`).toBeGreaterThanOrEqual(0);
+      expect(states[at].projectiles, `${id} survived the counter`).toHaveLength(0);
+    }
+  });
+
+  it("reports the counter as its owner's, where the box met the bubble", () => {
+    // A stand-in forward smash scripted as a capsule (a sphere's contact point is
+    // its centre, the candidate's own point): 4 to 16 in front at height 8. From
+    // 22 apart its far end meets the bubble, nearest the bubble's centre.
+    const capsule: FighterDef = {
+      ...mario,
+      id: "lancer",
+      scripts: {
+        ...mario.scripts,
+        fsmash: script("game_attacks4", "attack_s4_s", [
+          frame(15),
+          ATTACK({ id: 0, bone: "top", damage: 10, angle: 361, kbg: 50, bkb: 30, size: 1, x: 0, y: 8, z: 4, x2: 0, y2: 8, z2: 16 }),
+          wait(3),
+          clearAll(),
+        ]),
+      },
+    };
+    const ctx: SimContext = { ...registryContext, fighter: (id) => (id === "lancer" ? capsule : registryContext.fighter(id)) };
+    const { states, events } = run(duel("lancer", 22), 20, FSMASH, ctx);
+    const at = caughtAt(events);
+    expect(at).toBeGreaterThan(0);
+    const lancer = states[at].fighters[0];
+    const box = { x1: lancer.x + fx(4), y1: lancer.y + fx(8), x2: lancer.x + fx(16), y2: lancer.y + fx(8), r: fx(1) };
+    const point = contactPoint(box, counterBubble(states[at - 1].fighters[1], COUNTER_DEF));
+    expect(events[at].counters).toEqual([{ port: 1, ...point }]);
+    // The far end, not the box's own first point.
+    expect(point).toEqual({ x: box.x2, y: box.y2 });
+  });
+
+  it("triggers once invincibility is over, and not on its last frame", () => {
+    const f = duel("mario", 60).fighters[1];
+    Object.assign(f, { action: "special", move: "downB", actionFrame: 10 });
+    f.invincible = 1;
+    expect(activeCounter(f, marth)).toBeNull();
+    f.invincible = 0;
+    expect(activeCounter(f, marth)).toBe(COUNTER_DEF);
+  });
+
+  it("mirrors the bubble's forward offset with the fighter's facing", () => {
+    const c: CounterDef = { ...COUNTER_DEF, x: fx(3) };
+    const f = duel("mario", 60).fighters[1];
+    Object.assign(f, { x: fx(20), y: fx(2), facing: 1 });
+    expect(counterBubble(f, c)).toEqual(circle(fx(23), fx(12), fx(10.5)));
+    f.facing = -1;
+    expect(counterBubble(f, c)).toEqual(circle(fx(17), fx(12), fx(10.5)));
   });
 });

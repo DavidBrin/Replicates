@@ -1242,7 +1242,9 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // Punch, Hero's Bow) lands into `land` here, its charge lost and nothing
   // stored. No published source says what Ultimate does: SmashWiki "Charge
   // storage cancel" (https://www.ssbwiki.com/Charge_storage_cancel) covers only
-  // landing during the cancel animation.
+  // landing during the cancel animation. UNVERIFIED (Plan 5, Task 5) for the same
+  // reason: an aerial Counter, or its counterattack, landing cuts into `land`
+  // too; no source says what a Counter does on landing.
   startAction(f, "land");
   // `charge` carries the landing's length, as it does for landingLag.
   // UNVERIFIED: that the published lag is the number of frames spent in `land`.

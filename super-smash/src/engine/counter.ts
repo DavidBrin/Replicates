@@ -21,8 +21,9 @@
  * fighter is invincible, even if the opponent hits them". A countered
  * projectile is consumed: Corrin's is "the only counterattack that avoids
  * attacks instead of negating them; thus, single-hit projectiles will not
- * shatter upon contact", so every other counter's do. Its thrower, not a party
- * to the contact, is not frozen, as for any projectile hit.
+ * shatter upon contact", so every other counter's do. UNVERIFIED: that its
+ * thrower is not frozen; that is the engine's rule for any projectile hit (its
+ * owner is not a party to the contact), and no source says it of a counter.
  *
  * Everything here mutates the countering fighter (and, in `step()`, the
  * attacker's hitlag) only, so it rolls back with them.
@@ -31,7 +32,7 @@
 import { clamp, mul } from "./fixed";
 import { circle, moveFrameOf } from "./hitbox";
 import type { Capsule } from "./hitbox";
-import { startMove } from "./states";
+import { startMove, updateDodgeIntangibility } from "./states";
 import type { CounterDef, FighterDef, FighterState } from "./types";
 
 /**
@@ -75,7 +76,8 @@ export function triggerCounter(f: FighterState, def: FighterDef, c: CounterDef, 
   startMove(f, "special", c.then);
   f.combat.counterDamage = counterDamage(c, caught);
   f.hitlag = c.freeze;
-  const w = def.moves[c.then]?.intangible;
-  if (w !== undefined && w[0] <= 1) f.intangible = Math.max(f.intangible, c.freeze + 1);
+  // Its frame 1, intangible when the counterattack's window starts there; the
+  // freeze holds the frame, and with it the window (`step()`'s hitlag branch).
+  updateDodgeIntangibility(f, def);
   return c.freeze;
 }

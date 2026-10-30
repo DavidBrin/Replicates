@@ -920,10 +920,22 @@ const legacy: FighterDef = {
       // `game_speciallw`'s FIGHTER_MARTH_STATUS_SPECIAL_LW_FLAG_SHIELD, on at 6,
       // off at 28 (`acmd/generated/marth.ts`).
       //
-      // Published but not modelled: the aerial version's "Horizontal speed
+      // In the air (fix round 1), the same page's "Parameters": "Horizontal speed
       // multiplier on startup 0.5", "Air friction 0.0025", "Gravity 0.04", "Fall
-      // speed 1.2" and its 79-frame animation (the grounded one's 71); it falls as
-      // Marth does and ends on 64 like the grounded one.
+      // speed 1.2", through Task 4's stall (`StallDef`, `specialStallExec`): no
+      // drift, speed bleeding by the friction, falling by the move's own gravity
+      // to its own speed. "Animation length (aerial) 79" against "Interruptible
+      // 65": in the air the guard plays on to 79 unless Marth acts from 65
+      // (`airTotalFrames`, as the Cape's 58). The grounded 71 needs nothing: its
+      // frames 65-71 are interruptible, which plays as standing does.
+      // UNVERIFIED: that the startup also stops the fall dead (the stall's stop,
+      // vertical speed 0, as the Reflector's and the Cape's), and that the stop,
+      // with the ×0.5, is the airtime's first aerial stall only while the rest of
+      // the physics run on every aerial use (`everyUse`); the page gives the
+      // numbers, not when they apply. UNVERIFIED too: landing during it, or
+      // during the counterattack, ends the move into `land`, the engine's rule
+      // for any aerial special (`onLanded`); no source says what a Counter does
+      // on landing. The bake holds the guard's last drawn frame through 65-79.
       intangible: [5, 6],
       counter: {
         active: [6, 27],
@@ -936,6 +948,8 @@ const legacy: FighterDef = {
         freeze: 21,
         then: "counterAttack",
       },
+      stall: { startX: fx(0.5), boostY: 0, noGravityFrames: 0, gravity: fx(0.04), fallSpeed: fx(1.2), airFriction: fx(0.0025), everyUse: true },
+      airTotalFrames: 79,
       hitboxes: [],
     },
 
@@ -947,7 +961,8 @@ const legacy: FighterDef = {
       // `game_speciallwhit` (rubendal Data Viewer 13.0.1,
       // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Marth/data.json,
       // "SpecialLwHit"; its motion's CancelFrame 42): four 8% boxes at angle 361,
-      // KBG 60, BKB 90, size 5.5, hitlag ×1.4, on sword1 ×2, armr and claviclel.
+      // KBG 60, BKB 90, size 5.5, hitlag ×1.4, on sword1 ×2, armr and claviclel
+      // (SmashWiki's table names box 2's bone `colonells`).
       // UltimateFrameData's "Counter, Attack" (startup 4, active 4-6, total 40,
       // "Intangible on frame 1-7 in addition to counter freeze frames") is the
       // same move counted from the frame after the freeze; here, as in the
@@ -958,14 +973,29 @@ const legacy: FighterDef = {
       // (`counterDamage`, `CombatState.counterDamage`). UNVERIFIED: their root-bone
       // positions, set along the sword's reach (the script hangs its boxes off
       // bones; no reference slot plays `game_speciallwhit`, so the compiled
-      // legacy script runs). Published but not modelled: the boxes "ignore most
-      // kinds of armor" (`AttackModule::set_force_reaction`).
+      // legacy script runs).
+      //
+      // Fix round 1:
+      // - The boxes cannot clank: the page's table gives each `clang=f` and
+      //   `rebound=f` (its template files them under "Attacks with hitboxes that
+      //   cannot clang"), the script `Clang_Rebound=ATTACK_SETOFF_KIND_OFF`.
+      //   `transcendent`, which the legacy compile writes as `THRU`.
+      // - They "ignore most kinds of armor, except Yoshi's double jump" (the
+      //   page; the script's `AttackModule::set_force_reaction(0..3, true,
+      //   false)`): `forceReaction`.
+      // - In the air, "Animation length 51" against "Interruptible 42"
+      //   (`airTotalFrames`), and the guard's aerial physics. UNVERIFIED: that the
+      //   page's "Parameters" govern `special_air_lw_hit` too (they are listed for
+      //   the move, not per state). The stall's stop never comes here: it is a
+      //   first frame's, and the counterattack spends its first frame frozen.
       totalFrames: 41,
       intangible: [1, 8],
       counterDamage: true,
+      stall: { startX: fx(0.5), boostY: 0, noGravityFrames: 0, gravity: fx(0.04), fallSpeed: fx(1.2), airFriction: fx(0.0025), everyUse: true },
+      airTotalFrames: 51,
       hitboxes: [
-        { id: 0, startFrame: 5, endFrame: 7, x: fx(BODY_REACH), y: fx(7.5), radius: fx(5.5), damage: fx(8.0), angle: fx(361), baseKnockback: fx(90), knockbackGrowth: fx(60), hitlagMultiplier: fx(1.4), effect: "slash" },
-        { id: 1, startFrame: 5, endFrame: 7, x: fx(TIP_REACH), y: fx(7.5), radius: fx(5.5), damage: fx(8.0), angle: fx(361), baseKnockback: fx(90), knockbackGrowth: fx(60), hitlagMultiplier: fx(1.4), effect: "slash" },
+        { id: 0, startFrame: 5, endFrame: 7, x: fx(BODY_REACH), y: fx(7.5), radius: fx(5.5), damage: fx(8.0), angle: fx(361), baseKnockback: fx(90), knockbackGrowth: fx(60), hitlagMultiplier: fx(1.4), effect: "slash", transcendent: true, forceReaction: true },
+        { id: 1, startFrame: 5, endFrame: 7, x: fx(TIP_REACH), y: fx(7.5), radius: fx(5.5), damage: fx(8.0), angle: fx(361), baseKnockback: fx(90), knockbackGrowth: fx(60), hitlagMultiplier: fx(1.4), effect: "slash", transcendent: true, forceReaction: true },
       ],
     },
 

@@ -94,6 +94,14 @@ export interface AttackParams {
    * (`scriptHitboxes`, Plan 3, Task 16).
    */
   readonly meteor?: boolean;
+  /**
+   * REPLICA: `AttackModule::set_force_reaction(id, true, …)` was issued on this
+   * box, so it goes through super armour (`Hitbox.forceReaction`). The game sets
+   * it by a separate call; it rides on the box here because only a legacy
+   * compilation sets it (Plan 5, Task 5 fix round 1: Marth's counterattack). The
+   * imported scripts' calls stay unparsed (`unknown`).
+   */
+  readonly forceReaction?: boolean;
 }
 
 /** smash-script `CATCH(id, bone, size, x, y, z, x2, y2, z2, status, situation)`. */
