@@ -195,6 +195,12 @@ export type AcmdCommand =
   | { readonly op: "hitAbs" }
   /** `AttackModule::set_catch_only_all(on, …)`: the live boxes hit only the held fighter (Plan 5, Task 7). */
   | { readonly op: "catchOnly"; readonly on: boolean }
+  /**
+   * `FT_CATCH_STOP(frames, …)`: a hitlag-like stop on both fighters before a
+   * throw's release, the fighter held invincible through it (Plan 5, Task 7 fix
+   * round 1; `resolveThrows`).
+   */
+  | { readonly op: "catchStop"; readonly frames: number }
   /** `for(N Iterations){ … }`. */
   | { readonly op: "loop"; readonly count: number; readonly body: readonly AcmdCommand[] }
   /** Anything the replica does not interpret yet, kept verbatim so nothing is lost on import. */

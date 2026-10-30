@@ -63,6 +63,13 @@ export interface ScriptFrameState {
    * call before a `clear_all`, so the two agree on the roster.
    */
   readonly catchOnly: boolean;
+  /**
+   * ATTACKs issued and cleared again on exactly this game frame, so never live
+   * (Plan 5, Task 7 fix round 1), each with whether `set_catch_only_all` was on
+   * when it went. Pikachu's down throw sets one "to both appear and be deleted
+   * on frame 14", a hit the game registers only in part (`resolveThrows`).
+   */
+  readonly flashed: readonly { readonly params: AttackParams; readonly catchOnly: boolean }[];
   /** The motion frame this game frame shows, floored — what a bone table is indexed by. */
   readonly motionFrame: number;
   /** Commands that ran on exactly this game frame, in script order. */
@@ -250,6 +257,23 @@ function motionFrameAt(segments: readonly MotionSegment[], g: number): number {
   return s.base + (t - r) / s.num + (r >= s.carry ? 1 : 0);
 }
 
+/** Longer than any move: a motion frame no script reaches by here is never reached. */
+const MOTION_SEARCH_LIMIT = 10_000;
+
+/**
+ * The game frame on which `script`'s motion first reaches motion frame `m` (Plan
+ * 5, Task 7 fix round 1). rubendal's frame numbers — `frame(n)`, a script's
+ * `CancelFrame` — count the motion, which `FT_MOTION_RATE` speeds up or slows
+ * down; UltimateFrameData counts game frames. At the default rate the two agree.
+ * Samus's down throw runs `FT_MOTION_RATE(FSM=0.85)` from frame 25, so its
+ * `CancelFrame` 40 comes on game frame 38 (UFD: 37 total). Integers only.
+ */
+export function gameFrameOfMotion(script: AcmdScript, m: number): number {
+  const { segments } = scheduleOf(script);
+  for (let g = 1; g <= MOTION_SEARCH_LIMIT; g++) if (motionFrameAt(segments, g) >= m) return g;
+  throw new Error(`${script.name} never reaches motion frame ${m}`);
+}
+
 export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameState {
   const { commands, fire, segments } = scheduleOf(script);
   const attacks = new Map<number, AttackParams>();
@@ -262,6 +286,15 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
   let wholeHit: HitStatus = "HIT_STATUS_NORMAL";
   let throwAbs: AbsParams | null = null;
   let catchOnly = false;
+  // Attacks issued on this very frame, by id, and those of them cleared on it.
+  const issuedNow = new Map<number, AttackParams>();
+  const flashed: { params: AttackParams; catchOnly: boolean }[] = [];
+  const flash = (id: number): void => {
+    const p = issuedNow.get(id);
+    if (p === undefined) return;
+    flashed.push({ params: p, catchOnly });
+    issuedNow.delete(id);
+  };
 
   for (let i = 0; i < commands.length; i++) {
     const c = commands[i];
@@ -272,17 +305,20 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
     switch (c.op) {
       case "attack":
         attacks.set(c.params.id, c.params);
+        if (e === gameFrame) issuedNow.set(c.params.id, c.params);
         shieldSetoff.delete(c.params.id); // UNVERIFIED: a new hitbox starts at the default multiplier
         break;
       case "catch":
         catches.set(c.params.id, c.params);
         break;
       case "clearAll":
+        if (e === gameFrame) for (const id of [...issuedNow.keys()]) flash(id);
         attacks.clear();
         shieldSetoff.clear();
         catchOnly = false;
         break;
       case "clear":
+        if (e === gameFrame) flash(c.id);
         attacks.delete(c.id);
         shieldSetoff.delete(c.id);
         break;
@@ -325,6 +361,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
       // Passive: the throw status reads them off `fired` (`resolveThrows`).
       case "reverseLr":
       case "hitAbs":
+      case "catchStop":
       case "unknown":
         break;
     }
@@ -348,6 +385,7 @@ export function runScript(script: AcmdScript, gameFrame: number): ScriptFrameSta
     momentum,
     throwAbs,
     catchOnly,
+    flashed,
     motionFrame: motionFrameAt(segments, gameFrame),
     fired,
   };

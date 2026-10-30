@@ -1,6 +1,8 @@
 /**
  * The commands the importer leaves as `unknown` that Plan 5 runs: a throw's
- * `ATTACK_ABS` and `ATK_HIT_ABS`, and a pummel's `set_catch_only_all`.
+ * `ATTACK_ABS` and `ATK_HIT_ABS`, a pummel's `set_catch_only_all`, and Marth's
+ * throws' `FT_CATCH_STOP` and Fox's grabs' `FT_START_ADJUST_MOTION_FRAME` (fix
+ * round 1).
  *
  * Lifted here, at activation, rather than in the generated files, so the
  * committed imports stay byte-for-byte what `scripts/import-acmd.mjs` wrote.
@@ -12,6 +14,8 @@ import type { AbsParams, AcmdCommand, AcmdScript } from "@/engine/acmd/types";
 import { parseArgs, unhash } from "./parse";
 
 const ABS = /^ATTACK_ABS\((.*)\)$/;
+/** `FT_CATCH_STOP(4, 1)`: the stop's length, then a flag the replica does not read. */
+const CATCH_STOP = /^FT_CATCH_STOP\((\d+),/;
 
 /**
  * `ATTACK_ABS(Kind=…, ID=0, Damage=8.0, Angle=45, KBG=65, FKB=0, BKB=60, Hitlag=0.0, …)`,
@@ -47,6 +51,15 @@ function lift(c: AcmdCommand): AcmdCommand {
   if (c.raw.startsWith("ATK_HIT_ABS(FIGHTER_ATTACK_ABSOLUTE_KIND_THROW")) return { op: "hitAbs" };
   if (c.raw.startsWith("AttackModule::set_catch_only_all(true")) return { op: "catchOnly", on: true };
   if (c.raw.startsWith("AttackModule::set_catch_only_all(false")) return { op: "catchOnly", on: false };
+  // Fox's grab and dash grab run `FT_MOTION_RATE` 0.8 and 0.9 from frame 1 and call
+  // this on the catch frame. UNVERIFIED reading: the motion runs at 1 from there.
+  // It is what makes UFD's numbers (https://ultimateframedata.com/fox): the grab on
+  // game frame 6 of 36 and the dash grab on 10 of 44, out of CancelFrames 38 and
+  // 46; at 0.8 and 0.9 throughout they would end on 30 and 41. No other imported
+  // script calls it.
+  if (c.raw === "FT_START_ADJUST_MOTION_FRAME_arg1(1)") return { op: "motionRate", rate: [1, 1] };
+  const stop = CATCH_STOP.exec(c.raw);
+  if (stop !== null && Number(stop[1]) >= 1) return { op: "catchStop", frames: Number(stop[1]) };
   return c;
 }
 

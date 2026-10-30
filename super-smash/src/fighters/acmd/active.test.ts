@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
 import { moveReach } from "@/ai/behaviours";
 import { decodeBake } from "@/engine/acmd/bakeCodec";
 import { LEGACY_BONE_TABLE, TOP_POSE, newBonePose } from "@/engine/acmd/bones";
-import { ATTACK, clearAll, frame, loop } from "@/engine/acmd/dsl";
+import { ATTACK, clearAll, frame, loop, reverseLr, unknown } from "@/engine/acmd/dsl";
 import { scriptHitboxes } from "@/engine/acmd/hitboxes";
-import { runScript } from "@/engine/acmd/interpreter";
+import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
 import { prepareFighterScripts } from "@/engine/acmd/run";
 import { fx } from "@/engine/fixed";
@@ -102,8 +102,10 @@ describe("which imported scripts run (Plan 3, Task 18)", () => {
       for (const slot of active) {
         const key = ref.slots[slot] as string;
         expect(def.scripts?.[slot], `${def.id} ${slot}`).toBe(liftScript(ref.scripts[key]));
+        // The script's CancelFrame is a motion frame; the move ends on the game
+        // frame its motion reaches it (fix round 1).
         const faf = ref.faf[key];
-        if (faf !== undefined) expect(def.moves[slot]?.totalFrames, `${def.id} ${slot}`).toBe(faf - 1);
+        if (faf !== undefined) expect(def.moves[slot]?.totalFrames, `${def.id} ${slot}`).toBe(gameFrameOfMotion(def.scripts![slot]!, faf) - 1);
       }
     }
   });
@@ -129,6 +131,28 @@ describe("which imported scripts run (Plan 3, Task 18)", () => {
         expect(def.scripts?.[slot]?.commands.some((c) => c.op === "hitAbs"), `${def.id} ${slot}`).toBe(true);
       }
     }
+  });
+});
+
+// Task 7 fix round 1: `FT_CATCH_STOP` is lifted into a stop only the throw status runs,
+// as `REVERSE_LR` is; a script outside a throw that calls either stays on its legacy move.
+describe("the throw-only commands", () => {
+  const jab = FIGHTERS.find((f) => f.id === "mario")!.moves.jab1;
+  const fthrow = FIGHTERS.find((f) => f.id === "mario")!.moves.fthrow;
+  const box = ATTACK({ id: 0, bone: "top", damage: 2, angle: 45, kbg: 100, bkb: 40, size: 4, x: 0, y: 6, z: 6 });
+  const withCall = (call: string, name: string, motion: string): AcmdScript => ({
+    name,
+    motion,
+    commands: [unknown("ATTACK_ABS(Kind=FIGHTER_ATTACK_ABSOLUTE_KIND_THROW, ID=0, Damage=8.0, Angle=45, KBG=65, FKB=0, BKB=60, Hitlag=0.0)"), frame(3), unknown(call), frame(4), box, unknown("ATK_HIT_ABS(FIGHTER_ATTACK_ABSOLUTE_KIND_THROW, hash40(\"throw\"))"), frame(5), clearAll()],
+  });
+
+  it.each(["FT_CATCH_STOP(4, 1)", "REVERSE_LR()"])("admits %s in a throw and refuses it anywhere else", (call) => {
+    const lifted = call === "REVERSE_LR()" ? "reverseLr" : "catchStop";
+    const raw = withCall(call, "game_throwf", "throw_f");
+    expect(liftScript(raw).commands.some((c) => c.op === lifted || (c.op === "unknown" && c.raw === call))).toBe(true);
+    const asOp = { ...raw, commands: raw.commands.map((c) => (c.op === "unknown" && c.raw === "REVERSE_LR()" ? reverseLr() : c)) };
+    expect(activatable("fthrow", fthrow, asOp)).toBe(true);
+    expect(activatable("jab1", jab, { ...asOp, name: "game_attack11", motion: "attack_11" })).toBe(false);
   });
 });
 

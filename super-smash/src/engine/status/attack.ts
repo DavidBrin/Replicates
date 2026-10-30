@@ -240,11 +240,11 @@ export const STATUS_THROW: FighterStatus = {
   main(f, intent, ctx) {
     const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
     if (f.actionFrame >= (move?.totalFrames ?? THROW_FRAMES)) {
-      // A throw normally releases through its own hitbox connecting, but a
-      // throw whose hitbox never lands (an unauthored one, or one whose
-      // victim was taken away mid-animation) would otherwise end with the
-      // link still tying two fighters together. The animation finishing is
-      // the backstop: nobody is held once the throw is over.
+      // A throw normally releases through its `ATK_HIT_ABS` (`resolveThrows`),
+      // but a throw that lands none (an unauthored one, or one whose victim
+      // was taken away mid-animation) would otherwise end with the link still
+      // tying two fighters together. The animation finishing is the backstop:
+      // nobody is held once the throw is over.
       releaseHeld(f, ctx.fighters);
       handOff(f, f.grounded ? "stand" : "fall", intent, ctx);
     } else bufferPress(f, intent, ctx.frame);
@@ -253,14 +253,18 @@ export const STATUS_THROW: FighterStatus = {
 
 /**
  * One frame of the struggle (Plan 3, Task 14): the timer runs down a frame at a
- * time (`elapsed`) and faster for every press, pummels or not; no escape before
- * frame 19. `elapsed` is false in a freeze, where mashing still counts and the
- * frame does not (SmashWiki "Pummel": "opponents can still mash out of the
- * attacker's grab during hitlag"; UNVERIFIED that the clock itself stops).
+ * time and faster for every press, pummels or not; no escape before frame 19.
+ * It runs on every frame of the hold, the freezes of a pummel included, and
+ * mashing counts in them too (Plan 5, Task 7 fix round 1, replacing Plan 3's
+ * UNVERIFIED pause): SmashWiki "Grab" (https://www.ssbwiki.com/Grab), the grab
+ * time is set when the grab lands, "so it is not affected by pummeling or
+ * external damage"; SmashWiki "Pummel" (https://www.ssbwiki.com/Pummel),
+ * "opponents can still mash out of the attacker's grab during hitlag". So a
+ * hold lasts at most its `90 + 1.7p` frames, however it is pummelled.
  */
-export function struggleInGrab(f: FighterState, intent: Intent, ctx: StateContext, elapsed: boolean): void {
+export function struggleInGrab(f: FighterState, intent: Intent, ctx: StateContext): void {
   const sticks = f.framesSinceDirPress === 0 ? 1 : 0;
-  f.grabTimer -= (elapsed ? 1 : 0) + mashFrames(f.combat, buttonPresses(intent), sticks, GRAB_MASH_BUTTON, GRAB_MASH_STICK);
+  f.grabTimer -= 1 + mashFrames(f.combat, buttonPresses(intent), sticks, GRAB_MASH_BUTTON, GRAB_MASH_STICK);
   if (f.grabTimer > 0 || f.actionFrame < GRAB_MIN_FRAMES) return;
   // A grab release: the holder's own status sees `grabbing < 0` and stands. The
   // mash credit goes with the link (`releaseGrab`).
@@ -278,7 +282,7 @@ export const STATUS_CAPTURE_WAIT: FighterStatus = {
       startAction(f, f.grounded ? "stand" : "fall");
       return;
     }
-    struggleInGrab(f, intent, ctx, true);
+    struggleInGrab(f, intent, ctx);
   },
 };
 

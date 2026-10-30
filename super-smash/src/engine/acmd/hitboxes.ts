@@ -86,6 +86,16 @@ export function absHitbox(a: AbsParams): Hitbox {
   };
 }
 
+/**
+ * An ATTACK's numbers as a `Hitbox` with no position (Plan 5, Task 7 fix round
+ * 1): what a box that never went live would have hit with — Pikachu's
+ * down-throw box, issued and cleared on frame 14, whose hit the game registers
+ * only in part (`resolveThrows`).
+ */
+export function unplacedHitbox(a: AttackParams): Hitbox {
+  return attackHitbox(a, 0, { x: 0, y: 0 }, undefined);
+}
+
 /** Scratch for `BoneTable.pose`, reused so resolving a hitbox allocates no pose. Not state. */
 const POSE = newBonePose();
 

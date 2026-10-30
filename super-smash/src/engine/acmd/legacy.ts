@@ -197,7 +197,10 @@ function lastToOpen(hitboxes: readonly Hitbox[]): Hitbox | null {
 /**
  * A legacy throw box as `ATTACK_ABS(Kind=FIGHTER_ATTACK_ABSOLUTE_KIND_THROW, …)`,
  * field for field as `attackFromHitbox` maps a box: `bkb` the base knockback, a
- * fixed knockback `fkb`, the box's hitlag multiplier.
+ * fixed knockback `fkb`. Its hitlag is the box's own multiplier where it states
+ * one, else none (fix round 1): SmashWiki "Throw" (https://www.ssbwiki.com/Throw),
+ * "Throw releases also usually inflict no hitlag", and every imported throw's
+ * `ATTACK_ABS` but Pikachu's down throw carries `Hitlag=0.0`.
  */
 export function absFromHitbox(hb: Hitbox): AbsParams {
   return {
@@ -207,7 +210,7 @@ export function absFromHitbox(hb: Hitbox): AbsParams {
     kbg: hb.knockbackGrowth,
     fkb: hb.fixedKnockback ?? 0,
     bkb: hb.baseKnockback,
-    hitlag: hb.hitlagMultiplier ?? ONE,
+    hitlag: hb.hitlagMultiplier ?? 0,
     collisionAttr: ATTR_OF_EFFECT[hb.effect ?? "normal"],
   };
 }

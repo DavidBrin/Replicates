@@ -3720,15 +3720,17 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       expect(frames[end].state.fighters[1]).toMatchObject({ vx: 0, vy: 0, grounded: true, grabbedBy: 0 });
     });
 
-    // SmashWiki "Grab": the grab time is "not affected by pummeling". The hit leaves
-    // the timer as the clock had it; the freeze, like everything in one, holds it.
-    it("leaves the escape timer to the clock: the hit does not touch it, and the freeze holds it", () => {
+    // SmashWiki "Grab" (https://www.ssbwiki.com/Grab): the grab time is set when the
+    // grab lands, "so it is not affected by pummeling". The hit leaves the timer as
+    // the clock had it, and the clock runs on through the freeze (Plan 5, Task 7 fix
+    // round 1; Plan 3 held it there, an UNVERIFIED reading this replaces).
+    it("leaves the escape timer to the clock: the hit does not touch it, and the freeze does not stop it", () => {
       const { hit, frames } = pummelled(100);
       const timer = (i: number): number => frames[i].state.fighters[1].grabTimer;
       expect(timer(hit)).toBe(timer(hit - 1) - 1);
       const lag = frames[hit].state.fighters[1].hitlag;
-      for (let i = hit + 1; i <= hit + lag; i++) expect(timer(i)).toBe(timer(hit));
-      expect(timer(hit + lag + 1)).toBe(timer(hit) - 1);
+      expect(lag).toBeGreaterThan(0);
+      for (let i = hit + 1; i <= hit + lag + 1; i++) expect(timer(i), `frame ${i}`).toBe(timer(hit) - (i - hit));
     });
 
     // SmashWiki "Pummel": "opponents can still mash out of the attacker's grab during hitlag".
@@ -3741,8 +3743,9 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       const { frames } = pummelled(100, mashing, hit + lag + 2);
       const presses = Array.from({ length: lag }, (_, k) => hit + 1 + k).filter(mashing).length;
       expect(presses).toBeGreaterThan(0);
+      // The clock's own frames are the quiet run's; the presses come off on top.
       expect(frames[hit + lag].state.fighters[1].grabTimer).toBe(
-        quiet[hit].state.fighters[1].grabTimer - Math.floor((presses * GRAB_MASH_BUTTON) / 10),
+        quiet[hit + lag].state.fighters[1].grabTimer - Math.floor((presses * GRAB_MASH_BUTTON) / 10),
       );
     });
 
@@ -3814,9 +3817,56 @@ describe("being grabbed ends what the grab replaces (Plan 3, Task 14)", () => {
       expect(launch(throwing("bthrow", fx(45), fx(-4)), Btn.Left).vx).toBeGreaterThan(0);
     });
 
-    // Ruling P5-R8 (UNVERIFIED stand-in): a box of the captor's that is not
-    // catch-only (Mario's back-throw hip box) leaves the fighter it holds alone and
-    // hits whoever else it reaches.
+    // A hit on the fighter held on the very frame of the release resolves first: it
+    // frees them, and the throw lands on nobody (UNVERIFIED: no source orders the two).
+    it("lets a bystander's hit on the fighter held, on the release frame, take them out of the throw", () => {
+      const def: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, fthrow: move("fthrow", { totalFrames: 20, hitboxes: [] }) },
+        scripts: {
+          fthrow: { name: "game_throwf", motion: "throw_f", commands: [attackAbs({ damage: 6, angle: 45, kbg: 70, bkb: 60 }), frame(6), hitAbs()] },
+          // Fighter 2's jab, from 12 behind fighter 0, reaches fighter 1 on its frame 6.
+          jab1: { name: "game_attack11", motion: "attack_11", commands: [frame(6), ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 40, size: 3, x: 0, y: 6, z: 20 }), frame(7), clearAll()] },
+        },
+      };
+      const ctx = ctxFor(def);
+      const frames = play(holdingPair(standing3(ctx), 100), 20, (i) => [i === 2 ? Btn.Right : 0, 0, i === 2 ? Btn.Attack : 0], ctx);
+      const hits = frames.flatMap((f, i) => f.events.hits.map((h) => [i, h.attacker, h.victim]));
+      const release = 2 + 5;
+      expect(hits.filter(([, a]) => a === 2)).toEqual([[release, 2, 1]]);
+      expect(hits.filter(([, a]) => a === 0)).toEqual([]);
+    });
+
+    // SmashWiki "Throw" (https://www.ssbwiki.com/Throw): the thrower "lasts [invincible]
+    // from frame 1 all the way until the frame the opponent is thrown" — the release
+    // frame included — and no longer (fix round 1).
+    it.each([
+      ["on the release frame, which it shrugs off", 6, false],
+      ["a frame after it, which lands", 7, true],
+    ])("lets a bystander's hit on the thrower land only once the throw is out: %s", (_name, at, lands) => {
+      const def: FighterDef = {
+        ...BASE_DEF,
+        moves: { ...BASE_DEF.moves, fthrow: move("fthrow", { totalFrames: 20, hitboxes: [] }) },
+        scripts: {
+          fthrow: { name: "game_throwf", motion: "throw_f", commands: [attackAbs({ damage: 6, angle: 45, kbg: 70, bkb: 60 }), frame(6), hitAbs()] },
+          // Fighter 2's jab, from 12 behind fighter 0, reaches fighter 0 alone on frame `at`.
+          jab1: { name: "game_attack11", motion: "attack_11", commands: [frame(at), ATTACK({ id: 0, bone: "top", damage: 5, angle: 45, kbg: 50, bkb: 40, size: 3, x: 0, y: 6, z: 8 }), frame(at + 1), clearAll()] },
+        },
+      };
+      const ctx = ctxFor(def);
+      const frames = play(holdingPair(standing3(ctx), 100), 20, (i) => [i === 2 ? Btn.Right : 0, 0, i === 2 ? Btn.Attack : 0], ctx);
+      const hits = frames.flatMap((f) => f.events.hits);
+      const onThrower = hits.filter((h) => h.victim === 0);
+      expect(onThrower).toHaveLength(1);
+      expect(onThrower[0].damage > 0).toBe(lands);
+      // The throw lands either way: on 6, before (or as) the bystander's hit.
+      expect(hits.filter((h) => h.attacker === 0 && h.knockback > 0)).toHaveLength(1);
+    });
+
+    // Ruling P5-R8: a box of the captor's that is not catch-only (Mario's
+    // back-throw hip box) leaves the fighter it holds alone and hits whoever else
+    // it reaches. SmashWiki "Throw" (https://www.ssbwiki.com/Throw): "collateral
+    // hitboxes, which can only hit bystanders and not the thrown opponent".
     it("leaves the fighter held to the throw when the captor swings a box in the world, and hits a bystander", () => {
       const def: FighterDef = {
         ...BASE_DEF,
@@ -4348,6 +4398,55 @@ describe("script hitboxes carry the game's own flags (Plan 3, Task 16)", () => {
     /** A throw whose only box is catch-only and lands no launch: what the box alone does. */
     const catchOnlyBox = (over: Partial<Parameters<typeof ATTACK>[0]> = {}) =>
       slotScripted("fthrow", [frame(4), throwBox({ bkb: 0, kbg: 0, ...over }), catchOnly(true), frame(5), clearAll()]);
+
+    // Pikachu's down-throw box is catch-only, and the game registers it in part
+    // (`resolveThrows`). A box of the captor's in the world, issued and cleared on
+    // one frame, is never live, and does nothing to the fighter held (UNVERIFIED:
+    // no roster throw has one, and no source names the case).
+    it.each([
+      ["catch-only: both freeze, no damage", true],
+      ["in the world: nothing", false],
+    ])("registers a box issued and cleared on one frame in part only when it is catch-only: %s", (_name, only) => {
+      const box = ATTACK({ id: 0, bone: "top", damage: 3, angle: 361, kbg: 0, bkb: 0, size: 5, x: 0, y: 6, z: 8, hitlag: 1.2 });
+      const ctx = slotScripted("fthrow", [frame(3), box, ...(only ? [catchOnly(true)] : []), clearAll()]);
+      const frames = play(holding(ctx), 12, (i) => [i === 2 ? Btn.Right : 0, 0], ctx);
+      const at = 2 + 2;
+      expect(frames.flatMap((f) => f.events.hits)).toEqual([]);
+      expect(frames.at(-1)!.state.fighters[1].damage).toBe(0);
+      const [a, v] = frames[at].state.fighters;
+      expect([a.hitlag > 0, v.hitlag > 0]).toEqual([only, only]);
+    });
+
+    /** A throw whose one launch is `over`'s ATTACK_ABS, landed on frame 4; the launch's hit and the frame it landed on. */
+    const absThrow = (over: Partial<Parameters<typeof attackAbs>[0]> = {}) =>
+      slotScripted("fthrow", [attackAbs({ damage: 6, angle: 45, kbg: 70, bkb: 60, ...over }), frame(4), hitAbs()]);
+    function launchOf(ctx: SimContext, prepare?: (s: GameState) => void) {
+      const frames = play(holding(ctx, prepare), 40, (i) => [i === 2 ? Btn.Right : 0, 0], ctx);
+      const at = frames.findIndex((f) => f.events.hits.length > 0);
+      return { hit: frames[at].events.hits[0], state: frames[at].state };
+    }
+
+    // Fixed knockback (`FKB`) launches the same at any percent; growth alone grows with it.
+    it("launches by the ATTACK_ABS's fixed knockback where it sets one: the same at any percent", () => {
+      const at = (ctx: SimContext, percent: number) => launchOf(ctx, (s) => (s.fighters[1].damage = fx(percent))).hit.knockback;
+      const fixed = absThrow({ fkb: 80, bkb: 0, kbg: 100 });
+      expect(at(fixed, 0)).toBeGreaterThan(0);
+      expect(at(fixed, 150)).toBe(at(fixed, 0));
+      const grown = absThrow({ bkb: 0, kbg: 100 });
+      expect(at(grown, 150)).toBeGreaterThan(at(grown, 0));
+    });
+
+    // Its effect is the hit's: an electric release freezes the one thrown ×1.5
+    // (`computeHitlag`), and never the thrower (fix round 1).
+    it("freezes the one thrown by the ATTACK_ABS's own effect, and the thrower not at all", () => {
+      const lag = (attr?: string) => {
+        const { state } = launchOf(absThrow({ hitlag: 1, ...(attr !== undefined ? { collisionAttr: attr } : {}) }));
+        expect(state.fighters[0].hitlag, "the thrower").toBe(0);
+        return state.fighters[1].hitlag;
+      };
+      expect(lag()).toBeGreaterThan(0);
+      expect(lag("collision_attr_elec")).toBeGreaterThan(lag());
+    });
 
     it("launches a throw the way the thrower faces, and only REVERSE_LR turns one", () => {
       expect(thrown(throwWith("fthrow"), Btn.Right)).toMatchObject({ hits: 1, vx: expect.toSatisfy((v: number) => v > 0) });

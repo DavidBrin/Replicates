@@ -58,6 +58,14 @@ describe("lifting a throw's ATTACK_ABS, ATK_HIT_ABS and set_catch_only_all", () 
     expect(flat.some((c) => c.op === "unknown" && c.raw.startsWith("CHECK_FINISH_CAMERA"))).toBe(true);
   });
 
+  // Fix round 1: Marth's throws' stop, and Fox's grabs' motion-rate reset.
+  it("lifts FT_CATCH_STOP into a stop of its length, and Fox's motion adjust into a rate of 1", () => {
+    const marth = flatten(liftScript(REFERENCE_SCRIPTS.marth.scripts.game_throwlw)).filter((c) => c.op === "catchStop");
+    expect(marth).toEqual([{ op: "catchStop", frames: 5 }]);
+    const fox = flatten(liftScript(REFERENCE_SCRIPTS.fox.scripts.game_catch)).filter((c) => c.op === "motionRate");
+    expect(fox.map((c) => c.op === "motionRate" && c.rate)).toEqual([[4, 5], [1, 1]]);
+  });
+
   it("hands back the same object for the same script, and never touches the import", () => {
     const raw = REFERENCE_SCRIPTS.mario.scripts.game_throwf;
     expect(liftScript(raw)).toBe(liftScript(raw));

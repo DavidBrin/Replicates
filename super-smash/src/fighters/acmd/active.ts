@@ -33,7 +33,7 @@
 
 import { LEGACY_BONE_TABLE, type BoneTable } from "@/engine/acmd/bones";
 import { scriptHitboxTable } from "@/engine/acmd/hitboxes";
-import { runScript } from "@/engine/acmd/interpreter";
+import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
 import { THROW_SLOTS } from "@/engine/acmd/legacy";
 import { isUnmodelledAutolink } from "@/engine/knockback";
 import type { AcmdCommand, AcmdScript } from "@/engine/acmd/types";
@@ -64,6 +64,7 @@ const RUN_OPS: ReadonlySet<AcmdCommand["op"]> = new Set([
   "attackAbs",
   "hitAbs",
   "catchOnly",
+  "catchStop",
 ]);
 
 /** Engine calls with no effect on the replica's sim: collision pushboxes, hit-height tags, VFX, grab-cut bookkeeping. */
@@ -74,15 +75,13 @@ const COSMETIC_PREFIXES: readonly string[] = [
   "AttackModule::set_no_damage_fly_smoke_all",
   "GrabModule::set_rebound",
   "methodlua2cpp::L2CFighterAnimcmdGameCommon::game_CaptureCutCommon",
-  "FT_START_ADJUST_MOTION_FRAME",
-  // Plan 5, Task 7: a throw's KO camera and cut-in zoom, and two calls read as
-  // bookkeeping. UNVERIFIED for those two: `FT_LEAVE_NEAR_OTTOTTO` steps the
+  // Plan 5, Task 7: a throw's KO camera and cut-in zoom, and one call read as
+  // bookkeeping. UNVERIFIED for that one: `FT_LEAVE_NEAR_OTTOTTO` steps the
   // thrower back from a ledge's teeter (the catch statuses stop at the cliff
-  // here instead), and `FT_CATCH_STOP` holds the throw for a few frames.
+  // here instead). `FT_CATCH_STOP` is not cosmetic: it is lifted (`lift.ts`).
   "CHECK_FINISH_CAMERA",
   "FighterCutInManager::",
   "FT_LEAVE_NEAR_OTTOTTO",
-  "FT_CATCH_STOP",
 ];
 
 /** Longer than any move: a box still live here is never cleared by its script. */
@@ -96,8 +95,8 @@ function runnable(commands: readonly AcmdCommand[], bones: Set<string>, throwing
       if (!runnable(c.body, bones, throwing)) return false;
       continue;
     }
-    // Only the throw status turns its fighter (`resolveThrows`).
-    if (c.op === "reverseLr") {
+    // Only the throw status turns its fighter or stops it (`resolveThrows`).
+    if (c.op === "reverseLr" || c.op === "catchStop") {
       if (!throwing) return false;
       continue;
     }
@@ -142,8 +141,11 @@ export function activatable(
 /**
  * `def` with `slots` running their imported scripts: `scripts[slot]` is the
  * reference script, its throw and pummel commands lifted (`liftScript`), and
- * the move's `totalFrames` becomes the script's published first actionable
- * frame − 1 (`CancelFrame`), so the move ends when the game's does.
+ * the move's `totalFrames` becomes the game frame on which the script's motion
+ * reaches its published first actionable frame (`CancelFrame`), − 1, so the
+ * move ends when the game's does. `CancelFrame` is a motion frame, and a script
+ * that runs `FT_MOTION_RATE` reaches it on another game frame (Plan 5, Task 7
+ * fix round 1: `gameFrameOfMotion`; Link's jab, 25 → 24, UFD 23 total).
  *
  * The move's `hitboxes` become the script's own boxes, frame for frame
  * (`scriptHitboxTable`), because the sim is not their only reader: the
@@ -183,7 +185,7 @@ export function withReferenceScripts(
     const faf = ref.faf[key];
     moves[slot] = {
       ...move,
-      ...(faf !== undefined ? { totalFrames: faf - 1 } : {}),
+      ...(faf !== undefined ? { totalFrames: gameFrameOfMotion(script, faf) - 1 } : {}),
       ...(bones !== null ? { hitboxes: syncedTable(def, slot, script, bones) } : {}),
     };
   }

@@ -193,6 +193,11 @@ export function attackAbs(s: AbsSpec): AcmdCommand {
 export const hitAbs = (): AcmdCommand => ({ op: "hitAbs" });
 /** `AttackModule::set_catch_only_all(on, false)`. */
 export const catchOnly = (on: boolean): AcmdCommand => ({ op: "catchOnly", on });
+/** `FT_CATCH_STOP(frames, 1)`. */
+export function catchStop(frames: number): AcmdCommand {
+  assertWhole("catch stop", frames, 1);
+  return { op: "catchStop", frames };
+}
 export function loop(count: number, body: readonly AcmdCommand[]): AcmdCommand {
   assertWhole("loop count", count, 0);
   return { op: "loop", count, body };

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { LEGACY_BONE_TABLE } from "@/engine/acmd/bones";
+import { gameFrameOfMotion } from "@/engine/acmd/interpreter";
 import { prepareFighterScripts } from "@/engine/acmd/run";
 import { scriptBoneNames } from "@/engine/acmd/scriptBones";
 import type { AcmdCommand } from "@/engine/acmd/types";
@@ -217,7 +218,7 @@ describe.skipIf(UPDATING)("the game's form of a fighter, per bone table (ruling 
       expect(input.scripts?.[slot], `mario ${slot}`).toBe(liftScript(ref.scripts[key]));
       expect(input.moves[slot]!.hitboxes, `mario ${slot}`).toBe(MARIO.moves[slot]!.hitboxes);
       const faf = ref.faf[key];
-      if (faf !== undefined) expect(input.moves[slot]!.totalFrames, `mario ${slot}`).toBe(faf - 1);
+      if (faf !== undefined) expect(input.moves[slot]!.totalFrames, `mario ${slot}`).toBe(gameFrameOfMotion(input.scripts![slot]!, faf) - 1);
       expect(withLimbScripts(MARIO, bake.bones).moves[slot]!.totalFrames, `mario ${slot}`).toBe(input.moves[slot]!.totalFrames);
     }
   });

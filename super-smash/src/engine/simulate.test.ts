@@ -684,7 +684,7 @@ describe("the four throws", () => {
     expect(started.fighters[0]).toMatchObject({ action: "throw", move: t.slot, grabbing: 1, hitThisMove: [] });
     expect(started.fighters[1]).toMatchObject({ action: "thrown", grabbedBy: 0 });
 
-    // The throw's launch lands: the one hit, a shared freeze, and the link is cut.
+    // The throw's launch lands: the one hit, and the link is cut.
     // Since Plan 5 Task 7 the box is compiled to the game's `ATTACK_ABS` +
     // `ATK_HIT_ABS`, laid on the fighter held: reported where they stand (8 units
     // out, on the floor), not where the box was (6, 6).
@@ -694,19 +694,19 @@ describe("the four throws", () => {
       { attacker: 0, victim: 1, damage: 30107, x: 32768, y: 0, contactX: 32768, contactY: 0, knockback: 310933, angle: t.angle, hitboxId: 0 },
     ]);
     expect(ticks.filter((k) => k.hits.length > 0)).toHaveLength(1);
+    // No freeze, for either (Task 7 fix round 1; these pinned 10 frames on both
+    // before): a throw's release freezes nobody but the one thrown, and only where
+    // published (SmashWiki "Throw", "Throw releases also usually inflict no hitlag"),
+    // so this unauthored launch freezes nobody and fires on contact.
     const [a, b] = ticks[connected].state.fighters;
-    expect(a).toMatchObject({ action: "throw", move: t.slot, grabbing: -1, hitlag: 10, hitThisMove: [1] });
-    expect(b).toMatchObject({ action: "hitstun", grabbedBy: -1, damage: 30107, hitlag: 10, hitstun: 29 });
+    expect(a).toMatchObject({ action: "throw", move: t.slot, grabbing: -1, hitlag: 0, hitThisMove: [1] });
+    expect(b).toMatchObject({ action: "hitstun", grabbedBy: -1, damage: 30107, hitlag: 0, hitstun: 29 });
+    expect(b).toMatchObject({ vx: t.vx, vy: t.vy, grounded: false });
 
-    // The launch fires on the last frame of the freeze.
-    const release = ticks.findIndex((k, i) => i > connected && k.state.fighters[1].hitlag === 0);
-    expect(release).toBe(connected + 10);
-    expect(ticks[release].state.fighters[1]).toMatchObject({ vx: t.vx, vy: t.vy, grounded: false, hitstun: 29 });
-
-    // The thrower finishes the animation after the freeze, then stands.
+    // The thrower finishes the animation, then stands.
     expect(actionsFrom(ticks, HOLD_INPUT_TICK, 0)).toEqual(["throw", "stand"]);
     const ended = ticks.findIndex((k, i) => i > HOLD_INPUT_TICK && k.state.fighters[0].action === "stand");
-    expect(ended).toBe(HOLD_INPUT_TICK + t.totalFrames + 10);
+    expect(ended).toBe(HOLD_INPUT_TICK + t.totalFrames);
     expect(ticks[ended].state.fighters[0]).toMatchObject({ move: null, grabbing: -1, grabTimer: 0 });
   });
 });

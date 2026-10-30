@@ -13,10 +13,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { gameScriptFor } from "@/engine/acmd/legacy";
-import { runScript } from "@/engine/acmd/interpreter";
+import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
 import { fx, toFloat } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
 import { moveFrameOf } from "@/engine/hitbox";
+import { findProjectileDef, spawnProjectile } from "@/engine/projectile";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
 import type { SimContext } from "@/engine/simulate";
 import { Btn } from "@/engine/types";
@@ -170,9 +171,11 @@ describe("throws in the baked world (the game's)", () => {
 
   // Mario's `game_throwb` hangs an 8% `hip` box on frame 13 with no
   // `set_catch_only_all`, then turns on 40 (`REVERSE_LR`) and lands the 11%
-  // ATTACK_ABS (45°) on 44: UFD "Backward Throw 44 59 11.0". Ruling P5-R8
-  // (UNVERIFIED stand-in): a captor's box that is not catch-only skips the
-  // fighter it holds, so the hip box leaves Fox to the throw.
+  // ATTACK_ABS (45°) on 44: UFD "Backward Throw 44 59 11.0". Ruling P5-R8: a
+  // captor's box that is not catch-only skips the fighter it holds, so the hip
+  // box leaves Fox to the throw. SmashWiki "Throw" (https://www.ssbwiki.com/Throw):
+  // "a few throws such as Mario's back throw have collateral hitboxes, which can
+  // only hit bystanders and not the thrown opponent".
   it("Mario's back throw: the hip box leaves the fighter held alone, the throw lands on 44 behind him", () => {
     const { states, events } = run(holding("mario", CTX), [Btn.Left, ...Array<InputFrame>(70).fill(0)], CTX);
     expect(CTX.fighter("mario").scripts?.bthrow, "the baked game runs the script").toBeDefined();
@@ -248,30 +251,71 @@ describe("a throw's exit paths and rollback", () => {
     expect(again.at(-1)!.fighters[1].grabbedBy).toBe(-1);
   });
 
-  it("launches nobody once the thrower is hit mid-throw: the hit frees the fighter held", () => {
+  // SmashWiki "Throw" (https://www.ssbwiki.com/Throw): in Ultimate "the thrower is
+  // now invincible until the opponent has been thrown" (fix round 1). So a hit on
+  // the thrower mid-throw, which used to free the fighter held, changes nothing.
+  it("lets a hit on the thrower change nothing before the release: Kirby is invincible to frame 58", () => {
     const s = createInitialState("finalDestination", [{ defId: "kirby" }, { defId: "fox" }, { defId: "mario" }], { ...RULES, oneOnOne: false }, 5);
     const [a, v, m] = s.fighters;
     Object.assign(a, { action: "grabHold", grounded: true, platform: 0, x: fx(-4), y: 0, facing: 1, intangible: 0, grabbing: 1 });
     Object.assign(v, { action: "grabbed", grounded: true, platform: 0, x: fx(4), y: 0, facing: -1, intangible: 0, grabbedBy: 0, grabTimer: 500 });
-    // Mario behind Kirby, facing him, jabs on step 20.
-    Object.assign(m, { action: "stand", grounded: true, platform: 0, x: fx(-12), y: 0, facing: 1, intangible: 0 });
+    // Mario behind Kirby, facing him, jabs on steps 20 and 40: far enough back that
+    // the jab reaches Kirby's back and not Fox beyond him (a hit on the fighter held
+    // frees them: that is not a hit on the thrower).
+    Object.assign(m, { action: "stand", grounded: true, platform: 0, x: fx(-17), y: 0, facing: 1, intangible: 0 });
     let st = s;
     let prev: InputFrame[] = [0, 0, 0];
-    const kirbyHits: number[] = [];
-    let freed = -1;
+    const onKirby: number[] = [];
+    let launch = -1;
     for (let i = 0; i < 90; i++) {
-      const now = [i === 0 ? Btn.Down : 0, 0, i === 20 ? Btn.Attack : 0];
+      const now = [i === 0 ? Btn.Down : 0, 0, i === 20 || i === 40 ? Btn.Attack : 0];
       const out = step(st, now, { prevInputs: prev });
       st = out.state;
       prev = now;
-      for (const h of out.events.hits) if (h.attacker === 0) kirbyHits.push(h.knockback);
-      if (freed < 0 && st.fighters[1].grabbedBy < 0) freed = i;
+      for (const h of out.events.hits) {
+        if (h.victim === 0) onKirby.push(h.damage);
+        if (h.attacker === 0 && h.knockback > 0) launch = moveFrameOf(st.fighters[0].actionFrame);
+      }
     }
-    expect(freed, "Mario's jab frees Fox").toBeGreaterThan(20);
-    expect(st.fighters[0].action).not.toBe("throw");
-    // Stomps before the jab, and no launch after it.
-    expect(kirbyHits.length).toBeGreaterThan(0);
-    expect(kirbyHits.every((kb) => kb === 0)).toBe(true);
+    // The jabs connect, and transfer nothing (an invincible hit).
+    expect(onKirby.length).toBeGreaterThan(0);
+    expect(onKirby.every((d) => d === 0)).toBe(true);
+    expect(st.fighters[0].damage).toBe(0);
+    expect(st.fighters[1].damage, "Fox: the stomps and the launch, nothing of Mario's").toBeGreaterThan(0);
+    // The throw goes on: the release on 58, as without them.
+    expect(launch).toBe(58);
+  });
+
+  it("is invincible to the release frame and no further (SmashWiki: Pikachu's down throw, invincibility 1-21)", () => {
+    // A respawn invincibility counter is the other source; the throw's needs none.
+    const BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
+    const game = bakedContext({ fighter: (id) => BY_ID.get(id)!, stage: (id) => STAGES.find((x) => x.id === id)! }, readBakeFromDisk());
+    const s = createInitialState("finalDestination", [{ defId: "pikachu" }, { defId: "fox" }, { defId: "mario" }], { ...RULES, oneOnOne: false }, 5, game);
+    const [a, v, m] = s.fighters;
+    Object.assign(a, { action: "grabHold", grounded: true, platform: 0, x: fx(-4), y: 0, facing: 1, intangible: 0, grabbing: 1 });
+    Object.assign(v, { action: "grabbed", grounded: true, platform: 0, x: fx(4), y: 0, facing: -1, intangible: 0, grabbedBy: 0, grabTimer: 500 });
+    Object.assign(m, { action: "stand", grounded: true, platform: 0, x: fx(-12), y: 0, facing: 1, intangible: 0 });
+    // Mario jabs over and over; what lands on Pikachu, by Pikachu's move frame.
+    let st = s;
+    let prev: InputFrame[] = [0, 0, 0];
+    const hurt: [number, number][] = [];
+    for (let i = 0; i < 70; i++) {
+      const now = [i === 0 ? Btn.Down : 0, 0, i % 4 === 1 ? Btn.Attack : 0];
+      const before = st.fighters[0];
+      const out = step(st, now, { prevInputs: prev, ctx: game });
+      st = out.state;
+      prev = now;
+      // The throw's frame when the hit landed: a hit that lands ends the throw and
+      // restarts the frame count, so read it from before the step then.
+      const after = st.fighters[0];
+      const frame = after.action === "throw" ? moveFrameOf(after.actionFrame) : moveFrameOf(before.actionFrame) + 1;
+      for (const h of out.events.hits) if (h.victim === 0 && before.action === "throw") hurt.push([frame, h.damage]);
+    }
+    const free = hurt.filter(([, d]) => d > 0).map(([f]) => f);
+    expect(hurt.filter(([, d]) => d === 0).length, "jabs met the invincible throw").toBeGreaterThan(0);
+    expect(free.length, "and one hurt once it was over").toBeGreaterThan(0);
+    expect(Math.min(...free), "the first hit that hurts").toBeGreaterThan(21);
+    expect(hurt.filter(([f]) => f <= 21).every(([, d]) => d === 0)).toBe(true);
   });
 
   // Every path that ends a grab clears both ends (`releaseGrab`), which also
@@ -334,5 +378,155 @@ describe("what each roster throw runs", () => {
       }
     }
     expect(at, `${id} ${slot}`).toHaveLength(1);
+  });
+});
+
+/*
+ * Task 7 fix round 1. Frame numbers: SmashWiki's per-move pages (timing without
+ * hitlag), UltimateFrameData's rows (game time, freezes before the release
+ * included), rubendal's scripts (motion frames).
+ */
+describe("throw timing as published (fix round 1)", () => {
+  const BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
+  const GAME = bakedContext({ fighter: (id) => BY_ID.get(id)!, stage: (id) => STAGES.find((s) => s.id === id)! }, readBakeFromDisk());
+  /** The steps (from 0, the press) the thrower spends in the throw. */
+  const inThrow = (states: readonly GameState[]): number => states.findIndex((s) => s.fighters[0].action !== "throw");
+
+  // SmashWiki "Pikachu (SSBU)/Down throw" (https://www.ssbwiki.com/Pikachu_(SSBU)/Down_throw):
+  // "Throw Release 21", "Interruptible 44", the frame-14 box "set to both appear and be
+  // deleted on frame 14", "only partially registered on the thrown opponent, causing
+  // hitlag but not any damage", and the release "inflicts hitlag to the opponent,
+  // causing their knockback to start on frame 30". UFD's 29/51
+  // (https://ultimateframedata.com/pikachu) add the frame-14 freeze to both.
+  it("Pikachu's down throw: a partial hit freezes both on 14, the release freezes Fox alone, Pikachu acts on 44", () => {
+    const { states, events } = run(holding("pikachu", GAME), [Btn.Down, ...Array<InputFrame>(80).fill(0)], GAME);
+    // Frame 14: both freeze; no damage, no hit reported.
+    const partial = states.findIndex((s) => moveFrameOf(s.fighters[0].actionFrame) === 14);
+    const lag14 = states[partial].fighters[0].hitlag;
+    expect(lag14).toBeGreaterThan(0);
+    expect(states[partial].fighters[1].hitlag).toBe(lag14);
+    expect(states[partial].fighters[1].damage).toBe(0);
+    expect(events[partial].hits).toEqual([]);
+    // The release, on 21: Fox freezes, Pikachu does not.
+    const hits = hitsBy0(states, events);
+    expect(hits.map((h) => h.frame)).toEqual([21]);
+    const release = hits[0].step;
+    expect(release).toBe(20 + lag14);
+    expect(states[release].fighters[0].hitlag).toBe(0);
+    const lagR = states[release].fighters[1].hitlag;
+    expect(lagR).toBeGreaterThan(0);
+    // Pikachu acts on his move frame 44: 43 frames of throw and the one freeze he took.
+    expect(inThrow(states)).toBe(43 + lag14);
+    // Fox's launch fires when his own freeze ends.
+    const launched = states.findIndex((s, i) => i > release && s.fighters[1].pendingFacing === 0);
+    expect(launched).toBe(release + lagR);
+  });
+
+  // UFD (https://ultimateframedata.com/fox): "Backward Throw 10/16/19/22 49", "Up
+  // Throw 7/18/21/24 49" — legacy-run throws, whose release freezes nobody.
+  it.each([
+    ["bthrow", Btn.Left],
+    ["uthrow", Btn.Up],
+  ] as const)("Fox's legacy %s ends on UFD's 49: the release freezes nobody", (slot, button) => {
+    const { states } = run(holding("fox"), [button, ...Array<InputFrame>(70).fill(0)]);
+    expect(FIGHTERS.find((f) => f.id === "fox")!.scripts?.[slot], "legacy").toBeUndefined();
+    expect(inThrow(states)).toBe(49);
+    expect(states.every((s) => s.fighters[0].hitlag === 0)).toBe(true);
+  });
+
+  // `FT_CATCH_STOP(n, 1)`: SmashWiki "Marth (SSBU)/Forward throw"
+  // (https://www.ssbwiki.com/Marth_(SSBU)/Forward_throw), "During frame 14, the move
+  // inflicts 4 frames of hitlag to both Marth and the opponent, during which the
+  // opponent is invincible". UFD (https://ultimateframedata.com/marth): forward 18 /
+  // 34, back 19 / 44, down 20 / 46 — the scripts' 15, 16 and 16 plus 3, 3 and 4. The
+  // back throw's 44 leaves its stop out, as UFD's startup does not.
+  it.each([
+    ["fthrow", Btn.Right, 18, 34],
+    ["bthrow", Btn.Left, 19, 47],
+    ["dthrow", Btn.Down, 20, 46],
+  ] as const)("Marth's %s stops both before the release, Fox invincible, and lands on UFD's %i", (slot, button, release, total) => {
+    const { states, events } = run(holding("marth"), [button, ...Array<InputFrame>(70).fill(0)]);
+    const hits = events.flatMap((e, i) => e.hits.map(() => i));
+    expect(hits.map((i) => i + 1), "the release, in game frames").toEqual([release]);
+    expect(inThrow(states)).toBe(total);
+    // The stop: both frozen, Fox invincible, on the frames between.
+    const stop = states.findIndex((s) => s.fighters[0].hitlag > 0);
+    expect(states[stop].fighters[1].hitlag).toBe(states[stop].fighters[0].hitlag);
+    for (let i = stop + 1; i < hits[0]; i++) expect(states[i].fighters[1].invincible, `step ${i}`).toBeGreaterThan(0);
+  });
+
+  // rubendal's CancelFrame is a motion frame; `FT_MOTION_RATE` decides the game frame.
+  // Samus's `game_throwlw`: `FT_MOTION_RATE(FSM=0.85)` from frame 25, CancelFrame 40
+  // -> game frame 38; UFD (https://ultimateframedata.com/samus) "Down Throw 21 37".
+  // Link's jab 1, down tilt and forward air: UFD (https://ultimateframedata.com/link)
+  // totals 23, 30 and 51.
+  it("takes a script's first actionable frame in game frames: Samus's down throw is UFD's 37", () => {
+    const samus = FIGHTERS.find((f) => f.id === "samus")!;
+    expect(gameFrameOfMotion(samus.scripts!.dthrow!, 40)).toBe(38);
+    expect(samus.moves.dthrow!.totalFrames).toBe(37);
+    const link = FIGHTERS.find((f) => f.id === "link")!;
+    expect([link.moves.jab1!.totalFrames, link.moves.dtilt!.totalFrames, link.moves.fair!.totalFrames]).toEqual([23, 30, 51]);
+    const { states } = run(holding("samus"), [Btn.Down, ...Array<InputFrame>(60).fill(0)]);
+    expect(inThrow(states)).toBe(37);
+  });
+
+  // Fox's grab and dash grab: `FT_MOTION_RATE` 0.8 and 0.9 from frame 1, then
+  // `FT_START_ADJUST_MOTION_FRAME_arg1(1)` on the catch frame, read as the rate back
+  // to 1 (`lift.ts`). UFD (https://ultimateframedata.com/fox): "Grab 6 36", "Dash
+  // Grab 10 44".
+  it("times Fox's grabs as UFD does: the catch on 6 and 10, 36 and 44 frames in all", () => {
+    const fox = FIGHTERS.find((f) => f.id === "fox")!;
+    expect([fox.moves.grab!.totalFrames, fox.moves.dashGrab!.totalFrames]).toEqual([36, 44]);
+    expect(fox.moves.grab!.hitboxes.map((h) => h.startFrame)).toEqual([6, 6]);
+    expect(fox.moves.dashGrab!.hitboxes.map((h) => h.startFrame)).toEqual([10, 10]);
+  });
+});
+
+describe("rollback through the new freezes (fix round 1)", () => {
+  const BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
+  const GAME = bakedContext({ fighter: (id) => BY_ID.get(id)!, stage: (id) => STAGES.find((s) => s.id === id)! }, readBakeFromDisk());
+  // Nothing new is kept: the stop and the partial hit write `hitlag` and
+  // `invincible`, and throw invincibility is read off the script. A snapshot on
+  // any frame around them re-simulates hash-equal.
+  it.each([
+    ["Marth's forward throw (FT_CATCH_STOP)", "marth", Btn.Right, undefined],
+    ["Pikachu's down throw in the game (the partial hit, the release freeze)", "pikachu", Btn.Down, GAME],
+  ] as const)("%s", (_name, id, button, ctx) => {
+    const inputs = [button, ...Array<InputFrame>(60).fill(0)];
+    const { states } = run(holding(id, ctx), inputs, ctx);
+    for (let at = 8; at <= 34; at++) {
+      const again = run(cloneState(states[at]), inputs.slice(at + 1), ctx).states;
+      again.forEach((st, k) => expect(hashState(st), `snapshot ${at}, step ${at + 1 + k}`).toBe(hashState(states[at + 1 + k])));
+    }
+  });
+});
+
+describe("the grab timer through pummels (fix round 1)", () => {
+  // SmashWiki "Grab" (https://www.ssbwiki.com/Grab): `90 + 1.7p` frames, set when the
+  // grab lands, "so it is not affected by pummeling". Pummelled from the start and
+  // never mashing, a 0% Fox is let go on the 90th frame of the hold.
+  it("lets a 0% fighter go on frame 90 of the hold, however hard he is pummelled", () => {
+    const s = holding("mario");
+    s.fighters[1].grabTimer = 90;
+    const { states, events } = run(s, Array.from({ length: 120 }, (_, i) => (i % 3 === 0 ? Btn.Attack : 0)));
+    const pummels = events.filter((e) => e.hits.length > 0).length;
+    expect(pummels).toBeGreaterThan(3);
+    expect(states.findIndex((st) => st.fighters[1].grabbedBy < 0)).toBe(89);
+  });
+});
+
+describe("a captor's projectile (ruling P5-R8)", () => {
+  // The rule is a captor's own boxes; a projectile has left its owner's move, and
+  // hits the fighter held like anyone (UNVERIFIED: no source names a case).
+  it("hits the fighter its owner holds", () => {
+    const s = holding("mario");
+    const mario = FIGHTERS.find((f) => f.id === "mario")!;
+    const fireball = findProjectileDef(mario, "fireball")!;
+    s.projectiles.push(spawnProjectile(fireball, s.fighters[0], s.nextProjectileId));
+    s.nextProjectileId += 1;
+    const { events, states } = run(s, Array<InputFrame>(20).fill(0));
+    const hits = events.flatMap((e) => e.hits);
+    expect(hits.map((h) => [h.attacker, h.victim])).toEqual([[0, 1]]);
+    expect(states.at(-1)!.fighters[1].grabbedBy).toBe(-1);
   });
 });

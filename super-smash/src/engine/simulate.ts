@@ -78,6 +78,7 @@ import {
   hitboxWorldPos,
   hurtboxCapsule,
   markHit,
+  moveFrameOf,
   resolveClank,
   sweptCapsuleOverlaps,
 } from "./hitbox";
@@ -155,8 +156,9 @@ import {
   shieldDamage,
   shieldPushback,
 } from "./shield";
-import { absHitbox, scriptHitboxes } from "./acmd/hitboxes";
-import { moveScriptFrame, prepareFighterScripts } from "./acmd/run";
+import { absHitbox, scriptHitboxes, unplacedHitbox } from "./acmd/hitboxes";
+import { moveScriptFrame, prepareFighterScripts, throwStrikeFrame } from "./acmd/run";
+import { gameScriptFor } from "./acmd/legacy";
 import "./status";
 import { releaseHeld, struggleInGrab } from "./status/attack";
 import { emptyEvents } from "./types";
@@ -638,11 +640,10 @@ export function step(
       // through a freeze, and `advanceFighter`, which re-asserts the window, does
       // not run in one (Plan 5, Task 5 fix round 1).
       updateDodgeIntangibility(f, defs[i]);
-      // A held fighter can still mash out of the grab during the freeze of a
-      // pummel (SmashWiki "Pummel": "opponents can still mash out of the
-      // attacker's grab during hitlag"). Only the mash counts: the frame itself
-      // does not, as nothing else in a freeze does (Plan 3, Task 14).
-      if (f.action === "grabbed" && f.grabbedBy >= 0) struggleInGrab(f, intent, stateCtx(i), false);
+      // A held fighter's grab time runs, and it can still mash out of the grab,
+      // during the freeze of a pummel (`struggleInGrab`; Plan 5, Task 7 fix round
+      // 1: the frame counts too, where Plan 3 Task 14 stopped the clock).
+      if (f.action === "grabbed" && f.grabbedBy >= 0) struggleInGrab(f, intent, stateCtx(i));
       const shiftedFromX = f.x;
       const shiftedFromY = f.y;
       if (intent.sdiX !== 0 || intent.sdiY !== 0) {
@@ -1276,11 +1277,13 @@ function resolveHits(
       if (c.hitbox.windbox === true && victim.ledge !== null) continue;
       if (recordSaysAlreadyHit(s, c, victim.port)) continue;
       // Ruling P5-R8: a captor's box that is not catch-only leaves the fighter it
-      // holds alone, and hits anyone else it reaches (Mario's back throw: `game_throwb`
-      // hangs an 8% `hip` box on frame 13 with no `set_catch_only_all`, and lands
-      // the throw by `ATK_HIT_ABS` on 44). UNVERIFIED: a stand-in; no source says
-      // what such a box does to the fighter held. Not a projectile, which has left
-      // its owner's move.
+      // holds alone, and hits anyone else it reaches. SmashWiki "Throw"
+      // (https://www.ssbwiki.com/Throw): "a few throws such as Mario's back throw
+      // have collateral hitboxes, which can only hit bystanders and not the thrown
+      // opponent" (`game_throwb` hangs an 8% `hip` box on frame 13 with no
+      // `set_catch_only_all`, and lands the throw by `ATK_HIT_ABS` on 44).
+      // UNVERIFIED: the rule for any captor's box, beyond the throws the page
+      // names. Not a projectile, which has left its owner's move.
       if (c.onlyPort === null && c.projectile === null && captorOf(s, victim) === s.fighters[c.attacker]) continue;
       if (c.onlyPort !== null) {
         // Catch-only (a pummel, a throw's hits before its launch): the fighter
@@ -1353,7 +1356,7 @@ function resolveHits(
       if (c.hitbox.windbox === true) applyWindbox(attacker, victim, defs[v], c, events);
       // Invincible: the fighter *is* there and the hit connects. It is only the
       // consequences that do not land. See `FighterState.invincible`.
-      else if (victim.invincible > 0) applyInvincibleHit(s, attacker, victim, c, contact, events);
+      else if (isInvincible(victim, defs[v])) applyInvincibleHit(s, attacker, victim, c, contact, events);
       // Catch-only: damage and a freeze, and the hold stays (Plan 5, Task 7).
       else if (c.onlyPort !== null) applyHeldHit(s, attacker, victim, c, contact, events);
       else {
@@ -1376,22 +1379,45 @@ function resolveHits(
 }
 
 /**
- * Throws (Plan 5, Task 7): what a throw's script fires on the frame it reaches.
+ * Throws (Plan 5, Task 7): what a throw's script fires on the frame it reaches,
+ * in script order.
  *
  * - `REVERSE_LR()` turns the thrower round (ruling P5-R7): Samus's back throw on
  *   12, Mario's on 40, a legacy back throw on its `turnAt`. Everything the
  *   throw does after, its launch included, is the way the thrower then faces.
+ * - `FT_CATCH_STOP(n, …)` stops both fighters, the one held invincible
+ *   (fix round 1): SmashWiki "Marth (SSBU)/Forward throw"
+ *   (https://www.ssbwiki.com/Marth_(SSBU)/Forward_throw), "During frame 14, the
+ *   move inflicts 4 frames of hitlag to both Marth and the opponent, during which
+ *   the opponent is invincible"; SmashWiki "Hitlag" (https://www.ssbwiki.com/Hitlag)
+ *   says the same of his back and down throws. The n frames count the frame it
+ *   fires on, so the move stands n − 1 frames more: UFD's 18, 19 and 20 for
+ *   Marth's forward, back and down throws are the scripts' releases 15, 16 and
+ *   16 plus 3, 3 and 4 (https://ultimateframedata.com/marth). No damage and no
+ *   hit, so nothing is reported.
+ * - A catch-only box issued and cleared on one frame (`flashed`) is registered
+ *   in part on the fighter held: the freeze of its hit on both fighters, and
+ *   nothing else (fix round 1). SmashWiki "Pikachu (SSBU)/Down throw"
+ *   (https://www.ssbwiki.com/Pikachu_(SSBU)/Down_throw): the box is "set to
+ *   both appear and be deleted on frame 14", and "the hit is only partially
+ *   registered on the thrown opponent, causing hitlag but not any damage or
+ *   graphical effects". UNVERIFIED: that it freezes Pikachu too; UFD's 29/51
+ *   (https://ultimateframedata.com/pikachu) count it in his own timeline.
  * - `ATK_HIT_ABS` lays the live `ATTACK_ABS` launch on the fighter held — no
  *   hurtbox, no geometry, nothing to clank with — through the ordinary hit
- *   pipeline (`applyHit`): damage, staleness, knockback, the release. Every
- *   published throw but Pikachu's down throw carries `Hitlag=0.0`, so nobody
- *   freezes and the launch fires at once. Not on a fighter the throw no longer
- *   holds: a hit on the thrower, or a KO either side, has ended the link
- *   (`releaseGrab`) before this frame.
+ *   pipeline (`applyHit`): damage, staleness, knockback, the release. Its
+ *   hitlag falls on the one thrown alone, and the thrower plays on (fix round
+ *   1): SmashWiki "Hitlag", throws "can inflict hitlag on release, which only
+ *   affects the opponent", and in Ultimate only Pikachu's down throw does on
+ *   this roster; the rest carry `Hitlag=0.0`. Not on a fighter the throw no
+ *   longer holds: a KO either side, or a hit on the fighter held, has ended the
+ *   link (`releaseGrab`) before this frame. Hits resolve first (`resolveHits`),
+ *   so a hit on the fighter held on the frame of the release takes them out of
+ *   the throw (UNVERIFIED: no source orders the two).
  *
  * Each fires once, on the frame the move steps onto: a frame held by a freeze
  * is run again but not acted on again, as `spawnDueProjectiles` does it (a
- * second turn would face the thrower forward again).
+ * second turn would face the thrower forward again, a second stop stop it twice).
  *
  * UNVERIFIED: where the hit is reported. The game lays the throw at its `throw`
  * joint; here the spark is the held fighter's position (`holdAtCaptor`).
@@ -1410,32 +1436,80 @@ function resolveThrows(
     if (f.actionFrame === beforeActionFrame[i] && !enteredThisTick(f, frozen[i])) continue;
     const run = moveScriptFrame(defs[i], f);
     if (run === null) continue;
+    /** The fighter this throw holds, both ends of the link whole, or null. */
+    const held = (): FighterState | null => {
+      const victim = f.grabbing >= 0 ? s.fighters[f.grabbing] : undefined;
+      return victim === undefined || captorOf(s, victim) !== f || victim.action === "dead" ? null : victim;
+    };
     for (const cmd of run.state.fired) {
       if (cmd.op === "reverseLr") f.facing = -f.facing;
+      if (cmd.op === "catchStop") {
+        const victim = held();
+        if (victim === null) continue;
+        const more = cmd.frames - 1;
+        f.hitlag = Math.max(f.hitlag, more);
+        victim.hitlag = Math.max(victim.hitlag, more);
+        // `invincible` counts down before each frame's hits, so `frames` covers the stop.
+        victim.invincible = Math.max(victim.invincible, cmd.frames);
+      }
       if (cmd.op !== "hitAbs" || run.state.throwAbs === null) continue;
-      const v = f.grabbing;
-      const victim = v >= 0 ? s.fighters[v] : undefined;
-      if (victim === undefined || captorOf(s, victim) !== f || victim.action === "dead") continue;
+      const victim = held();
+      if (victim === null) continue;
+      const v = victim.port;
       const at = { x: victim.x, y: victim.y };
-      const c: Candidate = {
-        attacker: i,
-        hitbox: absHitbox(run.state.throwAbs),
-        x: at.x,
-        y: at.y,
-        prevX: at.x,
-        prevY: at.y,
-        dx: 0,
-        dy: 0,
-        slot: f.move,
-        projectile: null,
-        chargeScale: ONE,
-        destroyOnHit: false,
-        onlyPort: null,
-        suppressed: false,
-      };
-      applyHit(s, f, victim, defs[v], c, at, intents[v], events);
+      const own = f.hitlag;
+      applyHit(s, f, victim, defs[v], throwCandidate(i, absHitbox(run.state.throwAbs), f.move, at), at, intents[v], events);
+      f.hitlag = own;
+    }
+    for (const flash of run.state.flashed) {
+      if (!flash.catchOnly) continue;
+      const victim = held();
+      if (victim === null) continue;
+      const hb = unplacedHitbox(flash.params);
+      const damage = effectiveDamage(s, f, throwCandidate(i, hb, f.move, { x: victim.x, y: victim.y }));
+      const lag = computeHitlag(damage, { electric: hb.effect === "electric", moveMultiplier: hb.hitlagMultiplier });
+      freezeVictim(victim, Math.max(victim.hitlag, lag));
+      f.hitlag = Math.max(f.hitlag, lag);
     }
   }
+}
+
+/**
+ * Invincible: the respawn's and the dodges' counter (`FighterState.invincible`),
+ * or a throw short of its release (fix round 1). SmashWiki "Throw"
+ * (https://www.ssbwiki.com/Throw): in Ultimate "the thrower is now invincible
+ * until the opponent has been thrown", and "it lasts from frame 1 all the way
+ * until the frame the opponent is thrown" — the release frame included
+ * (SmashWiki "Pikachu (SSBU)/Down throw": "Invincibility 1-21", release on 21).
+ * A freeze holds the throw on its frame, and the invincibility with it. Read
+ * off the throw's script, so nothing is kept for it.
+ */
+function isInvincible(f: FighterState, def: FighterDef): boolean {
+  if (f.invincible > 0) return true;
+  if (f.action !== "throw" || f.move === null) return false;
+  const script = gameScriptFor(def, f.move);
+  const release = script === null ? null : throwStrikeFrame(script);
+  return release !== null && moveFrameOf(f.actionFrame) <= release;
+}
+
+/** A throw's own hit as a hit candidate: no geometry, no projectile, the fighter held its only target. */
+function throwCandidate(attacker: number, hitbox: Hitbox, slot: MoveSlot, at: Point): Candidate {
+  return {
+    attacker,
+    hitbox,
+    x: at.x,
+    y: at.y,
+    prevX: at.x,
+    prevY: at.y,
+    dx: 0,
+    dy: 0,
+    slot,
+    projectile: null,
+    chargeScale: ONE,
+    destroyOnHit: false,
+    onlyPort: null,
+    suppressed: false,
+  };
 }
 
 /**
@@ -2486,7 +2560,7 @@ function applyHit(
  */
 function applyWindbox(attacker: FighterState, victim: FighterState, victimDef: FighterDef, c: Candidate, events: StepEvents): void {
   recordHit(c, attacker, victim.port);
-  if (victim.invincible > 0 || hitReachesShield(victim, victimDef, c)) return;
+  if (isInvincible(victim, victimDef) || hitReachesShield(victim, victimDef, c)) return;
   // It reached the body: who pushed whom, for the results screen's kill credit
   // (`StepEvents.pushes`), whatever the push then does.
   events.pushes.push({ attacker: attacker.port, victim: victim.port });

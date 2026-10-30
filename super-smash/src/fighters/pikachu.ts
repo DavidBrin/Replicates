@@ -966,6 +966,13 @@ const legacy: FighterDef = {
           angle: fx(83),
           baseKnockback: fx(60),
           knockbackGrowth: fx(100),
+          // Its release freezes the one thrown (Plan 5, Task 7 fix round 1): the
+          // `ATTACK_ABS` in `game_throwlw` carries `Hitlag=1.0` (rubendal SSBU
+          // Data Viewer 13.0.1), and SmashWiki "Hitlag"
+          // (https://www.ssbwiki.com/Hitlag) names Pikachu's down throw among the
+          // three Ultimate throws with release hitlag. Every other legacy throw
+          // releases with none.
+          hitlagMultiplier: fx(1),
         },
       ],
     },

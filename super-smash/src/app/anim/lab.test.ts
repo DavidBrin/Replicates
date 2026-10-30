@@ -203,19 +203,26 @@ describe("what the model sheet shows", () => {
     expect(fighterAt(opts({ action: "grab", move: "fsmash" }), 3).move).toBe("grab");
   });
 
-  it("is as long as the game's own move: four slots' published lengths differ from the legacy table's", () => {
+  it("is as long as the game's own move: where its published length differs from the legacy table's", () => {
     const bake = readBakeFromDisk();
-    // The game's lengths come from the imported scripts' first actionable frame (`withLimbScripts`):
+    // The game's lengths come from the imported scripts' first actionable frame (`withLimbScripts`),
+    // reached in game frames through the script's `FT_MOTION_RATE` (Plan 5, Task 7 fix round 1):
     // FAF − 1, UltimateFrameData's own column (https://ultimateframedata.com).
-    for (const [fighterId, move, legacy, game] of [
-      ["mario", "uair", 30, 31],
-      ["kirby", "nair", 52, 54],
-      ["kirby", "uair", 35, 37],
-      ["fox", "nair", 38, 41],
-      // Where they agree, the bake changes nothing.
-      ["mario", "ftilt", 25, 25],
+    for (const [fighterId, action, move, legacy, game] of [
+      // Pikachu's down throw and pummel run their scripts in the game (Plan 5, Task 7):
+      // `game_throwlw` CancelFrame 44, `game_catchattack` 6.
+      ["pikachu", "throw", "dthrow", 51, 43],
+      ["pikachu", "pummel", "jab1", 16, 5],
+      // Taken in game frames, the four whose motion-frame CancelFrame used to differ agree with the
+      // legacy table and UFD (Mario's up air 30, Kirby's neutral and up airs 52 and 35, Fox's
+      // neutral air 38); and where they always agreed, the bake changes nothing.
+      ["mario", "attack", "uair", 30, 30],
+      ["kirby", "attack", "nair", 52, 52],
+      ["kirby", "attack", "uair", 35, 35],
+      ["fox", "attack", "nair", 38, 38],
+      ["mario", "attack", "ftilt", 25, 25],
     ] as const) {
-      const o = opts({ fighterId, move });
+      const o = opts({ fighterId, action, move });
       expect(lengthFor(o, null), `${fighterId} ${move} before the bake`).toBe(legacy);
       expect(lengthFor(o, bake), `${fighterId} ${move} with the bake`).toBe(game);
     }

@@ -495,6 +495,14 @@ describe("engine golden trace", () => {
   // from 300 on both fighters are where they were. No CPU match grabs, so the four
   // and the lab keep their traces: hits 17/33/20/23, 6 and 0; shield hits 0/0/0/0,
   // 3 and 0; KOs 1/2/0/1, 1 and 2, as before.
+  // Its fix round 1 (a script's first actionable frame counted in game frames
+  // through its FT_MOTION_RATE, which re-times eleven running moves; a throw's
+  // release freezing the one thrown alone; Marth's catch stops; throw
+  // invincibility; the grab timer running through a pummel's freeze) moved two:
+  // kirby-marth from the 101-200 sample (Kirby's jab and neutral and up airs end
+  // sooner) and link-samus from 1001-1100 (Link's jab, down tilt and forward air
+  // re-timed): hits 23 and 21, shield hits 0 and 1, KOs 2 and 2. So now: hits
+  // 17/33/21/23, 6 and 0; shield hits 0/0/1/0, 3 and 0; KOs 1/2/2/2, 1 and 2.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

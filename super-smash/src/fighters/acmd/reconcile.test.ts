@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { runScript } from "@/engine/acmd/interpreter";
+import { gameFrameOfMotion, runScript } from "@/engine/acmd/interpreter";
 import { gameScriptFor } from "@/engine/acmd/legacy";
 import type { AcmdScript } from "@/engine/acmd/types";
 import { toFloat } from "@/engine/fixed";
@@ -42,6 +42,17 @@ import { withLimbScripts } from "./limb";
  * throws whose frames or numbers really differ (Donkey Kong's cargo throws,
  * Kirby's up throw); comparing every first actionable frame added 5 moves with
  * no hit on either side (105 → 60 in all).
+ *
+ * A script's `CancelFrame` is a motion frame, compared here in game frames
+ * through its `FT_MOTION_RATE` (`gameFrameOfMotion`, Task 7 fix round 1): that
+ * took 8 entries out (60 → 52), each one the legacy table agreeing with UFD and
+ * the script both, once the frames were counted alike. Two that stay are slot
+ * gaps, not disagreements: the importer maps Samus's neutral B to
+ * `game_specialnstart`, the 13-frame charge start (UFD
+ * https://ultimateframedata.com/samus: "Takes 13 frames to enter charge state";
+ * the shot, 44 total, is the legacy move and has no imported script), and her
+ * side B to `game_specials`, the Super Missile (UFD 57), against the legacy
+ * Homing Missile (UFD 54).
  */
 
 const ALLOW_FILE = join(process.cwd(), "src", "fighters", "acmd", "reconcile.allow.json");
@@ -115,8 +126,10 @@ function disagreements(): Record<string, string> {
           if (mine[k] !== theirs[k]) out[`${def.id} ${slot} ${k}`] = `legacy ${mine[k]} / ${key} ${theirs[k]}`;
         }
       }
-      // Whenever both sides give one (ruling P5-R9), hits or none.
-      const faf = ref.faf[key];
+      // Whenever both sides give one (ruling P5-R9), hits or none: in game frames,
+      // the script's `CancelFrame` taken through its `FT_MOTION_RATE` (fix round 1).
+      const cancel = ref.faf[key];
+      const faf = cancel === undefined ? undefined : gameFrameOfMotion(liftScript(ref.scripts[key]), cancel);
       if (faf !== undefined && move.totalFrames + 1 !== faf) out[`${def.id} ${slot} faf`] = `legacy ${move.totalFrames + 1} / ${key} ${faf}`;
     }
   }
