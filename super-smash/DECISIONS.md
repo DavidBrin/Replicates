@@ -2855,10 +2855,13 @@ the page reports a stand-in for every fighter.
 capsule sizes and SHA-256s; the guard test refuses any tracked file whose name, or whose size and
 hash, is a manifest file's, and the pre-push scan hashes every blob a push would send against the
 manifest. Since the plan-final wave the guard test and the deploy guard also refuse a pipeline
-format by its name, a model's or texture's magic number under any name, and any gzip but the
-bake (compression would hide those bytes). No render or
-screenshot of a real model is committed either: the repo is public, and a picture of a model is
-a derivative of the ripped files. Captures go to the git-ignored `test-results/anim/`. The
+format by its name and a model's or texture's magic number under any name; and, since a model
+compressed, archived or re-encoded keeps none of its own first bytes, any binary file outside an
+explicit allowlist (`BINARY_ALLOW` in `scripts/models/rippedFormats.mjs`: the bake and the
+README's stand-in screenshots, plus, for the deploy, the glbs `index.json` names), and any
+compressed file anywhere in the repo but the bake and Risk's Natural Earth map data. No render
+or screenshot of a real model is committed either: the repo is public, and a picture of a model
+is a derivative of the ripped files. Captures go to the git-ignored `test-results/anim/`. The
 deployed site serves the glbs built on the deploying machine; a checkout without `pnpm models`
 plays with capsule stand-ins.
 
@@ -2924,8 +2927,7 @@ adopted.
 - *R12, limb placement*: a limb box is placed only on a bone the clips place — the root (`top`,
   `trans`), a bone the retarget drives, or a rigid rider of one; a root-hung independent joint
   (`throw`, `rot`) is not, so Samus's grab and dash grab keep their legacy boxes. `reach.test.ts`
-  compares every frame, in each direction (forward, back, up, down; a sweep by its envelope),
-  catches included: under 0.8 times the legacy reach and more than a unit short fails. Each
+  compares every frame, along each move's own direction (sweeps by envelope), catches included: under 0.8 times the legacy reach and more than a unit short fails. Each
   `reach.allow.json` entry has a class (`root-exact`, `sweep`, `size`, `clip-gain`) and a reason;
   a clip-gain is accepted only by the controller. A pinned hold list (`limb.hold.json`) keeps a
   slot on its legacy box; after 13b it holds only Samus's dair (below).
@@ -3029,8 +3031,9 @@ against the model manifest.
 - *The bake download gives up when it stalls or crawls.* It is aborted after 15 s with no bytes
   (`BAKE_IDLE_TIMEOUT_MS`, reset by the answer and by every chunk) or 5 minutes in all
   (`BAKE_TOTAL_TIMEOUT_MS`, the 1.8 MB file at about 50 kbit/s), both judgements and UNVERIFIED.
-  A single 30 s deadline over the whole file came first and failed a steady 0.5 Mbit/s link every
-  time (codex confirm pass). Either way the player reads "The fighters' animation data stalled,
+  A single 30 s deadline over the whole file came first: 1,845,102 bytes take about 29.5 s at
+  0.5 Mbit/s before any setup time, so it failed such a link once the connection's setup was
+  added (codex confirm pass). Either way the player reads "The fighters' animation data stalled,
   or was too slow to finish downloading. Check your connection and try again.", in the lobby
   (which offers Create and Join again) or over `/play`, and the next try asks afresh. A request
   that fails outright, or a body that breaks off, is said in the same style ("Couldn't reach the
@@ -3077,7 +3080,8 @@ bonks on it (`physics.ts`); the golden did not move. `calibrate` refuses a drive
 drives on one SSBU bone, or a turn on a "bind" drive. Leaving online `/play` before the match
 mounts leaves the room. A fresh clone's `pnpm test` is green without the models. The deploy guard
 audits all of `public/`, which `next build` copies whole, and it and the commit guard know a model
-or texture by its first bytes as well as by its name (`scripts/models/rippedFormats.mjs`).
+or texture by its first bytes as well as by its name, and refuse any binary file outside their
+allowlist (`scripts/models/rippedFormats.mjs`).
 
 **Found and carried.** The controller's lists (`.superpowers/sdd/`) are the detail; this is the
 summary.

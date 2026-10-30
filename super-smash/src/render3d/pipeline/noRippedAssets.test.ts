@@ -4,11 +4,11 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { gzipSync } from "node:zlib";
+import { deflateSync, gzipSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
-import { BAKE_PATH, MAGIC_BYTES, PIPELINE_ONLY, isGzip, modelMagic } from "../../../scripts/models/rippedFormats.mjs";
+import { BAKE_PATH, PIPELINE_ONLY, SNIFF_BYTES, binaryAllowed, binaryKind, compressedKind, modelMagic } from "../../../scripts/models/rippedFormats.mjs";
 import { parseManifest, type ModelManifest } from "./manifest";
 
 /**
@@ -23,10 +23,18 @@ import { parseManifest, type ModelManifest } from "./manifest";
  * the manifest lists (a renamed copy), or if it is a format only the pipeline
  * makes (.blend, .glb, .gltf, .webp, .ktx2, .dds), or if it starts with one of
  * those formats' magic numbers (a glb renamed `.bin`, a texture pulled out of
- * a glb), or if it is gzip and not the bake (compression hides what a file
- * holds). A name pattern missed 17 of the 114 real files (`eye_donkey_001.png`,
+ * a glb). A name pattern missed 17 of the 114 real files (`eye_donkey_001.png`,
  * `pikachu_facial_01_col.png`, …). The names and the magic numbers are
  * `scripts/models/rippedFormats.mjs`, the list the deploy guard refuses too.
+ *
+ * A model compressed, archived or re-encoded keeps none of its own first bytes
+ * (codex re-confirm, P2), so two rules do not ask what a file holds: any
+ * compressed file anywhere in the repo is refused unless `COMPRESSED_ALLOW`
+ * lists it, and any binary file in this package unless `BINARY_ALLOW` does.
+ * The binary rule stops at this package: the sibling projects commit their own
+ * screenshots, research captures, icons and sounds (about 500 binary files),
+ * which are theirs to vet; the rules above, and the compression rule, still
+ * cover them.
  *
  * The scan is the whole repo (`:/`), not just `super-smash/`: a file in `Risk/`
  * takes the same repo down. Paths are NUL-separated (`-z`) because git quotes a
@@ -57,8 +65,19 @@ const IGNORED_OUTPUT = /(^|\/)(\.model-cache|public\/models|test-results)\//i;
  */
 const CAPTURE_PNG = /(^|\/)(anim|fight)-[^/]*\.png$/i;
 const GITLINK = "160000";
-/** The bake, the one gzip the repo may hold, from the repo root (this package's prefix, then `BAKE_PATH`). */
-const BAKE_IN_REPO = execFileSync("git", ["rev-parse", "--show-prefix"], { cwd: ROOT, encoding: "utf8" }).trim() + BAKE_PATH;
+/** This package's folder in the repo (`super-smash/`), which the binary allowlist's paths are relative to. */
+const PACKAGE = execFileSync("git", ["rev-parse", "--show-prefix"], { cwd: ROOT, encoding: "utf8" }).trim();
+/**
+ * The compressed files the repo may hold, anywhere, from the repo root, each with why. Every other compressed file
+ * is refused, in any project: listed from every staged blob on 2026-10-29, these were the only two.
+ */
+const COMPRESSED_ALLOW: ReadonlyMap<string, string> = new Map([
+  [PACKAGE + BAKE_PATH, "the bone bake (BINARY_ALLOW)"],
+  [
+    "Risk/research/map-data/naturalearth/ne_110m_admin_0_countries.zip",
+    "Risk's map source: Natural Earth's 1:110m countries shapefile, public domain (its .LICENSE.txt sits beside it)",
+  ],
+]);
 const MAX_BUFFER = 1 << 30;
 
 /** A path in the index and the blob git would commit for it. */
@@ -69,7 +88,7 @@ interface IndexEntry {
 }
 
 /**
- * Index entries that are ripped assets, with why. `size`, `hash` and `head` (the blob's first `MAGIC_BYTES` bytes)
+ * Index entries that are ripped assets, with why. `size`, `hash` and `head` (the blob's first `SNIFF_BYTES` bytes)
  * take a blob id and are injected so the rule is testable without real blobs.
  */
 export function rippedAssets(
@@ -94,9 +113,12 @@ export function rippedAssets(
       const magic = modelMagic(first);
       // Only a blob of exactly a manifest size can have a manifest hash.
       const shas = bySize.get(size(id));
+      const compressed = compressedKind(first);
+      const binary = path.startsWith(PACKAGE) && !binaryAllowed(path.slice(PACKAGE.length)) ? binaryKind(first) : null;
       if (magic !== null) out.push(`${path} (model bytes: ${magic})`);
-      else if (isGzip(first) && path !== BAKE_IN_REPO) out.push(`${path} (gzip bytes: a compressed file hides what it holds; only the bake may be gzip)`);
       else if (shas?.has(hash(id))) out.push(`${path} (manifest file bytes)`);
+      else if (compressed !== null && !COMPRESSED_ALLOW.has(path)) out.push(`${path} (compressed: ${compressed}; a compressed file hides what it holds, and only the listed ones may be)`);
+      else if (binary !== null) out.push(`${path} (binary outside the allowlist: ${binary})`);
     }
   }
   return out;
@@ -121,7 +143,7 @@ function indexEntries(env: NodeJS.ProcessEnv): IndexEntry[] {
 }
 
 /**
- * The size and first `MAGIC_BYTES` bytes of each blob, from one `cat-file --batch` (every staged blob in the repo,
+ * The size and first `SNIFF_BYTES` bytes of each blob, from one `cat-file --batch` (every staged blob in the repo,
  * about 180 MB in 3,300 blobs today, read in well under a second). A blob git cannot find is left out.
  */
 function blobs(ids: readonly string[], env: NodeJS.ProcessEnv): Map<string, { size: number; head: Uint8Array }> {
@@ -136,7 +158,7 @@ function blobs(ids: readonly string[], env: NodeJS.ProcessEnv): Map<string, { si
     at = eol + 1;
     if (size === undefined) continue;
     const bytes = Number(size);
-    if (type === "blob") found.set(id, { size: bytes, head: out.subarray(at, at + Math.min(bytes, MAGIC_BYTES)) });
+    if (type === "blob") found.set(id, { size: bytes, head: out.subarray(at, at + Math.min(bytes, SNIFF_BYTES)) });
     at += bytes + 1;
   }
   return found;
@@ -169,6 +191,16 @@ describe("the ripped-asset rule", () => {
     "super-smash/public/bake/roster.bin.gz": gzipSync("the bake"),
     "Risk/public/bake/roster.bin.gz": gzipSync("another package's file of the same name"),
     "docs/not-gzip.bin": Buffer.from([0x1f, 0x00, 0x8b, 0x08]),
+    // Binary under this package's paths, and the same kinds elsewhere (codex re-confirm, P2).
+    "super-smash/src/data.bin": deflateSync(Buffer.concat([Buffer.from("glTF"), Buffer.alloc(64, 0x41)])),
+    "super-smash/public/pack.dat": Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("a zip entry")]),
+    "Risk/frame.bin": Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from("a zstd frame")]),
+    "super-smash/README.bin": Buffer.from("text, then a NUL\0"),
+    "super-smash/src/notes.md": Buffer.from([0x68, 0x69, 0xc3, 0x28]),
+    "super-smash/public/icons/logo.png": Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("an image nobody listed")]),
+    "super-smash/docs/screenshots/new.png": Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("a README screenshot")]),
+    "Risk/docs/screenshots/board.png": Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("another project's screenshot")]),
+    "Risk/research/map-data/naturalearth/ne_110m_admin_0_countries.zip": Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("Natural Earth")]),
   };
   // A blob id stands for its path here; the real wiring is exercised against git below.
   const run = (paths: string[]) =>
@@ -225,8 +257,31 @@ describe("the ripped-asset rule", () => {
   it("catches a gzip file anywhere but the bake: compression hides a model's own first bytes (fw2 re-review)", () => {
     // gzip is both bytes, 1f 8b: one alone is not.
     expect(run(["art/fox.glb.gz", "super-smash/public/bake/roster.bin.gz", "Risk/public/bake/roster.bin.gz", "docs/not-gzip.bin"])).toEqual([
-      "art/fox.glb.gz (gzip bytes: a compressed file hides what it holds; only the bake may be gzip)",
-      "Risk/public/bake/roster.bin.gz (gzip bytes: a compressed file hides what it holds; only the bake may be gzip)",
+      "art/fox.glb.gz (compressed: gzip; a compressed file hides what it holds, and only the listed ones may be)",
+      "Risk/public/bake/roster.bin.gz (compressed: gzip; a compressed file hides what it holds, and only the listed ones may be)",
+    ]);
+  });
+
+  it("catches any compressed file in the repo but the listed ones, and any binary file in this package but the allowlist (codex re-confirm, P2)", () => {
+    expect(
+      run([
+        "super-smash/src/data.bin",
+        "super-smash/public/pack.dat",
+        "Risk/frame.bin",
+        "super-smash/README.bin",
+        "super-smash/src/notes.md",
+        "super-smash/public/icons/logo.png",
+        "super-smash/docs/screenshots/new.png",
+        "Risk/docs/screenshots/board.png",
+        "Risk/research/map-data/naturalearth/ne_110m_admin_0_countries.zip",
+      ]),
+    ).toEqual([
+      "super-smash/src/data.bin (compressed: zlib; a compressed file hides what it holds, and only the listed ones may be)",
+      "super-smash/public/pack.dat (compressed: zip; a compressed file hides what it holds, and only the listed ones may be)",
+      "Risk/frame.bin (compressed: zstd; a compressed file hides what it holds, and only the listed ones may be)",
+      "super-smash/README.bin (binary outside the allowlist: a NUL byte)",
+      "super-smash/src/notes.md (binary outside the allowlist: not UTF-8 text)",
+      "super-smash/public/icons/logo.png (binary outside the allowlist: PNG image)",
     ]);
   });
 
@@ -334,11 +389,34 @@ describe("no Nintendo-ripped asset is tracked", () => {
         ["super-smash/src/a.json", Buffer.from("DDS |\0\0\0 a texture")],
       ];
       for (const [path, bytes] of planted) s.plant(path, s.blob(bytes));
-      s.plant("super-smash/public/sounds/hit.wav", s.blob(Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WAVEfmt ")])));
+      // RIFF but not WebP: a WAV is no model. In another project, where only these rules apply (in this package any
+      // binary file outside the allowlist is refused anyway).
+      s.plant("Risk/public/sounds/hit.wav", s.blob(Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WAVEfmt ")])));
       const flagged = scan(s.env);
       expect(flagged.every((f) => f.includes(" (model bytes: "))).toBe(true);
       expect(flagged.map((f) => f.slice(0, f.indexOf(" (model bytes: "))).sort()).toEqual(planted.map(([path]) => path).sort());
       for (const [path] of planted) expect(existsSync(join(ROOT, "..", path))).toBe(false);
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  it("sees a compressed or binary blob staged outside the allowlists, under any name (codex re-confirm, P2)", () => {
+    const s = scratch();
+    try {
+      expect(scan(s.env)).toEqual([]);
+      const planted: [string, Buffer][] = [
+        ["super-smash/src/data.bin", deflateSync(Buffer.concat([Buffer.from("glTF"), Buffer.alloc(64, 0x41)]))],
+        ["super-smash/docs/archive.txt", Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("a zip entry")])],
+        ["Risk/frame.bin", Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from("a zstd frame")])],
+        ["super-smash/public/blob.json", Buffer.from("text, then a NUL\0")],
+      ];
+      for (const [path, bytes] of planted) s.plant(path, s.blob(bytes));
+      // A new README screenshot is allowed, as another project's own picture is.
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("a picture")]);
+      s.plant("super-smash/docs/screenshots/new.png", s.blob(png));
+      s.plant("Risk/docs/screenshots/new.png", s.blob(png));
+      expect(scan(s.env).map((f) => f.slice(0, f.indexOf(" ("))).sort()).toEqual(planted.map(([path]) => path).sort());
     } finally {
       s.cleanup();
     }
@@ -353,8 +431,8 @@ describe("no Nintendo-ripped asset is tracked", () => {
       // A new bake staged over the committed one is the one gzip allowed.
       s.plant("super-smash/public/bake/roster.bin.gz", s.blob(gzipSync("a new bake")));
       const flagged = scan(s.env);
-      expect(flagged.every((f) => f.includes(" (gzip bytes: "))).toBe(true);
-      expect(flagged.map((f) => f.slice(0, f.indexOf(" (gzip bytes: "))).sort()).toEqual([...planted].sort());
+      expect(flagged.every((f) => f.includes(" (compressed: gzip; "))).toBe(true);
+      expect(flagged.map((f) => f.slice(0, f.indexOf(" (compressed: "))).sort()).toEqual([...planted].sort());
     } finally {
       s.cleanup();
     }

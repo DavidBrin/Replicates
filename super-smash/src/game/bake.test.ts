@@ -289,6 +289,22 @@ describe("a bake that does not arrive in time", () => {
     }
   });
 
+  it("arms no timer for a request that answers after it was given up on (codex re-confirm, P3)", async () => {
+    // A fetch that ignores its abort and answers anyway, 10 ms later, with a body that then never closes.
+    const late: FetchLike = (_url, init) =>
+      new Promise((resolve) => {
+        init.signal.addEventListener("abort", () => {
+          setTimeout(() => resolve({ ok: true, status: 200, body: new ReadableStream({ start: (c) => c.enqueue(new Uint8Array(GZ.subarray(0, 1024))) }) }), 10);
+        });
+      });
+    const seen = watch(fetchBake(late));
+    await vi.advanceTimersByTimeAsync(BAKE_IDLE_TIMEOUT_MS);
+    expect((seen.error as Error).message).toBe(TOO_SLOW);
+    expect(vi.getTimerCount()).toBe(1); // only the fake's own late answer
+    await vi.advanceTimersByTimeAsync(10);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("leaves no timer running once the bake is in, or once the file is refused", async () => {
     await fetchBake(serve(new Uint8Array(GZ)));
     expect(vi.getTimerCount()).toBe(0);

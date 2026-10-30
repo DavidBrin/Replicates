@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { gzipSync } from "node:zlib";
+import { deflateRawSync, deflateSync, gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -228,11 +228,15 @@ describe("models:check, the deploy guard", () => {
     expect(pipelineStamp(repo, "5.2.3")).not.toBe(pipelineStamp(repo, "4.2.1"));
   });
 
-  it("refuses outside a git checkout: it cannot tell what would be committed", () => {
+  it("refuses outside a git checkout: it cannot tell what would be committed, and labels no file committed or ignored", () => {
+    put("public/robots.txt", "User-agent: *");
     rmSync(at(".git"), { recursive: true, force: true });
     const r = check();
     expect(r.status).toBe(1);
     expect(r.out).toContain("cannot ask git");
+    // It said git could not be asked; it does not guess what git would have said about each file (docs re-review).
+    expect(r.out).not.toContain("git-ignored");
+    expect(r.out).not.toContain("commit it or delete it");
   });
 });
 
@@ -245,7 +249,8 @@ describe("models:check, the rest of public/: next build deploys all of it (codex
     expect(r.status).toBe(1);
     expect(r.out).toContain(`public/audit.glb is a model or texture format ${OUTSIDE}`);
     expect(r.out).toContain(`public/audit.glb starts with glTF bytes (a glb) ${OUTSIDE}`);
-    expect(r.out).toContain("public/audit.glb is neither a built model, the bake nor a committed file — next build would deploy it; commit it or delete it");
+    // A ripped file is only ever told to go: committing it would not make it deployable.
+    expect(r.out).not.toContain("commit it or delete it");
   });
 
   it("refuses every pipeline format by its name outside public/models/, committed or not, whatever its bytes", () => {
@@ -274,11 +279,15 @@ describe("models:check, the rest of public/: next build deploys all of it (codex
     expect(r.status).toBe(1);
     for (const [path, , kind] of planted) expect(r.out, path).toContain(`${path} starts with ${kind} ${OUTSIDE}`);
     expect(r.out).not.toContain("is a model or texture format");
-    // A file that only starts like one is not: "RIFF" without "WEBP" is a WAV, and a short "glT" is not glTF.
+    // A file that only starts like one is not one: "RIFF" without "WEBP" is a WAV (refused only as a binary file
+    // nobody listed), and a short "glT" is not glTF.
     put("public/sounds/hit.wav", Buffer.concat([Buffer.from("RIFF"), Buffer.from([30, 0, 0, 0]), Buffer.from("WAVEfmt ")]));
     put("public/data/short.txt", "glT");
     commit("public/sounds/hit.wav", "public/data/short.txt");
-    expect(check().out).not.toMatch(/hit\.wav|short\.txt/);
+    const after = check().out;
+    expect(after).not.toContain("hit.wav starts with");
+    expect(after).toContain("public/sounds/hit.wav is a binary file (a NUL byte)");
+    expect(after).not.toContain("short.txt");
   });
 
   it("refuses a file anywhere in public/ with a fetched model file's bytes (its size, then its SHA-256), models folder included", () => {
@@ -309,15 +318,16 @@ describe("models:check, the rest of public/: next build deploys all of it (codex
   });
 
   it("tells a git-ignored file only to go: it cannot be committed, and `git status` never shows it (fw2 re-review)", () => {
-    // The package's own .gitignore ignores both: a Finder file and a TypeScript build cache.
-    put("public/icons/.DS_Store", Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31])); // "Bud1"
+    // The package's own .gitignore ignores both: a TypeScript build cache (text) and a Finder file (binary).
     put("public/notes.tsbuildinfo", "{}");
+    put("public/icons/.DS_Store", Buffer.from([0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31])); // "Bud1"
     const r = check();
     expect(r.status).toBe(1);
-    for (const path of ["public/icons/.DS_Store", "public/notes.tsbuildinfo"]) {
-      expect(r.out, path).toContain(`${path} is git-ignored, so it cannot be committed, and is neither a built model nor the bake — next build would deploy it; delete it`);
-      expect(r.out, path).not.toContain(`${path} is neither a built model, the bake nor a committed file`);
-    }
+    expect(r.out).toContain("public/notes.tsbuildinfo is git-ignored, so it cannot be committed, and is neither a built model nor the bake — next build would deploy it; delete it");
+    // The Finder file is binary: one message, the binary one, which also says only to delete it.
+    expect(r.out).toContain("public/icons/.DS_Store is a binary file (a NUL byte) and neither the bake nor an indexed glb — next build would deploy it; delete it");
+    for (const path of ["public/notes.tsbuildinfo", "public/icons/.DS_Store"]) expect(r.out, path).not.toContain(`${path} is neither a built model, the bake nor a committed file`);
+    expect(r.out.match(/public\/icons\/\.DS_Store/g)).toHaveLength(1);
   });
 
   it("refuses a gzip file anywhere in public/ but the bake: compression hides a model's own first bytes (fw2 re-review)", () => {
@@ -330,10 +340,46 @@ describe("models:check, the rest of public/: next build deploys all of it (codex
     const r = check();
     expect(r.status).toBe(1);
     for (const path of ["public/data/fox.glb.gz", "public/bake/old.bin.gz", "public/models/extra.gz"]) {
-      expect(r.out, path).toContain(`${path} is gzip-compressed, which hides what it holds, and only the bake may be — next build would deploy it; delete it`);
+      expect(r.out, path).toContain(`${path} is a binary file (gzip-compressed) and neither the bake nor an indexed glb — next build would deploy it; delete it`);
     }
     expect(r.out).not.toContain("public/bake/roster.bin.gz");
     expect(r.out).not.toContain("starts with");
+  });
+
+  it("gives an untracked gzip one message, the one that says to delete it (docs re-review)", () => {
+    put("public/data/fox.glb.gz", gzipSync(MAGIC.glb));
+    const r = check();
+    expect(r.status).toBe(1);
+    expect(r.out.match(/public\/data\/fox\.glb\.gz/g)).toHaveLength(1);
+    expect(r.out).toContain("public/data/fox.glb.gz is a binary file (gzip-compressed) and neither the bake nor an indexed glb — next build would deploy it; delete it");
+  });
+
+  it("refuses any binary file in public/ but the bake and the indexed glbs: compressed, archived or raw, under any name (codex re-confirm, P2)", () => {
+    // Each committed, so being binary is the only thing wrong with it.
+    const glTF = Buffer.concat([Buffer.from("glTF"), Buffer.from("a model, compressed"), Buffer.alloc(64, 0x41)]);
+    const planted: [string, Buffer, string][] = [
+      ["public/data/model.bin", deflateSync(glTF), "zlib-compressed"],
+      ["public/data/pack.dat", Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("a zip entry")]), "zip-compressed"],
+      ["public/data/frame.txt", Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from("a zstd frame")]), "zstd-compressed"],
+      ["public/data/blob.json", Buffer.from('{"a": "\u0000"}\0'), "a NUL byte"],
+      ["public/icons/logo.png", Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("an image nobody listed")]), "PNG image"],
+    ];
+    for (const [path, bytes] of planted) put(path, bytes);
+    put("public/data/raw.bin", deflateRawSync(glTF)); // raw deflate has no header: caught as a NUL byte or as bytes that are not text
+    commit(...planted.map(([path]) => path), "public/data/raw.bin");
+    // The allowed: the bake (gzip), and an indexed glb whose bytes are a real glb's kind of binary.
+    put("public/bake/roster.bin.gz", gzipSync("the bake"));
+    const i = index();
+    writeFileSync(at("public", "models", i.models.mario.file), MAGIC.glb);
+    i.models.mario.sha256 = sha256(MAGIC.glb);
+    i.models.mario.bytes = MAGIC.glb.length;
+    writeIndex(i);
+    const r = check();
+    expect(r.status).toBe(1);
+    for (const [path, , kind] of planted) expect(r.out, path).toContain(`${path} is a binary file (${kind}) and neither the bake nor an indexed glb — next build would deploy it; delete it`);
+    expect(r.out).toMatch(/public\/data\/raw\.bin is a binary file \((a NUL byte|not UTF-8 text)\)/);
+    expect(r.out).not.toContain("roster.bin.gz");
+    expect(r.out).not.toContain("mario");
   });
 
   it("refuses a symbolic link anywhere in public/: next build would deploy what it points at", () => {

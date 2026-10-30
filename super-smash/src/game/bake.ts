@@ -96,8 +96,15 @@ async function download(fetchFn: FetchLike): Promise<Uint8Array> {
   });
   let idle = setTimeout(giveUp, BAKE_IDLE_TIMEOUT_MS);
   const total = setTimeout(giveUp, BAKE_TOTAL_TIMEOUT_MS);
-  /** Bytes arrived (or the answer did): the idle wait starts again. */
+  /**
+   * Bytes arrived (or the answer did): the idle wait starts again. Not once the
+   * download was given up on: a fetch that answers after its abort would
+   * otherwise leave a timer behind (codex re-confirm, P3). After any other
+   * ending nothing calls it: a success has read its last chunk, and a request
+   * or body that failed reads no more.
+   */
   const progress = () => {
+    if (controller.signal.aborted) return;
     clearTimeout(idle);
     idle = setTimeout(giveUp, BAKE_IDLE_TIMEOUT_MS);
   };

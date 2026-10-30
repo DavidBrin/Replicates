@@ -16,10 +16,13 @@
  * bake and files the repo commits may deploy, and none may have a pipeline
  * format's name or a model's first bytes (`rippedFormats.mjs`); anywhere, no
  * file may have the bytes of a file the manifest pins (its size, then its
- * SHA-256), no file but the bake may be gzip (which would hide a model's own
- * first bytes), and no symbolic link may stand in for a file. A stray file is
- * told to be committed or deleted, or, when git ignores it (a Finder
- * `.DS_Store`), only to be deleted.
+ * SHA-256), no file may be binary but the bake (`BINARY_ALLOW`) and the glbs
+ * `index.json` names (a model compressed, archived or re-encoded hides its own
+ * first bytes; codex re-confirm, P2), and no symbolic link may stand in for a
+ * file. A file refused for what it is gets one reason and is told to delete
+ * it; any other stray is told to be committed or deleted, or, when git
+ * ignores it (a Finder `.DS_Store`), only to be deleted. When git cannot be
+ * asked, no file is labelled either way: that refusal stands alone.
  *
  *   node scripts/models/check.mjs     # run by `pnpm run deploy` before `next build`
  */
@@ -29,7 +32,7 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { BAKE_PATH, MAGIC_BYTES, PIPELINE_ONLY, isGzip, modelMagic } from "./rippedFormats.mjs";
+import { BAKE_PATH, PIPELINE_ONLY, SNIFF_BYTES, binaryAllowed, binaryKind, modelMagic } from "./rippedFormats.mjs";
 import { BLENDER_VERSION, PIPELINE_INPUTS, blenderRelease, pipelineStamp } from "./stamp.mjs";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -69,6 +72,8 @@ function walk(dir, rel, out = []) {
   return out;
 }
 const PUBLIC = walk(join(ROOT, "public"), "public");
+/** The glbs `index.json` names, by path: binary, and allowed. Null without an index, which is refused already. */
+let indexedGlbs = null;
 
 const indexFile = join(ROOT, "public", "models", "index.json");
 if (!existsSync(indexFile)) {
@@ -99,6 +104,7 @@ if (!existsSync(indexFile)) {
     else if (blenderRelease(e.blender) !== BLENDER_VERSION) problems.push(`${id}: exported by Blender ${e.blender}, not ${BLENDER_VERSION} (BLENDER_VERSION in scripts/models/stamp.mjs) — run \`pnpm models\` with Blender ${BLENDER_VERSION}`);
   }
   const named = new Set(["index.json", ...Object.values(index.models ?? {}).map((e) => e.file)]);
+  indexedGlbs = new Set(Object.values(index.models ?? {}).map((e) => `public/models/${e.file}`));
   const stray = PUBLIC.map((f) => f.path).filter((p) => p.startsWith("public/models/") && !named.has(p.slice("public/models/".length)));
   if (stray.length > 0) problems.push(`public/models/ holds file(s) index.json does not name (${stray.map((p) => p.slice("public/models/".length)).join(", ")}) — next build would deploy them; delete them`);
 }
@@ -117,16 +123,19 @@ function manifestBySize() {
 }
 const fetched = manifestBySize();
 
-/** A file's first `MAGIC_BYTES` bytes (fewer if it is shorter). */
+/** A file's first `SNIFF_BYTES` bytes (fewer if it is shorter). */
 function headOf(abs) {
   const fd = openSync(abs, "r");
   try {
-    const head = Buffer.alloc(MAGIC_BYTES);
-    return head.subarray(0, readSync(fd, head, 0, MAGIC_BYTES, 0));
+    const head = Buffer.alloc(SNIFF_BYTES);
+    return head.subarray(0, readSync(fd, head, 0, SNIFF_BYTES, 0));
   } finally {
     closeSync(fd);
   }
 }
+
+/** Whether git answered: when it could not be asked, no file is labelled committed, untracked or ignored. */
+const gitAnswered = addable !== null;
 
 for (const { path, abs, link } of PUBLIC) {
   if (link) {
@@ -135,21 +144,33 @@ for (const { path, abs, link } of PUBLIC) {
   }
   const outside = !path.startsWith("public/models/");
   const ship = "next build would deploy it; delete it";
-  if (outside && PIPELINE_ONLY.test(path)) problems.push(`${path} is a model or texture format outside public/models/ — ${ship}`);
   const head = headOf(abs);
+  /** What is wrong with what the file is: each refusal says only to delete it. */
+  const ripped = [];
+  if (outside && PIPELINE_ONLY.test(path)) ripped.push(`${path} is a model or texture format outside public/models/ — ${ship}`);
   const magic = outside ? modelMagic(head) : null;
-  if (magic !== null) problems.push(`${path} starts with ${magic} outside public/models/ — ${ship}`);
-  if (path !== BAKE_PATH && isGzip(head)) problems.push(`${path} is gzip-compressed, which hides what it holds, and only the bake may be — ${ship}`);
-  if (outside && path !== BAKE_PATH && !committed.has(path)) {
+  if (magic !== null) ripped.push(`${path} starts with ${magic} outside public/models/ — ${ship}`);
+  // Only a file of exactly a manifest size can have a manifest hash, so only those are read whole.
+  const shas = fetched.get(statSync(abs).size);
+  const source = shas === undefined ? undefined : shas.get(sha256(readFileSync(abs)));
+  if (source !== undefined) ripped.push(`${path} has the bytes of a fetched model file (${source}) — ${ship}`);
+  if (ripped.length > 0) {
+    problems.push(...ripped);
+    continue;
+  }
+  // Any other binary file: a model compressed, archived or re-encoded hides its own first bytes, so a binary
+  // file is listed or refused. Inside public/models/ without an index, the missing index is the refusal.
+  const binary = binaryKind(head);
+  const allowed = binaryAllowed(path) || (indexedGlbs === null ? !outside : indexedGlbs.has(path));
+  if (binary !== null && !allowed) {
+    problems.push(`${path} is a binary file (${binary}) and neither the bake nor an indexed glb — ${ship}`);
+    continue;
+  }
+  if (outside && gitAnswered && path !== BAKE_PATH && !committed.has(path)) {
     // A git-ignored file (a Finder `.DS_Store`) cannot be committed, and `git status` never shows it.
     if (untracked.has(path)) problems.push(`${path} is neither a built model, the bake nor a committed file — next build would deploy it; commit it or delete it`);
     else problems.push(`${path} is git-ignored, so it cannot be committed, and is neither a built model nor the bake — ${ship}`);
   }
-  // Only a file of exactly a manifest size can have a manifest hash, so only those are read whole.
-  const shas = fetched.get(statSync(abs).size);
-  if (shas === undefined) continue;
-  const source = shas.get(sha256(readFileSync(abs)));
-  if (source !== undefined) problems.push(`${path} has the bytes of a fetched model file (${source}) — ${ship}`);
 }
 
 if (problems.length > 0) {

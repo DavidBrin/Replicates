@@ -328,8 +328,9 @@ Load-bearing details, all from the reference screenshots:
   and shakes when hit.
 - **Fighters are SSBU's models, posed by the project's own clips.** Each model is posed by
   the replica's hand-authored clips, retargeted onto its SSBU skeleton in the side plane, and
-  the sim reads the same bones from the bake, so in the 50 moves whose hitboxes hang off limb
-  bones a hitbox rides the limb the player sees.
+  the sim reads the same bones from the bake, so the hitboxes of the 50 limb-bone moves ride
+  the bones the bake places: the limb the player sees, or the root for the four whose boxes
+  hang on `top` or `trans`.
   Without the models each fighter is a stand-in: its own hurtbox capsules, in its port's
   colour. The 2D rigs still draw the HUD's portraits and stock icons. See DECISIONS D57.
 - **The match is 3D, and WebGL is required.** The stage, fighters, shields and hit sparks are
@@ -353,7 +354,8 @@ Load-bearing details, all from the reference screenshots:
 - **The bake and its ratchets** — the bake regenerates byte for byte and its digest is
   pinned; the limb ratchet (which script slots run on limb bones, `limb.json`), the reach
   ratchet (every frame, along each move's own direction, against the legacy boxes,
-  `reach.test.ts`), the
+  `reach.test.ts`; the two sweeps, Samus's neutral air and Pikachu's down air, are judged by
+  their envelope instead), the
   strike test (each attack strikes with the limb its hitboxes ride) and the hurt ratchet
   (each fighter's bone-derived hurtboxes against its old box, `hurt.allow.json`).
 - **3D E2E** — stand-ins when the models are not served, a lost and restored WebGL context,

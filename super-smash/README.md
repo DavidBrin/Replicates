@@ -92,7 +92,7 @@ one and Join room in the other.
 | `pnpm run deploy` | `models:check`, build and `wrangler deploy` (David's Cloudflare login) |
 | `pnpm models:fetch` | Fetch the fighter models at a pinned commit into the git-ignored `.model-cache/`, SHA-256-checked |
 | `pnpm models` | Export, join and optimise one glb per fighter into the git-ignored `public/models/` (needs Blender, portable, in `.model-cache/tools/`) |
-| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones, or with a model, texture, fetched file or gzip (bar the bake) anywhere else in `public/`, or any file there the repo does not commit, a git-ignored `.DS_Store` included |
+| `pnpm models:check` | Refuse a deploy whose models are missing, changed, oversized or built against other bones, or with a model, texture, fetched file or any binary file but the bake and the indexed glbs anywhere in `public/`, or any file there the repo does not commit, a git-ignored `.DS_Store` included |
 
 Without `pnpm models` the game runs as it is, with every fighter a capsule stand-in; the
 simulation and every test need neither the models nor Blender (a fresh clone's `pnpm test` is
@@ -256,8 +256,10 @@ SSBU models, their shields, hit sparks and KO blasts), and a transparent 2D over
 magnifying glass). All three are framed by the same camera value, and three.js loads in its own
 chunk after `/play` mounts. The models are posed by the replica's own 2D clips, retargeted onto
 each SSBU skeleton in the side plane; the simulation reads those same bones from integer tables
-baked at build time (`public/bake/roster.bin.gz`), so in the 50 moves whose hitboxes hang off limb
-bones a hitbox rides the limb the player sees, and the sim never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
+baked at build time (`public/bake/roster.bin.gz`), so the hitboxes of the 50 limb-bone moves ride
+the bones the bake places (the limb the player sees, or the root for the four whose boxes hang on
+`top` or `trans`: Mario's jab 3, Samus's and Marth's down tilts, Pikachu's back air), and the sim
+never evaluates float animation. A clip edit is therefore a gameplay edit: re-bake
 (`UPDATE_BAKE=1`) and re-run `reach.test.ts`. The models themselves are built locally by
 `pnpm models` and never committed; without them every fighter is a capsule stand-in of its own
 hurtboxes, and one that fails to load is a stand-in for that match only
@@ -357,8 +359,9 @@ David-Smash is a static export served by one Cloudflare Worker on the free plan:
    The checksum line must print `OK`; if it does not, delete the file and install nothing.
 3. `pnpm models`, then `pnpm run deploy` from a clean tree (nothing uncommitted in
    `super-smash/`, so the build id is the commit's). The deploy runs `models:check` first,
-   which refuses any model missing, changed or built otherwise, and anywhere else in `public/`
-   (`next build` copies all of it) any model, texture, fetched file or gzip but the bake, and
+   which refuses any model missing, changed or built otherwise, and anywhere in `public/`
+   (`next build` copies all of it) any model, texture or fetched file, any binary file but the
+   bake and the glbs `index.json` names (a compressed model shows none of its own bytes), and
    any file the repo does not commit. A git-ignored stray, such as a Finder `.DS_Store`, never
    shows in `git status`; its message says to delete it. Then `next build` and
    `wrangler deploy`.

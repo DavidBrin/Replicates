@@ -33,8 +33,8 @@ pnpm models:fetch      # the .blend files and textures, at a pinned commit, SHA-
 pnpm models            # Blender (portable, in .model-cache/tools/) exports, joins and optimises one glb per fighter
 pnpm models:check      # what `pnpm run deploy` runs first: every glb present, unchanged, under 25 MiB, built
                        # against the committed skeletons by this pipeline, nothing in public/models/ git would take,
-                       # and no model, texture, fetched file, gzip but the bake, or uncommitted file anywhere else
-                       # in public/ (next build copies all of it)
+                       # and no model, texture, fetched file, binary file but the bake and the indexed glbs,
+                       # or uncommitted file anywhere else in public/ (next build copies all of it)
 ```
 
 The models come from Worldblender's Blender re-exports. **Nothing Nintendo made
@@ -47,8 +47,11 @@ SHA-256s (`scripts/models/manifest.json`), which meshes are the fighter
 hurt-capsule sizes (`src/render3d/skeletons/*.json`, read out of the `.blend`
 files by a stdlib-only reader, `pnpm models:skeletons`, no Blender), and the
 bake. `noRippedAssets.test.ts` refuses any tracked file whose name, or whose
-size and hash, is a manifest file's, and any in a pipeline format, starting
-with a model's or texture's magic number, or gzip but the bake
+size and hash, is a manifest file's, and any in a pipeline format or starting
+with a model's or texture's magic number; and, since a compressed or
+re-encoded model shows none of its own bytes, any binary file in this package
+outside `BINARY_ALLOW` (the bake and `docs/screenshots/*.png`) and any
+compressed file in the repo but the listed ones
 (`scripts/models/rippedFormats.mjs`).
 
 **Without `pnpm models`, every fighter is a stand-in**: their own hurtbox
