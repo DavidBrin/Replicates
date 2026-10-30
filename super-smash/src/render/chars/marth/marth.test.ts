@@ -36,6 +36,7 @@ import { resolve, type PoseAngles } from "../../skeleton";
 import { samplePose, type Keyframe, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 import { POSE_LIBRARY } from "../../poses/library";
+import { moveTimingFor, samplePoseForFighter } from "../../poses/timing";
 import { poses } from "./poses";
 import { rig } from "./rig";
 import { fx } from "./fx";
@@ -292,6 +293,9 @@ const MIN_BLADE_PATH: Partial<Record<PoseName, number>> = {
   dair: 40,
   sideB: 100,
   upB: 90,
+  // Plan 5, Task 5: the riposte, from the load (point raked down behind him) out
+  // to the cut ("an outward slash in normal grip").
+  counterAttack: 100,
 };
 
 /** The two that are thrusts, and the shoulder travel that makes them read. */
@@ -317,6 +321,8 @@ const HELD: Partial<Record<PoseName, MoveSlot>> = {
   dair: "dair",
   sideB: "sideB",
   neutralB: "neutralB",
+  // Plan 5, Task 5: the Counter's riposte, its own clip with the strike on the cut.
+  counterAttack: "counterAttack",
 };
 
 describe("the sword actually swings", () => {
@@ -488,7 +494,8 @@ describe("the effects are wired to moves that exist", () => {
    */
   it("only claims a tipper on moves that have two hitboxes on the same frames", () => {
     for (const slot of Object.keys(fx) as MoveSlot[]) {
-      if (slot === "downB") continue; // the counter flash, not a tipper
+      // The Counter's guard and riposte flashes are not tippers (Plan 5, Task 5).
+      if (slot === "downB" || slot === "counterAttack") continue;
       const boxes = def.moves[slot]!.hitboxes;
       const shared = boxes.some((a) =>
         boxes.some((b) => b.id !== a.id && b.startFrame === a.startFrame && b.endFrame === a.endFrame),
@@ -523,11 +530,11 @@ describe("the effects are wired to moves that exist", () => {
     };
 
     for (const slot of Object.keys(fx) as MoveSlot[]) {
-      // Shield Breaker's charge glow and the Counter's ward are deliberately
-      // painted outside any hitbox window — they are charge and stance tells,
-      // not swing tells — so only the moves whose whole graphic is the tipper
-      // can be asked this.
-      if (slot === "neutralB" || slot === "downB") continue;
+      // Shield Breaker's charge glow, the Counter's ward and its riposte's
+      // trigger are deliberately painted outside any hitbox window — they are
+      // charge, stance and trigger tells, not swing tells — so only the moves
+      // whose whole graphic is the tipper can be asked this.
+      if (slot === "neutralB" || slot === "downB" || slot === "counterAttack") continue;
       const boxes = def.moves[slot]!.hitboxes.filter((h) => !h.grabbing);
       const first = Math.min(...boxes.map((h) => h.startFrame));
       const window = boxes.filter((h) => h.startFrame === first);
@@ -707,38 +714,83 @@ describe("the point of a capsule is its end furthest out", () => {
 });
 
 /**
- * Counter's graphic covers the move's own two halves and the gap between them.
+ * Counter's graphic covers its two moves (Plan 5, Task 5): the guard (`downB`)
+ * and the riposte (`counterAttack`), which the counter starts when it catches
+ * something.
  *
- * The engine has no counter mechanic, so the whole of what a player can read
- * about this move is the graphic: a gleam as the guard forms, a held ward across
- * the documented window (frames 6-27), a gap, and then the riposte. If the ward
- * stops early the move looks over while it is still countering, and if it never
- * stops the move never looks like it resolved.
+ * A gleam as the guard forms, a held ward across the documented window (frames
+ * 6-27), and nothing after it: a whiffed Counter ends in the guard. The riposte
+ * flashes its trigger through the counter's freeze (its frame 1), cuts onto
+ * frame 5, its first live frame, and is gone once the cut has played out. If
+ * the ward stops early the move looks over while it is still countering, and if
+ * it never stops the move never looks like it resolved.
  */
-describe("Counter shows its window", () => {
+describe("Counter shows its window, and its riposte", () => {
   const marth = FIGHTERS.find((f) => f.id === "marth") as FighterDef;
   const cam = createCamera(makeStage());
-  const drawn = (actionFrame: number) => {
+  const drawn = (move: MoveSlot, actionFrame: number) => {
     const ctx = createMockContext();
-    const f = makeFighter({ defId: "marth", action: "special", move: "downB", actionFrame });
+    const f = makeFighter({ defId: "marth", action: "special", move, actionFrame });
     const r = drawMoveFx(ctx, marth, f, cam, 14, 960, 700, undefined);
     for (const paint of r.over) paint();
     return ctx.calls.length;
   };
 
-  it("paints across the documented counter window and again on the riposte", () => {
+  it("paints across the documented counter window", () => {
     // frame = actionFrame + 1, and the window is move frames 6-27.
     for (const frame of [6, 14, 27]) {
-      expect(drawn(frame - 1), `nothing painted on frame ${frame}, inside the counter window`).toBeGreaterThan(0);
-    }
-    for (const frame of [36, 40]) {
-      expect(drawn(frame - 1), `nothing painted on frame ${frame}, the riposte`).toBeGreaterThan(0);
+      expect(drawn("downB", frame - 1), `nothing painted on frame ${frame}, inside the counter window`).toBeGreaterThan(0);
     }
   });
 
-  it("goes dark between the window closing and the riposte", () => {
-    for (const frame of [29, 31]) {
-      expect(drawn(frame - 1), `frame ${frame} is between the window and the cut and should be dark`).toBe(0);
+  it("goes dark once the window closes: a whiffed counter answers nothing", () => {
+    for (const frame of [28, 36, 40, 64]) {
+      expect(drawn("downB", frame - 1), `frame ${frame} is after the window and should be dark`).toBe(0);
+    }
+  });
+
+  it("paints the riposte from its frozen first frame through the cut on frame 5", () => {
+    for (const frame of [1, 3, 5, 7, 10]) {
+      expect(drawn("counterAttack", frame - 1), `nothing painted on riposte frame ${frame}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("draws the point of the cut inside a box the riposte hits with, on the cut", () => {
+    // No tipper: the boxes are identical but for where they sit, so the point
+    // only has to be inside one of them on the frame they go live.
+    const clip = poses.counterAttack as PoseClip;
+    const point = bladeTip(clip.keys[strikeIndexOf(clip)]);
+    const boxes = def.moves.counterAttack!.hitboxes;
+    const inside = boxes.some((h) => Math.hypot(point.x - toFloat(h.x), point.y - toFloat(h.y)) <= toFloat(h.radius));
+    expect(inside, `point (${point.x.toFixed(1)}, ${point.y.toFixed(1)}) is in none of the riposte's boxes`).toBe(true);
+  });
+
+  it("plays the riposte on its own clip, the cut on its first live frame (move frame 5), as the renderer samples it", () => {
+    const at = (actionFrame: number) =>
+      samplePoseForFighter(makeFighter({ defId: "marth", action: "special", move: "counterAttack", actionFrame }), 0, moveTimingFor(def, "counterAttack"));
+    const clip = poses.counterAttack as PoseClip;
+    expect(at(4)).toEqual(samplePose(clip, clip.strike as number));
+    expect(at(0)).toEqual(samplePose(clip, 0));
+  });
+
+  it("holds the guard through the window on a whiff, as the renderer samples it", () => {
+    const guard = poses.downB as PoseClip;
+    const held = samplePose(guard, guard.keys.find((k) => k.ease === "hold")!.t);
+    for (const actionFrame of [5, 15, 26]) {
+      const drawn = samplePoseForFighter(makeFighter({ defId: "marth", action: "special", move: "downB", actionFrame }), 0, moveTimingFor(def, "downB"));
+      expect(drawn, `move frame ${actionFrame + 1}`).toEqual(held);
+    }
+  });
+
+  it("starts the riposte on the guard's own pose, so catching a hit does not jump the figure", () => {
+    const guard = poses.downB as PoseClip;
+    const held = guard.keys.find((k) => k.ease === "hold")!;
+    expect(samplePose(poses.counterAttack as PoseClip, 0)).toEqual(samplePose(guard, held.t));
+  });
+
+  it("goes dark once the riposte's cut has played out", () => {
+    for (const frame of [13, 20, 41]) {
+      expect(drawn("counterAttack", frame - 1), `riposte frame ${frame} should be dark`).toBe(0);
     }
   });
 });

@@ -348,6 +348,8 @@ describe("state to pose", () => {
     "fsmash", "usmash", "dsmash", "nair", "fair", "bair", "uair", "dair",
     "neutralB", "sideB", "upB", "downB", "grab", "dashGrab", "pummel",
     "fthrow", "bthrow", "uthrow", "dthrow", "ledgeAttack", "getUpAttack", "finalSmash",
+    // Plan 5, Task 5: the counterattack, a clip of its own (P5-R4).
+    "counterAttack",
   ];
 
   it("maps every move slot onto a clip that exists", () => {

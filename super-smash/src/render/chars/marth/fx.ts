@@ -474,6 +474,192 @@ const shieldBreakerCharge: FxFn = (c) => {
   return NOTHING;
 };
 
+/**
+ * Marth, Counter. Three beats over two moves (Plan 5, Task 5: the guard is
+ * `downB`, the riposte `counterAttack`), and none of them is a lamp on his chest.
+ *
+ * The colours are the reference's rather than invented. Ultimate's counter
+ * trigger is a **violet/purple starburst** over the body, and the returned
+ * slash draws a broad **cyan-white crescent** ending in a cyan shockwave ring.
+ * Round one had a gold ward and a white cut, which were plausible and were
+ * nobody's.
+ *
+ *   guard, frames 4-8    the gleam of the blade arriving into the guard, run
+ *                        along the blade itself. The stance forms on frame 4.
+ *   guard, frames 6-27   the documented counter window: a dim violet edge on
+ *                        the blade, pulsing slowly. Faint on purpose — a counter
+ *                        that announced itself would be telling the opponent
+ *                        what the move is for — and violet because that is the
+ *                        colour the trigger will be, so the two read as one move.
+ *   riposte, frames 1-12 the starburst first, held through the counter's
+ *                        freeze (frame 1, for 21 frames), then the crescent
+ *                        sweeping 214° → 100° (down behind, under, out forward)
+ *                        onto the cut on frame 5, the trailing edge two frames
+ *                        behind the leading one, then the ring. The riposte's
+ *                        boxes stand at the root and draw no swing of their own
+ *                        (the 2D swing arc went in Plan 4), so this is the whole
+ *                        graphic of the cut.
+ *
+ * The blade's rig-unit endpoints below are measured off the guard pose rather
+ * than guessed, which is why they moved in round two: the guard used to point
+ * down and *forward* and now rakes down and back.
+ */
+/** Falchion in the guard pose, hilt to point, in rig units, off the clip's guard key. */
+const GUARD_HILT = { x: -0.09, y: 5.09 };
+const GUARD_TIP = { x: -2.67, y: 0.52 };
+
+interface CounterPaint {
+  readonly px: (rx: number) => number;
+  readonly py: (ry: number) => number;
+  readonly s: number;
+  /** Light run along the guard's blade — four overlapping falloffs, not four beads. */
+  readonly alongBlade: (colour: string, a: number, w: number) => void;
+}
+
+function counterPaint(c: FxContext): CounterPaint {
+  const { ctx, x, y, u, dir } = c;
+  // Rig units to world units — `scale` in `rig.ts`. The pose library is
+  // authored in rig units and `u` is pixels per *world* unit, so every length
+  // below is a measurement taken off the clip's own keys.
+  const s = u * 1.16;
+  const px = (rx: number) => x + dir * rx * s;
+  const py = (ry: number) => y - ry * s;
+  const alongBlade = (colour: string, a: number, w: number) => {
+    for (let i = 0; i < 4; i++) {
+      const k = i / 3;
+      glow(
+        ctx,
+        px(GUARD_HILT.x + (GUARD_TIP.x - GUARD_HILT.x) * k),
+        py(GUARD_HILT.y + (GUARD_TIP.y - GUARD_HILT.y) * k),
+        w * s * (0.55 + 0.5 * k),
+        withAlpha(colour, a),
+      );
+    }
+  };
+  return { px, py, s, alongBlade };
+}
+
+/** The guard (`downB`): the gleam as it forms, and the ward across the window. */
+const counterGuard: FxFn = (c) => {
+  const { ctx, frame } = c;
+  if (frame < 4 || frame > 27) return NOTHING;
+  const { px, py, s, alongBlade } = counterPaint(c);
+
+  // The gleam goes **over** the figure: it is the blade arriving through the
+  // space his body occupies, and under it the frame-4 gleam lost its inner half
+  // to his chest — the half nearest the hilt, and therefore the half that says
+  // which way the blade is pointing. The held ward is split across both layers;
+  // see below.
+  if (frame <= 8) {
+    const k = 1 - (frame - 4) / 5;
+    const a = k * k;
+    c.over(() => {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      alongBlade("#FFFFFF", 0.4 * a, 0.85);
+      alongBlade("#BFE9FF", 0.3 * a, 1.5);
+      // The point, not the body: this is the bit that says "sword".
+      glow(ctx, px(GUARD_TIP.x), py(GUARD_TIP.y), 1.7 * s * (0.6 + 0.7 * k), withAlpha("#FFFFFF", 0.8 * a));
+      ctx.restore();
+    });
+  }
+
+  if (frame >= 6) {
+    const hold = Math.min(1, (frame - 5) / 3, (28 - frame) / 4);
+    const pulse = 0.74 + 0.26 * Math.cos((frame - 6) * 0.42);
+    // Split across the two layers, and each half is where it has to be.
+    //
+    // Three captures went into this. At 0.16 alpha and a blade-width radius
+    // it could not be seen at all; `lighter` over an already near-white blade
+    // adds nothing at the centre, so all of the violet was landing where it
+    // could not show. The **halo** is the part that reads, and it reads
+    // because it is wide enough to fall on the dark to each side of the blade
+    // — that is under the figure, which is also where `specialFx.test.ts`
+    // expects this move to paint. The small pale **core** has to go over,
+    // because its whole job is to sit on top of Falchion.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    alongBlade("#8A4FD8", 0.62 * hold * pulse, 2.4);
+    ctx.restore();
+    c.over(() => {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      alongBlade("#E4C8FF", 0.22 * hold * pulse, 0.8);
+      ctx.restore();
+    });
+  }
+  return NOTHING;
+};
+
+/**
+ * The riposte (`counterAttack`): the trigger's starburst through the freeze,
+ * then the crescent onto the cut on frame 5, the boxes' first live frame, and
+ * the ring. The counterattack's frame 1 is the frozen one, so `frame` 1 lasts
+ * the counter's 21 frames of hitlag.
+ */
+const counterRiposte: FxFn = (c) => {
+  const { ctx, u, dir, frame } = c;
+  if (frame > 12) return NOTHING;
+  const { px, py, s } = counterPaint(c);
+
+  // Canvas angle of a rig-space bone angle (degrees, 0 = up, clockwise
+  // positive facing right). Facing is a multiply on the forward component,
+  // which is the same rule `resolve` mirrors the rig under — never a branch.
+  // Every angle asked for lies in 100°..214°, which maps into the lower
+  // half-plane in both facings, so the wedge never straddles ±π and min/max
+  // is enough to pick the short way round.
+  const ang = (a: number) => {
+    const r = (a * Math.PI) / 180;
+    return Math.atan2(-Math.cos(r), dir * Math.sin(r));
+  };
+  const band = (cx: number, cy: number, r: number, w: number, a: number, b: number, fill: string) => {
+    crescent(ctx, cx, cy, r * s, w * s, Math.min(a, b), Math.max(a, b));
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+
+  const clamp = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  // The leading edge arrives on the cut, frame 5; nothing of it shows while the
+  // freeze holds frame 1, which is the starburst's alone.
+  const lead = clamp((frame - 1) / 4);
+  const trail = clamp((frame - 3) / 4);
+  const fade = Math.min(1, (13 - frame) / 6);
+  const burst = clamp((4 - frame) / 3);
+  // The cut goes **over** the figure: the blade travels through the space his
+  // body occupies.
+  c.over(() => {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    // The trigger: a violet starburst over the body, first, and held through
+    // the freeze.
+    if (burst > 0) {
+      glow(ctx, px(0.6), py(8.0), 4.6 * s * (0.5 + 0.6 * burst), withAlpha("#B77BFF", 0.45 * burst));
+      glow(ctx, px(0.6), py(8.0), 2.2 * s, withAlpha("#F0E0FF", 0.5 * burst));
+    }
+    // …then the cut: 214° → 100°, the point dropping behind, passing under
+    // and coming out forward, following the clip's own load-to-extension arc.
+    if (lead > 0) {
+      const cx = px(-0.9 + 2.8 * lead);
+      const cy = py(8.8);
+      const a1 = ang(214 - 114 * lead);
+      const a2 = ang(214 - 114 * trail);
+      band(cx, cy, 7.8, 3.4, a1, a2, withAlpha("#FFFFFF", 0.52 * fade));
+      band(cx, cy, 9.3, 1.6, a1, a2, withAlpha("#7FE9FF", 0.5 * fade));
+    }
+    // The shockwave, once the sweep has arrived.
+    if (lead >= 1) {
+      const ring = clamp((frame - 5) / 6);
+      ctx.lineWidth = u * 0.3;
+      ctx.strokeStyle = withAlpha("#7FE9FF", 0.42 * (1 - ring));
+      ctx.beginPath();
+      ctx.arc(px(6.6), py(6.4), u * (1.4 + 5.2 * ring), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+  return NOTHING;
+};
+
 export const fx: Partial<Record<MoveSlot, FxFn>> = {
   jab1: tipper,
   jab2: tipper,
@@ -496,161 +682,8 @@ export const fx: Partial<Record<MoveSlot, FxFn>> = {
     return tipper(c) ?? NOTHING;
   },
 
-  /**
-   * Marth, Counter. Three beats, and none of them is a lamp on his chest.
-   *
-   * The colours are the reference's rather than invented. Ultimate's counter
-   * trigger is a **violet/purple starburst** over the body, and the returned
-   * slash draws a broad **cyan-white crescent** ending in a cyan shockwave ring.
-   * Round one had a gold ward and a white cut, which were plausible and were
-   * nobody's.
-   *
-   *   frames 4-8    the gleam of the blade arriving into the guard, run along
-   *                 the blade itself. The stance forms on frame 4, which is the
-   *                 clip's strike key.
-   *   frames 6-27   the documented counter window: a dim violet edge on the
-   *                 blade, pulsing slowly. Faint on purpose — a counter that
-   *                 announced itself would be telling the opponent what the move
-   *                 is for — and violet because that is the colour the trigger
-   *                 will be, so the two read as one move.
-   *   frames 33-44  the riposte: the starburst first, then the crescent sweeping
-   *                 214° → 100° (down behind, under, out forward) with the
-   *                 trailing edge two frames behind the leading one, then the
-   *                 ring. No hitbox lives there, so the 2D swing arc (removed in
-   *                 Plan 4) drew nothing of its own and this is the whole graphic
-   *                 of the cut.
-   *
-   * The blade's rig-unit endpoints below are measured off the clip's own guard
-   * key rather than guessed, which is why they moved this round: the guard used
-   * to point down and *forward* and now rakes down and back.
-   */
-  downB: (c) => {
-    const { ctx, x, y, u, dir, frame } = c;
-    if (frame < 4 || (frame > 27 && frame < 33) || frame > 44) return NOTHING;
-
-    // Rig units to world units — `scale` in `rig.ts`. The pose library is
-    // authored in rig units and `u` is pixels per *world* unit, so every length
-    // below is a measurement taken off the clip's own keys.
-    const s = u * 1.16;
-    const px = (rx: number) => x + dir * rx * s;
-    const py = (ry: number) => y - ry * s;
-
-    // Falchion in the guard pose, hilt to point, in rig units.
-    const HILT_X = -0.09;
-    const HILT_Y = 5.09;
-    const TIP_X = -2.67;
-    const TIP_Y = 0.52;
-    /** Light run along the blade — four overlapping falloffs, not four beads. */
-    const alongBlade = (colour: string, a: number, w: number) => {
-      for (let i = 0; i < 4; i++) {
-        const k = i / 3;
-        glow(
-          ctx,
-          px(HILT_X + (TIP_X - HILT_X) * k),
-          py(HILT_Y + (TIP_Y - HILT_Y) * k),
-          w * s * (0.55 + 0.5 * k),
-          withAlpha(colour, a),
-        );
-      }
-    };
-
-    // Canvas angle of a rig-space bone angle (degrees, 0 = up, clockwise
-    // positive facing right). Facing is a multiply on the forward component,
-    // which is the same rule `resolve` mirrors the rig under — never a branch.
-    // Every angle asked for lies in 100°..214°, which maps into the lower
-    // half-plane in both facings, so the wedge never straddles ±π and min/max
-    // is enough to pick the short way round.
-    const ang = (a: number) => {
-      const r = (a * Math.PI) / 180;
-      return Math.atan2(-Math.cos(r), dir * Math.sin(r));
-    };
-    const band = (cx: number, cy: number, r: number, w: number, a: number, b: number, fill: string) => {
-      crescent(ctx, cx, cy, r * s, w * s, Math.min(a, b), Math.max(a, b));
-      ctx.fillStyle = fill;
-      ctx.fill();
-    };
-
-    // The two cuts go **over** the figure: both are the blade travelling
-    // through the space his body occupies, and under it the frame-4 gleam lost
-    // its inner half to his chest — the half nearest the hilt, and therefore the
-    // half that says which way the blade is pointing. The held ward is split
-    // across both layers; see below.
-    if (frame <= 8) {
-      const k = 1 - (frame - 4) / 5;
-      const a = k * k;
-      c.over(() => {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        alongBlade("#FFFFFF", 0.4 * a, 0.85);
-        alongBlade("#BFE9FF", 0.3 * a, 1.5);
-        // The point, not the body: this is the bit that says "sword".
-        glow(ctx, px(TIP_X), py(TIP_Y), 1.7 * s * (0.6 + 0.7 * k), withAlpha("#FFFFFF", 0.8 * a));
-        ctx.restore();
-      });
-    }
-
-    if (frame >= 6 && frame <= 27) {
-      const hold = Math.min(1, (frame - 5) / 3, (28 - frame) / 4);
-      const pulse = 0.74 + 0.26 * Math.cos((frame - 6) * 0.42);
-      // Split across the two layers, and each half is where it has to be.
-      //
-      // Three captures went into this. At 0.16 alpha and a blade-width radius
-      // it could not be seen at all; `lighter` over an already near-white blade
-      // adds nothing at the centre, so all of the violet was landing where it
-      // could not show. The **halo** is the part that reads, and it reads
-      // because it is wide enough to fall on the dark to each side of the blade
-      // — that is under the figure, which is also where `specialFx.test.ts`
-      // expects this move to paint. The small pale **core** has to go over,
-      // because its whole job is to sit on top of Falchion.
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      alongBlade("#8A4FD8", 0.62 * hold * pulse, 2.4);
-      ctx.restore();
-      c.over(() => {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        alongBlade("#E4C8FF", 0.22 * hold * pulse, 0.8);
-        ctx.restore();
-      });
-    }
-
-    if (frame >= 33) {
-      const clamp = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-      const lead = clamp((frame - 32.5) / 4.5);
-      const trail = clamp((frame - 34.5) / 4.5);
-      const fade = Math.min(1, (45 - frame) / 6);
-      const burst = clamp((36 - frame) / 3);
-      c.over(() => {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        // The trigger: a violet starburst over the body, brief and first.
-        if (burst > 0) {
-          glow(ctx, px(0.6), py(8.0), 4.6 * s * (0.5 + 0.6 * burst), withAlpha("#B77BFF", 0.45 * burst));
-          glow(ctx, px(0.6), py(8.0), 2.2 * s, withAlpha("#F0E0FF", 0.5 * burst));
-        }
-        // …then the cut: 214° → 100°, the point dropping behind, passing under
-        // and coming out forward, following the clip's own load-to-extension arc.
-        const cx = px(-0.9 + 2.8 * lead);
-        const cy = py(8.8);
-        const a1 = ang(214 - 114 * lead);
-        const a2 = ang(214 - 114 * trail);
-        band(cx, cy, 7.8, 3.4, a1, a2, withAlpha("#FFFFFF", 0.52 * fade));
-        band(cx, cy, 9.3, 1.6, a1, a2, withAlpha("#7FE9FF", 0.5 * fade));
-        // The shockwave, once the sweep has arrived.
-        if (lead >= 1) {
-          const ring = clamp((frame - 37) / 6);
-          ctx.lineWidth = u * 0.3;
-          ctx.strokeStyle = withAlpha("#7FE9FF", 0.42 * (1 - ring));
-          ctx.beginPath();
-          ctx.arc(px(6.6), py(6.4), u * (1.4 + 5.2 * ring), 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.restore();
-      });
-    }
-
-    return NOTHING;
-  },
+  downB: counterGuard,
+  counterAttack: counterRiposte,
 };
 
 /** Painters for this fighter’s own projectiles, keyed by projectile def id. */

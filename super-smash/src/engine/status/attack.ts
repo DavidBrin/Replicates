@@ -118,10 +118,15 @@ export const STATUS_ATTACK: FighterStatus = {
   main: attackMain,
 };
 
-/** A special's per-move bookkeeping (Plan 5): nothing of one special rides into the next status. */
+/**
+ * A special's per-move bookkeeping (Plan 5): nothing of one special rides into
+ * the next status. A counter that catches something starts its counterattack
+ * through here too (`triggerCounter`), and sets the counterattack's damage after.
+ */
 function clearSpecialMove(f: FighterState): void {
   f.combat.stalling = false;
   f.combat.reflectHold = 0;
+  f.combat.counterDamage = 0;
 }
 
 export const STATUS_SPECIAL: FighterStatus = {

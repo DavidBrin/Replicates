@@ -133,6 +133,14 @@ export interface CombatState {
    * ledge, a hit, a grab or a KO.
    */
   helplessMove: MoveSlot | null;
+  /**
+   * Plan 5, Task 5: the damage the counterattack deals (Q12), the hit its counter
+   * caught × the counter's multiplier, clamped (`counter.ts`); 0 when no
+   * counterattack is out. Per move, as `reflectHold`: set as the counterattack
+   * starts and cleared by the special status's `end` however it is left (its own
+   * end, a hit, a grab, a ledge, a landing, a clank or a KO).
+   */
+  counterDamage: number;
 }
 
 export function emptyCombat(): CombatState {
@@ -162,6 +170,7 @@ export function emptyCombat(): CombatState {
     specialStall: false,
     stalling: false,
     helplessMove: null,
+    counterDamage: 0,
   };
 }
 
@@ -192,5 +201,6 @@ export function cloneCombat(c: CombatState): CombatState {
     specialStall: c.specialStall,
     stalling: c.stalling,
     helplessMove: c.helplessMove,
+    counterDamage: c.counterDamage,
   };
 }

@@ -99,7 +99,6 @@
   "marth dsmash lead": "legacy 12%/361°/bkb57/kbg88 / game_attacklw4 8%/361°/bkb60/kbg88",
   "marth dsmash faf": "legacy 56 / game_attacklw4 55",
   "marth bair lead": "legacy 12.5%/361°/bkb40/kbg94 / game_attackairb 9%/361°/bkb40/kbg85",
-  "marth downB hitboxes": "legacy some / game_speciallw none",
   "marth pummel faf": "legacy 20 / game_catchattack 7",
   "marth fthrow hitboxes": "legacy some / game_throwf none",
   "marth bthrow hitboxes": "legacy some / game_throwb none",

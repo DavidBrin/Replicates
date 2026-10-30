@@ -190,6 +190,7 @@ export function mixCombat(h: number, c: CombatState): number {
   x = mixBool(x, c.specialStall);
   x = mixBool(x, c.stalling);
   x = c.helplessMove === null ? mixInt(x, 0) : mixString(x, c.helplessMove);
+  x = mixInt(x, c.counterDamage);
   return x;
 }
 

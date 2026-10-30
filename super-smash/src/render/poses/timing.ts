@@ -178,6 +178,9 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   ledgeAttack: "ftilt",
   getUpAttack: "dsmash",
   finalSmash: "neutralB",
+  // Plan 5, Task 5 (P5-R4): the counterattack is a clip of its own, its strike
+  // key on the cut; the counter's guard stays `downB`.
+  counterAttack: "counterAttack",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */

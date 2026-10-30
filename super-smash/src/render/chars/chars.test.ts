@@ -148,6 +148,7 @@ const SLOT_FOR: Partial<Record<PoseName, MoveSlot>> = {
   sideB: "sideB",
   upB: "upB",
   downB: "downB",
+  counterAttack: "counterAttack",
   fthrow: "fthrow",
   bthrow: "bthrow",
   uthrow: "uthrow",
@@ -155,7 +156,7 @@ const SLOT_FOR: Partial<Record<PoseName, MoveSlot>> = {
 };
 
 function actionFor(slot: MoveSlot): "attack" | "special" | "throw" {
-  if (slot === "neutralB" || slot === "sideB" || slot === "upB" || slot === "downB") return "special";
+  if (slot === "neutralB" || slot === "sideB" || slot === "upB" || slot === "downB" || slot === "counterAttack") return "special";
   if (slot.endsWith("throw")) return "throw";
   return "attack";
 }

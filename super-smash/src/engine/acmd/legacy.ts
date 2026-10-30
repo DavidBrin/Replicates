@@ -49,6 +49,11 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   ledgeAttack: "cliff_attack_quick",
   getUpAttack: "down_attack_u",
   finalSmash: "final",
+  // Plan 5, Task 5: Marth's counterattack, `special_lw_hit` (SmashWiki
+  // "Marth (SSBU)/Down special", https://www.ssbwiki.com/Marth_(SSBU)/Down_special:
+  // "Upon countering an attack, Marth immediately transitions to the first frame
+  // of this state").
+  counterAttack: "special_lw_hit",
 };
 
 /**

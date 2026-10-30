@@ -903,23 +903,69 @@ const legacy: FighterDef = {
       totalFrames: 64,
       // The counter *window* is frames 6-27 — twenty-two frames, which is
       // generous — and a caught attack is returned at **1.2x** with a floor of
-      // 8%. The counterattack itself has **no tipper**: all four of its
-      // hitboxes are identical. The hitbox below is the returned strike; the
-      // window and the multiplier are engine behaviour keyed off this slot.
+      // 8%. The guard has no hitbox of its own: the returned strike is the
+      // separate `counterAttack` below, which the counter starts when it catches
+      // something (`engine/counter.ts`).
+      //
+      // Plan 5, Task 5 — SmashWiki "Marth (SSBU)/Down special"
+      // (https://www.ssbwiki.com/Marth_(SSBU)/Down_special): "Intangibility 5-6",
+      // "Counter 6-27", "Interruptible 65", "Counter damage multiplier 1.2",
+      // "Counter minimum damage 8%", "Counter maximum damage 50%", "Counter
+      // hitlag on activation 21 frames", "Counter bubble size 10.5u", "Counter
+      // bubble bone top", "Counter bubble offsets [0, 10, 0]". UltimateFrameData
+      // (https://ultimateframedata.com/marth): "Down B (Counter)" startup 6,
+      // total 64, "Intangibility on 5-6 when detecting. Counter window 6-27."
+      // The bubble is the counter's own: what reaches it is caught, whether or not
+      // it reaches Marth (`engine/counter.ts`). The window is
+      // `game_speciallw`'s FIGHTER_MARTH_STATUS_SPECIAL_LW_FLAG_SHIELD, on at 6,
+      // off at 28 (`acmd/generated/marth.ts`).
+      //
+      // Published but not modelled: the aerial version's "Horizontal speed
+      // multiplier on startup 0.5", "Air friction 0.0025", "Gravity 0.04", "Fall
+      // speed 1.2" and its 79-frame animation (the grounded one's 71); it falls as
+      // Marth does and ends on 64 like the grounded one.
+      intangible: [5, 6],
+      counter: {
+        active: [6, 27],
+        radius: fx(10.5),
+        x: 0,
+        y: fx(10),
+        multiplier: fx(1.2),
+        minDamage: fx(8),
+        maxDamage: fx(50),
+        freeze: 21,
+        then: "counterAttack",
+      },
+      hitboxes: [],
+    },
+
+    counterAttack: {
+      slot: "counterAttack",
+      name: "Counter (attack)",
+      // Plan 5, Task 5 — SmashWiki "Marth (SSBU)/Down special", "Attack":
+      // "Intangibility 1-8", "Hitboxes 5-7", "Interruptible 42"; and
+      // `game_speciallwhit` (rubendal Data Viewer 13.0.1,
+      // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Marth/data.json,
+      // "SpecialLwHit"; its motion's CancelFrame 42): four 8% boxes at angle 361,
+      // KBG 60, BKB 90, size 5.5, hitlag ×1.4, on sword1 ×2, armr and claviclel.
+      // UltimateFrameData's "Counter, Attack" (startup 4, active 4-6, total 40,
+      // "Intangible on frame 1-7 in addition to counter freeze frames") is the
+      // same move counted from the frame after the freeze; here, as in the
+      // script, the freeze is spent on frame 1.
+      //
+      // The four boxes are identical but for where they sit — no tipper — so two
+      // stand in for them here, and their damage is replaced by the counter's
+      // (`counterDamage`, `CombatState.counterDamage`). UNVERIFIED: their root-bone
+      // positions, set along the sword's reach (the script hangs its boxes off
+      // bones; no reference slot plays `game_speciallwhit`, so the compiled
+      // legacy script runs). Published but not modelled: the boxes "ignore most
+      // kinds of armor" (`AttackModule::set_force_reaction`).
+      totalFrames: 41,
+      intangible: [1, 8],
+      counterDamage: true,
       hitboxes: [
-        {
-          id: 0,
-          startFrame: 4,
-          endFrame: 6,
-          x: fx(7.0),
-          y: fx(7.5),
-          radius: fx(3.4),
-          damage: fx(8.0),
-          angle: fx(361),
-          baseKnockback: fx(90),
-          knockbackGrowth: fx(60),
-          effect: "slash",
-        },
+        { id: 0, startFrame: 5, endFrame: 7, x: fx(BODY_REACH), y: fx(7.5), radius: fx(5.5), damage: fx(8.0), angle: fx(361), baseKnockback: fx(90), knockbackGrowth: fx(60), hitlagMultiplier: fx(1.4), effect: "slash" },
+        { id: 1, startFrame: 5, endFrame: 7, x: fx(TIP_REACH), y: fx(7.5), radius: fx(5.5), damage: fx(8.0), angle: fx(361), baseKnockback: fx(90), knockbackGrowth: fx(60), hitlagMultiplier: fx(1.4), effect: "slash" },
       ],
     },
 

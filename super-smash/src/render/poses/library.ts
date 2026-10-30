@@ -97,6 +97,8 @@ export type PoseName =
   | "sideB"
   | "upB"
   | "downB"
+  // Plan 5, Task 5: the strike a counter returns (Marth's Counter).
+  | "counterAttack"
   | "fthrow"
   | "bthrow"
   | "uthrow"
@@ -157,4 +159,13 @@ export const POSE_LIBRARY: Record<PoseName, PoseClip> = {
   jab2: attacks.jab,
   jab3: attacks.jab,
   rapidJab: attacks.jab,
+
+  /**
+   * The strike a counter returns once it has caught something (Plan 5, Task 5),
+   * a clip of its own so the guard and the cut are two moves, each timed on its
+   * own frames. Only a fighter with a counter has the slot, and the one who does
+   * (Marth) draws his own; the shared default is the forward tilt's strike, a
+   * forward cut on any rig.
+   */
+  counterAttack: attacks.ftilt,
 };

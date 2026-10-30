@@ -17,6 +17,19 @@
 import { P, type PoseClip } from "../../poses/clip";
 import type { PoseName } from "../../poses/library";
 
+/**
+ * Counter's guard (Plan 5, Task 5): one pose two clips share, the guard's own
+ * (`downB`) and the counterattack's first frame (`counterAttack`), so the
+ * counter catching a hit changes move without the figure moving. See `downB`.
+ */
+const GUARD = P({
+  hip: 4, torso: -16, head: 14,
+  thighR: 148, shinR: 46, footR: -82,
+  thighL: 156, shinL: 42, footL: -86,
+  upperArmR: 132, forearmR: 80, handR: 10,
+  upperArmL: 244, forearmL: -30,
+});
+
 export const poses: Partial<Record<PoseName, PoseClip>> = {
   /**
    * The standing loop, and the pose a player looks at more than any other.
@@ -2045,7 +2058,7 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
   },
 
   /**
-   * Counter. 64 frames, hitbox on frames 4-6, counter window 6-27.
+   * Counter: the guard. 64 frames, counter window 6-27, no hitbox of its own.
    *
    * SmashWiki, verbatim: "Marth's countering stance has him face away while
    * holding the Falchion slanted downward in reverse grip, and counterattacks
@@ -2065,46 +2078,41 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
    * across the body near the centreline, blade running down and behind to a
    * point near the stage at (−3.1, 0.6) world.
    *
-   * ## The strike key is the guard, not the cut
+   * ## Two moves, two clips (Plan 5, Task 5; P5-R4)
    *
-   * `first = 3`, `total = 64`. The single hitbox is the *returned* strike and the
-   * schema has nowhere to put it but frames 4-6, three frames in — and there is
-   * no counter mechanic in the engine, so a player simply sees 64 frames of a
-   * defensive move. Anchoring the cut there would put a fully committed slash on
-   * frame 4 and then sixty dead frames. So `strike = 0.08` names the moment the
-   * **guard forms**, which lands it on actionFrame 3, and the rest stretches
-   * over frames 3..63 as `f = 3 + (t − 0.08)/0.92 × 61`:
+   * Until the engine had a counter this one clip carried both halves: the guard,
+   * and a cut on frame 36 that answered nothing, because the move's only hitbox
+   * — the returned strike, on frames 4-6 — had nowhere else to go. The engine now
+   * catches the hit (`engine/counter.ts`) and starts the counterattack, its own
+   * move, `counterAttack` below, so the cut moved there, with its strike key on
+   * the cut. What is left here is the guard, which is all a whiffed Counter is.
+   *
+   * The guard has no hitbox, so it plays straight across its 64 frames, `t =
+   * f/64` (`poseTimeFor`, `attackClipTime`): its `strike` anchors nothing, and
+   * is there so the clip snaps in rather than blending (`blend.ts`) — a counter
+   * that eased into position would not be a counter.
    *
    *   t 0     → f 0    still nearly his stance, blade starting back
-   *   t 0.08  → f 3    the guard — the strike key, held
-   *   t 0.43  → f 26   the load, one frame before the window closes
-   *   t 0.578 → f 36   the counter-slash at full extension, stepping in
-   *   t 0.698 → f 44   …and still there
-   *   t 0.85  → f 55   only now does he rise
+   *   t 0.047 → f 3    the guard, held
+   *   t 0.42  → f 27   the window's last frame: the hold lets go
+   *   t 0.78  → f 50   still crouched in it, the weight easing up
+   *   t 1              his stance (a terminator: f 63 is the last drawn)
    *
    * `hold` on the guard keeps that pose to the exact degree from actionFrame 3
-   * to 26 — move frames 4-27, the documented window — and then cuts. Easing
-   * instead would rotate the blade a slow visible 16° through the window and
-   * stop it being one shape.
-   *
-   * The other correction from the reference is the **hold after the cut**: "he
-   * then holds a deep low lunge with the blade extended horizontally forward for
-   * ~20 frames before standing back up". Round one had him recovered by f44.
-   *
-   * The honest gap remains: on the frames the hitbox is actually live the fighter
-   * is in the guard, and the guard's blade does not cover the encoded hitbox at
-   * (7, 7.5). The blade covers it at frame 37 instead. That is the price of the
-   * move having no counter mechanic to hang its two halves on.
+   * to 26 — move frames 4-27, the window — and the copy at t 0.42 makes the
+   * cut a no-op, so after the window he only settles. Easing instead would
+   * rotate the blade a slow visible 16° through the window and stop it being
+   * one shape. The rise back to his stance is UNVERIFIED in shape: the
+   * reference holds the guard to the end, and a clip has to arrive somewhere.
    */
   downB: {
     loop: false,
-    strike: 0.08,
+    strike: 0.047,
     keys: [
       // Frames 0-2. Barely out of his stance — the reference pivots the torso
       // away across frames 1-4, so this is the first degree of that, with the
       // blade already starting to rake back. `in`, so the three startup frames
-      // sit still and the guard arrives as a snap; a counter that eased into
-      // position would not be a counter.
+      // sit still and the guard arrives as a snap.
       {
         t: 0,
         pose: P({
@@ -2123,24 +2131,98 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
       // past the near hip, point near the stage behind him. Free arm trailing so
       // it does not cross the blade.
       {
-        t: 0.08,
-        pose: P({
-          hip: 4, torso: -16, head: 14,
-          thighR: 148, shinR: 46, footR: -82,
-          thighL: 156, shinL: 42, footL: -86,
-          upperArmR: 132, forearmR: 80, handR: 10,
-          upperArmL: 244, forearmL: -30,
-        }),
+        t: 0.047,
+        pose: GUARD,
         offsetX: -0.3,
         offsetY: -1.0,
         scaleY: 0.95,
         ease: "hold",
       },
-      // The load, one frame before the window closes: the hand goes back past
-      // the hip and the point drops further behind, the free arm swings forward
-      // to counter-rotate, the weight sinks onto the back leg.
+      // The window's last frame: the same guard, so the hold's cut lands on
+      // itself and only the settle that follows moves.
       {
-        t: 0.43,
+        t: 0.42,
+        pose: GUARD,
+        offsetX: -0.3,
+        offsetY: -1.0,
+        scaleY: 0.95,
+      },
+      // Move frame 50. Still in the guard, the knees straightening a little and
+      // the blade lifting off the stage, before he stands.
+      {
+        t: 0.78,
+        pose: P({
+          hip: 3, torso: -10, head: 8,
+          thighR: 156, shinR: 32, footR: -86,
+          thighL: 166, shinL: 28, footL: -92,
+          upperArmR: 146, forearmR: 52, handR: 4,
+          upperArmL: 228, forearmL: -26,
+        }),
+        offsetX: -0.22,
+        offsetY: -0.6,
+        scaleY: 0.97,
+      },
+      // Terminator, on the idle's own carry, as the counterattack's is.
+      {
+        t: 1,
+        pose: P({
+          hip: 0.4, torso: 3, head: -3,
+          thighR: 167, shinR: 8, footR: -84,
+          thighL: 192, shinL: 2, footL: -100,
+          upperArmR: 176, forearmR: -24, handR: -6,
+          upperArmL: 196, forearmL: -16,
+        }),
+      },
+    ],
+  },
+
+  /**
+   * Counter: the counterattack (Plan 5, Task 5; P5-R4). 41 frames, the freeze
+   * spent on frame 1, hitboxes on frames 5-7 (SmashWiki "Marth (SSBU)/Down
+   * special", "Attack": "Hitboxes 5-7", "Interruptible 42"; "Upon countering an
+   * attack, Marth immediately transitions to the first frame of this state, in
+   * which he freezes for 21 frames alongside the opponent").
+   *
+   * Frame 1 is the guard, exactly the guard clip's, so the 21 frozen frames show
+   * the counter holding the blow, and the change of move does not jump. Then the
+   * load and the cut, with the **strike key on the cut**: `first = 4` and `total
+   * = 41`, so `strike = 0.3` lands it on actionFrame 4, move frame 5, the first
+   * frame the boxes are live, and the rest stretches over frames 4..40 as `t =
+   * 0.3 + (f − 4)/37 × 0.7`:
+   *
+   *   t 0     → f 0     the guard, frozen through the counter's hitlag
+   *   t 0.15  → f 2     the load: hand back past the hip, point dropping behind
+   *   t 0.3   → f 4     the counter-slash at full extension, stepping in
+   *   t 0.338 → f 6     the boxes' last live frame (move frame 7), still extended
+   *   t 0.451 → f 12    …and still there
+   *   t 0.659 → f 23    only now does he rise
+   *   t 1               his stance (a terminator: f 40 is the last drawn)
+   *
+   * The hold after the cut is the reference's: "he then holds a deep low lunge
+   * with the blade extended horizontally forward for ~20 frames before standing
+   * back up". Counter is the one move with no tipper — all four of its real
+   * hitboxes are identical, and they hug the arm and the inner half of the
+   * blade — so the contact is the body of the blade at mid reach with his whole
+   * weight behind it, not a point poke.
+   */
+  counterAttack: {
+    loop: false,
+    strike: 0.3,
+    keys: [
+      // The guard, as the guard clip draws it. `smooth` out of it: the load is a
+      // gather, not a strike.
+      {
+        t: 0,
+        pose: GUARD,
+        offsetX: -0.3,
+        offsetY: -1.0,
+        scaleY: 0.95,
+      },
+      // The load: the hand goes back past the hip and the point drops further
+      // behind, the free arm swings forward to counter-rotate, the weight sinks
+      // onto the back leg.
+      {
+        t: 0.15,
         pose: P({
           hip: 8, torso: -26, head: 22,
           thighR: 140, shinR: 52, footR: -80,
@@ -2155,13 +2237,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         ease: "in",
       },
       // The counter-slash at full extension, and he **steps in**: a deep low
-      // forward lunge with the blade swept outward and up. Counter is the one
-      // move with no tipper — all four of its real hitboxes are identical, and
-      // they hug the arm and the inner half of the blade — so the contact is the
-      // body of the blade at mid reach with his whole weight behind it, not a
-      // point poke at TIP_REACH.
+      // forward lunge with the blade swept outward and up.
       {
-        t: 0.578,
+        t: 0.3,
         pose: P({
           hip: -6, torso: 24, head: -16,
           thighR: 138, shinR: 40, footR: -70,
@@ -2174,11 +2252,25 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         scaleX: 1.06,
         ease: "out",
       },
-      // Move frame 44, and still out there. The reference holds this lunge for
-      // about twenty frames; the blade levels off forward and nothing else
-      // moves.
+      // Move frame 7, the boxes' last live frame: the extension held, so the
+      // blade the player sees is where the simulation still hits with it.
       {
-        t: 0.698,
+        t: 0.338,
+        pose: P({
+          hip: -6, torso: 24, head: -16,
+          thighR: 138, shinR: 40, footR: -70,
+          thighL: 226, shinL: 20, footL: -70,
+          upperArmR: 90, forearmR: -6, handR: 2,
+          upperArmL: 220, forearmL: -54,
+        }),
+        offsetX: 0.95,
+        offsetY: -0.7,
+        scaleX: 1.06,
+      },
+      // Eight frames on, and still out there. The reference holds this lunge for
+      // about twenty frames; the blade levels off forward and nothing else moves.
+      {
+        t: 0.451,
         pose: P({
           hip: -4, torso: 20, head: -12,
           thighR: 140, shinR: 40, footR: -72,
@@ -2190,9 +2282,9 @@ export const poses: Partial<Record<PoseName, PoseClip>> = {
         offsetY: -0.65,
         scaleX: 1.05,
       },
-      // Move frame 55. Only now does he come up out of it.
+      // Nineteen frames after the cut. Only now does he come up out of it.
       {
-        t: 0.85,
+        t: 0.659,
         pose: P({
           hip: -2, torso: 12, head: -6,
           thighR: 150, shinR: 30, footR: -80,

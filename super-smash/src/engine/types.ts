@@ -177,7 +177,9 @@ export type MoveSlot =
   | "dthrow"
   | "ledgeAttack"
   | "getUpAttack"
-  | "finalSmash";
+  | "finalSmash"
+  // Plan 5: what a special turns into (Marth's Counter, `CounterDef.then`).
+  | "counterAttack";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -377,6 +379,34 @@ export interface ReflectDetector {
 }
 
 /**
+ * A counter a move holds out (Plan 5, Task 5): Marth's Counter. Frames are game
+ * frames of the move; lengths and damages Q12.
+ *
+ * SmashWiki "Counterattack" (https://www.ssbwiki.com/Counterattack): a counter
+ * puts "the user into a shield-like state"; "Should any normally blockable
+ * attack hit the user during these guard frames, the attack will be blocked
+ * ... and the user will automatically retaliate". What it catches is what
+ * reaches its bubble ("if no attack hits a counterattack's counter hurtbox, the
+ * move fails"), the page's "Counter bubble size" and "offsets".
+ */
+export interface CounterDef {
+  /** First and last frame a hit is caught (the page's "Counter a-b"). */
+  readonly active: readonly [number, number];
+  /** The counter bubble: radius, and its centre's offset from the origin (x facing-relative). */
+  readonly radius: number;
+  readonly x: number;
+  readonly y: number;
+  /** The counterattack's damage: caught × multiplier, clamped to [min, max]. */
+  readonly multiplier: number;
+  readonly minDamage: number;
+  readonly maxDamage: number;
+  /** Frames the counter and a melee attacker freeze when it catches something ("Counter hitlag on activation"). */
+  readonly freeze: number;
+  /** The move slot the counterattack is. Its hitboxes deal the counter's damage (`MoveDef.counterDamage`). */
+  readonly then: MoveSlot;
+}
+
+/**
  * A special's stall in the air (Plan 5): Fox's Reflector, Mario's Cape. Q12.
  *
  * Its **stop** (`startX`, `boostY`, `noGravityFrames`) is the airtime's first
@@ -540,6 +570,13 @@ export interface MoveDef {
   readonly reflector?: ReflectorDef;
   /** The move stalls a fall in the air (Plan 5). See `StallDef`. */
   readonly stall?: StallDef;
+  /** A counter this move holds out (Plan 5, Task 5). See `CounterDef`. */
+  readonly counter?: CounterDef;
+  /**
+   * Its hitboxes deal the damage its counter caught (`CombatState.counterDamage`)
+   * in place of their own (Plan 5, Task 5: the counterattack).
+   */
+  readonly counterDamage?: boolean;
   /**
    * The move leaves its fighter helpless (`specialFall`) when it ends in the air
    * (Plan 5, Task 4b). See `HelplessDef`.
@@ -1091,6 +1128,8 @@ export interface StepEvents {
   finalSmashes: number[];
   /** Projectiles sent back this frame, by whom and where (Plan 5). */
   reflects: { port: number; x: number; y: number }[];
+  /** Counters that caught something this frame: whose, and where it met the bubble (Plan 5, Task 5). */
+  counters: { port: number; x: number; y: number }[];
 }
 
 export function emptyEvents(): StepEvents {
@@ -1105,5 +1144,6 @@ export function emptyEvents(): StepEvents {
     smashBallBroken: null,
     finalSmashes: [],
     reflects: [],
+    counters: [],
   };
 }

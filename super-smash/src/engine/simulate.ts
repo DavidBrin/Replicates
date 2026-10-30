@@ -96,6 +96,7 @@ import {
 } from "./projectile";
 import { chargedHitbox } from "./specialCharge";
 import { reflectProjectiles } from "./reflect";
+import { activeCounter, counterBubble, triggerCounter } from "./counter";
 import {
   blastZoneKO,
   clampShiftToStage,
@@ -978,8 +979,11 @@ function gatherHitboxes(
     // a smash's charge stays the damage multiplier it always was.
     const sc = defs[i].moves[f.move]?.specialCharge;
     const chargeT = sc === undefined ? 0 : chargeFraction(f.charge, sc.frames);
+    // A counterattack deals what its counter caught (Plan 5, Task 5; `counter.ts`).
+    const countered = defs[i].moves[f.move]?.counterDamage === true;
     for (const raw of live) {
-      const hb = sc === undefined ? raw : chargedHitbox(raw, sc.full?.[raw.id], chargeT, sc.partial);
+      const charged = sc === undefined ? raw : chargedHitbox(raw, sc.full?.[raw.id], chargeT, sc.partial);
+      const hb = countered ? { ...charged, damage: f.combat.counterDamage } : charged;
       const now = hitboxWorldPos(f.x, f.y, f.facing, hb);
       const was = hitboxWorldPos(prevPos[i].x, prevPos[i].y, f.facing, hb);
       // The far end mirrors with facing exactly as the near end does.
@@ -1216,6 +1220,28 @@ function resolveHits(
     const hurtboxes = fighterHurtboxes(defs[v], victim, s.frame, bake, bones) ?? [hurtboxCapsule(victim, defs[v].attributes)];
     /** How deep `c` reaches the body at its deepest, and on which capsule. */
     const reachOf = (c: Candidate) => deepestReach(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, hurtboxes);
+    /**
+     * Whether `c` reaches the body: any capsule (Plan 4: one per bone), and
+     * deeper than a graze. A box that only grazes the body — less than 0.1 deep —
+     * is a glancing blow: no hit, and the swing is not spent (Plan 3, Task 13). It
+     * is skipped before the lowest-id pick, so it cannot shadow a deeper box of the
+     * same source. With a bake the body is a capsule per bone, and the depth is
+     * the deepest any of them is reached (Plan 4): a box that grazes an arm on its
+     * way into the chest hits. UNVERIFIED: that a grab, or a hit that reaches a
+     * raised shield, is exempt. SmashWiki "Glancing blow" says nothing of either,
+     * so this is a choice, not a rule: they keep the plain overlap test they
+     * always had (a grab stays as reliable as it was, a shield is poked as it
+     * was). D56 lists it under Open questions.
+     */
+    const reachesBody = (c: Candidate): boolean =>
+      hurtboxes.some((h) => sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, h)) &&
+      (reachOf(c).depth >= GLANCING_BLOW_DEPTH || c.hitbox.grabbing === true || hitReachesShield(victim, defs[v], c));
+    // A counter out (Plan 5, Task 5): its bubble catches whatever reaches it but
+    // a grab, which goes through to the body (`counter.ts`). `caught` holds the
+    // candidates that reached the bubble, whether or not they reach the body.
+    const counter = activeCounter(victim, defs[v]);
+    const bubble = counter === null ? null : counterBubble(victim, counter);
+    const caught = new Set<Candidate>();
 
     // Per source, the lowest-id hitbox that reaches this victim.
     const perSource = new Map<number, Candidate>();
@@ -1233,23 +1259,9 @@ function resolveHits(
         // Not geometry-tested: the game holds the victim at the box, and a legacy
         // box sits there only for some of the roster (Plan 3, Task 14).
         if (c.onlyPort !== v || victim.grabbedBy !== c.attacker) continue;
-      } else {
-        // Any capsule the box reaches (Plan 4: one per bone).
-        if (!hurtboxes.some((h) => sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, h))) continue;
-        // A box that only grazes the body — less than 0.1 deep — is a glancing
-        // blow: no hit, and the swing is not spent (Plan 3, Task 13). It is skipped
-        // before the lowest-id pick, so it cannot shadow a deeper box of the same
-        // source. With a bake the body is a capsule per bone, and the depth is the
-        // deepest any of them is reached (Plan 4): a box that grazes an arm on its
-        // way into the chest hits. UNVERIFIED: that a grab, or a hit that reaches
-        // a raised shield, is exempt. SmashWiki "Glancing blow" says nothing of
-        // either, so this is a choice, not a rule: they keep the plain overlap test
-        // they always had (a grab stays as reliable as it was, a shield is poked as
-        // it was). D56 lists it under Open questions.
-        if (reachOf(c).depth < GLANCING_BLOW_DEPTH && !c.hitbox.grabbing && !hitReachesShield(victim, defs[v], c)) {
-          continue;
-        }
-      }
+      } else if (bubble !== null && !c.hitbox.grabbing && sweptCapsuleOverlaps(c.prevX, c.prevY, c.x, c.y, c.dx, c.dy, c.hitbox.radius, bubble)) {
+        caught.add(c);
+      } else if (!reachesBody(c)) continue;
       const key = candidateKey(c);
       const incumbent = perSource.get(key);
       if (incumbent === undefined || c.hitbox.id < incumbent.hitbox.id) perSource.set(key, c);
@@ -1263,6 +1275,31 @@ function resolveHits(
       .map(([, c]) => c);
     for (const c of ordered) {
       const attacker = s.fighters[c.attacker];
+      if (caught.has(c) && bubble !== null) {
+        // The counter catches it (Plan 5, Task 5): the hit is spent and does
+        // nothing to the fighter, who starts the counterattack frozen; a melee
+        // attacker freezes with them ("freezes for 21 frames alongside the
+        // opponent"). The caught damage is the box's own with its charge (`c`'s
+        // chargeScale), before staleness and the one-on-one bonus (UNVERIFIED:
+        // SmashWiki's "the countered attack's damage" names no modifiers). A
+        // projectile is consumed, and its thrower, not a party to the contact,
+        // does not freeze, as for any projectile hit. UNVERIFIED: that one which
+        // survives its hits (`destroyOnHit` false) is consumed too.
+        const counterNow = activeCounter(victim, defs[v]);
+        if (counterNow !== null) {
+          recordHit(c, attacker, victim.port);
+          const freeze = triggerCounter(victim, defs[v], counterNow, mul(c.hitbox.damage, c.chargeScale));
+          if (c.projectile === null) attacker.hitlag = freeze;
+          else destroyed.add(c.projectile.instanceId);
+          const at = contactPoint(capsuleOf(c), bubble);
+          events.counters.push({ port: victim.port, x: at.x, y: at.y });
+          continue;
+        }
+        // Another source set the counter off earlier this frame: what reached
+        // only the bubble misses, and what reaches the body meets the
+        // counterattack's intangibility below.
+        if (!reachesBody(c)) continue;
+      }
       // Intangible: the fighter is not there, so there is nothing to hit — and
       // crucially the swing is *not* spent on them. Marking it here would mean a
       // lingering hitbox that met a dodge on its first active frame could never
