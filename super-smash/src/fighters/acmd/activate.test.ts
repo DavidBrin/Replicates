@@ -309,8 +309,9 @@ describe("a box that cannot clank, and one that cannot rebound", () => {
   });
 
   // R-T13g. Fox's forward smash (game_attacks4, all six boxes THRU; 14% clean) meets
-  // Mario's (17.8% sweetspot, legacy): within 9%, so both would rebound. Fox's
-  // cannot: he swings on, Mario rebounds, and the hit Fox's box met is blocked.
+  // Mario's (legacy): within 9%, so both would rebound. Fox's cannot: he swings on,
+  // Mario rebounds, and the hit Fox's box met is blocked. Mario's box that clanks is
+  // his 14.7% close one: his 17.8% sweetspot is OFF, as its script has it (Task 13c).
   it("clanks with Fox's forward smash, which swings on while Mario rebounds and is not hit by it", () => {
     const GAME = bakedContext(ctx, readBakeFromDisk());
     const ALONE: MatchRules = { ...RULES, oneOnOne: false };
