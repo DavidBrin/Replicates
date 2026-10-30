@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { cpuInput, cpuWorldFromDef, type CpuWorld } from "@/ai/cpu";
+import { stageViewFromDef } from "@/ai/behaviours";
 import { FNV_OFFSET, mixBool, mixInt, mixString } from "@/engine/hash";
 import { kineticSumX, kineticSumY } from "@/engine/kinetic";
 import { launchWorldAngle } from "@/engine/knockback";
@@ -102,17 +102,7 @@ function cpuMatch(name: string, stage: string, fighters: readonly [string, strin
     cpu: true,
     driver() {
       const view = stageViewFromDef(CTX.stage(stage));
-      const worlds: CpuWorld[] = fighters.map((id) => {
-        const def = CTX.fighter(id);
-        return {
-          stage: view,
-          jumps: def.attributes.jumps,
-          meleeReach: meleeReachFromDef(def),
-          airBrake: airBrakeFromDef(def),
-          airDodge: airDodgeFromDef(def),
-          recovery: recoveryFromDef(def),
-        };
-      });
+      const worlds: CpuWorld[] = fighters.map((id) => cpuWorldFromDef(CTX.fighter(id), view));
       let cpuSeed = seed ^ 0x1f2e3d4c;
       return (state) =>
         fighters.map((_, port) => {
@@ -179,7 +169,11 @@ const MATCHES: readonly Match[] = [
  * link-samus and kirby-marth each fall helpless after an up special and land into
  * the special landing, and donkeyKong-pikachu techs; none ledge-rolls any more, and
  * none crouches, grabs, spot-dodges, ledge-attacks, breaks a shield or trumps a
- * ledge.
+ * ledge. Its fix round 1 (the CPU's up special model, the hard helpless cap):
+ * 35 — all four fall helpless and land into the special landing now,
+ * link-samus spot-dodges and two ledge-attack; none techs, tech-rolls or is
+ * shield-stunned any more, and none crouches, grabs, ledge-rolls, breaks a
+ * shield or trumps a ledge.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -486,6 +480,14 @@ describe("engine golden trace", () => {
   // link-samus, each still tumbling from a hit); the rest are still
   // self-destructs, none of them in special fall (Mario during a Cape, Samus
   // during a Missile, Marth during Dolphin Slash).
+  // Its fix round 1 (the CPU models its up special by the engine's own rules,
+  // stick and helpless cap included; a helpless fall's drift is capped hard;
+  // Link's grounded Spin Attack ends free to act) moved the same four from the
+  // same samples: hits 17, 33, 20 and 23; shield hits 0 in all four; KOs 1, 2, 0
+  // and 1. So now: hits 17/33/20/23, 6 and 0; shield hits 0/0/0/0, 3 and 0; KOs
+  // 1/2/0/1, 1 and 2. One KO is by a hit (Marth in kirby-marth, tumbling); the
+  // others are self-destructs: Mario during a Cape, Donkey Kong during a
+  // Headbutt, and Pikachu in special fall after a Quick Attack.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

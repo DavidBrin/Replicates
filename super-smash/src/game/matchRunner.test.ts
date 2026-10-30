@@ -18,6 +18,7 @@ import {
   FRAME_MS,
   LINGER_RESEND_MS,
   createMatchRunner,
+  matchCpuWorlds,
   type MatchAudio,
   type MatchRunner,
   type NetplayOptions,
@@ -25,7 +26,8 @@ import {
 } from "./matchRunner";
 import { bootstrapEngine, getFighterOrThrow, getStageOrThrow } from "./bootstrap";
 import { GAME_SIM_CONTEXT } from "./simContext";
-import { meleeReachFromDef } from "@/ai/behaviours";
+import { meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { cpuWorldFromDef } from "@/ai/cpu";
 import { hashState } from "@/engine/hash";
 import { KO_FREEZE_FRAMES } from "@/engine/simulate";
 import { Btn, type InputFrame, type MatchOutcome, type MatchRules } from "@/engine/types";
@@ -248,6 +250,21 @@ describe("a CPU's swing range matches its arms", () => {
     });
   }
 
+});
+
+describe("the worlds the game's CPUs see", () => {
+  // Plan 5, Task 4b fix round 1: the game's own wiring of the up special model,
+  // which the golden and the sweep build for themselves and so cannot pin.
+  it("carry each fighter's up special model, as every other CPU world does", () => {
+    const stage = getStageOrThrow("finalDestination");
+    const defs = [getFighterOrThrow("mario"), getFighterOrThrow("fox")];
+    const worlds = matchCpuWorlds(stage, defs);
+    defs.forEach((def, i) => {
+      expect(worlds[i].recovery, def.id).not.toBeNull();
+      expect(worlds[i].recovery, def.id).toEqual(recoveryFromDef(def));
+      expect(worlds[i], def.id).toEqual(cpuWorldFromDef(def, stageViewFromDef(stage)));
+    });
+  });
 });
 
 /** A pad on port 0 whose frame the test sets. */

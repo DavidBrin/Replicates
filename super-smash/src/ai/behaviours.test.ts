@@ -39,7 +39,6 @@ import {
   stageViewFromDef,
   survive,
   towardX,
-  upBReach,
   type BehaviourContext,
   type LevelTuning,
   type RecoveryMove,
@@ -415,38 +414,25 @@ describe("recover", () => {
 /* ---------------------------------------------------------- special fall -- */
 
 describe("recover, now that the up special leaves the fighter helpless (Plan 5, Task 4b)", () => {
-  /**
-   * A made-up up special, chosen so its path is exact in Q12: 3 up and 0.5
-   * forward for its first ten frames, then gravity 0.125 for the other twenty.
-   * It gains 30 + (2.875 + ... + 0.5) = 63.75 and goes 15 forward; helpless, it
-   * drifts at 0.6.
-   */
-  const UP_B: RecoveryMove = {
-    totalFrames: 30,
-    momentum: [{ frame: 1, x: fx(0.5), y: fx(3), hold: 9 }],
-    gravity: fx(0.125),
-    fallSpeed: fx(1.5),
-    helplessDrift: fx(0.6),
-  };
+  // Mario's own up special, as the CPU models it (`recoveryFromDef`; its
+  // agreement with the engine is `recovery.test.ts`'s), off the default stage,
+  // whose left ledge is at x -80, y 0.
+  const MARIO = getFighter("mario")!;
+  const UP_B: RecoveryMove = recoveryFromDef(MARIO)!;
   const withUpB = (state: GameState, tuning = L9): BehaviourContext => ({ ...context(state, tuning), recovery: UP_B });
-  /** Out of jumps (one, spent) off the left of the default stage, whose ledge is at x -80, y 0. */
+  /** Out of jumps (one, spent), off the left of the default stage, facing it. */
   const spent = (over: Partial<FighterState> = {}) =>
-    gameState([fighter(0, { x: fx(-160), y: 0, vy: 0, grounded: false, platform: -1, jumpsUsed: 1, action: "fall", ...over })]);
+    gameState([fighter(0, { x: fx(-220), y: 0, vy: 0, grounded: false, platform: -1, jumpsUsed: 1, action: "fall", ...over })]);
   const pressesOver = (ctx: (f: number) => BehaviourContext): number[] => Array.from({ length: 12 }, (_, f) => recover(ctx(f)).input);
   const fires = (inputs: number[]) => inputs.some((i) => held(i, Btn.Special) && held(i, Btn.Up));
 
-  it("reads where the up special goes off the move's own momentum and the fighter's gravity", () => {
-    expect(upBReach(UP_B, 0)).toEqual({ rise: fx(63.75), across: fx(15) });
-    // From a fall already under way, the same move gains less.
-    expect(upBReach({ ...UP_B, momentum: [{ frame: 5, x: 0, y: fx(3), hold: 5 }] }, -fx(1)).rise).toBeLessThan(fx(63.75));
-  });
-
-  it("takes each fighter's own up special, and its helpless drift at the published multiplier", () => {
-    const mario = getFighter("mario")!;
-    const r = recoveryFromDef(mario);
-    expect(r).toMatchObject({ totalFrames: mario.moves.upB!.totalFrames, momentum: mario.moves.upB!.momentum });
+  it("takes each fighter's own up special, frame by frame as its script runs it, and its helpless drift at the published multiplier", () => {
+    expect(UP_B.totalFrames).toBe(MARIO.moves.upB!.totalFrames);
+    expect(UP_B.momentum).toHaveLength(UP_B.totalFrames);
+    // `momentum: [{ frame: 4, x: 0.5, y: 2.9, hold: 12 }]`: frames 4 to 16.
+    expect(UP_B.momentum.map((m, i) => (m === null ? 0 : i + 1)).filter((n) => n > 0)).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     // SmashWiki "Mario (SSBU)/Up special": "Helplessness air speed multiplier 0.6".
-    expect(r!.helplessDrift).toBe(mul(fighterParams(mario).air_speed_x_stable, fx(0.6)));
+    expect(UP_B.helplessDrift).toBe(mul(fighterParams(MARIO).air_speed_x_stable, fx(0.6)));
   });
 
   it("drifts closer rather than spend the up special where it would come down short of the ledge", () => {
@@ -456,17 +442,11 @@ describe("recover, now that the up special leaves the fighter helpless (Plan 5, 
   });
 
   it("spends it once the ledge is in its reach", () => {
-    // 30 short of the ledge, 15 of which the move covers: the drift does the rest.
-    expect(fires(pressesOver((f) => withUpB(gameState(spent({ x: fx(-110) }).fighters, { frame: f }))))).toBe(true);
-  });
-
-  it("counts the move's sideways travel the way the fighter faces", () => {
-    // The same spot facing away: the move carries it 15 further off.
-    expect(fires(pressesOver((f) => withUpB(gameState(spent({ x: fx(-110), facing: -1 }).fighters, { frame: f }))))).toBe(false);
+    expect(fires(pressesOver((f) => withUpB(gameState(spent({ x: fx(-100), y: fx(-10) }).fighters, { frame: f }))))).toBe(true);
   });
 
   it("spends it anyway once a few more frames of falling would put the ledge out of its rise", () => {
-    expect(fires(pressesOver((f) => withUpB(gameState(spent({ y: fx(-70) }).fighters, { frame: f }))))).toBe(true);
+    expect(fires(pressesOver((f) => withUpB(gameState(spent({ y: fx(-80) }).fighters, { frame: f }))))).toBe(true);
   });
 
   it("jumps instead while it still has one and the up special is out of reach", () => {

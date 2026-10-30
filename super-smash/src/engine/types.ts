@@ -453,6 +453,12 @@ export interface HelplessDef {
    * faster than the fighter's air speed times this.
    */
   readonly airSpeed: number;
+  /**
+   * Helpless only when the move was begun in the air (fix round 1: Link's Spin
+   * Attack, SmashWiki "Helpless": "helpless after the move was used if in the
+   * air"). Begun on the ground, it ends free to act wherever it ends.
+   */
+  readonly aerialOnly?: boolean;
 }
 
 /** The numbers a charge changes on a hitbox; the rest of the box stays as authored. */

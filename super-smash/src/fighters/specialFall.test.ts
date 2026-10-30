@@ -18,7 +18,7 @@ import { fx, mul } from "@/engine/fixed";
 import { hashState } from "@/engine/hash";
 import { fighterParams } from "@/engine/params";
 import { cloneState, createInitialState, registerFighters, registerStages, step } from "@/engine/simulate";
-import { onLeftGround } from "@/engine/states";
+import { endsHelpless, onLeftGround } from "@/engine/states";
 import { STATUS_KIND_OF_ACTION, changeStatus } from "@/engine/status/kind";
 import { Btn } from "@/engine/types";
 import type { ActionState, FighterDef, FighterState, GameState, InputFrame, MatchRules, MoveDef } from "@/engine/types";
@@ -34,13 +34,14 @@ const BY_ID = new Map(FIGHTERS.map((f) => [f.id, f]));
  * "Helplessness air speed multiplier". UNVERIFIED where a page publishes no
  * multiplier: the fighter's own air speed (× 1).
  */
-const PUBLISHED: Readonly<Record<string, { readonly landingLag: number; readonly airSpeed: number; readonly url: string }>> = {
+const PUBLISHED: Readonly<Record<string, { readonly landingLag: number; readonly airSpeed: number; readonly url: string; readonly aerialOnly?: true }>> = {
   // "Helplessness air speed multiplier 0.6", "Landing lag 30 frames".
   mario: { landingLag: 30, airSpeed: fx(0.6), url: "https://www.ssbwiki.com/Mario_(SSBU)/Up_special" },
   // "Helplessness landing lag 38 frames"; no multiplier published (UNVERIFIED × 1).
   donkeyKong: { landingLag: 38, airSpeed: fx(1), url: "https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Up_special" },
   // "Air speed multiplier ... 0.909 (helpless)", "Landing lag 30 frames".
-  link: { landingLag: 30, airSpeed: fx(0.909), url: "https://www.ssbwiki.com/Link_(SSBU)/Up_special" },
+  // Only "if in the air" (SmashWiki "Helpless"; fix round 1).
+  link: { landingLag: 30, airSpeed: fx(0.909), url: "https://www.ssbwiki.com/Link_(SSBU)/Up_special", aerialOnly: true },
   // "Landing lag 24 frames", "Helplessness air speed multiplier 0.66".
   samus: { landingLag: 24, airSpeed: fx(0.66), url: "https://www.ssbwiki.com/Samus_(SSBU)/Up_special" },
   // "Landing (cutter)": "Interruptible 31"; UltimateFrameData's landing lag 30
@@ -125,7 +126,7 @@ describe("every up special's published special fall", () => {
   for (const def of FIGHTERS) {
     it(`${def.id}'s is ${PUBLISHED[def.id].url}'s`, () => {
       const p = PUBLISHED[def.id];
-      expect(def.moves.upB?.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed });
+      expect(def.moves.upB?.helpless).toEqual({ landingLag: p.landingLag, airSpeed: p.airSpeed, ...(p.aerialOnly ? { aerialOnly: true } : {}) });
     });
   }
 
@@ -159,6 +160,40 @@ describe("an up special used in the air", () => {
   }
 });
 
+describe("Link's Spin Attack", () => {
+  // SmashWiki "Helpless" (https://www.ssbwiki.com/Helpless): "Spin Attack makes
+  // Link ... helpless after the move was used if in the air"; the grounded one
+  // only if its platform goes. The replica's grounded Spin Attack lifts off
+  // (its momentum, Task 13b), so it must end free to act, not helpless.
+  it("leaves Link free to act when begun on the ground, though it ends in the air", () => {
+    const ground = scene("link", { action: "stand", grounded: true, platform: 0, x: fx(-30), y: 0 });
+    const frames = run(ground, 160, (i) => (i === 0 ? Btn.Up | Btn.Special : 0));
+    const end = frames.findIndex((s) => s.fighters[0].action !== "special");
+    expect(frames[end - 1].fighters[0].grounded, "airborne as it ends").toBe(false);
+    expect(frames[end].fighters[0]).toMatchObject({ action: "fall", combat: { helplessMove: null } });
+    expect(frames.slice(end).some((s) => s.fighters[0].action === "specialFall" || s.fighters[0].action === "specialLanding")).toBe(false);
+    const [jumped] = run(frames[end], 1, () => Btn.Jump);
+    expect(jumped.fighters[0].action).toBe("jump");
+  });
+
+  it("tells where the move began by the airtime, at the boundary", () => {
+    // Begun on the ground and off it from its first frame: one airborne frame
+    // counted per move frame after it. Begun in the air: one more.
+    const spin = BY_ID.get("link")!.moves.upB!;
+    const at = (airTime: number) => helpless("link", { action: "special", move: "upB", actionFrame: 40, airTime }).fighters[0];
+    expect(endsHelpless(at(40), spin), "begun on the ground").toBe(false);
+    expect(endsHelpless(at(41), spin), "begun in the air").toBe(true);
+  });
+
+  it("leaves Link helpless when begun in the air, even on his first frame off the ground", () => {
+    for (const airTime of [0, 30]) {
+      const frames = run(scene("link", { x: fx(-200), y: 0, airTime }), 120, (i) => (i === 0 ? Btn.Up | Btn.Special : 0));
+      const end = frames.findIndex((s) => s.fighters[0].action !== "special");
+      expect(frames[end].fighters[0].action, `airTime ${airTime}`).toBe("specialFall");
+    }
+  });
+});
+
 describe("a side special used in the air", () => {
   it("leaves Fox free to act when Fox Illusion ends, and Mario when the Cape ends", () => {
     for (const id of ["fox", "mario"]) {
@@ -183,6 +218,22 @@ describe("while helpless", () => {
       expect(frames.at(-1)!.fighters[0].action).toBe("specialFall");
       expect(frames.at(-1)!.fighters[0].vx).toBe(top);
       expect(Math.max(...frames.map((s) => s.fighters[0].vx))).toBe(top);
+    });
+  }
+
+  // Plan 5, Task 4b fix round 1: the cap holds whatever speed the fall began
+  // with (Pikachu leaves Quick Attack at 4.4 a frame), and whatever the stick.
+  // UNVERIFIED how Ultimate brings a faster speed down to it: SmashWiki "Air
+  // friction" covers the stick let go and nothing above a top speed.
+  for (const [id, vx] of [["pikachu", fx(4.4)], ["fox", -fx(3)]] as const) {
+    it(`caps ${id}'s helpless drift at its multiplier from the fall's first frame, however fast it began`, () => {
+      const def = BY_ID.get(id)!;
+      const top = mul(fighterParams(def).air_speed_x_stable, PUBLISHED[id].airSpeed);
+      for (const stick of [Btn.Right, 0, Btn.Left]) {
+        const frames = run(helpless(id, { vx }), 30, () => stick);
+        for (const s of frames) expect(Math.abs(s.fighters[0].vx), `stick ${stick}`).toBeLessThanOrEqual(top);
+        expect(frames.at(-1)!.fighters[0].action).toBe("specialFall");
+      }
     });
   }
 
@@ -284,4 +335,13 @@ describe("landing from special fall", () => {
       expect(early.fighters[0].action).toBe("specialLanding");
     });
   }
+
+  it("keeps a press made during its last frames and acts on it on the first free frame, as landing lag does", () => {
+    const lag = PUBLISHED.mario.landingLag;
+    const frames = run(helpless("mario", { x: 0, y: fx(3), vy: -fx(1) }), lag + 20);
+    const landed = frames.findIndex((s) => s.fighters[0].action !== "specialFall");
+    // A jump pressed two frames before the lag is over, then let go.
+    const after = run(frames[landed + lag - 2], 3, (i) => (i === 0 ? Btn.Jump : 0));
+    expect(after.map((s) => s.fighters[0].action)).toEqual(["specialLanding", "stand", "jumpSquat"]);
+  });
 });

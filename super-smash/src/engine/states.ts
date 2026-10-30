@@ -801,6 +801,22 @@ export function startSpecialFall(f: FighterState, slot: MoveSlot): void {
   f.combat.helplessMove = slot;
 }
 
+/**
+ * Whether `move`, ending now, leaves `f` helpless: in the air, with
+ * `MoveDef.helpless`, and for a move helpless only when begun in the air
+ * (`HelplessDef.aerialOnly`), begun there (fix round 1). Where it began is read
+ * off the airtime, which needs no state of its own: `airTime` counts every
+ * frame begun in the air (`step`, before `advanceFighter`) and, like
+ * `actionFrame`, stands still in hitlag, so a move begun in the air ends with
+ * more airborne frames counted than move frames, and one begun on the ground,
+ * whose first frame began on it, with no more.
+ */
+export function endsHelpless(f: FighterState, move: MoveDef): boolean {
+  const h = move.helpless;
+  if (h === undefined || f.grounded) return false;
+  return h.aerialOnly !== true || f.airTime > f.actionFrame;
+}
+
 /** The `HelplessDef` of the move that left `f` helpless, or undefined when it is not. */
 export function helplessOf(f: FighterState, def: FighterDef): HelplessDef | undefined {
   const slot = f.combat.helplessMove;

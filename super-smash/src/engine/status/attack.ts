@@ -27,6 +27,7 @@ import {
   THROW_FRAMES,
   bufferPress,
   buttonPresses,
+  endsHelpless,
   handOff,
   handleActionable,
   hasMove,
@@ -100,7 +101,7 @@ function attackMain(f: FighterState, intent: Intent, ctx: StateContext): void {
     // A move that ends helpless leaves its fighter in special fall when it ends
     // in the air (Plan 5, Task 4b; `MoveDef.helpless`).
     const slot = f.move;
-    if (!f.grounded && move.helpless !== undefined && slot !== null) {
+    if (slot !== null && endsHelpless(f, move)) {
       startSpecialFall(f, slot);
       return;
     }

@@ -29,7 +29,7 @@ import {
   SET_WEIGHT_GRAVITY,
   SET_WEIGHT_LAUNCH_FRAMES,
 } from "./constants";
-import { ONE, abs, approach, mul, sqrt } from "./fixed";
+import { ONE, abs, approach, clamp, mul, sqrt } from "./fixed";
 import { damageSpeedUpMag, damageSpeedUpMaxMag } from "./knockback";
 import type { FighterParams } from "./params";
 import type { FighterState } from "./types";
@@ -394,8 +394,14 @@ export interface KineticInput {
    */
   readonly airFriction?: number;
   /**
-   * A top drift speed below the fighter's own air speed (Plan 5, Task 4b: a
-   * helpless fall's, `HelplessDef.airSpeed`). Absent: `air_speed_x_stable`.
+   * A hard top drift speed below the fighter's own air speed (Plan 5, Task 4b:
+   * a helpless fall's, `HelplessDef.airSpeed`): the stick steers toward it, and
+   * nothing faster is kept, whatever the stick (fix round 1: a helpless
+   * Pikachu kept Quick Attack's 4.4 a frame against a 0.38 cap). UNVERIFIED how
+   * Ultimate brings a faster speed down to the cap: SmashWiki "Air friction"
+   * (https://www.ssbwiki.com/Air_friction) covers the stick let go, and no
+   * source covers a speed above the top one; here it is cut to the cap at once.
+   * Absent: `air_speed_x_stable`, and a faster speed is kept (`airControlX`).
    */
   readonly airSpeedMax?: number;
 }
@@ -475,6 +481,7 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
         : input.airFriction !== undefined
           ? approach(k.controlX, 0, input.airFriction)
           : airControlX(k.controlX, input.stickX, p, input.airSpeedMax);
+      if (!f.grounded && input.airSpeedMax !== undefined) k.controlX = clamp(k.controlX, -input.airSpeedMax, input.airSpeedMax);
       break;
     case "GROUND_STOP":
       k.stopX = approach(k.stopX, 0, f.grounded ? p.ground_brake : p.air_brake_x);

@@ -37,19 +37,23 @@ import {
   type MoveSlot,
   type StageDef,
 } from "@/engine/types";
+import type { ActiveMomentum } from "@/engine/acmd/interpreter";
+import { moveScriptFrame } from "@/engine/acmd/run";
 import { AIR_DODGE_SLIDE_FRAMES, airDodgeCharge, airDodgeFrames, airDodgeOf } from "@/engine/airDodge";
 import {
   AIR_DODGE_SLIDE_DISTANCE,
   AIR_DODGE_SLIDE_END_SPEED,
   AIR_DODGE_SLINGSHOT_DISTANCE,
   AIR_DODGE_SLINGSHOT_FRAMES,
+  LEDGE_GRAB_BACK_PENALTY,
   LEDGE_GRAB_RANGE_X,
   LEDGE_GRAB_RANGE_Y,
   SDI_INPUT_INTERVAL,
   SMASH_INPUT_WINDOW,
 } from "@/engine/constants";
-import { ONE, abs, fx, magnitude, mul } from "@/engine/fixed";
-import { fighterParams } from "@/engine/params";
+import { ONE, abs, clamp, fx, magnitude, mul } from "@/engine/fixed";
+import { airControlX, gravityStep } from "@/engine/kinetic";
+import { fighterParams, type FighterParams } from "@/engine/params";
 
 /* ------------------------------------------------------------------ stage -- */
 
@@ -389,64 +393,93 @@ export function airDodgeFromDef(def: FighterDef): AirDodgeAttributes {
 
 /**
  * What the CPU needs of its fighter's up special to judge a recovery (Plan 5,
- * Task 4b). The move leaves the fighter helpless now, with no second try, so
- * when to spend it is decided by where it actually goes: its own scripted
- * momentum (`MoveDef.momentum`), the fighter's gravity and fall speed for the
- * frames between, and the helpless drift it comes down with
- * (`HelplessDef.airSpeed`, the fighter's own air speed when the move has none).
+ * Task 4b). The move leaves the fighter helpless, with no second try, so when
+ * to spend it is decided by where it actually goes, which `upBPath` works out
+ * by the engine's own rules (fix round 1): the move's scripted momentum as its
+ * script runs it, the fighter's own drift and gravity around and after it, and
+ * the helpless fall's cap after that.
  */
 export interface RecoveryMove {
   readonly totalFrames: number;
-  readonly momentum: NonNullable<MoveDef["momentum"]>;
-  /** `air_accel_y` and `air_speed_y_stable`, Q12. */
-  readonly gravity: number;
-  readonly fallSpeed: number;
-  /** The helpless fall's top drift speed, Q12 a frame. */
+  /** The script's live momentum on each of the move's game frames (index = frame − 1), or null. */
+  readonly momentum: readonly (ActiveMomentum | null)[];
+  /** The fighter's own: air speed, accelerations and friction, gravity, fall speeds. */
+  readonly params: FighterParams;
+  /** The helpless fall's top drift speed, Q12 a frame (`HelplessDef.airSpeed`; the fighter's own air speed without one). */
   readonly helplessDrift: number;
 }
 
-/** A fighter's up special as `recover` judges it, or null when it carries the fighter nowhere of its own. */
+/**
+ * A fighter's up special as `recover` judges it, read off the script the engine
+ * runs (`moveScriptFrame`), or null when it has none or it moves the fighter
+ * nowhere of its own (no momentum on any frame).
+ */
 export function recoveryFromDef(def: FighterDef): RecoveryMove | null {
   const move = def.moves.upB;
-  if (move?.momentum === undefined) return null;
+  if (move === undefined) return null;
+  const momentum = Array.from({ length: move.totalFrames }, (_, i) => moveScriptFrame(def, { move: "upB", actionFrame: i })?.state.momentum ?? null);
+  if (momentum.every((m) => m === null)) return null;
   const p = fighterParams(def);
-  return {
-    totalFrames: move.totalFrames,
-    momentum: move.momentum,
-    gravity: p.air_accel_y,
-    fallSpeed: p.air_speed_y_stable,
-    helplessDrift: mul(p.air_speed_x_stable, move.helpless?.airSpeed ?? ONE),
-  };
+  return { totalFrames: move.totalFrames, momentum, params: p, helplessDrift: mul(p.air_speed_x_stable, move.helpless?.airSpeed ?? ONE) };
+}
+
+/** One frame of an up special's path: where the fighter is, relative to where it used it, and its vertical speed. */
+export interface PathPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly vy: number;
 }
 
 /**
- * Where the up special carries the fighter from here, frame by frame by the
- * engine's own rule (`applyMoveMomentum`): a hold sets the velocity, and
- * between and after holds gravity pulls the vertical speed toward the fall
- * speed while the sideways speed the last hold left carries on (the CPU holds
- * toward the stage, and air control keeps a speed above the fighter's own).
- * `rise` is the most height it gains over the move, from its vertical speed
- * `vy` now; `across`, how far it goes the way the fighter faces by the end.
+ * Where the up special takes the fighter, frame by frame from its first, with
+ * the stick held `toward` (−1 or 1) throughout, for `frames` frames: the move,
+ * then the helpless fall. The engine's rules, from `applyMovement`: on a frame
+ * a momentum window is live its velocity is set (the energies zeroed); before
+ * its last frame nothing else moves the fighter, and on that frame the velocity
+ * becomes drift and gravity's; on every other frame air control steers it
+ * (`airControlX`, toward the fighter's air speed, or within the helpless cap)
+ * and gravity pulls toward the fall speed (`gravityStep`). Not modelled: a
+ * launch still decaying, a jump's scheduled rise, a hit, a landing or a ledge
+ * on the way (the caller reads those off the path).
  */
-export function upBReach(r: RecoveryMove, vy: number): { readonly rise: number; readonly across: number } {
+export function upBPath(
+  r: RecoveryMove,
+  f: Pick<FighterState, "vx" | "vy" | "facing" | "fastFalling">,
+  toward: number,
+  frames: number,
+): PathPoint[] {
+  const p = r.params;
+  const terminal = f.fastFalling ? p.dive_speed_y : p.air_speed_y_stable;
+  const side = f.facing >= 0 ? 1 : -1;
+  const out: PathPoint[] = [];
+  let control = f.vx;
+  let gravity = f.vy;
+  let x = 0;
   let y = 0;
-  let rise = 0;
-  let across = 0;
-  let vx = 0;
-  let v = vy;
-  for (let frame = 1; frame <= r.totalFrames; frame++) {
-    const held = r.momentum.find((m) => frame >= m.frame && frame <= m.frame + (m.hold ?? 0));
-    if (held !== undefined) {
-      vx = held.x;
-      v = held.y;
-    } else {
-      v = Math.max(v - r.gravity, -r.fallSpeed);
+  for (let frame = 1; frame <= frames; frame++) {
+    const m = frame <= r.totalFrames ? r.momentum[frame - 1] : null;
+    if (m !== null) {
+      if (frame < m.until) {
+        x += m.x * side;
+        y += m.y;
+        out.push({ x, y, vy: m.y });
+        continue;
+      }
+      control = m.x * side;
+      gravity = m.y;
     }
-    y += v;
-    across += vx;
-    if (y > rise) rise = y;
+    if (frame <= r.totalFrames) {
+      control = airControlX(control, toward, p);
+    } else {
+      const cap = r.helplessDrift;
+      control = clamp(airControlX(control, toward, p, cap), -cap, cap);
+    }
+    gravity = gravityStep(gravity, p.air_accel_y, terminal);
+    x += control;
+    y += gravity;
+    out.push({ x, y, vy: gravity });
   }
-  return { rise, across };
+  return out;
 }
 
 /**
@@ -728,7 +761,8 @@ export const recover: Behaviour = (ctx) => {
   // ledge is in its reach, or as soon as waiting longer would put the ledge
   // out of it; until then the fighter drifts closer, and jumps if it can.
   if (outOfJumps || deep) {
-    if (ctx.recovery !== null && !upBInReach(self, nearerLedge, stage, ctx.recovery)) {
+    const r = ctx.recovery;
+    if (r !== null && !upBInReach(self, nearerLedge, stage, r) && !upBNowOrNever(self, stage, r)) {
       return { score: 950, input: drift | (!outOfJumps && jumping ? Btn.Jump : 0) };
     }
     const firing = pulse(ctx.view.frame, self.port, 6, 3);
@@ -746,21 +780,51 @@ export const recover: Behaviour = (ctx) => {
 const UPB_DECISION_FRAMES = 6;
 
 /**
- * Whether `recover` should spend the up special now (Plan 5, Task 4b): the move
- * (`upBReach`, from the fighter's speed now) would leave it within a ledge
- * grab of `ledge` once its helpless drift has carried it back down to the
- * ledge's height; or it is now or never: a few more frames of falling and the
- * move could no longer lift it to the ledge (`LEDGE_GRAB_RANGE_Y` below it is
- * high enough to grab).
+ * UNVERIFIED (CPU judgement): helpless frames `upBInReach` follows past the
+ * move's end, enough to come back down to a ledge from any up special's height.
+ */
+const UPB_LOOKAHEAD_FRAMES = 120;
+
+/**
+ * Whether the up special, used now with the stick held toward the stage, gets
+ * the fighter back (Plan 5, Task 4b fix round 1): somewhere on its path
+ * (`upBPath`, the move and then the helpless fall) the fighter comes down on
+ * the main stage, between its ledges, or is falling within a ledge grab of it
+ * (`LEDGE_GRAB_RANGE_X`, less from behind, and `LEDGE_GRAB_RANGE_Y` below, as
+ * `findLedgeGrab` measures; the body's own half-width, which only adds reach,
+ * is left out). A path through a blast line does not.
  */
 export function upBInReach(self: FighterState, ledge: number, stage: StageView, r: RecoveryMove): boolean {
-  const reach = upBReach(r, self.vy);
-  const below = stage.groundY - LEDGE_GRAB_RANGE_Y - self.y;
-  if (below + UPB_DECISION_FRAMES * r.fallSpeed >= reach.rise) return true;
-  const way = ledge > self.x ? 1 : -1;
-  const short = abs(ledge - self.x) - (self.facing === way ? reach.across : -reach.across);
-  const driftFrames = Math.trunc((reach.rise - below) / r.fallSpeed);
-  return short <= driftFrames * r.helplessDrift + LEDGE_GRAB_RANGE_X;
+  const toward = ledge > self.x ? 1 : -1;
+  const range = self.facing === toward ? LEDGE_GRAB_RANGE_X : mul(LEDGE_GRAB_RANGE_X, LEDGE_GRAB_BACK_PENALTY);
+  let prevY = self.y;
+  for (const p of upBPath(r, self, toward, r.totalFrames + UPB_LOOKAHEAD_FRAMES)) {
+    const x = self.x + p.x;
+    const y = self.y + p.y;
+    if (x < stage.blastLeft || x > stage.blastRight || y < stage.blastBottom || y > stage.blastTop) return false;
+    // How far past the ledge, toward the stage: positive is over it.
+    const past = (x - ledge) * toward;
+    const onStage = x >= stage.leftLedge && x <= stage.rightLedge;
+    if (past > 0 && onStage && p.vy <= 0 && prevY >= stage.groundY && y <= stage.groundY) return true;
+    const drop = stage.groundY - y;
+    if (p.vy <= 0 && past <= 0 && -past <= range && drop >= 0 && drop <= LEDGE_GRAB_RANGE_Y) return true;
+    prevY = y;
+  }
+  return false;
+}
+
+/**
+ * Whether it is now or never for the up special: a few more frames of falling
+ * (`UPB_DECISION_FRAMES`) and the move's highest point, from the fighter's
+ * speed now, would no longer lift it to grabbing height under the ledge. Then
+ * `recover` spends it even out of reach, as the last thing left.
+ */
+export function upBNowOrNever(self: FighterState, stage: StageView, r: RecoveryMove): boolean {
+  const path = upBPath(r, self, 0, r.totalFrames);
+  let apex = 0;
+  for (const p of path) if (p.y > apex) apex = p.y;
+  const terminal = self.fastFalling ? r.params.dive_speed_y : r.params.air_speed_y_stable;
+  return stage.groundY - LEDGE_GRAB_RANGE_Y - self.y + UPB_DECISION_FRAMES * terminal >= apex;
 }
 
 /**

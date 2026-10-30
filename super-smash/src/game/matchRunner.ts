@@ -39,8 +39,8 @@ import { createCamera, updateCamera, type Camera } from "@/render/camera";
 import { createVfx, stepVfx, type VfxState } from "@/render/vfx";
 import { createHudState, updateHud, type HudState } from "@/render/hud";
 import { render, renderBackground, type RenderState } from "@/render/renderer";
-import { cpuInput, type CpuWorld } from "@/ai/cpu";
-import { airBrakeFromDef, airDodgeFromDef, meleeReachFromDef, recoveryFromDef, stageViewFromDef } from "@/ai/behaviours";
+import { cpuInput, cpuWorldFromDef, type CpuWorld } from "@/ai/cpu";
+import { stageViewFromDef } from "@/ai/behaviours";
 import type { KeyboardInput } from "@/input/keyboard";
 import { mergeKeyboardAndPad, type GamepadInput } from "@/input/gamepad";
 import { RollbackSession, type DesyncReport, type NetStats } from "@/net/rollback";
@@ -219,6 +219,16 @@ export interface MatchRunner {
   readonly stalled: boolean;
 }
 
+/**
+ * What each port's CPU knows of its own fighter and the stage
+ * (`cpuWorldFromDef`): the same builder the golden and the CPU sweep use. A
+ * port with no definition gets Battlefield's view and two jumps.
+ */
+export function matchCpuWorlds(stage: StageDef, defs: readonly (FighterDef | undefined)[]): CpuWorld[] {
+  const view = stageViewFromDef(stage);
+  return defs.map((def) => (def !== undefined ? cpuWorldFromDef(def, view) : { stage: view, jumps: 2 }));
+}
+
 export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   const {
     stage,
@@ -281,17 +291,7 @@ export function createMatchRunner(options: MatchRunnerOptions): MatchRunner {
   // decision forever and stops looking like a player.
   let cpuSeed = seed ^ 0x1f2e3d4c;
 
-  const cpuWorlds: CpuWorld[] = players.map((p, i) => ({
-    stage: stageViewFromDef(stage),
-    jumps: defs[i]?.attributes.jumps ?? 2,
-    // Per fighter, from its own move data. A shared constant here is what let a
-    // CPU decide it was close enough to punch from further than its arm goes.
-    meleeReach: defs[i] ? meleeReachFromDef(defs[i]) : undefined,
-    airBrake: defs[i] ? airBrakeFromDef(defs[i]) : undefined,
-    airDodge: defs[i] ? airDodgeFromDef(defs[i]) : undefined,
-    // Where its up special goes: it leaves the fighter helpless (Plan 5, Task 4b).
-    recovery: defs[i] ? recoveryFromDef(defs[i]) : undefined,
-  }));
+  const cpuWorlds = matchCpuWorlds(stage, defs);
 
   const camera = createCamera(stage);
   const vfx: VfxState = createVfx();

@@ -28,13 +28,17 @@
 
 import { DEFAULT_AIR_DODGE } from "@/engine/airDodge";
 import { nextRandom } from "@/engine/fixed";
-import type { AirDodgeAttributes, GameState, InputFrame } from "@/engine/types";
+import type { AirDodgeAttributes, FighterDef, GameState, InputFrame } from "@/engine/types";
 import {
   BEHAVIOURS,
   DECISION_ROLLS,
   DEFAULT_STAGE_VIEW,
   MELEE_RANGE,
   ROLL_FUMBLE,
+  airBrakeFromDef,
+  airDodgeFromDef,
+  meleeReachFromDef,
+  recoveryFromDef,
   type BehaviourContext,
   type BehaviourName,
   type LevelTuning,
@@ -76,6 +80,26 @@ export interface CpuWorld {
    * Defaults to none: the CPU spends it as soon as it is needed.
    */
   readonly recovery?: RecoveryMove | null;
+}
+
+/**
+ * Everything a CPU knows about its own fighter and the stage, from the
+ * fighter's definition: the one builder the game (`matchCpuWorlds`), the golden
+ * and the CPU sweep share, so none of them can leave a field out (Plan 5, Task
+ * 4b fix round 1: one of three left the up special model out).
+ */
+export function cpuWorldFromDef(def: FighterDef, stage: StageView): CpuWorld {
+  return {
+    stage,
+    jumps: def.attributes.jumps,
+    // Per fighter, from its own move data. A shared constant here is what let a
+    // CPU decide it was close enough to punch from further than its arm goes.
+    meleeReach: meleeReachFromDef(def),
+    airBrake: airBrakeFromDef(def),
+    airDodge: airDodgeFromDef(def),
+    // Where its up special goes: it leaves the fighter helpless (Plan 5, Task 4b).
+    recovery: recoveryFromDef(def),
+  };
 }
 
 /**
