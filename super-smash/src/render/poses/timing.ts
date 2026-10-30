@@ -186,6 +186,11 @@ export const SLOT_POSE: Record<MoveSlot, PoseName> = {
   // Plan 5, Task 5 (P5-R4): the counterattack is a clip of its own, its strike
   // key on the cut; the counter's guard stays `downB`.
   counterAttack: "counterAttack",
+  // Plan 5, Task 8: Donkey Kong's cargo throws borrow his throws' clips.
+  cargoFthrow: "fthrow",
+  cargoBthrow: "bthrow",
+  cargoUthrow: "uthrow",
+  cargoDthrow: "dthrow",
 };
 
 /** A looping clip that names no period of its own runs at half a second. */
@@ -297,7 +302,13 @@ export function poseNameFor(f: Pick<PosedFighter, "action" | "move" | "jumpsUsed
     case "techCeiling":
       return "tumble";
     case "grabbed":
+    // Plan 5, Task 8: carried on Donkey Kong's shoulders, still held.
+    case "cargoHeld":
       return "grabbed";
+    // ...and Donkey Kong carrying: no clip has the carry's raised arms, and his
+    // walk reads as the carry (it walks).
+    case "cargoCarry":
+      return "walk";
     case "thrown":
       return "thrown";
     case "downed":

@@ -979,9 +979,12 @@ export function isCatchStatus(action: ActionState): boolean {
  * after the catch). UNVERIFIED: a stand-in for Inhale's own statuses, which Plan
  * 5 Task 9 builds and which replace it. It does not stop at a cliff: that is the
  * catch statuses' alone.
+ *
+ * And Donkey Kong's carry (Plan 5, Task 8: `cargoCarry`), which holds its
+ * fighter on his shoulders and walks off a cliff with them.
  */
 export function isHolding(f: Pick<FighterState, "action" | "move">, def: FighterDef): boolean {
-  if (isCatchStatus(f.action)) return true;
+  if (isCatchStatus(f.action) || f.action === "cargoCarry") return true;
   if (f.action !== "special" || f.move === null) return false;
   return def.moves[f.move]?.hitboxes.some((h) => h.grabbing === true) ?? false;
 }
@@ -1163,6 +1166,8 @@ export function applyMovement(f: FighterState, intent: Intent, ctx: StateContext
     params,
     ...(restricted ? { airFriction: stall.airFriction } : {}),
     ...(helpless !== undefined ? { airSpeedMax: mul(params.air_speed_x_stable, helpless.airSpeed) } : {}),
+    // A status that walks faster or slower than the fighter's walk (Plan 5: the carry).
+    ...(status.walkMul !== undefined ? { walkMul: status.walkMul } : {}),
   });
   status.exec?.(f, intent, ctx);
 }
@@ -1192,6 +1197,13 @@ export function onLanded(f: FighterState, ctx: StateContext): void {
   // The hop is over, so the next one decides its own height and its own damage.
   f.shortHop = false;
 
+  // Landing from a carry's jump goes on carrying, and a cargo throw begun in the
+  // air finishes on the ground rather than cutting into a landing that would
+  // strand its fighter in `thrown` (Plan 5, Task 8). UNVERIFIED: SmashWiki
+  // "Donkey Kong (SSBU)/Forward throw" gives neither a landing lag for the carry
+  // (the `shoulder_landing` motion's length is unpublished) nor what a landing
+  // does to a cargo throw. Only a cargo throw is ever airborne.
+  if (f.action === "cargoCarry" || f.action === "throw") return;
   // A tumble that reaches the floor lies down: in hitstun, one too slow to
   // bounce (`techOrBounce`); after it (`tumbleFall`), at any speed — DAMAGE_FALL
   // has no bounce (SmashWiki "Tumbling": "they will land into a lying position").

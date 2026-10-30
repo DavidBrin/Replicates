@@ -141,6 +141,9 @@ export type ActionState =
   | "ledgeRoll"
   | "ledgeJump"
   | "ledgeTrumped"
+  // carried (Plan 5, Task 8): Donkey Kong's cargo, and the fighter on his shoulders
+  | "cargoCarry"
+  | "cargoHeld"
   // meta
   | "respawnPlatform"
   | "dead"
@@ -179,7 +182,12 @@ export type MoveSlot =
   | "getUpAttack"
   | "finalSmash"
   // Plan 5: what a special turns into (Marth's Counter, `CounterDef.then`).
-  | "counterAttack";
+  | "counterAttack"
+  // Plan 5, Task 8: Donkey Kong's four cargo throws, thrown from the carry.
+  | "cargoFthrow"
+  | "cargoBthrow"
+  | "cargoUthrow"
+  | "cargoDthrow";
 
 /** Non-damage properties a hit can carry. Drives VFX, hitlag and reactions. */
 export type HitEffect =
@@ -620,6 +628,12 @@ export interface MoveDef {
   readonly intangible?: readonly [number, number];
   /** Frames the fighter may not be interrupted, for specials with armour. */
   readonly superArmourFrames?: readonly [number, number];
+  /**
+   * A throw that lifts the fighter it holds to carry instead of launching them
+   * (Plan 5, Task 8: Donkey Kong's forward throw): when it ends with its
+   * fighter still held, the thrower carries them (`liftCargo`, `status/cargo.ts`).
+   */
+  readonly cargo?: boolean;
   /**
    * A back throw whose legacy launch box points forward turns its thrower round
    * on this move frame, before the launch: the game's `REVERSE_LR()`, which the

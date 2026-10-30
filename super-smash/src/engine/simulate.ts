@@ -98,6 +98,7 @@ import {
 import { chargedHitbox } from "./specialCharge";
 import { reflectProjectiles } from "./reflect";
 import { activeCounter, counterBubble, triggerCounter } from "./counter";
+import { pinHeldFighters, ridesCaptor } from "./held";
 import {
   blastZoneKO,
   clampShiftToStage,
@@ -642,8 +643,9 @@ export function step(
       updateDodgeIntangibility(f, defs[i]);
       // A held fighter's grab time runs, and it can still mash out of the grab,
       // during the freeze of a pummel (`struggleInGrab`; Plan 5, Task 7 fix round
-      // 1: the frame counts too, where Plan 3 Task 14 stopped the clock).
-      if (f.action === "grabbed" && f.grabbedBy >= 0) struggleInGrab(f, intent, stateCtx(i));
+      // 1: the frame counts too, where Plan 3 Task 14 stopped the clock). So does
+      // a carried one's (Plan 5, Task 8: the carry's struggle is the grab's).
+      if ((f.action === "grabbed" || f.action === "cargoHeld") && f.grabbedBy >= 0) struggleInGrab(f, intent, stateCtx(i));
       const shiftedFromX = f.x;
       const shiftedFromY = f.y;
       if (intent.sdiX !== 0 || intent.sdiY !== 0) {
@@ -745,7 +747,10 @@ export function step(
       onLeftGround(f);
     }
 
-    if (!f.grounded) {
+    // Hands full: a carrier, or a thrower in a cargo throw it began in the air, takes
+    // no ledge (Plan 5, Task 8; a throw on the ground never reaches here).
+    // UNVERIFIED: no source says whether either can take one.
+    if (!f.grounded && f.action !== "cargoCarry" && f.action !== "throw") {
       const grab = findLedgeGrab(f, stage, s.frame, ecb.half, s.fighters);
       if (grab !== null) {
         const pos = ledgePosition(stage, grab, s.frame);
@@ -788,11 +793,14 @@ export function step(
   // After phase 5, so the captor's position for the frame is final whatever the
   // port order, and before the hit phase, so the box a pummel or a throw is
   // measured from is where the victim is.
+  // A fighter carried rides on top of its carrier instead (Plan 5, Task 8: `held.ts`).
   for (let i = 0; i < s.fighters.length; i++) {
     const f = s.fighters[i];
     const captor = f.action === "dead" ? null : captorOf(s, f);
-    if (captor !== null) holdAtCaptor(f, captor, bodyHalf(defs[captor.port], bake, bones), bodyHalf(defs[i], bake, bones), stage, s.frame);
+    if (captor === null || ridesCaptor(f, captor)) continue;
+    holdAtCaptor(f, captor, bodyHalf(defs[captor.port], bake, bones), bodyHalf(defs[i], bake, bones), stage, s.frame);
   }
+  pinHeldFighters(s, (captor) => bodyTop(defs[captor.port], bake, bones));
 
   /* -- 6. hitboxes: gather, clank, connect --------------------------------- */
 
@@ -964,6 +972,11 @@ function holdAtCaptor(
  */
 function bodyHalf(def: FighterDef, bake: BakeTables, bones: BoneTable): number {
   return restEcb(def, bake, bones)?.half ?? def.attributes.width;
+}
+
+/** How tall a fighter's body stands: the top of `restEcb`, or Plan 2's `attributes.height` (Plan 5, Task 8). */
+function bodyTop(def: FighterDef, bake: BakeTables, bones: BoneTable): number {
+  return restEcb(def, bake, bones)?.top ?? def.attributes.height;
 }
 
 /* ------------------------------------------------------------- hit phases -- */
@@ -1487,6 +1500,12 @@ function resolveThrows(
 function isInvincible(f: FighterState, def: FighterDef): boolean {
   if (f.invincible > 0) return true;
   if (f.action !== "throw" || f.move === null) return false;
+  // A throw that releases nobody, Donkey Kong's lift (`MoveDef.cargo`), is
+  // invincible throughout: SmashWiki "Donkey Kong (SSBU)/Forward throw"
+  // (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Forward_throw), the carry's
+  // "Invincibility 1-15" over its "Animation length 15" (`game_throwf`'s
+  // `WHOLE_HIT(HIT_STATUS_INVINCIBLE)`, rubendal Data Viewer 13.0.1). Plan 5, Task 8.
+  if (def.moves[f.move]?.cargo === true) return true;
   const script = gameScriptFor(def, f.move);
   const release = script === null ? null : throwStrikeFrame(script);
   return release !== null && moveFrameOf(f.actionFrame) <= release;

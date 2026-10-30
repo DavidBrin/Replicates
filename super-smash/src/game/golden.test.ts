@@ -21,16 +21,20 @@ import { stateInvariantBreaks } from "./stateInvariants";
 
 import { TECH_LAB } from "./goldenLab";
 import { SCRIPTED_MATCH, scriptedInputs } from "./goldenScript";
+import { STATES_LAB } from "./goldenStatesLab";
 
 /**
  * The strangler's safety net (Plan 2, Tasks 0 and 0b).
  *
- * Six matches on the real roster and real stages: four CPU-vs-CPU stock
+ * Seven matches on the real roster and real stages: four CPU-vs-CPU stock
  * matches (levels 9 and 7) for 3,600 frames each, one scripted timed match
  * with the Smash Ball on (`goldenScript.ts`) that walks both ports through the
  * grabs, throws, shield break, spot dodge, ledge jump and soft-stick paths no
- * CPU ever takes, and a 100-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
- * three fighters launched by hand into the floor, the wall and the underside.
+ * CPU ever takes, a 100-frame tech lab (`goldenLab.ts`, Plan 3 Task 12):
+ * three fighters launched by hand into the floor, the wall and the underside,
+ * and a 400-frame states lab (`goldenStatesLab.ts`, Plan 5 Task 8, ruling
+ * P5-R14): scripted keys for the Plan 5 states nothing else reaches, Donkey
+ * Kong's cargo first.
  * Every frame's `digest` is folded into a running hash, and
  * every 100 frames that hash is compared with the committed one — so a
  * difference that heals before the next sample (a projectile one unit faster,
@@ -134,10 +138,17 @@ const MATCHES: readonly Match[] = [
       return (_state, frame) => TECH_LAB.inputs(frame);
     },
   },
+  {
+    ...STATES_LAB,
+    cpu: false,
+    driver() {
+      return (_state, frame) => STATES_LAB.inputs(frame);
+    },
+  },
 ];
 
 /**
- * Every `ActionState` the six matches must visit between them: all 50. A
+ * Every `ActionState` the seven matches must visit between them: all 52. A
  * `Record` rather than a list, so a new state is a compile error here until
  * somebody pins it. Measured 2026-10-27, again after the Plan 2 final fix wave: the CPU
  * matches reach 34, the script 41 — everything but `entering`, which Final Destination's
@@ -174,6 +185,11 @@ const MATCHES: readonly Match[] = [
  * link-samus spot-dodges and two ledge-attack; none techs, tech-rolls or is
  * shield-stunned any more, and none crouches, grabs, ledge-rolls, breaks a
  * shield or trumps a ledge.
+ * Plan 5 Task 8 added `cargoCarry` and `cargoHeld`, Donkey Kong's carry and the
+ * fighter carried. No golden CPU grabs and the script has no Donkey Kong, so a
+ * seventh match, the states lab (ruling P5-R14: visited, not exempted), carries
+ * Mario twice: he mashes out of the first carry, and the second ends in a cargo
+ * up throw that lands. Tasks 9, 11 and 12 extend it for their own states.
  */
 const MUST_VISIT: Record<ActionState, true> = {
   stand: true,
@@ -223,6 +239,8 @@ const MUST_VISIT: Record<ActionState, true> = {
   ledgeRoll: true,
   ledgeJump: true,
   ledgeTrumped: true,
+  cargoCarry: true,
+  cargoHeld: true,
   respawnPlatform: true,
   dead: true,
   entering: true,
@@ -359,7 +377,7 @@ function hitKind(attacker: FighterState): string {
  * across fighters and the stage, `stateInvariantBreaks`: no ledge held twice, no
  * fighter inside the stage). The static guards cannot see every write
  * (`velocity-writes.test.ts` lists its blind spots); this sees their effect,
- * on every frame of all six matches.
+ * on every frame of all seven matches.
  */
 function invariantBreaks(f: FighterState, frame: number): string[] {
   const at = `frame ${frame}, port ${f.port}`;
@@ -503,6 +521,10 @@ describe("engine golden trace", () => {
   // sooner) and link-samus from 1001-1100 (Link's jab, down tilt and forward air
   // re-timed): hits 23 and 21, shield hits 0 and 1, KOs 2 and 2. So now: hits
   // 17/33/21/23, 6 and 0; shield hits 0/0/1/0, 3 and 0; KOs 1/2/2/2, 1 and 2.
+  // Plan 5 Task 8 (Donkey Kong's cargo) left the six byte-identical (the CPUs
+  // grab nobody; the script has no Donkey Kong) and added the states lab: one hit
+  // (the cargo up throw), no shield hits, no KO. So now: hits 17/33/21/23, 6, 0
+  // and 1; shield hits 0/0/1/0, 3, 0 and 0; KOs 1/2/2/2, 1, 2 and 0.
   // (Task 12's, before the limb-bone scripts: hits 15/32/13/17, shield hits
   // 1/2/0/1, KOs 1/0/3/1. Plan 3's, on Plan 2's boxes: hits 12/18/7/11, shield hits
   // 0/3/2/0, KOs 3/1/1/2.)

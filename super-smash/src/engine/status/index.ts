@@ -8,6 +8,7 @@
 
 import { AIR_STATUSES } from "./air";
 import { ATTACK_STATUSES } from "./attack";
+import { CARGO_STATUSES } from "./cargo";
 import { CLIFF_STATUSES } from "./cliff";
 import { DAMAGE_STATUSES } from "./damage";
 import { GROUND_STATUSES } from "./ground";
@@ -26,6 +27,7 @@ export const ALL_STATUSES: readonly FighterStatus[] = [
   ...GROUND_STATUSES,
   ...AIR_STATUSES,
   ...PASSIVE_STATUSES,
+  ...CARGO_STATUSES,
 ];
 
 for (const s of ALL_STATUSES) registerStatus(s);

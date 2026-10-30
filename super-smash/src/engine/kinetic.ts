@@ -422,6 +422,11 @@ export interface KineticInput {
    * Absent: `air_speed_x_stable`, and a faster speed is kept (`airControlX`).
    */
   readonly airSpeedMax?: number;
+  /**
+   * The WALK type's top speed and acceleration, scaled (Q12; Plan 5, Task 8:
+   * Donkey Kong's carry, ×1.1, `FighterStatus.walkMul`). Absent: his own walk.
+   */
+  readonly walkMul?: number;
 }
 
 /** One frame of gravity toward `terminal`, which is a positive speed. */
@@ -474,13 +479,26 @@ export function kineticExec(f: FighterState, type: KineticType, input: KineticIn
   kineticTransfer(f, type);
   switch (type) {
     case "WALK": {
+      // A walking status off the ground (Plan 5, Task 8: the carry's jump, which
+      // stays the carry) drifts as a fall does. UNVERIFIED: the carry's air
+      // control is unpublished; SSBU runs its own SHOULDER_JUMP and _FALL statuses.
+      if (!f.grounded) {
+        k.controlX = airControlX(k.controlX, input.stickX, p);
+        break;
+      }
       // walk_accel_add at any deflection, walk_accel_mul scaled by it; the top
       // speed scales with deflection too. UNVERIFIED: that scaling is linear
       // here; the game's `walk_slow_speed_mul`, `walk_middle_ratio` and
       // `walk_fast_ratio` (skyline-smash FighterParamTable) shape it, and no
       // source used here publishes their values.
       const mag = input.stickMag ?? ONE;
-      k.controlX = approach(k.controlX, input.stickX * mul(p.walk_speed_max, mag), p.walk_accel_add + mul(p.walk_accel_mul, mag));
+      const top = mul(p.walk_speed_max, mag);
+      const accel = p.walk_accel_add + mul(p.walk_accel_mul, mag);
+      const scale = input.walkMul;
+      k.controlX =
+        scale === undefined
+          ? approach(k.controlX, input.stickX * top, accel)
+          : approach(k.controlX, input.stickX * mul(top, scale), mul(accel, scale));
       break;
     }
     case "DASH":

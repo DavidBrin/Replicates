@@ -71,6 +71,12 @@ export type StatusKind =
   | "FIGHTER_STATUS_KIND_CLIFF_ESCAPE"
   | "FIGHTER_STATUS_KIND_CLIFF_JUMP1"
   | "FIGHTER_STATUS_KIND_CLIFF_ROBBED"
+  // Plan 5, Task 8. SSBU's fighter-specific kind keeps its fighter in its name
+  // (skyline-smash `lua_const.rs`): the carry is DK's own SHOULDER_WAIT (with its
+  // _WALK, _TURN, _JUMP_SQUAT, _JUMP, _FALL and _LANDING, one replica status),
+  // and the fighter carried is in the common SHOULDERED_DONKEY.
+  | "FIGHTER_DONKEY_STATUS_KIND_SHOULDER_WAIT"
+  | "FIGHTER_STATUS_KIND_SHOULDERED_DONKEY"
   | "FIGHTER_STATUS_KIND_REBIRTH"
   | "FIGHTER_STATUS_KIND_DEAD"
   | "FIGHTER_STATUS_KIND_ENTRY";
@@ -124,6 +130,8 @@ export const STATUS_KIND_OF_ACTION: Readonly<Record<ActionState, StatusKind>> = 
   ledgeRoll: "FIGHTER_STATUS_KIND_CLIFF_ESCAPE",
   ledgeJump: "FIGHTER_STATUS_KIND_CLIFF_JUMP1",
   ledgeTrumped: "FIGHTER_STATUS_KIND_CLIFF_ROBBED",
+  cargoCarry: "FIGHTER_DONKEY_STATUS_KIND_SHOULDER_WAIT",
+  cargoHeld: "FIGHTER_STATUS_KIND_SHOULDERED_DONKEY",
   respawnPlatform: "FIGHTER_STATUS_KIND_REBIRTH",
   dead: "FIGHTER_STATUS_KIND_DEAD",
   entering: "FIGHTER_STATUS_KIND_ENTRY",
@@ -153,6 +161,11 @@ export interface FighterStatus {
   readonly action: ActionState;
   /** `KineticModule::change_kinetic` — how the energies are driven in this status. */
   readonly kineticType: KineticType;
+  /**
+   * The WALK type's top speed and acceleration, scaled (Q12): Donkey Kong's
+   * carry walks at 1.1× his walk (Plan 5, Task 8, `CARGO_WALK`). Absent: 1.
+   */
+  readonly walkMul?: number;
   /** status_pre: once, on entry, after the previous status's `end`. */
   readonly pre?: (f: FighterState) => void;
   /**

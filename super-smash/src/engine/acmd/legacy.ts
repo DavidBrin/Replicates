@@ -61,6 +61,12 @@ export const SLOT_MOTION: Readonly<Record<MoveSlot, MotionKind>> = {
   // "Upon countering an attack, Marth immediately transitions to the first frame
   // of this state").
   counterAttack: "special_lw_hit",
+  // Plan 5, Task 8: Donkey Kong's cargo throws (rubendal Motions: `throw_f_f`,
+  // `throw_f_b`, `throw_f_hi`, `throw_f_lw`, the motions of `game_throwff` …).
+  cargoFthrow: "throw_f_f",
+  cargoBthrow: "throw_f_b",
+  cargoUthrow: "throw_f_hi",
+  cargoDthrow: "throw_f_lw",
 };
 
 /**
@@ -184,8 +190,20 @@ export function legacyGameScript(move: MoveDef): AcmdScript {
   return { name: `game_${SLOT_MOTION[move.slot].replace(/_/g, "")}`, motion: SLOT_MOTION[move.slot], commands };
 }
 
-/** The four throws, whose launch is an `ATTACK_ABS` the throw status lands (Plan 5, Task 7). */
-export const THROW_SLOTS: ReadonlySet<MoveSlot> = new Set(["fthrow", "bthrow", "uthrow", "dthrow"]);
+/**
+ * Every throw, whose launch is an `ATTACK_ABS` the throw status lands (Plan 5,
+ * Task 7): the four, and Donkey Kong's four cargo throws (Task 8).
+ */
+export const THROW_SLOTS: ReadonlySet<MoveSlot> = new Set([
+  "fthrow",
+  "bthrow",
+  "uthrow",
+  "dthrow",
+  "cargoFthrow",
+  "cargoBthrow",
+  "cargoUthrow",
+  "cargoDthrow",
+]);
 
 /** The box a legacy throw launches with: the last to open (the later listed of a tie). */
 function lastToOpen(hitboxes: readonly Hitbox[]): Hitbox | null {

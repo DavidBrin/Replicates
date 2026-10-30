@@ -217,11 +217,11 @@ describe("each fighter's dodges are motions of their own, per direction (ruling 
       for (const charge of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         for (const jumpsUsed of [1, 2])
           for (const fastFalling of [false, true]) names.add(statusMotion({ action, jumpsUsed, fastFalling, charge }));
-    // 48 actions of their own (the two helpless ones share the fall's and the
-    // landing lag's), the second jump, two fast falls, five directional air
-    // dodges and the back roll.
+    // 50 actions of their own (the two helpless ones share the fall's and the
+    // landing lag's; Plan 5 Task 8's carry and carried have their own), the
+    // second jump, two fast falls, five directional air dodges and the back roll.
     expect(names.size).toBe(ACTIONS.length - Object.keys(MOTION_OF_ACTION).length + 1 + 2 + 5 + 1);
-    expect(ACTIONS.length).toBe(50);
+    expect(ACTIONS.length).toBe(52);
   });
 
   it.each(FIGHTERS.map((d) => [d.id, d] as const))("%s: spot dodge, rolls, air dodges and techs last the engine's own lengths", (_id, def) => {

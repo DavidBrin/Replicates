@@ -717,26 +717,121 @@ const legacy: FighterDef = {
     },
 
     /**
-     * The four throws below are DK's **cargo** throws, and that deserves an
-     * explanation rather than a silent substitution.
-     *
      * DK's forward throw is not a throw. It is Kong Karry: he hoists the victim
-     * onto his shoulder and keeps them there — walking, running and jumping
-     * freely — until he picks one of four *cargo* throws, which is what gives
-     * him eight throws instead of four. Carry duration is
-     * `((90 + 1.7p) * 11/6) - g` frames in the victim's percent `p`.
+     * onto his shoulders and keeps them there — walking, turning and jumping —
+     * until he picks one of four *cargo* throws, which is what gives him seven
+     * throws, not four (SmashWiki "Forward throw", https://www.ssbwiki.com/Forward_throw).
+     * Carry duration is `((90 + 1.7p) * 11/6) - g` frames in the victim's percent `p`.
      *
-     * `MoveSlot` has one throw per direction and no carry state, so what is
-     * encoded here is the cargo set, because those are the throws that actually
-     * launch — the carry itself only drops for 4%. His non-cargo back/up/down
-     * throws exist too (11% / 9% / 7%) and are noted per move.
+     * Plan 5, Task 8 models the carry (`engine/status/cargo.ts`): `fthrow` is the
+     * lift, `bthrow`/`uthrow`/`dthrow` are his ordinary throws, and `cargoFthrow`
+     * … `cargoDthrow` are thrown from the carry. Before it, with no carry state,
+     * the four slots held the cargo set.
+     *
+     * Sources: SmashWiki "Donkey Kong (SSBU)/Forward throw"
+     * (https://www.ssbwiki.com/Donkey_Kong_(SSBU)/Forward_throw), and the scripts
+     * and motions of rubendal's SSBU Data Viewer, patch 13.0.1
+     * (https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Donkey%20Kong/data.json):
+     * each throw's `ATTACK_ABS` (its one box here, the launch the legacy compile
+     * turns into `ATTACK_ABS` + `ATK_HIT_ABS`), the frame of its `ATK_HIT_ABS`
+     * (the box's frame), and its motion's `CancelFrame` − 1 (`totalFrames`).
+     * UltimateFrameData (https://ultimateframedata.com/donkey_kong) agrees on
+     * every one: Cargo Forward/Backward/Up/Down Throw 15/45, 16/42, 15/29, 17/44;
+     * Backward, Up and Down Throw 15/39, 14/43, 19/54 (startup/total). It has no
+     * row for the lift.
      */
     fthrow: {
       slot: "fthrow",
+      name: "Kong Karry",
+      // The lift (`cargo`): `game_throwf` is `WHOLE_HIT(HIT_STATUS_INVINCIBLE)` and
+      // raises FIGHTER_DONKEY_STATUS_SHOULDER_START_FLAG_SHOULDER_WAIT on frame 16,
+      // its motion `throw_f` CancelFrame 16; SmashWiki: "Invincibility 1-15",
+      // "Animation length 15". Its ATTACK_ABS is the carry's catch kind (4%, the
+      // page's "Carry release"), which no throw here deals (Plan 5, Task 7).
+      totalFrames: 15,
+      cargo: true,
+      hitboxes: [],
+    },
+
+    bthrow: {
+      slot: "bthrow",
+      name: "Back Throw",
+      // `game_throwb`: ATTACK_ABS 11%, angle 40, KBG 65, BKB 60; `REVERSE_LR()` and
+      // `ATK_HIT_ABS` on frame 15; motion `throw_b` CancelFrame 40. Its script has a
+      // command the sim does not run (`HitModule::set_status_all`), so this runs it.
+      totalFrames: 39,
+      turnAt: 15,
+      hitboxes: [
+        {
+          id: 0,
+          startFrame: 15,
+          endFrame: 15,
+          x: fx(-6.0),
+          y: fx(9.0),
+          radius: fx(4.0),
+          damage: fx(11.0),
+          angle: fx(40),
+          baseKnockback: fx(60),
+          knockbackGrowth: fx(65),
+        },
+      ],
+    },
+
+    uthrow: {
+      slot: "uthrow",
+      name: "Up Throw",
+      // `game_throwhi`: ATTACK_ABS 9%, angle 90, KBG 50, BKB 70; `ATK_HIT_ABS` on
+      // frame 14; CancelFrame 44. The imported script is what runs (`ACTIVE_SCRIPT_SLOTS`).
+      totalFrames: 43,
+      hitboxes: [
+        {
+          id: 0,
+          startFrame: 14,
+          endFrame: 14,
+          x: fx(0),
+          y: fx(12.0),
+          radius: fx(4.0),
+          damage: fx(9.0),
+          angle: fx(90),
+          baseKnockback: fx(70),
+          knockbackGrowth: fx(50),
+        },
+      ],
+    },
+
+    dthrow: {
+      slot: "dthrow",
+      name: "Down Throw",
+      // `game_throwlw`: ATTACK_ABS 7%, angle 361, KBG 50, BKB 60; `ATK_HIT_ABS` on
+      // frame 19; CancelFrame 55. The imported script is what runs.
+      totalFrames: 54,
+      hitboxes: [
+        {
+          id: 0,
+          startFrame: 19,
+          endFrame: 19,
+          x: fx(4.0),
+          y: fx(2.0),
+          radius: fx(4.0),
+          damage: fx(7.0),
+          angle: fx(361),
+          baseKnockback: fx(60),
+          knockbackGrowth: fx(50),
+        },
+      ],
+    },
+
+    // The cargo throws, from the carry: `game_throwff`, `game_throwfb`,
+    // `game_throwfhi`, `game_throwflw`, motions `throw_f_f` … `throw_f_lw`
+    // (CancelFrame 46, 43, 30, 45). SmashWiki gives the same numbers: Throw 15,
+    // 16, 15, 17; Interruptible 46, 43, 30, 45.
+    cargoFthrow: {
+      slot: "cargoFthrow",
       name: "Cargo Forward Throw",
       totalFrames: 45,
       hitboxes: [
         {
+          // ATTACK_ABS 12%, angle 60, KBG 46, BKB 90; ATK_HIT_ABS on frame 15.
           id: 0,
           startFrame: 15,
           endFrame: 15,
@@ -751,20 +846,16 @@ const legacy: FighterDef = {
       ],
     },
 
-    bthrow: {
-      slot: "bthrow",
+    cargoBthrow: {
+      slot: "cargoBthrow",
       name: "Cargo Back Throw",
       totalFrames: 42,
-      // The launch below points forward: he turns round on frame 15, as his
-      // non-cargo back throw does (`game_throwb`: `frame(15) REVERSE_LR()
-      // ATK_HIT_ABS(…)`, rubendal SSBU Data Viewer 13.0.1,
-      // https://rubendal.github.io/ssbu/data/patch/13.0.1/character/Donkey%20Kong/data.json).
-      // UNVERIFIED for the cargo throw: its own script is not in the data.
-      turnAt: 15,
+      // His hardest-hitting throw and his best kill throw. "Donkey Kong changes
+      // direction on frame 16": `REVERSE_LR()`, then the launch, on frame 16.
+      turnAt: 16,
       hitboxes: [
         {
-          // His hardest-hitting throw and his best kill throw. The non-cargo
-          // back throw is 11% at angle 40 (BKB 60, KBG 65).
+          // ATTACK_ABS 13%, angle 72, KBG 52, BKB 85; ATK_HIT_ABS on frame 16.
           id: 0,
           startFrame: 16,
           endFrame: 16,
@@ -779,15 +870,15 @@ const legacy: FighterDef = {
       ],
     },
 
-    uthrow: {
-      slot: "uthrow",
+    cargoUthrow: {
+      slot: "cargoUthrow",
       name: "Cargo Up Throw",
       totalFrames: 29,
       hitboxes: [
         {
           // The "Ding-Dong" throw of Smash 4, deliberately given more knockback
-          // in Ultimate so it stops being a guaranteed kill confirm. The
-          // non-cargo up throw is 9% at angle 90 (BKB 70, KBG 50).
+          // in Ultimate so it stops being a guaranteed kill confirm. ATTACK_ABS
+          // 12%, angle 92, KBG 53, BKB 65; ATK_HIT_ABS on frame 15.
           id: 0,
           startFrame: 15,
           endFrame: 15,
@@ -802,14 +893,17 @@ const legacy: FighterDef = {
       ],
     },
 
-    dthrow: {
-      slot: "dthrow",
+    cargoDthrow: {
+      slot: "cargoDthrow",
       name: "Cargo Down Throw",
       totalFrames: 44,
+      // "On frame 17, the move stops Donkey Kong's horizontal momentum, and sets
+      // his vertical momentum to 1.5" (`SET_SPEED_EX(0, 1.5, …)` on 17).
+      momentum: [{ frame: 17, x: fx(0), y: fx(1.5) }],
       hitboxes: [
         {
-          // A semi-spike at 46° — the stage-spike throw. The non-cargo down
-          // throw is 7% at the Sakurai angle (BKB 60, KBG 50).
+          // A semi-spike at 46°: the stage-spike throw. ATTACK_ABS 11%, angle 46,
+          // KBG 45, BKB 70; ATK_HIT_ABS on frame 17.
           id: 0,
           startFrame: 17,
           endFrame: 17,

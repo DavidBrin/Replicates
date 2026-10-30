@@ -380,7 +380,9 @@ describe("every fighter's pummel and throws land on the fighter held", () => {
   }
 
   describe.each(FIGHTERS.map((f) => [f.id, f] as const))("%s", (id, def) => {
-    it.each(THROWS)("%s lands its launch once and launches the way it points (a back throw, behind)", (slot, button) => {
+    // Donkey Kong's forward throw launches nobody: it lifts the fighter held to
+    // carry (Plan 5, Task 8; `MoveDef.cargo`, `fighters/cargo.test.ts`).
+    it.each(THROWS.filter(([slot]) => def.moves[slot]?.cargo !== true))("%s lands its launch once and launches the way it points (a back throw, behind)", (slot, button) => {
       const ticks = press(holding(id, victimFor(id)), button, 140);
       const hits = ticks.flatMap((t) => t.events.hits);
       // Its catch-only hits (Kirby's stomps, Link's kicks) hurt and hold; the

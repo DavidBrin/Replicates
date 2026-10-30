@@ -18,6 +18,7 @@ import { chargeHoldFrame, clearHitRecord } from "../hitbox";
 import { mashFrames } from "../shield";
 import { specialChargeMain } from "../specialCharge";
 import { reflectorMain, specialStallExec } from "../reflect";
+import { liftCargo } from "./cargo";
 import {
   GRAB_MASH_BUTTON,
   GRAB_MASH_STICK,
@@ -240,6 +241,9 @@ export const STATUS_THROW: FighterStatus = {
   main(f, intent, ctx) {
     const move = f.move !== null ? ctx.def.moves[f.move] : undefined;
     if (f.actionFrame >= (move?.totalFrames ?? THROW_FRAMES)) {
+      // Donkey Kong's forward throw ends with the fighter on his shoulders, if he
+      // still holds them (Plan 5, Task 8: `liftCargo`).
+      if (move?.cargo === true && liftCargo(f, intent, ctx)) return;
       // A throw normally releases through its `ATK_HIT_ABS` (`resolveThrows`),
       // but a throw that lands none (an unauthored one, or one whose victim
       // was taken away mid-animation) would otherwise end with the link still

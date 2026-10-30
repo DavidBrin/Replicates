@@ -117,6 +117,9 @@ const LEGACY_KINETIC: Readonly<Record<ActionState, KineticType>> = {
   // Plan 5, Task 4b: helpless drifts like a fall; its landing stops like a landing's.
   specialFall: "FALL",
   specialLanding: "GROUND_STOP",
+  // Plan 5, Task 8: Donkey Kong's carry walks; the fighter carried does not move.
+  cargoCarry: "WALK",
+  cargoHeld: "NONE",
 };
 
 /** Every action migrated so far; each status-group task extends this list first. */
@@ -181,6 +184,9 @@ const MIGRATED = [
   // Plan 5, Task 4b
   "specialFall",
   "specialLanding",
+  // Plan 5, Task 8
+  "cargoCarry",
+  "cargoHeld",
 ];
 
 describe("migrated statuses", () => {

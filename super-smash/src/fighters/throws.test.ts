@@ -129,14 +129,19 @@ describe("throws", () => {
 
   // Ruling P5-R7: a legacy back throw authored pointing forward turns its thrower
   // round on `MoveDef.turnAt`, the game's `REVERSE_LR`. Donkey Kong's back throw
-  // stays on its legacy move (its script runs `HitModule::set_status_all`).
-  it("turns a legacy back throw that points forward (Donkey Kong's, 72°) and launches behind", () => {
+  // stays on its legacy move (its script runs `HitModule::set_status_all`). Since
+  // Plan 5 Task 8 it is his own back throw, `game_throwb` (rubendal Data Viewer
+  // 13.0.1): 11% at 40°, `REVERSE_LR()` and `ATK_HIT_ABS` both on frame 15. (It
+  // held the cargo back throw's numbers, 13% at 72° on 16, which are
+  // `cargoBthrow`'s now: `fighters/cargo.test.ts`.)
+  it("turns a legacy back throw that points forward (Donkey Kong's, 40°) and launches behind", () => {
     const { states, events } = run(holding("donkeyKong"), [Btn.Left, ...Array<InputFrame>(80).fill(0)]);
     const hits = hitsBy0(states, events);
     expect(hits).toHaveLength(1);
     const turned = states.findIndex((s) => s.fighters[0].facing === -1);
     expect(moveFrameOf(states[turned].fighters[0].actionFrame)).toBe(15);
-    expect(hits[0].frame).toBe(16);
+    expect(hits[0].frame).toBe(15);
+    expect(toFloat(hits[0].damage)).toBeCloseTo(11 * 1.05 * 1.2, 2);
     const out = states.findIndex((s, i) => i > hits[0].step && s.fighters[1].hitlag === 0);
     expect(states[out].fighters[1].vx).toBeLessThan(0);
     expect(states.at(-1)!.fighters[0]).toMatchObject({ action: "stand", facing: -1 });
@@ -361,11 +366,18 @@ describe("a throw's exit paths and rollback", () => {
 });
 
 describe("what each roster throw runs", () => {
-  const SLOTS: readonly MoveSlot[] = ["fthrow", "bthrow", "uthrow", "dthrow"];
+  const SLOTS: readonly MoveSlot[] = ["fthrow", "bthrow", "uthrow", "dthrow", "cargoFthrow", "cargoBthrow", "cargoUthrow", "cargoDthrow"];
 
   // Every throw the plain roster runs lands exactly one launch, by `ATK_HIT_ABS`,
-  // on the frame its script says, carrying the script's own ATTACK_ABS.
-  it.each(FIGHTERS.flatMap((d) => SLOTS.map((slot) => [d.id, slot] as const)))("%s %s fires one ATK_HIT_ABS, with its launch live", (id, slot) => {
+  // on the frame its script says, carrying the script's own ATTACK_ABS; Donkey
+  // Kong's forward throw lands none (it lifts: Plan 5, Task 8), and only he has
+  // the four cargo throws.
+  const RUN = FIGHTERS.flatMap((d) => SLOTS.filter((slot) => d.moves[slot] !== undefined).map((slot) => [d.id, slot] as const));
+  it("covers the four throws of everyone, and Donkey Kong's four cargo throws", () => {
+    expect(RUN).toHaveLength(FIGHTERS.length * 4 + 4);
+  });
+
+  it.each(RUN)("%s %s fires one ATK_HIT_ABS, with its launch live", (id, slot) => {
     const def = FIGHTERS.find((f) => f.id === id)!;
     const script = gameScriptFor(def, slot)!;
     const total = def.moves[slot]!.totalFrames;
@@ -377,7 +389,7 @@ describe("what each roster throw runs", () => {
         expect(st.throwAbs, `${id} ${slot} frame ${g}`).not.toBeNull();
       }
     }
-    expect(at, `${id} ${slot}`).toHaveLength(1);
+    expect(at, `${id} ${slot}`).toHaveLength(def.moves[slot]!.cargo === true ? 0 : 1);
   });
 });
 

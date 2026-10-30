@@ -358,8 +358,11 @@ function legacy(type: LegacyType, f: FighterState, stickX: number): [number, num
   let vx = f.vx;
   let vy = f.vy;
   switch (type) {
+    // A walking status off the ground (Plan 5, Task 8: Donkey Kong's carry, whose
+    // jump stays the carry) drifts as a fall does. The legacy engine never had a
+    // walking fighter in the air: its walk became a fall on leaving the ground.
     case "WALK":
-      vx = walkVelocity(vx, stickX, ATTRS);
+      vx = f.grounded ? walkVelocity(vx, stickX, ATTRS) : airDrift(vx, stickX, ATTRS);
       break;
     case "MOTION":
       break;

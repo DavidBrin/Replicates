@@ -8,10 +8,8 @@ import type { Hitbox, MoveDef, MoveSlot } from "../types";
 import { LEGACY_BONE_TABLE } from "./bones";
 import { scriptHitboxes } from "./hitboxes";
 import { runScript } from "./interpreter";
-import { SLOT_MOTION, absFromHitbox, attackFromHitbox, gameScriptFor, legacyGameScript } from "./legacy";
+import { SLOT_MOTION, THROW_SLOTS as THROWS, absFromHitbox, attackFromHitbox, gameScriptFor, legacyGameScript } from "./legacy";
 import type { AcmdScript } from "./types";
-
-const THROWS: ReadonlySet<MoveSlot> = new Set(["fthrow", "bthrow", "uthrow", "dthrow"]);
 
 /** The box a legacy throw launches with: the last to open. */
 function lastToOpen(move: MoveDef): Hitbox | null {
@@ -110,7 +108,8 @@ describe("legacy moves compiled to game_ scripts", () => {
     }
   });
 
-  it.each(MOVES.filter(([, slot]) => THROWS.has(slot)))("%s %s: lands its launch on the held fighter, on its frame (Plan 5)", (_id, _slot, move) => {
+  // Donkey Kong's forward throw only lifts (Plan 5, Task 8: the cargo): it has no launch.
+  it.each(MOVES.filter(([, slot, move]) => THROWS.has(slot) && move.hitboxes.length > 0))("%s %s: lands its launch on the held fighter, on its frame (Plan 5)", (_id, _slot, move) => {
     const script = legacyGameScript(move);
     const launch = lastToOpen(move)!;
     for (let g = 1; g <= move.totalFrames + 10; g++) {
